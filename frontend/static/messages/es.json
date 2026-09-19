@@ -5533,7 +5533,11 @@
       "description": "Configure el umbral de confianza, el idioma de especies y el filtrado de falsos positivos para clasificadores de aves.",
       "firstDailyConsensus": {
         "label": "Exigir que dos modelos confirmen la primera detección del día de una especie",
-        "helpText": "Reduce los registros erróneos de especies nuevas al descartar la primera detección del día de una especie de ave, a menos que un segundo modelo también la detecte por encima de su umbral normal dentro de la misma ventana de detección. La especie se registra a partir de la siguiente ventana en la que dos modelos coincidan. Solo se aplica si todos los modelos de aves que analizan esa fuente de audio pueden identificar la especie, y no mientras el umbral dinámico haya reducido el umbral de esa especie; no afecta a los murciélagos, los sonidos que no son de aves ni las configuraciones con un solo modelo."
+        "helpText": "Reduce los registros erróneos de especies nuevas al descartar la primera detección del día de una especie de ave, a menos que un segundo modelo también la detecte por encima de su umbral normal dentro de la misma ventana de detección. La especie se registra a partir de la siguiente ventana en la que dos modelos coincidan. Las especies de la lista de especies exentas no están sujetas a esta regla. Solo se aplica si todos los modelos de aves que analizan esa fuente de audio pueden identificar la especie, y no mientras el umbral dinámico haya reducido el umbral de esa especie; no afecta a los murciélagos, los sonidos que no son de aves ni las configuraciones con un solo modelo.",
+        "whitelistLabel": "Lista de especies exentas",
+        "addSpeciesLabel": "Añadir especie a la lista de especies exentas",
+        "addSpeciesHelp": "Busca y añade especies que deban conservar el comportamiento normal del umbral de un solo modelo",
+        "whitelistDisabledHelp": "Activa la opción anterior para editar la lista de especies exentas."
       }
     },
     "bat": {

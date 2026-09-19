@@ -538,9 +538,10 @@ type DaylightFilterSettings struct {
 	Species []string `yaml:"species" json:"species"` // species, families, orders, or genera to filter during daylight
 }
 
-// FirstDailyConsensusSettings configures the first-daily-detection consensus rule: a bird species' first detection of the day is discarded unless a second model also cleared its normal threshold within the same detection window; the species is recorded from the next window in which two models agree. It only applies when every bird model analyzing the audio source can identify the species, and not while a dynamic threshold is lowering that species' threshold (unless the species has a custom threshold).
+// FirstDailyConsensusSettings configures the first-daily-detection consensus rule: a bird species' first detection of the day is discarded unless a second model also cleared its normal threshold within the same detection window; the species is recorded from the next window in which two models agree. It only applies when every bird model analyzing the audio source can identify the species, and not while a dynamic threshold is lowering that species' threshold (unless the species has a custom threshold). Whitelisted species are exempt and retain normal single-model threshold behavior.
 type FirstDailyConsensusSettings struct {
-	Enabled bool `yaml:"enabled" json:"enabled"` // true to require a second model to confirm a bird species' first detection each day
+	Enabled   bool     `yaml:"enabled" json:"enabled"`     // true to require a second model to confirm a bird species' first detection each day
+	Whitelist []string `yaml:"whitelist" json:"whitelist"` // species exempt from first-daily consensus, matched by common or scientific name
 }
 
 // RTSPHealthSettings contains settings for RTSP stream health monitoring.

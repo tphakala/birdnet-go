@@ -1,6 +1,8 @@
-import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
 import type { CatalogEntry } from '$lib/types/models';
+import type { SettingsFormData, RealtimeSettings } from '$lib/stores/settings';
+import { get, type Writable } from 'svelte/store';
 import { CHANNEL_STABLE } from '$lib/utils/variantSelection';
 
 // Page-level coverage for the model-gallery install-error split:
@@ -83,7 +85,7 @@ vi.mock('$lib/utils/api', async () => {
 
 import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import * as modelsApi from '$lib/utils/modelsApi';
-import { settingsStore } from '$lib/stores/settings';
+import { realtimeSettings, settingsActions, settingsStore } from '$lib/stores/settings';
 import { toastActions } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
 import { navigation } from '$lib/stores/navigation.svelte';
@@ -97,6 +99,105 @@ beforeEach(() => {
     configurable: true,
   });
   navigation.redirect('/ui/settings/analysis');
+});
+
+describe('AnalysisSettingsPage first-daily consensus whitelist', () => {
+  // setConsensus replaces the module-level stores; put them back so the gallery
+  // tests below still see the state they were written against.
+  let initialSettings: Parameters<typeof settingsStore.set>[0];
+  let initialRealtime: RealtimeSettings | undefined;
+
+  beforeAll(() => {
+    initialSettings = get(settingsStore);
+    initialRealtime = get(realtimeSettings);
+  });
+
+  afterEach(() => {
+    cleanup();
+    settingsStore.set(initialSettings);
+    (realtimeSettings as Writable<RealtimeSettings | undefined>).set(initialRealtime);
+  });
+
+  beforeEach(() => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [] });
+    vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
+    vi.mocked(modelsApi.fetchModelRegions).mockResolvedValue({
+      modelRegion: '',
+      locationConfigured: false,
+      resolved: { slug: '', source: 'global', ambiguous: false },
+      regions: [],
+      families: [],
+    });
+    vi.mocked(settingsActions.updateSection).mockClear();
+  });
+
+  function setConsensus(enabled: boolean, whitelist: string[] = []) {
+    (realtimeSettings as Writable<RealtimeSettings | undefined>).set({
+      firstDailyConsensus: { enabled, whitelist },
+    } as RealtimeSettings);
+    settingsStore.set({
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'analysis',
+      dataLoaded: true,
+      error: null,
+      originalData: {
+        realtime: { firstDailyConsensus: { enabled, whitelist } },
+      } as unknown as SettingsFormData,
+      formData: {
+        realtime: { firstDailyConsensus: { enabled, whitelist } },
+      } as unknown as SettingsFormData,
+    });
+  }
+
+  it('disables the whitelist editor while the rule is off and says why', () => {
+    setConsensus(false);
+    render(AnalysisSettingsPage);
+
+    const input = screen.getByLabelText('analysis.bird.firstDailyConsensus.addSpeciesLabel');
+    expect(input).toBeDisabled();
+
+    // The reason must be visible and linked to the disabled group for assistive tech.
+    const reason = screen.getByText('analysis.bird.firstDailyConsensus.whitelistDisabledHelp');
+    expect(input.closest('fieldset')).toHaveAttribute('aria-describedby', reason.id);
+  });
+
+  it('drops the disabled explanation once the rule is on', () => {
+    setConsensus(true);
+    render(AnalysisSettingsPage);
+
+    expect(
+      screen.queryByText('analysis.bird.firstDailyConsensus.whitelistDisabledHelp')
+    ).not.toBeInTheDocument();
+  });
+
+  it('enables the editor and preserves enabled when adding a species', async () => {
+    setConsensus(true, ['Parus major']);
+    render(AnalysisSettingsPage);
+
+    const input = screen.getByLabelText('analysis.bird.firstDailyConsensus.addSpeciesLabel');
+    await waitFor(() => expect(input).toBeEnabled());
+    await fireEvent.input(input, { target: { value: 'Passer domesticus' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Add species' }));
+
+    expect(settingsActions.updateSection).toHaveBeenCalledWith('realtime', {
+      firstDailyConsensus: {
+        enabled: true,
+        whitelist: ['Parus major', 'Passer domesticus'],
+      },
+    });
+  });
+
+  it('keeps the whitelist when the rule itself is toggled', async () => {
+    setConsensus(true, ['Parus major']);
+    render(AnalysisSettingsPage);
+
+    await fireEvent.click(screen.getByLabelText('analysis.bird.firstDailyConsensus.label'));
+
+    expect(settingsActions.updateSection).toHaveBeenCalledWith('realtime', {
+      firstDailyConsensus: { enabled: false, whitelist: ['Parus major'] },
+    });
+  });
 });
 
 // A network-shaped download failure (matches isNetworkDownloadError's real regex).

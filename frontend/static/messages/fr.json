@@ -5533,7 +5533,11 @@
       "description": "Configurez le seuil de confiance, la langue des espèces et le filtrage des faux positifs pour les classificateurs d'oiseaux.",
       "firstDailyConsensus": {
         "label": "Exiger que deux modèles confirment la première détection d'une espèce chaque jour",
-        "helpText": "Réduit les ajouts erronés de nouvelles espèces en rejetant la première détection d'une espèce d'oiseau chaque jour, à moins qu'un deuxième modèle ne la détecte également au-dessus de son seuil habituel dans la même fenêtre de détection. L'espèce est enregistrée à partir de la prochaine fenêtre dans laquelle deux modèles sont d'accord. S'applique uniquement si tous les modèles d'oiseaux qui analysent cette source audio peuvent identifier l'espèce, et non lorsque le seuil dynamique a abaissé le seuil de cette espèce ; les chauves-souris, les sons autres que ceux des oiseaux et les configurations à un seul modèle ne sont pas concernés."
+        "helpText": "Réduit les ajouts erronés de nouvelles espèces en rejetant la première détection d'une espèce d'oiseau chaque jour, à moins qu'un deuxième modèle ne la détecte également au-dessus de son seuil habituel dans la même fenêtre de détection. L'espèce est enregistrée à partir de la prochaine fenêtre dans laquelle deux modèles sont d'accord. Les espèces de la liste blanche sont exemptées. S'applique uniquement si tous les modèles d'oiseaux qui analysent cette source audio peuvent identifier l'espèce, et non lorsque le seuil dynamique a abaissé le seuil de cette espèce ; les chauves-souris, les sons autres que ceux des oiseaux et les configurations à un seul modèle ne sont pas concernés.",
+        "whitelistLabel": "Liste blanche des espèces",
+        "addSpeciesLabel": "Ajouter une espèce à la liste blanche",
+        "addSpeciesHelp": "Recherchez et ajoutez les espèces qui doivent conserver le seuil normal d'un seul modèle",
+        "whitelistDisabledHelp": "Activez l'option ci-dessus pour modifier la liste blanche des espèces."
       }
     },
     "bat": {

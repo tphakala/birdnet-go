@@ -224,3 +224,38 @@ func TestUpdateSectionSettingsSkipsExcludeForUnrelatedSection(t *testing.T) {
 	assert.Equal(t, []string{testExcludeLocalizedName}, got,
 		"unrelated section save must leave the legacy exclude entry untouched")
 }
+
+// TestUpdateSectionSettingsCanonicalizesFirstDailyConsensusWhitelist verifies the
+// PATCH realtime path stores the consensus whitelist in the same locale-independent
+// form as the exclude list. Both are matched by isSpeciesExcluded, so a localized
+// name left as typed would stop matching after a birdnet.locale change.
+func TestUpdateSectionSettingsCanonicalizesFirstDailyConsensusWhitelist(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	controller.Settings.Load().Realtime.FirstDailyConsensus.Whitelist = []string{}
+	installExcludeTestResolver(t, controller)
+
+	patchSection(t, e, controller, SettingsSectionRealtime, map[string]any{
+		"firstDailyConsensus": map[string]any{
+			"whitelist": []string{testExcludeLocalizedName, testExcludeScientificName, "  American Crow  ", "  "},
+		},
+	})
+
+	got := controller.Settings.Load().Realtime.FirstDailyConsensus.Whitelist
+	assert.Equal(t, []string{testExcludeScientificName, "American Crow"}, got,
+		"localized entry resolved, scientific dup removed, name trimmed, blank dropped")
+}
+
+// TestUpdateSettingsCanonicalizesFirstDailyConsensusWhitelist verifies the
+// full-settings PUT path, which the frontend settings page actually uses.
+func TestUpdateSettingsCanonicalizesFirstDailyConsensusWhitelist(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	controller.Settings.Load().Realtime.FirstDailyConsensus.Whitelist = []string{}
+	installExcludeTestResolver(t, controller)
+
+	s := conf.CloneSettings(controller.Settings.Load())
+	s.Realtime.FirstDailyConsensus.Whitelist = []string{testExcludeLocalizedName, "American Crow"}
+	putFullSettings(t, e, controller, s)
+
+	got := controller.Settings.Load().Realtime.FirstDailyConsensus.Whitelist
+	assert.Equal(t, []string{testExcludeScientificName, "American Crow"}, got)
+}

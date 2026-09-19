@@ -305,6 +305,7 @@ func setDefaultConfig() {
 
 	// First daily bird detection consensus (opt-in)
 	viper.SetDefault("realtime.firstdailyconsensus.enabled", false)
+	viper.SetDefault("realtime.firstdailyconsensus.whitelist", []string{})
 
 	// Dog bark filter configuration
 	viper.SetDefault("realtime.dogbarkfilter.enabled", false)

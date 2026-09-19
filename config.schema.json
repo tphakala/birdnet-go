@@ -1036,6 +1036,13 @@
         "enabled": {
           "type": "boolean",
           "description": "true to require a second model to confirm a bird species' first detection each day"
+        },
+        "whitelist": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "species exempt from first-daily consensus, matched by common or scientific name"
         }
       },
       "additionalProperties": false,

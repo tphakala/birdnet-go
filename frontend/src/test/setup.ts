@@ -274,7 +274,7 @@ vi.mock('$lib/utils/settingsApi.js', () => {
       },
     },
     realtime: {
-      firstDailyConsensus: { enabled: false },
+      firstDailyConsensus: { enabled: false, whitelist: [] },
       interval: 15,
       processingTime: true,
       dynamicThreshold: {

@@ -5533,7 +5533,11 @@
       "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers.",
       "firstDailyConsensus": {
         "label": "Require two models to confirm a species' first detection of the day",
-        "helpText": "Reduces false new-species entries by discarding a bird species' first detection of the day unless a second model also detects it above its normal threshold within the same detection window. The species is recorded from the next window in which two models agree. Applies only when every bird model analyzing that audio source can identify the species, and not while dynamic thresholding has lowered that species' threshold; bats, non-bird sounds and single-model setups are unaffected."
+        "helpText": "Reduces false new-species entries by discarding a bird species' first detection of the day unless a second model also detects it above its normal threshold within the same detection window. The species is recorded from the next window in which two models agree. Species on the whitelist are exempt. Applies only when every bird model analyzing that audio source can identify the species, and not while dynamic thresholding has lowered that species' threshold; bats, non-bird sounds and single-model setups are unaffected.",
+        "whitelistLabel": "Species whitelist",
+        "addSpeciesLabel": "Add species to whitelist",
+        "addSpeciesHelp": "Search and add species that should keep the normal single-model threshold behavior",
+        "whitelistDisabledHelp": "Turn on the option above to edit the species whitelist."
       }
     },
     "bat": {

@@ -337,6 +337,48 @@ func TestFirstDailyConsensusGate(t *testing.T) {
 	}
 }
 
+func TestFirstDailyConsensusWhitelist(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name             string
+		commonName       string
+		whitelist        []string
+		wantDiscard      bool
+		wantSupportCalls int
+	}{
+		{name: "common name", commonName: "House Sparrow", whitelist: []string{"House Sparrow"}},
+		{name: "scientific name", commonName: "House Sparrow", whitelist: []string{firstDailyTestSpecies}},
+		{name: "mixed case common name", commonName: "House Sparrow", whitelist: []string{"hOuSe SpArRoW"}},
+		{name: "mixed case scientific name", commonName: "House Sparrow", whitelist: []string{"pAsSeR dOmEsTiCuS"}},
+		{name: "non-whitelisted species remains gated", commonName: "House Sparrow", whitelist: []string{"Parus major"}, wantDiscard: true, wantSupportCalls: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p, settings, item := newFirstDailyConsensusGateTest(t, firstDailyTestSpecies)
+			item.Detection.Result.Species.CommonName = tt.commonName
+			settings.Realtime.FirstDailyConsensus.Whitelist = tt.whitelist
+			support := p.speciesSupportSource()
+			supportCalls := 0
+			p.firstDaily.support = speciesSupportFunc(func(sci string, modelIDs []string, minModels int) (bool, bool) {
+				supportCalls++
+				return support.SpeciesSharedByBirdModels(sci, modelIDs, minModels)
+			})
+
+			discarded, reason := p.shouldDiscardFirstDailyDetection(item, settings)
+			assert.Equal(t, tt.wantDiscard, discarded)
+			if tt.wantDiscard {
+				assert.Equal(t, reasonFirstDailyConsensus, reason)
+			} else {
+				assert.Empty(t, reason)
+			}
+			// A whitelisted species must leave before any model-support work.
+			assert.Equal(t, tt.wantSupportCalls, supportCalls)
+		})
+	}
+}
+
 func TestFirstDailyConsensusAcceptanceSequence(t *testing.T) {
 	t.Parallel()
 	p, settings, item := newFirstDailyConsensusGateTest(t, firstDailyTestSpecies)

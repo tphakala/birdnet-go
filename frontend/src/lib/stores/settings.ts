@@ -393,6 +393,7 @@ export interface DaylightFilterSettings {
 /** Controls confirmation of a bird species' first daily detection by two models. */
 export interface FirstDailyConsensusSettings {
   enabled: boolean;
+  whitelist?: string[] | null;
 }
 
 export interface EBirdSettings {
@@ -1030,7 +1031,7 @@ function createEmptySettings(): SettingsFormData {
         offset: 0,
         species: [],
       },
-      firstDailyConsensus: { enabled: false },
+      firstDailyConsensus: { enabled: false, whitelist: [] },
       extendedCapture: {
         enabled: false,
         maxDuration: 120,

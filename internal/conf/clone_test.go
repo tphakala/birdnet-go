@@ -99,6 +99,7 @@ func newPopulatedSettings() *Settings {
 
 	s.Realtime.DogBarkFilter.Species = []string{"Canis familiaris"}
 	s.Realtime.DaylightFilter.Species = []string{"Strix aluco"}
+	s.Realtime.FirstDailyConsensus.Whitelist = []string{"Parus major"}
 
 	s.Realtime.RTSP.Streams = []StreamConfig{
 		{
@@ -227,6 +228,7 @@ func mutateCloneEverywhere(dst *Settings) {
 
 	dst.Realtime.DogBarkFilter.Species[0] = mutated
 	dst.Realtime.DaylightFilter.Species[0] = mutated
+	dst.Realtime.FirstDailyConsensus.Whitelist[0] = mutated
 
 	dst.Realtime.RTSP.Streams[0].Models[0] = mutated
 	dst.Realtime.RTSP.Streams[0].Enabled = false
@@ -357,6 +359,7 @@ func assertSourceUnchanged(t *testing.T, src *Settings) {
 
 	assert.Equal(t, []string{"Canis familiaris"}, src.Realtime.DogBarkFilter.Species)
 	assert.Equal(t, []string{"Strix aluco"}, src.Realtime.DaylightFilter.Species)
+	assert.Equal(t, []string{"Parus major"}, src.Realtime.FirstDailyConsensus.Whitelist)
 
 	require.Len(t, src.Realtime.RTSP.Streams, 1)
 	assert.True(t, src.Realtime.RTSP.Streams[0].Enabled)

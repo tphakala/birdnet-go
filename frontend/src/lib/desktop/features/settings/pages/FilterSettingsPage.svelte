@@ -40,14 +40,11 @@
   import { api, ApiError } from '$lib/utils/api';
   import { t } from '$lib/i18n';
 
-  // API response interfaces
-  interface SpeciesListResponse {
-    species?: Array<{ label: string; commonName?: string; scientificName?: string }>;
-  }
   import { Filter, ShieldCheck } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import { normalizeForLookup } from '$lib/utils/speciesNames';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { mapSpeciesListResponse, type SpeciesListResponse } from '$lib/utils/speciesList';
 
   const logger = loggers.settings;
 
@@ -174,20 +171,9 @@
 
     try {
       const data = await api.get<SpeciesListResponse>('/api/v2/range/species/list');
-      if (data?.species && Array.isArray(data.species)) {
-        const sciMap = new Map<string, string>();
-        speciesListState.data = data.species.map(species => {
-          const value = species.commonName || species.label;
-          if (species.scientificName) {
-            sciMap.set(normalizeForLookup(value), species.scientificName);
-          }
-          return value;
-        });
-        speciesScientificMap = sciMap;
-      } else {
-        speciesListState.data = [];
-        speciesScientificMap = new Map();
-      }
+      const mapped = mapSpeciesListResponse(data);
+      speciesListState.data = mapped.predictions;
+      speciesScientificMap = mapped.scientificNames;
     } catch (error) {
       // Species list loading failure affects form functionality but isn't critical
       // Show minimal feedback rather than intrusive error

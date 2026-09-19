@@ -5533,7 +5533,11 @@
       "description": "Konfigurējiet ticamības slieksni, sugu valodu un viltus pozitīvo filtrēšanu putnu klasifikatoriem.",
       "firstDailyConsensus": {
         "label": "Pieprasīt, lai divi modeļi apstiprina sugas pirmo noteikšanu dienā",
-        "helpText": "Samazina kļūdainus jaunu sugu ierakstus, atmetot putnu sugas pirmo noteikšanu dienā, ja vien arī otrs modelis to nenosaka virs sava parastā sliekšņa tajā pašā noteikšanas laika logā. Suga tiek reģistrēta, sākot ar nākamo laika logu, kurā divu modeļu rezultāti sakrīt. Attiecas tikai uz gadījumiem, kad visi putnu modeļi, kas analizē šo skaņas avotu, spēj identificēt sugu, un ne tad, kad dinamiskais slieksnis ir pazeminājis šīs sugas slieksni; sikspārņi, skaņas, kas nav putnu skaņas, un konfigurācijas ar vienu modeli netiek ietekmētas."
+        "helpText": "Samazina kļūdainus jaunu sugu ierakstus, atmetot putnu sugas pirmo noteikšanu dienā, ja vien arī otrs modelis to nenosaka virs sava parastā sliekšņa tajā pašā noteikšanas laika logā. Suga tiek reģistrēta, sākot ar nākamo laika logu, kurā divu modeļu rezultāti sakrīt. Izņēmumu sarakstā iekļautās sugas ir atbrīvotas no šīs prasības. Attiecas tikai uz gadījumiem, kad visi putnu modeļi, kas analizē šo skaņas avotu, spēj identificēt sugu, un ne tad, kad dinamiskais slieksnis ir pazeminājis šīs sugas slieksni; sikspārņi, skaņas, kas nav putnu skaņas, un konfigurācijas ar vienu modeli netiek ietekmētas.",
+        "whitelistLabel": "Sugu izņēmumu saraksts",
+        "addSpeciesLabel": "Pievienot sugu izņēmumu sarakstam",
+        "addSpeciesHelp": "Meklējiet un pievienojiet sugas, kurām jāsaglabā parastā viena modeļa sliekšņa darbība",
+        "whitelistDisabledHelp": "Ieslēdziet iepriekš esošo opciju, lai rediģētu sugu izņēmumu sarakstu."
       }
     },
     "bat": {

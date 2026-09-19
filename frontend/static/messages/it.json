@@ -5533,7 +5533,11 @@
       "description": "Configura la soglia di confidenza, la lingua delle specie e il filtraggio dei falsi positivi per i classificatori di uccelli.",
       "firstDailyConsensus": {
         "label": "Richiedi che due modelli confermino il primo rilevamento del giorno di una specie",
-        "helpText": "Riduce le registrazioni errate di nuove specie scartando il primo rilevamento del giorno di una specie di uccello, a meno che anche un secondo modello non la rilevi al di sopra della propria soglia normale nella stessa finestra di rilevamento. La specie viene registrata a partire dalla successiva finestra in cui due modelli concordano. Si applica solo se tutti i modelli per uccelli che analizzano quella sorgente audio possono identificare la specie, e non mentre la soglia dinamica ha abbassato la soglia di quella specie; non influisce su pipistrelli, suoni diversi da quelli degli uccelli e configurazioni con un solo modello."
+        "helpText": "Riduce le registrazioni errate di nuove specie scartando il primo rilevamento del giorno di una specie di uccello, a meno che anche un secondo modello non la rilevi al di sopra della propria soglia normale nella stessa finestra di rilevamento. La specie viene registrata a partire dalla successiva finestra in cui due modelli concordano. Le specie nella lista specie esenti non sono soggette alla regola. Si applica solo se tutti i modelli per uccelli che analizzano quella sorgente audio possono identificare la specie, e non mentre la soglia dinamica ha abbassato la soglia di quella specie; non influisce su pipistrelli, suoni diversi da quelli degli uccelli e configurazioni con un solo modello.",
+        "whitelistLabel": "Lista specie esenti",
+        "addSpeciesLabel": "Aggiungi specie alla lista specie esenti",
+        "addSpeciesHelp": "Cerca e aggiungi le specie che devono mantenere il normale comportamento della soglia con un solo modello",
+        "whitelistDisabledHelp": "Attiva l'opzione qui sopra per modificare la lista specie esenti."
       }
     },
     "bat": {

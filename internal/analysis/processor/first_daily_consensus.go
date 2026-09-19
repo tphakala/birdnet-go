@@ -263,7 +263,8 @@ func (p *Processor) noteAcceptedDetection(item *PendingDetection, settings *conf
 // shouldDiscardFirstDailyDetection reports whether item is the first detection of
 // a bird species today with only one model behind it. It runs under pendingMutex
 // and reads memory only; checks are ordered cheapest first, and the accepted-today
-// lookup settles most calls once a species has been heard.
+// lookup settles most calls once a species has been heard. Whitelisted species
+// fail open before taxonomy and model-support work.
 //
 // A discard is terminal for this pending entry only: the species is not marked
 // accepted, so the next window in which two models agree is accepted normally.
@@ -281,6 +282,9 @@ func (p *Processor) shouldDiscardFirstDailyDetection(item *PendingDetection, set
 		return false, ""
 	}
 	if !classifier.IsBirdCapableModel(item.BestModelID) || countConfirmingModels(settings, item) >= firstDailyMinModels {
+		return false, ""
+	}
+	if len(settings.Realtime.FirstDailyConsensus.Whitelist) > 0 && isSpeciesExcluded(result.Species.CommonName, result.Species.ScientificName, settings.Realtime.FirstDailyConsensus.Whitelist) {
 		return false, ""
 	}
 	// A dynamic threshold that currently lowers the bar is the processor already

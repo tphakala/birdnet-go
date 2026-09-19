@@ -5533,7 +5533,11 @@
       "description": "Määritä luottamuskynnys, lajikieli ja väärien positiivisten suodatus lintuluokittimille.",
       "firstDailyConsensus": {
         "label": "Vaadi kahta mallia vahvistamaan lajin päivän ensimmäinen havainto",
-        "helpText": "Vähentää virheellisiä uusien lajien kirjauksia hylkäämällä lintulajin päivän ensimmäisen havainnon, ellei toinenkin malli havaitse lajia oman normaalin kynnysarvonsa ylittävällä varmuudella saman havaintoikkunan aikana. Laji kirjataan seuraavasta ikkunasta alkaen, jossa kaksi mallia on yhtä mieltä. Käytössä vain, kun jokainen kyseistä äänilähdettä analysoiva lintumalli pystyy tunnistamaan lajin, eikä silloin, kun dynaaminen kynnysarvo on alentanut kyseisen lajin kynnysarvoa. Ei vaikuta lepakoihin, muihin kuin lintujen ääniin eikä yhden mallin kokoonpanoihin."
+        "helpText": "Vähentää virheellisiä uusien lajien kirjauksia hylkäämällä lintulajin päivän ensimmäisen havainnon, ellei toinenkin malli havaitse lajia oman normaalin kynnysarvonsa ylittävällä varmuudella saman havaintoikkunan aikana. Laji kirjataan seuraavasta ikkunasta alkaen, jossa kaksi mallia on yhtä mieltä. Sallittujen lajien luettelossa olevat lajit on vapautettu säännöstä. Käytössä vain, kun jokainen kyseistä äänilähdettä analysoiva lintumalli pystyy tunnistamaan lajin, eikä silloin, kun dynaaminen kynnysarvo on alentanut kyseisen lajin kynnysarvoa. Ei vaikuta lepakoihin, muihin kuin lintujen ääniin eikä yhden mallin kokoonpanoihin.",
+        "whitelistLabel": "Sallittujen lajien luettelo",
+        "addSpeciesLabel": "Lisää laji sallittujen lajien luetteloon",
+        "addSpeciesHelp": "Etsi ja lisää lajeja, joille säilytetään yhden mallin normaali kynnysarvokäytäntö",
+        "whitelistDisabledHelp": "Ota yllä oleva asetus käyttöön muokataksesi sallittujen lajien luetteloa."
       }
     },
     "bat": {

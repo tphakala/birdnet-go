@@ -57,6 +57,7 @@
     type FilterLevel,
   } from '$lib/desktop/components/forms/FalsePositiveFilterControl.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import SpeciesListEditor from '$lib/desktop/components/forms/SpeciesListEditor.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
@@ -89,6 +90,10 @@
   } from '$lib/utils/variantSelection';
   import OptimizeReviewDialog from '$lib/desktop/features/settings/components/OptimizeReviewDialog.svelte';
   import { safeArrayAccess } from '$lib/utils/security';
+  import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import { normalizeForLookup } from '$lib/utils/speciesNames';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { mapSpeciesListResponse, type SpeciesListResponse } from '$lib/utils/speciesList';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
   import {
@@ -302,10 +307,86 @@
       validHours: 24,
     }
   );
-  let firstDailyConsensus = $derived($realtimeSettings?.firstDailyConsensus ?? { enabled: false });
+  let firstDailyConsensus = $derived(
+    $realtimeSettings?.firstDailyConsensus ?? { enabled: false, whitelist: [] }
+  );
+
+  // The API can omit `whitelist` or send null (a Go nil slice), so compare
+  // normalized values or the section would report unsaved changes nobody made.
+  function normalizeFirstDailyConsensus(
+    value: { enabled?: boolean; whitelist?: string[] | null } | undefined
+  ) {
+    return { enabled: value?.enabled ?? false, whitelist: value?.whitelist ?? [] };
+  }
+
+  let firstDailyConsensusWhitelistHasChanges = $derived(
+    hasSettingsChanged(
+      normalizeFirstDailyConsensus(store.originalData.realtime?.firstDailyConsensus).whitelist,
+      normalizeFirstDailyConsensus(store.formData.realtime?.firstDailyConsensus).whitelist
+    )
+  );
+
+  let whitelistPredictions = $state<string[]>([]);
+  let whitelistPredictionsLoading = $state(false);
+  let whitelistPredictionsRequested = $state(false);
+  let whitelistPredictionsFailed = false;
+  let whitelistScientificNames = $state(new Map<string, string>());
+
+  function localizeWhitelistLabel(value: string): string {
+    return localizeSpeciesName(whitelistScientificNames.get(normalizeForLookup(value)), value);
+  }
+
+  $effect(() => {
+    if (!firstDailyConsensus.enabled) {
+      // A failed load is retried the next time the rule is enabled, not in a loop.
+      if (whitelistPredictionsFailed) {
+        whitelistPredictionsRequested = false;
+        whitelistPredictionsFailed = false;
+      }
+      return;
+    }
+    if (!whitelistPredictionsRequested) {
+      void loadWhitelistPredictions();
+    }
+  });
+
+  async function loadWhitelistPredictions() {
+    whitelistPredictionsRequested = true;
+    whitelistPredictionsLoading = true;
+    try {
+      const data = await api.get<SpeciesListResponse>('/api/v2/range/species/list');
+      const mapped = mapSpeciesListResponse(data);
+      whitelistPredictions = mapped.predictions;
+      whitelistScientificNames = mapped.scientificNames;
+    } catch (error) {
+      logger.warn('Failed to load first-daily consensus whitelist species', error, {
+        component: 'AnalysisSettingsPage',
+        action: 'loadWhitelistPredictions',
+      });
+      whitelistPredictions = [];
+      whitelistScientificNames = new Map();
+      whitelistPredictionsFailed = true;
+      // Disabled while the request was in flight: the effect already ran its
+      // disabled branch, so re-arm here or re-enabling would never retry.
+      if (!firstDailyConsensus.enabled) {
+        whitelistPredictionsRequested = false;
+        whitelistPredictionsFailed = false;
+      }
+    } finally {
+      whitelistPredictionsLoading = false;
+    }
+  }
 
   function updateFirstDailyConsensus(enabled: boolean) {
-    settingsActions.updateSection('realtime', { firstDailyConsensus: { enabled } });
+    settingsActions.updateSection('realtime', {
+      firstDailyConsensus: { ...firstDailyConsensus, enabled },
+    });
+  }
+
+  function updateFirstDailyConsensusWhitelist(whitelist: string[]) {
+    settingsActions.updateSection('realtime', {
+      firstDailyConsensus: { ...firstDailyConsensus, whitelist },
+    });
   }
 
   let falsePositiveFilter = $derived($realtimeSettings?.falsePositiveFilter ?? { level: 0 });
@@ -1497,13 +1578,15 @@
         threshold: store.originalData.birdnet?.threshold,
         locale: store.originalData.birdnet?.locale,
         fpFilter: store.originalData.realtime?.falsePositiveFilter?.level ?? 0,
-        firstDailyConsensus: store.originalData.realtime?.firstDailyConsensus?.enabled ?? false,
+        firstDailyConsensus: normalizeFirstDailyConsensus(
+          store.originalData.realtime?.firstDailyConsensus
+        ),
       }}
       currentData={{
         threshold: birdnet?.threshold,
         locale: birdnet?.locale,
         fpFilter: falsePositiveFilter.level,
-        firstDailyConsensus: firstDailyConsensus.enabled,
+        firstDailyConsensus: normalizeFirstDailyConsensus(firstDailyConsensus),
       }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1581,6 +1664,35 @@
           disabled={store.isLoading || store.isSaving}
           onchange={updateFirstDailyConsensus}
         />
+        <fieldset
+          disabled={!firstDailyConsensus.enabled || store.isLoading || store.isSaving}
+          class="contents"
+          aria-describedby={firstDailyConsensus.enabled
+            ? undefined
+            : 'first-daily-consensus-whitelist-disabled'}
+        >
+          <SpeciesListEditor
+            species={firstDailyConsensus.whitelist ?? []}
+            disabled={!firstDailyConsensus.enabled || store.isLoading || store.isSaving}
+            predictions={whitelistPredictions}
+            predictionsLoading={whitelistPredictionsLoading}
+            localizeLabel={localizeWhitelistLabel}
+            listLabel={t('analysis.bird.firstDailyConsensus.whitelistLabel')}
+            addLabel={t('analysis.bird.firstDailyConsensus.addSpeciesLabel')}
+            addPlaceholder={t('settings.filters.typeSpeciesName')}
+            addHelpText={t('analysis.bird.firstDailyConsensus.addSpeciesHelp')}
+            addButtonText={t('settings.filters.falsePositivePrevention.addSpeciesButton')}
+            hasChanges={firstDailyConsensusWhitelistHasChanges}
+            onSpeciesChange={updateFirstDailyConsensusWhitelist}
+          />
+        </fieldset>
+        {#if !firstDailyConsensus.enabled}
+          <SettingsNote>
+            <span id="first-daily-consensus-whitelist-disabled">
+              {t('analysis.bird.firstDailyConsensus.whitelistDisabledHelp')}
+            </span>
+          </SettingsNote>
+        {/if}
       </div>
     </SettingsSection>
 
