@@ -69,21 +69,24 @@ jobs:
 
           # Verify JSON is valid and handle errors gracefully
           if [ ! -f validation-report.json ]; then
-            echo '{"success":false,"error":"validation-report.json not created"}' > validation-report.json
+            echo '{"success":false,"error":"validation-report.json not created","summary":{"totalErrors":0,"totalWarnings":0,"passedLocales":0,"totalLocales":0},"errors":[],"warnings":[]}' > validation-report.json
             echo "validation_failed=true" >> $GITHUB_OUTPUT
             echo "### ❌ Translation File Validation Failed" >> $GITHUB_STEP_SUMMARY
             echo "Error: Report file was not created" >> $GITHUB_STEP_SUMMARY
           elif ! jq empty validation-report.json 2>/dev/null; then
             echo "Invalid JSON in validation-report.json:" >> $GITHUB_STEP_SUMMARY
             cat validation-report.json >> $GITHUB_STEP_SUMMARY
-            echo '{"success":false,"error":"Invalid JSON in validation report"}' > validation-report.json
+            echo '{"success":false,"error":"Invalid JSON in validation report","summary":{"totalErrors":0,"totalWarnings":0,"passedLocales":0,"totalLocales":0},"errors":[],"warnings":[]}' > validation-report.json
             echo "validation_failed=true" >> $GITHUB_OUTPUT
           elif [ ! -s validation-report.json ] || ! jq -e 'has("success")' validation-report.json > /dev/null 2>&1; then
             # Empty (0-byte) file passes `jq empty` (exit 0), so guard against a
             # report that the validator never finished writing, e.g. it crashed
             # before emitting JSON. Without this, `.success == false` is not true,
             # the check falls through to the pass branch, and the job goes green
-            # on a run that never validated anything.
+            # on a run that never validated anything. Write a complete failure
+            # report so the "Comment on PR" step can always parse it (it reads
+            # .summary.* and .errors without guarding against a partial object).
+            echo '{"success":false,"error":"Empty or incomplete validation report (validator likely crashed before emitting JSON)","summary":{"totalErrors":0,"totalWarnings":0,"passedLocales":0,"totalLocales":0},"errors":[],"warnings":[]}' > validation-report.json
             echo "validation_failed=true" >> $GITHUB_OUTPUT
             echo "### ❌ Translation File Validation Failed" >> $GITHUB_STEP_SUMMARY
             echo "The validation report is empty or missing the \`success\` field (the validator likely crashed before emitting JSON)." >> $GITHUB_STEP_SUMMARY
