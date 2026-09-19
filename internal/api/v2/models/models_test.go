@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // TestModelsRouteRegistration verifies the models handler registers exactly the
@@ -33,6 +36,48 @@ func TestModelsRouteRegistration(t *testing.T) {
 		"GET /api/v2/models/install/:id/progress",
 	}
 	apitest.AssertRoutesRegistered(t, e, expectedRoutes)
+}
+
+// TestListModels_IncludesRegistryID verifies that ListModels returns, for every
+// enabled model, both the config alias (id) and the classifier registry ID
+// (registryId). The frontend joins registryId against the registry-ID
+// defaultTargets served by GET /api/v2/system/inference to map default analysis
+// targets back to the config aliases the source editors use (model de-privilege
+// epic, Phase 4).
+func TestListModels_IncludesRegistryID(t *testing.T) {
+	// PublishTestSettings mutates the process-global settings snapshot, so this
+	// test must not run in parallel. Publish AFTER NewCore, which installs its own
+	// default snapshot, so ListModels (which reads conf.GetSettings()) observes the
+	// enabled model list below.
+	core := apitest.NewCore(t)
+	h := New(core, nil)
+
+	settings := &conf.Settings{}
+	settings.Models.Enabled = []string{conf.ModelIDBirdNET}
+	apitest.PublishTestSettings(t, settings)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/models", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, h.ListModels(ctx))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var items []ModelListItem
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &items))
+	require.NotEmpty(t, items, "enabling birdnet must list at least one model")
+
+	var birdnet *ModelListItem
+	for i := range items {
+		assert.NotEmpty(t, items[i].RegistryID, "every listed model must carry a registryId join key (id=%q)", items[i].ID)
+		if items[i].ID == conf.ModelIDBirdNET {
+			birdnet = &items[i]
+		}
+	}
+	require.NotNil(t, birdnet, "the enabled birdnet alias must be listed")
+	assert.Equal(t, classifier.RegistryIDBirdNETV24, birdnet.RegistryID,
+		"birdnet alias must map to the BirdNET v2.4 registry ID")
 }
 
 // TestInstallModel_RejectsHiddenEntries verifies that hidden, foundation-only
