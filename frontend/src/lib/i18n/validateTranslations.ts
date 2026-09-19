@@ -172,13 +172,24 @@ class TranslationValidator {
     try {
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       const raw: unknown = JSON.parse(readFileSync(this.untranslatedBaselinePath, 'utf-8'));
-      if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-        for (const [locale, keys] of Object.entries(raw as Record<string, unknown>)) {
-          if (Array.isArray(keys)) {
-            for (const k of keys) {
-              if (typeof k === 'string') set.add(baselineKey(locale, k));
-            }
-          }
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        // Valid JSON but the wrong shape (an array or a scalar). Do not bypass it
+        // silently: without a diagnostic the missing grandfathering surfaces as
+        // "new untranslated" with no hint the baseline itself is malformed.
+        console.error(
+          `⚠️  Ignoring ${this.untranslatedBaselinePath}: expected a JSON object mapping each locale to an array of keys, got ${Array.isArray(raw) ? 'an array' : typeof raw}. Regenerate it with: npm run i18n:baseline:untranslated`
+        );
+        return set;
+      }
+      for (const [locale, keys] of Object.entries(raw as Record<string, unknown>)) {
+        if (!Array.isArray(keys)) {
+          console.error(
+            `⚠️  Ignoring locale "${locale}" in ${this.untranslatedBaselinePath}: expected an array of keys, got ${typeof keys}.`
+          );
+          continue;
+        }
+        for (const k of keys) {
+          if (typeof k === 'string') set.add(baselineKey(locale, k));
         }
       }
     } catch (err) {
@@ -897,7 +908,22 @@ Examples:
   // translating debt, or after intentionally accepting a string that is legitimately
   // identical to English, so the --fail-on-untranslated gate stays meaningful.
   if (args.includes('--update-baseline')) {
-    await validator.validate({ ...options, allowUntranslated: false });
+    // Only snapshot a baseline from a complete, valid set of locale files. A
+    // locale that failed to load comes back empty (all keys missing), and
+    // without these gates validate() can still pass, writing a baseline that
+    // omits that locale's entries; a later run would then flag them as new.
+    const ok = await validator.validate({
+      ...options,
+      allowUntranslated: false,
+      failOnWarnings: true,
+      minCoverage: 100,
+    });
+    if (!ok) {
+      console.error(
+        'Refusing to update the untranslated baseline: translation validation failed (missing keys, empty values, invalid ICU, or coverage below 100%). Fix those first so the baseline is not written from an incomplete set.'
+      );
+      process.exit(1);
+    }
     validator.writeUntranslatedBaseline();
     process.exit(0);
   }
@@ -912,6 +938,12 @@ Examples:
     // Output LLM-friendly structured JSON
     const results = validator.getResults();
     const referenceKeys = validator.getReferenceKeys();
+    // New untranslated entries are errors only when the gate is enforcing them
+    // (--fail-on-untranslated). Without the flag the run still passes, so they
+    // stay ordinary untranslated warnings; keying the error math on this keeps
+    // the report internally consistent (success never coexists with errors).
+    const failingUntranslated = (r: ValidationResult): string[] =>
+      options.failOnUntranslated ? r.newUntranslated : [];
     const jsonReport = {
       success: passed,
       timestamp: new Date().toISOString(),
@@ -924,7 +956,7 @@ Examples:
             r.emptyValues.length === 0 &&
             r.invalidICU.length === 0 &&
             r.parameterMismatches.length === 0 &&
-            r.newUntranslated.length === 0
+            failingUntranslated(r).length === 0
         ).length,
         totalErrors: results.reduce(
           (sum, r) =>
@@ -932,15 +964,16 @@ Examples:
             r.emptyValues.length +
             r.invalidICU.length +
             r.parameterMismatches.length +
-            r.newUntranslated.length,
+            failingUntranslated(r).length,
           0
         ),
-        // New untranslated entries are counted as errors above (they fail the
-        // gate), so exclude them from the untranslated warning total to avoid
-        // double-counting; grandfathered untranslated debt stays a warning.
+        // When the gate is enforcing, new untranslated entries are counted as
+        // errors above, so exclude them from the untranslated warning total to
+        // avoid double-counting; grandfathered (and, without the flag, all)
+        // untranslated debt stays a warning.
         totalWarnings: results.reduce(
           (sum, r) =>
-            sum + r.missingKeys.length + (r.untranslated.length - r.newUntranslated.length),
+            sum + r.missingKeys.length + (r.untranslated.length - failingUntranslated(r).length),
           0
         ),
       },
@@ -980,10 +1013,10 @@ Examples:
           fixable: true,
           suggestedFix: `Update parameters to match: {${expected.join('}, {')}}`,
         })),
-        // Newly back-filled English placeholders that are not grandfathered:
-        // these fail the gate, so surface them as errors (with the offending
+        // Newly back-filled English placeholders that are not grandfathered,
+        // when the gate is enforcing: surface them as errors (with the offending
         // key) rather than burying them in the generic untranslated warnings.
-        ...r.newUntranslated.map(key => ({
+        ...failingUntranslated(r).map(key => ({
           type: 'new_untranslated',
           locale: r.locale,
           key,
@@ -1006,10 +1039,11 @@ Examples:
           fixable: true,
           suggestedFix: `Copy key from ${DEFAULT_LOCALE}.json and translate`,
         })),
-        // Only grandfathered untranslated debt is a warning here; newly
-        // back-filled placeholders are reported as errors above.
+        // Untranslated debt that is not being reported as an error above stays a
+        // warning: grandfathered entries always, and every untranslated entry
+        // when the gate is not enforcing (--fail-on-untranslated absent).
         ...r.untranslated
-          .filter(key => !r.newUntranslated.includes(key))
+          .filter(key => !failingUntranslated(r).includes(key))
           .map(key => ({
             type: 'untranslated',
             locale: r.locale,
@@ -1039,8 +1073,8 @@ Examples:
           r.emptyValues.length +
           r.invalidICU.length +
           r.parameterMismatches.length +
-          r.newUntranslated.length,
-        warnings: r.missingKeys.length + (r.untranslated.length - r.newUntranslated.length),
+          failingUntranslated(r).length,
+        warnings: r.missingKeys.length + (r.untranslated.length - failingUntranslated(r).length),
         newUntranslated: r.newUntranslated.length,
         info: r.extraKeys.length,
       })),
