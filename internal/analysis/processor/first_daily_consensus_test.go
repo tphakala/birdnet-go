@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -443,4 +444,37 @@ func TestFirstDailyConsensusDefersApprovalUntilNextCycle(t *testing.T) {
 			assert.Empty(t, reason)
 		})
 	}
+}
+
+// TestFirstDailyConsensusDiscardsSeedFromBeforeDisable covers a quick off/on toggle
+// while a seed query is still running: its result predates the approvals made while
+// the rule was off, so applying it could discard a later single-model detection.
+func TestFirstDailyConsensusDiscardsSeedFromBeforeDisable(t *testing.T) {
+	t.Parallel()
+	now := firstDailyTestNow
+	day := now.Format(time.DateOnly)
+	settings := &conf.Settings{}
+	settings.Realtime.FirstDailyConsensus.Enabled = true
+	release := make(chan struct{})
+	ds := mocks.NewMockInterface(t)
+	ds.EXPECT().GetSpeciesSummaryData(mock.Anything, day, day).
+		Run(func(context.Context, string, string) { <-release }).
+		Return([]datastore.SpeciesSummaryData{{ScientificName: firstDailyTestSpecies}}, nil).Once()
+	ds.EXPECT().GetSpeciesSummaryData(mock.Anything, day, day).Return(nil, nil).Once()
+	p := &Processor{Ds: ds}
+
+	p.prepareFirstDailyConsensus(now, settings)
+	require.True(t, p.firstDaily.seeding)
+	settings.Realtime.FirstDailyConsensus.Enabled = false
+	p.prepareFirstDailyConsensus(now, settings)
+	settings.Realtime.FirstDailyConsensus.Enabled = true
+	close(release)
+
+	require.Eventually(t, func() bool {
+		p.prepareFirstDailyConsensus(now, settings)
+		d := p.firstDaily.days[day]
+		return d != nil && d.loaded
+	}, 5*time.Second, 5*time.Millisecond)
+	assert.False(t, p.firstDaily.days[day].accepted[speciesindex.CanonicalKey(firstDailyTestSpecies)],
+		"a seed started before the rule was disabled must not be applied")
 }

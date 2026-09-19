@@ -71,9 +71,10 @@ type firstDailyApproval struct {
 // firstDailySeed is the result of one datastore seed query, handed from the seed
 // goroutine back to the flusher.
 type firstDailySeed struct {
-	day     string
-	species []string
-	err     error
+	day        string
+	species    []string
+	err        error
+	generation uint64
 }
 
 // firstDailyConsensus is the rule's in-memory state, keyed by calendar day. The
@@ -91,6 +92,11 @@ type firstDailyConsensus struct {
 	// seeds delivers seed results; seeding is true while a query is in flight.
 	seeds   chan firstDailySeed
 	seeding bool
+	// generation advances whenever the rule is disabled. A seed carries the
+	// generation it started in and is dropped if they no longer match, so a query
+	// that began before a disable cannot mark a day loaded after a quick re-enable
+	// without the approvals made while the rule was off.
+	generation uint64
 
 	// support answers the per-source model-support question; nil means p.Bn.
 	support speciesSupport
@@ -140,9 +146,10 @@ func (p *Processor) prepareFirstDailyConsensus(now time.Time, settings *conf.Set
 	if !settings.Realtime.FirstDailyConsensus.Enabled {
 		// Re-enabling must reseed rather than trust approvals it did not observe.
 		c.days, c.approved = nil, nil
+		c.generation++
 		return
 	}
-	if received {
+	if received && seed.generation == c.generation {
 		c.applySeed(seed, now)
 	}
 	for approval := range c.approved {
@@ -219,20 +226,20 @@ func (p *Processor) startFirstDailySeed(now time.Time) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ds, seeds := p.Ds, c.seeds
+	ds, seeds, generation := p.Ds, c.seeds, c.generation
 	go func() {
 		defer func() {
 			// A panic must still report back, or seeding would stay true and the
 			// rule would never load.
 			if r := recover(); r != nil {
-				seeds <- firstDailySeed{day: day, err: errors.Newf("first daily consensus seed panicked: %v", r).
+				seeds <- firstDailySeed{day: day, generation: generation, err: errors.Newf("first daily consensus seed panicked: %v", r).
 					Component("processor").Build()}
 			}
 		}()
 		ctx, cancel := context.WithTimeout(ctx, firstDailySeedTimeout)
 		defer cancel()
 		rows, err := ds.GetSpeciesSummaryData(ctx, day, day)
-		seed := firstDailySeed{day: day, err: err, species: make([]string, 0, len(rows))}
+		seed := firstDailySeed{day: day, generation: generation, err: err, species: make([]string, 0, len(rows))}
 		for i := range rows {
 			if key := speciesindex.CanonicalKey(rows[i].ScientificName); key != "" {
 				seed.species = append(seed.species, key)
