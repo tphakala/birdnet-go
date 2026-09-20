@@ -123,15 +123,15 @@
     ];
   });
 
-  // Maximum disk usage options (static, no reactive dependency)
-  const maxUsageOptions = [
+  // Maximum disk usage options as derived store for consistency
+  let maxUsageOptions = $derived([
     { value: '70%', label: '70%' },
     { value: '75%', label: '75%' },
     { value: '80%', label: '80%' },
     { value: '85%', label: '85%' },
     { value: '90%', label: '90%' },
     { value: '95%', label: '95%' },
-  ];
+  ]);
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
@@ -391,7 +391,7 @@
         // Taxonomy group entries from server (with display suffixes)
         const generaEntries = (data.genera ?? []).map(g => `${g}${GENUS_SUFFIX}`);
         const familyEntries = (data.families ?? []).map(f =>
-          f.commonName ? `${f.name} - ${f.commonName}${FAMILY_SUFFIX}` : `${f.name}${FAMILY_SUFFIX}`
+          f.commonName ? `${f.name} — ${f.commonName}${FAMILY_SUFFIX}` : `${f.name}${FAMILY_SUFFIX}`
         );
         const orderEntries = (data.orders ?? []).map(o => `${o}${ORDER_SUFFIX}`);
 
@@ -598,9 +598,9 @@
     const cleaned = updatedSpecies.map(s => {
       if (s.endsWith(GENUS_SUFFIX)) return s.slice(0, -GENUS_SUFFIX.length);
       if (s.endsWith(FAMILY_SUFFIX)) {
-        // Extract scientific name from "Strigidae - Owls (Family)" or "Strigidae (Family)"
+        // Extract scientific name from "Strigidae — Owls (Family)" or "Strigidae (Family)"
         const withoutSuffix = s.slice(0, -FAMILY_SUFFIX.length);
-        const dashIdx = withoutSuffix.indexOf(' - ');
+        const dashIdx = withoutSuffix.indexOf(' — ');
         return dashIdx >= 0 ? withoutSuffix.slice(0, dashIdx) : withoutSuffix;
       }
       if (s.endsWith(ORDER_SUFFIX)) return s.slice(0, -ORDER_SUFFIX.length);
