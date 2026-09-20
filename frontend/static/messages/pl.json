@@ -3769,6 +3769,8 @@
         "pathHelp": "Katalog, w którym będą zapisywane klipy audio. Ścieżki względne są od katalogu aplikacji. Przykład: 'clips/' lub '/var/audio/birds/'",
         "typeLabel": "Format Audio",
         "typeHelp": "Format audio dla zapisanych klipów. WAV i FLAC są bezstratne (najlepsza jakość, większe pliki). MP3, AAC i Opus są stratne (mniejsze pliki, niewielka utrata jakości).",
+        "ultrasonicTypeLabel": "Format Ultradźwiękowy",
+        "ultrasonicTypeHelp": "Bezstratny format (WAV lub FLAC) używany tylko do nagrań nietoperzy i dźwięków ultradźwiękowych powyżej 48 kHz. Są one zapisywane z pełną źródłową częstotliwością próbkowania zamiast powyższego formatu, dzięki czemu nie traci się żadnych szczegółów ultradźwiękowych.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Bitrate kompresji audio dla formatów stratnych. Zakres: {min}-{max} kbps. Wyższe wartości zapewniają lepszą jakość, ale większe pliki.",
         "losslessBitrateValue": "N/A - Bezstratny",

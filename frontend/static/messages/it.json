@@ -3769,6 +3769,8 @@
         "pathHelp": "Directory dove clip audio saranno salvate. Percorsi relativi sono dalla directory applicazione. Esempio: 'clips/' o '/var/audio/birds/'",
         "typeLabel": "Formato Audio",
         "typeHelp": "Formato audio per clip salvate. WAV e FLAC sono lossless (migliore qualità, file più grandi). MP3, AAC e Opus sono lossy (file più piccoli, leggera perdita qualità).",
+        "ultrasonicTypeLabel": "Formato Ultrasonico",
+        "ultrasonicTypeHelp": "Formato lossless (WAV o FLAC) utilizzato solo per catture di pipistrelli e ultrasoniche sopra i 48 kHz. Queste vengono salvate alla frequenza di campionamento originale completa anziché nel formato sopra indicato, così da non perdere alcun dettaglio ultrasonico.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Bitrate compressione audio per formati lossy. Intervallo: {min}-{max} kbps. Valori più alti forniscono migliore qualità ma file più grandi.",
         "losslessBitrateValue": "N/D - Senza perdita",

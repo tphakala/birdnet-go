@@ -3769,6 +3769,8 @@
         "pathHelp": "Directory where audio clips will be saved. Relative paths are from the application directory. Example: 'clips/' or '/var/audio/birds/'",
         "typeLabel": "Audio Format",
         "typeHelp": "Audio format for saved clips. WAV and FLAC are lossless (best quality, larger files). MP3, AAC, and Opus are lossy (smaller files, slight quality loss).",
+        "ultrasonicTypeLabel": "Ultrasonic Format",
+        "ultrasonicTypeHelp": "Lossless format (WAV or FLAC) used only for bat and ultrasonic captures above 48 kHz. These are stored at their full source rate instead of the format above, so no ultrasonic detail is lost.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files.",
         "losslessBitrateValue": "N/A - Lossless",

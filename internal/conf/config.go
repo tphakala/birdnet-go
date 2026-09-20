@@ -43,16 +43,17 @@ type EqualizerSettings struct {
 }
 
 type ExportSettings struct {
-	Debug         bool                  `yaml:"debug" json:"debug" mapstructure:"debug"`                         // true to enable audio export debug
-	Enabled       bool                  `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                   // export audio clips containing indentified bird calls
-	Path          string                `yaml:"path" json:"path" mapstructure:"path"`                            // path to audio clip export directory
-	Type          string                `yaml:"type" json:"type" mapstructure:"type"`                            // audio file type, wav, mp3 or flac
-	Bitrate       string                `yaml:"bitrate,omitempty" json:"bitrate" mapstructure:"bitrate"`         // bitrate for audio export
-	Retention     RetentionSettings     `yaml:"retention" json:"retention" mapstructure:"retention"`             // retention settings
-	Length        int                   `yaml:"length" json:"length" mapstructure:"length"`                      // audio capture length in seconds
-	PreCapture    int                   `yaml:"precapture" json:"preCapture" mapstructure:"preCapture"`          // pre-capture in seconds
-	Gain          float64               `yaml:"gain" json:"gain" mapstructure:"gain"`                            // gain in dB for audio capture
-	Normalization NormalizationSettings `yaml:"normalization" json:"normalization" mapstructure:"normalization"` // audio normalization settings (EBU R128)
+	Debug          bool                  `yaml:"debug" json:"debug" mapstructure:"debug"`                            // true to enable audio export debug
+	Enabled        bool                  `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                      // export audio clips containing indentified bird calls
+	Path           string                `yaml:"path" json:"path" mapstructure:"path"`                               // path to audio clip export directory
+	Type           string                `yaml:"type" json:"type" mapstructure:"type"`                               // audio file type: wav, flac, aac, opus or mp3
+	UltrasonicType string                `yaml:"ultrasonictype" json:"ultrasonicType" mapstructure:"ultrasonicType"` // wav or flac only; used for bat/ultrasonic captures above 48 kHz
+	Bitrate        string                `yaml:"bitrate,omitempty" json:"bitrate" mapstructure:"bitrate"`            // bitrate for audio export
+	Retention      RetentionSettings     `yaml:"retention" json:"retention" mapstructure:"retention"`                // retention settings
+	Length         int                   `yaml:"length" json:"length" mapstructure:"length"`                         // audio capture length in seconds
+	PreCapture     int                   `yaml:"precapture" json:"preCapture" mapstructure:"preCapture"`             // pre-capture in seconds
+	Gain           float64               `yaml:"gain" json:"gain" mapstructure:"gain"`                               // gain in dB for audio capture
+	Normalization  NormalizationSettings `yaml:"normalization" json:"normalization" mapstructure:"normalization"`    // audio normalization settings (EBU R128)
 }
 
 // NormalizationSettings contains audio normalization configuration based on EBU R128 standard.

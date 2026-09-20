@@ -3769,6 +3769,8 @@
         "pathHelp": "Hakemisto, johon äänileikkeet tallennetaan. Suhteelliset polut ovat sovellushakemistosta. Esimerkki: 'clips/' tai '/var/audio/birds/'",
         "typeLabel": "Äänimuoto",
         "typeHelp": "Tallennettujen leikkeiden äänimuoto. WAV ja FLAC ovat häviöttömiä (paras laatu, suuremmat tiedostot). MP3, AAC ja Opus ovat häviöllisiä (pienemmät tiedostot, pieni laatutappio).",
+        "ultrasonicTypeLabel": "Ultraäänimuoto",
+        "ultrasonicTypeHelp": "Häviötön muoto (WAV tai FLAC), jota käytetään vain lepakko- ja ultraäänitallenteille yli 48 kHz taajuuksilla. Ne tallennetaan täydellä lähdenäytteenottotaajuudella yllä olevan muodon sijaan, jotta ultraäänen yksityiskohtia ei menetetä.",
         "bitrateLabel": "Bittinopeus",
         "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
         "losslessBitrateValue": "Ei saatavilla - Häviötön",

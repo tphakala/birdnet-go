@@ -105,6 +105,18 @@ func (b *SettingsBuilder) WithAudioExport(path, exportType, bitrate string) *Set
 	b.settings.Realtime.Audio.Export.Path = path
 	b.settings.Realtime.Audio.Export.Type = exportType
 	b.settings.Realtime.Audio.Export.Bitrate = bitrate
+	// Match the production default (WAV or FLAC only) so tests exercising the
+	// ultrasonic export path have a valid format without every call setting it.
+	if b.settings.Realtime.Audio.Export.UltrasonicType == "" {
+		b.settings.Realtime.Audio.Export.UltrasonicType = conf.AudioExportTypeFLAC
+	}
+	return b
+}
+
+// WithUltrasonicExportType sets the dedicated export format (WAV or FLAC) used for
+// bat/ultrasonic captures above the analysis rate.
+func (b *SettingsBuilder) WithUltrasonicExportType(exportType string) *SettingsBuilder {
+	b.settings.Realtime.Audio.Export.UltrasonicType = exportType
 	return b
 }
 

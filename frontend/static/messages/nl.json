@@ -3769,6 +3769,8 @@
         "pathHelp": "Map waar audio clips worden opgeslagen. Relatieve paden zijn vanaf de applicatie map. Voorbeeld: 'clips/' of '/var/audio/birds/'",
         "typeLabel": "Audio Formaat",
         "typeHelp": "Audio formaat voor opgeslagen clips. WAV en FLAC zijn lossless (beste kwaliteit, grotere bestanden). MP3, AAC, en Opus zijn lossy (kleinere bestanden, lichte kwaliteitsverlies).",
+        "ultrasonicTypeLabel": "Ultrasoon Formaat",
+        "ultrasonicTypeHelp": "Lossless formaat (WAV of FLAC) dat alleen wordt gebruikt voor vleermuis- en ultrasone opnames boven 48 kHz. Deze worden opgeslagen op hun volledige bronsamplerate in plaats van het bovenstaande formaat, zodat er geen ultrasone details verloren gaan.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compressie bitrate voor lossy formaten. Bereik: {min}-{max} kbps. Hogere waarden geven betere kwaliteit maar grotere bestanden.",
         "losslessBitrateValue": "N.v.t. - Verliesvrij",

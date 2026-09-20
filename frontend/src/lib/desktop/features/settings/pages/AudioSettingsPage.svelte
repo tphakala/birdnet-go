@@ -58,7 +58,13 @@
   import { getLocale } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { getBitrateConfig, formatBitrate, parseNumericBitrate } from '$lib/utils/audioValidation';
-  import { chooseBitrateForFormat, isExportFormat, type ExportFormat } from './audioExportFormat';
+  import {
+    chooseBitrateForFormat,
+    isExportFormat,
+    isLosslessExportFormat,
+    type ExportFormat,
+    type LosslessExportFormat,
+  } from './audioExportFormat';
   import {
     Volume2,
     Radio,
@@ -92,6 +98,18 @@
       { value: 'aac', label: t('settings.audio.formats.aac') },
       { value: 'opus', label: t('settings.audio.formats.opus') },
       { value: 'mp3', label: t('settings.audio.formats.mp3') },
+    ];
+  });
+
+  // Ultrasonic export is restricted to the two lossless containers (WAV/FLAC)
+  // that carry any sample rate natively, so a bat capture above the analysis rate
+  // is preserved losslessly at its full source rate.
+  const ultrasonicExportFormatOptions = $derived.by(() => {
+    // By accessing getLocale(), this will only recompute when locale changes
+    getLocale();
+    return [
+      { value: 'flac', label: t('settings.audio.formats.flac') },
+      { value: 'wav', label: t('settings.audio.formats.wav') },
     ];
   });
 
@@ -133,6 +151,7 @@
           enabled: false,
           path: 'clips/',
           type: 'wav' as const,
+          ultrasonicType: 'flac' as const,
           bitrate: '96k',
           retention: {
             policy: 'none',
@@ -244,11 +263,13 @@
       {
         path: store.originalData.realtime?.audio?.export?.path,
         type: store.originalData.realtime?.audio?.export?.type,
+        ultrasonicType: store.originalData.realtime?.audio?.export?.ultrasonicType,
         bitrate: store.originalData.realtime?.audio?.export?.bitrate,
       },
       {
         path: store.formData.realtime?.audio?.export?.path,
         type: store.formData.realtime?.audio?.export?.type,
+        ultrasonicType: store.formData.realtime?.audio?.export?.ultrasonicType,
         bitrate: store.formData.realtime?.audio?.export?.bitrate,
       }
     )
@@ -471,6 +492,15 @@
       audio: {
         ...$audioSettings!,
         export: { ...settings.audio.export, type, bitrate: nextBitrate },
+      },
+    });
+  }
+
+  function updateUltrasonicExportFormat(ultrasonicType: LosslessExportFormat) {
+    settingsActions.updateSection('realtime', {
+      audio: {
+        ...$audioSettings!,
+        export: { ...settings.audio.export, ultrasonicType },
       },
     });
   }
@@ -1219,11 +1249,13 @@
       originalData={{
         path: store.originalData.realtime?.audio?.export?.path,
         type: store.originalData.realtime?.audio?.export?.type,
+        ultrasonicType: store.originalData.realtime?.audio?.export?.ultrasonicType,
         bitrate: store.originalData.realtime?.audio?.export?.bitrate,
       }}
       currentData={{
         path: store.formData.realtime?.audio?.export?.path,
         type: store.formData.realtime?.audio?.export?.type,
+        ultrasonicType: store.formData.realtime?.audio?.export?.ultrasonicType,
         bitrate: store.formData.realtime?.audio?.export?.bitrate,
       }}
     >
@@ -1272,6 +1304,27 @@
                   updateExportFormat(candidate);
                 } else {
                   logger.warn('Ignoring unknown audio export format candidate', {
+                    candidate,
+                  });
+                }
+              }}
+              groupBy={false}
+              menuSize="sm"
+            />
+
+            <!-- Ultrasonic Export Type (bat/ultrasonic captures above 48 kHz) -->
+            <SelectDropdown
+              value={settings.audio.export.ultrasonicType}
+              label={t('settings.audio.fileSettings.ultrasonicTypeLabel')}
+              helpText={t('settings.audio.fileSettings.ultrasonicTypeHelp')}
+              options={ultrasonicExportFormatOptions}
+              disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
+              onChange={value => {
+                const candidate = Array.isArray(value) ? value[0] : value;
+                if (isLosslessExportFormat(candidate)) {
+                  updateUltrasonicExportFormat(candidate);
+                } else {
+                  logger.warn('Ignoring unknown ultrasonic export format candidate', {
                     candidate,
                   });
                 }

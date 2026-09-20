@@ -3769,6 +3769,8 @@
         "pathHelp": "Diretório onde os clipes de áudio serão salvos. Caminhos relativos são do diretório da aplicação. Exemplo: 'clips/' ou '/var/audio/birds/'",
         "typeLabel": "Formato de Áudio",
         "typeHelp": "Formato de áudio para clipes salvos. WAV e FLAC são sem perdas (melhor qualidade, arquivos maiores). MP3, AAC e Opus são com perdas (arquivos menores, pequena perda de qualidade).",
+        "ultrasonicTypeLabel": "Formato Ultrassónico",
+        "ultrasonicTypeHelp": "Formato sem perdas (WAV ou FLAC) usado apenas para capturas de morcegos e ultrassónicas acima de 48 kHz. Estas são salvas na sua taxa de amostragem de origem completa em vez do formato acima, para que nenhum detalhe ultrassónico seja perdido.",
         "bitrateLabel": "Taxa de bits",
         "bitrateHelp": "Taxa de bits de compressão de áudio para formatos com perdas. Intervalo: {min}-{max} kbps. Valores mais altos fornecem melhor qualidade, mas arquivos maiores.",
         "losslessBitrateValue": "N/D - Sem perda",

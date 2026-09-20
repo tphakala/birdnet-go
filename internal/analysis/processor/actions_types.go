@@ -141,6 +141,8 @@ type SaveAudioAction struct {
 	readyAt          time.Time
 	sourceSampleRate int    // Actual source capture rate for correct export headers
 	modelName        string // Detection model name (e.g. "BattyBirdNET") for export strategy
+	modelVersion     string // Detection model version, paired with modelName for ResolveModelType so the
+	// encode-side model-type check matches the clip-name path exactly (no name/version skew).
 	// species is the detection's common name, LOWERCASED to match the casing the
 	// sibling detection operations log, carried so the export log lines can name
 	// it. GET /api/v2/system/events/detections attributes recorded clip paths to a

@@ -933,7 +933,11 @@
         },
         "type": {
           "type": "string",
-          "description": "audio file type, wav, mp3 or flac"
+          "description": "audio file type: wav, flac, aac, opus or mp3"
+        },
+        "ultrasonictype": {
+          "type": "string",
+          "description": "wav or flac only; used for bat/ultrasonic captures above 48 kHz"
         },
         "bitrate": {
           "type": "string",
