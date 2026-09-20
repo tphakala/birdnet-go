@@ -3769,6 +3769,8 @@
         "pathHelp": "Direktorija, kurā tiks saglabāti audio klipi. Relatīvie ceļi ir no lietojumprogrammas direktorijas. Piemērs: 'clips/' vai '/var/audio/birds/'",
         "typeLabel": "Audio formāts",
         "typeHelp": "Audio formāts saglabātajiem klipiem. WAV un FLAC ir bezzudumu (labākā kvalitāte, lielāki faili). MP3, AAC un Opus ir ar zudumiem (mazāki faili, neliels kvalitātes zudums).",
+        "ultrasonicTypeLabel": "Ultraskaņas formāts",
+        "ultrasonicTypeHelp": "Bezzudumu formāts (WAV vai FLAC), ko izmanto tikai sikspārņu un ultraskaņas ierakstiem virs 48 kHz. Tie tiek saglabāti pilnā avota diskretizācijas frekvencē, nevis augstāk norādītajā formātā, tāpēc netiek zaudētas nekādas ultraskaņas detaļas.",
         "bitrateLabel": "Bitu pārraides ātrums",
         "bitrateHelp": "Audio kompresijas bitu pārraides ātrums formātiem ar zudumiem. Diapazons: {min}-{max} kbps. Augstākas vērtības nodrošina labāku kvalitāti, bet lielākus failus.",
         "losslessBitrateValue": "N/A - Bez zudumiem",

@@ -2759,6 +2759,8 @@ export type TranslationKey =
   | 'settings.audio.fileSettings.pathHelp'
   | 'settings.audio.fileSettings.typeLabel'
   | 'settings.audio.fileSettings.typeHelp'
+  | 'settings.audio.fileSettings.ultrasonicTypeLabel'
+  | 'settings.audio.fileSettings.ultrasonicTypeHelp'
   | 'settings.audio.fileSettings.bitrateLabel'
   | 'settings.audio.fileSettings.bitrateHelp' // params: min, max
   | 'settings.audio.fileSettings.losslessBitrateValue'

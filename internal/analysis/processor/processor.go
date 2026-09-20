@@ -1451,25 +1451,32 @@ func (p *Processor) resolveClipName(settings *conf.Settings, item *classifier.Re
 	}
 
 	clipName := p.generateClipName(settings, scientificName, confidence)
-	return p.applyBatFormatFallback(settings, clipName, item.ModelID, item.Source)
+	return p.applyExportFormatExtension(settings, clipName, item.ModelID, item.Source)
 }
 
-// applyBatFormatFallback overrides a clip name's extension to .wav when a bat model
-// at a high source sample rate is exported to a format (MP3/Opus/AAC) that cannot
-// carry rates above 48kHz, so the stored ClipName matches the file the exporter
-// actually writes. It is shared by the createDetection and extended-capture paths
-// so both persist the same fallback extension. An empty clip name is returned
-// unchanged.
-func (p *Processor) applyBatFormatFallback(settings *conf.Settings, clipName, modelID string, source datastore.AudioSource) string {
+// applyExportFormatExtension overrides a clip name's extension to match the
+// container the exporter will actually write, keeping the persisted ClipName in
+// lockstep with the on-disk file. buildClipPath derives the extension from
+// Export.Type; a bat/ultrasonic capture above the analysis rate is stored in the
+// dedicated Export.UltrasonicType instead (resolveExportFormat), so its extension
+// must be rewritten here. Shared by the createDetection and extended-capture paths
+// so both persist the same extension. An empty clip name is returned unchanged.
+func (p *Processor) applyExportFormatExtension(settings *conf.Settings, clipName, modelID string, source datastore.AudioSource) string {
 	if clipName == "" {
 		return clipName
 	}
 	mInfo := classifier.DetectionModelInfoForID(modelID)
 	sourceRate := p.resolveAudioSource(source).SampleRate
-	if needsBatFormatFallback(mInfo.Name, mInfo.Version, sourceRate, settings.Realtime.Audio.Export.Type) {
-		return replaceExtension(clipName, ".wav")
+	format := exportFormatForModel(mInfo.Name, mInfo.Version, sourceRate, &settings.Realtime.Audio.Export)
+	// GetFileExtension returns the extension WITHOUT a leading dot; replaceExtension
+	// expects the dot. Guard against an empty extension (only reachable with an
+	// unvalidated empty format) so buildClipPath's own extension is preserved rather
+	// than clobbered to a trailing dot (GitHub #2810/#2814).
+	ext := convert.GetFileExtension(format)
+	if ext == "" {
+		return clipName
 	}
-	return clipName
+	return replaceExtension(clipName, "."+ext)
 }
 
 // generateClipName generates a clip name for the given scientific name and confidence.
@@ -2332,6 +2339,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 			ClipName:         det.Result.ClipName,
 			sourceSampleRate: det.Result.AudioSource.SampleRate,
 			modelName:        det.Result.Model.Name,
+			modelVersion:     det.Result.Model.Version,
 			species:          strings.ToLower(det.Result.Species.CommonName),
 			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 			PreRenderer:      p.preRenderer,

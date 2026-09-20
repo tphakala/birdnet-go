@@ -3769,6 +3769,8 @@
         "pathHelp": "Mappe, hvor lydklip gemmes. Relative stier er fra applikationsmappen. Eksempel: 'clips/' eller '/var/audio/birds/'",
         "typeLabel": "Lydformat",
         "typeHelp": "Lydformat for gemte klip. WAV og FLAC er tabsfri (bedste kvalitet, større filer). MP3, AAC og Opus er tabsgivende (mindre filer, let kvalitetstab).",
+        "ultrasonicTypeLabel": "Ultralydsformat",
+        "ultrasonicTypeHelp": "Tabsfri format (WAV eller FLAC), der kun bruges til flagermus- og ultralydsoptagelser over 48 kHz. Disse gemmes med deres fulde kilderate i stedet for formatet ovenfor, så ingen ultralyddetaljer går tabt.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Lydkomprimerings-bitrate for tabsgivende formater. Interval: {min}-{max} kbps. Højere værdier giver bedre kvalitet, men større filer.",
         "losslessBitrateValue": "Ikke relevant - Tabsfri",

@@ -3769,6 +3769,8 @@
         "pathHelp": "Adresár, do ktorého sa budú ukladať zvukové klipy. Relatívne cesty sú od adresára aplikácie. Príklad: 'clips/' alebo '/var/audio/birds/'",
         "typeLabel": "Formát zvuku",
         "typeHelp": "Formát zvuku pre uložené klipy. WAV a FLAC sú bezstratové (najlepšia kvalita, väčšie súbory). MP3, AAC a Opus sú stratové (menšie súbory, mierna strata kvality).",
+        "ultrasonicTypeLabel": "Ultrazvukový formát",
+        "ultrasonicTypeHelp": "Bezstratový formát (WAV alebo FLAC) používaný len pre záznamy netopierov a ultrazvuku nad 48 kHz. Tieto záznamy sa ukladajú v plnej zdrojovej vzorkovacej frekvencii namiesto vyššie uvedeného formátu, takže sa nestratia žiadne ultrazvukové detaily.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Bitrate kompresie zvuku pre stratové formáty. Rozsah: {min}-{max} kbps. Vyššie hodnoty poskytujú lepšiu kvalitu, ale väčšie súbory.",
         "losslessBitrateValue": "N/A - Bez straty kvality",

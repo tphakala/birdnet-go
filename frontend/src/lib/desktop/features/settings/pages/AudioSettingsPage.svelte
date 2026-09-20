@@ -58,7 +58,13 @@
   import { getLocale } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { getBitrateConfig, formatBitrate, parseNumericBitrate } from '$lib/utils/audioValidation';
-  import { chooseBitrateForFormat, isExportFormat, type ExportFormat } from './audioExportFormat';
+  import {
+    chooseBitrateForFormat,
+    isExportFormat,
+    isLosslessExportFormat,
+    type ExportFormat,
+    type LosslessExportFormat,
+  } from './audioExportFormat';
   import {
     Volume2,
     Radio,
@@ -95,6 +101,18 @@
     ];
   });
 
+  // Ultrasonic export is restricted to the two lossless containers (WAV/FLAC)
+  // that carry any sample rate natively, so a bat capture above the analysis rate
+  // is preserved losslessly at its full source rate.
+  const ultrasonicExportFormatOptions = $derived.by(() => {
+    // By accessing getLocale(), this will only recompute when locale changes
+    getLocale();
+    return [
+      { value: 'flac', label: t('settings.audio.formats.flac') },
+      { value: 'wav', label: t('settings.audio.formats.wav') },
+    ];
+  });
+
   const retentionPolicyOptions = $derived.by(() => {
     // By accessing getLocale(), this will only recompute when locale changes
     getLocale();
@@ -105,15 +123,15 @@
     ];
   });
 
-  // Maximum disk usage options as derived store for consistency
-  let maxUsageOptions = $derived([
+  // Maximum disk usage options (static, no reactive dependency)
+  const maxUsageOptions = [
     { value: '70%', label: '70%' },
     { value: '75%', label: '75%' },
     { value: '80%', label: '80%' },
     { value: '85%', label: '85%' },
     { value: '90%', label: '90%' },
     { value: '95%', label: '95%' },
-  ]);
+  ];
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
@@ -133,6 +151,7 @@
           enabled: false,
           path: 'clips/',
           type: 'wav' as const,
+          ultrasonicType: 'flac' as const,
           bitrate: '96k',
           retention: {
             policy: 'none',
@@ -244,11 +263,13 @@
       {
         path: store.originalData.realtime?.audio?.export?.path,
         type: store.originalData.realtime?.audio?.export?.type,
+        ultrasonicType: store.originalData.realtime?.audio?.export?.ultrasonicType,
         bitrate: store.originalData.realtime?.audio?.export?.bitrate,
       },
       {
         path: store.formData.realtime?.audio?.export?.path,
         type: store.formData.realtime?.audio?.export?.type,
+        ultrasonicType: store.formData.realtime?.audio?.export?.ultrasonicType,
         bitrate: store.formData.realtime?.audio?.export?.bitrate,
       }
     )
@@ -370,7 +391,7 @@
         // Taxonomy group entries from server (with display suffixes)
         const generaEntries = (data.genera ?? []).map(g => `${g}${GENUS_SUFFIX}`);
         const familyEntries = (data.families ?? []).map(f =>
-          f.commonName ? `${f.name} — ${f.commonName}${FAMILY_SUFFIX}` : `${f.name}${FAMILY_SUFFIX}`
+          f.commonName ? `${f.name} - ${f.commonName}${FAMILY_SUFFIX}` : `${f.name}${FAMILY_SUFFIX}`
         );
         const orderEntries = (data.orders ?? []).map(o => `${o}${ORDER_SUFFIX}`);
 
@@ -475,6 +496,15 @@
     });
   }
 
+  function updateUltrasonicExportFormat(ultrasonicType: LosslessExportFormat) {
+    settingsActions.updateSection('realtime', {
+      audio: {
+        ...$audioSettings!,
+        export: { ...settings.audio.export, ultrasonicType },
+      },
+    });
+  }
+
   function updateExportBitrate(bitrate: number | string) {
     const formattedBitrate = formatBitrate(bitrate);
 
@@ -568,9 +598,9 @@
     const cleaned = updatedSpecies.map(s => {
       if (s.endsWith(GENUS_SUFFIX)) return s.slice(0, -GENUS_SUFFIX.length);
       if (s.endsWith(FAMILY_SUFFIX)) {
-        // Extract scientific name from "Strigidae — Owls (Family)" or "Strigidae (Family)"
+        // Extract scientific name from "Strigidae - Owls (Family)" or "Strigidae (Family)"
         const withoutSuffix = s.slice(0, -FAMILY_SUFFIX.length);
-        const dashIdx = withoutSuffix.indexOf(' — ');
+        const dashIdx = withoutSuffix.indexOf(' - ');
         return dashIdx >= 0 ? withoutSuffix.slice(0, dashIdx) : withoutSuffix;
       }
       if (s.endsWith(ORDER_SUFFIX)) return s.slice(0, -ORDER_SUFFIX.length);
@@ -1219,11 +1249,13 @@
       originalData={{
         path: store.originalData.realtime?.audio?.export?.path,
         type: store.originalData.realtime?.audio?.export?.type,
+        ultrasonicType: store.originalData.realtime?.audio?.export?.ultrasonicType,
         bitrate: store.originalData.realtime?.audio?.export?.bitrate,
       }}
       currentData={{
         path: store.formData.realtime?.audio?.export?.path,
         type: store.formData.realtime?.audio?.export?.type,
+        ultrasonicType: store.formData.realtime?.audio?.export?.ultrasonicType,
         bitrate: store.formData.realtime?.audio?.export?.bitrate,
       }}
     >
@@ -1272,6 +1304,27 @@
                   updateExportFormat(candidate);
                 } else {
                   logger.warn('Ignoring unknown audio export format candidate', {
+                    candidate,
+                  });
+                }
+              }}
+              groupBy={false}
+              menuSize="sm"
+            />
+
+            <!-- Ultrasonic Export Type (bat/ultrasonic captures above 48 kHz) -->
+            <SelectDropdown
+              value={settings.audio.export.ultrasonicType}
+              label={t('settings.audio.fileSettings.ultrasonicTypeLabel')}
+              helpText={t('settings.audio.fileSettings.ultrasonicTypeHelp')}
+              options={ultrasonicExportFormatOptions}
+              disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
+              onChange={value => {
+                const candidate = Array.isArray(value) ? value[0] : value;
+                if (isLosslessExportFormat(candidate)) {
+                  updateUltrasonicExportFormat(candidate);
+                } else {
+                  logger.warn('Ignoring unknown ultrasonic export format candidate', {
                     candidate,
                   });
                 }

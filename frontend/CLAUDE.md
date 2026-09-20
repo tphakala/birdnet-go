@@ -29,7 +29,7 @@ frontend/
 │   ├── pages/
 │   ├── stores/
 │   └── utils/
-├── static/messages/       # Translation files (15 locales)
+├── static/messages/       # Translation files (16 locales)
 │   ├── en.json           # English (primary)
 │   ├── cs.json           # Czech
 │   ├── da.json           # Danish
@@ -40,6 +40,7 @@ frontend/
 │   ├── hu.json           # Hungarian
 │   ├── it.json           # Italian
 │   ├── lv.json           # Latvian
+│   ├── nb.json           # Norwegian Bokmål
 │   ├── nl.json           # Dutch
 │   ├── pl.json           # Polish
 │   ├── pt.json           # Portuguese
@@ -66,6 +67,7 @@ frontend/static/messages/
 ├── hu.json  # Hungarian
 ├── it.json  # Italian
 ├── lv.json  # Latvian
+├── nb.json  # Norwegian Bokmål
 ├── nl.json  # Dutch
 ├── pl.json  # Polish
 ├── pt.json  # Portuguese

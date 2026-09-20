@@ -492,6 +492,42 @@ func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Handler, string) {
 	return e, h, core.SFS.BaseDir()
 }
 
+// TestServeAudio_AlternateExtensionFallback verifies the extension-agnostic
+// recovery on the audio serve path: when the requested clip name's exact file is
+// missing but a sibling with a different known audio extension exists (a rare
+// clip_name/on-disk drift), the actual file is served and the response is labeled
+// by the file served, not by the requested extension.
+func TestServeAudio_AlternateExtensionFallback(t *testing.T) {
+	e, _, tempDir := setupMediaTestEnvironment(t)
+
+	// The real file on disk is FLAC (createTestAudioFile writes valid audio bytes;
+	// the serve path only cares about the extension for labeling).
+	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, "drifted.flac")))
+
+	server := httptest.NewServer(e)
+	defer server.Close()
+
+	// The request (mirroring a stored clip_name) names .mp3, which does not exist.
+	resp, err := server.Client().Get(server.URL + "/api/v2/media/audio/drifted.mp3")
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode,
+		"the actual on-disk file must be served instead of a 404")
+	assert.Equal(t, MimeTypeFLAC, resp.Header.Get(echo.HeaderContentType),
+		"Content-Type must follow the file served, not the requested extension")
+	body, readErr := io.ReadAll(resp.Body)
+	require.NoError(t, readErr)
+	assert.NotEmpty(t, body, "the served alternate file must have a non-empty body")
+
+	// A genuinely absent clip (no sibling in any known audio format) still 404s.
+	resp2, err := server.Client().Get(server.URL + "/api/v2/media/audio/nonexistent.mp3")
+	require.NoError(t, err)
+	defer func() { _ = resp2.Body.Close() }()
+	assert.Equal(t, http.StatusNotFound, resp2.StatusCode,
+		"a clip with no on-disk file in any format must still 404")
+}
+
 // TestMediaEndpointsIntegration tests the media endpoints in an integrated way
 func TestMediaEndpointsIntegration(t *testing.T) {
 	// Setup test environment (already configures SecureFS)

@@ -174,7 +174,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.audio.export.debug` | boolean | true to enable audio export debug |
 | `realtime.audio.export.enabled` | boolean | export audio clips containing indentified bird calls |
 | `realtime.audio.export.path` | string | path to audio clip export directory |
-| `realtime.audio.export.type` | string | audio file type, wav, mp3 or flac |
+| `realtime.audio.export.type` | string | audio file type: wav, flac, aac, opus or mp3 |
+| `realtime.audio.export.ultrasonictype` | string | wav or flac only; used for bat/ultrasonic captures above 48 kHz |
 | `realtime.audio.export.bitrate` | string | bitrate for audio export |
 | `realtime.audio.export.retention.debug` | boolean | true to enable retention debug |
 | `realtime.audio.export.retention.policy` | string | retention policy, "none", "age" or "usage" |

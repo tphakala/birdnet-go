@@ -39,6 +39,10 @@
  * - Automatic persistence to server
  * - Error handling and user feedback
  */
+import type {
+  ExportFormat,
+  LosslessExportFormat,
+} from '$lib/desktop/features/settings/pages/audioExportFormat';
 import { t } from '$lib/i18n';
 import { getLogger } from '$lib/utils/logger';
 import { safeGet, safeSpread } from '$lib/utils/security';
@@ -316,7 +320,8 @@ export interface EqualizerFilter {
 }
 
 export interface ExportSettings {
-  type: 'wav' | 'mp3' | 'flac' | 'aac' | 'opus';
+  type: ExportFormat;
+  ultrasonicType: LosslessExportFormat; // bat/ultrasonic captures above 48 kHz; WAV or FLAC only
   bitrate: string;
   enabled: boolean;
   debug?: boolean;
@@ -971,6 +976,7 @@ function createEmptySettings(): SettingsFormData {
         streamTransport: 'auto',
         export: {
           type: 'wav',
+          ultrasonicType: 'flac',
           bitrate: '96k',
           enabled: false,
           debug: false,

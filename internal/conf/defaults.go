@@ -133,7 +133,8 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.debug", false)
 	viper.SetDefault("realtime.audio.export.enabled", true)
 	viper.SetDefault("realtime.audio.export.path", "clips/")
-	viper.SetDefault("realtime.audio.export.type", "wav")
+	viper.SetDefault("realtime.audio.export.type", AudioExportTypeWAV)
+	viper.SetDefault("realtime.audio.export.ultrasonictype", AudioExportTypeFLAC) // bat/ultrasonic captures above 48 kHz; WAV or FLAC only
 	viper.SetDefault("realtime.audio.export.bitrate", DefaultAudioExportBitrate)
 	viper.SetDefault("realtime.audio.export.length", DefaultAudioExportLength)
 	viper.SetDefault("realtime.audio.export.preCapture", 3)

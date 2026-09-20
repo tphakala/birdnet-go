@@ -3769,6 +3769,8 @@
         "pathHelp": "Verzeichnis, in dem Audioclips gespeichert werden. Relative Pfade beziehen sich auf das Anwendungsverzeichnis. Beispiel: 'clips/' oder '/var/audio/birds/'",
         "typeLabel": "Audioformat",
         "typeHelp": "Audioformat für gespeicherte Clips. WAV und FLAC sind verlustfrei (beste Qualität, größere Dateien). MP3, AAC und Opus sind verlustbehaftet (kleinere Dateien, leichter Qualitätsverlust).",
+        "ultrasonicTypeLabel": "Ultraschallformat",
+        "ultrasonicTypeHelp": "Verlustfreies Format (WAV oder FLAC), das nur für Fledermaus- und Ultraschallaufnahmen über 48 kHz verwendet wird. Diese werden mit ihrer vollen Quellabtastrate anstelle des obigen Formats gespeichert, sodass keine Ultraschalldetails verloren gehen.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio-Kompressionsbitrate für verlustbehaftete Formate. Bereich: {min}-{max} kbps. Höhere Werte bieten bessere Qualität, aber größere Dateien.",
         "losslessBitrateValue": "Nicht zutreffend - Verlustfrei",

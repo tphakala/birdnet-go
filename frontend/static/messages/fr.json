@@ -3769,6 +3769,8 @@
         "pathHelp": "Répertoire où les clips audio seront enregistrés. Les chemins relatifs sont par rapport au répertoire de l'application. Exemple : 'clips/' ou '/var/audio/birds/'",
         "typeLabel": "Format audio",
         "typeHelp": "Format audio pour les clips enregistrés. WAV et FLAC sont sans perte (meilleure qualité, fichiers plus volumineux). MP3, AAC et Opus sont avec perte (fichiers plus petits, légère perte de qualité).",
+        "ultrasonicTypeLabel": "Format ultrasonique",
+        "ultrasonicTypeHelp": "Format sans perte (WAV ou FLAC) utilisé uniquement pour les captures de chauves-souris et ultrasoniques supérieures à 48 kHz. Celles-ci sont enregistrées à leur fréquence d'échantillonnage source complète au lieu du format ci-dessus, afin qu'aucun détail ultrasonique ne soit perdu.",
         "bitrateLabel": "Débit",
         "bitrateHelp": "Débit de compression audio pour les formats avec perte. Plage : {min}-{max} kbps. Des valeurs plus élevées offrent une meilleure qualité mais des fichiers plus volumineux.",
         "losslessBitrateValue": "N/A - Sans perte",

@@ -3769,6 +3769,8 @@
         "pathHelp": "A könyvtár, ahová a hang klipek mentésre kerülnek. A relatív útvonalak az alkalmazás könyvtárból számítódnak. Példa: 'clips/' vagy '/var/audio/birds/'",
         "typeLabel": "Hang formátum",
         "typeHelp": "Hang formátum a mentett klipekhez. A WAV és FLAC veszteségmentes (legjobb minőség, nagyobb fájlok). Az MP3, AAC és Opus veszteséges (kisebb fájlok, enyhe minőségvesztés).",
+        "ultrasonicTypeLabel": "Ultrahang formátum",
+        "ultrasonicTypeHelp": "Veszteségmentes formátum (WAV vagy FLAC), amely kizárólag a 48 kHz feletti denevér- és ultrahang-felvételekhez használatos. Ezek a fenti formátum helyett a teljes forrás mintavételezési frekvenciájukkal kerülnek mentésre, így az ultrahangos részletek nem vesznek el.",
         "bitrateLabel": "Bitráta",
         "bitrateHelp": "Hang tömörítési bitráta a veszteséges formátumokhoz. Tartomány: {min}-{max} kbps. A magasabb értékek jobb minőséget, de nagyobb fájlokat eredményeznek.",
         "losslessBitrateValue": "N/A - Veszteségmentes",
