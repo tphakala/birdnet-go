@@ -59,7 +59,14 @@ describe('Date Persistence Utilities', () => {
       writable: true,
       configurable: true,
     });
-    window.localStorage = originalLocalStorage;
+    // vitest 5: window.localStorage is getter-only, so restore it via
+    // defineProperty instead of direct assignment (which throws). A test
+    // below replaces it with a throwing mock, so this restore is required.
+    Object.defineProperty(window, 'localStorage', {
+      value: originalLocalStorage,
+      writable: true,
+      configurable: true,
+    });
     vi.restoreAllMocks();
   });
 

@@ -12,17 +12,15 @@ import {
 } from './date';
 
 describe('Date Utilities', () => {
-  // Store original Date constructor
-  const OriginalDate = global.Date;
-
   beforeEach(() => {
-    // Reset to real Date
-    global.Date = OriginalDate;
+    // Use fake timers so each test's vi.setSystemTime() pin is honored. The
+    // removed `global.Date = OriginalDate` reassignment used to clobber
+    // setSystemTime's Date mock on the 2nd and later tests in the file.
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    // Ensure Date is restored
-    global.Date = OriginalDate;
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
