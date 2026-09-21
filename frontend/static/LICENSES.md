@@ -234,12 +234,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.19.0/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.20.0/LICENSE.md
 Source: MIT
 
 ### github.com/nicholas-fedor/shoutrrr/pkg/color
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.19.0/pkg/color/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.20.0/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -464,7 +464,7 @@ Source: MIT
 
 ### github.com/tphakala/simd
 
-License: https://github.com/tphakala/simd/blob/v1.9.0/LICENSE
+License: https://github.com/tphakala/simd/blob/v1.10.0/LICENSE
 Source: MIT
 
 ### github.com/valyala/bytebufferpool
@@ -524,42 +524,42 @@ Source: Apache-2.0
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.56.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.57.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.58.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.59.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
 
-License: https://cs.opensource.google/go/x/oauth2/+/v0.36.0:LICENSE
+License: https://cs.opensource.google/go/x/oauth2/+/v0.37.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sync
 
-License: https://cs.opensource.google/go/x/sync/+/v0.22.0:LICENSE
+License: https://cs.opensource.google/go/x/sync/+/v0.23.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.47.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.48.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.45.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.46.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.41.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.42.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
 
-License: https://cs.opensource.google/go/x/time/+/v0.15.0:LICENSE
+License: https://cs.opensource.google/go/x/time/+/v0.16.0:LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/api
