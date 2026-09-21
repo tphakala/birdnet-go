@@ -8,25 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/httpclient"
-	"golang.org/x/net/http2"
 )
-
-// TestUploadTransportHTTP2ConfigureSucceeds locks in the contract that
-// newUploadHTTPClient relies on: http2.ConfigureTransports succeeds on a clone of
-// http.DefaultTransport, so the HTTP/2 health-check pings are actually applied and
-// the warn-and-continue fallback in newUploadHTTPClient is not taken. http.Transport.Clone
-// does not copy the altProto registration, so ConfigureTransports does not error even
-// though the default transport is HTTP/2-enabled. A regression here (e.g. a future
-// x/net change) would silently disable the connection-reuse-race fix, so guard it.
-func TestUploadTransportHTTP2ConfigureSucceeds(t *testing.T) {
-	t.Parallel()
-
-	transport := httpclient.CloneDefaultTransport()
-	h2, err := http2.ConfigureTransports(transport)
-	require.NoError(t, err, "ConfigureTransports must succeed on a cloned DefaultTransport so the health-check pings apply")
-	require.NotNil(t, h2)
-}
 
 // TestNewUploadHTTPClient_DedicatedTransport verifies the upload client uses its
 // own transport (cloned from the default) rather than sharing the global
@@ -43,11 +25,14 @@ func TestNewUploadHTTPClient_DedicatedTransport(t *testing.T) {
 	require.True(t, ok, "upload client must use a *http.Transport")
 	require.NotNil(t, transport)
 
-	// Note: the HTTP/2 health-check settings (ReadIdleTimeout/PingTimeout) applied
-	// via http2.ConfigureTransports live on the unexported *http2.Transport and are
-	// not reachable from the *http.Transport, so they are intentionally not asserted
-	// here. The dedicated-transport check below is what guards against regressing to
-	// the shared DefaultTransport (the original bug).
+	// The HTTP/2 health-check settings now live on the exported *http.HTTP2Config
+	// (stdlib, Go 1.24+), so assert them directly. A regression here (e.g. the ping
+	// config not being applied) would silently disable the connection-reuse-race fix.
+	require.NotNil(t, transport.HTTP2, "upload transport must configure HTTP/2 health checks")
+	assert.Equal(t, http2SendPingTimeout, transport.HTTP2.SendPingTimeout,
+		"idle PING must be sent after http2SendPingTimeout")
+	assert.Equal(t, http2PingTimeout, transport.HTTP2.PingTimeout,
+		"connection must be dropped if no PONG arrives within http2PingTimeout")
 
 	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
 	require.True(t, ok)
