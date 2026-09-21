@@ -30,14 +30,14 @@
   import type { Snippet, Component } from 'svelte';
   import { untrack } from 'svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import type { IconProps } from '@lucide/svelte';
+  import type { LucideProps } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import SettingsPageActions from './SettingsPageActions.svelte';
 
   export interface TabDefinition {
     id: string;
     label: string;
-    icon?: Component<IconProps>;
+    icon?: Component<LucideProps>;
     hasChanges?: boolean;
     content: Snippet;
   }
