@@ -26,8 +26,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
-
-	"golang.org/x/net/http2"
 )
 
 // GetLogger returns the birdweather package logger
@@ -51,14 +49,14 @@ const (
 	// in a background worker, so a slow encode never blocks the analysis pipeline or UI.
 	encodingTimeout = 60 * time.Second
 
-	// http2ReadIdleTimeout and http2PingTimeout enable HTTP/2 connection health
+	// http2SendPingTimeout and http2PingTimeout enable HTTP/2 connection health
 	// checks on the upload client. The BirdWeather API sits behind a CDN that
 	// silently drops idle connections; reusing a half-open pooled connection
 	// surfaces as "http2: client connection force closed via ClientConn.Close".
 	// With these set, the transport sends a PING on an idle connection after
-	// http2ReadIdleTimeout and discards it if no PONG arrives within
+	// http2SendPingTimeout and discards it if no PONG arrives within
 	// http2PingTimeout, so a dead connection is never reused for an upload.
-	http2ReadIdleTimeout = 15 * time.Second
+	http2SendPingTimeout = 15 * time.Second
 	http2PingTimeout     = 5 * time.Second
 
 	// detectionDurationSeconds is the duration added to timestamp for end time
@@ -213,14 +211,14 @@ type Interface interface {
 // fail with "http2: client connection force closed via ClientConn.Close").
 func newUploadHTTPClient() *http.Client {
 	transport := httpclient.CloneDefaultTransport()
-	if h2, err := http2.ConfigureTransports(transport); err == nil {
-		h2.ReadIdleTimeout = http2ReadIdleTimeout
-		h2.PingTimeout = http2PingTimeout
-	} else {
-		// Non-fatal: without explicit HTTP/2 configuration the transport still
-		// negotiates HTTP/2 via ALPN, just without the proactive idle PINGs.
-		GetLogger().Warn("Failed to configure HTTP/2 health checks for BirdWeather uploads",
-			logger.Error(err))
+	// The cloned DefaultTransport has ForceAttemptHTTP2 set, so HTTP/2 is
+	// negotiated via ALPN. Give it a dedicated HTTP2Config (stdlib bundled HTTP/2,
+	// Go 1.24+) so the transport sends proactive idle health-check PINGs; this
+	// replaces the deprecated golang.org/x/net/http2.ConfigureTransports path. A
+	// fresh config keeps these timeouts off the shared http.DefaultTransport.
+	transport.HTTP2 = &http.HTTP2Config{
+		SendPingTimeout: http2SendPingTimeout,
+		PingTimeout:     http2PingTimeout,
 	}
 	return &http.Client{
 		Timeout:   httpClientTimeout,
