@@ -3,6 +3,7 @@
 package processor
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -127,6 +128,31 @@ func TestMqttAction_Execute_SourceTopicSkipped(t *testing.T) {
 			assert.Equal(t, testMQTTTopic, msgs[0].topic)
 		})
 	}
+}
+
+// TestMqttAction_Execute_SourceTopicSkippedWhenStepExpired verifies that when
+// the composite step context is already spent, the shared publish (which runs on
+// its own background timeout) still delivers, but the per-source republish is not
+// started: publishSourceDetection derives its timeout from the step context, so
+// an expired step yields an already-cancelled context and the publish returns
+// before delivering. The action still returns nil (a missed per-source publish
+// is non-fatal).
+func TestMqttAction_Execute_SourceTopicSkippedWhenStepExpired(t *testing.T) {
+	t.Parallel()
+
+	const sourceID = "rtsp_65c31a0b"
+	client := NewMockMQTTClient()
+	action := newSourceTopicTestAction(t, client, sourceID, true)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // Simulate a step whose budget is already spent.
+
+	require.NoError(t, action.Execute(ctx, nil))
+
+	assert.Equal(t, 2, client.GetPublishCalls(), "both publishes must be attempted")
+	msgs := client.GetPublishedMessages()
+	require.Len(t, msgs, 1, "only the shared publish should be delivered")
+	assert.Equal(t, testMQTTTopic, msgs[0].topic, "shared publish uses its own background timeout")
 }
 
 // TestMqttAction_Execute_SourceTopicFailure_NonFatal verifies that a failed

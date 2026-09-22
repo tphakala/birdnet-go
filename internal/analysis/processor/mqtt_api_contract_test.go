@@ -201,7 +201,7 @@ func TestMQTTAPIContract_NoteWithBirdImage_FieldNames(t *testing.T) {
 	t.Run("SourceID uses camelCase (new field for HA)", func(t *testing.T) {
 		// This is a new field added for Home Assistant, uses camelCase
 		assert.Contains(t, jsonMap, mqttAPIContractFields.SourceID,
-			"MQTT API CONTRACT: sourceId field must be present for HA filtering")
+			"MQTT API CONTRACT: sourceId field must be present; HA discovery keys the per-source topic on it")
 		assert.Equal(t, "test-source-1", jsonMap[mqttAPIContractFields.SourceID],
 			"sourceId value mismatch")
 	})
@@ -510,13 +510,13 @@ func TestMQTTAPIContract_NoRedundantDuplicateFields(t *testing.T) {
 	err = json.Unmarshal(jsonData, &jsonMap)
 	require.NoError(t, err)
 
-	// "ID" from embedded Note must NOT appear — "detectionId" is the canonical field
+	// "ID" from embedded Note must NOT appear: "detectionId" is the canonical field
 	assert.NotContains(t, jsonMap, "ID",
-		"Redundant field 'ID' must not appear in MQTT payload — use 'detectionId' (GitHub #109)")
+		"Redundant field 'ID' must not appear in MQTT payload; use 'detectionId' (GitHub #109)")
 
-	// "Source" from embedded Note must NOT appear — "sourceId" is the canonical field
+	// "Source" from embedded Note must NOT appear: "sourceId" is the canonical field
 	assert.NotContains(t, jsonMap, "Source",
-		"Redundant field 'Source' must not appear in MQTT payload — use 'sourceId' (GitHub #109)")
+		"Redundant field 'Source' must not appear in MQTT payload; use 'sourceId' (GitHub #109)")
 
 	// Canonical fields must still be present
 	assert.Contains(t, jsonMap, "detectionId",

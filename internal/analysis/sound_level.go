@@ -315,7 +315,8 @@ const soundLevelMQTTPublishTimeout = 5 * time.Second
 // without it see no extra traffic.
 //
 // Failure is logged, not returned: the data already reached the shared topic,
-// and the next interval publishes a fresh reading anyway.
+// and the next interval publishes a fresh reading anyway. ErrMQTTClientNotReady
+// is dropped silently, matching how the shared topic handles it.
 func publishSoundLevelToSourceTopic(settings *conf.Settings, sourceID, payload string, proc *processor.Processor) {
 	if !settings.Realtime.MQTT.HomeAssistant.Enabled || sourceID == "" {
 		return

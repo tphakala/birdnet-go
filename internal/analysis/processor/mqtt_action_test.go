@@ -60,10 +60,13 @@ func (m *MockMQTTClient) Connect(_ context.Context) error {
 	return nil
 }
 
-func (m *MockMQTTClient) Publish(_ context.Context, topic, payload string) error {
+func (m *MockMQTTClient) Publish(ctx context.Context, topic, payload string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.publishCalls++
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if m.publishErr != nil {
 		return m.publishErr
 	}
@@ -343,12 +346,12 @@ func TestMqttAction_Execute_SourceID(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "microphone-backyard", jsonMap["sourceId"],
-		"sourceId should match AudioSource.ID for HA filtering")
+		"sourceId should match AudioSource.ID; HA discovery keys the per-source topic on it")
 }
 
 // TestMqttAction_Execute_TransientError_NonFatal verifies that transient connection
 // errors (EOF, not connected) are absorbed by MqttAction and do NOT fail the action.
-// This is the key behavioral change for GitHub #2397 — the detection is safe in the
+// This is the key behavioral change for GitHub #2397: the detection is safe in the
 // database, so a missed MQTT notification is not data loss.
 func TestMqttAction_Execute_TransientError_NonFatal(t *testing.T) {
 	t.Parallel()

@@ -21,7 +21,9 @@ import (
 )
 
 // NoteWithBirdImage wraps a Note with bird image data for MQTT publishing.
-// The SourceID field enables Home Assistant to filter detections by source.
+// The SourceID field is the audio source ID of the detection. HA discovery
+// sensors no longer filter on it; they read the per-source topic keyed by the
+// same ID.
 //
 // IMPORTANT: JSON field names are part of the public MQTT API contract.
 // Changing them breaks existing Home Assistant and other MQTT integrations.
@@ -38,7 +40,7 @@ type NoteWithBirdImage struct {
 	Source *struct{} `json:"Source,omitempty"` // Suppressed: use sourceId instead
 
 	DetectionID uint                    `json:"detectionId"`          // Database ID for URL construction (e.g., /api/v2/audio/{id})
-	SourceID    string                  `json:"sourceId"`             // Audio source ID for HA filtering (added for HA discovery)
+	SourceID    string                  `json:"sourceId"`             // Audio source ID of the detection; HA discovery sensors read the per-source topic keyed by it
 	SourceName  string                  `json:"sourceName,omitempty"` // Display name for stable source mapping (#2799)
 	BirdImage   imageprovider.BirdImage `json:"BirdImage"`            // PascalCase for backward compatibility - DO NOT CHANGE
 	// SpeciesFirstDetectedAt is the species' earliest previous detection
@@ -124,7 +126,7 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 		// code bug. Return the sentinel unchanged so the job queue still
 		// retries (any non-nil error triggers retry with backoff) while
 		// shouldReportToSentry suppresses it via the notification-component
-		// filter — wrapping here would hide the sentinel from that filter.
+		// filter; wrapping here would hide the sentinel from that filter.
 		if errors.Is(err, notification.ErrCircuitBreakerOpen) || errors.Is(err, notification.ErrTooManyRequests) {
 			GetLogger().Debug("BirdWeather upload short-circuited: circuit breaker open",
 				logger.String("component", "analysis.processor.actions"),
@@ -208,7 +210,7 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 
 // Execute sends the note to the MQTT broker.
 // Transient connection errors (EOF, not connected) are logged as warnings and
-// do NOT fail the CompositeAction — the detection is already saved to the database.
+// do NOT fail the CompositeAction, the detection is already saved to the database.
 // This eliminates the TOCTOU race at Layer 2 (GitHub #2397).
 func (a *MqttAction) Execute(ctx context.Context, data any) error {
 	a.mu.Lock()
@@ -323,13 +325,18 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 		return err
 	}
 
+	// Capture the incoming step context before the line below reassigns ctx to a
+	// background-derived one, so the per-source republish stays bounded by the
+	// action's own deadline (see publishSourceDetection).
+	stepCtx := ctx
+
 	// Create a context with timeout for publishing
 	ctx, cancel := context.WithTimeout(context.Background(), MQTTPublishTimeout)
 	defer cancel()
 
 	// Publish the note to the MQTT broker.
 	// The detection is already saved to the database (CompositeAction order: DB -> SSE -> MQTT).
-	// Transient connection errors are non-fatal — we log a warning and return nil to avoid
+	// Transient connection errors are non-fatal: we log a warning and return nil to avoid
 	// failing the CompositeAction and generating noisy Sentry events (GitHub #2397).
 	err = a.MqttClient.Publish(ctx, a.Settings.Realtime.MQTT.Topic, string(noteJson))
 	if err != nil {
@@ -337,7 +344,7 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 		isConnErr := mqtt.IsTransientConnectionError(err)
 
 		if isConnErr {
-			// Transient connection error — detection is safe in DB, downgrade to warning.
+			// Transient connection error, detection is safe in DB, downgrade to warning.
 			// This is the key fix for GitHub #2397: the TOCTOU race between IsConnected()
 			// and Publish() produces these errors. Since the detection is persisted,
 			// a missed MQTT notification is not data loss.
@@ -352,7 +359,7 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 			return nil // Non-fatal: don't fail the CompositeAction
 		}
 
-		// Non-transient error (config issue, JSON error, etc.) — this is a real problem
+		// Non-transient error (config issue, JSON error, etc.): this is a real problem
 		GetLogger().Error("Failed to publish to MQTT",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
@@ -387,7 +394,7 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 			Build()
 	}
 
-	a.publishSourceDetection(note.Source.ID, string(noteJson))
+	a.publishSourceDetection(stepCtx, note.Source.ID, string(noteJson))
 
 	if a.Settings.Debug {
 		GetLogger().Debug("Successfully published to MQTT",
@@ -408,15 +415,20 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 // traffic. Detections without a source ID have no matching sensors and are
 // skipped.
 //
+// The publish timeout derives from parent (the action's step context) and is
+// capped at MQTTPublishTimeout, so an already-expired step does not start a
+// second publish that could block in an abandoned goroutine.
+//
 // Failure is logged and not returned: the detection already reached the shared
 // topic, and failing the action would make a retry publish it there twice.
-func (a *MqttAction) publishSourceDetection(sourceID, payload string) {
+func (a *MqttAction) publishSourceDetection(parent context.Context, sourceID, payload string) {
 	if !a.Settings.Realtime.MQTT.HomeAssistant.Enabled || sourceID == "" {
 		return
 	}
 
-	// A fresh timeout, so a slow shared-topic publish cannot starve this one.
-	ctx, cancel := context.WithTimeout(context.Background(), MQTTPublishTimeout)
+	// Bounded by the action's own deadline, and capped so a healthy step still
+	// gets the full publish timeout.
+	ctx, cancel := context.WithTimeout(parent, MQTTPublishTimeout)
 	defer cancel()
 
 	topic := mqtt.SourceDetectionTopic(a.Settings.Realtime.MQTT.Topic, sourceID)
