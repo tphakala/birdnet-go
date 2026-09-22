@@ -479,6 +479,7 @@
         "metricExceeded": "Nykyinen arvo: {value}% (raja-arvo: {threshold}%)",
         "detectionOccurred": "{species_name} havaittu {confidence}% varmuudella",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} yhteys katkaistu",
         "error": {
           "authError": "Tunnistautuminen epäonnistui - tarkista API-avain tai tunnistetiedot",

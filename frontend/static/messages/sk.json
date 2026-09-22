@@ -479,6 +479,7 @@
         "metricExceeded": "Aktuálna hodnota: {value}% (prahová hodnota: {threshold}%)",
         "detectionOccurred": "{species_name} detegovaný s {confidence}% istotou",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} odpojený",
         "error": {
           "authError": "Overenie zlyhalo - skontrolujte API kľúč alebo prihlasovacie údaje",

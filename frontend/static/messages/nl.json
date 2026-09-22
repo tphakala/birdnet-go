@@ -479,6 +479,7 @@
         "metricExceeded": "Huidige waarde: {value}% (drempelwaarde: {threshold}%)",
         "detectionOccurred": "{species_name} gedetecteerd met {confidence}% betrouwbaarheid",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} verbroken",
         "error": {
           "authError": "Authenticatie mislukt - controleer je API-sleutel of inloggegevens",

@@ -403,6 +403,60 @@ describe('translateNotification', () => {
     expect(result.message).toBe('English error message');
   });
 
+  it('names the failing source in an alert error message', () => {
+    const notification = createTestNotification({
+      title: 'Audio stream error',
+      message: 'Backyard feeder: error reading from FFmpeg',
+      message_key: 'notifications.content.alert.errorWithSource',
+      message_params: {
+        source_name: 'Backyard feeder',
+        error: 'error reading from FFmpeg',
+      },
+    });
+
+    const result = translateNotification(notification);
+
+    expect(result.message).toBe('Backyard feeder: error reading from FFmpeg');
+  });
+
+  it('resolves a classified error_key before substituting it into the message', () => {
+    const notification = createTestNotification({
+      title: 'Audio stream error',
+      message: 'Backyard feeder: Connection timed out',
+      message_key: 'notifications.content.alert.errorWithSource',
+      message_params: {
+        source_name: 'Backyard feeder',
+        error: 'dial tcp 192.168.1.10:554: i/o timeout',
+        error_key: 'notifications.content.alert.error.timeout',
+      },
+    });
+
+    const result = translateNotification(notification);
+
+    expect(result.message).toBe(
+      'Backyard feeder: Connection timed out - the service may be slow or unreachable'
+    );
+    // The raw error is replaced by the friendly explanation, not appended to it.
+    expect(result.message).not.toContain('i/o timeout');
+  });
+
+  it('falls back to the raw error when the classified error_key is unknown', () => {
+    const notification = createTestNotification({
+      title: 'Audio stream error',
+      message: 'Backyard feeder: raw failure text',
+      message_key: 'notifications.content.alert.errorWithSource',
+      message_params: {
+        source_name: 'Backyard feeder',
+        error: 'raw failure text',
+        error_key: 'notifications.content.alert.error.notATranslatedKey',
+      },
+    });
+
+    const result = translateNotification(notification);
+
+    expect(result.message).toBe('Backyard feeder: raw failure text');
+  });
+
   it('preserves i18n fields on original notification (does not mutate)', () => {
     const notification = createTestNotification({
       title: 'Original',

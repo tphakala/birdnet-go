@@ -479,6 +479,7 @@
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
         "detectionOccurred": "{species_name} detected with {confidence}% confidence",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} disconnected",
         "error": {
           "authError": "Authentication failed - check your API key or credentials",

@@ -479,6 +479,7 @@
         "metricExceeded": "Nuvarande värde: {value}% (tröskel: {threshold}%)",
         "detectionOccurred": "{species_name} detekterad med {confidence}% konfidens",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} frånkopplad",
         "error": {
           "authError": "Autentisering misslyckades - kontrollera din API-nyckel eller dina inloggningsuppgifter",

@@ -479,6 +479,7 @@
         "metricExceeded": "Aktueller Wert: {value}% (Schwellenwert: {threshold}%)",
         "detectionOccurred": "{species_name} erkannt mit {confidence}% Konfidenz",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} getrennt",
         "error": {
           "authError": "Authentifizierung fehlgeschlagen - API-Schlüssel oder Zugangsdaten prüfen",

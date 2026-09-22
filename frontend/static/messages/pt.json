@@ -479,6 +479,7 @@
         "metricExceeded": "Valor atual: {value}% (limite: {threshold}%)",
         "detectionOccurred": "{species_name} detetado com {confidence}% de confiança",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} desligado",
         "error": {
           "authError": "Autenticação falhou - verifique a chave API ou credenciais",

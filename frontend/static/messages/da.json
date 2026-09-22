@@ -479,6 +479,7 @@
         "metricExceeded": "Aktuel værdi: {value}% (grænse: {threshold}%)",
         "detectionOccurred": "{species_name} detekteret med {confidence}% sikkerhed",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} afbrudt",
         "error": {
           "authError": "Godkendelse fejlede - kontrollér din API-nøgle eller legitimationsoplysninger",

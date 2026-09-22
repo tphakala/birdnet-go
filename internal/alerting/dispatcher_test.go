@@ -578,13 +578,87 @@ func TestDispatcher_DefaultTemplate_ErrorMessage_Classified(t *testing.T) {
 
 	require.Len(t, mock.keyCalls, 1)
 	call := mock.keyCalls[0]
-	// "connection timeout" classifies as "timeout"
-	assert.Equal(t, MsgAlertErrorPrefix+".timeout", call.messageKey)
+	// The event names the failing stream, so the message is the source-prefixed
+	// wrapper; "connection timeout" classifies as "timeout", carried as the
+	// nested error_key the frontend resolves into the {error} placeholder.
+	assert.Equal(t, MsgAlertErrorWithSource, call.messageKey)
+	assert.Equal(t, MsgAlertErrorPrefix+".timeout", call.messageParams["error_key"])
 	assert.Equal(t, "backyard-cam", call.messageParams["source_name"])
 	assert.Equal(t, "connection timeout", call.messageParams["error"])
 	// Fallback uses the friendly message, not the raw error
 	assert.Contains(t, call.message, "backyard-cam")
 	assert.NotContains(t, call.message, "connection timeout", "should use friendly message, not raw error")
+}
+
+// TestDispatcher_DefaultTemplate_ErrorMessage_ClassifiedNoSource verifies that
+// an error event that cannot name its source keeps the bare classified key, so
+// the message does not render with an empty "{source_name}: " prefix.
+func TestDispatcher_DefaultTemplate_ErrorMessage_ClassifiedNoSource(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+	rule := &entities.AlertRule{
+		ID:      1,
+		Name:    "BirdWeather upload failed",
+		NameKey: RuleKeyBirdWeatherName,
+		Actions: []entities.AlertAction{
+			{Target: TargetBell},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeIntegration,
+		EventName:  EventBirdWeatherFailed,
+		Properties: map[string]any{
+			PropertyError: "connection timeout",
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.keyCalls, 1)
+	call := mock.keyCalls[0]
+	assert.Equal(t, MsgAlertErrorPrefix+".timeout", call.messageKey)
+	assert.NotContains(t, call.messageParams, "error_key",
+		"the classified key is the message key itself, not a nested param")
+	assert.Empty(t, call.messageParams["source_name"])
+}
+
+// TestDispatcher_DefaultTemplate_ErrorMessage_UnclassifiedWithSource verifies
+// that an unrecognized error still names the stream it came from, which is the
+// case the raw FFmpeg read errors fall into.
+func TestDispatcher_DefaultTemplate_ErrorMessage_UnclassifiedWithSource(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+	rule := &entities.AlertRule{
+		ID:      1,
+		Name:    "Audio stream error",
+		NameKey: RuleKeyStreamErrorName,
+		Actions: []entities.AlertAction{
+			{Target: TargetBell},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeStream,
+		EventName:  EventStreamError,
+		Properties: map[string]any{
+			PropertyStreamName: "Backyard feeder",
+			PropertyError:      "error reading from FFmpeg: stream ended without producing data",
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.keyCalls, 1)
+	call := mock.keyCalls[0]
+	assert.Equal(t, MsgAlertErrorWithSource, call.messageKey)
+	assert.NotContains(t, call.messageParams, "error_key",
+		"an unclassified error has no nested key to resolve")
+	assert.Equal(t, "Backyard feeder", call.messageParams["source_name"])
+	assert.Contains(t, call.message, "Backyard feeder")
+	assert.Contains(t, call.message, "stream ended without producing data")
 }
 
 func TestDispatcher_DefaultTemplate_ErrorMessage_Unclassified(t *testing.T) {

@@ -343,6 +343,29 @@ export function translateField(
 }
 
 /**
+ * Resolve a nested translation key inside a param bag.
+ *
+ * Some notification params are themselves translatable (an alert rule's name, a
+ * classified error explanation). The backend sends the nested key alongside the
+ * English text, e.g. `rule_name_key` next to `rule_name`, so the inner value is
+ * translated before being substituted into the outer template. Returns the
+ * params unchanged when the nested key is absent.
+ */
+function resolveNestedKeyParam(
+  params: Record<string, unknown> | undefined,
+  keyParam: string,
+  valueParam: string
+): Record<string, unknown> | undefined {
+  if (!params || typeof params[keyParam] !== 'string' || typeof params[valueParam] !== 'string') {
+    return params;
+  }
+  return {
+    ...params,
+    [valueParam]: translateField(params[keyParam], undefined, params[valueParam]),
+  };
+}
+
+/**
  * Translate a notification's title and message using i18n keys.
  * Falls back to the English title/message fields when keys are absent
  * or when translations haven't loaded yet.
@@ -351,29 +374,19 @@ export function translateNotification(notification: Notification): {
   title: string;
   message: string;
 } {
-  // Resolve nested translation keys within title params (e.g. rule_name_key)
-  // so the rule name itself is translated before being substituted into the title.
-  let titleParams = notification.title_params;
-  if (
-    titleParams &&
-    typeof titleParams.rule_name_key === 'string' &&
-    typeof titleParams.rule_name === 'string'
-  ) {
-    const translatedName = translateField(
-      titleParams.rule_name_key,
-      undefined,
-      titleParams.rule_name
-    );
-    titleParams = { ...titleParams, rule_name: translatedName };
-  }
+  // Resolve nested translation keys so the rule name and the classified error
+  // explanation are themselves translated before substitution. An unclassified
+  // error carries no error_key and keeps its raw text.
+  const titleParams = resolveNestedKeyParam(
+    notification.title_params,
+    'rule_name_key',
+    'rule_name'
+  );
+  const messageParams = resolveNestedKeyParam(notification.message_params, 'error_key', 'error');
 
   return {
     title: translateField(notification.title_key, titleParams, notification.title),
-    message: translateField(
-      notification.message_key,
-      notification.message_params,
-      notification.message
-    ),
+    message: translateField(notification.message_key, messageParams, notification.message),
   };
 }
 

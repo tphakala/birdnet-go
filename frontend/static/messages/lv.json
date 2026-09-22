@@ -479,6 +479,7 @@
         "metricExceeded": "Pašreizējā vērtība: {value}% (slieksnis: {threshold}%)",
         "detectionOccurred": "{species_name} noteikts ar {confidence}% ticamību",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} atvienots",
         "error": {
           "authError": "Autentifikācija neizdevās - pārbaudiet savu API atslēgu vai akreditācijas datus",

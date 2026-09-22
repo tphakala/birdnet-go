@@ -285,14 +285,29 @@ func errorMessage(event *AlertEvent) (key string, params map[string]any, fallbac
 	}
 
 	// Try to classify the error for a user-friendly message.
+	classifiedKey := ""
 	if classified := classifyError(errMsg); classified != nil {
-		key = MsgAlertErrorPrefix + "." + classified.Key
+		classifiedKey = MsgAlertErrorPrefix + "." + classified.Key
 		fallback = formatErrorFallback(sourceName, classified.Fallback)
-		return key, params, fallback
+	} else {
+		// Unrecognized error: the raw error is the message.
+		fallback = formatErrorFallback(sourceName, errMsg)
 	}
 
-	// Unrecognized error: fall back to the generic key with raw error.
-	fallback = formatErrorFallback(sourceName, errMsg)
+	// Name the failing stream or device in the localized message too, not just in
+	// the English fallback: with several cameras configured, "connection timed
+	// out" on its own does not say which one to go and check. The wrapper key
+	// renders "{source_name}: {error}" and resolves error_key into error first.
+	if sourceName != "" {
+		if classifiedKey != "" {
+			params["error_key"] = classifiedKey
+		}
+		return MsgAlertErrorWithSource, params, fallback
+	}
+
+	if classifiedKey != "" {
+		return classifiedKey, params, fallback
+	}
 	return MsgAlertErrorOccurred, params, fallback
 }
 

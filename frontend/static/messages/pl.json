@@ -479,6 +479,7 @@
         "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",
         "detectionOccurred": "{species_name} wykryto z {confidence}% pewnością",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} rozłączono",
         "error": {
           "authError": "Uwierzytelnianie nie powiodło się - sprawdź klucz API lub dane logowania",
