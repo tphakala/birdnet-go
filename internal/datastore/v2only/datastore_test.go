@@ -239,6 +239,96 @@ func TestV2OnlyDatastore_GetSpeciesLastDetectionDateBefore(t *testing.T) {
 	})
 }
 
+// TestV2OnlyDatastore_GetSpeciesFirstAndLastDetectionTimeBefore pins the
+// first/last previous-detection query used by the MQTT payload: the strict
+// before bound (the current detection is excluded), the legacy
+// concatenated-label match, false-positive exclusion, and the nil semantics
+// for a species with no prior detections.
+func TestV2OnlyDatastore_GetSpeciesFirstAndLastDetectionTimeBefore(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ds.timezone = time.UTC
+	ctx := t.Context()
+
+	before := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	day := func(d int, h int) time.Time { return time.Date(2024, 6, d, h, 30, 0, 0, time.UTC) }
+
+	t.Run("returns earliest and most-recent prior detections", func(t *testing.T) {
+		seedDetection(t, ds, "Turdus merula", day(10, 8))
+		seedDetection(t, ds, "Turdus merula", day(13, 18))
+		seedDetection(t, ds, "Turdus merula", day(20, 9)) // on/after before: excluded
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Turdus merula", before)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		require.NotNil(t, last)
+		assert.Equal(t, day(10, 8), *first)
+		assert.Equal(t, day(13, 18), *last)
+	})
+
+	t.Run("first and last are equal with a single prior detection", func(t *testing.T) {
+		seedDetection(t, ds, "Erithacus rubecula", day(11, 6))
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Erithacus rubecula", before)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		require.NotNil(t, last)
+		assert.Equal(t, *first, *last)
+		assert.Equal(t, day(11, 6), *first)
+	})
+
+	t.Run("returns nils when the only detection is on or after the bound", func(t *testing.T) {
+		seedDetection(t, ds, "Strix aluco", day(20, 9))
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Strix aluco", before)
+		require.NoError(t, err)
+		assert.Nil(t, first)
+		assert.Nil(t, last)
+	})
+
+	t.Run("excludes a detection at exactly the bound instant", func(t *testing.T) {
+		seedDetection(t, ds, "Cyanistes caeruleus", before)
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Cyanistes caeruleus", before)
+		require.NoError(t, err)
+		assert.Nil(t, first)
+		assert.Nil(t, last)
+	})
+
+	t.Run("matches a legacy concatenated label via the LIKE prefix", func(t *testing.T) {
+		seedDetection(t, ds, "Passer domesticus_tikataikka", day(11, 7))
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Passer domesticus", before)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		require.NotNil(t, last)
+		assert.Equal(t, day(11, 7), *first)
+		assert.Equal(t, day(11, 7), *last)
+	})
+
+	t.Run("excludes detections reviewed as false positive", func(t *testing.T) {
+		det := seedDetection(t, ds, "Fringilla coelebs", day(10, 8))
+		require.NoError(t, ds.manager.DB().Create(&entities.DetectionReview{
+			DetectionID: det.ID,
+			Verified:    entities.VerificationFalsePositive,
+		}).Error)
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Fringilla coelebs", before)
+		require.NoError(t, err)
+		assert.Nil(t, first)
+		assert.Nil(t, last)
+	})
+
+	t.Run("returns nils for an unknown species", func(t *testing.T) {
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Nonexistent species", before)
+		require.NoError(t, err)
+		assert.Nil(t, first)
+		assert.Nil(t, last)
+	})
+}
+
 type nilInjectingLabelRepository struct {
 	repository.LabelRepository
 }

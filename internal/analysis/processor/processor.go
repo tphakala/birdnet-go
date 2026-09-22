@@ -2172,15 +2172,25 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 		if mqttClient != nil {
 			mqttRetryConfig := retryConfigFromSettings(settings.Realtime.MQTT.RetrySettings)
 
+			// Derive the narrow species-time capability from the datastore. Both
+			// backends (*datastore.DataStore and *v2only.Datastore) implement it;
+			// a nil or unsupported datastore (DB disabled) yields nil, so the
+			// MQTT payload carries null fields.
+			var speciesTimeSource speciesDetectionTimeSource
+			if src, ok := any(p.Ds).(speciesDetectionTimeSource); ok {
+				speciesTimeSource = src
+			}
+
 			mqttAction = &MqttAction{
-				Settings:       settings,
-				MqttClient:     mqttClient,
-				EventTracker:   p.GetEventTracker(),
-				DetectionCtx:   detectionCtx, // Share context from DatabaseAction
-				Result:         det.Result,   // Domain model (single source of truth)
-				BirdImageCache: p.BirdImageCache,
-				RetryConfig:    mqttRetryConfig,
-				CorrelationID:  det.CorrelationID,
+				Settings:          settings,
+				MqttClient:        mqttClient,
+				EventTracker:      p.GetEventTracker(),
+				DetectionCtx:      detectionCtx, // Share context from DatabaseAction
+				Result:            det.Result,   // Domain model (single source of truth)
+				BirdImageCache:    p.BirdImageCache,
+				RetryConfig:       mqttRetryConfig,
+				CorrelationID:     det.CorrelationID,
+				SpeciesTimeSource: speciesTimeSource,
 			}
 		}
 	}

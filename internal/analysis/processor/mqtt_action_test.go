@@ -587,3 +587,206 @@ func TestMqttAction_Execute_PreservesClipNameWhenExportSucceeded(t *testing.T) {
 	assert.Equal(t, "2024/01/parus_major_95p_20240115T120000Z.wav", jsonMap["ClipName"],
 		"ClipName should be preserved when audio export succeeded")
 }
+
+// mockSpeciesTimeSource is a controllable speciesDetectionTimeSource for tests.
+type mockSpeciesTimeSource struct {
+	first    *time.Time
+	last     *time.Time
+	err      error
+	honorCtx bool // when set, block until the query context is done and return ctx.Err() (models a slow query hitting the timeout/cancellation)
+
+	calls       int
+	gotName     string
+	gotBefore   time.Time
+	gotDeadline bool // whether the received context carried the per-query timeout deadline
+}
+
+func (m *mockSpeciesTimeSource) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Context, scientificName string, before time.Time) (first, last *time.Time, err error) {
+	m.calls++
+	m.gotName = scientificName
+	m.gotBefore = before
+	_, m.gotDeadline = ctx.Deadline()
+	if m.honorCtx {
+		<-ctx.Done()
+		return nil, nil, ctx.Err()
+	}
+	return m.first, m.last, m.err
+}
+
+// TestMqttAction_Execute_SpeciesDetectionTimes_Populated verifies that the
+// payload carries the species' first-ever and most-recent previous detection
+// times when the datastore provides them.
+func TestMqttAction_Execute_SpeciesDetectionTimes_Populated(t *testing.T) {
+	t.Parallel()
+
+	mockClient := NewMockMQTTClient()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+	det := testDetection()
+
+	firstSeen := time.Date(2024, 1, 10, 8, 30, 0, 0, time.UTC)
+	lastSeen := time.Date(2024, 1, 14, 18, 45, 0, 0, time.UTC)
+	source := &mockSpeciesTimeSource{first: &firstSeen, last: &lastSeen}
+
+	detectionCtx := &DetectionContext{}
+	detectionCtx.NoteID.Store(1)
+
+	action := &MqttAction{
+		Settings:          settings,
+		Result:            det.Result,
+		MqttClient:        mockClient,
+		EventTracker:      eventTracker,
+		DetectionCtx:      detectionCtx,
+		SpeciesTimeSource: source,
+	}
+
+	err := action.Execute(t.Context(), nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, source.calls, "species time query should run exactly once")
+	assert.True(t, source.gotDeadline,
+		"query must run under the per-detection timeout (deadline-bounded context)")
+	assert.Equal(t, det.Result.Species.ScientificName, source.gotName,
+		"query must use the detection's scientific name")
+	assert.Equal(t, det.Result.Timestamp, source.gotBefore,
+		"bound must be the current detection timestamp (strict before)")
+
+	var jsonMap map[string]any
+	require.NoError(t, json.Unmarshal([]byte(mockClient.GetPublishedPayload()), &jsonMap))
+
+	assert.Equal(t, firstSeen.Format(time.RFC3339), jsonMap["speciesFirstDetectedAt"])
+	assert.Equal(t, lastSeen.Format(time.RFC3339), jsonMap["speciesLastDetectedAt"])
+}
+
+// TestMqttAction_Execute_SpeciesDetectionTimes_QueryError_NonFatal verifies that
+// a datastore failure degrades to null fields instead of failing the publish
+// (transient errors are non-fatal, GitHub #2397).
+func TestMqttAction_Execute_SpeciesDetectionTimes_QueryError_NonFatal(t *testing.T) {
+	t.Parallel()
+
+	mockClient := NewMockMQTTClient()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+	det := testDetection()
+
+	source := &mockSpeciesTimeSource{err: fmt.Errorf("database unavailable")}
+
+	detectionCtx := &DetectionContext{}
+	detectionCtx.NoteID.Store(1)
+
+	action := &MqttAction{
+		Settings:          settings,
+		Result:            det.Result,
+		MqttClient:        mockClient,
+		EventTracker:      eventTracker,
+		DetectionCtx:      detectionCtx,
+		SpeciesTimeSource: source,
+	}
+
+	err := action.Execute(t.Context(), nil)
+	require.NoError(t, err, "species time query failure must not fail the action")
+	assert.Equal(t, 1, mockClient.GetPublishCalls(), "payload must still be published")
+
+	var jsonMap map[string]any
+	require.NoError(t, json.Unmarshal([]byte(mockClient.GetPublishedPayload()), &jsonMap))
+
+	_, present := jsonMap["speciesFirstDetectedAt"]
+	assert.True(t, present, "speciesFirstDetectedAt key must still be present")
+	assert.Nil(t, jsonMap["speciesFirstDetectedAt"], "speciesFirstDetectedAt must be null on query error")
+	assert.Nil(t, jsonMap["speciesLastDetectedAt"], "speciesLastDetectedAt must be null on query error")
+}
+
+// TestMqttAction_Execute_SpeciesDetectionTimes_ContextCanceled_Silent verifies
+// that a canceled query context (an expected shutdown interruption) degrades to
+// null fields without failing the publish, and exercises the context.Canceled
+// suppression branch that keeps per-detection logs quiet on stop. The query
+// context is derived from the action context via the per-query timeout, so an
+// already-canceled action context reaches the query as context.Canceled.
+func TestMqttAction_Execute_SpeciesDetectionTimes_ContextCanceled_Silent(t *testing.T) {
+	t.Parallel()
+
+	mockClient := NewMockMQTTClient()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+	det := testDetection()
+
+	// honorCtx makes the query block until its context is done and return
+	// ctx.Err(); with an already-canceled parent that is context.Canceled.
+	source := &mockSpeciesTimeSource{honorCtx: true}
+
+	detectionCtx := &DetectionContext{}
+	detectionCtx.NoteID.Store(1)
+
+	action := &MqttAction{
+		Settings:          settings,
+		Result:            det.Result,
+		MqttClient:        mockClient,
+		EventTracker:      eventTracker,
+		DetectionCtx:      detectionCtx,
+		SpeciesTimeSource: source,
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // canceled before Execute: the query context is already done
+
+	err := action.Execute(ctx, nil)
+	require.NoError(t, err, "a canceled query context must not fail the action")
+	assert.Equal(t, 1, source.calls, "species time query should run exactly once")
+	assert.True(t, source.gotDeadline,
+		"query must still run under the per-detection timeout deadline")
+	assert.Equal(t, 1, mockClient.GetPublishCalls(), "payload must still be published")
+
+	var jsonMap map[string]any
+	require.NoError(t, json.Unmarshal([]byte(mockClient.GetPublishedPayload()), &jsonMap))
+
+	_, present := jsonMap["speciesFirstDetectedAt"]
+	assert.True(t, present, "speciesFirstDetectedAt key must still be present")
+	assert.Nil(t, jsonMap["speciesFirstDetectedAt"], "speciesFirstDetectedAt must be null on canceled query")
+	assert.Nil(t, jsonMap["speciesLastDetectedAt"], "speciesLastDetectedAt must be null on canceled query")
+}
+
+// TestMqttAction_Execute_SpeciesDetectionTimes_NilSource verifies that the
+// payload carries explicit nulls when no datastore is wired (DB disabled).
+func TestMqttAction_Execute_SpeciesDetectionTimes_NilSource(t *testing.T) {
+	t.Parallel()
+
+	mockClient := NewMockMQTTClient()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+	det := testDetection()
+
+	detectionCtx := &DetectionContext{}
+	detectionCtx.NoteID.Store(1)
+
+	action := &MqttAction{
+		Settings:     settings,
+		Result:       det.Result,
+		MqttClient:   mockClient,
+		EventTracker: eventTracker,
+		DetectionCtx: detectionCtx,
+		// SpeciesTimeSource intentionally nil
+	}
+
+	err := action.Execute(t.Context(), nil)
+	require.NoError(t, err)
+
+	var jsonMap map[string]any
+	require.NoError(t, json.Unmarshal([]byte(mockClient.GetPublishedPayload()), &jsonMap))
+
+	_, present := jsonMap["speciesFirstDetectedAt"]
+	assert.True(t, present, "speciesFirstDetectedAt key must always be present (no omitempty)")
+	assert.Nil(t, jsonMap["speciesFirstDetectedAt"])
+	assert.Nil(t, jsonMap["speciesLastDetectedAt"])
+}
