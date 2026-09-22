@@ -137,6 +137,18 @@ func SourceEntityKeys(sources []datastore.AudioSource) map[string]string {
 	return keys
 }
 
+// SourceEntityKeyCandidates returns every entity key SourceEntityKeys can have
+// assigned to source, whatever other sources existed at the time: the plain
+// base key, and the key it gets when another same-name source holds the base.
+// Removing a source's entities without a record of what was published means
+// removing under each candidate that no live source currently owns. (The
+// numeric disambiguator of SourceEntityKeys only appears when a suffixed key
+// collides with another group's base key and is not covered.)
+func SourceEntityKeyCandidates(source datastore.AudioSource) []string {
+	base := getSourceID(source)
+	return []string{base, base + "_" + SanitizeID(source.ID)}
+}
+
 // shortenDisplayName ensures display names stay within maxDisplayNameLength.
 // This prevents excessively long entity names in Home Assistant when
 // source IDs (like RTSP URLs) are used as fallback display names.
@@ -547,8 +559,6 @@ func (p *Publisher) RemoveSourceConfigs(ctx context.Context, entityKey string) e
 //
 // entityKey must be the source's key from SourceEntityKeys.
 func (p *Publisher) RemoveSourceDiscovery(ctx context.Context, source datastore.AudioSource, entityKey string) error {
-	log := GetLogger()
-
 	var errs []error
 
 	// 1. Clear the sensor config topics.
@@ -557,6 +567,19 @@ func (p *Publisher) RemoveSourceDiscovery(ctx context.Context, source datastore.
 	}
 
 	// 2. Clear the retained per-source state topics.
+	if err := p.RemoveSourceState(ctx, source); err != nil {
+		errs = append(errs, err)
+	}
+
+	return errors.Join(errs...)
+}
+
+// RemoveSourceState empties one source's retained per-source state topics
+// (detection and sound level, keyed by the raw source.ID) without touching its
+// discovery configs. It attempts both topics and returns the joined error.
+func (p *Publisher) RemoveSourceState(ctx context.Context, source datastore.AudioSource) error {
+	log := GetLogger()
+	var errs []error
 	for _, topic := range []string{
 		SourceDetectionTopic(p.config.BaseTopic, source.ID),
 		SourceSoundLevelTopic(p.config.BaseTopic, source.ID),
@@ -568,6 +591,5 @@ func (p *Publisher) RemoveSourceDiscovery(ctx context.Context, source datastore.
 			errs = append(errs, fmt.Errorf("remove state %s: %w", topic, err))
 		}
 	}
-
 	return errors.Join(errs...)
 }

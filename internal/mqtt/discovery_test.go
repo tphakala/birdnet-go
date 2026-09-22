@@ -1241,3 +1241,42 @@ func TestRemoveDiscovery_PropagatesPublishError(t *testing.T) {
 	mock.assertRetainedRemoval(t, "homeassistant/sensor/node/node_Porch_species/config")
 	mock.assertRetainedRemoval(t, SourceDetectionTopic(config.BaseTopic, sources[1].ID))
 }
+
+// TestSourceEntityKeyCandidates pins that the candidates cover every key
+// SourceEntityKeys can assign to a source, alone or in a same-name group.
+func TestSourceEntityKeyCandidates(t *testing.T) {
+	t.Parallel()
+
+	a := datastore.AudioSource{ID: "rtsp_aaaa", DisplayName: "Mic"}
+	b := datastore.AudioSource{ID: "rtsp_bbbb", DisplayName: "Mic"}
+	c := datastore.AudioSource{ID: "zz:1,0", DisplayName: "Mic"} // sorts last, raw ID needs sanitizing
+
+	assert.Equal(t, []string{"Mic", "Mic_rtsp_bbbb"}, SourceEntityKeyCandidates(b))
+
+	for _, set := range [][]datastore.AudioSource{{a}, {b}, {a, b}, {a, c}} {
+		keys := SourceEntityKeys(set)
+		for _, src := range set {
+			assert.Contains(t, SourceEntityKeyCandidates(src), keys[src.ID],
+				"assigned key must be among the candidates")
+		}
+	}
+}
+
+// TestRemoveSourceState_ClearsOnlyState verifies RemoveSourceState empties both
+// retained per-source state topics and publishes nothing under the config prefix.
+func TestRemoveSourceState_ClearsOnlyState(t *testing.T) {
+	t.Parallel()
+
+	mock := newMockPublisher()
+	config := DiscoveryConfig{DiscoveryPrefix: "homeassistant", BaseTopic: "birdnet", NodeID: "node"}
+	publisher := NewDiscoveryPublisher(mock, &config)
+	source := datastore.AudioSource{ID: "rtsp_65c31a0b", DisplayName: "Backyard"}
+
+	require.NoError(t, publisher.RemoveSourceState(t.Context(), source))
+
+	mock.assertRetainedRemoval(t, SourceDetectionTopic(config.BaseTopic, source.ID))
+	mock.assertRetainedRemoval(t, SourceSoundLevelTopic(config.BaseTopic, source.ID))
+	for topic := range mock.publishedMessages {
+		assert.False(t, strings.HasPrefix(topic, "homeassistant/"), "state removal must not touch configs: %s", topic)
+	}
+}
