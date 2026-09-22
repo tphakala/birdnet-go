@@ -641,6 +641,18 @@ func (g *Generator) killSoxProcess(soxCmd *exec.Cmd, soxPid int) {
 	}
 }
 
+// buildFFmpegSoxPipelineArgs builds the FFmpeg arguments for the FFmpeg|Sox
+// pipeline: decode audioPath and stream it to Sox as raw sox-format data on
+// stdout. The audio is downmixed to conf.NumChannels (mono) with -ac here in
+// FFmpeg rather than in Sox, because FFmpeg has already decoded the file, so
+// this avoids asking Sox to downmix a stream it just received and keeps the
+// multi-channel fix (stereo files rendering a doubled-height spectrogram, #4361)
+// in one place. -ac must precede the "-f sox -" output spec so it applies to the
+// output stream.
+func buildFFmpegSoxPipelineArgs(audioPath string) []string {
+	return []string{"-hide_banner", "-i", audioPath, "-ac", strconv.Itoa(conf.NumChannels), "-f", "sox", "-"}
+}
+
 // generateWithFFmpegSoxPipeline generates a spectrogram using FFmpeg piped to Sox.
 // Used when the audio file format is not natively supported by Sox.
 func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64, profile FrequencyProfile) error {
@@ -665,11 +677,9 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings 
 			Build()
 	}
 
-	// FFmpeg converts audio to Sox format and pipes to Sox. Downmix to mono here
-	// (-ac) rather than in Sox: FFmpeg already decoded the file, so this avoids
-	// asking Sox to downmix audio it just received, and keeps the multi-channel
-	// fix in one place instead of splitting it across both stages.
-	ffmpegArgs := []string{"-hide_banner", "-i", audioPath, "-ac", strconv.Itoa(conf.NumChannels), "-f", "sox", "-"}
+	// FFmpeg converts audio to Sox format and pipes to Sox, downmixing to mono
+	// in FFmpeg (see buildFFmpegSoxPipelineArgs for why).
+	ffmpegArgs := buildFFmpegSoxPipelineArgs(audioPath)
 	soxArgs := append([]string{"-t", "sox", "-"}, g.getSoxSpectrogramArgs(ctx, settings, audioPath, outputPath, width, raw, preValidatedDuration, profile)...)
 
 	ffmpegCmd := createCommandWithNice(ctx, ffmpegBinary, ffmpegArgs)

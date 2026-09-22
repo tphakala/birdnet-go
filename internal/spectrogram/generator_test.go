@@ -863,6 +863,24 @@ func TestGetSoxArgs_FileInput(t *testing.T) {
 	assert.True(t, slices.Contains(args, outputPath), "should contain output path")
 }
 
+// TestBuildFFmpegSoxPipelineArgs_DownmixesToMono verifies the FFmpeg|Sox
+// pipeline path downmixes file input to mono (-ac 1) before the sox output
+// spec, so stereo files do not render a doubled-height spectrogram (#4361).
+func TestBuildFFmpegSoxPipelineArgs_DownmixesToMono(t *testing.T) {
+	args := buildFFmpegSoxPipelineArgs("/tmp/test.mp3")
+
+	acIndex := slices.Index(args, "-ac")
+	require.NotEqual(t, -1, acIndex, "FFmpeg args should downmix channels with -ac")
+	require.Less(t, acIndex+1, len(args), "-ac should be followed by a channel count")
+	assert.Equal(t, "1", args[acIndex+1], "FFmpeg should downmix file input to one channel")
+
+	// The -ac output option must precede the "-f sox -" output spec so it applies
+	// to the stream Sox receives.
+	formatIndex := slices.Index(args, "-f")
+	require.NotEqual(t, -1, formatIndex, "FFmpeg args should specify the sox output format")
+	assert.Less(t, acIndex, formatIndex, "downmix should be applied before the sox output format")
+}
+
 // TestGetSoxSpectrogramArgs_RawFlag tests that raw flag is properly added.
 func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 	env := setupTestEnv(t)
