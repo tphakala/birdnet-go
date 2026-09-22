@@ -658,6 +658,12 @@
         "species": "Druh",
         "detections": "Detekcie"
       },
+      "dayparts": {
+        "night": "Night",
+        "morning": "Morning",
+        "afternoon": "Afternoon",
+        "evening": "Evening"
+      },
       "daylight": {
         "label": "Denné svetlo",
         "sunrise": "Východ slnka o {time}",
@@ -673,7 +679,9 @@
       "navigation": {
         "previousDay": "Predchádzajúci deň",
         "nextDay": "Nasledujúci deň",
-        "today": "Dnes"
+        "today": "Dnes",
+        "previousDaypart": "Earlier part of the day",
+        "nextDaypart": "Later part of the day"
       },
       "tooltips": {
         "viewHourly": "Zobraziť všetky detekcie pre {hour}:00",

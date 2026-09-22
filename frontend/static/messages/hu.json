@@ -658,6 +658,12 @@
         "species": "Faj",
         "detections": "Detektálások"
       },
+      "dayparts": {
+        "night": "Night",
+        "morning": "Morning",
+        "afternoon": "Afternoon",
+        "evening": "Evening"
+      },
       "daylight": {
         "label": "Nappal",
         "sunrise": "Napkelte: {time}",
@@ -673,7 +679,9 @@
       "navigation": {
         "previousDay": "Előző nap",
         "nextDay": "Következő nap",
-        "today": "Ma"
+        "today": "Ma",
+        "previousDaypart": "Earlier part of the day",
+        "nextDaypart": "Later part of the day"
       },
       "tooltips": {
         "viewHourly": "Összes detektálás megtekintése {hour}:00-kor",

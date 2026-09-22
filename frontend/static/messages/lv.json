@@ -658,6 +658,12 @@
         "species": "Suga",
         "detections": "Atklāšanas"
       },
+      "dayparts": {
+        "night": "Night",
+        "morning": "Morning",
+        "afternoon": "Afternoon",
+        "evening": "Evening"
+      },
       "daylight": {
         "label": "Dienas gaisma",
         "sunrise": "Saullēkts plkst. {time}",
@@ -673,7 +679,9 @@
       "navigation": {
         "previousDay": "Iepriekšējā diena",
         "nextDay": "Nākamā diena",
-        "today": "Šodien"
+        "today": "Šodien",
+        "previousDaypart": "Earlier part of the day",
+        "nextDaypart": "Later part of the day"
       },
       "tooltips": {
         "viewHourly": "Skatīt visas atklāšanas plkst. {hour}:00",

@@ -658,6 +658,12 @@
         "species": "Laji",
         "detections": "Havainnot"
       },
+      "dayparts": {
+        "night": "Night",
+        "morning": "Morning",
+        "afternoon": "Afternoon",
+        "evening": "Evening"
+      },
       "daylight": {
         "label": "Päivänvalo",
         "sunrise": "Auringonnousu klo {time}",
@@ -673,7 +679,9 @@
       "navigation": {
         "previousDay": "Edellinen päivä",
         "nextDay": "Seuraava päivä",
-        "today": "Tänään"
+        "today": "Tänään",
+        "previousDaypart": "Earlier part of the day",
+        "nextDaypart": "Later part of the day"
       },
       "tooltips": {
         "viewHourly": "Näytä kaikki havainnot klo {hour}.00",

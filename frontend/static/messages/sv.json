@@ -658,6 +658,12 @@
         "species": "Art",
         "detections": "Detekteringar"
       },
+      "dayparts": {
+        "night": "Night",
+        "morning": "Morning",
+        "afternoon": "Afternoon",
+        "evening": "Evening"
+      },
       "daylight": {
         "label": "Dagsljus",
         "sunrise": "Soluppgång kl. {time}",
@@ -673,7 +679,9 @@
       "navigation": {
         "previousDay": "Föregående dag",
         "nextDay": "Nästa dag",
-        "today": "Idag"
+        "today": "Idag",
+        "previousDaypart": "Earlier part of the day",
+        "nextDaypart": "Later part of the day"
       },
       "tooltips": {
         "viewHourly": "Visa alla detekteringar för {hour}:00",

@@ -209,21 +209,14 @@ Features:
     }
   }
 
+  /* Mobile shows a single daypart in the real card, so keep the skeleton to the
+     coarse six-hour columns here to limit the jump when the data lands. */
   @media (max-width: 767px) {
-    :global(.bi-hourly-count) {
-      display: table-cell;
-    }
-
-    :global(.hourly-count) {
-      display: none;
-    }
-  }
-
-  @media (max-width: 479px) {
     :global(.six-hourly-count) {
       display: table-cell;
     }
 
+    :global(.hourly-count),
     :global(.bi-hourly-count) {
       display: none;
     }
