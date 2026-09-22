@@ -174,7 +174,7 @@ type Processor struct {
 	// operators get a startup-time error for any broken path already
 	// configured. The map is then consulted from detection goroutines
 	// (read) and extended on-demand (write) when a species that was
-	// added or edited *after* startup first fires — that hot-reload
+	// added or edited *after* startup first fires: that hot-reload
 	// path is why we use sync.Map instead of a plain map + mutex: the
 	// Processor itself is never recreated on settings reload (mutation
 	// in place by ControlMonitor), and concurrent reads from detection
@@ -635,12 +635,12 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 }
 
 // Start launches the background goroutines that process detections.
-// It must be called AFTER BufferMgr and Registry are wired — otherwise
+// It must be called AFTER BufferMgr and Registry are wired: otherwise
 // detections arrive before the buffer manager is available and audio
 // clip export silently fails.
 func (p *Processor) Start() {
 	p.startOnce.Do(func() {
-		GetLogger().Info("Processor.Start() called — BufferMgr and Registry wired, launching detection goroutines",
+		GetLogger().Info("Processor.Start() called: BufferMgr and Registry wired, launching detection goroutines",
 			logger.Bool("buffer_mgr_set", p.BufferMgr != nil),
 			logger.Bool("registry_set", p.Registry() != nil),
 			logger.String("operation", "processor_start"))
@@ -2021,7 +2021,7 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 					// the only branch where we know for sure that the
 					// user configured a working action and the path is
 					// temporarily broken. Unimplemented action types
-					// must not trip this flag — they are a separate
+					// must not trip this flag: they are a separate
 					// issue and should fall through to defaults.
 					brokenCommandPathSkipped = true
 					continue
@@ -2676,11 +2676,11 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 		p.vadGate.close()
 	}
 
-	// Stop the job queue — use remaining context budget, not a hardcoded 30 seconds.
+	// Stop the job queue: use remaining context budget, not a hardcoded 30 seconds.
 	// Always send the stop signal even if the deadline has passed (remaining <= 0)
 	// so the queue's workers are notified and don't keep running after DB close.
 	// Enforce a minimum grace period so in-flight DB writes can complete before
-	// closeDataStore runs — a zero timeout would return immediately, risking
+	// closeDataStore runs: a zero timeout would return immediately, risking
 	// writes to a closed database connection.
 	// Check ctx.Err() first to handle cancellation without deadline (WithCancel).
 	queueStopTimeout := 30 * time.Second
@@ -2701,13 +2701,13 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	// reconnect loop armed, and Disconnect is what cancels that loop, so skipping
 	// it would leave the timer running past shutdown. Disconnect already handles
 	// the not-connected case, and for a client that never connected it does no
-	// blocking work at all — otherwise it is bounded by ShutdownDisconnectTimeout.
+	// blocking work at all: otherwise it is bounded by ShutdownDisconnectTimeout.
 	mqttClient := p.GetMQTTClient()
 	if mqttClient != nil {
 		mqttClient.Disconnect()
 	}
 
-	// Skip remaining cleanup if context is already expired — these are
+	// Skip remaining cleanup if context is already expired: these are
 	// nice-to-have disconnects, not critical for data integrity.
 	// Context expiration is expected, not an error condition for the caller.
 	if ctx.Err() != nil {

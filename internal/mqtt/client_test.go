@@ -45,7 +45,7 @@ func getBrokerAddress() string {
 	if isLocalBrokerAvailable() {
 		return localTestBroker
 	}
-	return "" // No broker available — use integration tests with testcontainer instead
+	return "" // No broker available: use integration tests with testcontainer instead
 }
 
 // isLocalBrokerAvailable checks if a local MQTT broker is available
