@@ -59,6 +59,10 @@ type AudioPipelineService struct {
 	apiService *APIServerService
 	engine     *engine.AudioEngine
 
+	// haEntityForgetter overrides the Home Assistant entity cleanup target in
+	// tests; production resolves the processor lazily (see haForgetter).
+	haEntityForgetter haEntityForgetter
+
 	watchdog            *audiocore.LivenessWatchdog
 	bufferMgr           *BufferManager
 	ctrlMonitor         *ControlMonitor
@@ -1391,6 +1395,57 @@ func sourceModelsChanged(bufMgr *buffer.Manager, sourceID string, desiredConfigI
 	return false
 }
 
+// haEntityForgetter queues removal of Home Assistant entities for sources the
+// user deleted or renamed. The processor implements it; the calls only queue
+// work, so they are safe while holding sourcesMu.
+type haEntityForgetter interface {
+	ForgetHomeAssistantSource(source datastore.AudioSource)
+	ForgetHomeAssistantEntityName(previous datastore.AudioSource)
+}
+
+// haForgetter returns the HA entity cleanup target, or nil when there is none.
+func (p *AudioPipelineService) haForgetter() haEntityForgetter {
+	if p.haEntityForgetter != nil {
+		return p.haEntityForgetter
+	}
+	if p.apiService == nil {
+		return nil
+	}
+	if proc := p.apiService.Processor(); proc != nil {
+		return proc
+	}
+	return nil
+}
+
+// forgetRenamedSourceHAEntities queues removal of the HA entities a source has
+// under its current (old) display name, before the rename is applied. Entities
+// are keyed by name; the source republishes under the new name.
+func (p *AudioPipelineService) forgetRenamedSourceHAEntities(src *audiocore.AudioSource) {
+	if f := p.haForgetter(); f != nil {
+		f.ForgetHomeAssistantEntityName(datastore.AudioSource{ID: src.ID, DisplayName: src.DisplayName})
+	}
+}
+
+// forgetDeletedSourceHAEntities queues removal of the HA entities of a source
+// that left the configuration. A stream that is only disabled is still in the
+// configuration under the same name and keeps its entities, so they resume when
+// it is enabled again.
+func (p *AudioPipelineService) forgetDeletedSourceHAEntities(src *audiocore.AudioSource) {
+	f := p.haForgetter()
+	if f == nil {
+		return
+	}
+	if settings := conf.Setting(); settings != nil {
+		for i := range settings.Realtime.RTSP.Streams {
+			stream := &settings.Realtime.RTSP.Streams[i]
+			if !stream.Enabled && stream.Name == src.DisplayName {
+				return
+			}
+		}
+	}
+	f.ForgetHomeAssistantSource(datastore.AudioSource{ID: src.ID, DisplayName: src.DisplayName})
+}
+
 // reconfigureChangedSources diffs the currently running sources against the
 // desired config from settings. Only sources that were added, removed, or
 // changed are touched - unchanged streams keep their capture buffers and
@@ -1505,6 +1560,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 
 			// Sync display name if the config name changed (e.g., stream renamed in UI).
 			if src.DisplayName != scm.config.DisplayName {
+				p.forgetRenamedSourceHAEntities(src)
 				registry.UpdateDisplayName(src.ID, scm.config.DisplayName)
 			}
 		} else {
@@ -1547,6 +1603,8 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			log.Warn("failed to remove source during reconfigure",
 				logger.String("source_id", src.ID),
 				logger.Error(err))
+		} else {
+			p.forgetDeletedSourceHAEntities(src)
 		}
 		// engine.RemoveSource also removes the soundlevel route. Drop the
 		// tracking entry so the idempotency check in
