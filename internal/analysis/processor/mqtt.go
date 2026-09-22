@@ -258,11 +258,14 @@ func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mq
 // hardcoded "default" source that older versions published before the
 // source registry was populated. These entries never matched real
 // detection payloads and left HA sensors stuck at "Unknown".
+//
+// Only the legacy source's sensors and per-source state are removed. The bridge
+// is shared with the real sources and is republished right after this runs, so
+// removing it here would make its entity flap on every process start.
 func cleanupDefaultDiscovery(ctx context.Context, publisher *mqtt.Publisher) {
-	defaultSources := []datastore.AudioSource{
-		{ID: "default", DisplayName: "Default"},
-	}
-	if err := publisher.RemoveDiscovery(ctx, defaultSources); err != nil {
+	defaultSource := datastore.AudioSource{ID: "default", DisplayName: "Default"}
+	entityKey := mqtt.SourceEntityKeys([]datastore.AudioSource{defaultSource})[defaultSource.ID]
+	if err := publisher.RemoveSourceDiscovery(ctx, defaultSource, entityKey); err != nil {
 		GetLogger().Debug("failed to clean up stale default discovery entries",
 			logger.Error(err),
 			logger.String("operation", "ha_discovery_cleanup_default"))

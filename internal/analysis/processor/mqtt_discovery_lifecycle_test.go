@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/mqtt"
 )
 
 const lifecycleTestBaseTopic = "birdnet"
@@ -165,4 +166,33 @@ func TestRefreshHomeAssistantDiscovery_Debounced(t *testing.T) {
 	payload, found := soundLevelConfigPayload(client.GetPublishedMessages())
 	require.True(t, found, "the debounced publish must include the sound level sensor config")
 	assert.NotEmpty(t, payload, "sound level is on, so the sensor config must not be a removal")
+}
+
+// TestCleanupDefaultDiscovery_KeepsBridge verifies the legacy "default" source
+// cleanup removes that source's sensors but never publishes a removal for the
+// shared bridge config, which would make the bridge entity flap once per start.
+func TestCleanupDefaultDiscovery_KeepsBridge(t *testing.T) {
+	t.Parallel()
+
+	client := NewMockMQTTClient()
+	publisher := mqtt.NewDiscoveryPublisher(client, &mqtt.DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       lifecycleTestBaseTopic,
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "node",
+	})
+
+	cleanupDefaultDiscovery(t.Context(), publisher)
+
+	msgs := client.GetPublishedMessages()
+	require.NotEmpty(t, msgs, "the legacy source must be cleaned up")
+	removedLegacySpecies := false
+	for _, m := range msgs {
+		assert.NotEqual(t, "homeassistant/binary_sensor/node/status/config", m.topic,
+			"cleanup must not remove the bridge")
+		if m.topic == "homeassistant/sensor/node/node_Default_species/config" {
+			removedLegacySpecies = m.payload == "" && m.retain
+		}
+	}
+	assert.True(t, removedLegacySpecies, "the legacy source's species config must get a retained removal")
 }
