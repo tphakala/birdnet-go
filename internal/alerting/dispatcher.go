@@ -272,6 +272,14 @@ func detectionMessage(event *AlertEvent) (key string, params map[string]any, fal
 	return MsgAlertDetectionOccurred, params, fallback
 }
 
+// errorMessage builds the i18n key, params and English fallback for an error
+// event. The key depends on what the event can say: MsgAlertErrorWithSource
+// whenever the failing stream or device is named, otherwise the classified key
+// for a recognized error, otherwise the generic MsgAlertErrorOccurred. A
+// classified error under the wrapper travels as the nested "error_key" param,
+// which the frontend resolves before substituting into "{source_name}: {error}".
+// Returns an empty key when the event carries neither a source nor an error, so
+// the caller can fall through to its own template.
 func errorMessage(event *AlertEvent) (key string, params map[string]any, fallback string) {
 	sourceName := entityName(event)
 	errMsg, _ := event.Properties[PropertyError].(string)
