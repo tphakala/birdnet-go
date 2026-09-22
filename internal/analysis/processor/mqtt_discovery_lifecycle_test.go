@@ -196,3 +196,129 @@ func TestCleanupDefaultDiscovery_KeepsBridge(t *testing.T) {
 	}
 	assert.True(t, removedLegacySpecies, "the legacy source's species config must get a retained removal")
 }
+
+// publishForRetireTest publishes discovery for p through client under settings
+// and fails the test on error, returning the published message count.
+func publishForRetireTest(t *testing.T, p *Processor, client *MockMQTTClient, settings *conf.Settings) int {
+	t.Helper()
+	require.NoError(t, p.publishHomeAssistantDiscovery(t.Context(), client, settings))
+	return len(client.GetPublishedMessages())
+}
+
+// TestRetireHomeAssistantDiscovery covers removing HA entities when HA discovery
+// is turned off: removal happens under the identity that was published, every
+// removal is retained, and the published identity is forgotten only after a
+// complete removal.
+func TestRetireHomeAssistantDiscovery(t *testing.T) {
+	t.Run("removes everything under the published identity", func(t *testing.T) {
+		published := newLifecycleSettings(true)
+		useLiveSettings(t, published)
+		p := newLifecycleProcessor(t, "Backyard")
+		client := NewMockMQTTClient()
+		before := publishForRetireTest(t, p, client, published)
+
+		next := newLifecycleSettings(false)
+		next.Realtime.MQTT.HomeAssistant.DiscoveryPrefix = "otherprefix" // must not matter
+		useLiveSettings(t, next)
+		p.RetireHomeAssistantDiscovery(t.Context(), client, next)
+
+		removals := client.GetPublishedMessages()[before:]
+		require.NotEmpty(t, removals)
+		topics := make(map[string]bool, len(removals))
+		for _, m := range removals {
+			assert.Empty(t, m.payload, "retire publishes only removals, got payload on %s", m.topic)
+			assert.True(t, m.retain, "removal of %s must be retained", m.topic)
+			assert.False(t, strings.HasPrefix(m.topic, "otherprefix/"), "removal must use the published prefix")
+			topics[m.topic] = true
+		}
+		assert.True(t, topics["homeassistant/binary_sensor/node/status/config"], "bridge must be removed")
+		assert.True(t, topics["homeassistant/sensor/node/node_Backyard_species/config"], "source sensors must be removed")
+		p.haDiscoveryMu.Lock()
+		assert.Nil(t, p.haPublishedConfig, "identity is forgotten after a complete removal")
+		p.haDiscoveryMu.Unlock()
+	})
+
+	noOps := []struct {
+		name    string
+		publish bool
+		next    func() *conf.Settings
+	}{
+		{name: "nothing published in this process", publish: false, next: func() *conf.Settings { return newLifecycleSettings(false) }},
+		{name: "HA discovery still enabled", publish: true, next: func() *conf.Settings { return newLifecycleSettings(true) }},
+		{name: "MQTT disabled entirely", publish: true, next: func() *conf.Settings {
+			s := newLifecycleSettings(false)
+			s.Realtime.MQTT.Enabled = false
+			return s
+		}},
+	}
+	for _, tt := range noOps {
+		t.Run("no-op: "+tt.name, func(t *testing.T) {
+			published := newLifecycleSettings(true)
+			useLiveSettings(t, published)
+			p := newLifecycleProcessor(t, "Backyard")
+			client := NewMockMQTTClient()
+			before := 0
+			if tt.publish {
+				before = publishForRetireTest(t, p, client, published)
+			}
+			p.RetireHomeAssistantDiscovery(t.Context(), client, tt.next())
+			assert.Len(t, client.GetPublishedMessages(), before, "retire must publish nothing")
+		})
+	}
+
+	t.Run("disconnected client keeps the identity, next connect retires", func(t *testing.T) {
+		published := newLifecycleSettings(true)
+		useLiveSettings(t, published)
+		p := newLifecycleProcessor(t, "Backyard")
+		oldClient := NewMockMQTTClient()
+		publishForRetireTest(t, p, oldClient, published)
+
+		next := newLifecycleSettings(false)
+		useLiveSettings(t, next)
+		oldClient.SetConnected(false)
+		p.RetireHomeAssistantDiscovery(t.Context(), oldClient, next)
+		p.haDiscoveryMu.Lock()
+		assert.NotNil(t, p.haPublishedConfig, "identity must be kept when removal was impossible")
+		p.haDiscoveryMu.Unlock()
+
+		// The new client registers handlers while HA discovery is off; its
+		// retire handler performs the removal on connect.
+		newClient := NewMockMQTTClient()
+		p.RegisterHomeAssistantDiscovery(newClient, next)
+		handler := newClient.OnConnectHandler()
+		require.NotNil(t, handler, "a retire handler must be registered even with HA discovery off")
+		handler()
+
+		assert.NotEmpty(t, newClient.GetPublishedMessages(), "the retire handler must remove the entities")
+		p.haDiscoveryMu.Lock()
+		assert.Nil(t, p.haPublishedConfig)
+		p.haDiscoveryMu.Unlock()
+	})
+
+	t.Run("failed removal keeps the identity", func(t *testing.T) {
+		published := newLifecycleSettings(true)
+		useLiveSettings(t, published)
+		p := newLifecycleProcessor(t, "Backyard")
+		client := NewMockMQTTClient()
+		publishForRetireTest(t, p, client, published)
+
+		next := newLifecycleSettings(false)
+		useLiveSettings(t, next)
+		client.SetTopicError("homeassistant/binary_sensor/node/status/config", assert.AnError)
+		p.RetireHomeAssistantDiscovery(t.Context(), client, next)
+
+		p.haDiscoveryMu.Lock()
+		assert.NotNil(t, p.haPublishedConfig, "identity must be kept after a partial removal")
+		p.haDiscoveryMu.Unlock()
+	})
+
+	t.Run("a publish queued before the switch does not recreate entities", func(t *testing.T) {
+		published := newLifecycleSettings(true)
+		useLiveSettings(t, newLifecycleSettings(false)) // HA already off when it runs
+		p := newLifecycleProcessor(t, "Backyard")
+		client := NewMockMQTTClient()
+
+		require.NoError(t, p.publishHomeAssistantDiscovery(t.Context(), client, published))
+		assert.Empty(t, client.GetPublishedMessages())
+	})
+}

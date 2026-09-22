@@ -22,6 +22,8 @@ const (
 	// discoveryDebounceDuration is the delay after the last source registration
 	// before HA discovery is republished. Coalesces rapid startup registrations.
 	discoveryDebounceDuration = 3 * time.Second
+	// haDiscoveryRetireTimeout bounds removing HA discovery when it is turned off.
+	haDiscoveryRetireTimeout = 10 * time.Second
 )
 
 // ErrMQTTClientNotReady is returned by PublishMQTT whenever the MQTT client
@@ -137,10 +139,9 @@ func (p *Processor) initializeMQTT(settings *conf.Settings) {
 		return
 	}
 
-	// Register Home Assistant discovery handler if enabled
-	if settings.Realtime.MQTT.HomeAssistant.Enabled {
-		p.registerHomeAssistantDiscovery(mqttClient, settings)
-	}
+	// Register the Home Assistant handlers (discovery only when enabled; the
+	// retire handler always, see RegisterHomeAssistantDiscovery).
+	p.RegisterHomeAssistantDiscovery(mqttClient, settings)
 
 	// Create a context with a timeout for the connection attempt
 	ctx, cancel := context.WithTimeout(context.Background(), mqttConnectionTimeout)
@@ -168,14 +169,79 @@ func (p *Processor) initializeMQTT(settings *conf.Settings) {
 
 // RegisterHomeAssistantDiscovery registers the OnConnect handler for Home Assistant discovery.
 // This is called during MQTT initialization and after MQTT reconfiguration.
+//
+// The retire handler is registered even when HA discovery is disabled: if this
+// process published discovery and HA discovery was then turned off while the
+// broker was unreachable, the first successful (re)connect removes the entities.
 func (p *Processor) RegisterHomeAssistantDiscovery(client mqtt.Client, settings *conf.Settings) {
 	if client == nil || settings == nil {
 		return
 	}
+	p.registerHomeAssistantRetire(client)
 	if !settings.Realtime.MQTT.HomeAssistant.Enabled {
 		return
 	}
 	p.registerHomeAssistantDiscovery(client, settings)
+}
+
+// registerHomeAssistantRetire registers an OnConnect handler that retires HA
+// discovery when it is disabled in the live settings. It is a no-op unless this
+// process published discovery, so installs that never enabled HA see nothing.
+func (p *Processor) registerHomeAssistantRetire(client mqtt.Client) {
+	client.RegisterOnConnectHandler(func() {
+		if !client.IsConnected() {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), haDiscoveryRetireTimeout)
+		defer cancel()
+		p.RetireHomeAssistantDiscovery(ctx, client, p.currentSettings())
+	})
+}
+
+// RetireHomeAssistantDiscovery removes the HA entities this process published
+// when next has MQTT enabled but HA discovery disabled: the bridge, every
+// current source's sensors, and their retained per-source state, all under the
+// identity they were published with. Removal goes through client, the caller's
+// connected client (the reconfigure path passes the old client before it is
+// disconnected; the OnConnect retire handler passes its own).
+//
+// The published identity is forgotten only after every removal succeeded, so a
+// failure or a disconnected client leaves it for the next attempt (the retire
+// handler on the next connect). A source missing from the registry at that
+// moment (mid-restart) keeps its entities; that is rare and matches the
+// behavior before retirement existed.
+func (p *Processor) RetireHomeAssistantDiscovery(ctx context.Context, client mqtt.Client, next *conf.Settings) {
+	if next == nil || !next.Realtime.MQTT.Enabled || next.Realtime.MQTT.HomeAssistant.Enabled {
+		return
+	}
+
+	p.haDiscoveryMu.Lock()
+	defer p.haDiscoveryMu.Unlock()
+
+	published := p.haPublishedConfig
+	if published == nil {
+		return
+	}
+	log := GetLogger()
+	if client == nil || !client.IsConnected() {
+		log.Debug("HA discovery retirement deferred: MQTT client not connected",
+			logger.String("operation", "ha_discovery_retire"))
+		return
+	}
+
+	removeCtx, cancel := context.WithTimeout(ctx, haDiscoveryRetireTimeout)
+	defer cancel()
+
+	publisher := mqtt.NewDiscoveryPublisher(client, published)
+	if err := publisher.RemoveDiscovery(removeCtx, p.getAudioSourcesForDiscovery()); err != nil {
+		log.Warn("failed to remove HA discovery after it was disabled, will retry on next connect",
+			logger.Error(err),
+			logger.String("operation", "ha_discovery_retire"))
+		return
+	}
+	p.haPublishedConfig = nil
+	log.Info("removed HA discovery entities after HA discovery was disabled",
+		logger.String("operation", "ha_discovery_retire"))
 }
 
 // registerHomeAssistantDiscovery registers the OnConnect handler for Home Assistant discovery.
@@ -229,6 +295,17 @@ func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings 
 // This is the shared implementation used by both the OnConnect handler and manual trigger.
 // Skips publishing when no audio sources are registered yet (startup race).
 func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mqtt.Client, settings *conf.Settings) error {
+	p.haDiscoveryMu.Lock()
+	defer p.haDiscoveryMu.Unlock()
+
+	// A publish queued before HA discovery was turned off (debounce timer, an
+	// OnConnect that raced the settings save) must not recreate retired entities.
+	if live := p.currentSettings(); live != nil && !live.Realtime.MQTT.HomeAssistant.Enabled {
+		GetLogger().Debug("skipping HA discovery publish, HA discovery is disabled",
+			logger.String("operation", "ha_discovery_skip"))
+		return nil
+	}
+
 	haSettings := settings.Realtime.MQTT.HomeAssistant
 	discoveryConfig := mqtt.DiscoveryConfig{
 		DiscoveryPrefix: haSettings.DiscoveryPrefix,
@@ -251,7 +328,11 @@ func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mq
 		cleanupDefaultDiscovery(ctx, publisher)
 	})
 
-	return publisher.PublishDiscovery(ctx, sources, settings)
+	if err := publisher.PublishDiscovery(ctx, sources, settings); err != nil {
+		return err
+	}
+	p.haPublishedConfig = &discoveryConfig
+	return nil
 }
 
 // cleanupDefaultDiscovery removes stale HA discovery entries for the

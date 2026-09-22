@@ -491,6 +491,13 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		return
 	}
 
+	// If HA discovery was just turned off, remove its entities through the old
+	// client while it is still connected. If that is not possible, the retire
+	// handler registered on the new client retries on its first connect.
+	retireCtx, retireCancel := context.WithTimeout(context.Background(), mqttReconfigureConnectTimeout)
+	cm.proc.RetireHomeAssistantDiscovery(retireCtx, cm.proc.GetMQTTClient(), settings)
+	retireCancel()
+
 	// First, safely disconnect any existing client
 	cm.proc.DisconnectMQTTClient()
 

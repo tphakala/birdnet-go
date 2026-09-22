@@ -116,6 +116,15 @@ type Processor struct {
 	discoveryDebounceMu     sync.Mutex
 	defaultDiscoveryCleanup sync.Once // ensures stale "default" discovery cleanup runs at most once
 
+	// haDiscoveryMu serializes HA discovery publishing and retirement, so a
+	// publish that was already queued cannot interleave with (or undo) a retire.
+	haDiscoveryMu sync.Mutex
+	// haPublishedConfig is the discovery identity (prefix, base topic, node) this
+	// process last published under, or nil when nothing needs retiring. It holds
+	// no per-entity state: retirement recomputes the entities from the registry.
+	// Guarded by haDiscoveryMu.
+	haPublishedConfig *mqtt.DiscoveryConfig
+
 	// BufferMgr provides access to capture buffers for audio clip extraction.
 	// Set once during pipeline initialization (audio_pipeline_service.go) and never replaced;
 	// no synchronization needed for concurrent reads.
