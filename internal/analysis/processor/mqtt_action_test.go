@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -32,6 +33,16 @@ type MockMQTTClient struct {
 	publishCalls     int
 	reconnectLoops   int
 	disconnectCalls  int
+	// messages records every successful publish in order.
+	messages []publishedMessage
+	// topicErrs fails publishes to specific topics only.
+	topicErrs map[string]error
+}
+
+// publishedMessage is one publish captured by MockMQTTClient.
+type publishedMessage struct {
+	topic   string
+	payload string
 }
 
 // NewMockMQTTClient creates a new mock MQTT client.
@@ -56,8 +67,12 @@ func (m *MockMQTTClient) Publish(_ context.Context, topic, payload string) error
 	if m.publishErr != nil {
 		return m.publishErr
 	}
+	if err := m.topicErrs[topic]; err != nil {
+		return err
+	}
 	m.publishedTopic = topic
 	m.publishedPayload = payload
+	m.messages = append(m.messages, publishedMessage{topic: topic, payload: payload})
 	return nil
 }
 
@@ -128,6 +143,23 @@ func (m *MockMQTTClient) SetPublishError(err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.publishErr = err
+}
+
+// SetTopicError makes publishes to topic fail with err; other topics succeed.
+func (m *MockMQTTClient) SetTopicError(topic string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.topicErrs == nil {
+		m.topicErrs = make(map[string]error)
+	}
+	m.topicErrs[topic] = err
+}
+
+// GetPublishedMessages returns a copy of every successful publish, in order.
+func (m *MockMQTTClient) GetPublishedMessages() []publishedMessage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.messages)
 }
 
 // GetPublishCalls returns the number of Publish calls.

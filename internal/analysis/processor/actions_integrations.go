@@ -387,6 +387,8 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 			Build()
 	}
 
+	a.publishSourceDetection(note.Source.ID, string(noteJson))
+
 	if a.Settings.Debug {
 		GetLogger().Debug("Successfully published to MQTT",
 			logger.String("component", "analysis.processor.actions"),
@@ -398,6 +400,35 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 			logger.String("operation", "mqtt_publish_success"))
 	}
 	return nil
+}
+
+// publishSourceDetection republishes a detection to its source's own topic
+// (mqtt.SourceDetectionTopic), which the Home Assistant discovery sensors read.
+// Only done while HA discovery is enabled, so installs without it see no extra
+// traffic. Detections without a source ID have no matching sensors and are
+// skipped.
+//
+// Failure is logged and not returned: the detection already reached the shared
+// topic, and failing the action would make a retry publish it there twice.
+func (a *MqttAction) publishSourceDetection(sourceID, payload string) {
+	if !a.Settings.Realtime.MQTT.HomeAssistant.Enabled || sourceID == "" {
+		return
+	}
+
+	// A fresh timeout, so a slow shared-topic publish cannot starve this one.
+	ctx, cancel := context.WithTimeout(context.Background(), MQTTPublishTimeout)
+	defer cancel()
+
+	topic := mqtt.SourceDetectionTopic(a.Settings.Realtime.MQTT.Topic, sourceID)
+	if err := a.MqttClient.Publish(ctx, topic, payload); err != nil {
+		GetLogger().Warn("Failed to publish detection to per-source MQTT topic",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.Error(privacy.WrapError(err)),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("topic", topic),
+			logger.String("operation", "mqtt_publish_source_topic"))
+	}
 }
 
 // Execute updates the range filter species list, this is run every day

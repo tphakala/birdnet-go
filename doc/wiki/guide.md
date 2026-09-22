@@ -1682,6 +1682,12 @@ When MQTT is enabled, sound level data is published to the topic:
 <base_topic>/soundlevel
 ```
 
+When Home Assistant discovery is also enabled, each source's data is additionally published to its own topic, which the discovered Sound Level sensor reads:
+
+```
+<base_topic>/sources/<source_id>/soundlevel
+```
+
 The MQTT message uses a compact JSON format to minimize payload size:
 
 ```json
@@ -2995,6 +3001,7 @@ The application offers several integration points:
 
 * MQTT support for IoT ecosystems.
   - The `retain` flag in MQTT settings is recommended for Home Assistant integration to ensure sensor states are preserved across restarts.
+  - With Home Assistant discovery enabled, each detection is also published to a per-source topic, `<base_topic>/sources/<source_id>`, and each source's discovered sensors read their own topic. A detection from one source therefore never changes another source's sensors. The shared `<base_topic>` still carries every detection.
 * Telemetry endpoint compatible with Prometheus.
 * BirdWeather API integration for community data sharing.
   - **About BirdWeather:** [BirdWeather.com](https://www.birdweather.com/) is a citizen science platform that collects bird vocalizations from stations around the world. It uses the BirdNET model (developed by Cornell Lab of Ornithology and Chemnitz University of Technology) for identification. Uploading data helps contribute to this global library.

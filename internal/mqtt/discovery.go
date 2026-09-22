@@ -263,13 +263,19 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 
 	availabilityTopic := p.config.BaseTopic + "/status"
 
+	// Each source's sensors read that source's own state topic, so the
+	// templates need no sourceId filter. Filtering on the shared topic cannot
+	// work: HA turns a template that renders None into an unknown state, so
+	// every other source's detection would clear these sensors (GitHub #4349).
+	// The topics are keyed by the raw source.ID, matching the publishers.
+	detectionTopic := SourceDetectionTopic(p.config.BaseTopic, source.ID)
+
 	// Publish Last Species sensor
-	// Note: ValueTemplate uses source.ID (not sanitized) to match incoming JSON
 	if err := p.publishSensor(ctx, nodeID, sourceID, SensorSpecies, &DiscoveryPayload{
 		Name:              "Last Species",
 		UniqueID:          deviceID + "_species",
-		StateTopic:        p.config.BaseTopic,
-		ValueTemplate:     fmt.Sprintf("{{ value_json.CommonName if value_json.sourceId == '%s' else None }}", source.ID),
+		StateTopic:        detectionTopic,
+		ValueTemplate:     "{{ value_json.CommonName }}",
 		Icon:              "mdi:bird",
 		AvailabilityTopic: availabilityTopic,
 		Device:            device,
@@ -278,12 +284,11 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 	}
 
 	// Publish Confidence sensor
-	// Note: ValueTemplate uses source.ID (not sanitized) to match incoming JSON
 	if err := p.publishSensor(ctx, nodeID, sourceID, SensorConfidence, &DiscoveryPayload{
 		Name:              "Confidence",
 		UniqueID:          deviceID + "_confidence",
-		StateTopic:        p.config.BaseTopic,
-		ValueTemplate:     fmt.Sprintf("{{ (value_json.Confidence * 100) | round(1) if value_json.sourceId == '%s' else None }}", source.ID),
+		StateTopic:        detectionTopic,
+		ValueTemplate:     "{{ (value_json.Confidence * 100) | round(1) }}",
 		UnitOfMeasurement: "%",
 		StateClass:        "measurement",
 		Icon:              "mdi:percent",
@@ -294,12 +299,11 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 	}
 
 	// Publish Scientific Name sensor
-	// Note: ValueTemplate uses source.ID (not sanitized) to match incoming JSON
 	if err := p.publishSensor(ctx, nodeID, sourceID, SensorScientificName, &DiscoveryPayload{
 		Name:              "Scientific Name",
 		UniqueID:          deviceID + "_scientific_name",
-		StateTopic:        p.config.BaseTopic,
-		ValueTemplate:     fmt.Sprintf("{{ value_json.ScientificName if value_json.sourceId == '%s' else None }}", source.ID),
+		StateTopic:        detectionTopic,
+		ValueTemplate:     "{{ value_json.ScientificName }}",
 		Icon:              "mdi:format-quote-close",
 		AvailabilityTopic: availabilityTopic,
 		Device:            device,
@@ -308,14 +312,13 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 	}
 
 	// Publish Sound Level sensor if sound level monitoring is enabled
-	// Note: ValueTemplate uses source.ID (not sanitized) to match incoming JSON
 	// Band key format: formatBandKey() in soundlevel.go produces "1.0_kHz" for 1000 Hz
 	if settings.Realtime.Audio.SoundLevel.Enabled {
 		if err := p.publishSensor(ctx, nodeID, sourceID, SensorSoundLevel, &DiscoveryPayload{
 			Name:              "Sound Level",
 			UniqueID:          deviceID + "_sound_level",
-			StateTopic:        p.config.BaseTopic + "/soundlevel",
-			ValueTemplate:     fmt.Sprintf("{{ value_json.b['1.0_kHz'].m if value_json.src == '%s' else None }}", source.ID),
+			StateTopic:        SourceSoundLevelTopic(p.config.BaseTopic, source.ID),
+			ValueTemplate:     "{{ value_json.b['1.0_kHz'].m }}",
 			UnitOfMeasurement: "dB",
 			DeviceClass:       "sound_pressure",
 			StateClass:        "measurement",

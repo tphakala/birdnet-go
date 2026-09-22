@@ -262,8 +262,10 @@ func TestPublishSourceDiscovery(t *testing.T) {
 
 	assert.Equal(t, "Last Species", speciesPayload.Name)
 	assert.Equal(t, "mdi:bird", speciesPayload.Icon)
-	assert.Equal(t, "birdnet", speciesPayload.StateTopic)
-	assert.Contains(t, speciesPayload.ValueTemplate, "hw:0,0") // Original source ID in template
+	// State topic is keyed by the raw source.ID (what the publisher sees), not
+	// by the DisplayName used for entity IDs.
+	assert.Equal(t, "birdnet/sources/hw_0_0", speciesPayload.StateTopic)
+	assert.Equal(t, "{{ value_json.CommonName }}", speciesPayload.ValueTemplate)
 
 	// Verify device has via_device pointing to bridge
 	assert.Equal(t, "birdnet_go_test-node_bridge", speciesPayload.Device.ViaDevice)
@@ -551,17 +553,17 @@ func TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat(t *testing.T) {
 		"Value template should access bands via value_json.b")
 	assert.Contains(t, payload.ValueTemplate, ".m",
 		"Value template should access mean dB via .m")
-	assert.Contains(t, payload.ValueTemplate, "value_json.src",
-		"Value template should filter by source ID via value_json.src")
+	assert.Equal(t, "birdnet/sources/test-mic/soundlevel", payload.StateTopic,
+		"Sound level sensor must read its source's own sound level topic")
 }
 
-// TestValueTemplates_UseNoneFallback verifies that all value templates use
-// "else None" instead of "else this.state". When HA starts, sensors are in
-// 'unknown' state. If a multi-source sensor receives a message from a
-// non-matching source and the template returns this.state ('unknown'), HA
-// rejects it for numeric sensors (sound_pressure device class, % unit).
-// Returning None tells HA to skip the state update entirely.
-func TestValueTemplates_UseNoneFallback(t *testing.T) {
+// TestSourceSensors_ReadPerSourceTopics guards GitHub #4349. On an HA MQTT
+// sensor, a value_template cannot ignore a message: rendering None sets the
+// state to unknown. With every source sharing one state topic, a template that
+// filters on sourceId therefore let each detection clear all other sources'
+// sensors. Each source's sensors must instead read a topic only that source
+// publishes to, with a template that has no source filter and no fallback.
+func TestSourceSensors_ReadPerSourceTopics(t *testing.T) {
 	t.Parallel()
 
 	mock := newMockPublisher()
@@ -576,11 +578,6 @@ func TestValueTemplates_UseNoneFallback(t *testing.T) {
 	publisher := NewDiscoveryPublisher(mock, &config)
 	ctx := t.Context()
 
-	source := datastore.AudioSource{
-		ID:          "rtsp_abc123",
-		DisplayName: "Backyard Mic",
-	}
-
 	settings := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
 			Audio: conf.AudioSettings{
@@ -591,33 +588,63 @@ func TestValueTemplates_UseNoneFallback(t *testing.T) {
 		},
 	}
 
-	err := publisher.publishSourceDiscovery(ctx, source, settings)
-	require.NoError(t, err)
-
-	nodeID := SanitizeID(config.NodeID)
-	sourceID := SanitizeID(source.DisplayName)
-	prefix := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID
-
-	sensors := map[string]string{
-		"species":         prefix + "_species/config",
-		"confidence":      prefix + "_confidence/config",
-		"scientific_name": prefix + "_scientific_name/config",
-		"sound_level":     prefix + "_sound_level/config",
+	sources := []datastore.AudioSource{
+		{ID: "rtsp_aaaa1111", DisplayName: "Backyard Mic"},
+		{ID: "rtsp_bbbb2222", DisplayName: "Front Porch"},
 	}
 
-	for name, topic := range sensors {
-		require.Contains(t, mock.publishedMessages, topic, "Missing topic for %s", name)
+	nodeID := SanitizeID(config.NodeID)
+	stateTopics := make(map[string]string) // state topic -> source that owns it
 
-		var payload DiscoveryPayload
-		err := json.Unmarshal([]byte(mock.publishedMessages[topic]), &payload)
-		require.NoError(t, err, "Failed to parse %s payload", name)
+	for _, source := range sources {
+		require.NoError(t, publisher.publishSourceDiscovery(ctx, source, settings))
 
-		assert.Contains(t, payload.ValueTemplate, "else None",
-			"%s template must use 'else None' to avoid HA validation errors on numeric sensors at startup; got: %s",
-			name, payload.ValueTemplate)
-		assert.NotContains(t, payload.ValueTemplate, "this.state",
-			"%s template must NOT use 'this.state' fallback; got: %s",
-			name, payload.ValueTemplate)
+		prefix := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + SanitizeID(source.DisplayName)
+		sensors := map[string]struct {
+			topic         string
+			stateTopic    string
+			valueTemplate string
+		}{
+			"species": {
+				prefix + "_species/config",
+				SourceDetectionTopic(config.BaseTopic, source.ID),
+				"{{ value_json.CommonName }}",
+			},
+			"confidence": {
+				prefix + "_confidence/config",
+				SourceDetectionTopic(config.BaseTopic, source.ID),
+				"{{ (value_json.Confidence * 100) | round(1) }}",
+			},
+			"scientific_name": {
+				prefix + "_scientific_name/config",
+				SourceDetectionTopic(config.BaseTopic, source.ID),
+				"{{ value_json.ScientificName }}",
+			},
+			"sound_level": {
+				prefix + "_sound_level/config",
+				SourceSoundLevelTopic(config.BaseTopic, source.ID),
+				"{{ value_json.b['1.0_kHz'].m }}",
+			},
+		}
+
+		for name, want := range sensors {
+			require.Contains(t, mock.publishedMessages, want.topic, "Missing topic for %s", name)
+
+			var payload DiscoveryPayload
+			require.NoError(t, json.Unmarshal([]byte(mock.publishedMessages[want.topic]), &payload),
+				"Failed to parse %s payload", name)
+
+			assert.Equal(t, want.stateTopic, payload.StateTopic, "%s state topic for %s", name, source.ID)
+			assert.Equal(t, want.valueTemplate, payload.ValueTemplate, "%s template for %s", name, source.ID)
+			assert.NotContains(t, payload.ValueTemplate, "else",
+				"%s template must not have a fallback branch; HA would apply it as unknown", name)
+
+			if owner, taken := stateTopics[payload.StateTopic]; taken {
+				assert.Equal(t, source.ID, owner,
+					"state topic %s is shared by sources %s and %s", payload.StateTopic, owner, source.ID)
+			}
+			stateTopics[payload.StateTopic] = source.ID
+		}
 	}
 }
 
