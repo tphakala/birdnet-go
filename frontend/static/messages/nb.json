@@ -2164,7 +2164,7 @@
         },
         "succession": {
           "title": "Akustisk suksesjon",
-          "description": "Hvordan lydlandskapets mest vanlige arter avløser hverandre gjennom døgnet, vist som stablede bånd med timevise registreringer fra før daggry til gjennom natten",
+          "description": "Hvordan lydlandskapets mest vanlige arter avløser hverandre gjennom døgnet, vist som stablede bånd med timevise registreringer fra før daggry og gjennom natten",
           "noData": "Ingen akustiske suksesjonsdata tilgjengelig",
           "noDataHint": "Velg et bredere datointervall for å se hvordan artene avløser hverandre gjennom døgnet",
           "ariaLabel": "Lydlandskapets artssuksesjon: stablede registreringer per time for de vanligste artene",
@@ -2178,7 +2178,7 @@
           "title": "Start av morgengry",
           "description": "Når morgengryet starter hver dag i forhold til borgerlig tussmørke.",
           "noData": "Ingen data for morgengry tilgjengelig",
-          "noDataHint": "Velg et lengre tidsrom for å se hvordan morgenkoret endrer seg gjennom sesongene",
+          "noDataHint": "Velg et lengre tidsrom for å se hvordan morgenkoret forskyver seg gjennom sesongene",
           "ariaLabel": "Start av morgengry",
           "axisDate": "Dato",
           "axisOnset": "Minutter fra borgerlig tussmørke",
