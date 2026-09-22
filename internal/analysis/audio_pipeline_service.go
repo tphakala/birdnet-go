@@ -1395,20 +1395,6 @@ func sourceModelsChanged(bufMgr *buffer.Manager, sourceID string, desiredConfigI
 // desired config from settings. Only sources that were added, removed, or
 // changed are touched - unchanged streams keep their capture buffers and
 // source IDs intact.
-// forgetHomeAssistantDiscoverySource asks the processor to remove Home Assistant
-// discovery for a source the user deleted from the config. It is a no-op when the
-// processor is not available.
-func (p *AudioPipelineService) forgetHomeAssistantDiscoverySource(sourceID string) {
-	if p.apiService == nil {
-		return
-	}
-	proc := p.apiService.Processor()
-	if proc == nil {
-		return
-	}
-	proc.ForgetHomeAssistantSource(sourceID)
-}
-
 func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan audiocore.AudioLevelData) {
 	p.sourcesMu.Lock()
 	defer p.sourcesMu.Unlock()
@@ -1562,11 +1548,6 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				logger.String("source_id", src.ID),
 				logger.Error(err))
 		}
-		// Config-driven deletion: the user removed this stream from settings, so
-		// remove its Home Assistant discovery entities and retained state. Unlike a
-		// transient restart (which the registry listener no longer treats as a
-		// removal), this is a real deletion.
-		p.forgetHomeAssistantDiscoverySource(src.ID)
 		// engine.RemoveSource also removes the soundlevel route. Drop the
 		// tracking entry so the idempotency check in
 		// registerSoundLevelConsumers does not skip this ID if the same

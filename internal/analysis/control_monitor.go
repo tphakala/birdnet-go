@@ -491,11 +491,6 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		return
 	}
 
-	// Retire stale Home Assistant discovery through the still-connected old client
-	// before disconnecting it, so entities and retained state are removed under the
-	// OLD topics when HA discovery is turned off or the discovery identity changes.
-	cm.proc.RetireHomeAssistantDiscovery(context.Background(), settings)
-
 	// First, safely disconnect any existing client
 	cm.proc.DisconnectMQTTClient()
 
@@ -528,14 +523,6 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 
 		// Safely set the new client
 		cm.proc.SetMQTTClient(newClient)
-
-		// Retire again through the freshly connected client. If HA discovery was
-		// turned off while the OLD client was already down, the first retire above
-		// could not publish the removals and kept the record; now that the new
-		// client is connected to the same broker, this second call cleans up. It is
-		// idempotent: once the record is cleared it is a no-op, and it does nothing
-		// while HA discovery stays enabled.
-		cm.proc.RetireHomeAssistantDiscovery(context.Background(), settings)
 
 		if connectErr != nil {
 			cm.notifySuccess("MQTT reconfigured, broker unreachable: retrying in background")
@@ -755,13 +742,6 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 	} else {
 		GetLogger().Info("Sound level monitoring disabled")
 		cm.notifySuccess("Sound level monitoring disabled")
-	}
-
-	// Republish HA discovery so the per-source Sound Level sensor is added or
-	// removed immediately when sound level monitoring toggles. Internally guarded:
-	// a no-op unless MQTT and HA discovery are enabled and the client is connected.
-	if cm.proc != nil {
-		cm.proc.RepublishHomeAssistantDiscovery()
 	}
 
 	emitHotReload("sound_level")

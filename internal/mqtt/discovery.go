@@ -91,23 +91,14 @@ func getSourceID(source datastore.AudioSource) string {
 // and non-colliding installs therefore keep exactly the keys they had before this
 // disambiguation existed.
 //
-// previous maps a raw source ID to the entity key it was last published under
-// (pass nil when there is no prior assignment). Incumbency wins: a source that
-// already held a key keeps exactly that key, so none of these move a live source's
-// HA history:
-//   - editing one source's RTSP URL mints a new raw ID for the same name: the new
-//     ID has no previous key and simply takes the base key of its (now single)
-//     group;
-//   - adding a new same-name source with a smaller raw ID: the incumbent keeps its
-//     key and the newcomer is suffixed, even though its raw ID sorts first;
-//   - a colliding source departing (a restart): the survivor keeps whatever key it
-//     held (base or suffixed), so nothing is rekeyed or removed.
-//
-// A source without a previous key claims the plain base key if it is free (the
-// lexicographically smallest such source wins), otherwise a base+"_"+SanitizeID(ID)
-// suffix. The result is deterministic regardless of input slice order, and every
-// returned key is unique.
-func SourceEntityKeys(sources []datastore.AudioSource, previous map[string]string) map[string]string {
+// The assignment is a pure function of the current source list, so it is the
+// same after a restart as it was before: within a group, the lexicographically
+// smallest raw ID keeps the plain base key and the rest get base+"_"+SanitizeID(ID).
+// The price of determinism is that adding a same-name source whose raw ID sorts
+// first moves the plain key (and its HA history) to that source; giving sources
+// distinct names avoids it. Every returned key is unique, and the result does not
+// depend on input slice order.
+func SourceEntityKeys(sources []datastore.AudioSource) map[string]string {
 	// Group sources by their base entity key.
 	groups := make(map[string][]string, len(sources)) // base -> raw IDs
 	bases := make([]string, 0, len(sources))
@@ -119,50 +110,19 @@ func SourceEntityKeys(sources []datastore.AudioSource, previous map[string]strin
 		groups[base] = append(groups[base], source.ID)
 	}
 	slices.Sort(bases)
-	for base := range groups {
-		slices.Sort(groups[base])
-	}
 
 	keys := make(map[string]string, len(sources))
 	used := make(map[string]struct{}, len(sources))
-
-	// Pass 1: every source that already held a key keeps it, as long as it is still
-	// free. Reserving these globally before assigning fresh keys is what protects an
-	// incumbent from a same-name newcomer or a restart-driven regrouping.
 	for _, base := range bases {
-		for _, id := range groups[base] {
-			pk, ok := previous[id]
-			if !ok || pk == "" {
-				continue
-			}
-			if _, taken := used[pk]; taken {
-				continue // collides with another kept key; reassign in pass 2
-			}
-			keys[id] = pk
-			used[pk] = struct{}{}
-		}
+		ids := groups[base]
+		slices.Sort(ids)
+		// Plain base keys are claimed first so a suffixed key can never take a
+		// base key another group needs.
+		keys[ids[0]] = base
+		used[base] = struct{}{}
 	}
-
-	// Pass 2: assign the still-unassigned sources. The smallest such source in a
-	// group takes the plain base key if it is still free; the rest get a suffixed
-	// key, guaranteed unique against everything reserved so far.
 	for _, base := range bases {
-		unassigned := make([]string, 0, len(groups[base]))
-		for _, id := range groups[base] {
-			if _, done := keys[id]; !done {
-				unassigned = append(unassigned, id)
-			}
-		}
-		if len(unassigned) == 0 {
-			continue
-		}
-		start := 0
-		if _, taken := used[base]; !taken {
-			keys[unassigned[0]] = base
-			used[base] = struct{}{}
-			start = 1
-		}
-		for _, id := range unassigned[start:] {
+		for _, id := range groups[base][1:] {
 			candidate := base + "_" + SanitizeID(id)
 			for n := 2; ; n++ {
 				if _, taken := used[candidate]; !taken {
@@ -275,19 +235,11 @@ func NewDiscoveryPublisher(client Client, config *DiscoveryConfig) *Publisher {
 	}
 }
 
-// PublishDiscovery publishes Home Assistant discovery configs for all sources,
-// computing each source's entity key from scratch (no prior assignment). Callers
-// that must preserve incumbency across an edit should compute keys with
-// SourceEntityKeys(sources, previous) and call PublishDiscoveryWithKeys.
+// PublishDiscovery publishes Home Assistant discovery configs for all sources.
+// Entity keys come from SourceEntityKeys(sources), so they depend only on the
+// current source list.
 func (p *Publisher) PublishDiscovery(ctx context.Context, sources []datastore.AudioSource, settings *conf.Settings) error {
-	return p.PublishDiscoveryWithKeys(ctx, sources, SourceEntityKeys(sources, nil), settings)
-}
-
-// PublishDiscoveryWithKeys publishes Home Assistant discovery configs for all
-// sources using the caller-supplied entity keys (raw source ID -> entity key).
-// The keys must be the same ones the caller records, so a later removal targets
-// exactly the config topics that were published.
-func (p *Publisher) PublishDiscoveryWithKeys(ctx context.Context, sources []datastore.AudioSource, entityKeys map[string]string, settings *conf.Settings) error {
+	entityKeys := SourceEntityKeys(sources)
 	log := GetLogger()
 	log.Info("Publishing Home Assistant discovery messages",
 		logger.Int("source_count", len(sources)),
@@ -517,21 +469,12 @@ func (p *Publisher) bridgeID(nodeID string) string {
 	return fmt.Sprintf("%s_%s_bridge", deviceIDPrefix, nodeID)
 }
 
-// RemoveDiscovery publishes empty payloads to remove all discovery entries,
-// computing each source's entity key from scratch. Callers that recorded explicit
-// keys should call RemoveDiscoveryWithKeys so removal targets the exact keys the
-// entities were published under.
+// RemoveDiscovery publishes empty retained payloads to remove the bridge and
+// every source's sensors and retained per-source state. Entity keys come from
+// SourceEntityKeys(sources). It attempts every removal and returns the joined
+// error of all per-topic publish failures (nil when all succeeded).
 func (p *Publisher) RemoveDiscovery(ctx context.Context, sources []datastore.AudioSource) error {
-	return p.RemoveDiscoveryWithKeys(ctx, sources, SourceEntityKeys(sources, nil))
-}
-
-// RemoveDiscoveryWithKeys publishes empty payloads to remove the bridge and every
-// source's sensors and retained per-source state, using the caller-supplied entity
-// keys (raw source ID -> entity key). It attempts every removal and returns the
-// joined error of all per-topic publish failures (nil when all succeeded), so a
-// caller can tell a fully-successful removal from a partial one and keep its
-// record to retry.
-func (p *Publisher) RemoveDiscoveryWithKeys(ctx context.Context, sources []datastore.AudioSource, entityKeys map[string]string) error {
+	entityKeys := SourceEntityKeys(sources)
 	log := GetLogger()
 	log.Info("Removing Home Assistant discovery messages")
 
