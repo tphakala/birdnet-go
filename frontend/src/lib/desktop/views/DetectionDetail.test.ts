@@ -237,6 +237,38 @@ describe('DetectionDetail audio download', () => {
       expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     });
   });
+
+  // A blank common name would build a guide URL for a page that does not exist,
+  // so the links are omitted rather than rendered broken.
+  it('omits the reference links when the detection has no common name', async () => {
+    const detection = makeDetection({
+      id: 1241,
+      scientificName: 'Dumetella carolinensis',
+      commonName: '   ',
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/v2/detections/1241')) {
+          return Promise.resolve(jsonResponse(detection));
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    const { container } = detailTest.render({ detectionId: '1241' });
+
+    // Anchor on the loaded detection's own text: the skeleton also renders a
+    // .hero-confidence, so waiting on that would assert before the data arrives.
+    await waitFor(() => {
+      expect(container.querySelector('.species-scientific-name')?.textContent).toContain(
+        'Dumetella carolinensis'
+      );
+    });
+
+    expect(container.querySelector('.species-reference-links')).toBeNull();
+  });
 });
 
 describe('DetectionDetail rarity location coordinates', () => {
