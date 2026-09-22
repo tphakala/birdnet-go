@@ -36,6 +36,7 @@ func TestNewService(t *testing.T) {
 		{"yrno_provider", "yrno", false},
 		{"openweather_provider", "openweather", false},
 		{"wunderground_provider", "wunderground", false},
+		{"pirateweather_provider", string(conf.WeatherPirateWeather), false},
 		{"invalid_provider_disabled", "invalid", true},
 		{"empty_provider_defaults_to_yrno", "", false},
 		{"none_provider_disabled", "none", true},
@@ -208,7 +209,7 @@ func TestWeatherDataCreation(t *testing.T) {
 
 // TestSettingsCreation tests the creation of test settings.
 func TestSettingsCreation(t *testing.T) {
-	providers := []string{"yrno", "openweather", "wunderground"}
+	providers := []string{"yrno", "openweather", "wunderground", string(conf.WeatherPirateWeather)}
 
 	for _, provider := range providers {
 		t.Run(provider, func(t *testing.T) {
@@ -1151,13 +1152,11 @@ func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
 		"fetch should pick up updated longitude from global settings")
 }
 
-// TestNewService_PinsProviderName verifies that the Service pins the
-// provider name at construction based on the actual provider implementation
-// it selected. This matters because fetchAndSave uses s.providerName in logs
-// and metrics, and reading the name from the (hot-reloadable) settings
-// snapshot instead could misreport a later UI change while s.provider still
-// points at the original implementation.
-func TestNewService_PinsProviderName(t *testing.T) {
+// TestNewService_SelectsProviderName verifies that NewService selects the
+// providerName that matches the actual provider implementation constructed
+// for the configured setting (including the "" -> yr.no default), which
+// fetchAndSave/Status report in logs and metrics.
+func TestNewService_SelectsProviderName(t *testing.T) {
 	tests := []struct {
 		configured string
 		want       string
@@ -1173,10 +1172,45 @@ func TestNewService_PinsProviderName(t *testing.T) {
 			svc, err := NewService(settings, nil, nil)
 			require.NoError(t, err)
 			require.NotNil(t, svc)
-			assert.Equal(t, tt.want, svc.providerName,
-				"providerName should reflect the actual provider implementation, not be re-read from settings")
+			assert.Equal(t, tt.want, svc.activeProviderName(),
+				"providerName should reflect the actual provider implementation selected")
 		})
 	}
+}
+
+// TestReconcileConfig_HotReloadsProvider verifies that a provider change in
+// settings takes effect on the next fetch cycle without a service restart.
+func TestReconcileConfig_HotReloadsProvider(t *testing.T) {
+	settings := createTestSettings(t, yrNoProviderName)
+	svc, err := NewService(settings, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, yrNoProviderName, svc.activeProviderName())
+
+	changed := createTestSettings(t, openWeatherProviderName, func(s *conf.Settings) {
+		s.Realtime.Weather.OpenWeather.APIKey = "test-key"
+	})
+	svc.reconcileConfig(changed)
+
+	assert.Equal(t, openWeatherProviderName, svc.activeProviderName(),
+		"reconcileConfig should switch the active provider on a settings change")
+	provider, _ := svc.activeProvider()
+	_, ok := provider.(*OpenWeatherProvider)
+	assert.True(t, ok, "active provider should be rebuilt as the newly configured implementation")
+}
+
+// TestReconcileConfig_KeepsPreviousProviderOnUnsupportedValue verifies that an
+// unrecognized/"none" provider value in settings does not tear down a working
+// provider; disabling weather entirely goes through stopping the service.
+func TestReconcileConfig_KeepsPreviousProviderOnUnsupportedValue(t *testing.T) {
+	settings := createTestSettings(t, yrNoProviderName)
+	svc, err := NewService(settings, nil, nil)
+	require.NoError(t, err)
+
+	changed := createTestSettings(t, "not-a-real-provider")
+	svc.reconcileConfig(changed)
+
+	assert.Equal(t, yrNoProviderName, svc.activeProviderName(),
+		"an unsupported configured provider should keep the previous provider active")
 }
 
 // TestWundergroundProvider_HTTP204_NoContent tests that Wunderground returns
