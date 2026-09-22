@@ -590,18 +590,26 @@ func TestMqttAction_Execute_PreservesClipNameWhenExportSucceeded(t *testing.T) {
 
 // mockSpeciesTimeSource is a controllable speciesDetectionTimeSource for tests.
 type mockSpeciesTimeSource struct {
-	first     *time.Time
-	last      *time.Time
-	err       error
-	calls     int
-	gotName   string
-	gotBefore time.Time
+	first    *time.Time
+	last     *time.Time
+	err      error
+	honorCtx bool // when set, block until the query context is done and return ctx.Err() (models a slow query hitting the timeout/cancellation)
+
+	calls       int
+	gotName     string
+	gotBefore   time.Time
+	gotDeadline bool // whether the received context carried the per-query timeout deadline
 }
 
-func (m *mockSpeciesTimeSource) GetSpeciesFirstAndLastDetectionTimeBefore(_ context.Context, scientificName string, before time.Time) (first, last *time.Time, err error) {
+func (m *mockSpeciesTimeSource) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Context, scientificName string, before time.Time) (first, last *time.Time, err error) {
 	m.calls++
 	m.gotName = scientificName
 	m.gotBefore = before
+	_, m.gotDeadline = ctx.Deadline()
+	if m.honorCtx {
+		<-ctx.Done()
+		return nil, nil, ctx.Err()
+	}
 	return m.first, m.last, m.err
 }
 
@@ -639,6 +647,8 @@ func TestMqttAction_Execute_SpeciesDetectionTimes_Populated(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, source.calls, "species time query should run exactly once")
+	assert.True(t, source.gotDeadline,
+		"query must run under the per-detection timeout (deadline-bounded context)")
 	assert.Equal(t, det.Result.Species.ScientificName, source.gotName,
 		"query must use the detection's scientific name")
 	assert.Equal(t, det.Result.Timestamp, source.gotBefore,
@@ -690,6 +700,58 @@ func TestMqttAction_Execute_SpeciesDetectionTimes_QueryError_NonFatal(t *testing
 	assert.True(t, present, "speciesFirstDetectedAt key must still be present")
 	assert.Nil(t, jsonMap["speciesFirstDetectedAt"], "speciesFirstDetectedAt must be null on query error")
 	assert.Nil(t, jsonMap["speciesLastDetectedAt"], "speciesLastDetectedAt must be null on query error")
+}
+
+// TestMqttAction_Execute_SpeciesDetectionTimes_ContextCanceled_Silent verifies
+// that a canceled query context (an expected shutdown interruption) degrades to
+// null fields without failing the publish, and exercises the context.Canceled
+// suppression branch that keeps per-detection logs quiet on stop. The query
+// context is derived from the action context via the per-query timeout, so an
+// already-canceled action context reaches the query as context.Canceled.
+func TestMqttAction_Execute_SpeciesDetectionTimes_ContextCanceled_Silent(t *testing.T) {
+	t.Parallel()
+
+	mockClient := NewMockMQTTClient()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+	det := testDetection()
+
+	// honorCtx makes the query block until its context is done and return
+	// ctx.Err(); with an already-canceled parent that is context.Canceled.
+	source := &mockSpeciesTimeSource{honorCtx: true}
+
+	detectionCtx := &DetectionContext{}
+	detectionCtx.NoteID.Store(1)
+
+	action := &MqttAction{
+		Settings:          settings,
+		Result:            det.Result,
+		MqttClient:        mockClient,
+		EventTracker:      eventTracker,
+		DetectionCtx:      detectionCtx,
+		SpeciesTimeSource: source,
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // canceled before Execute: the query context is already done
+
+	err := action.Execute(ctx, nil)
+	require.NoError(t, err, "a canceled query context must not fail the action")
+	assert.Equal(t, 1, source.calls, "species time query should run exactly once")
+	assert.True(t, source.gotDeadline,
+		"query must still run under the per-detection timeout deadline")
+	assert.Equal(t, 1, mockClient.GetPublishCalls(), "payload must still be published")
+
+	var jsonMap map[string]any
+	require.NoError(t, json.Unmarshal([]byte(mockClient.GetPublishedPayload()), &jsonMap))
+
+	_, present := jsonMap["speciesFirstDetectedAt"]
+	assert.True(t, present, "speciesFirstDetectedAt key must still be present")
+	assert.Nil(t, jsonMap["speciesFirstDetectedAt"], "speciesFirstDetectedAt must be null on canceled query")
+	assert.Nil(t, jsonMap["speciesLastDetectedAt"], "speciesLastDetectedAt must be null on canceled query")
 }
 
 // TestMqttAction_Execute_SpeciesDetectionTimes_NilSource verifies that the
