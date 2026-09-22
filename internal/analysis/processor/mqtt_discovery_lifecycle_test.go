@@ -4,6 +4,7 @@
 package processor
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 )
 
@@ -61,12 +63,15 @@ func newLifecycleProcessor(t *testing.T, displayNames ...string) *Processor {
 	return p
 }
 
-// soundLevelConfigPayload returns the last payload published to a sound level
-// sensor config topic, and whether one was published.
+// soundLevelConfigPayload returns the last payload published to the sound level
+// sensor config topic of the "Backyard" source used by these tests, and whether
+// one was published. It matches the exact topic: other sound level config
+// topics (e.g. the suffixed-key cleanup) must not be mistaken for it.
 func soundLevelConfigPayload(msgs []publishedMessage) (string, bool) {
+	const topic = "homeassistant/sensor/node/node_Backyard_sound_level/config"
 	payload, found := "", false
 	for _, m := range msgs {
-		if strings.HasSuffix(m.topic, "_sound_level/config") {
+		if m.topic == topic {
 			payload, found = m.payload, true
 		}
 	}
@@ -320,5 +325,368 @@ func TestRetireHomeAssistantDiscovery(t *testing.T) {
 
 		require.NoError(t, p.publishHomeAssistantDiscovery(t.Context(), client, published))
 		assert.Empty(t, client.GetPublishedMessages())
+	})
+}
+
+// registerLifecycleSource adds an RTSP source with a unique connection string
+// and returns its registry snapshot as a datastore.AudioSource.
+func registerLifecycleSource(t *testing.T, p *Processor, conn, name string) datastore.AudioSource {
+	t.Helper()
+	src, err := p.registry.Register(&audiocore.SourceConfig{
+		Type:             audiocore.SourceTypeRTSP,
+		ConnectionString: conn,
+		DisplayName:      name,
+		SampleRate:       48000,
+		BitDepth:         16,
+		Channels:         1,
+	})
+	require.NoError(t, err)
+	return datastore.AudioSource{ID: src.ID, DisplayName: src.DisplayName}
+}
+
+// newEmptyLifecycleProcessor returns a processor with an empty registry.
+func newEmptyLifecycleProcessor() *Processor {
+	p := &Processor{}
+	p.registry = audiocore.NewSourceRegistry(audiocore.GetLogger())
+	return p
+}
+
+// lastPayloads maps every topic in msgs to its last payload.
+func lastPayloads(msgs []publishedMessage) map[string]publishedMessage {
+	out := make(map[string]publishedMessage, len(msgs))
+	for _, m := range msgs {
+		out[m.topic] = m
+	}
+	return out
+}
+
+// assertRemoved asserts topic received a retained empty payload as its last
+// publish. It requires the topic to have been published at all: a map lookup
+// of a never-published topic yields an empty payload and would pass vacuously.
+func assertRemoved(t *testing.T, last map[string]publishedMessage, topic string) {
+	t.Helper()
+	m, ok := last[topic]
+	require.True(t, ok, "expected a removal on %s, but nothing was published there", topic)
+	assert.Empty(t, m.payload, "%s must be removed", topic)
+	assert.True(t, m.retain, "removal of %s must be retained", topic)
+}
+
+func speciesConfigTopic(key string) string {
+	return "homeassistant/sensor/node/node_" + key + "_species/config"
+}
+
+// stopDebounce stops the processor's debounce timer at test end so a queued
+// refresh does not publish after the test.
+func stopDebounce(t *testing.T, p *Processor) {
+	t.Helper()
+	t.Cleanup(func() {
+		p.discoveryDebounceMu.Lock()
+		defer p.discoveryDebounceMu.Unlock()
+		if p.discoveryDebounce != nil {
+			p.discoveryDebounce.Stop()
+		}
+	})
+}
+
+// TestForgetHomeAssistantSource covers removing the HA entities of streams
+// deleted or renamed in settings. Removals run on the next discovery publish,
+// computed from the live sources alone (no record of what was published).
+func TestForgetHomeAssistantSource(t *testing.T) {
+	t.Run("deleted stream: configs and state removed, others untouched", func(t *testing.T) {
+		settings := newLifecycleSettings(true)
+		useLiveSettings(t, settings)
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		garden := registerLifecycleSource(t, p, "rtsp://192.0.2.1/garden", "Garden")
+		registerLifecycleSource(t, p, "rtsp://192.0.2.1/porch", "Porch")
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+
+		require.NoError(t, p.registry.Unregister(garden.ID))
+		p.ForgetHomeAssistantSource(garden)
+		assert.Empty(t, client.GetPublishedMessages(), "forget must not publish on the caller's goroutine")
+		p.publishDiscoveryIfReady()
+
+		last := lastPayloads(client.GetPublishedMessages())
+		for _, topic := range []string{
+			speciesConfigTopic("Garden"),
+			"birdnet/sources/" + garden.ID,
+			"birdnet/sources/" + garden.ID + "/soundlevel",
+		} {
+			assertRemoved(t, last, topic)
+		}
+		assert.NotEmpty(t, last[speciesConfigTopic("Porch")].payload, "a live source must keep its entities")
+	})
+
+	t.Run("URL edited, same name: the new source keeps the entities", func(t *testing.T) {
+		useLiveSettings(t, newLifecycleSettings(true))
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		old := registerLifecycleSource(t, p, "rtsp://192.0.2.1/old", "Garden")
+		// Production order: the new source is registered before the old one is removed.
+		replacement := registerLifecycleSource(t, p, "rtsp://192.0.2.1/new", "Garden")
+		require.NoError(t, p.registry.Unregister(old.ID))
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+
+		p.ForgetHomeAssistantSource(old)
+		p.publishDiscoveryIfReady()
+
+		msgs := client.GetPublishedMessages()
+		for _, m := range msgs {
+			if m.topic == speciesConfigTopic("Garden") {
+				assert.NotEmpty(t, m.payload, "the live replacement's config must never be emptied")
+			}
+		}
+		last := lastPayloads(msgs)
+		assertRemoved(t, last, "birdnet/sources/"+old.ID)
+		assert.NotContains(t, last, "birdnet/sources/"+replacement.ID, "the replacement's state is not touched")
+	})
+
+	t.Run("rename: old name removed, state kept", func(t *testing.T) {
+		useLiveSettings(t, newLifecycleSettings(true))
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		src := registerLifecycleSource(t, p, "rtsp://192.0.2.1/cam", "Garden")
+		require.True(t, p.registry.UpdateDisplayName(src.ID, "Yard"))
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+
+		p.ForgetHomeAssistantEntityName(src) // src still carries the old name
+		p.publishDiscoveryIfReady()
+
+		last := lastPayloads(client.GetPublishedMessages())
+		assertRemoved(t, last, speciesConfigTopic("Garden"))
+		assert.NotEmpty(t, last[speciesConfigTopic("Yard")].payload, "the source is published under its new name")
+		assert.NotContains(t, last, "birdnet/sources/"+src.ID, "a renamed live source keeps its retained state")
+	})
+
+	t.Run("collision winner deleted: survivor promoted, its suffixed configs removed", func(t *testing.T) {
+		useLiveSettings(t, newLifecycleSettings(true))
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		a := registerLifecycleSource(t, p, "rtsp://192.0.2.1/a", "Mic")
+		b := registerLifecycleSource(t, p, "rtsp://192.0.2.1/b", "Mic")
+		winner, survivor := a, b
+		if b.ID < a.ID {
+			winner, survivor = b, a
+		}
+		require.NoError(t, p.registry.Unregister(winner.ID))
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+
+		p.ForgetHomeAssistantSource(winner)
+		p.publishDiscoveryIfReady()
+
+		last := lastPayloads(client.GetPublishedMessages())
+		assert.NotEmpty(t, last[speciesConfigTopic("Mic")].payload, "the survivor now owns the plain key")
+		assertRemoved(t, last, speciesConfigTopic("Mic_"+survivor.ID))
+	})
+
+	t.Run("last stream deleted: removed without touching the bridge", func(t *testing.T) {
+		useLiveSettings(t, newLifecycleSettings(true))
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		only := registerLifecycleSource(t, p, "rtsp://192.0.2.1/only", "Garden")
+		require.NoError(t, p.registry.Unregister(only.ID))
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+
+		p.ForgetHomeAssistantSource(only)
+		p.publishDiscoveryIfReady()
+
+		last := lastPayloads(client.GetPublishedMessages())
+		assertRemoved(t, last, speciesConfigTopic("Garden"))
+		assert.NotContains(t, last, "homeassistant/binary_sensor/node/status/config", "the bridge is left alone")
+	})
+
+	t.Run("re-added under the same raw ID: nothing removed", func(t *testing.T) {
+		useLiveSettings(t, newLifecycleSettings(true))
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		src := registerLifecycleSource(t, p, "rtsp://192.0.2.1/cam", "Garden")
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+
+		p.ForgetHomeAssistantSource(src) // queued, but the source is live again
+		p.publishDiscoveryIfReady()
+
+		// (Its sound level state is cleared by the publish itself because sound
+		// level monitoring is off in these settings; that is unrelated.)
+		last := lastPayloads(client.GetPublishedMessages())
+		assert.NotEmpty(t, last[speciesConfigTopic("Garden")].payload, "a live source keeps its config")
+		assert.NotContains(t, last, "birdnet/sources/"+src.ID, "a live source keeps its detection state")
+	})
+
+	t.Run("broker down: kept queued, performed on the next publish", func(t *testing.T) {
+		useLiveSettings(t, newLifecycleSettings(true))
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		garden := registerLifecycleSource(t, p, "rtsp://192.0.2.1/garden", "Garden")
+		registerLifecycleSource(t, p, "rtsp://192.0.2.1/porch", "Porch")
+		require.NoError(t, p.registry.Unregister(garden.ID))
+		client := NewMockMQTTClient()
+		client.SetConnected(false)
+		p.SetMQTTClient(client)
+
+		p.ForgetHomeAssistantSource(garden)
+		p.publishDiscoveryIfReady()
+		assert.Empty(t, client.GetPublishedMessages())
+
+		client.SetConnected(true)
+		p.publishDiscoveryIfReady()
+		assertRemoved(t, lastPayloads(client.GetPublishedMessages()), speciesConfigTopic("Garden"))
+	})
+
+	t.Run("failed removal is retried", func(t *testing.T) {
+		useLiveSettings(t, newLifecycleSettings(true))
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		garden := registerLifecycleSource(t, p, "rtsp://192.0.2.1/garden", "Garden")
+		registerLifecycleSource(t, p, "rtsp://192.0.2.1/porch", "Porch")
+		require.NoError(t, p.registry.Unregister(garden.ID))
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+		client.SetTopicError(speciesConfigTopic("Garden"), assert.AnError)
+
+		p.ForgetHomeAssistantSource(garden)
+		p.publishDiscoveryIfReady()
+		p.haPendingMu.Lock()
+		assert.Len(t, p.haPendingRemovals, 1, "a failed removal must stay queued")
+		p.haPendingMu.Unlock()
+
+		client.SetTopicError(speciesConfigTopic("Garden"), nil)
+		p.publishDiscoveryIfReady()
+		assertRemoved(t, lastPayloads(client.GetPublishedMessages()), speciesConfigTopic("Garden"))
+		p.haPendingMu.Lock()
+		assert.Empty(t, p.haPendingRemovals)
+		p.haPendingMu.Unlock()
+	})
+
+	t.Run("HA discovery off: nothing queued", func(t *testing.T) {
+		useLiveSettings(t, newLifecycleSettings(false))
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		p.ForgetHomeAssistantSource(datastore.AudioSource{ID: "rtsp_x", DisplayName: "Garden"})
+		p.haPendingMu.Lock()
+		assert.Empty(t, p.haPendingRemovals)
+		p.haPendingMu.Unlock()
+	})
+
+	t.Run("retire performs queued removals", func(t *testing.T) {
+		published := newLifecycleSettings(true)
+		useLiveSettings(t, published)
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		garden := registerLifecycleSource(t, p, "rtsp://192.0.2.1/garden", "Garden")
+		registerLifecycleSource(t, p, "rtsp://192.0.2.1/porch", "Porch")
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+		require.NoError(t, p.publishHomeAssistantDiscovery(t.Context(), client, published))
+
+		require.NoError(t, p.registry.Unregister(garden.ID))
+		p.ForgetHomeAssistantSource(garden) // queued, then HA is turned off before any publish
+		next := newLifecycleSettings(false)
+		useLiveSettings(t, next)
+		p.RetireHomeAssistantDiscovery(t.Context(), client, next)
+
+		last := lastPayloads(client.GetPublishedMessages())
+		assertRemoved(t, last, speciesConfigTopic("Garden"))
+		assertRemoved(t, last, "birdnet/sources/"+garden.ID)
+		p.haPendingMu.Lock()
+		assert.Empty(t, p.haPendingRemovals)
+		p.haPendingMu.Unlock()
+	})
+}
+
+// TestForgetHomeAssistantSource_Queue covers the queue's bounds and the
+// identity removals are performed under: duplicates collapse, the queue is
+// capped while the broker is unreachable, and removals target the identity the
+// entities were published under.
+func TestForgetHomeAssistantSource_Queue(t *testing.T) {
+	t.Run("duplicates collapse and the queue is capped", func(t *testing.T) {
+		useLiveSettings(t, newLifecycleSettings(true))
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		src := datastore.AudioSource{ID: "rtsp_dup", DisplayName: "Garden"}
+		p.ForgetHomeAssistantSource(src)
+		p.ForgetHomeAssistantSource(src)
+		p.haPendingMu.Lock()
+		assert.Len(t, p.haPendingRemovals, 1, "the same removal is queued once")
+		p.haPendingMu.Unlock()
+
+		for i := range haPendingRemovalsCap + 10 {
+			p.ForgetHomeAssistantSource(datastore.AudioSource{ID: "rtsp_" + strconv.Itoa(i), DisplayName: "Cam"})
+		}
+		p.haPendingMu.Lock()
+		assert.Len(t, p.haPendingRemovals, haPendingRemovalsCap)
+		p.haPendingMu.Unlock()
+	})
+
+	t.Run("failed publish keeps the taken removals queued", func(t *testing.T) {
+		useLiveSettings(t, newLifecycleSettings(true))
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		garden := registerLifecycleSource(t, p, "rtsp://192.0.2.1/garden", "Garden")
+		registerLifecycleSource(t, p, "rtsp://192.0.2.1/porch", "Porch")
+		require.NoError(t, p.registry.Unregister(garden.ID))
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+		client.SetTopicError(speciesConfigTopic("Porch"), assert.AnError) // live source publish fails
+
+		p.ForgetHomeAssistantSource(garden)
+		p.publishDiscoveryIfReady()
+
+		p.haPendingMu.Lock()
+		assert.Len(t, p.haPendingRemovals, 1, "removals taken by a failed publish must be requeued")
+		p.haPendingMu.Unlock()
+	})
+
+	t.Run("a retried removal keeps the identity of its first attempt", func(t *testing.T) {
+		published := newLifecycleSettings(true)
+		useLiveSettings(t, published)
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		garden := registerLifecycleSource(t, p, "rtsp://192.0.2.1/garden", "Garden")
+		registerLifecycleSource(t, p, "rtsp://192.0.2.1/porch", "Porch")
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+		require.NoError(t, p.publishHomeAssistantDiscovery(t.Context(), client, published))
+
+		// Same save: prefix changes and Garden is deleted; the removal fails once.
+		moved := newLifecycleSettings(true)
+		moved.Realtime.MQTT.HomeAssistant.DiscoveryPrefix = "otherprefix"
+		useLiveSettings(t, moved)
+		require.NoError(t, p.registry.Unregister(garden.ID))
+		client.SetTopicError(speciesConfigTopic("Garden"), assert.AnError)
+		p.ForgetHomeAssistantSource(garden)
+		p.publishDiscoveryIfReady() // publishes under otherprefix, removal fails
+
+		client.SetTopicError(speciesConfigTopic("Garden"), nil)
+		p.publishDiscoveryIfReady() // retry must still target the old prefix
+
+		assertRemoved(t, lastPayloads(client.GetPublishedMessages()), speciesConfigTopic("Garden"))
+	})
+
+	t.Run("removals use the identity the entities were published under", func(t *testing.T) {
+		published := newLifecycleSettings(true)
+		useLiveSettings(t, published)
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		garden := registerLifecycleSource(t, p, "rtsp://192.0.2.1/garden", "Garden")
+		registerLifecycleSource(t, p, "rtsp://192.0.2.1/porch", "Porch")
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+		require.NoError(t, p.publishHomeAssistantDiscovery(t.Context(), client, published))
+
+		// One settings save both changes the prefix and deletes Garden.
+		moved := newLifecycleSettings(true)
+		moved.Realtime.MQTT.HomeAssistant.DiscoveryPrefix = "otherprefix"
+		useLiveSettings(t, moved)
+		require.NoError(t, p.registry.Unregister(garden.ID))
+		p.ForgetHomeAssistantSource(garden)
+		p.publishDiscoveryIfReady()
+
+		assertRemoved(t, lastPayloads(client.GetPublishedMessages()), speciesConfigTopic("Garden"))
 	})
 }

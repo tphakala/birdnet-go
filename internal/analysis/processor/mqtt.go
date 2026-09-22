@@ -4,6 +4,7 @@ package processor
 import (
 	"context"
 	stderrors "errors"
+	"slices"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -24,6 +25,9 @@ const (
 	discoveryDebounceDuration = 3 * time.Second
 	// haDiscoveryRetireTimeout bounds removing HA discovery when it is turned off.
 	haDiscoveryRetireTimeout = 10 * time.Second
+	// haPendingRemovalsCap bounds queued HA entity removals (one per deleted or
+	// renamed source) while the broker is unreachable.
+	haPendingRemovalsCap = 256
 )
 
 // ErrMQTTClientNotReady is returned by PublishMQTT whenever the MQTT client
@@ -233,7 +237,35 @@ func (p *Processor) RetireHomeAssistantDiscovery(ctx context.Context, client mqt
 	defer cancel()
 
 	publisher := mqtt.NewDiscoveryPublisher(client, published)
-	if err := publisher.RemoveDiscovery(removeCtx, p.getAudioSourcesForDiscovery()); err != nil {
+	err := publisher.RemoveDiscovery(removeCtx, p.getAudioSourcesForDiscovery())
+	// Removals queued for sources deleted just before discovery was turned off
+	// are no longer performed by a publish, so retirement performs them. Every
+	// candidate key goes, since all live entities are being removed anyway.
+	pending := p.takeHAPendingRemovals()
+	var failed []haPendingRemoval
+	for _, item := range pending {
+		if item.config == nil {
+			item.config = published
+		}
+		itemPublisher := mqtt.NewDiscoveryPublisher(client, item.config)
+		var errs []error
+		for _, key := range mqtt.SourceEntityKeyCandidates(item.source) {
+			if rmErr := itemPublisher.RemoveSourceConfigs(removeCtx, key); rmErr != nil {
+				errs = append(errs, rmErr)
+			}
+		}
+		if !item.configOnly {
+			if rmErr := itemPublisher.RemoveSourceState(removeCtx, item.source); rmErr != nil {
+				errs = append(errs, rmErr)
+			}
+		}
+		if len(errs) > 0 {
+			failed = append(failed, item)
+			err = errors.Join(append([]error{err}, errs...)...)
+		}
+	}
+	p.requeueHAPendingRemovals(failed)
+	if err != nil {
 		log.Warn("failed to remove HA discovery after it was disabled, will retry on next connect",
 			logger.Error(err),
 			logger.String("operation", "ha_discovery_retire"))
@@ -316,9 +348,25 @@ func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mq
 	}
 
 	publisher := mqtt.NewDiscoveryPublisher(client, &discoveryConfig)
+
+	// Queued removals are taken BEFORE the live snapshot. A source is
+	// unregistered before its removal is queued, so anything taken here is
+	// absent from the snapshot unless it was genuinely re-added; anything queued
+	// after this point arms a new debounce and is handled by the next publish.
+	pending := p.takeHAPendingRemovals()
+	// Removals target the identity the entities were published under, which a
+	// settings save may have changed together with the stream deletion.
+	removalConfig := &discoveryConfig
+	if p.haPublishedConfig != nil {
+		removalConfig = p.haPublishedConfig
+	}
+
 	sources := p.getAudioSourcesForDiscovery()
 
 	if len(sources) == 0 {
+		// Queued removals are explicit user intent (a deleted stream may have
+		// been the last one), so perform them even with nothing to publish.
+		p.processHAPendingRemovals(ctx, client, removalConfig, pending, nil)
 		GetLogger().Debug("skipping HA discovery publish, no audio sources registered yet",
 			logger.String("operation", "ha_discovery_skip"))
 		return nil
@@ -329,10 +377,169 @@ func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mq
 	})
 
 	if err := publisher.PublishDiscovery(ctx, sources, settings); err != nil {
+		p.requeueHAPendingRemovals(pending)
 		return err
 	}
 	p.haPublishedConfig = &discoveryConfig
+	removePromotedSuffixConfigs(ctx, publisher, sources)
+	p.processHAPendingRemovals(ctx, client, removalConfig, pending, sources)
 	return nil
+}
+
+// haPendingRemoval is one queued HA entity removal. configOnly marks a rename:
+// the source is still live under its raw ID, so only the discovery configs under
+// its previous name are removed, never its per-source state.
+type haPendingRemoval struct {
+	source     datastore.AudioSource
+	configOnly bool
+	// config pins the identity a failed removal was attempted under, so a retry
+	// after the published identity changed still targets the right topics. nil
+	// until the first attempt.
+	config *mqtt.DiscoveryConfig
+}
+
+// ForgetHomeAssistantSource queues removal of a source deleted from the
+// configuration: its discovery configs (under every entity key it can have
+// held that no live source owns) and its retained per-source state. The work
+// runs on the next debounced discovery publish, never on the caller's
+// goroutine, so it is safe to call while holding audio pipeline locks.
+// Nothing is queued unless MQTT and HA discovery are enabled.
+func (p *Processor) ForgetHomeAssistantSource(source datastore.AudioSource) {
+	p.queueHAPendingRemoval(source, false)
+}
+
+// ForgetHomeAssistantEntityName queues removal of the discovery configs a
+// source had under its previous display name after a rename. previous carries
+// the source's raw ID and its OLD display name. The live source is republished
+// under its new name, so its per-source state is kept.
+func (p *Processor) ForgetHomeAssistantEntityName(previous datastore.AudioSource) {
+	p.queueHAPendingRemoval(previous, true)
+}
+
+func (p *Processor) queueHAPendingRemoval(source datastore.AudioSource, configOnly bool) {
+	settings := p.currentSettings()
+	if settings == nil || !settings.Realtime.MQTT.Enabled || !settings.Realtime.MQTT.HomeAssistant.Enabled {
+		return
+	}
+	item := haPendingRemoval{source: source, configOnly: configOnly}
+	p.haPendingMu.Lock()
+	if !slices.Contains(p.haPendingRemovals, item) {
+		if len(p.haPendingRemovals) >= haPendingRemovalsCap {
+			// The broker has been unreachable through many settings changes;
+			// drop the oldest request rather than grow without bound.
+			p.haPendingRemovals = p.haPendingRemovals[1:]
+			GetLogger().Warn("HA entity removal queue full, dropping the oldest request",
+				logger.Int("cap", haPendingRemovalsCap),
+				logger.String("operation", "ha_discovery_forget_source"))
+		}
+		p.haPendingRemovals = append(p.haPendingRemovals, item)
+	}
+	p.haPendingMu.Unlock()
+	p.scheduleDiscoveryPublish()
+}
+
+// takeHAPendingRemovals empties the queue and returns what was in it.
+func (p *Processor) takeHAPendingRemovals() []haPendingRemoval {
+	p.haPendingMu.Lock()
+	defer p.haPendingMu.Unlock()
+	items := p.haPendingRemovals
+	p.haPendingRemovals = nil
+	return items
+}
+
+// requeueHAPendingRemovals puts removals that failed back on the queue.
+func (p *Processor) requeueHAPendingRemovals(items []haPendingRemoval) {
+	if len(items) == 0 {
+		return
+	}
+	p.haPendingMu.Lock()
+	defer p.haPendingMu.Unlock()
+	p.haPendingRemovals = append(p.haPendingRemovals, items...)
+}
+
+// processHAPendingRemovals performs the taken queued removals after discovery
+// for the live sources was published. A candidate key owned by a live source is never
+// removed (an edited stream URL keeps its name and key under a new raw ID), and
+// a deleted source whose raw ID is live again keeps everything. Failed items are
+// requeued. Must be called with haDiscoveryMu held.
+func (p *Processor) processHAPendingRemovals(ctx context.Context, client mqtt.Client, config *mqtt.DiscoveryConfig, items []haPendingRemoval, live []datastore.AudioSource) {
+	if len(items) == 0 {
+		return
+	}
+
+	liveIDs := make(map[string]struct{}, len(live))
+	for _, src := range live {
+		liveIDs[src.ID] = struct{}{}
+	}
+	liveKeys := make(map[string]struct{}, len(live))
+	for _, key := range mqtt.SourceEntityKeys(live) {
+		liveKeys[key] = struct{}{}
+	}
+
+	var failed []haPendingRemoval
+	for _, item := range items {
+		if _, isLive := liveIDs[item.source.ID]; isLive && !item.configOnly {
+			continue // re-added under the same raw ID: nothing to remove
+		}
+		if item.config == nil {
+			item.config = config
+		}
+		publisher := mqtt.NewDiscoveryPublisher(client, item.config)
+		var errs []error
+		for _, key := range mqtt.SourceEntityKeyCandidates(item.source) {
+			if _, owned := liveKeys[key]; owned {
+				continue
+			}
+			if err := publisher.RemoveSourceConfigs(ctx, key); err != nil {
+				errs = append(errs, err)
+			}
+		}
+		if !item.configOnly {
+			if err := publisher.RemoveSourceState(ctx, item.source); err != nil {
+				errs = append(errs, err)
+			}
+		}
+		if err := errors.Join(errs...); err != nil {
+			GetLogger().Warn("failed to remove HA entities of a removed or renamed source, will retry",
+				logger.String("source_id", item.source.ID),
+				logger.Error(err),
+				logger.String("operation", "ha_discovery_forget_source"))
+			failed = append(failed, item)
+		}
+	}
+	p.requeueHAPendingRemovals(failed)
+}
+
+// removePromotedSuffixConfigs empties the suffixed discovery configs of every
+// source that now holds its plain entity key. When the winner of a same-name
+// group is deleted, the survivor is promoted from base+"_"+ID to base and its
+// old suffixed configs would otherwise stay in HA as a duplicate device. A key
+// another live source owns is skipped (a source whose display name sanitizes to
+// exactly this suffixed key would hold it as its plain key); for a source that
+// was never suffixed this is a no-op removal of topics that do not exist. Failures are only logged, since this
+// runs on every discovery publish.
+func removePromotedSuffixConfigs(ctx context.Context, publisher *mqtt.Publisher, sources []datastore.AudioSource) {
+	keys := mqtt.SourceEntityKeys(sources)
+	owned := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		owned[key] = struct{}{}
+	}
+	for _, src := range sources {
+		candidates := mqtt.SourceEntityKeyCandidates(src)
+		plain, suffixed := candidates[0], candidates[1]
+		if keys[src.ID] != plain {
+			continue
+		}
+		if _, taken := owned[suffixed]; taken {
+			continue
+		}
+		if err := publisher.RemoveSourceConfigs(ctx, suffixed); err != nil {
+			GetLogger().Debug("failed to remove stale suffixed HA discovery configs",
+				logger.String("source_id", src.ID),
+				logger.Error(err),
+				logger.String("operation", "ha_discovery_promotion_cleanup"))
+		}
+	}
 }
 
 // cleanupDefaultDiscovery removes stale HA discovery entries for the

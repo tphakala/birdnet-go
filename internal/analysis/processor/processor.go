@@ -125,6 +125,13 @@ type Processor struct {
 	// Guarded by haDiscoveryMu.
 	haPublishedConfig *mqtt.DiscoveryConfig
 
+	// haPendingRemovals holds HA entity removals requested by user actions (a
+	// stream deleted or renamed in settings) until the next discovery publish
+	// or retirement performs them. haPendingMu guards it and is never held across
+	// network I/O, so the audio pipeline may queue while holding its own locks.
+	haPendingMu       sync.Mutex
+	haPendingRemovals []haPendingRemoval
+
 	// BufferMgr provides access to capture buffers for audio clip extraction.
 	// Set once during pipeline initialization (audio_pipeline_service.go) and never replaced;
 	// no synchronization needed for concurrent reads.
