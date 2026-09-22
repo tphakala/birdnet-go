@@ -948,9 +948,9 @@
         "humidity": "Humedad",
         "pressure": "Presión",
         "cloudCover": "Nubosidad",
-        "uvIndex": "UV Index",
-        "lightningDistance": "Average lightning strike distance",
-        "lightningCount": "{count} lightning strike(s)"
+        "uvIndex": "Índice UV",
+        "lightningDistance": "Distancia media de los rayos",
+        "lightningCount": "{count} rayos"
       },
       "units": {
         "temperature": "°C",
@@ -3377,8 +3377,8 @@
           "openweather": "El uso de OpenWeather requiere una clave API, regístrese para obtener una clave API gratuita en <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
           "wunderground": "Requiere una clave API de Weather Underground y un ID de estación PWS válido. Los datos meteorológicos de Weather Underground solo están disponibles en inglés. Consulte <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> para más detalles.",
           "pirateweather": "El uso de Pirate Weather requiere una clave API, regístrese en <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>.",
-          "tempest": "Reads live observations broadcast locally over UDP by a Tempest/WeatherFlow weather station on your network. No API key, account, or internet connection required.",
-          "tempestNetworking": "Requires the birdnet-go container to share your LAN's broadcast domain (e.g. Docker <code>host</code> networking or an ipvlan/macvlan network such as Unraid's <code>br0</code>). A standard Docker bridge network will never receive these broadcasts, regardless of this setting."
+          "tempest": "Lee observaciones en vivo transmitidas localmente por UDP por una estación meteorológica Tempest/WeatherFlow en su red. No se requiere clave de API, cuenta ni conexión a internet.",
+          "tempestNetworking": "Requiere que el contenedor birdnet-go comparta el dominio de difusión de su LAN (p. ej., red <code>host</code> de Docker o una red ipvlan/macvlan como <code>br0</code> de Unraid). Una red bridge estándar de Docker nunca recibirá estas difusiones, independientemente de esta configuración."
         },
         "apiKey": {
           "label": "Clave API",
@@ -3411,8 +3411,8 @@
         },
         "tempest": {
           "listenAddress": {
-            "label": "UDP Listen Address",
-            "helpText": "Local UDP address to listen on for Tempest hub broadcasts. Leave empty to use the default \":50222\" (WeatherFlow's fixed broadcast port)."
+            "label": "Dirección de escucha UDP",
+            "helpText": "Dirección UDP local en la que escuchar las difusiones del hub Tempest. Déjelo vacío para usar el valor predeterminado \":50222\" (el puerto de difusión fijo de WeatherFlow)."
           },
           "extraFields": {
             "title": "Datos adicionales de la estación",

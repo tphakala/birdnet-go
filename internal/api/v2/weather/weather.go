@@ -516,6 +516,8 @@ func (c *Handler) buildHourlyWeatherResponse(hw *datastore.HourlyWeather) hourly
 	if hw.TempestExtrasJSON != nil {
 		var extras tempestExtrasResponse
 		if err := json.Unmarshal([]byte(*hw.TempestExtrasJSON), &extras); err != nil {
+			// Corrupted extras must not fail the rest of the hourly response;
+			// log and omit TempestExtras instead of returning an error.
 			c.LogWarnIfEnabled("Failed to parse persisted Tempest extras", logger.Error(err))
 		} else {
 			resp.TempestExtras = &extras

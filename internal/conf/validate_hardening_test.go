@@ -436,6 +436,7 @@ func TestValidateWeatherSettings_InvalidProvider(t *testing.T) {
 		{"openweather provider allowed", "openweather", false},
 		{"wunderground provider allowed", "wunderground", false},
 		{"pirateweather provider allowed", "pirateweather", false},
+		{"tempest provider allowed", "tempest", false},
 		{"unknown provider rejected", "invalid_provider", true},
 		{"whitespace-only rejected", "  ", true},
 	}

@@ -948,9 +948,9 @@
         "humidity": "Vlhkost",
         "pressure": "Tlak",
         "cloudCover": "Oblačnost",
-        "uvIndex": "UV Index",
-        "lightningDistance": "Average lightning strike distance",
-        "lightningCount": "{count} lightning strike(s)"
+        "uvIndex": "UV index",
+        "lightningDistance": "Průměrná vzdálenost úderu blesku",
+        "lightningCount": "{count} úderů blesku"
       },
       "units": {
         "temperature": "°C",
@@ -3377,8 +3377,8 @@
           "openweather": "Použití OpenWeather vyžaduje API klíč, zaregistrujte se pro bezplatný API klíč na <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
           "wunderground": "Vyžaduje API klíč Weather Underground a platné ID stanice PWS. Podrobnosti najdete na <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>.",
           "pirateweather": "Použití Pirate Weather vyžaduje API klíč, zaregistrujte se na <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>.",
-          "tempest": "Reads live observations broadcast locally over UDP by a Tempest/WeatherFlow weather station on your network. No API key, account, or internet connection required.",
-          "tempestNetworking": "Requires the birdnet-go container to share your LAN's broadcast domain (e.g. Docker <code>host</code> networking or an ipvlan/macvlan network such as Unraid's <code>br0</code>). A standard Docker bridge network will never receive these broadcasts, regardless of this setting."
+          "tempest": "Čte živá pozorování vysílaná lokálně přes UDP meteostanicí Tempest/WeatherFlow ve vaší síti. Není vyžadován žádný API klíč, účet ani internetové připojení.",
+          "tempestNetworking": "Vyžaduje, aby kontejner birdnet-go sdílel vysílací doménu vaší LAN sítě (např. síťování Docker <code>host</code> nebo síť ipvlan/macvlan, jako je Unraid <code>br0</code>). Standardní síť Docker bridge tato vysílání nikdy nepřijme, bez ohledu na toto nastavení."
         },
         "apiKey": {
           "label": "API klíč",
@@ -3411,8 +3411,8 @@
         },
         "tempest": {
           "listenAddress": {
-            "label": "UDP Listen Address",
-            "helpText": "Local UDP address to listen on for Tempest hub broadcasts. Leave empty to use the default \":50222\" (WeatherFlow's fixed broadcast port)."
+            "label": "Adresa UDP naslouchání",
+            "helpText": "Lokální UDP adresa pro naslouchání vysílání hubu Tempest. Ponechte prázdné pro použití výchozí hodnoty \":50222\" (pevný vysílací port WeatherFlow)."
           },
           "extraFields": {
             "title": "Doplňkové údaje stanice",

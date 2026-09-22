@@ -14,6 +14,12 @@
 |---------|------|-------------|
 | `debug` | boolean | true to enable debug mode |
 
+## configversion
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `configversion` | integer | ConfigVersion records the newest one-shot config migration applied to this file. It is managed automatically by config loading and should not be edited by hand; it lets a migration whose precondition cannot be recovered from the data itself run exactly once (see MigrateSourceTargetDefaults). Hidden from the settings API and preserved across saves by CloneSettings, so writers never drop it. |
+
 ## logging
 
 LoggingConfig represents logging configuration
@@ -137,7 +143,7 @@ ModelsConfig holds global model enablement and management settings.
 |---------|------|-------------|
 | `models.enabled` | string[] | list of model IDs to load (e.g., "birdnet", "perch_v2") |
 | `models.directory` | string | base directory for downloaded model files |
-| `models.installed` | string[] | list of installed model IDs managed by the model gallery |
+| `models.autoenablemigrated` | boolean | AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy model auto-enable has run for this config file, so it never re-runs. Do not edit by hand; a managed read-only config may set it true (with configversion: 2) to keep an explicit models.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the companion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go. |
 
 ## lowmemory
 
@@ -168,7 +174,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.audio.export.debug` | boolean | true to enable audio export debug |
 | `realtime.audio.export.enabled` | boolean | export audio clips containing indentified bird calls |
 | `realtime.audio.export.path` | string | path to audio clip export directory |
-| `realtime.audio.export.type` | string | audio file type, wav, mp3 or flac |
+| `realtime.audio.export.type` | string | audio file type: wav, flac, aac, opus or mp3 |
+| `realtime.audio.export.ultrasonictype` | string | wav or flac only; used for bat/ultrasonic captures above 48 kHz |
 | `realtime.audio.export.bitrate` | string | bitrate for audio export |
 | `realtime.audio.export.retention.debug` | boolean | true to enable retention debug |
 | `realtime.audio.export.retention.policy` | string | retention policy, "none", "age" or "usage" |
@@ -301,7 +308,7 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.species.include` | string[] | Always include these species |
 | `realtime.species.exclude` | string[] | Always exclude these species |
 | `realtime.species.config` | any |  |
-| `realtime.weather.provider` | string | "none", "yrno", "openweather", "wunderground", or "tempest" |
+| `realtime.weather.provider` | string | "none", "yrno", "openweather", "wunderground", "pirateweather", or "tempest" |
 | `realtime.weather.pollinterval` | integer | weather data polling interval in minutes |
 | `realtime.weather.debug` | boolean | true to enable debug mode |
 | `realtime.weather.openweather.enabled` | boolean | true to enable OpenWeather integration, for legacy support |
@@ -313,6 +320,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.weather.wunderground.stationid` | string | WeatherUnderground station ID |
 | `realtime.weather.wunderground.endpoint` | string | WeatherUnderground API endpoint |
 | `realtime.weather.wunderground.units` | string | units of measurement: "e" (imperial), "m" (metric), "h" (UK hybrid) |
+| `realtime.weather.pirateweather.apikey` | string | Pirate Weather API key |
+| `realtime.weather.pirateweather.endpoint` | string | Pirate Weather API endpoint |
 | `realtime.weather.tempest.listenaddress` | string | ListenAddress is the local UDP address to listen on for Tempest hub broadcasts, e.g. ":50222" (all interfaces) or "192.168.1.50:50222" (a specific interface). Empty defaults to ":50222" - WeatherFlow's fixed, non-configurable broadcast port. Receiving these broadcasts requires the birdnet-go container/host to share the LAN's broadcast domain (e.g. Docker host networking or an ipvlan/macvlan network); a standard Docker bridge network will never receive them regardless of this setting. |
 | `realtime.weather.tempest.extrafields.illuminance` | boolean |  |
 | `realtime.weather.tempest.extrafields.uvindex` | boolean |  |

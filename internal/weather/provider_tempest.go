@@ -3,7 +3,6 @@ package weather
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -162,21 +161,16 @@ func (p *TempestProvider) Start(ctx context.Context) {
 
 		getLogger().Info("Tempest UDP listener started", logger.String("address", addr))
 
-		// Closing the connection is the standard way to unblock the read
-		// loop's blocking ReadFromUDP call on shutdown.
-		go func() {
-			<-ctx.Done()
-			_ = conn.Close()
-		}()
-
-		go p.readLoop(conn)
+		go p.readLoop(ctx, conn)
 	})
 }
 
 // readLoop continuously reads UDP packets and updates the cached observation.
-// It returns once conn is closed (by Start's shutdown goroutine above).
-func (p *TempestProvider) readLoop(conn *net.UDPConn) {
-	defer func() {
+// It returns once ctx is done, which closes conn to unblock the blocking
+// ReadFromUDP call; that close is the single close point for conn.
+func (p *TempestProvider) readLoop(ctx context.Context, conn *net.UDPConn) {
+	go func() {
+		<-ctx.Done()
 		_ = conn.Close()
 	}()
 
@@ -184,7 +178,7 @@ func (p *TempestProvider) readLoop(conn *net.UDPConn) {
 	for {
 		n, _, err := conn.ReadFromUDP(buf)
 		if err != nil {
-			if errors.Is(err, net.ErrClosed) {
+			if weathererrors.Is(err, net.ErrClosed) {
 				getLogger().Info("Tempest UDP listener stopped")
 				return
 			}
@@ -356,7 +350,7 @@ func CheckTempestListenAddress(listenAddress string) (busy bool, err error) {
 	}
 	conn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
-		if errors.Is(err, syscall.EADDRINUSE) {
+		if weathererrors.Is(err, syscall.EADDRINUSE) {
 			return true, nil
 		}
 		return false, err

@@ -2,6 +2,7 @@ package weather
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"sync"
 	"testing"
@@ -37,6 +38,7 @@ func TestNewService(t *testing.T) {
 		{"openweather_provider", "openweather", false},
 		{"wunderground_provider", "wunderground", false},
 		{"pirateweather_provider", string(conf.WeatherPirateWeather), false},
+		{"tempest_provider", string(conf.WeatherTempest), false},
 		{"invalid_provider_disabled", "invalid", true},
 		{"empty_provider_defaults_to_yrno", "", false},
 		{"none_provider_disabled", "none", true},
@@ -209,7 +211,7 @@ func TestWeatherDataCreation(t *testing.T) {
 
 // TestSettingsCreation tests the creation of test settings.
 func TestSettingsCreation(t *testing.T) {
-	providers := []string{"yrno", "openweather", "wunderground", string(conf.WeatherPirateWeather)}
+	providers := []string{"yrno", "openweather", "wunderground", string(conf.WeatherPirateWeather), string(conf.WeatherTempest)}
 
 	for _, provider := range providers {
 		t.Run(provider, func(t *testing.T) {
@@ -1240,6 +1242,78 @@ func TestReconcileConfig_KeepsPreviousProviderOnUnsupportedValue(t *testing.T) {
 
 	assert.Equal(t, yrNoProviderName, svc.activeProviderName(),
 		"an unsupported configured provider should keep the previous provider active")
+}
+
+// TestReconcileConfig_StartsLifecyclerOnMidRunSwap verifies a mid-run swap to
+// a background-push provider (e.g. Tempest) starts that provider's own
+// Tempest's UDP listener: StartPolling's Lifecycler check only runs once, at
+// startup, against whichever provider was active then. reconcileConfig must
+// itself start a newly swapped-in Lifecycler provider using the same
+// long-lived context StartPolling recorded, or the provider silently never
+// receives any data until the process is restarted.
+func TestReconcileConfig_StartsLifecyclerOnMidRunSwap(t *testing.T) {
+	settings := createTestSettings(t, yrNoProviderName)
+	svc, err := NewService(settings, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, yrNoProviderName, svc.activeProviderName())
+
+	// Simulate StartPolling already being underway with a long-lived ctx,
+	// without actually running its ticker loop.
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	svc.setStartCtx(ctx)
+
+	// Reserve a free loopback UDP port for the swapped-in Tempest provider to
+	// bind to, same approach as TestTempestProvider_StartAndReadLoop.
+	probe, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	require.NoError(t, err)
+	addr := probe.LocalAddr().String()
+	require.NoError(t, probe.Close())
+
+	changed := createTestSettings(t, tempestProviderName, func(s *conf.Settings) {
+		s.Realtime.Weather.Tempest.ListenAddress = addr
+	})
+	svc.reconcileConfig(changed)
+
+	require.Equal(t, tempestProviderName, svc.activeProviderName())
+
+	// If reconcileConfig started the listener, a real UDP packet sent to addr
+	// should be observable via FetchWeather shortly after.
+	require.Eventually(t, func() bool {
+		conn, dialErr := net.Dial("udp", addr)
+		if dialErr != nil {
+			return false
+		}
+		defer func() { _ = conn.Close() }()
+		_, writeErr := conn.Write(sampleObsSTPacket(time.Now().Unix()))
+		return writeErr == nil
+	}, 2*time.Second, 20*time.Millisecond, "swapped-in Tempest listener should be bound and accepting packets")
+
+	provider, _ := svc.activeProvider()
+	require.Eventually(t, func() bool {
+		_, fetchErr := provider.FetchWeather(t.Context(), changed)
+		return fetchErr == nil
+	}, 2*time.Second, 20*time.Millisecond,
+		"reconcileConfig should have started the Tempest listener so the sent packet is observed")
+}
+
+// TestReconcileConfig_DoesNotStartLifecyclerBeforePollingBegins verifies that
+// a provider swap before StartPolling has ever run (getStartCtx returns nil)
+// does not attempt to start the new Lifecycler provider with a nil context;
+// StartPolling's own one-time check covers this case once polling begins.
+func TestReconcileConfig_DoesNotStartLifecyclerBeforePollingBegins(t *testing.T) {
+	settings := createTestSettings(t, yrNoProviderName)
+	svc, err := NewService(settings, nil, nil)
+	require.NoError(t, err)
+
+	changed := createTestSettings(t, tempestProviderName, func(s *conf.Settings) {
+		s.Realtime.Weather.Tempest.ListenAddress = "127.0.0.1:0"
+	})
+
+	require.NotPanics(t, func() {
+		svc.reconcileConfig(changed)
+	})
+	assert.Equal(t, tempestProviderName, svc.activeProviderName())
 }
 
 // TestWundergroundProvider_HTTP204_NoContent tests that Wunderground returns

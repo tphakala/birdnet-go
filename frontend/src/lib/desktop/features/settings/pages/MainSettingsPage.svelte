@@ -813,12 +813,7 @@
       weather: {
         ...settings.weather,
         provider: provider as
-          | 'none'
-          | 'yrno'
-          | 'openweather'
-          | 'wunderground'
-          | 'pirateweather'
-          | 'tempest',
+          'none' | 'yrno' | 'openweather' | 'wunderground' | 'pirateweather' | 'tempest',
       },
     });
   }

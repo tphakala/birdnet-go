@@ -948,9 +948,9 @@
         "humidity": "Luftfuktighet",
         "pressure": "Lufttryck",
         "cloudCover": "Molntäcke",
-        "uvIndex": "UV Index",
-        "lightningDistance": "Average lightning strike distance",
-        "lightningCount": "{count} lightning strike(s)"
+        "uvIndex": "UV-index",
+        "lightningDistance": "Genomsnittligt avstånd för blixtnedslag",
+        "lightningCount": "{count} blixtnedslag"
       },
       "units": {
         "temperature": "°C",
@@ -3377,8 +3377,8 @@
           "openweather": "Användning av OpenWeather kräver en API-nyckel, registrera dig för en gratis API-nyckel på <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
           "wunderground": "Kräver en Weather Underground API-nyckel och ett giltigt PWS-stations-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> för detaljer.",
           "pirateweather": "Användning av Pirate Weather kräver en API-nyckel, registrera dig på <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>.",
-          "tempest": "Reads live observations broadcast locally over UDP by a Tempest/WeatherFlow weather station on your network. No API key, account, or internet connection required.",
-          "tempestNetworking": "Requires the birdnet-go container to share your LAN's broadcast domain (e.g. Docker <code>host</code> networking or an ipvlan/macvlan network such as Unraid's <code>br0</code>). A standard Docker bridge network will never receive these broadcasts, regardless of this setting."
+          "tempest": "Läser realtidsobservationer som sänds lokalt via UDP av en Tempest/WeatherFlow-väderstation på ditt nätverk. Ingen API-nyckel, inget konto eller internetanslutning krävs.",
+          "tempestNetworking": "Kräver att birdnet-go-containern delar ditt LAN:s broadcast-domän (t.ex. Dockers <code>host</code>-nätverk eller ett ipvlan/macvlan-nätverk som Unraids <code>br0</code>). Ett vanligt Docker-bridge-nätverk kommer aldrig att ta emot dessa broadcaster, oavsett denna inställning."
         },
         "apiKey": {
           "label": "API-nyckel",
@@ -3411,8 +3411,8 @@
         },
         "tempest": {
           "listenAddress": {
-            "label": "UDP Listen Address",
-            "helpText": "Local UDP address to listen on for Tempest hub broadcasts. Leave empty to use the default \":50222\" (WeatherFlow's fixed broadcast port)."
+            "label": "UDP-lyssningsadress",
+            "helpText": "Lokal UDP-adress att lyssna på för Tempest hub-sändningar. Lämna tomt för att använda standardvärdet \":50222\" (WeatherFlows fasta broadcast-port)."
           },
           "extraFields": {
             "title": "Ytterligare stationsdata",

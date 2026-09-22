@@ -27,12 +27,7 @@
 
   // Weather provider type definition
   export type WeatherProvider =
-    | 'none'
-    | 'yrno'
-    | 'openweather'
-    | 'wunderground'
-    | 'pirateweather'
-    | 'tempest';
+    'none' | 'yrno' | 'openweather' | 'wunderground' | 'pirateweather' | 'tempest';
 
   interface Props extends HTMLAttributes<HTMLElement> {
     provider: WeatherProvider;
