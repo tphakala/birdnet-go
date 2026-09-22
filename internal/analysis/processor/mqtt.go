@@ -192,12 +192,29 @@ func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings 
 			return
 		}
 
+		// The handler outlives the settings it was registered with (it fires on
+		// every reconnect). Routing and identity (base topic, discovery prefix,
+		// node name) stay those of the settings this client was created with,
+		// because a change to them builds a new client and handler. Feature
+		// flags are read live: HA discovery may have been turned off since, and
+		// sound level monitoring decides which sensors are published.
+		live := p.currentSettings()
+		if live == nil {
+			live = settings
+		}
+		if !live.Realtime.MQTT.HomeAssistant.Enabled {
+			log.Debug("HA discovery disabled since handler registration, skipping")
+			return
+		}
+		effective := conf.CloneSettings(settings)
+		effective.Realtime.Audio.SoundLevel = live.Realtime.Audio.SoundLevel
+
 		log.Info("MQTT connected, publishing Home Assistant discovery messages")
 
 		ctx, cancel := context.WithTimeout(context.Background(), discoveryPublishTimeout)
 		defer cancel()
 
-		if err := p.publishHomeAssistantDiscovery(ctx, client, settings); err != nil {
+		if err := p.publishHomeAssistantDiscovery(ctx, client, effective); err != nil {
 			log.Error("Failed to publish Home Assistant discovery",
 				logger.Error(err))
 		}

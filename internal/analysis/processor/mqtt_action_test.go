@@ -45,6 +45,7 @@ type MockMQTTClient struct {
 type publishedMessage struct {
 	topic   string
 	payload string
+	retain  bool // true only for PublishWithRetain(..., true)
 }
 
 // NewMockMQTTClient creates a new mock MQTT client.
@@ -63,6 +64,10 @@ func (m *MockMQTTClient) Connect(_ context.Context) error {
 }
 
 func (m *MockMQTTClient) Publish(ctx context.Context, topic, payload string) error {
+	return m.publish(ctx, topic, payload, false)
+}
+
+func (m *MockMQTTClient) publish(ctx context.Context, topic, payload string, retain bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.publishCalls++
@@ -77,12 +82,12 @@ func (m *MockMQTTClient) Publish(ctx context.Context, topic, payload string) err
 	}
 	m.publishedTopic = topic
 	m.publishedPayload = payload
-	m.messages = append(m.messages, publishedMessage{topic: topic, payload: payload})
+	m.messages = append(m.messages, publishedMessage{topic: topic, payload: payload, retain: retain})
 	return nil
 }
 
-func (m *MockMQTTClient) PublishWithRetain(ctx context.Context, topic, payload string, _ bool) error {
-	return m.Publish(ctx, topic, payload)
+func (m *MockMQTTClient) PublishWithRetain(ctx context.Context, topic, payload string, retain bool) error {
+	return m.publish(ctx, topic, payload, retain)
 }
 
 func (m *MockMQTTClient) IsConnected() bool {
