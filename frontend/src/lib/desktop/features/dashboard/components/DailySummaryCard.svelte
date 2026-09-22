@@ -51,7 +51,7 @@ Responsive Breakpoints:
   import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import { t } from '$lib/i18n';
-  import type { DailySpeciesSummary, TimeOfDayValue } from '$lib/types/detection.types';
+  import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { getLocalDateString, getDateInTimezone } from '$lib/utils/date';
   import {
     buildHourlyDetectionUrl,
@@ -132,6 +132,8 @@ Responsive Breakpoints:
 
   // Mobile daypart view: the day is split into four six-hour blocks so a phone can
   // show one block of the heatmap at a time instead of scrolling a 900px-wide grid.
+  // The union mirrors the subset of TimeOfDayIcon's `timeOfDay` prop used here.
+  type TimeOfDayValue = 'night' | 'sunrise' | 'day' | 'sunset';
   const DAYPART_HOURS = 6;
   const DAYPARTS: { startHour: number; timeOfDay: TimeOfDayValue }[] = [
     { startHour: 0, timeOfDay: 'night' },
@@ -1036,16 +1038,6 @@ Responsive Breakpoints:
                   </div>
                 {/each}
               </div>
-
-              <!-- Active daypart weather (phone) -->
-              <div class="daypart-grid grid">
-                <div
-                  class="h-5 flex items-center justify-center text-base weather-cell"
-                  title={getHourlyWeatherTooltip(activeDaypartStart)}
-                >
-                  {getHourlyWeatherEmoji(activeDaypartStart) || ''}
-                </div>
-              </div>
             </div>
           {/if}
 
@@ -1108,28 +1100,6 @@ Responsive Breakpoints:
                   {@render sunIcon('sunset', sunTimes?.sunset, showSunset)}
                 </div>
               {/each}
-            </div>
-
-            <!-- Active daypart daylight (phone) -->
-            <div class="daypart-grid grid">
-              {#key activeDaypartStart}
-                {@const daylightClass = getDaylightClass(activeDaypartStart)}
-                {@const showSunrise =
-                  sunriseHour !== null &&
-                  activeDaypartStart <= sunriseHour &&
-                  sunriseHour < activeDaypartEnd}
-                {@const showSunset =
-                  sunsetHour !== null &&
-                  activeDaypartStart <= sunsetHour &&
-                  sunsetHour < activeDaypartEnd &&
-                  !showSunrise}
-                <div
-                  class="h-5 rounded-sm daylight-cell daylight-{daylightClass} relative flex items-center justify-center"
-                >
-                  {@render sunIcon('sunrise', sunTimes?.sunrise, showSunrise)}
-                  {@render sunIcon('sunset', sunTimes?.sunset, showSunset)}
-                </div>
-              {/key}
             </div>
           </div>
 
