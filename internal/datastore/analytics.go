@@ -189,11 +189,12 @@ type SpeciesHourlyCounts struct {
 
 // NewSpeciesData represents a species detected for the first time within a period
 type NewSpeciesData struct {
-	ScientificName string `json:"scientific_name"`
-	CommonName     string `json:"common_name"`
-	FirstSeenDate  string `json:"first_seen_date"` // The absolute first date
-	LastSeenDate   string `json:"last_seen_date"`  // The most recent detection date
-	CountInPeriod  int    `json:"count_in_period"` // Optional: How many times seen in the query period
+	ScientificName string    `json:"scientific_name"`
+	CommonName     string    `json:"common_name"`
+	FirstSeenDate  string    `json:"first_seen_date"` // The absolute first date
+	LastSeenDate   string    `json:"last_seen_date"`  // The most recent detection date
+	CountInPeriod  int       `json:"count_in_period"` // Optional: How many times seen in the query period
+	FirstBeginTime time.Time `json:"-"`               // Earliest audio start, used to restore notification tracking across midnight
 }
 
 // SpeciesDetectionDate represents a species detected on a specific calendar date.
@@ -1038,6 +1039,7 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 		FirstDetectionDate string // Scan directly into string
 		LastDetectionDate  string
 		CountInPeriod      int
+		FirstBeginTime     time.Time
 	}
 	var rawResults []RawNewSpeciesResult
 
@@ -1061,12 +1063,16 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 	// Revised query with pagination
 	// NOTE: This query benefits significantly from a composite index on (scientific_name, date)
 	// Excludes detections marked as false_positive from both CTEs
+	// Select the audio timestamp from the original column so SQLite preserves its
+	// DATETIME type when scanning. MIN alone returns text. NULLIF ignores imports
+	// without an audio start; MIN(id) prevents ties from duplicating species rows.
 	query := fmt.Sprintf(`
 	WITH SpeciesFirstSeen AS (
 	    SELECT
 	        notes.scientific_name,
 	        MIN(CASE WHEN notes.date != '' AND notes.date IS NOT NULL THEN notes.date ELSE NULL END) as first_detection_date,
-	        MAX(CASE WHEN notes.date != '' AND notes.date IS NOT NULL THEN notes.date ELSE NULL END) as last_detection_date
+	        MAX(CASE WHEN notes.date != '' AND notes.date IS NOT NULL THEN notes.date ELSE NULL END) as last_detection_date,
+	        MIN(NULLIF(notes.begin_time, ?)) as first_begin_time
 	    FROM notes
 	    LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
 	    WHERE (note_reviews.verified IS NULL OR note_reviews.verified != '%s')
@@ -1089,16 +1095,21 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 	    COALESCE(sip.common_name, sfs.scientific_name) as common_name,
 	    sfs.first_detection_date,
 	    sfs.last_detection_date,
-	    sip.count_in_period
+	    sip.count_in_period,
+	    first_note.begin_time as first_begin_time
 	FROM SpeciesFirstSeen sfs
 	JOIN SpeciesInPeriod sip ON sfs.scientific_name = sip.scientific_name
+	LEFT JOIN notes first_note ON first_note.id = (
+	    SELECT MIN(n.id) FROM notes n
+	    WHERE n.scientific_name = sfs.scientific_name AND n.begin_time = sfs.first_begin_time
+	)
 	WHERE sfs.first_detection_date BETWEEN ? AND ?
 	ORDER BY sfs.first_detection_date DESC
 	LIMIT ? OFFSET ?;
 	`, entities.VerificationFalsePositive, entities.VerificationFalsePositive)
 
 	// Execute the raw SQL query into the temporary struct
-	if err := ds.DB.WithContext(ctx).Raw(query, startDate, endDate, startDate, endDate, limit, offset).Scan(&rawResults).Error; err != nil {
+	if err := ds.DB.WithContext(ctx).Raw(query, time.Time{}, startDate, endDate, startDate, endDate, limit, offset).Scan(&rawResults).Error; err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
@@ -1121,6 +1132,7 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 				FirstSeenDate:  raw.FirstDetectionDate, // Assign only if valid
 				LastSeenDate:   raw.LastDetectionDate,
 				CountInPeriod:  raw.CountInPeriod,
+				FirstBeginTime: raw.FirstBeginTime,
 			})
 		} else {
 			// Log if a record surprisingly had an empty date after SQL filtering
