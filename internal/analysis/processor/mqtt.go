@@ -413,17 +413,26 @@ func (p *Processor) publishDiscoveryIfReady() {
 	}
 
 	log := GetLogger()
-	log.Info("publishing HA discovery after source registration",
-		logger.String("operation", "ha_discovery_source_event"))
+	log.Info("publishing HA discovery (debounced refresh)",
+		logger.String("operation", "ha_discovery_refresh"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), discoveryPublishTimeout)
 	defer cancel()
 
 	if err := p.publishHomeAssistantDiscovery(ctx, client, settings); err != nil {
-		log.Error("failed to publish HA discovery after source registration",
+		log.Error("failed to publish HA discovery (debounced refresh)",
 			logger.Error(err),
-			logger.String("operation", "ha_discovery_source_event"))
+			logger.String("operation", "ha_discovery_refresh"))
 	}
+}
+
+// RefreshHomeAssistantDiscovery schedules a debounced republish of HA discovery,
+// for settings that change which sensors exist (sound level monitoring) without
+// reconnecting MQTT. It only arms the debounce timer, so it never blocks the
+// caller; the publish runs later on the timer goroutine and is skipped unless
+// MQTT and HA discovery are enabled and the client is connected.
+func (p *Processor) RefreshHomeAssistantDiscovery() {
+	p.scheduleDiscoveryPublish()
 }
 
 // Registry returns the source registry, or nil if not set.

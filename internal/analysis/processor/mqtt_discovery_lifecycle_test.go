@@ -131,3 +131,38 @@ func TestOnConnectHandler_UsesLiveSettings(t *testing.T) {
 		}
 	})
 }
+
+// TestRefreshHomeAssistantDiscovery_Debounced verifies that a refresh only arms
+// the debounce timer: nothing is published on the caller's goroutine (the
+// control monitor must never block on the broker), and the debounced publish
+// uses live settings, so a sound level toggle adds the Sound Level sensor.
+func TestRefreshHomeAssistantDiscovery_Debounced(t *testing.T) {
+	live := newLifecycleSettings(true)
+	live.Realtime.Audio.SoundLevel.Enabled = true
+	useLiveSettings(t, live)
+
+	p := newLifecycleProcessor(t, "Backyard")
+	client := NewMockMQTTClient()
+	p.SetMQTTClient(client)
+
+	p.RefreshHomeAssistantDiscovery()
+	t.Cleanup(func() {
+		p.discoveryDebounceMu.Lock()
+		defer p.discoveryDebounceMu.Unlock()
+		if p.discoveryDebounce != nil {
+			p.discoveryDebounce.Stop()
+		}
+	})
+
+	assert.Empty(t, client.GetPublishedMessages(), "refresh must not publish synchronously")
+	p.discoveryDebounceMu.Lock()
+	armed := p.discoveryDebounce != nil
+	p.discoveryDebounceMu.Unlock()
+	assert.True(t, armed, "refresh must arm the debounce timer")
+
+	// Run what the timer runs, without waiting for it.
+	p.publishDiscoveryIfReady()
+	payload, found := soundLevelConfigPayload(client.GetPublishedMessages())
+	require.True(t, found, "the debounced publish must include the sound level sensor config")
+	assert.NotEmpty(t, payload, "sound level is on, so the sensor config must not be a removal")
+}

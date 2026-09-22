@@ -734,6 +734,12 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 		return
 	}
 
+	// The Sound Level sensor exists in HA discovery only while monitoring is on,
+	// so refresh discovery to add or remove it without an MQTT reconnect.
+	if cm.proc != nil {
+		cm.proc.RefreshHomeAssistantDiscovery()
+	}
+
 	settings := conf.Setting()
 	if settings.Realtime.Audio.SoundLevel.Enabled {
 		GetLogger().Info("Sound level monitoring reconfigured",
