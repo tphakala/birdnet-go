@@ -1011,6 +1011,10 @@
                   <code>{'{base_topic}'}/soundlevel</code>
                 </li>
                 <li>
+                  {t('settings.audio.soundLevelMonitoring.mqttSourceTopic')}
+                  <code>{'{base_topic}'}/sources/{'{source_id}'}/soundlevel</code>
+                </li>
+                <li>
                   {t('settings.audio.soundLevelMonitoring.sseEndpoint')}
                   <code>/api/v2/soundlevels/stream</code>
                 </li>

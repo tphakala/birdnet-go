@@ -4,7 +4,41 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+// TestSourceTopicsEnabled verifies the gate that governs per-source topic
+// publishing: both MQTT and HA discovery must be enabled, and a nil settings
+// pointer is never enabled.
+func TestSourceTopicsEnabled(t *testing.T) {
+	t.Parallel()
+
+	newSettings := func(mqttEnabled, haEnabled bool) *conf.Settings {
+		s := &conf.Settings{}
+		s.Realtime.MQTT.Enabled = mqttEnabled
+		s.Realtime.MQTT.HomeAssistant.Enabled = haEnabled
+		return s
+	}
+
+	tests := []struct {
+		name     string
+		settings *conf.Settings
+		want     bool
+	}{
+		{name: "nil settings", settings: nil, want: false},
+		{name: "both disabled", settings: newSettings(false, false), want: false},
+		{name: "mqtt disabled, ha enabled", settings: newSettings(false, true), want: false},
+		{name: "mqtt enabled, ha disabled", settings: newSettings(true, false), want: false},
+		{name: "both enabled", settings: newSettings(true, true), want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, SourceTopicsEnabled(tt.settings))
+		})
+	}
+}
 
 func TestSoundLevelTopic(t *testing.T) {
 	t.Parallel()
@@ -24,6 +58,28 @@ func TestSoundLevelTopic(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tt.want, SoundLevelTopic(tt.baseTopic))
+		})
+	}
+}
+
+func TestStatusTopic(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		baseTopic string
+		want      string
+	}{
+		{name: "plain base", baseTopic: "birdnet", want: "birdnet/status"},
+		{name: "trailing slash", baseTopic: "birdnet/", want: "birdnet/status"},
+		{name: "nested base", baseTopic: "home/birdnet", want: "home/birdnet/status"},
+		{name: "repeated trailing slashes", baseTopic: "birdnet//", want: "birdnet/status"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, StatusTopic(tt.baseTopic))
 		})
 	}
 }
@@ -79,4 +135,20 @@ func TestSourceTopics_DistinctPerSource(t *testing.T) {
 		"per-source topic must differ from the shared detection topic")
 	assert.NotEqual(t, SoundLevelTopic(base), SourceSoundLevelTopic(base, a),
 		"per-source sound level topic must differ from the shared one")
+}
+
+// TestSourceDetectionTopic_SanitizeCollision documents a known, accepted
+// limitation: two distinct raw IDs that sanitize identically map to the same
+// per-source topic. Registry source IDs are "<type>_<hex>" (see
+// audiocore.SourceRegistry) and never collide, so this cannot happen for real
+// sources; the test pins the behavior so a future change is a deliberate choice.
+func TestSourceDetectionTopic_SanitizeCollision(t *testing.T) {
+	t.Parallel()
+
+	const base = "birdnet"
+	// "hw:0,0" and "hw:0/0" both sanitize to "hw_0_0".
+	assert.Equal(t,
+		SourceDetectionTopic(base, "hw:0,0"),
+		SourceDetectionTopic(base, "hw:0/0"),
+		"distinct raw IDs that sanitize alike collide (known limitation; registry IDs never collide)")
 }

@@ -22,6 +22,9 @@ const (
 	// discoveryDebounceDuration is the delay after the last source registration
 	// before HA discovery is republished. Coalesces rapid startup registrations.
 	discoveryDebounceDuration = 3 * time.Second
+	// haDiscoveryRetireTimeout bounds the removal publishes issued when retiring
+	// HA discovery during a reconfigure through the still-connected old client.
+	haDiscoveryRetireTimeout = 10 * time.Second
 )
 
 // ErrMQTTClientNotReady is returned by PublishMQTT whenever the MQTT client
@@ -98,7 +101,7 @@ func (p *Processor) PublishMQTT(ctx context.Context, topic, payload string) erro
 		return client.Publish(ctx, topic, payload)
 	}
 	// Emit one warn log per topic so operators learn MQTT is configured but not
-	// reachable. Subsequent attempts on that topic are silent — the sentinel is
+	// reachable. Subsequent attempts on that topic are silent: the sentinel is
 	// all the caller needs to decide to skip.
 	//
 	// Keyed on the topic rather than guarded once per process, because the line
@@ -106,6 +109,12 @@ func (p *Processor) PublishMQTT(ctx context.Context, topic, payload string) erro
 	// may have since changed away from: the topic derives from the
 	// hot-reloadable Realtime.MQTT.Topic setting. The key space is bounded by
 	// how many distinct topics the configuration has held, not by traffic.
+	//
+	// The per-source sound level topic (mqtt.SourceSoundLevelTopic) publishes
+	// through here too while HA discovery is on, so the key space also grows by
+	// one entry per audio source. That is still bounded: source count is small
+	// and stable. (The per-source detection topic does not add keys here; it
+	// publishes via the MQTT client directly, not through PublishMQTT.)
 	p.mqttNotReadyWarnLogged.do(topic, func() {
 		GetLogger().Warn(
 			"MQTT publish suppressed: client not ready (further suppressed publishes on this topic are silent)",
@@ -192,12 +201,26 @@ func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings 
 			return
 		}
 
+		// Read the live settings so a settings change after registration takes
+		// effect (the handler may fire on a reconnect long after registration).
+		// Fall back to the captured settings if no live snapshot is published.
+		liveSettings := p.currentSettings()
+		if liveSettings == nil {
+			liveSettings = settings
+		}
+
+		// HA discovery may have been turned off since this handler was registered.
+		if !liveSettings.Realtime.MQTT.HomeAssistant.Enabled {
+			log.Debug("HA discovery disabled since handler registration, skipping publish")
+			return
+		}
+
 		log.Info("MQTT connected, publishing Home Assistant discovery messages")
 
 		ctx, cancel := context.WithTimeout(context.Background(), discoveryPublishTimeout)
 		defer cancel()
 
-		if err := p.publishHomeAssistantDiscovery(ctx, client, settings); err != nil {
+		if err := p.publishHomeAssistantDiscovery(ctx, client, liveSettings); err != nil {
 			log.Error("Failed to publish Home Assistant discovery",
 				logger.Error(err))
 		}
@@ -208,9 +231,20 @@ func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings 
 		logger.String("device_name", haSettings.DeviceName))
 }
 
+// haDiscoveryRecord captures the last successfully published Home Assistant
+// discovery: the config it was published under, the broker, and the source list.
+// It lets the next publish (and RetireHomeAssistantDiscovery) remove entities and
+// retained state for sources that disappeared or whose entity key changed.
+type haDiscoveryRecord struct {
+	config  mqtt.DiscoveryConfig
+	broker  string
+	sources []datastore.AudioSource
+}
+
 // publishHomeAssistantDiscovery publishes Home Assistant discovery messages.
 // This is the shared implementation used by both the OnConnect handler and manual trigger.
-// Skips publishing when no audio sources are registered yet (startup race).
+// Skips publishing when no audio sources have EVER been registered (startup race),
+// but removes everything previously published once the last source disappears.
 func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mqtt.Client, settings *conf.Settings) error {
 	haSettings := settings.Realtime.MQTT.HomeAssistant
 	discoveryConfig := mqtt.DiscoveryConfig{
@@ -220,13 +254,37 @@ func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mq
 		NodeID:          settings.Main.Name,
 		Version:         settings.Version,
 	}
+	broker := settings.Realtime.MQTT.Broker
 
 	publisher := mqtt.NewDiscoveryPublisher(client, &discoveryConfig)
 	sources := p.getAudioSourcesForDiscovery()
 
+	// Serialize discovery reconciliation so concurrent triggers (OnConnect, the
+	// debounce timer, and the manual trigger) cannot interleave publishes and
+	// removals or corrupt the last-published record.
+	p.haDiscoveryMu.Lock()
+	defer p.haDiscoveryMu.Unlock()
+
 	if len(sources) == 0 {
-		GetLogger().Debug("skipping HA discovery publish, no audio sources registered yet",
-			logger.String("operation", "ha_discovery_skip"))
+		// No sources registered now. If we published before, every source has gone
+		// away: remove everything we published (entities, retained state, bridge)
+		// under the OLD config and clear the record. If we never published, this is
+		// the startup race (GitHub #2948), so skip silently and leave nothing.
+		prev := p.haDiscoveryRecord
+		if prev == nil {
+			GetLogger().Debug("skipping HA discovery publish, no audio sources registered yet",
+				logger.String("operation", "ha_discovery_skip"))
+			return nil
+		}
+		prevPublisher := mqtt.NewDiscoveryPublisher(client, &prev.config)
+		if err := prevPublisher.RemoveDiscovery(ctx, prev.sources); err != nil {
+			GetLogger().Error("failed to remove HA discovery after all sources removed",
+				logger.Error(err),
+				logger.String("operation", "ha_discovery_remove_all"))
+			// Keep the record so a later trigger can retry the removal.
+			return err
+		}
+		p.haDiscoveryRecord = nil
 		return nil
 	}
 
@@ -234,7 +292,125 @@ func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mq
 		cleanupDefaultDiscovery(ctx, publisher)
 	})
 
-	return publisher.PublishDiscovery(ctx, sources, settings)
+	if err := publisher.PublishDiscovery(ctx, sources, settings); err != nil {
+		return err
+	}
+
+	// Publish succeeded: remove entities/state for sources that disappeared or
+	// whose entity key changed since the last publish, then store the new record.
+	p.reconcileRemovedDiscovery(ctx, publisher, sources)
+	p.haDiscoveryRecord = &haDiscoveryRecord{
+		config:  discoveryConfig,
+		broker:  broker,
+		sources: sources,
+	}
+	return nil
+}
+
+// reconcileRemovedDiscovery removes discovery entities and retained state for
+// sources that were in the previous record but are gone from newSources, and
+// removes the orphaned config topics for sources still present whose entity key
+// changed. Must be called with haDiscoveryMu held, after a successful publish of
+// newSources under the current publisher.
+func (p *Processor) reconcileRemovedDiscovery(ctx context.Context, publisher *mqtt.Publisher, newSources []datastore.AudioSource) {
+	prev := p.haDiscoveryRecord
+	if prev == nil {
+		return
+	}
+
+	oldKeys := mqtt.SourceEntityKeys(prev.sources)
+	newKeys := mqtt.SourceEntityKeys(newSources)
+
+	present := make(map[string]struct{}, len(newSources))
+	for _, s := range newSources {
+		present[s.ID] = struct{}{}
+	}
+
+	for _, oldSource := range prev.sources {
+		oldKey := oldKeys[oldSource.ID]
+		if _, stillPresent := present[oldSource.ID]; !stillPresent {
+			// Source removed: clear its entities and retained per-source state.
+			if err := publisher.RemoveSourceDiscovery(ctx, oldSource, oldKey); err != nil {
+				GetLogger().Warn("failed to remove discovery for departed source",
+					logger.String("source_id", oldSource.ID),
+					logger.Error(err),
+					logger.String("operation", "ha_discovery_remove_source"))
+			}
+			continue
+		}
+		// Source still present: if its entity key changed, the configs under the
+		// old key are orphaned. Clear ONLY those configs; the state topics (keyed
+		// by the unchanged raw source ID) are still being published to, so wiping
+		// them would drop a live source's retained state.
+		if newKeys[oldSource.ID] != oldKey {
+			if err := publisher.RemoveSourceConfigs(ctx, oldKey); err != nil {
+				GetLogger().Warn("failed to remove stale discovery configs for rekeyed source",
+					logger.String("source_id", oldSource.ID),
+					logger.Error(err),
+					logger.String("operation", "ha_discovery_remove_stale_configs"))
+			}
+		}
+	}
+}
+
+// RetireHomeAssistantDiscovery removes previously published HA discovery when a
+// reconfigure makes it stale, using the still-connected OLD client and must be
+// called BEFORE the old client is disconnected. It fires when HA discovery is
+// being turned off (while MQTT stays enabled) or when the discovery identity
+// (discovery prefix, base topic, node ID, or broker) changed since the last
+// publish, so entities and retained state are removed under the OLD topics
+// rather than orphaned. It is a no-op when nothing was ever published, when MQTT
+// is being disabled entirely (entities go unavailable via the LWT status topic,
+// as before), or when the identity is unchanged and HA discovery stays enabled.
+func (p *Processor) RetireHomeAssistantDiscovery(ctx context.Context, next *conf.Settings) {
+	if next == nil {
+		return
+	}
+
+	p.haDiscoveryMu.Lock()
+	defer p.haDiscoveryMu.Unlock()
+
+	prev := p.haDiscoveryRecord
+	if prev == nil {
+		return // nothing was ever published, so nothing to retire
+	}
+
+	// MQTT disabled entirely: leave the entities to go unavailable through the LWT
+	// status topic, same as before. Keep the record so a later re-enable can still
+	// reconcile against it.
+	if !next.Realtime.MQTT.Enabled {
+		return
+	}
+
+	haDisabled := !next.Realtime.MQTT.HomeAssistant.Enabled
+	identityChanged := prev.config.DiscoveryPrefix != next.Realtime.MQTT.HomeAssistant.DiscoveryPrefix ||
+		prev.config.BaseTopic != next.Realtime.MQTT.Topic ||
+		prev.config.NodeID != next.Main.Name ||
+		prev.broker != next.Realtime.MQTT.Broker
+
+	if !haDisabled && !identityChanged {
+		return // still enabled under the same identity: the next publish reconciles
+	}
+
+	client := p.GetMQTTClient()
+	if client == nil || !client.IsConnected() {
+		// No connected client to publish the removal through. Keep the record so a
+		// later publish or retire can still clean up.
+		return
+	}
+
+	removeCtx, cancel := context.WithTimeout(ctx, haDiscoveryRetireTimeout)
+	defer cancel()
+
+	// Remove under the RECORDED config (old prefix/base/node), not the new one.
+	publisher := mqtt.NewDiscoveryPublisher(client, &prev.config)
+	if err := publisher.RemoveDiscovery(removeCtx, prev.sources); err != nil {
+		GetLogger().Error("failed to retire HA discovery on reconfigure",
+			logger.Error(err),
+			logger.String("operation", "ha_discovery_retire"))
+		return // keep the record so a later attempt can retry
+	}
+	p.haDiscoveryRecord = nil
 }
 
 // cleanupDefaultDiscovery removes stale HA discovery entries for the
@@ -356,9 +532,15 @@ func (p *Processor) SetRegistry(r *audiocore.SourceRegistry) {
 
 	r.AddListener(func(event audiocore.SourceEvent) {
 		switch event.Type {
-		case audiocore.SourceAdded, audiocore.SourceReconfigured:
+		case audiocore.SourceAdded, audiocore.SourceReconfigured, audiocore.SourceRemoved:
+			// A source appeared, was reconfigured, or was removed: republish so new
+			// entities appear and a departed source's entities and retained state
+			// are cleaned up by the diff in publishHomeAssistantDiscovery.
 			p.scheduleDiscoveryPublish()
-		default: // SourceRemoved and SourceStateChanged don't affect discovery
+		case audiocore.SourceStateChanged:
+			// Runtime state (running/stopped) does not change discovery entities.
+		default:
+			// Unknown event types do not affect discovery.
 		}
 	})
 }
@@ -376,6 +558,16 @@ func (p *Processor) scheduleDiscoveryPublish() {
 	p.discoveryDebounce = time.AfterFunc(discoveryDebounceDuration, func() {
 		p.publishDiscoveryIfReady()
 	})
+}
+
+// RepublishHomeAssistantDiscovery re-publishes HA discovery if MQTT and HA
+// discovery are enabled and the client is connected. Safe to call at any time
+// (it silently returns when preconditions are not met). Used when a setting that
+// changes the discovered entity set toggles at runtime, e.g. sound level
+// monitoring: combined with the per-source Sound Level sensor removal in the
+// discovery publisher, this adds or removes that sensor immediately.
+func (p *Processor) RepublishHomeAssistantDiscovery() {
+	p.publishDiscoveryIfReady()
 }
 
 // publishDiscoveryIfReady publishes HA discovery if MQTT is enabled, connected,

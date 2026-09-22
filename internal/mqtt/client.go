@@ -90,7 +90,7 @@ func NewClient(settings *conf.Settings, observabilityMetrics *observability.Metr
 	// Configure LWT (Last Will and Testament) for Home Assistant availability tracking
 	if settings.Realtime.MQTT.HomeAssistant.Enabled {
 		config.LWT.Enabled = true
-		config.LWT.Topic = config.Topic + "/status"
+		config.LWT.Topic = StatusTopic(config.Topic)
 		config.LWT.Payload = "offline"
 		config.LWT.QoS = 1
 		config.LWT.Retain = true

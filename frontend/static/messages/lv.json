@@ -3261,7 +3261,7 @@
             "label": "Ierīces nosaukums",
             "helpText": "Ierīču pamata nosaukums, kā tas parādās Home Assistant. Katram audio avotam būs sava ierīce, kas saistīta ar šo galveno BirdNET-Go ierīci."
           },
-          "sensorsNote": "<strong>Izveidotie sensori:</strong> Katram audio avotam Home Assistant saņems: Pēdējā suga, Ticamība, Zinātniskais nosaukums un Skaņas līmenis (ja iespējots). Tilta ierīce ietver tiešsaistes/bezsaistes pieejamības statusu.",
+          "sensorsNote": "<strong>Izveidotie sensori:</strong> Katram audio avotam Home Assistant saņems: Pēdējā suga, Ticamība, Zinātniskais nosaukums un Skaņas līmenis (ja iespējots). Tilta ierīce ietver tiešsaistes/bezsaistes pieejamības statusu. Katra avota sensori nolasa attiecīgā avota paša MQTT tematu, &lt;base_topic&gt;/sources/&lt;source_id&gt;, tāpēc viena avota noteikšana nekad neatiestata cita avota sensorus.",
           "discovery": {
             "button": "Nosūtīt atklāšanu",
             "success": "Atklāšanas ziņojumi nosūtīti uz Home Assistant",
@@ -3720,6 +3720,7 @@
         "dataOutputTitle": "Skaņas līmeņa datu izvade",
         "dataOutputDescription": "Kad iespējots, skaņas līmeņa mērījumi tiek publicēti caur:",
         "mqttTopic": "MQTT temats:",
+        "mqttSourceTopic": "MQTT temats katram avotam (ar Home Assistant discovery):",
         "sseEndpoint": "SSE galapunkts:",
         "prometheusMetrics": "Prometheus metrikas:"
       },

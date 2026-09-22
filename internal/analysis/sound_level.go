@@ -306,7 +306,10 @@ func toCompactFormat(data soundlevel.SoundLevelData, nodeName string) CompactSou
 	return compact
 }
 
-// soundLevelMQTTPublishTimeout bounds each sound level MQTT publish.
+// soundLevelMQTTPublishTimeout bounds each sound level MQTT publish. It is
+// shorter than processor.MQTTPublishTimeout because sound level is a
+// fixed-interval publisher: a slow publish that is cut short here is replaced by
+// the next interval's fresh reading, so there is no value in waiting longer.
 const soundLevelMQTTPublishTimeout = 5 * time.Second
 
 // publishSoundLevelToSourceTopic republishes sound level data to its source's
@@ -317,8 +320,10 @@ const soundLevelMQTTPublishTimeout = 5 * time.Second
 // Failure is logged, not returned: the data already reached the shared topic,
 // and the next interval publishes a fresh reading anyway. ErrMQTTClientNotReady
 // is dropped silently, matching how the shared topic handles it.
-func publishSoundLevelToSourceTopic(settings *conf.Settings, sourceID, payload string, proc *processor.Processor) {
-	if !settings.Realtime.MQTT.HomeAssistant.Enabled || sourceID == "" {
+func publishSoundLevelToSourceTopic(settings *conf.Settings, sourceID, name, payload string, proc *processor.Processor) {
+	// validateSoundLevelData already rejected an empty Source before this point,
+	// so no sourceID == "" guard is needed here.
+	if !mqtt.SourceTopicsEnabled(settings) {
 		return
 	}
 
@@ -327,11 +332,21 @@ func publishSoundLevelToSourceTopic(settings *conf.Settings, sourceID, payload s
 
 	topic := mqtt.SourceSoundLevelTopic(settings.Realtime.MQTT.Topic, sourceID)
 	if err := proc.PublishMQTT(ctx, topic, payload); err != nil && !stderrors.Is(err, processor.ErrMQTTClientNotReady) {
+		// Log the same fields the shared-topic publisher logs, so a per-source
+		// failure is not observably poorer than a shared-topic failure.
 		getSoundLevelLogger().Warn("failed to publish sound level data to per-source MQTT topic",
-			logger.Error(privacy.WrapError(err)),
+			logger.String("component", "analysis.soundlevel"),
 			logger.String("source", sourceID),
+			logger.String("name", name),
 			logger.String("topic", topic),
-			logger.String("operation", "publish_mqtt_source_topic"))
+			logger.String("operation", "publish_mqtt_source_topic"),
+			logger.Error(privacy.WrapError(err)))
+
+		// Record the failure so it is visible via Prometheus, guarded the same
+		// way the shared-topic path guards its metric recording.
+		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(sourceID, name, "mqtt", "source_topic_error")
+		}
 	}
 }
 
@@ -456,7 +471,7 @@ func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processo
 			Context("source", soundData.Source).
 			Context("name", soundData.Name).
 			Context("payload_size", len(jsonData)).
-			Context("timeout_seconds", soundLevelMQTTPublishTimeout.Seconds()).
+			Context("timeout_seconds", int(soundLevelMQTTPublishTimeout/time.Second)).
 			Context("octave_bands_count", len(compactData.Bands)).
 			Context("retryable", true). // MQTT publish failures are typically retryable
 			Build()
@@ -469,7 +484,7 @@ func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processo
 
 	LogSoundLevelMQTTPublished(topic, soundData.Source, len(soundData.OctaveBands))
 
-	publishSoundLevelToSourceTopic(settings, soundData.Source, string(jsonData), proc)
+	publishSoundLevelToSourceTopic(settings, soundData.Source, soundData.Name, string(jsonData), proc)
 
 	// Log detailed sound level data if debug is enabled
 	// These logs are for publishing events, not realtime processing

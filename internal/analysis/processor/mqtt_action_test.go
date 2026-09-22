@@ -37,6 +37,8 @@ type MockMQTTClient struct {
 	messages []publishedMessage
 	// topicErrs fails publishes to specific topics only.
 	topicErrs map[string]error
+	// onConnectHandler stores the last handler registered via RegisterOnConnectHandler.
+	onConnectHandler mqtt.OnConnectHandler
 }
 
 // publishedMessage is one publish captured by MockMQTTClient.
@@ -104,7 +106,20 @@ func (m *MockMQTTClient) StartReconnectLoop() {
 
 func (m *MockMQTTClient) TestConnection(_ context.Context, _ chan<- mqtt.TestResult) {}
 func (m *MockMQTTClient) SetControlChannel(_ chan string)                            {}
-func (m *MockMQTTClient) RegisterOnConnectHandler(_ mqtt.OnConnectHandler)           {}
+
+// RegisterOnConnectHandler stores the handler so tests can invoke it directly.
+func (m *MockMQTTClient) RegisterOnConnectHandler(h mqtt.OnConnectHandler) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onConnectHandler = h
+}
+
+// OnConnectHandler returns the last handler registered, or nil.
+func (m *MockMQTTClient) OnConnectHandler() mqtt.OnConnectHandler {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.onConnectHandler
+}
 
 // ReconnectLoopStarts returns how many times StartReconnectLoop was called.
 func (m *MockMQTTClient) ReconnectLoopStarts() int {

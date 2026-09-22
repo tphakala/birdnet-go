@@ -116,6 +116,13 @@ type Processor struct {
 	discoveryDebounceMu     sync.Mutex
 	defaultDiscoveryCleanup sync.Once // ensures stale "default" discovery cleanup runs at most once
 
+	// haDiscoveryRecord captures the last successfully published HA discovery so
+	// the next publish (or a reconfigure retirement) can remove entities and
+	// retained state for sources that went away or whose entity key changed.
+	// nil until the first successful publish. Guarded by haDiscoveryMu.
+	haDiscoveryRecord *haDiscoveryRecord
+	haDiscoveryMu     sync.Mutex
+
 	// BufferMgr provides access to capture buffers for audio clip extraction.
 	// Set once during pipeline initialization (audio_pipeline_service.go) and never replaced;
 	// no synchronization needed for concurrent reads.

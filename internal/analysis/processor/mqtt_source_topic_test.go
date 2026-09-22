@@ -6,11 +6,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
@@ -155,6 +159,81 @@ func TestMqttAction_Execute_SourceTopicSkippedWhenStepExpired(t *testing.T) {
 	assert.Equal(t, testMQTTTopic, msgs[0].topic, "shared publish uses its own background timeout")
 }
 
+// TestMqttAction_SourceTopicFailure_Alerting verifies that a non-transient
+// per-source publish failure raises the same MQTT-publish-failed alert the
+// shared path raises, while a transient connection failure stays a warning only.
+// The shared publish succeeds here, so its own alert never fires; only the
+// per-source failure can raise one.
+func TestMqttAction_SourceTopicFailure_Alerting(t *testing.T) {
+	// Not parallel: SetGlobalBus mutates a package-global singleton.
+	const (
+		sourceID     = "rtsp_65c31a0b"
+		testBroker   = "tcp://broker.example:1883"
+		barrierEvent = "test.barrier"
+	)
+
+	tests := []struct {
+		name      string
+		failErr   error
+		wantAlert bool
+	}{
+		{name: "non-transient failure raises alert", failErr: errors.New("broker rejected publish"), wantAlert: true},
+		{name: "transient failure does not alert", failErr: errors.New("connection lost"), wantAlert: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prevBus := alerting.GetGlobalBus()
+			bus := alerting.NewAlertEventBus(nil)
+			alerting.SetGlobalBus(bus)
+			t.Cleanup(func() {
+				bus.Stop()
+				alerting.SetGlobalBus(prevBus)
+			})
+
+			var mu sync.Mutex
+			var events []*alerting.AlertEvent
+			bus.Subscribe(func(e *alerting.AlertEvent) {
+				mu.Lock()
+				defer mu.Unlock()
+				events = append(events, e)
+			})
+
+			client := NewMockMQTTClient()
+			client.SetTopicError(mqtt.SourceDetectionTopic(testMQTTTopic, sourceID), tt.failErr)
+			action := newSourceTopicTestAction(t, client, sourceID, true)
+			action.Settings.Realtime.MQTT.Broker = testBroker
+
+			require.NoError(t, action.Execute(t.Context(), nil))
+
+			// FIFO barrier: the bus delivers in order on a single worker, so once
+			// the sentinel arrives any alert Execute raised has already arrived.
+			bus.Publish(&alerting.AlertEvent{ObjectType: alerting.ObjectTypeIntegration, EventName: barrierEvent})
+			require.Eventually(t, func() bool {
+				mu.Lock()
+				defer mu.Unlock()
+				return slices.ContainsFunc(events, func(e *alerting.AlertEvent) bool { return e.EventName == barrierEvent })
+			}, time.Second, 5*time.Millisecond)
+
+			mu.Lock()
+			defer mu.Unlock()
+			var mqttAlerts []*alerting.AlertEvent
+			for _, e := range events {
+				if e.EventName == alerting.EventMQTTPublishFailed {
+					mqttAlerts = append(mqttAlerts, e)
+				}
+			}
+			if tt.wantAlert {
+				require.Len(t, mqttAlerts, 1, "non-transient failure must raise exactly one alert")
+				assert.Equal(t, testBroker, mqttAlerts[0].Properties[alerting.PropertyBroker])
+				assert.NotEmpty(t, mqttAlerts[0].Properties[alerting.PropertyError])
+			} else {
+				assert.Empty(t, mqttAlerts, "transient failure must not raise an alert")
+			}
+		})
+	}
+}
+
 // TestMqttAction_Execute_SourceTopicFailure_NonFatal verifies that a failed
 // per-source publish does not fail the action. The detection already reached
 // the shared topic; failing would make a retry publish it there twice.
@@ -172,4 +251,50 @@ func TestMqttAction_Execute_SourceTopicFailure_NonFatal(t *testing.T) {
 	msgs := client.GetPublishedMessages()
 	require.Len(t, msgs, 1)
 	assert.Equal(t, testMQTTTopic, msgs[0].topic)
+}
+
+// TestMqttAction_Execute_TrailingSlashBase_MatchesDiscoveredTopic verifies the
+// per-source detection publish hits exactly the discovered species state_topic
+// even when the base topic carries a trailing slash ("birdnet/"), so a
+// trailing-slash base never desynchronizes the publisher from discovery.
+func TestMqttAction_Execute_TrailingSlashBase_MatchesDiscoveredTopic(t *testing.T) {
+	t.Parallel()
+
+	const base = "birdnet/"
+	const sourceID = "rtsp_65c31a0b"
+	source := datastore.AudioSource{ID: sourceID, DisplayName: "Backyard Microphone"}
+
+	// Discover the species state topic for the trailing-slash base.
+	recorder := NewMockMQTTClient()
+	publisher := mqtt.NewDiscoveryPublisher(recorder, &mqtt.DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       base,
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "node",
+		Version:         "test",
+	})
+	require.NoError(t, publisher.PublishDiscovery(t.Context(), []datastore.AudioSource{source}, &conf.Settings{}))
+
+	var stateTopic string
+	for _, msg := range recorder.GetPublishedMessages() {
+		if !strings.HasSuffix(msg.topic, "_species/config") {
+			continue
+		}
+		var payload mqtt.DiscoveryPayload
+		require.NoError(t, json.Unmarshal([]byte(msg.payload), &payload))
+		stateTopic = payload.StateTopic
+	}
+	require.NotEmpty(t, stateTopic, "discovery must publish a species sensor")
+
+	// Run the action against the same trailing-slash base.
+	client := NewMockMQTTClient()
+	action := newSourceTopicTestAction(t, client, sourceID, true)
+	action.Settings.Realtime.MQTT.Topic = base
+
+	require.NoError(t, action.Execute(t.Context(), nil))
+
+	msgs := client.GetPublishedMessages()
+	require.Len(t, msgs, 2, "expected one shared and one per-source publish")
+	assert.Equal(t, stateTopic, msgs[1].topic,
+		"per-source publish must hit the discovered state topic for a trailing-slash base")
 }

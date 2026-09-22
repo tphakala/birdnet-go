@@ -422,7 +422,7 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 // Failure is logged and not returned: the detection already reached the shared
 // topic, and failing the action would make a retry publish it there twice.
 func (a *MqttAction) publishSourceDetection(parent context.Context, sourceID, payload string) {
-	if !a.Settings.Realtime.MQTT.HomeAssistant.Enabled || sourceID == "" {
+	if !mqtt.SourceTopicsEnabled(a.Settings) || sourceID == "" {
 		return
 	}
 
@@ -433,13 +433,30 @@ func (a *MqttAction) publishSourceDetection(parent context.Context, sourceID, pa
 
 	topic := mqtt.SourceDetectionTopic(a.Settings.Realtime.MQTT.Topic, sourceID)
 	if err := a.MqttClient.Publish(ctx, topic, payload); err != nil {
+		sanitizedErr := privacy.WrapError(err)
 		GetLogger().Warn("Failed to publish detection to per-source MQTT topic",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
-			logger.Error(privacy.WrapError(err)),
+			logger.Error(sanitizedErr),
 			logger.String("species", a.Result.Species.CommonName),
 			logger.String("topic", topic),
 			logger.String("operation", "mqtt_publish_source_topic"))
+
+		// A non-transient failure is a real problem (config or topic error). The
+		// shared-path alert in Execute never fired for it, because the shared
+		// publish already succeeded before this per-source republish ran, so
+		// raise the same alert here. Transient connection errors stay a warning
+		// only, matching the shared path (GitHub #2397).
+		if !mqtt.IsTransientConnectionError(err) {
+			alerting.TryPublish(&alerting.AlertEvent{
+				ObjectType: alerting.ObjectTypeIntegration,
+				EventName:  alerting.EventMQTTPublishFailed,
+				Properties: map[string]any{
+					alerting.PropertyBroker: a.Settings.Realtime.MQTT.Broker,
+					alerting.PropertyError:  sanitizedErr.Error(),
+				},
+			})
+		}
 	}
 }
 

@@ -1,7 +1,11 @@
 // topics.go: MQTT state topic construction shared by publishers and HA discovery.
 package mqtt
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
+)
 
 // Topic segments appended to the configured base topic.
 const (
@@ -11,12 +15,29 @@ const (
 
 	// sourcesTopicSegment is the subtree holding one state topic per audio source.
 	sourcesTopicSegment = "sources"
+
+	// statusTopicSegment names the availability topic under the base topic. It
+	// carries the LWT payload and the Home Assistant bridge/availability state.
+	statusTopicSegment = "status"
 )
 
 // trimBaseTopic strips trailing slashes so joined topics never contain an
 // empty level ("birdnet//soundlevel").
 func trimBaseTopic(baseTopic string) string {
 	return strings.TrimRight(baseTopic, "/")
+}
+
+// SourceTopicsEnabled reports whether the per-source state topics
+// (SourceDetectionTopic, SourceSoundLevelTopic) should be published.
+//
+// Per-source topics exist only for Home Assistant discovery: the discovered
+// sensors are the only subscribers that read them. So they are published only
+// while both MQTT and HA discovery are enabled. An install without HA discovery
+// sees no extra broker traffic on these topics.
+func SourceTopicsEnabled(settings *conf.Settings) bool {
+	return settings != nil &&
+		settings.Realtime.MQTT.Enabled &&
+		settings.Realtime.MQTT.HomeAssistant.Enabled
 }
 
 // SoundLevelTopic returns the shared sound level topic that carries every
@@ -45,4 +66,13 @@ func SourceDetectionTopic(baseTopic, sourceID string) string {
 // "birdnet/sources/rtsp_abc123/soundlevel". See SourceDetectionTopic.
 func SourceSoundLevelTopic(baseTopic, sourceID string) string {
 	return SourceDetectionTopic(baseTopic, sourceID) + "/" + soundLevelTopicSegment
+}
+
+// StatusTopic returns the availability topic under the base topic, e.g.
+// "birdnet/status". It is the single source of truth for the MQTT LWT topic,
+// the Home Assistant bridge state topic, and every sensor's availability topic:
+// those three must be identical or HA availability breaks, so all construct the
+// topic here rather than concatenating "/status" independently.
+func StatusTopic(baseTopic string) string {
+	return trimBaseTopic(baseTopic) + "/" + statusTopicSegment
 }

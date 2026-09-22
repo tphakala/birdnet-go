@@ -75,6 +75,54 @@ func getSourceID(source datastore.AudioSource) string {
 	return SanitizeID(source.ID)
 }
 
+// SourceEntityKeys maps each source's raw ID to the entity key used for its HA
+// device identifier, sensor unique_ids, and discovery config topics.
+//
+// The entity key is normally getSourceID(source): the sanitized DisplayName, or
+// the sanitized raw ID when no DisplayName is set. Two sources whose names
+// sanitize to the same base key would otherwise share device identifiers,
+// unique_ids, and config topics and silently overwrite each other's discovery
+// (last writer wins). To keep colliding sources distinct while preserving the
+// existing unique_ids and HA history in the common case, within a group of
+// sources that share a base key the source with the lexicographically smallest
+// raw ID keeps the plain base key and every other source is suffixed with
+// "_" + SanitizeID(source.ID). Single-source and non-colliding installs
+// therefore keep exactly the keys they had before this disambiguation existed.
+//
+// The result is deterministic regardless of the input slice order.
+func SourceEntityKeys(sources []datastore.AudioSource) map[string]string {
+	// Group sources by their base entity key.
+	groups := make(map[string][]datastore.AudioSource, len(sources))
+	for _, source := range sources {
+		base := getSourceID(source)
+		groups[base] = append(groups[base], source)
+	}
+
+	keys := make(map[string]string, len(sources))
+	for base, group := range groups {
+		if len(group) == 1 {
+			keys[group[0].ID] = base
+			continue
+		}
+		// The lexicographically smallest raw ID keeps the plain base key, so the
+		// winner is independent of input order.
+		winner := group[0].ID
+		for _, s := range group[1:] {
+			if s.ID < winner {
+				winner = s.ID
+			}
+		}
+		for _, s := range group {
+			if s.ID == winner {
+				keys[s.ID] = base
+			} else {
+				keys[s.ID] = base + "_" + SanitizeID(s.ID)
+			}
+		}
+	}
+	return keys
+}
+
 // shortenDisplayName ensures display names stay within maxDisplayNameLength.
 // This prevents excessively long entity names in Home Assistant when
 // source IDs (like RTSP URLs) are used as fallback display names.
@@ -186,10 +234,14 @@ func (p *Publisher) PublishDiscovery(ctx context.Context, sources []datastore.Au
 		return err
 	}
 
+	// Compute entity keys once so colliding source names get distinct, stable
+	// device/unique_id/config-topic keys (see SourceEntityKeys).
+	entityKeys := SourceEntityKeys(sources)
+
 	// Publish discovery for each audio source, tracking first error
 	var firstErr error
 	for _, source := range sources {
-		if err := p.publishSourceDiscovery(ctx, source, settings); err != nil {
+		if err := p.publishSourceDiscovery(ctx, source, entityKeys[source.ID], settings); err != nil {
 			log.Error("Failed to publish source discovery",
 				logger.String("source_id", source.ID),
 				logger.Error(err))
@@ -216,7 +268,7 @@ func (p *Publisher) publishBridgeDiscovery(ctx context.Context) error {
 	payload := DiscoveryPayload{
 		Name:           "Status",
 		UniqueID:       bridgeID + "_status",
-		StateTopic:     p.config.BaseTopic + "/status",
+		StateTopic:     StatusTopic(p.config.BaseTopic),
 		DeviceClass:    "connectivity",
 		EntityCategory: "diagnostic",
 		PayloadOn:      StatusPayloadOnline,
@@ -236,10 +288,14 @@ func (p *Publisher) publishBridgeDiscovery(ctx context.Context) error {
 }
 
 // publishSourceDiscovery publishes discovery for a specific audio source.
-func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore.AudioSource, settings *conf.Settings) error {
+//
+// entityKey is the source's entity key from SourceEntityKeys; it keys the device
+// identifier, the sensor unique_ids, and the discovery config topics. State
+// topics stay keyed by the raw source.ID (which is always unique), so only the
+// entity-facing identifiers use entityKey.
+func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore.AudioSource, entityKey string, settings *conf.Settings) error {
 	nodeID := SanitizeID(p.config.NodeID)
-	sourceID := getSourceID(source)
-	deviceID := fmt.Sprintf("%s_%s_%s", deviceIDPrefix, nodeID, sourceID)
+	deviceID := fmt.Sprintf("%s_%s_%s", deviceIDPrefix, nodeID, entityKey)
 	bridgeID := p.bridgeID(nodeID)
 
 	// Determine display name for the device
@@ -261,7 +317,7 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 		ViaDevice:    bridgeID,
 	}
 
-	availabilityTopic := p.config.BaseTopic + "/status"
+	availabilityTopic := StatusTopic(p.config.BaseTopic)
 
 	// Each source's sensors read that source's own state topic, so the
 	// templates need no sourceId filter. Filtering on the shared topic cannot
@@ -271,7 +327,7 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 	detectionTopic := SourceDetectionTopic(p.config.BaseTopic, source.ID)
 
 	// Publish Last Species sensor
-	if err := p.publishSensor(ctx, nodeID, sourceID, SensorSpecies, &DiscoveryPayload{
+	if err := p.publishSensor(ctx, nodeID, entityKey, SensorSpecies, &DiscoveryPayload{
 		Name:              "Last Species",
 		UniqueID:          deviceID + "_species",
 		StateTopic:        detectionTopic,
@@ -284,7 +340,7 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 	}
 
 	// Publish Confidence sensor
-	if err := p.publishSensor(ctx, nodeID, sourceID, SensorConfidence, &DiscoveryPayload{
+	if err := p.publishSensor(ctx, nodeID, entityKey, SensorConfidence, &DiscoveryPayload{
 		Name:              "Confidence",
 		UniqueID:          deviceID + "_confidence",
 		StateTopic:        detectionTopic,
@@ -299,7 +355,7 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 	}
 
 	// Publish Scientific Name sensor
-	if err := p.publishSensor(ctx, nodeID, sourceID, SensorScientificName, &DiscoveryPayload{
+	if err := p.publishSensor(ctx, nodeID, entityKey, SensorScientificName, &DiscoveryPayload{
 		Name:              "Scientific Name",
 		UniqueID:          deviceID + "_scientific_name",
 		StateTopic:        detectionTopic,
@@ -314,7 +370,7 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 	// Publish Sound Level sensor if sound level monitoring is enabled
 	// Band key format: formatBandKey() in internal/audiocore/soundlevel/processor.go produces "1.0_kHz" for 1000 Hz
 	if settings.Realtime.Audio.SoundLevel.Enabled {
-		if err := p.publishSensor(ctx, nodeID, sourceID, SensorSoundLevel, &DiscoveryPayload{
+		if err := p.publishSensor(ctx, nodeID, entityKey, SensorSoundLevel, &DiscoveryPayload{
 			Name:              "Sound Level",
 			UniqueID:          deviceID + "_sound_level",
 			StateTopic:        SourceSoundLevelTopic(p.config.BaseTopic, source.ID),
@@ -326,6 +382,15 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 			AvailabilityTopic: availabilityTopic,
 			Device:            device,
 		}); err != nil {
+			return err
+		}
+	} else {
+		// Sound level monitoring is off: remove any stale Sound Level sensor by
+		// publishing an empty retained payload to its config topic. This makes
+		// toggling sound level off take effect immediately in HA. Idempotent when
+		// no sensor was ever published (empty retained config is a no-op removal).
+		soundLevelConfigTopic := p.getSensorTopic(nodeID, entityKey, SensorSoundLevel)
+		if err := p.client.PublishWithRetain(ctx, soundLevelConfigTopic, "", true); err != nil {
 			return err
 		}
 	}
@@ -397,17 +462,70 @@ func (p *Publisher) RemoveDiscovery(ctx context.Context, sources []datastore.Aud
 		log.Warn("Failed to remove bridge discovery", logger.Error(err))
 	}
 
-	// Remove each source's sensors
+	// Remove each source's sensors and retained per-source state. Entity keys are
+	// computed the same way PublishDiscovery computes them, so each source's
+	// configs are removed under the exact key they were published with.
+	entityKeys := SourceEntityKeys(sources)
 	for _, source := range sources {
-		sourceID := getSourceID(source)
+		if err := p.RemoveSourceDiscovery(ctx, source, entityKeys[source.ID]); err != nil {
+			log.Warn("Failed to remove source discovery",
+				logger.String("source_id", source.ID),
+				logger.Error(err))
+		}
+	}
 
-		for _, sensorType := range AllSensorTypes {
-			topic := p.getSensorTopic(nodeID, sourceID, sensorType)
-			if err := p.client.PublishWithRetain(ctx, topic, "", true); err != nil {
-				log.Warn("Failed to remove sensor discovery",
-					logger.String("topic", topic),
-					logger.Error(err))
-			}
+	return nil
+}
+
+// removeSourceConfigTopics empties every sensor discovery config topic for
+// entityKey, leaving the per-source state topics untouched.
+func (p *Publisher) removeSourceConfigTopics(ctx context.Context, entityKey string) {
+	log := GetLogger()
+	nodeID := SanitizeID(p.config.NodeID)
+	for _, sensorType := range AllSensorTypes {
+		topic := p.getSensorTopic(nodeID, entityKey, sensorType)
+		if err := p.client.PublishWithRetain(ctx, topic, "", true); err != nil {
+			log.Warn("Failed to remove sensor discovery",
+				logger.String("topic", topic),
+				logger.Error(err))
+		}
+	}
+}
+
+// RemoveSourceConfigs empties only a source's discovery config topics (keyed by
+// entityKey) and leaves the per-source state topics intact. It is used when a
+// live source's entity key changes: the configs under the old key are orphaned,
+// but the state topics (keyed by the unchanged raw source ID) are still being
+// published to, so wiping them would drop a live source's retained state.
+func (p *Publisher) RemoveSourceConfigs(ctx context.Context, entityKey string) error {
+	p.removeSourceConfigTopics(ctx, entityKey)
+	return nil
+}
+
+// RemoveSourceDiscovery removes one source's discovery entries and its retained
+// per-source state. It first empties every sensor config topic (keyed by
+// entityKey), then empties the retained per-source state topics (keyed by the
+// raw source.ID), so a retain=true install does not keep orphaned detection or
+// sound level payloads for a removed source. Config topics are cleared before
+// state topics so a subscriber never sees state for an entity whose config has
+// already gone away.
+//
+// entityKey must be the source's key from SourceEntityKeys.
+func (p *Publisher) RemoveSourceDiscovery(ctx context.Context, source datastore.AudioSource, entityKey string) error {
+	log := GetLogger()
+
+	// 1. Clear the sensor config topics.
+	p.removeSourceConfigTopics(ctx, entityKey)
+
+	// 2. Clear the retained per-source state topics.
+	for _, topic := range []string{
+		SourceDetectionTopic(p.config.BaseTopic, source.ID),
+		SourceSoundLevelTopic(p.config.BaseTopic, source.ID),
+	} {
+		if err := p.client.PublishWithRetain(ctx, topic, "", true); err != nil {
+			log.Warn("Failed to remove per-source state",
+				logger.String("topic", topic),
+				logger.Error(err))
 		}
 	}
 
