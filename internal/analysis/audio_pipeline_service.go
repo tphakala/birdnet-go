@@ -1417,12 +1417,12 @@ func (p *AudioPipelineService) haForgetter() haEntityForgetter {
 	return nil
 }
 
-// forgetRenamedSourceHAEntities queues removal of the HA entities a source has
-// under its current (old) display name, before the rename is applied. Entities
-// are keyed by name; the source republishes under the new name.
-func (p *AudioPipelineService) forgetRenamedSourceHAEntities(src *audiocore.AudioSource) {
+// forgetRenamedSourceHAEntities queues removal of the HA entities a source had
+// under oldName after it was renamed. Entities are keyed by name; the source
+// republishes under its new name.
+func (p *AudioPipelineService) forgetRenamedSourceHAEntities(sourceID, oldName string) {
 	if f := p.haForgetter(); f != nil {
-		f.ForgetHomeAssistantEntityName(datastore.AudioSource{ID: src.ID, DisplayName: src.DisplayName})
+		f.ForgetHomeAssistantEntityName(datastore.AudioSource{ID: sourceID, DisplayName: oldName})
 	}
 }
 
@@ -1560,8 +1560,12 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 
 			// Sync display name if the config name changed (e.g., stream renamed in UI).
 			if src.DisplayName != scm.config.DisplayName {
-				p.forgetRenamedSourceHAEntities(src)
+				// Update the registry before queueing the old name's removal, so
+				// a discovery publish that runs in between already sees the new
+				// name and does not treat the old one as live.
+				oldName := src.DisplayName
 				registry.UpdateDisplayName(src.ID, scm.config.DisplayName)
+				p.forgetRenamedSourceHAEntities(src.ID, oldName)
 			}
 		} else {
 			// New source - add it.

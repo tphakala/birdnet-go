@@ -3,7 +3,7 @@
 // These tests verify that MqttAction correctly:
 // - Reads detection ID from DetectionContext
 // - Generates correct JSON payload with all fields
-// - Includes sourceId for Home Assistant filtering
+// - Includes sourceId (the audio source ID) in the payload
 package processor
 
 import (
@@ -328,8 +328,8 @@ func TestMqttAction_Execute_PayloadContainsAllFields(t *testing.T) {
 	assert.Regexp(t, `^\d{2}:\d{2}:\d{2}$`, jsonMap["Time"], "Time should be HH:MM:SS")
 }
 
-// TestMqttAction_Execute_SourceID verifies that the sourceId field is included
-// for Home Assistant device filtering.
+// TestMqttAction_Execute_SourceID verifies that the sourceId field carries the
+// audio source ID.
 func TestMqttAction_Execute_SourceID(t *testing.T) {
 	t.Parallel()
 
