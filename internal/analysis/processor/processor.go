@@ -132,6 +132,11 @@ type Processor struct {
 	haPendingMu       sync.Mutex
 	haPendingRemovals []haPendingRemoval
 
+	// haLegacyStatusCleared is the pre-fix status topic ("<base>//status" for a
+	// base topic with a trailing slash) this process has already cleared, so it
+	// is cleared once per distinct base. Guarded by haDiscoveryMu.
+	haLegacyStatusCleared string
+
 	// BufferMgr provides access to capture buffers for audio clip extraction.
 	// Set once during pipeline initialization (audio_pipeline_service.go) and never replaced;
 	// no synchronization needed for concurrent reads.

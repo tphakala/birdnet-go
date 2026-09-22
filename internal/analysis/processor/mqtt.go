@@ -381,9 +381,32 @@ func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mq
 		return err
 	}
 	p.haPublishedConfig = &discoveryConfig
+	p.clearLegacyStatusTopic(ctx, client, settings.Realtime.MQTT.Topic)
 	removePromotedSuffixConfigs(ctx, publisher, sources)
 	p.processHAPendingRemovals(ctx, client, removalConfig, pending, sources)
 	return nil
+}
+
+// clearLegacyStatusTopic empties the retained status message an older version
+// left on "<base>/status" built from the raw base topic. For a base topic with a
+// trailing slash that was "<base>//status", while the status (LWT) topic is now
+// built from the trimmed base, so the old retained "online"/"offline" would stay
+// on the broker forever. Nothing is published when the two topics coincide. A
+// failed clear is retried on the next discovery publish. Must be called with
+// haDiscoveryMu held.
+func (p *Processor) clearLegacyStatusTopic(ctx context.Context, client mqtt.Client, baseTopic string) {
+	legacy := baseTopic + "/status"
+	if legacy == mqtt.StatusTopic(baseTopic) || legacy == p.haLegacyStatusCleared {
+		return
+	}
+	if err := client.PublishWithRetain(ctx, legacy, "", true); err != nil {
+		GetLogger().Debug("failed to clear legacy status topic",
+			logger.String("topic", legacy),
+			logger.Error(err),
+			logger.String("operation", "ha_discovery_legacy_status"))
+		return
+	}
+	p.haLegacyStatusCleared = legacy
 }
 
 // haPendingRemoval is one queued HA entity removal. configOnly marks a rename:

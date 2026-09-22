@@ -690,3 +690,57 @@ func TestForgetHomeAssistantSource_Queue(t *testing.T) {
 		assertRemoved(t, lastPayloads(client.GetPublishedMessages()), speciesConfigTopic("Garden"))
 	})
 }
+
+// TestClearLegacyStatusTopic verifies the retained status message an older
+// version left under "<base>//status" (base topic with a trailing slash) is
+// cleared once, retried after a failure, and never published for a base topic
+// without a trailing slash.
+func TestClearLegacyStatusTopic(t *testing.T) {
+	publishWithBase := func(t *testing.T, client *MockMQTTClient, p *Processor, base string) {
+		t.Helper()
+		s := newLifecycleSettings(true)
+		s.Realtime.MQTT.Topic = base
+		useLiveSettings(t, s)
+		require.NoError(t, p.publishHomeAssistantDiscovery(t.Context(), client, s))
+	}
+	count := func(client *MockMQTTClient, topic string) int {
+		n := 0
+		for _, m := range client.GetPublishedMessages() {
+			if m.topic == topic {
+				n++
+			}
+		}
+		return n
+	}
+
+	t.Run("trailing slash: cleared once, retained", func(t *testing.T) {
+		p := newLifecycleProcessor(t, "Backyard")
+		client := NewMockMQTTClient()
+		publishWithBase(t, client, p, "birdnet/")
+		publishWithBase(t, client, p, "birdnet/")
+
+		assert.Equal(t, 1, count(client, "birdnet//status"), "the legacy topic is cleared exactly once")
+		assertRemoved(t, lastPayloads(client.GetPublishedMessages()), "birdnet//status")
+	})
+
+	t.Run("no trailing slash: nothing published", func(t *testing.T) {
+		p := newLifecycleProcessor(t, "Backyard")
+		client := NewMockMQTTClient()
+		publishWithBase(t, client, p, "birdnet")
+
+		for _, m := range client.GetPublishedMessages() {
+			assert.NotEqual(t, "birdnet/status", m.topic, "the live status topic must not be cleared")
+		}
+	})
+
+	t.Run("failed clear is retried", func(t *testing.T) {
+		p := newLifecycleProcessor(t, "Backyard")
+		client := NewMockMQTTClient()
+		client.SetTopicError("birdnet//status", assert.AnError)
+		publishWithBase(t, client, p, "birdnet/")
+		client.SetTopicError("birdnet//status", nil)
+		publishWithBase(t, client, p, "birdnet/")
+
+		assertRemoved(t, lastPayloads(client.GetPublishedMessages()), "birdnet//status")
+	})
+}
