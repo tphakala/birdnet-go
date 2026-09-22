@@ -1,3 +1,15 @@
+<script module lang="ts">
+  // Range-filter scores require a full geo evaluation, so cache them for the
+  // browser session. Module-scoped so the cache survives navigating away from
+  // and back to the Species page within the same SPA session.
+  let cachedRangeScores: Map<string, number> | null = null;
+  // The settings the cached scores were computed for (lat|lon|threshold). When
+  // the user changes location/range-filter settings elsewhere in the SPA and
+  // returns, this no longer matches and the cache is recomputed instead of
+  // serving stale scores.
+  let cachedRangeScoresKey: string | null = null;
+</script>
+
 <script lang="ts">
   import { t, getLocale, type TranslationKey } from '$lib/i18n';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
@@ -7,9 +19,17 @@
   import { getStoredValue, setStoredValue } from '$lib/utils/storage';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { isAuthenticated } from '$lib/utils/auth';
+  import { settingsActions, birdnetSettings } from '$lib/stores/settings';
+  import { api } from '$lib/utils/api';
+  import { get } from 'svelte/store';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import { onMount, onDestroy } from 'svelte';
+  import { SvelteSet, SvelteMap } from 'svelte/reactivity';
+  import { Trash2, SlidersHorizontal } from '@lucide/svelte';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesDetailModal from '../components/modals/SpeciesDetailModal.svelte';
   import SpeciesCard from '../components/ui/SpeciesCard.svelte';
@@ -52,7 +72,32 @@
     thumbnail_url?: string;
   }
 
-  type ViewMode = 'grid' | 'list';
+  type ViewMode = 'grid' | 'list' | 'manage';
+
+  // Per-species review counts used by the Manage view.
+  interface ReviewStat {
+    scientificName: string;
+    // commonName lets the Manage view render a row for species that have NO
+    // surviving detections in the period summary (every detection was rejected),
+    // since those species are absent from speciesData and have no name otherwise.
+    commonName?: string;
+    total: number;
+    verified: number;
+    rejected: number;
+  }
+
+  // Manage-only sort keys. Kept separate from SortOrder (and never persisted to
+  // localStorage) so a Manage-only column never leaks into grid/list sorting.
+  type ManageSortKey =
+    | 'name'
+    | 'count'
+    | 'max_confidence'
+    | 'last_seen'
+    | 'excluded'
+    | 'included'
+    | 'correct'
+    | 'range'
+    | 'confirmed';
 
   // A species row paired with the visitor-localized common name, used inside
   // filteredSpecies for search + name-sort so they match what the user sees.
@@ -106,6 +151,13 @@
       desc: 'last_seen_desc',
     },
   ];
+
+  // Defense-in-depth cap on the species-delete round-trip loop (confirmDelete):
+  // the backend's exclude_ids handshake guarantees termination in at most
+  // (detection count / server maxBatchSize of 500) passes, so this is only a
+  // last-resort backstop against an unforeseen non-terminating case, set far
+  // above any plausible detection count (1000 passes * 500 = 500,000).
+  const MAX_DELETE_PASSES = 1000;
 
   // Default sort and persistence (survives a page refresh).
   const DEFAULT_SORT_ORDER: SortOrder = 'count_desc';
@@ -256,6 +308,16 @@
           break;
       }
 
+      // The Manage view is a curation tool over the FULL dataset (its review
+      // stats, membership lists and delete actions are all all-time), so it
+      // deliberately ignores the active date filter. Loading all-time summary
+      // data here keeps speciesData consistent with the all-time review stats
+      // and prevents the date filter from hiding/desyncing manageable species.
+      if (viewMode === 'manage') {
+        startDate = null;
+        endDate = null;
+      }
+
       // Build query parameters
       const params = new URLSearchParams();
       if (startDate) params.set('start_date', startDate);
@@ -307,6 +369,23 @@
     };
   }
 
+  // Shared search predicate over a species' display, common, and scientific names.
+  // displayName (the visitor-localized name) is passed in so callers that already
+  // localized the row don't repeat the dictionary lookup. Used by both the grid/list
+  // (filteredSpecies) and Manage (manageRows) filters so the matching rules stay in
+  // one place.
+  function speciesMatchesSearch(
+    species: SpeciesData,
+    displayName: string,
+    searchLower: string
+  ): boolean {
+    return (
+      displayName.toLowerCase().includes(searchLower) ||
+      species.common_name.toLowerCase().includes(searchLower) ||
+      species.scientific_name.toLowerCase().includes(searchLower)
+    );
+  }
+
   // Filtered + sorted rows for display. Search and name-sort operate on the
   // visitor-localized common name (displayName) so they match what the user
   // sees, while scientific name and the server common name stay searchable too.
@@ -328,11 +407,8 @@
 
     const searchLower = debouncedSearchTerm.trim().toLowerCase();
     const filtered = searchLower
-      ? rows.filter(
-          ({ species, displayName }) =>
-            displayName.toLowerCase().includes(searchLower) ||
-            species.common_name.toLowerCase().includes(searchLower) ||
-            species.scientific_name.toLowerCase().includes(searchLower)
+      ? rows.filter(({ species, displayName }) =>
+          speciesMatchesSearch(species, displayName, searchLower)
         )
       : rows;
 
@@ -384,7 +460,9 @@
   });
 
   function getFilteredCount(): number {
-    return filteredSpecies.length;
+    // Manage view acts on manageRows (summary plus synthesized fully-rejected
+    // species), so the count badge should reflect that superset, not the summary.
+    return viewMode === 'manage' ? manageRows.length : filteredSpecies.length;
   }
 
   function getTotalSpeciesCount(): number {
@@ -487,6 +565,444 @@
     showDetailModal = false;
     selectedSpecies = null;
   }
+
+  // ---- Manage view (authenticated, desktop-only species curation) ----
+
+  // Membership sets keyed by the species' server common name, matching the
+  // existing exclude endpoint contract. Reactive collections re-render toggles.
+  let excludedSet = new SvelteSet<string>();
+  let includedSet = new SvelteSet<string>();
+  let confirmedSet = new SvelteSet<string>();
+
+  // Per-list in-flight species (keyed by common name) to block double-click races.
+  let togglingExcluded = new SvelteSet<string>();
+  let togglingIncluded = new SvelteSet<string>();
+  let togglingConfirmed = new SvelteSet<string>();
+
+  // Per-species review stats and range scores (keyed by scientific name).
+  let reviewStats = new SvelteMap<string, ReviewStat>();
+  let rangeScores = new SvelteMap<string, number>();
+  let rangeLoading = $state(false);
+  let manageDataLoaded = $state(false);
+
+  // Manage-only sort state, never persisted to localStorage.
+  let manageSortKey = $state<ManageSortKey>('count');
+  let manageSortDirection = $state<'asc' | 'desc'>('desc');
+
+  // Delete confirmation modal state.
+  let deleteTarget = $state<SpeciesData | null>(null);
+  let showDeleteModal = $state(false);
+  let deleteInFlight = $state(false);
+  let deleteError = $state<string | null>(null);
+  // Set while a species delete spans more than one chunked request (see
+  // DeleteSpeciesDetections' maxBatchSize cap), so the modal can show progress
+  // instead of looking hung on a species with a large detection count.
+  let deleteProgress = $state<{ deleted: number; remaining: number } | null>(null);
+
+  // Inline error surfaced when an exclude/include/confirm toggle fails. The
+  // checkbox reverts to its prior state on failure, so without this the failure
+  // would be silent.
+  let membershipError = $state<string | null>(null);
+
+  // Default sort direction per Manage-only column (only the name column starts ascending).
+  const MANAGE_SORT_COLUMNS: { field: ManageSortKey; defaultAsc: boolean }[] = [
+    { field: 'name', defaultAsc: true },
+    { field: 'count', defaultAsc: false },
+    { field: 'max_confidence', defaultAsc: false },
+    { field: 'last_seen', defaultAsc: false },
+    { field: 'excluded', defaultAsc: false },
+    { field: 'included', defaultAsc: false },
+    { field: 'correct', defaultAsc: false },
+    { field: 'range', defaultAsc: false },
+    { field: 'confirmed', defaultAsc: false },
+  ];
+
+  function showManageView() {
+    const wasManage = viewMode === 'manage';
+    viewMode = 'manage';
+    // Entering Manage switches the summary to all-time (see fetchData), so
+    // reload it unless we were already in Manage.
+    if (!wasManage) void fetchData();
+    void fetchManageData();
+  }
+
+  // Grid/List share the date-scoped summary, so returning from the all-time
+  // Manage view must re-fetch under the active date filter.
+  function showScopedView(mode: 'grid' | 'list') {
+    const wasManage = viewMode === 'manage';
+    viewMode = mode;
+    if (wasManage) {
+      void fetchData();
+      // Force the next Manage visit to refetch membership/review data instead of
+      // reusing this session's cache, so edits made elsewhere (Settings species
+      // editor, another tab/session) while the user was away are picked up.
+      manageDataLoaded = false;
+    }
+  }
+
+  async function fetchManageData() {
+    if (manageDataLoaded) {
+      void loadRangeScores();
+      return;
+    }
+    try {
+      const [stats, included, confirmed, excluded] = await Promise.all([
+        api.get<ReviewStat[]>('/api/v2/analytics/species/review-stats'),
+        api.get<{ species: string[] }>('/api/v2/detections/included'),
+        api.get<{ species: string[] }>('/api/v2/detections/confirmed'),
+        api.get<{ species: string[] }>('/api/v2/detections/ignored'),
+      ]);
+      // Only replace the local state once every request has succeeded, so a
+      // partial failure below (which throws before any .set/.add) can't land a
+      // half-updated table. Clearing here (rather than before the fetch) also
+      // means a failed refresh leaves the previous data displayed instead of
+      // flashing empty.
+      reviewStats.clear();
+      for (const s of stats) reviewStats.set(s.scientificName, s);
+      includedSet.clear();
+      for (const n of included.species ?? []) includedSet.add(n);
+      confirmedSet.clear();
+      for (const n of confirmed.species ?? []) confirmedSet.add(n);
+      excludedSet.clear();
+      for (const n of excluded.species ?? []) excludedSet.add(n);
+      manageDataLoaded = true;
+    } catch (error) {
+      logger.error('Error fetching manage data:', error);
+      // manageDataLoaded stays false, so the next call (e.g. re-entering Manage,
+      // or the delete-with-locked-rows refresh) retries instead of silently
+      // keeping stale data forever. The sets above were only mutated after a
+      // successful Promise.all, so a failure here leaves the last known-good
+      // data on screen; surface an explicit error so that data isn't mistaken
+      // for current.
+      membershipError = t('analytics.species.manage.loadFailed');
+    }
+    // Render the table immediately; range scores stream in asynchronously.
+    void loadRangeScores();
+  }
+
+  // Identifies the inputs loadRangeFilterSpecies depends on, so the session cache
+  // can be invalidated when the user changes location or the range-filter
+  // threshold elsewhere in the SPA and returns to Manage.
+  function rangeScoreCacheKey(): string {
+    const b = get(birdnetSettings);
+    return `${b.latitude}|${b.longitude}|${b.rangeFilter?.threshold}`;
+  }
+
+  async function loadRangeScores() {
+    const key = rangeScoreCacheKey();
+    if (cachedRangeScores && cachedRangeScoresKey === key) {
+      if (rangeScores.size === 0) {
+        for (const [name, score] of cachedRangeScores) rangeScores.set(name, score);
+      }
+      return;
+    }
+    rangeLoading = true;
+    try {
+      const result = await settingsActions.loadRangeFilterSpecies();
+      const map = new Map<string, number>();
+      for (const s of result.species) {
+        if (s.scientificName && typeof s.score === 'number') {
+          map.set(s.scientificName, s.score);
+        }
+      }
+      cachedRangeScores = map;
+      cachedRangeScoresKey = key;
+      // Drop any scores cached under the previous settings before repopulating.
+      rangeScores.clear();
+      for (const [name, score] of map) rangeScores.set(name, score);
+    } catch (error) {
+      logger.error('Error loading range scores:', error);
+    } finally {
+      rangeLoading = false;
+    }
+  }
+
+  function handleManageSort(field: string) {
+    const column = MANAGE_SORT_COLUMNS.find(c => c.field === field);
+    if (!column) return;
+    if (manageSortKey === column.field) {
+      manageSortDirection = manageSortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      manageSortKey = column.field;
+      manageSortDirection = column.defaultAsc ? 'asc' : 'desc';
+    }
+  }
+
+  // Share of reviewed detections marked correct (verified), as a 0-100 percentage.
+  // Returns -1 when the species has no reviews so those rows sort to the bottom and
+  // render an em dash, matching the range column's missing-data convention.
+  function correctRate(species: SpeciesData): number {
+    const stat = reviewStats.get(species.scientific_name);
+    if (!stat) return -1;
+    const reviewed = stat.verified + stat.rejected;
+    if (reviewed === 0) return -1;
+    return (stat.verified / reviewed) * 100;
+  }
+
+  // True when the species is in the given membership list (excluded / included /
+  // confirmed). Used by both the row checkboxes and the membership column sorts.
+  function isMember(set: SvelteSet<string>, species: SpeciesData): boolean {
+    return listEntryFor(set, species) !== undefined;
+  }
+
+  // The Manage view acts on a SUPERSET of the period summary: a species whose
+  // detections were all rejected is absent from speciesData (the summary excludes
+  // false positives) yet still owns rows the user may want to delete. We synthesize
+  // a row for each such review-stats-only species so it surfaces in Manage. These
+  // carry the all-time detection count and no confidence/date data, since none
+  // survives in the summary; the row exists primarily so the species is reviewable
+  // and deletable.
+  let manageSpecies = $derived.by<SpeciesData[]>(() => {
+    if (viewMode !== 'manage') return speciesData;
+    const present = new Set(speciesData.map(s => s.scientific_name));
+    const extras: SpeciesData[] = [];
+    for (const [sciName, stat] of reviewStats) {
+      if (present.has(sciName)) continue;
+      extras.push({
+        common_name: stat.commonName || sciName,
+        scientific_name: sciName,
+        count: stat.total,
+        avg_confidence: 0,
+        max_confidence: 0,
+        first_heard: '',
+        last_heard: '',
+      });
+    }
+    return extras.length > 0 ? [...speciesData, ...extras] : speciesData;
+  });
+
+  // Search-filtered Manage rows, re-sorted by the Manage-only key. Reuses the shared
+  // speciesMatchesSearch predicate (same rules as filteredSpecies), but runs over
+  // manageSpecies so synthesized fully-rejected species are searchable too.
+  let manageRows = $derived.by<SpeciesData[]>(() => {
+    if (viewMode !== 'manage') return filteredSpecies;
+    const locale = getLocale();
+    const searchLower = debouncedSearchTerm.trim().toLowerCase();
+    const rows = manageSpecies.filter(species => {
+      if (!searchLower) return true;
+      const displayName = localizeSpeciesName(species.scientific_name, species.common_name);
+      return speciesMatchesSearch(species, displayName, searchLower);
+    });
+    const dir = manageSortDirection === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      switch (manageSortKey) {
+        case 'name':
+          return (
+            dir *
+            localizeSpeciesName(a.scientific_name, a.common_name).localeCompare(
+              localizeSpeciesName(b.scientific_name, b.common_name),
+              locale
+            )
+          );
+        case 'count':
+          return dir * (a.count - b.count);
+        case 'max_confidence':
+          return dir * (a.max_confidence - b.max_confidence);
+        case 'last_seen': {
+          const da = parseLocalDateString(a.last_heard);
+          const db = parseLocalDateString(b.last_heard);
+          if (!da && !db) return 0;
+          if (!da) return 1;
+          if (!db) return -1;
+          return dir * (da.getTime() - db.getTime());
+        }
+        case 'excluded':
+          return dir * (Number(isMember(excludedSet, a)) - Number(isMember(excludedSet, b)));
+        case 'included':
+          return dir * (Number(isMember(includedSet, a)) - Number(isMember(includedSet, b)));
+        case 'confirmed':
+          return dir * (Number(isMember(confirmedSet, a)) - Number(isMember(confirmedSet, b)));
+        case 'correct':
+          return dir * (correctRate(a) - correctRate(b));
+        case 'range':
+          return (
+            dir *
+            ((rangeScores.get(a.scientific_name) ?? -1) -
+              (rangeScores.get(b.scientific_name) ?? -1))
+          );
+        default: {
+          const _exhaustive: never = manageSortKey;
+          void _exhaustive;
+          return 0;
+        }
+      }
+    });
+    return rows;
+  });
+
+  function formatDateOnly(value: string): string {
+    if (!value) return '—';
+    const parsed = parseLocalDateString(value);
+    return parsed ? getLocalDateString(parsed) : '—';
+  }
+
+  // Correctness rate as a 0-100 integer percentage; em dash when unreviewed.
+  function correctRateText(species: SpeciesData): string {
+    const rate = correctRate(species);
+    return rate < 0 ? '—' : `${Math.round(rate)}%`;
+  }
+
+  // Returns the exact list entry matching this species by common OR scientific
+  // name (case-insensitive), or undefined when absent. The settings picker treats
+  // the two names as aliases, so a list may store either form.
+  function listEntryFor(set: SvelteSet<string>, species: SpeciesData): string | undefined {
+    const common = species.common_name.toLowerCase();
+    const scientific = species.scientific_name.toLowerCase();
+    for (const entry of set) {
+      const e = entry.toLowerCase();
+      if (e === common || e === scientific) return entry;
+    }
+    return undefined;
+  }
+
+  async function toggleMembership(
+    list: 'excluded' | 'included' | 'confirmed',
+    species: SpeciesData
+  ) {
+    const inflight =
+      list === 'excluded'
+        ? togglingExcluded
+        : list === 'included'
+          ? togglingIncluded
+          : togglingConfirmed;
+    // Track in-flight by scientific name (stable) so the guard holds regardless
+    // of which alias the list stores.
+    const inflightKey = species.scientific_name;
+    if (inflight.has(inflightKey)) return;
+    const set =
+      list === 'excluded' ? excludedSet : list === 'included' ? includedSet : confirmedSet;
+    const path =
+      list === 'excluded'
+        ? '/api/v2/detections/ignore'
+        : list === 'included'
+          ? '/api/v2/detections/include'
+          : '/api/v2/detections/confirm';
+
+    // Remove the alias actually stored in the list; add under the common name.
+    const existingEntry = listEntryFor(set, species);
+    const payloadName = existingEntry ?? species.common_name;
+    const wasPresent = existingEntry !== undefined;
+
+    // Optimistic update: toggle immediately so the UI responds without waiting for the API.
+    if (wasPresent) {
+      set.delete(payloadName);
+    } else {
+      set.add(payloadName);
+    }
+
+    inflight.add(inflightKey);
+    membershipError = null;
+    try {
+      await api.post<{ action: string }>(path, { common_name: payloadName });
+    } catch (error) {
+      logger.error(`Error toggling ${list} membership:`, error);
+      membershipError = t('analytics.species.manage.membershipFailed');
+      // Revert the optimistic update on failure.
+      if (wasPresent) {
+        set.add(payloadName);
+      } else {
+        set.delete(payloadName);
+      }
+    } finally {
+      inflight.delete(inflightKey);
+    }
+  }
+
+  function requestDelete(species: SpeciesData) {
+    deleteTarget = species;
+    deleteError = null;
+    showDeleteModal = true;
+  }
+
+  // All-time detection count for the confirmation modal (not the filtered count).
+  let deleteAllTimeCount = $derived(
+    deleteTarget ? (reviewStats.get(deleteTarget.scientific_name)?.total ?? deleteTarget.count) : 0
+  );
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    deleteInFlight = true;
+    deleteError = null;
+    deleteProgress = null;
+    let totalDeleted = 0;
+    let totalSkipped = 0;
+    // IDs the server has already reported as locked (permanently un-deletable),
+    // accumulated across rounds and resent as exclude_ids so chunk selection
+    // (always the front of the current ID list) advances past them instead of
+    // re-examining the same locked entries every round - otherwise a locked
+    // detection could block the loop from ever reaching later, genuinely
+    // deletable detections. See the SpeciesDeleteResult doc comment backend-side.
+    const excludeIds: string[] = [];
+    try {
+      // The server caps each call at maxBatchSize detections and reports how many
+      // are still pending, so a species with a very large detection count can't
+      // hold one request (and, on SQLite, its writer lock) open for minutes. Loop
+      // until the server reports nothing left. deletePasses is a defense-in-depth
+      // cap only - the exclude_ids handshake guarantees termination in at most
+      // (total detections / maxBatchSize) rounds, far below this limit.
+      let deletePasses = 0;
+      for (;;) {
+        deletePasses += 1;
+        if (deletePasses > MAX_DELETE_PASSES) {
+          throw new Error(`Species delete exceeded ${MAX_DELETE_PASSES} passes`);
+        }
+        const result = await api.post<{
+          deleted: number;
+          skipped: number;
+          remaining: number;
+          skipped_ids?: string[];
+        }>('/api/v2/detections/species/delete', {
+          scientific_name: target.scientific_name,
+          exclude_ids: excludeIds,
+        });
+        totalDeleted += result?.deleted ?? 0;
+        totalSkipped += result?.skipped ?? 0;
+        excludeIds.push(...(result?.skipped_ids ?? []));
+        const remaining = result?.remaining ?? 0;
+        if (remaining === 0) break;
+        deleteProgress = { deleted: totalDeleted, remaining };
+      }
+      showDeleteModal = false;
+      deleteTarget = null;
+      if (totalSkipped > 0) {
+        // The server kept some locked detections, so the species still owns rows.
+        // Dropping it optimistically would hide those survivors and contradict the
+        // delete dialog, which promises locked detections are kept. Refresh from
+        // the server instead so the summary and review stats reflect what remains.
+        manageDataLoaded = false;
+        await Promise.all([fetchData(), fetchManageData()]);
+        return;
+      }
+      // Nothing skipped: optimistically drop the species from the table without a
+      // full data refresh. Remove it from the summary and clear its review-stats
+      // entry so manageSpecies does not re-synthesize a stale row (old all-time
+      // count / re-deletable), and drop it from the range-score caches so they
+      // don't leak entries for deleted species (module-scoped cache + reactive map).
+      speciesData = speciesData.filter(s => s.scientific_name !== target.scientific_name);
+      reviewStats.delete(target.scientific_name);
+      cachedRangeScores?.delete(target.scientific_name);
+      rangeScores.delete(target.scientific_name);
+    } catch (error) {
+      logger.error('Error deleting species detections:', error);
+      deleteError = t('analytics.species.manage.deleteFailed');
+      if (totalDeleted > 0 || totalSkipped > 0) {
+        // Earlier chunks committed server-side before this one failed, so the
+        // cached manage data (and this row's count) is no longer accurate.
+        manageDataLoaded = false;
+        void Promise.all([fetchData(), fetchManageData()]);
+      }
+    } finally {
+      deleteInFlight = false;
+      deleteProgress = null;
+    }
+  }
+
+  function cancelDelete() {
+    showDeleteModal = false;
+    deleteTarget = null;
+    deleteError = null;
+  }
 </script>
 
 <div class="col-span-12 space-y-4" role="region" aria-label={t('analytics.species.title')}>
@@ -568,7 +1084,7 @@
           <button
             class="btn btn-sm join-item"
             class:btn-active={viewMode === 'grid'}
-            onclick={() => (viewMode = 'grid')}
+            onclick={() => showScopedView('grid')}
             aria-label={t('analytics.species.switchToGrid')}
           >
             <svg
@@ -585,7 +1101,7 @@
           <button
             class="btn btn-sm join-item"
             class:btn-active={viewMode === 'list'}
-            onclick={() => (viewMode = 'list')}
+            onclick={() => showScopedView('list')}
             aria-label={t('analytics.species.switchToList')}
           >
             <svg
@@ -601,8 +1117,27 @@
               />
             </svg>
           </button>
+          {#if $isAuthenticated}
+            <button
+              type="button"
+              class="btn btn-sm join-item hidden sm:inline-flex"
+              class:btn-active={viewMode === 'manage'}
+              onclick={showManageView}
+              aria-label={t('analytics.species.switchToManage')}
+            >
+              <SlidersHorizontal class="h-4 w-4" />
+            </button>
+          {/if}
         </div>
       </div>
+
+      <!-- Manage operates on the full dataset; tell the user the date filter
+           does not apply here so the inert period selector is not confusing. -->
+      {#if viewMode === 'manage'}
+        <p class="text-sm text-base-content/70 mb-4" role="note">
+          {t('analytics.species.manage.allTimeNote')}
+        </p>
+      {/if}
 
       <!-- Loading State -->
       {#if isLoading}
@@ -710,8 +1245,175 @@
         </div>
       {/if}
 
-      <!-- Empty State -->
-      {#if !isLoading && filteredSpecies.length === 0}
+      <!-- Manage View (authenticated, desktop-only) -->
+      {#if !isLoading && viewMode === 'manage' && manageRows.length > 0}
+        {#if membershipError}
+          <p class="text-sm text-[var(--color-error)] mb-2" role="alert">{membershipError}</p>
+        {/if}
+        <div class="overflow-x-auto hidden sm:block">
+          <table class="table w-full">
+            <thead>
+              <tr>
+                <SortableHeader
+                  label={t('analytics.species.headers.species')}
+                  field="name"
+                  activeField={manageSortKey}
+                  direction={manageSortDirection}
+                  onSort={handleManageSort}
+                />
+                <SortableHeader
+                  label={t('analytics.species.headers.detections')}
+                  field="count"
+                  activeField={manageSortKey}
+                  direction={manageSortDirection}
+                  onSort={handleManageSort}
+                />
+                <SortableHeader
+                  label={t('analytics.species.headers.maxConfidence')}
+                  field="max_confidence"
+                  activeField={manageSortKey}
+                  direction={manageSortDirection}
+                  onSort={handleManageSort}
+                />
+                <SortableHeader
+                  label={t('analytics.species.headers.lastDetected')}
+                  field="last_seen"
+                  activeField={manageSortKey}
+                  direction={manageSortDirection}
+                  onSort={handleManageSort}
+                />
+                <SortableHeader
+                  label={t('analytics.species.manage.headers.excluded')}
+                  field="excluded"
+                  activeField={manageSortKey}
+                  direction={manageSortDirection}
+                  onSort={handleManageSort}
+                />
+                <SortableHeader
+                  label={t('analytics.species.manage.headers.included')}
+                  field="included"
+                  activeField={manageSortKey}
+                  direction={manageSortDirection}
+                  onSort={handleManageSort}
+                />
+                <!-- Label key is historically named reviewRatio; the column now shows
+                     the correctness rate (verified / reviewed), sorted by `correct`. -->
+                <SortableHeader
+                  label={t('analytics.species.manage.headers.reviewRatio')}
+                  field="correct"
+                  activeField={manageSortKey}
+                  direction={manageSortDirection}
+                  onSort={handleManageSort}
+                />
+                <SortableHeader
+                  label={t('analytics.species.manage.headers.rangeProbability')}
+                  field="range"
+                  activeField={manageSortKey}
+                  direction={manageSortDirection}
+                  onSort={handleManageSort}
+                />
+                <SortableHeader
+                  label={t('analytics.species.manage.headers.confirmed')}
+                  field="confirmed"
+                  activeField={manageSortKey}
+                  direction={manageSortDirection}
+                  onSort={handleManageSort}
+                />
+                <th>{t('analytics.species.manage.headers.actions')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each manageRows as species, index (`${species.scientific_name}_${index}`)}
+                {@const displayName = localizeSpeciesName(
+                  species.scientific_name,
+                  species.common_name
+                )}
+                <tr
+                  class={index % 2 === 0
+                    ? 'bg-[var(--color-base-100)]'
+                    : 'bg-[var(--color-base-200)]'}
+                >
+                  <td>
+                    <div class="font-bold">{displayName}</div>
+                    <div class="text-sm opacity-50 italic">{species.scientific_name}</div>
+                  </td>
+                  <td class="font-semibold">{species.count}</td>
+                  <!-- Synthesized fully-rejected rows carry no confidence data
+                       (max_confidence === 0); a real summary row is always > 0, so
+                       render an em dash instead of a misleading 0.0%. -->
+                  <td
+                    >{species.max_confidence > 0
+                      ? formatPercentage(species.max_confidence)
+                      : '—'}</td
+                  >
+                  <td class="text-sm">{formatDateOnly(species.last_heard)}</td>
+                  <td
+                    title={togglingExcluded.has(species.scientific_name)
+                      ? t('common.ui.loading')
+                      : undefined}
+                  >
+                    <Checkbox
+                      checked={isMember(excludedSet, species)}
+                      disabled={togglingExcluded.has(species.scientific_name)}
+                      onchange={() => toggleMembership('excluded', species)}
+                    />
+                  </td>
+                  <td
+                    title={togglingIncluded.has(species.scientific_name)
+                      ? t('common.ui.loading')
+                      : undefined}
+                  >
+                    <Checkbox
+                      checked={isMember(includedSet, species)}
+                      disabled={togglingIncluded.has(species.scientific_name)}
+                      onchange={() => toggleMembership('included', species)}
+                    />
+                  </td>
+                  <td class="text-sm">{correctRateText(species)}</td>
+                  <td class="text-sm">
+                    {#if rangeLoading && !rangeScores.has(species.scientific_name)}
+                      <span
+                        class="loading loading-spinner loading-xs"
+                        aria-label={t('common.ui.loading')}
+                      ></span>
+                    {:else if rangeScores.has(species.scientific_name)}
+                      {formatPercentage(rangeScores.get(species.scientific_name) ?? 0)}
+                    {:else}
+                      —
+                    {/if}
+                  </td>
+                  <td
+                    title={togglingConfirmed.has(species.scientific_name)
+                      ? t('common.ui.loading')
+                      : undefined}
+                  >
+                    <Checkbox
+                      checked={isMember(confirmedSet, species)}
+                      disabled={togglingConfirmed.has(species.scientific_name)}
+                      onchange={() => toggleMembership('confirmed', species)}
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs text-[var(--color-error)]"
+                      onclick={() => requestDelete(species)}
+                      aria-label={t('analytics.species.manage.delete')}
+                    >
+                      <Trash2 class="h-4 w-4" />
+                    </button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+
+      <!-- Empty State. In Manage view the actionable set is manageRows (summary
+           plus synthesized fully-rejected species), so the summary being empty does
+           not mean Manage is empty. -->
+      {#if !isLoading && (viewMode === 'manage' ? manageRows.length === 0 : filteredSpecies.length === 0)}
         <div class="text-center py-8 text-[var(--color-base-content)] opacity-50">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -738,6 +1440,39 @@
   isOpen={showDetailModal}
   onClose={handleCloseDetailModal}
 />
+
+<!-- Delete species confirmation (Manage view) -->
+<Modal
+  isOpen={showDeleteModal}
+  type="confirm"
+  title={t('analytics.species.manage.deleteTitle')}
+  confirmLabel={t('analytics.species.manage.deleteConfirm')}
+  confirmVariant="error"
+  loading={deleteInFlight}
+  onClose={cancelDelete}
+  onConfirm={confirmDelete}
+>
+  {#if deleteTarget}
+    <p>
+      {t('analytics.species.manage.deleteMessage', {
+        species: localizeSpeciesName(deleteTarget.scientific_name, deleteTarget.common_name),
+        count: formatNumber(deleteAllTimeCount),
+      })}
+    </p>
+    <p class="text-sm opacity-70 mt-2">{t('analytics.species.manage.deleteWarning')}</p>
+    {#if deleteProgress}
+      <p class="text-sm opacity-70 mt-2" role="status" aria-live="polite">
+        {t('analytics.species.manage.deleteProgress', {
+          deleted: formatNumber(deleteProgress.deleted),
+          remaining: formatNumber(deleteProgress.remaining),
+        })}
+      </p>
+    {/if}
+    {#if deleteError}
+      <p class="text-sm text-[var(--color-error)] mt-2" role="alert">{deleteError}</p>
+    {/if}
+  {/if}
+</Modal>
 
 <!-- Mobile Audio Player -->
 

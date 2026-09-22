@@ -201,6 +201,96 @@ func TestSearch_ScientificLikeNotTruncated(t *testing.T) {
 	assert.Equal(t, int64(n), total, "scientific LIKE must not be capped at 100 labels")
 }
 
+// TestGetSpeciesReviewStats verifies per-species total/verified/rejected counts,
+// counting false positives in the totals (unlike GetSpeciesSummary).
+func TestGetSpeciesReviewStats(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	robin := createTestLabel(t, db, "Turdus migratorius", 1)
+	jay := createTestLabel(t, db, "Cyanocitta cristata", 1)
+
+	r1 := createDetectionForLabel(t, db, robin.ID, 1000)
+	_ = createDetectionForLabel(t, db, robin.ID, 1001)
+	j1 := createDetectionForLabel(t, db, jay.ID, 1002)
+
+	require.NoError(t, db.Table(repo.reviewsTable()).
+		Create(&entities.DetectionReview{DetectionID: r1.ID, Verified: entities.VerificationCorrect}).Error)
+	require.NoError(t, db.Table(repo.reviewsTable()).
+		Create(&entities.DetectionReview{DetectionID: j1.ID, Verified: entities.VerificationFalsePositive}).Error)
+
+	stats, err := repo.GetSpeciesReviewStats(ctx)
+	require.NoError(t, err)
+
+	byName := make(map[string]SpeciesReviewStat, len(stats))
+	for _, s := range stats {
+		byName[s.ScientificName] = s
+	}
+
+	assert.Equal(t, int64(2), byName["Turdus migratorius"].Total)
+	assert.Equal(t, int64(1), byName["Turdus migratorius"].Verified)
+	assert.Equal(t, int64(0), byName["Turdus migratorius"].Rejected)
+
+	assert.Equal(t, int64(1), byName["Cyanocitta cristata"].Total)
+	assert.Equal(t, int64(0), byName["Cyanocitta cristata"].Verified)
+	assert.Equal(t, int64(1), byName["Cyanocitta cristata"].Rejected) // false positive counted
+}
+
+// TestGetDetectionIDsByScientificName verifies detection-ID lookup by scientific
+// name, including the legacy "ScientificName_CommonName" label format.
+func TestGetDetectionIDsByScientificName(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	robin := createTestLabel(t, db, "Turdus migratorius", 1)
+	jay := createTestLabel(t, db, "Cyanocitta cristata", 1)
+	d1 := createDetectionForLabel(t, db, robin.ID, 1000)
+	d2 := createDetectionForLabel(t, db, robin.ID, 1001)
+	_ = createDetectionForLabel(t, db, jay.ID, 1002)
+
+	t.Run("exact scientific name", func(t *testing.T) {
+		ids, err := repo.GetDetectionIDsByScientificName(ctx, "Turdus migratorius")
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{d1.ID, d2.ID}, ids)
+	})
+
+	t.Run("input label in underscore form is normalized", func(t *testing.T) {
+		ids, err := repo.GetDetectionIDsByScientificName(ctx, "Turdus migratorius_American Robin")
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{d1.ID, d2.ID}, ids)
+	})
+
+	t.Run("matches label stored in underscore form", func(t *testing.T) {
+		owl := createTestLabel(t, db, "Tyto alba_Barn Owl", 1)
+		d := createDetectionForLabel(t, db, owl.ID, 2000)
+		ids, err := repo.GetDetectionIDsByScientificName(ctx, "Tyto alba")
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{d.ID}, ids)
+	})
+
+	t.Run("does not match a longer name sharing the prefix", func(t *testing.T) {
+		// The legacy "_" separator is a LIKE wildcard; "Motacilla alba" must not
+		// match the distinct species "Motacilla alba alba".
+		alba := createTestLabel(t, db, "Motacilla alba", 1)
+		albaAlba := createTestLabel(t, db, "Motacilla alba alba", 1)
+		dAlba := createDetectionForLabel(t, db, alba.ID, 3000)
+		_ = createDetectionForLabel(t, db, albaAlba.ID, 3001) // prefix-sharing species must not be returned
+
+		ids, err := repo.GetDetectionIDsByScientificName(ctx, "Motacilla alba")
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{dAlba.ID}, ids,
+			"must return only the exact species and never IDs for prefix-sharing species")
+	})
+
+	t.Run("no match", func(t *testing.T) {
+		ids, err := repo.GetDetectionIDsByScientificName(ctx, "Nonexistent species")
+		require.NoError(t, err)
+		assert.Empty(t, ids)
+	})
+}
+
 func TestDeleteBatch_SkipsLockedDetections(t *testing.T) {
 	db := setupDetectionTestDB(t)
 	ctx := t.Context()
