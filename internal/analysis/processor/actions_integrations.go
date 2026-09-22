@@ -415,9 +415,11 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 // traffic. Detections without a source ID have no matching sensors and are
 // skipped.
 //
-// The publish timeout derives from parent (the action's step context) and is
-// capped at MQTTPublishTimeout, so an already-expired step does not start a
-// second publish that could block in an abandoned goroutine.
+// The publish is bounded by whatever remains of the action's step budget
+// (CompositeActionTimeout, via the parent context) and by MQTTPublishTimeout,
+// whichever is shorter; it does not always get the full MQTTPublishTimeout. An
+// already-expired step is skipped entirely so it does not start a publish that
+// can only fail with the step's own deadline.
 //
 // Failure is logged and not returned: the detection already reached the shared
 // topic, and failing the action would make a retry publish it there twice.
@@ -426,8 +428,22 @@ func (a *MqttAction) publishSourceDetection(parent context.Context, sourceID, pa
 		return
 	}
 
-	// Bounded by the action's own deadline, and capped so a healthy step still
-	// gets the full publish timeout.
+	// If the action's step budget is already spent, do not start a publish that
+	// can only fail with the step's own deadline/cancel. That is not a broker or
+	// config fault, so it is logged at debug and never alerted.
+	if err := parent.Err(); err != nil {
+		GetLogger().Debug("Skipping per-source detection publish: step context already done",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("source_id", sourceID),
+			logger.Error(err),
+			logger.String("operation", "mqtt_publish_source_topic"))
+		return
+	}
+
+	// The publish is bounded by whatever remains of the action's step budget
+	// (CompositeActionTimeout) and by MQTTPublishTimeout, whichever is shorter; it
+	// does not always get the full MQTTPublishTimeout.
 	ctx, cancel := context.WithTimeout(parent, MQTTPublishTimeout)
 	defer cancel()
 
@@ -441,6 +457,12 @@ func (a *MqttAction) publishSourceDetection(parent context.Context, sourceID, pa
 			logger.String("species", a.Result.Species.CommonName),
 			logger.String("topic", topic),
 			logger.String("operation", "mqtt_publish_source_topic"))
+
+		// A context deadline/cancel means the step budget ran out mid-publish, not
+		// a broker or config fault, so it warns only and never alerts.
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return
+		}
 
 		// A non-transient failure is a real problem (config or topic error). The
 		// shared-path alert in Execute never fired for it, because the shared

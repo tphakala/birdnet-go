@@ -529,6 +529,14 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		// Safely set the new client
 		cm.proc.SetMQTTClient(newClient)
 
+		// Retire again through the freshly connected client. If HA discovery was
+		// turned off while the OLD client was already down, the first retire above
+		// could not publish the removals and kept the record; now that the new
+		// client is connected to the same broker, this second call cleans up. It is
+		// idempotent: once the record is cleared it is a no-op, and it does nothing
+		// while HA discovery stays enabled.
+		cm.proc.RetireHomeAssistantDiscovery(context.Background(), settings)
+
 		if connectErr != nil {
 			cm.notifySuccess("MQTT reconfigured, broker unreachable: retrying in background")
 		} else {

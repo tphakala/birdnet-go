@@ -27,6 +27,15 @@ func trimBaseTopic(baseTopic string) string {
 	return strings.TrimRight(baseTopic, "/")
 }
 
+// NormalizeBaseTopic strips trailing slashes from a base topic so two configured
+// values that differ only by a trailing slash ("birdnet" vs "birdnet/") compare
+// and join identically. Exported so callers reconciling HA discovery can tell a
+// real base-topic change from a cosmetic trailing-slash edit (the joined topics
+// are identical, so no removal is needed).
+func NormalizeBaseTopic(baseTopic string) string {
+	return trimBaseTopic(baseTopic)
+}
+
 // SourceTopicsEnabled reports whether the per-source state topics
 // (SourceDetectionTopic, SourceSoundLevelTopic) should be published.
 //

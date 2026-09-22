@@ -21,10 +21,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
-// soundLevelPublishingErrorsMetric is the fully-qualified Prometheus name of the
-// counter that RecordSoundLevelPublishingError increments.
-const soundLevelPublishingErrorsMetric = "myaudio_sound_level_publishing_errors_total"
-
 // TestPublishSoundLevelToSourceTopic_RecordsFailureMetric verifies that a
 // non-sentinel per-source publish failure records a source_topic_error metric,
 // while the ErrMQTTClientNotReady sentinel records no error metric (it is a
@@ -71,8 +67,12 @@ func TestPublishSoundLevelToSourceTopic_RecordsFailureMetric(t *testing.T) {
 
 			require.NoError(t, publishSoundLevelToMQTT(data, proc))
 
-			count := testutil.CollectAndCount(metricsObj.SoundLevel, soundLevelPublishingErrorsMetric)
-			assert.Equal(t, tt.wantErrors, count, "source_topic_error metric series count")
+			// Assert the exact value of the specific labelled series, not just how
+			// many series exist, so a double count or a wrong-label increment is
+			// caught.
+			got := testutil.ToFloat64(metricsObj.SoundLevel.SoundLevelPublishingErrorsVec().
+				WithLabelValues(data.Source, data.Name, "mqtt", "source_topic_error"))
+			assert.InDelta(t, float64(tt.wantErrors), got, 0, "source_topic_error metric value")
 		})
 	}
 }

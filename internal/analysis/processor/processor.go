@@ -115,11 +115,14 @@ type Processor struct {
 	discoveryDebounce       *time.Timer
 	discoveryDebounceMu     sync.Mutex
 	defaultDiscoveryCleanup sync.Once // ensures stale "default" discovery cleanup runs at most once
+	legacyStatusCleanup     sync.Once // ensures the pre-fix raw "<base>//status" topic is cleared at most once
 
-	// haDiscoveryRecord captures the last successfully published HA discovery so
-	// the next publish (or a reconfigure retirement) can remove entities and
-	// retained state for sources that went away or whose entity key changed.
-	// nil until the first successful publish. Guarded by haDiscoveryMu.
+	// haDiscoveryRecord captures everything published since the last full retire:
+	// the config it was published under and, per raw source ID, the source and the
+	// entity key it was published with. It lets the next publish (or a reconfigure
+	// retirement, or a config-driven source removal) remove entities and retained
+	// state under the exact topics they were published on. nil until the first
+	// successful publish. Read and written only under haDiscoveryMu.
 	haDiscoveryRecord *haDiscoveryRecord
 	haDiscoveryMu     sync.Mutex
 

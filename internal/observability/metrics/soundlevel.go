@@ -207,3 +207,10 @@ func (m *SoundLevelMetrics) RecordSoundLevelPublishing(source, name, destination
 func (m *SoundLevelMetrics) RecordSoundLevelPublishingError(source, name, destination, errorType string) {
 	m.soundLevelPublishingErrors.WithLabelValues(source, name, destination, errorType).Inc()
 }
+
+// SoundLevelPublishingErrorsVec exposes the publishing-errors counter vector so
+// tests can assert the exact value of a specific labelled series (e.g. via
+// testutil.ToFloat64), rather than only counting how many series exist.
+func (m *SoundLevelMetrics) SoundLevelPublishingErrorsVec() *prometheus.CounterVec {
+	return m.soundLevelPublishingErrors
+}

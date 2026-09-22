@@ -137,10 +137,9 @@ func TestMqttAction_Execute_SourceTopicSkipped(t *testing.T) {
 // TestMqttAction_Execute_SourceTopicSkippedWhenStepExpired verifies that when
 // the composite step context is already spent, the shared publish (which runs on
 // its own background timeout) still delivers, but the per-source republish is not
-// started: publishSourceDetection derives its timeout from the step context, so
-// an expired step yields an already-cancelled context and the publish returns
-// before delivering. The action still returns nil (a missed per-source publish
-// is non-fatal).
+// even attempted: publishSourceDetection checks the step context first and returns
+// without publishing when it is already done, so no doomed publish is started. The
+// action still returns nil (a missed per-source publish is non-fatal).
 func TestMqttAction_Execute_SourceTopicSkippedWhenStepExpired(t *testing.T) {
 	t.Parallel()
 
@@ -153,7 +152,7 @@ func TestMqttAction_Execute_SourceTopicSkippedWhenStepExpired(t *testing.T) {
 
 	require.NoError(t, action.Execute(ctx, nil))
 
-	assert.Equal(t, 2, client.GetPublishCalls(), "both publishes must be attempted")
+	assert.Equal(t, 1, client.GetPublishCalls(), "only the shared publish is attempted; the per-source one is skipped")
 	msgs := client.GetPublishedMessages()
 	require.Len(t, msgs, 1, "only the shared publish should be delivered")
 	assert.Equal(t, testMQTTTopic, msgs[0].topic, "shared publish uses its own background timeout")
@@ -179,6 +178,7 @@ func TestMqttAction_SourceTopicFailure_Alerting(t *testing.T) {
 	}{
 		{name: "non-transient failure raises alert", failErr: errors.New("broker rejected publish"), wantAlert: true},
 		{name: "transient failure does not alert", failErr: errors.New("connection lost"), wantAlert: false},
+		{name: "deadline exceeded does not alert", failErr: context.DeadlineExceeded, wantAlert: false},
 	}
 
 	for _, tt := range tests {
@@ -226,7 +226,8 @@ func TestMqttAction_SourceTopicFailure_Alerting(t *testing.T) {
 			if tt.wantAlert {
 				require.Len(t, mqttAlerts, 1, "non-transient failure must raise exactly one alert")
 				assert.Equal(t, testBroker, mqttAlerts[0].Properties[alerting.PropertyBroker])
-				assert.NotEmpty(t, mqttAlerts[0].Properties[alerting.PropertyError])
+				assert.Contains(t, mqttAlerts[0].Properties[alerting.PropertyError], "broker rejected publish",
+					"alert must carry the underlying publish error message")
 			} else {
 				assert.Empty(t, mqttAlerts, "transient failure must not raise an alert")
 			}
