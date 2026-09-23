@@ -84,6 +84,8 @@ interface AppConfigResponse {
       grid?: Record<string, unknown>;
     }[];
   };
+  /** Station coordinates, present only when an enabled banner shows the location map */
+  stationLocation?: StationLocation;
   sentry?: {
     enabled: boolean;
     dsn: string;
@@ -108,6 +110,16 @@ interface ProjectLinks {
   discussionsUrl: string;
   releasesUrl: string;
   communityUrl: string;
+}
+
+/**
+ * Station coordinates served by the public app config. The backend includes them
+ * only when an enabled dashboard banner shows the location map, so guests (who
+ * never load the authenticated settings) can render that map.
+ */
+interface StationLocation {
+  latitude: number;
+  longitude: number;
 }
 
 /**
@@ -140,6 +152,8 @@ interface AppState {
   speciesDictVersion: string;
   /** Dashboard layout from public config (available before auth) */
   layout: AppConfigResponse['layout'] | null;
+  /** Station coordinates for the banner map from public config (available before auth) */
+  stationLocation: StationLocation | null;
   /** Project identity/links for routing in-app links */
   projectLinks: ProjectLinks;
   /** Security configuration */
@@ -188,6 +202,7 @@ const DEFAULT_STATE: AppState = {
   audioExportEnabled: true,
   speciesDictVersion: '',
   layout: null,
+  stationLocation: null,
   projectLinks: DEFAULT_PROJECT_LINKS,
   security: {
     enabled: false,
@@ -319,6 +334,7 @@ export async function initApp(): Promise<boolean> {
       appState.audioExportEnabled = config.audioExportEnabled ?? true;
       appState.speciesDictVersion = config.speciesDictVersion ?? '';
       appState.layout = config.layout ?? null;
+      appState.stationLocation = config.stationLocation ?? null;
       appState.projectLinks = config.projectLinks ?? DEFAULT_PROJECT_LINKS;
 
       // Apply server-configured appearance settings

@@ -204,6 +204,118 @@ func TestGetAppConfig_AudioExportEnabled(t *testing.T) {
 	}
 }
 
+// TestGetAppConfig_StationLocation verifies the public config carries the station
+// coordinates only when an enabled banner element shows the location map and the
+// location is configured. Guests never load the authenticated settings, so this is
+// what lets them see the banner map (#4344); in every other case the coordinates
+// must stay out of the public payload.
+func TestGetAppConfig_StationLocation(t *testing.T) {
+	const (
+		testLatitude  = 60.1699
+		testLongitude = 24.9384
+	)
+
+	bannerElement := func(enabled, showMap bool) conf.DashboardElement {
+		return conf.DashboardElement{
+			ID:      "banner-0",
+			Type:    "banner",
+			Enabled: enabled,
+			Banner:  &conf.BannerConfig{ShowLocationMap: showMap},
+		}
+	}
+	summaryElement := conf.DashboardElement{ID: "daily-summary-0", Type: "daily-summary", Enabled: true}
+
+	tests := []struct {
+		name         string
+		configured   bool
+		elements     []conf.DashboardElement
+		wantLocation bool
+	}{
+		{
+			name:         "enabled banner shows the map",
+			configured:   true,
+			elements:     []conf.DashboardElement{bannerElement(true, true)},
+			wantLocation: true,
+		},
+		{
+			name:         "map banner found after other elements",
+			configured:   true,
+			elements:     []conf.DashboardElement{summaryElement, bannerElement(false, true), bannerElement(true, true)},
+			wantLocation: true,
+		},
+		{
+			name:       "banner map hidden",
+			configured: true,
+			elements:   []conf.DashboardElement{bannerElement(true, false)},
+		},
+		{
+			name:       "banner element disabled",
+			configured: true,
+			elements:   []conf.DashboardElement{bannerElement(false, true)},
+		},
+		{
+			name:       "location not configured",
+			configured: false,
+			elements:   []conf.DashboardElement{bannerElement(true, true)},
+		},
+		{
+			name:       "banner without config",
+			configured: true,
+			elements:   []conf.DashboardElement{{ID: "banner-0", Type: "banner", Enabled: true}},
+		},
+		{
+			name:       "map flag on a non-banner element",
+			configured: true,
+			elements: []conf.DashboardElement{{
+				ID:      "daily-summary-0",
+				Type:    "daily-summary",
+				Enabled: true,
+				Banner:  &conf.BannerConfig{ShowLocationMap: true},
+			}},
+		},
+		{
+			name:       "no layout",
+			configured: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			settings := &conf.Settings{
+				Version: "1.0.0-test",
+			}
+			settings.BirdNET.Latitude = testLatitude
+			settings.BirdNET.Longitude = testLongitude
+			settings.BirdNET.LocationConfigured = tt.configured
+			settings.Realtime.Dashboard.Layout.Elements = tt.elements
+			controller := newAppHandler(t, e, settings)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
+
+			require.NoError(t, controller.GetAppConfig(c))
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			var raw map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+
+			if !tt.wantLocation {
+				assert.NotContains(t, raw, "stationLocation",
+					"coordinates must stay private unless an enabled banner shows the map")
+				return
+			}
+			require.Contains(t, raw, "stationLocation",
+				"guests need the coordinates to render the banner map")
+			assert.Equal(t,
+				map[string]any{"latitude": testLatitude, "longitude": testLongitude},
+				raw["stationLocation"])
+		})
+	}
+}
+
 // TestGetAppConfig_ProjectLinks verifies the response always carries the
 // project identity/links (independent of telemetry), defaulting to the upstream
 // values with correctly derived issue URLs when nothing is overridden.
