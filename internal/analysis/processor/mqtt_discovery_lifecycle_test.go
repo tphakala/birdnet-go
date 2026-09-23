@@ -563,14 +563,48 @@ func TestForgetHomeAssistantSource(t *testing.T) {
 		p.haPendingMu.Unlock()
 	})
 
-	t.Run("HA discovery off: nothing queued", func(t *testing.T) {
-		useLiveSettings(t, newLifecycleSettings(false))
+	t.Run("MQTT off: nothing queued", func(t *testing.T) {
+		off := newLifecycleSettings(false)
+		off.Realtime.MQTT.Enabled = false
+		useLiveSettings(t, off)
 		p := newEmptyLifecycleProcessor()
 		stopDebounce(t, p)
 		p.ForgetHomeAssistantSource(datastore.AudioSource{ID: "rtsp_x", DisplayName: "Garden"})
 		p.haPendingMu.Lock()
 		assert.Empty(t, p.haPendingRemovals)
 		p.haPendingMu.Unlock()
+	})
+
+	t.Run("HA off with the broker down: a stream deleted in the same save is removed on connect", func(t *testing.T) {
+		published := newLifecycleSettings(true)
+		useLiveSettings(t, published)
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		garden := registerLifecycleSource(t, p, "rtsp://192.0.2.1/garden", "Garden")
+		registerLifecycleSource(t, p, "rtsp://192.0.2.1/porch", "Porch")
+		oldClient := NewMockMQTTClient()
+		p.SetMQTTClient(oldClient)
+		require.NoError(t, p.publishHomeAssistantDiscovery(t.Context(), oldClient, published))
+
+		// One save turns HA discovery off and deletes Garden. MQTT is
+		// reconfigured first: the broker is down, so retirement is deferred.
+		next := newLifecycleSettings(false)
+		useLiveSettings(t, next)
+		oldClient.SetConnected(false)
+		p.RetireHomeAssistantDiscovery(t.Context(), oldClient, next)
+		// Then the streams: Garden leaves the registry and its removal is queued.
+		require.NoError(t, p.registry.Unregister(garden.ID))
+		p.ForgetHomeAssistantSource(garden)
+
+		newClient := NewMockMQTTClient()
+		p.RegisterHomeAssistantDiscovery(newClient, next)
+		handler := newClient.OnConnectHandler()
+		require.NotNil(t, handler)
+		handler()
+
+		last := lastPayloads(newClient.GetPublishedMessages())
+		assertRemoved(t, last, speciesConfigTopic("Garden"))
+		assertRemoved(t, last, "birdnet/sources/"+garden.ID)
 	})
 
 	t.Run("retire performs queued removals", func(t *testing.T) {

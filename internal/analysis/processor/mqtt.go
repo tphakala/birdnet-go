@@ -423,7 +423,12 @@ type haPendingRemoval struct {
 // held that no live source owns) and its retained per-source state. The work
 // runs on the next debounced discovery publish, never on the caller's
 // goroutine, so it is safe to call while holding audio pipeline locks.
-// Nothing is queued unless MQTT and HA discovery are enabled.
+// Nothing is queued unless MQTT is enabled. HA discovery may already be off:
+// a save that turns it off while the broker is down defers retirement to the
+// next connection, and the source deleted in that same save is no longer
+// registered then, so only the queue still names it. The retire handler
+// performs the queued removals; with nothing to retire they wait for the next
+// publish, where a removal of entities that no longer exist is harmless.
 func (p *Processor) ForgetHomeAssistantSource(source datastore.AudioSource) {
 	p.queueHAPendingRemoval(source, false)
 }
@@ -438,7 +443,7 @@ func (p *Processor) ForgetHomeAssistantEntityName(previous datastore.AudioSource
 
 func (p *Processor) queueHAPendingRemoval(source datastore.AudioSource, configOnly bool) {
 	settings := p.currentSettings()
-	if settings == nil || !settings.Realtime.MQTT.Enabled || !settings.Realtime.MQTT.HomeAssistant.Enabled {
+	if settings == nil || !settings.Realtime.MQTT.Enabled {
 		return
 	}
 	item := haPendingRemoval{source: source, configOnly: configOnly}
