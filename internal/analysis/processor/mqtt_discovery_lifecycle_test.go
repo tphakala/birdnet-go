@@ -642,6 +642,44 @@ func TestForgetHomeAssistantSource_Queue(t *testing.T) {
 		p.haPendingMu.Unlock()
 	})
 
+	t.Run("a request repeated after a failed attempt is kept once", func(t *testing.T) {
+		useLiveSettings(t, newLifecycleSettings(true))
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		garden := registerLifecycleSource(t, p, "rtsp://192.0.2.1/garden", "Garden")
+		registerLifecycleSource(t, p, "rtsp://192.0.2.1/porch", "Porch")
+		require.NoError(t, p.registry.Unregister(garden.ID))
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+		client.SetTopicError(speciesConfigTopic("Garden"), assert.AnError)
+
+		p.ForgetHomeAssistantSource(garden)
+		p.publishDiscoveryIfReady() // fails, requeued pinned to its identity
+		// The same request again sits unpinned next to the pinned retry.
+		p.ForgetHomeAssistantSource(garden)
+		p.publishDiscoveryIfReady() // fails again
+
+		p.haPendingMu.Lock()
+		assert.Len(t, p.haPendingRemovals, 1, "the pinned retry and the repeated request are one removal")
+		p.haPendingMu.Unlock()
+	})
+
+	t.Run("requeued removals are capped, oldest dropped", func(t *testing.T) {
+		useLiveSettings(t, newLifecycleSettings(true))
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		items := make([]haPendingRemoval, haPendingRemovalsCap+5)
+		for i := range items {
+			items[i] = haPendingRemoval{source: datastore.AudioSource{ID: "rtsp_" + strconv.Itoa(i), DisplayName: "Cam"}}
+		}
+		p.requeueHAPendingRemovals(items)
+
+		p.haPendingMu.Lock()
+		defer p.haPendingMu.Unlock()
+		require.Len(t, p.haPendingRemovals, haPendingRemovalsCap)
+		assert.Equal(t, "rtsp_5", p.haPendingRemovals[0].source.ID, "the oldest requests are dropped")
+	})
+
 	t.Run("a retried removal keeps the identity of its first attempt", func(t *testing.T) {
 		published := newLifecycleSettings(true)
 		useLiveSettings(t, published)

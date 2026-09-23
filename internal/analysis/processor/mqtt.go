@@ -478,6 +478,14 @@ func (p *Processor) requeueHAPendingRemovals(items []haPendingRemoval) {
 	p.haPendingMu.Lock()
 	defer p.haPendingMu.Unlock()
 	p.haPendingRemovals = append(p.haPendingRemovals, items...)
+	if excess := len(p.haPendingRemovals) - haPendingRemovalsCap; excess > 0 {
+		// Same bound as queueHAPendingRemoval: drop the oldest requests.
+		p.haPendingRemovals = p.haPendingRemovals[excess:]
+		GetLogger().Warn("HA entity removal queue full, dropping the oldest requests",
+			logger.Int("cap", haPendingRemovalsCap),
+			logger.Int("dropped", excess),
+			logger.String("operation", "ha_discovery_forget_source"))
+	}
 }
 
 // processHAPendingRemovals performs the taken queued removals after discovery
@@ -499,6 +507,16 @@ func (p *Processor) processHAPendingRemovals(ctx context.Context, client mqtt.Cl
 		liveKeys[key] = struct{}{}
 	}
 
+	// A request repeated after an earlier attempt failed is queued unpinned
+	// next to the pinned retry; once both are pinned to the same identity they
+	// are the same removal, so it is performed (and requeued) only once.
+	type removalIdentity struct {
+		source     datastore.AudioSource
+		configOnly bool
+		config     mqtt.DiscoveryConfig
+	}
+	seen := make(map[removalIdentity]struct{}, len(items))
+
 	var failed []haPendingRemoval
 	for _, item := range items {
 		if _, isLive := liveIDs[item.source.ID]; isLive && !item.configOnly {
@@ -507,6 +525,11 @@ func (p *Processor) processHAPendingRemovals(ctx context.Context, client mqtt.Cl
 		if item.config == nil {
 			item.config = config
 		}
+		id := removalIdentity{source: item.source, configOnly: item.configOnly, config: *item.config}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
 		publisher := mqtt.NewDiscoveryPublisher(client, item.config)
 		var errs []error
 		for _, key := range mqtt.SourceEntityKeyCandidates(item.source) {
