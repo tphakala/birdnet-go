@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -65,8 +66,11 @@ func TestSanitizeID(t *testing.T) {
 
 // mockPublisher implements a mock MQTT client for testing discovery publishing.
 type mockPublisher struct {
-	publishedMessages map[string]string // topic -> payload
+	publishedMessages map[string]string // topic -> payload (last write wins)
+	publishOrder      []string          // topics in the order PublishWithRetain saw them
 	publishError      error
+	topicErrors       map[string]error // fails publishes to specific topics only
+	retained          map[string]bool  // topic -> retain flag of the last publish
 }
 
 // Ensure mockPublisher implements the Client interface at compile time
@@ -75,6 +79,7 @@ var _ Client = (*mockPublisher)(nil)
 func newMockPublisher() *mockPublisher {
 	return &mockPublisher{
 		publishedMessages: make(map[string]string),
+		retained:          make(map[string]bool),
 	}
 }
 
@@ -87,12 +92,37 @@ func (m *mockPublisher) TestConnection(_ context.Context, _ chan<- TestResult) {
 func (m *mockPublisher) RegisterOnConnectHandler(_ OnConnectHandler)           {}
 func (m *mockPublisher) StartReconnectLoop()                                   {}
 
-func (m *mockPublisher) PublishWithRetain(_ context.Context, topic, data string, _ bool) error {
+func (m *mockPublisher) PublishWithRetain(_ context.Context, topic, data string, retain bool) error {
 	if m.publishError != nil {
 		return m.publishError
 	}
+	if err := m.topicErrors[topic]; err != nil {
+		return err
+	}
 	m.publishedMessages[topic] = data
+	m.retained[topic] = retain
+	m.publishOrder = append(m.publishOrder, topic)
 	return nil
+}
+
+// assertRetainedRemoval asserts topic received an empty payload with the retain
+// flag set. A non-retained empty payload does not clear a retained message on the
+// broker, so a removal without retain would silently leave the old value behind.
+func (m *mockPublisher) assertRetainedRemoval(t *testing.T, topic string) {
+	t.Helper()
+	require.Contains(t, m.publishedMessages, topic, "topic %s not cleared", topic)
+	assert.Empty(t, m.publishedMessages[topic], "topic %s must be emptied", topic)
+	assert.True(t, m.retained[topic], "removal of %s must be retained", topic)
+}
+
+// firstIndexOf returns the position of the first publish to topic, or -1.
+func (m *mockPublisher) firstIndexOf(topic string) int {
+	for i, t := range m.publishOrder {
+		if t == topic {
+			return i
+		}
+	}
+	return -1
 }
 
 // TestDiscoveryPayloadStructure verifies the discovery payload JSON structure.
@@ -234,7 +264,7 @@ func TestPublishSourceDiscovery(t *testing.T) {
 		},
 	}
 
-	err := publisher.publishSourceDiscovery(ctx, source, settings)
+	err := publisher.publishSourceDiscovery(ctx, source, getSourceID(source), settings)
 	require.NoError(t, err, "Failed to publish source discovery")
 
 	// Expected topics for the source sensors
@@ -262,15 +292,20 @@ func TestPublishSourceDiscovery(t *testing.T) {
 
 	assert.Equal(t, "Last Species", speciesPayload.Name)
 	assert.Equal(t, "mdi:bird", speciesPayload.Icon)
-	assert.Equal(t, "birdnet", speciesPayload.StateTopic)
-	assert.Contains(t, speciesPayload.ValueTemplate, "hw:0,0") // Original source ID in template
+	// State topic is keyed by the raw source.ID (what the publisher sees), not
+	// by the DisplayName used for entity IDs.
+	assert.Equal(t, "birdnet/sources/hw_0_0", speciesPayload.StateTopic)
+	assert.Equal(t, "{{ value_json.CommonName }}", speciesPayload.ValueTemplate)
 
 	// Verify device has via_device pointing to bridge
 	assert.Equal(t, "birdnet_go_test-node_bridge", speciesPayload.Device.ViaDevice)
 	assert.Equal(t, "BirdNET-Go USB Microphone", speciesPayload.Device.Name)
 }
 
-// TestPublishSourceDiscoveryWithoutSoundLevel verifies sound level sensor is not published when disabled.
+// TestPublishSourceDiscoveryWithoutSoundLevel verifies that when sound level
+// monitoring is disabled, the Sound Level sensor is removed by publishing an
+// empty retained payload to its config topic (idempotent removal), so toggling
+// sound level off takes the HA sensor away instead of leaving it stale.
 func TestPublishSourceDiscoveryWithoutSoundLevel(t *testing.T) {
 	t.Parallel()
 
@@ -301,16 +336,17 @@ func TestPublishSourceDiscoveryWithoutSoundLevel(t *testing.T) {
 		},
 	}
 
-	err := publisher.publishSourceDiscovery(ctx, source, settings)
+	err := publisher.publishSourceDiscovery(ctx, source, getSourceID(source), settings)
 	require.NoError(t, err, "Failed to publish source discovery")
 
-	// Sound level topic should NOT be present
+	// Sound level config topic should be present but EMPTY (a retained removal).
 	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
 	sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 	soundLevelTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_sound_level/config"
 
-	assert.NotContains(t, mock.publishedMessages, soundLevelTopic, "Sound level topic should not be published when disabled")
+	require.Contains(t, mock.publishedMessages, soundLevelTopic, "Sound level config topic should receive a removal when disabled")
+	assert.Empty(t, mock.publishedMessages[soundLevelTopic], "Sound level sensor should be removed with an empty retained payload when disabled")
 
 	// Other sensors should still be present
 	speciesTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_species/config"
@@ -444,11 +480,14 @@ func TestPublishDiscoveryMultipleSources(t *testing.T) {
 	err := publisher.PublishDiscovery(ctx, sources, settings)
 	require.NoError(t, err, "Failed to publish discovery")
 
-	// Should have bridge + 3 sensors per source (species, confidence, scientific_name)
+	// Sound level is disabled, so each source publishes 3 active sensors
+	// (species, confidence, scientific_name) plus an empty retained removal on
+	// its sound_level config topic AND on its per-source sound_level state topic
+	// (so a reading retained while monitoring was on is not kept forever).
 	// Bridge: 1 topic
-	// 3 sources * 3 sensors = 9 topics
-	// Total: 10 topics
-	assert.Len(t, mock.publishedMessages, 10, "Expected 10 discovery messages")
+	// 3 sources * 5 topics = 15 topics
+	// Total: 16 topics
+	assert.Len(t, mock.publishedMessages, 16, "Expected 16 discovery messages")
 
 	// Verify each source has its sensors
 	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
@@ -510,7 +549,7 @@ func TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat(t *testing.T) {
 		},
 	}
 
-	err := publisher.publishSourceDiscovery(ctx, source, settings)
+	err := publisher.publishSourceDiscovery(ctx, source, getSourceID(source), settings)
 	require.NoError(t, err, "Failed to publish source discovery")
 
 	// Get the sound level discovery payload
@@ -551,17 +590,17 @@ func TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat(t *testing.T) {
 		"Value template should access bands via value_json.b")
 	assert.Contains(t, payload.ValueTemplate, ".m",
 		"Value template should access mean dB via .m")
-	assert.Contains(t, payload.ValueTemplate, "value_json.src",
-		"Value template should filter by source ID via value_json.src")
+	assert.Equal(t, "birdnet/sources/test-mic/soundlevel", payload.StateTopic,
+		"Sound level sensor must read its source's own sound level topic")
 }
 
-// TestValueTemplates_UseNoneFallback verifies that all value templates use
-// "else None" instead of "else this.state". When HA starts, sensors are in
-// 'unknown' state. If a multi-source sensor receives a message from a
-// non-matching source and the template returns this.state ('unknown'), HA
-// rejects it for numeric sensors (sound_pressure device class, % unit).
-// Returning None tells HA to skip the state update entirely.
-func TestValueTemplates_UseNoneFallback(t *testing.T) {
+// TestSourceSensors_ReadPerSourceTopics guards GitHub #4349. On an HA MQTT
+// sensor, a value_template cannot ignore a message: rendering None sets the
+// state to unknown. With every source sharing one state topic, a template that
+// filters on sourceId therefore let each detection clear all other sources'
+// sensors. Each source's sensors must instead read a topic only that source
+// publishes to, with a template that has no source filter and no fallback.
+func TestSourceSensors_ReadPerSourceTopics(t *testing.T) {
 	t.Parallel()
 
 	mock := newMockPublisher()
@@ -576,11 +615,6 @@ func TestValueTemplates_UseNoneFallback(t *testing.T) {
 	publisher := NewDiscoveryPublisher(mock, &config)
 	ctx := t.Context()
 
-	source := datastore.AudioSource{
-		ID:          "rtsp_abc123",
-		DisplayName: "Backyard Mic",
-	}
-
 	settings := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
 			Audio: conf.AudioSettings{
@@ -591,33 +625,63 @@ func TestValueTemplates_UseNoneFallback(t *testing.T) {
 		},
 	}
 
-	err := publisher.publishSourceDiscovery(ctx, source, settings)
-	require.NoError(t, err)
-
-	nodeID := SanitizeID(config.NodeID)
-	sourceID := SanitizeID(source.DisplayName)
-	prefix := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID
-
-	sensors := map[string]string{
-		"species":         prefix + "_species/config",
-		"confidence":      prefix + "_confidence/config",
-		"scientific_name": prefix + "_scientific_name/config",
-		"sound_level":     prefix + "_sound_level/config",
+	sources := []datastore.AudioSource{
+		{ID: "rtsp_aaaa1111", DisplayName: "Backyard Mic"},
+		{ID: "rtsp_bbbb2222", DisplayName: "Front Porch"},
 	}
 
-	for name, topic := range sensors {
-		require.Contains(t, mock.publishedMessages, topic, "Missing topic for %s", name)
+	nodeID := SanitizeID(config.NodeID)
+	stateTopics := make(map[string]string) // state topic -> source that owns it
 
-		var payload DiscoveryPayload
-		err := json.Unmarshal([]byte(mock.publishedMessages[topic]), &payload)
-		require.NoError(t, err, "Failed to parse %s payload", name)
+	for _, source := range sources {
+		require.NoError(t, publisher.publishSourceDiscovery(ctx, source, getSourceID(source), settings))
 
-		assert.Contains(t, payload.ValueTemplate, "else None",
-			"%s template must use 'else None' to avoid HA validation errors on numeric sensors at startup; got: %s",
-			name, payload.ValueTemplate)
-		assert.NotContains(t, payload.ValueTemplate, "this.state",
-			"%s template must NOT use 'this.state' fallback; got: %s",
-			name, payload.ValueTemplate)
+		prefix := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + SanitizeID(source.DisplayName)
+		sensors := map[string]struct {
+			topic         string
+			stateTopic    string
+			valueTemplate string
+		}{
+			"species": {
+				prefix + "_species/config",
+				SourceDetectionTopic(config.BaseTopic, source.ID),
+				"{{ value_json.CommonName }}",
+			},
+			"confidence": {
+				prefix + "_confidence/config",
+				SourceDetectionTopic(config.BaseTopic, source.ID),
+				"{{ (value_json.Confidence * 100) | round(1) }}",
+			},
+			"scientific_name": {
+				prefix + "_scientific_name/config",
+				SourceDetectionTopic(config.BaseTopic, source.ID),
+				"{{ value_json.ScientificName }}",
+			},
+			"sound_level": {
+				prefix + "_sound_level/config",
+				SourceSoundLevelTopic(config.BaseTopic, source.ID),
+				"{{ value_json.b['1.0_kHz'].m }}",
+			},
+		}
+
+		for name, want := range sensors {
+			require.Contains(t, mock.publishedMessages, want.topic, "Missing topic for %s", name)
+
+			var payload DiscoveryPayload
+			require.NoError(t, json.Unmarshal([]byte(mock.publishedMessages[want.topic]), &payload),
+				"Failed to parse %s payload", name)
+
+			assert.Equal(t, want.stateTopic, payload.StateTopic, "%s state topic for %s", name, source.ID)
+			assert.Equal(t, want.valueTemplate, payload.ValueTemplate, "%s template for %s", name, source.ID)
+			assert.NotContains(t, payload.ValueTemplate, "else",
+				"%s template must not have a fallback branch; HA would apply it as unknown", name)
+
+			if owner, taken := stateTopics[payload.StateTopic]; taken {
+				assert.Equal(t, source.ID, owner,
+					"state topic %s is shared by sources %s and %s", payload.StateTopic, owner, source.ID)
+			}
+			stateTopics[payload.StateTopic] = source.ID
+		}
 	}
 }
 
@@ -674,7 +738,7 @@ func TestDeviceNaming_ShortDisplayNameWhenIDIsLong(t *testing.T) {
 		},
 	}
 
-	err := publisher.publishSourceDiscovery(ctx, source, settings)
+	err := publisher.publishSourceDiscovery(ctx, source, getSourceID(source), settings)
 	require.NoError(t, err, "Failed to publish source discovery")
 
 	// Get the species sensor discovery payload to check device name
@@ -745,7 +809,7 @@ func TestDeviceNaming_PreservesShortDisplayName(t *testing.T) {
 
 	settings := &conf.Settings{}
 
-	err := publisher.publishSourceDiscovery(ctx, source, settings)
+	err := publisher.publishSourceDiscovery(ctx, source, getSourceID(source), settings)
 	require.NoError(t, err, "Failed to publish source discovery")
 
 	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
@@ -859,4 +923,360 @@ func TestRemoveDiscovery_CleansUpDefaultSource(t *testing.T) {
 	assert.Empty(t, mock.publishedMessages["homeassistant/sensor/test/test_Default_confidence/config"])
 	assert.Empty(t, mock.publishedMessages["homeassistant/sensor/test/test_Default_scientific_name/config"])
 	assert.Empty(t, mock.publishedMessages["homeassistant/sensor/test/test_Default_sound_level/config"])
+}
+
+// TestDiscovery_StatusTopicsUseStatusTopic verifies that the bridge state topic
+// and each sensor's availability topic resolve through StatusTopic, so a
+// trailing-slash base topic yields "birdnet/status" (not "birdnet//status") and
+// all availability topics match the LWT topic HA needs for online/offline.
+func TestDiscovery_StatusTopicsUseStatusTopic(t *testing.T) {
+	t.Parallel()
+
+	const base = "birdnet/"
+	wantStatus := StatusTopic(base)
+	require.Equal(t, "birdnet/status", wantStatus, "trailing slash must not leave an empty topic level")
+
+	mock := newMockPublisher()
+	config := DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       base,
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "test-node",
+		Version:         "1.0.0",
+	}
+	publisher := NewDiscoveryPublisher(mock, &config)
+
+	settings := &conf.Settings{}
+	source := datastore.AudioSource{ID: "rtsp_65c31a0b", DisplayName: "Backyard"}
+	require.NoError(t, publisher.PublishDiscovery(t.Context(), []datastore.AudioSource{source}, settings))
+
+	// Bridge state topic
+	var foundBridge, foundSensor bool
+	for topic, data := range mock.publishedMessages {
+		if data == "" {
+			continue // Empty retained payloads are removals (e.g. the disabled sound level sensor).
+		}
+		var payload DiscoveryPayload
+		require.NoError(t, json.Unmarshal([]byte(data), &payload))
+		switch {
+		case strings.Contains(topic, "/binary_sensor/"):
+			foundBridge = true
+			assert.Equal(t, wantStatus, payload.StateTopic, "bridge state_topic must use StatusTopic")
+		case strings.HasSuffix(topic, "_species/config"):
+			foundSensor = true
+			assert.Equal(t, wantStatus, payload.AvailabilityTopic, "sensor availability_topic must use StatusTopic")
+		}
+	}
+	assert.True(t, foundBridge, "bridge discovery message not found")
+	assert.True(t, foundSensor, "species sensor discovery message not found")
+}
+
+// TestSourceEntityKeys_NoCollision verifies that when no source names collide,
+// each source keeps exactly its getSourceID key, preserving existing unique_ids
+// and HA history.
+func TestSourceEntityKeys_NoCollision(t *testing.T) {
+	t.Parallel()
+
+	sources := []datastore.AudioSource{
+		{ID: "rtsp_aaaa1111", DisplayName: "Backyard"},
+		{ID: "rtsp_bbbb2222", DisplayName: "Front Porch"},
+		{ID: "hw:0,0"}, // no display name -> sanitized raw ID
+	}
+
+	keys := SourceEntityKeys(sources)
+	assert.Equal(t, map[string]string{
+		"rtsp_aaaa1111": "Backyard",
+		"rtsp_bbbb2222": "Front_Porch",
+		"hw:0,0":        "hw_0_0",
+	}, keys)
+}
+
+// TestSourceEntityKeys_Collision verifies that colliding source names get
+// distinct keys, deterministically regardless of input order: the source with
+// the lexicographically smallest raw ID keeps the plain base key.
+func TestSourceEntityKeys_Collision(t *testing.T) {
+	t.Parallel()
+
+	a := datastore.AudioSource{ID: "rtsp_aaaa", DisplayName: "Mic"}
+	b := datastore.AudioSource{ID: "rtsp_bbbb", DisplayName: "Mic"}
+
+	forward := SourceEntityKeys([]datastore.AudioSource{a, b})
+	reverse := SourceEntityKeys([]datastore.AudioSource{b, a})
+
+	assert.Equal(t, forward, reverse, "keys must be independent of input order")
+	assert.Equal(t, "Mic", forward["rtsp_aaaa"], "smallest raw ID keeps the plain base key")
+	assert.Equal(t, "Mic_rtsp_bbbb", forward["rtsp_bbbb"], "other colliding source is suffixed with its sanitized raw ID")
+	assert.NotEqual(t, forward["rtsp_aaaa"], forward["rtsp_bbbb"], "colliding sources must get distinct keys")
+}
+
+// TestSourceEntityKeys_Deterministic pins that keys depend only on the current
+// source list: the same set yields the same keys in any order (so a restart
+// cannot disagree with what was published), and the smallest raw ID of a
+// same-name group holds the plain key even when it joined later (the documented
+// price of determinism).
+func TestSourceEntityKeys_Deterministic(t *testing.T) {
+	t.Parallel()
+
+	existing := datastore.AudioSource{ID: "rtsp_bravo", DisplayName: "Mic"}
+	joined := datastore.AudioSource{ID: "rtsp_alpha", DisplayName: "Mic"}
+
+	first := SourceEntityKeys([]datastore.AudioSource{existing, joined})
+	second := SourceEntityKeys([]datastore.AudioSource{joined, existing})
+	assert.Equal(t, first, second, "keys must not depend on input order")
+	assert.Equal(t, map[string]string{
+		"rtsp_alpha": "Mic",
+		"rtsp_bravo": "Mic_rtsp_bravo",
+	}, first)
+}
+
+// TestSourceEntityKeys_UniqueWhenSuffixMatchesAnotherBase covers the uniqueness
+// fallback: a suffixed key can coincide with another source's plain base key
+// (DisplayName "Mic b" sanitizes to "Mic_b", which is also the suffixed key of
+// source "b" in the "Mic" group). Every key must still be unique, and plain base
+// keys are never taken by a suffix.
+func TestSourceEntityKeys_UniqueWhenSuffixMatchesAnotherBase(t *testing.T) {
+	t.Parallel()
+
+	sources := []datastore.AudioSource{
+		{ID: "a", DisplayName: "Mic"},
+		{ID: "b", DisplayName: "Mic"},
+		{ID: "c", DisplayName: "Mic b"},
+	}
+	keys := SourceEntityKeys(sources)
+
+	assert.Equal(t, "Mic", keys["a"])
+	assert.Equal(t, "Mic_b", keys["c"], "a plain base key must not be taken by another group's suffix")
+	assert.Equal(t, "Mic_b_2", keys["b"], "the colliding suffix gets a numeric disambiguator")
+
+	seen := make(map[string]string, len(keys))
+	for id, key := range keys {
+		if other, dup := seen[key]; dup {
+			t.Fatalf("key %q assigned to both %q and %q", key, other, id)
+		}
+		seen[key] = id
+	}
+}
+
+// TestPublishDiscovery_CollidingNames_DistinctEntities verifies that publishing
+// discovery for two sources whose display names sanitize alike yields distinct
+// config topics and distinct unique_ids, so neither overwrites the other.
+func TestPublishDiscovery_CollidingNames_DistinctEntities(t *testing.T) {
+	t.Parallel()
+
+	mock := newMockPublisher()
+	config := DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       "birdnet",
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "node",
+		Version:         "1.0.0",
+	}
+	publisher := NewDiscoveryPublisher(mock, &config)
+
+	sources := []datastore.AudioSource{
+		{ID: "rtsp_aaaa", DisplayName: "Mic"},
+		{ID: "rtsp_bbbb", DisplayName: "Mic"},
+	}
+	require.NoError(t, publisher.PublishDiscovery(t.Context(), sources, &conf.Settings{}))
+
+	var speciesTopics, uniqueIDs []string
+	for topic, data := range mock.publishedMessages {
+		if !strings.HasSuffix(topic, "_species/config") {
+			continue
+		}
+		speciesTopics = append(speciesTopics, topic)
+		var payload DiscoveryPayload
+		require.NoError(t, json.Unmarshal([]byte(data), &payload))
+		uniqueIDs = append(uniqueIDs, payload.UniqueID)
+	}
+
+	require.Len(t, speciesTopics, 2, "each colliding source must get its own species config topic")
+	assert.NotEqual(t, speciesTopics[0], speciesTopics[1], "config topics must be distinct")
+	require.Len(t, uniqueIDs, 2)
+	assert.NotEqual(t, uniqueIDs[0], uniqueIDs[1], "unique_ids must be distinct")
+
+	assert.Contains(t, mock.publishedMessages, "homeassistant/sensor/node/node_Mic_species/config")
+	assert.Contains(t, mock.publishedMessages, "homeassistant/sensor/node/node_Mic_rtsp_bbbb_species/config")
+}
+
+// TestRemoveSourceDiscovery_ClearsConfigsAndState verifies that removing a
+// source empties every sensor config topic AND both per-source state topics, and
+// that config topics are cleared before the state topics.
+func TestRemoveSourceDiscovery_ClearsConfigsAndState(t *testing.T) {
+	t.Parallel()
+
+	mock := newMockPublisher()
+	config := DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       "birdnet",
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "node",
+		Version:         "1.0.0",
+	}
+	publisher := NewDiscoveryPublisher(mock, &config)
+
+	source := datastore.AudioSource{ID: "rtsp_65c31a0b", DisplayName: "Backyard"}
+	entityKey := getSourceID(source)
+	nodeID := SanitizeID(config.NodeID)
+
+	require.NoError(t, publisher.RemoveSourceDiscovery(t.Context(), source, entityKey))
+
+	// Every config topic is emptied.
+	lastConfigIdx := -1
+	for _, sensorType := range AllSensorTypes {
+		topic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + entityKey + "_" + sensorType + "/config"
+		mock.assertRetainedRemoval(t, topic)
+		if idx := mock.firstIndexOf(topic); idx > lastConfigIdx {
+			lastConfigIdx = idx
+		}
+	}
+
+	// Both per-source state topics are emptied.
+	detectionTopic := SourceDetectionTopic(config.BaseTopic, source.ID)
+	soundLevelTopic := SourceSoundLevelTopic(config.BaseTopic, source.ID)
+	for _, topic := range []string{detectionTopic, soundLevelTopic} {
+		mock.assertRetainedRemoval(t, topic)
+	}
+
+	// Config topics are cleared before state topics.
+	assert.Less(t, lastConfigIdx, mock.firstIndexOf(detectionTopic), "config topics must be cleared before the detection state topic")
+	assert.Less(t, lastConfigIdx, mock.firstIndexOf(soundLevelTopic), "config topics must be cleared before the sound level state topic")
+}
+
+// TestRemoveSourceConfigs_LeavesStateTopics verifies that RemoveSourceConfigs
+// clears only the discovery config topics and never touches the per-source state
+// topics, so a live source whose entity key changed does not lose its retained
+// detection/sound-level state.
+func TestRemoveSourceConfigs_LeavesStateTopics(t *testing.T) {
+	t.Parallel()
+
+	mock := newMockPublisher()
+	config := DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       "birdnet",
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "node",
+		Version:         "1.0.0",
+	}
+	publisher := NewDiscoveryPublisher(mock, &config)
+
+	source := datastore.AudioSource{ID: "rtsp_65c31a0b", DisplayName: "Backyard"}
+	entityKey := getSourceID(source)
+	nodeID := SanitizeID(config.NodeID)
+
+	require.NoError(t, publisher.RemoveSourceConfigs(t.Context(), entityKey))
+
+	// Config topics are emptied.
+	for _, sensorType := range AllSensorTypes {
+		topic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + entityKey + "_" + sensorType + "/config"
+		mock.assertRetainedRemoval(t, topic)
+	}
+
+	// State topics are NOT touched.
+	assert.NotContains(t, mock.publishedMessages, SourceDetectionTopic(config.BaseTopic, source.ID),
+		"detection state topic must not be cleared for a live source")
+	assert.NotContains(t, mock.publishedMessages, SourceSoundLevelTopic(config.BaseTopic, source.ID),
+		"sound level state topic must not be cleared for a live source")
+}
+
+// TestPublishSourceDiscovery_SoundLevelDisabled_ClearsStateTopic verifies R10:
+// when sound level monitoring is off, publishing a source clears both its
+// sound_level config topic AND its retained per-source sound_level STATE topic,
+// so a reading published while monitoring was on is not retained forever.
+func TestPublishSourceDiscovery_SoundLevelDisabled_ClearsStateTopic(t *testing.T) {
+	t.Parallel()
+
+	mock := newMockPublisher()
+	config := DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       "birdnet",
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "node",
+		Version:         "1.0.0",
+	}
+	publisher := NewDiscoveryPublisher(mock, &config)
+
+	source := datastore.AudioSource{ID: "rtsp_65c31a0b", DisplayName: "Backyard"}
+	settings := &conf.Settings{} // sound level disabled by default
+
+	require.NoError(t, publisher.publishSourceDiscovery(t.Context(), source, getSourceID(source), settings))
+
+	stateTopic := SourceSoundLevelTopic(config.BaseTopic, source.ID)
+	mock.assertRetainedRemoval(t, stateTopic)
+}
+
+// TestRemoveDiscovery_PropagatesPublishError verifies that a per-topic publish
+// failure during removal is not swallowed: RemoveDiscovery keeps removing the
+// remaining topics, including every later source, and returns a non-nil joined
+// error so a caller can tell a partial removal from a complete one.
+func TestRemoveDiscovery_PropagatesPublishError(t *testing.T) {
+	t.Parallel()
+
+	mock := newMockPublisher()
+	config := DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       "birdnet",
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "node",
+		Version:         "1.0.0",
+	}
+	publisher := NewDiscoveryPublisher(mock, &config)
+
+	sources := []datastore.AudioSource{
+		{ID: "rtsp_65c31a0b", DisplayName: "Backyard"},
+		{ID: "rtsp_7d41e2aa", DisplayName: "Porch"},
+	}
+
+	// Fail exactly one config topic of the first source; every other removal
+	// must still be attempted.
+	failedTopic := "homeassistant/sensor/node/node_Backyard_confidence/config"
+	mock.topicErrors = map[string]error{failedTopic: errors.New("broker rejected publish")}
+
+	err := publisher.RemoveDiscovery(t.Context(), sources)
+	require.Error(t, err, "a per-topic publish failure must propagate as a non-nil error")
+
+	mock.assertRetainedRemoval(t, "homeassistant/sensor/node/node_Backyard_species/config")
+	mock.assertRetainedRemoval(t, SourceDetectionTopic(config.BaseTopic, sources[0].ID))
+	// The second source is still removed after the first source's failure.
+	mock.assertRetainedRemoval(t, "homeassistant/sensor/node/node_Porch_species/config")
+	mock.assertRetainedRemoval(t, SourceDetectionTopic(config.BaseTopic, sources[1].ID))
+}
+
+// TestSourceEntityKeyCandidates pins that the candidates cover every key
+// SourceEntityKeys can assign to a source, alone or in a same-name group.
+func TestSourceEntityKeyCandidates(t *testing.T) {
+	t.Parallel()
+
+	a := datastore.AudioSource{ID: "rtsp_aaaa", DisplayName: "Mic"}
+	b := datastore.AudioSource{ID: "rtsp_bbbb", DisplayName: "Mic"}
+	c := datastore.AudioSource{ID: "zz:1,0", DisplayName: "Mic"} // sorts last, raw ID needs sanitizing
+
+	assert.Equal(t, []string{"Mic", "Mic_rtsp_bbbb"}, SourceEntityKeyCandidates(b))
+
+	for _, set := range [][]datastore.AudioSource{{a}, {b}, {a, b}, {a, c}} {
+		keys := SourceEntityKeys(set)
+		for _, src := range set {
+			assert.Contains(t, SourceEntityKeyCandidates(src), keys[src.ID],
+				"assigned key must be among the candidates")
+		}
+	}
+}
+
+// TestRemoveSourceState_ClearsOnlyState verifies RemoveSourceState empties both
+// retained per-source state topics and publishes nothing under the config prefix.
+func TestRemoveSourceState_ClearsOnlyState(t *testing.T) {
+	t.Parallel()
+
+	mock := newMockPublisher()
+	config := DiscoveryConfig{DiscoveryPrefix: "homeassistant", BaseTopic: "birdnet", NodeID: "node"}
+	publisher := NewDiscoveryPublisher(mock, &config)
+	source := datastore.AudioSource{ID: "rtsp_65c31a0b", DisplayName: "Backyard"}
+
+	require.NoError(t, publisher.RemoveSourceState(t.Context(), source))
+
+	mock.assertRetainedRemoval(t, SourceDetectionTopic(config.BaseTopic, source.ID))
+	mock.assertRetainedRemoval(t, SourceSoundLevelTopic(config.BaseTopic, source.ID))
+	for topic := range mock.publishedMessages {
+		assert.False(t, strings.HasPrefix(topic, "homeassistant/"), "state removal must not touch configs: %s", topic)
+	}
 }

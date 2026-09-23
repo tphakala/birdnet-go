@@ -3261,7 +3261,7 @@
             "label": "Nom de l'appareil",
             "helpText": "Le nom de base des appareils tels qu'ils apparaissent dans Home Assistant. Chaque source audio aura son propre appareil lié à cet appareil principal BirdNET-Go."
           },
-          "sensorsNote": "<strong>Capteurs créés :</strong> Pour chaque source audio, Home Assistant recevra : Dernière espèce, Confiance, Nom scientifique et Niveau sonore (si activé). L'appareil pont inclut l'état de disponibilité en ligne/hors ligne.",
+          "sensorsNote": "<strong>Capteurs créés :</strong> Pour chaque source audio, Home Assistant recevra : Dernière espèce, Confiance, Nom scientifique et Niveau sonore (si activé). L'appareil pont inclut l'état de disponibilité en ligne/hors ligne. Les capteurs de détection de chaque source lisent le topic MQTT propre à cette source, &lt;base_topic&gt;/sources/&lt;source_id&gt;, et son capteur de Niveau sonore lit le sous-topic &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, de sorte qu'une détection d'une source ne réinitialise jamais les capteurs d'une autre source.",
           "discovery": {
             "button": "Envoyer la découverte",
             "success": "Messages de découverte envoyés à Home Assistant",
@@ -3720,6 +3720,7 @@
         "dataOutputTitle": "Sortie des données de niveau sonore",
         "dataOutputDescription": "Lorsqu'activé, les mesures du niveau sonore sont publiées via :",
         "mqttTopic": "Topic MQTT :",
+        "mqttSourceTopic": "Topic MQTT par source (avec Home Assistant discovery) :",
         "sseEndpoint": "Point de terminaison SSE :",
         "prometheusMetrics": "Métriques Prometheus :"
       },

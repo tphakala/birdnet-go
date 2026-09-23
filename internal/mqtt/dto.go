@@ -34,7 +34,7 @@ type MQTTEventDTO struct {
 	// Existing fields with specific casing (part of API contract)
 	// ===========================================================================
 	DetectionID uint    `json:"detectionId"`          // camelCase - database ID for URL construction
-	SourceID    string  `json:"sourceId"`             // camelCase - audio source ID for HA filtering
+	SourceID    string  `json:"sourceId"`             // camelCase - audio source ID of the detection; HA discovery reads the per-source topic keyed by it
 	Occurrence  float64 `json:"occurrence,omitempty"` // lowercase with omitempty
 
 	// ===========================================================================

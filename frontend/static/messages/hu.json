@@ -3261,7 +3261,7 @@
             "label": "Eszköz név",
             "helpText": "Az alap nevet az eszközökhöz, ahogy megjelennek a Home Assistant-ban. Minden hang forrásnak saját eszköze lesz, amely ehhez a fő BirdNET-Go eszközhöz lesz kapcsolva."
           },
-          "sensorsNote": "<strong>Létrehozott érzékelők:</strong> Minden hang forráshoz a Home Assistant megkapja: Utolsó faj, Megbízhatóság, Tudományos név és Hangszint (ha engedélyezve van). A bridge eszköz tartalmazza az online/offline elérhetőségi állapotot.",
+          "sensorsNote": "<strong>Létrehozott érzékelők:</strong> Minden hang forráshoz a Home Assistant megkapja: Utolsó faj, Megbízhatóság, Tudományos név és Hangszint (ha engedélyezve van). A bridge eszköz tartalmazza az online/offline elérhetőségi állapotot. Az egyes források észlelési érzékelői az adott forrás saját MQTT témáját olvassák, &lt;base_topic&gt;/sources/&lt;source_id&gt;, és annak Hangszint érzékelője a &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel altémát olvassa, így az egyik forrás észlelése soha nem állítja vissza egy másik forrás érzékelőit.",
           "discovery": {
             "button": "Felfedezés küldése",
             "success": "Felfedezés üzenetek elküldve a Home Assistant-nak",
@@ -3720,6 +3720,7 @@
         "dataOutputTitle": "Hangszint adat kimenet",
         "dataOutputDescription": "Ha engedélyezve van, a hangszint mérések publikálásra kerülnek:",
         "mqttTopic": "MQTT téma:",
+        "mqttSourceTopic": "Forrásonkénti MQTT téma (Home Assistant discovery esetén):",
         "sseEndpoint": "SSE végpont:",
         "prometheusMetrics": "Prometheus metrikák:"
       },

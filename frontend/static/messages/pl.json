@@ -3261,7 +3261,7 @@
             "label": "Nazwa urządzenia",
             "helpText": "Podstawowa nazwa urządzeń wyświetlana w Home Assistant. Każde źródło audio będzie miało własne urządzenie połączone z tym głównym urządzeniem BirdNET-Go."
           },
-          "sensorsNote": "<strong>Utworzone czujniki:</strong> Dla każdego źródła audio Home Assistant otrzyma: Ostatni gatunek, Pewność, Nazwa naukowa i Poziom dźwięku (jeśli włączony). Urządzenie mostka zawiera status dostępności online/offline.",
+          "sensorsNote": "<strong>Utworzone czujniki:</strong> Dla każdego źródła audio Home Assistant otrzyma: Ostatni gatunek, Pewność, Nazwa naukowa i Poziom dźwięku (jeśli włączony). Urządzenie mostka zawiera status dostępności online/offline. Czujniki detekcji każdego źródła odczytują własny temat MQTT tego źródła, &lt;base_topic&gt;/sources/&lt;source_id&gt;, a jego czujnik Poziom dźwięku odczytuje podtemat &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, więc wykrycie z jednego źródła nigdy nie resetuje czujników innego źródła.",
           "discovery": {
             "button": "Wyślij Discovery",
             "success": "Wiadomości wykrywania wysłane do Home Assistant",
@@ -3720,6 +3720,7 @@
         "dataOutputTitle": "Wyjście Danych Poziomu Dźwięku",
         "dataOutputDescription": "Po włączeniu pomiary poziomu dźwięku są publikowane przez:",
         "mqttTopic": "Temat MQTT:",
+        "mqttSourceTopic": "Temat MQTT dla każdego źródła (z Home Assistant discovery):",
         "sseEndpoint": "Punkt końcowy SSE:",
         "prometheusMetrics": "Metryki Prometheus:"
       },

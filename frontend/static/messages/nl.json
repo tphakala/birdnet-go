@@ -3261,7 +3261,7 @@
             "label": "Apparaatnaam",
             "helpText": "De basisnaam voor apparaten zoals ze verschijnen in Home Assistant. Elke audiobron heeft zijn eigen apparaat gekoppeld aan dit hoofd BirdNET-Go apparaat."
           },
-          "sensorsNote": "<strong>Aangemaakte Sensoren:</strong> Voor elke audiobron ontvangt Home Assistant: Laatste Soort, Betrouwbaarheid, Wetenschappelijke Naam en Geluidsniveau (indien ingeschakeld). Het bridge apparaat bevat online/offline beschikbaarheidsstatus.",
+          "sensorsNote": "<strong>Aangemaakte Sensoren:</strong> Voor elke audiobron ontvangt Home Assistant: Laatste Soort, Betrouwbaarheid, Wetenschappelijke Naam en Geluidsniveau (indien ingeschakeld). Het bridge apparaat bevat online/offline beschikbaarheidsstatus. De detectiesensoren van elke bron lezen het eigen MQTT-topic van die bron, &lt;base_topic&gt;/sources/&lt;source_id&gt;, en de Geluidsniveau-sensor leest het subtopic &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, zodat een detectie van één bron nooit de sensoren van een andere bron reset.",
           "discovery": {
             "button": "Verstuur Discovery",
             "success": "Discovery berichten verzonden naar Home Assistant",
@@ -3720,6 +3720,7 @@
         "dataOutputTitle": "Geluidsniveau Gegevens Output",
         "dataOutputDescription": "Wanneer ingeschakeld, worden geluidsniveau metingen gepubliceerd via:",
         "mqttTopic": "MQTT-topic:",
+        "mqttSourceTopic": "MQTT-topic per bron (met Home Assistant discovery):",
         "sseEndpoint": "SSE-eindpunt:",
         "prometheusMetrics": "Prometheus-metrics:"
       },

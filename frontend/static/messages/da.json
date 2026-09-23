@@ -3261,7 +3261,7 @@
             "label": "Enhedsnavn",
             "helpText": "Basisnavnet for enheder som de vises i Home Assistant. Hver lydkilde vil have sin egen enhed knyttet til denne hoved BirdNET-Go-enhed."
           },
-          "sensorsNote": "<strong>Sensorer oprettet:</strong> For hver lydkilde modtager Home Assistant: Seneste art, Konfidens, Videnskabeligt navn og Lydniveau (hvis aktiveret). Bridge-enheden inkluderer online/offline-tilgængelighedsstatus.",
+          "sensorsNote": "<strong>Sensorer oprettet:</strong> For hver lydkilde modtager Home Assistant: Seneste art, Konfidens, Videnskabeligt navn og Lydniveau (hvis aktiveret). Bridge-enheden inkluderer online/offline-tilgængelighedsstatus. Hver kildes detektionssensorer læser kildens eget MQTT-emne, &lt;base_topic&gt;/sources/&lt;source_id&gt;, og dens Lydniveau-sensor læser underemnet &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, så en registrering fra én kilde aldrig nulstiller en anden kildes sensorer.",
           "discovery": {
             "button": "Send Discovery",
             "success": "Discovery-beskeder sendt til Home Assistant",
@@ -3720,6 +3720,7 @@
         "dataOutputTitle": "Output af lydniveaudata",
         "dataOutputDescription": "Når aktiveret, publiceres lydniveaumålinger via:",
         "mqttTopic": "MQTT-emne:",
+        "mqttSourceTopic": "MQTT-emne pr. kilde (med Home Assistant discovery):",
         "sseEndpoint": "SSE-endepunkt:",
         "prometheusMetrics": "Prometheus-metrikker:"
       },

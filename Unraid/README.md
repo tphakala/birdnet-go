@@ -194,15 +194,15 @@ Configure security in the web interface under **Settings** → **Security**.
 
 ### Home Assistant
 
-BirdNET-Go supports MQTT for Home Assistant integration:
+BirdNET-Go supports MQTT for Home Assistant integration. Enabling Home Assistant MQTT discovery in BirdNET-Go (Settings > Integrations > MQTT) registers the detection sensors automatically, so the manual sensor below is only needed if you prefer to configure it by hand. The example uses the default base topic `birdnet` (change it to match `realtime.mqtt.topic` if you set a custom topic) and reads the detection's common name from `value_json.CommonName`. Modern Home Assistant configures MQTT sensors under the `mqtt:` key:
 
 ```yaml
 # configuration.yaml
-sensor:
-  - platform: mqtt
-    name: "Latest Bird Detection"
-    state_topic: "birdnet/detection"
-    value_template: "{{ value_json.species }}"
+mqtt:
+  sensor:
+    - name: "Latest Bird Detection"
+      state_topic: "birdnet"
+      value_template: "{{ value_json.CommonName }}"
 ```
 
 ### Node-RED

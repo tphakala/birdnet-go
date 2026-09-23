@@ -45,7 +45,7 @@ func getBrokerAddress() string {
 	if isLocalBrokerAvailable() {
 		return localTestBroker
 	}
-	return "" // No broker available — use integration tests with testcontainer instead
+	return "" // No broker available: use integration tests with testcontainer instead
 }
 
 // isLocalBrokerAvailable checks if a local MQTT broker is available
@@ -636,6 +636,41 @@ func createTestClient(t *testing.T, broker string) (Client, *observability.Metri
 	require.NoError(t, err, "Failed to create MQTT client")
 
 	return client, metrics
+}
+
+// TestNewClient_LWTTopicUsesStatusTopic verifies that the Last Will topic is
+// built through StatusTopic, so a trailing-slash base topic yields
+// "birdnet/status" and matches the availability topic HA sensors read. LWT and
+// the discovered availability topics must be identical or HA never sees the node
+// go offline.
+func TestNewClient_LWTTopicUsesStatusTopic(t *testing.T) {
+	t.Parallel()
+
+	const base = "birdnet/"
+	testSettings := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			MQTT: conf.MQTTSettings{
+				Broker: "tcp://localhost:1883",
+				Topic:  base,
+			},
+		},
+	}
+	testSettings.Main.Name = sanitizeClientID(t.Name())
+	testSettings.Realtime.MQTT.HomeAssistant.Enabled = true
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err, "Failed to create metrics")
+
+	c, err := NewClient(testSettings, metrics)
+	require.NoError(t, err, "Failed to create MQTT client")
+
+	impl, ok := c.(*client)
+	require.True(t, ok, "NewClient must return *client")
+	assert.True(t, impl.config.LWT.Enabled, "LWT must be enabled when HA discovery is on")
+	assert.Equal(t, StatusTopic(base), impl.config.LWT.Topic,
+		"LWT topic must equal StatusTopic(base)")
+	assert.Equal(t, "birdnet/status", impl.config.LWT.Topic,
+		"trailing-slash base must not leave an empty topic level")
 }
 
 // TestExtractBrokerHostname verifies the TLS ServerName hostname extraction

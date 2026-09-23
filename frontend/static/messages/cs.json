@@ -3261,7 +3261,7 @@
             "label": "Název zařízení",
             "helpText": "Základní název zařízení, jak se zobrazují v Home Assistant. Každý zdroj zvuku bude mít své vlastní zařízení propojené s tímto hlavním zařízením BirdNET-Go."
           },
-          "sensorsNote": "<strong>Vytvořené senzory:</strong> Pro každý zdroj zvuku Home Assistant obdrží: Poslední druh, Jistotu, Vědecký název a Úroveň zvuku (pokud je povolena). Můstkové zařízení obsahuje stav dostupnosti online/offline.",
+          "sensorsNote": "<strong>Vytvořené senzory:</strong> Pro každý zdroj zvuku Home Assistant obdrží: Poslední druh, Jistotu, Vědecký název a Úroveň zvuku (pokud je povolena). Můstkové zařízení obsahuje stav dostupnosti online/offline. Detekční senzory každého zdroje čtou vlastní MQTT téma daného zdroje, &lt;base_topic&gt;/sources/&lt;source_id&gt;, a jeho senzor Úroveň zvuku čte podtéma &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, takže detekce z jednoho zdroje nikdy neresetuje senzory jiného zdroje.",
           "discovery": {
             "button": "Odeslat zjišťování",
             "success": "Zprávy o zjišťování byly odeslány do Home Assistant",
@@ -3720,6 +3720,7 @@
         "dataOutputTitle": "Výstup dat o úrovni zvuku",
         "dataOutputDescription": "Pokud je povoleno, měření úrovně zvuku jsou zveřejňována prostřednictvím:",
         "mqttTopic": "MQTT téma:",
+        "mqttSourceTopic": "MQTT téma pro jednotlivé zdroje (s Home Assistant discovery):",
         "sseEndpoint": "Koncový bod SSE:",
         "prometheusMetrics": "Metriky Prometheus:"
       },

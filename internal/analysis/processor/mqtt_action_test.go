@@ -3,13 +3,14 @@
 // These tests verify that MqttAction correctly:
 // - Reads detection ID from DetectionContext
 // - Generates correct JSON payload with all fields
-// - Includes sourceId for Home Assistant filtering
+// - Includes sourceId (the audio source ID) in the payload
 package processor
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -32,6 +33,19 @@ type MockMQTTClient struct {
 	publishCalls     int
 	reconnectLoops   int
 	disconnectCalls  int
+	// messages records every successful publish in order.
+	messages []publishedMessage
+	// topicErrs fails publishes to specific topics only.
+	topicErrs map[string]error
+	// onConnectHandler stores the last handler registered via RegisterOnConnectHandler.
+	onConnectHandler mqtt.OnConnectHandler
+}
+
+// publishedMessage is one publish captured by MockMQTTClient.
+type publishedMessage struct {
+	topic   string
+	payload string
+	retain  bool // true only for PublishWithRetain(..., true)
 }
 
 // NewMockMQTTClient creates a new mock MQTT client.
@@ -49,20 +63,31 @@ func (m *MockMQTTClient) Connect(_ context.Context) error {
 	return nil
 }
 
-func (m *MockMQTTClient) Publish(_ context.Context, topic, payload string) error {
+func (m *MockMQTTClient) Publish(ctx context.Context, topic, payload string) error {
+	return m.publish(ctx, topic, payload, false)
+}
+
+func (m *MockMQTTClient) publish(ctx context.Context, topic, payload string, retain bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.publishCalls++
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if m.publishErr != nil {
 		return m.publishErr
 	}
+	if err := m.topicErrs[topic]; err != nil {
+		return err
+	}
 	m.publishedTopic = topic
 	m.publishedPayload = payload
+	m.messages = append(m.messages, publishedMessage{topic: topic, payload: payload, retain: retain})
 	return nil
 }
 
-func (m *MockMQTTClient) PublishWithRetain(ctx context.Context, topic, payload string, _ bool) error {
-	return m.Publish(ctx, topic, payload)
+func (m *MockMQTTClient) PublishWithRetain(ctx context.Context, topic, payload string, retain bool) error {
+	return m.publish(ctx, topic, payload, retain)
 }
 
 func (m *MockMQTTClient) IsConnected() bool {
@@ -86,7 +111,20 @@ func (m *MockMQTTClient) StartReconnectLoop() {
 
 func (m *MockMQTTClient) TestConnection(_ context.Context, _ chan<- mqtt.TestResult) {}
 func (m *MockMQTTClient) SetControlChannel(_ chan string)                            {}
-func (m *MockMQTTClient) RegisterOnConnectHandler(_ mqtt.OnConnectHandler)           {}
+
+// RegisterOnConnectHandler stores the handler so tests can invoke it directly.
+func (m *MockMQTTClient) RegisterOnConnectHandler(h mqtt.OnConnectHandler) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onConnectHandler = h
+}
+
+// OnConnectHandler returns the last handler registered, or nil.
+func (m *MockMQTTClient) OnConnectHandler() mqtt.OnConnectHandler {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.onConnectHandler
+}
 
 // ReconnectLoopStarts returns how many times StartReconnectLoop was called.
 func (m *MockMQTTClient) ReconnectLoopStarts() int {
@@ -128,6 +166,23 @@ func (m *MockMQTTClient) SetPublishError(err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.publishErr = err
+}
+
+// SetTopicError makes publishes to topic fail with err; other topics succeed.
+func (m *MockMQTTClient) SetTopicError(topic string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.topicErrs == nil {
+		m.topicErrs = make(map[string]error)
+	}
+	m.topicErrs[topic] = err
+}
+
+// GetPublishedMessages returns a copy of every successful publish, in order.
+func (m *MockMQTTClient) GetPublishedMessages() []publishedMessage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.messages)
 }
 
 // GetPublishCalls returns the number of Publish calls.
@@ -273,8 +328,8 @@ func TestMqttAction_Execute_PayloadContainsAllFields(t *testing.T) {
 	assert.Regexp(t, `^\d{2}:\d{2}:\d{2}$`, jsonMap["Time"], "Time should be HH:MM:SS")
 }
 
-// TestMqttAction_Execute_SourceID verifies that the sourceId field is included
-// for Home Assistant device filtering.
+// TestMqttAction_Execute_SourceID verifies that the sourceId field carries the
+// audio source ID.
 func TestMqttAction_Execute_SourceID(t *testing.T) {
 	t.Parallel()
 
@@ -311,12 +366,12 @@ func TestMqttAction_Execute_SourceID(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "microphone-backyard", jsonMap["sourceId"],
-		"sourceId should match AudioSource.ID for HA filtering")
+		"sourceId should match AudioSource.ID; HA discovery keys the per-source topic on it")
 }
 
 // TestMqttAction_Execute_TransientError_NonFatal verifies that transient connection
 // errors (EOF, not connected) are absorbed by MqttAction and do NOT fail the action.
-// This is the key behavioral change for GitHub #2397 — the detection is safe in the
+// This is the key behavioral change for GitHub #2397: the detection is safe in the
 // database, so a missed MQTT notification is not data loss.
 func TestMqttAction_Execute_TransientError_NonFatal(t *testing.T) {
 	t.Parallel()

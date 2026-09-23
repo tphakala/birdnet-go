@@ -3261,7 +3261,7 @@
             "label": "Nombre del dispositivo",
             "helpText": "El nombre base para los dispositivos tal como aparecen en Home Assistant. Cada fuente de audio tendrá su propio dispositivo vinculado a este dispositivo principal de BirdNET-Go."
           },
-          "sensorsNote": "<strong>Sensores creados:</strong> Para cada fuente de audio, Home Assistant recibirá: Última especie, Confianza, Nombre científico y Nivel de sonido (si está habilitado). El dispositivo puente incluye estado de disponibilidad en línea/fuera de línea.",
+          "sensorsNote": "<strong>Sensores creados:</strong> Para cada fuente de audio, Home Assistant recibirá: Última especie, Confianza, Nombre científico y Nivel de sonido (si está habilitado). El dispositivo puente incluye estado de disponibilidad en línea/fuera de línea. Los sensores de detección de cada fuente leen el tema MQTT propio de esa fuente, &lt;base_topic&gt;/sources/&lt;source_id&gt;, y su sensor de Nivel de sonido lee el subtema &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, de modo que una detección de una fuente nunca restablece los sensores de otra fuente.",
           "discovery": {
             "button": "Enviar Discovery",
             "success": "Mensajes de descubrimiento enviados a Home Assistant",
@@ -3720,6 +3720,7 @@
         "dataOutputTitle": "Salida de datos del nivel de sonido",
         "dataOutputDescription": "Cuando está habilitado, las mediciones del nivel de sonido se publican vía:",
         "mqttTopic": "Tema MQTT:",
+        "mqttSourceTopic": "Tema MQTT por fuente (con Home Assistant discovery):",
         "sseEndpoint": "Punto final SSE:",
         "prometheusMetrics": "Métricas Prometheus:"
       },
