@@ -267,8 +267,12 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 // configured and an enabled banner element shows the location map, nil otherwise.
 // The map itself already reveals the station position to every visitor, so the
 // coordinates are exposed exactly when the admin opted into that map and never
-// in any other case.
+// in any other case. Private mode is excluded: /app/config stays public there,
+// but guests only get the login form and authenticated users read the settings.
 func bannerStationLocation(settings *conf.Settings) *StationLocationDTO {
+	if settings.Security.PrivateMode {
+		return nil
+	}
 	lat, lon, configured := settings.Location()
 	if !configured {
 		return nil

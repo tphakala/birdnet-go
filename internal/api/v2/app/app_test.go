@@ -228,6 +228,7 @@ func TestGetAppConfig_StationLocation(t *testing.T) {
 	tests := []struct {
 		name         string
 		configured   bool
+		privateMode  bool
 		elements     []conf.DashboardElement
 		wantLocation bool
 	}{
@@ -242,6 +243,14 @@ func TestGetAppConfig_StationLocation(t *testing.T) {
 			configured:   true,
 			elements:     []conf.DashboardElement{summaryElement, bannerElement(false, true), bannerElement(true, true)},
 			wantLocation: true,
+		},
+		{
+			// /app/config stays public in private mode, where guests only get the
+			// login form and authenticated users read the full settings.
+			name:        "private mode",
+			configured:  true,
+			privateMode: true,
+			elements:    []conf.DashboardElement{bannerElement(true, true)},
 		},
 		{
 			name:       "banner map hidden",
@@ -288,6 +297,7 @@ func TestGetAppConfig_StationLocation(t *testing.T) {
 			settings.BirdNET.Latitude = testLatitude
 			settings.BirdNET.Longitude = testLongitude
 			settings.BirdNET.LocationConfigured = tt.configured
+			settings.Security.PrivateMode = tt.privateMode
 			settings.Realtime.Dashboard.Layout.Elements = tt.elements
 			controller := newAppHandler(t, e, settings)
 
@@ -304,7 +314,7 @@ func TestGetAppConfig_StationLocation(t *testing.T) {
 
 			if !tt.wantLocation {
 				assert.NotContains(t, raw, "stationLocation",
-					"coordinates must stay private unless an enabled banner shows the map")
+					"coordinates must not appear in the public payload in this case")
 				return
 			}
 			require.Contains(t, raw, "stationLocation",
