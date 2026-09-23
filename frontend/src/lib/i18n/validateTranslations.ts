@@ -69,6 +69,7 @@ const SKIP_UNTRANSLATED_KEYWORDS = [
   'webhook',
   'mqtt',
   'birdweather',
+  'pirate weather',
   'ifttt',
   'google',
   'oauth',
