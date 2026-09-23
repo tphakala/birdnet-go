@@ -3261,7 +3261,7 @@
             "label": "Laitteen nimi",
             "helpText": "Laitteiden perusnimi sellaisena kuin ne näkyvät Home Assistantissa. Jokaisella äänilähteellä on oma laite, joka on linkitetty tähän BirdNET-Go-päälaitteeseen."
           },
-          "sensorsNote": "<strong>Luodut anturit:</strong> Jokaista äänilähdettä kohden Home Assistant saa: Viimeisin laji, Luottamus, Tieteellinen nimi ja Äänitaso (jos käytössä). Siltalaitteessa on online/offline-saatavuustila. Kunkin lähteen anturit lukevat kyseisen lähteen omaa MQTT-aihetta, &lt;base_topic&gt;/sources/&lt;source_id&gt;, joten yhden lähteen havainto ei koskaan nollaa toisen lähteen antureita.",
+          "sensorsNote": "<strong>Luodut anturit:</strong> Jokaista äänilähdettä kohden Home Assistant saa: Viimeisin laji, Luottamus, Tieteellinen nimi ja Äänitaso (jos käytössä). Siltalaitteessa on online/offline-saatavuustila. Kunkin lähteen havaintoanturit lukevat kyseisen lähteen omaa MQTT-aihetta, &lt;base_topic&gt;/sources/&lt;source_id&gt;, ja sen Äänitaso-anturi lukee aliaihetta &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, joten yhden lähteen havainto ei koskaan nollaa toisen lähteen antureita.",
           "discovery": {
             "button": "Lähetä Discovery",
             "success": "Discovery-viestit lähetetty Home Assistantiin",

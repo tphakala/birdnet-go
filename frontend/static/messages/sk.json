@@ -3261,7 +3261,7 @@
             "label": "Názov zariadenia",
             "helpText": "Základný názov zariadení, ako sa zobrazujú v Home Assistant. Každý zdroj zvuku bude mať svoje vlastné zariadenie prepojené s týmto hlavným zariadením BirdNET-Go."
           },
-          "sensorsNote": "<strong>Vytvorené senzory:</strong> Pre každý zdroj zvuku dostane Home Assistant: Posledný druh, Istotu, Vedecký názov a Úroveň zvuku (ak je povolená). Premosťovacie zariadenie zahŕňa stav dostupnosti online/offline. Senzory každého zdroja čítajú vlastnú MQTT tému daného zdroja, &lt;base_topic&gt;/sources/&lt;source_id&gt;, takže detekcia z jedného zdroja nikdy neresetuje senzory iného zdroja.",
+          "sensorsNote": "<strong>Vytvorené senzory:</strong> Pre každý zdroj zvuku dostane Home Assistant: Posledný druh, Istotu, Vedecký názov a Úroveň zvuku (ak je povolená). Premosťovacie zariadenie zahŕňa stav dostupnosti online/offline. Detekčné senzory každého zdroja čítajú vlastnú MQTT tému daného zdroja, &lt;base_topic&gt;/sources/&lt;source_id&gt;, a jeho senzor Úroveň zvuku číta podtému &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, takže detekcia z jedného zdroja nikdy neresetuje senzory iného zdroja.",
           "discovery": {
             "button": "Odoslať zisťovanie",
             "success": "Správy o zisťovaní boli odoslané do Home Assistant",

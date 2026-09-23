@@ -1693,7 +1693,7 @@ The MQTT message uses a compact JSON format to minimize payload size:
 ```json
 {
   "ts": "2024-01-15T08:30:45Z",
-  "src": "USB Audio Device",
+  "src": "rtsp_65c31a0b",
   "nm": "Primary Microphone",
   "dur": 10,
   "b": {

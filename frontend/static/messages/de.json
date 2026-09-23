@@ -3261,7 +3261,7 @@
             "label": "Gerätename",
             "helpText": "Der Basisname für Geräte, wie sie in Home Assistant erscheinen. Jede Audioquelle hat ihr eigenes Gerät, das mit diesem BirdNET-Go-Hauptgerät verknüpft ist."
           },
-          "sensorsNote": "<strong>Erstellte Sensoren:</strong> Für jede Audioquelle erhält Home Assistant: Letzte Art, Konfidenz, wissenschaftlicher Name und Schallpegel (wenn aktiviert). Das Bridge-Gerät enthält Online/Offline-Verfügbarkeitsstatus. Die Sensoren jeder Quelle lesen das eigene MQTT-Topic dieser Quelle, &lt;base_topic&gt;/sources/&lt;source_id&gt;, sodass eine Erkennung einer Quelle niemals die Sensoren einer anderen Quelle zurücksetzt.",
+          "sensorsNote": "<strong>Erstellte Sensoren:</strong> Für jede Audioquelle erhält Home Assistant: Letzte Art, Konfidenz, wissenschaftlicher Name und Schallpegel (wenn aktiviert). Das Bridge-Gerät enthält Online/Offline-Verfügbarkeitsstatus. Die Erkennungssensoren jeder Quelle lesen das eigene MQTT-Topic dieser Quelle, &lt;base_topic&gt;/sources/&lt;source_id&gt;, und ihr Schallpegel-Sensor liest das Subtopic &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, sodass eine Erkennung einer Quelle niemals die Sensoren einer anderen Quelle zurücksetzt.",
           "discovery": {
             "button": "Discovery senden",
             "success": "Discovery-Nachrichten an Home Assistant gesendet",

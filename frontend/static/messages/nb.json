@@ -3261,7 +3261,7 @@
             "label": "Enhetsnavn",
             "helpText": "Grunnnavnet for enheter slik de vises i Home Assistant. Hver lydkilde vil ha sin egen enhet koblet til denne hoved-BirdNET-Go-enheten."
           },
-          "sensorsNote": "<strong>Sensorer opprettet:</strong> For hver lydkilde vil Home Assistant motta: Siste art, Sikkerhet, Vitenskapelig navn og Lydnivå (hvis aktivert). Bro-enheten inkluderer tilgjengelig/utilgjengelig-status. Sensorene til hver kilde leser kildens eget MQTT-emne, &lt;base_topic&gt;/sources/&lt;source_id&gt;, slik at en registrering fra én kilde aldri nullstiller sensorene til en annen kilde.",
+          "sensorsNote": "<strong>Sensorer opprettet:</strong> For hver lydkilde vil Home Assistant motta: Siste art, Sikkerhet, Vitenskapelig navn og Lydnivå (hvis aktivert). Bro-enheten inkluderer tilgjengelig/utilgjengelig-status. Deteksjonssensorene til hver kilde leser kildens eget MQTT-emne, &lt;base_topic&gt;/sources/&lt;source_id&gt;, og dens Lydnivå-sensor leser underemnet &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, slik at en registrering fra én kilde aldri nullstiller sensorene til en annen kilde.",
           "discovery": {
             "button": "Send oppdagelse",
             "success": "Oppdagelsesmeldinger sendt til Home Assistant",

@@ -3261,7 +3261,7 @@
             "label": "Nome do dispositivo",
             "helpText": "O nome base para dispositivos conforme aparecem no Home Assistant. Cada fonte de áudio terá seu próprio dispositivo vinculado a este dispositivo principal do BirdNET-Go."
           },
-          "sensorsNote": "<strong>Sensores criados:</strong> Para cada fonte de áudio, o Home Assistant receberá: Última espécie, Confiança, Nome científico e Nível de som (se ativado). O dispositivo ponte inclui status de disponibilidade online/offline. Os sensores de cada fonte leem o tópico MQTT próprio dessa fonte, &lt;base_topic&gt;/sources/&lt;source_id&gt;, de modo que uma deteção de uma fonte nunca reinicia os sensores de outra fonte.",
+          "sensorsNote": "<strong>Sensores criados:</strong> Para cada fonte de áudio, o Home Assistant receberá: Última espécie, Confiança, Nome científico e Nível de som (se ativado). O dispositivo ponte inclui status de disponibilidade online/offline. Os sensores de deteção de cada fonte leem o tópico MQTT próprio dessa fonte, &lt;base_topic&gt;/sources/&lt;source_id&gt;, e o seu sensor de Nível de som lê o subtópico &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, de modo que uma deteção de uma fonte nunca reinicia os sensores de outra fonte.",
           "discovery": {
             "button": "Enviar Discovery",
             "success": "Mensagens de descoberta enviadas ao Home Assistant",

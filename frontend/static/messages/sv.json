@@ -3261,7 +3261,7 @@
             "label": "Enhetsnamn",
             "helpText": "Basnamnet för enheter som de visas i Home Assistant. Varje ljudkälla har sin egen enhet kopplad till denna huvudsakliga BirdNET-Go-enhet."
           },
-          "sensorsNote": "<strong>Skapade sensorer:</strong> För varje ljudkälla tar Home Assistant emot: Senaste art, Konfidens, Vetenskapligt namn och Ljudnivå (om aktiverat). Bryggenheten inkluderar tillgänglighetsstatus online/offline. Varje källas sensorer läser källans eget MQTT-ämne, &lt;base_topic&gt;/sources/&lt;source_id&gt;, så en detektering från en källa aldrig nollställer en annan källas sensorer.",
+          "sensorsNote": "<strong>Skapade sensorer:</strong> För varje ljudkälla tar Home Assistant emot: Senaste art, Konfidens, Vetenskapligt namn och Ljudnivå (om aktiverat). Bryggenheten inkluderar tillgänglighetsstatus online/offline. Varje källas detekteringssensorer läser källans eget MQTT-ämne, &lt;base_topic&gt;/sources/&lt;source_id&gt;, och dess Ljudnivå-sensor läser underämnet &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, så en detektering från en källa aldrig nollställer en annan källas sensorer.",
           "discovery": {
             "button": "Skicka Discovery",
             "success": "Identifieringsmeddelanden skickade till Home Assistant",
