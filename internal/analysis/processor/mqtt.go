@@ -104,7 +104,7 @@ func (p *Processor) PublishMQTT(ctx context.Context, topic, payload string) erro
 		return client.Publish(ctx, topic, payload)
 	}
 	// Emit one warn log per topic so operators learn MQTT is configured but not
-	// reachable. Subsequent attempts on that topic are silent — the sentinel is
+	// reachable. Subsequent attempts on that topic are silent; the sentinel is
 	// all the caller needs to decide to skip.
 	//
 	// Keyed on the topic rather than guarded once per process, because the line
@@ -241,12 +241,9 @@ func (p *Processor) RetireHomeAssistantDiscovery(ctx context.Context, client mqt
 	// Removals queued for sources deleted just before discovery was turned off
 	// are no longer performed by a publish, so retirement performs them. Every
 	// candidate key goes, since all live entities are being removed anyway.
-	pending := p.takeHAPendingRemovals()
+	pending := pinHARemovals(p.takeHAPendingRemovals(), published)
 	var failed []haPendingRemoval
 	for _, item := range pending {
-		if item.config == nil {
-			item.config = published
-		}
 		itemPublisher := mqtt.NewDiscoveryPublisher(client, item.config)
 		var errs []error
 		for _, key := range mqtt.SourceEntityKeyCandidates(item.source) {
@@ -470,14 +467,44 @@ func (p *Processor) takeHAPendingRemovals() []haPendingRemoval {
 	return items
 }
 
-// requeueHAPendingRemovals puts removals that failed back on the queue.
+// pinHARemovals pins every removal not yet attempted to config, the identity
+// its entities were published under, and drops duplicates. A request repeated
+// after an earlier attempt failed is queued unpinned next to the pinned retry;
+// once both are pinned to the same identity they are the same removal, so it
+// is performed (and requeued) only once. The same source pinned to different
+// identities stays separate, since each identity has its own topics.
+func pinHARemovals(items []haPendingRemoval, config *mqtt.DiscoveryConfig) []haPendingRemoval {
+	type removalIdentity struct {
+		source     datastore.AudioSource
+		configOnly bool
+		config     mqtt.DiscoveryConfig
+	}
+	seen := make(map[removalIdentity]struct{}, len(items))
+	pinned := make([]haPendingRemoval, 0, len(items))
+	for _, item := range items {
+		if item.config == nil {
+			item.config = config
+		}
+		id := removalIdentity{source: item.source, configOnly: item.configOnly, config: *item.config}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		pinned = append(pinned, item)
+	}
+	return pinned
+}
+
+// requeueHAPendingRemovals puts removals that failed back at the front of the
+// queue: they were taken before anything queued during the attempt, so they are
+// the oldest requests and the first to go when the cap is exceeded.
 func (p *Processor) requeueHAPendingRemovals(items []haPendingRemoval) {
 	if len(items) == 0 {
 		return
 	}
 	p.haPendingMu.Lock()
 	defer p.haPendingMu.Unlock()
-	p.haPendingRemovals = append(p.haPendingRemovals, items...)
+	p.haPendingRemovals = append(slices.Clone(items), p.haPendingRemovals...)
 	if excess := len(p.haPendingRemovals) - haPendingRemovalsCap; excess > 0 {
 		// Same bound as queueHAPendingRemoval: drop the oldest requests.
 		p.haPendingRemovals = p.haPendingRemovals[excess:]
@@ -507,29 +534,11 @@ func (p *Processor) processHAPendingRemovals(ctx context.Context, client mqtt.Cl
 		liveKeys[key] = struct{}{}
 	}
 
-	// A request repeated after an earlier attempt failed is queued unpinned
-	// next to the pinned retry; once both are pinned to the same identity they
-	// are the same removal, so it is performed (and requeued) only once.
-	type removalIdentity struct {
-		source     datastore.AudioSource
-		configOnly bool
-		config     mqtt.DiscoveryConfig
-	}
-	seen := make(map[removalIdentity]struct{}, len(items))
-
 	var failed []haPendingRemoval
-	for _, item := range items {
+	for _, item := range pinHARemovals(items, config) {
 		if _, isLive := liveIDs[item.source.ID]; isLive && !item.configOnly {
 			continue // re-added under the same raw ID: nothing to remove
 		}
-		if item.config == nil {
-			item.config = config
-		}
-		id := removalIdentity{source: item.source, configOnly: item.configOnly, config: *item.config}
-		if _, dup := seen[id]; dup {
-			continue
-		}
-		seen[id] = struct{}{}
 		publisher := mqtt.NewDiscoveryPublisher(client, item.config)
 		var errs []error
 		for _, key := range mqtt.SourceEntityKeyCandidates(item.source) {

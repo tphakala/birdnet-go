@@ -664,10 +664,13 @@ func TestForgetHomeAssistantSource_Queue(t *testing.T) {
 		p.haPendingMu.Unlock()
 	})
 
-	t.Run("requeued removals are capped, oldest dropped", func(t *testing.T) {
+	t.Run("requeued removals go first and are capped, oldest dropped", func(t *testing.T) {
 		useLiveSettings(t, newLifecycleSettings(true))
 		p := newEmptyLifecycleProcessor()
 		stopDebounce(t, p)
+		// Queued while the failed attempt was in flight, so newer than the retries.
+		newer := datastore.AudioSource{ID: "rtsp_newer", DisplayName: "Newer"}
+		p.ForgetHomeAssistantSource(newer)
 		items := make([]haPendingRemoval, haPendingRemovalsCap+5)
 		for i := range items {
 			items[i] = haPendingRemoval{source: datastore.AudioSource{ID: "rtsp_" + strconv.Itoa(i), DisplayName: "Cam"}}
@@ -677,7 +680,39 @@ func TestForgetHomeAssistantSource_Queue(t *testing.T) {
 		p.haPendingMu.Lock()
 		defer p.haPendingMu.Unlock()
 		require.Len(t, p.haPendingRemovals, haPendingRemovalsCap)
-		assert.Equal(t, "rtsp_5", p.haPendingRemovals[0].source.ID, "the oldest requests are dropped")
+		assert.Equal(t, "rtsp_6", p.haPendingRemovals[0].source.ID, "the oldest retries are dropped")
+		assert.Equal(t, newer, p.haPendingRemovals[len(p.haPendingRemovals)-1].source,
+			"a request newer than the retries is kept, behind them")
+	})
+
+	t.Run("retire performs a repeated removal once", func(t *testing.T) {
+		published := newLifecycleSettings(true)
+		useLiveSettings(t, published)
+		p := newEmptyLifecycleProcessor()
+		stopDebounce(t, p)
+		garden := registerLifecycleSource(t, p, "rtsp://192.0.2.1/garden", "Garden")
+		registerLifecycleSource(t, p, "rtsp://192.0.2.1/porch", "Porch")
+		client := NewMockMQTTClient()
+		p.SetMQTTClient(client)
+		require.NoError(t, p.publishHomeAssistantDiscovery(t.Context(), client, published))
+		require.NoError(t, p.registry.Unregister(garden.ID))
+
+		// A pinned retry and the same request repeated, unpinned.
+		p.haDiscoveryMu.Lock()
+		pinnedConfig := *p.haPublishedConfig
+		p.haDiscoveryMu.Unlock()
+		p.haPendingMu.Lock()
+		p.haPendingRemovals = []haPendingRemoval{{source: garden, config: &pinnedConfig}, {source: garden}}
+		p.haPendingMu.Unlock()
+
+		client.SetTopicError(speciesConfigTopic("Garden"), assert.AnError)
+		next := newLifecycleSettings(false)
+		useLiveSettings(t, next)
+		p.RetireHomeAssistantDiscovery(t.Context(), client, next)
+
+		p.haPendingMu.Lock()
+		defer p.haPendingMu.Unlock()
+		assert.Len(t, p.haPendingRemovals, 1, "the pinned retry and the repeated request are one removal")
 	})
 
 	t.Run("a retried removal keeps the identity of its first attempt", func(t *testing.T) {
