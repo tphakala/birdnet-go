@@ -17,6 +17,10 @@ shared namespaces that prevent duplicate strings.
 4. Run `npm run generate:i18n-types` and commit the regenerated
    `src/lib/i18n/types.generated.ts`
 
+To rename a key, move its translated value in each locale file first:
+`i18n:sync` deletes every key that is not in `en.json` and fills the new key
+with the English value.
+
 Changing the English text of an existing key is different: `i18n:sync` leaves
 the other locales alone, and unless the parameters (`{name}`) change, no check
 notices that their translations are now stale. Update that key's translation in
@@ -27,15 +31,18 @@ regenerated.
 What enforces this:
 
 - **Pre-commit hook**: runs `npm run i18n:sync:check` when any locale file is
-  staged, and `npm run generate:i18n-types:check` when `en.json`, the type
-  generator or `types.generated.ts` changes.
+  staged (it also fails on orphaned keys), and
+  `npm run generate:i18n-types:check` when `en.json`, the type generator or
+  `types.generated.ts` changes.
 - **CI**: checks the generated types, fails on missing keys and on newly added
   English fallbacks that were never translated (`--fail-on-untranslated`), and
   fails when code uses a key that `en.json` does not define. It also fails on
   parameter (`{name}`) mismatches, empty values and invalid ICU syntax in every
-  translated locale; `en.json` itself is not checked, so review the ICU syntax
-  of English text yourself. It reports orphaned keys but does not fail on
-  them.
+  translated locale, with gaps: it skips ICU checks for values without `{` and
+  for keys ending in `Placeholder`, and does not see parameters inside HTML
+  tags (see `src/lib/i18n/validateTranslations.ts`). `en.json` itself is not
+  checked, so review the English text yourself (ICU syntax and empty values).
+  CI reports orphaned keys but does not fail on them.
 
 Before pushing, run `npm run i18n:validate:ci` (the translation validator with
 CI's exact flags) and `npm run i18n:validate:full` (sync, types, usage and
