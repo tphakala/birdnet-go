@@ -52,24 +52,25 @@ Reuse the project's helpers instead of writing a new check, and pick the one for
 the job:
 
 - **Files** named by untrusted input: go through SecureFS (`internal/securefs`,
-  `c.SFS` in API handlers). Its file-access methods (`StatRel`, `ReadDirRel`,
-  `ServeRelativeFile`) give containment: they resolve inside an `os.Root`, so
-  neither `..` nor a symlink can escape. `ValidateRelativePath` is only a
-  lexical check (it cleans the path and rejects absolute and upward paths) and
-  does not stop a symlink, so pass its result to those methods and never join
-  it onto a directory for an `os.*` call. SecureFS does not reject odd-looking
-  names, so do not treat it as a string validator.
+  `c.SFS` in API handlers). Its relative-path methods (`StatRel`,
+  `ReadDirRel`, `ServeRelativeFile`) give containment: they resolve inside an
+  `os.Root`, so neither `..` nor a symlink can escape. `ValidateRelativePath`
+  is only a lexical check (it cleans the path and rejects absolute and upward
+  paths) and does not stop a symlink, so pass its result to those methods and
+  never join it onto a directory for an `os.*` call. Some existing handlers in
+  `internal/api/v2/media` still do that join; do not copy them. SecureFS does
+  not reject odd-looking names, so do not treat it as a string validator.
 - **Clip paths** from API requests: `apicore.NormalizeClipPathStrict`.
 - **Redirect targets** (which may carry a query string):
   `security.IsValidRedirect`.
 - **Other internal URL paths** (a bare path starting with `/`):
-  `security.IsSafePath`, which NFKC-normalizes the path and rejects `..`,
-  backslashes, NUL bytes and their multiply URL-encoded forms.
+  `security.IsSafePath`, which rejects traversal and other unsafe forms,
+  including encoded ones (its doc comment lists exactly what it checks).
 
 For a new check, follow the ruleguard rule in `rules/net.go`: use
 `filepath.IsLocal` for file paths, and keep a `strings.Contains(p, "..")`
 substring check only for URL paths and for file paths that may legitimately be
-absolute, which `IsLocal` rejects (see `validateExportPath` in
+absolute, which `IsLocal` rejects (see the `..` check in `validateExportPath`,
 `internal/conf/validate_audio.go`). The rule reports every such substring
 check, so each one needs a `//nolint:gocritic` comment giving the reason (see
 `internal/api/v2/apicore/clip_path.go`).
@@ -142,7 +143,7 @@ most often missed:
 Config: `.golangci.yaml` (golangci-lint v2 format).
 
 - Always lint the **whole module** (`task lint`; see the root `AGENTS.md` for
-  running it without Task), never single files or packages; partial runs miss
+  running a step by hand), never single files or packages; partial runs miss
   cross-package issues. The run type-checks the module, so it doubles as
   compilation validation, but only for the build tags and OS it runs with. No
   automated step in the preflight gate covers other tags or platforms; its
