@@ -1783,7 +1783,7 @@ grep -rn 'title="[^"$]*[A-Za-z]\|aria-label="[^"$]*[A-Za-z]' --include="*.svelte
 
 # Agent 4: i18n Translation Integrity Patterns
 
-Translation files live at `frontend/static/messages/`. `en.json` is the source of truth. All 15 non-English files must mirror its key structure exactly with properly translated values.
+Translation files live at `frontend/static/messages/`. `en.json` is the source of truth. All 15 non-English files must mirror its key structure exactly with properly translated values. The `for lang in ...` loops below list those 15 locales; keep them in sync with `LOCALES` in `frontend/src/lib/i18n/config.ts` when a locale is added.
 
 ## Flattening JSON to Dot-Notation
 
@@ -1807,7 +1807,7 @@ cd frontend/static/messages
 # Generate sorted key lists
 jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > /tmp/en_keys.txt
 
-for lang in da de es fi fr hu it lv nl pl pt sk sv; do
+for lang in cs da de es fi fr hu it lv nb nl pl pt sk sv; do
   jq -r '[paths(scalars)] | .[] | join(".")' "${lang}.json" | sort > "/tmp/${lang}_keys.txt"
   missing=$(comm -23 /tmp/en_keys.txt "/tmp/${lang}_keys.txt")
   if [ -n "$missing" ]; then
@@ -1834,7 +1834,7 @@ Values in non-English files identical to the English value. English placeholders
 ```bash
 cd frontend/static/messages
 
-for lang in da de es fi fr hu it lv nl pl pt sk sv; do
+for lang in cs da de es fi fr hu it lv nb nl pl pt sk sv; do
   echo "=== ${lang}.json: ENGLISH PLACEHOLDERS ==="
   # Compare values at matching key paths
   jq -r 'paths(scalars) as $p | "\($p | join("."))=\(getpath($p))"' en.json | sort > /tmp/en_kv.txt
@@ -1876,7 +1876,7 @@ Keys present in a non-English file but absent from `en.json`. These are leftover
 ```bash
 cd frontend/static/messages
 
-for lang in da de es fi fr hu it lv nl pl pt sk sv; do
+for lang in cs da de es fi fr hu it lv nb nl pl pt sk sv; do
   orphaned=$(comm -13 /tmp/en_keys.txt "/tmp/${lang}_keys.txt")
   if [ -n "$orphaned" ]; then
     echo "=== ${lang}.json: ORPHANED KEYS ==="
@@ -1899,7 +1899,7 @@ jq -r '[paths | select(length > 0)] | map(join(".")) | .[]' en.json | sort -u > 
 jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > /tmp/en_scalar_paths.txt
 comm -23 /tmp/en_all_paths.txt /tmp/en_scalar_paths.txt | sort > /tmp/en_object_paths.txt
 
-for lang in da de es fi fr hu it lv nl pl pt sk sv; do
+for lang in cs da de es fi fr hu it lv nb nl pl pt sk sv; do
   jq -r '[paths(scalars)] | .[] | join(".")' "${lang}.json" | sort > "/tmp/${lang}_scalar.txt"
   # Flag: path is an object in en.json but a scalar in this file (or vice versa)
   mismatches=$(comm -12 /tmp/en_object_paths.txt "/tmp/${lang}_scalar.txt")
