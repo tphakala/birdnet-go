@@ -185,9 +185,10 @@ unauthenticated clients (the audio domain does this with its local
 - **Follow the error format** - `return c.HandleError(ctx, err, "message", statusCode)`
   (or `c.HandleErrorWithKey(...)` for an i18n key). The `ErrorResponse` shape and
   correlation-id behavior live in `apicore`.
-- **Hot-reload** - read settings per request via `c.CurrentSettings()` /
-  `c.ControllerSettings()` (the atomic snapshot on `Core`); never branch on settings
-  captured at startup.
+- **Hot-reload** - read settings per request via `c.CurrentSettings()` (the
+  process-wide settings snapshot, falling back to Core's) or
+  `c.ControllerSettings()` (Core's own snapshot); both are lock-free atomic loads.
+  Never branch on settings captured at startup.
 - **Document in README.md** - update the endpoint table immediately.
 
 ## Future api/v3

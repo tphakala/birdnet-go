@@ -61,8 +61,9 @@ reach telemetry, so it carries the right component and category.
 
 ## Categories
 
-Pick the most specific category from the `Category*` constants in `errors.go`.
-Common groups:
+Pick the most specific category from the `Category*` constants in `errors.go`,
+which is the authoritative list; the groups below are a map, not a copy to trust
+over the code:
 
 - Model and startup: `CategoryModelInit`, `CategoryModelLoad`, `CategoryLabelLoad`,
   `CategoryConfiguration`, `CategoryPolicyConfig`
@@ -87,6 +88,11 @@ Common groups:
   `.Component()` is set explicitly.
 - **Generic Sentry titles**: add an `operation` context and use a descriptive
   `errors.Newf()` message. See "Troubleshooting" in `README.md`.
-- **Performance**: telemetry is dispatched asynchronously through the event bus
-  and costs almost nothing when disabled. See "Event Bus Integration" in
-  `README.md`.
+- **Performance**: when telemetry is disabled, `Build()` skips component
+  detection and publishing entirely; when enabled, reporting is asynchronous
+  through the event bus. The builder itself still allocates (2 allocations and about
+  100 ns for a bare error, 4 allocations and a few hundred ns with two `Context`
+  calls, measured on a desktop CPU), so on per-sample or per-buffer hot
+  paths return a pre-declared sentinel and build the enhanced error once at the
+  component boundary. Measure with
+  `go test -run='^$' -bench=ErrorCreation -benchmem ./internal/errors/`.

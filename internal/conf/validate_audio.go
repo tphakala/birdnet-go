@@ -813,7 +813,7 @@ func validateExportPath(path string) error {
 			Build()
 	}
 
-	//nolint:gocritic // ruleguard suggests IsLocal alone, but IsLocal cleans "../x" to "x" (valid!); explicit ".." check is required for untrusted input per internal/AGENTS.md
+	//nolint:gocritic // ruleguard suggests IsLocal alone, but IsLocal rejects the absolute paths this function must accept, so the explicit ".." check is the traversal guard for them (see internal/AGENTS.md, path validation)
 	if strings.Contains(path, "..") {
 		return errors.Newf("audio export path must not contain path traversal (..): %q", path).
 			Category(errors.CategoryValidation).

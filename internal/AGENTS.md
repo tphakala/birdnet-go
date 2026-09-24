@@ -1,6 +1,7 @@
 # Go Coding Standards
 
-Applies to all Go code in the repository (`internal/`, `cmd/`, `pkg/`). Read
+Applies to all Go code in the repository (`internal/`, `cmd/`, `main.go`, and the
+ruleguard rules in `rules/`). Read
 `TESTING.md` before writing tests and `internal/errors/AGENTS.md` before adding
 error handling.
 
@@ -47,10 +48,24 @@ Never hand-parse these; use the stdlib:
 
 ### Path validation for untrusted input
 
-`filepath.IsLocal()` cleans its input first, so `"path/../etc"` becomes `"etc"`
-and passes. Use it to validate a final, already-cleaned filesystem path (it
-also rejects Windows reserved names such as `COM1`/`NUL`, CVE-2023-45283 and
-CVE-2023-45284). For untrusted URL paths, ALSO reject a literal `..` explicitly:
+Path checks are lexical: `filepath.Clean()` and `filepath.IsLocal()` look at the
+string only and never resolve symlinks, so a path that passes them can still
+escape its base directory through a symlink when you open it. To actually open
+or write files from untrusted input, go through `os.Root` or the project's
+SecureFS (`internal/securefs`, exposed to API handlers as `c.SFS`), which
+contain symlinks as well as `..`.
+
+Use the lexical checks to reject bad input early:
+
+- `filepath.IsLocal()` rejects absolute paths, empty paths and paths that
+  escape upward (`../x`). On Windows it also rejects reserved names such as
+  `COM1`/`NUL` (CVE-2023-45283, CVE-2023-45284); on Linux those are ordinary
+  names. It cleans before judging, so `"a/../x"` is accepted (it stays inside
+  the base).
+- When a value must be rejected if it contains `..` at all (for example a URL
+  path, or a function that must also accept absolute paths, which `IsLocal`
+  rejects), match `..` as a whole path segment, not as a substring, so a name
+  like `foo..bar.wav` is still allowed. Treat both `/` and `\` as separators.
 
 ```go
 cleanPath := filepath.Clean(userInput)
@@ -58,8 +73,8 @@ if !filepath.IsLocal(cleanPath) {
     return errors.Newf("invalid path").Category(errors.CategoryValidation).Build()
 }
 
-// URL path from a request: IsLocal alone is not enough
-if strings.Contains(urlPath, "..") {
+isSep := func(r rune) bool { return r == '/' || r == '\\' }
+if slices.Contains(strings.FieldsFunc(urlPath, isSep), "..") {
     return errors.Newf("path traversal attempt").Category(errors.CategoryValidation).Build()
 }
 ```
@@ -75,11 +90,16 @@ if strings.Contains(urlPath, "..") {
 - Safe type assertions: `if v, ok := x.(Type); ok { ... }`
 - Copy data out under a read lock (`sync.RWMutex`) rather than holding the lock
   while working
-- Propagate `context.Context` down call chains; never store it in a struct
-  (`fatcontext`)
+- Propagate `context.Context` down call chains as the first parameter; do not
+  store a request context in a struct (no linter enforces this; long-lived
+  services that own their lifecycle, such as `apicore.Core`, are the exception)
 - Avoid circular dependencies and side effects in `init()`
 - Settings must hot-reload: read the current settings at the point of use, do
-  not capture them once at startup
+  not capture them once at startup. `conf.GetSettings()` and
+  `conf.CurrentOrFallback(fallback)` are lock-free atomic loads, so reading them
+  per call is cheap even on hot paths; do not cache them or wrap them in a lock.
+- Batch operations log a failing item and continue with the rest, then report
+  the aggregate, instead of aborting on the first error
 
 ## Security
 
@@ -97,8 +117,12 @@ most:
 
 - testify `assert`/`require` for all assertions (`testifylint` enforces idioms,
   for example `assert.Equal` rather than `assert.True(a == b)`)
+- Wait on channels with `testutil.WaitForChannel` (`internal/testutil`), which
+  also provides test containers under `internal/testutil/containers`
 - Table-driven tests with `t.Run()`; `t.Helper()` in every helper (`thelper`)
-- `testing/synctest` instead of `time.Sleep()` for timing and concurrency tests
+- `testing/synctest` instead of `time.Sleep()` for timing and concurrency
+  tests. The API is `synctest.Test(t, func(t *testing.T) { ... })` plus
+  `synctest.Wait()`; there is no `synctest.Run` in Go 1.27.
 - `t.TempDir()` for scratch space; `t.ArtifactDir()` (Go 1.26) for outputs worth
   keeping with `-artifacts`. Do not use `os.MkdirTemp()` in tests.
 - `t.Cleanup()` instead of `defer` for restoring global state
@@ -112,15 +136,28 @@ most:
 
 ### Goroutine leak detection
 
-Tests that start services or goroutines should verify nothing leaks:
+Prefer a package-wide check in `TestMain`, with only narrowly scoped ignores for
+known process-lifetime goroutines (see `internal/imports/zz_goleak_test.go`):
 
 ```go
-defer goleak.VerifyNone(t,
-    goleak.IgnoreTopFunction("testing.(*T).Run"),
-    goleak.IgnoreTopFunction("runtime.gopark"),
-    goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-)
+func TestMain(m *testing.M) {
+    goleak.VerifyTestMain(m,
+        goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
+    )
+}
 ```
+
+For a per-test check, follow `verifyNoLeaks` in
+`internal/api/v2/leakcheck_test.go`: call it at the START of the test (not with
+`defer`). It snapshots existing goroutines with `goleak.IgnoreCurrent()` and runs
+`goleak.VerifyNone` from `t.Cleanup`. Register it before the service's own
+`t.Cleanup(svc.Stop)` so it runs after the stop (cleanups run last in, first out).
+A `defer goleak.VerifyNone(t)` runs before any `t.Cleanup`, so it reports
+services that are about to be stopped. Never combine a per-test leak check with
+`t.Parallel()`.
+
+Do not add blanket ignores such as `runtime.gopark` (it would hide parked
+leaks) or `testing.(*T).Run` (goleak already filters test-runner stacks).
 
 Always stop services you start, use local instances rather than global
 singletons, and allow generous (500ms+) timeouts for async assertions so CI
@@ -128,11 +165,14 @@ does not flake.
 
 ### Mocks
 
-Never hand-write mocks; generate them with mockery (`.mockery.yaml`). Never edit
-files under `internal/datastore/mocks/` by hand.
+Never hand-write new mocks; generate them with mockery. `.mockery.yaml` lists
+the mocked packages (currently `internal/datastore`,
+`internal/datastore/v2/repository`, `internal/notification`, `internal/events`),
+each with a generated `mocks/` directory; never edit those files by hand. To mock
+a new interface, add it to `.mockery.yaml`, then regenerate:
 
 ```bash
-go generate ./internal/datastore      # after changing internal/datastore/interfaces.go
+go generate ./internal/datastore      # runs mockery over the whole .mockery.yaml
 ```
 
 ```go
@@ -140,9 +180,12 @@ mockDS := mocks.NewMockInterface(t)
 mockDS.EXPECT().Save(mock.Anything, mock.Anything).Return(nil).Once()
 ```
 
-Use `.Maybe()` for calls that happen conditionally or from goroutines, so the
-test does not fail when the call is legitimately skipped. Full guide:
-`internal/datastore/mocks/README.md`.
+Use `.Maybe()` only for incidental calls that may or may not happen. When the
+call IS the behaviour under test, including one made from a goroutine, keep the
+expectation strict and wait for it (signal a channel from `.Run(...)` and wait
+with `testutil.WaitForChannel`, or `assert.Eventually`), then stop the goroutine
+before the test returns. A `.Maybe()` there lets the test pass when the behaviour
+is gone. Full guide: `internal/datastore/mocks/README.md`.
 
 ## Linting
 
@@ -161,22 +204,23 @@ Config: `.golangci.yaml` (golangci-lint v2 format).
 
 Enabled linters most likely to fire, and the usual fix:
 
-| Linter                | Fix                                                           |
-| --------------------- | ------------------------------------------------------------- |
-| errorlint             | `errors.Is()` / `errors.As()`, never `==` on errors           |
-| errname               | Sentinel errors are named `ErrXxx`                            |
-| nilerr / nilnil       | Do not return a nil error with a failure, or `nil, nil`       |
-| bodyclose             | `defer resp.Body.Close()` after checking the error            |
-| gocognit / gocyclo    | Split functions (gocognit threshold is 50)                    |
-| dupl / goconst        | Extract duplicated code; reuse an existing constant           |
-| exhaustive            | Handle every enum case; a `default` case counts as exhaustive |
-| prealloc              | `make([]T, 0, n)` when the size is known                      |
-| testifylint / thelper | testify idioms; `t.Helper()` in helpers                       |
-| fatcontext / iface    | No context in structs; no interface pollution                 |
-| modernize             | Use the modern idiom it suggests                              |
-| forbidigo             | Typed logger helpers for sensitive fields                     |
+| Linter                | Fix                                                                                                                         |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| errorlint             | `errors.Is()` / `errors.AsType()`, never `==` on errors                                                                     |
+| errname               | Sentinel errors are named `ErrXxx`                                                                                          |
+| nilerr / nilnil       | Do not return a nil error with a failure, or `nil, nil`                                                                     |
+| bodyclose             | `defer resp.Body.Close()` after checking the error                                                                          |
+| gocognit / gocyclo    | Split functions (gocognit threshold is 50)                                                                                  |
+| dupl / goconst        | Extract duplicated code; reuse an existing constant                                                                         |
+| exhaustive            | Handle every enum case; a `default` case counts as exhaustive                                                               |
+| prealloc              | `make([]T, 0, n)` when the size is known                                                                                    |
+| testifylint / thelper | testify idioms; `t.Helper()` in helpers                                                                                     |
+| fatcontext / iface    | No contexts nested in loops/closures; no interface pollution                                                                |
+| gocritic              | Its `performance` tag is on: pass large structs by pointer (`hugeParam`), range by index over large values (`rangeValCopy`) |
+| modernize             | Use the modern idiom it suggests                                                                                            |
+| forbidigo             | Typed logger helpers for sensitive fields                                                                                   |
 
-Also enabled: gocritic, staticcheck, revive, ineffassign, wastedassign,
+Also enabled: staticcheck, revive, ineffassign, wastedassign,
 unconvert, misspell, predeclared, copyloopvar, durationcheck. `gosec` is
 configured but currently disabled. gocritic's `commentFormatting` and
 `commentedOutCode` checks are disabled.
