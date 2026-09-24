@@ -37,12 +37,12 @@ yourself before touching code in that area.
 - **Linting**: `golangci-lint` (Go), `npm run check:all` (frontend)
 - **Review**: every PR receives an automated CodeRabbit review
 
-| Path         | Purpose                    |
-| ------------ | -------------------------- |
-| `/cmd/`      | CLI commands (Cobra/Viper) |
-| `/internal/` | Private Go packages        |
-| `/rules/`    | gocritic ruleguard rules   |
-| `/frontend/` | Svelte 5 web UI            |
+| Path         | Purpose                        |
+| ------------ | ------------------------------ |
+| `/cmd/`      | CLI commands (Cobra/Viper)     |
+| `/internal/` | Private Go packages            |
+| `/rules/`    | Custom go-ruleguard lint rules |
+| `/frontend/` | Svelte 5 web UI                |
 
 ## Critical Constraints
 

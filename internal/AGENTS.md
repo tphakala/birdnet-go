@@ -201,6 +201,11 @@ Config: `.golangci.yaml` (golangci-lint v2 format).
   Quality Gate").
 - A `//nolint` directive needs a specific linter name and a justification
   comment.
+- `rules/*.go` holds the project's custom
+  [go-ruleguard](https://github.com/quasilyte/go-ruleguard) rules (DSL files
+  behind the `ruleguard` build tag). golangci-lint loads them through gocritic's
+  `ruleguard` setting, so their findings are reported under `gocritic` and are
+  suppressed with `//nolint:gocritic`.
 
 Enabled linters most likely to fire, and the usual fix:
 
