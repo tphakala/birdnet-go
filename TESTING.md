@@ -331,7 +331,8 @@ the test runner's own goroutines, so never add `testing.(*T).Run` or
 
 For a per-test check, snapshot the goroutines that already exist at the START of
 the test and register the check FIRST, via `t.Cleanup`, so it runs last (after the
-service's own cleanup). See `verifyNoLeaks` in `internal/api/v2/leakcheck_test.go`:
+service's own cleanup). Use `testutil.VerifyNoLeaks(t)` from
+`internal/testutil/goleak.go`, which does exactly this:
 
 ```go
 func TestNoLeaks(t *testing.T) {

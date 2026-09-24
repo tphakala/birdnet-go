@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // unreachableRTSP points at a closed local port so the supervisor fails to
@@ -64,11 +64,11 @@ func TestManager_StreamHealth_unknownErrors(t *testing.T) {
 }
 
 func TestManager_lifecycle_tracksHealthAndShutsDownCleanly(t *testing.T) {
-	// Snapshot the goroutines that exist before the test (deferred args evaluate
-	// now, at the defer statement), so the check flags only NEW goroutines such
-	// as a leaked supervisor or reader, rather than filtering by top-of-stack
-	// function, which can hide a parked leaked goroutine.
-	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	// Snapshot the goroutines that exist before the test, so the check flags
+	// only NEW goroutines such as a leaked supervisor or reader, rather than
+	// filtering by top-of-stack function, which can hide a parked leaked
+	// goroutine. The check runs in t.Cleanup, after t.Context() is cancelled.
+	testutil.VerifyNoLeaks(t)
 	m := NewManager(t.Context(), func(audiocore.AudioFrame) {}, nil, nil, nil, nil)
 
 	require.NoError(t, m.StartStream(rtspSpec("s1")))

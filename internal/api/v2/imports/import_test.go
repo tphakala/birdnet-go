@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -31,6 +30,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imports"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // testDBOnlyBody is the canonical valid db-only import request body used across tests.
@@ -294,13 +294,10 @@ func TestStartBirdNETPiImport_BadJSON_Returns400(t *testing.T) {
 
 // TestStartBirdNETPiImport_ModeDBAudio_Returns202 verifies db-audio mode is accepted.
 func TestStartBirdNETPiImport_ModeDBAudio_Returns202(t *testing.T) {
-	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
+	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks) so a
 	// leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	verifyNoLeaks(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-	)
+	testutil.VerifyNoLeaks(t)
 
 	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
@@ -352,13 +349,10 @@ func TestStartBirdNETPiImport_ModeDBAudio_Returns202(t *testing.T) {
 // import would start, copy no audio (the engine skips audio when ClipExportPath is empty),
 // and silently produce detections with no clips, masking a misconfiguration.
 func TestStartBirdNETPiImport_ModeDBAudio_NoExportPath_Returns400(t *testing.T) {
-	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
+	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks) so a
 	// leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	verifyNoLeaks(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-	)
+	testutil.VerifyNoLeaks(t)
 
 	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
@@ -446,13 +440,10 @@ func makeTempDBWithRow(t *testing.T, date, comName, fileName string) (dir string
 // empty, so the engine skipped audio entirely (IncludeAudio && ClipExportPath != "" was
 // false) and the new path was never covered.
 func TestStartBirdNETPiImport_ModeDBAudio_CopiesClip(t *testing.T) {
-	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
+	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks) so a
 	// leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	verifyNoLeaks(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-	)
+	testutil.VerifyNoLeaks(t)
 
 	const (
 		date     = "2024-01-01"
@@ -705,13 +696,10 @@ func TestStartBirdNETPiImport_FakeValidationFailure_Returns400(t *testing.T) {
 
 // TestStartBirdNETPiImport_GoodFakeSource_Returns202 verifies 202 on a valid request.
 func TestStartBirdNETPiImport_GoodFakeSource_Returns202(t *testing.T) {
-	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
+	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks) so a
 	// leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	verifyNoLeaks(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-	)
+	testutil.VerifyNoLeaks(t)
 
 	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
@@ -753,13 +741,10 @@ func TestStartBirdNETPiImport_GoodFakeSource_Returns202(t *testing.T) {
 
 // TestStartBirdNETPiImport_ConflictWhileRunning_Returns409 verifies 409 on concurrent starts.
 func TestStartBirdNETPiImport_ConflictWhileRunning_Returns409(t *testing.T) {
-	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
+	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks) so a
 	// leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	verifyNoLeaks(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-	)
+	testutil.VerifyNoLeaks(t)
 	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
@@ -931,13 +916,10 @@ func TestCancelImport_JobNotFound_Returns404(t *testing.T) {
 
 // TestCancelImport_RunningJob_Returns200Cancelling verifies cancel returns 200 with cancelling status.
 func TestCancelImport_RunningJob_Returns200Cancelling(t *testing.T) {
-	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
+	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks) so a
 	// leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	verifyNoLeaks(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-	)
+	testutil.VerifyNoLeaks(t)
 	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
@@ -1151,13 +1133,10 @@ func TestImportRoutes_FailClosedWhenNoAuth(t *testing.T) {
 
 // TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd verifies the full pipeline with a real SQLite file.
 func TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd(t *testing.T) {
-	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
+	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks) so a
 	// leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	verifyNoLeaks(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-	)
+	testutil.VerifyNoLeaks(t)
 
 	const rowCount = 3
 
@@ -1251,13 +1230,10 @@ func (p *panicIterateSource) Iterate(_ context.Context, _ int, fn func([]imports
 // TestStreamImportProgress_LiveStreaming verifies that a connected SSE client receives
 // multiple strictly-increasing progress events followed by a terminal complete event.
 func TestStreamImportProgress_LiveStreaming(t *testing.T) {
-	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
+	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks) so a
 	// leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	verifyNoLeaks(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-	)
+	testutil.VerifyNoLeaks(t)
 
 	e, c := newImportHandler(t)
 	c.RegisterImportRoutes(c.Group)
@@ -1386,13 +1362,10 @@ func TestStreamImportProgress_LiveStreaming(t *testing.T) {
 // TestStreamImportProgress_CancelEmitsCancelledEvent verifies that cancelling a
 // running import results in a terminal cancelled SSE event on any connected stream.
 func TestStreamImportProgress_CancelEmitsCancelledEvent(t *testing.T) {
-	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
+	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks) so a
 	// leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	verifyNoLeaks(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-	)
+	testutil.VerifyNoLeaks(t)
 
 	e, c := newImportHandler(t)
 	c.RegisterImportRoutes(c.Group)
@@ -1500,13 +1473,10 @@ func TestStreamImportProgress_CancelEmitsCancelledEvent(t *testing.T) {
 // panic in the import engine is recovered, the job reaches a terminal error state,
 // and the last-reported progress is preserved (not zeroed).
 func TestStartBirdNETPiImport_PanicInEngine_RecoverAndPreserveStats(t *testing.T) {
-	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
+	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks) so a
 	// leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	verifyNoLeaks(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-	)
+	testutil.VerifyNoLeaks(t)
 
 	e, c := newImportHandler(t)
 	c.RegisterImportRoutes(c.Group)
@@ -1753,10 +1723,7 @@ func TestLaunchImport_RemovesStagingDirOnCompletion(t *testing.T) {
 	if runtime.GOOS == osWindows {
 		t.Skip("native import staging is unix-only; Windows cannot remove a dir with an open file handle")
 	}
-	verifyNoLeaks(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-	)
+	testutil.VerifyNoLeaks(t)
 
 	base := t.TempDir()
 	stagingDir := filepath.Join(base, "birdnet-go-import-staging")
