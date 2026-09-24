@@ -31,9 +31,14 @@ noted. Frontend test rules are in the Testing section below (the root
   element and list IDs. `generateSessionId()` (`$lib/utils/session`) is a
   concurrency token, not a secret; for security-sensitive randomness use
   `crypto.getRandomValues()`, which works over plain HTTP.
-- **NEVER touch `localStorage` or `sessionStorage` directly.** Access can throw
-  (private windows, blocked storage); use `getStoredValue()` / `setStoredValue()`
-  from `$lib/utils/storage`, or wrap the call in `try`/`catch`.
+- **NEVER touch `localStorage` or `sessionStorage` without a guard.** Access can
+  throw (private windows, blocked storage). For new `localStorage` keys use
+  `getStoredValue()` / `setStoredValue()` / `removeStoredValue()` from
+  `$lib/utils/storage`. Those helpers JSON-encode, so do not switch an existing
+  key that is stored as a raw string (for example `birdnet-locale`) to them
+  unless every reader and writer of that key changes together; keep its
+  `getItem`/`setItem` calls inside `try`/`catch` instead. There is no
+  `sessionStorage` helper: wrap those calls in `try`/`catch`.
 - **NEVER ship ambiguous UI states.** Disabled controls, errors, and loading
   states must always tell the user _why_. See UX Design Principles.
 - **NEVER log PII** (emails, passwords, tokens, personal data).
@@ -202,22 +207,24 @@ review would have.
 When a control is disabled, the user MUST be able to tell _why_ without
 guessing:
 
-- A **tooltip** (`title`) explaining the blocked condition. Tooltips are
-  invisible on touch devices, so also show **inline helper text** or a **status
-  badge** whenever the reason persists, and always for important controls
-  (Save, Submit, Delete).
+- **Visible inline helper text** or a **status badge** with the reason whenever
+  the control is blocked. A `title` tooltip is a useful extra, but tablets are
+  touch devices and never show it, so it cannot be the only explanation. A
+  badge suits workflow reasons ("Read-only mode", "Pending approval").
 - **`aria-describedby`** pointing at the explanation.
 - A **specific** reason: "Threshold must be between 0 and 1 before saving", not
   "Cannot save".
 - Prefer `aria-disabled="true"` plus a suppressed click handler over native
-  `disabled`: a natively disabled button leaves the tab order, so keyboard and
-  screen reader users never reach its explanation. This is the pattern the
-  shipped components use (for example
+  `disabled`: Tab skips a natively disabled button, so keyboard users never
+  reach its explanation. Many existing components still use native
+  `disabled`; this is the preferred pattern for new and changed controls (for
+  example
   `src/lib/desktop/features/settings/components/OptimizeReviewDialog.svelte`):
 
 ```svelte
 <script lang="ts">
-  const SAVE_HELP_ID = 'mysettings-save-help'; // unique per component
+  import { generateId } from '$lib/utils/uuid';
+  const SAVE_HELP_ID = generateId('save-help'); // unique per instance
 </script>
 
 <button
@@ -264,7 +271,9 @@ Theme colours are written as CSS variables in arbitrary values
 - Icon-only buttons have an `aria-label`; when a control also has visible text,
   its accessible name must contain that text (WCAG 2.5.3)
 - Live regions: `role="status"` for progress (it implies `aria-live="polite"`),
-  `role="alert"` for errors
+  `role="alert"` for errors. Render the live-region container unconditionally
+  and change its text; a region inserted by `{#if}` together with its text is
+  often not announced.
 - Run `npm run test:a11y` for changes to interactive components
 
 ## Static Analysis (ast-grep)
@@ -288,16 +297,28 @@ change a rule, confirm it fires on a file that contains a guaranteed match.
   `$lib/utils/security`, `$app/navigation`, `$app/stores`, MapLibre,
   `window.location`, and global `fetch`. Read it before adding a `vi.mock()`;
   do not duplicate those mocks per file.
+- Those module mocks are partial factories: an export they do not define throws
+  "No export is defined on the mock" when called. The `$lib/utils/security` mock,
+  for example, has no `isPlainObject`. If code under test needs a real export
+  from a mocked module, add it to the mock in `setup.ts` (spreading
+  `await importOriginal()`), or use `vi.importActual` in the test.
 - The global `fetch` mock serves the translation files, answers every `/api/`
   URL with `200 {data: []}`, and rejects anything else. A test of an error path must override it, or it will
   silently exercise the success path.
 - To test a module that `setup.ts` mocks, call `vi.unmock('<module id>')` at the
   top of the test file (see `src/lib/utils/logger.test.ts`).
-- Override a shared mock for one test with a one-shot value
-  (`vi.mocked(fn).mockReturnValueOnce(...)`, `mockResolvedValueOnce(...)`). A
-  persistent `mockReturnValue` survives `vi.clearAllMocks()`, which only clears
-  call history, and leaks into later tests; use `vi.resetAllMocks()` in
-  `beforeEach` if you need persistent overrides. Reset any store you mutate.
+- `vi.clearAllMocks()` only clears call history. A persistent override
+  (`mockReturnValue`, `mockImplementation`) and any unconsumed one-shot value
+  (`mockReturnValueOnce`, `mockResolvedValueOnce`) survive it and leak into later
+  tests in the same file. Do NOT use `vi.resetAllMocks()` to clean up: it turns
+  every `setup.ts` default built with `vi.fn().mockImplementation(...)` (global
+  `fetch`, the settings API, `matchMedia`) into a function that returns
+  `undefined`, breaking later tests.
+- To override a shared mock, save its implementation and restore it:
+  `const original = vi.mocked(fn).getMockImplementation()` before the override,
+  then `vi.mocked(fn).mockImplementation(original)` in `afterEach`. When you use
+  one-shot values, assert they were consumed (`toHaveBeenCalledTimes`). Reset
+  any store you mutate.
 - Render components with `renderTyped()` from `src/test/render-helpers.ts`
   instead of casting to `any`. Name tests with `it` (ESLint enforces it).
 - Files named `*.integration.test.ts`, `*.browser.test.ts` or
