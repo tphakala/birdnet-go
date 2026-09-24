@@ -48,37 +48,31 @@ Never hand-parse these; use the stdlib:
 
 ### Path validation for untrusted input
 
-Reuse the project's validators instead of writing a new check; they already
-handle the cases a hand-rolled check misses (URL-encoded and double-encoded
-`..`, Unicode look-alikes, null bytes, backslashes):
+Reuse the project's helpers instead of writing a new check, and pick the one for
+the job:
 
-- Filesystem access from untrusted input: SecureFS (`internal/securefs`,
-  exposed to API handlers as `c.SFS`; `ValidateRelativePath`, `Open`,
-  `OpenFile`, ...). It sits on `os.Root`, so it also contains symlinks, which
-  no string check can.
-- Clip paths from API requests: `apicore.NormalizeClipPathStrict`.
-- Internal URL paths such as redirect targets: `security.IsSafePath`.
+- **Files** named by untrusted input: go through SecureFS (`internal/securefs`,
+  `c.SFS` in API handlers) and its relative-path methods (`StatRel`,
+  `ReadDirRel`, `ServeRelativeFile`, `ValidateRelativePath`). Its protection is
+  containment: it resolves inside an `os.Root`, so neither `..` nor a symlink
+  can escape. It does not reject odd-looking names, so do not treat it as a
+  string validator.
+- **Clip paths** from API requests: `apicore.NormalizeClipPathStrict`.
+- **Redirect targets** (which may carry a query string):
+  `security.IsValidRedirect`.
+- **Other internal URL paths** (a bare path starting with `/`):
+  `security.IsSafePath`, the strictest string check in the codebase.
 
-Their `strings.Contains(p, "..")` substring checks are deliberately stricter
-than a segment match (they reject names like `clips..old` and forms like
-`..../x`), and the ruleguard rule in `rules/net.go` says the same. Keep new
-checks at least that strict.
+For a new check, follow the ruleguard rule in `rules/net.go`: use
+`filepath.IsLocal` for file paths, and keep a `strings.Contains(p, "..")`
+substring check only for URL paths. The rule reports every such substring
+check, so each one needs a `//nolint:gocritic` comment giving the reason (see
+`internal/api/v2/apicore/clip_path.go`).
 
-If you must use the standard library directly, remember that `filepath.Clean()`
-and `filepath.IsLocal()` are lexical: they never resolve symlinks, and
-cleaning first can hide input you meant to reject (`filepath.Clean("")` is
-`"."`, which `IsLocal` accepts, while `IsLocal("")` is false). Check the raw
-input, after any URL decoding; `IsLocal` cleans internally:
-
-```go
-if !filepath.IsLocal(userInput) {
-    return errors.Newf("invalid path").Category(errors.CategoryValidation).Build()
-}
-```
-
-`IsLocal` rejects absolute paths and upward escapes (`../x`), accepts
-`"a/../x"` (it stays inside the base), and on Windows only also rejects
-reserved names such as `COM1`/`NUL`.
+`filepath.Clean()` and `filepath.IsLocal()` are lexical: they never resolve
+symlinks. Pass the raw input to `IsLocal` (after any URL decoding) rather than
+cleaning it first: `filepath.Clean("")` is `"."`, which `IsLocal` accepts,
+while `IsLocal("")` is false.
 
 ## Design Patterns
 
