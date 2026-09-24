@@ -296,7 +296,7 @@ Use `t.Cleanup()` for automatic cleanup in reverse order:
 func TestWithResources(t *testing.T) {
     // Resources are cleaned up in reverse order
     db := setupDatabase(t)
-    t.Cleanup(func() { db.Close() })  // Cleaned up last
+    t.Cleanup(func() { assert.NoError(t, db.Close()) })  // Cleaned up last
 
     cache := setupCache(t)
     t.Cleanup(func() { cache.Clear() })  // Cleaned up second
@@ -317,15 +317,17 @@ func TestMain(m *testing.M) {
 }
 ```
 
-Ignore only named goroutines that a dependency deliberately keeps running for
-the whole process and that your code has no way to stop, such as the go-cache
-janitor (`goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run")`).
-Do not ignore a goroutine you can stop: `database/sql.(*DB).connectionOpener`,
-for example, exits when the database is closed, so close it in `t.Cleanup`
-instead (some existing ignores of it predate this rule; do not copy them).
-goleak already filters the test runner's own goroutines, so do not add
-`testing.(*T).Run` or `testing.(*T).Parallel` ignores either; the existing ones
-are redundant.
+Do not copy an ignore list from an existing test: several contain ignores that
+are redundant or that hide real leaks (`sync.runtime_notifyListWait` hides any
+goroutine stuck in `sync.Cond.Wait`). Add an ignore only for a named goroutine
+you have seen in a failure and cannot stop, such as the go-cache janitor
+(`goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run")`),
+which has no Stop method and exits only when its cache is garbage collected,
+something goleak's retry cannot wait for. Do not ignore a goroutine you can
+stop: `database/sql.(*DB).connectionOpener`, for example, exits when the
+database is closed, so close it in `t.Cleanup` instead. goleak already filters
+the test runner's own goroutines, so never add `testing.(*T).Run` or
+`testing.(*T).Parallel` ignores.
 
 For a per-test check, snapshot the goroutines that already exist at the START of
 the test and register the check FIRST, via `t.Cleanup`, so it runs last (after the
@@ -368,8 +370,11 @@ relying on the retry.
   service you start.
 - Restore global state with `t.Cleanup()`, not `defer`.
 - Use `t.TempDir()` for scratch space and `t.ArtifactDir()` for output worth
-  keeping (it is kept only when `go test` runs with `-artifacts`; otherwise it
-  is deleted like `t.TempDir()`); never `os.MkdirTemp()`.
+  keeping; never `os.MkdirTemp()`. `ArtifactDir` output is kept only when
+  `go test` runs with `-artifacts` (otherwise it is deleted like `t.TempDir()`),
+  and it is written under `-outputdir`, which defaults to the package directory
+  inside the repository. Pass `-outputdir` with an existing directory outside
+  the repository so the output cannot be committed.
 - Test containers (MySQL, Mosquitto, MediaMTX, ntfy, Pebble) live in
   `internal/testutil/containers`.
 
@@ -394,10 +399,12 @@ go generate ./internal/datastore   # runs mockery over the whole .mockery.yaml
 
 Use mockery v2 (`.mockery.yaml` is in the v2 format), v2.53.7 or a later v2
 release: `go install github.com/vektra/mockery/v2@v2.53.7`. mockery is not a
-`go.mod` tool. v2.53.6, the version named in the current mock headers, was
-built against an older `golang.org/x/tools` and fails to load this module's
-packages on Go 1.27. Regenerating with a newer version rewrites the version
-line in every mock header; commit that with your change. See
+`go.mod` tool. Older v2 releases such as v2.53.6 were built against an older
+`golang.org/x/tools` and fail to load this module's packages on Go 1.27.
+Regenerating with a newer version rewrites the version line in every mock
+header; commit that with your change. It also writes an untracked
+`internal/datastore/mocks/mock_batchLocalizer.go` for an unexported interface;
+do not commit that file. See
 `internal/datastore/mocks/README.md` for mock usage patterns.
 
 ### Mock Usage
