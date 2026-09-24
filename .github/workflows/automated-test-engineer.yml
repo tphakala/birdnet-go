@@ -118,7 +118,7 @@ jobs:
           1. Analyze the failing tests above
           2. Check out the code and examine the failing test files
           3. Identify the root cause of each failure
-          4. Implement fixes following project guidelines in CLAUDE.md
+          4. Implement fixes following project guidelines in AGENTS.md and internal/AGENTS.md
           5. Run the tests to verify fixes work
           6. Run golangci-lint to ensure code quality
           7. Create a PR with the fixes
@@ -130,7 +130,7 @@ jobs:
           - Use `t.Parallel()` only when tests are truly independent
           - Structure tests clearly: setup → execution → assertion
           - Only fix failing tests, don't modify working ones
-          - Ensure all tests follow the patterns in CLAUDE.md
+          - Ensure all tests follow the patterns in internal/AGENTS.md and TESTING.md
 
           ## Available Tools
           You have access to:

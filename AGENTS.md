@@ -1,59 +1,116 @@
 # AI Agent Instructions for BirdNET-Go
 
-These instructions apply to all AI coding agents working on this repository,
-regardless of tool (Claude Code, Codex, Cursor, Gemini, Windsurf, Copilot, etc.).
+These instructions apply to every AI coding agent working on this repository
+(Claude Code, Codex, Cursor, Gemini/Antigravity, Windsurf, Copilot, and others)
+and to human contributors. They are the single source of project guidance.
+
+BirdNET-Go is a Go implementation of BirdNET for real-time bird sound
+identification, aimed at hobby birders and home users. It is an open source
+project run for fun by volunteers, so avoidable rework and support load matter.
+
+## Module Guides
+
+Guidance is split by area. Tools that support nested `AGENTS.md` files load the
+matching file when you work in that directory; if yours does not, read it
+yourself before touching code in that area.
+
+| Working on                                 | Read first                                             |
+| ------------------------------------------ | ------------------------------------------------------ |
+| Any Go code                                | `internal/AGENTS.md`                                   |
+| API v2 endpoints (`internal/api/v2/`)      | `internal/api/v2/AGENTS.md`, then its `README.md`      |
+| Error handling (`internal/errors/`)        | `internal/errors/AGENTS.md`                            |
+| Frontend (Svelte 5, TypeScript)            | `frontend/AGENTS.md`                                   |
+| Desktop UI components                      | `frontend/src/lib/desktop/components/AGENTS.md`        |
+| Generic UI primitives                      | `frontend/src/lib/desktop/components/ui/AGENTS.md`     |
+| Settings pages                             | `frontend/src/lib/desktop/features/settings/AGENTS.md` |
+| Translations (`frontend/static/messages/`) | `frontend/static/messages/AGENTS.md`                   |
+| Screenshot tooling                         | `frontend/tools/AGENTS.md`                             |
+| Writing or changing tests (Go or TS)       | `TESTING.md` (all Go tests MUST use testify)           |
+
+## Project Context
+
+- **Backend**: Go 1.27 (see `go.mod`), Echo HTTP server, GORM datastore
+- **Frontend**: Svelte 5 (runes), TypeScript, Tailwind CSS v4, Vite, Vitest
+- **Build system**: [Task](https://taskfile.dev) (`Taskfile.yml`)
+- **Linting**: `golangci-lint` (Go), `npm run check:all` (frontend)
+- **Review**: every PR receives an automated CodeRabbit review
+
+| Path         | Purpose                    |
+| ------------ | -------------------------- |
+| `/cmd/`      | CLI commands (Cobra/Viper) |
+| `/internal/` | Private Go packages        |
+| `/pkg/`      | Public Go packages         |
+| `/frontend/` | Svelte 5 web UI            |
+
+## Critical Constraints
+
+- **API v1 is frozen.** Never add or extend v1 endpoints; all new endpoints go
+  in `internal/api/v2/`.
+- **Settings must hot-reload.** Every setting changed through the UI must take
+  effect immediately, without a server restart. Read settings per request or
+  per operation (for example dynamic middleware or an atomic settings snapshot);
+  never branch once on a value captured at startup.
+- **No magic numbers or strings.** Use named constants with descriptive names.
+- **Use `internal/errors`, not the standard `errors` package**, in Go code (see
+  `internal/errors/AGENTS.md` for the exceptions).
+- **Never log secrets or PII.** Use the typed sensitive-field helpers in
+  `internal/logger` (a `forbidigo` lint rule enforces this for credential and
+  token field names).
+- **Document all exported symbols.**
+- **Branch from an up-to-date `main`**: `git pull origin main && git checkout -b <branch>`.
 
 ## PR Scope Rule
 
 Each pull request must contain exactly ONE of:
+
 - One feature
 - One bug fix
 - One refactor
 
-PRs that batch multiple features or multiple fixes WILL NOT be merged.
-This is non-negotiable. If your task involves multiple independent changes,
-split them into separate branches and separate PRs.
+PRs that batch multiple features or multiple fixes WILL NOT be merged. If your
+task involves multiple independent changes, split them into separate branches
+and separate PRs. If you are unsure whether changes are one concern or several,
+ask before proceeding.
 
-If you are uncertain whether changes constitute one concern or multiple,
-ask the user before proceeding.
-
-Why: batched PRs cannot be properly reviewed, cannot be safely reverted
-if one change causes a regression, and create merge conflicts for other
-contributors.
+Why: batched PRs cannot be properly reviewed, cannot be safely reverted if one
+change causes a regression, and create merge conflicts for other contributors.
 
 ## Mandatory: Pre-Push Quality Gate
 
-Before pushing code or creating a pull request, you MUST execute the
-preflight quality gate defined in `.agents/skills/preflight/SKILL.md`.
+Before pushing code or creating a pull request, you MUST run the preflight
+quality gate defined in `.agents/skills/preflight/SKILL.md`. Read that file and
+follow its complete process (all phases). Do not push without running it.
 
-Read that file and follow its complete process (all phases).
-Do not skip this step. Do not push without running it first.
+If your tool supports native skill invocation (for example `/preflight` in
+Claude Code, which is symlinked from `.claude/skills/preflight`), use that.
+Otherwise read the SKILL.md file and execute the process manually.
 
-If your platform supports native skill invocation (e.g., Claude Code's
-`/preflight` or Codex's skill system), use that. Otherwise, read the
-SKILL.md file directly and execute the review process.
+The minimum verification, always run and observed before claiming success:
+
+```bash
+golangci-lint run -v          # Go: whole module, zero issues
+go test -race ./...           # Go tests
+cd frontend && npm run check:all && npm test   # frontend
+```
 
 ## PR Creation Rules
 
 When creating a pull request, you MUST:
 
-1. Verify this PR addresses exactly ONE feature, fix, or refactor
-2. Include a "Preflight Status" section in the PR description showing
-   what was found and fixed during preflight
+1. Verify the PR addresses exactly ONE feature, fix, or refactor
+2. Include a "Preflight Status" section in the description showing what the
+   gate found and fixed
 3. Verify all linters pass (`golangci-lint run -v`, `npm run check:all`)
 4. Verify all tests pass (`go test -race ./...`, `npm test`)
 5. Confirm the diff contains ONLY changes relevant to the stated goal
-6. Confirm scope is complete (no TODO/FIXME for core functionality)
-7. Confirm no secrets, credentials, or PII in the diff
+6. Confirm scope is complete (no TODO/FIXME left for core functionality)
+7. Confirm no secrets, credentials, or PII are in the diff
 8. Document any breaking changes to API, config, or behavior
 
-You MUST actually execute verification commands (linters, tests) and
-observe passing output before claiming they pass. Do not check boxes
-based on assumption or prior knowledge.
-
-PRs missing the preflight certification will require multiple review
-rounds. The gate catches the same issues reviewers find; running it
-locally saves a day of back-and-forth.
+Actually execute the verification commands and observe passing output before
+claiming they pass. Do not tick boxes from assumption or prior knowledge. PRs
+without the preflight certification take multiple review rounds; the gate
+catches the same issues reviewers find.
 
 ## Interpreting CI Failures
 
@@ -62,31 +119,75 @@ automatic rerun of any failed test, then publishes a consolidated result in the
 `test-report` job. Before assuming a red run means your code is broken:
 
 1. Read the `test-report` job summary. It states one verdict:
-   - `REGRESSION` - real failures that persisted after a rerun. Fix these.
-   - `PASS (with flakes)` - tests that failed once then passed on rerun. These
+   - `REGRESSION`: real failures that persisted after a rerun. Fix these.
+   - `PASS (with flakes)`: tests that failed once then passed on rerun. These
      are flaky/infra (a reaped container, a registry blip), NOT a code
      regression. Do not "fix" them; re-run or report instead.
-   - `PASS` - all green.
+   - `PASS`: all green.
 2. For machine-readable detail, download the `ci-failures` artifact:
-   - `ci-failures.json` - array of real regressions (`{pkg, test, output}`).
-   - `ci-flaky.json` - tests that passed on rerun (informational).
-   Prefer reading these small files over scrolling the raw multi-thousand-line
-   logs.
+   - `ci-failures.json`: array of real regressions (`{pkg, test, output}`).
+   - `ci-flaky.json`: tests that passed on rerun (informational).
+
+   Prefer these small files over scrolling multi-thousand-line raw logs.
+
 3. If a testcontainer job failed, the job summary includes a "Testcontainer
-   diagnostics" block (docker state, memory, OOM kills) to distinguish an
-   infra flake from a logic bug.
+   diagnostics" block (docker state, memory, OOM kills) to tell an infra flake
+   from a logic bug.
 
 Do not spend time debugging a failure classified as flaky/infra. If a test is
 persistently flaky, raise it rather than patching around it.
 
-## Project Context
+## Build Commands
 
-- Tech stack: Go 1.24+, Svelte 5, TypeScript, Tailwind v4.1
-- Build system: Task (taskfile.dev)
-- Linting: golangci-lint (Go), npm run check:all (Frontend)
-- Testing: go test -race (Go), npm test (Frontend)
-- All PRs receive automated CodeRabbit reviews
-- API v1 is frozen; all new endpoints go in `internal/api/v2/`
+| Command                   | Purpose                                                                    |
+| ------------------------- | -------------------------------------------------------------------------- |
+| `task`                    | Default build (auto-detects the target)                                    |
+| `task dev_server`         | Backend development server with reload                                     |
+| `task frontend-build`     | Frontend production build                                                  |
+| `task test` / `task lint` | Go tests / Go lint                                                         |
+| `task frontend-quality`   | Frontend checks, tests, and build                                          |
+| `task clean`              | Remove build artifacts                                                     |
+| `task linux_amd64`        | Cross-platform build (also `linux_arm64`, `windows_amd64`, `darwin_arm64`) |
 
-For detailed guidelines, see `CLAUDE.md` and the `CLAUDE.md` files in
-subdirectories (`internal/`, `frontend/`, `internal/api/v2/`).
+Run `task --list` for everything else (setup, integration tests, model downloads).
+
+## Code Search and Refactoring
+
+Prefer syntax-aware tools over plain text search for code operations. Use
+`ast-grep` (`sg`) for structural searches and rewrites instead of `grep`/`sed`
+regexes, which break on formatting and match inside strings and comments:
+
+```bash
+# Structural search
+ast-grep --pattern 'console.$METHOD($$$)' frontend/src/
+
+# Syntax-safe rewrite
+ast-grep --pattern 'let $VAR = $VALUE' --rewrite 'const $VAR = $VALUE' src/
+```
+
+If your tool offers language-server navigation (find references, go to
+definition), use it for "who calls this" questions before changing a signature.
+See `frontend/doc/AST-GREP-SETUP.md` for the frontend ast-grep rules.
+
+## Handling Review Feedback
+
+Automated review (CodeRabbit plus the repository's configured checks) runs on
+every PR. When addressing review comments:
+
+- Verify each suggestion technically before implementing it; reviewers,
+  human or bot, can be wrong.
+- Push back with a reason when a suggestion is incorrect or out of scope.
+- Ask for clarification before partially implementing an unclear item.
+- After pushing fixes, a fresh CodeRabbit pass can be requested with a PR
+  comment: `@coderabbitai review`.
+
+## About These Instruction Files
+
+- Keep guidance in `AGENTS.md` files: this root file for cross-cutting rules and
+  one per module for area-specific rules. Keep each file focused and current;
+  delete rules that no longer match the code instead of letting them rot.
+- Do NOT add `CLAUDE.md`, `CLAUDE.local.md`, or `GEMINI.md` files. Claude Code
+  reads `AGENTS.md` natively, but stops reading it entirely (nested files
+  included) if a `CLAUDE.md` or `CLAUDE.local.md` exists at or above the root.
+- For personal, machine-local instructions with Claude Code, use a gitignored
+  file under `.claude/rules/` named `*.local.md`.

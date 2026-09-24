@@ -201,7 +201,7 @@ type Processor struct {
 	// (e.g. the operator fixed permissions or restored a missing file),
 	// the entry is deleted and the action becomes active immediately
 	// without waiting for a process restart. This satisfies the
-	// hot-reload requirement in CLAUDE.md while still suppressing the
+	// hot-reload requirement in AGENTS.md while still suppressing the
 	// per-detection Sentry spam between rechecks.
 	invalidCommandPaths sync.Map
 }

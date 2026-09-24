@@ -333,7 +333,7 @@ const modelTypeBat = "bat"
 // The /media/* routes register on the passed v2 group g (== c.Group). The
 // ID-based routes register directly on c.Echo (the embedded core's Echo
 // instance), preserving the greedy GET /api/v2/audio/:id route documented in
-// internal/api/v2/CLAUDE.md: it is registered on the Echo instance (not the
+// internal/api/v2/AGENTS.md: it is registered on the Echo instance (not the
 // group) and catches all /api/v2/audio/* paths. Registering it here, at the
 // media slot, keeps it on c.Echo at the exact same point in initialization.
 func (c *Handler) RegisterRoutes(g *echo.Group) {

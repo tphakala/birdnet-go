@@ -1783,7 +1783,7 @@ grep -rn 'title="[^"$]*[A-Za-z]\|aria-label="[^"$]*[A-Za-z]' --include="*.svelte
 
 # Agent 4: i18n Translation Integrity Patterns
 
-Translation files live at `frontend/static/messages/`. `en.json` is the source of truth. All 13 non-English files must mirror its key structure exactly with properly translated values.
+Translation files live at `frontend/static/messages/`. `en.json` is the source of truth. All 15 non-English files must mirror its key structure exactly with properly translated values.
 
 ## Flattening JSON to Dot-Notation
 

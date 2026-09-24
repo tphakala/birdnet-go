@@ -50,7 +50,7 @@
   // gallery action runs. Apply/Apply-all reference it via aria-describedby and stay
   // tab-focusable (aria-disabled, not native disabled) so the reason is reachable by
   // keyboard and screen readers, and visible on touch devices where a title tooltip
-  // never appears (see frontend/CLAUDE.md "No Ambiguous Disabled States").
+  // never appears (see frontend/AGENTS.md "No Ambiguous Disabled States").
   const IN_FLIGHT_STATUS_ID = 'optimize-inflight-status';
 
   // Reflect the `open` prop onto the native dialog. showModal()/close() are

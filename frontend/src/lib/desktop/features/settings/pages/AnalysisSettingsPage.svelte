@@ -343,7 +343,7 @@
   const offerByEntry = $derived(new Map(offers.map(o => [o.entry.id, o])));
 
   // Session-scoped banner dismissal, guarded so a private-window/blocked
-  // sessionStorage never throws (see frontend/CLAUDE.md).
+  // sessionStorage never throws (see frontend/AGENTS.md).
   const OPTIMIZE_BANNER_DISMISS_KEY = 'birdnet.optimizeBannerDismissed';
   function readOptimizeDismissed(): boolean {
     try {
