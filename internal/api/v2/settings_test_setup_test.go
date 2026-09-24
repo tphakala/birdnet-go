@@ -68,11 +68,9 @@ func TestMain(m *testing.M) {
 			// Ignore the test-framework goroutines (these are not leaks).
 			goleak.IgnoreTopFunction("testing.(*T).Run"),
 			goleak.IgnoreTopFunction("testing.(*T).Parallel"),
-			// Ignore background goroutines from third-party dependencies that run
-			// for the lifetime of the process and are not leaks we can stop:
-			// the go-cache janitor and the lumberjack log-rotation worker.
+			// Ignore the go-cache janitor: a third-party background goroutine that
+			// runs for the lifetime of the process and is not a leak we can stop.
 			goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		}
 
 		if err := goleak.Find(opts...); err != nil {
