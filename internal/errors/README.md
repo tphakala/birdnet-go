@@ -506,18 +506,21 @@ The enhanced error system is designed to be lightweight:
 - Telemetry reporting is asynchronous via event bus
 - Privacy scrubbing uses efficient regex patterns
 - Automatic component detection uses call stack inspection minimally
-- Negligible cost when telemetry is disabled (~2.5ns overhead)
+- Low cost when telemetry is disabled: `Build()` still allocates the error
+  (about 90 ns and 2 allocations per error in `BenchmarkErrorCreationNoTelemetry`,
+  one of which is the wrapped `fmt.Errorf`); only the reporting skip check itself
+  is in the ~2.5 ns range
 
 ## Import Best Practices
 
 ### Standard Library Integration
 
-This package provides all necessary error handling functions as passthrough methods, so you should **never** import the standard `errors` package alongside it:
+This package provides passthroughs for the standard error functions, so you should not import the standard `errors` package alongside it. The only exceptions are breaking an import cycle and using `errors.AsType`, which has no passthrough; in that case alias the standard package as `stderrors` (see `AGENTS.md` in this directory):
 
 ```go
-// ❌ WRONG - Creates import conflicts and confusion
+// ❌ WRONG - Importing both without one of the exceptions above
 import (
-    stderrors "errors"  // Don't alias the standard package
+    stderrors "errors"  // Not needed: use the passthroughs instead
     "github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -573,7 +576,7 @@ graph LR
 1. **Error Creation**: When `Build()` is called, the error is created with all context
 2. **Event Publishing**: The error is published to the event bus as an `ErrorEvent`
 3. **Async Processing**: Workers process errors asynchronously without blocking
-4. **Fast Path**: If no consumers are registered, publishing is skipped (2.5ns overhead)
+4. **Fast Path**: If no consumers are registered, publishing is skipped (the skip check itself costs about 2.5 ns; building the error still allocates)
 
 ### Performance Characteristics
 
@@ -583,7 +586,7 @@ The event bus integration provides exceptional performance:
 | ------------------- | -------------------- | -------------------- | ----------- |
 | Error.Build()       | 100.78ms             | 30.77μs              | 3,275x      |
 | Batch (1000 errors) | 5.13s                | <50ms                | 100x+       |
-| No telemetry        | 200ns                | 2.5ns                | 80x         |
+| No telemetry        | not re-measured      | ~90ns, 2 allocs      | n/a         |
 
 ### Event Publisher Interface
 
@@ -591,7 +594,7 @@ The error package uses the `EventPublisher` interface to decouple from the event
 
 ```go
 type EventPublisher interface {
-    PublishError(event ErrorEvent) error
+    TryPublish(event any) bool
 }
 ```
 

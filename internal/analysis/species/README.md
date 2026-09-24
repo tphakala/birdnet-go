@@ -574,7 +574,7 @@ Common error categories:
 When modifying this package:
 
 1. **Run tests**: `go test -race -v ./internal/analysis/species/`
-2. **Run linter**: `golangci-lint run -v internal/analysis/species/`
+2. **Run linter**: `task lint` (whole module, from the repository root)
 3. **Check coverage**: Maintain high test coverage
 4. **Update docs**: Keep this README current
 5. **Add tests**: New features require comprehensive tests

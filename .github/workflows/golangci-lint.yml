@@ -52,8 +52,9 @@ jobs:
           # change. Linting only compiles, so the missing ffmpeg is irrelevant here.
           # No non-test file is gated on !integration, so this stays a strict superset of
           # the plain noembed,skipfrontend view and reports into the same summary below.
-          # These build tags match `task lint` in the Taskfile, so this lane and a
-          # local pre-push lint compile the same configuration.
+          # `task lint` in the Taskfile uses only noembed,skipfrontend, so this lane
+          # compiles more files than a plain local lint. To reproduce it locally, run
+          # `task lint BASE_BUILD_TAGS=integration,pebble_e2e,normcompare`.
           args: --build-tags=integration,pebble_e2e,noembed,skipfrontend,normcompare --output.checkstyle.path=golangci-lint-report.xml
 
       - name: Generate lint summary

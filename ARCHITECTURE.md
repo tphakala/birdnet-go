@@ -1011,21 +1011,37 @@ func TestDetectionSave(t *testing.T) {
 
 **Conditional Mock Calls:**
 
-For methods called conditionally or asynchronously, use `.Maybe()`:
+Use `.Maybe()` only for incidental calls that may or may not happen and are
+not what the test is checking:
 
 ```go
-// Method only called when feature enabled
+// Incidental call, only made when a feature is enabled
 mockDS.EXPECT().
     GetActiveNotificationHistory(mock.AnythingOfType("time.Time")).
     Return([]datastore.NotificationHistory{}, nil).
     Maybe()  // Won't fail if not called
+```
 
-// Async operation in goroutine
+When an asynchronous call (for example one made from a goroutine) is the
+behaviour under test, keep the expectation strict and wait for it. A `.Maybe()`
+there lets the test pass when the behaviour is gone:
+
+```go
+// Async operation in goroutine: strict expectation plus an explicit wait
+saved := make(chan struct{})
 mockDS.EXPECT().
     SaveNotificationHistory(mock.AnythingOfType("*datastore.NotificationHistory")).
     Return(nil).
-    Maybe()  // Non-blocking
+    Run(func(*datastore.NotificationHistory) { close(saved) }).
+    Once()
+
+// ... trigger the code under test ...
+
+testutil.WaitForChannel(t, saved, 5*time.Second, "SaveNotificationHistory not called")
 ```
+
+See `TESTING.md` (Async Mock Expectations) for the full rule, including the
+`require.Eventually` variant.
 
 **Regenerating Mocks:**
 
@@ -1372,7 +1388,11 @@ export const settings = writable<Settings>({
 
 // Auto-persist to localStorage
 settings.subscribe((value) => {
-  localStorage.setItem("settings", JSON.stringify(value));
+  try {
+    localStorage.setItem("settings", JSON.stringify(value));
+  } catch {
+    // Storage can be unavailable (private mode, quota exceeded); keep in-memory state
+  }
 });
 ```
 
@@ -2443,8 +2463,8 @@ npm run build
 **Linting:**
 
 ```bash
-# Backend linting (from project root)
-golangci-lint run -v
+# Backend linting (from project root; whole module, adds build tags and CGO flags)
+task lint
 
 # Frontend linting (from frontend/ directory)
 cd frontend && npm run check:all
@@ -2456,11 +2476,11 @@ task frontend-lint
 **Formatting:**
 
 ```bash
-# Go formatting (via golangci-lint)
-golangci-lint run --fix
+# Go formatting issues are reported by the whole-module lint
+task lint
 
-# Markdown formatting
-task format-md
+# Markdown: format only the files you changed (from frontend/)
+npx prettier --write ../<path to each changed .md file>
 
 # Frontend formatting (Prettier)
 npm run format
