@@ -797,8 +797,8 @@ func validateNormalizationSettings(norm *NormalizationSettings, gain float64) er
 	return nil
 }
 
-// validateExportPath rejects export paths that contain path traversal sequences
-// or null bytes. Both relative and absolute paths are accepted: Docker
+// validateExportPath rejects export paths that contain a ".." path segment
+// (with either separator) or null bytes. Both relative and absolute paths are accepted: Docker
 // containers and install.sh legitimately use absolute paths like /data/clips/.
 func validateExportPath(path string) error {
 	if path == "" {
@@ -813,8 +813,10 @@ func validateExportPath(path string) error {
 			Build()
 	}
 
-	//nolint:gocritic // ruleguard suggests IsLocal alone, but IsLocal rejects the absolute paths this function must accept, so the explicit ".." check is the traversal guard for them (see internal/AGENTS.md, path validation)
-	if strings.Contains(path, "..") {
+	// IsLocal alone would reject the absolute paths this function must accept,
+	// so a ".." path segment is the traversal guard for them. Only whole
+	// segments count: a name such as "clips..old" is a valid directory.
+	if hasParentDirSegment(path) {
 		return errors.Newf("audio export path must not contain path traversal (..): %q", path).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "audio-export-path").
@@ -836,6 +838,25 @@ func validateExportPath(path string) error {
 	}
 
 	return nil
+}
+
+// parentDirSegment is the path segment that refers to the parent directory.
+const parentDirSegment = ".."
+
+// hasParentDirSegment reports whether path contains a ".." segment. It splits
+// on both '/' and '\' regardless of the host OS, so a Windows-style traversal
+// such as `a\..\b` is caught on Unix too. The raw path is checked, not a
+// filepath.Clean result, because cleaning would fold "a/../b" into "b" and hide
+// the traversal attempt.
+func hasParentDirSegment(path string) bool {
+	for segment := range strings.FieldsFuncSeq(path, func(r rune) bool {
+		return r == '/' || r == '\\'
+	}) {
+		if segment == parentDirSegment {
+			return true
+		}
+	}
+	return false
 }
 
 // validateEQFilters validates a slice of equalizer filters. The context string
