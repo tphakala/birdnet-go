@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // migrationSetupConfig holds configuration for migration infrastructure setup.
@@ -527,6 +528,9 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 		Timezone:       time.Local,
 		Labels:         settings.BirdNET.Labels, // For common<->scientific name-map resolution
 		SpeciesCodeMap: scientificIndex,
+		// Sun calculator for civil dawn (dawn-chorus onset) and time-of-day classification,
+		// matching the legacy datastore.New wiring.
+		SunCalc: suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude),
 	})
 	if err != nil {
 		_ = v2Manager.Close()
