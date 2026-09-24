@@ -393,7 +393,7 @@ The MQTT integration settings are managed through the web interface.
    - Detailed error messages for troubleshooting
 
 3. **Frontend State Management**:
-   - Uses Alpine.js for reactive UI updates
+   - Uses Svelte 5 reactive state for UI updates
    - Watches for setting changes to enable save button
    - Clears test results when settings change
    - Handles anonymous authentication toggle logic
