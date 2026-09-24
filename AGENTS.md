@@ -59,8 +59,9 @@ yourself before touching code in that area.
   `internal/logger` (a `forbidigo` lint rule enforces this for credential and
   token field names).
 - **Document all exported symbols.**
-- **Branch from an up-to-date `main`**: `git pull origin main && git checkout -b <branch>`,
-  and check open PRs first so you do not duplicate or conflict with work in flight.
+- **Branch from an up-to-date `main`**:
+  `git switch main && git pull origin main && git switch -c <branch>`, and
+  check open PRs first so you do not duplicate or conflict with work in flight.
 - **Format the Markdown you change with Prettier**: from `frontend/`, run
   `npx prettier --write ../<path to each changed .md file>`. Skip files under
   `.agents/skills/`, which are not Prettier-formatted. Do not run
@@ -195,8 +196,8 @@ regexes, which break on formatting and match inside strings and comments:
 # Structural search
 ast-grep --pattern 'console.$METHOD($$$)' frontend/src/
 
-# Syntax-safe rewrite
-ast-grep --pattern 'let $VAR = $VALUE' --rewrite 'const $VAR = $VALUE' src/
+# Syntax-safe rewrite: prints the diff only; add --update-all (-U) to apply it
+ast-grep --pattern 'let $VAR = $VALUE' --rewrite 'const $VAR = $VALUE' frontend/src/
 ```
 
 If your tool offers language-server navigation (find references, go to
