@@ -118,9 +118,8 @@ func TestValidUILocalesDefault(t *testing.T) {
 	_, err := os.Stat(filepath.Join(frontendStaticDir, "messages", "en.json"))
 	require.NoError(t, err, "frontend/static/messages/en.json must exist")
 
-	expected := DiscoverUILocales(os.DirFS(frontendStaticDir))
-	locales := ValidUILocales()
-	assert.ElementsMatch(t, expected, locales, "defaultUILocales must exactly match frontend/static/messages")
+	discovered := DiscoverUILocales(os.DirFS(frontendStaticDir))
+	assert.ElementsMatch(t, discovered, defaultUILocales, "defaultUILocales must exactly match frontend/static/messages")
 }
 
 func TestUILocalesDiscovered(t *testing.T) {
