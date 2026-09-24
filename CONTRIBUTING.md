@@ -354,8 +354,7 @@ See [frontend/doc/AST-GREP-SETUP.md](frontend/doc/AST-GREP-SETUP.md) for details
 task test                    # All tests
 task test-verbose            # Verbose output
 task test-coverage           # With coverage
-# One package while iterating (needs the headers from task setup-dev):
-CGO_ENABLED=1 CGO_CFLAGS="-I$PWD/.cache/tensorflow" go test -race -tags noembed,skipfrontend ./internal/api/v2/...
+task --dry test              # Print the exact go test command, to run one package
 ```
 
 ### Frontend Tests
@@ -377,7 +376,7 @@ BirdNET-Go **welcomes AI-assisted coding tools**. The main developer uses [Claud
 
 Project guidelines are in [AGENTS.md](https://agents.md) files (see [Getting Started](#getting-started)): one at the repository root for cross-cutting rules and one per module for area-specific rules. Claude Code (2.1.277 and later; not yet on Bedrock, Vertex, or Foundry), Codex, Cursor, Antigravity, Copilot, and most other AI coding tools read them automatically, and they work just as well for manual development. Gemini CLI reads `GEMINI.md` by default, so point its context file setting at `AGENTS.md`.
 
-Please do not add `CLAUDE.md`, `CLAUDE.local.md`, or `GEMINI.md` files. Claude Code stops reading `AGENTS.md` (nested files included) when a `CLAUDE.md` or `CLAUDE.local.md` exists at or above the repository root, so personal instructions belong in a gitignored `.claude/rules/*.local.md` file instead.
+Please do not add `CLAUDE.md`, `CLAUDE.local.md`, or `GEMINI.md` files. Claude Code reads `AGENTS.md` only in a project that has no `CLAUDE.md`; tested with Claude Code 2.1.281, a root `CLAUDE.md` or `CLAUDE.local.md` turns that off for the root and the nested `AGENTS.md` files alike. Personal instructions belong in a gitignored `.claude/rules/*.local.md` file instead.
 
 ### Responsible AI Usage
 

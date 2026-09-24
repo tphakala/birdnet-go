@@ -62,8 +62,10 @@ yourself before touching code in that area.
 - **Branch from an up-to-date `main`**: `git pull origin main && git checkout -b <branch>`,
   and check open PRs first so you do not duplicate or conflict with work in flight.
 - **Format the Markdown you change with Prettier**: from `frontend/`, run
-  `npx prettier --write <changed .md files>`. Do not run `task format-md` in a
-  feature PR: it reformats every Markdown file in the repository.
+  `npx prettier --write ../<path to each changed .md file>`. Skip files under
+  `.agents/skills/`, which are not Prettier-formatted. Do not run
+  `task format-md` in a feature PR: it reformats every Markdown file in the
+  repository.
 
 ## PR Scope Rule
 
@@ -100,27 +102,25 @@ task test                     # Go tests with -race
 cd frontend && npm run check:all && npm test   # frontend
 ```
 
-Every form needs the TensorFlow Lite headers, which `task setup-dev` installs
-into `.cache/tensorflow`. `task lint` and `task test` then add the
-`noembed,skipfrontend` build tags and the CGO include flags for you. Without
-Task, run the equivalent commands yourself:
+Run `task setup-dev` once first: it installs the TensorFlow Lite headers and
+C library that every Go build, lint and test needs (the models are committed).
+`task lint` and `task test` add the build tags and CGO flags for you. To run the
+tools without Task, print the exact command with `task --dry lint` or
+`task --dry test` instead of copying one from a document.
 
-```bash
-CGO_ENABLED=1 CGO_CFLAGS="-I$PWD/.cache/tensorflow" \
-  golangci-lint run -v --build-tags=noembed,skipfrontend
-CGO_ENABLED=1 CGO_CFLAGS="-I$PWD/.cache/tensorflow" \
-  go test -race -tags noembed,skipfrontend ./...
-```
+These checks cover only the default build tags and your own OS:
 
-Without the `skipfrontend` tag the build also needs a built `frontend/dist`.
-The models are committed, so nothing needs downloading.
-
-These checks cover only the default tag set and your own OS. When you change
-files behind other build tags, add them with `task lint BASE_BUILD_TAGS=<tags>`
-(CI lints with `integration,pebble_e2e,noembed,skipfrontend,normcompare`). Other
-operating systems cannot be checked locally without a cross toolchain; when
-you change OS-specific files (`_windows.go`, `_darwin.go`), say so in the PR
-and make sure the cross-platform, Windows and macOS CI jobs pass.
+- For files behind other build tags, add them with
+  `task lint BASE_BUILD_TAGS=<tags>` (CI's lint tag set is in
+  `.github/workflows/golangci-lint.yml`; for `openvino`, run
+  `task check-openvino` first).
+- Other operating systems cannot be checked locally without a cross toolchain.
+  On a pull request, the `cross-platform-build` job compiles and vets
+  windows/amd64 and linux/arm64 whenever Go files change. The native Windows and
+  macOS test jobs run only when a maintainer adds the `full-ci` label, and they
+  are advisory with known failures, so a green check there proves nothing
+  unless you read the job output. When you change OS-specific files
+  (`_windows.go`, `_darwin.go`), say so in the PR and ask for `full-ci`.
 
 ## PR Creation Rules
 

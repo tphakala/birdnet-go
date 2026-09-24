@@ -136,8 +136,8 @@ most often missed:
 
 Config: `.golangci.yaml` (golangci-lint v2 format).
 
-- Always lint the **whole module** (`task lint`, or `golangci-lint run -v` once
-  the prerequisites in the root `AGENTS.md` are in place), never single files or
+- Always lint the **whole module** (`task lint`; see the root `AGENTS.md` for running it
+  without Task), never single files or
   packages; partial runs miss cross-package issues. The run type-checks the
   module, so it doubles as compilation validation, but only for the build tags
   and OS it runs with. No automated step in the preflight gate covers other
