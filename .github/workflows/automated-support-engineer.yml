@@ -2,16 +2,34 @@ name: Automated Support Engineer
 
 on:
   issues:
-    types: [opened, labeled]
+    # Only "opened": the issue templates apply labels on creation, so also
+    # listening for "labeled" ran the job twice per issue.
+    types: [opened]
   issue_comment:
     types: [created]
 
+# One run per issue at a time, so a comment posted while the first reply is
+# still being written waits and then sees that reply.
+concurrency:
+  group: support-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   provide-support:
-    # Skip if issue is created by tphakala or if it's a bot comment
+    # Only issues opened by external users: skip pull request comments, issues
+    # opened by the maintainer or the project bot, and comments by bots or the
+    # maintainer.
     if: |
-      (github.event_name == 'issues' && github.event.issue.user.login != 'tphakala' && !contains(github.event.issue.user.type, 'Bot')) ||
-      (github.event_name == 'issue_comment' && github.event.comment.user.login != 'tphakala' && !contains(github.event.comment.user.type, 'Bot') && !contains(github.event.comment.body, '🤖 Automated Support'))
+      github.event.issue.user.login != 'tphakala' &&
+      github.event.issue.user.login != 'birdnet-go-bot' &&
+      !contains(github.event.issue.user.type, 'Bot') &&
+      (github.event_name == 'issues' ||
+        (github.event_name == 'issue_comment' &&
+          !github.event.issue.pull_request &&
+          github.event.comment.user.login != 'tphakala' &&
+          github.event.comment.user.login != 'birdnet-go-bot' &&
+          !contains(github.event.comment.user.type, 'Bot') &&
+          !contains(github.event.comment.body, '🤖 Automated Support')))
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -32,7 +50,7 @@ jobs:
           ISSUE_NUMBER=${{ github.event.issue.number }}
 
           # Check if we've already responded to this issue
-          if gh api repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
+          if gh api --paginate repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
             --jq '.[] | select(.body | contains("🤖 Automated Support"))' | grep -q .; then
             echo "already_responded=true" >> "$GITHUB_OUTPUT"
             echo "Already responded to issue #${ISSUE_NUMBER}"
@@ -42,8 +60,8 @@ jobs:
           fi
 
       # The issue title, body and comment are untrusted user input. They are passed
-      # through env variables and written to a file, never spliced into a workflow
-      # expression, a shell script or the prompt text.
+      # through env variables and written to a file, never interpolated into a run
+      # script or the prompt text.
       - name: Prepare issue context
         if: steps.check-response.outputs.already_responded != 'true'
         env:
@@ -56,7 +74,8 @@ jobs:
           mkdir -p support-context
           {
             if [ "$EVENT_NAME" = "issue_comment" ]; then
-              printf 'New comment on issue #%s\n\nComment:\n%s\n' "$ISSUE_NUMBER" "$COMMENT_BODY"
+              printf 'New comment on issue #%s\n\nIssue title: %s\n\nIssue body:\n%s\n\nComment:\n%s\n' \
+                "$ISSUE_NUMBER" "$ISSUE_TITLE" "$ISSUE_BODY" "$COMMENT_BODY"
             else
               printf 'New issue opened: #%s\n\nTitle: %s\n\nBody:\n%s\n' "$ISSUE_NUMBER" "$ISSUE_TITLE" "$ISSUE_BODY"
             fi
