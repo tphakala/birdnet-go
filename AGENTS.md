@@ -61,8 +61,9 @@ yourself before touching code in that area.
 - **Document all exported symbols.**
 - **Branch from an up-to-date `main`**: `git pull origin main && git checkout -b <branch>`,
   and check open PRs first so you do not duplicate or conflict with work in flight.
-- **Format Markdown with Prettier** (`task format-md`, or `npx prettier --write`
-  from `frontend/`) when you change documentation.
+- **Format the Markdown you change with Prettier**: from `frontend/`, run
+  `npx prettier --write <changed .md files>`. Do not run `task format-md` in a
+  feature PR: it reformats every Markdown file in the repository.
 
 ## PR Scope Rule
 
@@ -99,14 +100,27 @@ task test                     # Go tests with -race
 cd frontend && npm run check:all && npm test   # frontend
 ```
 
-`task lint` and `task test` add the `noembed,skipfrontend` build tags and the
-TensorFlow Lite CGO flags. Plain `golangci-lint run -v` and `go test -race ./...`
-only work once `frontend/dist` has been built, the models have been downloaded,
-and the TensorFlow Lite headers are installed (`task setup-dev`). Neither form
-covers other build tags or operating systems: when you touch tagged or
-OS-specific files, also lint with those tags (for example
-`golangci-lint run --build-tags=<tags>`) and build for the affected platform
-(`task linux_arm64`, `task windows_amd64`, `task darwin_arm64`).
+Every form needs the TensorFlow Lite headers, which `task setup-dev` installs
+into `.cache/tensorflow`. `task lint` and `task test` then add the
+`noembed,skipfrontend` build tags and the CGO include flags for you. Without
+Task, run the equivalent commands yourself:
+
+```bash
+CGO_ENABLED=1 CGO_CFLAGS="-I$PWD/.cache/tensorflow" \
+  golangci-lint run -v --build-tags=noembed,skipfrontend
+CGO_ENABLED=1 CGO_CFLAGS="-I$PWD/.cache/tensorflow" \
+  go test -race -tags noembed,skipfrontend ./...
+```
+
+Without the `skipfrontend` tag the build also needs a built `frontend/dist`.
+The models are committed, so nothing needs downloading.
+
+These checks cover only the default tag set and your own OS. When you change
+files behind other build tags, add them with `task lint BASE_BUILD_TAGS=<tags>`
+(CI lints with `integration,pebble_e2e,noembed,skipfrontend,normcompare`). Other
+operating systems cannot be checked locally without a cross toolchain; when
+you change OS-specific files (`_windows.go`, `_darwin.go`), say so in the PR
+and make sure the cross-platform, Windows and macOS CI jobs pass.
 
 ## PR Creation Rules
 
@@ -164,7 +178,7 @@ persistently flaky, raise it rather than patching around it.
 | `task clean`              | Remove build artifacts                                                     |
 | `task linux_amd64`        | Cross-platform build (also `linux_arm64`, `windows_amd64`, `darwin_arm64`) |
 
-Run `task --list` for everything else (setup, integration tests, model downloads).
+Run `task --list` for everything else (setup, integration tests, native library downloads).
 
 ## Code Search and Refactoring
 
@@ -202,13 +216,13 @@ every PR. When addressing review comments:
   one per module for area-specific rules. Keep each file focused and current;
   delete rules that no longer match the code instead of letting them rot.
 - Do NOT add `CLAUDE.md`, `CLAUDE.local.md`, or `GEMINI.md` files. Claude Code
-  (2.1.277 and later) reads `AGENTS.md` natively, but stops reading it entirely
-  (nested files included) if a `CLAUDE.md` or `CLAUDE.local.md` exists at or
-  above the root.
+  (2.1.277 and later) reads `AGENTS.md` in a project that has no `CLAUDE.md`
+  (the "Project instructions" setting in `/config` controls this). Tested with
+  Claude Code 2.1.281: a root `CLAUDE.md` or `CLAUDE.local.md` turns that off
+  for the root and the nested `AGENTS.md` files alike.
 - Tool caveats: Claude Code's native `AGENTS.md` support is not yet available on
-  Bedrock, Vertex, or Foundry, and older versions ignore it; there, or with
-  Gemini CLI (which reads `GEMINI.md` by default until its context file setting
-  points at `AGENTS.md`), read this file and the module guide yourself, or
-  import it from a gitignored personal file.
+  Bedrock, Vertex, or Foundry, and older versions ignore it. Gemini CLI reads
+  `GEMINI.md` by default until its context file setting points at `AGENTS.md`.
+  With those tools, read this file and the matching module guide yourself.
 - For personal, machine-local instructions with Claude Code, use a gitignored
   file under `.claude/rules/` named `*.local.md`.

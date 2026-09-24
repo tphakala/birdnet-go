@@ -278,9 +278,8 @@ task clean            # Clean artifacts
 Configuration: [.golangci.yaml](.golangci.yaml)
 
 ```bash
-golangci-lint run -v                    # All files
-golangci-lint run -v internal/api/v2/   # Specific path
-golangci-lint run --fix                 # Auto-fix
+task lint                               # Whole module (never lint single packages)
+task lint-fix                           # Auto-fix
 ```
 
 ### Frontend Linting
@@ -355,8 +354,8 @@ See [frontend/doc/AST-GREP-SETUP.md](frontend/doc/AST-GREP-SETUP.md) for details
 task test                    # All tests
 task test-verbose            # Verbose output
 task test-coverage           # With coverage
-go test -race -v ./...       # Race detector
-go test -v ./internal/api/v2/...  # Specific package
+# One package while iterating (needs the headers from task setup-dev):
+CGO_ENABLED=1 CGO_CFLAGS="-I$PWD/.cache/tensorflow" go test -race -tags noembed,skipfrontend ./internal/api/v2/...
 ```
 
 ### Frontend Tests
@@ -443,7 +442,7 @@ git checkout -b docs/what-updated           # Documentation
 ```bash
 git pull origin main                        # Update from main
 git checkout -b feature/my-feature          # Create branch
-golangci-lint run -v                        # Lint Go
+task lint                                   # Lint Go
 task frontend-quality                       # Lint frontend
 task test                                   # Test Go
 task frontend-test                          # Test frontend
@@ -511,7 +510,7 @@ Fixes #123
 ### Critical Constraints
 
 - **NEVER expand API v1** - Use `internal/api/v2/`
-- **Always lint before commit** - `golangci-lint run -v` and `task frontend-quality`
+- **Always lint before commit** - `task lint` and `task frontend-quality`
 - **Branch from updated main** - `git pull origin main` first
 - **No `any` types in TypeScript** - Properly type all parameters
 
@@ -551,7 +550,7 @@ air realtime            # Hot reload
 task dev_server         # Full dev server
 
 # Quality
-golangci-lint run -v    # Go linting
+task lint               # Go linting
 task frontend-quality   # Frontend quality
 
 # Testing
