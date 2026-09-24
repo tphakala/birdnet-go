@@ -42,9 +42,11 @@ if [ -n "$GO_FILES" ]; then
     echo "✅ All Go files are properly formatted"
   fi
   
-  # Run golangci-lint
+  # Run golangci-lint with the same build tags as `task lint` and CI
+  # (noembed,skipfrontend skip model and frontend embedding, which also makes
+  # the run faster).
   echo "   Linting Go files..."
-  if ! golangci-lint run -v; then
+  if ! golangci-lint run -v --build-tags=noembed,skipfrontend; then
     echo "❌ golangci-lint found issues in Go files"
     echo "💡 Fix the issues above before committing"
     echo "⚠️  Note: --no-verify bypasses are not accepted in this project"
@@ -74,9 +76,11 @@ fi
 echo "🔍 Running frontend pre-commit checks..."
 cd frontend || exit 1
 
-# Check i18n key sync if translation files are staged
+# Check i18n key sync if translation files are staged.
+# The frontend/ prefix is optional so the match still works under git diff.relative=true
+# (paths come out relative to the frontend/ cwd set above).
 I18N_FILES=$(git diff --cached --name-only --diff-filter=ACMR | \
-  grep 'frontend/static/messages/.*\.json$' || true)
+  grep -E '(frontend/)?static/messages/[^/]*\.json$' || true)
 
 if [ -n "$I18N_FILES" ]; then
   echo "🌍 Checking i18n key sync..."

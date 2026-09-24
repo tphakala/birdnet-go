@@ -39,13 +39,8 @@
 
     if (newLocale === currentLocale) return;
 
-    // Update the locale in the store
+    // Update the locale in the store; setLocale also persists it to localStorage
     setLocale(newLocale);
-
-    // Store preference in localStorage
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('birdnet-locale', newLocale);
-    }
   }
 </script>
 

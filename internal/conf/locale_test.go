@@ -1,6 +1,8 @@
 package conf
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
 
@@ -45,6 +47,15 @@ func TestDiscoverUILocales(t *testing.T) {
 			expected: []string{"en"},
 		},
 		{
+			name: "ignores hidden json files",
+			fs: fstest.MapFS{
+				"messages/en.json":                          &fstest.MapFile{Data: []byte("{}")},
+				"messages/fi.json":                          &fstest.MapFile{Data: []byte("{}")},
+				"messages/.i18n-untranslated-baseline.json": &fstest.MapFile{Data: []byte("{}")},
+			},
+			expected: []string{"en", "fi"},
+		},
+		{
 			name: "ignores directories inside messages",
 			fs: fstest.MapFS{
 				"messages/en.json":          &fstest.MapFile{Data: []byte("{}")},
@@ -56,7 +67,7 @@ func TestDiscoverUILocales(t *testing.T) {
 			name: "falls back to defaults when messages dir missing",
 			fs:   fstest.MapFS{},
 			expected: []string{
-				"da", "de", "en", "es", "fi", "fr", "hu", "it", "lv", "nl", "pl", "pt", "sk", "sv",
+				"cs", "da", "de", "en", "es", "fi", "fr", "hu", "it", "lv", "nb", "nl", "pl", "pt", "sk", "sv",
 			},
 		},
 		{
@@ -100,10 +111,15 @@ func TestSetValidUILocales(t *testing.T) {
 }
 
 func TestValidUILocalesDefault(t *testing.T) {
-	// Verify the default exactly matches all current frontend locales.
-	// Keep in sync with frontend/static/messages/*.json.
+	// Verify the default exactly matches the locale files that exist in
+	// frontend/static/messages, so adding a locale without updating
+	// defaultUILocales fails here.
+	const frontendStaticDir = "../../frontend/static"
+	_, err := os.Stat(filepath.Join(frontendStaticDir, "messages", "en.json"))
+	require.NoError(t, err, "frontend/static/messages/en.json must exist")
+
+	expected := DiscoverUILocales(os.DirFS(frontendStaticDir))
 	locales := ValidUILocales()
-	expected := []string{"da", "de", "en", "es", "fi", "fr", "hu", "it", "lv", "nl", "pl", "pt", "sk", "sv"}
 	assert.ElementsMatch(t, expected, locales, "defaultUILocales must exactly match frontend/static/messages")
 }
 

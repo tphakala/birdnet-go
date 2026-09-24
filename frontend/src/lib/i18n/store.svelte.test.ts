@@ -11,7 +11,7 @@
  * Fix: Critical fallbacks provide essential translations immediately
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -195,5 +195,36 @@ describe('i18n store - localStorage cache', () => {
     // Should use fresh translations, not stale cache
     const result = t('common.loading');
     expect(result).toBe('Loading...');
+  });
+});
+
+describe('i18n store - blocked storage', () => {
+  // When site data is blocked, merely reading window.localStorage throws a
+  // SecurityError. The store reads it at module init, so a fresh import must
+  // survive that and fall back to a valid locale.
+  const originalDescriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+
+  afterEach(() => {
+    if (originalDescriptor) {
+      Object.defineProperty(window, 'localStorage', originalDescriptor);
+    }
+    vi.resetModules();
+  });
+
+  it('should initialize and switch locale without throwing when storage access throws', async () => {
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('The operation is insecure.', 'SecurityError');
+      },
+    });
+    vi.resetModules();
+
+    const store = await import('./store.svelte');
+    const { isValidLocale } = await import('./config');
+
+    expect(isValidLocale(store.getLocale())).toBe(true);
+    expect(() => store.setLocale('fi')).not.toThrow();
+    expect(store.getLocale()).toBe('fi');
   });
 });

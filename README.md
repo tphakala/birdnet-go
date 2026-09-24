@@ -55,7 +55,7 @@ Self-hosted, 24/7, local AI inference. BirdNET-Go ingests soundcard input or net
 - **Live spectrogram streaming** and **detection heatmaps** rendered straight in the browser.
 - **Alert rules engine** that routes detections to Discord, Slack, Telegram, ntfy, Pushover, Gotify, Matrix, webhooks, browser push, MQTT (with Home Assistant discovery), shell scripts, and BirdWeather.
 - **Production-ready ops**: onboarding wizard, OIDC/SSO, TLS certificate management, hot-reload settings, system health page, database doctor, and one-click support dumps.
-- **Installable as a PWA**, with 15 UI languages and species names in 40+ languages.
+- **Installable as a PWA**, with a multilingual UI and species names in 40+ languages.
 - **Local-only by default**. Optional Sentry telemetry is strictly opt-in.
 
 ## Quick install
@@ -105,7 +105,7 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
 - Customizable dashboard layout, color schemes, and a "Currently Hearing" card
 - Multiselect and bulk actions on the detections list
 - Browser terminal (xterm.js over WebSocket PTY) for in-app administration
-- 15 UI languages: English, German, French, Spanish, Portuguese, Dutch, Polish, Italian, Czech, Slovak, Hungarian, Finnish, Swedish, Danish, Latvian
+- UI languages: English, German, French, Spanish, Portuguese, Dutch, Polish, Italian, Czech, Slovak, Hungarian, Finnish, Swedish, Danish, Norwegian (Bokmål), Latvian
 - Species names in 40+ languages
 
 ### Alerts and integrations

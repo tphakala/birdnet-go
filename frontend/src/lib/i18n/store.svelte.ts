@@ -30,11 +30,16 @@ const CRITICAL_FALLBACKS: Record<string, string> = {
 
 // Initialize locale from localStorage, browser preferences, or use default
 function getInitialLocale(): Locale {
-  if (typeof localStorage !== 'undefined') {
-    const stored = localStorage.getItem('birdnet-locale');
-    if (stored && isValidLocale(stored)) {
-      return stored;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('birdnet-locale');
+      if (stored && isValidLocale(stored)) {
+        return stored;
+      }
     }
+  } catch {
+    // Storage access can throw (for example a SecurityError when site data
+    // is blocked); fall through to browser detection.
   }
 
   // If no stored preference, use browser locale detection
@@ -98,12 +103,12 @@ export function setLocale(locale: Locale): void {
   loadMessages(locale);
 
   // Persist locale to localStorage
-  if (typeof localStorage !== 'undefined') {
-    try {
+  try {
+    if (typeof localStorage !== 'undefined') {
       localStorage.setItem('birdnet-locale', locale);
-    } catch (error) {
-      logger.warn('Failed to save locale to localStorage:', error);
     }
+  } catch (error) {
+    logger.warn('Failed to save locale to localStorage:', error);
   }
 }
 
@@ -321,7 +326,12 @@ if (typeof window !== 'undefined') {
   loading = true;
 
   // Try to load messages synchronously from cache if available
-  const cachedMessages = localStorage.getItem(cacheKey(locale));
+  let cachedMessages: string | null = null;
+  try {
+    cachedMessages = localStorage.getItem(cacheKey(locale));
+  } catch {
+    // Storage blocked or unavailable; continue with the async load
+  }
   if (cachedMessages) {
     try {
       messages = JSON.parse(cachedMessages);

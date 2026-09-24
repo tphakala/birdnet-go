@@ -18,7 +18,10 @@ npm run i18n:validate
 # Check if keys used in code exist in translations
 npm run i18n:check-usage
 
-# Run both validators
+# Translation validator with CI's exact flags
+npm run i18n:validate:ci
+
+# Sync, generated types, usage and untranslated checks
 npm run i18n:validate:full
 
 # Find unused translation keys
@@ -52,7 +55,8 @@ npm run i18n:validate
 # Strict mode (shows all details)
 npm run i18n:validate:strict
 
-# CI mode (fails if coverage < 85%)
+# CI mode (CI's exact flags: fails below 100% coverage, on warnings,
+# and on newly added untranslated English fallbacks)
 npm run i18n:validate:ci
 
 # Generate JSON report for LLMs
@@ -170,17 +174,17 @@ npm run i18n:find-unused
 
 ## npm Scripts
 
-| Script                 | Description                                  |
-| ---------------------- | -------------------------------------------- |
-| `i18n:validate`        | Basic translation file validation            |
-| `i18n:validate:strict` | Detailed validation output                   |
-| `i18n:validate:ci`     | CI mode (min 85% coverage, fail on warnings) |
-| `i18n:validate:json`   | JSON output for LLM parsing                  |
-| `i18n:report`          | Generate JSON report                         |
-| `i18n:report:md`       | Generate Markdown report                     |
-| `i18n:check-usage`     | Find missing translations for used keys      |
-| `i18n:find-unused`     | Find unused translation keys                 |
-| `i18n:validate:full`   | Run all validations                          |
+| Script                 | Description                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| `i18n:validate`        | Basic translation file validation                                                       |
+| `i18n:validate:strict` | Detailed validation output                                                              |
+| `i18n:validate:ci`     | CI mode (min 100% coverage, fail on warnings, fail on new untranslated values)          |
+| `i18n:validate:json`   | JSON output for LLM parsing                                                             |
+| `i18n:report`          | Generate JSON report                                                                    |
+| `i18n:report:md`       | Generate Markdown report                                                                |
+| `i18n:check-usage`     | Find missing translations for used keys                                                 |
+| `i18n:find-unused`     | Find unused translation keys                                                            |
+| `i18n:validate:full`   | Sync, generated types, usage and untranslated checks (not the CI translation validator) |
 
 ## GitHub Actions Integration
 
@@ -345,8 +349,13 @@ npm run i18n:find-unused
 
 ### Before Committing
 
+Run both; neither covers the other:
+
 ```bash
-# Validate everything
+# Translation validator with CI's exact flags
+npm run i18n:validate:ci
+
+# Sync, generated types, usage and untranslated checks (including orphaned keys)
 npm run i18n:validate:full
 ```
 
@@ -375,7 +384,7 @@ Edit `package.json`:
 ```json
 {
   "scripts": {
-    "i18n:validate:ci": "npx tsx src/lib/i18n/validateTranslations.ts --min-coverage 90"
+    "i18n:validate:ci": "npx tsx src/lib/i18n/validateTranslations.ts --min-coverage 100 --fail-on-warnings --strict --fail-on-untranslated"
   }
 }
 ```
@@ -457,9 +466,7 @@ frontend/
 
 ## Performance
 
-- **Translation validation**: ~100ms for 6 languages
-- **Usage scanning**: ~200ms for ~900 keys across 50 files
-- **Total validation**: < 500ms
+Each validator finishes in a second or two, including `tsx` startup.
 
 ## Contributing
 
