@@ -104,19 +104,22 @@ cd frontend && npm run check:all && npm test   # frontend
 
 Run `task setup-dev` once first: it installs the TensorFlow Lite headers and
 C library that every Go build, lint and test needs (the models are committed).
-`task lint` and `task test` add the build tags and CGO flags for you. To run the
-tools without Task, print the exact command with `task --dry lint` or
-`task --dry test` instead of copying one from a document.
+`task lint` and `task test` add the build tags and CGO flags for you. To run a
+step by hand instead, print what Task would run with `task --dry lint` or
+`task --dry test` (a short `sh` script) instead of copying a command from a
+document.
 
 These checks cover only the default build tags and your own OS:
 
 - For files behind other build tags, add them with
   `task lint BASE_BUILD_TAGS=<tags>` (CI's lint tag set is in
   `.github/workflows/golangci-lint.yml`; for `openvino`, run
-  `task check-openvino` first).
+  `task check-openvino OPENVINO=true` first, since without `OPENVINO=true`
+  the task reports itself up to date and installs nothing).
 - Other operating systems cannot be checked locally without a cross toolchain.
-  On a pull request, the `cross-platform-build` job compiles and vets
-  windows/amd64 and linux/arm64 whenever Go files change. The native Windows and
+  On a pull request, the `cross-platform-build` workflow compiles and vets
+  windows/amd64 and linux/arm64 whenever Go files change; it is not advisory,
+  so treat a failure there as a real break. The native Windows and
   macOS test jobs run only when a maintainer adds the `full-ci` label, and they
   are advisory with known failures, so a green check there proves nothing
   unless you read the job output. When you change OS-specific files
