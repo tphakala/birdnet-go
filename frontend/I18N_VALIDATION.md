@@ -379,15 +379,21 @@ cd frontend && npm run i18n:validate:ci
 
 ### Adjust Coverage Threshold
 
-Edit `package.json`:
+The default is 100 (every key translated), both in the `i18n:validate:ci` script
+and in the `i18n-validation.yml` workflow, which runs the validator with its own
+flags. To relax it locally, lower `--min-coverage` in `package.json`, for example
+to 95:
 
 ```json
 {
   "scripts": {
-    "i18n:validate:ci": "npx tsx src/lib/i18n/validateTranslations.ts --min-coverage 100 --fail-on-warnings --strict --fail-on-untranslated"
+    "i18n:validate:ci": "npx tsx src/lib/i18n/validateTranslations.ts --min-coverage 95 --fail-on-warnings --strict --fail-on-untranslated"
   }
 }
 ```
+
+CI is unaffected by this script; change the flag in
+`.github/workflows/i18n-validation.yml` too if CI should use the new value.
 
 ### Skip Specific Files
 

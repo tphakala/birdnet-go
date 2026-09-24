@@ -492,9 +492,10 @@ Timestamps are intentionally omitted following the Twelve-Factor App methodology
 the execution environment (journald, Docker) adds them automatically.
 
 ```yaml
-console:
-  enabled: true
-  level: "info" # Can be different from default_level
+logging:
+  console:
+    enabled: true
+    level: "info" # Can be different from default_level
 ```
 
 **Output format**: `LEVEL  [module] message key=value`
@@ -508,10 +509,11 @@ Dec 28 13:43:08 myapp[1234]: INFO  [main] Application started version=1.0.0
 #### File Output
 
 ```yaml
-file_output:
-  enabled: true
-  path: "logs/app.log"
-  level: "debug" # Log more verbose to file
+logging:
+  file_output:
+    enabled: true
+    path: "logs/app.log"
+    level: "debug" # Log more verbose to file
 ```
 
 **Best practices**:
@@ -523,10 +525,11 @@ file_output:
 #### Module-Specific Levels
 
 ```yaml
-module_levels:
-  storage: "debug" # Storage module logs at debug level
-  auth: "info" # Auth module logs at info level
-  webhook: "trace" # Webhook module logs everything
+logging:
+  module_levels:
+    storage: "debug" # Storage module logs at debug level
+    auth: "info" # Auth module logs at info level
+    webhook: "trace" # Webhook module logs everything
 ```
 
 **Use cases**:
@@ -538,12 +541,13 @@ module_levels:
 #### Module-Specific Outputs
 
 ```yaml
-modules:
-  auth:
-    enabled: true
-    file_path: "logs/auth.log"
-    level: "info"
-    console_also: true # Also output to console
+logging:
+  modules:
+    auth:
+      enabled: true
+      file_path: "logs/auth.log"
+      level: "info"
+      console_also: true # Also output to console
 ```
 
 **Use cases**:

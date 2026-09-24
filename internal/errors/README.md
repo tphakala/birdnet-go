@@ -507,9 +507,9 @@ The enhanced error system is designed to be lightweight:
 - Privacy scrubbing uses efficient regex patterns
 - Automatic component detection uses call stack inspection minimally
 - Low cost when telemetry is disabled: `Build()` still allocates the error
-  (about 90 ns and 2 allocations per error in `BenchmarkErrorCreationNoTelemetry`,
-  one of which is the wrapped `fmt.Errorf`); only the reporting skip check itself
-  is in the ~2.5 ns range
+  (2 allocations per error in `BenchmarkErrorCreationNoTelemetry`, one of which
+  is the benchmark's own `fmt.Errorf`); only the reporting skip check itself is
+  cheap
 
 ## Import Best Practices
 
@@ -576,7 +576,7 @@ graph LR
 1. **Error Creation**: When `Build()` is called, the error is created with all context
 2. **Event Publishing**: The error is published to the event bus as an `ErrorEvent`
 3. **Async Processing**: Workers process errors asynchronously without blocking
-4. **Fast Path**: If no consumers are registered, publishing is skipped (the skip check itself costs about 2.5 ns; building the error still allocates)
+4. **Fast Path**: If no consumers are registered, publishing is skipped (the skip check itself is cheap; building the error still allocates)
 
 ### Performance Characteristics
 
@@ -586,7 +586,7 @@ The event bus integration provides exceptional performance:
 | ------------------- | -------------------- | -------------------- | ----------- |
 | Error.Build()       | 100.78ms             | 30.77μs              | 3,275x      |
 | Batch (1000 errors) | 5.13s                | <50ms                | 100x+       |
-| No telemetry        | not re-measured      | ~90ns, 2 allocs      | n/a         |
+| No telemetry        | not re-measured      | 2 allocs             | n/a         |
 
 ### Event Publisher Interface
 

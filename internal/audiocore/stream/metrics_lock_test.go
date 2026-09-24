@@ -49,12 +49,12 @@ func (m *reentrantMetrics) RecordWireRate(string, float64) {}
 func (m *reentrantMetrics) SetStreamEngine(string, string) {}
 func (m *reentrantMetrics) DeleteStream(string)            {}
 
-// TestOnState_EmitsMetricsOutsideLock is a regression test for the AB-BA hazard
-// where onState emitted metrics under the lock: onState must release s.mu before emitting stream
-// metrics, matching onDeliver and snapshot. A metrics implementation that reads
-// stream health back while holding its own lock would otherwise risk a deadlock.
-// StateConnected is used because that transition drives onState without touching
-// the pipeline or supervisor.
+// TestOnState_EmitsMetricsOutsideLock is a regression test for an AB-BA
+// hazard: onState must release s.mu before emitting stream metrics, matching
+// onDeliver and snapshot. A metrics implementation that reads stream health
+// back while holding its own lock would otherwise risk a deadlock.
+// StateConnected is used because that transition drives onState without
+// touching the pipeline or supervisor.
 func TestOnState_EmitsMetricsOutsideLock(t *testing.T) {
 	t.Parallel()
 

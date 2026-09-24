@@ -131,7 +131,8 @@ var LocaleCodes = map[string]string{
 
 // defaultUILocales is the fallback list of valid UI locales.
 // Keep in sync with frontend/static/messages/*.json and frontend/src/lib/i18n/config.ts.
-// This is ONLY used when DiscoverUILocales fails to read the embedded frontend FS.
+// It is the initial value of validUILocales (before SetValidUILocales runs) and the
+// list DiscoverUILocales returns when it fails to read the embedded frontend FS.
 var defaultUILocales = []string{
 	"cs", "da", "de", "en", "es", "fi", "fr", "hu", "it", "lv", "nb", "nl", "pl", "pt", "sk", "sv",
 }
@@ -202,10 +203,8 @@ func DiscoverUILocales(fsys fs.FS) []string {
 		if strings.HasPrefix(name, ".") || !strings.HasSuffix(name, ".json") {
 			continue
 		}
+		// The hidden-file skip above already drops ".json", so locale is never empty.
 		locale := strings.TrimSuffix(name, ".json")
-		if locale == "" {
-			continue
-		}
 		locales = append(locales, locale)
 		if locale == "en" {
 			hasEN = true

@@ -235,7 +235,9 @@ func parseFailureReason(err error) string {
 // segment. Callers must pass url.URL.Path, which url.Parse has already
 // percent-decoded; decoding again here would reject a legitimate literal "%"
 // in the path and would treat a double-encoded segment as traversal when it is
-// not.
+// not. It splits on '/' only, because '\' is not a URL path separator;
+// hasParentDirSegment in validate_audio.go is the file-path variant that also
+// splits on '\'.
 func hasDotDotSegment(path string) bool {
 	return slices.Contains(strings.Split(path, "/"), "..")
 }

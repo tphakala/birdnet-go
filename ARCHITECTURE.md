@@ -1017,7 +1017,7 @@ not what the test is checking:
 ```go
 // Incidental call, only made when a feature is enabled
 mockDS.EXPECT().
-    GetActiveNotificationHistory(mock.AnythingOfType("time.Time")).
+    GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
     Return([]datastore.NotificationHistory{}, nil).
     Maybe()  // Won't fail if not called
 ```
@@ -1030,9 +1030,9 @@ there lets the test pass when the behaviour is gone:
 // Async operation in goroutine: strict expectation plus an explicit wait
 saved := make(chan struct{})
 mockDS.EXPECT().
-    SaveNotificationHistory(mock.AnythingOfType("*datastore.NotificationHistory")).
+    SaveNotificationHistory(mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
     Return(nil).
-    Run(func(*datastore.NotificationHistory) { close(saved) }).
+    Run(func(_ context.Context, _ *datastore.NotificationHistory) { close(saved) }).
     Once()
 
 // ... trigger the code under test ...
@@ -2476,8 +2476,13 @@ task frontend-lint
 **Formatting:**
 
 ```bash
-# Go formatting issues are reported by the whole-module lint
+# Go formatting: golangci-lint has no formatters configured, so run gofmt on
+# the files you changed (the pre-commit hook also runs gofmt on staged files)
+gofmt -w <files>
+
+# Go linting, and lint with auto-fix (task lint-fix runs golangci-lint --fix)
 task lint
+task lint-fix
 
 # Markdown: format only the files you changed (from frontend/)
 npx prettier --write ../<path to each changed .md file>

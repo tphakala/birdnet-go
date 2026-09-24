@@ -192,11 +192,11 @@ func (dw *DualWriteRepository) StartReconciliation() {
 // clears its dirty marker. During dual-write legacy is the source of truth and its row is
 // deleted before the v2 row (DualWriteRepository.Delete), so a missing legacy row means the
 // detection was deleted; a surviving v2 row is an orphan that would resurrect after v2
-// promotion. A row already absent from v2 (ErrDetectionNotFound) needs no
-// delete. A locked, user-verified v2 row (ErrDetectionLocked) is never force-deleted; its
-// marker is still cleared so the id does not linger in the dirty set and block migration
-// validation forever, and the protected row is left in place. Any other delete error leaves
-// the marker for a later retry (a non-nil return); it returns nil once the marker is cleared
+// promotion. A row already absent from v2 (ErrDetectionNotFound) needs no delete. A
+// locked, user-verified v2 row (ErrDetectionLocked) is never force-deleted; its marker is
+// still cleared so the id does not linger in the dirty set and block migration validation
+// forever, and the protected row is left in place. Any other delete error leaves the
+// marker for a later retry (a non-nil return); it returns nil once the marker is cleared
 // or the row was already gone.
 //
 // This is shared by the runtime reconciler (reconcileDirtyIDs) and the migration catch-up

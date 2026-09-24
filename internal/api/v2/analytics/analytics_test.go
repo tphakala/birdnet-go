@@ -1037,13 +1037,12 @@ func TestGetDailySpeciesSummary_ThumbnailDefersToProxy(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// TestGetSpeciesSummary_ThumbnailDefersToProxy is a regression test for thumbnails
-// that bypassed the media proxy.
-// The species summary endpoint must emit the media-proxy URL for every species,
-// independent of the image cache, so the proxy resolves images through the single-item
-// fallback chain instead of showing a placeholder when the primary provider has a
-// negative cache entry. A nil BirdImageCache proves the thumbnail URL no longer depends
-// on the (negative-blind) batch cache lookup.
+// TestGetSpeciesSummary_ThumbnailDefersToProxy is a regression test for thumbnails that
+// bypassed the media proxy. The species summary endpoint must emit the media-proxy URL
+// for every species, independent of the image cache, so the proxy resolves images
+// through the single-item fallback chain instead of showing a placeholder when the
+// primary provider has a negative cache entry. A nil BirdImageCache proves the thumbnail
+// URL no longer depends on the (negative-blind) batch cache lookup.
 func TestGetSpeciesSummary_ThumbnailDefersToProxy(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "analytics")
@@ -1082,8 +1081,9 @@ func TestGetSpeciesSummary_ThumbnailDefersToProxy(t *testing.T) {
 }
 
 // TestGetNewSpeciesDetections_ThumbnailDefersToProxy is a regression test for
-// thumbnails that bypassed the media proxy. Like the species summary, the new-species endpoint must emit the media-proxy
-// URL for every species independent of the image cache.
+// thumbnails that bypassed the media proxy. Like the species summary, the new-species
+// endpoint must emit the media-proxy URL for every species independent of the image
+// cache.
 func TestGetNewSpeciesDetections_ThumbnailDefersToProxy(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "analytics")
@@ -1123,10 +1123,10 @@ func TestGetNewSpeciesDetections_ThumbnailDefersToProxy(t *testing.T) {
 }
 
 // TestGetSpeciesThumbnails_DefersToProxy is a regression test for thumbnails that
-// bypassed the media proxy. The
-// batch thumbnails endpoint previously returned the static placeholder for a species
-// with no positive cache entry (masking a fallback image); it must now emit the
-// media-proxy URL for every requested species, independent of the image cache.
+// bypassed the media proxy. The batch thumbnails endpoint previously returned the static
+// placeholder for a species with no positive cache entry (masking a fallback image); it
+// must now emit the media-proxy URL for every requested species, independent of the
+// image cache.
 func TestGetSpeciesThumbnails_DefersToProxy(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "analytics")

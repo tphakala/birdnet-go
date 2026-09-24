@@ -519,7 +519,7 @@ providers:
 
 ### Use Case 3: Slack/Discord Integration
 
-**Note**: Discord embed color `5814783` is green (hex `0x58B05F`). Adjust for your needs:
+**Note**: Discord embed color `5814783` is light blue (hex `0x58B9FF`). Adjust for your needs:
 
 - Red: `15158332` (0xE74C3C)
 - Blue: `3447003` (0x3498DB)
@@ -767,10 +767,10 @@ Potential features for future releases:
 
 When modifying the webhook provider:
 
-1. **Run tests**: `go test -v -race ./internal/notification/push_webhook_test.go`
+1. **Run tests**: `go test -race -run Webhook ./internal/notification/`
 2. **Run linter**: `task lint` (whole module, from the repository root)
 3. **Update docs**: Keep this file and code comments in sync
-4. **Follow patterns**: Use existing Go 1.24/1.25 patterns in the code
+4. **Follow patterns**: Use the existing patterns in the code (the Go version is set in `go.mod`)
 
 ## References
 

@@ -5151,14 +5151,10 @@ configure_metrics_exposure() {
 
 # Generate systemd service content
 generate_systemd_service_content() {
-    # Use configured timezone if available, otherwise fall back to system timezone.
-    # Mirror the multi-method detection from configure_timezone() so newer
-    # systemd distributions without /etc/timezone (e.g. Debian 13) still resolve
-    # the host zone instead of silently defaulting to UTC.
-    # Resolve the host timezone via the shared resolver, preferring any
-    # zone the user already configured. Falls back to UTC only when nothing valid can be
-    # detected, so newer systemd distributions without /etc/timezone (e.g. Debian 13)
-    # still resolve the host zone instead of silently defaulting to UTC.
+    # Resolve the host timezone via the shared resolver, preferring any zone the
+    # user already configured. Falls back to UTC only when nothing valid can be
+    # detected, so newer systemd distributions without /etc/timezone (e.g.
+    # Debian 13) still resolve the host zone instead of silently defaulting to UTC.
     local TZ
     TZ=$(resolve_host_timezone "$CONFIGURED_TZ")
     if [ -z "$TZ" ]; then

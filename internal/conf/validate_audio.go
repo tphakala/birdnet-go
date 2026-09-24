@@ -847,7 +847,8 @@ const parentDirSegment = ".."
 // on both '/' and '\' regardless of the host OS, so a Windows-style traversal
 // such as `a\..\b` is caught on Unix too. The raw path is checked, not a
 // filepath.Clean result, because cleaning would fold "a/../b" into "b" and hide
-// the traversal attempt.
+// the traversal attempt. It is for file paths; hasDotDotSegment in
+// huggingface.go is the URL-path variant, which splits on '/' only.
 func hasParentDirSegment(path string) bool {
 	for segment := range strings.FieldsFuncSeq(path, func(r rune) bool {
 		return r == '/' || r == '\\'

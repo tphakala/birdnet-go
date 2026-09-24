@@ -11,9 +11,8 @@ import (
 //
 // It snapshots the goroutines alive at the moment it is called (via
 // goleak.IgnoreCurrent) and ignores them, so a leftover goroutine from a
-// previously-run test, most often a net/http.(*Transport).dialConn still
-// connecting after another test opened an outbound HTTP connection, is not
-// wrongly attributed to this test. goleak inspects every goroutine in the
+// previously-run test (for example a net/http dialConn goroutine left by an
+// earlier test) is not wrongly attributed to this test. goleak inspects every goroutine in the
 // process, not just the ones this test spawned, so without the snapshot these
 // checks flake under `go test -race -shuffle=on` depending on which test ran
 // first.
@@ -30,8 +29,10 @@ import (
 // extra options are appended after the snapshot, for per-test ignores of
 // named goroutines that cannot be stopped, such as the go-cache janitor.
 //
-// This helper is for per-test checks. A package-wide goleak.VerifyTestMain
-// gate must NOT use IgnoreCurrent, because it runs once after all tests.
+// This helper is for per-test checks. Do not pass IgnoreCurrent to a
+// package-wide goleak.VerifyTestMain gate: the option is evaluated before
+// m.Run, so it would only hide goroutines started by TestMain's own setup
+// (masking leaks there) and does nothing for the tests themselves.
 //
 // Do not combine VerifyNoLeaks with t.Parallel(): a process-wide leak check
 // cannot coexist with goroutines from other tests running concurrently.

@@ -164,7 +164,7 @@ func TestImageCacheDisablesReadsOnCorruption(t *testing.T) {
 
 // TestImageCacheDisablesWritesOnCorruption verifies that a corruption error
 // from SaveImageCache also latches the disabled-DB flag, preventing further
-// save attempts from generating Sentry events (the save path).
+// save attempts from generating Sentry events.
 func TestImageCacheDisablesWritesOnCorruption(t *testing.T) {
 	t.Parallel()
 
@@ -203,8 +203,7 @@ func TestImageCacheDisablesWritesOnCorruption(t *testing.T) {
 // TestImageCacheCorruptionAtStartup verifies that a corruption error raised
 // during the warmup load (loadCachedImages) latches the flag, lets init
 // complete cleanly, and prevents any further GetAll calls. Without this the
-// startup error would propagate and abort image cache init entirely
-// (the startup path).
+// startup error would propagate and abort image cache init entirely.
 func TestImageCacheCorruptionAtStartup(t *testing.T) {
 	t.Parallel()
 

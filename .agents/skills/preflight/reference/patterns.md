@@ -1787,7 +1787,7 @@ grep -rn 'title="[^"$]*[A-Za-z]\|aria-label="[^"$]*[A-Za-z]' --include="*.svelte
 
 Translation files live at `frontend/static/messages/`. `en.json` is the source of truth. All 15 non-English files must mirror its key structure exactly with properly translated values. The `for lang in ...` loops below list those 15 locales; keep them in sync with `LOCALES` in `frontend/src/lib/i18n/config.ts` when a locale is added.
 
-The snippets below write their intermediate key lists to `$I18N_TMP`, a private scratch directory, so parallel agents never clobber each other's files. Create it once per review, before running any of the checks (Check 3 reuses the key lists from Check 1), and remove it when done:
+The snippets below write their intermediate key lists to `$I18N_TMP`, a private scratch directory, so parallel agents never clobber each other's files. Create it once per review, before running any of the checks (Check 3 reuses the key lists from Check 1), and remove it when done. Agent shells do not keep variables between tool calls, so run the setup, every check you need and the cleanup in ONE shell invocation; otherwise `$I18N_TMP` is empty in the later calls and Check 3 cannot find Check 1's files. Each snippet starts with a guard that stops it when `$I18N_TMP` is unset:
 
 ```bash
 I18N_TMP=$(mktemp -d)
@@ -1800,6 +1800,8 @@ rm -rf "$I18N_TMP"
 Use `jq` to extract all scalar key paths and values from a translation file:
 
 ```bash
+: "${I18N_TMP:?create it first: I18N_TMP=\$(mktemp -d)}"
+
 # Flatten to key=value pairs (one per line)
 jq -r 'paths(scalars) as $p | "\($p | join("."))=\(getpath($p))"' en.json
 
@@ -1812,6 +1814,7 @@ jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > "$I18N_TMP/en_keys.t
 Keys present in `en.json` but absent from a locale file. Every gap means the UI falls back to the key name or shows nothing.
 
 ```bash
+: "${I18N_TMP:?create it first: I18N_TMP=\$(mktemp -d)}"
 cd frontend/static/messages
 
 # Generate sorted key lists
@@ -1842,6 +1845,7 @@ Every missing key must be flagged. There are no acceptable gaps.
 Values in non-English files identical to the English value. English placeholders are the most common i18n defect: a developer adds keys to all files but copies the English text instead of translating.
 
 ```bash
+: "${I18N_TMP:?create it first: I18N_TMP=\$(mktemp -d)}"
 cd frontend/static/messages
 
 for lang in cs da de es fi fr hu it lv nb nl pl pt sk sv; do
@@ -1884,6 +1888,7 @@ The rule is simple: if a human reading the locale file would see English text, i
 Keys present in a non-English file but absent from `en.json`. These are leftovers from deleted features or key renames.
 
 ```bash
+: "${I18N_TMP:?create it first: I18N_TMP=\$(mktemp -d)}"
 cd frontend/static/messages
 
 for lang in cs da de es fi fr hu it lv nb nl pl pt sk sv; do
@@ -1902,6 +1907,7 @@ Orphaned keys are lower severity than gaps or placeholders, but should still be 
 A key path that is an object (has children) in one file but a scalar (leaf value) in another. This breaks the i18n library at runtime.
 
 ```bash
+: "${I18N_TMP:?create it first: I18N_TMP=\$(mktemp -d)}"
 cd frontend/static/messages
 
 # Get object paths from en.json
