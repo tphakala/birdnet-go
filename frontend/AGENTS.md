@@ -259,8 +259,11 @@ Theme colours are written as CSS variables in arbitrary values
 - Live regions: `role="status"` for progress (it implies `aria-live="polite"`),
   `role="alert"` for errors. Render a `role="status"` container
   unconditionally and change its text; one inserted by `{#if}` together with its
-  text is often not announced. Several existing components still insert it
-  with `{#if}`; do not copy that.
+  text is often not announced. Most existing components, and `LoadingSpinner`
+  (whose root is a `role="status"` element), are mounted with `{#if}`; do not
+  copy that for an announcement that matters. Keep an always-rendered sr-only
+  `role="status"` region and change its text instead, as
+  `src/lib/desktop/views/DetectionDetail.svelte` does.
 - Run `npm run test:a11y` for changes to interactive components
 
 ## Static Analysis (ast-grep)
@@ -292,10 +295,11 @@ change a rule, confirm it fires on a file that contains a guaranteed match.
   `src/lib/utils/logger.test.ts`) or declare a per-file
   `vi.mock('<module>', async importOriginal => ({ ...(await importOriginal()), ... }))`.
   Calling `vi.importActual` in the test body does not help: the code under test
-  still imports the mock.
+  still imports the mock. A test of a module that `setup.ts` mocks does not
+  throw; it silently runs against the mock, so `vi.unmock` that module.
 - The global `fetch` mock serves the translation files, answers every `/api/`
-  URL with `200 {data: []}`, and rejects anything else. A test of an error path must override it, or it will
-  silently exercise the success path.
+  URL with `200 {data: []}`, and rejects anything else. A test of an error path
+  must override it, or it will silently exercise the success path.
 - `vi.clearAllMocks()` only clears call history. A persistent override
   (`mockReturnValue`, `mockImplementation`) and any unconsumed one-shot value
   (`mockReturnValueOnce`, `mockResolvedValueOnce`) survive it and leak into later
@@ -309,16 +313,16 @@ change a rule, confirm it fires on a file that contains a guaranteed match.
   ```typescript
   const original = vi.mocked(fn).getMockImplementation();
   // ... override and test ...
+  vi.mocked(fn).mockReset();
   if (original) vi.mocked(fn).mockImplementation(original);
-  else vi.mocked(fn).mockReset();
   ```
 
-  `getMockImplementation()` returns `undefined` for a bare `vi.fn()` (many
-  `setup.ts` mocks, such as `goto` and the toast actions, are bare), and strict
-  type checking rejects passing that on. For those, `mockReset()` is the
-  restore: it drops the override and returns the mock to its bare state. When you use one-shot values, assert they
-  were consumed (`toHaveBeenCalledTimes`), since restoring the implementation
-  does not clear them. Reset any store you mutate.
+  `mockReset()` drops the override and any queued one-shot values, which
+  returns a bare `vi.fn()` to its original state; the saved implementation is
+  then put back for mocks that had one. `getMockImplementation()` returns
+  `undefined` for a bare `vi.fn()` (many `setup.ts` mocks, such as `goto` and
+  the toast actions, are bare), and strict type checking rejects passing that
+  on, hence the guard. Reset any store you mutate.
 
 - Render components with `renderTyped()` from `src/test/render-helpers.ts`
   instead of casting to `any`. Name tests with `it` (ESLint enforces it).
