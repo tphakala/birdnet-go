@@ -106,8 +106,9 @@ Run `task setup-dev` once first: it installs the TensorFlow Lite headers and
 C library that every Go build, lint and test needs (the models are committed).
 `task lint` and `task test` add the build tags and CGO flags for you. To run a
 step by hand instead, print what Task would run with `task --dry lint` or
-`task --dry test` (a short `sh` script) instead of copying a command from a
-document.
+`task --dry test` instead of copying a command from a document. Task prints
+the commands on stderr, each prefixed with `task: [lint]` or `task: [test]`;
+copy them without that prefix and run them in `sh` or `bash`.
 
 These checks cover only the default build tags and your own OS:
 
@@ -118,7 +119,8 @@ These checks cover only the default build tags and your own OS:
   the task reports itself up to date and installs nothing).
 - Other operating systems cannot be checked locally without a cross toolchain.
   On a pull request, the `cross-platform-build` workflow compiles and vets
-  windows/amd64 and linux/arm64 whenever Go files change; it is not advisory,
+  windows/amd64 and linux/arm64, and builds and vets the `openvino` tag on
+  linux/amd64 and linux/arm64, whenever Go files change; it is not advisory,
   so treat a failure there as a real break. The native Windows and
   macOS test jobs run only when a maintainer adds the `full-ci` label, and they
   are advisory with known failures, so a green check there proves nothing
