@@ -95,8 +95,8 @@ jobs:
           allowed_non_write_users: "*"
           claude_args: |
             --model sonnet
-            --allowedTools "Read(./support-context/**),Read(./README.md),Read(./AGENTS.md),Read(./doc/**),Glob(./doc/**),Grep(./doc/**),Grep(./README.md),WebFetch(domain:github.com),WebFetch(domain:raw.githubusercontent.com)"
-            --disallowedTools "Read(//proc/**),Read(//tmp/**),Read(//home/**),Read(//etc/**),Bash"
+            --allowedTools "Read(./support-context/**),Read(./README.md),Read(./AGENTS.md),Read(./doc/**),Grep(./doc/**),Grep(./README.md),WebFetch(domain:github.com),WebFetch(domain:raw.githubusercontent.com)"
+            --disallowedTools "Read(//proc/**),Read(//etc/**),Read(//tmp/**),Read(//home/runner/work/_temp/**),Read(//home/runner/.claude/**),Bash"
             --json-schema '{"type":"object","properties":{"reply":{"type":"string"}},"required":["reply"]}'
           prompt: |
             REPO: ${{ github.repository }}
