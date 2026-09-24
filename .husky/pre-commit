@@ -48,13 +48,18 @@ if [ -n "$GO_FILES" ]; then
   # normcompare tags. The CGO settings are the ones `task lint` sets, so the
   # TFLite cgo packages typecheck whatever the environment holds.
   REPO_ROOT=$(git rev-parse --show-toplevel)
+  CACHE_DIR="$REPO_ROOT/.cache"
+  if [ ! -d "$CACHE_DIR/tensorflow" ]; then
+    # A linked worktree has no .cache of its own; use the main checkout's.
+    CACHE_DIR="$(git rev-parse --path-format=absolute --git-common-dir)/../.cache"
+  fi
   case "$(uname -s)_$(uname -m)" in
     Darwin_arm64) LIB_DIR="/opt/homebrew/lib" ;;
     Darwin_*) LIB_DIR="/usr/local/lib" ;;
     *) LIB_DIR="/usr/lib" ;;
   esac
   export CGO_ENABLED=1
-  export CGO_CFLAGS="-I$REPO_ROOT/.cache/tensorflow -I$REPO_ROOT/.cache/openvino/include"
+  export CGO_CFLAGS="-I$CACHE_DIR/tensorflow -I$CACHE_DIR/openvino/include"
   export CGO_LDFLAGS="-L$LIB_DIR -ltensorflowlite_c"
   echo "   Linting Go files..."
   if ! golangci-lint run -v --build-tags=noembed,skipfrontend; then

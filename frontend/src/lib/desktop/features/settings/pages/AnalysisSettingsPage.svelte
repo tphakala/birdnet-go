@@ -1718,7 +1718,7 @@
               {rangeFilterState.testing
                 ? t('settings.main.sections.rangeFilter.speciesCount.loading')
                 : rangeFilterState.speciesCount !== null
-                  ? formatNumber(rangeFilterState.speciesCount)
+                  ? `${t('settings.main.sections.rangeFilter.speciesCount.label')}: ${formatNumber(rangeFilterState.speciesCount)}`
                   : ''}
             </span>
           </div>
