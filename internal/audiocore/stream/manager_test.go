@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,9 +68,12 @@ func TestManager_lifecycle_tracksHealthAndShutsDownCleanly(t *testing.T) {
 	// Snapshot the goroutines that exist before the test, so the check flags
 	// only NEW goroutines such as a leaked supervisor or reader, rather than
 	// filtering by top-of-stack function, which can hide a parked leaked
-	// goroutine. The check runs in t.Cleanup, after t.Context() is cancelled.
+	// goroutine. The check runs in t.Cleanup, after t.Context() is cancelled,
+	// so the manager is built on a context that the end of the test does not
+	// cancel: only Shutdown can stop its goroutines, and the check proves that
+	// it does.
 	testutil.VerifyNoLeaks(t)
-	m := NewManager(t.Context(), func(audiocore.AudioFrame) {}, nil, nil, nil, nil)
+	m := NewManager(context.WithoutCancel(t.Context()), func(audiocore.AudioFrame) {}, nil, nil, nil, nil)
 
 	require.NoError(t, m.StartStream(rtspSpec("s1")))
 	require.NoError(t, m.StartStream(rtspSpec("s2")))
