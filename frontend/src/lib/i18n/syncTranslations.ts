@@ -199,7 +199,7 @@ class TranslationSync {
 
     // Added keys are filled with the ENGLISH text as a placeholder, not a real
     // translation. Surface that loudly and list the keys so the placeholders are
-    // not committed as-is and forgotten (see the i18n workflow in frontend/AGENTS.md).
+    // not committed as-is and forgotten (see the i18n workflow in frontend/static/messages/AGENTS.md).
     const distinctAddedKeys = [...new Set(results.flatMap(r => r.addedKeys))].sort();
     if (distinctAddedKeys.length > 0) {
       const verb = options.check ? 'would be' : 'were';

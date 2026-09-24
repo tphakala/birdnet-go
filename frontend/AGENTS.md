@@ -36,7 +36,7 @@ noted. Frontend test rules are in the Testing section below (the root
   `getStoredValue()` / `setStoredValue()` / `removeStoredValue()` from
   `$lib/utils/storage`. Those helpers JSON-encode, so do not switch an existing
   key that is stored as a raw string (for example `birdnet-locale`) to them
-  unless every reader and writer of that key changes together; keep its
+  unless every reader and writer of that key changes together; put its
   `getItem`/`setItem` calls inside `try`/`catch` instead. There is no
   `sessionStorage` helper: wrap those calls in `try`/`catch`.
 - **NEVER ship ambiguous UI states.** Disabled controls, errors, and loading
@@ -202,11 +202,10 @@ guessing:
 - A **specific** reason: "Threshold must be between 0 and 1 before saving", not
   "Cannot save".
 - Prefer `aria-disabled="true"` plus a suppressed click handler over native
-  `disabled`: Tab skips a natively disabled button, so keyboard users never
-  reach its explanation. Many existing components still use native
-  `disabled`; this is the preferred pattern for new and changed controls (for
-  example
-  `src/lib/desktop/features/settings/components/OptimizeReviewDialog.svelte`):
+  `disabled`: Tab skips a natively disabled button, so a screen reader user
+  tabbing through the form never hears the button or its reason. Many existing
+  components still use native `disabled`; use this pattern for new and changed
+  controls:
 
 ```svelte
 <script lang="ts">
@@ -258,9 +257,9 @@ Theme colours are written as CSS variables in arbitrary values
 - Icon-only buttons have an `aria-label`; when a control also has visible text,
   its accessible name must contain that text (WCAG 2.5.3)
 - Live regions: `role="status"` for progress (it implies `aria-live="polite"`),
-  `role="alert"` for errors. Render the live-region container unconditionally
-  and change its text; a region inserted by `{#if}` together with its text is
-  often not announced.
+  `role="alert"` for errors. Render a `role="status"` container
+  unconditionally and change its text; one inserted by `{#if}` together with its
+  text is often not announced.
 - Run `npm run test:a11y` for changes to interactive components
 
 ## Static Analysis (ast-grep)
