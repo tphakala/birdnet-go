@@ -1709,10 +1709,8 @@
                 : '-'}
             </div>
             {#if rangeFilterState.testing}
-              <LoadingSpinner
-                size="sm"
-                label={t('settings.main.sections.rangeFilter.speciesCount.loading')}
-              />
+              <!-- Decorative: the dimmed count beside it shows the loading state. -->
+              <LoadingSpinner size="sm" aria-hidden="true" />
             {/if}
           </div>
           <div class="flex gap-2 mt-2">
@@ -2475,7 +2473,7 @@
                   aria-label="{t('analysis.gallery.reinstall')} {entry.name}"
                 >
                   {#if isReinstalling}
-                    <Loader2 class="size-3.5 animate-spin" />
+                    <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
                     {t('analysis.gallery.reinstalling')}
                   {:else}
                     <RefreshCw class="size-3.5" />
@@ -2503,7 +2501,7 @@
                   aria-label="{t('analysis.gallery.remove')} {entry.name}"
                 >
                   {#if isDeleting}
-                    <Loader2 class="size-3.5 animate-spin" />
+                    <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
                     {t('analysis.gallery.removing')}
                   {:else}
                     <Trash2 class="size-3.5" />
@@ -2725,7 +2723,7 @@
         aria-label="{t('analysis.gallery.install')} {entry.name}"
       >
         {#if isInstalling}
-          <Loader2 class="size-3.5 animate-spin" />
+          <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
           {t('analysis.gallery.installing')}
         {:else}
           <Download class="size-3.5" />
@@ -2979,10 +2977,10 @@
         <button
           type="button"
           onclick={handleInstall}
-          disabled={installBlocked}
+          aria-disabled={installBlocked ? 'true' : undefined}
           aria-describedby={installBlocked ? INSTALL_BLOCKED_HELP_ID : undefined}
           title={installBlocked ? t('analysis.gallery.variants.incompatible') : undefined}
-          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
         >
           <Download class="size-4" />
           {t('analysis.gallery.license.acceptAndInstall')}
@@ -3132,9 +3130,7 @@
       <div class="flex-1 overflow-auto">
         {#if rangeFilterState.loading}
           <div class="text-center py-12">
-            <span
-              class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-            ></span>
+            <LoadingSpinner size="lg" aria-hidden="true" />
             <p class="mt-3 text-[var(--color-base-content)] opacity-90">
               {t('settings.main.sections.rangeFilter.modal.loadingSpecies')}
             </p>

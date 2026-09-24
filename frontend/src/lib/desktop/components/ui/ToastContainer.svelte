@@ -52,7 +52,9 @@
     'bottom-right': 'bottom-4 right-4',
   };
 
-  // Translated accessible name for each position's notification region
+  // Translated accessible name for each position's notification region. Each
+  // entry calls t() with a literal key so the i18n usage checker sees every
+  // key, and t() runs at render time so the label follows a locale change.
   const regionLabels: Record<ToastPosition, () => string> = {
     'top-left': () => t('common.aria.toastRegion.topLeft'),
     'top-center': () => t('common.aria.toastRegion.topCenter'),
@@ -72,7 +74,7 @@
   }
 </script>
 
-<!-- Render toast containers for each position that has toasts -->
+<!-- Render a toast container for every position, even when empty, so each live region exists before a toast is added to it -->
 {#each Object.entries(toastsByPosition) as [position, positionToasts] (position)}
   <!-- z-[2000] = Z_INDEX.TOAST: toasts must stay above all overlays, including the mobile sidebar drawer (z-[200]) -->
   <div

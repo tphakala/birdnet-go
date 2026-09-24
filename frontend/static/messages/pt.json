@@ -110,12 +110,12 @@
       "dismissAlert": "Descartar alerta",
       "closeNotification": "Fechar notificação",
       "toastRegion": {
-        "topLeft": "Notificações, em cima à esquerda",
-        "topCenter": "Notificações, em cima ao centro",
-        "topRight": "Notificações, em cima à direita",
-        "bottomLeft": "Notificações, em baixo à esquerda",
-        "bottomCenter": "Notificações, em baixo ao centro",
-        "bottomRight": "Notificações, em baixo à direita"
+        "topLeft": "Notificações, canto superior esquerdo",
+        "topCenter": "Notificações, parte superior central",
+        "topRight": "Notificações, canto superior direito",
+        "bottomLeft": "Notificações, canto inferior esquerdo",
+        "bottomCenter": "Notificações, parte inferior central",
+        "bottomRight": "Notificações, canto inferior direito"
       },
       "toggleDropdown": "Alternar menu suspenso",
       "sortAscending": "Ordenar crescente",

@@ -82,4 +82,11 @@ describe('LoadingSpinner', () => {
     expect(root).not.toHaveAttribute('aria-label');
     expect(root?.querySelector('span.animate-spin')).toBeInTheDocument();
   });
+
+  it('is decorative when aria-hidden is the boolean true', () => {
+    renderLoadingSpinner({ 'aria-hidden': true, label: 'Saving' });
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText('Saving')).not.toBeInTheDocument();
+  });
 });

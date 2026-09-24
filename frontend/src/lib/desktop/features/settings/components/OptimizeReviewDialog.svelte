@@ -181,7 +181,7 @@
                   <span
                     class="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-base-content)]/80"
                   >
-                    <Loader2 class="size-3.5 animate-spin" />
+                    <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
                     {t('analysis.gallery.optimize.applying')}
                   </span>
                 {:else}
