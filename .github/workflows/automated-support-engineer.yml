@@ -52,7 +52,7 @@ jobs:
           allowed_tools: |
             Read(README.md)
             Read(docs/*.md)
-            Read(CLAUDE.md)
+            Read(AGENTS.md)
             Glob(docs/**/*.md)
             Grep(*.go)
             WebFetch(https://*)

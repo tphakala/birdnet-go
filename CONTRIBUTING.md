@@ -104,13 +104,13 @@ Before contributing:
 2. **Review [ARCHITECTURE.md](ARCHITECTURE.md)** - Understand the tech stack
 3. **Check [existing issues](https://github.com/tphakala/birdnet-go/issues)** - Avoid duplicates
 4. **Join [Discord](https://discord.gg/gcSCFGUtsd)** - For discussions and support
-5. **Read relevant CLAUDE.md files** - Development guidelines:
-   - [CLAUDE.md](CLAUDE.md) - Project overview and universal rules
-   - [internal/CLAUDE.md](internal/CLAUDE.md) - Go backend guidelines
-   - [frontend/CLAUDE.md](frontend/CLAUDE.md) - Svelte 5 frontend guidelines
-   - [internal/api/v2/CLAUDE.md](internal/api/v2/CLAUDE.md) - API v2 guidelines
+5. **Read relevant AGENTS.md files** - Development guidelines:
+   - [AGENTS.md](AGENTS.md) - Project overview, universal rules, and an index of all module guides
+   - [internal/AGENTS.md](internal/AGENTS.md) - Go backend guidelines
+   - [frontend/AGENTS.md](frontend/AGENTS.md) - Svelte 5 frontend guidelines
+   - [internal/api/v2/AGENTS.md](internal/api/v2/AGENTS.md) - API v2 guidelines
 
-   **Note:** CLAUDE.md files serve all contributors (AI-assisted or manual).
+   **Note:** AGENTS.md files serve all contributors (AI-assisted or manual).
 
 ## Development Setup
 
@@ -278,9 +278,8 @@ task clean            # Clean artifacts
 Configuration: [.golangci.yaml](.golangci.yaml)
 
 ```bash
-golangci-lint run -v                    # All files
-golangci-lint run -v internal/api/v2/   # Specific path
-golangci-lint run --fix                 # Auto-fix
+task lint                               # Whole module (never lint single packages)
+task lint-fix                           # Auto-fix
 ```
 
 ### Frontend Linting
@@ -355,8 +354,7 @@ See [frontend/doc/AST-GREP-SETUP.md](frontend/doc/AST-GREP-SETUP.md) for details
 task test                    # All tests
 task test-verbose            # Verbose output
 task test-coverage           # With coverage
-go test -race -v ./...       # Race detector
-go test -v ./internal/api/v2/...  # Specific package
+task --dry test              # Print the exact go test command, to run one package
 ```
 
 ### Frontend Tests
@@ -374,9 +372,11 @@ task e2e-report                 # View report
 
 BirdNET-Go **welcomes AI-assisted coding tools**. The main developer uses [Claude Code](https://claude.ai/claude-code), and all PRs receive [CodeRabbit AI](https://coderabbit.ai/) reviews.
 
-### CLAUDE.md Guidelines
+### AGENTS.md Guidelines
 
-Project guidelines are in CLAUDE.md files (see [Getting Started](#getting-started)). These files work for both AI assistants and manual development.
+Project guidelines are in [AGENTS.md](https://agents.md) files (see [Getting Started](#getting-started)): one at the repository root for cross-cutting rules and one per module for area-specific rules. Claude Code, Codex, Cursor, Antigravity, Copilot, and most other AI coding tools read them automatically, and they work just as well for manual development. For tool and version caveats, see "About These Instruction Files" in [AGENTS.md](AGENTS.md).
+
+Please do not add `CLAUDE.md`, `CLAUDE.local.md`, or `GEMINI.md` files: a root `CLAUDE.md` or `CLAUDE.local.md` stops Claude Code from loading any `AGENTS.md` file (details in "About These Instruction Files" in [AGENTS.md](AGENTS.md)). Personal instructions belong in a gitignored `.claude/rules/*.local.md` file instead.
 
 ### Responsible AI Usage
 
@@ -408,7 +408,7 @@ Project guidelines are in CLAUDE.md files (see [Getting Started](#getting-starte
 
 1. Install: [Claude Code guide](https://docs.claude.com/en/docs/claude-code)
 2. Open BirdNET-Go repository
-3. CLAUDE.md files provide automatic context
+3. AGENTS.md files provide automatic context
 4. Ask Claude for help with specific tasks
 
 ### Quality Gate (Mandatory for AI-Assisted PRs)
@@ -441,7 +441,7 @@ git checkout -b docs/what-updated           # Documentation
 ```bash
 git pull origin main                        # Update from main
 git checkout -b feature/my-feature          # Create branch
-golangci-lint run -v                        # Lint Go
+task lint                                   # Lint Go
 task frontend-quality                       # Lint frontend
 task test                                   # Test Go
 task frontend-test                          # Test frontend
@@ -509,7 +509,7 @@ Fixes #123
 ### Critical Constraints
 
 - **NEVER expand API v1** - Use `internal/api/v2/`
-- **Always lint before commit** - `golangci-lint run -v` and `task frontend-quality`
+- **Always lint before commit** - `task lint` and `task frontend-quality`
 - **Branch from updated main** - `git pull origin main` first
 - **No `any` types in TypeScript** - Properly type all parameters
 
@@ -526,9 +526,9 @@ Fixes #123
 ### Development Guidelines
 
 - [Architecture](ARCHITECTURE.md)
-- [Go Backend Guidelines](internal/CLAUDE.md)
-- [Frontend Guidelines](frontend/CLAUDE.md)
-- [API v2 Guidelines](internal/api/v2/CLAUDE.md)
+- [Go Backend Guidelines](internal/AGENTS.md)
+- [Frontend Guidelines](frontend/AGENTS.md)
+- [API v2 Guidelines](internal/api/v2/AGENTS.md)
 
 ### Community
 
@@ -549,7 +549,7 @@ air realtime            # Hot reload
 task dev_server         # Full dev server
 
 # Quality
-golangci-lint run -v    # Go linting
+task lint               # Go linting
 task frontend-quality   # Frontend quality
 
 # Testing

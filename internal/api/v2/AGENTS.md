@@ -2,7 +2,7 @@
 
 ## Essential Reference
 
-**ALWAYS read `internal/api/v2/README.md` first** - it is the endpoint catalog:
+**ALWAYS read `internal/api/v2/README.md` first**; it is the endpoint catalog:
 
 - Complete list of all API endpoints, grouped by domain
 - Per-route authentication requirements
@@ -92,13 +92,16 @@ or the facade); it runs inside the normal `go test ./...` unit-test jobs.
 
    ```go
    func (c *Handler) GetThing(ctx echo.Context) error {
-       if c.DS == nil {
-           return c.HandleError(ctx, nil, "datastore unavailable", http.StatusServiceUnavailable)
+       if err := c.RequireDatastore(ctx); err != nil {
+           return err // 503 response already written
        }
-       // ... use c.CurrentSettings(), c.HandleError(...), dto.Thing, etc.
+       // ... use c.Repo, c.CurrentSettings(), c.HandleError(...), dto.Thing, etc.
        return ctx.JSON(http.StatusOK, resp)
    }
    ```
+
+   For detection CRUD use `c.Repo` (`datastore.DetectionRepository`); `c.DS` is
+   deprecated for new detection code.
 
 2. Add the route line to that domain's `RegisterRoutes(g *echo.Group)`:
 
@@ -155,12 +158,12 @@ original per-route registration order across the split.
 The API uses distinct namespaces. Adding endpoints to the wrong namespace causes
 route collisions.
 
-| Namespace | Purpose | Registration | Example |
-|---|---|---|---|
-| `/audio/:id` | Detection audio clips by numeric note ID | `c.Echo.GET(...)` (media domain) | `ServeAudioByID` |
-| `/system/audio/*` | Audio device/source management (protected) | `protectedGroup.Group("/audio")` (audio domain) | `GetAudioDevices`, `ListAudioSources` |
-| `/streams/*` | Live streaming, SSE, source listing (public) | `g.GET("/streams/...")` (audio/sse domains) | `StreamAudioLevel`, `ListStreamSources` |
-| `/media/*` | Static media files (images, spectrograms) | `g.GET("/media/...")` (media domain) | `ServeSpectrogram` |
+| Namespace         | Purpose                                      | Registration                                    | Example                                 |
+| ----------------- | -------------------------------------------- | ----------------------------------------------- | --------------------------------------- |
+| `/audio/:id`      | Detection audio clips by numeric note ID     | `c.Echo.GET(...)` (media domain)                | `ServeAudioByID`                        |
+| `/system/audio/*` | Audio device/source management (protected)   | `protectedGroup.Group("/audio")` (audio domain) | `GetAudioDevices`, `ListAudioSources`   |
+| `/streams/*`      | Live streaming, SSE, source listing (public) | `g.GET("/streams/...")` (audio/sse domains)     | `StreamAudioLevel`, `ListStreamSources` |
+| `/media/*`        | Static media files (images, spectrograms)    | `g.GET("/media/...")` (media domain)            | `ServeSpectrogram`                      |
 
 **WARNING:** `GET /api/v2/audio/:id` is registered directly on `c.Echo` (not the
 `/api/v2` group) and catches ALL paths under `/api/v2/audio/*`. Any non-numeric
@@ -182,9 +185,10 @@ unauthenticated clients (the audio domain does this with its local
 - **Follow the error format** - `return c.HandleError(ctx, err, "message", statusCode)`
   (or `c.HandleErrorWithKey(...)` for an i18n key). The `ErrorResponse` shape and
   correlation-id behavior live in `apicore`.
-- **Hot-reload** - read settings per request via `c.CurrentSettings()` /
-  `c.ControllerSettings()` (the atomic snapshot on `Core`); never branch on settings
-  captured at startup.
+- **Hot-reload** - read settings per request via `c.CurrentSettings()` (the
+  process-wide settings snapshot, falling back to Core's) or
+  `c.ControllerSettings()` (Core's own snapshot); both are lock-free atomic loads.
+  Never branch on settings captured at startup.
 - **Document in README.md** - update the endpoint table immediately.
 
 ## Future api/v3
@@ -193,7 +197,7 @@ A future `internal/api/v3` lives as a sibling facade with its own `Core` (do not
 re-monolith). It can reuse these patterns but should not couple to `apicore` so the
 two versions evolve independently.
 
-## CSRF Protection (legacy info)
+## CSRF Protection
 
 CSRF middleware validates tokens from the `X-CSRF-Token` header (primary) or the
 `_csrf` form field (fallback); it is wired globally in the parent `server.go`. The

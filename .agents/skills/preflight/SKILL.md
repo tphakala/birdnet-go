@@ -249,8 +249,9 @@ Before pushing or creating a PR, verify each item by actually executing the comm
 
 - [ ] Single concern: PR contains exactly ONE feature, ONE fix, or ONE refactor
 - [ ] Preflight passed: All Phase 1-3 findings resolved or filed as issues
-- [ ] Linters clean: golangci-lint run -v and npm run check:all pass (zero warnings)
-- [ ] Tests pass: go test -race ./... and npm test pass
+- [ ] Linters clean: task lint (golangci-lint over the whole module) and npm run check:all (from frontend/) pass (zero warnings)
+- [ ] Tests pass: task test (go test -race) and npm test pass
+- [ ] Tagged or OS-specific Go files changed: linted with those build tags (task lint BASE_BUILD_TAGS=<tags>), and OS-specific files called out in the PR so the maintainer can add the `full-ci` label (see the root AGENTS.md)
 - [ ] No unrelated changes: diff contains only changes relevant to the stated goal
 - [ ] Scope complete: PR fully implements what it claims; no TODO/FIXME for core functionality
 - [ ] No regression/backward-compat break: no orphaned config keys, removed/renamed API fields, destructive migrations, changed detection defaults, or read-time filters that hide data an existing feature kept on purpose (Reviewer 6)

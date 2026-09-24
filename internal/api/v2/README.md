@@ -7,7 +7,7 @@ The API v2 provides comprehensive access to BirdNET-Go's bird detection and moni
 ## Endpoint Registration Pattern
 
 > Architecture and the "add a new endpoint / add a new domain" recipes live in
-> `internal/api/v2/CLAUDE.md`. The summary below is the registration mechanics.
+> `internal/api/v2/AGENTS.md`. The summary below is the registration mechanics.
 
 ### Per-domain registration
 
@@ -639,7 +639,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 ## Adding New Endpoints
 
-See `internal/api/v2/CLAUDE.md` for the full architecture and the "add a new
+See `internal/api/v2/AGENTS.md` for the full architecture and the "add a new
 domain" recipe. To add an endpoint to an EXISTING domain:
 
 ### 1. Create the Handler method (on the domain's `*Handler`)
@@ -666,7 +666,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 
 No facade change is needed for a new endpoint in an existing domain. A brand-new
 domain additionally needs a `Controller` field, a `New(...)` call, and one ordered
-`RegisterRoutes` entry in `api.go:initRoutes()` (see CLAUDE.md Recipe B).
+`RegisterRoutes` entry in `api.go:initRoutes()` (see AGENTS.md Recipe B).
 
 ### 3. Update Documentation
 

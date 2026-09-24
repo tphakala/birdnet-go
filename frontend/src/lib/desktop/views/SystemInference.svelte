@@ -476,7 +476,7 @@
   }
 
   // Plain-English explanation of the current VAD gate state, so a disabled / no-model
-  // / idle indicator is never ambiguous (frontend/CLAUDE.md: never ship ambiguous states).
+  // / idle indicator is never ambiguous (frontend/AGENTS.md: never ship ambiguous states).
   function vadStateHelp(v: InferenceVAD): string {
     if (!v.enabled) return t('system.inference.vad.disabledHelp');
     if (!v.available) return t('system.inference.vad.unavailableHelp');
@@ -1398,7 +1398,7 @@
                     {/each}
                   </div>
                   <!-- Persistent, visible reason so keyboard and touch users get the
-                       cause without a hover (frontend/CLAUDE.md: no ambiguous states).
+                       cause without a hover (frontend/AGENTS.md: no ambiguous states).
                        Each not-analyzing badge references it via aria-describedby for
                        screen readers. Gated on anySourceDown (not the header's
                        allSourcesDown) so a single down source among healthy ones still
