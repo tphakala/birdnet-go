@@ -284,11 +284,14 @@ change a rule, confirm it fires on a file that contains a guaranteed match.
   `$lib/utils/security`, `$app/navigation`, `$app/stores`, MapLibre,
   `window.location`, and global `fetch`. Read it before adding a `vi.mock()`;
   do not duplicate those mocks per file.
-- Those module mocks are partial factories: an export they do not define throws
-  "No export is defined on the mock" when called. The `$lib/utils/security` mock,
-  for example, has no `isPlainObject`. If code under test needs a real export
-  from a mocked module, add it to the mock in `setup.ts` (spreading
-  `await importOriginal()`), or use `vi.importActual` in the test.
+- Those module mocks are partial factories: reading an export they do not
+  define throws `[vitest] No "<name>" export is defined on the "<module>" mock`.
+  The `$lib/utils/security` mock, for example, has no `isPlainObject`. If code
+  under test needs a real export from a mocked module, add it to the mock in
+  `setup.ts`, or in the test file call `vi.unmock('<module>')` or declare a
+  per-file `vi.mock('<module>', async importOriginal => ({ ...(await importOriginal()), ... }))`.
+  Calling `vi.importActual` in the test body does not help: the code under test
+  still imports the mock.
 - The global `fetch` mock serves the translation files, answers every `/api/`
   URL with `200 {data: []}`, and rejects anything else. A test of an error path must override it, or it will
   silently exercise the success path.
@@ -298,14 +301,23 @@ change a rule, confirm it fires on a file that contains a guaranteed match.
   (`mockReturnValue`, `mockImplementation`) and any unconsumed one-shot value
   (`mockReturnValueOnce`, `mockResolvedValueOnce`) survive it and leak into later
   tests in the same file. Do NOT use `vi.resetAllMocks()` to clean up: it turns
-  every `setup.ts` default built with `vi.fn().mockImplementation(...)` (global
-  `fetch`, the settings API, `matchMedia`) into a function that returns
-  `undefined`, breaking later tests.
-- To override a shared mock, save its implementation and restore it:
-  `const original = vi.mocked(fn).getMockImplementation()` before the override,
-  then `vi.mocked(fn).mockImplementation(original)` in `afterEach`. When you use
-  one-shot values, assert they were consumed (`toHaveBeenCalledTimes`). Reset
-  any store you mutate.
+  every `setup.ts` default built with `vi.fn().mockImplementation(...)` or
+  `.mockResolvedValue(...)` (global `fetch`, the settings API, `matchMedia`) into
+  a function that returns `undefined`, breaking later tests.
+- To override a shared mock, save its implementation before ANY override
+  (including one-shot values), then restore it in `afterEach`:
+
+  ```typescript
+  const original = vi.mocked(fn).getMockImplementation();
+  // ... override and test ...
+  if (original) vi.mocked(fn).mockImplementation(original);
+  ```
+
+  The guard is needed because `getMockImplementation()` can return `undefined`,
+  which strict type checking rejects. When you use one-shot values, assert they
+  were consumed (`toHaveBeenCalledTimes`), since restoring the implementation
+  does not clear them. Reset any store you mutate.
+
 - Render components with `renderTyped()` from `src/test/render-helpers.ts`
   instead of casting to `any`. Name tests with `it` (ESLint enforces it).
 - Files named `*.integration.test.ts`, `*.browser.test.ts` or

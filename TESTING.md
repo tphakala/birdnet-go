@@ -308,14 +308,19 @@ func TestWithResources(t *testing.T) {
 
 ### Goroutine Leak Detection
 
-Use `go.uber.org/goleak` to detect goroutine leaks. Prefer a package-wide check,
-with only narrowly scoped ignores for known process-lifetime goroutines:
+Use `go.uber.org/goleak` to detect goroutine leaks. Prefer a package-wide check
+in `TestMain`:
 
 ```go
 func TestMain(m *testing.M) {
     goleak.VerifyTestMain(m)
 }
 ```
+
+Ignore only named goroutines that live for the whole process and cannot be
+stopped, for example `goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener")`
+in `internal/imports/zz_goleak_test.go`. goleak already filters the test runner's
+own goroutines, so do not add `testing.(*T).Run` ignores.
 
 For a per-test check, snapshot the goroutines that already exist at the START of
 the test and register the check FIRST, via `t.Cleanup`, so it runs last (after the
@@ -335,13 +340,32 @@ func TestNoLeaks(t *testing.T) {
 Calling `goleak.IgnoreCurrent()` inside the cleanup would snapshot at the end of
 the test and hide every leak it is meant to catch.
 
-A deferred check (`defer goleak.VerifyNone(t, goleak.IgnoreCurrent())`) is fine
-when the test stops its services with `defer` too, since the `IgnoreCurrent()`
-argument is evaluated when the `defer` statement runs. It is wrong when the
-services are stopped via `t.Cleanup`: defers run before `t.Cleanup` functions, so
-it reports goroutines that are about to be stopped. Never combine a per-test leak
-check with `t.Parallel()`, and allow generous (500ms+) timeouts for asynchronous
-shutdown so CI does not flake.
+A deferred check (`defer goleak.VerifyNone(t, goleak.IgnoreCurrent())`) only
+works as the first statement of the test, with every service stopped by a later
+`defer`. The `IgnoreCurrent()` argument is evaluated when the `defer` statement
+runs, so anything started before that line is in the snapshot and a real leak
+passes unnoticed. It also misreports services stopped via `t.Cleanup`, because
+defers run before cleanups. Prefer the `t.Cleanup` form above.
+
+Never combine a per-test leak check with `t.Parallel()`. goleak retries for only
+about half a second, so make `Stop()` wait for its goroutines to exit instead of
+relying on the retry.
+
+### Isolation and Parallelism
+
+- Use `t.Parallel()` only for tests that are truly independent. Never
+  parallelize a test that mutates global state (for example
+  `conftest.SetTestSettings()`), shares mutable data, or runs a per-test leak
+  check.
+- In parallel subtests, clone shared maps (`maps.Clone`) instead of aliasing
+  them.
+- Use local service instances rather than global singletons, and stop every
+  service you start.
+- Restore global state with `t.Cleanup()`, not `defer`.
+- Use `t.TempDir()` for scratch space and `t.ArtifactDir()` for output worth
+  keeping; never `os.MkdirTemp()`.
+- Test containers (MySQL, Mosquitto, MediaMTX, ntfy, Pebble) live in
+  `internal/testutil/containers`.
 
 ## Mocking with testify/mock
 
@@ -359,12 +383,14 @@ packages and interfaces. Never hand-write or hand-edit a generated mock. To mock
 new interface, add it to `.mockery.yaml`, then regenerate every mock:
 
 ```bash
-# mockery is not a go.mod tool; install the version the mocks were generated with
-# (the .mockery.yaml format is mockery v2):
-go install github.com/vektra/mockery/v2@v2.53.6
-
 go generate ./internal/datastore   # runs mockery over the whole .mockery.yaml
 ```
+
+Use mockery v2, at the version named in the header of the generated files
+(`.mockery.yaml` is in the v2 format). mockery is not a `go.mod` tool, and a
+binary built against an older `golang.org/x/tools` can fail to load this
+module's packages on the current Go version. See
+`internal/datastore/mocks/README.md` for mock usage patterns.
 
 ### Mock Usage
 
