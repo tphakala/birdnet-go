@@ -3,13 +3,23 @@
  * and generateTypes.ts).
  *
  * The runtime translator (`t()` in store.svelte.ts) interpolates `{name}` and
- * ICU plural blocks itself and treats HTML tags as literal text, which the UI
- * then renders as HTML. The formatjs parser, by default, reads tags as ICU rich
- * text elements: it rejects any tag with attributes (`<a href="...">` is
- * INVALID_TAG) and hides parameters nested inside a tag's children. Parsing
- * with `ignoreTag: true` matches the runtime: tags stay literal, so a
- * parameter anywhere in the string, including inside a tag attribute such as
- * `<a href="{url}">`, is an ordinary argument.
+ * ICU plural blocks itself. It treats HTML tags as literal text, which the UI
+ * then renders as HTML, and it has no ICU apostrophe quoting: `'` is always a
+ * literal character. The helpers below make the formatjs parser read a value
+ * the same way before parsing it:
+ *
+ * - `ignoreTag: true` keeps tags literal, so a tag with attributes
+ *   (`<a href="...">`, INVALID_TAG in the default mode) is accepted and a
+ *   parameter anywhere in the string, including inside a tag attribute such as
+ *   `<a href="{url}">`, is an ordinary argument. Tag structure (unclosed or
+ *   mismatched tags) is therefore not checked.
+ * - Every apostrophe is doubled, so `l'{name}` yields the parameter `name`
+ *   instead of an ICU-quoted literal.
+ * - Go template field references (`{{.CommonName}}`) are replaced by a plain
+ *   word, so the rest of the value is still checked.
+ *
+ * Only `{name}` and `plural` are resolved by the runtime; select, number, date
+ * and time arguments are accepted here but render unresolved.
  */
 
 import { parse as parseICU } from '@formatjs/icu-messageformat-parser';
@@ -17,16 +27,29 @@ import { parse as parseICU } from '@formatjs/icu-messageformat-parser';
 type ICUElements = ReturnType<typeof parseICU>;
 
 /** Parser options that match how the runtime treats HTML tags (as literal text). */
-export const ICU_PARSE_OPTIONS = { ignoreTag: true } as const;
+const ICU_PARSE_OPTIONS = { ignoreTag: true } as const;
 
 /**
- * Matches Go template actions such as `{{.CommonName}}`. Alert template
- * placeholders show these to users; they are not ICU syntax and the ICU
- * parser rejects them (MALFORMED_ARGUMENT). Requiring the leading `.` keeps
- * an ICU plural branch that is just a parameter (`other {{name}}`) from
- * matching.
+ * Matches Go template field references such as `{{.CommonName}}`. Alert
+ * template placeholders show these to users; they are not ICU syntax and the
+ * ICU parser rejects them (MALFORMED_ARGUMENT). Requiring the leading `.`
+ * keeps an ICU plural branch that is just a parameter (`other {{name}}`) from
+ * matching. Other template actions (`{{if .X}}`, `{{range}}`) do not match and
+ * fail validation.
  */
-const GO_TEMPLATE_PATTERN = /\{\{-?\s*\.[^{}]*\}\}/;
+const GO_TEMPLATE_PATTERN = /\{\{-?\s*\.[^{}]*\}\}/g;
+
+/** Plain word substituted for each Go template field reference before parsing. */
+const GO_TEMPLATE_STAND_IN = 'GoTemplateField';
+
+/**
+ * Rewrites a translation value so the ICU parser reads it the way the runtime
+ * does: Go template field references become a plain word and every apostrophe
+ * becomes a literal (ICU `''`).
+ */
+function toRuntimeICU(value: string): string {
+  return value.replace(GO_TEMPLATE_PATTERN, GO_TEMPLATE_STAND_IN).replaceAll("'", "''");
+}
 
 /** Fallback for strings the ICU parser rejects: simple `{name}` placeholders. */
 const SIMPLE_PARAM_PATTERN = /\{(\w+)\}/g;
@@ -36,22 +59,13 @@ const FIRST_ARGUMENT_TYPE = 1; // argument
 const LAST_ARGUMENT_TYPE = 6; // plural (2-5: number, date, time, select)
 
 /**
- * Reports whether a translation value contains Go template syntax, which is
- * not ICU MessageFormat and must not be ICU-validated.
- */
-export function containsGoTemplate(value: string): boolean {
-  return GO_TEMPLATE_PATTERN.test(value);
-}
-
-/**
- * Parses a translation value as ICU MessageFormat with runtime-matching
- * options and returns the parser's error message, or null when the value is
- * valid. Values containing Go template syntax are skipped (null).
+ * Parses a translation value as ICU MessageFormat the way the runtime reads it
+ * (see toRuntimeICU) and returns the parser's error message, or null when the
+ * value is valid.
  */
 export function findICUSyntaxError(value: string): string | null {
-  if (containsGoTemplate(value)) return null;
   try {
-    parseICU(value, ICU_PARSE_OPTIONS);
+    parseICU(toRuntimeICU(value), ICU_PARSE_OPTIONS);
     return null;
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
@@ -60,8 +74,8 @@ export function findICUSyntaxError(value: string): string | null {
 
 /**
  * Walks an ICU AST collecting parameter names, recursing into plural/select
- * option branches and (when a caller parsed without ignoreTag) tag children.
- * Types 1-6 are the parameter-bearing nodes (argument, number, date, time,
+ * option branches. The AST has no tag nodes, because values are parsed with
+ * ignoreTag. Types 1-6 are the parameter-bearing nodes (argument, number, date, time,
  * select, plural); literal (0), pound (7) and tag (8) carry no parameter name.
  */
 function collectParams(elements: ICUElements, params: Set<string>): void {
@@ -75,10 +89,6 @@ function collectParams(elements: ICUElements, params: Set<string>): void {
       typeof node.value === 'string'
     ) {
       params.add(node.value);
-    }
-
-    if (Array.isArray(node.children)) {
-      collectParams(node.children as ICUElements, params);
     }
 
     if (typeof node.options === 'object' && node.options !== null) {
@@ -98,13 +108,13 @@ function collectParams(elements: ICUElements, params: Set<string>): void {
  * Extracts parameter names from a translation value in order of first
  * appearance, including parameters inside HTML tags and plural/select
  * branches. Falls back to simple `{name}` matching for values the ICU parser
- * rejects (such as Go template placeholders).
+ * rejects.
  */
 export function extractICUParameters(text: string): string[] {
   const params = new Set<string>();
 
   try {
-    collectParams(parseICU(text, ICU_PARSE_OPTIONS), params);
+    collectParams(parseICU(toRuntimeICU(text), ICU_PARSE_OPTIONS), params);
   } catch {
     for (const match of text.matchAll(SIMPLE_PARAM_PATTERN)) {
       params.add(match[1]);

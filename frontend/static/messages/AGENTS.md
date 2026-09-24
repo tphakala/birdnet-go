@@ -38,9 +38,11 @@ What enforces this:
   English fallbacks that were never translated (`--fail-on-untranslated`), and
   fails when code uses a key that `en.json` does not define. It also fails on
   parameter (`{name}`) mismatches, empty values and invalid ICU syntax in every
-  translated locale. HTML tags are parsed as plain text (as `t()` does at
-  runtime), parameters inside tags are compared too, and values containing Go
-  template syntax (`{{.Name}}`) skip the ICU check (see
+  translated locale. Values are read the way `t()` reads them at runtime: HTML
+  tags and apostrophes are plain text (so write `'{name}'`, never ICU's
+  `''{name}''`, which renders both apostrophes), parameters inside tags are
+  compared too, and Go template field references (`{{.Name}}`) count as plain
+  words. Tag structure (unclosed or mismatched tags) is not checked (see
   `src/lib/i18n/icuMessage.ts`). `en.json` itself is not
   checked, so review the English text yourself (ICU syntax and empty values).
   CI reports orphaned keys but does not fail on them.

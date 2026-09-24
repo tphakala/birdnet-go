@@ -424,9 +424,10 @@ class TranslationValidator {
 
   private validateICUSyntax(key: string, value: string, result: ValidationResult): void {
     // Every value is parsed, including ones without `{` (such as HTML-only
-    // strings). HTML tags are literal text, as at runtime, and values holding
-    // Go template syntax like {{.CommonName}} (alert template placeholders)
-    // are skipped because they are not ICU MessageFormat.
+    // strings). The value is read the way the runtime reads it: HTML tags and
+    // apostrophes are literal text, and Go template field references like
+    // {{.CommonName}} (alert template placeholders) stand in as plain words
+    // (see icuMessage.ts).
     const error = findICUSyntaxError(value);
     if (error !== null) {
       result.invalidICU.push({ key, error });

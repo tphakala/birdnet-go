@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { containsGoTemplate, extractICUParameters, findICUSyntaxError } from './icuMessage';
+import { extractICUParameters, findICUSyntaxError } from './icuMessage';
 import { extractParameters } from './generateTypes';
 
 describe('extractICUParameters', () => {
@@ -68,22 +68,37 @@ describe('findICUSyntaxError', () => {
     expect(findICUSyntaxError('<strong>{count, plural, one {# item}</strong>')).not.toBeNull();
   });
 
-  it('skips values containing Go template syntax', () => {
+  it('accepts values containing Go template field references', () => {
     expect(
       findICUSyntaxError('e.g. First detection of {{.CommonName}} ({{.ScientificName}})')
     ).toBeNull();
   });
-});
 
-describe('containsGoTemplate', () => {
-  it('detects Go template actions', () => {
-    expect(containsGoTemplate('New species: {{.CommonName}}')).toBe(true);
+  it('still checks the ICU part of a value that also has Go template references', () => {
+    expect(findICUSyntaxError('{{.CommonName}} {count, plural, one {# item}')).not.toBeNull();
   });
 
-  it('does not treat ICU placeholders or plural branches as Go templates', () => {
-    expect(containsGoTemplate('{name}')).toBe(false);
-    expect(containsGoTemplate('{count, plural, one {{name} item} other {items}}')).toBe(false);
-    expect(containsGoTemplate('{count, plural, one {# item} other {{name}}}')).toBe(false);
+  it('does not mistake an ICU plural branch holding a parameter for a Go template', () => {
+    expect(findICUSyntaxError('{count, plural, one {# item} other {{name}}}')).toBeNull();
+  });
+
+  it('treats an apostrophe as a literal, as the runtime does', () => {
+    expect(
+      findICUSyntaxError("l'{name} a {count, plural, one {# oiseau} other {# oiseaux}}")
+    ).toBeNull();
+  });
+});
+
+describe('extractICUParameters with runtime-literal characters', () => {
+  it('finds a parameter after an apostrophe', () => {
+    expect(extractICUParameters("l'{name}")).toEqual(['name']);
+    expect(extractICUParameters("d'<strong>{name}</strong>")).toEqual(['name']);
+  });
+
+  it('finds parameters next to Go template field references', () => {
+    expect(
+      extractICUParameters('{{.CommonName}}: {count, plural, one {# bird} other {# birds}}')
+    ).toEqual(['count']);
   });
 });
 
