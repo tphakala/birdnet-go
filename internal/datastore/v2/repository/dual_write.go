@@ -192,7 +192,7 @@ func (dw *DualWriteRepository) StartReconciliation() {
 // clears its dirty marker. During dual-write legacy is the source of truth and its row is
 // deleted before the v2 row (DualWriteRepository.Delete), so a missing legacy row means the
 // detection was deleted; a surviving v2 row is an orphan that would resurrect after v2
-// promotion (Forgejo #1581). A row already absent from v2 (ErrDetectionNotFound) needs no
+// promotion. A row already absent from v2 (ErrDetectionNotFound) needs no
 // delete. A locked, user-verified v2 row (ErrDetectionLocked) is never force-deleted; its
 // marker is still cleared so the id does not linger in the dirty set and block migration
 // validation forever, and the protected row is left in place. Any other delete error leaves
@@ -256,12 +256,12 @@ func (dw *DualWriteRepository) reconcileDirtyIDs() {
 					reconciled++
 					return
 				}
-				// Transient legacy error — skip, retry next cycle
+				// Transient legacy error: skip, retry next cycle
 				dw.logger.Warn("reconciliation: legacy fetch failed", logger.Uint64("id", uint64(id)), logger.Error(err))
 				return
 			}
 
-			// Record exists in legacy — fetch additional results and sync to v2
+			// Record exists in legacy: fetch additional results and sync to v2
 			additionalResults, err := dw.legacy.GetAdditionalResults(ctx, idStr)
 			if err != nil {
 				dw.logger.Warn("reconciliation: legacy additional results fetch failed", logger.Uint64("id", uint64(id)), logger.Error(err))
@@ -273,7 +273,7 @@ func (dw *DualWriteRepository) reconcileDirtyIDs() {
 				return
 			}
 
-			// Sync succeeded — clear dirty ID
+			// Sync succeeded: clear dirty ID
 			if rmErr := dw.stateManager.RemoveDirtyID(id); rmErr != nil {
 				dw.logger.Warn("reconciliation: failed to remove dirty ID", logger.Uint64("id", uint64(id)), logger.Error(rmErr))
 			} else {

@@ -4168,7 +4168,7 @@ _valid_iana_tz() {
 
 # Resolve the host timezone using a single, validated detection chain.
 # Shared by configure_timezone() and generate_systemd_service_content() so the two
-# cannot drift apart (Forgejo #877). Tries, in order: an optional preferred candidate
+# cannot drift apart. Tries, in order: an optional preferred candidate
 # (e.g. a previously configured zone), timedatectl, the /etc/localtime symlink, and
 # finally /etc/timezone. Each source is validated against the zoneinfo database
 # independently and skipped on failure, so a stale or invalid earlier source no longer
@@ -4251,7 +4251,7 @@ configure_timezone() {
     local system_tz=""
     local detected_tz=""
     
-    # Detect and validate the system timezone via the shared resolver (Forgejo #877)
+    # Detect and validate the system timezone via the shared resolver
     system_tz=$(resolve_host_timezone "")
 
     # Default to UTC if we couldn't detect
@@ -5155,7 +5155,7 @@ generate_systemd_service_content() {
     # Mirror the multi-method detection from configure_timezone() so newer
     # systemd distributions without /etc/timezone (e.g. Debian 13) still resolve
     # the host zone instead of silently defaulting to UTC.
-    # Resolve the host timezone via the shared resolver (Forgejo #877), preferring any
+    # Resolve the host timezone via the shared resolver, preferring any
     # zone the user already configured. Falls back to UTC only when nothing valid can be
     # detected, so newer systemd distributions without /etc/timezone (e.g. Debian 13)
     # still resolve the host zone instead of silently defaulting to UTC.
@@ -6229,7 +6229,7 @@ start_birdnet_go() {
         fi
 
         # If no known pattern matched, still capture the most relevant log line so the
-        # report is actionable instead of a bare "unknown" (Forgejo #350).
+        # report is actionable instead of a bare "unknown".
         if [ "$error_type" = "unknown" ]; then
             error_detail=$(echo "$service_logs" | grep -oiE '(error|fatal|panic|failed)[^;]*' | tail -1 | sed 's/"/\\"/g' | head -c 200)
             [ -z "$error_detail" ] && error_detail="No recognized error pattern; see the service logs below"
@@ -6364,7 +6364,7 @@ start_birdnet_go() {
         send_telemetry_event "error" "Service startup failed: $error_type" "error" "step=start_birdnet_go,error_type=$error_type" "$diagnostic_json"
         print_message "❌ Failed to start BirdNET-Go service" "$RED"
 
-        # Surface a concrete summary even when the error type is unknown (Forgejo #350): the
+        # Surface a concrete summary even when the error type is unknown: the
         # detected cause and the container exit code are the most actionable details and
         # should never be omitted just because no known pattern matched.
         print_message "   Detected cause: $error_type" "$YELLOW"

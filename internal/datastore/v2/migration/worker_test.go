@@ -43,7 +43,7 @@ func TestWorker_PanicDoesNotTriggerCancelledTelemetry(t *testing.T) {
 		stopCh:       make(chan struct{}),
 		pauseCh:      make(chan struct{}),
 		resumeCh:     make(chan struct{}),
-		// legacy is nil — processBatch() will panic on nil pointer dereference
+		// legacy is nil: processBatch() will panic on nil pointer dereference
 	}
 
 	w.mu.Lock()
@@ -589,7 +589,7 @@ func newOnDiskDetectionRepo(t *testing.T) (repository.DetectionRepository, *sql.
 
 // plantGhostDetection inserts a v2 detection row that has no matching legacy row,
 // simulating a dual-write delete where the legacy row was removed but the v2 delete
-// failed and the id was marked dirty (Forgejo #1581).
+// failed and the id was marked dirty.
 func plantGhostDetection(t *testing.T, repo repository.DetectionRepository, id uint) {
 	t.Helper()
 	require.NoError(t, repo.SaveWithID(t.Context(), &entities.Detection{
@@ -602,7 +602,7 @@ func plantGhostDetection(t *testing.T, repo repository.DetectionRepository, id u
 }
 
 // TestWorker_ProcessDirtyIDsBatch_DeletesV2GhostWhenLegacyDeleted verifies the
-// Forgejo #1581 fix: a dirty id whose legacy row is gone means the detection was
+// ghost-resurrection fix: a dirty id whose legacy row is gone means the detection was
 // deleted, so the orphaned v2 row must be removed (not just the dirty marker),
 // otherwise the deleted detection resurrects after v2 promotion.
 func TestWorker_ProcessDirtyIDsBatch_DeletesV2GhostWhenLegacyDeleted(t *testing.T) {
@@ -725,7 +725,7 @@ func TestWorker_ProcessDirtyIDsBatch_KeepsDirtyWhenV2DeleteErrors(t *testing.T) 
 // TestWorker_ProcessDirtyIDsBatch_KeepsLockedGhostButClearsDirty verifies that when the v2
 // ghost is locked (user-verified) and its legacy row is gone, the reconciler does not
 // force-delete the protected row but still clears the dirty marker, so the id cannot block
-// migration validation forever (Forgejo #1581 follow-up).
+// migration validation forever.
 func TestWorker_ProcessDirtyIDsBatch_KeepsLockedGhostButClearsDirty(t *testing.T) {
 	sm, cleanup := setupWorkerTest(t)
 	defer cleanup()
