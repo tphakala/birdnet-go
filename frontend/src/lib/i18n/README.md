@@ -116,7 +116,8 @@ Translations are persisted to localStorage for instant loading on app startup:
 ```typescript
 // cacheKey(locale) is `birdnet-messages-${locale}-${I18N_CACHE_VERSION}`, where
 // I18N_CACHE_VERSION is a hash of the message files computed in vite.config.js
-// ('dev' outside a production build), so the cache turns over when they change.
+// ('dev' only when there are no message files), so the cache turns over when
+// they change.
 // Storage access can throw (blocked site data, private browsing), so every
 // call is wrapped in try/catch and failures fall back to the network fetch.
 

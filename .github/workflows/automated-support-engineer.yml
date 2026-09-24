@@ -8,14 +8,15 @@ on:
   issue_comment:
     types: [created]
 
-# One run per issue at a time, so a comment posted while the first reply is
-# still being written waits and then sees that reply.
-concurrency:
-  group: support-${{ github.event.issue.number }}
-  cancel-in-progress: false
-
 jobs:
   provide-support:
+    # One run per issue at a time, so a comment posted while the first reply is
+    # still being written waits and then sees that reply. It is set on the job,
+    # not the workflow, so it applies to the support job rather than to every
+    # triggering event.
+    concurrency:
+      group: support-${{ github.event.issue.number }}
+      cancel-in-progress: false
     # Only issues opened by external users: skip pull request comments, issues
     # opened by the maintainer or the project bot, and comments by bots or the
     # maintainer.

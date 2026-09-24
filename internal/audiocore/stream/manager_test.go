@@ -74,6 +74,10 @@ func TestManager_lifecycle_tracksHealthAndShutsDownCleanly(t *testing.T) {
 	// it does.
 	testutil.VerifyNoLeaks(t)
 	m := NewManager(context.WithoutCancel(t.Context()), func(audiocore.AudioFrame) {}, nil, nil, nil, nil)
+	// Stops the manager if a require below fails before the explicit Shutdown.
+	// Registered after VerifyNoLeaks, so it runs before the leak check; on the
+	// normal path Shutdown has already run and this call is a no-op.
+	t.Cleanup(func() { _ = m.Shutdown() })
 
 	require.NoError(t, m.StartStream(rtspSpec("s1")))
 	require.NoError(t, m.StartStream(rtspSpec("s2")))

@@ -45,8 +45,8 @@ if [ -n "$GO_FILES" ]; then
   # Run golangci-lint with the default build tags of `task lint`
   # (noembed,skipfrontend skip model and frontend embedding, which also makes
   # the run faster). CI additionally lints the integration, pebble_e2e and
-  # normcompare tags. The CGO settings mirror `task lint` unless the
-  # environment already sets them, so the TFLite cgo packages typecheck.
+  # normcompare tags. The CGO settings are the ones `task lint` sets, so the
+  # TFLite cgo packages typecheck whatever the environment holds.
   REPO_ROOT=$(git rev-parse --show-toplevel)
   case "$(uname -s)_$(uname -m)" in
     Darwin_arm64) LIB_DIR="/opt/homebrew/lib" ;;
@@ -54,8 +54,8 @@ if [ -n "$GO_FILES" ]; then
     *) LIB_DIR="/usr/lib" ;;
   esac
   export CGO_ENABLED=1
-  export CGO_CFLAGS="${CGO_CFLAGS:--I$REPO_ROOT/.cache/tensorflow -I$REPO_ROOT/.cache/openvino/include}"
-  export CGO_LDFLAGS="${CGO_LDFLAGS:--L$LIB_DIR -ltensorflowlite_c}"
+  export CGO_CFLAGS="-I$REPO_ROOT/.cache/tensorflow -I$REPO_ROOT/.cache/openvino/include"
+  export CGO_LDFLAGS="-L$LIB_DIR -ltensorflowlite_c"
   echo "   Linting Go files..."
   if ! golangci-lint run -v --build-tags=noembed,skipfrontend; then
     echo "❌ golangci-lint found issues in Go files"

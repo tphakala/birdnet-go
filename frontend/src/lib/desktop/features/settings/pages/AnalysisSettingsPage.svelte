@@ -235,7 +235,7 @@
   const installBlocked = $derived(
     licenseSelectedVariant != null && !licenseSelectedVariant.compatible
   );
-  // Links the disabled Install button to the visible reason it is blocked.
+  // Links the blocked (aria-disabled) Install button to the visible reason.
   const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
@@ -1220,7 +1220,8 @@
   function handleInstall() {
     if (!licenseModel) return;
     // Never install a variant the recommender flagged incompatible with this host
-    // (the button is disabled in this state; this guards a programmatic call too).
+    // (the button is only aria-disabled so it stays focusable, which makes this
+    // guard what actually blocks the click and keyboard activation).
     if (installBlocked) return;
     // Do not start an install while any gallery action is in flight; they share
     // the single downloadProgress state and SSE subscription.
@@ -1709,9 +1710,17 @@
                 : '-'}
             </div>
             {#if rangeFilterState.testing}
-              <!-- Decorative: the dimmed count beside it shows the loading state. -->
+              <!-- Decorative: the status region below announces the state. -->
               <LoadingSpinner size="sm" aria-hidden="true" />
             {/if}
+            <!-- Always rendered so screen readers hear loading and the new count. -->
+            <span class="sr-only" role="status">
+              {rangeFilterState.testing
+                ? t('settings.main.sections.rangeFilter.speciesCount.loading')
+                : rangeFilterState.speciesCount !== null
+                  ? formatNumber(rangeFilterState.speciesCount)
+                  : ''}
+            </span>
           </div>
           <div class="flex gap-2 mt-2">
             <button
@@ -2980,7 +2989,7 @@
           aria-disabled={installBlocked ? 'true' : undefined}
           aria-describedby={installBlocked ? INSTALL_BLOCKED_HELP_ID : undefined}
           title={installBlocked ? t('analysis.gallery.variants.incompatible') : undefined}
-          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-[var(--color-primary)]"
         >
           <Download class="size-4" />
           {t('analysis.gallery.license.acceptAndInstall')}

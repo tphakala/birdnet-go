@@ -78,7 +78,7 @@ func TestSpeciesTracker(t *testing.T) {
 
     // Set expectations
     mockDS.EXPECT().
-        GetActiveNotificationHistory(mock.AnythingOfType("time.Time")).
+        GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
         Return([]datastore.NotificationHistory{}, nil)
 
     tracker := NewTrackerFromSettings(mockDS, settings)

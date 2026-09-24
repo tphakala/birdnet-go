@@ -56,8 +56,8 @@ let previousMessages = $state<Record<string, string>>({});
 let initialLoadComplete = $state(false);
 
 // Cache version for invalidation: a hash of the message files, injected via
-// Vite define, so it changes whenever a translation changes.
-// Falls back to 'dev' so dev/test mode always fetches fresh translations.
+// Vite define (dev server, build and tests alike), so it changes whenever a
+// translation changes. Falls back to 'dev' if the define is missing.
 const I18N_CACHE_VERSION: string =
   typeof __I18N_CACHE_VERSION__ !== 'undefined' ? __I18N_CACHE_VERSION__ : 'dev';
 

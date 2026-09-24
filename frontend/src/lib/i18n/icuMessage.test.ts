@@ -83,9 +83,8 @@ describe('findICUSyntaxError', () => {
   });
 
   it('treats an apostrophe as a literal, as the runtime does', () => {
-    expect(
-      findICUSyntaxError("l'{name} a {count, plural, one {# oiseau} other {# oiseaux}}")
-    ).toBeNull();
+    // ICU quoting would hide the unclosed brace after the apostrophe.
+    expect(findICUSyntaxError("l'{name")).not.toBeNull();
   });
 });
 

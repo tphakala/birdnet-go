@@ -12,10 +12,10 @@ import (
 // It snapshots the goroutines alive at the moment it is called (via
 // goleak.IgnoreCurrent) and ignores them, so a leftover goroutine from a
 // previously-run test (for example a net/http dialConn goroutine left by an
-// earlier test) is not wrongly attributed to this test. goleak inspects every goroutine in the
-// process, not just the ones this test spawned, so without the snapshot these
-// checks flake under `go test -race -shuffle=on` depending on which test ran
-// first.
+// earlier test) is not wrongly attributed to this test. goleak inspects every
+// goroutine in the process, not just the ones this test spawned, so without the
+// snapshot these checks flake under `go test -race -shuffle=on` depending on
+// which test ran first.
 //
 // Because the snapshot is taken when VerifyNoLeaks is called, callers must
 // call it directly (NOT with defer) as the first statement of the test, before
