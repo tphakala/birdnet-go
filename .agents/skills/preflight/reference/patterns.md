@@ -680,7 +680,7 @@ func (s *SQLiteStore) Open() error {
 3. Embeds a struct with lifecycle methods that cancel/replace context fields
 
 **Review action:** When code reads or writes a `context.Context` field on a struct:
-1. `grep -rn 'fieldName\s*=' internal/<package>/` (the package that declares the struct) to find ALL assignments
+1. `grep -rn 'fieldName\s*=' <package-dir>/` (the directory of the package that declares the struct: usually under `internal/`, sometimes `cmd/` or the repository root) to find ALL assignments
 2. Check if any embedded struct method modifies the same field
 3. Check if any goroutine captures the field (will it survive lifecycle transitions?)
 
@@ -721,7 +721,7 @@ When a gate agent suggests a fix that touches shared state (contexts, mutexes, a
 
 **Verification steps after any fix touching shared state:**
 1. Identify the shared state the fix touches (context, mutex, channel, atomic, map, global)
-2. `grep -rn 'stateName' internal/<package>/` (the package that owns the state) to find ALL readers and writers
+2. `grep -rn 'stateName' <package-dir>/` (the directory of the package that owns the state) to find ALL readers and writers
 3. For each writer: does it conflict with the fix? (cancel, replace, close, reset)
 4. For each reader: does it assume a state the fix changes?
 5. If the state is on an embedded struct: check the embedded struct's methods too

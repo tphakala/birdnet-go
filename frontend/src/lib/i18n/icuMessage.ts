@@ -18,13 +18,22 @@
  * - Go template field references (`{{.CommonName}}`) are replaced by a plain
  *   word, so the rest of the value is still checked.
  *
- * Only `{name}` and `plural` are resolved by the runtime; select, number, date
- * and time arguments are accepted here but render unresolved.
+ * Only `{name}` and cardinal `plural` are resolved by the runtime, so
+ * findICUSyntaxError reports select, selectordinal, number, date and time
+ * arguments and plural offsets, which would otherwise render wrong or
+ * unresolved.
  */
 
-import { parse as parseICU } from '@formatjs/icu-messageformat-parser';
-
-type ICUElements = ReturnType<typeof parseICU>;
+import {
+  parse as parseICU,
+  isArgumentElement,
+  isDateElement,
+  isNumberElement,
+  isPluralElement,
+  isSelectElement,
+  isTimeElement,
+  type MessageFormatElement,
+} from '@formatjs/icu-messageformat-parser';
 
 /** Parser options that match how the runtime treats HTML tags (as literal text). */
 const ICU_PARSE_OPTIONS = { ignoreTag: true } as const;
@@ -54,19 +63,46 @@ function toRuntimeICU(value: string): string {
 /** Fallback for strings the ICU parser rejects: simple `{name}` placeholders. */
 const SIMPLE_PARAM_PATTERN = /\{(\w+)\}/g;
 
-/** First and last ICU element types that carry a parameter name in `value`. */
-const FIRST_ARGUMENT_TYPE = 1; // argument
-const LAST_ARGUMENT_TYPE = 6; // plural (2-5: number, date, time, select)
+/**
+ * Returns the ICU argument kind the runtime t() cannot render (select,
+ * selectordinal, plural with an offset, number, date, time), or null when it
+ * can render the element.
+ */
+function unsupportedArgumentKind(element: MessageFormatElement): string | null {
+  if (isSelectElement(element)) return 'select';
+  if (isPluralElement(element) && element.pluralType === 'ordinal') return 'selectordinal';
+  if (isPluralElement(element) && element.offset !== 0) return 'plural offset';
+  if (isNumberElement(element)) return 'number';
+  if (isDateElement(element)) return 'date';
+  if (isTimeElement(element)) return 'time';
+  return null;
+}
+
+/** Finds the first argument in an ICU AST that the runtime cannot render. */
+function findUnsupportedArgument(elements: MessageFormatElement[]): string | null {
+  for (const element of elements) {
+    const kind = unsupportedArgumentKind(element);
+    if (kind !== null && 'value' in element) {
+      return `unsupported ICU ${kind} argument {${element.value}}: t() resolves only {name} and plural`;
+    }
+    if (isPluralElement(element) || isSelectElement(element)) {
+      for (const option of Object.values(element.options)) {
+        const nested = findUnsupportedArgument(option.value);
+        if (nested !== null) return nested;
+      }
+    }
+  }
+  return null;
+}
 
 /**
  * Parses a translation value as ICU MessageFormat the way the runtime reads it
- * (see toRuntimeICU) and returns the parser's error message, or null when the
- * value is valid.
+ * (see toRuntimeICU) and returns the parser's error message, a message naming
+ * an argument the runtime cannot render, or null when the value is valid.
  */
 export function findICUSyntaxError(value: string): string | null {
   try {
-    parseICU(toRuntimeICU(value), ICU_PARSE_OPTIONS);
-    return null;
+    return findUnsupportedArgument(parseICU(toRuntimeICU(value), ICU_PARSE_OPTIONS));
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
@@ -75,30 +111,25 @@ export function findICUSyntaxError(value: string): string | null {
 /**
  * Walks an ICU AST collecting parameter names, recursing into plural/select
  * option branches. The AST has no tag nodes, because values are parsed with
- * ignoreTag. Types 1-6 are the parameter-bearing nodes (argument, number, date, time,
- * select, plural); literal (0), pound (7) and tag (8) carry no parameter name.
+ * ignoreTag. Argument, number, date, time, select and plural elements name a
+ * parameter; literal and pound elements do not.
  */
-function collectParams(elements: ICUElements, params: Set<string>): void {
+function collectParams(elements: MessageFormatElement[], params: Set<string>): void {
   for (const element of elements) {
-    const node = element as unknown as Record<string, unknown>;
-
     if (
-      typeof node.type === 'number' &&
-      node.type >= FIRST_ARGUMENT_TYPE &&
-      node.type <= LAST_ARGUMENT_TYPE &&
-      typeof node.value === 'string'
+      isArgumentElement(element) ||
+      isNumberElement(element) ||
+      isDateElement(element) ||
+      isTimeElement(element) ||
+      isSelectElement(element) ||
+      isPluralElement(element)
     ) {
-      params.add(node.value);
+      params.add(element.value);
     }
 
-    if (typeof node.options === 'object' && node.options !== null) {
-      for (const option of Object.values(node.options as Record<string, unknown>)) {
-        if (option && typeof option === 'object' && 'value' in option) {
-          const optionValue = (option as Record<string, unknown>).value;
-          if (Array.isArray(optionValue)) {
-            collectParams(optionValue as ICUElements, params);
-          }
-        }
+    if (isPluralElement(element) || isSelectElement(element)) {
+      for (const option of Object.values(element.options)) {
+        collectParams(option.value, params);
       }
     }
   }

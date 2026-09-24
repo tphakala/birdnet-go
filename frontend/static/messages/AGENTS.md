@@ -42,7 +42,9 @@ What enforces this:
   tags and apostrophes are plain text (so write `'{name}'`, never ICU's
   `''{name}''`, which renders both apostrophes), parameters inside tags are
   compared too, and Go template field references (`{{.Name}}`) count as plain
-  words. Tag structure (unclosed or mismatched tags) is not checked (see
+  words. ICU arguments `t()` cannot render (`select`, `selectordinal`,
+  `number`, `date`, `time`) fail validation; use `{name}` and `plural` only.
+  Tag structure (unclosed or mismatched tags) is not checked (see
   `src/lib/i18n/icuMessage.ts`). `en.json` itself is not
   checked, so review the English text yourself (ICU syntax and empty values).
   CI reports orphaned keys but does not fail on them.

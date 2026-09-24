@@ -29,8 +29,7 @@ jobs:
           !github.event.issue.pull_request &&
           github.event.comment.user.login != 'tphakala' &&
           github.event.comment.user.login != 'birdnet-go-bot' &&
-          !contains(github.event.comment.user.type, 'Bot') &&
-          !contains(github.event.comment.body, '🤖 Automated Support')))
+          !contains(github.event.comment.user.type, 'Bot')))
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -48,11 +47,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           ISSUE_NUMBER=${{ github.event.issue.number }}
 
-          # Check if we've already responded to this issue
-          if gh api --paginate repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
-            --jq '.[] | select(.body | contains("🤖 Automated Support"))' | grep -q .; then
+          # Check if we've already responded to this issue. Only a marker in a
+          # comment posted by this workflow (github-actions[bot]) counts, so a user
+          # quoting the marker cannot mute the bot. A failed lookup on any page
+          # fails the job instead of reading as "no reply yet".
+          REPLIES=$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("🤖 Automated Support"))) | .id')
+          if [ -n "$REPLIES" ]; then
             echo "already_responded=true" >> "$GITHUB_OUTPUT"
             echo "Already responded to issue #${ISSUE_NUMBER}"
           else

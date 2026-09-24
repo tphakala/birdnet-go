@@ -546,7 +546,7 @@ The custom errors package provides:
 
 When updating existing code:
 
-1. ✅ Remove any `import "errors"` or `import stderrors "errors"`
+1. ✅ Remove any `import "errors"` or `import stderrors "errors"`, unless the file uses `stderrors.AsType` or breaks an import cycle (the two exceptions above)
 2. ✅ Ensure `import "github.com/tphakala/birdnet-go/internal/errors"` is present
 3. ✅ Replace `fmt.Errorf()` with `errors.Newf()` where enhanced telemetry is needed
 4. ✅ Add `.Component()`, `.Category()`, and `.Context()` calls

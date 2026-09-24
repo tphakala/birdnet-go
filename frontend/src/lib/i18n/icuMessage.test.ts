@@ -82,6 +82,20 @@ describe('findICUSyntaxError', () => {
     expect(findICUSyntaxError('{count, plural, one {# item} other {{name}}}')).toBeNull();
   });
 
+  it('reports arguments the runtime t() cannot render', () => {
+    expect(findICUSyntaxError('{kind, select, bird {Bird} other {Other}}')).toMatch(/select/);
+    expect(findICUSyntaxError('{n, selectordinal, one {#st} other {#th}}')).toMatch(
+      /selectordinal/
+    );
+    expect(findICUSyntaxError('{n, plural, offset:1 one {# x} other {# y}}')).toMatch(/offset/);
+    expect(findICUSyntaxError('{n, number}')).toMatch(/number/);
+    expect(findICUSyntaxError('{d, date, short}')).toMatch(/date/);
+    expect(findICUSyntaxError('{d, time, short}')).toMatch(/time/);
+    expect(
+      findICUSyntaxError('{count, plural, one {# {kind, select, a {A} other {B}}} other {#}}')
+    ).toMatch(/select/);
+  });
+
   it('treats an apostrophe as a literal, as the runtime does', () => {
     // ICU quoting would hide the unclosed brace after the apostrophe.
     expect(findICUSyntaxError("l'{name")).not.toBeNull();
