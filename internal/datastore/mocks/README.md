@@ -86,6 +86,7 @@ func TestSpeciesTracker(t *testing.T) {
 ```
 
 **Benefits**:
+
 - ✅ No manual mock maintenance
 - ✅ Automatic updates when interface changes
 - ✅ Type-safe expectations
@@ -189,6 +190,7 @@ All datastore mocks have been successfully migrated to generated mocks:
 ### Out of Scope
 
 These mocks are for non-datastore interfaces and remain unchanged:
+
 - `internal/imageprovider/*` - Image provider mocks
 - `internal/api/v2/range_test.go` - MockBirdNET, MockProcessor
 - `internal/api/v2/integrations_test.go` - MockMQTTClient, MockBirdWeatherClient
@@ -196,6 +198,7 @@ These mocks are for non-datastore interfaces and remain unchanged:
 ## 🛠️ Configuration
 
 Mock generation is configured in:
+
 - **Go generate directive**: `internal/datastore/interfaces.go:4`
 - **Global config**: `.mockery.yaml`
 
@@ -208,5 +211,5 @@ Mock generation is configured in:
 ---
 
 **Last Generated**: October 26, 2025
-**Mockery Version**: v2.53.5
+**Mockery Version**: named in each generated file's header; see `TESTING.md` for the version to regenerate with
 **Interface Methods**: 62

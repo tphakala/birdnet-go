@@ -317,10 +317,15 @@ func TestMain(m *testing.M) {
 }
 ```
 
-Ignore only named goroutines that live for the whole process and cannot be
-stopped, for example `goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener")`
-in `internal/imports/zz_goleak_test.go`. goleak already filters the test runner's
-own goroutines, so do not add `testing.(*T).Run` ignores.
+Ignore only named goroutines that a dependency deliberately keeps running for
+the whole process and that your code has no way to stop, such as the go-cache
+janitor (`goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run")`).
+Do not ignore a goroutine you can stop: `database/sql.(*DB).connectionOpener`,
+for example, exits when the database is closed, so close it in `t.Cleanup`
+instead (some existing ignores of it predate this rule; do not copy them).
+goleak already filters the test runner's own goroutines, so do not add
+`testing.(*T).Run` or `testing.(*T).Parallel` ignores either; the existing ones
+are redundant.
 
 For a per-test check, snapshot the goroutines that already exist at the START of
 the test and register the check FIRST, via `t.Cleanup`, so it runs last (after the
@@ -363,7 +368,8 @@ relying on the retry.
   service you start.
 - Restore global state with `t.Cleanup()`, not `defer`.
 - Use `t.TempDir()` for scratch space and `t.ArtifactDir()` for output worth
-  keeping; never `os.MkdirTemp()`.
+  keeping (it is kept only when `go test` runs with `-artifacts`; otherwise it
+  is deleted like `t.TempDir()`); never `os.MkdirTemp()`.
 - Test containers (MySQL, Mosquitto, MediaMTX, ntfy, Pebble) live in
   `internal/testutil/containers`.
 
@@ -386,10 +392,12 @@ new interface, add it to `.mockery.yaml`, then regenerate every mock:
 go generate ./internal/datastore   # runs mockery over the whole .mockery.yaml
 ```
 
-Use mockery v2, at the version named in the header of the generated files
-(`.mockery.yaml` is in the v2 format). mockery is not a `go.mod` tool, and a
-binary built against an older `golang.org/x/tools` can fail to load this
-module's packages on the current Go version. See
+Use mockery v2 (`.mockery.yaml` is in the v2 format), v2.53.7 or a later v2
+release: `go install github.com/vektra/mockery/v2@v2.53.7`. mockery is not a
+`go.mod` tool. v2.53.6, the version named in the current mock headers, was
+built against an older `golang.org/x/tools` and fails to load this module's
+packages on Go 1.27. Regenerating with a newer version rewrites the version
+line in every mock header; commit that with your change. See
 `internal/datastore/mocks/README.md` for mock usage patterns.
 
 ### Mock Usage
