@@ -37,7 +37,7 @@ noted. Frontend test rules are in the Testing section below (the root
   `$lib/utils/storage`. Those helpers JSON-encode, so do not switch an existing
   key that is stored as a raw string (for example `birdnet-locale`) to them
   unless every reader and writer of that key changes together; put its
-  `getItem`/`setItem` calls inside `try`/`catch` instead. There is no
+  `localStorage` calls inside `try`/`catch` instead. There is no
   `sessionStorage` helper: wrap those calls in `try`/`catch`.
 - **NEVER ship ambiguous UI states.** Disabled controls, errors, and loading
   states must always tell the user _why_. See UX Design Principles.
@@ -259,7 +259,8 @@ Theme colours are written as CSS variables in arbitrary values
 - Live regions: `role="status"` for progress (it implies `aria-live="polite"`),
   `role="alert"` for errors. Render a `role="status"` container
   unconditionally and change its text; one inserted by `{#if}` together with its
-  text is often not announced.
+  text is often not announced. Several existing components still insert it
+  with `{#if}`; do not copy that.
 - Run `npm run test:a11y` for changes to interactive components
 
 ## Static Analysis (ast-grep)
@@ -287,15 +288,14 @@ change a rule, confirm it fires on a file that contains a guaranteed match.
   define throws `[vitest] No "<name>" export is defined on the "<module>" mock`.
   The `$lib/utils/security` mock, for example, has no `isPlainObject`. If code
   under test needs a real export from a mocked module, add it to the mock in
-  `setup.ts`, or in the test file call `vi.unmock('<module>')` or declare a
-  per-file `vi.mock('<module>', async importOriginal => ({ ...(await importOriginal()), ... }))`.
+  `setup.ts`, or in the test file call `vi.unmock('<module>')` at the top (see
+  `src/lib/utils/logger.test.ts`) or declare a per-file
+  `vi.mock('<module>', async importOriginal => ({ ...(await importOriginal()), ... }))`.
   Calling `vi.importActual` in the test body does not help: the code under test
   still imports the mock.
 - The global `fetch` mock serves the translation files, answers every `/api/`
   URL with `200 {data: []}`, and rejects anything else. A test of an error path must override it, or it will
   silently exercise the success path.
-- To test a module that `setup.ts` mocks, call `vi.unmock('<module id>')` at the
-  top of the test file (see `src/lib/utils/logger.test.ts`).
 - `vi.clearAllMocks()` only clears call history. A persistent override
   (`mockReturnValue`, `mockImplementation`) and any unconsumed one-shot value
   (`mockReturnValueOnce`, `mockResolvedValueOnce`) survive it and leak into later
@@ -310,10 +310,13 @@ change a rule, confirm it fires on a file that contains a guaranteed match.
   const original = vi.mocked(fn).getMockImplementation();
   // ... override and test ...
   if (original) vi.mocked(fn).mockImplementation(original);
+  else vi.mocked(fn).mockReset();
   ```
 
-  The guard is needed because `getMockImplementation()` can return `undefined`,
-  which strict type checking rejects. When you use one-shot values, assert they
+  `getMockImplementation()` returns `undefined` for a bare `vi.fn()` (many
+  `setup.ts` mocks, such as `goto` and the toast actions, are bare), and strict
+  type checking rejects passing that on. For those, `mockReset()` is the
+  restore: it drops the override and returns the mock to its bare state. When you use one-shot values, assert they
   were consumed (`toHaveBeenCalledTimes`), since restoring the implementation
   does not clear them. Reset any store you mutate.
 
