@@ -109,6 +109,14 @@
       "closeModal": "Fermer la fenêtre modale",
       "dismissAlert": "Ignorer l'alerte",
       "closeNotification": "Fermer la notification",
+      "toastRegion": {
+        "topLeft": "Notifications, en haut à gauche",
+        "topCenter": "Notifications, en haut au centre",
+        "topRight": "Notifications, en haut à droite",
+        "bottomLeft": "Notifications, en bas à gauche",
+        "bottomCenter": "Notifications, en bas au centre",
+        "bottomRight": "Notifications, en bas à droite"
+      },
       "toggleDropdown": "Basculer le menu déroulant",
       "sortAscending": "Trier par ordre croissant",
       "selectLanguage": "Sélectionner la langue",
@@ -130,7 +138,6 @@
       "selectToday": "Sélectionner aujourd'hui",
       "dateSelected": "Date sélectionnée : {date}",
       "calendarNavigation": "Navigation du calendrier : utilisez les flèches pour vous déplacer, Entrée pour sélectionner, Échap pour fermer",
-      "downloadCsv": "Télécharger la liste des espèces au format CSV",
       "visitEbirdLink": "Ouvrir eBird.org dans un nouvel onglet",
       "learnEbirdTaxonomyLink": "Ouvrir la taxonomie eBird dans un nouvel onglet",
       "resizeHandle": "Glisser pour redimensionner",

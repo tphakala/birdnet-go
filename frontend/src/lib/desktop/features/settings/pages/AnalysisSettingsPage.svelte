@@ -61,6 +61,7 @@
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
+  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -89,6 +90,7 @@
   } from '$lib/utils/variantSelection';
   import OptimizeReviewDialog from '$lib/desktop/features/settings/components/OptimizeReviewDialog.svelte';
   import { safeArrayAccess } from '$lib/utils/security';
+  import { generateId } from '$lib/utils/uuid';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
   import {
@@ -233,6 +235,8 @@
   const installBlocked = $derived(
     licenseSelectedVariant != null && !licenseSelectedVariant.compatible
   );
+  // Links the disabled Install button to the visible reason it is blocked.
+  const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
   // Element bindings should NOT use $state - causes showModal() to fail
@@ -1705,9 +1709,10 @@
                 : '-'}
             </div>
             {#if rangeFilterState.testing}
-              <span
-                class="inline-block w-4 h-4 border-2 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-              ></span>
+              <LoadingSpinner
+                size="sm"
+                label={t('settings.main.sections.rangeFilter.speciesCount.loading')}
+              />
             {/if}
           </div>
           <div class="flex gap-2 mt-2">
@@ -1731,7 +1736,6 @@
                 rangeFilterState.downloading ||
                 !birdnet?.locationConfigured}
               onclick={downloadSpeciesCSV}
-              aria-label={t('common.aria.downloadCsv')}
             >
               <Download class="size-4" />
               {t('analytics.filters.exportCsv')}
@@ -2960,7 +2964,7 @@
       </div>
 
       {#if installBlocked}
-        <p class="mt-4 text-sm text-[var(--color-error)]" role="alert">
+        <p id={INSTALL_BLOCKED_HELP_ID} class="mt-4 text-sm text-[var(--color-error)]" role="alert">
           {t('analysis.gallery.variants.incompatible')}
         </p>
       {/if}
@@ -2976,6 +2980,7 @@
           type="button"
           onclick={handleInstall}
           disabled={installBlocked}
+          aria-describedby={installBlocked ? INSTALL_BLOCKED_HELP_ID : undefined}
           title={installBlocked ? t('analysis.gallery.variants.incompatible') : undefined}
           class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -3162,7 +3167,6 @@
           disabled={rangeFilterState.loading ||
             rangeFilterState.downloading ||
             !rangeFilterState.speciesCount}
-          aria-label={t('common.aria.downloadCsv')}
         >
           <Download class="size-4" />
           {t('analytics.filters.exportCsv')}

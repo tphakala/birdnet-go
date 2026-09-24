@@ -109,6 +109,14 @@
       "closeModal": "Aizvērt modālo logu",
       "dismissAlert": "Noraidīt brīdinājumu",
       "closeNotification": "Aizvērt paziņojumu",
+      "toastRegion": {
+        "topLeft": "Paziņojumi, augšā pa kreisi",
+        "topCenter": "Paziņojumi, augšā centrā",
+        "topRight": "Paziņojumi, augšā pa labi",
+        "bottomLeft": "Paziņojumi, apakšā pa kreisi",
+        "bottomCenter": "Paziņojumi, apakšā centrā",
+        "bottomRight": "Paziņojumi, apakšā pa labi"
+      },
       "toggleDropdown": "Pārslēgt nolaižamo izvēlni",
       "sortAscending": "Kārtot augošā secībā",
       "selectLanguage": "Izvēlēties valodu",
@@ -130,7 +138,6 @@
       "selectToday": "Izvēlēties šodienu",
       "dateSelected": "Izvēlēts datums: {date}",
       "calendarNavigation": "Izmantojiet bulttaustiņus, lai pārvietotos kalendārā, Enter, lai izvēlētos, Escape, lai aizvērtu",
-      "downloadCsv": "Lejupielādēt sugu sarakstu kā CSV",
       "visitEbirdLink": "Atvērt eBird.org jaunā cilnē",
       "learnEbirdTaxonomyLink": "Atvērt eBird taksonomiju jaunā cilnē",
       "resizeHandle": "Velciet, lai mainītu izmēru",

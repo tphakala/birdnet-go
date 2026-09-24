@@ -109,6 +109,14 @@
       "closeModal": "Alles sluiten",
       "dismissAlert": "Negeer melding",
       "closeNotification": "Sluit melding",
+      "toastRegion": {
+        "topLeft": "Meldingen, linksboven",
+        "topCenter": "Meldingen, middenboven",
+        "topRight": "Meldingen, rechtsboven",
+        "bottomLeft": "Meldingen, linksonder",
+        "bottomCenter": "Meldingen, middenonder",
+        "bottomRight": "Meldingen, rechtsonder"
+      },
       "toggleDropdown": "Open/sluit keuzelijst",
       "sortAscending": "Oplopend sorteren",
       "selectLanguage": "Kies de taal",
@@ -130,7 +138,6 @@
       "selectToday": "Selecteer vandaag",
       "dateSelected": "Datum geselecteerd: {date}",
       "calendarNavigation": "Navigeer met pijl toetsen door de kalender, Enter om te selecteren, Esc om te sluiten",
-      "downloadCsv": "Soorten lijst als CSV ophalen",
       "visitEbirdLink": "Open eBird.org in een nieuwe tab",
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in een nieuwe tab",
       "resizeHandle": "Sleep om te vergroten/verkleinen",

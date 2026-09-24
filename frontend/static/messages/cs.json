@@ -109,6 +109,14 @@
       "closeModal": "Zavřít modální okno",
       "dismissAlert": "Zavřít upozornění",
       "closeNotification": "Zavřít oznámení",
+      "toastRegion": {
+        "topLeft": "Oznámení, vlevo nahoře",
+        "topCenter": "Oznámení, uprostřed nahoře",
+        "topRight": "Oznámení, vpravo nahoře",
+        "bottomLeft": "Oznámení, vlevo dole",
+        "bottomCenter": "Oznámení, uprostřed dole",
+        "bottomRight": "Oznámení, vpravo dole"
+      },
       "toggleDropdown": "Přepnout rozbalovací nabídku",
       "sortAscending": "Seřadit vzestupně",
       "selectLanguage": "Vybrat jazyk",
@@ -130,7 +138,6 @@
       "selectToday": "Vybrat dnešek",
       "dateSelected": "Vybrané datum: {date}",
       "calendarNavigation": "Pro pohyb v kalendáři použijte šipky, Enter pro výběr, Escape pro zavření",
-      "downloadCsv": "Stáhnout seznam druhů jako CSV",
       "visitEbirdLink": "Otevřít eBird.org v nové kartě",
       "learnEbirdTaxonomyLink": "Otevřít taxonomii eBird v nové kartě",
       "resizeHandle": "Tažením změníte velikost",

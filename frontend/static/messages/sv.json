@@ -109,6 +109,14 @@
       "closeModal": "Stäng dialogruta",
       "dismissAlert": "Avfärda varning",
       "closeNotification": "Stäng avisering",
+      "toastRegion": {
+        "topLeft": "Aviseringar, uppe till vänster",
+        "topCenter": "Aviseringar, uppe i mitten",
+        "topRight": "Aviseringar, uppe till höger",
+        "bottomLeft": "Aviseringar, nere till vänster",
+        "bottomCenter": "Aviseringar, nere i mitten",
+        "bottomRight": "Aviseringar, nere till höger"
+      },
       "toggleDropdown": "Växla rullgardinsmeny",
       "sortAscending": "Sortera stigande",
       "selectLanguage": "Välj språk",
@@ -130,7 +138,6 @@
       "selectToday": "Välj idag",
       "dateSelected": "Datum valt: {date}",
       "calendarNavigation": "Använd piltangenterna för att navigera i kalendern, Enter för att välja, Escape för att stänga",
-      "downloadCsv": "Ladda ner artlistan som CSV",
       "visitEbirdLink": "Öppna eBird.org i en ny flik",
       "learnEbirdTaxonomyLink": "Öppna eBird Taxonomy i en ny flik",
       "resizeHandle": "Dra för att ändra storlek",
