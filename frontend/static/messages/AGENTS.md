@@ -17,20 +17,29 @@ shared namespaces that prevent duplicate strings.
 4. Run `npm run generate:i18n-types` and commit the regenerated
    `src/lib/i18n/types.generated.ts`
 
-When translation files are staged, the pre-commit hook runs
-`npm run i18n:sync:check` and `npm run generate:i18n-types:check`, so a commit
-with out-of-sync locales or stale generated types fails. CI runs
-`generate:i18n-types:check` and a translation completeness check, but not
-`i18n:sync:check`: orphaned keys only surface locally, so run
-`npm run i18n:validate:full` before pushing.
+What enforces this:
+
+- **Pre-commit hook**: runs `npm run i18n:sync:check` when any locale file is
+  staged, and `npm run generate:i18n-types:check` when `en.json` or the type
+  generator changes.
+- **CI**: checks the generated types, fails on missing keys and on newly added
+  English fallbacks that were never translated (`--fail-on-untranslated`), and
+  fails when code uses a key that `en.json` does not define. It reports
+  orphaned keys but does not fail on them.
+
+Run `npm run i18n:validate:full` before pushing; it runs the same checks
+locally, including the orphaned-key check.
 
 ## Key Principles
 
 - **Reuse before adding.** Many common strings already exist; use the
   `common.*` namespace for reusable UI text instead of duplicating it.
 - **Follow existing naming**: dot-separated, camelCase segments, grouped by
-  feature. A segment that mirrors a backend identifier (an event type, an
-  operator, a config key) keeps that identifier's spelling, even snake_case.
+  feature (`settings.audio.soundCards.gainLabel`). A segment that mirrors a
+  backend identifier (an alert event, metric or operator, a status value, a
+  check ID) keeps that identifier's spelling, even snake_case, except that dots
+  in the identifier become underscores (see `toKeySegment` in
+  `src/lib/utils/alertSchema.ts`). Do not "fix" those keys.
 - **Separate keys for separate meanings.** When one English word has different
   meanings in different places, give each its own key.
 - **Parameters** use `{name}` placeholders; keep them identical across locales.

@@ -160,23 +160,10 @@ All user-visible text goes through `t()`:
 <p>{t('about.avicommonsTitle')}</p>
 ```
 
-Adding or changing keys (details in `static/messages/AGENTS.md`):
-
-1. Add the key to `static/messages/en.json` first (English is the source of truth)
-2. `npm run i18n:sync` to propagate the key to every locale (English fallback)
-3. Translate the fallbacks in each locale file
-4. `npm run generate:i18n-types` and commit the regenerated
-   `src/lib/i18n/types.generated.ts`
-
-The pre-commit hook rejects out-of-sync locales and stale generated types; CI
-checks the generated types and key completeness. Run
-`npm run i18n:validate:full` locally for the complete set, including orphaned
-keys, which CI does not fail on.
-
-Keys use dot notation with camelCase segments, grouped by feature
-(`settings.audio.soundCards.gainLabel`). A segment that mirrors a backend
-identifier (an event type, an operator, a config key) keeps that identifier's
-spelling, even if it is snake_case; do not "fix" those keys.
+Adding or changing a key means updating every locale, regenerating the key
+types, and following the naming rules. The workflow, what the hook and CI
+enforce, and the naming rules are in `static/messages/AGENTS.md`; read it before
+touching translations.
 
 ## API, CSRF, and Live Data
 
