@@ -57,7 +57,7 @@ func newSeededHandler(t *testing.T) (*echo.Echo, *Handler) {
 
 	// SQLiteStore is the concrete store the application runs; DataStore alone does
 	// not satisfy datastore.Interface.
-	ds := &datastore.SQLiteStore{DataStore: datastore.DataStore{DB: db}}
+	ds := &datastore.SQLiteStore{DB: db}
 	e := echo.New()
 	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithDatastore(ds))
 	return e, buildTestHandler(t, core, map[string]string{}, map[string]string{})
