@@ -335,9 +335,13 @@ func TestNoLeaks(t *testing.T) {
 Calling `goleak.IgnoreCurrent()` inside the cleanup would snapshot at the end of
 the test and hide every leak it is meant to catch.
 
-Do not use `defer goleak.VerifyNone(t)`: defers run before `t.Cleanup` functions,
-so it reports goroutines of services that are about to be stopped. Never combine
-a per-test leak check with `t.Parallel()`.
+A deferred check (`defer goleak.VerifyNone(t, goleak.IgnoreCurrent())`) is fine
+when the test stops its services with `defer` too, since the `IgnoreCurrent()`
+argument is evaluated when the `defer` statement runs. It is wrong when the
+services are stopped via `t.Cleanup`: defers run before `t.Cleanup` functions, so
+it reports goroutines that are about to be stopped. Never combine a per-test leak
+check with `t.Parallel()`, and allow generous (500ms+) timeouts for asynchronous
+shutdown so CI does not flake.
 
 ## Mocking with testify/mock
 
@@ -355,6 +359,10 @@ packages and interfaces. Never hand-write or hand-edit a generated mock. To mock
 new interface, add it to `.mockery.yaml`, then regenerate every mock:
 
 ```bash
+# mockery is not a go.mod tool; install the version the mocks were generated with
+# (the .mockery.yaml format is mockery v2):
+go install github.com/vektra/mockery/v2@v2.53.6
+
 go generate ./internal/datastore   # runs mockery over the whole .mockery.yaml
 ```
 
@@ -384,9 +392,15 @@ mockRepo.EXPECT().Save(mock.Anything).Return(nil).Maybe()
 ```
 
 When the asynchronous call is the behaviour under test, keep the expectation
-strict and wait for it (signal a channel from `.Run(...)`, or use
-`require.Eventually`); a `.Maybe()` there lets the test pass when the behaviour is
-gone.
+strict and wait for it, then stop the goroutine before the test returns; a
+`.Maybe()` there lets the test pass when the behaviour is gone. Two race-safe
+ways to wait:
+
+- Close a channel from `.Run(...)` (pair it with `.Once()`, since closing twice
+  panics) and wait with `testutil.WaitForChannel`.
+- Increment an `atomic` counter from `.Run(...)` and poll it with
+  `require.Eventually`. Never poll `mockX.Calls` directly: testify guards that
+  slice with a mutex, so reading it from the test is a data race under `-race`.
 
 ## Modern Go Features (1.22+)
 

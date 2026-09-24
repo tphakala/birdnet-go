@@ -48,36 +48,37 @@ Never hand-parse these; use the stdlib:
 
 ### Path validation for untrusted input
 
-Path checks are lexical: `filepath.Clean()` and `filepath.IsLocal()` look at the
-string only and never resolve symlinks, so a path that passes them can still
-escape its base directory through a symlink when you open it. To actually open
-or write files from untrusted input, go through `os.Root` or the project's
-SecureFS (`internal/securefs`, exposed to API handlers as `c.SFS`), which
-contain symlinks as well as `..`.
+Reuse the project's validators instead of writing a new check; they already
+handle the cases a hand-rolled check misses (URL-encoded and double-encoded
+`..`, Unicode look-alikes, null bytes, backslashes):
 
-Use the lexical checks to reject bad input early:
+- Filesystem access from untrusted input: SecureFS (`internal/securefs`,
+  exposed to API handlers as `c.SFS`; `ValidateRelativePath`, `Open`,
+  `OpenFile`, ...). It sits on `os.Root`, so it also contains symlinks, which
+  no string check can.
+- Clip paths from API requests: `apicore.NormalizeClipPathStrict`.
+- Internal URL paths such as redirect targets: `security.IsSafePath`.
 
-- `filepath.IsLocal()` rejects absolute paths, empty paths and paths that
-  escape upward (`../x`). On Windows it also rejects reserved names such as
-  `COM1`/`NUL` (CVE-2023-45283, CVE-2023-45284); on Linux those are ordinary
-  names. It cleans before judging, so `"a/../x"` is accepted (it stays inside
-  the base).
-- When a value must be rejected if it contains `..` at all (for example a URL
-  path, or a function that must also accept absolute paths, which `IsLocal`
-  rejects), match `..` as a whole path segment, not as a substring, so a name
-  like `foo..bar.wav` is still allowed. Treat both `/` and `\` as separators.
+Their `strings.Contains(p, "..")` substring checks are deliberately stricter
+than a segment match (they reject names like `clips..old` and forms like
+`..../x`), and the ruleguard rule in `rules/net.go` says the same. Keep new
+checks at least that strict.
+
+If you must use the standard library directly, remember that `filepath.Clean()`
+and `filepath.IsLocal()` are lexical: they never resolve symlinks, and
+cleaning first can hide input you meant to reject (`filepath.Clean("")` is
+`"."`, which `IsLocal` accepts, while `IsLocal("")` is false). Check the raw
+input, after any URL decoding; `IsLocal` cleans internally:
 
 ```go
-cleanPath := filepath.Clean(userInput)
-if !filepath.IsLocal(cleanPath) {
+if !filepath.IsLocal(userInput) {
     return errors.Newf("invalid path").Category(errors.CategoryValidation).Build()
 }
-
-isSep := func(r rune) bool { return r == '/' || r == '\\' }
-if slices.Contains(strings.FieldsFunc(urlPath, isSep), "..") {
-    return errors.Newf("path traversal attempt").Category(errors.CategoryValidation).Build()
-}
 ```
+
+`IsLocal` rejects absolute paths and upward escapes (`../x`), accepts
+`"a/../x"` (it stays inside the base), and on Windows only also rejects
+reserved names such as `COM1`/`NUL`.
 
 ## Design Patterns
 
@@ -96,10 +97,16 @@ if slices.Contains(strings.FieldsFunc(urlPath, isSep), "..") {
 - Avoid circular dependencies and side effects in `init()`
 - Settings must hot-reload: read the current settings at the point of use, do
   not capture them once at startup. `conf.GetSettings()` and
-  `conf.CurrentOrFallback(fallback)` are lock-free atomic loads, so reading them
-  per call is cheap even on hot paths; do not cache them or wrap them in a lock.
-- Batch operations log a failing item and continue with the rest, then report
-  the aggregate, instead of aborting on the first error
+  `conf.CurrentOrFallback(fallback)` are lock-free atomic loads, cheap even on
+  hot paths, so never wrap them in a lock or keep the result across
+  operations. Load once per operation (`s := conf.CurrentOrFallback(...)`) and
+  read related fields from that one snapshot, so a reload in between cannot mix
+  two versions. Treat the snapshot as read-only; `GetSettings()` can return nil
+  before settings are loaded, which `CurrentOrFallback` handles.
+- Batches of independent items (per-file imports, per-species lookups) log a
+  failing item and continue, then report the aggregate. All-or-nothing work
+  (a database transaction, a migration, a config write, a backup restore)
+  aborts and rolls back on the first error instead.
 
 ## Security
 
@@ -112,80 +119,24 @@ if slices.Contains(strings.FieldsFunc(urlPath, isSep), "..") {
 
 ## Testing
 
-Full patterns and shared helpers are in `TESTING.md`. The rules that matter
-most:
+`TESTING.md` is the full reference for Go tests: testify usage, table-driven
+tests, `testing/synctest`, goroutine-leak checks, mocks (mockery and `.Maybe()`),
+cleanup and parallelism. Read it before writing or changing a test. The rules
+most often missed:
 
-- testify `assert`/`require` for all assertions (`testifylint` enforces idioms,
-  for example `assert.Equal` rather than `assert.True(a == b)`)
-- Wait on channels with `testutil.WaitForChannel` (`internal/testutil`), which
-  also provides test containers under `internal/testutil/containers`
-- Table-driven tests with `t.Run()`; `t.Helper()` in every helper (`thelper`)
-- `testing/synctest` instead of `time.Sleep()` for timing and concurrency
-  tests. The API is `synctest.Test(t, func(t *testing.T) { ... })` plus
-  `synctest.Wait()`; there is no `synctest.Run` in Go 1.27.
-- `t.TempDir()` for scratch space; `t.ArtifactDir()` (Go 1.26) for outputs worth
-  keeping with `-artifacts`. Do not use `os.MkdirTemp()` in tests.
-- `t.Cleanup()` instead of `defer` for restoring global state
-- `t.Parallel()` only for truly independent tests. Never parallelize tests that
-  mutate global state (for example `conftest.SetTestSettings()`) or share
-  mutable data; clone shared maps per subtest with `maps.Clone`.
-- Test-only helpers go in `*_test.go` files. Helpers shared across packages go
-  in a dedicated test-support package (for example `internal/conf/conftest`,
-  `internal/api/v2/apitest`) that production code never imports.
-- Benchmarks: `b.ReportAllocs()` and `b.Loop()`
-
-### Goroutine leak detection
-
-Prefer a package-wide check in `TestMain`, with only narrowly scoped ignores for
-known process-lifetime goroutines (see `internal/imports/zz_goleak_test.go`):
-
-```go
-func TestMain(m *testing.M) {
-    goleak.VerifyTestMain(m,
-        goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
-    )
-}
-```
-
-For a per-test check, follow `verifyNoLeaks` in
-`internal/api/v2/leakcheck_test.go`: call it at the START of the test (not with
-`defer`). It snapshots existing goroutines with `goleak.IgnoreCurrent()` and runs
-`goleak.VerifyNone` from `t.Cleanup`. Register it before the service's own
-`t.Cleanup(svc.Stop)` so it runs after the stop (cleanups run last in, first out).
-A `defer goleak.VerifyNone(t)` runs before any `t.Cleanup`, so it reports
-services that are about to be stopped. Never combine a per-test leak check with
-`t.Parallel()`.
-
-Do not add blanket ignores such as `runtime.gopark` (it would hide parked
-leaks) or `testing.(*T).Run` (goleak already filters test-runner stacks).
-
-Always stop services you start, use local instances rather than global
-singletons, and allow generous (500ms+) timeouts for async assertions so CI
-does not flake.
-
-### Mocks
-
-Never hand-write new mocks; generate them with mockery. `.mockery.yaml` lists
-the mocked packages (currently `internal/datastore`,
-`internal/datastore/v2/repository`, `internal/notification`, `internal/events`),
-each with a generated `mocks/` directory; never edit those files by hand. To mock
-a new interface, add it to `.mockery.yaml`, then regenerate:
-
-```bash
-go generate ./internal/datastore      # runs mockery over the whole .mockery.yaml
-```
-
-```go
-mockDS := mocks.NewMockInterface(t)
-mockDS.EXPECT().Save(mock.Anything, mock.Anything).Return(nil).Once()
-```
-
-Use `.Maybe()` only for incidental calls that may or may not happen. When the
-call IS the behaviour under test, including one made from a goroutine, keep the
-expectation strict and wait for it (signal a channel from `.Run(...)` and wait
-with `testutil.WaitForChannel`, or `assert.Eventually`), then stop the goroutine
-before the test returns. A `.Maybe()` there lets the test pass when the behaviour
-is gone. Full guide: `internal/datastore/mocks/README.md`.
+- testify `assert`/`require` for all assertions (`testifylint` enforces idioms)
+- `testing/synctest` (`synctest.Test`) instead of `time.Sleep()` for timing and
+  concurrency; there is no `synctest.Run` in Go 1.27
+- `t.TempDir()` for scratch space, `t.ArtifactDir()` for outputs worth keeping,
+  never `os.MkdirTemp()`
+- Never `t.Parallel()` a test that mutates global state (for example
+  `conftest.SetTestSettings()`), shares mutable data, or runs a per-test
+  goroutine-leak check
+- Generated mocks only (`.mockery.yaml` plus `go generate ./internal/datastore`);
+  `.Maybe()` only for incidental calls, never for the behaviour under test
+- Test-only helpers go in `*_test.go` files; helpers shared across packages go in
+  a test-support package (`internal/conf/conftest`, `internal/api/v2/apitest`,
+  `internal/testutil`) that production code never imports
 
 ## Linting
 

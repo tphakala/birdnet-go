@@ -90,9 +90,11 @@ over the code:
   `errors.Newf()` message. See "Troubleshooting" in `README.md`.
 - **Performance**: when telemetry is disabled, `Build()` skips component
   detection and publishing entirely; when enabled, reporting is asynchronous
-  through the event bus. The builder itself still allocates (2 allocations and about
-  100 ns for a bare error, 4 allocations and a few hundred ns with two `Context`
-  calls, measured on a desktop CPU), so on per-sample or per-buffer hot
-  paths return a pre-declared sentinel and build the enhanced error once at the
-  component boundary. Measure with
-  `go test -run='^$' -bench=ErrorCreation -benchmem ./internal/errors/`.
+  through the event bus. Building still costs something: the `ErrorCreation`
+  benchmarks (which also create the wrapped error with `fmt.Errorf`) report
+  about 2 allocations and 100 ns for a plain error and 4 allocations and
+  200-300 ns with two `Context` calls on an x86-64 mini PC, of which the builder
+  itself accounts for 1 and 3 allocations. Expect several times more on a
+  Raspberry Pi. So on per-sample or per-buffer hot paths, return a pre-declared
+  sentinel and build the enhanced error once at the component boundary. Measure
+  with `go test -run='^$' -bench=ErrorCreation -benchmem -count=6 ./internal/errors/`.
