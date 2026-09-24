@@ -11,8 +11,10 @@ outpkg: mocks  # Package name for generated mocks
 packages:
   github.com/tphakala/birdnet-go/internal/datastore:
     config:
-      # All interfaces in this package should be mocked
-      all: true
+      # Mock every exported interface in this package. Do not add "all: true":
+      # mockery v2 ignores include-regex when all is set, and would then also
+      # mock unexported interfaces such as batchLocalizer.
+      include-regex: "^[A-Z]"
     interfaces:
       # Main datastore interface - this is the critical one
       Interface:
