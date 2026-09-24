@@ -32,8 +32,8 @@ What enforces this:
 
 - **Pre-commit hook**: runs `npm run i18n:sync:check` when any locale file is
   staged (it also fails on orphaned keys), and
-  `npm run generate:i18n-types:check` when `en.json`, the type generator or
-  `types.generated.ts` changes.
+  `npm run generate:i18n-types:check` when `en.json`, the type generator, its
+  ICU helper (`icuMessage.ts`) or `types.generated.ts` changes.
 - **CI**: checks the generated types, fails on missing keys and on newly added
   English fallbacks that were never translated (`--fail-on-untranslated`), and
   fails when code uses a key that `en.json` does not define. It also fails on

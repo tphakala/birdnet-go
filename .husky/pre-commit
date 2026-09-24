@@ -42,9 +42,20 @@ if [ -n "$GO_FILES" ]; then
     echo "✅ All Go files are properly formatted"
   fi
   
-  # Run golangci-lint with the same build tags as `task lint` and CI
+  # Run golangci-lint with the default build tags of `task lint`
   # (noembed,skipfrontend skip model and frontend embedding, which also makes
-  # the run faster).
+  # the run faster). CI additionally lints the integration, pebble_e2e and
+  # normcompare tags. The CGO settings mirror `task lint` unless the
+  # environment already sets them, so the TFLite cgo packages typecheck.
+  REPO_ROOT=$(git rev-parse --show-toplevel)
+  case "$(uname -s)_$(uname -m)" in
+    Darwin_arm64) LIB_DIR="/opt/homebrew/lib" ;;
+    Darwin_*) LIB_DIR="/usr/local/lib" ;;
+    *) LIB_DIR="/usr/lib" ;;
+  esac
+  export CGO_ENABLED=1
+  export CGO_CFLAGS="${CGO_CFLAGS:--I$REPO_ROOT/.cache/tensorflow -I$REPO_ROOT/.cache/openvino/include}"
+  export CGO_LDFLAGS="${CGO_LDFLAGS:--L$LIB_DIR -ltensorflowlite_c}"
   echo "   Linting Go files..."
   if ! golangci-lint run -v --build-tags=noembed,skipfrontend; then
     echo "❌ golangci-lint found issues in Go files"
@@ -95,7 +106,7 @@ fi
 # The frontend/ prefix is optional so the match still works under git diff.relative=true
 # (paths come out relative to the frontend/ cwd set above).
 I18N_TYPES_TRIGGER=$(git diff --cached --name-only --diff-filter=ACMR | \
-  grep -E '(frontend/)?static/messages/en\.json$|(frontend/)?src/lib/i18n/generateTypes\.ts$|(frontend/)?src/lib/i18n/types\.generated\.ts$' || true)
+  grep -E '(frontend/)?static/messages/en\.json$|(frontend/)?src/lib/i18n/generateTypes\.ts$|(frontend/)?src/lib/i18n/types\.generated\.ts$|(frontend/)?src/lib/i18n/icuMessage\.ts$' || true)
 
 if [ -n "$I18N_TYPES_TRIGGER" ]; then
   echo "🌍 Checking generated i18n types..."
