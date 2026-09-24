@@ -17,9 +17,12 @@ shared namespaces that prevent duplicate strings.
 4. Run `npm run generate:i18n-types` and commit the regenerated
    `src/lib/i18n/types.generated.ts`
 
-The pre-commit hook runs `npm run i18n:sync:check` and
-`npm run generate:i18n-types:check`, and CI enforces both. A commit with
-out-of-sync locales or stale generated types fails.
+When translation files are staged, the pre-commit hook runs
+`npm run i18n:sync:check` and `npm run generate:i18n-types:check`, so a commit
+with out-of-sync locales or stale generated types fails. CI runs
+`generate:i18n-types:check` and a translation completeness check, but not
+`i18n:sync:check`: orphaned keys only surface locally, so run
+`npm run i18n:validate:full` before pushing.
 
 ## Key Principles
 

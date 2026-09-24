@@ -376,9 +376,9 @@ BirdNET-Go **welcomes AI-assisted coding tools**. The main developer uses [Claud
 
 ### AGENTS.md Guidelines
 
-Project guidelines are in [AGENTS.md](https://agents.md) files (see [Getting Started](#getting-started)): one at the repository root for cross-cutting rules and one per module for area-specific rules. Claude Code, Codex, Cursor, Gemini, Copilot, and most other AI coding tools read them automatically, and they work just as well for manual development.
+Project guidelines are in [AGENTS.md](https://agents.md) files (see [Getting Started](#getting-started)): one at the repository root for cross-cutting rules and one per module for area-specific rules. Claude Code (2.1.277 and later; not yet on Bedrock, Vertex, or Foundry), Codex, Cursor, Antigravity, Copilot, and most other AI coding tools read them automatically, and they work just as well for manual development. Gemini CLI reads `GEMINI.md` by default, so point its context file setting at `AGENTS.md`.
 
-Please do not add `CLAUDE.md`, `CLAUDE.local.md`, or `GEMINI.md` files. Claude Code stops reading `AGENTS.md` when a `CLAUDE.md` or `CLAUDE.local.md` exists, so personal instructions belong in a gitignored `.claude/rules/*.local.md` file instead.
+Please do not add `CLAUDE.md`, `CLAUDE.local.md`, or `GEMINI.md` files. Claude Code stops reading `AGENTS.md` (nested files included) when a `CLAUDE.md` or `CLAUDE.local.md` exists at or above the repository root, so personal instructions belong in a gitignored `.claude/rules/*.local.md` file instead.
 
 ### Responsible AI Usage
 

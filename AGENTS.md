@@ -1,7 +1,7 @@
 # AI Agent Instructions for BirdNET-Go
 
 These instructions apply to every AI coding agent working on this repository
-(Claude Code, Codex, Cursor, Gemini/Antigravity, Windsurf, Copilot, and others)
+(Claude Code, Codex, Cursor, Antigravity, Gemini CLI, Windsurf, Copilot, and others)
 and to human contributors. They are the single source of project guidance.
 
 BirdNET-Go is a Go implementation of BirdNET for real-time bird sound
@@ -88,10 +88,19 @@ Otherwise read the SKILL.md file and execute the process manually.
 The minimum verification, always run and observed before claiming success:
 
 ```bash
-golangci-lint run -v          # Go: whole module, zero issues
-go test -race ./...           # Go tests
+task lint                     # Go: golangci-lint over the whole module, zero issues
+task test                     # Go tests with -race
 cd frontend && npm run check:all && npm test   # frontend
 ```
+
+`task lint` and `task test` add the `noembed,skipfrontend` build tags and the
+TensorFlow Lite CGO flags. Plain `golangci-lint run -v` and `go test -race ./...`
+only work once `frontend/dist` has been built, the models have been downloaded,
+and the TensorFlow Lite headers are installed (`task setup-dev`). Neither form
+covers other build tags or operating systems: when you touch tagged or
+OS-specific files, also lint with those tags (for example
+`golangci-lint run --build-tags=<tags>`) and build for the affected platform
+(`task linux_arm64`, `task windows_amd64`, `task darwin_arm64`).
 
 ## PR Creation Rules
 
@@ -100,8 +109,8 @@ When creating a pull request, you MUST:
 1. Verify the PR addresses exactly ONE feature, fix, or refactor
 2. Include a "Preflight Status" section in the description showing what the
    gate found and fixed
-3. Verify all linters pass (`golangci-lint run -v`, `npm run check:all`)
-4. Verify all tests pass (`go test -race ./...`, `npm test`)
+3. Verify all linters pass (`task lint`, `npm run check:all`)
+4. Verify all tests pass (`task test`, `npm test`)
 5. Confirm the diff contains ONLY changes relevant to the stated goal
 6. Confirm scope is complete (no TODO/FIXME left for core functionality)
 7. Confirm no secrets, credentials, or PII are in the diff
@@ -145,7 +154,7 @@ persistently flaky, raise it rather than patching around it.
 | `task dev_server`         | Backend development server with reload                                     |
 | `task frontend-build`     | Frontend production build                                                  |
 | `task test` / `task lint` | Go tests / Go lint                                                         |
-| `task frontend-quality`   | Frontend checks, tests, and build                                          |
+| `task frontend-quality`   | Frontend auto-fix (format, lint, ast-grep), then checks, tests, and build  |
 | `task clean`              | Remove build artifacts                                                     |
 | `task linux_amd64`        | Cross-platform build (also `linux_arm64`, `windows_amd64`, `darwin_arm64`) |
 
@@ -187,7 +196,13 @@ every PR. When addressing review comments:
   one per module for area-specific rules. Keep each file focused and current;
   delete rules that no longer match the code instead of letting them rot.
 - Do NOT add `CLAUDE.md`, `CLAUDE.local.md`, or `GEMINI.md` files. Claude Code
-  reads `AGENTS.md` natively, but stops reading it entirely (nested files
-  included) if a `CLAUDE.md` or `CLAUDE.local.md` exists at or above the root.
+  (2.1.277 and later) reads `AGENTS.md` natively, but stops reading it entirely
+  (nested files included) if a `CLAUDE.md` or `CLAUDE.local.md` exists at or
+  above the root.
+- Tool caveats: Claude Code's native `AGENTS.md` support is not yet available on
+  Bedrock, Vertex, or Foundry, and older versions ignore it; there, or with
+  Gemini CLI (which reads `GEMINI.md` by default until its context file setting
+  points at `AGENTS.md`), read this file and the module guide yourself, or
+  import it from a gitignored personal file.
 - For personal, machine-local instructions with Claude Code, use a gitignored
   file under `.claude/rules/` named `*.local.md`.

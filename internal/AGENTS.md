@@ -13,7 +13,7 @@ error handling.
 - Tests: testify only, always run with `-race`
 - No magic numbers or strings: use named constants
 - Document every exported symbol (`// TypeName does ...`)
-- **Zero linter tolerance**: `golangci-lint run -v` must report no issues
+- **Zero linter tolerance**: `task lint` must report no issues
 
 ## Modern Go Idioms
 
@@ -148,10 +148,14 @@ test does not fail when the call is legitimately skipped. Full guide:
 
 Config: `.golangci.yaml` (golangci-lint v2 format).
 
-- Always lint the **whole module** (`golangci-lint run -v`), never single files
-  or packages; partial runs miss cross-package issues. The run type-checks the
-  whole module, so it doubles as compilation validation for the default build
-  tags. Cross-platform and build-tag coverage is part of the preflight gate.
+- Always lint the **whole module** (`task lint`, or `golangci-lint run -v` once
+  the prerequisites in the root `AGENTS.md` are in place), never single files or
+  packages; partial runs miss cross-package issues. The run type-checks the
+  module, so it doubles as compilation validation, but only for the build tags
+  and OS it runs with. Nothing in the preflight gate covers other tags or
+  platforms: when you change tagged or OS-specific files, lint with those tags
+  and build for that platform yourself (root `AGENTS.md`, "Mandatory: Pre-Push
+  Quality Gate").
 - A `//nolint` directive needs a specific linter name and a justification
   comment.
 
@@ -179,8 +183,8 @@ configured but currently disabled. gocritic's `commentFormatting` and
 
 ## Pre-Commit Checklist
 
-- [ ] `golangci-lint run -v` on the whole module: zero issues
-- [ ] `go test -race ./...` (or the affected packages while iterating, then the
+- [ ] `task lint` on the whole module: zero issues
+- [ ] `task test` (or the affected packages while iterating, then the
       full run)
 - [ ] No `//nolint` without a justification
 - [ ] Every exported symbol documented; every error handled

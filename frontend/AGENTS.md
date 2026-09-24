@@ -58,17 +58,17 @@ frontend/
 
 ## Commands
 
-| npm (in `frontend/`) | Task (repo root)          | Purpose                           |
-| -------------------- | ------------------------- | --------------------------------- |
-| `npm install`        | `task frontend-install`   | Install dependencies              |
-| `npm run dev`        | `task frontend-dev`       | Dev server                        |
-| `npm run check:all`  | `task frontend-lint`      | Format, lint, typecheck, ast-grep |
-|                      | `task frontend-lint-fix`  | Auto-fix format, lint, ast-grep   |
-| `npm run typecheck`  | `task frontend-typecheck` | TypeScript checks                 |
-| `npm test`           | `task frontend-test`      | Unit and component tests          |
-| `npm run test:a11y`  |                           | Accessibility tests               |
-| `npm run build`      | `task frontend-build`     | Production build                  |
-|                      | `task frontend-quality`   | Checks, tests, and build          |
+| npm (in `frontend/`) | Task (repo root)          | Purpose                                     |
+| -------------------- | ------------------------- | ------------------------------------------- |
+| `npm install`        | `task frontend-install`   | Install dependencies                        |
+| `npm run dev`        | `task frontend-dev`       | Dev server                                  |
+| `npm run check:all`  | `task frontend-lint`      | Format, lint, CSS lint, typecheck, ast-grep |
+|                      | `task frontend-lint-fix`  | Auto-fix format, lint, ast-grep             |
+| `npm run typecheck`  | `task frontend-typecheck` | TypeScript checks                           |
+| `npm test`           | `task frontend-test`      | Unit and component tests                    |
+| `npm run test:a11y`  |                           | Accessibility tests                         |
+| `npm run build`      | `task frontend-build`     | Production build                            |
+|                      | `task frontend-quality`   | Auto-fix, then checks, tests, and build     |
 
 The Husky pre-commit hook runs lint-staged formatting, type checks, and the i18n
 sync checks. Do not bypass it.
@@ -156,8 +156,9 @@ Adding or changing keys (details in `static/messages/AGENTS.md`):
 4. `npm run generate:i18n-types` and commit the regenerated
    `src/lib/i18n/types.generated.ts`
 
-CI and the pre-commit hook fail if locales or generated types are out of sync
-(`npm run i18n:validate:full` runs the same checks locally). Keys use dot
+The pre-commit hook rejects out-of-sync locales and stale generated types; CI
+checks the generated types and key completeness. Run `npm run i18n:validate:full`
+locally for the complete set, including orphaned keys, which CI does not fail on. Keys use dot
 notation with camelCase segments, grouped by feature (`settings.audio.gainLabel`).
 
 ## API, CSRF, and Live Data
@@ -233,11 +234,16 @@ guessing:
 
 ## Static Analysis (ast-grep)
 
-`npm run check:all` includes `npm run ast:all`. The rule sets in `rules/`
-catch Svelte 4 patterns (`export let`, `$:`, slots, `on:`), XSS via `{@html}`,
-unsafe `localStorage` use, rune misuse, and convention breaks (console over
-logger, date formatting). Individual sets: `ast:migration`, `ast:best-practices`,
-`ast:security`. Guide: `doc/AST-GREP-SETUP.md`.
+`npm run check:all` includes `npm run ast:all`. The rule sets in `rules/` are
+meant to catch Svelte 4 patterns (`export let`, `$:`, slots, `on:`), XSS via
+`{@html}`, unsafe `localStorage` use, rune misuse, and convention breaks (console
+over logger, date formatting). Individual sets: `ast:migration`,
+`ast:best-practices`, `ast:svelte5`, `ast:security`. Guide:
+`doc/AST-GREP-SETUP.md`.
+
+A rule file that ast-grep cannot load as a rule set runs zero rules and still
+exits cleanly, so a green `ast:all` is not proof a rule works. When you add or
+change a rule, confirm it fires on a file that contains a guaranteed match.
 
 ## Testing
 
