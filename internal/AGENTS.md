@@ -96,7 +96,8 @@ while `IsLocal("")` is false.
   operations. Load once per operation (`s := conf.CurrentOrFallback(...)`) and
   read related fields from that one snapshot, so a reload in between cannot mix
   two versions. Treat the snapshot as read-only; `GetSettings()` can return nil
-  before settings are loaded, which `CurrentOrFallback` handles.
+  before settings are loaded; `CurrentOrFallback` then returns the fallback you
+  pass, so pass a non-nil one.
 - Batches of independent items (per-file imports, per-species lookups) log a
   failing item and continue, then report the aggregate. All-or-nothing work
   (a database transaction, a migration, a config write, a backup restore)

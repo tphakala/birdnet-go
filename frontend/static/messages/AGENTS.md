@@ -17,18 +17,24 @@ shared namespaces that prevent duplicate strings.
 4. Run `npm run generate:i18n-types` and commit the regenerated
    `src/lib/i18n/types.generated.ts`
 
+Changing the English text of an existing key is different: `i18n:sync` leaves
+the other locales alone and no check notices that their translations are now
+stale. Update that key's translation in every locale yourself.
+
 What enforces this:
 
 - **Pre-commit hook**: runs `npm run i18n:sync:check` when any locale file is
-  staged, and `npm run generate:i18n-types:check` when `en.json` or the type
-  generator changes.
+  staged, and `npm run generate:i18n-types:check` when `en.json`, the type
+  generator or `types.generated.ts` changes.
 - **CI**: checks the generated types, fails on missing keys and on newly added
   English fallbacks that were never translated (`--fail-on-untranslated`), and
-  fails when code uses a key that `en.json` does not define. It reports
-  orphaned keys but does not fail on them.
+  fails when code uses a key that `en.json` does not define. It also fails on
+  placeholder mismatches, empty values and invalid ICU syntax in any locale. It
+  reports orphaned keys but does not fail on them.
 
-Run `npm run i18n:validate:full` before pushing; it runs the same checks
-locally, including the orphaned-key check.
+Before pushing, run `npm run i18n:validate:ci` (the translation validator with
+CI's exact flags) and `npm run i18n:validate:full` (sync, types, usage and
+untranslated checks, including orphaned keys).
 
 ## Key Principles
 

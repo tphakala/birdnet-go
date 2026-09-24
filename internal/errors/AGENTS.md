@@ -88,13 +88,14 @@ over the code:
   `.Component()` is set explicitly.
 - **Generic Sentry titles**: add an `operation` context and use a descriptive
   `errors.Newf()` message. See "Troubleshooting" in `README.md`.
-- **Performance**: when telemetry is disabled, `Build()` skips component
-  detection and publishing entirely; when enabled, reporting is asynchronous
-  through the event bus. Building still costs something: the `ErrorCreation`
-  benchmarks (which also create the wrapped error with `fmt.Errorf`) report
-  about 2 allocations and 100 ns for a plain error and 4 allocations and
-  200-300 ns with two `Context` calls on an x86-64 mini PC, of which the builder
-  itself accounts for 1 and 3 allocations. Expect several times more on a
-  Raspberry Pi. So on per-sample or per-buffer hot paths, return a pre-declared
-  sentinel and build the enhanced error once at the component boundary. Measure
-  with `go test -run='^$' -bench=ErrorCreation -benchmem -count=6 ./internal/errors/`.
+- **Performance**: building an enhanced error is never free. With telemetry
+  disabled (the default) it costs on the order of 100 ns and a few allocations
+  on a desktop CPU, roughly three times that on a Raspberry Pi 5. With telemetry
+  enabled, an error built without `.Component()` also walks the call stack to
+  detect the component, which costs microseconds; another reason to always set
+  `.Component()`. So on per-sample or per-buffer hot paths, return a
+  pre-declared sentinel and build the enhanced error once at the component
+  boundary. Measure with
+  `go test -run='^$' -bench='ErrorCreation(NoTelemetry|WithContext)$' -benchmem -count=6 ./internal/errors/`
+  (the `WithTelemetry` benchmark measures a synchronous fallback path, not
+  production reporting).
