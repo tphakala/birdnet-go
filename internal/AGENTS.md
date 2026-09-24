@@ -52,20 +52,25 @@ Reuse the project's helpers instead of writing a new check, and pick the one for
 the job:
 
 - **Files** named by untrusted input: go through SecureFS (`internal/securefs`,
-  `c.SFS` in API handlers) and its relative-path methods (`StatRel`,
-  `ReadDirRel`, `ServeRelativeFile`, `ValidateRelativePath`). Its protection is
-  containment: it resolves inside an `os.Root`, so neither `..` nor a symlink
-  can escape. It does not reject odd-looking names, so do not treat it as a
-  string validator.
+  `c.SFS` in API handlers). Its file-access methods (`StatRel`, `ReadDirRel`,
+  `ServeRelativeFile`) give containment: they resolve inside an `os.Root`, so
+  neither `..` nor a symlink can escape. `ValidateRelativePath` is only a
+  lexical check (it cleans the path and rejects absolute and upward paths) and
+  does not stop a symlink, so pass its result to those methods and never join
+  it onto a directory for an `os.*` call. SecureFS does not reject odd-looking
+  names, so do not treat it as a string validator.
 - **Clip paths** from API requests: `apicore.NormalizeClipPathStrict`.
 - **Redirect targets** (which may carry a query string):
   `security.IsValidRedirect`.
 - **Other internal URL paths** (a bare path starting with `/`):
-  `security.IsSafePath`, the strictest string check in the codebase.
+  `security.IsSafePath`, which NFKC-normalizes the path and rejects `..`,
+  backslashes, NUL bytes and their multiply URL-encoded forms.
 
 For a new check, follow the ruleguard rule in `rules/net.go`: use
 `filepath.IsLocal` for file paths, and keep a `strings.Contains(p, "..")`
-substring check only for URL paths. The rule reports every such substring
+substring check only for URL paths and for file paths that may legitimately be
+absolute, which `IsLocal` rejects (see `validateExportPath` in
+`internal/conf/validate_audio.go`). The rule reports every such substring
 check, so each one needs a `//nolint:gocritic` comment giving the reason (see
 `internal/api/v2/apicore/clip_path.go`).
 
@@ -122,11 +127,10 @@ most often missed:
 - testify `assert`/`require` for all assertions (`testifylint` enforces idioms)
 - `testing/synctest` (`synctest.Test`) instead of `time.Sleep()` for timing and
   concurrency; there is no `synctest.Run` in Go 1.27
-- `t.TempDir()` for scratch space, `t.ArtifactDir()` for outputs worth keeping,
-  never `os.MkdirTemp()`
-- Never `t.Parallel()` a test that mutates global state (for example
-  `conftest.SetTestSettings()`), shares mutable data, or runs a per-test
-  goroutine-leak check
+- Isolation, temporary directories and `t.Parallel()` rules are in
+  `TESTING.md` ("Isolation and Parallelism"); the one most often broken: never
+  `t.Parallel()` a test that mutates global state such as
+  `conftest.SetTestSettings()`
 - Generated mocks only (`.mockery.yaml` plus `go generate ./internal/datastore`);
   `.Maybe()` only for incidental calls, never for the behaviour under test
 - Test-only helpers go in `*_test.go` files; helpers shared across packages go in
@@ -137,13 +141,13 @@ most often missed:
 
 Config: `.golangci.yaml` (golangci-lint v2 format).
 
-- Always lint the **whole module** (`task lint`; see the root `AGENTS.md` for running it
-  without Task), never single files or
-  packages; partial runs miss cross-package issues. The run type-checks the
-  module, so it doubles as compilation validation, but only for the build tags
-  and OS it runs with. No automated step in the preflight gate covers other
-  tags or platforms; its certification checklist asks you to handle them, as
-  described in the root `AGENTS.md` ("Mandatory: Pre-Push Quality Gate").
+- Always lint the **whole module** (`task lint`; see the root `AGENTS.md` for
+  running it without Task), never single files or packages; partial runs miss
+  cross-package issues. The run type-checks the module, so it doubles as
+  compilation validation, but only for the build tags and OS it runs with. No
+  automated step in the preflight gate covers other tags or platforms; its
+  certification checklist asks you to handle them, as described in the root
+  `AGENTS.md` ("Mandatory: Pre-Push Quality Gate").
 - A `//nolint` directive needs a specific linter name and a justification
   comment.
 - `rules/*.go` holds the project's custom
