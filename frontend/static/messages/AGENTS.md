@@ -29,7 +29,8 @@ with out-of-sync locales or stale generated types fails. CI runs
 - **Reuse before adding.** Many common strings already exist; use the
   `common.*` namespace for reusable UI text instead of duplicating it.
 - **Follow existing naming**: dot-separated, camelCase segments, grouped by
-  feature.
+  feature. A segment that mirrors a backend identifier (an event type, an
+  operator, a config key) keeps that identifier's spelling, even snake_case.
 - **Separate keys for separate meanings.** When one English word has different
   meanings in different places, give each its own key.
 - **Parameters** use `{name}` placeholders; keep them identical across locales.

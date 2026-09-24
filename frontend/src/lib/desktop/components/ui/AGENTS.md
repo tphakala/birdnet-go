@@ -22,7 +22,7 @@ import Card from '$lib/desktop/components/ui/Card.svelte';
 import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
 ```
 
-## Conventions for Components Here
+## Conventions for New Components
 
 - A TypeScript `Props` interface
 - A `className` prop merged with `cn()` from `$lib/utils/cn`, plus `...rest`

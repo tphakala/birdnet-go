@@ -33,7 +33,7 @@ message rather than assuming the file was written.
 ## Standard Viewports
 
 The desktop UI targets tablet and desktop only (see
-`src/lib/desktop/AGENTS.md`):
+`frontend/src/lib/desktop/AGENTS.md`):
 
 - Desktop: 1400x1800 (default)
 - Large desktop: 1920x1080

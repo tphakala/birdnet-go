@@ -26,8 +26,13 @@ noted. See `TESTING.md` at the repository root for shared test patterns.
 - **NEVER rely on Secure Context APIs without a fallback.** BirdNET-Go usually
   runs over plain HTTP on home networks, where `crypto.randomUUID()` and
   `navigator.clipboard` are undefined. Use `copyToClipboard()` from
-  `$lib/utils/clipboard` and `generateSessionId()` from `$lib/utils/session`
-  (or `Math.random().toString(36).slice(2, 10)` for non-security IDs).
+  `$lib/utils/clipboard`, and `generateId(prefix?)` from `$lib/utils/uuid` for
+  element and list IDs. `generateSessionId()` (`$lib/utils/session`) is a
+  concurrency token, not a secret; for security-sensitive randomness use
+  `crypto.getRandomValues()`, which works over plain HTTP.
+- **NEVER touch `localStorage` or `sessionStorage` directly.** Access can throw
+  (private windows, blocked storage); use `getStoredValue()` / `setStoredValue()`
+  from `$lib/utils/storage`, or wrap the call in `try`/`catch`.
 - **NEVER ship ambiguous UI states.** Disabled controls, errors, and loading
   states must always tell the user _why_. See UX Design Principles.
 - **NEVER log PII** (emails, passwords, tokens, personal data).
@@ -128,6 +133,7 @@ const items = data.items ?? [];
 const displayName = user.name || 'Anonymous';
 
 // Validate shape, not just presence, for data from the store or API
+// (isPlainObject comes from $lib/utils/security)
 const include = Array.isArray(base.include) ? base.include : [];
 const config = isPlainObject(base.config) ? base.config : {};
 ```
@@ -157,9 +163,14 @@ Adding or changing keys (details in `static/messages/AGENTS.md`):
    `src/lib/i18n/types.generated.ts`
 
 The pre-commit hook rejects out-of-sync locales and stale generated types; CI
-checks the generated types and key completeness. Run `npm run i18n:validate:full`
-locally for the complete set, including orphaned keys, which CI does not fail on. Keys use dot
-notation with camelCase segments, grouped by feature (`settings.audio.gainLabel`).
+checks the generated types and key completeness. Run
+`npm run i18n:validate:full` locally for the complete set, including orphaned
+keys, which CI does not fail on.
+
+Keys use dot notation with camelCase segments, grouped by feature
+(`settings.audio.soundCards.gainLabel`). A segment that mirrors a backend
+identifier (an event type, an operator, a config key) keeps that identifier's
+spelling, even if it is snake_case; do not "fix" those keys.
 
 ## API, CSRF, and Live Data
 
@@ -191,32 +202,54 @@ When a control is disabled, the user MUST be able to tell _why_ without
 guessing:
 
 - A **tooltip** (`title`) explaining the blocked condition. Tooltips are
-  invisible on touch devices, so for important controls (Save, Submit, Delete)
-  also show **inline helper text** or a **status badge**.
+  invisible on touch devices, so also show **inline helper text** or a **status
+  badge** whenever the reason persists, and always for important controls
+  (Save, Submit, Delete).
 - **`aria-describedby`** pointing at the explanation.
 - A **specific** reason: "Threshold must be between 0 and 1 before saving", not
   "Cannot save".
 - Prefer `aria-disabled="true"` plus a suppressed click handler over native
-  `disabled` when the user needs keyboard focus to reach the explanation.
+  `disabled`: a natively disabled button leaves the tab order, so keyboard and
+  screen reader users never reach its explanation. This is the pattern the
+  shipped components use (for example
+  `src/lib/desktop/features/settings/components/OptimizeReviewDialog.svelte`):
 
 ```svelte
+<script lang="ts">
+  const SAVE_HELP_ID = 'mysettings-save-help'; // unique per component
+</script>
+
 <button
   type="button"
-  disabled={!canSave}
+  onclick={e => {
+    if (!canSave) {
+      e.preventDefault();
+      return;
+    }
+    save();
+  }}
+  aria-disabled={!canSave ? 'true' : undefined}
+  aria-describedby={!canSave ? SAVE_HELP_ID : undefined}
   title={!canSave ? saveBlockedReason : undefined}
-  aria-describedby={!canSave ? 'save-help' : undefined}
+  class="... aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
 >
   {t('common.save')}
 </button>
 {#if !canSave}
-  <p id="save-help" class="text-sm text-base-content/70">{saveBlockedReason}</p>
+  <p id={SAVE_HELP_ID} class="text-sm text-[var(--color-base-content)]/70">
+    {saveBlockedReason}
+  </p>
 {/if}
 ```
+
+Theme colours are written as CSS variables in arbitrary values
+(`text-[var(--color-base-content)]`), not bare theme class names.
 
 ### General Rules
 
 - Every state (loading, saving, validating, error, success) has a visible,
-  labelled indicator; a bare spinner is not enough.
+  labelled indicator; a bare spinner is not enough. Fetching, saving and
+  processing are distinct states with distinct labels.
 - Validation errors appear next to the offending field with the specific reason.
 - Destructive actions confirm with context: what will be deleted and what else
   is affected.
@@ -227,8 +260,9 @@ guessing:
 ## Accessibility
 
 - Every input has a `<label for>`; helper text is linked with `aria-describedby`
-- Icon-only buttons have an `aria-label`
-- Live regions: `role="status" aria-live="polite"` for progress,
+- Icon-only buttons have an `aria-label`; when a control also has visible text,
+  its accessible name must contain that text (WCAG 2.5.3)
+- Live regions: `role="status"` for progress (it implies `aria-live="polite"`),
   `role="alert"` for errors
 - Run `npm run test:a11y` for changes to interactive components
 
@@ -247,13 +281,30 @@ change a rule, confirm it fires on a file that contains a guaranteed match.
 
 ## Testing
 
-- Common mocks (`$lib/utils/logger`, `$lib/stores/toast`, `$lib/i18n`,
-  `$lib/utils/settingsApi.js`, MapLibre, browser APIs) live in
-  `src/test/setup.ts`, loaded for every test by the Vitest config. Check it
-  before adding a `vi.mock()`; do not duplicate those mocks per file, override
-  per test with `vi.mocked(...)` instead.
-- Reset between tests with `vi.clearAllMocks()` and reset any store you mutate.
+- `src/test/setup.ts` is loaded for every test by the Vitest config and mocks,
+  among others: `$lib/utils/logger`, `$lib/utils/transitions`,
+  `$lib/stores/toast`, `$lib/i18n`, `$lib/utils/settingsApi.js`,
+  `$lib/utils/security`, `$app/navigation`, `$app/stores`, MapLibre,
+  `window.location`, and global `fetch`. Read it before adding a `vi.mock()`;
+  do not duplicate those mocks per file.
+- The global `fetch` mock serves the translation files, answers every `/api/`
+  URL with `200 {data: []}`, and rejects anything else. A test of an error path must override it, or it will
+  silently exercise the success path.
+- To test a module that `setup.ts` mocks, call `vi.unmock('<module id>')` at the
+  top of the test file (see `src/lib/utils/logger.test.ts`).
+- Override a shared mock for one test with a one-shot value
+  (`vi.mocked(fn).mockReturnValueOnce(...)`, `mockResolvedValueOnce(...)`). A
+  persistent `mockReturnValue` survives `vi.clearAllMocks()`, which only clears
+  call history, and leaks into later tests; use `vi.resetAllMocks()` in
+  `beforeEach` if you need persistent overrides. Reset any store you mutate.
+- Render components with `renderTyped()` from `src/test/render-helpers.ts`
+  instead of casting to `any`. Name tests with `it` (ESLint enforces it).
+- Files named `*.integration.test.ts`, `*.browser.test.ts` or
+  `*.reverse-proxy.test.ts` are excluded from `npm test`; do not use those
+  suffixes for unit tests.
 - Tests that deliberately pass malformed data may use `any`, but only with a
   scoped `// eslint-disable-next-line @typescript-eslint/no-explicit-any` and a
-  comment saying why. Prefer `unknown` or a `DeepPartial<T>` test type.
+  comment saying why. Prefer `unknown`, or define a local
+  `type DeepPartial<T> = { [K in keyof T]?: DeepPartial<T[K]> }` for partial
+  fixtures.
 - Put component tests next to the component (`Component.test.ts`).

@@ -20,6 +20,9 @@ The form state mirrors the backend config JSON (`SettingsFormData` in
 - Change-detection paths must use the same structure:
 
 ```typescript
+import { settingsStore } from '$lib/stores/settings';
+import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+
 let store = $derived($settingsStore);
 let privacyFilterHasChanges = $derived(
   hasSettingsChanged(
@@ -36,13 +39,26 @@ let privacyFilterHasChanges = $derived(
 are replaced, not merged, so spread the existing nested object yourself:
 
 ```typescript
+import { privacyFilterSettings, settingsActions } from '$lib/stores/settings';
+
+// A $derived view of the store with every field defaulted, so the spread
+// below always produces a complete object (FilterSettingsPage.svelte does this)
+let privacy = $derived({
+  enabled: $privacyFilterSettings?.enabled ?? false,
+  confidence: $privacyFilterSettings?.confidence ?? 0.05,
+  // ... every other field of the nested object
+});
+
 function updatePrivacyConfidence(confidence: number) {
   settingsActions.updateSection('realtime', {
-    ...$realtimeSettings,
-    privacyFilter: { ...settings.privacy, confidence },
+    privacyFilter: { ...privacy, confidence },
   });
 }
 ```
+
+The other `realtime` fields are kept by the top-level merge; only the nested
+`privacyFilter` object needs the spread. Spreading the raw store value instead
+can produce an incomplete object when the section has not loaded yet.
 
 `section` is typed as `keyof SettingsFormData`, so a wrong section name is a
 type error; do not cast around it.
