@@ -732,7 +732,7 @@ timedatectl() { echo "America/Chicago"; }
 got=$(BNG_TZ_ETC_TIMEZONE="${tzdir}/etc_stale" BNG_TZ_LOCALTIME="${tzdir}/none" resolve_host_timezone "")
 assert_eq "timedatectl beats stale /etc/timezone" "America/Chicago" "$got"
 
-# 2. Debian 13 / Forgejo #877 guard: no /etc/timezone, timedatectl still resolves.
+# 2. Debian 13 guard: no /etc/timezone, timedatectl still resolves.
 timedatectl() { echo "Europe/Helsinki"; }
 got=$(BNG_TZ_ETC_TIMEZONE="${tzdir}/absent" BNG_TZ_LOCALTIME="${tzdir}/none" resolve_host_timezone "")
 assert_eq "no /etc/timezone: timedatectl resolves (Debian 13)" "Europe/Helsinki" "$got"

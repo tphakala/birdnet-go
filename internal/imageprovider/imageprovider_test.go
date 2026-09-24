@@ -1125,8 +1125,6 @@ func TestMain(m *testing.M) {
 	conftest.NewTestSettings().Apply()
 
 	goleak.VerifyTestMain(m,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
 		// NOTE: startCacheRefresh.func1 is deliberately NOT ignored. Close() stops it, so
 		// ignoring it hid every test that constructed a cache and never closed it.
 		// Ignore HTTP/2 client connection goroutines from the shared imageHTTPClient

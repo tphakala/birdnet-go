@@ -109,6 +109,14 @@
       "closeModal": "Sulje modaali-ikkuna",
       "dismissAlert": "Hylkää ilmoitus",
       "closeNotification": "Sulje ilmoitus",
+      "toastRegion": {
+        "topLeft": "Ilmoitukset, ylhäällä vasemmalla",
+        "topCenter": "Ilmoitukset, ylhäällä keskellä",
+        "topRight": "Ilmoitukset, ylhäällä oikealla",
+        "bottomLeft": "Ilmoitukset, alhaalla vasemmalla",
+        "bottomCenter": "Ilmoitukset, alhaalla keskellä",
+        "bottomRight": "Ilmoitukset, alhaalla oikealla"
+      },
       "toggleDropdown": "Vaihda pudotusvalikon tila",
       "sortAscending": "Lajittele nousevasti",
       "selectLanguage": "Valitse kieli",
@@ -130,7 +138,6 @@
       "selectToday": "Valitse tänään",
       "dateSelected": "Päivämäärä valittu: {date}",
       "calendarNavigation": "Käytä nuolinäppäimiä kalenterissa liikkumiseen, Enter valitsee, Esc sulkee",
-      "downloadCsv": "Lataa lajilista CSV-tiedostona",
       "visitEbirdLink": "Avaa eBird.org uuteen välilehteen",
       "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen",
       "resizeHandle": "Vedä muuttaaksesi kokoa",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Äänianalyysi ylikuormitettu",
-        "overloadMessage": "Järjestelmäsi hylkää {dropRate} % lähteen ''{sourceName}'' ääninäytteistä, koska se ei pysy analyysin tahdissa. Pienennä BirdNET-päällekkäisyysarvoa tunnistusasetuksista tai harkitse nopeamman suorittimen hankkimista."
+        "overloadMessage": "Järjestelmäsi hylkää {dropRate} % lähteen '{sourceName}' ääninäytteistä, koska se ei pysy analyysin tahdissa. Pienennä BirdNET-päällekkäisyysarvoa tunnistusasetuksista tai harkitse nopeamman suorittimen hankkimista."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime ei ole käytettävissä",

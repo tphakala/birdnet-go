@@ -257,13 +257,13 @@ Theme colours are written as CSS variables in arbitrary values
 - Icon-only buttons have an `aria-label`; when a control also has visible text,
   its accessible name must contain that text (WCAG 2.5.3)
 - Live regions: `role="status"` for progress (it implies `aria-live="polite"`),
-  `role="alert"` for errors. Render a `role="status"` container
-  unconditionally and change its text; one inserted by `{#if}` together with its
-  text is often not announced. Most existing components, and `LoadingSpinner`
-  (whose root is a `role="status"` element), are mounted with `{#if}`; do not
-  copy that for an announcement that matters. Keep an always-rendered sr-only
-  `role="status"` region and change its text instead, as
-  `src/lib/desktop/views/DetectionDetail.svelte` does.
+  `role="alert"` for errors (never add `aria-live` to it). A region inserted by
+  `{#if}` together with its text is often not announced, and most existing
+  components mount `LoadingSpinner` (a `role="status"` element) that way. For an
+  announcement that matters, keep an always-rendered sr-only `role="status"`
+  region and change only its text, as
+  `src/lib/desktop/features/settings/components/editor/EditorSpeciesInput.svelte`
+  does, and pass `aria-hidden="true"` to any `LoadingSpinner` beside it.
 - Run `npm run test:a11y` for changes to interactive components
 
 ## Static Analysis (ast-grep)
@@ -289,7 +289,8 @@ change a rule, confirm it fires on a file that contains a guaranteed match.
   do not duplicate those mocks per file.
 - Those module mocks are partial factories: reading an export they do not
   define throws `[vitest] No "<name>" export is defined on the "<module>" mock`.
-  The `$lib/utils/security` mock, for example, has no `isPlainObject`. If code
+  (The `$lib/utils/security` mock is the exception: it passes the real exports
+  through via `importOriginal`.) If code
   under test needs a real export from a mocked module, add it to the mock in
   `setup.ts`, or in the test file call `vi.unmock('<module>')` at the top (see
   `src/lib/utils/logger.test.ts`) or declare a per-file

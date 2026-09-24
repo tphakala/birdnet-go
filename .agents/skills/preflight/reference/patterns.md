@@ -680,7 +680,7 @@ func (s *SQLiteStore) Open() error {
 3. Embeds a struct with lifecycle methods that cancel/replace context fields
 
 **Review action:** When code reads or writes a `context.Context` field on a struct:
-1. `grep -rn 'fieldName\s*=' pkg/` to find ALL assignments
+1. `grep -rn 'fieldName\s*=' <package-dir>/` (the directory of the package that declares the struct: usually under `internal/`, sometimes `cmd/` or the repository root) to find ALL assignments
 2. Check if any embedded struct method modifies the same field
 3. Check if any goroutine captures the field (will it survive lifecycle transitions?)
 
@@ -721,7 +721,7 @@ When a gate agent suggests a fix that touches shared state (contexts, mutexes, a
 
 **Verification steps after any fix touching shared state:**
 1. Identify the shared state the fix touches (context, mutex, channel, atomic, map, global)
-2. `grep -rn 'stateName' pkg/` to find ALL readers and writers
+2. `grep -rn 'stateName' <package-dir>/` (the directory of the package that owns the state) to find ALL readers and writers
 3. For each writer: does it conflict with the fix? (cancel, replace, close, reset)
 4. For each reader: does it assume a state the fix changes?
 5. If the state is on an embedded struct: check the embedded struct's methods too
@@ -1586,10 +1586,12 @@ This project uses native Tailwind v4.1 only. Any daisyUI class is a code smell.
 <button class="btn btn-primary">Submit</button>
 <div class="card card-body">Content</div>
 
-<!-- GOOD: Native Tailwind v4.1 -->
-<button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Submit</button>
-<div class="p-6 bg-white rounded-xl shadow-md">Content</div>
+<!-- GOOD: Native Tailwind v4.1 with theme CSS variables (follows light/dark theme) -->
+<button class="px-4 py-2 bg-[var(--color-primary)] text-[var(--color-primary-content)] rounded-lg hover:bg-[var(--color-primary)]/85 transition-colors">Submit</button>
+<div class="p-6 bg-[var(--color-base-100)] text-[var(--color-base-content)] rounded-xl shadow-md">Content</div>
 ```
+
+Prefer the shared primitives (`Button.svelte`, `Card.svelte` in `frontend/src/lib/desktop/components/ui/`) over hand-rolled classes. Fixed palette colours such as `bg-blue-600` or `bg-white` ignore the theme and are a finding too.
 
 **Search pattern:**
 ```bash
@@ -1785,16 +1787,26 @@ grep -rn 'title="[^"$]*[A-Za-z]\|aria-label="[^"$]*[A-Za-z]' --include="*.svelte
 
 Translation files live at `frontend/static/messages/`. `en.json` is the source of truth. All 15 non-English files must mirror its key structure exactly with properly translated values. The `for lang in ...` loops below list those 15 locales; keep them in sync with `LOCALES` in `frontend/src/lib/i18n/config.ts` when a locale is added.
 
+The snippets below write their intermediate key lists to `$I18N_TMP`, a private scratch directory, so parallel agents never clobber each other's files. Create it once per review, before running any of the checks (Check 3 reuses the key lists from Check 1), and remove it when done. Agent shells do not keep variables between tool calls, so run the setup, every check you need and the cleanup in ONE shell invocation; otherwise `$I18N_TMP` is empty in the later calls and Check 3 cannot find Check 1's files. Each snippet starts with a guard that stops it when `$I18N_TMP` is unset:
+
+```bash
+I18N_TMP=$(mktemp -d)
+# ... run the checks ...
+rm -rf "$I18N_TMP"
+```
+
 ## Flattening JSON to Dot-Notation
 
 Use `jq` to extract all scalar key paths and values from a translation file:
 
 ```bash
+: "${I18N_TMP:?create it first: I18N_TMP=\$(mktemp -d)}"
+
 # Flatten to key=value pairs (one per line)
 jq -r 'paths(scalars) as $p | "\($p | join("."))=\(getpath($p))"' en.json
 
 # Extract just the key paths (for set comparison)
-jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > /tmp/en_keys.txt
+jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > "$I18N_TMP/en_keys.txt"
 ```
 
 ## Check 1: Missing Keys (Gaps)
@@ -1802,14 +1814,15 @@ jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > /tmp/en_keys.txt
 Keys present in `en.json` but absent from a locale file. Every gap means the UI falls back to the key name or shows nothing.
 
 ```bash
+: "${I18N_TMP:?create it first: I18N_TMP=\$(mktemp -d)}"
 cd frontend/static/messages
 
 # Generate sorted key lists
-jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > /tmp/en_keys.txt
+jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > "$I18N_TMP/en_keys.txt"
 
 for lang in cs da de es fi fr hu it lv nb nl pl pt sk sv; do
-  jq -r '[paths(scalars)] | .[] | join(".")' "${lang}.json" | sort > "/tmp/${lang}_keys.txt"
-  missing=$(comm -23 /tmp/en_keys.txt "/tmp/${lang}_keys.txt")
+  jq -r '[paths(scalars)] | .[] | join(".")' "${lang}.json" | sort > "$I18N_TMP/${lang}_keys.txt"
+  missing=$(comm -23 "$I18N_TMP/en_keys.txt" "$I18N_TMP/${lang}_keys.txt")
   if [ -n "$missing" ]; then
     echo "=== ${lang}.json: MISSING KEYS ==="
     echo "$missing"
@@ -1832,15 +1845,16 @@ Every missing key must be flagged. There are no acceptable gaps.
 Values in non-English files identical to the English value. English placeholders are the most common i18n defect: a developer adds keys to all files but copies the English text instead of translating.
 
 ```bash
+: "${I18N_TMP:?create it first: I18N_TMP=\$(mktemp -d)}"
 cd frontend/static/messages
 
 for lang in cs da de es fi fr hu it lv nb nl pl pt sk sv; do
   echo "=== ${lang}.json: ENGLISH PLACEHOLDERS ==="
   # Compare values at matching key paths
-  jq -r 'paths(scalars) as $p | "\($p | join("."))=\(getpath($p))"' en.json | sort > /tmp/en_kv.txt
-  jq -r 'paths(scalars) as $p | "\($p | join("."))=\(getpath($p))"' "${lang}.json" | sort > "/tmp/${lang}_kv.txt"
+  jq -r 'paths(scalars) as $p | "\($p | join("."))=\(getpath($p))"' en.json | sort > "$I18N_TMP/en_kv.txt"
+  jq -r 'paths(scalars) as $p | "\($p | join("."))=\(getpath($p))"' "${lang}.json" | sort > "$I18N_TMP/${lang}_kv.txt"
   # Find identical lines (same key, same value)
-  comm -12 /tmp/en_kv.txt "/tmp/${lang}_kv.txt" | grep -v '^\s*$'
+  comm -12 "$I18N_TMP/en_kv.txt" "$I18N_TMP/${lang}_kv.txt" | grep -v '^\s*$'
 done
 ```
 
@@ -1874,10 +1888,11 @@ The rule is simple: if a human reading the locale file would see English text, i
 Keys present in a non-English file but absent from `en.json`. These are leftovers from deleted features or key renames.
 
 ```bash
+: "${I18N_TMP:?create it first: I18N_TMP=\$(mktemp -d)}"
 cd frontend/static/messages
 
 for lang in cs da de es fi fr hu it lv nb nl pl pt sk sv; do
-  orphaned=$(comm -13 /tmp/en_keys.txt "/tmp/${lang}_keys.txt")
+  orphaned=$(comm -13 "$I18N_TMP/en_keys.txt" "$I18N_TMP/${lang}_keys.txt")
   if [ -n "$orphaned" ]; then
     echo "=== ${lang}.json: ORPHANED KEYS ==="
     echo "$orphaned"
@@ -1892,17 +1907,18 @@ Orphaned keys are lower severity than gaps or placeholders, but should still be 
 A key path that is an object (has children) in one file but a scalar (leaf value) in another. This breaks the i18n library at runtime.
 
 ```bash
+: "${I18N_TMP:?create it first: I18N_TMP=\$(mktemp -d)}"
 cd frontend/static/messages
 
 # Get object paths from en.json
-jq -r '[paths | select(length > 0)] | map(join(".")) | .[]' en.json | sort -u > /tmp/en_all_paths.txt
-jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > /tmp/en_scalar_paths.txt
-comm -23 /tmp/en_all_paths.txt /tmp/en_scalar_paths.txt | sort > /tmp/en_object_paths.txt
+jq -r '[paths | select(length > 0)] | map(join(".")) | .[]' en.json | sort -u > "$I18N_TMP/en_all_paths.txt"
+jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > "$I18N_TMP/en_scalar_paths.txt"
+comm -23 "$I18N_TMP/en_all_paths.txt" "$I18N_TMP/en_scalar_paths.txt" | sort > "$I18N_TMP/en_object_paths.txt"
 
 for lang in cs da de es fi fr hu it lv nb nl pl pt sk sv; do
-  jq -r '[paths(scalars)] | .[] | join(".")' "${lang}.json" | sort > "/tmp/${lang}_scalar.txt"
+  jq -r '[paths(scalars)] | .[] | join(".")' "${lang}.json" | sort > "$I18N_TMP/${lang}_scalar.txt"
   # Flag: path is an object in en.json but a scalar in this file (or vice versa)
-  mismatches=$(comm -12 /tmp/en_object_paths.txt "/tmp/${lang}_scalar.txt")
+  mismatches=$(comm -12 "$I18N_TMP/en_object_paths.txt" "$I18N_TMP/${lang}_scalar.txt")
   if [ -n "$mismatches" ]; then
     echo "=== ${lang}.json: STRUCTURAL MISMATCH (object in en.json, scalar here) ==="
     echo "$mismatches"

@@ -33,10 +33,9 @@ func TestMain(m *testing.M) {
 	time.Sleep(testCleanupGracePeriod)
 
 	if testResult == 0 {
+		// goleak already filters the test runner's own goroutines, so only
+		// non-stoppable third-party workers are listed here.
 		opts := []goleak.Option{
-			// Test-framework goroutines (not leaks).
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("testing.(*T).Parallel"),
 			// Process-lifetime third-party worker that cannot be stopped: the
 			// go-cache janitor (started by the core's DetectionCache).
 			goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),

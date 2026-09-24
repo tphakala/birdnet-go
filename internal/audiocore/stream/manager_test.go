@@ -1,13 +1,14 @@
 package stream
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // unreachableRTSP points at a closed local port so the supervisor fails to
@@ -64,12 +65,19 @@ func TestManager_StreamHealth_unknownErrors(t *testing.T) {
 }
 
 func TestManager_lifecycle_tracksHealthAndShutsDownCleanly(t *testing.T) {
-	// Snapshot the goroutines that exist before the test (deferred args evaluate
-	// now, at the defer statement), so the check flags only NEW goroutines such
-	// as a leaked supervisor or reader, rather than filtering by top-of-stack
-	// function, which can hide a parked leaked goroutine.
-	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
-	m := NewManager(t.Context(), func(audiocore.AudioFrame) {}, nil, nil, nil, nil)
+	// Snapshot the goroutines that exist before the test, so the check flags
+	// only NEW goroutines such as a leaked supervisor or reader, rather than
+	// filtering by top-of-stack function, which can hide a parked leaked
+	// goroutine. The check runs in t.Cleanup, after t.Context() is cancelled,
+	// so the manager is built on a context that the end of the test does not
+	// cancel: only Shutdown can stop its goroutines, and the check proves that
+	// it does.
+	testutil.VerifyNoLeaks(t)
+	m := NewManager(context.WithoutCancel(t.Context()), func(audiocore.AudioFrame) {}, nil, nil, nil, nil)
+	// Stops the manager if a require below fails before the explicit Shutdown.
+	// Registered after VerifyNoLeaks, so it runs before the leak check; on the
+	// normal path Shutdown has already run and this call is a no-op.
+	t.Cleanup(func() { _ = m.Shutdown() })
 
 	require.NoError(t, m.StartStream(rtspSpec("s1")))
 	require.NoError(t, m.StartStream(rtspSpec("s2")))

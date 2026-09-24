@@ -109,6 +109,14 @@
       "closeModal": "Ablak bezárása",
       "dismissAlert": "Értesítés elutasítása",
       "closeNotification": "Értesítés bezárása",
+      "toastRegion": {
+        "topLeft": "Értesítések, bal felül",
+        "topCenter": "Értesítések, középen felül",
+        "topRight": "Értesítések, jobb felül",
+        "bottomLeft": "Értesítések, bal alul",
+        "bottomCenter": "Értesítések, középen alul",
+        "bottomRight": "Értesítések, jobb alul"
+      },
       "toggleDropdown": "Legördülő menü kapcsolása",
       "sortAscending": "Növekvő rendezés",
       "selectLanguage": "Nyelv kiválasztása",
@@ -130,7 +138,6 @@
       "selectToday": "Ma kiválasztása",
       "dateSelected": "Kiválasztott dátum: {date}",
       "calendarNavigation": "A naptárban a nyílbillentyűkkel navigálhat, Enter a kiválasztáshoz, Escape a bezáráshoz",
-      "downloadCsv": "Fajlista letöltése CSV formátumban",
       "visitEbirdLink": "eBird.org megnyitása új lapon",
       "learnEbirdTaxonomyLink": "eBird taxonómia megnyitása új lapon",
       "resizeHandle": "Húzza az átméretezéshez",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Hang elemzés túlterhelve",
-        "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a ''{sourceName}'' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
+        "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a '{sourceName}' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
       },
       "ort": {
         "unavailableTitle": "Az ONNX Runtime nem elérhető",

@@ -109,6 +109,14 @@
       "closeModal": "Lukk dialogboks",
       "dismissAlert": "Avvis varsel",
       "closeNotification": "Lukk varsel",
+      "toastRegion": {
+        "topLeft": "Varsler, øverst til venstre",
+        "topCenter": "Varsler, øverst i midten",
+        "topRight": "Varsler, øverst til høyre",
+        "bottomLeft": "Varsler, nederst til venstre",
+        "bottomCenter": "Varsler, nederst i midten",
+        "bottomRight": "Varsler, nederst til høyre"
+      },
       "toggleDropdown": "Veksle nedtrekksliste",
       "sortAscending": "Sorter stigende",
       "selectLanguage": "Velg språk",
@@ -130,7 +138,6 @@
       "selectToday": "Velg i dag",
       "dateSelected": "Dato valgt: {date}",
       "calendarNavigation": "Bruk piltaster for å navigere i kalender, Enter for å velge, Escape for å lukke",
-      "downloadCsv": "Last ned artsliste som CSV",
       "visitEbirdLink": "Åpne eBird.org i ny fane",
       "learnEbirdTaxonomyLink": "Åpne eBird-taksonomi i ny fane",
       "resizeHandle": "Dra for å endre størrelse",

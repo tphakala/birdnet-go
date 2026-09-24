@@ -14,7 +14,7 @@ import (
 // operation=silence_timeout context stamped by handleSilenceTimeout, not by a
 // substring of the (dynamic) error message. The old substring check
 // (strings.Contains(msg, "silence timeout")) never matched because the message
-// is "stream stopped producing data for N seconds" (Forgejo #1641).
+// is "stream stopped producing data for N seconds".
 func TestIsSilenceTimeoutError(t *testing.T) {
 	t.Parallel()
 

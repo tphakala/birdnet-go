@@ -30,11 +30,16 @@ const CRITICAL_FALLBACKS: Record<string, string> = {
 
 // Initialize locale from localStorage, browser preferences, or use default
 function getInitialLocale(): Locale {
-  if (typeof localStorage !== 'undefined') {
-    const stored = localStorage.getItem('birdnet-locale');
-    if (stored && isValidLocale(stored)) {
-      return stored;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('birdnet-locale');
+      if (stored && isValidLocale(stored)) {
+        return stored;
+      }
     }
+  } catch {
+    // Storage access can throw (for example a SecurityError when site data
+    // is blocked); fall through to browser detection.
   }
 
   // If no stored preference, use browser locale detection
@@ -50,8 +55,9 @@ let previousMessages = $state<Record<string, string>>({});
 // Track if initial translation load has completed (for first load only)
 let initialLoadComplete = $state(false);
 
-// Build version for cache invalidation. Changes on every build via Vite define.
-// Falls back to 'dev' so dev/test mode always fetches fresh translations.
+// Cache version for invalidation: a hash of the message files, injected via
+// Vite define (dev server, build and tests alike), so it changes whenever a
+// translation changes. Falls back to 'dev' if the define is missing.
 const I18N_CACHE_VERSION: string =
   typeof __I18N_CACHE_VERSION__ !== 'undefined' ? __I18N_CACHE_VERSION__ : 'dev';
 
@@ -98,12 +104,12 @@ export function setLocale(locale: Locale): void {
   loadMessages(locale);
 
   // Persist locale to localStorage
-  if (typeof localStorage !== 'undefined') {
-    try {
+  try {
+    if (typeof localStorage !== 'undefined') {
       localStorage.setItem('birdnet-locale', locale);
-    } catch (error) {
-      logger.warn('Failed to save locale to localStorage:', error);
     }
+  } catch (error) {
+    logger.warn('Failed to save locale to localStorage:', error);
   }
 }
 
@@ -321,7 +327,12 @@ if (typeof window !== 'undefined') {
   loading = true;
 
   // Try to load messages synchronously from cache if available
-  const cachedMessages = localStorage.getItem(cacheKey(locale));
+  let cachedMessages: string | null = null;
+  try {
+    cachedMessages = localStorage.getItem(cacheKey(locale));
+  } catch {
+    // Storage blocked or unavailable; continue with the async load
+  }
   if (cachedMessages) {
     try {
       messages = JSON.parse(cachedMessages);

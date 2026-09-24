@@ -8,8 +8,10 @@ Automated screenshot capture using Playwright for testing and documentation.
 
 ### Prerequisites
 
+`playwright` is already a devDependency, so `npm install` in `frontend/` provides
+it. Only the browser needs installing:
+
 ```bash
-npm install playwright
 npx playwright install chromium
 ```
 

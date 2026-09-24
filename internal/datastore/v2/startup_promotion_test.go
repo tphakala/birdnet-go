@@ -327,7 +327,7 @@ func TestMoveSQLiteDBFiles_PreservesSidecars(t *testing.T) {
 
 // TestMoveSQLiteDBFiles_RemovesStaleDestinationSidecar proves that when the source has no
 // sidecars (the normal post-checkpoint path), a stale sidecar left at the destination is
-// removed so it is not wrongly paired with the moved database (Forgejo #1580).
+// removed so it is not wrongly paired with the moved database.
 func TestMoveSQLiteDBFiles_RemovesStaleDestinationSidecar(t *testing.T) {
 	dir := t.TempDir()
 	from := filepath.Join(dir, "src.db")
@@ -346,7 +346,7 @@ func TestMoveSQLiteDBFiles_RemovesStaleDestinationSidecar(t *testing.T) {
 
 // TestMoveSQLiteDBFiles_FailsClosedAndRevertsOnSidecarFailure proves that a sidecar rename
 // failure is reported (not swallowed as success) and that the already-renamed main file is
-// rolled back, so the caller never sees a half-moved database (Forgejo #1580).
+// rolled back, so the caller never sees a half-moved database.
 func TestMoveSQLiteDBFiles_FailsClosedAndRevertsOnSidecarFailure(t *testing.T) {
 	dir := t.TempDir()
 	from := filepath.Join(dir, "src.db")
@@ -370,7 +370,7 @@ func TestMoveSQLiteDBFiles_FailsClosedAndRevertsOnSidecarFailure(t *testing.T) {
 
 // TestMoveSQLiteDBFiles_FailsClosedOnUnreadableSidecar proves that a non-not-exist stat
 // error on a sidecar is treated as fail-closed (the sidecar may hide live WAL data), not as
-// "absent": the move returns an error and reverts (Forgejo #1580). A self-referential symlink
+// "absent": the move returns an error and reverts. A self-referential symlink
 // makes os.Stat fail with ELOOP, which is independent of privileges (unlike a chmod, which
 // root bypasses).
 func TestMoveSQLiteDBFiles_FailsClosedOnUnreadableSidecar(t *testing.T) {
@@ -394,7 +394,7 @@ func TestMoveSQLiteDBFiles_FailsClosedOnUnreadableSidecar(t *testing.T) {
 
 // TestMoveSQLiteDBFiles_FailsClosedWhenStaleSidecarRemovalFails proves that when the source
 // has no sidecars but the stale destination sidecar cannot be removed, the move fails closed
-// and reverts rather than silently leaving a mispaired sidecar (Forgejo #1580).
+// and reverts rather than silently leaving a mispaired sidecar.
 func TestMoveSQLiteDBFiles_FailsClosedWhenStaleSidecarRemovalFails(t *testing.T) {
 	dir := t.TempDir()
 	from := filepath.Join(dir, "src.db")

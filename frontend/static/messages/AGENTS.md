@@ -32,15 +32,20 @@ What enforces this:
 
 - **Pre-commit hook**: runs `npm run i18n:sync:check` when any locale file is
   staged (it also fails on orphaned keys), and
-  `npm run generate:i18n-types:check` when `en.json`, the type generator or
-  `types.generated.ts` changes.
+  `npm run generate:i18n-types:check` when `en.json`, the type generator, its
+  ICU helper (`icuMessage.ts`) or `types.generated.ts` changes.
 - **CI**: checks the generated types, fails on missing keys and on newly added
   English fallbacks that were never translated (`--fail-on-untranslated`), and
   fails when code uses a key that `en.json` does not define. It also fails on
   parameter (`{name}`) mismatches, empty values and invalid ICU syntax in every
-  translated locale, with gaps: it skips ICU checks for values without `{` and
-  for keys ending in `Placeholder`, and does not see parameters inside HTML
-  tags (see `src/lib/i18n/validateTranslations.ts`). `en.json` itself is not
+  translated locale. Values are read the way `t()` reads them at runtime: HTML
+  tags and apostrophes are plain text (so write `'{name}'`, never ICU's
+  `''{name}''`, which renders both apostrophes), parameters inside tags are
+  compared too, and Go template field references (`{{.Name}}`) count as plain
+  words. ICU arguments `t()` cannot render (`select`, `selectordinal`,
+  `number`, `date`, `time`) fail validation; use `{name}` and `plural` only.
+  Tag structure (unclosed or mismatched tags) is not checked (see
+  `src/lib/i18n/icuMessage.ts`). `en.json` itself is not
   checked, so review the English text yourself (ICU syntax and empty values).
   CI reports orphaned keys but does not fail on them.
 

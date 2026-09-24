@@ -109,6 +109,14 @@
       "closeModal": "Zavrieť modálne okno",
       "dismissAlert": "Zrušiť upozornenie",
       "closeNotification": "Zavrieť oznámenie",
+      "toastRegion": {
+        "topLeft": "Upozornenia, vľavo hore",
+        "topCenter": "Upozornenia, v strede hore",
+        "topRight": "Upozornenia, vpravo hore",
+        "bottomLeft": "Upozornenia, vľavo dole",
+        "bottomCenter": "Upozornenia, v strede dole",
+        "bottomRight": "Upozornenia, vpravo dole"
+      },
       "toggleDropdown": "Prepnúť rozbaľovaciu ponuku",
       "sortAscending": "Zoradiť vzostupne",
       "selectLanguage": "Vybrať jazyk",
@@ -130,7 +138,6 @@
       "selectToday": "Vybrať dnešok",
       "dateSelected": "Vybraný dátum: {date}",
       "calendarNavigation": "Použite šípky na navigáciu v kalendári, Enter na výber, Escape na zavretie",
-      "downloadCsv": "Stiahnuť zoznam druhov ako CSV",
       "visitEbirdLink": "Otvoriť eBird.org v novej karte",
       "learnEbirdTaxonomyLink": "Otvoriť taxonómiu eBird v novej karte",
       "resizeHandle": "Potiahnutím zmeníte veľkosť",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Analýza zvuku preťažená",
-        "overloadMessage": "Váš systém zahadzuje {dropRate} % zvukových vzoriek zo zdroja ''{sourceName}'', pretože nestíha analýzu. Znížte hodnotu prekrytia BirdNET v nastaveniach detekcie alebo zvážte rýchlejší procesor."
+        "overloadMessage": "Váš systém zahadzuje {dropRate} % zvukových vzoriek zo zdroja '{sourceName}', pretože nestíha analýzu. Znížte hodnotu prekrytia BirdNET v nastaveniach detekcie alebo zvážte rýchlejší procesor."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime nie je k dispozícii",

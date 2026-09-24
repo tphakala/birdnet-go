@@ -19,7 +19,7 @@ BirdNET-Go is a real-time bird species identification system that uses deep lear
 - 🎧 **Multiple Audio Sources**: Support for USB microphones, sound cards, and RTSP streams
 - 🌍 **Location-based Filtering**: Species filtering based on your geographic location
 - 🔊 **Audio Clip Export**: Save interesting detections in multiple formats (WAV, FLAC, AAC, MP3, Opus)
-- 📱 **Mobile-Friendly**: Responsive design works great on phones and tablets
+- 📱 **Tablet and Desktop UI**: Responsive design for tablet and desktop screens, with touch support on tablets (phones are not a supported layout yet)
 - 🔌 **Integration Ready**: MQTT support for home automation and IoT projects
 
 ## Installation via Unraid Community Applications

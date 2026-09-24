@@ -104,6 +104,7 @@ type Logger interface {
 ```
 
 **Key features**:
+
 - Module scoping for hierarchical loggers (e.g., `main.datastore.sqlite`)
 - Structured fields via type-safe constructors
 - Context propagation for trace IDs and request correlation
@@ -151,6 +152,7 @@ func (cl *CentralLogger) Flush() error
 ```
 
 **Features**:
+
 - Routes logs to different outputs based on module
 - Console output: human-readable text (no timestamps - journald/Docker adds them)
 - File output: JSON format with RFC3339 timestamps for log aggregation
@@ -179,6 +181,7 @@ func (l *SlogLogger) ReopenLogFile() error  // For log rotation (SIGHUP)
 ```
 
 **Features**:
+
 - JSON output format by default
 - File output with log rotation support (via SIGHUP)
 - Module scoping with nested names
@@ -307,11 +310,13 @@ cp multiwriter.go pkg/logger/      # Multi-handler support
 ### Step 2: Update Import Paths
 
 Change all import paths from:
+
 ```go
 import "github.com/tphakala/hookrelay/pkg/logger"
 ```
 
 To your project's import path:
+
 ```go
 import "github.com/yourorg/yourproject/pkg/logger"
 ```
@@ -323,7 +328,7 @@ Add logging configuration to your `config.yaml`:
 ```yaml
 logging:
   default_level: "info"
-  timezone: "Local"  # "Local", "UTC", or IANA name like "Europe/Helsinki"
+  timezone: "Local" # "Local", "UTC", or IANA name like "Europe/Helsinki"
 
   # Console: text format, no timestamps (journald/Docker adds them)
   console:
@@ -354,7 +359,7 @@ logging:
       enabled: true
       file_path: "logs/auth.log"
       level: "info"
-      console_also: true  # Also log to console
+      console_also: true # Also log to console
 ```
 
 ### Step 4: Initialize in main.go
@@ -476,8 +481,8 @@ func (s *Storage) GetUser(ctx context.Context, id string) (*User, error) {
 
 ```yaml
 logging:
-  default_level: "info"  # Default for all modules: trace, debug, info, warn, error
-  timezone: "UTC"        # Timezone for timestamps
+  default_level: "info" # Default for all modules: trace, debug, info, warn, error
+  timezone: "UTC" # Timezone for timestamps
 ```
 
 #### Console Output
@@ -487,14 +492,16 @@ Timestamps are intentionally omitted following the Twelve-Factor App methodology
 the execution environment (journald, Docker) adds them automatically.
 
 ```yaml
+logging:
   console:
     enabled: true
-    level: "info"   # Can be different from default_level
+    level: "info" # Can be different from default_level
 ```
 
 **Output format**: `LEVEL  [module] message key=value`
 
 Example in journald:
+
 ```
 Dec 28 13:43:08 myapp[1234]: INFO  [main] Application started version=1.0.0
 ```
@@ -502,13 +509,15 @@ Dec 28 13:43:08 myapp[1234]: INFO  [main] Application started version=1.0.0
 #### File Output
 
 ```yaml
+logging:
   file_output:
     enabled: true
     path: "logs/app.log"
-    level: "debug"  # Log more verbose to file
+    level: "debug" # Log more verbose to file
 ```
 
 **Best practices**:
+
 - Use absolute paths or relative to working directory
 - Create `logs/` directory in `.gitignore`
 - Use lower level in file (debug) than console (info)
@@ -516,13 +525,15 @@ Dec 28 13:43:08 myapp[1234]: INFO  [main] Application started version=1.0.0
 #### Module-Specific Levels
 
 ```yaml
+logging:
   module_levels:
-    storage: "debug"    # Storage module logs at debug level
-    auth: "info"        # Auth module logs at info level
-    webhook: "trace"    # Webhook module logs everything
+    storage: "debug" # Storage module logs at debug level
+    auth: "info" # Auth module logs at info level
+    webhook: "trace" # Webhook module logs everything
 ```
 
 **Use cases**:
+
 - Debug specific components without flooding logs
 - Reduce noise from chatty modules
 - Compliance requirements (log all auth events)
@@ -530,15 +541,17 @@ Dec 28 13:43:08 myapp[1234]: INFO  [main] Application started version=1.0.0
 #### Module-Specific Outputs
 
 ```yaml
+logging:
   modules:
     auth:
       enabled: true
       file_path: "logs/auth.log"
       level: "info"
-      console_also: true  # Also output to console
+      console_also: true # Also output to console
 ```
 
 **Use cases**:
+
 - Security logs in separate file for auditing
 - High-volume modules (metrics, health checks)
 - Compliance requirements (separate auth/payment logs)
@@ -550,7 +563,7 @@ Dec 28 13:43:08 myapp[1234]: INFO  [main] Application started version=1.0.0
 ```yaml
 logging:
   default_level: "debug"
-  timezone: "Local"  # Use system timezone
+  timezone: "Local" # Use system timezone
 
   # Console: text format without timestamps (run interactively)
   console:
@@ -558,7 +571,7 @@ logging:
     level: "debug"
 
   file_output:
-    enabled: false  # No file logging in dev
+    enabled: false # No file logging in dev
 ```
 
 #### Production Configuration (systemd/Docker)
@@ -577,29 +590,29 @@ logging:
   file_output:
     enabled: true
     path: "/var/log/myapp/app.log"
-    level: "debug"  # More verbose in file
+    level: "debug" # More verbose in file
 
   module_levels:
-    auth: "info"    # Always log auth events
-    health: "warn"  # Reduce health check noise
+    auth: "info" # Always log auth events
+    health: "warn" # Reduce health check noise
 
   modules:
     auth:
       enabled: true
       file_path: "/var/log/myapp/auth.log"
       level: "info"
-      console_also: false  # Only to file
+      console_also: false # Only to file
 ```
 
 #### Testing Configuration
 
 ```yaml
 logging:
-  default_level: "error"  # Only errors in tests
+  default_level: "error" # Only errors in tests
   timezone: "UTC"
 
   console:
-    enabled: false  # Silent during tests
+    enabled: false # Silent during tests
 
   file_output:
     enabled: false
@@ -619,6 +632,7 @@ logger.Info("User logged in",
 ```
 
 **Output (JSON)**:
+
 ```json
 {
   "time": "2025-01-12T10:30:00Z",
@@ -676,6 +690,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 ```
 
 **Output**:
+
 ```json
 {"time":"...","level":"INFO","msg":"Processing request","trace_id":"abc-123"}
 {"time":"...","level":"ERROR","msg":"Request failed","trace_id":"abc-123","error":"..."}
@@ -792,6 +807,7 @@ go func() {
 ```
 
 **Logrotate configuration** (`/etc/logrotate.d/myapp`):
+
 ```
 /var/log/myapp/*.log {
     daily
@@ -815,7 +831,7 @@ centralLogger.SetModuleLevel("storage", logger.LogLevelDebug)
 // Useful for debugging production issues without restart
 ```
 
-*Note: This feature would need to be implemented in your fork if required.*
+_Note: This feature would need to be implemented in your fork if required._
 
 ### 3. Log Sampling (High-Volume Reduction)
 
@@ -909,10 +925,13 @@ func TestHandler_Process(t *testing.T) {
 
 ### Option 2: Mock Logger (Advanced)
 
-Generate mocks with `mockery`:
+Mocks are generated by mockery from `.mockery.yaml` (see `TESTING.md`, Mock
+Generation with mockery). `Logger` is not listed there today: add it under a
+`github.com/tphakala/birdnet-go/internal/logger` package entry, then regenerate
+every mock (this writes `internal/logger/mocks/mock_Logger.go`):
 
 ```bash
-mockery --name=Logger --dir=pkg/logger --output=mocks
+go generate ./internal/datastore   # runs mockery over the whole .mockery.yaml
 ```
 
 Use in tests:
@@ -930,8 +949,7 @@ func TestHandler_Process_Error(t *testing.T) {
 
     err := handler.Process(context.Background(), invalidData)
     require.Error(t, err)
-
-    mockLogger.AssertExpectations(t)
+    // NewMockLogger(t) asserts the expectations automatically at test cleanup
 }
 ```
 

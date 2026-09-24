@@ -20,6 +20,7 @@
   import NotificationToast from './NotificationToast.svelte';
   import type { ToastMessage, ToastPosition } from '$lib/stores/toast';
   import { safeGet } from '$lib/utils/security';
+  import { t } from '$lib/i18n';
 
   // Group toasts by position using Record with pre-initialized keys
   const toastsByPosition = $derived.by(() => {
@@ -51,12 +52,29 @@
     'bottom-right': 'bottom-4 right-4',
   };
 
+  // Translated accessible name for each position's notification region. Each
+  // entry calls t() with a literal key so the i18n usage checker sees every
+  // key, and t() runs at render time so the label follows a locale change.
+  const regionLabels: Record<ToastPosition, () => string> = {
+    'top-left': () => t('common.aria.toastRegion.topLeft'),
+    'top-center': () => t('common.aria.toastRegion.topCenter'),
+    'top-right': () => t('common.aria.toastRegion.topRight'),
+    'bottom-left': () => t('common.aria.toastRegion.bottomLeft'),
+    'bottom-center': () => t('common.aria.toastRegion.bottomCenter'),
+    'bottom-right': () => t('common.aria.toastRegion.bottomRight'),
+  };
+
+  function regionLabel(position: ToastPosition): string {
+    // eslint-disable-next-line security/detect-object-injection -- Safe: position is a ToastPosition key
+    return regionLabels[position]();
+  }
+
   function handleClose(id: string) {
     toastActions.remove(id);
   }
 </script>
 
-<!-- Render toast containers for each position that has toasts -->
+<!-- Render a toast container for every position, even when empty, so each live region exists before a toast is added to it -->
 {#each Object.entries(toastsByPosition) as [position, positionToasts] (position)}
   <!-- z-[2000] = Z_INDEX.TOAST: toasts must stay above all overlays, including the mobile sidebar drawer (z-[200]) -->
   <div
@@ -67,7 +85,7 @@
     )}"
     role="region"
     aria-live="polite"
-    aria-label="{position} notifications"
+    aria-label={regionLabel(position as ToastPosition)}
   >
     <div class="flex flex-col gap-2">
       {#each positionToasts as toast (toast.id)}

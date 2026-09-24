@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 	"go.uber.org/goleak"
 )
 
@@ -24,12 +25,8 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 	// Snapshot existing goroutines now (test start) and verify no leaks at the
 	// end. Captured here so a leftover transport-dial goroutine from a
 	// previously-run test (shuffle order) is ignored, not attributed to this
-	// test; see verifyNoLeaks for the full rationale.
-	verifyNoLeaks(t,
-		// Ignore goroutines from testing framework and other standard libraries
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
+	// test; see testutil.VerifyNoLeaks for the full rationale.
+	testutil.VerifyNoLeaks(t,
 		// Ignore the go-cache janitor which we can't control
 		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
 	)
@@ -132,14 +129,10 @@ func TestSendReconfigActionsRecoverOnClosedChannel(t *testing.T) {
 // TestGoroutineCleanupWithoutRoutes verifies that creating a controller without
 // routes doesn't start unnecessary goroutines
 func TestGoroutineCleanupWithoutRoutes(t *testing.T) {
-	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
-	// leftover transport-dial goroutine from a previously-run test under
+	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks)
+	// so a leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	verifyNoLeaks(t,
-		// Ignore goroutines from testing framework and other standard libraries
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
+	testutil.VerifyNoLeaks(t,
 		// Ignore the go-cache janitor which we can't control
 		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
 	)

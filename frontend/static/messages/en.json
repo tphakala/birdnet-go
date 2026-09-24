@@ -109,6 +109,14 @@
       "closeModal": "Close modal",
       "dismissAlert": "Dismiss alert",
       "closeNotification": "Close notification",
+      "toastRegion": {
+        "topLeft": "Notifications, top left",
+        "topCenter": "Notifications, top center",
+        "topRight": "Notifications, top right",
+        "bottomLeft": "Notifications, bottom left",
+        "bottomCenter": "Notifications, bottom center",
+        "bottomRight": "Notifications, bottom right"
+      },
       "toggleDropdown": "Toggle dropdown",
       "sortAscending": "Sort ascending",
       "selectLanguage": "Select language",
@@ -130,7 +138,6 @@
       "selectToday": "Select today",
       "dateSelected": "Date selected: {date}",
       "calendarNavigation": "Use arrow keys to navigate calendar, Enter to select, Escape to close",
-      "downloadCsv": "Download species list as CSV",
       "visitEbirdLink": "Open eBird.org in a new tab",
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in a new tab",
       "resizeHandle": "Drag to resize",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Audio Analysis Overloaded",
-        "overloadMessage": "Your system is dropping {dropRate}% of audio samples for source ''{sourceName}'' because it cannot keep up with analysis. Reduce the BirdNET overlap value in detection settings or consider upgrading to a faster CPU."
+        "overloadMessage": "Your system is dropping {dropRate}% of audio samples for source '{sourceName}' because it cannot keep up with analysis. Reduce the BirdNET overlap value in detection settings or consider upgrading to a faster CPU."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime Not Available",

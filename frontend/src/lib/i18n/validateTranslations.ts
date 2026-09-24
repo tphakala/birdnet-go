@@ -17,8 +17,8 @@
 
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { parse as parseICU } from '@formatjs/icu-messageformat-parser';
 import { LOCALE_CODES, DEFAULT_LOCALE } from './config.js';
+import { extractICUParameters, findICUSyntaxError } from './icuMessage.js';
 
 interface ValidationResult {
   locale: string;
@@ -423,21 +423,14 @@ class TranslationValidator {
   }
 
   private validateICUSyntax(key: string, value: string, result: ValidationResult): void {
-    // Skip ICU validation for placeholder keys that contain literal template syntax examples
-    // These keys (e.g., titlePlaceholder, messagePlaceholder) show users Go template syntax
-    // like {{.CommonName}} which is not ICU MessageFormat and should not be validated
-    if (key.endsWith('Placeholder')) return;
-
-    // Check if message contains ICU syntax
-    if (!value.includes('{')) return;
-
-    try {
-      parseICU(value);
-    } catch (error) {
-      result.invalidICU.push({
-        key,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    // Every value is parsed, including ones without `{` (such as HTML-only
+    // strings). The value is read the way the runtime reads it: HTML tags and
+    // apostrophes are literal text, and Go template field references like
+    // {{.CommonName}} (alert template placeholders) stand in as plain words
+    // (see icuMessage.ts).
+    const error = findICUSyntaxError(value);
+    if (error !== null) {
+      result.invalidICU.push({ key, error });
     }
   }
 
@@ -464,55 +457,8 @@ class TranslationValidator {
   }
 
   private extractParameters(text: string): string[] {
-    const params = new Set<string>();
-
-    // Use ICU parser to properly extract parameters from AST
-    // This avoids false positives from words inside literal text
-    try {
-      const ast = parseICU(text);
-      this.extractParamsFromAST(ast, params);
-    } catch {
-      // If parsing fails, fall back to simple regex for non-ICU messages
-      // This regex only matches simple {param} patterns without any commas
-      const simpleParamRegex = /\{(\w+)\}/g;
-      let match;
-      while ((match = simpleParamRegex.exec(text)) !== null) {
-        params.add(match[1]);
-      }
-    }
-
-    return Array.from(params).sort();
-  }
-
-  private extractParamsFromAST(elements: ReturnType<typeof parseICU>, params: Set<string>): void {
-    for (const element of elements) {
-      // Handle different AST node types based on type field
-      const node = element as unknown as Record<string, unknown>;
-
-      // Type 1 = argument (actual ICU parameter like {name})
-      if ('type' in node && node.type === 1 && 'value' in node && typeof node.value === 'string') {
-        params.add(node.value);
-      }
-
-      // Type 6 = plural/select node (like {count, plural, ...})
-      if ('type' in node && node.type === 6 && 'value' in node && typeof node.value === 'string') {
-        // Add the parameter name (e.g., "count" from {count, plural, ...})
-        params.add(node.value);
-      }
-
-      // Recursively process nested options in plural/select nodes
-      if ('options' in node && typeof node.options === 'object' && node.options !== null) {
-        const options = node.options as Record<string, unknown>;
-        for (const option of Object.values(options)) {
-          if (option && typeof option === 'object' && 'value' in option) {
-            const optionObj = option as Record<string, unknown>;
-            if (Array.isArray(optionObj.value)) {
-              this.extractParamsFromAST(optionObj.value as ReturnType<typeof parseICU>, params);
-            }
-          }
-        }
-      }
-    }
+    // Sorted so the mismatch report is order-independent.
+    return extractICUParameters(text).sort();
   }
 
   private groupKeysBySection(keys: string[]): Map<string, string[]> {

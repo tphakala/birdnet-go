@@ -69,8 +69,9 @@ the job:
 
 For a new check, follow the ruleguard rule in `rules/net.go`: use
 `filepath.IsLocal` for file paths, and keep a `strings.Contains(p, "..")`
-substring check only for URL paths and for file paths that may legitimately be
-absolute, which `IsLocal` rejects (see the `..` check in `validateExportPath`,
+substring check only for URL paths. For file paths that may legitimately be
+absolute, which `IsLocal` rejects, reject `..` path segments instead of the
+substring, so names like `clips..old` stay valid (see `hasParentDirSegment` in
 `internal/conf/validate_audio.go`). The rule reports every such substring
 check, so each one needs a `//nolint:gocritic` comment giving the reason (see
 `internal/api/v2/apicore/clip_path.go`).

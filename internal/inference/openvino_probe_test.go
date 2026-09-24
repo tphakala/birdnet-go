@@ -12,9 +12,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 
 	ov "github.com/tphakala/birdnet-go/internal/inference/openvino"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // ovProbeHelperEnv marks a test-binary re-invocation as the probe child
@@ -287,12 +287,12 @@ func TestOpenVINOHasDeviceDoesNotBlockOnInFlightProbe(t *testing.T) {
 	if !ov.Supported {
 		t.Skip("probe short-circuits without the openvino build tag")
 	}
-	calls := fakeOVProbeChild(t, "hang")
-	shortenOVProbeTimeout(t, 2*time.Second)
-
 	// If an assertion below fails before <-done, the probe goroutine (and its
 	// child) would outlive the test; make that a reported leak, not a silent one.
-	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	testutil.VerifyNoLeaks(t)
+
+	calls := fakeOVProbeChild(t, "hang")
+	shortenOVProbeTimeout(t, 2*time.Second)
 
 	done := make(chan struct{})
 	go func() {

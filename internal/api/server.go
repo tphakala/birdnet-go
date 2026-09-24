@@ -351,7 +351,7 @@ func (s *Server) initAuth() {
 
 // setupMiddleware configures the Echo middleware stack.
 func (s *Server) setupMiddleware() {
-	// HEAD→GET rewrite — runs before routing so HEAD requests match GET routes.
+	// HEAD→GET rewrite: runs before routing so HEAD requests match GET routes.
 	// Per RFC 9110 §9.3.2, HEAD must return the same status as GET.
 	// Go's net/http automatically suppresses the response body for HEAD.
 	s.echo.Pre(mw.NewHeadToGet())
@@ -407,7 +407,7 @@ func (s *Server) setupMiddleware() {
 					// sees mismatched Path/RawPath and may route inconsistently.
 					// hasPercentEncodedPrefix treats %XX hex digits
 					// case-insensitively so lowercase-hex-forwarding proxies
-					// also match. Fixes Forgejo #447.
+					// also match.
 					if req.URL.RawPath != "" {
 						encodedBP := (&url.URL{Path: bp}).EscapedPath()
 						if n := hasPercentEncodedPrefix(req.URL.RawPath, encodedBP); n >= 0 {
@@ -433,7 +433,7 @@ func (s *Server) setupMiddleware() {
 	// Recovery middleware - should be first
 	s.echo.Use(echomw.Recover())
 
-	// Base path context — makes the effective base path available to all handlers
+	// Base path context: makes the effective base path available to all handlers
 	// via c.Get("basePath"). Computed per-request from ingressPath() which checks
 	// proxy headers and config in priority order.
 	s.echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -446,7 +446,7 @@ func (s *Server) setupMiddleware() {
 	// Request logging using custom middleware package (uses centralized logger)
 	s.echo.Use(mw.NewRequestLogger())
 
-	// Security middleware configuration — start from defaults, override server-specific values
+	// Security middleware configuration: start from defaults, override server-specific values
 	securityConfig := mw.DefaultSecurityConfig()
 	securityConfig.AllowedOrigins = s.config.AllowedOrigins
 	securityConfig.AllowCredentials = true
@@ -783,7 +783,7 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 		s.apiController.Shutdown()
 	}
 
-	// Shutdown Echo server — since the listener is already closed and SSE
+	// Shutdown Echo server: since the listener is already closed and SSE
 	// clients are disconnected, this should complete quickly.
 	if err := s.echo.Shutdown(ctx); err != nil {
 		// Ignore "use of closed network connection" since we closed the listener above
@@ -930,7 +930,7 @@ func (s *Server) registerSPARoutes() {
 
 	authMiddleware := s.getAuthMiddleware()
 
-	// Public SPA shell routes — the SPA itself decides what to render
+	// Public SPA shell routes: the SPA itself decides what to render
 	// based on Security.PrivateMode and the authenticated/guest state
 	// returned by /api/v2/app/config.
 	publicRoutes := []string{

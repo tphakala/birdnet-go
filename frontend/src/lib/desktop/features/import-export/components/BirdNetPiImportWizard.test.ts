@@ -648,7 +648,7 @@ describe('BirdNetPiImportWizard', () => {
     expect(mockEsInstance?.close).toHaveBeenCalledOnce();
   });
 
-  // ---- SSE stall reconcile (server restart mid-import, Forgejo #1323) ----
+  // ---- SSE stall reconcile (server restart mid-import) ----
 
   it('stall with an empty job manager shows the interrupted state and closes the stream', async () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
