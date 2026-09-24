@@ -32,8 +32,6 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
 		// Ignore the go-cache janitor which we can't control
 		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-		// Ignore lumberjack logger goroutines
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
 	// Create Echo instance
@@ -144,8 +142,6 @@ func TestGoroutineCleanupWithoutRoutes(t *testing.T) {
 		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
 		// Ignore the go-cache janitor which we can't control
 		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-		// Ignore lumberjack logger goroutines
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
 	// Setup test environment (which uses NewWithOptions with initializeRoutes=false)

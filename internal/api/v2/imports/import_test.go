@@ -300,7 +300,6 @@ func TestStartBirdNETPiImport_ModeDBAudio_Returns202(t *testing.T) {
 	verifyNoLeaks(t,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
 	_, c := newImportHandler(t)
@@ -359,7 +358,6 @@ func TestStartBirdNETPiImport_ModeDBAudio_NoExportPath_Returns400(t *testing.T) 
 	verifyNoLeaks(t,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
 	_, c := newImportHandler(t)
@@ -454,7 +452,6 @@ func TestStartBirdNETPiImport_ModeDBAudio_CopiesClip(t *testing.T) {
 	verifyNoLeaks(t,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
 	const (
@@ -714,7 +711,6 @@ func TestStartBirdNETPiImport_GoodFakeSource_Returns202(t *testing.T) {
 	verifyNoLeaks(t,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
 	_, c := newImportHandler(t)
@@ -763,7 +759,6 @@ func TestStartBirdNETPiImport_ConflictWhileRunning_Returns409(t *testing.T) {
 	verifyNoLeaks(t,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
@@ -942,7 +937,6 @@ func TestCancelImport_RunningJob_Returns200Cancelling(t *testing.T) {
 	verifyNoLeaks(t,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
@@ -1163,7 +1157,6 @@ func TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd(t *testing.T) {
 	verifyNoLeaks(t,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
 	const rowCount = 3
@@ -1264,7 +1257,6 @@ func TestStreamImportProgress_LiveStreaming(t *testing.T) {
 	verifyNoLeaks(t,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
 	e, c := newImportHandler(t)
@@ -1400,7 +1392,6 @@ func TestStreamImportProgress_CancelEmitsCancelledEvent(t *testing.T) {
 	verifyNoLeaks(t,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
 	e, c := newImportHandler(t)
@@ -1515,7 +1506,6 @@ func TestStartBirdNETPiImport_PanicInEngine_RecoverAndPreserveStats(t *testing.T
 	verifyNoLeaks(t,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
 	e, c := newImportHandler(t)
@@ -1766,7 +1756,6 @@ func TestLaunchImport_RemovesStagingDirOnCompletion(t *testing.T) {
 	verifyNoLeaks(t,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 	)
 
 	base := t.TempDir()
