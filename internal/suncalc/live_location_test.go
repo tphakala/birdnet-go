@@ -12,13 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Sydney coordinates: a second location in a different timezone and hemisphere, so its sunrise
-// differs from the Helsinki test location on the same date.
-const (
-	sydneyLatitude  = -33.8688
-	sydneyLongitude = 151.2093
-)
-
 // New York coordinates: a third location, for tests that need two successive changes.
 const (
 	newYorkLatitude  = 40.7128
@@ -30,7 +23,6 @@ type testCoordinates struct {
 	mu        sync.Mutex
 	latitude  float64
 	longitude float64
-	calls     atomic.Int64
 }
 
 func newTestCoordinates(latitude, longitude float64) *testCoordinates {
@@ -44,7 +36,6 @@ func (c *testCoordinates) set(latitude, longitude float64) {
 }
 
 func (c *testCoordinates) source() (latitude, longitude float64) {
-	c.calls.Add(1)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.latitude, c.longitude
@@ -167,6 +158,39 @@ func TestNewSunCalcWithSource_IgnoresNonFiniteCoordinates(t *testing.T) {
 		assert.Same(t, before, sc.current(), "non-finite coordinates must keep the previous state")
 	}
 	assert.Equal(t, "Europe/Helsinki", sc.LocationName())
+
+	coords.set(sydneyLatitude, sydneyLongitude)
+	assert.Equal(t, "Australia/Sydney", sc.LocationName(),
+		"a valid location after non-finite ones must still be picked up")
+}
+
+// TestGetSunEventTimes_SingleSnapshotPerCall pins that one GetSunEventTimes call takes one
+// state snapshot and computes from it. The scripted source reports Sydney for the first
+// operation's reads (the read before the swap lock and the re-read under it) and Helsinki on
+// every later read, so a call that took a second snapshot would switch back and return
+// Helsinki times.
+func TestGetSunEventTimes_SingleSnapshotPerCall(t *testing.T) {
+	const firstOperationReads = 2 // pre-lock read plus the re-read under the swap lock
+	calls := 0
+	source := func() (float64, float64) {
+		calls++
+		if calls > 1 && calls <= 1+firstOperationReads {
+			return sydneyLatitude, sydneyLongitude
+		}
+		return testLatitude, testLongitude
+	}
+	sc := NewSunCalcWithSource(source)
+	require.Equal(t, 1, calls, "construction reads the source once")
+
+	date := midsummerDate()
+	got, err := sc.GetSunEventTimes(date)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1+firstOperationReads, calls, "one GetSunEventTimes call must take a single snapshot")
+	want, err := NewSunCalc(sydneyLatitude, sydneyLongitude).GetSunEventTimes(date)
+	require.NoError(t, err)
+	assert.True(t, want.Sunrise.Equal(got.Sunrise), "sunrise must come from the state the call read")
+	assert.True(t, want.CivilDusk.Equal(got.CivilDusk), "civil dusk must come from the state the call read")
 }
 
 func TestNewSunCalcWithSource_NonFiniteInitialCoordinates(t *testing.T) {
@@ -196,46 +220,94 @@ func TestNewSunCalc_DoesNotConsultSource(t *testing.T) {
 }
 
 // TestLiveLocationRaceUnderConcurrency flips the location while many goroutines read sun data
-// and another flips the metrics instance. Run with -race: every read must see one consistent
-// state and never race with a swap.
+// and another flips the metrics instance. Run with -race, it checks that reads never race with
+// a swap, that every result equals what a fixed-location calculator returns for one of the two
+// locations (a result mixing the two fails), and that readers actually saw both locations.
 func TestLiveLocationRaceUnderConcurrency(t *testing.T) {
+	const (
+		readers     = 8
+		duration    = 200 * time.Millisecond
+		maxDuration = 10 * time.Second
+		days        = 30
+	)
+	baseDate := midsummerDate()
+
+	// Precompute each location's results. This also resolves both timezones up front, so the
+	// first swap does not spend the whole window loading timezone data.
+	helsinki := NewSunCalc(testLatitude, testLongitude)
+	sydney := NewSunCalc(sydneyLatitude, sydneyLongitude)
+	var wantHelsinki, wantSydney [days]SunEventTimes
+	for i := range days {
+		d := baseDate.AddDate(0, 0, i)
+		var err error
+		wantHelsinki[i], err = helsinki.GetSunEventTimes(d)
+		require.NoError(t, err)
+		wantSydney[i], err = sydney.GetSunEventTimes(d)
+		require.NoError(t, err)
+	}
+	matches := func(got, want *SunEventTimes) bool {
+		return got.Sunrise.Equal(want.Sunrise) && got.Sunset.Equal(want.Sunset) &&
+			got.CivilDawn.Equal(want.CivilDawn) && got.CivilDusk.Equal(want.CivilDusk)
+	}
+
 	coords := newTestCoordinates(testLatitude, testLongitude)
 	sc := NewSunCalcWithSource(coords.source)
 	m := newTestMetrics(t)
 
-	const (
-		readers  = 8
-		duration = 200 * time.Millisecond
-	)
-	baseDate := midsummerDate()
 	start := make(chan struct{})
-	var wg sync.WaitGroup
-	var reads, failures atomic.Int64
+	stop := make(chan struct{}) // closed once every reader is done; ends the writers
+	var readersWG, writersWG sync.WaitGroup
+	var reads, failures, sawHelsinki, sawSydney atomic.Int64
+
+	// Readers run for at least duration and keep going (up to maxDuration) until both
+	// locations have been observed, so a slow or loaded machine cannot end the window before
+	// any swap was seen.
+	keepReading := func(deadline, hardDeadline time.Time) bool {
+		now := time.Now()
+		if now.Before(deadline) {
+			return true
+		}
+		return now.Before(hardDeadline) && (sawHelsinki.Load() == 0 || sawSydney.Load() == 0)
+	}
 
 	for r := range readers {
 		seed := r
-		wg.Go(func() {
+		readersWG.Go(func() {
 			<-start
 			deadline := time.Now().Add(duration)
+			hardDeadline := time.Now().Add(maxDuration)
 			i := seed
-			for time.Now().Before(deadline) {
-				d := baseDate.AddDate(0, 0, i%30)
+			for keepReading(deadline, hardDeadline) {
+				day := i % days
+				d := baseDate.AddDate(0, 0, day)
 				// require cannot stop the test from a spawned goroutine, so count
 				// failures here and assert on the total after the goroutines finish.
-				if times, err := sc.GetSunEventTimes(d); err != nil || times.Sunrise.IsZero() {
+				times, err := sc.GetSunEventTimes(d)
+				if err != nil || (!matches(&times, &wantHelsinki[day]) && !matches(&times, &wantSydney[day])) {
 					failures.Add(1)
 				}
 				_, _ = sc.GetCivilDawn(d)
-				_ = sc.LocationName()
+				switch sc.LocationName() {
+				case "Europe/Helsinki":
+					sawHelsinki.Add(1)
+				case "Australia/Sydney":
+					sawSydney.Add(1)
+				default:
+					failures.Add(1)
+				}
 				reads.Add(1)
 				i++
 			}
 		})
 	}
-	wg.Go(func() {
+	writersWG.Go(func() {
 		<-start
-		deadline := time.Now().Add(duration)
-		for i := 0; time.Now().Before(deadline); i++ {
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
 			if i%2 == 0 {
 				coords.set(sydneyLatitude, sydneyLongitude)
 			} else {
@@ -244,20 +316,29 @@ func TestLiveLocationRaceUnderConcurrency(t *testing.T) {
 			runtime.Gosched()
 		}
 	})
-	wg.Go(func() {
+	writersWG.Go(func() {
 		<-start
-		deadline := time.Now().Add(duration)
-		for i := 0; time.Now().Before(deadline); i++ {
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
 			if i%2 == 0 {
 				sc.SetMetrics(m)
 			} else {
 				sc.SetMetrics(nil)
 			}
+			runtime.Gosched()
 		}
 	})
 
 	close(start)
-	wg.Wait()
+	readersWG.Wait()
+	close(stop)
+	writersWG.Wait()
 	assert.Positive(t, reads.Load(), "readers must have run")
-	assert.Zero(t, failures.Load(), "every concurrent read must return valid sun event times")
+	assert.Zero(t, failures.Load(), "every concurrent read must match one location's sun event times")
+	assert.Positive(t, sawHelsinki.Load(), "readers must have seen the Helsinki state")
+	assert.Positive(t, sawSydney.Load(), "readers must have seen the Sydney state")
 }

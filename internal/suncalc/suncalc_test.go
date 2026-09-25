@@ -66,7 +66,7 @@ func TestLocationName(t *testing.T) {
 	assert.Equal(t, "Europe/Helsinki", name, "expected IANA timezone for Helsinki coordinates")
 
 	// Sydney coordinates
-	scSydney := NewSunCalc(-33.8688, 151.2093)
+	scSydney := NewSunCalc(sydneyLatitude, sydneyLongitude)
 	assert.Equal(t, "Australia/Sydney", scSydney.LocationName(), "expected IANA timezone for Sydney coordinates")
 }
 
@@ -79,10 +79,11 @@ func TestCacheConsistency(t *testing.T) {
 	require.NoError(t, err, "failed to get initial sun event times")
 
 	// Verify cache entry exists using the normalized local date key
-	dateKey := date.In(sc.current().location).Format(time.DateOnly)
-	sc.current().lock.RLock()
-	entry, exists := sc.current().cache[dateKey]
-	sc.current().lock.RUnlock()
+	st := sc.current()
+	dateKey := date.In(st.location).Format(time.DateOnly)
+	st.lock.RLock()
+	entry, exists := st.cache[dateKey]
+	st.lock.RUnlock()
 
 	assert.True(t, exists, "cache entry not found after calculation")
 
@@ -100,18 +101,19 @@ func TestCacheEviction(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	sc.current().lock.RLock()
-	assert.Len(t, sc.current().cache, maxCacheEntries, "cache should be at capacity")
-	sc.current().lock.RUnlock()
+	st := sc.current()
+	st.lock.RLock()
+	assert.Len(t, st.cache, maxCacheEntries, "cache should be at capacity")
+	st.lock.RUnlock()
 
 	// One more entry should trigger eviction (clear + re-add)
 	nextDate := baseDate.AddDate(0, 0, maxCacheEntries)
 	_, err := sc.GetSunEventTimes(nextDate)
 	require.NoError(t, err)
 
-	sc.current().lock.RLock()
-	assert.Len(t, sc.current().cache, 1, "cache should contain only the new entry after eviction")
-	sc.current().lock.RUnlock()
+	st.lock.RLock()
+	assert.Len(t, st.cache, 1, "cache should contain only the new entry after eviction")
+	st.lock.RUnlock()
 }
 
 func TestConcurrentAccess(t *testing.T) {
