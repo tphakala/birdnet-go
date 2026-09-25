@@ -358,3 +358,91 @@ func TestApplyDetectionTemplates_NonNewSpeciesUnchanged(t *testing.T) {
 	assert.Equal(t, "Original Title", title)
 	assert.Equal(t, "Original Message", message)
 }
+
+func setupTestNotificationService(t *testing.T) *notification.Service {
+	t.Helper()
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+	notification.Initialize(notification.DefaultServiceConfig())
+	svc := notification.GetService()
+	require.NotNil(t, svc)
+	t.Cleanup(svc.Stop)
+	return svc
+}
+
+func TestNotificationAdapter_DispatchTemplateBehavior(t *testing.T) {
+	tests := []struct {
+		name            string
+		dispatch        func(a *notificationAdapter, props map[string]any) error
+		expectedTitle   string
+		expectedMessage string
+	}{
+		{
+			name: "CreateAndBroadcast preserves custom template on new species",
+			dispatch: func(a *notificationAdapter, props map[string]any) error {
+				return a.CreateAndBroadcast(TargetPush, notification.TypeDetection, "Custom Title", "Custom Message", props)
+			},
+			expectedTitle:   "Custom Title",
+			expectedMessage: "Custom Message",
+		},
+		{
+			name: "CreateAndBroadcastTest preserves custom template on new species",
+			dispatch: func(a *notificationAdapter, props map[string]any) error {
+				return a.CreateAndBroadcastTest(TargetPush, notification.TypeDetection, "Custom Title", "Custom Message", props)
+			},
+			expectedTitle:   "Custom Title",
+			expectedMessage: "Custom Message",
+		},
+		{
+			name: "CreateAndBroadcastWithKeys applies global new species template",
+			dispatch: func(a *notificationAdapter, props map[string]any) error {
+				return a.CreateAndBroadcastWithKeys(
+					TargetPush, notification.TypeDetection, "Fallback Title", "Fallback Message",
+					"title.key", nil, "msg.key", nil, props,
+				)
+			},
+			expectedTitle:   "Global: Eurasian Blue Tit",
+			expectedMessage: "Global: Eurasian Blue Tit",
+		},
+		{
+			name: "CreateAndBroadcastTestWithKeys passes fallback through unchanged",
+			dispatch: func(a *notificationAdapter, props map[string]any) error {
+				return a.CreateAndBroadcastTestWithKeys(
+					TargetPush, notification.TypeDetection, "Fallback Title", "Fallback Message",
+					"title.key", nil, "msg.key", nil, props,
+				)
+			},
+			expectedTitle:   "Fallback Title",
+			expectedMessage: "Fallback Message",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := setupTestNotificationService(t)
+			ch, _ := svc.Subscribe()
+			defer svc.Unsubscribe(ch)
+
+			settings := conftest.GetTestSettings()
+			settings.Notification.Templates.NewSpecies.Title = "Global: {{.CommonName}}"
+			settings.Notification.Templates.NewSpecies.Message = "Global: {{.CommonName}}"
+			conftest.SetTestSettings(settings)
+			t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+			props := validDetectionProps()
+			props[PropertyIsNewSpecies] = true
+
+			adapter := &notificationAdapter{}
+			err := tt.dispatch(adapter, props)
+			require.NoError(t, err)
+
+			select {
+			case received := <-ch:
+				assert.Equal(t, tt.expectedTitle, received.Title)
+				assert.Equal(t, tt.expectedMessage, received.Message)
+			case <-time.After(time.Second):
+				t.Fatal("timed out waiting for notification")
+			}
+		})
+	}
+}
