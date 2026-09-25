@@ -2,7 +2,6 @@ package audio
 
 import (
 	"context"
-	stderrors "errors"
 	"fmt"
 	"maps"
 	"net"
@@ -14,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 type testStreamRequest struct {
@@ -93,7 +93,7 @@ func (c *Handler) TestStream(ctx echo.Context) error {
 		errorKey := "errors.streams.test.connectionFailed"
 		status := http.StatusBadGateway
 
-		if stderrors.Is(err, ffmpeg.ErrNoAudioStreamsFound) {
+		if errors.Is(err, ffmpeg.ErrNoAudioStreamsFound) {
 			message = "stream has no audio track"
 			errorKey = "errors.streams.test.noAudioTrack"
 			status = http.StatusUnprocessableEntity

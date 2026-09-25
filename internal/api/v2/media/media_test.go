@@ -4,7 +4,6 @@ package media
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"gorm.io/gorm"
 )
@@ -1113,7 +1113,7 @@ func TestTranslateAudioServeErrorClearsHeadersBeforeCommittedJSON(t *testing.T) 
 	ctx.Response().Header().Set(echo.HeaderContentDisposition, "inline; filename*=UTF-8''test.wav")
 	ctx.Response().Header().Set(headerAcceptRanges, acceptRangesBytes)
 
-	require.NoError(t, controller.translateAudioServeError(ctx, errors.New("forced serve failure"), "Failed to serve audio"))
+	require.NoError(t, controller.translateAudioServeError(ctx, errors.NewStd("forced serve failure"), "Failed to serve audio"))
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	assert.Contains(t, rec.Header().Get(echo.HeaderContentType), echo.MIMEApplicationJSON)
 	assert.Empty(t, rec.Header().Get(echo.HeaderContentDisposition))

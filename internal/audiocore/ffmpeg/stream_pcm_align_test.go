@@ -2,7 +2,6 @@ package ffmpeg
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"strconv"
 	"testing"
@@ -12,11 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // errScriptedFailure is the non-EOF read failure used to check that a pending
 // carry is discarded rather than emitted when the stream breaks.
-var errScriptedFailure = errors.New("scripted read failure")
+var errScriptedFailure = errors.NewStd("scripted read failure")
 
 // scriptedReader hands out a fixed byte stream in the read sizes given by
 // script, mimicking a pipe: stdout.Read returns whatever bytes happen to be

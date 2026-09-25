@@ -12,10 +12,12 @@ import "errors"                                            // do not
 ```
 
 It provides passthroughs for the standard functions: `errors.Is`, `errors.As`,
-`errors.Unwrap`, `errors.Join`, and `errors.NewStd` (a plain `stderrors.New`).
-Import the standard package only to break an import cycle or to use
-`errors.AsType`, which has no passthrough; alias it `stderrors` if the file also
-imports this package.
+`errors.AsType`, `errors.Unwrap`, `errors.Join`, `errors.ErrUnsupported`, and
+`errors.NewStd` (the standard `errors.New`). There are no exceptions: this
+package imports nothing else from the module, so it cannot cause an import
+cycle, and the `depguard` linter rejects the standard package everywhere except
+`errors.go` here. If you need a standard function that is missing, add a
+passthrough here rather than importing the standard package.
 
 ## Creating Errors
 

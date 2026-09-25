@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	stderrors "errors"
 	"io"
 	"net"
 	"os"
@@ -528,7 +527,7 @@ func IsTransientConnectionError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if stderrors.Is(err, io.EOF) || stderrors.Is(err, io.ErrUnexpectedEOF) {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return true
 	}
 	msg := strings.ToLower(err.Error())

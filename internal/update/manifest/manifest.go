@@ -20,11 +20,12 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // SchemaVersion is the current manifest schema version. Consumers MUST check
@@ -214,7 +215,7 @@ func (m *Manifest) Validate() error {
 		return fmt.Errorf("schema_version %d is not the supported version %d", m.SchemaVersion, SchemaVersion)
 	}
 	if len(m.Channels) == 0 {
-		return errors.New("at least one channel is required")
+		return errors.NewStd("at least one channel is required")
 	}
 	for name, ch := range m.Channels {
 		if ch == nil {

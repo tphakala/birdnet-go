@@ -2,7 +2,6 @@
 package audio
 
 import (
-	goerrors "errors"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -12,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -144,7 +144,7 @@ func (c *Handler) GetDeviceCapabilities(ctx echo.Context) error {
 
 	caps, err := audiocore.ProbeDeviceCapabilities(deviceID, c.APILogger)
 	if err != nil {
-		if goerrors.Is(err, audiocore.ErrDeviceNotFound) {
+		if errors.Is(err, audiocore.ErrDeviceNotFound) {
 			return c.HandleError(ctx, err, "Device not found", http.StatusNotFound)
 		}
 		c.LogErrorIfEnabled("Failed to probe device capabilities",

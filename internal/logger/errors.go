@@ -1,11 +1,12 @@
 package logger
 
 import (
-	stderrors "errors"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // EnhancedErrorInterface defines the methods we expect from internal/errors.EnhancedError.
-// This interface avoids importing internal/errors directly to prevent circular dependencies.
+// Matching on this interface rather than the concrete type lets ErrorFields
+// extract fields from any error that carries the same metadata.
 type EnhancedErrorInterface interface {
 	error
 	GetComponent() string
@@ -24,7 +25,7 @@ func ErrorFields(err error) []Field {
 	}
 
 	// Try to extract enhanced error information
-	if ee, ok := stderrors.AsType[EnhancedErrorInterface](err); ok {
+	if ee, ok := errors.AsType[EnhancedErrorInterface](err); ok {
 		fields := []Field{
 			Error(err),
 			String("component", ee.GetComponent()),

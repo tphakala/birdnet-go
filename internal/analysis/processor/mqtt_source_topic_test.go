@@ -5,7 +5,6 @@ package processor
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 )
 
@@ -176,8 +176,8 @@ func TestMqttAction_SourceTopicFailure_Alerting(t *testing.T) {
 		failErr   error
 		wantAlert bool
 	}{
-		{name: "non-transient failure raises alert", failErr: errors.New("broker rejected publish"), wantAlert: true},
-		{name: "transient failure does not alert", failErr: errors.New("connection lost"), wantAlert: false},
+		{name: "non-transient failure raises alert", failErr: errors.NewStd("broker rejected publish"), wantAlert: true},
+		{name: "transient failure does not alert", failErr: errors.NewStd("connection lost"), wantAlert: false},
 		{name: "deadline exceeded does not alert", failErr: context.DeadlineExceeded, wantAlert: false},
 	}
 
@@ -243,7 +243,7 @@ func TestMqttAction_Execute_SourceTopicFailure_NonFatal(t *testing.T) {
 
 	const sourceID = "rtsp_65c31a0b"
 	client := NewMockMQTTClient()
-	client.SetTopicError(mqtt.SourceDetectionTopic(testMQTTTopic, sourceID), errors.New("broker rejected publish"))
+	client.SetTopicError(mqtt.SourceDetectionTopic(testMQTTTopic, sourceID), errors.NewStd("broker rejected publish"))
 	action := newSourceTopicTestAction(t, client, sourceID, true)
 
 	require.NoError(t, action.Execute(t.Context(), nil))

@@ -3,7 +3,6 @@ package logger
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"math"
 	"os"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestFieldConstructors tests all field constructor functions
@@ -44,7 +44,7 @@ func TestFieldConstructors(t *testing.T) {
 	})
 
 	t.Run("Error field with error", func(t *testing.T) {
-		err := errors.New("test error")
+		err := errors.NewStd("test error")
 		field := Error(err)
 		assert.Equal(t, "error", field.Key)
 		assert.Equal(t, "test error", field.Value)
@@ -330,7 +330,7 @@ func TestSlogLogger_StructuredFields(t *testing.T) {
 		buf := &bytes.Buffer{}
 		logger := NewSlogLogger(buf, LogLevelError, time.UTC)
 
-		err := errors.New("test error")
+		err := errors.NewStd("test error")
 		logger.Error("operation failed", Error(err))
 
 		output := buf.String()

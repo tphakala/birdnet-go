@@ -25,9 +25,8 @@ Prefer the current idiom; the `modernize` linter flags many of the old forms.
   `FirstSeen: new(time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC))`
 - `strings.Cut` instead of `strings.Index` plus slicing
 - `errors.AsType[*fs.PathError](err)` (Go 1.26) instead of `errors.As` with a
-  pre-declared target. `internal/errors` has no `AsType` passthrough, so files
-  that need it import the standard package (alias it `stderrors` when the file
-  also imports `internal/errors`)
+  pre-declared target, through the `internal/errors` passthrough (never import
+  the standard `errors` package)
 - `sync.WaitGroup.Go(func() { ... })` instead of `Add(1)` plus `defer Done()`
 - `for field := range t.Fields()` (Go 1.26 `reflect` iterators) instead of
   indexing with `NumField()`

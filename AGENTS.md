@@ -53,8 +53,9 @@ yourself before touching code in that area.
   per operation (for example dynamic middleware or an atomic settings snapshot);
   never branch once on a value captured at startup.
 - **No magic numbers or strings.** Use named constants with descriptive names.
-- **Use `internal/errors`, not the standard `errors` package**, in Go code (see
-  `internal/errors/AGENTS.md` for the exceptions).
+- **Use `internal/errors`, never the standard `errors` package**, in Go code.
+  It passes through every standard function (see `internal/errors/AGENTS.md`),
+  and `depguard` rejects the standard import.
 - **Never log secrets or PII.** Use the typed sensitive-field helpers in
   `internal/logger` (a `forbidigo` lint rule enforces this for credential and
   token field names).
