@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseSearchQuery, formatFiltersForAPI, getFilterSuggestions } from './searchParser';
+import { getLocalDateString } from './date';
 
 describe('parseSearchQuery', () => {
   it('should parse simple text query without filters', () => {
@@ -138,7 +139,9 @@ describe('parseSearchQuery', () => {
 });
 
 describe('formatFiltersForAPI', () => {
-  it('should format confidence filter', () => {
+  // A comparison becomes one end of a confidence band, which is the form the
+  // detections filter panel can display. The operator form was invisible there.
+  it('should format a greater-than confidence filter as a minimum bound', () => {
     const filters = [
       {
         type: 'confidence' as const,
@@ -149,7 +152,33 @@ describe('formatFiltersForAPI', () => {
     ];
 
     const result = formatFiltersForAPI(filters);
-    expect(result).toEqual({ confidence: '>85' });
+    expect(result).toEqual({ confidenceMin: '85' });
+  });
+
+  it('should format a less-than confidence filter as a maximum bound', () => {
+    const filters = [
+      {
+        type: 'confidence' as const,
+        operator: '<=' as const,
+        value: 50,
+        raw: 'confidence:<=50',
+      },
+    ];
+
+    expect(formatFiltersForAPI(filters)).toEqual({ confidenceMax: '50' });
+  });
+
+  it('should format an equality confidence filter as a single-value band', () => {
+    const filters = [
+      {
+        type: 'confidence' as const,
+        operator: '=' as const,
+        value: 70,
+        raw: 'confidence:=70',
+      },
+    ];
+
+    expect(formatFiltersForAPI(filters)).toEqual({ confidenceMin: '70', confidenceMax: '70' });
   });
 
   it('should format time filter', () => {
@@ -162,8 +191,26 @@ describe('formatFiltersForAPI', () => {
       },
     ];
 
+    // "dawn" is a legacy alias; it is emitted as the canonical sun-event name the
+    // API and the detections filter panel both speak.
     const result = formatFiltersForAPI(filters);
-    expect(result).toEqual({ timeOfDay: 'dawn' });
+    expect(result).toEqual({ timeOfDay: 'sunrise' });
+  });
+
+  it('should pass canonical time periods through unchanged', () => {
+    for (const period of ['day', 'night', 'sunrise', 'sunset']) {
+      const result = formatFiltersForAPI([
+        { type: 'time' as const, operator: ':' as const, value: period, raw: `time:${period}` },
+      ]);
+      expect(result).toEqual({ timeOfDay: period });
+    }
+  });
+
+  it('should map the dusk alias to sunset', () => {
+    const result = formatFiltersForAPI([
+      { type: 'time' as const, operator: ':' as const, value: 'dusk', raw: 'time:dusk' },
+    ]);
+    expect(result).toEqual({ timeOfDay: 'sunset' });
   });
 
   // source: maps to the `source` query param; location: to `location` (node name).
@@ -228,9 +275,71 @@ describe('formatFiltersForAPI', () => {
 
     const result = formatFiltersForAPI(filters);
     expect(result).toEqual({
-      confidence: '>=85',
-      verified: 'true',
+      confidenceMin: '85',
+      // "verified:true" meant "carries any verdict", which the filter panel has no
+      // control for. It maps to the verdict a user typing it most likely wants.
+      verified: 'correct',
     });
+  });
+
+  it('should map the legacy verified booleans onto verdicts', () => {
+    const format = (value: string | boolean) =>
+      formatFiltersForAPI([
+        { type: 'verified' as const, operator: ':' as const, value, raw: `verified:${value}` },
+      ]).verified;
+
+    expect(format(true)).toBe('correct');
+    expect(format('human')).toBe('correct');
+    expect(format(false)).toBe('unverified');
+  });
+
+  it('should pass explicit verdicts through unchanged', () => {
+    for (const verdict of ['correct', 'false_positive', 'unverified']) {
+      const result = formatFiltersForAPI([
+        {
+          type: 'verified' as const,
+          operator: ':' as const,
+          value: verdict,
+          raw: `verified:${verdict}`,
+        },
+      ]);
+      expect(result).toEqual({ verified: verdict });
+    }
+  });
+
+  // The API accepts only YYYY-MM-DD for dates, so an unresolved shortcut used to
+  // make the whole request fail with a 400.
+  it('should resolve a date shortcut into a concrete range', () => {
+    const result = formatFiltersForAPI([
+      { type: 'date' as const, operator: ':' as const, value: 'today', raw: 'date:today' },
+    ]);
+
+    const today = getLocalDateString();
+    expect(result).toEqual({ start_date: today, end_date: today });
+  });
+
+  it('should treat a literal date as a one-day range', () => {
+    const result = formatFiltersForAPI([
+      {
+        type: 'date' as const,
+        operator: ':' as const,
+        value: '2026-03-14',
+        raw: 'date:2026-03-14',
+      },
+    ]);
+    expect(result).toEqual({ start_date: '2026-03-14', end_date: '2026-03-14' });
+  });
+
+  it('should resolve the week shortcut to a trailing range ending today', () => {
+    const result = formatFiltersForAPI([
+      { type: 'date' as const, operator: ':' as const, value: 'week', raw: 'date:week' },
+    ]);
+
+    const { start_date: startDate, end_date: endDate } = result;
+    expect(endDate).toBe(getLocalDateString());
+    expect(startDate).toBeDefined();
+    // ISO dates sort lexicographically, so a plain string comparison orders them.
+    expect(String(startDate) < String(endDate)).toBe(true);
   });
 });
 
@@ -250,7 +359,7 @@ describe('getFilterSuggestions', () => {
   it('should suggest time values', () => {
     const result = getFilterSuggestions('time:');
     expect(result).toEqual(
-      expect.arrayContaining(['time:dawn', 'time:day', 'time:dusk', 'time:night'])
+      expect.arrayContaining(['time:day', 'time:night', 'time:sunrise', 'time:sunset'])
     );
   });
 
@@ -264,7 +373,7 @@ describe('getFilterSuggestions', () => {
   it('should suggest verified values', () => {
     const result = getFilterSuggestions('verified:');
     expect(result).toEqual(
-      expect.arrayContaining(['verified:true', 'verified:false', 'verified:human'])
+      expect.arrayContaining(['verified:correct', 'verified:false_positive', 'verified:unverified'])
     );
   });
 

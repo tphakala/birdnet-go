@@ -151,8 +151,12 @@ describe('WeatherInfo', () => {
       },
     });
 
+    // Column count now responds to the container's actual width (via a
+    // CSS container query) rather than the viewport, so only the base
+    // grid/compact classes are asserted here - see WeatherInfo.svelte's
+    // <style> block for the @container breakpoints.
     const grid = document.querySelector('[aria-live="polite"]');
-    expect(grid).toHaveClass('grid', 'grid-cols-2', 'sm:grid-cols-4');
+    expect(grid).toHaveClass('weather-info-grid', 'grid', 'compact');
 
     // Should not show pressure and clouds in compact mode
     expect(screen.queryByText('detections.weather.labels.pressure')).not.toBeInTheDocument();

@@ -205,6 +205,7 @@ const translations: Record<string, string> = {
   'dashboard.recentDetections.actions.lockDetection': 'Lock detection',
   'dashboard.recentDetections.actions.unlockDetection': 'Unlock detection',
   'dashboard.recentDetections.actions.deleteDetection': 'Delete detection',
+  'dashboard.recentDetections.actions.compareSounds': 'Reference sounds',
   // Audio Settings translations
   'settings.audio.audioCapture.title': 'Audio Capture',
   'settings.audio.audioCapture.description': 'Configure audio capture settings',

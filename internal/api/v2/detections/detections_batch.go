@@ -50,6 +50,23 @@ type BatchResolveRequest struct {
 	Search    string `json:"search,omitempty"`
 	Hour      string `json:"hour,omitempty"`
 	Duration  int    `json:"duration,omitempty"`
+
+	// Advanced filter fields, mirroring the query parameters of
+	// GET /api/v2/detections. "Select all matching" resolves the same query the
+	// user is looking at, so every filter that narrows the list must narrow the
+	// resolved set too - otherwise a bulk action silently applies to detections the
+	// filters had excluded from view.
+	StartDate     string `json:"startDate,omitempty"`
+	EndDate       string `json:"endDate,omitempty"`
+	Confidence    string `json:"confidence,omitempty"`
+	ConfidenceMin string `json:"confidenceMin,omitempty"`
+	ConfidenceMax string `json:"confidenceMax,omitempty"`
+	TimeOfDay     string `json:"timeOfDay,omitempty"`
+	HourRange     string `json:"hourRange,omitempty"`
+	Verified      string `json:"verified,omitempty"`
+	Location      string `json:"location,omitempty"`
+	Source        string `json:"source,omitempty"`
+	Locked        string `json:"locked,omitempty"`
 }
 
 // BatchResult represents the outcome of a batch operation.
@@ -241,14 +258,31 @@ func (c *Handler) BatchResolveDetections(ctx echo.Context) error {
 	}
 
 	params := &detectionQueryParams{
-		QueryType:  req.QueryType,
-		Species:    req.Species,
-		Date:       req.Date,
-		Search:     req.Search,
-		Hour:       req.Hour,
-		Duration:   duration,
-		NumResults: maxBatchSize + 1,
-		Offset:     0,
+		QueryType:     req.QueryType,
+		Species:       req.Species,
+		Date:          req.Date,
+		Search:        req.Search,
+		Hour:          req.Hour,
+		Duration:      duration,
+		StartDate:     req.StartDate,
+		EndDate:       req.EndDate,
+		Confidence:    req.Confidence,
+		ConfidenceMin: req.ConfidenceMin,
+		ConfidenceMax: req.ConfidenceMax,
+		TimeOfDay:     req.TimeOfDay,
+		HourRange:     req.HourRange,
+		Verified:      req.Verified,
+		Location:      req.Location,
+		Source:        req.Source,
+		Locked:        req.Locked,
+		NumResults:    maxBatchSize + 1,
+		Offset:        0,
+	}
+
+	// Validate with the same rules the list endpoint applies, so a filter set that
+	// the list rejects cannot be resolved into a bulk-action target here.
+	if err := validateAdvancedFilterParams(params); err != nil {
+		return err
 	}
 
 	notes, totalCount, err := c.getDetectionsByQueryType(params)

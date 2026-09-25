@@ -149,6 +149,37 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/detections/batch/lock`      | `BatchLockDetections`   | ✅   | Bulk lock or unlock detections             |
 | POST   | `/detections/batch/resolve`   | `BatchResolveDetections`| ✅   | Resolve query params to detection IDs      |
 
+#### `GET /detections` filter parameters
+
+All optional. Supplying any of them routes the request through the advanced search
+path. Each is validated: an unparseable value returns 400 rather than being
+silently ignored.
+
+| Parameter | Values | Notes |
+| --------- | ------ | ----- |
+| `search` | free text | Substring match on scientific and common names |
+| `species` | species name | Exact match, unlike `search` |
+| `date` | `YYYY-MM-DD` | Pins results to a single day |
+| `start_date`, `end_date` | `YYYY-MM-DD` | Inclusive date range |
+| `hour`, `hourRange` | `0`-`23`, `6-9` | Hour of day, single or range |
+| `confidence` | `>85`, `<=50`, `70` | Single comparison |
+| `confidenceMin`, `confidenceMax` | `0`-`100` | Inclusive confidence band as whole percentages. Independent of `confidence`; when both are given the intersection applies |
+| `verified` | `correct`, `false_positive`, `unverified`, `any` | Review verdict. The legacy spellings `true`/`false`/`human`/`yes`/`no`/`1`/`0` still parse and keep their older reviewed/not-reviewed meaning |
+| `locked` | `true`, `false` | Lock state |
+| `timeOfDay` | `day`, `night`, `sunrise`, `sunset`, `any` | Resolved against the station's real sun events on the legacy datastore, approximated by hour buckets on the normalized one. `dawn`/`dusk` are accepted aliases for `sunrise`/`sunset` |
+| `location` | node name | Matches `notes.source_node` |
+| `source` | source id, display name, node name or URI | Intersected with `location` when both are given |
+| `sortBy` | `date_desc`, `date_asc`, `species_asc`, `species_desc`, `confidence_asc`, `confidence_desc`, `status` | |
+| `numResults` (alias `limit`), `offset` | integers | Pagination |
+| `includeWeather` | `true` | Attach weather to each detection |
+
+`POST /detections/batch/resolve` accepts the same filters in its JSON body
+(camelCase: `startDate`, `endDate`, `confidenceMin`, `confidenceMax`, `timeOfDay`,
+`hourRange`, alongside `queryType`, `species`, `date`, `search`, `hour`,
+`duration`, `verified`, `locked`, `location`, `source`) and validates them with the
+same rules, so "select all matching" resolves exactly the set the list endpoint
+returns.
+
 ### Integrations (`integrations/integrations.go`)
 
 | Method | Route                                        | Handler                         | Auth | Description                                    |
@@ -236,7 +267,7 @@ reported to telemetry, since they are expected, self-resolving backpressure.
 
 | Method | Route     | Handler        | Auth | Description                    |
 | ------ | --------- | -------------- | ---- | ------------------------------ |
-| POST   | `/search` | `HandleSearch` | ❌   | Search detections with filters |
+| POST   | `/search` | `HandleSearch` | ❌   | Search detections with filters. Retained for API compatibility; the web UI filters through `GET /detections`, which covers the same filters and returns the richer detection shape (weather, clip name, comments, species-tracking metadata) |
 
 ### Settings (`settings.go`)
 

@@ -1,10 +1,14 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
-  import { t } from '$lib/i18n';
+  import { t, getLocale } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { getAllAboutBirdsUrl, getWikipediaUrl } from '$lib/utils/speciesLinks';
+  import { buildSpeciesSearchUrl } from '$lib/utils/detectionUrls';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
+  import { ExternalLink } from '@lucide/svelte';
 
   interface SpeciesData {
     common_name: string;
@@ -52,6 +56,13 @@
   let displayName = $derived(
     localizeSpeciesName(displaySpecies?.scientific_name, displaySpecies?.common_name)
   );
+  let wikipediaUrl = $derived(
+    getWikipediaUrl(displayName, getLocale(), displaySpecies?.common_name ?? '')
+  );
+  let detectionsUrl = $derived(buildSpeciesSearchUrl(displaySpecies?.scientific_name ?? ''));
+  let viewDetectionsLabel = $derived(
+    t('analytics.species.viewDetections', { species: displayName })
+  );
 
   function formatPercentage(value: number): string {
     return (value * 100).toFixed(1) + '%';
@@ -73,14 +84,20 @@
   {#snippet header()}
     {#if displaySpecies}
       <div class="flex items-center justify-between">
-        <div class="min-w-0">
+        <a
+          href={detectionsUrl}
+          onclick={handleAppLinkClick}
+          class="min-w-0 hover:opacity-80 transition-opacity"
+          aria-label={viewDetectionsLabel}
+          title={viewDetectionsLabel}
+        >
           <h3 id="modal-title" class="font-bold text-lg truncate">
             {displayName}
           </h3>
           <p class="text-sm text-[var(--color-base-content)] opacity-70 italic truncate">
             {displaySpecies.scientific_name}
           </p>
-        </div>
+        </a>
       </div>
     {/if}
   {/snippet}
@@ -88,14 +105,20 @@
   {#snippet children()}
     {#if displaySpecies}
       {#if displaySpecies.thumbnail_url}
-        <div class="w-full aspect-[4/3] rounded-xl overflow-hidden bg-[var(--color-base-300)]">
+        <a
+          href={detectionsUrl}
+          onclick={handleAppLinkClick}
+          class="block w-full aspect-[4/3] rounded-xl overflow-hidden bg-[var(--color-base-300)] hover:opacity-80 transition-opacity"
+          aria-label={viewDetectionsLabel}
+          title={viewDetectionsLabel}
+        >
           <img
             src={displaySpecies.thumbnail_url}
             alt={displayName}
             class="w-full h-full object-cover"
             onerror={handleBirdImageError}
           />
-        </div>
+        </a>
       {/if}
 
       <div class="grid grid-cols-2 gap-3 text-sm mt-3">
@@ -120,6 +143,27 @@
           </div>
         {/if}
       </div>
+
+      <a
+        href={getAllAboutBirdsUrl(displaySpecies.common_name)}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn btn-outline btn-sm mt-4 w-full"
+        aria-label={`${t('analytics.species.openAllAboutBirds')}: ${displayName}`}
+      >
+        <ExternalLink class="size-4" />
+        {t('analytics.species.openAllAboutBirds')}
+      </a>
+      <a
+        href={wikipediaUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn btn-outline btn-sm mt-2 w-full"
+        aria-label={`${t('analytics.species.openWikipedia')}: ${displayName}`}
+      >
+        <span class="text-xs font-serif font-bold">W</span>
+        {t('analytics.species.openWikipedia')}
+      </a>
     {/if}
   {/snippet}
 

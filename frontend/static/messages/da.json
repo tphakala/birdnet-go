@@ -535,6 +535,10 @@
       "verifiedStatus": "Bekræftelsesstatus",
       "lockedStatus": "Låsestatus",
       "timeOfDay": "Tidspunkt på dagen",
+      "hourRange": "Klokkeslæt",
+      "hourRangeHelp": "Filtrér registreringer efter klokkeslæt, uafhængigt af solopgang og solnedgang (lad stå tomt for alle timer)",
+      "hourStart": "Tidligste time",
+      "hourEnd": "Seneste time",
       "source": "Lydkilde"
     },
     "advancedFilters": "Avancerede filtre",
@@ -556,6 +560,9 @@
       "night": "Kun nat",
       "sunrise": "Solopgang +/- 30 min",
       "sunset": "Solnedgang +/- 30 min"
+    },
+    "hourOptions": {
+      "any": "Alle timer"
     },
     "sourceOptions": {
       "any": "Alle kilder"
@@ -598,12 +605,15 @@
       "collapseDetails": "Skjul detaljer for {species}",
       "playAudio": "Afspil lyd for {species}",
       "viewDetails": "Se detaljer for {species}",
+      "detectionDetail": "Registreringsdetaljer",
+      "detectionDetailFor": "Registreringsdetaljer for {species}",
       "unknownSpecies": "Ukendt art",
       "clickToCollapse": "Klik for at skjule"
     },
     "errors": {
       "searchFailed": "Søgning fejlede: {error}",
-      "minMaxConfidence": "Minimum sikkerhed kan ikke være større end maksimum sikkerhed."
+      "minMaxConfidence": "Minimum sikkerhed kan ikke være større end maksimum sikkerhed.",
+      "minMaxHour": "Tidligste time kan ikke være senere end seneste time."
     },
     "pagination": {
       "page": "Side {current} af {total}",
@@ -747,7 +757,8 @@
         "ignoreSpecies": "Ignorér art",
         "lockDetection": "Lås registrering",
         "unlockDetection": "Lås registrering op",
-        "deleteDetection": "Slet registrering"
+        "deleteDetection": "Slet registrering",
+        "compareSounds": "Referencelyde"
       },
       "noDetections": "Ingen seneste registreringer",
       "errors": {
@@ -846,6 +857,7 @@
       "hourly": "Timeresultater for {hour}:00 den {date}",
       "hourlyRange": "Timeresultater fra {startHour}:00 til {endHour}:00 den {date}",
       "species": "Resultater for {species} den {date}",
+      "speciesAll": "Resultater for {species}",
       "search": "Søgeresultater for \"{query}\"",
       "allDetections": "Alle registreringer for {date}"
     },
@@ -854,6 +866,9 @@
       "observation": "Observation",
       "aria": {
         "downloadAudioClip": "Download lydklip for {name} detektion",
+        "compareSounds": "Lyt til identifikationsoptagelser for {name} på All About Birds (åbner i en ny fane)",
+        "viewOnAllAboutBirds": "Se {name} på All About Birds (åbner i en ny fane)",
+        "viewOnWikipedia": "Se {name} på Wikipedia (åbner i en ny fane)",
         "audioRecordingFor": "Lydoptagelse og spektrogram for {name}",
         "scientificName": "Videnskabeligt navn",
         "classificationBadges": "Mærker for artsklassifikation",
@@ -1000,7 +1015,10 @@
     },
     "media": {
       "title": "Optagelse og spektrogram",
-      "clipHint": "Klik og træk på spektrogrammet for at vælge et interval til klipeksport"
+      "clipHint": "Klik og træk på spektrogrammet for at vælge et interval til klipeksport",
+      "compareSounds": "Referencelyde",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipedia"
     },
     "tabs": {
       "overview": "Oversigt",
@@ -2041,9 +2059,13 @@
       "speciesList": "Artsliste",
       "switchToGrid": "Skift til gittervisning",
       "switchToList": "Skift til listevisning",
+      "openAllAboutBirds": "Se denne art på All About Birds",
+      "openWikipedia": "Se denne art på Wikipedia",
+      "viewDetections": "Se alle registreringer af {species}",
       "noSpeciesFound": "Ingen arter fundet der matcher dine filtre.",
       "headers": {
         "species": "Art",
+        "links": "Links",
         "detections": "Registreringer",
         "avgConfidence": "Gns. sikkerhed",
         "maxConfidence": "Maks. sikkerhed",

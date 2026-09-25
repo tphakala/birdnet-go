@@ -11,6 +11,14 @@ export interface SourceInfo {
   displayName?: string;
 }
 
+/**
+ * The time-of-day categories the backend classifier emits (see
+ * `internal/suncalc.ClassifyTimeOfDay`) and that TimeOfDayIcon renders.
+ * Detections carry `timeOfDay` as a plain string because the API models it as
+ * one, so narrowing to this union is what the icon's prop expects.
+ */
+export type TimeOfDayValue = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
+
 export interface Detection {
   id: number;
   date: string;
@@ -55,6 +63,72 @@ export interface PaginatedDetectionResponse {
   itemsPerPage?: number;
 }
 
+/**
+ * Review verdict a detection can be filtered by. The empty string means the
+ * filter is off; it is distinct from 'unverified', which selects detections that
+ * carry no verdict.
+ */
+export type DetectionVerifiedFilter = '' | 'correct' | 'false_positive' | 'unverified';
+
+/** Lock-state filter. The empty string means the filter is off. */
+export type DetectionLockedFilter = '' | 'true' | 'false';
+
+/**
+ * Time-of-day period filter. These are resolved against the station's real
+ * sunrise and sunset times, not fixed clock hours. The empty string means the
+ * filter is off.
+ */
+export type DetectionTimeOfDayFilter = '' | 'day' | 'night' | 'sunrise' | 'sunset';
+
+/**
+ * The filter set shown in the detections filter panel and carried in the URL
+ * query string, so a filtered view is shareable and survives reload and
+ * back/forward navigation.
+ *
+ * Confidence is held as whole percentages (0-100) because that is what the range
+ * inputs and the labels use; the API takes the same percentages and converts.
+ */
+export interface DetectionFilters {
+  /** Free-text species query, matched against scientific and common names. */
+  search: string;
+  /** Inclusive start of the date range (YYYY-MM-DD). */
+  startDate: string;
+  /** Inclusive end of the date range (YYYY-MM-DD). */
+  endDate: string;
+  confidenceMin: number;
+  confidenceMax: number;
+  verified: DetectionVerifiedFilter;
+  locked: DetectionLockedFilter;
+  timeOfDay: DetectionTimeOfDayFilter;
+  /**
+   * Inclusive clock-hour band, each end a whole hour as a bare number string
+   * ('0'-'23'); '' means that end is unbounded. This is the wall-clock companion
+   * to timeOfDay, which follows the station's sun events instead. A dashboard
+   * hourly drill-down arrives as `hour`/`duration` and is folded into this band,
+   * so the hour it is filtering by is visible in the panel rather than applied
+   * invisibly.
+   */
+  hourStart: string;
+  hourEnd: string;
+  /** Audio source, by display name. Empty means all sources. */
+  source: string;
+}
+
+/** The filter values that mean "no constraint". */
+export const DEFAULT_DETECTION_FILTERS: DetectionFilters = {
+  search: '',
+  startDate: '',
+  endDate: '',
+  confidenceMin: 0,
+  confidenceMax: 100,
+  verified: '',
+  locked: '',
+  timeOfDay: '',
+  hourStart: '',
+  hourEnd: '',
+  source: '',
+};
+
 export interface DetectionsListData {
   notes: Detection[];
   queryType: 'hourly' | 'species' | 'search' | 'all';
@@ -63,6 +137,13 @@ export interface DetectionsListData {
   duration?: number;
   species?: string;
   search?: string;
+  /**
+   * The active filter set. Bulk "select all matching" resolves the same query the
+   * user is looking at, so the list needs the filters to send to
+   * /detections/batch/resolve -- without them the resolved set would be wider
+   * than the visible one.
+   */
+  filters?: DetectionFilters;
   numResults: number;
   offset: number;
   totalResults: number;
@@ -99,6 +180,16 @@ export interface DetectionQueryParams {
   numResults?: number;
   offset?: number;
   sortBy?: DetectionSortBy;
+  // Advanced filters. Confidence bounds are whole percentages, matching the
+  // filter panel's inputs; the backend converts them to fractions.
+  confidenceMin?: number;
+  confidenceMax?: number;
+  verified?: DetectionVerifiedFilter;
+  locked?: DetectionLockedFilter;
+  timeOfDay?: DetectionTimeOfDayFilter;
+  /** Clock-hour band as the API spells it: '7' for a single hour, '6-9' for a range. */
+  hourRange?: string;
+  source?: string;
 }
 
 export interface DetectionReviewRequest {

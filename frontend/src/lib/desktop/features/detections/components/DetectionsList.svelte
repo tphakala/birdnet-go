@@ -57,6 +57,7 @@
     XCircle,
   } from '@lucide/svelte';
   import { onMount, untrack } from 'svelte';
+  import { useMediaQuery } from '$lib/utils/mediaQuery.svelte';
   import { useSelectionMode } from '../composables/useSelectionMode.svelte';
   import { useDetectionActions } from '../composables/useDetectionActions.svelte';
   import {
@@ -68,6 +69,10 @@
   import DetectionRow from './DetectionRow.svelte';
   import DetectionsCardView from './DetectionsCardView.svelte';
   import { appState } from '$lib/stores/appState.svelte';
+  import {
+    detectionFiltersToResolveBody,
+    hasActiveDetectionFilters,
+  } from '$lib/utils/detectionFilters';
 
   type SortField = 'dateTime' | 'species' | 'confidence' | 'status';
   type SortDirection = 'asc' | 'desc';
@@ -96,6 +101,13 @@
     className = '',
   }: Props = $props();
 
+  // Only the layout that is on screen is rendered. Both used to be built and one
+  // hidden with `md:hidden`, which mounted a table row *and* a mobile card for
+  // every detection: two spectrogram/thumbnail loads and two audio elements per
+  // row, half of them for a card nobody could see. The breakpoint matches the
+  // `md:` one the layouts themselves use.
+  const isWideViewport = useMediaQuery('(min-width: 768px)');
+
   // Show the Recording column when audio export is enabled (so it stays visible
   // even for a page that happens to have no clips yet) OR when any visible row
   // actually has a clip (so historical clips remain reachable after export is
@@ -123,9 +135,29 @@
         return t('detections.titles.species', { species: data.species, date: data.date });
 
       case 'search':
+        // The species analytics page links here as queryType=search with only
+        // a species filter (no free-text query) so it can show a species'
+        // full history instead of being pinned to one day like queryType=species
+        // requires. Fall back to a species-only title instead of the quoted
+        // "{query}" one, which would otherwise render literally with nothing to fill in.
+        if (!data.search && data.species) {
+          return t('detections.titles.speciesAll', { species: data.species });
+        }
+        if (!data.search) {
+          // Filters are active but none of them is a free-text query, so there is
+          // nothing to quote. The filter panel above states what is narrowing the
+          // list; a quoted empty string here would just read as a bug.
+          return t('detections.title');
+        }
         return t('detections.titles.search', { query: data.search });
 
       default:
+        // The date-stamped title is only truthful for the unfiltered single-day
+        // view. Once a filter spans dates, claiming "all detections for <today>"
+        // would misdescribe what is on screen.
+        if (data.filters && hasActiveDetectionFilters(data.filters)) {
+          return t('detections.title');
+        }
         return t('detections.titles.allDetections', { date: data.date });
     }
   });
@@ -137,24 +169,43 @@
     }
   }
 
-  const RESULTS_OPTIONS = [
-    { value: '10', label: '10' },
-    { value: '25', label: '25' },
-    { value: '50', label: '50' },
-    { value: '100', label: '100' },
-  ];
+  /** Page sizes offered, and the one assumed before the first response arrives. */
+  const RESULTS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
+  const DEFAULT_RESULTS_PER_PAGE = 25;
+  const RESULTS_OPTIONS = RESULTS_PER_PAGE_OPTIONS.map(size => ({
+    value: String(size),
+    label: String(size),
+  }));
 
   function handleNumResultsChange(value: string | string[]) {
     const numResults = parseInt(value as string);
-    if (isNaN(numResults) || ![10, 25, 50, 100].includes(numResults)) return;
+    if (isNaN(numResults) || !RESULTS_PER_PAGE_OPTIONS.includes(numResults)) return;
     selection.clear();
     selectedNumResults = String(numResults);
     onNumResultsChange?.(numResults);
   }
 
-  // State for number of results - captures initial value without creating dependency
-  // Uses untrack() to explicitly capture initial value only (local state is independent after init)
-  let selectedNumResults = $state(untrack(() => String(data?.numResults ?? 25)));
+  // The selector holds its own value so a click shows immediately, ahead of the
+  // debounced refetch, rather than snapping back while the request is in flight.
+  // It starts from `data`, which is null on the very first render.
+  let selectedNumResults = $state(
+    untrack(() => String(data?.numResults ?? DEFAULT_RESULTS_PER_PAGE))
+  );
+
+  // Adopt the page size the list is actually showing whenever it changes. Without
+  // this the selector keeps the value it was born with -- and it is created before
+  // the first response, so a page size that came from a link or a stored
+  // preference left the selector reading 25 next to 50 rows.
+  //
+  // Keyed on the applied size changing, not on it differing from the selector: the
+  // latter would undo the optimistic value above during the debounce.
+  let lastAppliedNumResults = untrack(() => data?.numResults);
+  $effect(() => {
+    const applied = data?.numResults;
+    if (applied === undefined || applied === lastAppliedNumResults) return;
+    lastAppliedNumResults = applied;
+    selectedNumResults = String(applied);
+  });
 
   // --- View mode state (persisted in localStorage) ---
   const VIEW_STORAGE_KEY = 'detectionsViewMode';
@@ -331,10 +382,17 @@
           body: JSON.stringify({
             queryType: data.queryType,
             species: data.species,
-            date: data.date,
+            // The date pin only applies to the unfiltered single-day view; sending
+            // it for a filtered query would resolve a narrower set than the one on
+            // screen, so a bulk action would silently skip most matches.
+            date: data.filters && hasActiveDetectionFilters(data.filters) ? undefined : data.date,
             search: data.search,
             hour: data.hour !== undefined ? String(data.hour) : undefined,
             duration: data.duration !== undefined ? data.duration : undefined,
+            // Every advanced filter that narrows the visible list must narrow the
+            // resolved set too, or the action would reach detections the user
+            // filtered out of view.
+            ...(data.filters ? detectionFiltersToResolveBody(data.filters) : {}),
           }),
         }
       );
@@ -580,7 +638,7 @@
       />
     {:else}
       <!-- Desktop/tablet: table or card view -->
-      <div class="hidden md:block">
+      {#if isWideViewport.matches}
         {#if viewMode === 'table'}
           <table class="w-full">
             <caption class="sr-only">{t('detections.table.caption')}</caption>
@@ -668,24 +726,24 @@
         {:else}
           <DetectionsCardView detections={data.notes} {onRefresh} />
         {/if}
-      </div>
-
-      <!-- Mobile: card layout (always mobile cards on small screens) -->
-      <div class="md:hidden space-y-2">
-        {#each data.notes as detection (detection.id)}
-          <DetectionCardMobile
-            {detection}
-            {onDetailsClick}
-            isExcluded={isSpeciesExcluded(detection.commonName)}
-            onReview={() => detectionActions.handleReview(detection)}
-            onMarkCorrect={() => detectionActions.handleMarkCorrect(detection)}
-            onMarkFalsePositive={() => detectionActions.handleMarkFalsePositive(detection)}
-            onToggleSpecies={() => detectionActions.handleToggleSpecies(detection)}
-            onToggleLock={() => detectionActions.handleToggleLock(detection)}
-            onDelete={() => detectionActions.handleDelete(detection)}
-          />
-        {/each}
-      </div>
+      {:else}
+        <!-- Narrow viewports: card layout -->
+        <div class="space-y-2">
+          {#each data.notes as detection (detection.id)}
+            <DetectionCardMobile
+              {detection}
+              {onDetailsClick}
+              isExcluded={isSpeciesExcluded(detection.commonName)}
+              onReview={() => detectionActions.handleReview(detection)}
+              onMarkCorrect={() => detectionActions.handleMarkCorrect(detection)}
+              onMarkFalsePositive={() => detectionActions.handleMarkFalsePositive(detection)}
+              onToggleSpecies={() => detectionActions.handleToggleSpecies(detection)}
+              onToggleLock={() => detectionActions.handleToggleLock(detection)}
+              onDelete={() => detectionActions.handleDelete(detection)}
+            />
+          {/each}
+        </div>
+      {/if}
     {/if}
   </div>
 
