@@ -239,10 +239,8 @@ func TestInitializeFreshInstall_SunCalcFollowsLocationChange(t *testing.T) {
 	moved.BirdNET.Longitude = sydneyLongitude
 	conf.StoreSettings(moved)
 
-	assert.Equal(t, "Australia/Sydney", ds.suncalc.LocationName(),
-		"the datastore's sun calculator must follow the published station location")
-
-	// The sun times the datastore classifies with must be the new location's, not only its name.
+	// The sun times the datastore classifies with must be the new location's. Checked before
+	// LocationName, so the sun-times call alone must notice the change.
 	date := time.Date(2024, 6, 21, 12, 0, 0, 0, time.UTC)
 	got, err := ds.suncalc.GetSunEventTimes(date)
 	require.NoError(t, err)
@@ -250,4 +248,7 @@ func TestInitializeFreshInstall_SunCalcFollowsLocationChange(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, want.Sunrise.Equal(got.Sunrise), "sunrise must match a fixed Sydney calculator")
 	assert.True(t, want.CivilDawn.Equal(got.CivilDawn), "civil dawn must match a fixed Sydney calculator")
+
+	assert.Equal(t, "Australia/Sydney", ds.suncalc.LocationName(),
+		"the datastore's sun calculator must follow the published station location")
 }

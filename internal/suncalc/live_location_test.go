@@ -52,9 +52,10 @@ func TestNewSunCalcWithSource_FollowsLocationChange(t *testing.T) {
 
 	coords.set(sydneyLatitude, sydneyLongitude)
 
-	assert.Equal(t, "Australia/Sydney", sc.LocationName(), "timezone must follow the new location")
+	// Sun times first: this call alone must notice the change (LocationName would swap first).
 	sydney, err := sc.GetSunEventTimes(date)
 	require.NoError(t, err)
+	assert.Equal(t, "Australia/Sydney", sc.LocationName(), "timezone must follow the new location")
 	assert.False(t, helsinki.Sunrise.Equal(sydney.Sunrise),
 		"sunrise must be recalculated for the new location, not served from the old cache")
 
@@ -186,7 +187,8 @@ func TestGetSunEventTimes_SingleSnapshotPerCall(t *testing.T) {
 	got, err := sc.GetSunEventTimes(date)
 	require.NoError(t, err)
 
-	assert.Equal(t, 1+firstOperationReads, calls, "one GetSunEventTimes call must take a single snapshot")
+	assert.Equal(t, 1+firstOperationReads, calls,
+		"one GetSunEventTimes call must read the source only for its single swap (pre-lock read plus in-lock re-read)")
 	want, err := NewSunCalc(sydneyLatitude, sydneyLongitude).GetSunEventTimes(date)
 	require.NoError(t, err)
 	assert.True(t, want.Sunrise.Equal(got.Sunrise), "sunrise must come from the state the call read")
@@ -210,7 +212,7 @@ func TestNewSunCalcWithSource_NilSourceIsFixed(t *testing.T) {
 	assert.Zero(t, st.observer.Longitude)
 }
 
-func TestNewSunCalc_DoesNotConsultSource(t *testing.T) {
+func TestNewSunCalc_KeepsState(t *testing.T) {
 	sc := NewSunCalc(testLatitude, testLongitude)
 	assert.Nil(t, sc.source, "a fixed-location SunCalc has no coordinate source")
 	first := sc.current()
@@ -245,9 +247,14 @@ func TestLiveLocationRaceUnderConcurrency(t *testing.T) {
 		wantSydney[i], err = sydney.GetSunEventTimes(d)
 		require.NoError(t, err)
 	}
+	// time.Equal ignores the zone, so compare the zone too: a result re-zoned into the other
+	// location's timezone must not match.
+	same := func(got, want time.Time) bool {
+		return got.Equal(want) && got.Location().String() == want.Location().String()
+	}
 	matches := func(got, want *SunEventTimes) bool {
-		return got.Sunrise.Equal(want.Sunrise) && got.Sunset.Equal(want.Sunset) &&
-			got.CivilDawn.Equal(want.CivilDawn) && got.CivilDusk.Equal(want.CivilDusk)
+		return same(got.Sunrise, want.Sunrise) && same(got.Sunset, want.Sunset) &&
+			same(got.CivilDawn, want.CivilDawn) && same(got.CivilDusk, want.CivilDusk)
 	}
 
 	coords := newTestCoordinates(testLatitude, testLongitude)

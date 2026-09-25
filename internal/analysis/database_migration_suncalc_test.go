@@ -25,11 +25,14 @@ func TestInitializeV2OnlyMode_ComputesDawnChorusOnset(t *testing.T) {
 		// Mid-latitude station: civil dawn is defined on every day of the year.
 		stationLatitude  = 50.0
 		stationLongitude = 10.0
-		// Same latitude, 20 degrees further east: civil dawn about 80 minutes earlier in UTC.
-		movedLongitude = 30.0
-		onsetDate      = "2026-05-15"
-		detectionCount = 5 // matches the v2only minimum detections for a day to yield an onset
-		minuteStep     = 5
+		// Same latitude, 20 degrees further east: civil dawn about 80 minutes earlier in UTC
+		// (4 minutes per degree of longitude).
+		movedLongitude             = 30.0
+		expectedOnsetShiftMinutes  = 80
+		onsetShiftToleranceMinutes = 2
+		onsetDate                  = "2026-05-15"
+		detectionCount             = 5 // matches the v2only minimum detections for a day to yield an onset
+		minuteStep                 = 5
 	)
 
 	settings := &conf.Settings{}
@@ -80,6 +83,8 @@ func TestInitializeV2OnlyMode_ComputesDawnChorusOnset(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, after, 1)
 	require.NotNil(t, after[0].OnsetRelMinutes)
-	assert.NotEqual(t, *got[0].OnsetRelMinutes, *after[0].OnsetRelMinutes,
-		"the onset relative to civil dawn must follow a station location change")
+	// Civil dawn moves earlier by about 80 minutes while the detections stay put, so the onset
+	// relative to it grows by about that much.
+	assert.InDelta(t, expectedOnsetShiftMinutes, *after[0].OnsetRelMinutes-*got[0].OnsetRelMinutes,
+		onsetShiftToleranceMinutes, "the onset relative to civil dawn must follow a station location change")
 }

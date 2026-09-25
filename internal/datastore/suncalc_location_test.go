@@ -40,8 +40,8 @@ func TestNew_SunCalcFollowsLocationChange(t *testing.T) {
 	moved.BirdNET.Longitude = 151.2093
 	conf.StoreSettings(moved)
 
-	assert.Equal(t, "Australia/Sydney", store.SunCalc.LocationName(),
-		"the datastore's sun calculator must follow the published station location")
+	// Sun times first: the per-row lookup alone must notice the change (LocationName would swap
+	// the calculator first and hide a lookup that skips it).
 	sydney, err := store.getSunEventsForDate(dateStr, timestamp)
 	require.NoError(t, err)
 	assert.False(t, helsinki.Sunrise.Equal(sydney.Sunrise),
@@ -50,4 +50,6 @@ func TestNew_SunCalcFollowsLocationChange(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, want.Sunrise.Equal(sydney.Sunrise), "sunrise must match a fixed Sydney calculator")
 	assert.True(t, want.Sunset.Equal(sydney.Sunset), "sunset must match a fixed Sydney calculator")
+	assert.Equal(t, "Australia/Sydney", store.SunCalc.LocationName(),
+		"the datastore's sun calculator must follow the published station location")
 }
