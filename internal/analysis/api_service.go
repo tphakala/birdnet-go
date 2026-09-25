@@ -151,8 +151,10 @@ func (s *APIServerService) Start(ctx context.Context) error {
 	// Initialize bird image cache.
 	s.birdImageCache = initBirdImageCache(s.settings, dataStore, s.metrics)
 
-	// Create SunCalc for sunrise/sunset calculations.
-	s.sunCalc = suncalc.NewSunCalc(s.settings.BirdNET.Latitude, s.settings.BirdNET.Longitude)
+	// Create SunCalc for sunrise/sunset calculations. It follows the live station location, so
+	// the processor, quiet hours, nighttime scheduler and API all pick up a location change
+	// without a restart.
+	s.sunCalc = suncalc.NewSunCalcWithSource(conf.LiveLocation(s.settings))
 
 	// Create processor.
 	s.proc = processor.New(s.settings, dataStore, bn, s.metrics, s.birdImageCache, GetLogger())

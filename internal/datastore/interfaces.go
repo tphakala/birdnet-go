@@ -299,12 +299,11 @@ type DatabaseStats struct {
 
 // DataStore implements StoreInterface using a GORM database.
 type DataStore struct {
-	DB            *gorm.DB          // GORM database instance
-	SunCalc       *suncalc.SunCalc  // Instance for calculating sun times (Assumed initialized)
-	sunTimesCache sync.Map          // Thread-safe map for caching sun times by date
-	metrics       *Metrics          // Metrics instance for tracking operations
-	metricsMu     sync.RWMutex      // Mutex to protect metrics field access
-	dbCounters    *dbstats.Counters // Atomic counters for query latency tracking
+	DB         *gorm.DB          // GORM database instance
+	SunCalc    *suncalc.SunCalc  // Instance for calculating sun times (Assumed initialized)
+	metrics    *Metrics          // Metrics instance for tracking operations
+	metricsMu  sync.RWMutex      // Mutex to protect metrics field access
+	dbCounters *dbstats.Counters // Atomic counters for query latency tracking
 
 	// Monitoring lifecycle management
 	monitoringCtx    context.Context    // Context for monitoring goroutines
@@ -340,8 +339,9 @@ func (ds *DataStore) CountDetectionsSince(ctx context.Context, since time.Time) 
 
 // NewDataStore creates a new DataStore instance based on the provided configuration context.
 func New(settings *conf.Settings) Interface {
-	// Create a SunCalc instance to be shared by all datastore implementations
-	sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
+	// Create a SunCalc instance to be shared by all datastore implementations. It follows the
+	// live station location so a location change in the settings takes effect without a restart.
+	sunCalc := suncalc.NewSunCalcWithSource(conf.LiveLocation(settings))
 
 	switch {
 	case settings.Output.SQLite.Enabled:
@@ -355,7 +355,7 @@ func New(settings *conf.Settings) Interface {
 			SunCalc:  sunCalc,
 		}
 	default:
-		// No database explicitly enabled — default to SQLite
+		// No database explicitly enabled, default to SQLite
 		return &SQLiteStore{
 			Settings: settings,
 			SunCalc:  sunCalc,
@@ -498,7 +498,7 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 			"total_duration_ms", time.Since(txStart).Milliseconds())
 	}
 
-	// Success — record metrics.
+	// Success: record metrics.
 	duration := time.Since(txStart)
 	txLogger.Info("Transaction completed",
 		logger.String("tx_id", txID),
@@ -2683,14 +2683,10 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	return results, int(total), nil
 }
 
-// getSunEventsForDate retrieves sun times for a given date
+// getSunEventsForDate retrieves sun times for a given date. It relies on the SunCalc's own
+// per-date cache, which follows the live station location; caching here by date string alone
+// would keep serving the previous location's times after a location change.
 func (ds *DataStore) getSunEventsForDate(dateStr string, timestamp time.Time) (suncalc.SunEventTimes, error) {
-	// Check if the sun times are already cached
-	if cached, exists := ds.getCachedSunTimes(dateStr); exists {
-		return cached, nil
-	}
-
-	// Calculate sun times for the given date
 	sunTimes, err := ds.SunCalc.GetSunEventTimes(timestamp)
 	if err != nil {
 		return suncalc.SunEventTimes{}, errors.New(err).
@@ -2701,22 +2697,5 @@ func (ds *DataStore) getSunEventsForDate(dateStr string, timestamp time.Time) (s
 			Build()
 	}
 
-	// Cache the calculated sun times
-	ds.cacheSunTimes(dateStr, &sunTimes)
-
 	return sunTimes, nil
-}
-
-// getCachedSunTimes retrieves sun times from the cache
-func (ds *DataStore) getCachedSunTimes(dateStr string) (suncalc.SunEventTimes, bool) {
-	cached, exists := ds.sunTimesCache.Load(dateStr)
-	if exists {
-		return cached.(suncalc.SunEventTimes), true
-	}
-	return suncalc.SunEventTimes{}, false
-}
-
-// cacheSunTimes caches sun times
-func (ds *DataStore) cacheSunTimes(dateStr string, sunTimes *suncalc.SunEventTimes) {
-	ds.sunTimesCache.Store(dateStr, *sunTimes)
 }

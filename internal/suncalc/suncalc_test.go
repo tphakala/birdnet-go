@@ -12,8 +12,8 @@ func TestNewSunCalc(t *testing.T) {
 	sc := newTestSunCalc()
 	require.NotNil(t, sc, "NewSunCalc returned nil")
 
-	assert.InDelta(t, testLatitude, sc.observer.Latitude, 0.0001, "expected latitude to match")
-	assert.InDelta(t, testLongitude, sc.observer.Longitude, 0.0001, "expected longitude to match")
+	assert.InDelta(t, testLatitude, sc.current().observer.Latitude, 0.0001, "expected latitude to match")
+	assert.InDelta(t, testLongitude, sc.current().observer.Longitude, 0.0001, "expected longitude to match")
 }
 
 func TestGetSunEventTimes(t *testing.T) {
@@ -79,10 +79,10 @@ func TestCacheConsistency(t *testing.T) {
 	require.NoError(t, err, "failed to get initial sun event times")
 
 	// Verify cache entry exists using the normalized local date key
-	dateKey := date.In(sc.location).Format(time.DateOnly)
-	sc.lock.RLock()
-	entry, exists := sc.cache[dateKey]
-	sc.lock.RUnlock()
+	dateKey := date.In(sc.current().location).Format(time.DateOnly)
+	sc.current().lock.RLock()
+	entry, exists := sc.current().cache[dateKey]
+	sc.current().lock.RUnlock()
 
 	assert.True(t, exists, "cache entry not found after calculation")
 
@@ -100,18 +100,18 @@ func TestCacheEviction(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	sc.lock.RLock()
-	assert.Len(t, sc.cache, maxCacheEntries, "cache should be at capacity")
-	sc.lock.RUnlock()
+	sc.current().lock.RLock()
+	assert.Len(t, sc.current().cache, maxCacheEntries, "cache should be at capacity")
+	sc.current().lock.RUnlock()
 
 	// One more entry should trigger eviction (clear + re-add)
 	nextDate := baseDate.AddDate(0, 0, maxCacheEntries)
 	_, err := sc.GetSunEventTimes(nextDate)
 	require.NoError(t, err)
 
-	sc.lock.RLock()
-	assert.Len(t, sc.cache, 1, "cache should contain only the new entry after eviction")
-	sc.lock.RUnlock()
+	sc.current().lock.RLock()
+	assert.Len(t, sc.current().cache, 1, "cache should contain only the new entry after eviction")
+	sc.current().lock.RUnlock()
 }
 
 func TestConcurrentAccess(t *testing.T) {

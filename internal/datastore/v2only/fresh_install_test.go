@@ -194,3 +194,36 @@ func TestInitializeFreshInstall_ConfiguresSunCalc(t *testing.T) {
 	assert.Equal(t, minOnsetDetections, got[0].DetectionCount)
 	assert.NotNil(t, got[0].OnsetRelMinutes, "onset relative to civil dawn must be computed")
 }
+
+// TestInitializeFreshInstall_SunCalcFollowsLocationChange pins that the datastore's sun
+// calculator follows a station location changed through the settings (a new published snapshot)
+// without rebuilding the datastore, so time-of-day and dawn-chorus onset use the new location.
+// It publishes global settings, so it must not run in parallel.
+func TestInitializeFreshInstall_SunCalcFollowsLocationChange(t *testing.T) {
+	v2.ResetDatabaseMode()
+	defer v2.ResetDatabaseMode()
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(prev) })
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "birdnet.db")
+	settings.BirdNET.Latitude = 60.1699 // Helsinki
+	settings.BirdNET.Longitude = 24.9384
+	conf.StoreSettings(settings)
+
+	ds, err := InitializeFreshInstall(settings, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, ds.Close()) })
+
+	require.NotNil(t, ds.suncalc)
+	assert.Equal(t, "Europe/Helsinki", ds.suncalc.LocationName())
+
+	moved := conf.CloneSettings(settings)
+	moved.BirdNET.Latitude = -33.8688 // Sydney
+	moved.BirdNET.Longitude = 151.2093
+	conf.StoreSettings(moved)
+
+	assert.Equal(t, "Australia/Sydney", ds.suncalc.LocationName(),
+		"the datastore's sun calculator must follow the published station location")
+}
