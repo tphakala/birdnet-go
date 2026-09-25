@@ -28,8 +28,8 @@ import (
 import "github.com/tphakala/birdnet-go/internal/errors"
 
 // The custom package provides passthrough functions:
-// errors.Is(), errors.As(), errors.AsType(), errors.Unwrap(), errors.Join(),
-// errors.ErrUnsupported and errors.NewStd() are all available
+// errors.Is(), errors.As(), errors.AsType(), errors.Unwrap(), errors.Join()
+// and errors.NewStd() are all available, as is the errors.ErrUnsupported sentinel
 ```
 
 ### Basic Usage
@@ -543,7 +543,8 @@ errors.ErrUnsupported                        // Standard sentinel
 The custom errors package provides:
 
 - **Enhanced Functions**: `errors.New()`, `errors.Newf()` with telemetry integration
-- **Standard Functions**: `errors.Is()`, `errors.As()`, `errors.AsType()`, `errors.Unwrap()`, `errors.Join()`, `errors.NewStd()`, `errors.ErrUnsupported`
+- **Standard Functions**: `errors.Is()`, `errors.As()`, `errors.AsType()`, `errors.Unwrap()`, `errors.Join()`, `errors.NewStd()`
+- **Standard Sentinels**: `errors.ErrUnsupported`
 - **Specialized Functions**: Component detection, context building, privacy scrubbing
 
 ### Migration Checklist
