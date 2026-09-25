@@ -506,7 +506,7 @@ type OpenWeatherSettings struct {
 // PirateWeatherSettings contains settings for Pirate Weather integration.
 // Pirate Weather is a Dark Sky-API-compatible drop-in service; only an API
 // key and an optional endpoint override are needed (unlike OpenWeather it has
-// no units/language options here — the provider always requests SI units).
+// no units/language options here; the provider always requests SI units).
 type PirateWeatherSettings struct {
 	APIKey   string `yaml:"apikey" json:"apiKey"`     // Pirate Weather API key
 	Endpoint string `yaml:"endpoint" json:"endpoint"` // Pirate Weather API endpoint
@@ -1964,6 +1964,18 @@ func (s *Settings) Location() (lat, lon float64, configured bool) {
 		return 0, 0, false
 	}
 	return s.BirdNET.Latitude, s.BirdNET.Longitude, s.BirdNET.LocationConfigured
+}
+
+// LiveLocation returns a function that reports the station coordinates from the current
+// settings snapshot each time it is called, falling back to fallback when no snapshot has been
+// published. Long-lived consumers (such as suncalc.NewSunCalcWithSource) use it so a location
+// changed in the settings takes effect without a restart. A nil fallback reports (0, 0) until a
+// snapshot is published, so pass the settings the caller was constructed with.
+func LiveLocation(fallback *Settings) func() (latitude, longitude float64) {
+	return func() (latitude, longitude float64) {
+		latitude, longitude, _ = CurrentOrFallback(fallback).Location()
+		return latitude, longitude
+	}
 }
 
 // ResolveEQOverride returns the per-source or per-stream EQ override for the

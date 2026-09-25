@@ -650,14 +650,16 @@ func (c *Handler) GetSunTimes(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to calculate sun times", http.StatusInternalServerError)
 	}
 
-	// Build response
+	// Build response. The timezone is taken from the returned times, which carry the zone of the
+	// state they were computed from: asking the calculator again could observe a location
+	// changed in between and label these times with the new location's zone.
 	response := sunTimesResponse{
 		Date:      date,
 		Sunrise:   sunTimes.Sunrise,
 		Sunset:    sunTimes.Sunset,
 		CivilDawn: sunTimes.CivilDawn,
 		CivilDusk: sunTimes.CivilDusk,
-		Timezone:  c.SunCalc.LocationName(),
+		Timezone:  sunTimes.Sunrise.Location().String(),
 	}
 
 	c.LogInfoIfEnabled("Calculated sun times",

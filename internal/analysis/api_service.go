@@ -152,7 +152,7 @@ func (s *APIServerService) Start(ctx context.Context) error {
 	s.birdImageCache = initBirdImageCache(s.settings, dataStore, s.metrics)
 
 	// Create SunCalc for sunrise/sunset calculations.
-	s.sunCalc = suncalc.NewSunCalc(s.settings.BirdNET.Latitude, s.settings.BirdNET.Longitude)
+	s.sunCalc = newStationSunCalc(s.settings)
 
 	// Create processor.
 	s.proc = processor.New(s.settings, dataStore, bn, s.metrics, s.birdImageCache, GetLogger())
@@ -257,6 +257,13 @@ func (s *APIServerService) Start(ctx context.Context) error {
 
 	startSucceeded = true
 	return nil
+}
+
+// newStationSunCalc builds the sun calculator the API service shares with the processor, quiet
+// hours, the nighttime scheduler and the API. It follows the live station location, so all of
+// them pick up a location change without a restart.
+func newStationSunCalc(settings *conf.Settings) *suncalc.SunCalc {
+	return suncalc.NewSunCalcWithSource(conf.LiveLocation(settings))
 }
 
 // Stop gracefully shuts down the API server and owned subsystems.

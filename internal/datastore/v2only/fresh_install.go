@@ -187,8 +187,8 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 		Labels:             settings.BirdNET.Labels, // Required for locale-specific common name resolution
 		SpeciesCodeMap:     speciesCodeMap,
 		// Sun calculator for civil dawn (dawn-chorus onset) and time-of-day classification,
-		// matching the legacy datastore.New wiring.
-		SunCalc: suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude),
+		// matching the legacy datastore.New wiring. It follows the live station location.
+		SunCalc: suncalc.NewSunCalcWithSource(conf.LiveLocation(settings)),
 	})
 	if err != nil {
 		_ = manager.Close()
