@@ -599,13 +599,13 @@ func CategoryOf(err error) ErrorCategory {
 
 	// The interface comes first: a cause can carry a category without being an
 	// *EnhancedError.
-	if catErr, ok := stderrors.AsType[CategorizedError](err); ok {
+	if catErr, ok := AsType[CategorizedError](err); ok {
 		if category := catErr.ErrorCategory(); category != "" {
 			return category
 		}
 	}
 
-	if enhErr, ok := stderrors.AsType[*EnhancedError](err); ok && enhErr.Category != "" {
+	if enhErr, ok := AsType[*EnhancedError](err); ok && enhErr.Category != "" {
 		return enhErr.Category
 	}
 
