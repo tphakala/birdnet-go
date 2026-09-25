@@ -15,6 +15,10 @@ type EnhancedErrorInterface interface {
 	GetContext() map[string]any
 }
 
+// Fail the build if *errors.EnhancedError stops satisfying the interface, which
+// would otherwise make ErrorFields silently drop the enhanced fields.
+var _ EnhancedErrorInterface = (*errors.EnhancedError)(nil)
+
 // ErrorFields extracts structured fields from an error.
 // If the error is an EnhancedError (implements EnhancedErrorInterface),
 // it extracts component, category, priority, and context fields.

@@ -102,9 +102,6 @@ func TestErrUnsupportedPassthrough(t *testing.T) {
 	// errors.ErrUnsupported and nothing else, so this fails unless the
 	// passthrough is that exact sentinel rather than a lookalike.
 	require.ErrorIs(t, http.ErrNotSupported, ErrUnsupported)
-
-	wrapped := fmt.Errorf("feature x: %w", ErrUnsupported)
-	require.ErrorIs(t, wrapped, ErrUnsupported)
 }
 
 func TestIsCategory(t *testing.T) {

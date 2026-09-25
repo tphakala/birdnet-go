@@ -13,8 +13,10 @@
 // This package intentionally depends only on the standard library and
 // internal/errors (the project's drop-in replacement for the standard errors
 // package) so that both the CI generator and the future in-app client can
-// import it without pulling in any other application internals. The Go types
-// here are the single source of truth for the manifest contract.
+// import it without pulling in any other application internals. internal/errors
+// does transitively bring in the sentry-go client, which this package never
+// initializes. The Go types here are the single source of truth for the
+// manifest contract.
 package manifest
 
 import (
