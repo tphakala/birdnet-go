@@ -91,7 +91,9 @@ func TestNewSunCalcWithSource_UnchangedLocationKeepsState(t *testing.T) {
 // before a concurrent swap cannot publish them over the newer state. The scripted source makes
 // the outer call read B and, from inside that same read, drives a nested call that swaps to the
 // newest location C. When the outer call then takes the swap lock it must see that the source
-// now reports C and keep C, not overwrite it with its stale B.
+// now reports C and keep C, not overwrite it with its stale B. Calling back into the SunCalc
+// from a source breaks the CoordinateSource contract; it is done here deliberately, only from
+// the pre-lock read and only once, which is the one place it cannot deadlock or recurse.
 func TestNewSunCalcWithSource_NoStaleOverwrite(t *testing.T) {
 	var sc *SunCalc
 	var newest *sunState

@@ -84,7 +84,12 @@ func TestInitializeV2OnlyMode_ComputesDawnChorusOnset(t *testing.T) {
 	require.Len(t, after, 1)
 	require.NotNil(t, after[0].OnsetRelMinutes)
 	// Civil dawn moves earlier by about 80 minutes while the detections stay put, so the onset
-	// relative to it grows by about that much.
-	assert.InDelta(t, expectedOnsetShiftMinutes, *after[0].OnsetRelMinutes-*got[0].OnsetRelMinutes,
-		onsetShiftToleranceMinutes, "the onset relative to civil dawn must follow a station location change")
+	// relative to it grows by about that much. Civil dawn is a minute of the day in the host's
+	// time zone, so in some zones the two dawns fall on either side of local midnight and the
+	// raw difference wraps by a day; fold it back into [-12h, 12h).
+	const minutesPerDay = 24 * 60
+	shift := *after[0].OnsetRelMinutes - *got[0].OnsetRelMinutes
+	shift = ((shift+minutesPerDay/2)%minutesPerDay+minutesPerDay)%minutesPerDay - minutesPerDay/2
+	assert.InDelta(t, expectedOnsetShiftMinutes, shift, onsetShiftToleranceMinutes,
+		"the onset relative to civil dawn must follow a station location change")
 }

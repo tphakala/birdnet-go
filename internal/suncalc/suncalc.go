@@ -46,7 +46,8 @@ const sunEventsOperation = "get_sun_events"
 // built with NewSunCalcWithSource calls it on every operation, so a station location changed at
 // runtime (for example through the settings UI) takes effect on the next call without a restart.
 // Implementations must be cheap and safe for concurrent use, and must not call back into the
-// SunCalc: the source is also read while the SunCalc holds its swap lock.
+// SunCalc: a callback reads the source again (unbounded recursion), and from the read made while
+// the SunCalc holds its swap lock it would also deadlock.
 type CoordinateSource func() (latitude, longitude float64)
 
 // sunState is everything derived from one pair of observer coordinates: the astral observer, the
