@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // InitializeFreshInstall creates a new v2-only datastore for fresh installations.
@@ -185,6 +186,9 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 		AvesClassID:        &avesClassID,
 		Labels:             settings.BirdNET.Labels, // Required for locale-specific common name resolution
 		SpeciesCodeMap:     speciesCodeMap,
+		// Sun calculator for civil dawn (dawn-chorus onset) and time-of-day classification,
+		// matching the legacy datastore.New wiring.
+		SunCalc: suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude),
 	})
 	if err != nil {
 		_ = manager.Close()

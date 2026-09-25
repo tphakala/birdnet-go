@@ -1,6 +1,7 @@
 package v2only
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -147,4 +148,49 @@ func TestInitializeFreshInstall_EmptySQLitePath(t *testing.T) {
 	_, err := InitializeFreshInstall(settings, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sqlite path is empty")
+}
+
+// TestInitializeFreshInstall_ConfiguresSunCalc pins that a fresh-install datastore gets a sun
+// calculator for the configured station location. Without it civil dawn is never available, so
+// the dawn-chorus onset endpoint returns a null onset for every day and the chart stays empty.
+func TestInitializeFreshInstall_ConfiguresSunCalc(t *testing.T) {
+	v2.ResetDatabaseMode()
+	defer v2.ResetDatabaseMode()
+
+	const (
+		// Mid-latitude station: civil dawn is defined on every day of the year.
+		stationLatitude  = 50.0
+		stationLongitude = 10.0
+		onsetDate        = "2026-05-15"
+		minuteStep       = 5
+	)
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "birdnet.db")
+	settings.BirdNET.Latitude = stationLatitude
+	settings.BirdNET.Longitude = stationLongitude
+
+	ds, err := InitializeFreshInstall(settings, nil, nil)
+	require.NoError(t, err)
+	defer func() { _ = ds.Close() }()
+
+	require.NotNil(t, ds.suncalc, "fresh install must configure a sun calculator")
+
+	// Enough morning detections for a day to qualify for an onset.
+	for i := range minOnsetDetections {
+		require.NoError(t, ds.Save(&datastore.Note{
+			Date:           onsetDate,
+			Time:           fmt.Sprintf("05:%02d:00", i*minuteStep),
+			ScientificName: "Turdus merula",
+			CommonName:     "Eurasian Blackbird",
+			Confidence:     0.9,
+		}, nil))
+	}
+
+	got, err := ds.GetDailyActivityOnset(t.Context(), onsetDate, onsetDate, "")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, minOnsetDetections, got[0].DetectionCount)
+	assert.NotNil(t, got[0].OnsetRelMinutes, "onset relative to civil dawn must be computed")
 }
