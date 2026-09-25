@@ -40,7 +40,7 @@ type Engine struct {
 	repo           repository.AlertRuleRepository
 	metricTracker  *MetricTracker
 	actionFunc     ActionFunc
-	testActionFunc ActionFunc // Used by TestFireRule to tag notifications as test
+	testActionFunc ActionFunc // Used by TestFireRule to dispatch test fires
 	log            logger.Logger
 	telemetry      *AlertingTelemetry // nil-safe engine health reporter
 
@@ -78,7 +78,8 @@ func NewEngine(repo repository.AlertRuleRepository, actionFunc ActionFunc, log l
 }
 
 // SetTestActionFunc sets the function called when a rule is test-fired.
-// This should tag the resulting notification as a test so push providers skip it.
+// It routes test fires through the test dispatch variants; the resulting
+// notifications are still delivered to push providers.
 func (e *Engine) SetTestActionFunc(fn ActionFunc) {
 	e.testActionFunc = fn
 }
