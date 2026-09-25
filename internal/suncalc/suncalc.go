@@ -127,9 +127,12 @@ func (sc *SunCalc) current() *sunState {
 
 	sc.swapMu.Lock()
 	defer sc.swapMu.Unlock()
-	// Double-check: a concurrent caller may already have switched to these coordinates.
+	// Double-check against a fresh read: a concurrent caller may already have switched states
+	// while this one waited, and the coordinates read before the lock may be stale by now.
+	// Publishing them would overwrite a newer location, so decide on what the source reports now.
 	st = sc.state.Load()
-	if latitude == st.latitude && longitude == st.longitude {
+	latitude, longitude = sc.source()
+	if (latitude == st.latitude && longitude == st.longitude) || !finiteCoordinates(latitude, longitude) {
 		return st
 	}
 	st = newSunState(latitude, longitude)

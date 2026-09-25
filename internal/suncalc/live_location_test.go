@@ -19,6 +19,12 @@ const (
 	sydneyLongitude = 151.2093
 )
 
+// New York coordinates: a third location, for tests that need two successive changes.
+const (
+	newYorkLatitude  = 40.7128
+	newYorkLongitude = -74.006
+)
+
 // testCoordinates is a concurrency-safe coordinate source for tests.
 type testCoordinates struct {
 	mu        sync.Mutex
@@ -87,6 +93,64 @@ func TestNewSunCalcWithSource_UnchangedLocationKeepsState(t *testing.T) {
 	second.lock.RLock()
 	assert.Len(t, second.cache, 1, "the cache must survive calls with unchanged coordinates")
 	second.lock.RUnlock()
+}
+
+// TestNewSunCalcWithSource_NoStaleOverwrite pins that a caller holding coordinates it read
+// before a concurrent swap cannot publish them over the newer state. The scripted source makes
+// the outer call read B and, from inside that same read, drives a nested call that swaps to the
+// newest location C. When the outer call then takes the swap lock it must see that the source
+// now reports C and keep C, not overwrite it with its stale B.
+func TestNewSunCalcWithSource_NoStaleOverwrite(t *testing.T) {
+	var sc *SunCalc
+	var newest *sunState
+	calls := 0
+	source := func() (float64, float64) {
+		calls++
+		switch calls {
+		case 1: // construction: Helsinki (A)
+			return testLatitude, testLongitude
+		case 2: // outer pre-lock read: Sydney (B), then a newer location lands first
+			newest = sc.current()
+			return sydneyLatitude, sydneyLongitude
+		default: // every later read, including the nested swap: New York (C)
+			return newYorkLatitude, newYorkLongitude
+		}
+	}
+	sc = NewSunCalcWithSource(source)
+
+	_ = sc.current()
+
+	// Inspect the published state directly: calling current() again would consult the source
+	// and repair a stale overwrite, hiding it.
+	st := sc.state.Load()
+	assert.InDelta(t, newYorkLatitude, st.observer.Latitude, 0.0001,
+		"a stale pre-lock read must not overwrite the newer location")
+	assert.Equal(t, "America/New_York", st.location.String())
+	assert.Same(t, newest, st, "the state the nested call published must be kept, not rebuilt")
+}
+
+// TestNewSunCalcWithSource_NonFiniteInLockKeepsState pins that when the source reports a new,
+// finite location before the swap lock but a non-finite one once the lock is held, the swap is
+// abandoned and the previous state stays published.
+func TestNewSunCalcWithSource_NonFiniteInLockKeepsState(t *testing.T) {
+	calls := 0
+	source := func() (float64, float64) {
+		calls++
+		switch calls {
+		case 1: // construction: Helsinki
+			return testLatitude, testLongitude
+		case 2: // pre-lock read: Sydney
+			return sydneyLatitude, sydneyLongitude
+		default: // in-lock read: not a number
+			return math.NaN(), math.NaN()
+		}
+	}
+	sc := NewSunCalcWithSource(source)
+	before := sc.state.Load()
+
+	_ = sc.current()
+
+	assert.Same(t, before, sc.state.Load(), "a non-finite in-lock read must keep the previous state")
 }
 
 func TestNewSunCalcWithSource_IgnoresNonFiniteCoordinates(t *testing.T) {
