@@ -138,7 +138,7 @@ func (sc *SunCalc) current() *sunState {
 	st = newSunState(latitude, longitude)
 	sc.state.Store(st)
 	// Coordinates are PII, so the change is logged without the values themselves.
-	GetLogger().Debug("Observer location changed, rebuilt sun calculator state",
+	GetLogger().Info("Observer location changed, rebuilt sun calculator state",
 		logger.String("timezone", st.location.String()))
 	return st
 }
@@ -327,7 +327,8 @@ func (st *sunState) calculateSunEventTimes(date time.Time) (SunEventTimes, error
 
 // LocationName returns the IANA timezone name for the observer's current location
 // (e.g., "Australia/Sydney", "America/Los_Angeles"). For a SunCalc with a coordinate
-// source it reflects the location the source reports at the time of the call.
+// source it reflects the location the source reports at the time of the call, unless that
+// location is non-finite, in which case the previous location is kept.
 func (sc *SunCalc) LocationName() string {
 	return sc.current().location.String()
 }

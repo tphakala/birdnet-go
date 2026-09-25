@@ -58,9 +58,14 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// realtime analysis-buffer cadence, so a change reallocates the buffers via a
 	// full audio-capture restart (restart_audio_capture; analysisOverlapChanged in
 	// the detector table).
-	"BirdNET.Overlap":            {categories: []hotReloadCategory{hotReloadFresh}, action: "restart_audio_capture"},
-	"BirdNET.Longitude":          {categories: []hotReloadCategory{hotReloadDisplay}, action: "rebuild_range_filter"},
-	"BirdNET.Latitude":           {categories: []hotReloadCategory{hotReloadDisplay}, action: "rebuild_range_filter"},
+	"BirdNET.Overlap": {categories: []hotReloadCategory{hotReloadFresh}, action: "restart_audio_capture"},
+	// The coordinates are also read fresh by the shared sun calculator and both datastores' sun
+	// calculators (suncalc.NewSunCalcWithSource over conf.LiveLocation), and the weather service
+	// rebuilds its own per poll, so sun times, time-of-day and the dawn-chorus onset follow a change.
+	"BirdNET.Longitude": {categories: []hotReloadCategory{hotReloadDisplay, hotReloadFresh}, action: "rebuild_range_filter"},
+	"BirdNET.Latitude":  {categories: []hotReloadCategory{hotReloadDisplay, hotReloadFresh}, action: "rebuild_range_filter"},
+	// Not marked fresh: the nighttime scheduler reads it live, but the daylight filter resolves
+	// it only at startup (initDaylightFilter), so a change does not reach every consumer.
 	"BirdNET.LocationConfigured": {categories: []hotReloadCategory{hotReloadDisplay}},
 	"BirdNET.Threads":            {categories: []hotReloadCategory{hotReloadFresh}, action: "reload_birdnet"},
 	"BirdNET.Locale":             {categories: []hotReloadCategory{hotReloadDisplay}, action: "reload_birdnet"},

@@ -2683,9 +2683,10 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	return results, int(total), nil
 }
 
-// getSunEventsForDate retrieves sun times for a given date. It relies on the SunCalc's own
-// per-date cache, which follows the live station location; caching here by date string alone
-// would keep serving the previous location's times after a location change.
+// getSunEventsForDate retrieves sun times for the date of timestamp; dateStr only labels the
+// error. It relies on the SunCalc's own per-date cache, which follows the live station location;
+// caching here by date string alone would keep serving the previous location's times after a
+// location change.
 func (ds *DataStore) getSunEventsForDate(dateStr string, timestamp time.Time) (suncalc.SunEventTimes, error) {
 	sunTimes, err := ds.SunCalc.GetSunEventTimes(timestamp)
 	if err != nil {
