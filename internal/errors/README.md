@@ -15,10 +15,10 @@ The enhanced error system automatically reports errors to Sentry with privacy-sa
 
 ### Important: Import Guidelines
 
-**DO NOT** import the standard `errors` package alongside this custom errors package. This custom package provides passthrough functions for standard error operations:
+**DO NOT** import the standard `errors` package, with or without an alias; the `depguard` linter rejects it. This custom package provides passthrough functions for standard error operations:
 
 ```go
-// ❌ WRONG - Do not import both
+// ❌ WRONG - Do not import the standard package
 import (
     "errors"  // Don't do this
     "github.com/tphakala/birdnet-go/internal/errors"

@@ -5,8 +5,8 @@ import (
 )
 
 // EnhancedErrorInterface defines the methods we expect from internal/errors.EnhancedError.
-// Matching on this interface rather than the concrete type lets ErrorFields
-// extract fields from any error that carries the same metadata.
+// Matching on this interface keeps ErrorFields decoupled from the concrete
+// *EnhancedError type.
 type EnhancedErrorInterface interface {
 	error
 	GetComponent() string
