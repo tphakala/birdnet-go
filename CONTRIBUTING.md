@@ -37,6 +37,7 @@ air realtime
 - ✅ Frontend embedded in Go binary (use `air`, not Vite dev server)
 - ✅ Pre-commit hooks auto-format & lint
 - ✅ AI-assisted coding encouraged - use responsibly
+- ✅ Fix PRs merge quickly; [discuss new features first](#fixes-and-features-what-to-expect) or expect a wait of months
 
 **Need details?** Read the sections below. **Questions?** [Discord](https://discord.gg/gcSCFGUtsd)
 
@@ -103,8 +104,9 @@ Before contributing:
 1. **Read the [License](#license-and-legal)** and [Privacy Policy](PRIVACY.md)
 2. **Review [ARCHITECTURE.md](ARCHITECTURE.md)** - Understand the tech stack
 3. **Check [existing issues](https://github.com/tphakala/birdnet-go/issues)** - Avoid duplicates
-4. **Join [Discord](https://discord.gg/gcSCFGUtsd)** - For discussions and support
-5. **Read relevant AGENTS.md files** - Development guidelines:
+4. **Planning a new feature?** Discuss it with the maintainer before writing code (see [Fixes and Features](#fixes-and-features-what-to-expect))
+5. **Join [Discord](https://discord.gg/gcSCFGUtsd)** - For discussions and support
+6. **Read relevant AGENTS.md files** - Development guidelines:
    - [AGENTS.md](AGENTS.md) - Project overview, universal rules, and an index of all module guides
    - [internal/AGENTS.md](internal/AGENTS.md) - Go backend guidelines
    - [frontend/AGENTS.md](frontend/AGENTS.md) - Svelte 5 frontend guidelines
@@ -427,6 +429,21 @@ PRs that skip preflight typically require 5-10 review rounds. Running preflight 
 **Questions?** Join [Discord](https://discord.gg/gcSCFGUtsd) to discuss AI-assisted development.
 
 ## Submitting Changes
+
+### Fixes and Features: What to Expect
+
+Bug fix PRs and feature PRs are reviewed very differently, so set your expectations before you start.
+
+**Fix PRs (`fix:`)** are usually reviewed and merged quickly. A focused fix for a real, reproducible bug, with a test that covers it, is the easiest kind of contribution to accept. Linking the issue it fixes helps even more.
+
+**Feature PRs (`feat:`)** can take several months to merge, and some will not be merged at all, unless the feature was discussed with the maintainer before the PR was filed. Every new feature becomes code the maintainer has to support, debug, and keep working for years after the contributor has moved on. Before accepting one, the maintainer has to weigh:
+
+- **Maintenance burden:** how much new code, configuration, UI, and support load it adds, and who keeps it working as the rest of the application changes
+- **Fit with the project vision:** whether it belongs in BirdNET-Go at all, and whether it matches the direction the maintainer has planned for the application
+
+A working implementation does not answer either question, so a finished feature PR that arrives without prior discussion goes to the back of the queue.
+
+**To get a feature merged faster, discuss it first.** Open a [GitHub Discussion](https://github.com/tphakala/birdnet-go/discussions) or an [issue](https://github.com/tphakala/birdnet-go/issues), or ask on [Discord](https://discord.gg/gcSCFGUtsd), describing the problem the feature solves and your proposed approach. Wait for the maintainer to agree on scope and design before writing a lot of code. This saves you from building something that cannot be accepted, and a feature agreed on up front is reviewed like any other PR.
 
 ### Branch Naming
 
