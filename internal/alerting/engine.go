@@ -559,8 +559,9 @@ func (e *Engine) fireRule(rule *entities.AlertRule, event *AlertEvent) {
 
 // TestFireRule fires a rule's actions directly, bypassing condition evaluation
 // and cooldown checks. Used by the test endpoint. The resulting notification
-// is marked as a test so that push providers (Telegram, Shoutrrr, etc.) do
-// not forward it.
+// is delivered to push providers like a live one, but the synthetic event
+// carries no detection properties, so detection-specific rendering such as
+// the global new-species template does not apply.
 func (e *Engine) TestFireRule(rule *entities.AlertRule) {
 	event := &AlertEvent{
 		ObjectType: rule.ObjectType,

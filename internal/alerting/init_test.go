@@ -405,15 +405,15 @@ func TestNotificationAdapter_DispatchTemplateBehavior(t *testing.T) {
 			expectedMessage: "Global: Eurasian Blue Tit",
 		},
 		{
-			name: "CreateAndBroadcastTestWithKeys applies global new species template",
+			name: "CreateAndBroadcastTestWithKeys passes fallback through unchanged",
 			dispatch: func(a *notificationAdapter, props map[string]any) error {
 				return a.CreateAndBroadcastTestWithKeys(
 					TargetPush, notification.TypeDetection, "Fallback Title", "Fallback Message",
 					"title.key", nil, "msg.key", nil, props,
 				)
 			},
-			expectedTitle:   "Global: Eurasian Blue Tit",
-			expectedMessage: "Global: Eurasian Blue Tit",
+			expectedTitle:   "Fallback Title",
+			expectedMessage: "Fallback Message",
 		},
 	}
 
@@ -446,4 +446,3 @@ func TestNotificationAdapter_DispatchTemplateBehavior(t *testing.T) {
 		})
 	}
 }
-
