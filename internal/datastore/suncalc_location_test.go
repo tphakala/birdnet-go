@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // TestNew_SunCalcFollowsLocationChange pins that the legacy datastore's sun calculator follows a
@@ -45,4 +46,8 @@ func TestNew_SunCalcFollowsLocationChange(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, helsinki.Sunrise.Equal(sydney.Sunrise),
 		"sun times for an already-resolved date must be recalculated for the new location")
+	want, err := suncalc.NewSunCalc(moved.BirdNET.Latitude, moved.BirdNET.Longitude).GetSunEventTimes(timestamp)
+	require.NoError(t, err)
+	assert.True(t, want.Sunrise.Equal(sydney.Sunrise), "sunrise must match a fixed Sydney calculator")
+	assert.True(t, want.Sunset.Equal(sydney.Sunset), "sunset must match a fixed Sydney calculator")
 }

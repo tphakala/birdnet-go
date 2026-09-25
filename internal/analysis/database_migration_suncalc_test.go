@@ -19,15 +19,17 @@ import (
 // for every day and the dawn-chorus chart stays empty.
 func TestInitializeV2OnlyMode_ComputesDawnChorusOnset(t *testing.T) {
 	datastoreV2.ResetDatabaseMode()
-	defer datastoreV2.ResetDatabaseMode()
+	t.Cleanup(datastoreV2.ResetDatabaseMode)
 
 	const (
 		// Mid-latitude station: civil dawn is defined on every day of the year.
 		stationLatitude  = 50.0
 		stationLongitude = 10.0
-		onsetDate        = "2026-05-15"
-		detectionCount   = 5 // matches the v2only minimum detections for a day to yield an onset
-		minuteStep       = 5
+		// Same latitude, 20 degrees further east: civil dawn about 80 minutes earlier in UTC.
+		movedLongitude = 30.0
+		onsetDate      = "2026-05-15"
+		detectionCount = 5 // matches the v2only minimum detections for a day to yield an onset
+		minuteStep     = 5
 	)
 
 	settings := &conf.Settings{}
@@ -35,6 +37,12 @@ func TestInitializeV2OnlyMode_ComputesDawnChorusOnset(t *testing.T) {
 	settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "birdnet.db")
 	settings.BirdNET.Latitude = stationLatitude
 	settings.BirdNET.Longitude = stationLongitude
+
+	// The sun calculator reads the published settings snapshot, so publish this test's settings
+	// (and restore the previous snapshot) rather than depend on whatever another test left.
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(prev) })
+	conf.StoreSettings(settings)
 
 	// Create the v2 schema at the configured path, then reopen it the way a restart does.
 	fresh, err := v2only.InitializeFreshInstall(settings, nil, nil)
@@ -59,5 +67,19 @@ func TestInitializeV2OnlyMode_ComputesDawnChorusOnset(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, detectionCount, got[0].DetectionCount)
-	assert.NotNil(t, got[0].OnsetRelMinutes, "onset relative to civil dawn must be computed in v2-only mode")
+	require.NotNil(t, got[0].OnsetRelMinutes, "onset relative to civil dawn must be computed in v2-only mode")
+
+	// Move the station east without reopening the datastore: civil dawn comes earlier in the
+	// same local clock, so the onset relative to it must change. A sun calculator captured at
+	// startup would keep reporting the old value.
+	moved := conf.CloneSettings(settings)
+	moved.BirdNET.Longitude = movedLongitude
+	conf.StoreSettings(moved)
+
+	after, err := ds.GetDailyActivityOnset(t.Context(), onsetDate, onsetDate, "")
+	require.NoError(t, err)
+	require.Len(t, after, 1)
+	require.NotNil(t, after[0].OnsetRelMinutes)
+	assert.NotEqual(t, *got[0].OnsetRelMinutes, *after[0].OnsetRelMinutes,
+		"the onset relative to civil dawn must follow a station location change")
 }
