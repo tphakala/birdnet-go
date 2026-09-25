@@ -5,7 +5,6 @@ package analysis
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -36,7 +36,7 @@ func TestPublishSoundLevelToSourceTopic_RecordsFailureMetric(t *testing.T) {
 		failErr    error
 		wantErrors int
 	}{
-		{name: "non-sentinel failure records source_topic_error", failErr: errors.New("broker rejected"), wantErrors: 1},
+		{name: "non-sentinel failure records source_topic_error", failErr: errors.NewStd("broker rejected"), wantErrors: 1},
 		{name: "client-not-ready sentinel records no error", failErr: processor.ErrMQTTClientNotReady, wantErrors: 0},
 	}
 
@@ -155,7 +155,7 @@ func TestPublishSoundLevelToMQTT_PublishFailures(t *testing.T) {
 		{
 			name:          "per-source publish error is non-fatal",
 			failTopic:     sourceTopic,
-			failErr:       errors.New("broker rejected"),
+			failErr:       errors.NewStd("broker rejected"),
 			wantErr:       false,
 			wantAttempted: []string{sharedTopic, sourceTopic},
 		},
@@ -169,7 +169,7 @@ func TestPublishSoundLevelToMQTT_PublishFailures(t *testing.T) {
 		{
 			name:          "shared publish error skips the per-source topic",
 			failTopic:     sharedTopic,
-			failErr:       errors.New("broker down"),
+			failErr:       errors.NewStd("broker down"),
 			wantErr:       true,
 			wantAttempted: []string{sharedTopic},
 		},

@@ -10,21 +10,25 @@
 // always resolves to the latest manifest. The in-app update checker (a future
 // feature) consumes this file to decide whether a newer build is available.
 //
-// This package intentionally depends only on the standard library so that both
-// the CI generator and the future in-app client can import it without pulling
-// in any application internals. The Go types here are the single source of
-// truth for the manifest contract.
+// This package intentionally depends only on the standard library and
+// internal/errors (the project's drop-in replacement for the standard errors
+// package) so that both the CI generator and the future in-app client can
+// import it without pulling in any other application internals. internal/errors
+// does transitively bring in the sentry-go client, which this package never
+// initializes. The Go types here are the single source of truth for the
+// manifest contract.
 package manifest
 
 import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // SchemaVersion is the current manifest schema version. Consumers MUST check
@@ -214,7 +218,7 @@ func (m *Manifest) Validate() error {
 		return fmt.Errorf("schema_version %d is not the supported version %d", m.SchemaVersion, SchemaVersion)
 	}
 	if len(m.Channels) == 0 {
-		return errors.New("at least one channel is required")
+		return errors.NewStd("at least one channel is required")
 	}
 	for name, ch := range m.Channels {
 		if ch == nil {

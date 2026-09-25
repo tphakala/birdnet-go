@@ -3,7 +3,6 @@ package analysis
 import (
 	"context"
 	"encoding/json"
-	stderrors "errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -331,7 +330,7 @@ func publishSoundLevelToSourceTopic(settings *conf.Settings, sourceID, name, pay
 	defer cancel()
 
 	topic := mqtt.SourceSoundLevelTopic(settings.Realtime.MQTT.Topic, sourceID)
-	if err := proc.PublishMQTT(ctx, topic, payload); err != nil && !stderrors.Is(err, processor.ErrMQTTClientNotReady) {
+	if err := proc.PublishMQTT(ctx, topic, payload); err != nil && !errors.Is(err, processor.ErrMQTTClientNotReady) {
 		// Log the same fields the shared-topic publisher logs, so a per-source
 		// failure is not observably poorer than a shared-topic failure.
 		getSoundLevelLogger().Warn("failed to publish sound level data to per-source MQTT topic",
@@ -443,7 +442,7 @@ func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processo
 		// identical "client not available" events every sound-level interval.
 		// The processor emits a single warn log on the first occurrence;
 		// subsequent drops are silent by design.
-		if stderrors.Is(err, processor.ErrMQTTClientNotReady) {
+		if errors.Is(err, processor.ErrMQTTClientNotReady) {
 			if settings.Realtime.Audio.SoundLevel.Debug {
 				getSoundLevelLogger().Debug("sound level MQTT publish skipped: client not ready",
 					logger.String("source", soundData.Source),

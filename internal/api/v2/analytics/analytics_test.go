@@ -5,7 +5,6 @@ package analytics
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -212,7 +212,7 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Setup mock to return a database error (like the SQL aggregate error)
-	dbError := errors.New("Error 1140 (42000): In aggregated query without GROUP BY, expression #3 of SELECT list contains nonaggregated column 'datastore.notes.species_code'")
+	dbError := errors.NewStd("Error 1140 (42000): In aggregated query without GROUP BY, expression #3 of SELECT list contains nonaggregated column 'datastore.notes.species_code'")
 	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{}, dbError)
 
 	// Create a request
@@ -1543,7 +1543,7 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Override the GetTopBirdsData function to return an error
-	mockDS.On("GetTopBirdsData", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, errors.New("database connection error"))
+	mockDS.On("GetTopBirdsData", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, errors.NewStd("database connection error"))
 
 	// Create a request with the date we want to test
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
@@ -1591,7 +1591,7 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 
 	// Mock GetBatchHourlyOccurrences to return an error
 	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, testDate, testDate, mock.Anything, 0.0).Return(
-		map[string][24]int{}, errors.New("batch query failed: connection timeout"))
+		map[string][24]int{}, errors.NewStd("batch query failed: connection timeout"))
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date="+testDate, http.NoBody)

@@ -4,7 +4,6 @@ package mqtt
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net"
@@ -21,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -1410,7 +1410,7 @@ func TestHandleReconnectFailureErrorSuppression(t *testing.T) {
 		logger.String("broker", config.Broker),
 		logger.String("client_id", config.ClientID))
 
-	testErr := errors.New("connection refused")
+	testErr := errors.NewStd("connection refused")
 
 	// First failure should set state
 	c.handleReconnectFailure(testLog, testErr)
@@ -1431,7 +1431,7 @@ func TestHandleReconnectFailureErrorSuppression(t *testing.T) {
 	c.mu.RUnlock()
 
 	// Failure with different error should reset suppression state
-	differentErr := errors.New("no route to host")
+	differentErr := errors.NewStd("no route to host")
 	c.handleReconnectFailure(testLog, differentErr)
 
 	c.mu.RLock()
@@ -1606,7 +1606,7 @@ func TestPublishSuppressionWhileDisconnected(t *testing.T) {
 		}
 
 		// Simulate connection loss
-		tc.onConnectionLost(nil, errors.New("connection refused"))
+		tc.onConnectionLost(nil, errors.NewStd("connection refused"))
 
 		tc.mu.RLock()
 		assert.True(t, tc.disconnected, "Should set disconnected flag")

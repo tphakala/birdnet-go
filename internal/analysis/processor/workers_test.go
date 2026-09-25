@@ -2,7 +2,6 @@ package processor
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -13,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -41,31 +41,31 @@ func TestPrivacyWrapError(t *testing.T) {
 		},
 		{
 			name:          "simple error",
-			err:           errors.New("simple error message"),
+			err:           errors.NewStd("simple error message"),
 			shouldContain: []string{"simple error message"},
 		},
 		{
 			name:             "RTSP URL with credentials",
-			err:              errors.New("failed to connect to rtsp://admin:password123@192.168.1.100:554/stream"),
+			err:              errors.NewStd("failed to connect to rtsp://admin:password123@192.168.1.100:554/stream"),
 			shouldContain:    []string{"failed to connect to"},
 			shouldNotContain: []string{"admin", "password123"},
 		},
 		{
 			name: "API key in error",
 			// NOTE: This is a fake API key used only for testing the sanitization function.
-			err:              errors.New("API request failed: api_key=abc123xyz789"),
+			err:              errors.NewStd("API request failed: api_key=abc123xyz789"),
 			shouldContain:    []string{"API request failed"},
 			shouldNotContain: []string{"abc123xyz789"},
 		},
 		{
 			name:             "Token in error",
-			err:              errors.New("authentication failed: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"),
+			err:              errors.NewStd("authentication failed: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"),
 			shouldContain:    []string{"authentication failed", "[TOKEN]"},
 			shouldNotContain: []string{"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"},
 		},
 		{
 			name:             "Email in error",
-			err:              errors.New("notification failed for user@example.com"),
+			err:              errors.NewStd("notification failed for user@example.com"),
 			shouldContain:    []string{"notification failed for", "[EMAIL]"},
 			shouldNotContain: []string{"user@example.com"},
 		},
@@ -102,7 +102,7 @@ func TestPrivacyWrapError(t *testing.T) {
 func TestPrivacyWrapErrorWrapped(t *testing.T) {
 	t.Parallel()
 	// Create a wrapped error with sensitive information
-	baseErr := errors.New("user@example.com")
+	baseErr := errors.NewStd("user@example.com")
 	wrappedErr := fmt.Errorf("operation failed for: %w", baseErr)
 
 	// Sanitize the wrapped error

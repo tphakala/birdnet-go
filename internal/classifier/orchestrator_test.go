@@ -2,7 +2,6 @@ package classifier
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"runtime"
 	"sync"
@@ -15,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // mockModelInstance implements ModelInstance for testing.
@@ -934,7 +934,7 @@ func TestOrchestrator_PredictModel_ErrorIncrementsInvokeErrors(t *testing.T) {
 	// (globalInferenceCounters). Keeping it serial avoids coupling the delta to
 	// any other test that touches the shared counters.
 	const modelID = "error-model"
-	predictErr := errors.New("injected predict failure")
+	predictErr := errors.NewStd("injected predict failure")
 
 	mock := &mockModelInstance{
 		id:   modelID,
@@ -994,7 +994,7 @@ func TestInferenceFailureLogsAtError(t *testing.T) {
 func TestOrchestrator_PredictModel_FailureStreak(t *testing.T) {
 	// Not parallel: exercises the package-global inferenceFailureStreaks map.
 	const modelID = "streak-model"
-	predictErr := errors.New("injected predict failure")
+	predictErr := errors.NewStd("injected predict failure")
 
 	var fail bool
 	mock := &mockModelInstance{

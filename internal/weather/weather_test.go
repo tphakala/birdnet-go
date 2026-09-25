@@ -2,7 +2,6 @@ package weather
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"sync"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // mockProvider is a test double for the Provider interface.
@@ -294,7 +294,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 		})
 
 		// SaveDailyEvents fails (e.g., SQLITE_BUSY)
-		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.NewStd("database is locked")).Once()
 
 		// Fallback: GetDailyEvents returns existing row
 		existingID := uint(42)
@@ -338,11 +338,11 @@ func TestService_SaveWeatherData(t *testing.T) {
 		})
 
 		// First SaveDailyEvents fails (e.g., SQLITE_BUSY)
-		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.NewStd("database is locked")).Once()
 
 		// GetDailyEvents also fails: no existing row
 		localDate := fixedTime.UTC().In(time.Local).Format(time.DateOnly)
-		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, errors.New("no rows")).Once()
+		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, errors.NewStd("no rows")).Once()
 
 		// Retry SaveDailyEvents succeeds
 		mockDB.On("SaveDailyEvents", mock.Anything).Run(func(args mock.Arguments) {
@@ -382,14 +382,14 @@ func TestService_SaveWeatherData(t *testing.T) {
 		})
 
 		// First SaveDailyEvents fails
-		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.NewStd("database is locked")).Once()
 
 		// GetDailyEvents also fails: no existing row
 		localDate := fixedTime.UTC().In(time.Local).Format(time.DateOnly)
-		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, errors.New("no rows")).Once()
+		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, errors.NewStd("no rows")).Once()
 
 		// Retry SaveDailyEvents also fails
-		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.NewStd("database is locked")).Once()
 
 		err := service.saveWeatherData(testData)
 
@@ -417,7 +417,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 		})
 
 		// First SaveDailyEvents fails
-		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.NewStd("database is locked")).Once()
 
 		// GetDailyEvents returns empty row with nil error (v1 legacy "not found" contract)
 		localDate := fixedTime.UTC().In(time.Local).Format(time.DateOnly)
@@ -464,7 +464,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 		}).Return(nil).Once()
 
 		// SaveHourlyWeather fails
-		mockDB.On("SaveHourlyWeather", mock.Anything).Return(errors.New("disk full")).Once()
+		mockDB.On("SaveHourlyWeather", mock.Anything).Return(errors.NewStd("disk full")).Once()
 
 		err := service.saveWeatherData(testData)
 
@@ -1014,7 +1014,7 @@ func TestFetchAndSave_GeneralFailureBackoff(t *testing.T) {
 	provider := &mockProvider{
 		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
 			callCount++
-			return nil, errors.New("network timeout")
+			return nil, errors.NewStd("network timeout")
 		},
 	}
 
@@ -1047,7 +1047,7 @@ func TestFetchAndSave_SuccessResetsBackoff(t *testing.T) {
 		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
 			if failOnFirst {
 				failOnFirst = false
-				return nil, errors.New("transient error")
+				return nil, errors.NewStd("transient error")
 			}
 			return createTestWeatherData(t), nil
 		},
@@ -1114,7 +1114,7 @@ func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
 		fetchFunc: func(settings *conf.Settings) (*WeatherData, error) {
 			observedLat = settings.BirdNET.Latitude
 			observedLon = settings.BirdNET.Longitude
-			return nil, errors.New("short-circuit after observing coords")
+			return nil, errors.NewStd("short-circuit after observing coords")
 		},
 	}
 

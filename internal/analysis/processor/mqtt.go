@@ -3,7 +3,6 @@ package processor
 
 import (
 	"context"
-	stderrors "errors"
 	"slices"
 	"time"
 
@@ -49,12 +48,12 @@ const (
 // action creation when the client is nil (see processor.go), so this
 // sentinel is primarily for streaming (non-detection) publishers.
 //
-// This sentinel error is intentionally a plain stderrors.New value so it has
+// This sentinel error is intentionally a plain errors.NewStd value so it has
 // no telemetry category attached. Wrapping layers must preserve it with
 // errors.Is-compatible wrapping (fmt.Errorf("...: %w", err) or the internal
 // errors builder's New() which chains cause) so callers can detect and
 // silently drop publishes while the broker is unreachable.
-var ErrMQTTClientNotReady = stderrors.New("MQTT client not ready")
+var ErrMQTTClientNotReady = errors.NewStd("MQTT client not ready")
 
 // GetMQTTClient safely returns the current MQTT client
 func (p *Processor) GetMQTTClient() mqtt.Client {

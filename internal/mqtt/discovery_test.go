@@ -4,7 +4,6 @@ package mqtt
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestSanitizeID verifies the ID sanitization function for MQTT topics and HA entity IDs.
@@ -420,7 +420,7 @@ func TestPublishDiscoveryErrorHandling(t *testing.T) {
 	t.Parallel()
 
 	mock := newMockPublisher()
-	mock.publishError = errors.New("mock publish error")
+	mock.publishError = errors.NewStd("mock publish error")
 
 	config := DiscoveryConfig{
 		DiscoveryPrefix: "homeassistant",
@@ -1230,7 +1230,7 @@ func TestRemoveDiscovery_PropagatesPublishError(t *testing.T) {
 	// Fail exactly one config topic of the first source; every other removal
 	// must still be attempted.
 	failedTopic := "homeassistant/sensor/node/node_Backyard_confidence/config"
-	mock.topicErrors = map[string]error{failedTopic: errors.New("broker rejected publish")}
+	mock.topicErrors = map[string]error{failedTopic: errors.NewStd("broker rejected publish")}
 
 	err := publisher.RemoveDiscovery(t.Context(), sources)
 	require.Error(t, err, "a per-topic publish failure must propagate as a non-nil error")

@@ -7,7 +7,6 @@
 package species
 
 import (
-	"errors"
 	"maps"
 	"testing"
 	"time"
@@ -17,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // ============================================================================
@@ -207,7 +207,7 @@ func TestLoadNotificationHistoryFromDatabase_EdgeCases(t *testing.T) {
 			name:              "database_error_returns_error",
 			suppressionWindow: 24 * time.Hour,
 			mockHistories:     nil,
-			mockError:         errors.New("database connection failed"),
+			mockError:         errors.NewStd("database connection failed"),
 			expectedMapSize:   0,
 			expectError:       true,
 		},
@@ -575,7 +575,7 @@ func TestLoadSingleSeasonData_ErrorPaths(t *testing.T) {
 			name:        "database_error_returns_error",
 			seasonName:  "winter",
 			mockData:    nil,
-			mockError:   errors.New("database unavailable"),
+			mockError:   errors.NewStd("database unavailable"),
 			expectError: true,
 		},
 		{

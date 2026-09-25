@@ -15,10 +15,10 @@ The enhanced error system automatically reports errors to Sentry with privacy-sa
 
 ### Important: Import Guidelines
 
-**DO NOT** import the standard `errors` package alongside this custom errors package. This custom package provides passthrough functions for standard error operations:
+**DO NOT** import the standard `errors` package, with or without an alias; the `depguard` linter rejects it. This custom package provides passthrough functions for standard error operations:
 
 ```go
-// ❌ WRONG - Do not import both
+// ❌ WRONG - Do not import the standard package
 import (
     "errors"  // Don't do this
     "github.com/tphakala/birdnet-go/internal/errors"
@@ -28,7 +28,8 @@ import (
 import "github.com/tphakala/birdnet-go/internal/errors"
 
 // The custom package provides passthrough functions:
-// errors.Is(), errors.As(), errors.Unwrap() are all available
+// errors.Is(), errors.As(), errors.AsType(), errors.Unwrap(), errors.Join()
+// and errors.NewStd() are all available, as is the errors.ErrUnsupported sentinel
 ```
 
 ### Basic Usage
@@ -515,10 +516,10 @@ The enhanced error system is designed to be lightweight:
 
 ### Standard Library Integration
 
-This package provides passthroughs for the standard error functions, so you should not import the standard `errors` package alongside it. The only exceptions are breaking an import cycle and using `errors.AsType`, which has no passthrough; in that case alias the standard package as `stderrors` (see `AGENTS.md` in this directory):
+This package provides passthroughs for the standard error functions, so never import the standard `errors` package, with or without an alias such as `stderrors`. There are no exceptions: this package imports nothing else from the module, so it cannot cause an import cycle, and the `depguard` linter rejects the standard package everywhere except `errors.go` in this directory. If a standard function is missing, add a passthrough here.
 
 ```go
-// ❌ WRONG - Importing both without one of the exceptions above
+// ❌ WRONG - Importing the standard package, aliased or not
 import (
     stderrors "errors"  // Not needed: use the passthroughs instead
     "github.com/tphakala/birdnet-go/internal/errors"
@@ -528,10 +529,13 @@ import (
 import "github.com/tphakala/birdnet-go/internal/errors"
 
 // Available passthrough functions:
-errors.Is(err, target)     // Standard error checking
-errors.As(err, &target)    // Standard error unwrapping
-errors.Unwrap(err)         // Standard error unwrapping
-errors.Join(errs...)       // Standard error joining
+errors.Is(err, target)                       // Standard error checking
+errors.AsType[*fs.PathError](err)            // Type-safe error unwrapping (preferred)
+errors.As(err, &target)                      // Standard error unwrapping
+errors.Unwrap(err)                           // Standard error unwrapping
+errors.Join(errs...)                         // Standard error joining
+errors.NewStd("not found")                   // Standard errors.New, for sentinels
+errors.ErrUnsupported                        // Standard sentinel
 ```
 
 ### Function Availability
@@ -539,14 +543,15 @@ errors.Join(errs...)       // Standard error joining
 The custom errors package provides:
 
 - **Enhanced Functions**: `errors.New()`, `errors.Newf()` with telemetry integration
-- **Standard Functions**: `errors.Is()`, `errors.As()`, `errors.Unwrap()`, `errors.Join()`
+- **Standard Functions**: `errors.Is()`, `errors.As()`, `errors.AsType()`, `errors.Unwrap()`, `errors.Join()`, `errors.NewStd()`
+- **Standard Sentinels**: `errors.ErrUnsupported`
 - **Specialized Functions**: Component detection, context building, privacy scrubbing
 
 ### Migration Checklist
 
 When updating existing code:
 
-1. ✅ Remove any `import "errors"` or `import stderrors "errors"`, unless the file uses `stderrors.AsType` or breaks an import cycle (the two exceptions above)
+1. ✅ Remove any `import "errors"` or `import stderrors "errors"`, and change standard `errors.New("...")` calls to `errors.NewStd("...")`
 2. ✅ Ensure `import "github.com/tphakala/birdnet-go/internal/errors"` is present
 3. ✅ Replace `fmt.Errorf()` with `errors.Newf()` where enhanced telemetry is needed
 4. ✅ Add `.Component()`, `.Category()`, and `.Context()` calls
