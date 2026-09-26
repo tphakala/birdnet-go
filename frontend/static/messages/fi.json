@@ -1858,10 +1858,12 @@
       "noModelsHint": "Ei äänilähteitä määritettynä vielä?",
       "noModelsHintLink": "Määritä äänilähteet",
       "modelFailing": "jokainen analyysi epäonnistuu",
-      "modelFailingTooltip": "Viimeiset {count} analyysiä peräkkäin epäonnistuivat, joten tämä malli ei tunnista mitään. Kokeile mallin toista versiota kohdassa Asetukset > Analyysi > Mallit tai tarkista tässä näkyvä taustajärjestelmä ja tarkkuus.",
       "lastSuccess": "Viimeisin onnistuminen",
       "lastSuccessHelp": "Milloin tämä malli viimeksi analysoi ääntä ilman virhettä.",
-      "lastSuccessNever": "ei koskaan"
+      "lastSuccessNever": "Ei yhtään mallin latauksen jälkeen",
+      "modelFailingHelp": "{reason} Kokeile tämän mallin toista versiota kohdassa Asetukset > Analyysi > Mallit tai tarkista yllä näkyvä taustajärjestelmä ja tarkkuus.",
+      "modelFailingReasonNonFinite": "Kaikki viimeaikaiset analyysit epäonnistuivat, koska malli palautti virheellisiä pisteitä (NaN tai äärettömiä), joten se ei tunnista mitään.",
+      "modelFailingReasonError": "Kaikki viimeaikaiset analyysit epäonnistuivat, koska päättely palautti virheen, joten malli ei tunnista mitään."
     },
     "metrics": {
       "cpu": "CPU",

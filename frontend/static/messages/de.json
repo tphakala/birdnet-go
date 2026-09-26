@@ -1858,10 +1858,12 @@
       "noModelsHint": "Noch keine Audioquelle konfiguriert?",
       "noModelsHintLink": "Audioquellen konfigurieren",
       "modelFailing": "jede Analyse schlägt fehl",
-      "modelFailingTooltip": "Die letzten {count} Analysen in Folge sind fehlgeschlagen, daher erkennt dieses Modell nichts. Versuchen Sie eine andere Version des Modells unter Einstellungen > Analyse > Modelle oder prüfen Sie das hier angezeigte Backend und die Präzision.",
       "lastSuccess": "Letzter Erfolg",
       "lastSuccessHelp": "Wann dieses Modell zuletzt Audio ohne Fehler analysiert hat.",
-      "lastSuccessNever": "nie"
+      "lastSuccessNever": "Keiner seit dem Laden des Modells",
+      "modelFailingHelp": "{reason} Versuchen Sie eine andere Version dieses Modells unter Einstellungen > Analyse > Modelle oder prüfen Sie das oben angezeigte Backend und die Präzision.",
+      "modelFailingReasonNonFinite": "Alle letzten Analysen sind fehlgeschlagen, weil das Modell ungültige Werte (NaN oder unendlich) geliefert hat, daher erkennt es nichts.",
+      "modelFailingReasonError": "Alle letzten Analysen sind fehlgeschlagen, weil die Inferenz einen Fehler zurückgegeben hat, daher erkennt das Modell nichts."
     },
     "metrics": {
       "cpu": "CPU",

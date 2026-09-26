@@ -229,6 +229,9 @@ export interface InferenceModelHealth {
 /** Model health state for a model that fails every analysis window. */
 export const MODEL_HEALTH_FAILING = 'failing';
 
+/** errorClass of a failure run caused by NaN or infinite scores (backend InferenceErrorClassNonFinite). */
+export const ERROR_CLASS_NON_FINITE = 'non_finite_output';
+
 /** Ring-buffer metric keys used to look up audio pipeline time series. */
 export interface InferenceAudioMetricKeys {
   queueDepth: string;

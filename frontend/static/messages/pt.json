@@ -1858,10 +1858,12 @@
       "noModelsHint": "Nenhuma fonte de áudio configurada ainda?",
       "noModelsHintLink": "Configurar fontes de áudio",
       "modelFailing": "todas as análises falham",
-      "modelFailingTooltip": "As últimas {count} análises seguidas falharam, pelo que este modelo não deteta nada. Experimente outra versão do modelo em Configurações > Análise > Modelos, ou verifique o backend e a precisão mostrados aqui.",
       "lastSuccess": "Último sucesso",
       "lastSuccessHelp": "Quando este modelo analisou áudio sem erros pela última vez.",
-      "lastSuccessNever": "nunca"
+      "lastSuccessNever": "Nenhum desde que o modelo foi carregado",
+      "modelFailingHelp": "{reason} Experimente outra versão deste modelo em Configurações > Análise > Modelos, ou verifique o backend e a precisão mostrados acima.",
+      "modelFailingReasonNonFinite": "Todas as análises recentes falharam porque o modelo devolveu pontuações inválidas (NaN ou infinitas), pelo que não deteta nada.",
+      "modelFailingReasonError": "Todas as análises recentes falharam porque a inferência devolveu um erro, pelo que o modelo não deteta nada."
     },
     "metrics": {
       "cpu": "CPU",

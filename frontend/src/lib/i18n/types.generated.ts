@@ -1445,10 +1445,12 @@ export type TranslationKey =
   | 'system.inference.noModelsHint'
   | 'system.inference.noModelsHintLink'
   | 'system.inference.modelFailing'
-  | 'system.inference.modelFailingTooltip' // params: count
   | 'system.inference.lastSuccess'
   | 'system.inference.lastSuccessHelp'
   | 'system.inference.lastSuccessNever'
+  | 'system.inference.modelFailingHelp' // params: reason
+  | 'system.inference.modelFailingReasonNonFinite'
+  | 'system.inference.modelFailingReasonError'
   | 'system.metrics.cpu'
   | 'system.metrics.memory'
   | 'system.metrics.temperature'
@@ -4481,7 +4483,7 @@ export type TranslationParams = {
   'system.database.migration.prerequisites.warningCount': { count: string | number };
   'system.inference.sourcesDegraded': { count: string | number; total: string | number };
   'system.inference.coDetectedHelp': { seconds: string | number };
-  'system.inference.modelFailingTooltip': { count: string | number };
+  'system.inference.modelFailingHelp': { reason: string | number };
   'analytics.hub.card.notEnoughDataHint': { min: string | number };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };

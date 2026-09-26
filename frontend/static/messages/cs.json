@@ -1858,10 +1858,12 @@
       "noModelsHint": "Zatím žádný zdroj zvuku?",
       "noModelsHintLink": "Nakonfigurovat zdroje zvuku",
       "modelFailing": "každá analýza selhává",
-      "modelFailingTooltip": "Posledních {count} analýz za sebou selhalo, takže tento model nic nedetekuje. Zkuste jiné sestavení modelu v Nastavení > Analýza > Modely nebo zkontrolujte zde uvedený backend a přesnost.",
       "lastSuccess": "Poslední úspěch",
       "lastSuccessHelp": "Kdy tento model naposledy analyzoval zvuk bez chyby.",
-      "lastSuccessNever": "nikdy"
+      "lastSuccessNever": "Od načtení modelu žádný",
+      "modelFailingHelp": "{reason} Zkuste jiné sestavení tohoto modelu v Nastavení > Analýza > Modely nebo zkontrolujte backend a přesnost uvedené výše.",
+      "modelFailingReasonNonFinite": "Všechny nedávné analýzy selhaly, protože model vrátil neplatné skóre (NaN nebo nekonečné), takže nic nedetekuje.",
+      "modelFailingReasonError": "Všechny nedávné analýzy selhaly, protože inference vrátila chybu, takže model nic nedetekuje."
     },
     "metrics": {
       "cpu": "CPU",

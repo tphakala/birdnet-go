@@ -1858,10 +1858,12 @@
       "noModelsHint": "Nie skonfigurowano jeszcze źródła audio?",
       "noModelsHintLink": "Skonfiguruj źródła audio",
       "modelFailing": "każda analiza kończy się błędem",
-      "modelFailingTooltip": "Ostatnie {count} analiz z rzędu nie powiodło się, więc ten model niczego nie wykrywa. Wypróbuj inną wersję modelu w Ustawienia > Analiza > Modele lub sprawdź widoczny tu backend i precyzję.",
       "lastSuccess": "Ostatni sukces",
       "lastSuccessHelp": "Kiedy ten model ostatnio przeanalizował dźwięk bez błędu.",
-      "lastSuccessNever": "nigdy"
+      "lastSuccessNever": "Brak od załadowania modelu",
+      "modelFailingHelp": "{reason} Wypróbuj inną wersję tego modelu w Ustawienia > Analiza > Modele lub sprawdź backend i precyzję widoczne powyżej.",
+      "modelFailingReasonNonFinite": "Wszystkie ostatnie analizy nie powiodły się, ponieważ model zwrócił nieprawidłowe wyniki (NaN lub nieskończone), więc niczego nie wykrywa.",
+      "modelFailingReasonError": "Wszystkie ostatnie analizy nie powiodły się, ponieważ wnioskowanie zwróciło błąd, więc model niczego nie wykrywa."
     },
     "metrics": {
       "cpu": "CPU",

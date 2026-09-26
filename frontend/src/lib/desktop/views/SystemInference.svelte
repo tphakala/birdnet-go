@@ -50,7 +50,10 @@
     TriangleAlert,
   } from '@lucide/svelte';
   import { isContainerEnvironment } from '$lib/desktop/features/system/environment';
-  import { MODEL_HEALTH_FAILING } from '$lib/desktop/features/system/inference.types';
+  import {
+    ERROR_CLASS_NON_FINITE,
+    MODEL_HEALTH_FAILING,
+  } from '$lib/desktop/features/system/inference.types';
   import type {
     InferenceStatusResponse,
     InferenceModel,
@@ -439,6 +442,18 @@
   }
 
   // RTF is absent or meaningless when there are no invocations.
+  /**
+   * The visible explanation for a failing model: why its analyses fail (from the
+   * backend error class) and what to try next.
+   */
+  function modelFailingHelp(model: InferenceModel): string {
+    const reason =
+      model.health?.errorClass === ERROR_CLASS_NON_FINITE
+        ? t('system.inference.modelFailingReasonNonFinite')
+        : t('system.inference.modelFailingReasonError');
+    return t('system.inference.modelFailingHelp', { reason });
+  }
+
   function rtfDisplay(model: InferenceModel): string {
     const { invocations, rtf } = model.stats;
     if (invocations <= 0 || rtf == null) return '-';
@@ -1017,6 +1032,7 @@
             {@const anySourceDown = downCount > 0}
             {@const allSourcesDown = model.sources.length > 0 && downCount === model.sources.length}
             {@const isFailing = model.health?.state === MODEL_HEALTH_FAILING}
+            {@const failingHelp = isFailing ? modelFailingHelp(model) : ''}
             <div
               class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
             >
@@ -1070,9 +1086,8 @@
                     class="ml-auto flex items-center gap-1.5"
                     role="status"
                     data-testid="model-failing"
-                    title={t('system.inference.modelFailingTooltip', {
-                      count: model.health?.consecutiveFailures ?? 0,
-                    })}
+                    title={failingHelp}
+                    aria-describedby={`model-failing-help-${model.id}`}
                   >
                     <CircleX class="w-3 h-3 shrink-0 text-red-500" aria-hidden="true" />
                     <span class="text-xs font-medium text-red-600 dark:text-red-400"
@@ -1141,6 +1156,18 @@
                   </span>
                 {/if}
               </div>
+
+              {#if isFailing}
+                <!-- Visible remedy for the failing chip: a title tooltip never shows on
+                     a touch device, so the reason and the next step are spelled out. -->
+                <p
+                  id={`model-failing-help-${model.id}`}
+                  class="text-xs text-red-600 dark:text-red-400"
+                  data-testid="model-failing-help"
+                >
+                  {failingHelp}
+                </p>
+              {/if}
 
               <!-- Spec line -->
               <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
@@ -1215,7 +1242,7 @@
                     t('system.inference.lastSuccess'),
                     t('system.inference.lastSuccessHelp'),
                     model.health.lastSuccessAtUnix
-                      ? getLocalTimeString(new Date(model.health.lastSuccessAtUnix * 1000))
+                      ? formatLocalDateTime(new Date(model.health.lastSuccessAtUnix * 1000))
                       : t('system.inference.lastSuccessNever'),
                     `help-last-success-${model.id}`
                   )}

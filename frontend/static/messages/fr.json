@@ -1858,10 +1858,12 @@
       "noModelsHint": "Aucune source audio configurée ?",
       "noModelsHintLink": "Configurer les sources audio",
       "modelFailing": "chaque analyse échoue",
-      "modelFailingTooltip": "Les {count} dernières analyses consécutives ont échoué, ce modèle ne détecte donc rien. Essayez une autre version du modèle dans Paramètres > Analyse > Modèles, ou vérifiez le backend et la précision affichés ici.",
       "lastSuccess": "Dernier succès",
       "lastSuccessHelp": "Quand ce modèle a analysé de l'audio sans erreur pour la dernière fois.",
-      "lastSuccessNever": "jamais"
+      "lastSuccessNever": "Aucun depuis le chargement du modèle",
+      "modelFailingHelp": "{reason} Essayez une autre version de ce modèle dans Paramètres > Analyse > Modèles, ou vérifiez le backend et la précision affichés ci-dessus.",
+      "modelFailingReasonNonFinite": "Toutes les analyses récentes ont échoué car le modèle a renvoyé des scores invalides (NaN ou infinis), il ne détecte donc rien.",
+      "modelFailingReasonError": "Toutes les analyses récentes ont échoué car l'inférence a renvoyé une erreur, le modèle ne détecte donc rien."
     },
     "metrics": {
       "cpu": "CPU",

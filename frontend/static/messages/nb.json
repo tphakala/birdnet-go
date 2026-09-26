@@ -1858,10 +1858,12 @@
       "noModelsHint": "Ingen lydkilde konfigurert ennå?",
       "noModelsHintLink": "Konfigurer lydkilder",
       "modelFailing": "hver analyse feiler",
-      "modelFailingTooltip": "De siste {count} analysene på rad feilet, så denne modellen oppdager ingenting. Prøv en annen versjon av modellen under Innstillinger > Analyse > Modeller, eller sjekk backend og presisjon som vises her.",
       "lastSuccess": "Siste vellykkede",
       "lastSuccessHelp": "Når denne modellen sist analyserte lyd uten feil.",
-      "lastSuccessNever": "aldri"
+      "lastSuccessNever": "Ingen siden modellen ble lastet inn",
+      "modelFailingHelp": "{reason} Prøv en annen versjon av denne modellen under Innstillinger > Analyse > Modeller, eller sjekk backend og presisjon som vises over.",
+      "modelFailingReasonNonFinite": "Alle de siste analysene feilet fordi modellen returnerte ugyldige poeng (NaN eller uendelige), så den oppdager ingenting.",
+      "modelFailingReasonError": "Alle de siste analysene feilet fordi inferensen returnerte en feil, så modellen oppdager ingenting."
     },
     "metrics": {
       "cpu": "CPU",

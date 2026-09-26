@@ -1858,10 +1858,12 @@
       "noModelsHint": "Nog geen audiobron geconfigureerd?",
       "noModelsHintLink": "Audiobronnen configureren",
       "modelFailing": "elke analyse mislukt",
-      "modelFailingTooltip": "De laatste {count} analyses op rij zijn mislukt, dus dit model detecteert niets. Probeer een andere versie van het model via Instellingen > Analyse > Modellen, of controleer de backend en precisie die hier worden getoond.",
       "lastSuccess": "Laatste succes",
       "lastSuccessHelp": "Wanneer dit model voor het laatst audio zonder fout analyseerde.",
-      "lastSuccessNever": "nooit"
+      "lastSuccessNever": "Geen sinds het model is geladen",
+      "modelFailingHelp": "{reason} Probeer een andere versie van dit model via Instellingen > Analyse > Modellen, of controleer de backend en precisie hierboven.",
+      "modelFailingReasonNonFinite": "Alle recente analyses zijn mislukt omdat het model ongeldige scores gaf (NaN of oneindig), dus het detecteert niets.",
+      "modelFailingReasonError": "Alle recente analyses zijn mislukt omdat de inferentie een fout gaf, dus het model detecteert niets."
     },
     "metrics": {
       "cpu": "CPU",

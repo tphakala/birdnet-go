@@ -1858,10 +1858,12 @@
       "noModelsHint": "Nessuna sorgente audio configurata ancora?",
       "noModelsHintLink": "Configura sorgenti audio",
       "modelFailing": "ogni analisi fallisce",
-      "modelFailingTooltip": "Le ultime {count} analisi consecutive sono fallite, quindi questo modello non rileva nulla. Prova un'altra versione del modello in Impostazioni > Analisi > Modelli, oppure controlla il backend e la precisione mostrati qui.",
       "lastSuccess": "Ultimo successo",
       "lastSuccessHelp": "Quando questo modello ha analizzato l'audio senza errori l'ultima volta.",
-      "lastSuccessNever": "mai"
+      "lastSuccessNever": "Nessuno dal caricamento del modello",
+      "modelFailingHelp": "{reason} Prova un'altra versione di questo modello in Impostazioni > Analisi > Modelli, oppure controlla il backend e la precisione mostrati sopra.",
+      "modelFailingReasonNonFinite": "Tutte le analisi recenti sono fallite perché il modello ha restituito punteggi non validi (NaN o infiniti), quindi non rileva nulla.",
+      "modelFailingReasonError": "Tutte le analisi recenti sono fallite perché l'inferenza ha restituito un errore, quindi il modello non rileva nulla."
     },
     "metrics": {
       "cpu": "CPU",

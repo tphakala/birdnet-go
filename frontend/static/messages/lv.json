@@ -1858,10 +1858,12 @@
       "noModelsHint": "Vēl nav konfigurēti audio avoti?",
       "noModelsHintLink": "Konfigurēt audio avotus",
       "modelFailing": "katra analīze neizdodas",
-      "modelFailingTooltip": "Pēdējās {count} analīzes pēc kārtas neizdevās, tāpēc šis modelis neko nenosaka. Izmēģiniet citu modeļa versiju sadaļā Iestatījumi > Analīze > Modeļi vai pārbaudiet šeit redzamo aizmugursistēmu un precizitāti.",
       "lastSuccess": "Pēdējā veiksmīgā",
       "lastSuccessHelp": "Kad šis modelis pēdējo reizi analizēja audio bez kļūdām.",
-      "lastSuccessNever": "nekad"
+      "lastSuccessNever": "Nav kopš modeļa ielādes",
+      "modelFailingHelp": "{reason} Izmēģiniet citu šī modeļa versiju sadaļā Iestatījumi > Analīze > Modeļi vai pārbaudiet augstāk redzamo aizmugursistēmu un precizitāti.",
+      "modelFailingReasonNonFinite": "Visas nesenās analīzes neizdevās, jo modelis atgrieza nederīgus rezultātus (NaN vai bezgalīgus), tāpēc tas neko nenosaka.",
+      "modelFailingReasonError": "Visas nesenās analīzes neizdevās, jo secināšana atgrieza kļūdu, tāpēc modelis neko nenosaka."
     },
     "metrics": {
       "cpu": "Procesors",

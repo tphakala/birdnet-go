@@ -1858,10 +1858,12 @@
       "noModelsHint": "Még nincs beállítva hangforrás?",
       "noModelsHintLink": "Hangforrások beállítása",
       "modelFailing": "minden elemzés sikertelen",
-      "modelFailingTooltip": "Az utolsó {count} egymást követő elemzés sikertelen volt, így ez a modell semmit sem észlel. Próbálja ki a modell egy másik változatát a Beállítások > Elemzés > Modellek oldalon, vagy ellenőrizze az itt látható háttérrendszert és pontosságot.",
       "lastSuccess": "Utolsó sikeres",
       "lastSuccessHelp": "Mikor elemzett ez a modell utoljára hiba nélkül hangot.",
-      "lastSuccessNever": "soha"
+      "lastSuccessNever": "Nincs a modell betöltése óta",
+      "modelFailingHelp": "{reason} Próbálja ki a modell egy másik változatát a Beállítások > Elemzés > Modellek oldalon, vagy ellenőrizze a fent látható háttérrendszert és pontosságot.",
+      "modelFailingReasonNonFinite": "Minden legutóbbi elemzés sikertelen volt, mert a modell érvénytelen (NaN vagy végtelen) pontszámokat adott, így semmit sem észlel.",
+      "modelFailingReasonError": "Minden legutóbbi elemzés sikertelen volt, mert a következtetés hibát adott, így a modell semmit sem észlel."
     },
     "metrics": {
       "cpu": "CPU",

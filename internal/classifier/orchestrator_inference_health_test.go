@@ -100,6 +100,7 @@ func TestInferenceFailureNotice_Lifecycle(t *testing.T) {
 	assert.Equal(t, modelID, n.Metadata["model_id"])
 	assert.Equal(t, InferenceErrorClassNonFinite, n.Metadata["error_class"])
 	assert.Contains(t, n.Message, "OpenVINO CPU (f16)")
+	assert.Equal(t, "mock-"+modelID+" fails every analysis", n.Title, "the title uses the plain model name")
 
 	predictN(t, o, modelID, inferenceFailureLogEvery)
 	settle()
@@ -185,6 +186,7 @@ func TestInferenceHealth_Telemetry(t *testing.T) {
 	health := o.InferenceHealth()
 	require.Len(t, health, 1)
 	assert.Equal(t, modelID, health[0].ModelID)
+	assert.Equal(t, "mock-"+modelID, health[0].Name, "the plain model name, without the backend suffix")
 	assert.Zero(t, health[0].InferenceCount, "a loaded model that has not run is idle")
 	assert.True(t, health[0].LastInferenceAt.IsZero())
 	assert.True(t, health[0].LastSuccessAt.IsZero())
@@ -312,4 +314,19 @@ func TestInferenceHealth_SortedByID(t *testing.T) {
 		ids[i] = health[i].ModelID
 	}
 	assert.Equal(t, []string{"alpha-model", "mid-model", "zeta-model"}, ids)
+}
+
+// TestInferenceHealth_NamelessModelFallsBackToID pins that a model whose info
+// carries no name is reported by its registry ID, so the notice never starts
+// with an empty name.
+func TestInferenceHealth_NamelessModelFallsBackToID(t *testing.T) {
+	// Not parallel: mutates the package-global ModelRegistry.
+	const modelID = "nameless-health-model"
+	ModelRegistry[modelID] = ModelInfo{ID: modelID}
+	t.Cleanup(func() { delete(ModelRegistry, modelID) })
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: modelID})
+	health := o.InferenceHealth()
+	require.Len(t, health, 1)
+	assert.Equal(t, modelID, health[0].Name)
 }

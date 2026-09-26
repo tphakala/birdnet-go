@@ -1,3 +1,4 @@
+import { formatLocalDateTime } from '$lib/utils/date';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { waitFor, cleanup } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../test/render-helpers';
@@ -1212,9 +1213,42 @@ describe('SystemInference', () => {
     });
     expect(container.textContent).toContain('system.inference.modelFailing');
     expect(container.querySelector('[aria-label="system.inference.activityPaused"]')).toBeNull();
+    // The reason and remedy are visible, not only in a tooltip.
+    const help = container.querySelector('[data-testid="model-failing-help"]');
+    expect(help).not.toBeNull();
+    expect(help?.textContent).toContain('system.inference.modelFailingHelp');
+    expect(
+      container.querySelector('[data-testid="model-failing"]')?.getAttribute('aria-describedby')
+    ).toBe(help?.id);
     // Never succeeded since the instance loaded.
     expect(container.textContent).toContain('system.inference.lastSuccess');
     expect(container.textContent).toContain('system.inference.lastSuccessNever');
+  });
+
+  it('shows the date and time of the last success once a model has succeeded', async () => {
+    const lastSuccessAtUnix = 1750000000;
+    const model = makeModel({
+      health: {
+        state: 'ok',
+        consecutiveFailures: 0,
+        failureThreshold: 10,
+        inferenceCount: 5,
+        lastInferenceAtUnix: lastSuccessAtUnix,
+        lastSuccessAtUnix,
+      },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.lastSuccess');
+    });
+    expect(container.textContent).not.toContain('system.inference.lastSuccessNever');
+    expect(container.textContent).toContain(
+      formatLocalDateTime(new Date(lastSuccessAtUnix * 1000))
+    );
+    expect(container.querySelector('[data-testid="model-failing-help"]')).toBeNull();
   });
 
   it('shows no failing chip or last success for a healthy model that has not run', async () => {

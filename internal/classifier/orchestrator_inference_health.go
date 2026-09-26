@@ -158,8 +158,12 @@ func failureStreakNeedsSync(streak int64) bool {
 type ModelInferenceHealth struct {
 	// ModelID is the registry ID.
 	ModelID string
-	// ModelName is the display name.
+	// ModelName is the display name, which names the backend when a model has
+	// several (as the other diagnostics report it).
 	ModelName string
+	// Name is the plain model name the dashboard shows, the registry ID when the
+	// model has none. The bell notice uses it, since its text names the runtime.
+	Name string
 	// ConsecutiveFailures is the current run of failed analysis windows.
 	ConsecutiveFailures int64
 	// InferenceCount is the number of analysis windows the loaded instance has
@@ -182,14 +186,18 @@ type ModelInferenceHealth struct {
 }
 
 // InferenceHealth returns the inference health of every loaded model, sorted by
-// registry ID. A model paused by its schedule keeps the verdict of its last
-// window, since it runs none while paused.
+// registry ID. Each entry carries both the display name (ModelName) and the plain
+// name (Name, the registry ID for a model without one). A model paused by its
+// schedule keeps the verdict of its last window, since it runs none while paused.
 func (o *Orchestrator) InferenceHealth() []ModelInferenceHealth {
 	infos := o.ModelInfos()
 	out := make([]ModelInferenceHealth, 0, len(infos))
 	for i := range infos {
 		id := infos[i].ID
-		mh := ModelInferenceHealth{ModelID: id, ModelName: infos[i].DisplayName()}
+		mh := ModelInferenceHealth{ModelID: id, ModelName: infos[i].DisplayName(), Name: infos[i].Name}
+		if mh.Name == "" {
+			mh.Name = id
+		}
 		if v, ok := inferenceHealthRecords.Load(id); ok {
 			h := v.(*modelInferenceHealth) //nolint:errcheck // stored type is fixed
 			mh.ConsecutiveFailures = h.streak.Load()
@@ -404,10 +412,11 @@ func inferenceFailureSignature(h *ModelInferenceHealth) string {
 }
 
 // newInferenceFailureNotification builds the persistent bell notice for a model
-// whose analysis windows all fail. The English fallbacks mirror en.json.
+// whose analysis windows all fail. It names the model by its plain Name, since
+// the message already names the runtime. The English fallbacks mirror en.json.
 func newInferenceFailureNotification(h *ModelInferenceHealth) *notification.Notification {
 	runtime := describeRuntime(h.Backend, h.Device, h.Precision)
-	title := fmt.Sprintf("%s fails every analysis", h.ModelName)
+	title := fmt.Sprintf("%s fails every analysis", h.Name)
 	messageKey := notification.MsgInferenceFailingMessage
 	cause := "inference returned an error"
 	if h.ErrorClass == InferenceErrorClassNonFinite {
@@ -416,7 +425,7 @@ func newInferenceFailureNotification(h *ModelInferenceHealth) *notification.Noti
 	}
 	message := fmt.Sprintf(
 		"%s is loaded, but its last %d analyses in a row failed on %s: %s. Audio is captured but this model detects nothing. Check the model on the System > AI Models page.",
-		h.ModelName, InferenceFailureNoticeThreshold, runtime, cause)
+		h.Name, InferenceFailureNoticeThreshold, runtime, cause)
 	return notification.NewNotification(
 		notification.TypeError,
 		notification.PriorityHigh,
@@ -424,9 +433,9 @@ func newInferenceFailureNotification(h *ModelInferenceHealth) *notification.Noti
 		message,
 	).
 		WithComponent(notification.ComponentClassifier).
-		WithTitleKey(notification.MsgInferenceFailingTitle, map[string]any{"modelName": h.ModelName}).
+		WithTitleKey(notification.MsgInferenceFailingTitle, map[string]any{"modelName": h.Name}).
 		WithMessageKey(messageKey, map[string]any{
-			"modelName": h.ModelName,
+			"modelName": h.Name,
 			"failures":  InferenceFailureNoticeThreshold,
 			"runtime":   runtime,
 		}).

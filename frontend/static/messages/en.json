@@ -1858,10 +1858,12 @@
       "noModelsHint": "No audio source configured yet?",
       "noModelsHintLink": "Configure audio sources",
       "modelFailing": "every analysis fails",
-      "modelFailingTooltip": "The last {count} analyses in a row failed, so this model detects nothing. Try another build of the model in Settings > Analysis > Models, or check the backend and precision shown here.",
       "lastSuccess": "Last success",
       "lastSuccessHelp": "When this model last analyzed audio without an error.",
-      "lastSuccessNever": "never"
+      "lastSuccessNever": "None since the model loaded",
+      "modelFailingHelp": "{reason} Try another build of this model in Settings > Analysis > Models, or check the backend and precision shown above.",
+      "modelFailingReasonNonFinite": "Every recent analysis failed because the model returned invalid (NaN or infinite) scores, so it detects nothing.",
+      "modelFailingReasonError": "Every recent analysis failed because inference returned an error, so it detects nothing."
     },
     "metrics": {
       "cpu": "CPU",
