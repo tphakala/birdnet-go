@@ -3,8 +3,12 @@ package inference
 import (
 	"context"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -342,6 +346,52 @@ func TestOpenVINOHasDeviceNeverProbesOrEnumeratesBeforeProbe(t *testing.T) {
 	assert.False(t, OpenVINOHasDevice("GPU"))
 	assert.False(t, OpenVINOHasDevice("CPU"))
 	assert.Equal(t, 0, calls.count(), "a status reader must not launch the probe child")
+}
+
+// ovInProcessEnumerationAllowed names the only function in this package allowed
+// to call ov.AvailableDevices: the probe child, which enumerates in a separate
+// process precisely so a driver fault cannot abort BirdNET-Go (issue #4236).
+const ovInProcessEnumerationAllowed = "RunOVProbeChild"
+
+// TestOnlyProbeChildEnumeratesInProcess is the structural guard for #4236: a
+// behavioural test cannot tell an in-process ov.AvailableDevices call apart
+// from "no device" without a real OpenVINO core, so this parses the package's
+// non-test sources and fails if any function other than the probe child calls
+// it.
+func TestOnlyProbeChildEnumeratesInProcess(t *testing.T) {
+	t.Parallel()
+	fset := token.NewFileSet()
+	files, err := filepath.Glob("*.go")
+	require.NoError(t, err)
+
+	var callers []string
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		require.NoError(t, err)
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				sel, ok := n.(*ast.SelectorExpr)
+				if ok && sel.Sel.Name == "AvailableDevices" {
+					if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "ov" {
+						callers = append(callers, name+":"+fn.Name.Name)
+					}
+				}
+				return true
+			})
+		}
+	}
+	require.NotEmpty(t, callers, "the probe child must still enumerate (guards against a vacuous scan)")
+	for _, c := range callers {
+		assert.True(t, strings.HasSuffix(c, ":"+ovInProcessEnumerationAllowed),
+			"%s enumerates OpenVINO devices in-process; only the probe child may (issue #4236)", c)
+	}
 }
 
 // TestEnsureOpenVINOProbeRunsChildOnce pins that EnsureOpenVINOProbe probes the

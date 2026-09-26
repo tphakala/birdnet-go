@@ -474,7 +474,8 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	// because it carries no settings dependency. Handing them to the profile
 	// rather than letting it probe again keeps one probe behind every field of
 	// this response, so the backends card and the capability tokens cannot
-	// disagree, and halves the per-request OpenVINO device queries.
+	// disagree, and reads the OpenVINO device list once per request (from the
+	// out-of-process probe cache, see inference.OpenVINOHasDevice).
 	profile := hwprofile.Hardware().WithBackends(hwprofile.Backends{
 		TFLite: hwprofile.BackendStatus{Available: resp.Backends.TFLite.Available},
 		ONNX: hwprofile.BackendStatus{
