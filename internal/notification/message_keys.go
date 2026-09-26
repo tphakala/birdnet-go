@@ -23,7 +23,7 @@ const (
 	MsgIntegrationFailedTitle   = "notifications.content.integration.failedTitle"
 	MsgIntegrationFailedMessage = "notifications.content.integration.failedMessage"
 
-	// Error notifications (title keys only — messages are raw error strings)
+	// Error notifications (title keys only; messages are raw error strings)
 	MsgErrorCriticalSystem = "notifications.content.error.criticalSystem"
 	MsgErrorApplication    = "notifications.content.error.application"
 	MsgErrorImageProvider  = "notifications.content.error.imageProvider"
@@ -72,7 +72,7 @@ const (
 	MsgCleanupFailedTitle     = "notifications.content.cleanup.failedTitle"
 	MsgCleanupFailedMessage   = "notifications.content.cleanup.failedMessage"
 
-	// API error response keys — used in ErrorResponse.ErrorKey for frontend translation.
+	// API error response keys: used in ErrorResponse.ErrorKey for frontend translation.
 	// Namespace: errors.<handler>.<errorType>
 
 	// Auth errors

@@ -348,8 +348,8 @@ func TestSyncOptimizeNotice_Concurrent(t *testing.T) {
 	assert.Zero(t, deleted)
 }
 
-// TestSyncOptimizeNotice_RaisesForBuiltinOnRecommendedHost is the #4423 scenario:
-// a Raspberry Pi class host still on the built-in BirdNET v2.4 baseline gets one
+// TestSyncOptimizeNotice_RaisesForBuiltinOnRecommendedHost is a #4423-style
+// scenario: a Raspberry Pi class host still on the built-in BirdNET v2.4 baseline gets one
 // bell notice naming the model, with translation keys and bell-only delivery.
 func TestSyncOptimizeNotice_RaisesForBuiltinOnRecommendedHost(t *testing.T) {
 	profile := aarch64LowRAMONNXProfile()
@@ -536,8 +536,8 @@ func TestSyncOptimizeNotice_ProcessWideService(t *testing.T) {
 }
 
 // TestSyncOptimizeNotice_ServiceNotInitialized pins that a sync before the
-// notification service exists is a safe no-op that latches nothing, so the next
-// trigger retries. Not parallel: it resets the process-wide notification service.
+// notification service exists is a safe no-op that runs no evaluation and
+// latches nothing. Not parallel: it resets the process-wide notification service.
 func TestSyncOptimizeNotice_ServiceNotInitialized(t *testing.T) {
 	notification.ResetForTest()
 	t.Cleanup(notification.ResetForTest)

@@ -46,8 +46,9 @@ type Handler struct {
 	// is an injectable seam: nil means "use the default live probe"
 	// (defaultHardwareProfile), and tests set it to synthetic hardware. A
 	// per-Handler field rather than a package global, so tests stay parallel-safe.
-	// It receives the request's already-probed ONNX Runtime status so the default
-	// probe does not re-check ORT that GetModelCatalog just checked.
+	// It receives the caller's already-probed ONNX Runtime status (a catalog or
+	// install request, or the optimize notice evaluation) so the default probe
+	// does not re-check ORT.
 	hardwareProfile func(ort inference.ORTStatus) hwprofile.Profile
 	// ensureOVProbe runs the out-of-process OpenVINO device probe before a
 	// production-profile ranking that may not wait on a request (see
@@ -710,10 +711,11 @@ func formatBlockers(blockers []recommend.Reason) string {
 }
 
 // defaultHardwareProfile resolves the live host profile from the already-probed
-// ONNX Runtime status plus a per-request OpenVINO device probe, mirroring the
+// ONNX Runtime status plus the OpenVINO device list, mirroring the
 // inference-status endpoint (internal/api/v2/system/inference_status.go). The ORT
-// status is passed in (probed once per request by GetModelCatalog) rather than
-// re-probed here, and the OpenVINO device list feeds GPU capability derivation.
+// status is passed in (probed once by each caller) rather than re-probed here,
+// and the OpenVINO device list, answered from the out-of-process probe cache
+// (inference.OpenVINOHasDevice), feeds GPU capability derivation.
 // It is the production value of the hardwareProfile seam.
 func defaultHardwareProfile(ort inference.ORTStatus) hwprofile.Profile {
 	ov := inference.CheckOpenVINOAvailability()

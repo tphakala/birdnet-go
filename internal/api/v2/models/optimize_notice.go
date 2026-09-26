@@ -2,12 +2,13 @@ package models
 
 // optimize_notice.go surfaces the model gallery's within-model "optimize" offers
 // in the notification bell. The gallery derives the offers client-side from the
-// catalog, so a user who never opens Settings > Analysis > Model gallery never
-// learns that a better build of an installed model exists for this host (#4423:
-// a Raspberry Pi 5 whose stock BirdNET v2.4 build failed every inference was
-// fixed by the offered build). The bell notice is computed with the same
-// recommender and host profile as the catalog endpoint, so the two cannot
-// disagree, and it is kept in sync on startup and on every model topology change.
+// catalog, so a user who never opens Settings > Analysis > Models never learns
+// that a better build of an installed model exists for this host (#4423: a
+// Raspberry Pi 5 whose stock BirdNET v2.4 build failed every inference was fixed
+// by the offered build). The bell notice applies the same offer rule to the
+// same recommender pass as the catalog endpoint. It is a snapshot re-evaluated
+// at startup, after model topology changes, installs and uninstalls, and after
+// location, ModelRegion or primary model path changes.
 
 import (
 	"fmt"
@@ -32,8 +33,8 @@ const optimizeNoticeDebounce = 3 * time.Second
 const optimizeNoticeComponent = "classifier"
 
 // optimizeOffer is one installed model whose host-recommended variant differs
-// from the installed one. It mirrors the frontend OptimizeOffer
-// (frontend/src/lib/utils/variantSelection.ts).
+// from the installed one: the ids-only counterpart of the frontend OptimizeOffer
+// (frontend/src/lib/utils/variantSelection.ts), produced by the same rule.
 type optimizeOffer struct {
 	CatalogID     string
 	ModelName     string
@@ -117,10 +118,8 @@ func optimizeOffersSignature(offers []optimizeOffer) string {
 // (withoutCustomPrimaryOffer). It is not gated on request authentication because its
 // only consumer is the bell notice, which guests cannot read (the notifications
 // API shows unauthenticated callers detection notices only).
+// The caller guarantees c.ModelManager is non-nil (syncOptimizeNotice checks it).
 func (c *Handler) currentOptimizeOffers() []optimizeOffer {
-	if c.ModelManager == nil {
-		return nil
-	}
 	visible := classifier.VisibleCatalog()
 	installed := make(map[string]string, len(visible))
 	for i := range visible {
@@ -171,6 +170,9 @@ func (c *Handler) noticeSvc() noticeService {
 	if c.notices != nil {
 		return c.notices
 	}
+	// Check the concrete pointer before boxing it: returning a nil *Service as
+	// noticeService would yield a non-nil interface, defeating the caller's nil
+	// check and panicking on the first call.
 	if svc := notification.GetService(); svc != nil {
 		return svc
 	}
@@ -199,11 +201,13 @@ func (c *Handler) syncOptimizeNotice() {
 func (c *Handler) applyOptimizeNotice(svc noticeService, offers []optimizeOffer) {
 	n := &c.optimize
 	sig := optimizeOffersSignature(offers)
-	if sig == n.sig && (n.id != "" || sig == "") {
-		return // unchanged offer set: nothing to do
+	// id and sig are always set and cleared together, so an equal signature
+	// means the latched notice already matches (or none is due).
+	if sig == n.sig {
+		return
 	}
 	if n.id != "" {
-		// A user-deleted notice is fine: Delete then just reports it missing.
+		// A user-deleted notice is fine: Delete treats a missing one as success.
 		_ = svc.Delete(n.id)
 		n.id = ""
 		n.sig = ""
@@ -213,8 +217,9 @@ func (c *Handler) applyOptimizeNotice(svc noticeService, offers []optimizeOffer)
 	}
 	notif := newOptimizeNotification(offers)
 	if err := svc.CreateWithMetadata(notif); err != nil {
-		c.LogWarnIfEnabled("failed to create model optimize notification", logger.Error(err))
-		return // not latched: the next sync retries
+		c.LogWarnIfEnabled("failed to create model optimize notification",
+			logger.Int("offer_count", len(offers)), logger.Error(err))
+		return // not latched: the next trigger retries
 	}
 	n.id = notif.ID
 	n.sig = sig

@@ -105,8 +105,9 @@ const modelTopologyReconfigureDebounce = 2 * time.Second
 // inference snapshot, it asks the audio pipeline to reconcile its per-source
 // model registration, and it re-evaluates the model optimize bell notice.
 //
-// The audio-source reconfigure is the fix for GitHub issues #4201 and #4204. Loading a model
-// into the orchestrator does not attach it to anything: the audio router fans a
+// The audio-source reconfigure is the fix for GitHub issues #4201 and #4204.
+// Loading a model into the orchestrator does not attach it to anything: the
+// audio router fans a
 // source out to the models registered for it, and that registration is computed
 // only at startup and when settings change. So a model installed from the
 // gallery while the server ran would load, report itself as installed, and then
