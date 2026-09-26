@@ -22,9 +22,10 @@
   interface Props {
     confidence: number;
     className?: string;
+    label?: string;
   }
 
-  let { confidence, className = '' }: Props = $props();
+  let { confidence, className = '', label }: Props = $props();
 
   // Normalize confidence to percentage
   function normalizeConfidence(value: number): number {
@@ -36,12 +37,13 @@
 
   const confidencePercent = $derived(normalizeConfidence(confidence));
   const colorClasses = $derived(confidenceColorClasses(confidencePercent));
+  const accessibleLabel = $derived(label ?? `Confidence: ${confidencePercent}%`);
 </script>
 
 <div
   class={cn('confidence-badge', colorClasses, className)}
-  title="Confidence: {confidencePercent}%"
-  aria-label="Confidence: {confidencePercent}%"
+  title={accessibleLabel}
+  aria-label={accessibleLabel}
 >
   {confidencePercent}%
 </div>

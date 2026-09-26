@@ -3642,6 +3642,68 @@ func (_c *MockInterface_GetRecentAppEvents_Call) RunAndReturn(run func(context.C
 	return _c
 }
 
+// GetRecentSpeciesData provides a mock function with given fields: ctx, start, end, minConfidence, buckets
+func (_m *MockInterface) GetRecentSpeciesData(ctx context.Context, start time.Time, end time.Time, minConfidence float64, buckets int) ([]datastore.RecentSpeciesData, error) {
+	ret := _m.Called(ctx, start, end, minConfidence, buckets)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetRecentSpeciesData")
+	}
+
+	var r0 []datastore.RecentSpeciesData
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, float64, int) ([]datastore.RecentSpeciesData, error)); ok {
+		return rf(ctx, start, end, minConfidence, buckets)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, float64, int) []datastore.RecentSpeciesData); ok {
+		r0 = rf(ctx, start, end, minConfidence, buckets)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.RecentSpeciesData)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time, time.Time, float64, int) error); ok {
+		r1 = rf(ctx, start, end, minConfidence, buckets)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetRecentSpeciesData_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetRecentSpeciesData'
+type MockInterface_GetRecentSpeciesData_Call struct {
+	*mock.Call
+}
+
+// GetRecentSpeciesData is a helper method to define mock.On call
+//   - ctx context.Context
+//   - start time.Time
+//   - end time.Time
+//   - minConfidence float64
+//   - buckets int
+func (_e *MockInterface_Expecter) GetRecentSpeciesData(ctx interface{}, start interface{}, end interface{}, minConfidence interface{}, buckets interface{}) *MockInterface_GetRecentSpeciesData_Call {
+	return &MockInterface_GetRecentSpeciesData_Call{Call: _e.mock.On("GetRecentSpeciesData", ctx, start, end, minConfidence, buckets)}
+}
+
+func (_c *MockInterface_GetRecentSpeciesData_Call) Run(run func(ctx context.Context, start time.Time, end time.Time, minConfidence float64, buckets int)) *MockInterface_GetRecentSpeciesData_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Time), args[3].(float64), args[4].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetRecentSpeciesData_Call) Return(_a0 []datastore.RecentSpeciesData, _a1 error) *MockInterface_GetRecentSpeciesData_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetRecentSpeciesData_Call) RunAndReturn(run func(context.Context, time.Time, time.Time, float64, int) ([]datastore.RecentSpeciesData, error)) *MockInterface_GetRecentSpeciesData_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetRecentThresholdEvents provides a mock function with given fields: limit
 func (_m *MockInterface) GetRecentThresholdEvents(limit int) ([]datastore.ThresholdEvent, error) {
 	ret := _m.Called(limit)

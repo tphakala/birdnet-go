@@ -235,6 +235,11 @@ describe('formatters', () => {
     it('returns empty string for invalid dates', () => {
       expect(formatRelativeTime('invalid')).toBe('');
     });
+
+    it('uses the requested locale', () => {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      expect(formatRelativeTime(fiveMinutesAgo, 'de')).toMatch(/vor 5 Minuten/);
+    });
   });
 
   describe('formatDuration', () => {

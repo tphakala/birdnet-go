@@ -674,6 +674,9 @@ func (s *testLegacyInterface) GetAllNotes() ([]datastore.Note, error)           
 func (s *testLegacyInterface) GetTopBirdsData(_ context.Context, _ string, _ float64, _ int) ([]datastore.Note, error) {
 	return nil, nil
 }
+func (s *testLegacyInterface) GetRecentSpeciesData(_ context.Context, _, _ time.Time, _ float64, _ int) ([]datastore.RecentSpeciesData, error) {
+	return nil, nil
+}
 func (s *testLegacyInterface) GetBatchHourlyOccurrences(_ context.Context, _, _ string, _ []string, _ float64) (map[string][24]int, error) {
 	return make(map[string][24]int), nil
 }
