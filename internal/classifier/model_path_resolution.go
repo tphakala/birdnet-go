@@ -596,8 +596,8 @@ func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution
 // "Can load" is deliberately NOT "ONNX Runtime is available". initializeModel
 // tries OPENVINO FIRST for the v2.4 identity and only falls through to ONNX
 // Runtime when OpenVINO declines, so an openvino-tagged build on an A76/Pi5 or an
-// Intel iGPU runs these variants with no ORT installed at all (except an INT8
-// build on the auto backend, which OpenVINO declines; see
+// Intel iGPU runs these variants with no ORT installed at all (except an INT8 or
+// unrecognized-precision build on the auto backend, which OpenVINO declines; see
 // applyOpenVINOQuantizationPolicy). Gating on ORT alone would refuse a variant
 // that would have loaded, silently dropping such a host to
 // the embedded model and telling the user no installed model was available, which

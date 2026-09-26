@@ -37,17 +37,17 @@ func TestApplyOpenVINOQuantizationPolicy(t *testing.T) {
 		{
 			name: "INT8 on auto backend declines to ONNX Runtime", plan: cpuF16, ok: true,
 			backendPref: conf.BackendPrefAuto, quant: QuantizationINT8,
-			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonINT8Model,
+			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonUnverifiedWeights,
 		},
 		{
 			name: "INT8 on empty backend pref is auto and declines", plan: cpuF16, ok: true,
 			backendPref: "", quant: QuantizationINT8,
-			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonINT8Model,
+			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonUnverifiedWeights,
 		},
 		{
 			name: "INT8 on the GPU under auto also declines", plan: gpuF32, ok: true,
 			backendPref: conf.BackendPrefAuto, quant: QuantizationINT8,
-			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonINT8Model,
+			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonUnverifiedWeights,
 		},
 		{
 			name: "INT8 with explicit openvino backend is forced to f32", plan: cpuF16, ok: true,
@@ -61,9 +61,15 @@ func TestApplyOpenVINOQuantizationPolicy(t *testing.T) {
 			wantPlan: cpuF16, wantOK: true,
 		},
 		{
-			name: "unknown weights keep the plan unchanged", plan: cpuF16, ok: true,
+			name: "unrecognized weights on auto decline like INT8", plan: cpuF16, ok: true,
 			backendPref: conf.BackendPrefAuto, quant: QuantizationUnknown,
-			wantPlan: cpuF16, wantOK: true,
+			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonUnverifiedWeights,
+		},
+		{
+			name: "unrecognized weights on explicit openvino run at f32", plan: cpuF16, ok: true,
+			backendPref: conf.BackendPrefOpenVINO, quant: QuantizationUnknown,
+			wantPlan: openVINOPlan{device: inference.OVDeviceCPU, outputIndex: birdnetLogitsOutputIndex, precision: inference.OVPrecisionF32},
+			wantOK:   true,
 		},
 		{
 			name: "FP16 weights keep the plan unchanged", plan: cpuF16, ok: true,
@@ -94,10 +100,10 @@ func TestApplyOpenVINOQuantizationPolicy(t *testing.T) {
 
 // TestBirdNETV24CatalogModelFilesDetectQuantization pins that every BirdNET v2.4
 // gallery build's model file resolves to its declared precision from its
-// filename. Both call sites of the INT8 rule take the quantization from the file
-// name (customBirdNETV24ModelInfo at init, detectQuantization in the load gate), so
-// renaming an INT8 build without an int8 token would silently put it back on
-// OpenVINO f16 (GitHub #4423).
+// filename. Model init and the load gate both take the precision from the file
+// name (detectQuantization), so a gallery FP32 build renamed without its fp32
+// token would silently lose OpenVINO on auto, and a build whose name misstated
+// its precision could get the wrong plan (GitHub #4423).
 func TestBirdNETV24CatalogModelFilesDetectQuantization(t *testing.T) {
 	t.Parallel()
 	entry, ok := primaryCatalogEntry()
@@ -132,32 +138,49 @@ func stubBirdNETV24BasePlan(t *testing.T, plan openVINOPlan) {
 	t.Cleanup(func() { birdnetV24BasePlan = orig })
 }
 
-// TestBirdNETOpenVINOPlan_QuantizationPolicyWired drives the INT8 rule through
-// (*BirdNET).openVINOPlan, the model-init entry point, so dropping the policy
-// call or the quantization it is given fails here and not only in the pure
-// policy test. Not parallel: stubs package state.
+// TestBirdNETOpenVINOPlan_QuantizationPolicyWired drives the weight-precision
+// rule through (*BirdNET).openVINOPlan, the model-init entry point, so dropping
+// the policy call or the quantization it is given fails here and not only in the
+// pure policy test. The precision must come from the model file path, as in the
+// load gate, not from ModelInfo.Quantization: the legacy birdnet.version path
+// keeps the registry's FP32 for any file. Not parallel: stubs package state.
 func TestBirdNETOpenVINOPlan_QuantizationPolicyWired(t *testing.T) {
 	cpuF16 := openVINOPlan{device: inference.OVDeviceCPU, outputIndex: birdnetLogitsOutputIndex}
+	cpuF32 := openVINOPlan{device: inference.OVDeviceCPU, outputIndex: birdnetLogitsOutputIndex, precision: inference.OVPrecisionF32}
 	stubBirdNETV24BasePlan(t, cpuF16)
+
+	entry, ok := primaryCatalogEntry()
+	require.True(t, ok, "the catalog must carry the BirdNET v2.4 entry")
+	int8File := filepath.Join("models", "birdnet-v2.4", modelRoleLocalName(t, variantByID(t, &entry, "int8-arm-dfttrunc").Files))
+	fp32File := filepath.Join("models", "birdnet-v2.4", modelRoleLocalName(t, variantByID(t, &entry, "fp32-dfttrunc").Files))
+	stockFile := "/models/" + DefaultBirdNETINT8ONNXModelName
+	tokenlessFile := filepath.Join("data", "model", "my_birdnet.onnx")
 
 	tests := []struct {
 		name        string
+		path        string
+		infoQuant   Quantization
 		backendPref string
-		quant       Quantization
 		wantOK      bool
 		wantReason  string
 		wantPlan    openVINOPlan
 	}{
-		{"INT8 on auto declines", conf.BackendPrefAuto, QuantizationINT8, false, ovReasonINT8Model, openVINOPlan{}},
-		{"INT8 on explicit openvino runs at f32", conf.BackendPrefOpenVINO, QuantizationINT8, true, "",
-			openVINOPlan{device: inference.OVDeviceCPU, outputIndex: birdnetLogitsOutputIndex, precision: inference.OVPrecisionF32}},
-		{"FP32 on auto keeps the f16 CPU plan", conf.BackendPrefAuto, QuantizationFP32, true, "", cpuF16},
+		{name: "stock INT8 file on auto declines", path: stockFile, infoQuant: QuantizationINT8,
+			backendPref: conf.BackendPrefAuto, wantReason: ovReasonUnverifiedWeights},
+		{name: "gallery INT8 build on explicit openvino runs at f32", path: int8File, infoQuant: QuantizationINT8,
+			backendPref: conf.BackendPrefOpenVINO, wantOK: true, wantPlan: cpuF32},
+		{name: "gallery FP32 build on auto keeps the f16 CPU plan", path: fp32File, infoQuant: QuantizationFP32,
+			backendPref: conf.BackendPrefAuto, wantOK: true, wantPlan: cpuF16},
+		{name: "file with no precision token on auto declines", path: tokenlessFile, infoQuant: QuantizationFP32,
+			backendPref: conf.BackendPrefAuto, wantReason: ovReasonUnverifiedWeights},
+		{name: "INT8 path wins over FP32 ModelInfo on auto", path: int8File, infoQuant: QuantizationFP32,
+			backendPref: conf.BackendPrefAuto, wantReason: ovReasonUnverifiedWeights},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			bn := &BirdNET{Settings: &conf.Settings{}}
 			bn.Settings.BirdNET.Backend = tt.backendPref
-			bn.ModelInfo = ModelInfo{ID: DefaultModelVersion, Backend: BackendONNX, Quantization: tt.quant}
+			bn.ModelInfo = ModelInfo{ID: DefaultModelVersion, Backend: BackendONNX, Quantization: tt.infoQuant, CustomPath: tt.path}
 			plan, ok, reason := bn.openVINOPlan()
 			assert.Equal(t, tt.wantOK, ok)
 			assert.Equal(t, tt.wantReason, reason)
@@ -166,7 +189,7 @@ func TestBirdNETOpenVINOPlan_QuantizationPolicyWired(t *testing.T) {
 	}
 }
 
-// TestPrimaryVariantUsable_QuantizationPolicyWired drives the INT8 rule through
+// TestPrimaryVariantUsable_QuantizationPolicyWired drives the weight-precision rule through
 // the installed-variant load gate on a host with a loadable OpenVINO library and
 // no ONNX Runtime: the gate must agree with model init, refusing an INT8 build
 // on auto (init would run it on the missing ORT) and accepting it on an explicit
@@ -191,6 +214,7 @@ func TestPrimaryVariantUsable_QuantizationPolicyWired(t *testing.T) {
 		{"INT8 build on auto is refused", int8File, conf.BackendPrefAuto, false},
 		{"INT8 build on explicit openvino is accepted", int8File, conf.BackendPrefOpenVINO, true},
 		{"FP32 build on auto is accepted", fp32File, conf.BackendPrefAuto, true},
+		{"file with no precision token on auto is refused", "my_birdnet.onnx", conf.BackendPrefAuto, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
