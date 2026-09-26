@@ -487,6 +487,10 @@
         "loadFailedTitle": "Akustisk modell kunde inte läsas in",
         "loadFailedMessage": "En aktiverad akustisk modell kunde inte läsas in, så ljud spelas in men analyseras inte. Kontrollera modellen på sidan System > AI-modeller."
       },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modell har en bättre version för det här systemet} other {# modeller har bättre versioner för det här systemet}}",
+        "message": "En version som passar bättre för systemets hårdvara eller plats finns tillgänglig för: {models}. Öppna Inställningar > Analys > Modeller och välj Optimera för att byta."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nuvarande värde: {value}% (tröskel: {threshold}%)",

@@ -487,6 +487,10 @@
         "loadFailedTitle": "Akustický model se nepodařilo načíst",
         "loadFailedMessage": "Povolený akustický model se nepodařilo načíst, takže zvuk je zachycován, ale není analyzován. Zkontrolujte model na stránce Systém > Modely AI."
       },
+      "modelOptimize": {
+        "title": "{count, plural, one {# model má lepší sestavení pro tento systém} few {# modely mají lepší sestavení pro tento systém} many {# modelů má lepší sestavení pro tento systém} other {# modelů má lepší sestavení pro tento systém}}",
+        "message": "Sestavení lépe odpovídající hardwaru nebo poloze tohoto systému je k dispozici pro: {models}. Otevřete Nastavení > Analýza > Modely a zvolte Optimalizovat."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuální hodnota: {value} % (práh: {threshold} %)",

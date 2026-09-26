@@ -12,6 +12,10 @@ import (
 var (
 	ovInitMu      sync.Mutex
 	ovInitialized bool
+	// ovInitPath is the library path the loaded core came from, recorded by
+	// InitOpenVINO so EnsureOpenVINOProbe can probe the same library out of
+	// process. Guarded by ovInitMu.
+	ovInitPath string
 )
 
 // ovActiveClassifiers counts OpenVINO classifiers currently serving inference.
@@ -87,28 +91,39 @@ func NewOpenVINOClassifier(modelPath string, opts OpenVINOClassifierOptions) (Cl
 // is available. It returns false on any error (backend not compiled in, core not
 // initialized, or query failure), so callers can use it as a plain gate.
 //
-// When the out-of-process probe has completed (the device planner runs it before
-// any classifier is built), its cached result answers without touching the
-// in-process driver stack, so a status or capability query can never trip the
-// enumeration crash the probe exists to contain (issue #4236). While a probe is
-// still in flight it answers false rather than enumerating in-process behind
-// the child's back. Before any probe has run it falls back to the in-process
-// query, preserving prior behavior.
+// It never enumerates devices in-process: ov_core_get_available_devices walks
+// the vendor driver stack, and a fault there aborts the whole process (issue
+// #4236). When the out-of-process probe has completed, its cached result
+// answers. While a probe is in flight, and before any probe has run, it answers
+// false. The GPU device planner runs the probe before building a classifier; a
+// host that loaded the core without it (the explicit-CPU plan path) reads false
+// here until EnsureOpenVINOProbe fills the cache.
 func OpenVINOHasDevice(name string) bool {
 	devs, status, err := cachedOVProbeDevices()
-	switch status {
-	case ovProbeCached:
-		return err == nil && slices.Contains(devs, name)
-	case ovProbeInFlight:
-		return false
-	case ovProbeNotRun:
-		// fall through to the in-process query below
-	}
-	devs, err = ov.AvailableDevices()
-	if err != nil {
+	if status != ovProbeCached {
 		return false
 	}
-	return slices.Contains(devs, name)
+	return err == nil && slices.Contains(devs, name)
+}
+
+// EnsureOpenVINOProbe runs the out-of-process device probe for the library the
+// loaded OpenVINO core came from, unless a probe verdict for it is already
+// cached, so later OpenVINOHasDevice calls answer from the probe. It is a no-op
+// when this build has no OpenVINO backend or the core is not loaded (then no
+// device is available anyway). It blocks until the probe child finishes (bounded
+// by the probe timeout), so call it off request paths or where a one-time wait
+// is acceptable. A failed probe degrades to "no device", as in device planning.
+func EnsureOpenVINOProbe() {
+	if !ov.Supported {
+		return
+	}
+	ovInitMu.Lock()
+	initialized, path := ovInitialized, ovInitPath
+	ovInitMu.Unlock()
+	if !initialized {
+		return
+	}
+	_, _ = OpenVINOProbeDevices(path)
 }
 
 func (c *openvinoClassifier) Predict(samples []float32) ([]float32, error) {
@@ -234,7 +249,8 @@ func (e *openvinoEmbeddingExtractor) Close() {
 
 // InitOpenVINO initializes the OpenVINO runtime (loads libopenvino_c and the
 // process-global core). Safe to call repeatedly; retries after failure for
-// hot-reload recovery. Mirrors InitONNXRuntime.
+// hot-reload recovery. Mirrors InitONNXRuntime. On success it records
+// libraryPath for EnsureOpenVINOProbe.
 func InitOpenVINO(libraryPath string) error {
 	ovInitMu.Lock()
 	defer ovInitMu.Unlock()
@@ -245,6 +261,7 @@ func InitOpenVINO(libraryPath string) error {
 		return err
 	}
 	ovInitialized = true
+	ovInitPath = libraryPath
 	return nil
 }
 
@@ -259,6 +276,7 @@ func DestroyOpenVINO() error {
 		return err
 	}
 	ovInitialized = false
+	ovInitPath = ""
 	return nil
 }
 

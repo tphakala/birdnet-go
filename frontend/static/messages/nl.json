@@ -487,6 +487,10 @@
         "loadFailedTitle": "Akoestisch model kon niet worden geladen",
         "loadFailedMessage": "Een ingeschakeld akoestisch model kon niet worden geladen, dus audio wordt opgenomen maar niet geanalyseerd. Controleer het model op de pagina Systeem > AI-modellen."
       },
+      "modelOptimize": {
+        "title": "{count, plural, one {# model heeft een betere versie voor dit systeem} other {# modellen hebben betere versies voor dit systeem}}",
+        "message": "Er is een versie beschikbaar die beter past bij de hardware of locatie van dit systeem, voor: {models}. Open Instellingen > Analyse > Modellen en kies Optimaliseren om over te schakelen."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Huidige waarde: {value}% (drempelwaarde: {threshold}%)",

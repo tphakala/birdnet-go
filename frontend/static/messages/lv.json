@@ -487,6 +487,10 @@
         "loadFailedTitle": "Neizdevās ielādēt akustisko modeli",
         "loadFailedMessage": "Iespējoto akustisko modeli neizdevās ielādēt, tāpēc audio tiek ierakstīts, bet netiek analizēts. Pārbaudiet modeli lapā Sistēma > MI Modeļi."
       },
+      "modelOptimize": {
+        "title": "{count, plural, zero {# modeļiem ir labākas versijas šai sistēmai} one {# modelim ir labāka versija šai sistēmai} other {# modeļiem ir labākas versijas šai sistēmai}}",
+        "message": "Šīs sistēmas aparatūrai vai atrašanās vietai labāk piemērota versija ir pieejama šādiem modeļiem: {models}. Atveriet Iestatījumi > Analīze > Modeļi un izvēlieties Optimizēt, lai pārslēgtos."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Pašreizējā vērtība: {value}% (slieksnis: {threshold}%)",

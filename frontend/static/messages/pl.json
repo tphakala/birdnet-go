@@ -487,6 +487,10 @@
         "loadFailedTitle": "Nie udało się załadować modelu akustycznego",
         "loadFailedMessage": "Nie udało się załadować włączonego modelu akustycznego, więc dźwięk jest przechwytywany, ale nie jest analizowany. Sprawdź model na stronie System > Modele AI."
       },
+      "modelOptimize": {
+        "title": "{count, plural, one {# model ma lepszą wersję dla tego systemu} few {# modele mają lepsze wersje dla tego systemu} many {# modeli ma lepsze wersje dla tego systemu} other {# modeli ma lepsze wersje dla tego systemu}}",
+        "message": "Wersja lepiej dopasowana do sprzętu lub lokalizacji tego systemu jest dostępna dla: {models}. Otwórz Ustawienia > Analiza > Modele i wybierz Optymalizuj, aby przełączyć."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",

@@ -487,6 +487,10 @@
         "loadFailedTitle": "Échec du chargement du modèle acoustique",
         "loadFailedMessage": "Un modèle acoustique activé n'a pas pu être chargé, l'audio est donc capturé mais non analysé. Vérifiez le modèle sur la page Système > Modèles IA."
       },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modèle dispose d'une meilleure version pour ce système} other {# modèles disposent de meilleures versions pour ce système}}",
+        "message": "Une version mieux adaptée au matériel ou à l'emplacement de ce système est disponible pour : {models}. Ouvrez Paramètres > Analyse > Modèles et choisissez Optimiser pour changer."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valeur actuelle : {value}% (seuil : {threshold}%)",

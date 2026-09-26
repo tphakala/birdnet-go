@@ -487,6 +487,10 @@
         "loadFailedTitle": "Az akusztikai modellt nem sikerült betölteni",
         "loadFailedMessage": "Egy engedélyezett akusztikai modellt nem sikerült betölteni, így a rendszer rögzíti a hangot, de nem elemzi. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon."
       },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modellnek van jobb változata ehhez a rendszerhez} other {# modellnek van jobb változata ehhez a rendszerhez}}",
+        "message": "A rendszer hardveréhez vagy helyéhez jobban illő változat érhető el a következőkhöz: {models}. Nyissa meg a Beállítások > Elemzés > Modellek oldalt, és váltson az Optimalizálás gombbal."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Jelenlegi érték: {value}% (küszöbérték: {threshold}%)",

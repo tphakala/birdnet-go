@@ -487,6 +487,10 @@
         "loadFailedTitle": "No se pudo cargar el modelo acústico",
         "loadFailedMessage": "Un modelo acústico activado no se pudo cargar, por lo que el audio se captura pero no se analiza. Compruebe el modelo en la página Sistema > Modelos de IA."
       },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modelo tiene una versión mejor para este sistema} other {# modelos tienen versiones mejores para este sistema}}",
+        "message": "Hay disponible una versión mejor adaptada al hardware o a la ubicación de este sistema para: {models}. Abra Configuración > Análisis > Modelos y elija Optimizar para cambiar."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valor actual: {value}% (umbral: {threshold}%)",

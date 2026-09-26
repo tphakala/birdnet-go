@@ -487,6 +487,10 @@
         "loadFailedTitle": "Akustisches Modell konnte nicht geladen werden",
         "loadFailedMessage": "Ein aktiviertes akustisches Modell konnte nicht geladen werden, sodass Audio erfasst, aber nicht analysiert wird. Überprüfen Sie das Modell auf der Seite System > KI-Modelle."
       },
+      "modelOptimize": {
+        "title": "{count, plural, one {# Modell hat einen besseren Build für dieses System} other {# Modelle haben bessere Builds für dieses System}}",
+        "message": "Ein Build, der besser zur Hardware oder zum Standort dieses Systems passt, ist verfügbar für: {models}. Öffnen Sie Einstellungen > Analyse > Modelle und wählen Sie Optimieren, um zu wechseln."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktueller Wert: {value}% (Schwellenwert: {threshold}%)",

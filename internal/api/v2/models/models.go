@@ -46,9 +46,22 @@ type Handler struct {
 	// is an injectable seam: nil means "use the default live probe"
 	// (defaultHardwareProfile), and tests set it to synthetic hardware. A
 	// per-Handler field rather than a package global, so tests stay parallel-safe.
-	// It receives the request's already-probed ONNX Runtime status so the default
-	// probe does not re-check ORT that GetModelCatalog just checked.
+	// It receives the caller's already-probed ONNX Runtime status (a catalog or
+	// install request, or the optimize notice evaluation) so the default probe
+	// does not re-check ORT.
 	hardwareProfile func(ort inference.ORTStatus) hwprofile.Profile
+	// ensureOVProbe runs the out-of-process OpenVINO device probe before a
+	// production-profile ranking that may not wait on a request (see
+	// ensureHostProbed). nil means inference.EnsureOpenVINOProbe; tests inject a
+	// counter.
+	ensureOVProbe func()
+	// notices is the notification sink for the optimize bell notice. nil means
+	// the process-wide notification service; tests inject a fake.
+	notices noticeService
+	// optimize latches the optimize bell notice and its debounce timer
+	// (optimize_notice.go). Handler is only ever used by pointer, so the mutexes
+	// inside are never copied.
+	optimize optimizeNotice
 }
 
 // New builds a models Handler around the shared core and the facade-injected
@@ -614,6 +627,10 @@ func (c *Handler) rankCatalog(entries []classifier.CatalogEntry, ort inference.O
 // entry with no variants, or a variant it produced no verdict for), for which
 // there is nothing to gate; callers must treat gated==false as "allow". An empty
 // variantID resolves to the entry's default variant, matching install semantics.
+// It does not wait for the OpenVINO device probe: this runs on the install
+// request, and a probe child that hangs can take up to its timeout, longer than
+// the server's write timeout. The startup optimize evaluation runs the probe a
+// few seconds after boot, and allowIncompatible overrides the gate.
 func (c *Handler) requestedVariantCompatibility(entry *classifier.CatalogEntry, variantID string, ort inference.ORTStatus) (compatible, gated bool, blockers []recommend.Reason, hostArch string) {
 	if entry == nil || len(entry.Variants) == 0 {
 		return true, false, nil, ""
@@ -631,6 +648,25 @@ func (c *Handler) requestedVariantCompatibility(entry *classifier.CatalogEntry, 
 		return true, false, nil, hostArch
 	}
 	return rec.Compatible, true, rec.Blockers, hostArch
+}
+
+// ensureHostProbed runs the out-of-process OpenVINO device probe when the live
+// host profile is in use, so the optimize bell notice, which persists until the
+// next trigger, sees the real device list. Without it, a host that loaded the
+// OpenVINO core without probing (the explicit-CPU plan path) reports no OpenVINO
+// device, because inference.OpenVINOHasDevice never enumerates in-process (issue
+// #4236). It blocks while a probe child runs (a cached verdict returns at once;
+// a timed-out probe is retried on the next call), so it is only called off the
+// request path. It is a no-op under the hardwareProfile test seam.
+func (c *Handler) ensureHostProbed() {
+	if c.hardwareProfile != nil {
+		return
+	}
+	if c.ensureOVProbe != nil {
+		c.ensureOVProbe()
+		return
+	}
+	inference.EnsureOpenVINOProbe()
 }
 
 // variantOrDefault renders a variant id for messages and logs, mapping the empty
@@ -676,10 +712,11 @@ func formatBlockers(blockers []recommend.Reason) string {
 }
 
 // defaultHardwareProfile resolves the live host profile from the already-probed
-// ONNX Runtime status plus a per-request OpenVINO device probe, mirroring the
+// ONNX Runtime status plus the OpenVINO device list, mirroring the
 // inference-status endpoint (internal/api/v2/system/inference_status.go). The ORT
-// status is passed in (probed once per request by GetModelCatalog) rather than
-// re-probed here, and the OpenVINO device list feeds GPU capability derivation.
+// status is passed in (probed once by each caller) rather than re-probed here,
+// and the OpenVINO device list, answered from the out-of-process probe cache
+// (inference.OpenVINOHasDevice), feeds GPU capability derivation.
 // It is the production value of the hardwareProfile seam.
 func defaultHardwareProfile(ort inference.ORTStatus) hwprofile.Profile {
 	ov := inference.CheckOpenVINOAvailability()
@@ -807,6 +844,11 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 	// Start async install in a background goroutine.
 	progressChan := make(chan classifier.DownloadState, 16)
 	c.Go(func() {
+		// Re-evaluate the optimize notice whatever the outcome, panic included: an
+		// install whose hot-load fails still records the install without a
+		// topology event, and a failed swap may roll back to a different installed
+		// variant. Deferred first, so it runs after the recover below.
+		defer c.ScheduleOptimizeNoticeSync()
 		defer func() {
 			if r := recover(); r != nil {
 				c.LogErrorIfEnabled("Panic during model install",
@@ -883,6 +925,7 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 	// Start async reinstall in a background goroutine.
 	progressChan := make(chan classifier.DownloadState, 16)
 	c.Go(func() {
+		defer c.ScheduleOptimizeNoticeSync() // see InstallModel
 		defer func() {
 			if r := recover(); r != nil {
 				c.LogErrorIfEnabled("Panic during model reinstall",
@@ -923,6 +966,9 @@ func (c *Handler) UninstallModel(ctx echo.Context) error {
 	if err := c.ModelManager.Uninstall(catalogID); err != nil {
 		return c.HandleError(ctx, err, "failed to uninstall model", http.StatusInternalServerError)
 	}
+	// Uninstalling a model that was not loaded fires no topology event, but it
+	// can remove an optimize offer, so re-evaluate the notice here.
+	c.ScheduleOptimizeNoticeSync()
 
 	return ctx.JSON(http.StatusOK, map[string]string{
 		"catalogId": catalogID,
