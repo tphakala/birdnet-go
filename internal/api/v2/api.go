@@ -606,6 +606,9 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// changes after this point, so capturing it here is behaviorally identical to
 	// a per-request read; every other models dependency promotes from c.Core.
 	c.models = models.New(c.Core, c.authService)
+	// The optimize notice goes to the injected notification service, like the
+	// other notification producers here (nil keeps the process-wide one).
+	c.models.SetNotificationService(c.notificationService)
 	// Keep the model optimize bell notice in sync: evaluate it once at startup
 	// (the analyzer scans the installed models before it builds the web server),
 	// then after topology changes, model installs and uninstalls, and changes to

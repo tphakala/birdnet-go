@@ -164,8 +164,19 @@ func withoutCustomPrimaryOffer(offers []optimizeOffer, entries []classifier.Cata
 	})
 }
 
-// noticeSvc resolves the notification service, preferring the test seam. It
-// returns nil when the service is not initialized yet.
+// SetNotificationService routes the optimize notice to svc, the notification
+// service the facade injects (WithNotificationService), instead of the
+// process-wide one. A nil svc keeps the process-wide fallback. Call it before
+// StartOptimizeNoticeSync.
+func (c *Handler) SetNotificationService(svc *notification.Service) {
+	if c == nil || svc == nil {
+		return
+	}
+	c.notices = svc
+}
+
+// noticeSvc resolves the notification service: the injected one (or a test
+// fake), else the process-wide service. It returns nil when neither exists yet.
 func (c *Handler) noticeSvc() noticeService {
 	if c.notices != nil {
 		return c.notices
@@ -208,7 +219,12 @@ func (c *Handler) applyOptimizeNotice(svc noticeService, offers []optimizeOffer)
 	}
 	if n.id != "" {
 		// A user-deleted notice is fine: Delete treats a missing one as success.
-		_ = svc.Delete(n.id)
+		// Any other failure keeps the latch and stops here, so the next trigger
+		// retries instead of raising a second notice beside the old one.
+		if err := svc.Delete(n.id); err != nil {
+			c.LogWarnIfEnabled("failed to delete model optimize notification", logger.Error(err))
+			return
+		}
 		n.id = ""
 		n.sig = ""
 	}

@@ -32,6 +32,7 @@ type fakeNotices struct {
 	created   []*notification.Notification
 	deleted   []string
 	createErr error
+	deleteErr error
 }
 
 func (f *fakeNotices) CreateWithMetadata(n *notification.Notification) error {
@@ -47,6 +48,9 @@ func (f *fakeNotices) CreateWithMetadata(n *notification.Notification) error {
 func (f *fakeNotices) Delete(id string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
 	f.deleted = append(f.deleted, id)
 	return nil
 }
@@ -328,6 +332,58 @@ func TestApplyOptimizeNotice_ReplacesChangedOfferSet(t *testing.T) {
 	assert.Equal(t, "2 models have better builds for this system", notices.created[1].Title,
 		"the plural English fallback matches en.json")
 	assert.Equal(t, "Model A, Model B", notices.created[1].MessageParams["models"])
+}
+
+// TestApplyOptimizeNotice_DeleteFailureKeepsLatch pins that a failed delete of
+// the old notice aborts the reconciliation with the latch intact, so no second
+// notice is raised beside the old one and the next trigger retries.
+func TestApplyOptimizeNotice_DeleteFailureKeepsLatch(t *testing.T) {
+	h := New(apitest.NewCore(t, apitest.WithoutSettingsPublish()), nil)
+	notices := &fakeNotices{}
+	a := optimizeOffer{CatalogID: "a", ModelName: "Model A", ToVariantID: "fast"}
+	b := optimizeOffer{CatalogID: "b", ModelName: "Model B", ToVariantID: "fast"}
+
+	h.applyOptimizeNotice(notices, []optimizeOffer{a})
+	require.Len(t, notices.created, 1)
+	first := notices.created[0].ID
+
+	notices.deleteErr = errors.NewStd("store unavailable")
+	h.applyOptimizeNotice(notices, []optimizeOffer{a, b})
+	h.applyOptimizeNotice(notices, nil)
+	assert.Len(t, notices.created, 1, "no replacement is raised while the old notice cannot be deleted")
+	assert.Equal(t, first, h.optimize.id, "the latch still holds the old notice")
+
+	notices.deleteErr = nil
+	h.applyOptimizeNotice(notices, []optimizeOffer{a, b})
+	assert.Equal(t, []string{first}, notices.deleted, "the retry deletes the old notice")
+	require.Len(t, notices.created, 2)
+	assert.Equal(t, notices.created[1].ID, h.optimize.id)
+}
+
+// TestSetNotificationService_RoutesNotice pins that the facade-injected
+// notification service receives the notice instead of the process-wide one,
+// and that a nil service leaves the fallback in place. Not parallel: it resets
+// the process-wide notification service.
+func TestSetNotificationService_RoutesNotice(t *testing.T) {
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+
+	profile := aarch64LowRAMONNXProfile()
+	h, _ := newOptimizeTestHandler(t, &profile)
+	h.notices = nil
+
+	h.SetNotificationService(nil)
+	assert.Nil(t, h.noticeSvc(), "a nil service keeps the (uninitialized) process-wide fallback")
+
+	injected := notification.NewService(notification.DefaultServiceConfig())
+	t.Cleanup(injected.Stop)
+	h.SetNotificationService(injected)
+	h.syncOptimizeNotice()
+
+	stored, err := injected.List(&notification.FilterOptions{Types: []notification.Type{notification.TypeInfo}})
+	require.NoError(t, err)
+	require.Len(t, stored, 1, "the notice lands in the injected service")
+	assert.Equal(t, notification.MsgModelOptimizeTitle, stored[0].TitleKey)
 }
 
 // TestSyncOptimizeNotice_Concurrent runs overlapping evaluations under -race:
