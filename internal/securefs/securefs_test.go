@@ -595,11 +595,11 @@ func TestServeRelativeFile_FileNotFound_NoEnhancedError(t *testing.T) {
 	require.ErrorAs(t, err, &httpErr, "should return *echo.HTTPError")
 	assert.Equal(t, http.StatusNotFound, httpErr.Code, "should be 404")
 
-	// The internal error chain must NOT contain an EnhancedError —
+	// The internal error chain must NOT contain an EnhancedError:
 	// that would trigger telemetry hooks and notification bells.
 	if httpErr.Internal != nil {
-		var enhErr *errors.EnhancedError
-		assert.False(t, errors.As(httpErr.Internal, &enhErr),
+		_, isEnhErr := errors.AsType[*errors.EnhancedError](httpErr.Internal)
+		assert.False(t, isEnhErr,
 			"file-not-found should not produce EnhancedError in error chain")
 	}
 }

@@ -209,7 +209,7 @@ func (s *Service) List(filter *FilterOptions) ([]*Notification, error) {
 }
 
 // Count returns the number of notifications matching filter. Unlike List, no
-// result slice is allocated — use this for badge counts and similar callers.
+// result slice is allocated; use this for badge counts and similar callers.
 // filter.Limit and filter.Offset are ignored.
 func (s *Service) Count(filter *FilterOptions) (int, error) {
 	return s.store.Count(filter)
@@ -489,8 +489,7 @@ func (s *Service) CreateErrorNotification(err error) (*Notification, error) {
 	var titleParams map[string]any
 
 	// Check if it's an enhanced error
-	var enhancedErr *errors.EnhancedError
-	if errors.As(err, &enhancedErr) {
+	if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
 		component = enhancedErr.GetComponent()
 		category := enhancedErr.GetCategory()
 		message = enhancedErr.Error()
@@ -529,7 +528,7 @@ func (s *Service) CreateErrorNotification(err error) (*Notification, error) {
 		WithComponent(component)
 	if titleKey != "" {
 		notif.WithTitleKey(titleKey, titleParams)
-		// MessageKey intentionally left empty — raw error strings are diagnostic, not translatable
+		// MessageKey intentionally left empty; raw error strings are diagnostic, not translatable
 	}
 
 	if createErr := s.CreateWithMetadata(notif); createErr != nil {

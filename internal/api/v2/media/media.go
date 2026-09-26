@@ -426,8 +426,7 @@ func (c *Handler) setPrivateAudioCacheControl(ctx echo.Context) {
 // It checks if the error is already an HTTPError from SecureFS and returns it directly,
 // or maps specific error types to appropriate HTTP status codes.
 func (c *Handler) translateSecureFSError(ctx echo.Context, err error, userMsg string) error {
-	var httpErr *echo.HTTPError
-	if errors.As(err, &httpErr) {
+	if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok {
 		// If it's already an HTTPError from SecureFS, just pass it through
 		ctx.Logger().Debugf("SecureFS httpErr=%d internal=%v msg=%v",
 			httpErr.Code, httpErr.Internal, httpErr.Message)
@@ -970,8 +969,7 @@ func (c *Handler) ServeAudioClip(ctx echo.Context) error {
 		// Check if this is a 404 for a file that's still being encoded by FFmpeg.
 		// The detection DB record is committed before audio export completes, so the
 		// frontend may request the file before it exists on disk.
-		var httpErr *echo.HTTPError
-		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
+		if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok && httpErr.Code == http.StatusNotFound {
 			// Filename-based serving has no note ID to resolve capture times, so pass
 			// zero times (unknown -> no pending window, keep the grace wait, fail-safe).
 			err = c.handleAudio404WithWait(ctx, normalizedFilename, err, time.Time{}, time.Time{},
@@ -1055,8 +1053,7 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 	// Serve the file using SecureFS.
 	err = c.SFS.ServeRelativeFile(ctx, normalizedClipPath)
 	if err != nil {
-		var httpErr *echo.HTTPError
-		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
+		if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok && httpErr.Code == http.StatusNotFound {
 			// Capture times drive the pending-export and ghost decisions. They are
 			// looked up here on the 404 slow path only.
 			begin, end := c.noteCaptureTimes(noteID)
@@ -1740,8 +1737,7 @@ func (c *Handler) spectrogramHTTPError(ctx echo.Context, err error) error {
 		// non-reporting 503 path (not HandleError) so this expected "still encoding"
 		// backpressure does not spam the error log, Sentry, and the notification bell.
 		secs := spectrogramRetryAfterSecondsInt
-		var anr *AudioNotReadyError
-		if errors.As(err, &anr) && anr.RetryAfter > 0 {
+		if anr, ok := errors.AsType[*AudioNotReadyError](err); ok && anr.RetryAfter > 0 {
 			secs = int(math.Ceil(anr.RetryAfter.Seconds()))
 		}
 		return c.writeAudioNotReady(ctx, err, "Audio file is still being processed, please retry", secs)

@@ -574,8 +574,7 @@ func (c *Client) doRequestWithRetry(ctx context.Context, method, url string, bod
 		}
 
 		// Check if error is retryable
-		var enhancedErr *errors.EnhancedError
-		if errors.As(err, &enhancedErr) {
+		if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
 			// Don't retry authentication errors or not found errors
 			if enhancedErr.Category == errors.CategoryConfiguration ||
 				enhancedErr.Category == errors.CategoryNotFound ||

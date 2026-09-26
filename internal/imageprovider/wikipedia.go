@@ -1135,8 +1135,8 @@ func logSuccessfulAPIResponse(resp *wikiAPIResponse) {
 // on "invalid character" and "looking for beginning of value" silently stopped
 // applying whenever the wrapping text changed.
 func (l *wikiMediaProvider) handleJSONParsingErrorIfNeeded(err error, reqID, fullURL string, attempt int) error {
-	var failure *wikiParseFailureError
-	if !errors.As(err, &failure) {
+	failure, ok := errors.AsType[*wikiParseFailureError](err)
+	if !ok {
 		return nil
 	}
 	return l.classifyParseFailure(reqID, fullURL, attempt, failure)
@@ -1171,9 +1171,9 @@ func isNetworkError(err error) bool {
 	if err == nil {
 		return false
 	}
-	var netErr *net.OpError
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) || errors.As(err, &netErr) {
+	_, isDNSErr := errors.AsType[*net.DNSError](err)
+	_, isNetErr := errors.AsType[*net.OpError](err)
+	if isDNSErr || isNetErr {
 		return true
 	}
 	errMsg := err.Error()
@@ -1708,8 +1708,8 @@ func (l *wikiMediaProvider) queryThumbnail(ctx context.Context, reqID, scientifi
 		}
 		// Return a consistent user-facing error
 		// Check if it's already an enhanced error from queryAndGetFirstPage
-		var enhancedErr *errors.EnhancedError
-		if !errors.As(err, &enhancedErr) {
+		enhancedErr, ok := errors.AsType[*errors.EnhancedError](err)
+		if !ok {
 			enhancedErr = errors.Newf("no Wikipedia page found for species: %s", scientificName).
 				Component("imageprovider").
 				Category(errors.CategoryImageFetch).
@@ -1883,8 +1883,8 @@ func (l *wikiMediaProvider) queryAuthorInfo(ctx context.Context, reqID, thumbnai
 		}
 		// Return internal error, fetch will wrap it
 		// Check if it's already an enhanced error from queryAndGetFirstPage
-		var enhancedErr *errors.EnhancedError
-		if !errors.As(err, &enhancedErr) {
+		enhancedErr, ok := errors.AsType[*errors.EnhancedError](err)
+		if !ok {
 			enhancedErr = errors.Newf("failed to query Wikipedia for image author information: %v", err).
 				Component("imageprovider").
 				Category(errors.CategoryImageFetch).

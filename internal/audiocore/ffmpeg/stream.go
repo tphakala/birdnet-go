@@ -1385,11 +1385,11 @@ const opSilenceTimeout = "silence_timeout"
 // its operation=silence_timeout context rather than a substring of its message.
 // It walks the whole chain of EnhancedError values so classification still holds
 // if the silence error is ever wrapped inside another EnhancedError with a
-// different operation (errors.As alone would stop at the outer one).
+// different operation (a single errors.AsType would stop at the outer one).
 func isSilenceTimeoutError(err error) bool {
 	for err != nil {
-		var ee *errors.EnhancedError
-		if !errors.As(err, &ee) {
+		ee, ok := errors.AsType[*errors.EnhancedError](err)
+		if !ok {
 			return false
 		}
 		if op, _ := ee.GetContext()["operation"].(string); op == opSilenceTimeout {

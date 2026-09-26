@@ -320,8 +320,7 @@ func pcmChunkDuration(pcmLen, sampleRate int) time.Duration {
 // VAD session wraps its Run failures with CategoryModelLoad; resampling and
 // validation failures carry other categories.
 func isInferenceError(err error) bool {
-	var ee *errors.EnhancedError
-	if errors.As(err, &ee) {
+	if ee, ok := errors.AsType[*errors.EnhancedError](err); ok {
 		return ee.GetCategory() == string(errors.CategoryModelLoad)
 	}
 	return false

@@ -351,8 +351,7 @@ func (t *GDriveTarget) isAPIError(err error) (bool, error) {
 		return false, nil
 	}
 
-	var apiErr *googleapi.Error
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*googleapi.Error](err); ok {
 		switch apiErr.Code {
 		case HTTPUnauthorized:
 			// Token expired or invalid, try to refresh

@@ -728,8 +728,8 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 
 	if err != nil {
 		// Check if it's already an enhanced error, if not enhance it
-		var enhancedErr *errors.EnhancedError
-		if !errors.As(err, &enhancedErr) {
+		enhancedErr, ok := errors.AsType[*errors.EnhancedError](err)
+		if !ok {
 			enhancedErr = errors.New(err).
 				Component("imageprovider").
 				Category(errors.CategoryImageFetch).
@@ -1358,8 +1358,8 @@ func (c *BirdImageCache) logInitializeError(err error, scientificName string, lo
 		return
 	}
 
-	var enhancedErr *errors.EnhancedError
-	if !errors.As(err, &enhancedErr) {
+	enhancedErr, ok := errors.AsType[*errors.EnhancedError](err)
+	if !ok {
 		enhancedErr = errors.New(err).
 			Component("imageprovider").
 			Category(errors.CategoryImageProvider).
@@ -1982,8 +1982,7 @@ func (c *BirdImageCache) handleProviderFetchError(scientificName string, fetchEr
 // wrapped error preserving the original category to avoid false positives in
 // category-based errors.Is matching.
 func (c *BirdImageCache) enhanceFetchError(fetchErr error, scientificName string) *errors.EnhancedError {
-	var enhancedErr *errors.EnhancedError
-	if errors.As(fetchErr, &enhancedErr) {
+	if enhancedErr, ok := errors.AsType[*errors.EnhancedError](fetchErr); ok {
 		// Already enhanced: check if it has species context
 		if _, hasName := enhancedErr.Context["scientific_name"]; hasName {
 			return enhancedErr
