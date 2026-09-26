@@ -659,10 +659,10 @@
         "detections": "Detekcie"
       },
       "dayparts": {
-        "night": "Night",
-        "morning": "Morning",
-        "afternoon": "Afternoon",
-        "evening": "Evening"
+        "night": "Noc",
+        "morning": "Ráno",
+        "afternoon": "Popoludnie",
+        "evening": "Večer"
       },
       "daylight": {
         "label": "Denné svetlo",
@@ -680,8 +680,8 @@
         "previousDay": "Predchádzajúci deň",
         "nextDay": "Nasledujúci deň",
         "today": "Dnes",
-        "previousDaypart": "Earlier part of the day",
-        "nextDaypart": "Later part of the day"
+        "previousDaypart": "Skoršia časť dňa",
+        "nextDaypart": "Neskoršia časť dňa"
       },
       "tooltips": {
         "viewHourly": "Zobraziť všetky detekcie pre {hour}:00",

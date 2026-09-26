@@ -659,10 +659,10 @@
         "detections": "Detecções"
       },
       "dayparts": {
-        "night": "Night",
-        "morning": "Morning",
-        "afternoon": "Afternoon",
-        "evening": "Evening"
+        "night": "Madrugada",
+        "morning": "Manhã",
+        "afternoon": "Tarde",
+        "evening": "Noite"
       },
       "daylight": {
         "label": "Luz do dia",
@@ -680,8 +680,8 @@
         "previousDay": "Dia anterior",
         "nextDay": "Próximo dia",
         "today": "Hoje",
-        "previousDaypart": "Earlier part of the day",
-        "nextDaypart": "Later part of the day"
+        "previousDaypart": "Parte anterior do dia",
+        "nextDaypart": "Parte posterior do dia"
       },
       "tooltips": {
         "viewHourly": "Ver todas as detecções às {hour}:00",

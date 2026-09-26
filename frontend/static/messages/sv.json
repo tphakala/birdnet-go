@@ -659,10 +659,10 @@
         "detections": "Detekteringar"
       },
       "dayparts": {
-        "night": "Night",
-        "morning": "Morning",
-        "afternoon": "Afternoon",
-        "evening": "Evening"
+        "night": "Natt",
+        "morning": "Morgon",
+        "afternoon": "Eftermiddag",
+        "evening": "Kväll"
       },
       "daylight": {
         "label": "Dagsljus",
@@ -680,8 +680,8 @@
         "previousDay": "Föregående dag",
         "nextDay": "Nästa dag",
         "today": "Idag",
-        "previousDaypart": "Earlier part of the day",
-        "nextDaypart": "Later part of the day"
+        "previousDaypart": "Tidigare på dagen",
+        "nextDaypart": "Senare på dagen"
       },
       "tooltips": {
         "viewHourly": "Visa alla detekteringar för {hour}:00",

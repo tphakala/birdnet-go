@@ -659,10 +659,10 @@
         "detections": "Aantal herkend"
       },
       "dayparts": {
-        "night": "Night",
-        "morning": "Morning",
-        "afternoon": "Afternoon",
-        "evening": "Evening"
+        "night": "Nacht",
+        "morning": "Ochtend",
+        "afternoon": "Middag",
+        "evening": "Avond"
       },
       "daylight": {
         "label": "Daglicht",
@@ -680,8 +680,8 @@
         "previousDay": "Vorige dag",
         "nextDay": "Volgende dag",
         "today": "Vandaag",
-        "previousDaypart": "Earlier part of the day",
-        "nextDaypart": "Later part of the day"
+        "previousDaypart": "Eerder op de dag",
+        "nextDaypart": "Later op de dag"
       },
       "tooltips": {
         "viewHourly": "Bekijk alle herkenningen om {hour}:00",

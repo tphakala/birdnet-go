@@ -659,10 +659,10 @@
         "detections": "Registreringer"
       },
       "dayparts": {
-        "night": "Night",
-        "morning": "Morning",
-        "afternoon": "Afternoon",
-        "evening": "Evening"
+        "night": "Natt",
+        "morning": "Morgen",
+        "afternoon": "Ettermiddag",
+        "evening": "Kveld"
       },
       "daylight": {
         "label": "Dagslys",
@@ -680,8 +680,8 @@
         "previousDay": "Forrige dag",
         "nextDay": "Neste dag",
         "today": "I dag",
-        "previousDaypart": "Earlier part of the day",
-        "nextDaypart": "Later part of the day"
+        "previousDaypart": "Tidligere på dagen",
+        "nextDaypart": "Senere på dagen"
       },
       "tooltips": {
         "viewHourly": "Vis alle registreringer for {hour}:00",

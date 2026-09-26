@@ -659,10 +659,10 @@
         "detections": "Atklāšanas"
       },
       "dayparts": {
-        "night": "Night",
-        "morning": "Morning",
-        "afternoon": "Afternoon",
-        "evening": "Evening"
+        "night": "Nakts",
+        "morning": "Rīts",
+        "afternoon": "Pēcpusdiena",
+        "evening": "Vakars"
       },
       "daylight": {
         "label": "Dienas gaisma",
@@ -680,8 +680,8 @@
         "previousDay": "Iepriekšējā diena",
         "nextDay": "Nākamā diena",
         "today": "Šodien",
-        "previousDaypart": "Earlier part of the day",
-        "nextDaypart": "Later part of the day"
+        "previousDaypart": "Agrāka dienas daļa",
+        "nextDaypart": "Vēlāka dienas daļa"
       },
       "tooltips": {
         "viewHourly": "Skatīt visas atklāšanas plkst. {hour}:00",

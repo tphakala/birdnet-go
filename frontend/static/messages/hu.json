@@ -659,10 +659,10 @@
         "detections": "Detektálások"
       },
       "dayparts": {
-        "night": "Night",
-        "morning": "Morning",
-        "afternoon": "Afternoon",
-        "evening": "Evening"
+        "night": "Éjszaka",
+        "morning": "Reggel",
+        "afternoon": "Délután",
+        "evening": "Este"
       },
       "daylight": {
         "label": "Nappal",
@@ -680,8 +680,8 @@
         "previousDay": "Előző nap",
         "nextDay": "Következő nap",
         "today": "Ma",
-        "previousDaypart": "Earlier part of the day",
-        "nextDaypart": "Later part of the day"
+        "previousDaypart": "A nap korábbi szakasza",
+        "nextDaypart": "A nap későbbi szakasza"
       },
       "tooltips": {
         "viewHourly": "Összes detektálás megtekintése {hour}:00-kor",
