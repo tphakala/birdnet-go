@@ -161,11 +161,16 @@ func (sc *SunCalc) SetMetrics(m *metrics.SunCalcMetrics) {
 
 // GetSunEventTimes returns the sun event times for a given date, using cache if available
 func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
-	start := time.Now()
-
 	// Take one state snapshot so the observer, timezone and cache used below all
 	// belong to the same coordinates, even if the location changes mid-call.
-	st := sc.current()
+	return sc.sunEventTimes(date, sc.current())
+}
+
+// sunEventTimes resolves date against one already-taken state snapshot. Every
+// public entry point funnels through here so the cache key, the calculation and
+// the cache write all belong to the same location.
+func (sc *SunCalc) sunEventTimes(date time.Time, st *sunState) (SunEventTimes, error) {
+	start := time.Now()
 
 	// Snapshot the metrics pointer once into a local so every metrics access
 	// below operates on a stable value. SetMetrics writes sc.metrics under
@@ -333,6 +338,30 @@ func (st *sunState) calculateSunEventTimes(date time.Time) (SunEventTimes, error
 // location is non-finite, in which case the previous location is kept.
 func (sc *SunCalc) LocationName() string {
 	return sc.current().location.String()
+}
+
+// noonHour anchors a calendar date in the middle of its day. Midnight is the
+// wrong anchor: GetSunEventTimes re-derives the calendar date in the observer's
+// own timezone, so an instant on a day boundary resolves to the neighbouring
+// date as soon as the caller's zone differs from the station's.
+const noonHour = 12
+
+// GetSunEventTimesForDate returns the sun events for a calendar date read in the
+// station's own timezone. Only the year, month and day of date are used; its
+// clock time and location are ignored.
+//
+// Callers that mean "the station's day of 2025-03-20" should prefer this over
+// GetSunEventTimes, which takes an instant: handing that a date parsed in the
+// server's timezone silently resolves to the previous or next station date
+// whenever the two zones differ.
+func (sc *SunCalc) GetSunEventTimesForDate(date time.Time) (SunEventTimes, error) {
+	// One snapshot builds the anchor and resolves it, so the anchor can never be
+	// constructed in one station's timezone and then evaluated against another's.
+	st := sc.current()
+	// Build noon on the station's calendar date directly rather than adding 12h to
+	// its midnight, which lands at 11:00 or 13:00 across a DST transition.
+	anchor := time.Date(date.Year(), date.Month(), date.Day(), noonHour, 0, 0, 0, st.location)
+	return sc.sunEventTimes(anchor, st)
 }
 
 // GetSunriseTime returns the sunrise time for a given date

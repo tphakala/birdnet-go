@@ -607,6 +607,8 @@
       "collapseDetails": "Részletek összecsukása: {species}",
       "playAudio": "Hang lejátszása: {species}",
       "viewDetails": "Részletek megtekintése: {species}",
+      "detectionDetail": "Detektálás részletei",
+      "detectionDetailFor": "Detektálás részletei: {species}",
       "unknownSpecies": "Ismeretlen faj",
       "clickToCollapse": "Kattintson az összecsukáshoz"
     },
@@ -756,7 +758,8 @@
         "ignoreSpecies": "Faj figyelmen kívül hagyása",
         "lockDetection": "Detektálás zárolása",
         "unlockDetection": "Detektálás zárolásának feloldása",
-        "deleteDetection": "Detektálás törlése"
+        "deleteDetection": "Detektálás törlése",
+        "compareSounds": "Referencia hangok"
       },
       "noDetections": "Nincs legutóbbi detektálás",
       "errors": {
@@ -857,6 +860,7 @@
       "hourly": "Órási eredmények {date}-án {hour}:00-kor",
       "hourlyRange": "Órási eredmények {date}-án {startHour}:00 - {endHour}:00 között",
       "species": "{species} eredményei {date}-án",
+      "speciesAll": "{species} eredményei",
       "search": "\"{query}\" keresési eredményei",
       "allDetections": "Összes detektálás {date}-án"
     },
@@ -865,6 +869,9 @@
       "observation": "Megfigyelés",
       "aria": {
         "downloadAudioClip": "Hangklip letöltése: {name} észleléshez",
+        "compareSounds": "Hallgassa meg a(z) {name} azonosító felvételeit az All About Birds oldalon (új lapon nyílik meg)",
+        "viewOnAllAboutBirds": "{name} megtekintése az All About Birds oldalon (új lapon nyílik meg)",
+        "viewOnWikipedia": "{name} megtekintése a Wikipédián (új lapon nyílik meg)",
         "audioRecordingFor": "Hangfelvétel és spektrogram: {name}",
         "scientificName": "Tudományos név",
         "classificationBadges": "Faj besorolási jelvények",
@@ -1011,7 +1018,10 @@
     },
     "media": {
       "title": "Felvétel és spektrogram",
-      "clipHint": "Kattintson és húzza a spektrogramon egy tartomány kijelöléséhez a kivágás exportálásához"
+      "clipHint": "Kattintson és húzza a spektrogramon egy tartomány kijelöléséhez a kivágás exportálásához",
+      "compareSounds": "Referencia hangok",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipédia"
     },
     "tabs": {
       "overview": "Áttekintés",
@@ -2059,9 +2069,13 @@
       "speciesList": "Fajlista",
       "switchToGrid": "Rács nézetre váltás",
       "switchToList": "Lista nézetre váltás",
+      "openAllAboutBirds": "Faj megtekintése az All About Birds oldalon",
+      "openWikipedia": "Faj megtekintése a Wikipédián",
+      "viewDetections": "{species} összes észlelésének megtekintése",
       "noSpeciesFound": "A szűrőknek megfelelő faj nem található.",
       "headers": {
         "species": "Faj",
+        "links": "Linkek",
         "detections": "Detektálások",
         "avgConfidence": "Átl. megbízhatóság",
         "maxConfidence": "Max. megbízhatóság",

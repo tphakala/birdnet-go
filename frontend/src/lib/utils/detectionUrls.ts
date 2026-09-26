@@ -54,6 +54,23 @@ export function buildSpeciesDetectionUrl(
 }
 
 /**
+ * Builds a detection-list URL filtered to every detection of a species, across
+ * all dates. Used by the species analytics page (grid and list views) so
+ * clicking a species jumps to its full detection history.
+ *
+ * queryType=species requires an exact date match (Forgejo species-page click-through),
+ * so this uses queryType=search with a species filter instead, which the backend
+ * routes through advanced search with no date restriction.
+ */
+export function buildSpeciesSearchUrl(scientificName: string): string {
+  const params = new URLSearchParams({
+    queryType: 'search',
+    species: scientificName,
+  });
+  return buildAppUrl(`/ui/detections?${params.toString()}`);
+}
+
+/**
  * Builds a detection-list URL filtered to a species within a specific hour window.
  * Used by the dashboard per-species hourly cells.
  */
