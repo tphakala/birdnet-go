@@ -174,7 +174,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.audio.export.debug` | boolean | true to enable audio export debug |
 | `realtime.audio.export.enabled` | boolean | export audio clips containing indentified bird calls |
 | `realtime.audio.export.path` | string | path to audio clip export directory |
-| `realtime.audio.export.type` | string | audio file type, wav, mp3 or flac |
+| `realtime.audio.export.type` | string | audio file type: wav, flac, aac, opus or mp3 |
+| `realtime.audio.export.ultrasonictype` | string | wav or flac only; used for bat/ultrasonic captures above 48 kHz |
 | `realtime.audio.export.bitrate` | string | bitrate for audio export |
 | `realtime.audio.export.retention.debug` | boolean | true to enable retention debug |
 | `realtime.audio.export.retention.policy` | string | retention policy, "none", "age" or "usage" |
@@ -316,7 +317,7 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.species.include` | string[] | Always include these species |
 | `realtime.species.exclude` | string[] | Always exclude these species |
 | `realtime.species.config` | any |  |
-| `realtime.weather.provider` | string | "none", "yrno", "openweather", or "wunderground" |
+| `realtime.weather.provider` | string | "none", "yrno", "openweather", "wunderground", or "pirateweather" |
 | `realtime.weather.pollinterval` | integer | weather data polling interval in minutes |
 | `realtime.weather.debug` | boolean | true to enable debug mode |
 | `realtime.weather.openweather.enabled` | boolean | true to enable OpenWeather integration, for legacy support |
@@ -328,6 +329,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.weather.wunderground.stationid` | string | WeatherUnderground station ID |
 | `realtime.weather.wunderground.endpoint` | string | WeatherUnderground API endpoint |
 | `realtime.weather.wunderground.units` | string | units of measurement: "e" (imperial), "m" (metric), "h" (UK hybrid) |
+| `realtime.weather.pirateweather.apikey` | string | Pirate Weather API key |
+| `realtime.weather.pirateweather.endpoint` | string | Pirate Weather API endpoint |
 | `realtime.speciestracking.enabled` | boolean | true to enable new species tracking |
 | `realtime.speciestracking.newspecieswindowdays` | integer | Days to consider a species "new" (default: 7) |
 | `realtime.speciestracking.syncintervalminutes` | integer | Interval to sync with database (default: 60) |

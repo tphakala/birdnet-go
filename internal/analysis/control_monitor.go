@@ -506,6 +506,13 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		return
 	}
 
+	// If HA discovery was just turned off, remove its entities through the old
+	// client while it is still connected. If that is not possible, the retire
+	// handler registered on the new client retries on its first connect.
+	retireCtx, retireCancel := context.WithTimeout(context.Background(), mqttReconfigureConnectTimeout)
+	cm.proc.RetireHomeAssistantDiscovery(retireCtx, cm.proc.GetMQTTClient(), settings)
+	retireCancel()
+
 	// First, safely disconnect any existing client
 	cm.proc.DisconnectMQTTClient()
 
@@ -747,6 +754,12 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 		GetLogger().Error("Failed to reconfigure sound level monitoring", logger.Error(err))
 		cm.notifyError("Failed to reconfigure sound level monitoring", err)
 		return
+	}
+
+	// The Sound Level sensor exists in HA discovery only while monitoring is on,
+	// so refresh discovery to add or remove it without an MQTT reconnect.
+	if cm.proc != nil {
+		cm.proc.RefreshHomeAssistantDiscovery()
 	}
 
 	settings := conf.Setting()

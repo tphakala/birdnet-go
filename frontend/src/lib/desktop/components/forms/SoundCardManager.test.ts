@@ -24,15 +24,18 @@ vi.mock('./SelectDropdown.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockSelectDropdown.svelte')).default,
 }));
 
-// Heavy children irrelevant to this flow are replaced with inert components.
+// The name field stays functional (bind:value) so the add-flow save test can
+// type a name and enable the Add button; other heavy children are inert.
 vi.mock('./TextInput.svelte', async () => ({
-  default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
+  default: (await import('../../../../test/fixtures/MockTextInput.svelte')).default,
 }));
 vi.mock('./InlineSlider.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
 }));
+// The model list renders the current selection as text so the default model
+// pre-selection of the add form can be asserted without the real checkbox UI.
 vi.mock('./ModelCheckboxList.svelte', async () => ({
-  default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
+  default: (await import('../../../../test/fixtures/MockModelCheckboxList.svelte')).default,
 }));
 vi.mock('./QuietHoursEditor.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
@@ -46,7 +49,19 @@ vi.mock('$lib/stores/models.svelte', () => ({
   getAvailableModels: vi.fn(() => []),
   DEFAULT_MODEL_ID: 'birdnet',
   fetchModels: vi.fn(() => () => {}),
+  modelsLoaded: vi.fn(() => true),
+  modelsLoading: vi.fn(() => false),
 }));
+
+// The acoustic model verdict drives the add form's default pick; the pure
+// defaultModelSelection helper stays real so the mapping itself is exercised.
+vi.mock('$lib/stores/acousticModels.svelte', () => ({
+  subscribeAcousticModels: vi.fn(() => () => {}),
+  acousticModelAvailability: vi.fn(() => ({ kind: 'unknown' })),
+}));
+
+import { getAvailableModels } from '$lib/stores/models.svelte';
+import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
 
 const USB_MIC = 'usb-mic';
 const SLOW_DEV = 'slow-dev';
@@ -236,5 +251,114 @@ describe('SoundCardManager sample rate probe (issue #3593)', () => {
     // Let the stale slow-dev probe resolve; the fast device's options must survive.
     await settle(STALE_SETTLE_MS);
     expect(rateSelect().querySelector(`option[value="${RATE_96K.value}"]`)).not.toBeNull();
+  });
+});
+
+describe('SoundCardManager default model pre-selection (model de-privilege, N=0)', () => {
+  const MODEL_LIST_TESTID = 'model-checkbox-list';
+
+  // Listed Perch-first so registry-ID order (v2.4 first) is distinguishable
+  // from option order in the mapped selection.
+  const ENABLED_MODELS = [
+    { id: 'perch_v2', registryId: 'Perch_V2', name: 'Perch v2', category: 'bird' },
+    { id: 'birdnet', registryId: 'BirdNET_V2.4', name: 'BirdNET v2.4', category: 'bird' },
+  ];
+
+  function renderAndOpen() {
+    renderTyped(SoundCardManager, {
+      props: {
+        sources: [],
+        audioDevices: [{ index: 0, name: 'USB Mic', id: USB_MIC }],
+        audioDevicesLoading: false,
+        disabled: false,
+        onUpdateSources: vi.fn(),
+        onRefreshDevices: vi.fn(),
+      },
+    });
+    return fireEvent.click(screen.getByText(ADD_SOURCE_KEY));
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.mocked(getAvailableModels).mockReturnValue([]);
+    vi.mocked(acousticModelAvailability).mockReturnValue({ kind: 'unknown' });
+  });
+
+  it('pre-selects the mapped default targets, v2.4 first, when the classifier is ready', async () => {
+    vi.mocked(getAvailableModels).mockReturnValue(ENABLED_MODELS);
+    vi.mocked(acousticModelAvailability).mockReturnValue({
+      kind: 'ready',
+      defaultTargets: ['BirdNET_V2.4', 'Perch_V2'],
+    });
+
+    await renderAndOpen();
+
+    expect(screen.getByTestId(MODEL_LIST_TESTID)).toHaveTextContent('birdnet,perch_v2');
+  });
+
+  it('pre-selects nothing at N=0 and never invents a phantom BirdNET', async () => {
+    vi.mocked(getAvailableModels).mockReturnValue([]);
+    vi.mocked(acousticModelAvailability).mockReturnValue({
+      kind: 'none',
+      reason: 'none_installed',
+    });
+
+    await renderAndOpen();
+
+    expect(screen.getByTestId(MODEL_LIST_TESTID).textContent).toBe('');
+  });
+
+  it('completing the add flow at N=0 saves models:[] with no phantom BirdNET', async () => {
+    vi.mocked(getAvailableModels).mockReturnValue([]);
+    vi.mocked(acousticModelAvailability).mockReturnValue({
+      kind: 'none',
+      reason: 'none_installed',
+    });
+
+    const onUpdateSources = vi.fn();
+    renderTyped(SoundCardManager, {
+      props: {
+        sources: [],
+        audioDevices: [{ index: 0, name: 'USB Mic', id: USB_MIC }],
+        audioDevicesLoading: false,
+        disabled: false,
+        onUpdateSources,
+        onRefreshDevices: vi.fn(),
+      },
+    });
+
+    // Open the add form; the pre-selection must be empty at N=0.
+    await fireEvent.click(screen.getByText(ADD_SOURCE_KEY));
+    expect(screen.getByTestId(MODEL_LIST_TESTID).textContent).toBe('');
+
+    // Pick a device and name the source so the Add button enables.
+    const deviceSelect = await screen.findByTestId(DEVICE_SELECT_TESTID);
+    await fireEvent.change(deviceSelect, { target: { value: USB_MIC } });
+    await fireEvent.input(screen.getByTestId('new-soundcard-name'), {
+      target: { value: 'Mic 1' },
+    });
+
+    // Complete the add flow via the Add button (not the heading of the same text).
+    await fireEvent.click(screen.getByRole('button', { name: ADD_SOURCE_KEY }));
+
+    expect(onUpdateSources).toHaveBeenCalledTimes(1);
+    const savedSources = onUpdateSources.mock.calls[0][0] as AudioSourceConfig[];
+    expect(savedSources).toHaveLength(1);
+    // The saved source carries an empty model list; no default is invented.
+    expect(savedSources[0].models).toEqual([]);
+  });
+
+  it('falls back to the legacy BirdNET pick when no verdict is available', async () => {
+    vi.mocked(getAvailableModels).mockReturnValue(ENABLED_MODELS);
+    vi.mocked(acousticModelAvailability).mockReturnValue({ kind: 'unknown' });
+
+    await renderAndOpen();
+
+    expect(screen.getByTestId(MODEL_LIST_TESTID)).toHaveTextContent('birdnet');
+    expect(screen.getByTestId(MODEL_LIST_TESTID)).not.toHaveTextContent('perch_v2');
   });
 });

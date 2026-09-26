@@ -415,7 +415,7 @@ func emitPathReconciledNotification(registryID, modelPath string) {
 		fmt.Sprintf("Configured file paths for %s were out of date and have been repaired to match "+
 			"the installed model at %s.", modelName, modelPath),
 	).
-		WithComponent("classifier").
+		WithComponent(notification.ComponentClassifier).
 		WithTitleKey(notification.MsgModelPathReconciledTitle, map[string]any{
 			"modelName": modelName,
 		}).
@@ -423,7 +423,7 @@ func emitPathReconciledNotification(registryID, modelPath string) {
 			"modelName": modelName,
 			"modelPath": modelPath,
 		}).
-		WithDeliveryTarget("bell")
+		WithDeliveryTarget(notification.DeliveryTargetBell)
 
 	// CreateWithMetadata is rate limited and returns an error when the notification
 	// is dropped. Log it rather than discarding: a batch of family repairs could
@@ -503,7 +503,7 @@ func emitPathSubstitutedNotification(pc *pendingPathCorrection) {
 		title,
 		body,
 	).
-		WithComponent("classifier").
+		WithComponent(notification.ComponentClassifier).
 		WithTitleKey(titleKey, map[string]any{
 			"modelName": modelName,
 		}).
@@ -511,7 +511,7 @@ func emitPathSubstitutedNotification(pc *pendingPathCorrection) {
 			"modelName": modelName,
 			"modelPath": modelPath,
 		}).
-		WithDeliveryTarget("bell")
+		WithDeliveryTarget(notification.DeliveryTargetBell)
 
 	// CreateWithMetadata is rate limited and returns an error when the notification
 	// is dropped. Log it rather than discarding, matching emitPathReconciledNotification.

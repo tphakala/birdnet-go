@@ -312,7 +312,7 @@ func validateSpeciesGuideSettings(settings *SpeciesGuideConfig) {
 }
 
 // validWeatherProviders contains all recognized weather provider values.
-var validWeatherProviders = []string{"none", "yrno", "openweather", "wunderground"} //nolint:goconst // weather-provider value, not the RetentionPolicyNone constant
+var validWeatherProviders = []string{"none", "yrno", "openweather", "wunderground", "pirateweather"} //nolint:goconst // weather-provider value, not the RetentionPolicyNone constant
 
 // validateWeatherSettings validates weather-specific settings
 func validateWeatherSettings(settings *WeatherSettings) error {
@@ -348,6 +348,16 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 			return errors.New(err).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "wunderground-settings").
+				Build()
+		}
+	}
+
+	// Validate Pirate Weather settings if it's the selected provider
+	if settings.Provider == "pirateweather" {
+		if err := settings.PirateWeather.ValidatePirateWeather(); err != nil {
+			return errors.New(err).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "pirateweather-settings").
 				Build()
 		}
 	}

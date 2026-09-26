@@ -399,3 +399,45 @@ describe('settingsCoercion realtime mqtt tls settings', () => {
     });
   });
 });
+
+describe('settingsCoercion realtime audio export ultrasonicType', () => {
+  it('preserves a valid wav ultrasonic export format', () => {
+    const result = coerceSettings('realtime', {
+      audio: { export: { enabled: true, type: 'mp3', ultrasonicType: 'wav' } },
+    });
+
+    expect(result).toMatchObject({
+      audio: { export: { ultrasonicType: 'wav' } },
+    });
+  });
+
+  it('preserves a valid flac ultrasonic export format', () => {
+    const result = coerceSettings('realtime', {
+      audio: { export: { enabled: true, type: 'wav', ultrasonicType: 'flac' } },
+    });
+
+    expect(result).toMatchObject({
+      audio: { export: { ultrasonicType: 'flac' } },
+    });
+  });
+
+  it('backfills a missing ultrasonic export format to flac (legacy config)', () => {
+    const result = coerceSettings('realtime', {
+      audio: { export: { enabled: true, type: 'mp3' } },
+    });
+
+    expect(result).toMatchObject({
+      audio: { export: { ultrasonicType: 'flac' } },
+    });
+  });
+
+  it('replaces an out-of-range ultrasonic export format with flac', () => {
+    const result = coerceSettings('realtime', {
+      audio: { export: { enabled: true, type: 'mp3', ultrasonicType: 'mp3' } },
+    });
+
+    expect(result).toMatchObject({
+      audio: { export: { ultrasonicType: 'flac' } },
+    });
+  });
+});

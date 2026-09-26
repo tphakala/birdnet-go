@@ -162,11 +162,12 @@ func TestCacheClearThunderingHerd(t *testing.T) {
 	// later goroutine clears the full cache and reinserts, collapsing it to a
 	// single entry, so both assertions below fail. This makes the test a real
 	// regression guard rather than a no-op.
-	newKey := newDate.In(sc.location).Format(time.DateOnly)
-	sc.lock.RLock()
-	_, ok := sc.cache[newKey]
-	size := len(sc.cache)
-	sc.lock.RUnlock()
+	st := sc.current()
+	newKey := newDate.In(st.location).Format(time.DateOnly)
+	st.lock.RLock()
+	_, ok := st.cache[newKey]
+	size := len(st.cache)
+	st.lock.RUnlock()
 	require.True(t, ok, "new date %s was wiped from the cache by a thundering-herd clear()", newKey)
 	require.Equal(t, maxCacheEntries, size, "cache was inappropriately cleared by the thundering herd")
 }

@@ -3,7 +3,6 @@ package migration
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"io"
 	"path/filepath"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -43,7 +43,7 @@ func TestWorker_PanicDoesNotTriggerCancelledTelemetry(t *testing.T) {
 		stopCh:       make(chan struct{}),
 		pauseCh:      make(chan struct{}),
 		resumeCh:     make(chan struct{}),
-		// legacy is nil — processBatch() will panic on nil pointer dereference
+		// legacy is nil: processBatch() will panic on nil pointer dereference
 	}
 
 	w.mu.Lock()
@@ -365,7 +365,7 @@ func (m *mockFailingStateManager) Complete() error {
 	m.mu.Unlock()
 
 	if calls <= failCount {
-		return errors.New("simulated complete failure")
+		return errors.NewStd("simulated complete failure")
 	}
 	return m.StateManager.Complete()
 }
@@ -465,39 +465,39 @@ func TestWorker_TailSyncRetriesDirtyIDs(t *testing.T) {
 type failingModelRepo struct{}
 
 func (f *failingModelRepo) GetOrCreate(_ context.Context, _, _, _ string, _ entities.ModelType, _ *string) (*entities.AIModel, error) {
-	return nil, errors.New("model repo unavailable in test")
+	return nil, errors.NewStd("model repo unavailable in test")
 }
 
 func (f *failingModelRepo) GetByID(_ context.Context, _ uint) (*entities.AIModel, error) {
-	return nil, errors.New("not implemented")
+	return nil, errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) GetByNameVersionVariant(_ context.Context, _, _, _ string) (*entities.AIModel, error) {
-	return nil, errors.New("not implemented")
+	return nil, errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) GetAll(_ context.Context) ([]*entities.AIModel, error) {
-	return nil, errors.New("not implemented")
+	return nil, errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) Count(_ context.Context) (int64, error) {
-	return 0, errors.New("not implemented")
+	return 0, errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) CountLabels(_ context.Context, _ uint) (int64, error) {
-	return 0, errors.New("not implemented")
+	return 0, errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) Delete(_ context.Context, _ uint) error {
-	return errors.New("not implemented")
+	return errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) GetByIDs(_ context.Context, _ []uint) (map[uint]*entities.AIModel, error) {
-	return nil, errors.New("not implemented")
+	return nil, errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) Exists(_ context.Context, _ uint) (bool, error) {
-	return false, errors.New("not implemented")
+	return false, errors.NewStd("not implemented")
 }
 
 func TestWorker_SwitchStatementCoverage(t *testing.T) {
@@ -589,7 +589,7 @@ func newOnDiskDetectionRepo(t *testing.T) (repository.DetectionRepository, *sql.
 
 // plantGhostDetection inserts a v2 detection row that has no matching legacy row,
 // simulating a dual-write delete where the legacy row was removed but the v2 delete
-// failed and the id was marked dirty (Forgejo #1581).
+// failed and the id was marked dirty.
 func plantGhostDetection(t *testing.T, repo repository.DetectionRepository, id uint) {
 	t.Helper()
 	require.NoError(t, repo.SaveWithID(t.Context(), &entities.Detection{
@@ -602,7 +602,7 @@ func plantGhostDetection(t *testing.T, repo repository.DetectionRepository, id u
 }
 
 // TestWorker_ProcessDirtyIDsBatch_DeletesV2GhostWhenLegacyDeleted verifies the
-// Forgejo #1581 fix: a dirty id whose legacy row is gone means the detection was
+// ghost-resurrection fix: a dirty id whose legacy row is gone means the detection was
 // deleted, so the orphaned v2 row must be removed (not just the dirty marker),
 // otherwise the deleted detection resurrects after v2 promotion.
 func TestWorker_ProcessDirtyIDsBatch_DeletesV2GhostWhenLegacyDeleted(t *testing.T) {
@@ -725,7 +725,7 @@ func TestWorker_ProcessDirtyIDsBatch_KeepsDirtyWhenV2DeleteErrors(t *testing.T) 
 // TestWorker_ProcessDirtyIDsBatch_KeepsLockedGhostButClearsDirty verifies that when the v2
 // ghost is locked (user-verified) and its legacy row is gone, the reconciler does not
 // force-delete the protected row but still clears the dirty marker, so the id cannot block
-// migration validation forever (Forgejo #1581 follow-up).
+// migration validation forever.
 func TestWorker_ProcessDirtyIDsBatch_KeepsLockedGhostButClearsDirty(t *testing.T) {
 	sm, cleanup := setupWorkerTest(t)
 	defer cleanup()

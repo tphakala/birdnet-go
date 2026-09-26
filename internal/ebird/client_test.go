@@ -144,8 +144,7 @@ func TestDoRequest(t *testing.T) {
 			if tt.wantErr {
 				require.Error(t, err)
 
-				var enhancedErr *errors.EnhancedError
-				if errors.As(err, &enhancedErr) {
+				if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
 					assert.Equal(t, tt.wantCategory, enhancedErr.Category)
 				}
 				return
@@ -230,8 +229,7 @@ func TestGetSpeciesTaxonomy(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "species not found")
 
-		var enhancedErr *errors.EnhancedError
-		if errors.As(err, &enhancedErr) {
+		if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
 			assert.Equal(t, errors.CategoryNotFound, enhancedErr.Category)
 		}
 	})

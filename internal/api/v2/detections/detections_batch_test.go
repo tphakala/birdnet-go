@@ -5,7 +5,6 @@ package detections
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestBatchDeleteDetections tests the BatchDeleteDetections endpoint.
@@ -49,7 +49,7 @@ func TestBatchDeleteDetections(t *testing.T) {
 			name: "skips not-found IDs",
 			body: BatchIDsRequest{IDs: []string{"999"}},
 			mockSetup: func(m *mock.Mock) {
-				m.On("Get", "999").Return(datastore.Note{}, errors.New("record not found"))
+				m.On("Get", "999").Return(datastore.Note{}, errors.NewStd("record not found"))
 			},
 			expectedStatus: http.StatusOK,
 			checkResult: func(t *testing.T, rec *httptest.ResponseRecorder) {

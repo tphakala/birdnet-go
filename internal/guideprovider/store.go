@@ -105,8 +105,8 @@ func NewTransientError(err error) error {
 
 // IsTransient reports whether err (or anything it wraps) is a transient failure.
 func IsTransient(err error) bool {
-	var te *transientError
-	return errors.As(err, &te)
+	_, ok := errors.AsType[*transientError](err)
+	return ok
 }
 
 // entryToGuide maps a DB row to the domain model.

@@ -69,8 +69,7 @@ func executeRequest(t *testing.T, e *echo.Echo, method, path string, handler ech
 	err := handler(c)
 	if err != nil {
 		// Handler returned an error - record the HTTP status when it is an echo error.
-		var httpErr *echo.HTTPError
-		if errors.As(err, &httpErr) {
+		if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok {
 			rec.Code = httpErr.Code
 		} else {
 			require.NoError(t, err, "handler returned an unexpected error")

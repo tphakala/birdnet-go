@@ -1,6 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
   deduplicateNotifications,
+  mergeAndDeduplicateNotifications,
+  removeNotificationById,
+  rememberDeletedNotification,
+  wasRecentlyDeleted,
+  withoutRecentlyDeleted,
+  resetDeletedNotificationsForTest,
+  DELETED_NOTIFICATION_MEMORY_MS,
+  DELETED_NOTIFICATION_MEMORY_MAX,
   groupNotifications,
   createGroupingKey,
   sanitizeNotificationMessage,
@@ -181,6 +189,73 @@ describe('deduplicateNotifications', () => {
 
     expect(result.length).toBe(1);
     expect(result[0].id).toBe('first');
+  });
+});
+
+describe('mergeAndDeduplicateNotifications', () => {
+  it('refreshes an entry with the same id and keeps its local read state', () => {
+    const existing = [createTestNotification({ id: 'a', read: true, priority: 'medium' })];
+    const incoming = [
+      createTestNotification({
+        id: 'a',
+        read: false,
+        priority: 'high',
+        timestamp: '2025-01-01T13:00:00Z',
+      }),
+    ];
+
+    const result = mergeAndDeduplicateNotifications(existing, incoming);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: 'a',
+      read: true,
+      priority: 'high',
+      timestamp: '2025-01-01T13:00:00Z',
+    });
+  });
+
+  it('points a repeat with identical text at the new id and keeps the read state', () => {
+    const existing = [createTestNotification({ id: 'deleted', read: true, priority: 'high' })];
+    const incoming = [
+      createTestNotification({
+        id: 'replacement',
+        read: false,
+        priority: 'medium',
+        timestamp: '2025-01-01T13:00:00Z',
+      }),
+    ];
+
+    const result = mergeAndDeduplicateNotifications(existing, incoming);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('replacement');
+    expect(result[0].read).toBe(true);
+    expect(result[0].priority).toBe('high');
+  });
+
+  it('keeps distinct notifications and orders them newest first', () => {
+    const existing = [
+      createTestNotification({ id: 'old', message: 'Old', timestamp: '2025-01-01T10:00:00Z' }),
+    ];
+    const incoming = [
+      createTestNotification({ id: 'new', message: 'New', timestamp: '2025-01-01T11:00:00Z' }),
+    ];
+
+    const result = mergeAndDeduplicateNotifications(existing, incoming);
+
+    expect(result.map(n => n.id)).toEqual(['new', 'old']);
+  });
+
+  it('collapses repeats of the same text within the incoming batch to the first entry', () => {
+    const incoming = [
+      createTestNotification({ id: 'first', timestamp: '2025-01-01T12:00:00Z' }),
+      createTestNotification({ id: 'second', timestamp: '2025-01-01T11:00:00Z' }),
+    ];
+
+    const result = mergeAndDeduplicateNotifications([], incoming);
+
+    expect(result.map(n => n.id)).toEqual(['first']);
   });
 });
 
@@ -416,5 +491,58 @@ describe('translateNotification', () => {
     expect(notification.title_key).toBe('some.key');
     expect(notification.message_params).toEqual({ foo: 'bar' });
     expect(notification.title).toBe('Original');
+  });
+});
+
+describe('removeNotificationById', () => {
+  it('removes the notification and reports whether unread ones remain', () => {
+    const list = [
+      createTestNotification({ id: 'a', read: false }),
+      createTestNotification({ id: 'b', read: true }),
+    ];
+
+    const result = removeNotificationById(list, 'a');
+
+    expect(result.notifications.map(n => n.id)).toEqual(['b']);
+    expect(result.hasUnread).toBe(false);
+  });
+
+  it('returns the same list for an id it does not hold', () => {
+    const list = [createTestNotification({ id: 'a', read: false })];
+
+    const result = removeNotificationById(list, 'missing');
+
+    expect(result.notifications).toBe(list);
+    expect(result.hasUnread).toBe(true);
+  });
+});
+
+describe('recently deleted notification memory', () => {
+  afterEach(() => {
+    resetDeletedNotificationsForTest();
+  });
+
+  it('remembers a deletion for the memory window, then forgets it', () => {
+    rememberDeletedNotification('gone', 1000);
+
+    expect(wasRecentlyDeleted('gone', 1000 + DELETED_NOTIFICATION_MEMORY_MS - 1)).toBe(true);
+    expect(wasRecentlyDeleted('gone', 1000 + DELETED_NOTIFICATION_MEMORY_MS)).toBe(false);
+    expect(wasRecentlyDeleted('never-deleted', 1000)).toBe(false);
+  });
+
+  it('drops recently deleted notifications from a loaded list', () => {
+    rememberDeletedNotification('gone', 1000);
+    const loaded = [createTestNotification({ id: 'gone' }), createTestNotification({ id: 'kept' })];
+
+    expect(withoutRecentlyDeleted(loaded, 1001).map(n => n.id)).toEqual(['kept']);
+  });
+
+  it('forgets the oldest deletion beyond the cap', () => {
+    for (let i = 0; i <= DELETED_NOTIFICATION_MEMORY_MAX; i++) {
+      rememberDeletedNotification(`id-${i}`, 1000);
+    }
+
+    expect(wasRecentlyDeleted('id-0', 1001)).toBe(false);
+    expect(wasRecentlyDeleted(`id-${DELETED_NOTIFICATION_MEMORY_MAX}`, 1001)).toBe(true);
   });
 });

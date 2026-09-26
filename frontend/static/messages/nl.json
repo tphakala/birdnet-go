@@ -109,6 +109,14 @@
       "closeModal": "Alles sluiten",
       "dismissAlert": "Negeer melding",
       "closeNotification": "Sluit melding",
+      "toastRegion": {
+        "topLeft": "Meldingen, linksboven",
+        "topCenter": "Meldingen, middenboven",
+        "topRight": "Meldingen, rechtsboven",
+        "bottomLeft": "Meldingen, linksonder",
+        "bottomCenter": "Meldingen, middenonder",
+        "bottomRight": "Meldingen, rechtsonder"
+      },
       "toggleDropdown": "Open/sluit keuzelijst",
       "sortAscending": "Oplopend sorteren",
       "selectLanguage": "Kies de taal",
@@ -130,7 +138,6 @@
       "selectToday": "Selecteer vandaag",
       "dateSelected": "Datum geselecteerd: {date}",
       "calendarNavigation": "Navigeer met pijl toetsen door de kalender, Enter om te selecteren, Esc om te sluiten",
-      "downloadCsv": "Soorten lijst als CSV ophalen",
       "visitEbirdLink": "Open eBird.org in een nieuwe tab",
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in een nieuwe tab",
       "resizeHandle": "Sleep om te vergroten/verkleinen",
@@ -453,7 +460,7 @@
       },
       "buffer": {
         "overloadTitle": "Audio-analyse overbelast",
-        "overloadMessage": "Uw systeem verliest {dropRate} % van de audiosamples van bron ''{sourceName}'' omdat het de analyse niet kan bijhouden. Verlaag de BirdNET-overlappingswaarde in de detectie-instellingen of overweeg een snellere CPU."
+        "overloadMessage": "Uw systeem verliest {dropRate} % van de audiosamples van bron '{sourceName}' omdat het de analyse niet kan bijhouden. Verlaag de BirdNET-overlappingswaarde in de detectie-instellingen of overweeg een snellere CPU."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime niet beschikbaar",
@@ -481,6 +488,10 @@
         "loadFailedTitle": "Akoestisch model kon niet worden geladen",
         "loadFailedMessage": "Een ingeschakeld akoestisch model kon niet worden geladen, dus audio wordt opgenomen maar niet geanalyseerd. Controleer het model op de pagina Systeem > AI-modellen."
       },
+      "modelOptimize": {
+        "title": "{count, plural, one {# model heeft een betere versie voor dit systeem} other {# modellen hebben betere versies voor dit systeem}}",
+        "message": "Er is een versie beschikbaar die beter past bij de hardware of locatie van dit systeem, voor: {models}. Open Instellingen > Analyse > Modellen en kies Optimaliseren om over te schakelen."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Huidige waarde: {value}% (drempelwaarde: {threshold}%)",
@@ -500,6 +511,11 @@
           "diskFull": "Schijf vol - maak ruimte vrij",
           "permissionDenied": "Toegang geweigerd - controleer bestands- of servicemachtigingen"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} faalt bij elke analyse",
+        "message": "{modelName} is geladen, maar de laatste {failures} analyses op rij zijn mislukt op {runtime}: de inferentie gaf een fout. Audio wordt opgenomen, maar dit model detecteert niets. Controleer het model op de pagina Systeem > AI-modellen.",
+        "nonFiniteMessage": "{modelName} is geladen, maar de laatste {failures} analyses op rij zijn mislukt op {runtime}: het model gaf ongeldige scores (NaN of oneindig). Audio wordt opgenomen, maar dit model detecteert niets. Controleer het model op de pagina Systeem > AI-modellen."
       }
     },
     "loading": "Meldingen laden..."
@@ -756,6 +772,16 @@
       "recentDetectionsFetch": "Kon Recent herkend niet inlezen: {status}",
       "recentDetectionsLoad": "Kon Recent herkend niet weergeven",
       "configFetch": "Kon Overzicht instellingen niet inlezen: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Geen akoestisch model ingeschakeld",
+      "noneMessage": "Audio wordt opgenomen maar niet geanalyseerd. Schakel een model in via de modellengalerij om soorten te detecteren.",
+      "noneAction": "Modellengalerij openen",
+      "loadFailedTitle": "Akoestisch model kon niet worden geladen",
+      "loadFailedMessage": "Een ingeschakeld model kon niet worden geladen, waardoor er geen audio wordt geanalyseerd. De pagina AI-modellen toont welk model is mislukt en waarom.",
+      "loadFailedAction": "Bekijk de status van AI-modellen",
+      "failingTitle": "{count, plural, one {Een model faalt bij elke analyse} other {# modellen falen bij elke analyse}}",
+      "failingMessage": "{count, plural, one {{models} is geladen, maar elke analyse mislukt, dus het detecteert niets.} other {{models} zijn geladen, maar elke analyse mislukt, dus ze detecteren niets.}} De pagina AI-modellen toont de backend en de fout."
     },
     "banner": {
       "title": "Titel",
@@ -1831,7 +1857,14 @@
       "fp16Help": "16-bit floating point.",
       "invocationsHelp": "Totaal aantal geanalyseerde segmenten.",
       "noModelsHint": "Nog geen audiobron geconfigureerd?",
-      "noModelsHintLink": "Audiobronnen configureren"
+      "noModelsHintLink": "Audiobronnen configureren",
+      "modelFailing": "elke analyse mislukt",
+      "lastSuccess": "Laatste succes",
+      "lastSuccessHelp": "Wanneer dit model voor het laatst audio zonder fout analyseerde.",
+      "lastSuccessNever": "Geen sinds het model is geladen",
+      "modelFailingHelp": "{reason} Probeer een andere versie van dit model via Instellingen > Analyse > Modellen, of controleer de backend en precisie hierboven.",
+      "modelFailingReasonNonFinite": "Alle recente analyses zijn mislukt omdat het model ongeldige scores gaf (NaN of oneindig), dus het detecteert niets.",
+      "modelFailingReasonError": "Alle recente analyses zijn mislukt omdat de inferentie een fout gaf, dus het model detecteert niets."
     },
     "metrics": {
       "cpu": "CPU",
@@ -3315,7 +3348,7 @@
             "label": "Apparaatnaam",
             "helpText": "De basisnaam voor apparaten zoals ze verschijnen in Home Assistant. Elke audiobron heeft zijn eigen apparaat gekoppeld aan dit hoofd BirdNET-Go apparaat."
           },
-          "sensorsNote": "<strong>Aangemaakte Sensoren:</strong> Voor elke audiobron ontvangt Home Assistant: Laatste Soort, Betrouwbaarheid, Wetenschappelijke Naam en Geluidsniveau (indien ingeschakeld). Het bridge apparaat bevat online/offline beschikbaarheidsstatus.",
+          "sensorsNote": "<strong>Aangemaakte Sensoren:</strong> Voor elke audiobron ontvangt Home Assistant: Laatste Soort, Betrouwbaarheid, Wetenschappelijke Naam en Geluidsniveau (indien ingeschakeld). Het bridge apparaat bevat online/offline beschikbaarheidsstatus. De detectiesensoren van elke bron lezen het eigen MQTT-topic van die bron, &lt;base_topic&gt;/sources/&lt;source_id&gt;, en de Geluidsniveau-sensor leest het subtopic &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, zodat een detectie van één bron nooit de sensoren van een andere bron reset.",
           "discovery": {
             "button": "Verstuur Discovery",
             "success": "Discovery berichten verzonden naar Home Assistant",
@@ -3361,7 +3394,8 @@
             "none": "Geen",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3382,6 +3416,16 @@
             "helpText": "Selecteer eenheden voor temperatuur en wind snelheid (m = Metrisch, e = Imperial, h = UK Hybrid)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API Sleutel",
+            "helpText": "Voer jouw Pirate Weather API sleutel in. Vereist voor weer gegevens."
+          },
+          "endpoint": {
+            "label": "API-eindpunt",
+            "helpText": "Overschrijf het standaard Pirate Weather API endpoint indien nodig. Standaard https://api.pirateweather.net/forecast indien leeg gelaten."
+          }
+        },
         "notes": {
           "none": "Geen weer gegevens worden opgehaald.",
           "yrno": {
@@ -3389,7 +3433,8 @@
             "freeService": "Yr is een gratis weer gegevens service. Voor meer informatie, bezoek <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Gebruik van OpenWeather vereist een API sleutel, registreer voor een gratis API sleutel bij <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Vereist een Weather Underground API sleutel en een geldig PWS station ID. Zie <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> voor details."
+          "wunderground": "Vereist een Weather Underground API sleutel en een geldig PWS station ID. Zie <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> voor details.",
+          "pirateweather": "Gebruik van Pirate Weather vereist een API sleutel, registreer bij <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API Sleutel",
@@ -3762,6 +3807,7 @@
         "dataOutputTitle": "Geluidsniveau Gegevens Output",
         "dataOutputDescription": "Wanneer ingeschakeld, worden geluidsniveau metingen gepubliceerd via:",
         "mqttTopic": "MQTT-topic:",
+        "mqttSourceTopic": "MQTT-topic per bron (met Home Assistant discovery):",
         "sseEndpoint": "SSE-eindpunt:",
         "prometheusMetrics": "Prometheus-metrics:"
       },
@@ -3823,6 +3869,8 @@
         "pathHelp": "Map waar audio clips worden opgeslagen. Relatieve paden zijn vanaf de applicatie map. Voorbeeld: 'clips/' of '/var/audio/birds/'",
         "typeLabel": "Audio Formaat",
         "typeHelp": "Audio formaat voor opgeslagen clips. WAV en FLAC zijn lossless (beste kwaliteit, grotere bestanden). MP3, AAC, en Opus zijn lossy (kleinere bestanden, lichte kwaliteitsverlies).",
+        "ultrasonicTypeLabel": "Ultrasoon Formaat",
+        "ultrasonicTypeHelp": "Lossless formaat (WAV of FLAC) dat alleen wordt gebruikt voor vleermuis- en ultrasone opnames boven 48 kHz. Deze worden opgeslagen op hun volledige bronsamplerate in plaats van het bovenstaande formaat, zodat er geen ultrasone details verloren gaan.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compressie bitrate voor lossy formaten. Bereik: {min}-{max} kbps. Hogere waarden geven betere kwaliteit maar grotere bestanden.",
         "losslessBitrateValue": "N.v.t. - Verliesvrij",
@@ -3891,7 +3939,17 @@
       },
       "models": {
         "recommendBoth": "Voor de beste soortdetectie wordt aanbevolen om zowel BirdNET als Perch samen te gebruiken.",
-        "perchOnlyWarning": "Perch alleen produceert minder detecties. Verlaag de betrouwbaarheidsdrempel naar 0.50 voor zinvolle resultaten, of activeer BirdNET erbij voor een betere dekking."
+        "perchOnlyWarning": "Perch alleen produceert minder detecties. Verlaag de betrouwbaarheidsdrempel naar 0.50 voor zinvolle resultaten, of activeer BirdNET erbij voor een betere dekking.",
+        "loading": "Detectiemodellen laden...",
+        "noneEnabledTitle": "Geen detectiemodel ingeschakeld.",
+        "noneEnabledHelp": "Je kunt deze bron nog steeds bewaren. De audio wordt geanalyseerd door de standaardmodellen zodra er een is ingeschakeld.",
+        "noneEnabledLink": "Modellengalerij openen",
+        "noneAvailable": "Er zijn geen detectiemodellen ingeschakeld op deze server.",
+        "loadFailedWarning": "Een detectiemodel kon niet worden geladen, dus deze bron wordt pas geanalyseerd als het is hersteld.",
+        "loadFailedLink": "Bekijk de status van AI-modellen",
+        "defaultBadge": "{models} (standaard)",
+        "defaultPendingBadge": "Standaardmodellen",
+        "noneBadge": "Geen model geladen"
       }
     },
     "security": {
@@ -5216,6 +5274,7 @@
       "birdweatherClientFailed": "Kan BirdWeather-client niet aanmaken",
       "noWeatherProvider": "Geen weerprovider geselecteerd",
       "openWeatherKeyRequired": "OpenWeather API-sleutel is vereist",
+      "pirateWeatherKeyRequired": "Pirate Weather API-sleutel is vereist",
       "processorUnavailable": "Processor niet beschikbaar",
       "discoveryFailed": "Kan Home Assistant-detectie niet activeren"
     },

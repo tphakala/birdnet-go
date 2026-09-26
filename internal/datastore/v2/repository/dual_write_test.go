@@ -246,7 +246,7 @@ func TestReconciliation_ShutdownWithoutStart(t *testing.T) {
 // TestReconcileDirtyIDs_DeletesGhostWhenLegacyDeleted exercises the runtime reconciler's
 // call site of ReconcileDeletedGhost: a dirty id whose legacy row is gone must have its
 // orphaned v2 row deleted and its dirty marker cleared, so the deleted detection cannot
-// resurrect after v2 promotion (Forgejo #1581).
+// resurrect after v2 promotion.
 func TestReconcileDirtyIDs_DeletesGhostWhenLegacyDeleted(t *testing.T) {
 	t.Parallel()
 

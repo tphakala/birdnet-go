@@ -47,6 +47,11 @@ func setupIntegrationTestDB(t *testing.T) *datastore.DataStore {
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	// Close the pool when the test ends so its database/sql connectionOpener
+	// goroutine exits before the package goleak gate runs.
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, sqlDB.Close()) })
 
 	// Create the notes and note_reviews table schemas
 	// note_reviews is now required for analytics queries that filter out false positives

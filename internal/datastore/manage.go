@@ -680,8 +680,7 @@ const (
 // driver error with the specified error number. Returns false for non-MySQL errors,
 // making it safe to call regardless of the active database driver.
 func isMySQLError(err error, number uint16) bool {
-	var mysqlErr *gomysql.MySQLError
-	if errors.As(err, &mysqlErr) {
+	if mysqlErr, ok := errors.AsType[*gomysql.MySQLError](err); ok {
 		return mysqlErr.Number == number
 	}
 	return false

@@ -129,6 +129,15 @@ func TestValidateExportPath(t *testing.T) {
 		{"null byte rejected", "clips\x00/etc/passwd", true, "null bytes"},
 		{"windows-style path treated as relative on unix", "C:\\data\\clips", false, ""},
 		{"dot-only rejected", "..", true, "path traversal"},
+		{"double dot inside a name allowed", "clips..old", false, ""},
+		{"nested double dot inside a name allowed", "data/clips..old/birds", false, ""},
+		{"trailing dots in a name allowed", "clips../birds", false, ""},
+		{"leading parent segment rejected", "../x", true, "path traversal"},
+		{"traversal past nested dir rejected", "a/../../x", true, "path traversal"},
+		{"trailing parent segment rejected", "data/..", true, "path traversal"},
+		{"windows backslash traversal rejected", `..\..\Windows\System32`, true, "path traversal"},
+		{"windows nested backslash traversal rejected", `data\..\..\secret`, true, "path traversal"},
+		{"mixed separator traversal rejected", `data/..\secret`, true, "path traversal"},
 	}
 
 	for _, tt := range tests {
@@ -426,6 +435,7 @@ func TestValidateWeatherSettings_InvalidProvider(t *testing.T) {
 		{"yrno provider allowed", "yrno", false},
 		{"openweather provider allowed", "openweather", false},
 		{"wunderground provider allowed", "wunderground", false},
+		{"pirateweather provider allowed", "pirateweather", false},
 		{"unknown provider rejected", "invalid_provider", true},
 		{"whitespace-only rejected", "  ", true},
 	}
@@ -439,6 +449,9 @@ func TestValidateWeatherSettings_InvalidProvider(t *testing.T) {
 				Wunderground: WundergroundSettings{
 					APIKey:    "testkey",
 					StationID: "KTEST1",
+				},
+				PirateWeather: PirateWeatherSettings{
+					APIKey: "testkey",
 				},
 			}
 

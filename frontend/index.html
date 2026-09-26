@@ -50,7 +50,7 @@
             document.documentElement.setAttribute('data-scheme', 'blue');
           }
         } catch (e) {
-          // localStorage unavailable (private browsing) — fall back to blue
+          // localStorage unavailable (private browsing), fall back to blue
           document.documentElement.setAttribute('data-scheme', 'blue');
         }
       })();
@@ -79,7 +79,12 @@
         }
 
         let initialLocale = DEFAULT_LOCALE;
-        const stored = localStorage.getItem('birdnet-locale');
+        let stored = null;
+        try {
+          stored = localStorage.getItem('birdnet-locale');
+        } catch (e) {
+          // localStorage unavailable (blocked site data, private browsing)
+        }
         if (stored && SUPPORTED_LOCALES.includes(stored)) {
           initialLocale = stored;
         } else {

@@ -167,7 +167,8 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	if opts.backend != nil {
 		entry.backend = *opts.backend
 	}
-	dropInferenceFailureStreak(registryID) // fresh instance, fresh streak
+	dropInferenceHealth(registryID)      // fresh instance, fresh streak
+	o.kickInferenceHealthSyncIfTracked() // the replaced instance's failure notice is stale
 	entry.mu.Unlock()
 
 	// Close the replaced instance after releasing entry.mu: native teardown can be slow,

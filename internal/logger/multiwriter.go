@@ -2,8 +2,9 @@ package logger
 
 import (
 	"context"
-	"errors"
 	"log/slog"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // multiWriterHandler writes to multiple slog handlers

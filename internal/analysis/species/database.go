@@ -139,6 +139,7 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(ctx context.Context, now t
 	case len(newSpeciesData) > 0:
 		// Clear and populate lifetime tracking map with new data
 		t.speciesFirstSeen = make(map[string]time.Time, len(newSpeciesData))
+		t.speciesFirstAudioDate = make(map[string]time.Time)
 		t.speciesLastSeen = make(map[string]time.Time, len(newSpeciesData))
 		for _, species := range newSpeciesData {
 			// Canonicalize so a detection later arriving under the canonical name
@@ -153,6 +154,16 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(ctx context.Context, now t
 						logger.String("date", species.FirstSeenDate),
 						logger.Error(err))
 					continue
+				}
+				// A recording can start before midnight and be saved with the next
+				// day's date. Restore its audio date for notification deadlines while
+				// preserving the saved date used by badges and novelty reconstruction.
+				if !species.FirstBeginTime.IsZero() {
+					year, month, day := species.FirstBeginTime.Date()
+					audioDate := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+					if audioDate.Before(firstSeen) {
+						keepEarliest(t.speciesFirstAudioDate, key, audioDate)
+					}
 				}
 				// Keep the earliest first-seen and latest last-seen when aliases collapse.
 				keepEarliest(t.speciesFirstSeen, key, firstSeen)
@@ -175,6 +186,7 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(ctx context.Context, now t
 	case len(t.speciesFirstSeen) == 0:
 		// No data from database and no existing data - initialize empty map
 		t.speciesFirstSeen = make(map[string]time.Time, initialSpeciesCapacity)
+		t.speciesFirstAudioDate = nil
 		t.speciesLastSeen = make(map[string]time.Time, initialSpeciesCapacity)
 		getLog().Debug("No species data from database, initialized empty tracking")
 	default:

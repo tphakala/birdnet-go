@@ -260,8 +260,7 @@ func (w *NotificationWorker) handleNotificationCreationError(event events.ErrorE
 	w.circuitBreaker.RecordFailure()
 
 	// Rate limit errors are expected - just track and return
-	var enhErr *errors.EnhancedError
-	if errors.As(err, &enhErr) && enhErr.GetMessage() == "rate limit exceeded" {
+	if enhErr, ok := errors.AsType[*errors.EnhancedError](err); ok && enhErr.GetMessage() == "rate limit exceeded" {
 		w.eventsDropped.Add(1)
 		return nil
 	}
@@ -427,8 +426,7 @@ func (w *NotificationWorker) processEventGroup(key eventKey, groupEvents []event
 		w.eventsFailed.Add(uint64(eventCount))
 		w.circuitBreaker.RecordFailure()
 
-		var enhErr *errors.EnhancedError
-		if errors.As(err, &enhErr) && enhErr.GetMessage() == "rate limit exceeded" {
+		if enhErr, ok := errors.AsType[*errors.EnhancedError](err); ok && enhErr.GetMessage() == "rate limit exceeded" {
 			w.eventsDropped.Add(uint64(eventCount))
 		}
 		return err

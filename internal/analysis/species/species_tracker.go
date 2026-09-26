@@ -156,8 +156,10 @@ type SpeciesTracker struct {
 
 	// Lifetime tracking (existing)
 	speciesFirstSeen map[string]time.Time // scientificName -> first detection time
-	speciesLastSeen  map[string]time.Time // scientificName -> most recent detection time
-	windowDays       int                  // Days to consider a species "new"
+	// Earlier audio dates restored from storage, used only for notification deadlines.
+	speciesFirstAudioDate map[string]time.Time
+	speciesLastSeen       map[string]time.Time // scientificName -> most recent detection time
+	windowDays            int                  // Days to consider a species "new"
 
 	// Novelty episode tracking
 	noveltyEpisodes map[string]NoveltyStatus // scientificName -> active novelty episode

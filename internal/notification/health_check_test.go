@@ -3,7 +3,6 @@ package notification
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // mockHealthProvider implements Provider for health check testing
@@ -412,7 +412,7 @@ func TestHealthChecker_isCircuitBreakerGating(t *testing.T) {
 		},
 		{
 			name:     "other_error",
-			err:      errors.New("random error"),
+			err:      errors.NewStd("random error"),
 			expected: false,
 		},
 	}
@@ -466,7 +466,7 @@ func TestHealthChecker_recordHealthFailure(t *testing.T) {
 		},
 	}
 
-	testErr := errors.New("test error")
+	testErr := errors.NewStd("test error")
 	hc.recordHealthFailure(entry, "test", testErr)
 
 	assert.False(t, entry.health.Healthy)
@@ -536,7 +536,7 @@ func TestHealthChecker_executeHealthCheck(t *testing.T) {
 	})
 
 	t.Run("failure_without_circuit_breaker", func(t *testing.T) {
-		expectedErr := errors.New("validation failed")
+		expectedErr := errors.NewStd("validation failed")
 		provider := &mockHealthProvider{name: "test", enabled: true, validateErr: expectedErr}
 
 		err := hc.executeHealthCheck(provider, nil)
@@ -638,7 +638,7 @@ func TestHealthChecker_updateHealthStatus(t *testing.T) {
 		},
 		{
 			name:           "failure_updates_health",
-			err:            errors.New("test error"),
+			err:            errors.NewStd("test error"),
 			initialHealthy: true,
 			expectedChange: true,
 		},
@@ -717,7 +717,7 @@ func TestHealthChecker_checkProvider_Integration(t *testing.T) {
 		provider := &mockHealthProvider{
 			name:        "fail-test",
 			enabled:     true,
-			validateErr: errors.New("validation failed"),
+			validateErr: errors.NewStd("validation failed"),
 		}
 		hc.RegisterProvider(provider, nil)
 

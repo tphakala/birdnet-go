@@ -59,7 +59,7 @@ func (c *Controller) initSettingsRoutes() {
 	// (species summary limit, layout, locale, thumbnails settings, etc.)
 	// before login. The Layout is already exposed publicly via
 	// /api/v2/app/config (see PR #2402). Mutations (PATCH) on this section
-	// remain auth-protected — see the settingsGroup PATCH handler below.
+	// remain auth-protected (see the settingsGroup PATCH handler below).
 	// Registered on the parent group so that Echo's router matches this
 	// static path before the auth-protected `/:section` parameter route.
 	c.Group.GET("/settings/dashboard", c.GetDashboardSettings)
@@ -83,7 +83,7 @@ func (c *Controller) initSettingsRoutes() {
 	// PUT /api/v2/settings - Updates multiple settings sections with complete replacement
 	settingsGroup.PUT("", c.UpdateSettings)
 	// PATCH /api/v2/settings/:section - Updates a specific settings section with partial replacement
-	// (includes /settings/dashboard — writes remain auth-protected).
+	// (includes /settings/dashboard; writes remain auth-protected).
 	settingsGroup.PATCH("/:section", c.UpdateSectionSettings)
 
 	c.LogInfoIfEnabled("Settings routes initialized successfully")
@@ -129,7 +129,7 @@ const dashboardSectionName = "dashboard"
 // section so that unauthenticated guests can render the SPA dashboard
 // (species summary limit, layout, locale, thumbnails, etc.) without first
 // completing login. The Dashboard section contains no secrets, tokens, or
-// PII — the full settings payload (which does) remains behind auth. Writes
+// PII; the full settings payload (which does) remains behind auth. Writes
 // to this section are handled by UpdateSectionSettings and remain
 // auth-protected.
 func (c *Controller) GetDashboardSettings(ctx echo.Context) error {
@@ -689,7 +689,7 @@ func mergeJSONIntoStruct(data json.RawMessage, target any) error {
 	// slice elements. By nilling slices first, json.Unmarshal allocates fresh
 	// backing arrays and every element starts at its zero value.
 	//
-	// Only slices are affected — scalar, map, and struct fields are correctly
+	// Only slices are affected: scalar, map, and struct fields are correctly
 	// overwritten by json.Unmarshal. We must NOT zero the entire struct because
 	// fields tagged json:"-" (runtime values like Labels, SoxAudioTypes) would
 	// be destroyed and are absent from mergedJSON.
@@ -716,7 +716,7 @@ func zeroJSONSliceFields(v reflect.Value) {
 		if !field.CanSet() {
 			continue
 		}
-		// Skip fields invisible to JSON — they hold runtime values not
+		// Skip fields invisible to JSON: they hold runtime values not
 		// present in mergedJSON and would be permanently lost.
 		if tag, ok := sf.Tag.Lookup("json"); ok && tag == "-" {
 			continue
@@ -731,7 +731,7 @@ func zeroJSONSliceFields(v reflect.Value) {
 				zeroJSONSliceFields(field)
 			}
 		default:
-			// Only slices need zeroing — scalars, maps, etc. are correctly
+			// Only slices need zeroing: scalars, maps, etc. are correctly
 			// overwritten by json.Unmarshal without stale value issues.
 		}
 	}
@@ -940,7 +940,7 @@ func zeroJSONSliceAndMapFields(v reflect.Value) {
 		if !field.CanSet() {
 			continue
 		}
-		// Skip fields invisible to JSON — they hold runtime values not present in
+		// Skip fields invisible to JSON: they hold runtime values not present in
 		// mergedJSON and would be permanently lost.
 		if tag, ok := sf.Tag.Lookup("json"); ok && tag == "-" {
 			continue
@@ -1789,7 +1789,7 @@ func sanitizeSettingsForAPI(s *conf.Settings) *conf.Settings {
 	sanitized.Security.GithubAuth.ClientSecret = redact(s.Security.GithubAuth.ClientSecret)
 	sanitized.Security.MicrosoftAuth.ClientSecret = redact(s.Security.MicrosoftAuth.ClientSecret)
 
-	// Array-based OAuth providers — must copy the slice to avoid mutating the original
+	// Array-based OAuth providers: must copy the slice to avoid mutating the original
 	if len(s.Security.OAuthProviders) > 0 {
 		providers := make([]conf.OAuthProviderConfig, len(s.Security.OAuthProviders))
 		sanitized.Security.OAuthProviders = providers
@@ -1809,6 +1809,7 @@ func sanitizeSettingsForAPI(s *conf.Settings) *conf.Settings {
 	// --- Weather API keys ---
 	sanitized.Realtime.Weather.OpenWeather.APIKey = redact(s.Realtime.Weather.OpenWeather.APIKey)
 	sanitized.Realtime.Weather.Wunderground.APIKey = redact(s.Realtime.Weather.Wunderground.APIKey)
+	sanitized.Realtime.Weather.PirateWeather.APIKey = redact(s.Realtime.Weather.PirateWeather.APIKey)
 
 	// --- eBird API key ---
 	sanitized.Realtime.EBird.APIKey = redact(s.Realtime.EBird.APIKey)
@@ -1887,7 +1888,7 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 		apicore.RestoreRedactedSecret(*cur, inc)
 	}
 
-	// Security — defense-in-depth: restore even though SessionSecret is
+	// Security (defense-in-depth): restore even though SessionSecret is
 	// also in the blocked field map (protects against future unblocking).
 	restore(&current.Security.SessionSecret, &incoming.Security.SessionSecret)
 	restore(&current.Security.BasicAuth.Password, &incoming.Security.BasicAuth.Password)
@@ -1898,7 +1899,7 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	// Diagnostics
 	restore(&current.Diagnostics.Profiling.Token, &incoming.Diagnostics.Profiling.Token)
 
-	// Array-based OAuth providers — match by Provider name to handle reordering
+	// Array-based OAuth providers: match by Provider name to handle reordering
 	for i := range incoming.Security.OAuthProviders {
 		if incoming.Security.OAuthProviders[i].ClientSecret != redactedValue {
 			continue
@@ -1920,6 +1921,7 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	// Weather API keys
 	restore(&current.Realtime.Weather.OpenWeather.APIKey, &incoming.Realtime.Weather.OpenWeather.APIKey)
 	restore(&current.Realtime.Weather.Wunderground.APIKey, &incoming.Realtime.Weather.Wunderground.APIKey)
+	restore(&current.Realtime.Weather.PirateWeather.APIKey, &incoming.Realtime.Weather.PirateWeather.APIKey)
 
 	// eBird
 	restore(&current.Realtime.EBird.APIKey, &incoming.Realtime.EBird.APIKey)
@@ -1949,7 +1951,7 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 		}
 	}
 
-	// Webhook auth secrets — match by provider Name + endpoint URL to handle reordering
+	// Webhook auth secrets: match by provider Name + endpoint URL to handle reordering
 	// Build a map of current providers keyed by Name for O(1) lookup.
 	curProvidersByName := make(map[string]*conf.PushProviderConfig, len(current.Notification.Push.Providers))
 	for i := range current.Notification.Push.Providers {
@@ -1999,7 +2001,7 @@ func validateNoRedactedSentinels(s *conf.Settings) error {
 		}
 	}
 
-	// Scalar secret fields — these always have a 1:1 restore and should
+	// Scalar secret fields: these always have a 1:1 restore and should
 	// never remain as sentinel, but check defensively.
 	check(s.Security.SessionSecret, "security.sessionSecret")
 	check(s.Security.BasicAuth.Password, "security.basicAuth.password")
@@ -2011,6 +2013,7 @@ func validateNoRedactedSentinels(s *conf.Settings) error {
 	check(s.Output.MySQL.Password, "output.mysql.password")
 	check(s.Realtime.Weather.OpenWeather.APIKey, "realtime.weather.openWeather.apiKey")
 	check(s.Realtime.Weather.Wunderground.APIKey, "realtime.weather.wunderground.apiKey")
+	check(s.Realtime.Weather.PirateWeather.APIKey, "realtime.weather.pirateWeather.apiKey")
 	check(s.Realtime.EBird.APIKey, "realtime.ebird.apiKey")
 
 	// Array-based OAuth providers
@@ -2078,6 +2081,7 @@ func clearRedactedSentinels(s *conf.Settings) {
 	clearField(&s.Output.MySQL.Password)
 	clearField(&s.Realtime.Weather.OpenWeather.APIKey)
 	clearField(&s.Realtime.Weather.Wunderground.APIKey)
+	clearField(&s.Realtime.Weather.PirateWeather.APIKey)
 	clearField(&s.Realtime.EBird.APIKey)
 
 	for i := range s.Security.OAuthProviders {
@@ -2607,6 +2611,16 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.notifyRegionStaleness(oldSettings, currentSettings)
 	}
 
+	// Location, ModelRegion and the primary model path feed the optimize offers,
+	// and none of them fires a model topology event, so re-evaluate the bell
+	// notice here. The evaluation is debounced and runs off this goroutine. A
+	// location change can therefore raise both the region-staleness warning above
+	// and an optimize notice for the same regional model; which of the two should
+	// win is an open product decision, so both are kept for now.
+	if optimizeNoticeInputsChanged(oldSettings, currentSettings) {
+		c.scheduleOptimizeNoticeSync()
+	}
+
 	// Trigger reconfigurations asynchronously.
 	// Capture debug flag from the settings snapshot so the goroutine never
 	// reloads settings (which may be republished by a concurrent update).
@@ -2767,6 +2781,41 @@ func coordinatesChanged(oldSettings, currentSettings *conf.Settings) bool {
 		oldSettings.BirdNET.Longitude != currentSettings.BirdNET.Longitude
 }
 
+// optimizeNoticeInputsChanged reports whether a settings change alters an input
+// of the model optimize offers: the region the recommender scores against (the
+// station location, which auto region mode resolves from, or the ModelRegion
+// mode itself), or the configured primary model path, which decides whether the
+// BirdNET v2.4 offer is withheld from a user running a custom model.
+func optimizeNoticeInputsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return coordinatesChanged(oldSettings, currentSettings) ||
+		oldSettings.BirdNET.ModelRegion != currentSettings.BirdNET.ModelRegion ||
+		oldSettings.BirdNET.ModelPath != currentSettings.BirdNET.ModelPath
+}
+
+// optimizeNoticeScheduler is the part of the models handler the facade drives
+// to keep the model optimize bell notice in sync. It is an interface so the
+// wiring tests can observe the facade's calls.
+type optimizeNoticeScheduler interface {
+	ScheduleOptimizeNoticeSync()
+	StopOptimizeNoticeSync()
+}
+
+// optimizeNoticeHook boxes the scheduler for Controller.optimizeNotices, since
+// an atomic.Pointer needs a concrete type.
+type optimizeNoticeHook struct {
+	scheduler optimizeNoticeScheduler
+}
+
+// scheduleOptimizeNoticeSync asks the models handler to re-evaluate the model
+// optimize bell notice. It is a no-op until NewWithOptions publishes the
+// handler, which it does only when a ModelManager is wired and routes are
+// initialized.
+func (c *Controller) scheduleOptimizeNoticeSync() {
+	if h := c.optimizeNotices.Load(); h != nil {
+		h.scheduler.ScheduleOptimizeNoticeSync()
+	}
+}
+
 // notifyRegionStaleness runs the recommend-only region staleness detector after
 // a station location change and emits a bell notification for each installed
 // regional model variant that no longer matches the newly resolved region. Every
@@ -2839,7 +2888,7 @@ func mqttSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 // a stream (e.g., enables Perch v2 alongside BirdNET) the orchestrator must
 // rebind the stream's analysis pipeline. Without this check, the save
 // persists to disk but the running pipeline keeps using the previous model
-// set until a restart — silently breaking the hot-reload contract.
+// set until a restart, silently breaking the hot-reload contract.
 func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldRTSP := oldSettings.Realtime.RTSP
 	newRTSP := currentSettings.Realtime.RTSP

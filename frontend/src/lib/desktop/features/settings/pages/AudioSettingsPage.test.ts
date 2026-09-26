@@ -71,6 +71,7 @@ vi.mock('$lib/stores/appState.svelte', () => ({
   },
   getCsrfToken: vi.fn().mockReturnValue('test-csrf-token'),
   isSentryEnabled: () => false,
+  isGuestMode: vi.fn(() => false),
   refreshCsrfToken: vi.fn().mockResolvedValue(false),
   initApp: vi.fn().mockResolvedValue(true),
 }));

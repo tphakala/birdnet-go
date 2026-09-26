@@ -100,17 +100,17 @@ server.Shutdown()
 
 ### Available Options
 
-| Option | Purpose |
-|--------|---------|
-| `WithLogger(logger)` | Set standard logger |
-| `WithDataStore(ds)` | Set database interface |
-| `WithBirdImageCache(cache)` | Set species image cache |
-| `WithSunCalc(sc)` | Set sun calculator |
-| `WithProcessor(proc)` | Set analysis processor |
-| `WithOAuth2Server(oauth)` | Set OAuth2 server |
-| `WithMetrics(m)` | Set observability metrics |
-| `WithControlChannel(ch)` | Set control signal channel |
-| `WithAudioLevelChannel(ch)` | Set audio level channel |
+| Option                      | Purpose                    |
+| --------------------------- | -------------------------- |
+| `WithLogger(logger)`        | Set standard logger        |
+| `WithDataStore(ds)`         | Set database interface     |
+| `WithBirdImageCache(cache)` | Set species image cache    |
+| `WithSunCalc(sc)`           | Set sun calculator         |
+| `WithProcessor(proc)`       | Set analysis processor     |
+| `WithOAuth2Server(oauth)`   | Set OAuth2 server          |
+| `WithMetrics(m)`            | Set observability metrics  |
+| `WithControlChannel(ch)`    | Set control signal channel |
+| `WithAudioLevelChannel(ch)` | Set audio level channel    |
 
 ## API Controller
 
@@ -562,15 +562,15 @@ Debug endpoints for testing and development (protected):
 
 The `internal/api/middleware/` package provides HTTP middleware used by the server:
 
-| Middleware | File | Purpose |
-|------------|------|---------|
-| Recovery | Echo built-in | Panic recovery |
-| RequestLogger | `logging.go` | Structured request logging |
-| CORS | `security.go` | Cross-origin resource sharing |
-| BodyLimit | `security.go` | Request body size limits |
-| Gzip | `compression.go` | Response compression (auto-skips SSE) |
-| SecureHeaders | `security.go` | Security headers (HSTS, X-Frame-Options) |
-| CSRF | `csrf.go` | CSRF token validation for state-changing operations |
+| Middleware    | File             | Purpose                                             |
+| ------------- | ---------------- | --------------------------------------------------- |
+| Recovery      | Echo built-in    | Panic recovery                                      |
+| RequestLogger | `logging.go`     | Structured request logging                          |
+| CORS          | `security.go`    | Cross-origin resource sharing                       |
+| BodyLimit     | `security.go`    | Request body size limits                            |
+| Gzip          | `compression.go` | Response compression (auto-skips SSE)               |
+| SecureHeaders | `security.go`    | Security headers (HSTS, X-Frame-Options)            |
+| CSRF          | `csrf.go`        | CSRF token validation for state-changing operations |
 
 The API uses authentication middleware from `auth/middleware.go` which handles Bearer token and session-based authentication.
 
@@ -659,17 +659,17 @@ The API includes comprehensive endpoints for managing application settings:
 5. **Hot Reload Support**:
    The following settings are automatically applied at runtime without restart:
 
-   | Category | Action | Notification |
-   |----------|--------|--------------|
-   | BirdNET model | `reload_birdnet` | ✅ |
-   | Range filter | `rebuild_range_filter` | ✅ |
-   | Species intervals | `update_detection_intervals` | ✅ |
-   | MQTT | `reconfigure_mqtt` | ✅ |
-   | BirdWeather | `reconfigure_birdweather` | ✅ |
-   | RTSP sources | `reconfigure_rtsp_sources` | ✅ |
-   | Telemetry | `reconfigure_telemetry` | ✅ |
-   | Species tracking | `reconfigure_species_tracking` | ✅ |
-   | Audio/Equalizer | Various | ✅ |
+   | Category          | Action                         | Notification |
+   | ----------------- | ------------------------------ | ------------ |
+   | BirdNET model     | `reload_birdnet`               | ✅           |
+   | Range filter      | `rebuild_range_filter`         | ✅           |
+   | Species intervals | `update_detection_intervals`   | ✅           |
+   | MQTT              | `reconfigure_mqtt`             | ✅           |
+   | BirdWeather       | `reconfigure_birdweather`      | ✅           |
+   | RTSP sources      | `reconfigure_rtsp_sources`     | ✅           |
+   | Telemetry         | `reconfigure_telemetry`        | ✅           |
+   | Species tracking  | `reconfigure_species_tracking` | ✅           |
+   | Audio/Equalizer   | Various                        | ✅           |
 
    **Web server settings** (port, TLS, etc.) require a restart - users are notified via toast.
 
@@ -890,21 +890,20 @@ When working with the API code, be mindful of these important considerations:
   }
   ```
 
-#### Use errors.As for Type Assertions
+#### Use errors.AsType for Type Assertions
 
-- When checking for specific error types, use errors.As() to handle wrapped errors
-- This ensures compatibility with error wrapping patterns
+- When checking for specific error types, use errors.AsType() to handle wrapped errors
+- This ensures compatibility with error wrapping patterns; the `ErrorsAsType` lint rule flags `errors.As(err, &target)`
 - Example:
 
   ```go
   // INCORRECT
-  if sqlErr, ok := err.(*sqlite3.Error); ok && sqlErr.Code == sqlite3.ErrConstraint {
+  if sqlErr, ok := err.(sqlite3.Error); ok && sqlErr.Code == sqlite3.ErrConstraint {
       // Handle constraint violation
   }
 
   // CORRECT
-  var sqlErr *sqlite3.Error
-  if errors.As(err, &sqlErr) && sqlErr.Code == sqlite3.ErrConstraint {
+  if sqlErr, ok := errors.AsType[sqlite3.Error](err); ok && sqlErr.Code == sqlite3.ErrConstraint {
       // Handle constraint violation
   }
   ```
@@ -1017,15 +1016,15 @@ go test -v ./internal/api/auth/...
 
 ### Test File Categories
 
-| Pattern | Purpose |
-|---------|---------|
-| `*_test.go` | Standard unit tests for each handler/feature |
+| Pattern                 | Purpose                                         |
+| ----------------------- | ----------------------------------------------- |
+| `*_test.go`             | Standard unit tests for each handler/feature    |
 | `*_integration_test.go` | Integration tests combining multiple components |
-| `*_edge_test.go` | Edge case and boundary condition tests |
-| `*_concurrent_test.go` | Concurrency and race condition tests |
-| `*_malformed_test.go` | Malformed input validation tests |
-| `*_malicious_test.go` | Security and attack scenario tests |
-| `*_extreme_test.go` | Extreme value and stress tests |
+| `*_edge_test.go`        | Edge case and boundary condition tests          |
+| `*_concurrent_test.go`  | Concurrency and race condition tests            |
+| `*_malformed_test.go`   | Malformed input validation tests                |
+| `*_malicious_test.go`   | Security and attack scenario tests              |
+| `*_extreme_test.go`     | Extreme value and stress tests                  |
 
 ### Testing Best Practices
 

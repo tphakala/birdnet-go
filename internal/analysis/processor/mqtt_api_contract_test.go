@@ -63,6 +63,10 @@ var mqttAPIContractFields = struct {
 	Occurrence  string // lowercase with omitempty
 	BirdImage   string // PascalCase - DO NOT CHANGE (backward compatibility)
 
+	// New camelCase fields (allowed by the modification policy above)
+	SpeciesFirstDetectedAt string // camelCase - species' earliest previous detection (null when none)
+	SpeciesLastDetectedAt  string // camelCase - species' most-recent previous detection (null when none)
+
 	// BirdImage nested fields (from imageprovider.BirdImage)
 	// These use PascalCase because Go's default JSON marshaling is used
 	BirdImageURL            string
@@ -91,6 +95,10 @@ var mqttAPIContractFields = struct {
 	SourceName:  "sourceName",  // camelCase - display name for stable source mapping
 	Occurrence:  "occurrence",  // lowercase with omitempty
 	BirdImage:   "BirdImage",   // PascalCase - FROZEN for backward compatibility
+
+	// New camelCase fields
+	SpeciesFirstDetectedAt: "speciesFirstDetectedAt",
+	SpeciesLastDetectedAt:  "speciesLastDetectedAt",
 
 	// BirdImage nested fields (PascalCase - Go default)
 	BirdImageURL:            "URL",
@@ -128,9 +136,11 @@ func TestMQTTAPIContract_NoteWithBirdImage_FieldNames(t *testing.T) {
 			Occurrence:     0.75,
 			Source:         testAudioSource(),
 		},
-		DetectionID: 12345, // Should match Note.ID for URL construction
-		SourceID:    "test-source-1",
-		SourceName:  testAudioSource().DisplayName, // "test-source"
+		DetectionID:            12345, // Should match Note.ID for URL construction
+		SourceID:               "test-source-1",
+		SourceName:             testAudioSource().DisplayName, // "test-source"
+		SpeciesFirstDetectedAt: new(time.Date(2024, 1, 10, 8, 30, 0, 0, time.UTC)),
+		SpeciesLastDetectedAt:  new(time.Date(2024, 1, 14, 18, 45, 0, 0, time.UTC)),
 		BirdImage: imageprovider.BirdImage{
 			URL:            "https://example.com/bird.jpg",
 			ScientificName: "Turdus migratorius",
@@ -191,7 +201,7 @@ func TestMQTTAPIContract_NoteWithBirdImage_FieldNames(t *testing.T) {
 	t.Run("SourceID uses camelCase (new field for HA)", func(t *testing.T) {
 		// This is a new field added for Home Assistant, uses camelCase
 		assert.Contains(t, jsonMap, mqttAPIContractFields.SourceID,
-			"MQTT API CONTRACT: sourceId field must be present for HA filtering")
+			"MQTT API CONTRACT: sourceId field must be present; HA discovery keys the per-source topic on it")
 		assert.Equal(t, "test-source-1", jsonMap[mqttAPIContractFields.SourceID],
 			"sourceId value mismatch")
 	})
@@ -244,6 +254,50 @@ func TestMQTTAPIContract_NoteWithBirdImage_FieldNames(t *testing.T) {
 		occurrence, ok := jsonMap[mqttAPIContractFields.Occurrence].(float64)
 		require.True(t, ok, "occurrence must be a number")
 		assert.InDelta(t, 0.75, occurrence, 0.001, "occurrence value mismatch")
+	})
+
+	t.Run("Species detection time fields use camelCase (new fields)", func(t *testing.T) {
+		// New camelCase fields (allowed by the modification policy above)
+		assert.Contains(t, jsonMap, mqttAPIContractFields.SpeciesFirstDetectedAt,
+			"MQTT API CONTRACT: speciesFirstDetectedAt field must be present")
+		assert.Contains(t, jsonMap, mqttAPIContractFields.SpeciesLastDetectedAt,
+			"MQTT API CONTRACT: speciesLastDetectedAt field must be present")
+
+		firstTime, ok := jsonMap[mqttAPIContractFields.SpeciesFirstDetectedAt].(string)
+		require.True(t, ok, "speciesFirstDetectedAt must be a string (RFC3339) when set")
+		firstParsed, err := time.Parse(time.RFC3339, firstTime)
+		require.NoError(t, err, "speciesFirstDetectedAt must be RFC3339")
+		assert.Equal(t, time.Date(2024, 1, 10, 8, 30, 0, 0, time.UTC), firstParsed)
+
+		lastTime, ok := jsonMap[mqttAPIContractFields.SpeciesLastDetectedAt].(string)
+		require.True(t, ok, "speciesLastDetectedAt must be a string (RFC3339) when set")
+		lastParsed, err := time.Parse(time.RFC3339, lastTime)
+		require.NoError(t, err, "speciesLastDetectedAt must be RFC3339")
+		assert.Equal(t, time.Date(2024, 1, 14, 18, 45, 0, 0, time.UTC), lastParsed)
+	})
+
+	t.Run("Species detection time fields are explicit null when unset", func(t *testing.T) {
+		// No omitempty: the keys must always be present, serialized as null
+		// when the species has no previous detections.
+		unset := NoteWithBirdImage{
+			Note:     datastore.Note{Source: testAudioSource()},
+			SourceID: "test-source",
+		}
+		unsetJSON, err := json.Marshal(unset)
+		require.NoError(t, err)
+
+		var unsetMap map[string]any
+		require.NoError(t, json.Unmarshal(unsetJSON, &unsetMap))
+
+		firstRaw, present := unsetMap[mqttAPIContractFields.SpeciesFirstDetectedAt]
+		require.True(t, present,
+			"speciesFirstDetectedAt key must always be present (no omitempty)")
+		assert.Nil(t, firstRaw, "speciesFirstDetectedAt must be JSON null when unset")
+
+		lastRaw, present := unsetMap[mqttAPIContractFields.SpeciesLastDetectedAt]
+		require.True(t, present,
+			"speciesLastDetectedAt key must always be present (no omitempty)")
+		assert.Nil(t, lastRaw, "speciesLastDetectedAt must be JSON null when unset")
 	})
 }
 
@@ -395,6 +449,9 @@ func TestMQTTAPIContract_AllExpectedFieldsPresent(t *testing.T) {
 		"detectionId",    // camelCase - database ID for URL construction (issue #1748)
 		"sourceId",       // camelCase - new field for HA discovery
 		"BirdImage",      // PascalCase - FROZEN for backward compatibility
+		// New camelCase fields - always present (explicit null when no previous detections)
+		"speciesFirstDetectedAt",
+		"speciesLastDetectedAt",
 	}
 
 	for _, field := range expectedRootFields {
@@ -453,13 +510,13 @@ func TestMQTTAPIContract_NoRedundantDuplicateFields(t *testing.T) {
 	err = json.Unmarshal(jsonData, &jsonMap)
 	require.NoError(t, err)
 
-	// "ID" from embedded Note must NOT appear — "detectionId" is the canonical field
+	// "ID" from embedded Note must NOT appear: "detectionId" is the canonical field
 	assert.NotContains(t, jsonMap, "ID",
-		"Redundant field 'ID' must not appear in MQTT payload — use 'detectionId' (GitHub #109)")
+		"Redundant field 'ID' must not appear in MQTT payload; use 'detectionId' (GitHub #109)")
 
-	// "Source" from embedded Note must NOT appear — "sourceId" is the canonical field
+	// "Source" from embedded Note must NOT appear: "sourceId" is the canonical field
 	assert.NotContains(t, jsonMap, "Source",
-		"Redundant field 'Source' must not appear in MQTT payload — use 'sourceId' (GitHub #109)")
+		"Redundant field 'Source' must not appear in MQTT payload; use 'sourceId' (GitHub #109)")
 
 	// Canonical fields must still be present
 	assert.Contains(t, jsonMap, "detectionId",

@@ -937,7 +937,11 @@
         },
         "type": {
           "type": "string",
-          "description": "audio file type, wav, mp3 or flac"
+          "description": "audio file type: wav, flac, aac, opus or mp3"
+        },
+        "ultrasonictype": {
+          "type": "string",
+          "description": "wav or flac only; used for bat/ultrasonic captures above 48 kHz"
         },
         "bitrate": {
           "type": "string",
@@ -1527,6 +1531,21 @@
       "additionalProperties": false,
       "type": "object",
       "description": "PerchConfig holds configuration for the Google Perch v2 model."
+    },
+    "PirateWeatherSettings": {
+      "properties": {
+        "apikey": {
+          "type": "string",
+          "description": "Pirate Weather API key"
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "Pirate Weather API endpoint"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PirateWeatherSettings contains settings for Pirate Weather integration."
     },
     "PrivacyFilterSettings": {
       "properties": {
@@ -2778,7 +2797,7 @@
       "properties": {
         "provider": {
           "type": "string",
-          "description": "\"none\", \"yrno\", \"openweather\", or \"wunderground\""
+          "description": "\"none\", \"yrno\", \"openweather\", \"wunderground\", or \"pirateweather\""
         },
         "pollinterval": {
           "type": "integer",
@@ -2795,6 +2814,10 @@
         "wunderground": {
           "$ref": "#/$defs/WundergroundSettings",
           "description": "WeatherUnderground integration settings"
+        },
+        "pirateweather": {
+          "$ref": "#/$defs/PirateWeatherSettings",
+          "description": "Pirate Weather integration settings"
         }
       },
       "additionalProperties": false,

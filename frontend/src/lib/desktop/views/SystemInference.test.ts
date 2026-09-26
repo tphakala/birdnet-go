@@ -1,3 +1,5 @@
+import { formatLocalDateTime } from '$lib/utils/date';
+import { t } from '$lib/i18n';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { waitFor, cleanup } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../test/render-helpers';
@@ -113,6 +115,10 @@ function makeSnapshot(
       metricKeys: { queueDepth: 'audio.queue_depth' },
     },
     snapshotAtUnix: 1750000000,
+    // Registry IDs of the default targets and the classifier verdict; the page
+    // under test ignores both, so a neutral pairing keeps the fixture valid.
+    defaultTargets: [],
+    acousticModelsState: models.length > 0 ? 'ok' : 'none_installed',
   };
 }
 
@@ -1185,6 +1191,109 @@ describe('SystemInference', () => {
     expect(container.textContent).toContain('GPU');
     // The device chip carries the device help as a tooltip.
     expect(container.querySelector('[title="system.inference.deviceHelp"]')).not.toBeNull();
+  });
+
+  it('shows a failing chip and the last success when every analysis fails', async () => {
+    const model = makeModel({
+      paused: true, // failing takes precedence over paused
+      health: {
+        state: 'failing',
+        consecutiveFailures: 42,
+        failureThreshold: 10,
+        inferenceCount: 60,
+        lastInferenceAtUnix: 1750000000,
+        errorClass: 'non_finite_output',
+      },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="model-failing"]')).not.toBeNull();
+    });
+    expect(container.textContent).toContain('system.inference.modelFailing');
+    expect(container.querySelector('[aria-label="system.inference.activityPaused"]')).toBeNull();
+    // The reason and remedy are visible, not only in a tooltip.
+    const help = container.querySelector('[data-testid="model-failing-help"]');
+    expect(help).not.toBeNull();
+    expect(help?.textContent).toContain('system.inference.modelFailingHelp');
+    expect(
+      container.querySelector('[data-testid="model-failing"]')?.getAttribute('aria-describedby')
+    ).toBe(help?.id);
+    // The reason matches the error class.
+    expect(t).toHaveBeenCalledWith('system.inference.modelFailingHelp', {
+      reason: 'system.inference.modelFailingReasonNonFinite',
+    });
+    // Never succeeded since the instance loaded.
+    expect(container.textContent).toContain('system.inference.lastSuccess');
+    expect(container.textContent).toContain('system.inference.lastSuccessNever');
+  });
+
+  it('names an inference error as the reason for any other error class', async () => {
+    const model = makeModel({
+      health: {
+        state: 'failing',
+        consecutiveFailures: 10,
+        failureThreshold: 10,
+        inferenceCount: 10,
+        errorClass: 'inference_error',
+      },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="model-failing-help"]')).not.toBeNull();
+    });
+    expect(t).toHaveBeenCalledWith('system.inference.modelFailingHelp', {
+      reason: 'system.inference.modelFailingReasonError',
+    });
+    expect(t).not.toHaveBeenCalledWith('system.inference.modelFailingHelp', {
+      reason: 'system.inference.modelFailingReasonNonFinite',
+    });
+  });
+
+  it('shows the date and time of the last success once a model has succeeded', async () => {
+    const lastSuccessAtUnix = 1750000000;
+    const model = makeModel({
+      health: {
+        state: 'ok',
+        consecutiveFailures: 0,
+        failureThreshold: 10,
+        inferenceCount: 5,
+        lastInferenceAtUnix: lastSuccessAtUnix,
+        lastSuccessAtUnix,
+      },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.lastSuccess');
+    });
+    expect(container.textContent).not.toContain('system.inference.lastSuccessNever');
+    expect(container.textContent).toContain(
+      formatLocalDateTime(new Date(lastSuccessAtUnix * 1000))
+    );
+    expect(container.querySelector('[data-testid="model-failing-help"]')).toBeNull();
+  });
+
+  it('shows no failing chip or last success for a healthy model that has not run', async () => {
+    const model = makeModel({
+      health: { state: 'idle', consecutiveFailures: 0, failureThreshold: 10, inferenceCount: 0 },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    expect(container.querySelector('[data-testid="model-failing"]')).toBeNull();
+    expect(container.textContent).not.toContain('system.inference.lastSuccess');
   });
 
   it('shows a Paused indicator with the schedule label when the model is paused', async () => {

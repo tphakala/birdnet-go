@@ -133,7 +133,8 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.debug", false)
 	viper.SetDefault("realtime.audio.export.enabled", true)
 	viper.SetDefault("realtime.audio.export.path", "clips/")
-	viper.SetDefault("realtime.audio.export.type", "wav")
+	viper.SetDefault("realtime.audio.export.type", AudioExportTypeWAV)
+	viper.SetDefault("realtime.audio.export.ultrasonictype", AudioExportTypeFLAC) // bat/ultrasonic captures above 48 kHz; WAV or FLAC only
 	viper.SetDefault("realtime.audio.export.bitrate", DefaultAudioExportBitrate)
 	viper.SetDefault("realtime.audio.export.length", DefaultAudioExportLength)
 	viper.SetDefault("realtime.audio.export.preCapture", 3)
@@ -284,6 +285,10 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.weather.wunderground.stationid", "")
 	viper.SetDefault("realtime.weather.wunderground.endpoint", "https://api.weather.com/v2/pws/observations/current")
 	viper.SetDefault("realtime.weather.wunderground.units", "m") // m=metric, e=imperial, h=UK hybrid
+
+	// Pirate Weather specific configuration
+	viper.SetDefault("realtime.weather.pirateweather.apikey", "")
+	viper.SetDefault("realtime.weather.pirateweather.endpoint", "https://api.pirateweather.net/forecast")
 
 	// RTSP configuration
 	viper.SetDefault("realtime.rtsp.urls", []string{})

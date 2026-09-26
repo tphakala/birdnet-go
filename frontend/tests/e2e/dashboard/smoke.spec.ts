@@ -26,7 +26,7 @@ test.describe('Dashboard Smoke Tests - New UI Only', () => {
     // Verify the page doesn't have critical errors
     await expect(page.locator('[role="alert"]:has-text("Error"), .error-boundary')).toHaveCount(0);
 
-    // Ensure we're on the new UI (not HTMX)
+    // Ensure we're on the dashboard route
     await expect(page).toHaveURL(/.*\/ui\/dashboard/);
 
     // Check that navigation is present (sidebar nav inside the drawer)

@@ -1,12 +1,12 @@
 package jobqueue
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestRetryBackoffWithMockClock demonstrates how to test the retry backoff mechanism
@@ -50,7 +50,7 @@ func TestRetryBackoffWithMockClock(t *testing.T) {
 			// Create a new channel for the next execution
 			executionDone = make(chan struct{})
 
-			return errors.New("simulated failure")
+			return errors.NewStd("simulated failure")
 		},
 	}
 

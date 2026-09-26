@@ -47,8 +47,8 @@ func TestSpeciesNoteOps_DBErrorCarriesContext(t *testing.T) {
 	_, err = NewSpeciesNoteOps(db, nil).GetSpeciesNotes(t.Context(), "  Turdus merula  ")
 	require.Error(t, err)
 
-	var enhanced *errors.EnhancedError
-	require.True(t, errors.As(err, &enhanced), "database failures must be enhanced errors")
+	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+	require.True(t, ok, "database failures must be enhanced errors")
 	ctxFields := enhanced.GetContext()
 	assert.Equal(t, "get_species_notes", ctxFields["operation"])
 	assert.Equal(t, "species_notes", ctxFields["table"])

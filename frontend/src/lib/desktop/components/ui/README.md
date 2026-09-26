@@ -141,7 +141,7 @@ interface Props {
     Card content goes here
   {/snippet}
   {#snippet footer()}
-    <button class="btn btn-primary">Action</button>
+    <Button variant="primary" onclick={handleAction}>{t('common.save')}</Button>
   {/snippet}
 </Card>
 ```
@@ -365,15 +365,26 @@ interface Props {
 **Usage:**
 
 ```svelte
-<LoadingSpinner size="md" label="Loading..." />
+<LoadingSpinner size="md" label={t('common.ui.loading')} />
 <LoadingSpinner size="lg" color="text-secondary" />
+<!-- Decorative: an always-rendered role="status" region elsewhere announces the state -->
+<LoadingSpinner size="sm" aria-hidden="true" />
 ```
 
 **Features:**
 
 - 5 size options
 - Custom color support
-- Screen reader accessibility
+- Stops spinning under `prefers-reduced-motion`
+- Root is a `role="status"` element with an sr-only label (default
+  `common.ui.loading`; pass a specific `label`)
+- `aria-hidden="true"` renders a decorative spinner with no role or label
+
+**Accessibility:** a live region only announces changes made after it is
+already in the DOM. A spinner mounted inside `{#if}` inserts the region and its
+text together, so it is often not announced. For a state change that must be
+heard, keep an always-rendered sr-only `role="status"` region, change its text,
+and pass `aria-hidden="true"` to the spinner.
 
 ---
 

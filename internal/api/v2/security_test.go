@@ -5,7 +5,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -20,6 +19,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // searchNotesEmptyMock returns a mockSetup function that configures empty search results.
@@ -227,7 +227,7 @@ func TestInputValidation(t *testing.T) {
 			},
 			mockSetup: func(m *mock.Mock) {
 				// Setup all possible method calls
-				m.On("Get", mock.Anything).Return(datastore.Note{}, errors.New("not found"))
+				m.On("Get", mock.Anything).Return(datastore.Note{}, errors.NewStd("not found"))
 			},
 			expectedStatus: http.StatusNotFound,
 			expectedError:  "Detection not found",
@@ -268,7 +268,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				// Simulate validation failure via HandleError
 				return controller.HandleError(c,
-					errors.New("invalid characters detected in start_date"),
+					errors.NewStd("invalid characters detected in start_date"),
 					"invalid characters detected in start_date",
 					http.StatusBadRequest,
 				)
@@ -317,7 +317,7 @@ func TestInputValidation(t *testing.T) {
 			},
 			handler: func(c echo.Context) error {
 				return controller.HandleError(c,
-					errors.New("invalid characters detected in start_date"),
+					errors.NewStd("invalid characters detected in start_date"),
 					"invalid characters detected in start_date",
 					http.StatusBadRequest,
 				)

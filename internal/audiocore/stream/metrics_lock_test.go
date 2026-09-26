@@ -14,7 +14,7 @@ import (
 
 // reentrantMetrics is a StreamMetrics stub that probes, from inside each emission
 // callback, whether the stream's own mutex is free (via TryLock). onState and
-// recordError must release s.mu before emitting metrics (Forgejo #1646); if they
+// recordError must release s.mu before emitting metrics; if they
 // did not, TryLock here would fail because a sync.Mutex is not reentrant. TryLock
 // is used rather than a blocking Lock so a regression fails the assertion instead
 // of deadlocking the test.
@@ -49,12 +49,12 @@ func (m *reentrantMetrics) RecordWireRate(string, float64) {}
 func (m *reentrantMetrics) SetStreamEngine(string, string) {}
 func (m *reentrantMetrics) DeleteStream(string)            {}
 
-// TestOnState_EmitsMetricsOutsideLock is a regression test for the AB-BA hazard
-// fixed in Forgejo #1646: onState must release s.mu before emitting stream
-// metrics, matching onDeliver and snapshot. A metrics implementation that reads
-// stream health back while holding its own lock would otherwise risk a deadlock.
-// StateConnected is used because that transition drives onState without touching
-// the pipeline or supervisor.
+// TestOnState_EmitsMetricsOutsideLock is a regression test for an AB-BA
+// hazard: onState must release s.mu before emitting stream metrics, matching
+// onDeliver and snapshot. A metrics implementation that reads stream health
+// back while holding its own lock would otherwise risk a deadlock.
+// StateConnected is used because that transition drives onState without
+// touching the pipeline or supervisor.
 func TestOnState_EmitsMetricsOutsideLock(t *testing.T) {
 	t.Parallel()
 

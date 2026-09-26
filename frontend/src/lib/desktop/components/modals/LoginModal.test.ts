@@ -85,7 +85,7 @@ describe('LoginModal', () => {
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Redirect URL Validation', () => {

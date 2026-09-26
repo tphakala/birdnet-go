@@ -340,7 +340,7 @@ func (c *Handler) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryPa
 	}
 
 	// Auto-infer queryType from provided parameters when not explicitly set.
-	// This prevents silent parameter ignoring — e.g., ?species=Robin without
+	// This prevents silent parameter ignoring, e.g., ?species=Robin without
 	// queryType=species would previously fall through to the "all" path.
 	if params.QueryType == "" {
 		switch {
@@ -530,8 +530,7 @@ func (c *Handler) GetDetections(ctx echo.Context) error {
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		var dateErr *dateValidationError
-		if errors.As(err, &dateErr) {
+		if dateErr, ok := errors.AsType[*dateValidationError](err); ok {
 			return c.HandleErrorWithKey(ctx, err, dateErr.Error(), http.StatusBadRequest, notification.MsgErrDetectionInvalidDate, map[string]any{"paramName": dateErr.paramName})
 		}
 		return c.HandleError(ctx, err, "Invalid detection query parameters", http.StatusBadRequest)
@@ -782,7 +781,7 @@ func (c *Handler) applySpeciesTrackingMetadata(detection *DetectionResponse, sci
 	detection.IsNewThisSeason = status.FirstThisSeason != nil &&
 		detectionDate == status.FirstThisSeason.Format(time.DateOnly)
 
-	// DaysSinceFirstSeen is relative to now — tells the user how long ago
+	// DaysSinceFirstSeen is relative to now; it tells the user how long ago
 	// this species was first observed overall.
 	detection.DaysSinceFirstSeen = status.DaysSinceFirst
 	detection.DaysThisYear = status.DaysThisYear

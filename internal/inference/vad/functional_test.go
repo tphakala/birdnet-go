@@ -96,8 +96,7 @@ func skipIfORTUnavailable(t *testing.T, err error) {
 	if err == nil {
 		return
 	}
-	var ee *errors.EnhancedError
-	if errors.As(err, &ee) {
+	if ee, ok := errors.AsType[*errors.EnhancedError](err); ok {
 		if stage, ok := ee.GetContext()["stage"]; ok && stage == "ort_init" {
 			t.Skipf("ONNX Runtime unavailable; skipping: %v", err)
 		}

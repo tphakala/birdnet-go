@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -179,6 +180,14 @@ type Controller struct {
 	topologyReconfigureMu       sync.Mutex
 	topologyReconfigureTimer    *time.Timer
 	topologyReconfigureShutdown bool
+
+	// optimizeNotices holds the scheduler that keeps the model optimize bell
+	// notice in sync (the models handler), published once the handler is
+	// constructed and started. It is atomic because the model topology callback
+	// is wired by the WithModelManager option, before New constructs c.models,
+	// and can fire from the analyzer's goroutines while New is still running;
+	// reading the plain c.models field there would race.
+	optimizeNotices atomic.Pointer[optimizeNoticeHook]
 
 	// speciesGuide serves the species guide domain: the rate-limited
 	// /species/:name/guide and /species/:name/similar endpoints and the
@@ -388,6 +397,10 @@ func WithModelManager(mm *classifier.ModelManager) Option {
 		// audio sources. The method value binds c; c.MetricsStore and c.controlChan
 		// are read lazily at call time, so option ordering is irrelevant.
 		mm.SetTopologyChangedCallback(c.OnModelTopologyChanged)
+		// A model starting or stopping failing every analysis window changes the
+		// status snapshot (per-model health, the dashboard banner) but not the
+		// topology, so it only broadcasts; it must not reconfigure sources.
+		mm.SetInferenceHealthChangedCallback(c.BroadcastInferenceTopologyChanged)
 	}
 }
 
@@ -622,6 +635,18 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// changes after this point, so capturing it here is behaviorally identical to
 	// a per-request read; every other models dependency promotes from c.Core.
 	c.models = models.New(c.Core, c.authService)
+	// The optimize notice goes to the injected notification service, like the
+	// other notification producers here (nil keeps the process-wide one).
+	c.models.SetNotificationService(c.notificationService)
+	// Keep the model optimize bell notice in sync: evaluate it once at startup
+	// (the analyzer scans the installed models before it builds the web server),
+	// then after topology changes, model installs and uninstalls, and changes to
+	// the location, ModelRegion or primary model path. Skipped when routes are
+	// not initialized (tests), like every other background activity here.
+	if c.ModelManager != nil && initializeRoutes {
+		c.optimizeNotices.Store(&optimizeNoticeHook{scheduler: c.models})
+		c.models.StartOptimizeNoticeSync()
+	}
 
 	// Log auth configuration status
 	log := GetLogger()
@@ -916,6 +941,11 @@ func (c *Controller) Shutdown() {
 		c.topologyReconfigureTimer = nil
 	}
 	c.topologyReconfigureMu.Unlock()
+
+	// Stop the pending model optimize notice evaluation, and ignore later ones.
+	if h := c.optimizeNotices.Load(); h != nil {
+		h.scheduler.StopOptimizeNoticeSync()
+	}
 
 	// Cancel context to stop all goroutines, then wait for them to finish.
 	c.Cancel()

@@ -206,8 +206,7 @@ func TestTrackOperationTiming(t *testing.T) {
 
 		require.Error(t, err)
 		// Check that timing was added to enhanced error
-		var enhancedErr *errors.EnhancedError
-		if errors.As(err, &enhancedErr) {
+		if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
 			assert.Contains(t, enhancedErr.Context, "operation_duration_ms")
 			assert.Contains(t, enhancedErr.Context, "operation")
 		}
@@ -224,14 +223,14 @@ func TestTrackOperationTiming(t *testing.T) {
 
 		require.Error(t, err)
 		// The error should now be an EnhancedError
-		var enhancedErr *errors.EnhancedError
-		assert.True(t, errors.As(err, &enhancedErr), "error should be wrapped as EnhancedError")
+		_, ok := errors.AsType[*errors.EnhancedError](err)
+		assert.True(t, ok, "error should be wrapped as EnhancedError")
 	})
 
 	t.Run("breaker-open error is not re-promoted to WARN or wrapped with CategoryNetwork", func(t *testing.T) {
 		t.Parallel()
 
-		// Start from the notification sentinel directly — this is what the
+		// Start from the notification sentinel directly; this is what the
 		// BirdWeather client returns when its circuit breaker short-circuits.
 		var err error = notification.ErrCircuitBreakerOpen
 		startTime := time.Now()
@@ -240,7 +239,7 @@ func TestTrackOperationTiming(t *testing.T) {
 		cleanup()
 
 		// The error passes through unchanged. The timing tracker must NOT
-		// wrap it with CategoryNetwork or otherwise mutate it — earlier review
+		// wrap it with CategoryNetwork or otherwise mutate it; earlier review
 		// revealed the default path was promoting it to WARN which re-introduced
 		// the Sentry noise the breaker is supposed to suppress.
 		require.Error(t, err)

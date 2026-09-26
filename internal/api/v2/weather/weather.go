@@ -7,7 +7,6 @@
 package weather
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -15,7 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	errors_pkg "github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"gorm.io/gorm"
@@ -633,9 +632,9 @@ func (c *Handler) GetSunTimes(ctx echo.Context) error {
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		return c.HandleError(ctx, errors_pkg.New(errors.New("sun calculator not available")).
+		return c.HandleError(ctx, errors.New(errors.NewStd("sun calculator not available")).
 			Component("weather_api").
-			Category(errors_pkg.CategoryConfiguration).
+			Category(errors.CategoryConfiguration).
 			Build(), "Sun calculator not initialized", http.StatusInternalServerError)
 	}
 
@@ -651,14 +650,16 @@ func (c *Handler) GetSunTimes(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to calculate sun times", http.StatusInternalServerError)
 	}
 
-	// Build response
+	// Build response. The timezone is taken from the returned times, which carry the zone of the
+	// state they were computed from: asking the calculator again could observe a location
+	// changed in between and label these times with the new location's zone.
 	response := sunTimesResponse{
 		Date:      date,
 		Sunrise:   sunTimes.Sunrise,
 		Sunset:    sunTimes.Sunset,
 		CivilDawn: sunTimes.CivilDawn,
 		CivilDusk: sunTimes.CivilDusk,
-		Timezone:  c.SunCalc.LocationName(),
+		Timezone:  sunTimes.Sunrise.Location().String(),
 	}
 
 	c.LogInfoIfEnabled("Calculated sun times",
