@@ -1171,9 +1171,10 @@ func isNetworkError(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, isDNSErr := errors.AsType[*net.DNSError](err)
-	_, isNetErr := errors.AsType[*net.OpError](err)
-	if isDNSErr || isNetErr {
+	if _, ok := errors.AsType[*net.DNSError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[*net.OpError](err); ok {
 		return true
 	}
 	errMsg := err.Error()
