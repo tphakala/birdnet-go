@@ -34,6 +34,7 @@
   import {
     Brain,
     Binary,
+    CircleX,
     CircuitBoard,
     Container,
     Cpu,
@@ -49,6 +50,7 @@
     TriangleAlert,
   } from '@lucide/svelte';
   import { isContainerEnvironment } from '$lib/desktop/features/system/environment';
+  import { MODEL_HEALTH_FAILING } from '$lib/desktop/features/system/inference.types';
   import type {
     InferenceStatusResponse,
     InferenceModel,
@@ -1014,6 +1016,7 @@
             {@const downCount = model.sources.filter(s => s.notRunning).length}
             {@const anySourceDown = downCount > 0}
             {@const allSourcesDown = model.sources.length > 0 && downCount === model.sources.length}
+            {@const isFailing = model.health?.state === MODEL_HEALTH_FAILING}
             <div
               class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
             >
@@ -1058,7 +1061,25 @@
                     </span>
                   </span>
                 {/if}
-                {#if model.paused}
+                {#if isFailing}
+                  <!-- Every recent analysis window of this model failed (a broken backend or
+                       precision, e.g. non-finite scores): it is loaded but detects nothing.
+                       Takes the dominant header slot ahead of paused, since a paused model
+                       keeps the verdict of its last window. -->
+                  <span
+                    class="ml-auto flex items-center gap-1.5"
+                    role="status"
+                    data-testid="model-failing"
+                    title={t('system.inference.modelFailingTooltip', {
+                      count: model.health?.consecutiveFailures ?? 0,
+                    })}
+                  >
+                    <CircleX class="w-3 h-3 shrink-0 text-red-500" aria-hidden="true" />
+                    <span class="text-xs font-medium text-red-600 dark:text-red-400"
+                      >{t('system.inference.modelFailing')}</span
+                    >
+                  </span>
+                {:else if model.paused}
                   <!-- Schedule-gated model that is currently off-schedule: explain the
                        flat latency line instead of showing a bare "idle" dash. -->
                   <span
@@ -1187,6 +1208,16 @@
                     t('system.inference.errorRateHelp'),
                     Math.round(model.stats.errorRate * 100) + '%',
                     `help-error-rate-${model.id}`
+                  )}
+                {/if}
+                {#if model.health && model.health.inferenceCount > 0}
+                  {@render stat(
+                    t('system.inference.lastSuccess'),
+                    t('system.inference.lastSuccessHelp'),
+                    model.health.lastSuccessAtUnix
+                      ? getLocalTimeString(new Date(model.health.lastSuccessAtUnix * 1000))
+                      : t('system.inference.lastSuccessNever'),
+                    `help-last-success-${model.id}`
                   )}
                 {/if}
                 {#if model.stats.loadFailures !== undefined && model.stats.loadFailures > 0}

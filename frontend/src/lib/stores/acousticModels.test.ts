@@ -11,6 +11,7 @@ import {
   TOPOLOGY_EVENT,
   TOPOLOGY_ONLY_FILTER,
   acousticDefaultTargets,
+  acousticFailingModels,
   acousticModelAvailability,
   acousticModelsError,
   acousticModelsLoaded,
@@ -110,6 +111,42 @@ describe('acousticModels store', () => {
       await refreshAcousticModels();
       expect(acousticModelsState()).toBe(reason);
       expect(acousticModelAvailability()).toEqual({ kind: 'none', reason });
+    });
+
+    it('lists the loaded models whose health is failing, tolerating malformed entries', async () => {
+      apiGet.mockResolvedValueOnce({
+        ...snapshot('ok'),
+        models: [
+          { id: 'BirdNET_V2.4', name: 'BirdNET v2.4', health: { state: 'failing' } },
+          { id: 'Perch_V2', name: 'Perch v2', health: { state: 'ok' } },
+          { id: 'Bat', name: '', health: { state: 'failing' } },
+          { id: 'NoHealth', name: 'Old server' },
+          null,
+          'junk',
+        ],
+      });
+      await refreshAcousticModels();
+
+      expect(acousticFailingModels()).toEqual([
+        { id: 'BirdNET_V2.4', name: 'BirdNET v2.4' },
+        { id: 'Bat', name: 'Bat' },
+      ]);
+    });
+
+    it('clears the failing models when the next snapshot has none', async () => {
+      apiGet.mockResolvedValueOnce({
+        ...snapshot('ok'),
+        models: [{ id: 'm', name: 'M', health: { state: 'failing' } }],
+      });
+      await refreshAcousticModels();
+      expect(acousticFailingModels()).toHaveLength(1);
+
+      apiGet.mockResolvedValueOnce({
+        ...snapshot('ok'),
+        models: [{ id: 'm', name: 'M', health: { state: 'ok' } }],
+      });
+      await refreshAcousticModels();
+      expect(acousticFailingModels()).toEqual([]);
     });
 
     it('treats the "" sentinel and a missing field as no verdict (unknown)', async () => {

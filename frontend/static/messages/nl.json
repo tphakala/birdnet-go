@@ -510,6 +510,11 @@
           "diskFull": "Schijf vol - maak ruimte vrij",
           "permissionDenied": "Toegang geweigerd - controleer bestands- of servicemachtigingen"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} faalt bij elke analyse",
+        "message": "{modelName} is geladen, maar de laatste {failures} analyses op rij zijn mislukt op {runtime}: de inferentie gaf een fout. Audio wordt opgenomen, maar dit model detecteert niets. Controleer het model op de pagina Systeem > AI-modellen.",
+        "nonFiniteMessage": "{modelName} is geladen, maar de laatste {failures} analyses op rij zijn mislukt op {runtime}: het model gaf ongeldige (niet-eindige) scores. Audio wordt opgenomen, maar dit model detecteert niets. Controleer het model op de pagina Systeem > AI-modellen."
       }
     },
     "loading": "Meldingen laden..."
@@ -773,7 +778,9 @@
       "noneAction": "Modellengalerij openen",
       "loadFailedTitle": "Akoestisch model kon niet worden geladen",
       "loadFailedMessage": "Een ingeschakeld model kon niet worden geladen, waardoor er geen audio wordt geanalyseerd. De pagina AI-modellen toont welk model is mislukt en waarom.",
-      "loadFailedAction": "Bekijk de status van AI-modellen"
+      "loadFailedAction": "Bekijk de status van AI-modellen",
+      "failingTitle": "{count, plural, one {Een model faalt bij elke analyse} other {# modellen falen bij elke analyse}}",
+      "failingMessage": "{count, plural, one {{models} is geladen, maar elke analyse mislukt, dus het detecteert niets.} other {{models} zijn geladen, maar elke analyse mislukt, dus ze detecteren niets.}} De pagina AI-modellen toont de backend en de fout."
     },
     "banner": {
       "title": "Titel",
@@ -1849,7 +1856,12 @@
       "fp16Help": "16-bit floating point.",
       "invocationsHelp": "Totaal aantal geanalyseerde segmenten.",
       "noModelsHint": "Nog geen audiobron geconfigureerd?",
-      "noModelsHintLink": "Audiobronnen configureren"
+      "noModelsHintLink": "Audiobronnen configureren",
+      "modelFailing": "elke analyse mislukt",
+      "modelFailingTooltip": "De laatste {count} analyses op rij zijn mislukt, dus dit model detecteert niets. Probeer een andere versie van het model via Instellingen > Analyse > Modellen, of controleer de backend en precisie die hier worden getoond.",
+      "lastSuccess": "Laatste succes",
+      "lastSuccessHelp": "Wanneer dit model voor het laatst audio zonder fout analyseerde.",
+      "lastSuccessNever": "nooit"
     },
     "metrics": {
       "cpu": "CPU",

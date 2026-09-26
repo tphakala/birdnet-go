@@ -95,6 +95,9 @@ const (
 
 	// SSE event names.
 	sseEventConnected = "connected" // Initial handshake event name emitted to every subscriber.
+	// sseEventNotificationDeleted tells the client a notification was deleted on
+	// the server (a cleared or replaced persistent notice), so an open bell drops it.
+	sseEventNotificationDeleted = "notification_deleted"
 
 	// Buffer sizes
 	notificationChannelBuffer = 10 // Buffer size for notification channels
@@ -149,7 +152,9 @@ type NotificationClient struct {
 	Channel      chan *notification.Notification
 	Done         chan struct{} // Signal-only channel for shutdown notification
 	SubscriberCh <-chan *notification.Notification
-	Context      context.Context
+	// DeletionCh receives the IDs of notifications deleted on the server.
+	DeletionCh <-chan notification.DeletedEvent
+	Context    context.Context
 	// Guest is true when the SSE connection was opened by an unauthenticated
 	// request. Guests receive only bird-detection events; operational/admin
 	// notifications are filtered out before being sent to the wire.
@@ -490,6 +495,7 @@ func (c *Handler) StreamNotifications(ctx echo.Context) error {
 	// Ensure cleanup happens regardless of how we exit
 	defer func() {
 		service.Unsubscribe(client.SubscriberCh)
+		service.UnsubscribeDeletions(client.DeletionCh)
 		// Note: We don't close client.Done to avoid race conditions with senders
 		// The buffered channel will signal shutdown and be reclaimed by GC
 	}()
@@ -512,6 +518,7 @@ func (c *Handler) setupNotificationSSEClient(ctx echo.Context) (*NotificationCli
 	// Subscribe to notifications
 	service := c.getNotificationService()
 	notificationCh, notificationCtx := service.Subscribe()
+	deletionCh, _ := service.SubscribeDeletions()
 
 	// Create notification client. Record whether the caller is a guest so
 	// the event loop can filter operational/admin payloads before serving.
@@ -520,6 +527,7 @@ func (c *Handler) setupNotificationSSEClient(ctx echo.Context) (*NotificationCli
 		Channel:      make(chan *notification.Notification, notificationChannelBuffer),
 		Done:         make(chan struct{}, 1), // Buffered signal channel to prevent deadlock during disconnect
 		SubscriberCh: notificationCh,
+		DeletionCh:   deletionCh,
 		Context:      notificationCtx,
 		Guest:        c.isGuestNotificationRequest(ctx),
 	}
@@ -530,6 +538,7 @@ func (c *Handler) setupNotificationSSEClient(ctx echo.Context) (*NotificationCli
 		"message":  "Connected to notification stream",
 	}); err != nil {
 		service.Unsubscribe(notificationCh)
+		service.UnsubscribeDeletions(deletionCh)
 		return nil, nil, err
 	}
 
@@ -610,6 +619,16 @@ func (c *Handler) runNotificationEventLoop(ctx echo.Context, client *Notificatio
 				return err
 			}
 
+		case ev := <-client.DeletionCh:
+			// Guests only ever received detection notifications, so they only
+			// need deletions of those (the same filter as creates above).
+			if client.Guest && ev.Type != notification.TypeDetection {
+				continue
+			}
+			if err := c.sendNotificationDeletedEvent(ctx, client.ID, ev.ID); err != nil {
+				return err
+			}
+
 		case <-ticker.C:
 			// Check if connection has exceeded maximum duration
 			if time.Since(connectionStart) > maxSSEConnectionDuration {
@@ -681,6 +700,17 @@ func (c *Handler) sendNotificationEvent(ctx echo.Context, clientID string, notif
 
 	c.RecordSSEMessage(sseEndpoint, "notification")
 	c.logNotificationSent(clientID, notif)
+	return nil
+}
+
+// sendNotificationDeletedEvent tells the client that notification id was deleted.
+func (c *Handler) sendNotificationDeletedEvent(ctx echo.Context, clientID, id string) error {
+	if err := c.SendSSEMessage(ctx, sseEventNotificationDeleted, map[string]string{"id": id}); err != nil {
+		c.logNotificationError("failed to send notification deleted SSE", err, clientID)
+		c.RecordSSEError(sseEndpoint, "send_failed")
+		return err
+	}
+	c.RecordSSEMessage(sseEndpoint, sseEventNotificationDeleted)
 	return nil
 }
 

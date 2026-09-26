@@ -214,7 +214,7 @@ func TestSyncAcousticModelsNotice(t *testing.T) {
 	assert.Equal(t, "classifier", notes[0].Component)
 	assert.Equal(t, string(AcousticModelsNoneInstalled), notes[0].Metadata["acoustic_models_state"])
 	assert.Contains(t, notes[0].Message, "Enable a model")
-	require.NotEmpty(t, o.acousticNotice.id, "the notification id is latched")
+	require.NotEmpty(t, o.acousticNotice.ID(), "the notification id is latched")
 
 	o.syncAcousticModelsNotice()
 	assert.Len(t, list(), 1, "a second sync must not double-raise")
@@ -223,7 +223,7 @@ func TestSyncAcousticModelsNotice(t *testing.T) {
 	o.models[RegistryIDBirdNETV24] = &modelEntry{instance: &mockModelInstance{id: RegistryIDBirdNETV24}}
 	o.syncAcousticModelsNotice()
 	assert.Empty(t, list(), "the notice is deleted once a model is loaded")
-	assert.Empty(t, o.acousticNotice.id, "the latch is cleared")
+	assert.Empty(t, o.acousticNotice.ID(), "the latch is cleared")
 }
 
 // TestSyncAcousticModelsNotice_LoadFailedMessage pins that the load_failed state gets a
@@ -260,7 +260,7 @@ func TestSyncAcousticModelsNotice_NilServiceNoPanic(t *testing.T) {
 
 	o := newTestOrchestrator(t)
 	assert.NotPanics(t, func() { o.syncAcousticModelsNotice() })
-	assert.Empty(t, o.acousticNotice.id)
+	assert.Empty(t, o.acousticNotice.ID())
 }
 
 // TestSyncAcousticModelsNotice_TransitionRecreatesNotice pins the sentry-flagged transition:

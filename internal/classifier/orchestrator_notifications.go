@@ -2,7 +2,6 @@ package classifier
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
@@ -51,73 +50,44 @@ func emitORTUnavailableNotification(modelName, ortError string) {
 		fmt.Sprintf("ONNX Runtime %s is required for %s but is not available. %s",
 			requiredVersion, modelName, ortError),
 	).
-		WithComponent("classifier").
+		WithComponent(notification.ComponentClassifier).
 		WithTitleKey(notification.MsgORTUnavailableTitle, nil).
 		WithMessageKey(notification.MsgORTUnavailableMessage, map[string]any{
 			"modelName":       modelName,
 			"requiredVersion": requiredVersion,
 			"installGuideURL": inference.ORTInstallGuideURL,
 		}).
-		WithDeliveryTarget("bell")
+		WithDeliveryTarget(notification.DeliveryTargetBell)
 
 	_ = svc.CreateWithMetadata(notif)
 }
 
-// acousticModelsNotice is the single persistent "no acoustic model" bell notification per
-// process: raised while AcousticModelsState is not ok and deleted on the first successful
-// load. id is the live notification's ID ("" when none is outstanding) and state is the
-// acoustic-model state that notice was raised for, so a transition between two not-ok states
-// (none_installed -> load_failed) can replace a notice whose remedy text is now stale.
-type acousticModelsNotice struct {
-	mu    sync.Mutex
-	id    string
-	state AcousticModelsState
-}
-
 // syncAcousticModelsNotice raises the persistent bell notification when no acoustic model is
 // loaded, replaces it when the not-ok state changes (the remedy text differs), and clears it
-// once a model is loaded (model de-privilege epic, Phase 4). Idempotent and nil-safe on the
+// once a model is loaded (model de-privilege epic, Phase 4). The latch is a
+// notification.PersistentNotice keyed by the not-ok state. Idempotent and nil-safe on the
 // notification service (not yet initialized, or in tests): a raise that finds no service
 // latches nothing, so the next call (NewOrchestrator, ScanInstalled, LoadModel, UnloadModel)
-// retries it. Across restarts the in-memory store is empty, so "raised once per process" is
-// the dedupe.
+// retries it, and a failed create is re-armed a bounded number of times. Across restarts the
+// in-memory store is empty, so "raised once per process" is the dedupe.
 func (o *Orchestrator) syncAcousticModelsNotice() {
 	svc := notification.GetService()
 	if svc == nil {
 		return
 	}
-	o.acousticNotice.mu.Lock()
-	defer o.acousticNotice.mu.Unlock()
-	// Read the state under the latch lock so a concurrent LoadModel/UnloadModel/ScanInstalled
-	// sync cannot act on a state that disagrees with the latch (raise a notice another just
-	// cleared, or clear one another just raised).
-	state := o.AcousticModelsState()
-	switch {
-	case state == AcousticModelsOK && o.acousticNotice.id != "":
-		// A model loaded: clear the notice. An already user-dismissed notification is fine.
-		_ = svc.Delete(o.acousticNotice.id)
-		o.acousticNotice.id = ""
-		o.acousticNotice.state = ""
-	case state != AcousticModelsOK && o.acousticNotice.id == "":
-		// Raise: no notice outstanding.
-		notif := newAcousticModelsNotification(state)
-		if err := svc.CreateWithMetadata(notif); err == nil {
-			o.acousticNotice.id = notif.ID
-			o.acousticNotice.state = state
+	o.acousticNotice.SetRetry(o.syncAcousticModelsNotice)
+	// Reconcile reads the state under the latch lock, so a concurrent LoadModel/UnloadModel/
+	// ScanInstalled sync cannot act on a state that disagrees with the latch (raise a notice
+	// another just cleared, or clear one another just raised).
+	_ = o.acousticNotice.Reconcile(svc, func() (string, func() *notification.Notification) {
+		state := o.AcousticModelsState()
+		if state == AcousticModelsOK {
+			return "", nil
 		}
-	case state != AcousticModelsOK && o.acousticNotice.state != state:
-		// Transition between two not-ok states (e.g. none_installed -> load_failed): the
-		// remedy text differs, so replace the stale notice. Delete first (a user-dismissed
-		// notice is fine), clear the id, then re-raise; a create failure leaves id empty so
-		// the next sync retries the raise.
-		_ = svc.Delete(o.acousticNotice.id)
-		o.acousticNotice.id = ""
-		notif := newAcousticModelsNotification(state)
-		if err := svc.CreateWithMetadata(notif); err == nil {
-			o.acousticNotice.id = notif.ID
-			o.acousticNotice.state = state
+		return string(state), func() *notification.Notification {
+			return newAcousticModelsNotification(state)
 		}
-	}
+	})
 }
 
 // newAcousticModelsNotification builds the persistent bell notification for a not-ok
@@ -144,11 +114,11 @@ func newAcousticModelsNotification(state AcousticModelsState) *notification.Noti
 		title,
 		message,
 	).
-		WithComponent("classifier").
+		WithComponent(notification.ComponentClassifier).
 		WithTitleKey(titleKey, nil).
 		WithMessageKey(messageKey, map[string]any{"state": string(state)}).
 		WithMetadata("acoustic_models_state", string(state)).
-		WithDeliveryTarget("bell")
+		WithDeliveryTarget(notification.DeliveryTargetBell)
 }
 
 // SyncAcousticModelsNotice is the exported entry point for ModelManager.ScanInstalled, which

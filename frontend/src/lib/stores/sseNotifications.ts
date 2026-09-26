@@ -21,6 +21,18 @@ const SSE_INIT_DELAY_MS = 100;
 const TOAST_DEFAULT_DURATION_MS = 5000;
 const TOAST_DEFAULT_POSITION: ToastPosition = 'top-right';
 
+/** SSE event the server sends when it deletes a notification (backend sseEventNotificationDeleted). */
+export const NOTIFICATION_DELETED_SSE_EVENT = 'notification_deleted';
+/** Window event the bell and the notifications page listen on for deletes. */
+export const NOTIFICATION_DELETED_WINDOW_EVENT = 'notification-deleted';
+
+/** Returns the notification ID from a notification_deleted payload, or null when malformed. */
+export function parseDeletedNotificationId(payload: unknown): string | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const id = (payload as { id?: unknown }).id;
+  return typeof id === 'string' && id !== '' ? id : null;
+}
+
 interface SSENotification {
   message: string;
   type: 'info' | 'success' | 'warning' | 'error';
@@ -177,6 +189,35 @@ class SSENotificationManager {
           logger.error('Error processing notification event', error, {
             component: 'sseNotifications',
             action: 'handleNotification',
+          });
+        }
+      });
+
+      // Handle server-side deletes (a cleared or replaced persistent notice) by
+      // re-dispatching them on the window event the bell and the notifications
+      // page already use for client-side deletes.
+      this.eventSource.addEventListener(NOTIFICATION_DELETED_SSE_EVENT, (event: Event) => {
+        try {
+          const messageEvent = event as MessageEvent;
+          const parsed: unknown = JSON.parse(messageEvent.data);
+          onSSEActivity();
+          const id = parseDeletedNotificationId(parsed);
+          if (id === null) {
+            logger.warn('Invalid notification_deleted payload (ignored)', null, {
+              component: 'sseNotifications',
+              action: 'handleNotificationDeleted',
+            });
+            return;
+          }
+          globalThis.window.dispatchEvent(
+            new CustomEvent(NOTIFICATION_DELETED_WINDOW_EVENT, {
+              detail: { id, wasUnread: false },
+            })
+          );
+        } catch (error) {
+          logger.error('Error processing notification_deleted event', error, {
+            component: 'sseNotifications',
+            action: 'handleNotificationDeleted',
           });
         }
       });

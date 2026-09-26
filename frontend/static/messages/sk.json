@@ -510,6 +510,11 @@
           "diskFull": "Disk je plný - uvoľnite miesto",
           "permissionDenied": "Prístup zamietnutý - skontrolujte oprávnenia súboru alebo služby"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} zlyháva pri každej analýze",
+        "message": "{modelName} je načítaný, ale jeho posledných {failures} analýz za sebou zlyhalo na {runtime}: inferencia vrátila chybu. Zvuk sa zaznamenáva, ale tento model nič nedeteguje. Skontrolujte model na stránke Systém > Modely AI.",
+        "nonFiniteMessage": "{modelName} je načítaný, ale jeho posledných {failures} analýz za sebou zlyhalo na {runtime}: model vrátil neplatné (nekonečné) skóre. Zvuk sa zaznamenáva, ale tento model nič nedeteguje. Skontrolujte model na stránke Systém > Modely AI."
       }
     },
     "loading": "Načítavam upozornenia..."
@@ -773,7 +778,9 @@
       "noneAction": "Otvoriť galériu modelov",
       "loadFailedTitle": "Akustický model sa nepodarilo načítať",
       "loadFailedMessage": "Povolený model sa nepodarilo načítať, takže sa zvuk neanalyzuje. Stránka Modely AI ukazuje, ktorý model zlyhal a prečo.",
-      "loadFailedAction": "Zobraziť stav Modely AI"
+      "loadFailedAction": "Zobraziť stav Modely AI",
+      "failingTitle": "{count, plural, one {Model zlyháva pri každej analýze} few {# modely zlyhávajú pri každej analýze} many {# modelov zlyháva pri každej analýze} other {# modelov zlyháva pri každej analýze}}",
+      "failingMessage": "{count, plural, one {{models} je načítaný, ale každá analýza zlyháva, takže nič nedeteguje.} few {{models} sú načítané, ale každá analýza zlyháva, takže nič nedetegujú.} many {{models} sú načítané, ale každá analýza zlyháva, takže nič nedetegujú.} other {{models} sú načítané, ale každá analýza zlyháva, takže nič nedetegujú.}} Stránka Modely AI zobrazuje backend a chybu."
     },
     "banner": {
       "title": "Názov",
@@ -1849,7 +1856,12 @@
       "fp16Help": "16-bitové čísla s pohyblivou rádovou čiarkou. Hardvér s podporou môže byť rýchlejší a spotrebuje menej pamäte.",
       "invocationsHelp": "Celkový počet analyzovaných segmentov od spustenia.",
       "noModelsHint": "Zatiaľ žiadny zdroj zvuku?",
-      "noModelsHintLink": "Nakonfigurovať zdroje zvuku"
+      "noModelsHintLink": "Nakonfigurovať zdroje zvuku",
+      "modelFailing": "každá analýza zlyháva",
+      "modelFailingTooltip": "Posledných {count} analýz za sebou zlyhalo, takže tento model nič nedeteguje. Skúste iné zostavenie modelu v Nastavenia > Analýza > Modely alebo skontrolujte tu zobrazený backend a presnosť.",
+      "lastSuccess": "Posledný úspech",
+      "lastSuccessHelp": "Kedy tento model naposledy analyzoval zvuk bez chyby.",
+      "lastSuccessNever": "nikdy"
     },
     "metrics": {
       "cpu": "CPU",

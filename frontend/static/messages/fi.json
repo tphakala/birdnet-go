@@ -510,6 +510,11 @@
           "diskFull": "Levy on täynnä - vapauta tilaa",
           "permissionDenied": "Käyttö estetty - tarkista tiedosto- tai palveluoikeudet"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} epäonnistuu jokaisessa analyysissä",
+        "message": "{modelName} on ladattu, mutta sen viimeiset {failures} analyysiä peräkkäin epäonnistuivat taustajärjestelmällä {runtime}: päättely palautti virheen. Ääntä tallennetaan, mutta tämä malli ei tunnista mitään. Tarkista malli sivulla Järjestelmä > Tekoälymallit.",
+        "nonFiniteMessage": "{modelName} on ladattu, mutta sen viimeiset {failures} analyysiä peräkkäin epäonnistuivat taustajärjestelmällä {runtime}: malli palautti virheellisiä (äärettömiä) pisteitä. Ääntä tallennetaan, mutta tämä malli ei tunnista mitään. Tarkista malli sivulla Järjestelmä > Tekoälymallit."
       }
     },
     "loading": "Ladataan ilmoituksia..."
@@ -773,7 +778,9 @@
       "noneAction": "Avaa malligalleria",
       "loadFailedTitle": "Akustisen mallin lataus epäonnistui",
       "loadFailedMessage": "Käytössä olevaa mallia ei voitu ladata, joten ääntä ei analysoida. Tekoälymallit-sivu näyttää, mikä malli epäonnistui ja miksi.",
-      "loadFailedAction": "Näytä Tekoälymallit-tila"
+      "loadFailedAction": "Näytä Tekoälymallit-tila",
+      "failingTitle": "{count, plural, one {Malli epäonnistuu jokaisessa analyysissä} other {# mallia epäonnistuu jokaisessa analyysissä}}",
+      "failingMessage": "{count, plural, one {{models} on ladattu, mutta jokainen analyysi epäonnistuu, joten se ei tunnista mitään.} other {{models} on ladattu, mutta jokainen analyysi epäonnistuu, joten ne eivät tunnista mitään.}} Tekoälymallit-sivulla näkyy taustajärjestelmä ja virhe."
     },
     "banner": {
       "title": "Otsikko",
@@ -1849,7 +1856,12 @@
       "fp16Help": "16-bittinen liukuluku. Sitä tukeva laitteisto voi suorittaa jotkin mallit nopeammin ja vähemmällä muistilla.",
       "invocationsHelp": "Tämän mallin analysoimien äänisegmenttien kokonaismäärä käynnistyksen jälkeen.",
       "noModelsHint": "Ei äänilähteitä määritettynä vielä?",
-      "noModelsHintLink": "Määritä äänilähteet"
+      "noModelsHintLink": "Määritä äänilähteet",
+      "modelFailing": "jokainen analyysi epäonnistuu",
+      "modelFailingTooltip": "Viimeiset {count} analyysiä peräkkäin epäonnistuivat, joten tämä malli ei tunnista mitään. Kokeile mallin toista versiota kohdassa Asetukset > Analyysi > Mallit tai tarkista tässä näkyvä taustajärjestelmä ja tarkkuus.",
+      "lastSuccess": "Viimeisin onnistuminen",
+      "lastSuccessHelp": "Milloin tämä malli viimeksi analysoi ääntä ilman virhettä.",
+      "lastSuccessNever": "ei koskaan"
     },
     "metrics": {
       "cpu": "CPU",

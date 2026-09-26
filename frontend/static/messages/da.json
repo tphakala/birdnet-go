@@ -510,6 +510,11 @@
           "diskFull": "Disk er fuld - frigør noget plads",
           "permissionDenied": "Adgang nægtet - kontrollér fil- eller tjenestetilladelser"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} fejler ved hver analyse",
+        "message": "{modelName} er indlæst, men de seneste {failures} analyser i træk fejlede på {runtime}: inferensen returnerede en fejl. Lyd optages, men denne model registrerer intet. Tjek modellen på siden System > AI-modeller.",
+        "nonFiniteMessage": "{modelName} er indlæst, men de seneste {failures} analyser i træk fejlede på {runtime}: modellen returnerede ugyldige (ikke-endelige) scorer. Lyd optages, men denne model registrerer intet. Tjek modellen på siden System > AI-modeller."
       }
     },
     "loading": "Indlæser notifikationer..."
@@ -773,7 +778,9 @@
       "noneAction": "Åbn modelgalleri",
       "loadFailedTitle": "Akustisk model kunne ikke indlæses",
       "loadFailedMessage": "En aktiveret model kunne ikke indlæses, så der analyseres ingen lyd. Siden AI-modeller viser, hvilken model der fejlede og hvorfor.",
-      "loadFailedAction": "Vis status for AI-modeller"
+      "loadFailedAction": "Vis status for AI-modeller",
+      "failingTitle": "{count, plural, one {En model fejler ved hver analyse} other {# modeller fejler ved hver analyse}}",
+      "failingMessage": "{count, plural, one {{models} er indlæst, men hver analyse fejler, så den registrerer intet.} other {{models} er indlæst, men hver analyse fejler, så de registrerer intet.}} Siden AI-modeller viser backend og fejlen."
     },
     "banner": {
       "title": "Titel",
@@ -1849,7 +1856,12 @@
       "fp16Help": "16-bit flydende kommatal. Hardware, der understøtter det, kan køre nogle modeller hurtigere og med mindre hukommelse.",
       "invocationsHelp": "Totalt antal lydsegmenter denne model har analyseret siden opstart.",
       "noModelsHint": "Ingen lydkilde konfigureret endnu?",
-      "noModelsHintLink": "Konfigurer lydkilder"
+      "noModelsHintLink": "Konfigurer lydkilder",
+      "modelFailing": "hver analyse fejler",
+      "modelFailingTooltip": "De seneste {count} analyser i træk fejlede, så denne model registrerer intet. Prøv en anden version af modellen under Indstillinger > Analyse > Modeller, eller tjek den backend og præcision, der vises her.",
+      "lastSuccess": "Seneste succes",
+      "lastSuccessHelp": "Hvornår denne model sidst analyserede lyd uden fejl.",
+      "lastSuccessNever": "aldrig"
     },
     "metrics": {
       "cpu": "CPU",

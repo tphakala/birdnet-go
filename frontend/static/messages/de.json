@@ -510,6 +510,11 @@
           "diskFull": "Festplatte voll - Speicherplatz freigeben",
           "permissionDenied": "Zugriff verweigert - Datei- oder Dienstberechtigungen prüfen"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} scheitert bei jeder Analyse",
+        "message": "{modelName} ist geladen, aber die letzten {failures} Analysen in Folge sind auf {runtime} fehlgeschlagen: Die Inferenz hat einen Fehler zurückgegeben. Audio wird erfasst, aber dieses Modell erkennt nichts. Überprüfen Sie das Modell auf der Seite System > KI-Modelle.",
+        "nonFiniteMessage": "{modelName} ist geladen, aber die letzten {failures} Analysen in Folge sind auf {runtime} fehlgeschlagen: Das Modell hat ungültige (nicht endliche) Werte geliefert. Audio wird erfasst, aber dieses Modell erkennt nichts. Überprüfen Sie das Modell auf der Seite System > KI-Modelle."
       }
     },
     "loading": "Benachrichtigungen werden geladen..."
@@ -773,7 +778,9 @@
       "noneAction": "Modellgalerie öffnen",
       "loadFailedTitle": "Akustisches Modell konnte nicht geladen werden",
       "loadFailedMessage": "Ein aktiviertes Modell konnte nicht geladen werden, daher wird kein Audio analysiert. Die Seite KI-Modelle zeigt, welches Modell fehlgeschlagen ist und warum.",
-      "loadFailedAction": "Status der KI-Modelle anzeigen"
+      "loadFailedAction": "Status der KI-Modelle anzeigen",
+      "failingTitle": "{count, plural, one {Ein Modell scheitert bei jeder Analyse} other {# Modelle scheitern bei jeder Analyse}}",
+      "failingMessage": "{count, plural, one {{models} ist geladen, aber jede Analyse schlägt fehl, daher erkennt es nichts.} other {{models} sind geladen, aber jede Analyse schlägt fehl, daher erkennen sie nichts.}} Die Seite KI-Modelle zeigt das Backend und den Fehler."
     },
     "banner": {
       "title": "Titel",
@@ -1849,7 +1856,12 @@
       "fp16Help": "16-Bit-Gleitkomma.",
       "invocationsHelp": "Gesamte analysierte Audiosegmente seit dem Start.",
       "noModelsHint": "Noch keine Audioquelle konfiguriert?",
-      "noModelsHintLink": "Audioquellen konfigurieren"
+      "noModelsHintLink": "Audioquellen konfigurieren",
+      "modelFailing": "jede Analyse schlägt fehl",
+      "modelFailingTooltip": "Die letzten {count} Analysen in Folge sind fehlgeschlagen, daher erkennt dieses Modell nichts. Versuchen Sie eine andere Version des Modells unter Einstellungen > Analyse > Modelle oder prüfen Sie das hier angezeigte Backend und die Präzision.",
+      "lastSuccess": "Letzter Erfolg",
+      "lastSuccessHelp": "Wann dieses Modell zuletzt Audio ohne Fehler analysiert hat.",
+      "lastSuccessNever": "nie"
     },
     "metrics": {
       "cpu": "CPU",

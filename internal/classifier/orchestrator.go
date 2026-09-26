@@ -22,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -206,7 +207,11 @@ type Orchestrator struct {
 
 	// acousticNotice latches the single persistent "no acoustic model" bell notification
 	// (N = 0, model de-privilege epic Phase 4); see syncAcousticModelsNotice.
-	acousticNotice acousticModelsNotice
+	acousticNotice notification.PersistentNotice
+
+	// inferenceHealth latches the per-model "fails every analysis" bell notices and
+	// the observer of the failing set; see syncInferenceHealth.
+	inferenceHealth inferenceHealthState
 
 	// pendingWarmups queues deferred warm-ups recorded by model loaders while
 	// they hold o.mu (write lock). Drained by runPendingWarmups after o.mu is
@@ -691,47 +696,6 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 	return "", "", ""
 }
 
-// Predict runs inference using the primary model.
-// Delegates to PredictModel for uniform locking and telemetry.
-// inferenceFailureLogEvery is the interval, in consecutive failures of one
-// model, at which PredictModel repeats its ERROR log after the first failure.
-const inferenceFailureLogEvery = 100
-
-// inferenceFailureStreaks tracks consecutive PredictModel failures per model ID
-// (value: *atomic.Int64) for the log rate limiting in PredictModel.
-//
-//nolint:gochecknoglobals // log-flood guard shared with globalInferenceCounters
-var inferenceFailureStreaks sync.Map
-
-// inferenceFailureStreak increments and returns the consecutive failure count
-// for modelID.
-func (o *Orchestrator) inferenceFailureStreak(modelID string) int64 {
-	v, _ := inferenceFailureStreaks.LoadOrStore(modelID, new(atomic.Int64))
-	return v.(*atomic.Int64).Add(1) //nolint:errcheck // stored type is fixed above
-}
-
-// resetInferenceFailureStreak clears the consecutive failure count for modelID
-// after a successful inference so the next fault is logged at ERROR again.
-func (o *Orchestrator) resetInferenceFailureStreak(modelID string) {
-	if v, ok := inferenceFailureStreaks.Load(modelID); ok {
-		v.(*atomic.Int64).Store(0) //nolint:errcheck // stored type is fixed above
-	}
-}
-
-// dropInferenceFailureStreak removes modelID's streak entry when its instance is
-// torn down or replaced, so a later instance under the same ID starts fresh (its
-// first failure is logged at ERROR) and stale IDs do not accumulate across reloads.
-func dropInferenceFailureStreak(modelID string) {
-	inferenceFailureStreaks.Delete(modelID)
-}
-
-// inferenceFailureLogsAtError reports whether the streak-th consecutive failure
-// of one model is logged at ERROR (the first, then every
-// inferenceFailureLogEvery-th) rather than DEBUG.
-func inferenceFailureLogsAtError(streak int64) bool {
-	return streak == 1 || streak%inferenceFailureLogEvery == 0
-}
-
 // PredictModel runs inference on a specific model identified by modelID.
 // It uses a three-level locking protocol: a read lock on the models map to
 // fetch the entry (fast), then inferenceMu to serialize inference across all
@@ -783,13 +747,21 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 	results, err := entry.instance.Predict(ctx, sample)
 	duration := time.Since(start)
 
-	if err != nil {
+	switch {
+	case err != nil && isCancellation(ctx, err):
+		// The caller's context ended (shutdown, a cancelled window): not a model
+		// fault, so it neither advances nor ends the failure streak.
+		globalInferenceCounters.RecordError(modelID)
+		log.Debug("PredictModel cancelled",
+			logger.String("model_id", modelID),
+			logger.Error(err))
+	case err != nil:
 		globalInferenceCounters.RecordError(modelID)
 		// A broken backend fails every window (one per few seconds per source), so
 		// after the first failure only every inferenceFailureLogEvery-th repeat is
 		// logged at ERROR; the rest go to DEBUG. The metrics counter above still
 		// records each one.
-		streak := o.inferenceFailureStreak(modelID)
+		streak := recordInferenceFailure(modelID, err, time.Now())
 		emit := log.Debug
 		if inferenceFailureLogsAtError(streak) {
 			emit = log.Error
@@ -799,8 +771,13 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 			logger.Error(err),
 			logger.Int64("consecutive_failures", streak),
 			logger.Duration("duration", duration))
-	} else {
-		o.resetInferenceFailureStreak(modelID)
+		if failureStreakNeedsSync(streak) {
+			o.kickInferenceHealthSync()
+		}
+	default:
+		if ended := recordInferenceSuccess(modelID, time.Now()); ended >= InferenceFailureNoticeThreshold {
+			o.kickInferenceHealthSync()
+		}
 		globalInferenceCounters.RecordInvoke(modelID, duration.Microseconds())
 		log.Debug("PredictModel complete",
 			logger.String("model_id", modelID),
@@ -1823,9 +1800,13 @@ func (o *Orchestrator) Delete() {
 		// re-creating the entry after deletion, and stops a teardown-then-recreate
 		// cycle from leaking counter entries.
 		globalInferenceCounters.Delete(id)
-		dropInferenceFailureStreak(id)
+		dropInferenceHealth(id)
 		entry.mu.Unlock()
 	}
+
+	// Clear the failure notices of the models just closed and stop their retries
+	// (no model is loaded now, so the reconcile clears every latch).
+	o.syncInferenceHealth()
 
 	CloseHeatmapService()
 }
@@ -2330,7 +2311,8 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 		defer entry.mu.Unlock()
 
 		globalInferenceCounters.Delete(registryID)
-		dropInferenceFailureStreak(registryID)
+		dropInferenceHealth(registryID)
+		o.kickInferenceHealthSyncIfTracked() // clear the unloaded model's failure notice
 
 		o.rssMu.Lock()
 		delete(o.modelRSS, registryID)

@@ -147,6 +147,7 @@ func (c *Handler) registerHealthChecks() {
 		checks.NewAcousticModelsCheck(c.buildAcousticModelsProvider()),
 		checks.NewModelsLoadedCheck(c.buildModelLoadInfoProvider()),
 		checks.NewPerModelInferenceLatencyCheck(c.buildPerModelInferenceProvider()),
+		checks.NewInferenceFailuresCheck(c.buildInferenceFailuresProvider()),
 		checks.NewDetectionRateCheck(func(ctx context.Context, hours int) (int, error) {
 			ds := c.DS
 			if ds == nil {
@@ -381,6 +382,34 @@ func (c *Handler) buildAcousticModelsProvider() func() checks.AcousticModelsInfo
 			EnabledCount: len(seen),
 			LoadFailures: len(bn.LoadErrors()),
 		}
+	}
+}
+
+// buildInferenceFailuresProvider returns a closure reporting each loaded model's
+// failure run from the classifier's per-model inference health. It returns nil
+// (no loaded model) while no orchestrator is wired.
+func (c *Handler) buildInferenceFailuresProvider() func() []checks.ModelInferenceFailureInfo {
+	return func() []checks.ModelInferenceFailureInfo {
+		p := c.Processor
+		if p == nil {
+			return nil
+		}
+		bn := p.GetBirdNET()
+		if bn == nil {
+			return nil
+		}
+		models := bn.InferenceHealth()
+		out := make([]checks.ModelInferenceFailureInfo, 0, len(models))
+		for i := range models {
+			out = append(out, checks.ModelInferenceFailureInfo{
+				ModelID:             models[i].ModelID,
+				ModelName:           models[i].ModelName,
+				ConsecutiveFailures: models[i].ConsecutiveFailures,
+				Failing:             models[i].Failing,
+				ErrorClass:          models[i].ErrorClass,
+			})
+		}
+		return out
 	}
 }
 

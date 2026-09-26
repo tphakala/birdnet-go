@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -22,14 +23,19 @@ type Service struct {
 	store         NotificationStore
 	subscribers   []*Subscriber
 	subscribersMu sync.RWMutex
-	rateLimiter   *RateLimiter
-	cleanupTicker *time.Ticker
-	ctx           context.Context
-	cancel        context.CancelFunc
-	wg            sync.WaitGroup
-	logger        logger.Logger
-	config        *ServiceConfig
-	telemetry     *NotificationTelemetry
+	// deletionSubs receive a DeletedEvent for every notification Delete removes,
+	// so live clients (the SSE notification stream) can drop it. They are kept
+	// apart from subscribers so the push dispatcher never sees deletions.
+	deletionSubs   []*deletionSubscriber
+	deletionSubsMu sync.Mutex
+	rateLimiter    *RateLimiter
+	cleanupTicker  *time.Ticker
+	ctx            context.Context
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
+	logger         logger.Logger
+	config         *ServiceConfig
+	telemetry      *NotificationTelemetry
 }
 
 // ServiceConfig holds the complete configuration for the notification service.
@@ -278,11 +284,90 @@ func (s *Service) Delete(id string) error {
 			Build()
 	}
 
+	// Look the notification up first: only a delete that removes something is
+	// broadcast (the store's Delete does not report a missing ID), and the SSE
+	// stream filters deletion events for guests by type, as it does creates. Two
+	// concurrent deletes of one ID may both broadcast; clients drop by ID, so a
+	// duplicate event is harmless.
+	existing, getErr := s.store.Get(id)
+	found := getErr == nil && existing != nil
+
 	err := s.store.Delete(id)
 	if err != nil && errors.Is(err, ErrNotificationNotFound) {
 		return nil
 	}
+	if err == nil && found {
+		s.broadcastDeletion(DeletedEvent{ID: id, Type: existing.Type})
+	}
 	return err
+}
+
+// DeletedEvent reports a notification removed by Service.Delete.
+type DeletedEvent struct {
+	// ID is the deleted notification's ID.
+	ID string
+	// Type is the deleted notification's type.
+	Type Type
+}
+
+// deletionSubscriber is one SubscribeDeletions registration.
+type deletionSubscriber struct {
+	ch     chan DeletedEvent
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// SubscribeDeletions returns a channel that receives a DeletedEvent for every
+// notification Delete removes (a missing ID sends nothing), and a context that
+// is cancelled when the subscription ends. Sends never block: an event for a
+// full channel is dropped, as broadcast does for notifications. The channel is
+// owned by the service and never closed; call UnsubscribeDeletions when done.
+func (s *Service) SubscribeDeletions() (<-chan DeletedEvent, context.Context) {
+	s.deletionSubsMu.Lock()
+	defer s.deletionSubsMu.Unlock()
+
+	ctx, cancel := context.WithCancel(s.ctx)
+	sub := &deletionSubscriber{
+		ch:     make(chan DeletedEvent, DefaultChannelBufferSize),
+		ctx:    ctx,
+		cancel: cancel,
+	}
+	s.deletionSubs = append(s.deletionSubs, sub)
+	return sub.ch, ctx
+}
+
+// UnsubscribeDeletions ends a SubscribeDeletions registration.
+func (s *Service) UnsubscribeDeletions(ch <-chan DeletedEvent) {
+	s.deletionSubsMu.Lock()
+	defer s.deletionSubsMu.Unlock()
+
+	s.deletionSubs = slices.DeleteFunc(s.deletionSubs, func(sub *deletionSubscriber) bool {
+		if sub.ch != ch {
+			return false
+		}
+		sub.cancel()
+		return true
+	})
+}
+
+// broadcastDeletion sends ev to every live deletion subscriber without blocking
+// and drops cancelled ones.
+func (s *Service) broadcastDeletion(ev DeletedEvent) {
+	s.deletionSubsMu.Lock()
+	defer s.deletionSubsMu.Unlock()
+
+	s.deletionSubs = slices.DeleteFunc(s.deletionSubs, func(sub *deletionSubscriber) bool {
+		if sub.ctx.Err() != nil {
+			return true
+		}
+		select {
+		case sub.ch <- ev:
+		default:
+			s.logger.Debug("notification deletion channel full, skipping subscriber",
+				logger.String("notification_id", ev.ID))
+		}
+		return false
+	})
 }
 
 // Subscribe creates a channel to receive real-time notifications.

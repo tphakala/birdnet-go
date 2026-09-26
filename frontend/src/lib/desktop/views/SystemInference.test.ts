@@ -1191,6 +1191,47 @@ describe('SystemInference', () => {
     expect(container.querySelector('[title="system.inference.deviceHelp"]')).not.toBeNull();
   });
 
+  it('shows a failing chip and the last success when every analysis fails', async () => {
+    const model = makeModel({
+      paused: true, // failing takes precedence over paused
+      health: {
+        state: 'failing',
+        consecutiveFailures: 42,
+        failureThreshold: 10,
+        inferenceCount: 60,
+        lastInferenceAtUnix: 1750000000,
+        errorClass: 'non_finite_output',
+      },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="model-failing"]')).not.toBeNull();
+    });
+    expect(container.textContent).toContain('system.inference.modelFailing');
+    expect(container.querySelector('[aria-label="system.inference.activityPaused"]')).toBeNull();
+    // Never succeeded since the instance loaded.
+    expect(container.textContent).toContain('system.inference.lastSuccess');
+    expect(container.textContent).toContain('system.inference.lastSuccessNever');
+  });
+
+  it('shows no failing chip or last success for a healthy model that has not run', async () => {
+    const model = makeModel({
+      health: { state: 'idle', consecutiveFailures: 0, failureThreshold: 10, inferenceCount: 0 },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    expect(container.querySelector('[data-testid="model-failing"]')).toBeNull();
+    expect(container.textContent).not.toContain('system.inference.lastSuccess');
+  });
+
   it('shows a Paused indicator with the schedule label when the model is paused', async () => {
     const model = makeModel({ paused: true, scheduleLabel: 'Night schedule' });
     installApi(makeSnapshot([model]));

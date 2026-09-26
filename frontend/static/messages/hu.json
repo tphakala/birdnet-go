@@ -510,6 +510,11 @@
           "diskFull": "A lemez megtelt - szabadítson fel helyet",
           "permissionDenied": "Engedély megtagadva - ellenőrizze a fájl vagy szolgáltatás engedélyeit"
         }
+      },
+      "inferenceFailing": {
+        "title": "A(z) {modelName} minden elemzésnél hibázik",
+        "message": "A(z) {modelName} be van töltve, de az utolsó {failures} egymást követő elemzése sikertelen volt ezen: {runtime}. A következtetés hibát adott. A rendszer rögzíti a hangot, de ez a modell semmit sem észlel. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon.",
+        "nonFiniteMessage": "A(z) {modelName} be van töltve, de az utolsó {failures} egymást követő elemzése sikertelen volt ezen: {runtime}. A modell érvénytelen (nem véges) pontszámokat adott. A rendszer rögzíti a hangot, de ez a modell semmit sem észlel. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon."
       }
     },
     "loading": "Értesítések betöltése..."
@@ -773,7 +778,9 @@
       "noneAction": "Modellgaléria megnyitása",
       "loadFailedTitle": "Az akusztikai modellt nem sikerült betölteni",
       "loadFailedMessage": "Egy engedélyezett modellt nem sikerült betölteni, így a hang nincs elemezve. Az AI Modellek oldal mutatja, hogy melyik modell hibásodott meg és miért.",
-      "loadFailedAction": "AI Modellek állapotának megtekintése"
+      "loadFailedAction": "AI Modellek állapotának megtekintése",
+      "failingTitle": "{count, plural, one {Egy modell minden elemzésnél hibázik} other {# modell minden elemzésnél hibázik}}",
+      "failingMessage": "{count, plural, one {{models} be van töltve, de minden elemzés sikertelen, így semmit sem észlel.} other {{models} be vannak töltve, de minden elemzés sikertelen, így semmit sem észlelnek.}} Az AI Modellek oldal mutatja a háttérrendszert és a hibát."
     },
     "banner": {
       "title": "Cím",
@@ -1849,7 +1856,12 @@
       "fp16Help": "16-bites lebegőpontos számok. Kisebb memóriát és gyorsabb futást eredményezhet.",
       "invocationsHelp": "Összes elemzett szegmens indítás óta.",
       "noModelsHint": "Még nincs beállítva hangforrás?",
-      "noModelsHintLink": "Hangforrások beállítása"
+      "noModelsHintLink": "Hangforrások beállítása",
+      "modelFailing": "minden elemzés sikertelen",
+      "modelFailingTooltip": "Az utolsó {count} egymást követő elemzés sikertelen volt, így ez a modell semmit sem észlel. Próbálja ki a modell egy másik változatát a Beállítások > Elemzés > Modellek oldalon, vagy ellenőrizze az itt látható háttérrendszert és pontosságot.",
+      "lastSuccess": "Utolsó sikeres",
+      "lastSuccessHelp": "Mikor elemzett ez a modell utoljára hiba nélkül hangot.",
+      "lastSuccessNever": "soha"
     },
     "metrics": {
       "cpu": "CPU",

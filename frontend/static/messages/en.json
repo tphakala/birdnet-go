@@ -510,6 +510,11 @@
           "diskFull": "Disk is full - free some space",
           "permissionDenied": "Permission denied - check file or service permissions"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} fails every analysis",
+        "message": "{modelName} is loaded, but its last {failures} analyses in a row failed on {runtime}: inference returned an error. Audio is captured but this model detects nothing. Check the model on the System > AI Models page.",
+        "nonFiniteMessage": "{modelName} is loaded, but its last {failures} analyses in a row failed on {runtime}: the model returned invalid (non-finite) scores. Audio is captured but this model detects nothing. Check the model on the System > AI Models page."
       }
     },
     "loading": "Loading notifications..."
@@ -773,7 +778,9 @@
       "noneAction": "Open model gallery",
       "loadFailedTitle": "Acoustic model failed to load",
       "loadFailedMessage": "An enabled model could not be loaded, so no audio is being analyzed. The AI Models page shows which model failed and why.",
-      "loadFailedAction": "View AI Models status"
+      "loadFailedAction": "View AI Models status",
+      "failingTitle": "{count, plural, one {A model fails every analysis} other {# models fail every analysis}}",
+      "failingMessage": "{count, plural, one {{models} is loaded, but every analysis fails, so it detects nothing.} other {{models} are loaded, but every analysis fails, so they detect nothing.}} The AI Models page shows the backend and the error."
     },
     "banner": {
       "title": "Title",
@@ -1849,7 +1856,12 @@
       "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources"
+      "noModelsHintLink": "Configure audio sources",
+      "modelFailing": "every analysis fails",
+      "modelFailingTooltip": "The last {count} analyses in a row failed, so this model detects nothing. Try another build of the model in Settings > Analysis > Models, or check the backend and precision shown here.",
+      "lastSuccess": "Last success",
+      "lastSuccessHelp": "When this model last analyzed audio without an error.",
+      "lastSuccessNever": "never"
     },
     "metrics": {
       "cpu": "CPU",

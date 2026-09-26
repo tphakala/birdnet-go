@@ -947,3 +947,53 @@ func TestBuildSourceAttachments_FallbackRowCarriesLiveness(t *testing.T) {
 			"with no live evidence the row must not assert that the model is failing")
 	})
 }
+
+// TestBuildModelHealth pins the per-model health mapping: the state derives from
+// the classifier verdict (failing) and the window count (idle), and zero
+// timestamps are omitted.
+func TestBuildModelHealth(t *testing.T) {
+	t.Parallel()
+	at := time.Unix(1_790_000_000, 0)
+	tests := []struct {
+		name string
+		in   classifier.ModelInferenceHealth
+		want ModelHealthInfo
+	}{
+		{
+			name: "idle before the first window",
+			in:   classifier.ModelInferenceHealth{},
+			want: ModelHealthInfo{State: modelHealthIdle, FailureThreshold: classifier.InferenceFailureNoticeThreshold},
+		},
+		{
+			name: "ok with a short failure run",
+			in: classifier.ModelInferenceHealth{
+				ConsecutiveFailures: 2, InferenceCount: 50, LastInferenceAt: at, LastSuccessAt: at.Add(-time.Minute),
+				ErrorClass: classifier.InferenceErrorClassOther,
+			},
+			want: ModelHealthInfo{
+				State: modelHealthOK, ConsecutiveFailures: 2, FailureThreshold: classifier.InferenceFailureNoticeThreshold,
+				InferenceCount: 50, LastInferenceAtUnix: at.Unix(), LastSuccessAtUnix: at.Add(-time.Minute).Unix(),
+				ErrorClass: classifier.InferenceErrorClassOther,
+			},
+		},
+		{
+			name: "failing, never succeeded",
+			in: classifier.ModelInferenceHealth{
+				ConsecutiveFailures: 20, InferenceCount: 20, LastInferenceAt: at, Failing: true,
+				ErrorClass: classifier.InferenceErrorClassNonFinite,
+			},
+			want: ModelHealthInfo{
+				State: modelHealthFailing, ConsecutiveFailures: 20, FailureThreshold: classifier.InferenceFailureNoticeThreshold,
+				InferenceCount: 20, LastInferenceAtUnix: at.Unix(), ErrorClass: classifier.InferenceErrorClassNonFinite,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := buildModelHealth(&tt.in)
+			require.NotNil(t, got)
+			assert.Equal(t, tt.want, *got)
+		})
+	}
+}

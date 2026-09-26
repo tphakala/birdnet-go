@@ -510,6 +510,11 @@
           "diskFull": "Dysk jest pełny - zwolnij miejsce",
           "permissionDenied": "Brak uprawnień - sprawdź uprawnienia pliku lub usługi"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} zawodzi przy każdej analizie",
+        "message": "{modelName} jest załadowany, ale jego ostatnie {failures} analiz z rzędu nie powiodło się na {runtime}: wnioskowanie zwróciło błąd. Dźwięk jest przechwytywany, ale ten model niczego nie wykrywa. Sprawdź model na stronie System > Modele AI.",
+        "nonFiniteMessage": "{modelName} jest załadowany, ale jego ostatnie {failures} analiz z rzędu nie powiodło się na {runtime}: model zwrócił nieprawidłowe (nieskończone) wyniki. Dźwięk jest przechwytywany, ale ten model niczego nie wykrywa. Sprawdź model na stronie System > Modele AI."
       }
     },
     "loading": "Ładowanie powiadomień..."
@@ -773,7 +778,9 @@
       "noneAction": "Otwórz galerię modeli",
       "loadFailedTitle": "Nie udało się załadować modelu akustycznego",
       "loadFailedMessage": "Nie udało się załadować włączonego modelu, więc żaden dźwięk nie jest analizowany. Strona Modele AI pokazuje, który model uległ awarii i dlaczego.",
-      "loadFailedAction": "Wyświetl status modeli AI"
+      "loadFailedAction": "Wyświetl status modeli AI",
+      "failingTitle": "{count, plural, one {Model zawodzi przy każdej analizie} few {# modele zawodzą przy każdej analizie} many {# modeli zawodzi przy każdej analizie} other {# modeli zawodzi przy każdej analizie}}",
+      "failingMessage": "{count, plural, one {{models} jest załadowany, ale każda analiza kończy się błędem, więc niczego nie wykrywa.} few {{models} są załadowane, ale każda analiza kończy się błędem, więc niczego nie wykrywają.} many {{models} są załadowane, ale każda analiza kończy się błędem, więc niczego nie wykrywają.} other {{models} są załadowane, ale każda analiza kończy się błędem, więc niczego nie wykrywają.}} Strona Modele AI pokazuje backend i błąd."
     },
     "banner": {
       "title": "Tytuł",
@@ -1849,7 +1856,12 @@
       "fp16Help": "Półprecyzyjne wartości zmiennoprzecinkowe (16-bitowe).",
       "invocationsHelp": "Liczba przeanalizowanych segmentów od startu.",
       "noModelsHint": "Nie skonfigurowano jeszcze źródła audio?",
-      "noModelsHintLink": "Skonfiguruj źródła audio"
+      "noModelsHintLink": "Skonfiguruj źródła audio",
+      "modelFailing": "każda analiza kończy się błędem",
+      "modelFailingTooltip": "Ostatnie {count} analiz z rzędu nie powiodło się, więc ten model niczego nie wykrywa. Wypróbuj inną wersję modelu w Ustawienia > Analiza > Modele lub sprawdź widoczny tu backend i precyzję.",
+      "lastSuccess": "Ostatni sukces",
+      "lastSuccessHelp": "Kiedy ten model ostatnio przeanalizował dźwięk bez błędu.",
+      "lastSuccessNever": "nigdy"
     },
     "metrics": {
       "cpu": "CPU",

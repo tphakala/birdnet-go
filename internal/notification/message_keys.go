@@ -229,4 +229,9 @@ const (
 	// host in the model gallery; recommend-only, never swaps a model by itself)
 	MsgModelOptimizeTitle   = "notifications.content.modelOptimize.title"
 	MsgModelOptimizeMessage = "notifications.content.modelOptimize.message"
+
+	// Inference failure notice: a loaded model failed its last analyses in a row.
+	MsgInferenceFailingTitle            = "notifications.content.inferenceFailing.title"
+	MsgInferenceFailingMessage          = "notifications.content.inferenceFailing.message"
+	MsgInferenceFailingNonFiniteMessage = "notifications.content.inferenceFailing.nonFiniteMessage"
 )

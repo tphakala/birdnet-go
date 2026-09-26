@@ -510,6 +510,11 @@
           "diskFull": "Disken er full - frigjør litt plass",
           "permissionDenied": "Tilgang nektet - sjekk fil- eller tjenestetillatelser"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} feiler i hver analyse",
+        "message": "{modelName} er lastet inn, men de siste {failures} analysene på rad feilet på {runtime}: inferensen returnerte en feil. Lyd tas opp, men denne modellen oppdager ingenting. Sjekk modellen på siden System > AI-modeller.",
+        "nonFiniteMessage": "{modelName} er lastet inn, men de siste {failures} analysene på rad feilet på {runtime}: modellen returnerte ugyldige (ikke-endelige) poeng. Lyd tas opp, men denne modellen oppdager ingenting. Sjekk modellen på siden System > AI-modeller."
       }
     },
     "loading": "Laster varsler..."
@@ -773,7 +778,9 @@
       "noneAction": "Åpne modellgalleri",
       "loadFailedTitle": "Akustisk modell kunne ikke lastes inn",
       "loadFailedMessage": "En aktivert modell kunne ikke lastes inn, så ingen lyd analyseres. Siden AI-modeller viser hvilken modell som feilet og hvorfor.",
-      "loadFailedAction": "Vis status for AI-modeller"
+      "loadFailedAction": "Vis status for AI-modeller",
+      "failingTitle": "{count, plural, one {En modell feiler i hver analyse} other {# modeller feiler i hver analyse}}",
+      "failingMessage": "{count, plural, one {{models} er lastet inn, men hver analyse feiler, så den oppdager ingenting.} other {{models} er lastet inn, men hver analyse feiler, så de oppdager ingenting.}} Siden AI-modeller viser backend og feilen."
     },
     "banner": {
       "title": "Tittel",
@@ -1849,7 +1856,12 @@
       "fp16Help": "16-bit flyttall.",
       "invocationsHelp": "Totalt antall lydsegmenter analysert av denne modellen.",
       "noModelsHint": "Ingen lydkilde konfigurert ennå?",
-      "noModelsHintLink": "Konfigurer lydkilder"
+      "noModelsHintLink": "Konfigurer lydkilder",
+      "modelFailing": "hver analyse feiler",
+      "modelFailingTooltip": "De siste {count} analysene på rad feilet, så denne modellen oppdager ingenting. Prøv en annen versjon av modellen under Innstillinger > Analyse > Modeller, eller sjekk backend og presisjon som vises her.",
+      "lastSuccess": "Siste vellykkede",
+      "lastSuccessHelp": "Når denne modellen sist analyserte lyd uten feil.",
+      "lastSuccessNever": "aldri"
     },
     "metrics": {
       "cpu": "CPU",

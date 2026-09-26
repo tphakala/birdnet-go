@@ -510,6 +510,11 @@
           "diskFull": "Disks ir pilns - atbrīvojiet vietu",
           "permissionDenied": "Piekļuve liegta - pārbaudiet failu vai pakalpojuma atļaujas"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} kļūdās katrā analīzē",
+        "message": "{modelName} ir ielādēts, bet tā pēdējās {failures} analīzes pēc kārtas neizdevās uz {runtime}: secināšana atgrieza kļūdu. Audio tiek ierakstīts, bet šis modelis neko nenosaka. Pārbaudiet modeli lapā Sistēma > MI Modeļi.",
+        "nonFiniteMessage": "{modelName} ir ielādēts, bet tā pēdējās {failures} analīzes pēc kārtas neizdevās uz {runtime}: modelis atgrieza nederīgus (negalīgus) rezultātus. Audio tiek ierakstīts, bet šis modelis neko nenosaka. Pārbaudiet modeli lapā Sistēma > MI Modeļi."
       }
     },
     "loading": "Ielādē paziņojumus..."
@@ -773,7 +778,9 @@
       "noneAction": "Atvērt modeļu galeriju",
       "loadFailedTitle": "Neizdevās ielādēt akustisko modeli",
       "loadFailedMessage": "Neizdevās ielādēt iespējoto modeli, tāpēc audio netiek analizēts. Lapa MI Modeļi parāda, kurš modelis neizdevās un kāpēc.",
-      "loadFailedAction": "Skatīt MI Modeļi statusu"
+      "loadFailedAction": "Skatīt MI Modeļi statusu",
+      "failingTitle": "{count, plural, zero {# modeļi kļūdās katrā analīzē} one {Modelis kļūdās katrā analīzē} other {# modeļi kļūdās katrā analīzē}}",
+      "failingMessage": "{count, plural, zero {{models} ir ielādēti, bet katra analīze neizdodas, tāpēc tie neko nenosaka.} one {{models} ir ielādēts, bet katra analīze neizdodas, tāpēc tas neko nenosaka.} other {{models} ir ielādēti, bet katra analīze neizdodas, tāpēc tie neko nenosaka.}} Lapā MI Modeļi redzams aizmugursistēma un kļūda."
     },
     "banner": {
       "title": "Virsraksts",
@@ -1849,7 +1856,12 @@
       "fp16Help": "16-bitu peldošais komats. Atbalstīta aparatūra ļauj ātrāku un lētāku darbu.",
       "invocationsHelp": "Kopējais analizēto segmentu skaits.",
       "noModelsHint": "Vēl nav konfigurēti audio avoti?",
-      "noModelsHintLink": "Konfigurēt audio avotus"
+      "noModelsHintLink": "Konfigurēt audio avotus",
+      "modelFailing": "katra analīze neizdodas",
+      "modelFailingTooltip": "Pēdējās {count} analīzes pēc kārtas neizdevās, tāpēc šis modelis neko nenosaka. Izmēģiniet citu modeļa versiju sadaļā Iestatījumi > Analīze > Modeļi vai pārbaudiet šeit redzamo aizmugursistēmu un precizitāti.",
+      "lastSuccess": "Pēdējā veiksmīgā",
+      "lastSuccessHelp": "Kad šis modelis pēdējo reizi analizēja audio bez kļūdām.",
+      "lastSuccessNever": "nekad"
     },
     "metrics": {
       "cpu": "Procesors",

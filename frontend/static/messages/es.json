@@ -510,6 +510,11 @@
           "diskFull": "Disco lleno - libera espacio",
           "permissionDenied": "Permiso denegado - comprueba los permisos del archivo o servicio"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} falla en cada análisis",
+        "message": "{modelName} está cargado, pero sus últimos {failures} análisis seguidos fallaron en {runtime}: la inferencia devolvió un error. El audio se captura, pero este modelo no detecta nada. Compruebe el modelo en la página Sistema > Modelos de IA.",
+        "nonFiniteMessage": "{modelName} está cargado, pero sus últimos {failures} análisis seguidos fallaron en {runtime}: el modelo devolvió puntuaciones no válidas (no finitas). El audio se captura, pero este modelo no detecta nada. Compruebe el modelo en la página Sistema > Modelos de IA."
       }
     },
     "loading": "Cargando notificaciones..."
@@ -773,7 +778,9 @@
       "noneAction": "Abrir galería de modelos",
       "loadFailedTitle": "No se pudo cargar el modelo acústico",
       "loadFailedMessage": "No se pudo cargar un modelo activado, por lo que no se está analizando el audio. La página Modelos de IA muestra qué modelo falló y por qué.",
-      "loadFailedAction": "Ver estado de Modelos de IA"
+      "loadFailedAction": "Ver estado de Modelos de IA",
+      "failingTitle": "{count, plural, one {Un modelo falla en cada análisis} other {# modelos fallan en cada análisis}}",
+      "failingMessage": "{count, plural, one {{models} está cargado, pero cada análisis falla, así que no detecta nada.} other {{models} están cargados, pero cada análisis falla, así que no detectan nada.}} La página Modelos de IA muestra el backend y el error."
     },
     "banner": {
       "title": "Título",
@@ -1849,7 +1856,12 @@
       "fp16Help": "Coma flotante de 16 bits. El hardware compatible puede ejecutar algunos modelos más rápido y con menos memoria.",
       "invocationsHelp": "Total de segmentos de audio que este modelo ha analizado desde el inicio.",
       "noModelsHint": "¿Aún no hay ninguna fuente de audio configurada?",
-      "noModelsHintLink": "Configurar fuentes de audio"
+      "noModelsHintLink": "Configurar fuentes de audio",
+      "modelFailing": "cada análisis falla",
+      "modelFailingTooltip": "Los últimos {count} análisis seguidos fallaron, así que este modelo no detecta nada. Pruebe otra versión del modelo en Configuración > Análisis > Modelos, o revise el backend y la precisión que se muestran aquí.",
+      "lastSuccess": "Último éxito",
+      "lastSuccessHelp": "Cuándo este modelo analizó audio por última vez sin errores.",
+      "lastSuccessNever": "nunca"
     },
     "metrics": {
       "cpu": "CPU",

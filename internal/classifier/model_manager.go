@@ -200,6 +200,17 @@ func (mm *ModelManager) SetTopologyChangedCallback(cb func()) {
 	mm.topologyChangedCb.Store(&cb)
 }
 
+// SetInferenceHealthChangedCallback registers cb with the orchestrator, called
+// whenever the set of loaded models failing every analysis window changes (see
+// Orchestrator.SetInferenceHealthChangedCallback). A nil cb disables it; a
+// manager without an orchestrator ignores it.
+func (mm *ModelManager) SetInferenceHealthChangedCallback(cb func()) {
+	if mm.orchestrator == nil {
+		return
+	}
+	mm.orchestrator.SetInferenceHealthChangedCallback(cb)
+}
+
 // notifyTopologyChanged invokes the registered topology-changed callback if one
 // is set. It must be called outside any held lock, since the callback may run
 // arbitrary observer code. The load is atomic, so it is safe to call

@@ -28,10 +28,6 @@ import (
 // several models, a variant swap that unloads then loads) into one evaluation.
 const optimizeNoticeDebounce = 3 * time.Second
 
-// optimizeNoticeComponent is the notification component for the optimize notice,
-// matching the other classifier-originated bell notices.
-const optimizeNoticeComponent = "classifier"
-
 // optimizeOffer is one installed model whose host-recommended variant differs
 // from the installed one: the ids-only counterpart of the frontend OptimizeOffer
 // (frontend/src/lib/utils/variantSelection.ts), produced by the same rule.
@@ -44,22 +40,17 @@ type optimizeOffer struct {
 
 // noticeService is the slice of the notification service the optimize notice
 // uses. It is a seam so tests do not touch the process-wide singleton.
-type noticeService interface {
-	CreateWithMetadata(notif *notification.Notification) error
-	Delete(id string) error
-}
+type noticeService = notification.NoticeService
 
-// optimizeNotice is the single persistent optimize bell notice per process. id is
-// the live notification's ID ("" when none is outstanding) and sig identifies the
-// offer set it was raised for, so an unchanged set is a no-op (a notice the user
-// deleted is not re-raised until the offers change or the process restarts) while
-// a changed set replaces the notice.
+// optimizeNotice is the single persistent optimize bell notice per process. The
+// latch is keyed by the offer set's signature, so an unchanged set is a no-op (a
+// notice the user deleted is not re-raised until the offers change or the process
+// restarts) while a changed set replaces the notice.
 type optimizeNotice struct {
 	// mu serializes whole evaluations (compute and apply), so two overlapping syncs
 	// cannot apply their results out of order.
-	mu  sync.Mutex
-	id  string
-	sig string
+	mu    sync.Mutex
+	latch notification.PersistentNotice
 
 	// timerMu guards the debounce timer and the started and stopped flags.
 	timerMu sync.Mutex
@@ -208,37 +199,21 @@ func (c *Handler) syncOptimizeNotice() {
 }
 
 // applyOptimizeNotice reconciles the latched notice with offers. The caller holds
-// c.optimize.mu.
+// c.optimize.mu. A failed delete keeps the latch and a failed create is not
+// latched; either way the latch re-arms a bounded retry through
+// ScheduleOptimizeNoticeSync, and any later trigger retries too.
 func (c *Handler) applyOptimizeNotice(svc noticeService, offers []optimizeOffer) {
-	n := &c.optimize
 	sig := optimizeOffersSignature(offers)
-	// id and sig are always set and cleared together, so an equal signature
-	// means the latched notice already matches (or none is due).
-	if sig == n.sig {
-		return
-	}
-	if n.id != "" {
-		// A user-deleted notice is fine: Delete treats a missing one as success.
-		// Any other failure keeps the latch and stops here, so the next trigger
-		// retries instead of raising a second notice beside the old one.
-		if err := svc.Delete(n.id); err != nil {
-			c.LogWarnIfEnabled("failed to delete model optimize notification", logger.Error(err))
-			return
-		}
-		n.id = ""
-		n.sig = ""
-	}
-	if len(offers) == 0 {
-		return
-	}
-	notif := newOptimizeNotification(offers)
-	if err := svc.CreateWithMetadata(notif); err != nil {
-		c.LogWarnIfEnabled("failed to create model optimize notification",
+	c.LogDebugIfEnabled("model optimize notice evaluated",
+		logger.Int("offer_count", len(offers)), logger.String("signature", sig))
+	c.optimize.latch.SetRetry(c.ScheduleOptimizeNoticeSync)
+	err := c.optimize.latch.Reconcile(svc, func() (string, func() *notification.Notification) {
+		return sig, func() *notification.Notification { return newOptimizeNotification(offers) }
+	})
+	if err != nil {
+		c.LogWarnIfEnabled("failed to update model optimize notification",
 			logger.Int("offer_count", len(offers)), logger.Error(err))
-		return // not latched: the next trigger retries
 	}
-	n.id = notif.ID
-	n.sig = sig
 }
 
 // newOptimizeNotification builds the bell notice for a non-empty offer set.
@@ -265,7 +240,7 @@ func newOptimizeNotification(offers []optimizeOffer) *notification.Notification 
 		title,
 		message,
 	).
-		WithComponent(optimizeNoticeComponent).
+		WithComponent(notification.ComponentClassifier).
 		WithTitleKey(notification.MsgModelOptimizeTitle, map[string]any{"count": len(offers)}).
 		WithMessageKey(notification.MsgModelOptimizeMessage, map[string]any{"models": models}).
 		WithDeliveryTarget(notification.DeliveryTargetBell)
@@ -333,7 +308,8 @@ func (c *Handler) fireOptimizeNoticeSync() {
 }
 
 // StopOptimizeNoticeSync stops any pending evaluation and ignores later
-// schedules. Controller.Shutdown calls it before Core.Cancel and Core.Wait:
+// schedules, and cancels a pending retry of a failed notice update (the latched
+// notice itself is left in place). Controller.Shutdown calls it before Core.Cancel and Core.Wait:
 // after it returns no new evaluation starts, and one already running is joined
 // by Core.Wait. That running evaluation can hold shutdown for as long as an
 // OpenVINO device probe child takes, bounded by the probe timeout.
@@ -349,4 +325,5 @@ func (c *Handler) StopOptimizeNoticeSync() {
 		n.timer.Stop()
 		n.timer = nil
 	}
+	n.latch.Stop()
 }

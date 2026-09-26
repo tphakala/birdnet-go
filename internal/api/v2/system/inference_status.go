@@ -219,6 +219,71 @@ type InferenceModelStatus struct {
 	// detections for this model (the "Last heard" table), throttled per species so
 	// a continuously singing bird does not flood it. Empty when none.
 	RecentDetections []LastDetectionInfo `json:"recentDetections"`
+	// Health is the model's current inference health: whether its analysis
+	// windows are succeeding, with per-model telemetry. Absent when no
+	// orchestrator is wired.
+	Health *ModelHealthInfo `json:"health,omitempty"`
+}
+
+// Model health states reported in ModelHealthInfo.State.
+const (
+	// modelHealthOK: the latest analysis windows succeed (or failed fewer than
+	// classifier.InferenceFailureNoticeThreshold times in a row).
+	modelHealthOK = "ok"
+	// modelHealthFailing: the model failed its last
+	// classifier.InferenceFailureNoticeThreshold or more windows in a row.
+	modelHealthFailing = "failing"
+	// modelHealthIdle: loaded, but no analysis window has run yet.
+	modelHealthIdle = "idle"
+)
+
+// ModelHealthInfo is the current inference health of one loaded model: a live
+// state rather than the lifetime Stats.ErrorRate, plus the telemetry that says
+// whether the model is doing anything at all.
+type ModelHealthInfo struct {
+	// State is "ok", "failing" or "idle".
+	State string `json:"state"`
+	// ConsecutiveFailures is the current run of failed analysis windows.
+	ConsecutiveFailures int64 `json:"consecutiveFailures"`
+	// FailureThreshold is the run length at which State becomes "failing".
+	FailureThreshold int `json:"failureThreshold"`
+	// InferenceCount is the number of analysis windows the loaded instance ran,
+	// succeeded or failed.
+	InferenceCount int64 `json:"inferenceCount"`
+	// LastInferenceAtUnix is when the last window finished (Unix seconds), 0 when
+	// none has run.
+	LastInferenceAtUnix int64 `json:"lastInferenceAtUnix,omitempty"`
+	// LastSuccessAtUnix is when the last window succeeded (Unix seconds), 0 when
+	// none has.
+	LastSuccessAtUnix int64 `json:"lastSuccessAtUnix,omitempty"`
+	// ErrorClass is the class of the latest failure ("non_finite_output",
+	// "inference_error"), empty while no failure run is in progress.
+	ErrorClass string `json:"errorClass,omitempty"`
+}
+
+// buildModelHealth maps the classifier's per-model inference health onto the
+// API payload. It is pure.
+func buildModelHealth(h *classifier.ModelInferenceHealth) *ModelHealthInfo {
+	info := &ModelHealthInfo{
+		State:               modelHealthOK,
+		ConsecutiveFailures: h.ConsecutiveFailures,
+		FailureThreshold:    classifier.InferenceFailureNoticeThreshold,
+		InferenceCount:      h.InferenceCount,
+		ErrorClass:          h.ErrorClass,
+	}
+	switch {
+	case h.Failing:
+		info.State = modelHealthFailing
+	case h.InferenceCount == 0:
+		info.State = modelHealthIdle
+	}
+	if !h.LastInferenceAt.IsZero() {
+		info.LastInferenceAtUnix = h.LastInferenceAt.Unix()
+	}
+	if !h.LastSuccessAt.IsZero() {
+		info.LastSuccessAtUnix = h.LastSuccessAt.Unix()
+	}
+	return info
 }
 
 // ModelSpecInfo carries the audio input requirements of a model.
@@ -444,8 +509,8 @@ func applyRuntimeBackend(status *InferenceModelStatus, backend, precision string
 
 // GetInferenceStatus handles GET /api/v2/system/inference. It returns a
 // read-only snapshot of the inference subsystem: hardware, backends, loaded
-// models with per-model stats and memory, source attachment, and audio pipeline
-// metrics. The snapshot is assembled from live sources on every request so it
+// models with per-model stats, memory and current inference health, source
+// attachment, and audio pipeline metrics. The snapshot is assembled from live sources on every request so it
 // reflects hot-reload changes without any caching.
 func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	settings := c.CurrentSettings()
@@ -537,7 +602,13 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	runtimes := make(map[string]modelRuntime, len(infos))
 	paused := make(map[string]bool, len(infos))
 	scheduleLabels := make(map[string]string, len(infos))
+	var healthByID map[string]*ModelHealthInfo
 	if orch != nil {
+		health := orch.InferenceHealth()
+		healthByID = make(map[string]*ModelHealthInfo, len(health))
+		for i := range health {
+			healthByID[health[i].ModelID] = buildModelHealth(&health[i])
+		}
 		for i := range infos {
 			id := infos[i].ID
 			device, backend, precision := orch.GetModelRuntimeInfo(id)
@@ -659,6 +730,7 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 		status.Paused = paused[id]
 		status.ScheduleLabel = scheduleLabels[id]
 		status.RecentDetections = recentDetections[id]
+		status.Health = healthByID[id]
 		if status.RecentDetections == nil {
 			status.RecentDetections = []LastDetectionInfo{}
 		}
