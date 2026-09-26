@@ -377,6 +377,10 @@ func WithModelManager(mm *classifier.ModelManager) Option {
 		// audio sources. The method value binds c; c.MetricsStore and c.controlChan
 		// are read lazily at call time, so option ordering is irrelevant.
 		mm.SetTopologyChangedCallback(c.OnModelTopologyChanged)
+		// A model starting or stopping failing every analysis window changes the
+		// status snapshot (per-model health, the dashboard banner) but not the
+		// topology, so it only broadcasts; it must not reconfigure sources.
+		mm.SetInferenceHealthChangedCallback(c.BroadcastInferenceTopologyChanged)
 	}
 }
 

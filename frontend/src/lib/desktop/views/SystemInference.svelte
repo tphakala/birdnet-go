@@ -34,6 +34,7 @@
   import {
     Brain,
     Binary,
+    CircleX,
     CircuitBoard,
     Container,
     Cpu,
@@ -49,6 +50,10 @@
     TriangleAlert,
   } from '@lucide/svelte';
   import { isContainerEnvironment } from '$lib/desktop/features/system/environment';
+  import {
+    ERROR_CLASS_NON_FINITE,
+    MODEL_HEALTH_FAILING,
+  } from '$lib/desktop/features/system/inference.types';
   import type {
     InferenceStatusResponse,
     InferenceModel,
@@ -434,6 +439,18 @@
   // Spec line for a model: sample rate in kHz, segment length in seconds.
   function sampleRateKhz(hz: number): string {
     return (hz / HZ_PER_KHZ).toFixed(hz % HZ_PER_KHZ === 0 ? 0 : 1);
+  }
+
+  /**
+   * The visible explanation for a failing model: why its analyses fail (from the
+   * backend error class) and what to try next.
+   */
+  function modelFailingHelp(model: InferenceModel): string {
+    const reason =
+      model.health?.errorClass === ERROR_CLASS_NON_FINITE
+        ? t('system.inference.modelFailingReasonNonFinite')
+        : t('system.inference.modelFailingReasonError');
+    return t('system.inference.modelFailingHelp', { reason });
   }
 
   // RTF is absent or meaningless when there are no invocations.
@@ -1014,6 +1031,8 @@
             {@const downCount = model.sources.filter(s => s.notRunning).length}
             {@const anySourceDown = downCount > 0}
             {@const allSourcesDown = model.sources.length > 0 && downCount === model.sources.length}
+            {@const isFailing = model.health?.state === MODEL_HEALTH_FAILING}
+            {@const failingHelp = isFailing ? modelFailingHelp(model) : ''}
             <div
               class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
             >
@@ -1058,7 +1077,24 @@
                     </span>
                   </span>
                 {/if}
-                {#if model.paused}
+                {#if isFailing}
+                  <!-- Every recent analysis window of this model failed (a broken backend or
+                       precision, e.g. non-finite scores): it is loaded but detects nothing.
+                       Takes the dominant header slot ahead of paused, since a paused model
+                       keeps the verdict of its last window. -->
+                  <span
+                    class="ml-auto flex items-center gap-1.5"
+                    role="status"
+                    data-testid="model-failing"
+                    title={failingHelp}
+                    aria-describedby={`model-failing-help-${model.id}`}
+                  >
+                    <CircleX class="w-3 h-3 shrink-0 text-red-500" aria-hidden="true" />
+                    <span class="text-xs font-medium text-red-600 dark:text-red-400"
+                      >{t('system.inference.modelFailing')}</span
+                    >
+                  </span>
+                {:else if model.paused}
                   <!-- Schedule-gated model that is currently off-schedule: explain the
                        flat latency line instead of showing a bare "idle" dash. -->
                   <span
@@ -1082,7 +1118,7 @@
                        one healthy source out of this alarm: during silence it reads "idle"
                        instead of flapping to "not analyzing" and back when a bird sings, and
                        the specific down source is still flagged by its badge below.
-                       Precedence: paused > not-analyzing > active > idle. -->
+                       Precedence: failing > paused > not-analyzing > active > idle. -->
                   <span
                     class="ml-auto flex items-center gap-1.5"
                     role="status"
@@ -1120,6 +1156,18 @@
                   </span>
                 {/if}
               </div>
+
+              {#if isFailing}
+                <!-- Visible remedy for the failing chip: a title tooltip never shows on
+                     a touch device, so the reason and the next step are spelled out. -->
+                <p
+                  id={`model-failing-help-${model.id}`}
+                  class="text-xs text-red-600 dark:text-red-400"
+                  data-testid="model-failing-help"
+                >
+                  {failingHelp}
+                </p>
+              {/if}
 
               <!-- Spec line -->
               <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
@@ -1187,6 +1235,16 @@
                     t('system.inference.errorRateHelp'),
                     Math.round(model.stats.errorRate * 100) + '%',
                     `help-error-rate-${model.id}`
+                  )}
+                {/if}
+                {#if model.health && model.health.inferenceCount > 0}
+                  {@render stat(
+                    t('system.inference.lastSuccess'),
+                    t('system.inference.lastSuccessHelp'),
+                    model.health.lastSuccessAtUnix
+                      ? formatLocalDateTime(new Date(model.health.lastSuccessAtUnix * 1000))
+                      : t('system.inference.lastSuccessNever'),
+                    `help-last-success-${model.id}`
                   )}
                 {/if}
                 {#if model.stats.loadFailures !== undefined && model.stats.loadFailures > 0}

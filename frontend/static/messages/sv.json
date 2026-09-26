@@ -510,6 +510,11 @@
           "diskFull": "Disken är full - frigör utrymme",
           "permissionDenied": "Åtkomst nekad - kontrollera fil- eller tjänstbehörigheter"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} misslyckas vid varje analys",
+        "message": "{modelName} är inläst, men de senaste {failures} analyserna i rad misslyckades på {runtime}: inferensen returnerade ett fel. Ljud spelas in, men den här modellen upptäcker ingenting. Kontrollera modellen på sidan System > AI-modeller.",
+        "nonFiniteMessage": "{modelName} är inläst, men de senaste {failures} analyserna i rad misslyckades på {runtime}: modellen returnerade ogiltiga poäng (NaN eller oändliga). Ljud spelas in, men den här modellen upptäcker ingenting. Kontrollera modellen på sidan System > AI-modeller."
       }
     },
     "loading": "Laddar aviseringar..."
@@ -773,7 +778,9 @@
       "noneAction": "Öppna modellgalleri",
       "loadFailedTitle": "Akustisk modell kunde inte läsas in",
       "loadFailedMessage": "En aktiverad modell kunde inte läsas in, så inget ljud analyseras. Sidan AI-modeller visar vilken modell som misslyckades och varför.",
-      "loadFailedAction": "Visa status för AI-modeller"
+      "loadFailedAction": "Visa status för AI-modeller",
+      "failingTitle": "{count, plural, one {En modell misslyckas vid varje analys} other {# modeller misslyckas vid varje analys}}",
+      "failingMessage": "{count, plural, one {{models} är inläst, men varje analys misslyckas, så den upptäcker ingenting.} other {{models} är inlästa, men varje analys misslyckas, så de upptäcker ingenting.}} Sidan AI-modeller visar backend och felet."
     },
     "banner": {
       "title": "Titel",
@@ -1849,7 +1856,14 @@
       "fp16Help": "16-bitars flyttal. Hårdvara som stöder det kan köra vissa modeller snabbare och med mindre minne.",
       "invocationsHelp": "Totalt antal ljudsegment som denna modell har analyserat sedan start.",
       "noModelsHint": "Ingen ljudkälla konfigurerad ännu?",
-      "noModelsHintLink": "Konfigurera ljudkällor"
+      "noModelsHintLink": "Konfigurera ljudkällor",
+      "modelFailing": "varje analys misslyckas",
+      "lastSuccess": "Senaste lyckade",
+      "lastSuccessHelp": "När den här modellen senast analyserade ljud utan fel.",
+      "lastSuccessNever": "Ingen sedan modellen lästes in",
+      "modelFailingHelp": "{reason} Prova en annan version av den här modellen under Inställningar > Analys > Modeller, eller kontrollera den backend och precision som visas ovan.",
+      "modelFailingReasonNonFinite": "Alla senaste analyser misslyckades eftersom modellen returnerade ogiltiga poäng (NaN eller oändliga), så den upptäcker ingenting.",
+      "modelFailingReasonError": "Alla senaste analyser misslyckades eftersom inferensen returnerade ett fel, så modellen upptäcker ingenting."
     },
     "metrics": {
       "cpu": "CPU",

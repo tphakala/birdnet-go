@@ -2,13 +2,14 @@
  * Acoustic model availability store.
  *
  * Mirrors the classifier verdict served by GET /api/v2/system/inference
- * (`acousticModelsState` and `defaultTargets`) as module-level rune state shared
- * by the dashboard banner and the audio source editors.
+ * (`acousticModelsState`, `defaultTargets`, and the loaded models whose every
+ * analysis fails) as module-level rune state shared by the dashboard banner and
+ * the audio source editors.
  *
  * - subscribeAcousticModels(): fetch once for the first subscriber (and again on
  *   every remount after the last one left), cached for the rest. Editors use it.
  * - watchAcousticModels(): subscribe plus one shared topology SSE while any
- *   watcher is mounted, so the banner clears the moment a model loads. Only the
+ *   watcher is mounted, so the banner clears the moment a model loads or recovers. Only the
  *   dashboard banner uses it, so a dashboard holds a single extra SSE.
  *
  * There are no timers: state refreshes on (re)mount, on SSE (re)connect and on
@@ -21,7 +22,10 @@ import { loggers } from '$lib/utils/logger';
 import { isGuestMode } from '$lib/stores/appState.svelte';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
 import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
-import type { InferenceStatusResponse } from '$lib/desktop/features/system/inference.types';
+import {
+  MODEL_HEALTH_FAILING,
+  type InferenceStatusResponse,
+} from '$lib/desktop/features/system/inference.types';
 import { isNoAcousticModelState, type AcousticModelAvailability } from '$lib/types/models';
 
 const logger = loggers.ui;
@@ -46,6 +50,8 @@ const STATE_OK = 'ok';
 let state = $state<string | null>(null);
 /** Registry IDs of the default targets, in DefaultTargets order. */
 let defaultTargets = $state<string[]>([]);
+/** Loaded models whose every analysis window fails, in snapshot order. */
+let failingModels = $state<FailingModel[]>([]);
 /** True once a fetch has succeeded; the state is then meaningful. */
 let loaded = $state(false);
 /** True when the most recent fetch failed (a stale `state` may still be shown). */
@@ -72,6 +78,35 @@ export function acousticDefaultTargets(): readonly string[] {
   return defaultTargets;
 }
 
+/** A loaded model that fails every analysis window. */
+export interface FailingModel {
+  id: string;
+  name: string;
+}
+
+/** Loaded models whose every analysis fails (health state "failing"). */
+export function acousticFailingModels(): readonly FailingModel[] {
+  return failingModels;
+}
+
+/** Picks the failing models out of a snapshot's `models` list, tolerating older servers. */
+function failingModelsOf(models: unknown): FailingModel[] {
+  if (!Array.isArray(models)) return [];
+  const out: FailingModel[] = [];
+  for (const m of models) {
+    if (typeof m !== 'object' || m === null) continue;
+    const { id, name, health } = m as { id?: unknown; name?: unknown; health?: unknown };
+    const state =
+      typeof health === 'object' && health !== null
+        ? (health as { state?: unknown }).state
+        : undefined;
+    if (state === MODEL_HEALTH_FAILING && typeof id === 'string') {
+      out.push({ id, name: typeof name === 'string' && name !== '' ? name : id });
+    }
+  }
+  return out;
+}
+
 /**
  * The editors' view of availability. Unknown until a fetch succeeds and for the
  * "" sentinel or any unrecognised verdict; none for the two no-model verdicts;
@@ -92,6 +127,7 @@ function applySnapshot(data: unknown): void {
   defaultTargets = Array.isArray(snapshot.defaultTargets)
     ? snapshot.defaultTargets.filter((target): target is string => typeof target === 'string')
     : [];
+  failingModels = failingModelsOf(snapshot.models);
 }
 
 async function fetchSnapshot(): Promise<void> {
@@ -206,6 +242,7 @@ export function resetAcousticModelsForTest(): void {
   closeTopologyStream();
   state = null;
   defaultTargets = [];
+  failingModels = [];
   loaded = false;
   error = false;
   subscribers = 0;

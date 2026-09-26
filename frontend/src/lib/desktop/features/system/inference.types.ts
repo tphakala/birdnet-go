@@ -201,7 +201,36 @@ export interface InferenceModel {
   scheduleLabel?: string;
   /** Most recent above-threshold predictions, newest first (up to 20). */
   recentDetections?: InferenceLastDetection[];
+  /** Current inference health; absent when the server has no orchestrator wired. */
+  health?: InferenceModelHealth;
 }
+
+/**
+ * Live inference health of one loaded model (backend ModelHealthInfo): a current
+ * state, unlike the lifetime `stats.errorRate`.
+ */
+export interface InferenceModelHealth {
+  /** "ok", "failing" (the last failureThreshold+ windows all failed) or "idle" (none run yet). */
+  state: 'ok' | 'failing' | 'idle';
+  /** Current run of failed analysis windows. */
+  consecutiveFailures: number;
+  /** Run length at which the state becomes "failing". */
+  failureThreshold: number;
+  /** Analysis windows run by the loaded instance, succeeded or failed. */
+  inferenceCount: number;
+  /** Unix seconds of the last finished window; absent when none has run. */
+  lastInferenceAtUnix?: number;
+  /** Unix seconds of the last successful window; absent when none has. */
+  lastSuccessAtUnix?: number;
+  /** Class of the latest failure ("non_finite_output", "inference_error"). */
+  errorClass?: string;
+}
+
+/** Model health state for a model that fails every analysis window. */
+export const MODEL_HEALTH_FAILING = 'failing';
+
+/** errorClass of a failure run caused by NaN or infinite scores (backend InferenceErrorClassNonFinite). */
+export const ERROR_CLASS_NON_FINITE = 'non_finite_output';
 
 /** Ring-buffer metric keys used to look up audio pipeline time series. */
 export interface InferenceAudioMetricKeys {

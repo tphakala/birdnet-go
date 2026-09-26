@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -992,7 +991,7 @@ func TestInferenceFailureLogsAtError(t *testing.T) {
 // again, and unloading the model drops the entry so a later instance under the
 // same ID starts fresh.
 func TestOrchestrator_PredictModel_FailureStreak(t *testing.T) {
-	// Not parallel: exercises the package-global inferenceFailureStreaks map.
+	// Not parallel: exercises the package-global inferenceHealthRecords map.
 	const modelID = "streak-model"
 	predictErr := errors.NewStd("injected predict failure")
 
@@ -1008,15 +1007,15 @@ func TestOrchestrator_PredictModel_FailureStreak(t *testing.T) {
 		},
 	}
 	o := newTestOrchestrator(t, mock)
-	dropInferenceFailureStreak(modelID)
-	t.Cleanup(func() { dropInferenceFailureStreak(modelID) })
+	dropInferenceHealth(modelID)
+	t.Cleanup(func() { dropInferenceHealth(modelID) })
 
 	streak := func() (int64, bool) {
-		v, ok := inferenceFailureStreaks.Load(modelID)
+		v, ok := inferenceHealthRecords.Load(modelID)
 		if !ok {
 			return 0, false
 		}
-		return v.(*atomic.Int64).Load(), true
+		return v.(*modelInferenceHealth).streak.Load(), true
 	}
 	sample := [][]float32{{0.1}}
 

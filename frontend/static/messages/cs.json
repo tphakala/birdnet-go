@@ -510,6 +510,11 @@
           "diskFull": "Disk je plný - uvolněte místo",
           "permissionDenied": "Přístup odepřen - zkontrolujte oprávnění souboru nebo služby"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} selhává při každé analýze",
+        "message": "{modelName} je načten, ale posledních {failures} analýz za sebou selhalo na {runtime}: inference vrátila chybu. Zvuk je zachycován, ale tento model nic nedetekuje. Zkontrolujte model na stránce Systém > Modely AI.",
+        "nonFiniteMessage": "{modelName} je načten, ale posledních {failures} analýz za sebou selhalo na {runtime}: model vrátil neplatné skóre (NaN nebo nekonečné). Zvuk je zachycován, ale tento model nic nedetekuje. Zkontrolujte model na stránce Systém > Modely AI."
       }
     },
     "loading": "Načítání oznámení…"
@@ -773,7 +778,9 @@
       "noneAction": "Otevřít galerii modelů",
       "loadFailedTitle": "Akustický model se nepodařilo načíst",
       "loadFailedMessage": "Povolený model se nepodařilo načíst, takže se neanalyzuje žádný zvuk. Stránka Modely AI ukazuje, který model selhal a proč.",
-      "loadFailedAction": "Zobrazit stav Modely AI"
+      "loadFailedAction": "Zobrazit stav Modely AI",
+      "failingTitle": "{count, plural, one {Model selhává při každé analýze} few {# modely selhávají při každé analýze} many {# modelů selhává při každé analýze} other {# modelů selhává při každé analýze}}",
+      "failingMessage": "{count, plural, one {{models} je načten, ale každá analýza selhává, takže nic nedetekuje.} few {{models} jsou načteny, ale každá analýza selhává, takže nic nedetekují.} many {{models} jsou načteny, ale každá analýza selhává, takže nic nedetekují.} other {{models} jsou načteny, ale každá analýza selhává, takže nic nedetekují.}} Stránka Modely AI ukazuje backend a chybu."
     },
     "banner": {
       "title": "Název",
@@ -1849,7 +1856,14 @@
       "fp16Help": "16bitová čísla s plovoucí desetinnou čárkou. Hardware s podporou může být rychlejší a spotřebuje méně paměti.",
       "invocationsHelp": "Celkový počet analyzovaných segmentů od spuštění.",
       "noModelsHint": "Zatím žádný zdroj zvuku?",
-      "noModelsHintLink": "Nakonfigurovat zdroje zvuku"
+      "noModelsHintLink": "Nakonfigurovat zdroje zvuku",
+      "modelFailing": "každá analýza selhává",
+      "lastSuccess": "Poslední úspěch",
+      "lastSuccessHelp": "Kdy tento model naposledy analyzoval zvuk bez chyby.",
+      "lastSuccessNever": "Od načtení modelu žádný",
+      "modelFailingHelp": "{reason} Zkuste jiné sestavení tohoto modelu v Nastavení > Analýza > Modely nebo zkontrolujte backend a přesnost uvedené výše.",
+      "modelFailingReasonNonFinite": "Všechny nedávné analýzy selhaly, protože model vrátil neplatné skóre (NaN nebo nekonečné), takže nic nedetekuje.",
+      "modelFailingReasonError": "Všechny nedávné analýzy selhaly, protože inference vrátila chybu, takže model nic nedetekuje."
     },
     "metrics": {
       "cpu": "CPU",

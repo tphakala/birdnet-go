@@ -327,7 +327,7 @@ func TestApplyOptimizeNotice_ReplacesChangedOfferSet(t *testing.T) {
 
 	require.Len(t, notices.created, 2)
 	assert.Equal(t, []string{notices.created[0].ID}, notices.deleted, "the old notice is deleted exactly once")
-	assert.Equal(t, notices.created[1].ID, h.optimize.id, "the latch holds the new notice")
+	assert.Equal(t, notices.created[1].ID, h.optimize.latch.ID(), "the latch holds the new notice")
 	assert.Equal(t, 2, notices.created[1].TitleParams["count"])
 	assert.Equal(t, "2 models have better builds for this system", notices.created[1].Title,
 		"the plural English fallback matches en.json")
@@ -351,13 +351,13 @@ func TestApplyOptimizeNotice_DeleteFailureKeepsLatch(t *testing.T) {
 	h.applyOptimizeNotice(notices, []optimizeOffer{a, b})
 	h.applyOptimizeNotice(notices, nil)
 	assert.Len(t, notices.created, 1, "no replacement is raised while the old notice cannot be deleted")
-	assert.Equal(t, first, h.optimize.id, "the latch still holds the old notice")
+	assert.Equal(t, first, h.optimize.latch.ID(), "the latch still holds the old notice")
 
 	notices.deleteErr = nil
 	h.applyOptimizeNotice(notices, []optimizeOffer{a, b})
 	assert.Equal(t, []string{first}, notices.deleted, "the retry deletes the old notice")
 	require.Len(t, notices.created, 2)
-	assert.Equal(t, notices.created[1].ID, h.optimize.id)
+	assert.Equal(t, notices.created[1].ID, h.optimize.latch.ID())
 }
 
 // TestSetNotificationService_RoutesNotice pins that the facade-injected
@@ -416,7 +416,7 @@ func TestSyncOptimizeNotice_RaisesForBuiltinOnRecommendedHost(t *testing.T) {
 	n := notices.created[0]
 	assert.Equal(t, notification.TypeInfo, n.Type)
 	assert.Equal(t, notification.DeliveryTargetBell, n.DeliveryTarget)
-	assert.Equal(t, optimizeNoticeComponent, n.Component)
+	assert.Equal(t, notification.ComponentClassifier, n.Component)
 	assert.Equal(t, notification.MsgModelOptimizeTitle, n.TitleKey)
 	assert.Equal(t, notification.MsgModelOptimizeMessage, n.MessageKey)
 	assert.Equal(t, 1, n.TitleParams["count"])
@@ -587,7 +587,7 @@ func TestSyncOptimizeNotice_ProcessWideService(t *testing.T) {
 		}
 	}
 	require.NotNil(t, found, "the optimize notice must reach the notification store")
-	assert.Equal(t, found.ID, h.optimize.id, "the stored notice is the latched one")
+	assert.Equal(t, found.ID, h.optimize.latch.ID(), "the stored notice is the latched one")
 }
 
 // TestSyncOptimizeNotice_ServiceNotInitialized pins that a sync before the
@@ -602,7 +602,7 @@ func TestSyncOptimizeNotice_ServiceNotInitialized(t *testing.T) {
 	h.notices = nil
 
 	assert.NotPanics(t, h.syncOptimizeNotice)
-	assert.Empty(t, h.optimize.id)
+	assert.Empty(t, h.optimize.latch.ID())
 	assert.Zero(t, evaluations.Load(), "no evaluation runs without a notification service")
 
 	var nilHandler *Handler

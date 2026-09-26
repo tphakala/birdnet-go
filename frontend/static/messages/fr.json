@@ -510,6 +510,11 @@
           "diskFull": "Disque plein - libérez de l'espace",
           "permissionDenied": "Permission refusée - vérifiez les permissions du fichier ou du service"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} échoue à chaque analyse",
+        "message": "{modelName} est chargé, mais ses {failures} dernières analyses consécutives ont échoué sur {runtime} : l'inférence a renvoyé une erreur. L'audio est capturé, mais ce modèle ne détecte rien. Vérifiez le modèle sur la page Système > Modèles IA.",
+        "nonFiniteMessage": "{modelName} est chargé, mais ses {failures} dernières analyses consécutives ont échoué sur {runtime} : le modèle a renvoyé des scores invalides (NaN ou infinis). L'audio est capturé, mais ce modèle ne détecte rien. Vérifiez le modèle sur la page Système > Modèles IA."
       }
     },
     "loading": "Chargement des notifications..."
@@ -773,7 +778,9 @@
       "noneAction": "Ouvrir la galerie de modèles",
       "loadFailedTitle": "Échec du chargement du modèle acoustique",
       "loadFailedMessage": "Un modèle activé n'a pas pu être chargé, le son n'est donc pas analysé. La page Modèles IA montre quel modèle a échoué et pourquoi.",
-      "loadFailedAction": "Voir l'état des Modèles IA"
+      "loadFailedAction": "Voir l'état des Modèles IA",
+      "failingTitle": "{count, plural, one {Un modèle échoue à chaque analyse} other {# modèles échouent à chaque analyse}}",
+      "failingMessage": "{count, plural, one {{models} est chargé, mais chaque analyse échoue, il ne détecte donc rien.} other {{models} sont chargés, mais chaque analyse échoue, ils ne détectent donc rien.}} La page Modèles IA indique le backend et l'erreur."
     },
     "banner": {
       "title": "Titre",
@@ -1849,7 +1856,14 @@
       "fp16Help": "Virgule flottante 16 bits. Le matériel qui le prend en charge peut exécuter certains modèles plus rapidement et avec moins de mémoire.",
       "invocationsHelp": "Total des segments audio que ce modèle a analysés depuis le démarrage.",
       "noModelsHint": "Aucune source audio configurée ?",
-      "noModelsHintLink": "Configurer les sources audio"
+      "noModelsHintLink": "Configurer les sources audio",
+      "modelFailing": "chaque analyse échoue",
+      "lastSuccess": "Dernier succès",
+      "lastSuccessHelp": "Quand ce modèle a analysé de l'audio sans erreur pour la dernière fois.",
+      "lastSuccessNever": "Aucun depuis le chargement du modèle",
+      "modelFailingHelp": "{reason} Essayez une autre version de ce modèle dans Paramètres > Analyse > Modèles, ou vérifiez le backend et la précision affichés ci-dessus.",
+      "modelFailingReasonNonFinite": "Toutes les analyses récentes ont échoué car le modèle a renvoyé des scores invalides (NaN ou infinis), il ne détecte donc rien.",
+      "modelFailingReasonError": "Toutes les analyses récentes ont échoué car l'inférence a renvoyé une erreur, le modèle ne détecte donc rien."
     },
     "metrics": {
       "cpu": "CPU",

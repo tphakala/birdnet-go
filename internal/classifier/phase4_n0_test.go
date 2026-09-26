@@ -211,10 +211,10 @@ func TestSyncAcousticModelsNotice(t *testing.T) {
 	o.syncAcousticModelsNotice()
 	notes := list()
 	require.Len(t, notes, 1, "N = 0 raises exactly one bell notification")
-	assert.Equal(t, "classifier", notes[0].Component)
+	assert.Equal(t, notification.ComponentClassifier, notes[0].Component)
 	assert.Equal(t, string(AcousticModelsNoneInstalled), notes[0].Metadata["acoustic_models_state"])
 	assert.Contains(t, notes[0].Message, "Enable a model")
-	require.NotEmpty(t, o.acousticNotice.id, "the notification id is latched")
+	require.NotEmpty(t, o.acousticNotice.ID(), "the notification id is latched")
 
 	o.syncAcousticModelsNotice()
 	assert.Len(t, list(), 1, "a second sync must not double-raise")
@@ -223,7 +223,7 @@ func TestSyncAcousticModelsNotice(t *testing.T) {
 	o.models[RegistryIDBirdNETV24] = &modelEntry{instance: &mockModelInstance{id: RegistryIDBirdNETV24}}
 	o.syncAcousticModelsNotice()
 	assert.Empty(t, list(), "the notice is deleted once a model is loaded")
-	assert.Empty(t, o.acousticNotice.id, "the latch is cleared")
+	assert.Empty(t, o.acousticNotice.ID(), "the latch is cleared")
 }
 
 // TestSyncAcousticModelsNotice_LoadFailedMessage pins that the load_failed state gets a
@@ -252,6 +252,24 @@ func TestSyncAcousticModelsNotice_LoadFailedMessage(t *testing.T) {
 	assert.NotContains(t, notes[0].Message, "install one", "load_failed must not tell the user to install a model they already have")
 }
 
+// TestSyncAcousticModelsNotice_NoRaiseAfterDelete pins that a torn-down
+// orchestrator raises no "no acoustic model" notice, even when a sync (for
+// example a retry of a failed create) runs after Delete.
+func TestSyncAcousticModelsNotice_NoRaiseAfterDelete(t *testing.T) {
+	// Not parallel: uses the process-global notification service.
+	svc := setupTestNotification(t)
+	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+	o.syncAcousticModelsNotice()
+	o.Delete()
+
+	o.syncAcousticModelsNotice()
+	notes, err := svc.List(nil)
+	require.NoError(t, err)
+	for _, n := range notes {
+		assert.NotEqual(t, notification.MsgAcousticModelsNoneTitle, n.TitleKey, "no no-model notice after Delete")
+	}
+}
+
 // TestSyncAcousticModelsNotice_NilServiceNoPanic pins that a sync with no notification
 // service (not yet initialized, or a bare test) is a safe no-op that latches nothing.
 func TestSyncAcousticModelsNotice_NilServiceNoPanic(t *testing.T) {
@@ -260,7 +278,7 @@ func TestSyncAcousticModelsNotice_NilServiceNoPanic(t *testing.T) {
 
 	o := newTestOrchestrator(t)
 	assert.NotPanics(t, func() { o.syncAcousticModelsNotice() })
-	assert.Empty(t, o.acousticNotice.id)
+	assert.Empty(t, o.acousticNotice.ID())
 }
 
 // TestSyncAcousticModelsNotice_TransitionRecreatesNotice pins the sentry-flagged transition:

@@ -7,6 +7,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	ov "github.com/tphakala/birdnet-go/internal/inference/openvino"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 var (
@@ -123,7 +124,31 @@ func EnsureOpenVINOProbe() {
 	if !initialized {
 		return
 	}
-	_, _ = OpenVINOProbeDevices(path)
+	if _, err := OpenVINOProbeDevices(path); err != nil {
+		logOVProbeFailure(path, err)
+	}
+}
+
+// ovProbeFailureWarned records the library paths whose probe failure has been
+// logged at WARN (value: struct{}), so a failing probe is diagnosable from the
+// log without a WARN line per call (a cached probe failure is returned to every
+// caller, and a timed-out probe is retried by later callers).
+//
+//nolint:gochecknoglobals // process-wide once-per-path log guard
+var ovProbeFailureWarned sync.Map
+
+// logOVProbeFailure logs a failed device probe for libraryPath: WARN the first
+// time for that path, DEBUG after. The error names the cause (a crashed child
+// with its stderr excerpt, a timeout, or a missing completion marker).
+func logOVProbeFailure(libraryPath string, err error) {
+	log := logger.Global().Module("inference")
+	if _, seen := ovProbeFailureWarned.LoadOrStore(libraryPath, struct{}{}); seen {
+		log.Debug("OpenVINO device probe failed again",
+			logger.String("library_path", libraryPath), logger.Error(err))
+		return
+	}
+	log.Warn("OpenVINO device probe failed; treating the GPU as unavailable",
+		logger.String("library_path", libraryPath), logger.Error(err))
 }
 
 func (c *openvinoClassifier) Predict(samples []float32) ([]float32, error) {

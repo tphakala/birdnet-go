@@ -430,6 +430,9 @@ export type TranslationKey =
   | 'notifications.content.alert.error.connectionInterrupted'
   | 'notifications.content.alert.error.diskFull'
   | 'notifications.content.alert.error.permissionDenied'
+  | 'notifications.content.inferenceFailing.title' // params: modelName
+  | 'notifications.content.inferenceFailing.message' // params: modelName, failures, runtime
+  | 'notifications.content.inferenceFailing.nonFiniteMessage' // params: modelName, failures, runtime
   | 'notifications.loading'
   | 'search.title'
   | 'search.results'
@@ -617,6 +620,8 @@ export type TranslationKey =
   | 'dashboard.acousticModels.loadFailedTitle'
   | 'dashboard.acousticModels.loadFailedMessage'
   | 'dashboard.acousticModels.loadFailedAction'
+  | 'dashboard.acousticModels.failingTitle' // params: count
+  | 'dashboard.acousticModels.failingMessage' // params: count, models
   | 'dashboard.banner.title'
   | 'dashboard.banner.titlePlaceholder'
   | 'dashboard.banner.description'
@@ -1439,6 +1444,13 @@ export type TranslationKey =
   | 'system.inference.invocationsHelp'
   | 'system.inference.noModelsHint'
   | 'system.inference.noModelsHintLink'
+  | 'system.inference.modelFailing'
+  | 'system.inference.lastSuccess'
+  | 'system.inference.lastSuccessHelp'
+  | 'system.inference.lastSuccessNever'
+  | 'system.inference.modelFailingHelp' // params: reason
+  | 'system.inference.modelFailingReasonNonFinite'
+  | 'system.inference.modelFailingReasonError'
   | 'system.metrics.cpu'
   | 'system.metrics.memory'
   | 'system.metrics.temperature'
@@ -4311,6 +4323,17 @@ export type TranslationParams = {
   };
   'notifications.content.alert.errorOccurred': { error: string | number };
   'notifications.content.alert.disconnected': { source_name: string | number };
+  'notifications.content.inferenceFailing.title': { modelName: string | number };
+  'notifications.content.inferenceFailing.message': {
+    modelName: string | number;
+    failures: string | number;
+    runtime: string | number;
+  };
+  'notifications.content.inferenceFailing.nonFiniteMessage': {
+    modelName: string | number;
+    failures: string | number;
+    runtime: string | number;
+  };
   'search.resultsCountOther': { count: string | number };
   'search.review.reviewDetection': { species: string | number };
   'search.detailsPanel.expandDetails': { species: string | number };
@@ -4361,6 +4384,8 @@ export type TranslationParams = {
   'dashboard.errors.dailySummaryFetch': { status: string | number };
   'dashboard.errors.recentDetectionsFetch': { status: string | number };
   'dashboard.errors.configFetch': { status: string | number };
+  'dashboard.acousticModels.failingTitle': { count: string | number };
+  'dashboard.acousticModels.failingMessage': { count: string | number; models: string | number };
   'dashboard.editMode.configureTitle': { element: string | number };
   'detections.titles.hourly': { hour: string | number; date: string | number };
   'detections.titles.hourlyRange': {
@@ -4458,6 +4483,7 @@ export type TranslationParams = {
   'system.database.migration.prerequisites.warningCount': { count: string | number };
   'system.inference.sourcesDegraded': { count: string | number; total: string | number };
   'system.inference.coDetectedHelp': { seconds: string | number };
+  'system.inference.modelFailingHelp': { reason: string | number };
   'analytics.hub.card.notEnoughDataHint': { min: string | number };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };
