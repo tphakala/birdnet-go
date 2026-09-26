@@ -88,6 +88,7 @@ func tlsHandshakeError(verifyErr error) error {
 
 func TestClassifyError(t *testing.T) {
 	const host, port = "cam.local", 554
+	const tlsVerifyMsg = "The stream's TLS certificate could not be verified."
 
 	t.Run("nil error yields nil context", func(t *testing.T) {
 		assert.Nil(t, classifyError(nil, host, port))
@@ -98,6 +99,7 @@ func TestClassifyError(t *testing.T) {
 		err      error
 		wantType string
 		wantHTTP int
+		wantMsg  string
 	}{
 		{name: "no audio track", err: fmt.Errorf("setup: %w", ErrNoAudioTrack), wantType: errTypeNoAudioStream},
 		{name: "unsupported codec", err: fmt.Errorf("decode: %w", ErrUnsupportedCodec), wantType: errTypeUnsupportedCodec},
@@ -107,12 +109,16 @@ func TestClassifyError(t *testing.T) {
 		{name: "rtsp 404 response", err: fmt.Errorf("describe: %w", &rtsp.ResponseError{Code: 404, Reason: "Not Found"}), wantType: "rtsp_404", wantHTTP: 404},
 		{name: "redirect", err: fmt.Errorf("describe: %w", &audiostream.RedirectError{Location: "rtsp://other.host/s"}), wantType: errTypeRedirect},
 		{name: "request timeout", err: fmt.Errorf("dial: %w", rtsp.ErrRequestTimeout), wantType: errTypeConnectionTimeout},
-		{name: "tls unknown authority", err: fmt.Errorf("tls: %w", x509.UnknownAuthorityError{}), wantType: errTypeTLSVerifyFailed},
-		{name: "tls expired certificate", err: tlsHandshakeError(x509.CertificateInvalidError{Reason: x509.Expired}), wantType: errTypeTLSVerifyFailed},
-		{name: "tls hostname mismatch", err: tlsHandshakeError(x509.HostnameError{Host: host}), wantType: errTypeTLSVerifyFailed},
-		{name: "tls unknown authority from handshake", err: tlsHandshakeError(x509.UnknownAuthorityError{}), wantType: errTypeTLSVerifyFailed},
-		{name: "bare x509 invalid certificate", err: fmt.Errorf("verify: %w", x509.CertificateInvalidError{Reason: x509.Expired}), wantType: errTypeTLSVerifyFailed},
-		{name: "bare x509 hostname mismatch", err: fmt.Errorf("verify: %w", x509.HostnameError{Host: host}), wantType: errTypeTLSVerifyFailed},
+		{name: "bare x509 unknown authority", err: fmt.Errorf("tls: %w", x509.UnknownAuthorityError{}), wantType: errTypeTLSVerifyFailed, wantMsg: tlsVerifyMsg},
+		{name: "tls expired certificate", err: tlsHandshakeError(x509.CertificateInvalidError{Reason: x509.Expired}), wantType: errTypeTLSVerifyFailed, wantMsg: tlsVerifyMsg},
+		{name: "tls hostname mismatch", err: tlsHandshakeError(x509.HostnameError{Host: host}), wantType: errTypeTLSVerifyFailed, wantMsg: tlsVerifyMsg},
+		{name: "tls unknown authority from handshake", err: tlsHandshakeError(x509.UnknownAuthorityError{}), wantType: errTypeTLSVerifyFailed, wantMsg: tlsVerifyMsg},
+		{name: "tls verify error without x509 detail type", err: tlsHandshakeError(x509.SystemRootsError{}), wantType: errTypeTLSVerifyFailed, wantMsg: tlsVerifyMsg},
+		{name: "bare x509 invalid certificate", err: fmt.Errorf("verify: %w", x509.CertificateInvalidError{Reason: x509.Expired}), wantType: errTypeTLSVerifyFailed, wantMsg: tlsVerifyMsg},
+		{name: "bare x509 hostname mismatch", err: fmt.Errorf("verify: %w", x509.HostnameError{Host: host}), wantType: errTypeTLSVerifyFailed, wantMsg: tlsVerifyMsg},
+		// rtsps pointed at a plain RTSP port: a TLS handshake failure that is not
+		// a certificate verification failure stays a closed connection.
+		{name: "tls record header error is not a verify failure", err: fmt.Errorf("%w: %w", rtsp.ErrConnectionClosed, tls.RecordHeaderError{Msg: "first record does not look like a TLS handshake"}), wantType: errTypeConnectionReset},
 		{name: "invalid url", err: fmt.Errorf("dial: %w", rtsp.ErrInvalidURL), wantType: errTypeInvalidURL},
 		{name: "connection closed maps to reset", err: fmt.Errorf("wait: %w", rtsp.ErrConnectionClosed), wantType: errTypeConnectionReset},
 		{name: "server teardown maps to reset", err: fmt.Errorf("wait: %w", rtsp.ErrServerTeardown), wantType: errTypeConnectionReset},
@@ -129,6 +135,9 @@ func TestClassifyError(t *testing.T) {
 			assert.False(t, ctx.Timestamp.IsZero())
 			if tt.wantHTTP != 0 {
 				assert.Equal(t, tt.wantHTTP, ctx.HTTPStatus)
+			}
+			if tt.wantMsg != "" {
+				assert.Equal(t, tt.wantMsg, ctx.UserFacingMsg)
 			}
 		})
 	}
