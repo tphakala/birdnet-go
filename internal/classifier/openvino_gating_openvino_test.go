@@ -80,7 +80,8 @@ func TestOpenVINOPlan_ExplicitCPU(t *testing.T) {
 
 // TestOpenVINOPlan_Bat_ForcesF32 verifies the bat embedding model's plan carries f32
 // precision on whatever device the gate selects (explicit CPU here), unlike BirdNET
-// v2.4 which is f32 only on the GPU. The explicit-CPU path never enumerates devices,
+// v2.4 which is f32 only on the GPU (or for INT8 weights on an explicit openvino
+// backend). The explicit-CPU path never enumerates devices,
 // so no libopenvino_c is required. On a host where CPU is not allowed (ARM A72) the
 // plan is declined, which the else branch covers. This pins the bat-specific
 // "f32 everywhere" deviation at the plan level, where compilation actually reads it.

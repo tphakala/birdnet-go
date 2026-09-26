@@ -30,7 +30,7 @@ const (
 	ovReasonNoDevice       = "no supported OpenVINO device (needs an ARMv8.2+/A76 CPU with native f16, or an Intel OpenVINO GPU)"
 	ovReasonNotBirdNETv24  = "model is not the stock BirdNET v2.4 classifier"
 	ovReasonNotPerchNoDFT  = "model is not the Perch no_dft variant"
-	ovReasonINT8Model      = "INT8 model runs on ONNX Runtime (set backend to openvino to force OpenVINO at f32)"
+	ovReasonINT8Model      = "INT8 weights overflow at f16 on the ARM CPU and are unvalidated on the OpenVINO GPU (set birdnet.backend to openvino to force OpenVINO at f32)"
 )
 
 // openVINOPlan describes how a model should run on the OpenVINO backend.
@@ -177,7 +177,9 @@ func openVINODeviceForBackend(backendToken string) (device string, ok bool) {
 // backend that will not actually run that variant at f16. backendToken is a
 // hwprofile capability token (hwprofile.CapOpenVINOCPU and friends). Keeping the
 // policy here means the recommender never has to name a model ID, so any future
-// change to the per-model precision policy propagates automatically.
+// change to the per-model precision policy propagates automatically. The rules
+// that depend on the model file's weights rather than its registry ID
+// (applyOpenVINOQuantizationPolicy) are not reflected here.
 func BackendForcesFP32(registryID, backendToken string) bool {
 	device, ok := openVINODeviceForBackend(backendToken)
 	if !ok {
@@ -276,7 +278,9 @@ func isLibraryAbsent(err error) bool {
 // so only the BirdNET v2.4 identity is valid here; Perch (softmax) runs its own
 // OpenVINO path in the Perch ModelInstance (perch_onnx.go), never through this
 // primary path. The plan carries the device (CPU/GPU), logits output index, and
-// the precision hint (f32 on the GPU for BirdNET v2.4; see openVINOPrecisionFor).
+// the precision hint (f32 on the GPU for BirdNET v2.4, see openVINOPrecisionFor;
+// INT8 weights are declined on auto and run at f32 on an explicit openvino
+// backend, see applyOpenVINOQuantizationPolicy).
 func (bn *BirdNET) openVINOPlan() (plan openVINOPlan, ok bool, reason string) {
 	if bn.ModelInfo.ID != DefaultModelVersion {
 		return openVINOPlan{}, false, ovReasonNotBirdNETv24
@@ -287,8 +291,12 @@ func (bn *BirdNET) openVINOPlan() (plan openVINOPlan, ok bool, reason string) {
 // birdnetV24OpenVINOPlan returns the OpenVINO plan for a BirdNET v2.4 model file
 // whose weights have the given quantization. It is shared by model init
 // ((*BirdNET).openVINOPlan) and the installed-variant load gate
-// (Orchestrator.primaryVariantUsable) so the two can never disagree about which
-// backend a file will run on.
+// (Orchestrator.primaryVariantUsable) so both apply the same policy. The stock
+// arm64 INT8 default is tagged INT8 explicitly (stockBirdNETV24ONNXVariant), but
+// for a user-supplied or gallery file both sides derive the quantization from the
+// file name (customBirdNETV24ModelInfo at init, detectQuantization in the gate),
+// so such an INT8 file whose name carries no int8 token is not recognized and
+// keeps the f16 default.
 func birdnetV24OpenVINOPlan(cfg *conf.BirdNETConfig, quant Quantization) (plan openVINOPlan, ok bool, reason string) {
 	plan, ok, reason = birdnetV24BasePlan(cfg)
 	return applyOpenVINOQuantizationPolicy(plan, ok, reason, cfg.Backend, quant)
@@ -322,6 +330,12 @@ var birdnetV24BasePlan = func(cfg *conf.BirdNETConfig) (plan openVINOPlan, ok bo
 // is also faster than OpenVINO f32 (143 vs ~165 ms and 77 vs 87 ms per window).
 // So on the auto backend an INT8 model is declined here and runs on ORT. An
 // explicit backend=openvino is honored, forced to f32 so it stays correct.
+//
+// The decline also covers the GPU, where the BirdNET v2.4 plan is already f32:
+// INT8 weights on the OpenVINO GPU plugin have not been validated, while ORT is
+// known to be correct, so auto stays on the verified backend. On a host with
+// OpenVINO but no ONNX Runtime an INT8 model therefore fails to load on auto;
+// setting birdnet.backend to openvino runs it on OpenVINO at f32 instead.
 func applyOpenVINOQuantizationPolicy(plan openVINOPlan, ok bool, reason, backendPref string, quant Quantization) (outPlan openVINOPlan, outOK bool, outReason string) {
 	if !ok || quant != QuantizationINT8 {
 		return plan, ok, reason
@@ -336,10 +350,11 @@ func applyOpenVINOQuantizationPolicy(plan openVINOPlan, ok bool, reason, backend
 // shouldTryOpenVINO reports whether the OpenVINO backend is eligible for the
 // primary classifier: the boolean form of openVINOPlan, dropping the plan and the
 // decline reason. True only when built with the openvino tag, the model is the
-// BirdNET v2.4 identity, config does not opt out, and a supported device is
+// BirdNET v2.4 identity, config does not opt out, a supported device is
 // available (ARM A76 f16 CPU, or the Intel iGPU at f32; see openVINOPrecisionFor
-// for why BirdNET v2.4 uses f32 on the GPU). initializeModel calls openVINOPlan
-// directly so it can also log the decline reason; this predicate keeps the
+// for why BirdNET v2.4 uses f32 on the GPU), and the model is not INT8 on the
+// auto backend (see applyOpenVINOQuantizationPolicy). initializeModel calls
+// openVINOPlan directly so it can also log the decline reason; this predicate keeps the
 // eligibility gate independently assertable in tests.
 func (bn *BirdNET) shouldTryOpenVINO() bool {
 	_, ok, _ := bn.openVINOPlan()
@@ -360,7 +375,8 @@ func openVINOPrecisionLabel(precision string) string {
 // shared Quantization vocabulary ("FP16"/"FP32"). An empty hint means the backend
 // default, which is f16 (see openVINOPrecisionFor), so it maps to FP16; the
 // explicit override OVPrecisionF32 (BirdNET v2.4 and Perch v2 on the GPU, the bat
-// embedding model and BirdNET v3.0 on every device) maps to FP32.
+// embedding model and BirdNET v3.0 on every device, and INT8 BirdNET v2.4 on an
+// explicit openvino backend) maps to FP32.
 func openVINOEffectivePrecision(precisionHint string) string {
 	if precisionHint == inference.OVPrecisionF32 {
 		return string(QuantizationFP32)
@@ -443,9 +459,9 @@ func (bn *BirdNET) initializeOpenVINOModel() error {
 	bn.classifier = classifier
 	// Publish the concrete OpenVINO device (CPU/GPU) the classifier bound to plus
 	// the live backend and effective runtime precision, so the status card reports
-	// "OpenVINO" + the real compute precision (FP16 by default, FP32 only for the
-	// BirdNET v2.4 GPU path) and the real device rather than the static ONNX file
-	// metadata.
+	// "OpenVINO" + the real compute precision (FP16 by default, FP32 for the
+	// BirdNET v2.4 GPU path and for INT8 weights on an explicit openvino backend)
+	// and the real device rather than the static ONNX file metadata.
 	bn.setRuntimeInfo(plan.device, BackendOpenVINO, openVINOEffectivePrecision(plan.precision))
 	log.Info("OpenVINO model initialized",
 		logger.String("model", modelPath),

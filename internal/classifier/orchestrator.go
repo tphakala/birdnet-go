@@ -168,9 +168,10 @@ type Orchestrator struct {
 	// where inference.CheckORTAvailability and inference.InitOpenVINO are used.
 	// Tests set them so every side of the primary recovery's backend gate is
 	// reachable regardless of what the host happens to have installed; without an
-	// OpenVINO seam the gate's OpenVINO leg is untestable in the default build
-	// (openvinoBackendAvailable is a compile-time false there) AND its ORT-only
-	// test silently inverts on a machine that does have OpenVINO.
+	// OpenVINO seam the gate's ORT-only test silently inverts on a machine that
+	// does have OpenVINO. Reaching the OpenVINO leg in the default build, where
+	// openvinoBackendAvailable is a compile-time false and the plan declines
+	// before ovLoadable is consulted, also needs the birdnetV24BasePlan seam.
 	ortAvailable func(configuredPath string) bool
 	ovLoadable   func(libraryPath string) bool
 	modelsDir    string // base directory for gallery-installed models

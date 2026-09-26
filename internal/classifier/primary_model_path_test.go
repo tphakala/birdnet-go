@@ -161,7 +161,9 @@ func TestResolvePrimaryModelPath(t *testing.T) {
 		installed := writePrimaryGalleryModel(t, modelsDir)
 
 		// An openvino-tagged build on an A76/Pi5 or an Intel iGPU runs these
-		// variants with no ONNX Runtime installed at all. Gating on ORT alone
+		// variants with no ONNX Runtime installed at all (the fixture is the FP32
+		// build; INT8 builds on auto are covered by
+		// TestPrimaryVariantUsable_QuantizationPolicyWired). Gating on ORT alone
 		// refused a variant that would have loaded, dropping such a host to the
 		// embedded model while telling the user no installed model was available.
 		//
