@@ -1,6 +1,7 @@
 package api
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -39,6 +40,17 @@ func TestOptimizeNoticeInputsChanged(t *testing.T) {
 		{"identical", regionTestSettings(60.17, 24.94, true), regionTestSettings(60.17, 24.94, true), false},
 		{"coordinates changed", regionTestSettings(60.17, 24.94, true), regionTestSettings(4.61, -74.08, true), true},
 		{"location configured first time", regionTestSettings(0, 0, false), regionTestSettings(0, 0, true), true},
+		{"location unconfigured", regionTestSettings(60.17, 24.94, true), regionTestSettings(60.17, 24.94, false), true},
+		{
+			"unrelated field changed",
+			regionTestSettings(60.17, 24.94, true),
+			func() *conf.Settings {
+				s := regionTestSettings(60.17, 24.94, true)
+				s.BirdNET.Sensitivity = 1.5
+				return s
+			}(),
+			false,
+		},
 		{
 			"model region changed, same location",
 			withRegion(regionTestSettings(60.17, 24.94, true), "auto"),
@@ -78,9 +90,35 @@ func newOptimizeWiringController(t *testing.T, initializeRoutes bool) *Controlle
 	return c
 }
 
+// recordingScheduler counts the facade's optimize notice calls.
+type recordingScheduler struct {
+	mu        sync.Mutex
+	schedules int
+	stops     int
+}
+
+func (r *recordingScheduler) ScheduleOptimizeNoticeSync() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.schedules++
+}
+
+func (r *recordingScheduler) StopOptimizeNoticeSync() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.stops++
+}
+
+func (r *recordingScheduler) counts() (schedules, stops int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.schedules, r.stops
+}
+
 // TestOptimizeNoticeWiring verifies the facade publishes the models handler for
 // the optimize notice only on a routed controller with a ModelManager, and that
-// the topology, settings and shutdown hooks drive it without leaking goroutines.
+// the topology hook, the settings hook and Shutdown drive it: a recorder swapped
+// into the slot counts each call.
 func TestOptimizeNoticeWiring(t *testing.T) {
 	testutil.VerifyNoLeaks(t,
 		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
@@ -94,11 +132,38 @@ func TestOptimizeNoticeWiring(t *testing.T) {
 	if routed.goroutinesStarted != nil {
 		<-routed.goroutinesStarted
 	}
-	require.Same(t, routed.models, routed.optimizeNotices.Load(),
-		"a routed controller with a ModelManager publishes the models handler")
+	hook := routed.optimizeNotices.Load()
+	require.NotNil(t, hook, "a routed controller with a ModelManager publishes the models handler")
+	require.Same(t, routed.models, hook.scheduler)
+	// The real handler was started and armed its startup evaluation; stop it so
+	// only the recorder sees the calls below.
+	routed.models.StopOptimizeNoticeSync()
 
-	// Topology and settings hooks schedule a re-evaluation; Shutdown cancels it.
+	rec := &recordingScheduler{}
+	routed.optimizeNotices.Store(&optimizeNoticeHook{scheduler: rec})
+
 	routed.OnModelTopologyChanged()
-	routed.scheduleOptimizeNoticeSync()
+	schedules, _ := rec.counts()
+	assert.Equal(t, 1, schedules, "a topology change schedules a re-evaluation")
+
+	base := routed.CurrentSettings()
+	moved := *base
+	moved.BirdNET.Latitude = base.BirdNET.Latitude + 1
+	require.NoError(t, routed.handleSettingsChanges(base, &moved))
+	schedules, _ = rec.counts()
+	assert.Equal(t, 2, schedules, "a location change schedules a re-evaluation")
+
+	repinned := *base
+	repinned.BirdNET.ModelRegion = base.BirdNET.ModelRegion + "-changed"
+	require.NoError(t, routed.handleSettingsChanges(base, &repinned))
+	schedules, _ = rec.counts()
+	assert.Equal(t, 3, schedules, "a ModelRegion change schedules a re-evaluation")
+
+	require.NoError(t, routed.handleSettingsChanges(base, base))
+	schedules, _ = rec.counts()
+	assert.Equal(t, 3, schedules, "a save that changes no optimize input schedules nothing")
+
 	routed.Shutdown()
+	_, stops := rec.counts()
+	assert.Equal(t, 1, stops, "Shutdown stops the optimize notice scheduler")
 }

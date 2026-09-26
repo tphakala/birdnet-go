@@ -2780,13 +2780,27 @@ func optimizeNoticeInputsChanged(oldSettings, currentSettings *conf.Settings) bo
 		oldSettings.BirdNET.ModelPath != currentSettings.BirdNET.ModelPath
 }
 
+// optimizeNoticeScheduler is the part of the models handler the facade drives
+// to keep the model optimize bell notice in sync. It is an interface so the
+// wiring tests can observe the facade's calls.
+type optimizeNoticeScheduler interface {
+	ScheduleOptimizeNoticeSync()
+	StopOptimizeNoticeSync()
+}
+
+// optimizeNoticeHook boxes the scheduler for Controller.optimizeNotices, since
+// an atomic.Pointer needs a concrete type.
+type optimizeNoticeHook struct {
+	scheduler optimizeNoticeScheduler
+}
+
 // scheduleOptimizeNoticeSync asks the models handler to re-evaluate the model
 // optimize bell notice. It is a no-op until NewWithOptions publishes the
 // handler, which it does only when a ModelManager is wired and routes are
 // initialized.
 func (c *Controller) scheduleOptimizeNoticeSync() {
 	if h := c.optimizeNotices.Load(); h != nil {
-		h.ScheduleOptimizeNoticeSync()
+		h.scheduler.ScheduleOptimizeNoticeSync()
 	}
 }
 

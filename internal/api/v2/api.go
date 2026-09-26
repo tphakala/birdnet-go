@@ -179,12 +179,13 @@ type Controller struct {
 	topologyReconfigureTimer    *time.Timer
 	topologyReconfigureShutdown bool
 
-	// optimizeNotices is the models handler that keeps the model optimize bell
-	// notice in sync, published once the handler is constructed. It is atomic
-	// because the model topology callback is wired by the WithModelManager option,
-	// before New constructs c.models, and can fire from the analyzer's goroutines
-	// while New is still running; reading the plain c.models field there would race.
-	optimizeNotices atomic.Pointer[models.Handler]
+	// optimizeNotices holds the scheduler that keeps the model optimize bell
+	// notice in sync (the models handler), published once the handler is
+	// constructed and started. It is atomic because the model topology callback
+	// is wired by the WithModelManager option, before New constructs c.models,
+	// and can fire from the analyzer's goroutines while New is still running;
+	// reading the plain c.models field there would race.
+	optimizeNotices atomic.Pointer[optimizeNoticeHook]
 
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
@@ -611,7 +612,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// the location, ModelRegion or primary model path. Skipped when routes are
 	// not initialized (tests), like every other background activity here.
 	if c.ModelManager != nil && initializeRoutes {
-		c.optimizeNotices.Store(c.models)
+		c.optimizeNotices.Store(&optimizeNoticeHook{scheduler: c.models})
 		c.models.StartOptimizeNoticeSync()
 	}
 
@@ -872,7 +873,7 @@ func (c *Controller) Shutdown() {
 
 	// Stop the pending model optimize notice evaluation, and ignore later ones.
 	if h := c.optimizeNotices.Load(); h != nil {
-		h.StopOptimizeNoticeSync()
+		h.scheduler.StopOptimizeNoticeSync()
 	}
 
 	// Cancel context to stop all goroutines, then wait for them to finish.

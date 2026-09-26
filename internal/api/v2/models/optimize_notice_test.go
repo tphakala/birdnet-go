@@ -303,6 +303,46 @@ func TestOptimizeOffersSignature_OrderIndependent(t *testing.T) {
 	assert.Equal(t, optimizeOffersSignature([]optimizeOffer{a, b}), optimizeOffersSignature([]optimizeOffer{b, a}))
 	assert.NotEqual(t, optimizeOffersSignature([]optimizeOffer{a}), optimizeOffersSignature([]optimizeOffer{a, b}))
 	assert.Empty(t, optimizeOffersSignature(nil))
+	// The same model recommended onto a different build is a different offer, so
+	// a notice the user deleted is raised again when the recommendation moves.
+	assert.NotEqual(t,
+		optimizeOffersSignature([]optimizeOffer{{CatalogID: "a", ToVariantID: "fast"}}),
+		optimizeOffersSignature([]optimizeOffer{{CatalogID: "a", ToVariantID: "fast-int8"}}))
+}
+
+// TestApplyOptimizeNotice_ReplacesChangedOfferSet pins the replace path: when
+// one non-empty offer set changes to another, the old notice is deleted and a
+// single new one raised, so the bell never shows two optimize notices.
+func TestApplyOptimizeNotice_ReplacesChangedOfferSet(t *testing.T) {
+	h := New(apitest.NewCore(t, apitest.WithoutSettingsPublish()), nil)
+	notices := &fakeNotices{}
+	a := optimizeOffer{CatalogID: "a", ModelName: "Model A", ToVariantID: "fast"}
+	b := optimizeOffer{CatalogID: "b", ModelName: "Model B", ToVariantID: "fast"}
+
+	h.applyOptimizeNotice(notices, []optimizeOffer{a})
+	h.applyOptimizeNotice(notices, []optimizeOffer{a, b})
+
+	require.Len(t, notices.created, 2)
+	assert.Equal(t, []string{notices.created[0].ID}, notices.deleted, "the old notice is deleted exactly once")
+	assert.Equal(t, notices.created[1].ID, h.optimize.id, "the latch holds the new notice")
+	assert.Equal(t, 2, notices.created[1].TitleParams["count"])
+}
+
+// TestSyncOptimizeNotice_Concurrent runs overlapping evaluations under -race:
+// optimize.mu serializes them, so the latch ends consistent with one notice.
+func TestSyncOptimizeNotice_Concurrent(t *testing.T) {
+	profile := aarch64LowRAMONNXProfile()
+	h, notices := newOptimizeTestHandler(t, &profile)
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(h.syncOptimizeNotice)
+	}
+	wg.Wait()
+
+	created, deleted := notices.counts()
+	assert.Equal(t, 1, created, "concurrent evaluations of one offer set raise one notice")
+	assert.Zero(t, deleted)
 }
 
 // TestSyncOptimizeNotice_RaisesForBuiltinOnRecommendedHost is the #4423 scenario:
@@ -322,7 +362,9 @@ func TestSyncOptimizeNotice_RaisesForBuiltinOnRecommendedHost(t *testing.T) {
 	assert.Equal(t, notification.MsgModelOptimizeTitle, n.TitleKey)
 	assert.Equal(t, notification.MsgModelOptimizeMessage, n.MessageKey)
 	assert.Equal(t, 1, n.TitleParams["count"])
-	assert.Contains(t, n.MessageParams["models"], "BirdNET")
+	v24, ok := classifier.GetCatalogEntry("birdnet-v2.4")
+	require.True(t, ok)
+	assert.Equal(t, v24.Name, n.MessageParams["models"], "the notice names exactly the model with the offer")
 	assert.Equal(t, "1 model has a better build for this system", n.Title)
 	assert.Equal(t, 1, n.Metadata[optimizeOfferCountMetadataKey])
 }
@@ -389,7 +431,7 @@ func TestSyncOptimizeNotice_CreateFailureRetries(t *testing.T) {
 }
 
 func TestSyncOptimizeNotice_NilModelManagerIsNoop(t *testing.T) {
-	t.Parallel()
+	// Not parallel: apitest.NewCore publishes process-wide settings.
 	h := New(apitest.NewCore(t), nil)
 	notices := &fakeNotices{}
 	h.notices = notices
