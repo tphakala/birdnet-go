@@ -514,7 +514,7 @@
       "inferenceFailing": {
         "title": "{modelName} zawodzi przy każdej analizie",
         "message": "{modelName} jest załadowany, ale jego ostatnie {failures} analiz z rzędu nie powiodło się na {runtime}: wnioskowanie zwróciło błąd. Dźwięk jest przechwytywany, ale ten model niczego nie wykrywa. Sprawdź model na stronie System > Modele AI.",
-        "nonFiniteMessage": "{modelName} jest załadowany, ale jego ostatnie {failures} analiz z rzędu nie powiodło się na {runtime}: model zwrócił nieprawidłowe (nieskończone) wyniki. Dźwięk jest przechwytywany, ale ten model niczego nie wykrywa. Sprawdź model na stronie System > Modele AI."
+        "nonFiniteMessage": "{modelName} jest załadowany, ale jego ostatnie {failures} analiz z rzędu nie powiodło się na {runtime}: model zwrócił nieprawidłowe wyniki (NaN lub nieskończone). Dźwięk jest przechwytywany, ale ten model niczego nie wykrywa. Sprawdź model na stronie System > Modele AI."
       }
     },
     "loading": "Ładowanie powiadomień..."

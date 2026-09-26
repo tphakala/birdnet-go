@@ -514,7 +514,7 @@
       "inferenceFailing": {
         "title": "{modelName} faalt bij elke analyse",
         "message": "{modelName} is geladen, maar de laatste {failures} analyses op rij zijn mislukt op {runtime}: de inferentie gaf een fout. Audio wordt opgenomen, maar dit model detecteert niets. Controleer het model op de pagina Systeem > AI-modellen.",
-        "nonFiniteMessage": "{modelName} is geladen, maar de laatste {failures} analyses op rij zijn mislukt op {runtime}: het model gaf ongeldige (niet-eindige) scores. Audio wordt opgenomen, maar dit model detecteert niets. Controleer het model op de pagina Systeem > AI-modellen."
+        "nonFiniteMessage": "{modelName} is geladen, maar de laatste {failures} analyses op rij zijn mislukt op {runtime}: het model gaf ongeldige scores (NaN of oneindig). Audio wordt opgenomen, maar dit model detecteert niets. Controleer het model op de pagina Systeem > AI-modellen."
       }
     },
     "loading": "Meldingen laden..."

@@ -512,9 +512,9 @@
         }
       },
       "inferenceFailing": {
-        "title": "{modelName} kļūdās katrā analīzē",
+        "title": "{modelName}: katra analīze neizdodas",
         "message": "{modelName} ir ielādēts, bet tā pēdējās {failures} analīzes pēc kārtas neizdevās uz {runtime}: secināšana atgrieza kļūdu. Audio tiek ierakstīts, bet šis modelis neko nenosaka. Pārbaudiet modeli lapā Sistēma > MI Modeļi.",
-        "nonFiniteMessage": "{modelName} ir ielādēts, bet tā pēdējās {failures} analīzes pēc kārtas neizdevās uz {runtime}: modelis atgrieza nederīgus (negalīgus) rezultātus. Audio tiek ierakstīts, bet šis modelis neko nenosaka. Pārbaudiet modeli lapā Sistēma > MI Modeļi."
+        "nonFiniteMessage": "{modelName} ir ielādēts, bet tā pēdējās {failures} analīzes pēc kārtas neizdevās uz {runtime}: modelis atgrieza nederīgus rezultātus (NaN vai bezgalīgus). Audio tiek ierakstīts, bet šis modelis neko nenosaka. Pārbaudiet modeli lapā Sistēma > MI Modeļi."
       }
     },
     "loading": "Ielādē paziņojumus..."
@@ -779,8 +779,8 @@
       "loadFailedTitle": "Neizdevās ielādēt akustisko modeli",
       "loadFailedMessage": "Neizdevās ielādēt iespējoto modeli, tāpēc audio netiek analizēts. Lapa MI Modeļi parāda, kurš modelis neizdevās un kāpēc.",
       "loadFailedAction": "Skatīt MI Modeļi statusu",
-      "failingTitle": "{count, plural, zero {# modeļi kļūdās katrā analīzē} one {Modelis kļūdās katrā analīzē} other {# modeļi kļūdās katrā analīzē}}",
-      "failingMessage": "{count, plural, zero {{models} ir ielādēti, bet katra analīze neizdodas, tāpēc tie neko nenosaka.} one {{models} ir ielādēts, bet katra analīze neizdodas, tāpēc tas neko nenosaka.} other {{models} ir ielādēti, bet katra analīze neizdodas, tāpēc tie neko nenosaka.}} Lapā MI Modeļi redzams aizmugursistēma un kļūda."
+      "failingTitle": "{count, plural, zero {# modeļiem neizdodas neviena analīze} one {Modelim neizdodas neviena analīze} other {# modeļiem neizdodas neviena analīze}}",
+      "failingMessage": "{count, plural, zero {{models} ir ielādēti, bet katra analīze neizdodas, tāpēc tie neko nenosaka.} one {{models} ir ielādēts, bet katra analīze neizdodas, tāpēc tas neko nenosaka.} other {{models} ir ielādēti, bet katra analīze neizdodas, tāpēc tie neko nenosaka.}} Lapa MI Modeļi parāda aizmugursistēmu un kļūdu."
     },
     "banner": {
       "title": "Virsraksts",
@@ -1858,7 +1858,7 @@
       "noModelsHint": "Vēl nav konfigurēti audio avoti?",
       "noModelsHintLink": "Konfigurēt audio avotus",
       "modelFailing": "katra analīze neizdodas",
-      "lastSuccess": "Pēdējā veiksmīgā",
+      "lastSuccess": "Pēdējā veiksmīgā analīze",
       "lastSuccessHelp": "Kad šis modelis pēdējo reizi analizēja audio bez kļūdām.",
       "lastSuccessNever": "Nav kopš modeļa ielādes",
       "modelFailingHelp": "{reason} Izmēģiniet citu šī modeļa versiju sadaļā Iestatījumi > Analīze > Modeļi vai pārbaudiet augstāk redzamo aizmugursistēmu un precizitāti.",

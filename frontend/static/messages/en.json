@@ -514,7 +514,7 @@
       "inferenceFailing": {
         "title": "{modelName} fails every analysis",
         "message": "{modelName} is loaded, but its last {failures} analyses in a row failed on {runtime}: inference returned an error. Audio is captured but this model detects nothing. Check the model on the System > AI Models page.",
-        "nonFiniteMessage": "{modelName} is loaded, but its last {failures} analyses in a row failed on {runtime}: the model returned invalid (non-finite) scores. Audio is captured but this model detects nothing. Check the model on the System > AI Models page."
+        "nonFiniteMessage": "{modelName} is loaded, but its last {failures} analyses in a row failed on {runtime}: the model returned invalid (NaN or infinite) scores. Audio is captured but this model detects nothing. Check the model on the System > AI Models page."
       }
     },
     "loading": "Loading notifications..."

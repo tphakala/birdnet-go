@@ -514,7 +514,7 @@
       "inferenceFailing": {
         "title": "{modelName} échoue à chaque analyse",
         "message": "{modelName} est chargé, mais ses {failures} dernières analyses consécutives ont échoué sur {runtime} : l'inférence a renvoyé une erreur. L'audio est capturé, mais ce modèle ne détecte rien. Vérifiez le modèle sur la page Système > Modèles IA.",
-        "nonFiniteMessage": "{modelName} est chargé, mais ses {failures} dernières analyses consécutives ont échoué sur {runtime} : le modèle a renvoyé des scores invalides (non finis). L'audio est capturé, mais ce modèle ne détecte rien. Vérifiez le modèle sur la page Système > Modèles IA."
+        "nonFiniteMessage": "{modelName} est chargé, mais ses {failures} dernières analyses consécutives ont échoué sur {runtime} : le modèle a renvoyé des scores invalides (NaN ou infinis). L'audio est capturé, mais ce modèle ne détecte rien. Vérifiez le modèle sur la page Système > Modèles IA."
       }
     },
     "loading": "Chargement des notifications..."

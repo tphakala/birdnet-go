@@ -421,7 +421,7 @@ func newInferenceFailureNotification(h *ModelInferenceHealth) *notification.Noti
 	cause := "inference returned an error"
 	if h.ErrorClass == InferenceErrorClassNonFinite {
 		messageKey = notification.MsgInferenceFailingNonFiniteMessage
-		cause = "the model returned invalid (non-finite) scores"
+		cause = "the model returned invalid (NaN or infinite) scores"
 	}
 	message := fmt.Sprintf(
 		"%s is loaded, but its last %d analyses in a row failed on %s: %s. Audio is captured but this model detects nothing. Check the model on the System > AI Models page.",

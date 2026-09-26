@@ -514,7 +514,7 @@
       "inferenceFailing": {
         "title": "{modelName} feiler i hver analyse",
         "message": "{modelName} er lastet inn, men de siste {failures} analysene på rad feilet på {runtime}: inferensen returnerte en feil. Lyd tas opp, men denne modellen oppdager ingenting. Sjekk modellen på siden System > AI-modeller.",
-        "nonFiniteMessage": "{modelName} er lastet inn, men de siste {failures} analysene på rad feilet på {runtime}: modellen returnerte ugyldige (ikke-endelige) poeng. Lyd tas opp, men denne modellen oppdager ingenting. Sjekk modellen på siden System > AI-modeller."
+        "nonFiniteMessage": "{modelName} er lastet inn, men de siste {failures} analysene på rad feilet på {runtime}: modellen returnerte ugyldige poeng (NaN eller uendelige). Lyd tas opp, men denne modellen oppdager ingenting. Sjekk modellen på siden System > AI-modeller."
       }
     },
     "loading": "Laster varsler..."

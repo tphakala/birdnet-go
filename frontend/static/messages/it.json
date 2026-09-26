@@ -514,7 +514,7 @@
       "inferenceFailing": {
         "title": "{modelName} fallisce ogni analisi",
         "message": "{modelName} è caricato, ma le sue ultime {failures} analisi consecutive sono fallite su {runtime}: l'inferenza ha restituito un errore. L'audio viene acquisito, ma questo modello non rileva nulla. Controlla il modello nella pagina Sistema > Modelli IA.",
-        "nonFiniteMessage": "{modelName} è caricato, ma le sue ultime {failures} analisi consecutive sono fallite su {runtime}: il modello ha restituito punteggi non validi (non finiti). L'audio viene acquisito, ma questo modello non rileva nulla. Controlla il modello nella pagina Sistema > Modelli IA."
+        "nonFiniteMessage": "{modelName} è caricato, ma le sue ultime {failures} analisi consecutive sono fallite su {runtime}: il modello ha restituito punteggi non validi (NaN o infiniti). L'audio viene acquisito, ma questo modello non rileva nulla. Controlla il modello nella pagina Sistema > Modelli IA."
       }
     },
     "loading": "Caricamento notifiche..."

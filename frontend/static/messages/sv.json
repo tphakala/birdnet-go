@@ -514,7 +514,7 @@
       "inferenceFailing": {
         "title": "{modelName} misslyckas vid varje analys",
         "message": "{modelName} är inläst, men de senaste {failures} analyserna i rad misslyckades på {runtime}: inferensen returnerade ett fel. Ljud spelas in, men den här modellen upptäcker ingenting. Kontrollera modellen på sidan System > AI-modeller.",
-        "nonFiniteMessage": "{modelName} är inläst, men de senaste {failures} analyserna i rad misslyckades på {runtime}: modellen returnerade ogiltiga (icke-ändliga) poäng. Ljud spelas in, men den här modellen upptäcker ingenting. Kontrollera modellen på sidan System > AI-modeller."
+        "nonFiniteMessage": "{modelName} är inläst, men de senaste {failures} analyserna i rad misslyckades på {runtime}: modellen returnerade ogiltiga poäng (NaN eller oändliga). Ljud spelas in, men den här modellen upptäcker ingenting. Kontrollera modellen på sidan System > AI-modeller."
       }
     },
     "loading": "Laddar aviseringar..."

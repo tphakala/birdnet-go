@@ -514,7 +514,7 @@
       "inferenceFailing": {
         "title": "{modelName} scheitert bei jeder Analyse",
         "message": "{modelName} ist geladen, aber die letzten {failures} Analysen in Folge sind auf {runtime} fehlgeschlagen: Die Inferenz hat einen Fehler zurückgegeben. Audio wird erfasst, aber dieses Modell erkennt nichts. Überprüfen Sie das Modell auf der Seite System > KI-Modelle.",
-        "nonFiniteMessage": "{modelName} ist geladen, aber die letzten {failures} Analysen in Folge sind auf {runtime} fehlgeschlagen: Das Modell hat ungültige (nicht endliche) Werte geliefert. Audio wird erfasst, aber dieses Modell erkennt nichts. Überprüfen Sie das Modell auf der Seite System > KI-Modelle."
+        "nonFiniteMessage": "{modelName} ist geladen, aber die letzten {failures} Analysen in Folge sind auf {runtime} fehlgeschlagen: Das Modell hat ungültige Werte (NaN oder unendlich) geliefert. Audio wird erfasst, aber dieses Modell erkennt nichts. Überprüfen Sie das Modell auf der Seite System > KI-Modelle."
       }
     },
     "loading": "Benachrichtigungen werden geladen..."

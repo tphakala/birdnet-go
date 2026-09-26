@@ -514,7 +514,7 @@
       "inferenceFailing": {
         "title": "{modelName} zlyháva pri každej analýze",
         "message": "{modelName} je načítaný, ale jeho posledných {failures} analýz za sebou zlyhalo na {runtime}: inferencia vrátila chybu. Zvuk sa zaznamenáva, ale tento model nič nedeteguje. Skontrolujte model na stránke Systém > Modely AI.",
-        "nonFiniteMessage": "{modelName} je načítaný, ale jeho posledných {failures} analýz za sebou zlyhalo na {runtime}: model vrátil neplatné (nekonečné) skóre. Zvuk sa zaznamenáva, ale tento model nič nedeteguje. Skontrolujte model na stránke Systém > Modely AI."
+        "nonFiniteMessage": "{modelName} je načítaný, ale jeho posledných {failures} analýz za sebou zlyhalo na {runtime}: model vrátil neplatné skóre (NaN alebo nekonečné). Zvuk sa zaznamenáva, ale tento model nič nedeteguje. Skontrolujte model na stránke Systém > Modely AI."
       }
     },
     "loading": "Načítavam upozornenia..."

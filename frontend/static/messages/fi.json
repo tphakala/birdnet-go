@@ -514,7 +514,7 @@
       "inferenceFailing": {
         "title": "{modelName} epäonnistuu jokaisessa analyysissä",
         "message": "{modelName} on ladattu, mutta sen viimeiset {failures} analyysiä peräkkäin epäonnistuivat taustajärjestelmällä {runtime}: päättely palautti virheen. Ääntä tallennetaan, mutta tämä malli ei tunnista mitään. Tarkista malli sivulla Järjestelmä > Tekoälymallit.",
-        "nonFiniteMessage": "{modelName} on ladattu, mutta sen viimeiset {failures} analyysiä peräkkäin epäonnistuivat taustajärjestelmällä {runtime}: malli palautti virheellisiä (äärettömiä) pisteitä. Ääntä tallennetaan, mutta tämä malli ei tunnista mitään. Tarkista malli sivulla Järjestelmä > Tekoälymallit."
+        "nonFiniteMessage": "{modelName} on ladattu, mutta sen viimeiset {failures} analyysiä peräkkäin epäonnistuivat taustajärjestelmällä {runtime}: malli palautti virheellisiä pisteitä (NaN tai äärettömiä). Ääntä tallennetaan, mutta tämä malli ei tunnista mitään. Tarkista malli sivulla Järjestelmä > Tekoälymallit."
       }
     },
     "loading": "Ladataan ilmoituksia..."

@@ -514,7 +514,7 @@
       "inferenceFailing": {
         "title": "{modelName} falha em todas as análises",
         "message": "{modelName} está carregado, mas as suas últimas {failures} análises seguidas falharam em {runtime}: a inferência devolveu um erro. O áudio é capturado, mas este modelo não deteta nada. Verifique o modelo na página Sistema > Modelos de IA.",
-        "nonFiniteMessage": "{modelName} está carregado, mas as suas últimas {failures} análises seguidas falharam em {runtime}: o modelo devolveu pontuações inválidas (não finitas). O áudio é capturado, mas este modelo não deteta nada. Verifique o modelo na página Sistema > Modelos de IA."
+        "nonFiniteMessage": "{modelName} está carregado, mas as suas últimas {failures} análises seguidas falharam em {runtime}: o modelo devolveu pontuações inválidas (NaN ou infinitas). O áudio é capturado, mas este modelo não deteta nada. Verifique o modelo na página Sistema > Modelos de IA."
       }
     },
     "loading": "Carregando notificações..."
