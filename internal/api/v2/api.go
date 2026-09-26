@@ -607,11 +607,12 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c.models = models.New(c.Core, c.authService)
 	// Keep the model optimize bell notice in sync: evaluate it once at startup
 	// (the analyzer scans the installed models before it builds the web server),
-	// then on topology and location changes. Skipped when routes are not
-	// initialized (tests), like every other background activity here.
+	// then after topology changes, model installs and uninstalls, and changes to
+	// the location, ModelRegion or primary model path. Skipped when routes are
+	// not initialized (tests), like every other background activity here.
 	if c.ModelManager != nil && initializeRoutes {
 		c.optimizeNotices.Store(c.models)
-		c.models.ScheduleOptimizeNoticeSync()
+		c.models.StartOptimizeNoticeSync()
 	}
 
 	// Log auth configuration status
@@ -871,7 +872,7 @@ func (c *Controller) Shutdown() {
 
 	// Stop the pending model optimize notice evaluation, and ignore later ones.
 	if h := c.optimizeNotices.Load(); h != nil {
-		h.StopOptimizeNotice()
+		h.StopOptimizeNoticeSync()
 	}
 
 	// Cancel context to stop all goroutines, then wait for them to finish.

@@ -1,15 +1,20 @@
 package models
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
-	"testing/synctest"
 	"time"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/recommend"
@@ -285,7 +290,7 @@ func TestSyncOptimizeNotice_CustomPrimaryModelGetsNoNotice(t *testing.T) {
 	notices := &fakeNotices{}
 	h.notices = notices
 
-	h.SyncOptimizeNotice()
+	h.syncOptimizeNotice()
 
 	created, _ := notices.counts()
 	assert.Zero(t, created)
@@ -307,7 +312,7 @@ func TestSyncOptimizeNotice_RaisesForBuiltinOnRecommendedHost(t *testing.T) {
 	profile := aarch64LowRAMONNXProfile()
 	h, notices := newOptimizeTestHandler(t, &profile)
 
-	h.SyncOptimizeNotice()
+	h.syncOptimizeNotice()
 
 	require.Len(t, notices.created, 1)
 	n := notices.created[0]
@@ -328,29 +333,29 @@ func TestSyncOptimizeNotice_Lifecycle(t *testing.T) {
 	profile := aarch64LowRAMONNXProfile()
 	h, notices := newOptimizeTestHandler(t, &profile)
 
-	h.SyncOptimizeNotice()
-	h.SyncOptimizeNotice()
+	h.syncOptimizeNotice()
+	h.syncOptimizeNotice()
 	created, deleted := notices.counts()
 	assert.Equal(t, 1, created, "an unchanged offer set must not raise a second notice")
 	assert.Zero(t, deleted)
 
 	// The host now recommends the installed baseline: the offer is gone.
 	profile = tfliteOnlyProfile()
-	h.SyncOptimizeNotice()
+	h.syncOptimizeNotice()
 	created, deleted = notices.counts()
 	assert.Equal(t, 1, created)
 	require.Equal(t, 1, deleted, "an emptied offer set must clear the notice")
 	assert.Equal(t, notices.created[0].ID, notices.deleted[0])
 
 	// Nothing outstanding and still no offer: no-op.
-	h.SyncOptimizeNotice()
+	h.syncOptimizeNotice()
 	created, deleted = notices.counts()
 	assert.Equal(t, 1, created)
 	assert.Equal(t, 1, deleted)
 
 	// The offer returns: a fresh notice is raised.
 	profile = aarch64LowRAMONNXProfile()
-	h.SyncOptimizeNotice()
+	h.syncOptimizeNotice()
 	created, _ = notices.counts()
 	assert.Equal(t, 2, created)
 }
@@ -359,7 +364,7 @@ func TestSyncOptimizeNotice_NoOfferNoNotice(t *testing.T) {
 	profile := tfliteOnlyProfile()
 	h, notices := newOptimizeTestHandler(t, &profile)
 
-	h.SyncOptimizeNotice()
+	h.syncOptimizeNotice()
 
 	created, deleted := notices.counts()
 	assert.Zero(t, created)
@@ -373,12 +378,12 @@ func TestSyncOptimizeNotice_CreateFailureRetries(t *testing.T) {
 	h, notices := newOptimizeTestHandler(t, &profile)
 
 	notices.createErr = errors.NewStd("store full")
-	h.SyncOptimizeNotice()
+	h.syncOptimizeNotice()
 	created, _ := notices.counts()
 	require.Zero(t, created)
 
 	notices.createErr = nil
-	h.SyncOptimizeNotice()
+	h.syncOptimizeNotice()
 	created, _ = notices.counts()
 	assert.Equal(t, 1, created, "a failed create must be retried on the next sync")
 }
@@ -389,7 +394,8 @@ func TestSyncOptimizeNotice_NilModelManagerIsNoop(t *testing.T) {
 	notices := &fakeNotices{}
 	h.notices = notices
 
-	h.SyncOptimizeNotice()
+	h.syncOptimizeNotice()
+	h.StartOptimizeNoticeSync()
 	h.ScheduleOptimizeNoticeSync()
 
 	created, deleted := notices.counts()
@@ -400,37 +406,56 @@ func TestSyncOptimizeNotice_NilModelManagerIsNoop(t *testing.T) {
 	assert.Nil(t, h.optimize.timer, "no evaluation is scheduled without a ModelManager")
 }
 
+// pendingOptimizeTimer returns the currently armed debounce timer, or nil.
+func pendingOptimizeTimer(h *Handler) *time.Timer {
+	h.optimize.timerMu.Lock()
+	defer h.optimize.timerMu.Unlock()
+	return h.optimize.timer
+}
+
 // TestScheduleOptimizeNoticeSync_DebouncesAndStops verifies a burst of schedules
-// runs one evaluation after the debounce, and that nothing fires after Stop.
+// leaves exactly one pending evaluation (each schedule cancels the one before
+// it), that the pending callback runs exactly one evaluation, and that Stop
+// cancels the pending timer and ignores later schedules. It inspects the timers
+// directly rather than waiting out the debounce: the Core the handler is built
+// on runs background goroutines, so it cannot live in a synctest bubble.
 func TestScheduleOptimizeNoticeSync_DebouncesAndStops(t *testing.T) {
 	profile := aarch64LowRAMONNXProfile()
 	h, notices, evaluations := newCountingOptimizeTestHandler(t, &profile)
+	t.Cleanup(h.StopOptimizeNoticeSync)
 
-	synctest.Test(t, func(t *testing.T) {
-		for range 5 {
-			h.ScheduleOptimizeNoticeSync()
-		}
-		time.Sleep(optimizeNoticeDebounce - time.Millisecond)
-		synctest.Wait()
-		assert.Zero(t, evaluations.Load(), "no evaluation before the debounce elapses")
-
-		time.Sleep(time.Millisecond)
-		synctest.Wait()
-		assert.Equal(t, int32(1), evaluations.Load(), "a burst of schedules runs exactly one evaluation")
-		created, _ := notices.counts()
-		assert.Equal(t, 1, created)
-
-		// A schedule stopped before it fires never runs, and later ones are ignored.
-		profile = tfliteOnlyProfile()
+	const burst = 4
+	h.StartOptimizeNoticeSync()
+	timers := make([]*time.Timer, 0, burst+1)
+	timers = append(timers, pendingOptimizeTimer(h))
+	for range burst {
 		h.ScheduleOptimizeNoticeSync()
-		h.StopOptimizeNotice()
-		h.ScheduleOptimizeNoticeSync()
-		time.Sleep(2 * optimizeNoticeDebounce)
-		synctest.Wait()
-		assert.Equal(t, int32(1), evaluations.Load(), "no evaluation runs after StopOptimizeNotice")
-		_, deleted := notices.counts()
-		assert.Zero(t, deleted)
-	})
+		timers = append(timers, pendingOptimizeTimer(h))
+	}
+	live := timers[len(timers)-1]
+	require.NotNil(t, live)
+	for i, old := range timers[:len(timers)-1] {
+		require.NotSame(t, live, old)
+		assert.False(t, old.Stop(), "schedule %d must have cancelled the evaluation pending before it", i)
+	}
+
+	// The live timer is still pending; stop it so only the manual fire below
+	// runs, then check that callback runs exactly one evaluation.
+	require.True(t, live.Stop(), "the latest schedule must leave its evaluation pending")
+	h.fireOptimizeNoticeSync()
+	h.Wait()
+	assert.Equal(t, int32(1), evaluations.Load(), "a burst of schedules runs exactly one evaluation")
+	created, _ := notices.counts()
+	assert.Equal(t, 1, created)
+
+	// Stop cancels the pending timer, and later schedules arm nothing.
+	h.ScheduleOptimizeNoticeSync()
+	pending := pendingOptimizeTimer(h)
+	require.NotNil(t, pending)
+	h.StopOptimizeNoticeSync()
+	assert.False(t, pending.Stop(), "StopOptimizeNoticeSync must cancel the pending evaluation")
+	h.ScheduleOptimizeNoticeSync()
+	assert.Nil(t, pendingOptimizeTimer(h), "no schedule is armed after StopOptimizeNoticeSync")
 }
 
 // TestSyncOptimizeNotice_ProcessWideService runs the notice through the real
@@ -448,7 +473,7 @@ func TestSyncOptimizeNotice_ProcessWideService(t *testing.T) {
 	h, _ := newOptimizeTestHandler(t, &profile)
 	h.notices = nil // use the process-wide service
 
-	h.SyncOptimizeNotice()
+	h.syncOptimizeNotice()
 
 	stored, err := svc.List(&notification.FilterOptions{Types: []notification.Type{notification.TypeInfo}})
 	require.NoError(t, err)
@@ -473,11 +498,183 @@ func TestSyncOptimizeNotice_ServiceNotInitialized(t *testing.T) {
 	h, _, evaluations := newCountingOptimizeTestHandler(t, &profile)
 	h.notices = nil
 
-	assert.NotPanics(t, h.SyncOptimizeNotice)
+	assert.NotPanics(t, h.syncOptimizeNotice)
 	assert.Empty(t, h.optimize.id)
 	assert.Zero(t, evaluations.Load(), "no evaluation runs without a notification service")
 
 	var nilHandler *Handler
-	assert.NotPanics(t, nilHandler.StopOptimizeNotice)
+	assert.NotPanics(t, nilHandler.StopOptimizeNoticeSync)
 	assert.NotPanics(t, nilHandler.ScheduleOptimizeNoticeSync)
+	assert.NotPanics(t, nilHandler.StartOptimizeNoticeSync)
+}
+
+// optimizeTimerArmed reports whether an optimize notice evaluation is pending.
+func optimizeTimerArmed(h *Handler) bool {
+	h.optimize.timerMu.Lock()
+	defer h.optimize.timerMu.Unlock()
+	return h.optimize.timer != nil
+}
+
+// TestStartOptimizeNoticeSync_GatesScheduling pins that schedules are ignored
+// until the handler is started (an unrouted controller never arms a timer from
+// its install or uninstall paths) and that Start itself arms the startup
+// evaluation.
+func TestStartOptimizeNoticeSync_GatesScheduling(t *testing.T) {
+	profile := aarch64LowRAMONNXProfile()
+	h, _ := newOptimizeTestHandler(t, &profile)
+	t.Cleanup(h.StopOptimizeNoticeSync)
+
+	h.ScheduleOptimizeNoticeSync()
+	assert.False(t, optimizeTimerArmed(h), "a schedule before Start must not arm a timer")
+
+	h.StartOptimizeNoticeSync()
+	assert.True(t, optimizeTimerArmed(h), "Start arms the startup evaluation")
+
+	h.StopOptimizeNoticeSync()
+	h.StartOptimizeNoticeSync()
+	assert.False(t, optimizeTimerArmed(h), "Start after Stop must not re-arm")
+}
+
+// TestFireOptimizeNoticeSync_AfterStopDoesNothing pins that a timer callback
+// that fires after StopOptimizeNoticeSync (it was already dequeued when Stop
+// ran) starts no evaluation.
+func TestFireOptimizeNoticeSync_AfterStopDoesNothing(t *testing.T) {
+	profile := aarch64LowRAMONNXProfile()
+	h, notices, evaluations := newCountingOptimizeTestHandler(t, &profile)
+
+	h.StopOptimizeNoticeSync()
+	h.fireOptimizeNoticeSync()
+	h.Wait()
+
+	assert.Zero(t, evaluations.Load())
+	created, _ := notices.counts()
+	assert.Zero(t, created)
+}
+
+// TestFireOptimizeNoticeSync_JoinedByCoreWait pins that an evaluation already
+// running when the controller shuts down is joined by Core.Wait, so it cannot
+// outlive Shutdown.
+func TestFireOptimizeNoticeSync_JoinedByCoreWait(t *testing.T) {
+	profile := aarch64LowRAMONNXProfile()
+	h, _, _ := newCountingOptimizeTestHandler(t, &profile)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile {
+		once.Do(func() { close(entered) })
+		<-release
+		return profile
+	}
+
+	h.fireOptimizeNoticeSync()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "the fired callback never started an evaluation")
+	}
+	h.StopOptimizeNoticeSync()
+
+	waited := make(chan struct{})
+	go func() {
+		h.Wait()
+		close(waited)
+	}()
+	assert.Never(t, func() bool {
+		select {
+		case <-waited:
+			return true
+		default:
+			return false
+		}
+	}, 100*time.Millisecond, 10*time.Millisecond, "Core.Wait returned while the evaluation was still running")
+
+	close(release)
+	select {
+	case <-waited:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "Core.Wait did not return after the evaluation finished")
+	}
+}
+
+// installFakeModel puts the default variant's model file of catalogID on disk so
+// ScanInstalled reports it installed, without downloading anything.
+func installFakeModel(t *testing.T, modelsDir, catalogID string) {
+	t.Helper()
+	entry, ok := classifier.GetCatalogEntry(catalogID)
+	require.True(t, ok)
+	dir := filepath.Join(modelsDir, catalogID)
+	require.NoError(t, os.MkdirAll(dir, 0o750))
+	for _, f := range entry.Files {
+		if f.Role == "model" {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("fake"), 0o600))
+		}
+	}
+}
+
+// TestModelHandlers_ScheduleOptimizeNoticeSync pins that install, reinstall and
+// a successful uninstall re-evaluate the optimize notice. None of them reliably
+// fires a topology event (an unloaded model's uninstall, an install whose
+// hot-load fails), so the handlers schedule it themselves.
+func TestModelHandlers_ScheduleOptimizeNoticeSync(t *testing.T) {
+	// Each operation gets a fresh handler and models directory: a failed
+	// download leaves the model in a retained failed state that would block the
+	// next operation on the same manager.
+	setup := func(t *testing.T, installed bool) (*Handler, *apicore.Core) {
+		t.Helper()
+		core := apitest.NewCore(t)
+		modelsDir := t.TempDir()
+		if installed {
+			installFakeModel(t, modelsDir, "perch-v2")
+		}
+		mm := classifier.NewModelManager(modelsDir, nil, nil)
+		mm.ScanInstalled()
+		_, isInstalled := mm.InstalledVariantID("perch-v2")
+		require.Equal(t, installed, isInstalled, "fixture: perch-v2 install state")
+		core.ModelManager = mm
+		h := New(core, nil)
+		profile := amd64ONNXProfile() // perch-v2 must pass the install compatibility gate
+		h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return profile }
+		h.notices = &fakeNotices{}
+		t.Cleanup(h.StopOptimizeNoticeSync)
+		// Arm Start's timer, then clear it so the handler's own schedule is visible.
+		h.StartOptimizeNoticeSync()
+		h.optimize.timerMu.Lock()
+		h.optimize.timer.Stop()
+		h.optimize.timer = nil
+		h.optimize.timerMu.Unlock()
+		// Install and reinstall run in Core-tracked goroutines; with the Core
+		// context already cancelled the download fails at once, without network
+		// access, and the schedule after it still runs. Uninstall is synchronous.
+		core.Cancel()
+		return h, core
+	}
+	call := func(t *testing.T, handler echo.HandlerFunc, method string) int {
+		t.Helper()
+		e := echo.New()
+		req := httptest.NewRequest(method, "/api/v2/models/perch-v2", http.NoBody)
+		rec := httptest.NewRecorder()
+		ctx := e.NewContext(req, rec)
+		ctx.SetParamNames("id")
+		ctx.SetParamValues("perch-v2")
+		require.NoError(t, handler(ctx))
+		return rec.Code
+	}
+
+	t.Run("uninstall", func(t *testing.T) {
+		h, _ := setup(t, true)
+		require.Equal(t, http.StatusOK, call(t, h.UninstallModel, http.MethodDelete))
+		assert.True(t, optimizeTimerArmed(h), "a successful uninstall schedules a re-evaluation")
+	})
+	t.Run("install", func(t *testing.T) {
+		h, core := setup(t, false)
+		require.Equal(t, http.StatusAccepted, call(t, h.InstallModel, http.MethodPost))
+		core.Wait()
+		assert.True(t, optimizeTimerArmed(h), "an install schedules a re-evaluation, even when it fails")
+	})
+	t.Run("reinstall", func(t *testing.T) {
+		h, core := setup(t, true)
+		require.Equal(t, http.StatusAccepted, call(t, h.ReinstallModel, http.MethodPost))
+		core.Wait()
+		assert.True(t, optimizeTimerArmed(h), "a reinstall schedules a re-evaluation, even when it fails")
+	})
 }

@@ -841,6 +841,11 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 	// Start async install in a background goroutine.
 	progressChan := make(chan classifier.DownloadState, 16)
 	c.Go(func() {
+		// Re-evaluate the optimize notice whatever the outcome, panic included: an
+		// install whose hot-load fails still records the install without a
+		// topology event, and a failed swap may roll back to a different installed
+		// variant. Deferred first, so it runs after the recover below.
+		defer c.ScheduleOptimizeNoticeSync()
 		defer func() {
 			if r := recover(); r != nil {
 				c.LogErrorIfEnabled("Panic during model install",
@@ -917,6 +922,7 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 	// Start async reinstall in a background goroutine.
 	progressChan := make(chan classifier.DownloadState, 16)
 	c.Go(func() {
+		defer c.ScheduleOptimizeNoticeSync() // see InstallModel
 		defer func() {
 			if r := recover(); r != nil {
 				c.LogErrorIfEnabled("Panic during model reinstall",
@@ -957,6 +963,9 @@ func (c *Handler) UninstallModel(ctx echo.Context) error {
 	if err := c.ModelManager.Uninstall(catalogID); err != nil {
 		return c.HandleError(ctx, err, "failed to uninstall model", http.StatusInternalServerError)
 	}
+	// Uninstalling a model that was not loaded fires no topology event, but it
+	// can remove an optimize offer, so re-evaluate the notice here.
+	c.ScheduleOptimizeNoticeSync()
 
 	return ctx.JSON(http.StatusOK, map[string]string{
 		"catalogId": catalogID,

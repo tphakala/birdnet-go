@@ -63,9 +63,10 @@ type optimizeNotice struct {
 	id  string
 	sig string
 
-	// timerMu guards the debounce timer and the stopped flag.
+	// timerMu guards the debounce timer and the started and stopped flags.
 	timerMu sync.Mutex
 	timer   *time.Timer
+	started bool
 	stopped bool
 }
 
@@ -179,11 +180,11 @@ func (c *Handler) noticeSvc() noticeService {
 	return nil
 }
 
-// SyncOptimizeNotice evaluates the optimize offers and raises, replaces, or
+// syncOptimizeNotice evaluates the optimize offers and raises, replaces, or
 // clears the persistent bell notice to match. It is idempotent and safe to call
-// concurrently. When the notification service is not initialized nothing is
-// latched, so the next call retries.
-func (c *Handler) SyncOptimizeNotice() {
+// concurrently (optimize.mu serializes whole evaluations). When the notification
+// service is not initialized nothing is latched, so the next trigger retries.
+func (c *Handler) syncOptimizeNotice() {
 	if c.ModelManager == nil {
 		return
 	}
@@ -251,10 +252,12 @@ func newOptimizeNotification(offers []optimizeOffer) *notification.Notification 
 		WithDeliveryTarget(notification.DeliveryTargetBell)
 }
 
-// ScheduleOptimizeNoticeSync runs SyncOptimizeNotice after a short debounce, so a
-// burst of topology events costs one evaluation (each evaluation probes the host
-// hardware and ranks the whole catalog). It is a no-op after StopOptimizeNotice.
-func (c *Handler) ScheduleOptimizeNoticeSync() {
+// StartOptimizeNoticeSync enables optimize notice evaluations and schedules the
+// first one (the startup evaluation). Until it is called, ScheduleOptimizeNoticeSync
+// is a no-op, so a handler that is not serving (a controller built without
+// routes, as tests do) never arms a timer from its install or uninstall paths.
+// It is a no-op after StopOptimizeNoticeSync.
+func (c *Handler) StartOptimizeNoticeSync() {
 	if c == nil || c.ModelManager == nil {
 		return
 	}
@@ -264,16 +267,58 @@ func (c *Handler) ScheduleOptimizeNoticeSync() {
 	if n.stopped {
 		return
 	}
+	n.started = true
+	c.armOptimizeNoticeTimerLocked()
+}
+
+// ScheduleOptimizeNoticeSync re-evaluates the optimize notice after a short
+// debounce, so a burst of triggers costs one evaluation (each evaluation probes
+// the host hardware and ranks the whole catalog). It is a no-op before
+// StartOptimizeNoticeSync and after StopOptimizeNoticeSync.
+func (c *Handler) ScheduleOptimizeNoticeSync() {
+	if c == nil || c.ModelManager == nil {
+		return
+	}
+	n := &c.optimize
+	n.timerMu.Lock()
+	defer n.timerMu.Unlock()
+	if !n.started || n.stopped {
+		return
+	}
+	c.armOptimizeNoticeTimerLocked()
+}
+
+// armOptimizeNoticeTimerLocked (re)starts the debounce timer. The caller holds
+// c.optimize.timerMu.
+func (c *Handler) armOptimizeNoticeTimerLocked() {
+	n := &c.optimize
 	if n.timer != nil {
 		n.timer.Stop()
 	}
-	n.timer = time.AfterFunc(optimizeNoticeDebounce, c.SyncOptimizeNotice)
+	n.timer = time.AfterFunc(optimizeNoticeDebounce, c.fireOptimizeNoticeSync)
 }
 
-// StopOptimizeNotice stops any pending evaluation and ignores later schedules. It
-// is called on controller shutdown so no evaluation fires into a torn-down
-// process.
-func (c *Handler) StopOptimizeNotice() {
+// fireOptimizeNoticeSync is the debounce timer's callback. It runs the evaluation
+// as a Core-tracked goroutine so Controller.Shutdown's Core.Wait joins it, and it
+// starts nothing once StopOptimizeNoticeSync has run: both the stopped check and
+// the tracked start happen under timerMu, which StopOptimizeNoticeSync takes to
+// set stopped, so no evaluation can be added to the WaitGroup after Stop returns.
+func (c *Handler) fireOptimizeNoticeSync() {
+	n := &c.optimize
+	n.timerMu.Lock()
+	defer n.timerMu.Unlock()
+	if n.stopped {
+		return
+	}
+	c.Go(c.syncOptimizeNotice)
+}
+
+// StopOptimizeNoticeSync stops any pending evaluation and ignores later
+// schedules. Controller.Shutdown calls it before Core.Cancel and Core.Wait:
+// after it returns no new evaluation starts, and one already running is joined
+// by Core.Wait. That running evaluation can hold shutdown for as long as an
+// OpenVINO device probe child takes, bounded by the probe timeout.
+func (c *Handler) StopOptimizeNoticeSync() {
 	if c == nil {
 		return
 	}
