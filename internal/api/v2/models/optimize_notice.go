@@ -4,11 +4,11 @@ package models
 // in the notification bell. The gallery derives the offers client-side from the
 // catalog, so a user who never opens Settings > Analysis > Models never learns
 // that a better build of an installed model exists for this host (#4423: a
-// Raspberry Pi 5 whose stock BirdNET v2.4 build failed every inference was fixed
-// by the offered build). The bell notice applies the same offer rule to the
-// same recommender pass as the catalog endpoint. It is a snapshot re-evaluated
-// at startup, after model topology changes, installs and uninstalls, and after
-// location, ModelRegion or primary model path changes.
+// Raspberry Pi 5 whose stock BirdNET v2.4 build failed every inference was never
+// shown the offered build that worked). The bell notice applies the same offer
+// rule to the same recommender pass as the catalog endpoint. It is a snapshot
+// re-evaluated at startup, after model topology changes, installs and
+// uninstalls, and after location, ModelRegion or primary model path changes.
 
 import (
 	"fmt"
