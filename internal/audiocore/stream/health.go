@@ -204,9 +204,11 @@ func classifyInto(ctx *audiocore.StreamErrorContext, err error) {
 
 // isCertVerifyError reports whether err is a server certificate verification
 // failure. crypto/tls wraps a failure of its built-in chain verification in
-// *tls.CertificateVerificationError; the x509 types cover a verification error
-// that reaches the chain without that wrapper. crypto/x509 returns those by
-// value, so they are matched as values, not pointers.
+// *tls.CertificateVerificationError, whatever the underlying cause. The x509
+// checks are defensive: they catch a verification error that reaches the error
+// chain without that wrapper, such as one returned by a caller-supplied verify
+// callback. crypto/x509 returns those types by value, so they are matched as
+// values, not pointers.
 func isCertVerifyError(err error) bool {
 	if _, ok := errors.AsType[*tls.CertificateVerificationError](err); ok {
 		return true
