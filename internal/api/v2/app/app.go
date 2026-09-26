@@ -28,6 +28,9 @@ const (
 // version acknowledged by the user through the wizard dismiss action.
 const appMetadataKeyLastSeenVersion = "last_seen_version"
 
+// bannerElementType is the dashboard layout element type of the station banner.
+const bannerElementType = "banner"
+
 // AppConfigResponse represents the application configuration returned to the frontend.
 // This replaces the server-side injected window.BIRDNET_CONFIG.
 type AppConfigResponse struct {
@@ -42,11 +45,20 @@ type AppConfigResponse struct {
 	LiveSpectrogram    bool                  `json:"liveSpectrogram"`           // auto-start live spectrogram on dashboard
 	AudioExportEnabled bool                  `json:"audioExportEnabled"`        // whether audio clip export is enabled; drives showing per-detection spectrogram/audio in the UI
 	Layout             *conf.DashboardLayout `json:"layout,omitempty"`          // dashboard element layout for guest/pre-auth rendering
+	StationLocation    *StationLocationDTO   `json:"stationLocation,omitempty"` // station coordinates, only when an enabled banner shows the location map
 	FreshInstall       bool                  `json:"freshInstall"`              // true when this is a brand-new installation
 	NewVersion         bool                  `json:"newVersion"`                // true when the app was upgraded since last dismiss
 	PreviousVersion    string                `json:"previousVersion,omitempty"` // last version the user acknowledged
 	Sentry             *SentryFrontendConfig `json:"sentry,omitempty"`          // frontend telemetry config (only when enabled)
 	ProjectLinks       ProjectLinksConfig    `json:"projectLinks"`              // project identity/links served to the frontend
+}
+
+// StationLocationDTO carries the station coordinates for the public dashboard
+// banner map. Guests never load the authenticated settings, so the app config
+// is their only source for them.
+type StationLocationDTO struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
 }
 
 // SentryFrontendConfig exposes telemetry configuration to the frontend.
@@ -224,6 +236,10 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 		response.Layout = &settings.Realtime.Dashboard.Layout
 	}
 
+	// Include the station coordinates only when the admin chose to show the
+	// location map on the public banner (#4344).
+	response.StationLocation = bannerStationLocation(settings)
+
 	// Include Sentry frontend config when telemetry is enabled AND a DSN is
 	// actually configured for this build. Builds without a DSN (plain `go build`
 	// or forks) must not hand the frontend an empty DSN, which would make the
@@ -245,6 +261,30 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, response)
+}
+
+// bannerStationLocation returns the station coordinates when the location is
+// configured and an enabled banner element shows the location map, nil otherwise.
+// The map itself already reveals the station position to every visitor, so the
+// coordinates are exposed exactly when the admin opted into that map and never
+// in any other case. Private mode is excluded: /app/config stays public there,
+// but guests only get the login form and authenticated users read the settings.
+func bannerStationLocation(settings *conf.Settings) *StationLocationDTO {
+	if settings.Security.PrivateMode {
+		return nil
+	}
+	lat, lon, configured := settings.Location()
+	if !configured {
+		return nil
+	}
+	for i := range settings.Realtime.Dashboard.Layout.Elements {
+		element := &settings.Realtime.Dashboard.Layout.Elements[i]
+		if element.Type == bannerElementType && element.Enabled &&
+			element.Banner != nil && element.Banner.ShowLocationMap {
+			return &StationLocationDTO{Latitude: lat, Longitude: lon}
+		}
+	}
+	return nil
 }
 
 // determineWizardState computes the freshInstall, newVersion, and previousVersion fields
