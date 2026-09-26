@@ -66,6 +66,16 @@ func TestApplyOpenVINOQuantizationPolicy(t *testing.T) {
 			wantPlan: cpuF16, wantOK: true,
 		},
 		{
+			name: "FP16 weights keep the plan unchanged", plan: cpuF16, ok: true,
+			backendPref: conf.BackendPrefAuto, quant: QuantizationFP16,
+			wantPlan: cpuF16, wantOK: true,
+		},
+		{
+			name: "a declined plan stays declined for INT8 on explicit openvino", plan: openVINOPlan{}, ok: false, reason: ovReasonNoDevice,
+			backendPref: conf.BackendPrefOpenVINO, quant: QuantizationINT8,
+			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonNoDevice,
+		},
+		{
 			name: "a declined plan keeps its original reason for INT8", plan: openVINOPlan{}, ok: false, reason: ovReasonBackendONNX,
 			backendPref: conf.BackendPrefONNX, quant: QuantizationINT8,
 			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonBackendONNX,

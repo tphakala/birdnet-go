@@ -159,6 +159,8 @@ func TestResolvePrimaryModelPath(t *testing.T) {
 		t.Parallel()
 		modelsDir := t.TempDir()
 		installed := writePrimaryGalleryModel(t, modelsDir)
+		require.Equal(t, QuantizationFP32, detectQuantization(installed),
+			"this subtest covers the FP32 build; INT8 builds are covered by TestPrimaryVariantUsable_QuantizationPolicyWired")
 
 		// An openvino-tagged build on an A76/Pi5 or an Intel iGPU runs these
 		// variants with no ONNX Runtime installed at all (the fixture is the FP32

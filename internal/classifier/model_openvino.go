@@ -106,10 +106,10 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 // ~0.8, wrong top-1, confidences fall to ~0) while a loud single-species clip
 // survives by luck; f32 is bit-exact with ORT (~6e-6) and still ~4.6x faster than
 // ORT CPU. CPU f16 (incl. ARM A76) is unaffected for FP32-weight files, so the
-// override is scoped to the GPU path. Do NOT widen it to f16 without re-running the
-// inference/openvino_parity_functional_test.go soundscape parity check. INT8-weight
-// files are the exception on the CPU too; that depends on the file, not the
-// registry ID, so it is handled by applyOpenVINOQuantizationPolicy instead.
+// override is scoped to the GPU path. Do NOT widen it to f16 without re-running
+// the inference/openvino_parity_functional_test.go soundscape parity check.
+// INT8-weight files are the exception on the CPU too; that depends on the file,
+// not the registry ID, so it is handled by applyOpenVINOQuantizationPolicy.
 //
 // Perch v2 is likewise forced to f32 on the GPU. Its f16-GPU path was validated
 // on an Iris Xe iGPU, but on an Intel Arc A380 (dGPU) the f16 kernel returns
@@ -296,7 +296,7 @@ func (bn *BirdNET) openVINOPlan() (plan openVINOPlan, ok bool, reason string) {
 // for a user-supplied or gallery file both sides derive the quantization from the
 // file name (customBirdNETV24ModelInfo at init, detectQuantization in the gate),
 // so such an INT8 file whose name carries no int8 token is not recognized and
-// keeps the f16 default.
+// keeps the default plan (f16 on the CPU).
 func birdnetV24OpenVINOPlan(cfg *conf.BirdNETConfig, quant Quantization) (plan openVINOPlan, ok bool, reason string) {
 	plan, ok, reason = birdnetV24BasePlan(cfg)
 	return applyOpenVINOQuantizationPolicy(plan, ok, reason, cfg.Backend, quant)
@@ -354,8 +354,8 @@ func applyOpenVINOQuantizationPolicy(plan openVINOPlan, ok bool, reason, backend
 // available (ARM A76 f16 CPU, or the Intel iGPU at f32; see openVINOPrecisionFor
 // for why BirdNET v2.4 uses f32 on the GPU), and the model is not INT8 on the
 // auto backend (see applyOpenVINOQuantizationPolicy). initializeModel calls
-// openVINOPlan directly so it can also log the decline reason; this predicate keeps the
-// eligibility gate independently assertable in tests.
+// openVINOPlan directly so it can also log the decline reason; this predicate
+// keeps the eligibility gate independently assertable in tests.
 func (bn *BirdNET) shouldTryOpenVINO() bool {
 	_, ok, _ := bn.openVINOPlan()
 	return ok

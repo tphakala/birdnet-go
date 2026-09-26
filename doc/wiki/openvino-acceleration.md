@@ -62,7 +62,7 @@ There is nothing to install. If you are on an amd64 host without an iGPU you wil
 
 ```yaml
 birdnet:
-  backend: auto # or openvino
+  backend: openvino # auto also uses OpenVINO for FP32 models, but not for INT8
   openvinodevice: auto # cpu to force the OpenVINO CPU device
 ```
 
@@ -248,7 +248,7 @@ The runtime user is not in the render group. In Docker the entrypoint handles th
 
 ### Models still run on `CPU` / ORT with OpenVINO enabled
 
-Check the model is OpenVINO-eligible (see [What OpenVINO Accelerates](#what-openvino-accelerates)). INT8 models (on `auto`), the stock `perch_v2.onnx` with the DFT layer, and custom models stay on ONNX Runtime by design. Also confirm `birdnet.backend` is not set to `onnx`.
+Check the model is OpenVINO-eligible (see [What OpenVINO Accelerates](#what-openvino-accelerates)). INT8 BirdNET v2.4 models (on `auto`), INT8 Perch builds, the stock `perch_v2.onnx` with the DFT layer, and custom models stay on ONNX Runtime by design. Also confirm `birdnet.backend` is not set to `onnx`.
 
 ### Detections look wrong after forcing GPU f16
 

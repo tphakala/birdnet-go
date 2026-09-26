@@ -589,15 +589,17 @@ func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution
 // return a DFT-truncated ONNX build for this family. Recovering onto one that
 // cannot load would turn a recoverable stale path into a hard startup failure,
 // which is precisely the outcome this recovery exists to prevent. Reporting false
-// makes the caller fall through to the built-in baseline, which always loads.
+// makes the caller fall through to the built-in baseline, which loads wherever
+// its backend is available (on arm64 it is the INT8 ONNX model, which needs ONNX
+// Runtime on the auto backend; see applyOpenVINOQuantizationPolicy).
 //
 // "Can load" is deliberately NOT "ONNX Runtime is available". initializeModel
 // tries OPENVINO FIRST for the v2.4 identity and only falls through to ONNX
 // Runtime when OpenVINO declines, so an openvino-tagged build on an A76/Pi5 or an
 // Intel iGPU runs these variants with no ORT installed at all (except an INT8
 // build on the auto backend, which OpenVINO declines; see
-// applyOpenVINOQuantizationPolicy). Gating on ORT alone
-// would refuse a variant that would have loaded, silently dropping such a host to
+// applyOpenVINOQuantizationPolicy). Gating on ORT alone would refuse a variant
+// that would have loaded, silently dropping such a host to
 // the embedded model and telling the user no installed model was available, which
 // is false.
 //
