@@ -197,6 +197,36 @@ func TestOptimizeOffers(t *testing.T) {
 	}
 }
 
+// TestEnsureHostProbed_BeforeLiveRanking pins that the rankings that decide
+// something lasting (the optimize notice and the install gate) run the
+// out-of-process OpenVINO probe first when they use the live host profile, and
+// never under the test profile seam.
+func TestEnsureHostProbed_BeforeLiveRanking(t *testing.T) {
+	core := apitest.NewCore(t)
+	mm := classifier.NewModelManager(t.TempDir(), nil, nil)
+	mm.ScanInstalled()
+	core.ModelManager = mm
+	h := New(core, nil)
+	var probes atomic.Int32
+	h.ensureOVProbe = func() { probes.Add(1) }
+
+	entry, ok := classifier.GetCatalogEntry("birdnet-v2.4")
+	require.True(t, ok)
+
+	// Live host profile (no seam): both callers probe first.
+	h.currentOptimizeOffers()
+	assert.Equal(t, int32(1), probes.Load(), "the optimize evaluation probes before ranking")
+	h.requestedVariantCompatibility(&entry, "", inference.ORTStatus{})
+	assert.Equal(t, int32(2), probes.Load(), "the install gate probes before ranking")
+
+	// Synthetic profile: nothing to probe.
+	profile := tfliteOnlyProfile()
+	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return profile }
+	h.currentOptimizeOffers()
+	h.requestedVariantCompatibility(&entry, "", inference.ORTStatus{})
+	assert.Equal(t, int32(2), probes.Load(), "the test profile seam never probes")
+}
+
 func TestOptimizeOffersSignature_OrderIndependent(t *testing.T) {
 	t.Parallel()
 	a := optimizeOffer{CatalogID: "a", ToVariantID: "fast"}

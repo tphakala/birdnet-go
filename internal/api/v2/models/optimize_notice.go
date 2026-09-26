@@ -114,7 +114,8 @@ func optimizeOffersSignature(offers []optimizeOffer) string {
 
 // currentOptimizeOffers computes the offers for this host from live state: the
 // visible catalog, the installed variants, and the same recommender pass the
-// catalog endpoint runs. It is not gated on request authentication because its
+// catalog endpoint runs, after ensuring the OpenVINO device probe has run
+// (ensureHostProbed). It is not gated on request authentication because its
 // only consumer is the bell notice, which guests cannot read (the notifications
 // API shows unauthenticated callers detection notices only).
 func (c *Handler) currentOptimizeOffers() []optimizeOffer {
@@ -129,6 +130,7 @@ func (c *Handler) currentOptimizeOffers() []optimizeOffer {
 		}
 	}
 	ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
+	c.ensureHostProbed()
 	byVariant, recommended, _ := c.rankCatalog(visible, ortStatus)
 	return optimizeOffers(visible, installed, byVariant, recommended)
 }

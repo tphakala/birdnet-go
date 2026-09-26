@@ -314,3 +314,65 @@ func TestOpenVINOHasDeviceDoesNotBlockOnInFlightProbe(t *testing.T) {
 	<-done
 	assert.Equal(t, 1, calls.count())
 }
+
+// markOVCoreLoadedForTest makes the package believe InitOpenVINO loaded the core
+// from libraryPath (loaded=true) or that no core is loaded (loaded=false),
+// restoring the previous state at cleanup. No real library is loaded.
+func markOVCoreLoadedForTest(t *testing.T, loaded bool, libraryPath string) {
+	t.Helper()
+	ovInitMu.Lock()
+	prevInit, prevPath := ovInitialized, ovInitPath
+	ovInitialized, ovInitPath = loaded, libraryPath
+	ovInitMu.Unlock()
+	t.Cleanup(func() {
+		ovInitMu.Lock()
+		ovInitialized, ovInitPath = prevInit, prevPath
+		ovInitMu.Unlock()
+	})
+}
+
+// TestOpenVINOHasDeviceNeverProbesOrEnumeratesBeforeProbe pins that a status
+// reader on a host whose core is loaded but never probed (the explicit-CPU plan
+// path) answers false without launching a probe child: it must neither block on
+// a child nor fall back to the in-process driver walk (issue #4236).
+func TestOpenVINOHasDeviceNeverProbesOrEnumeratesBeforeProbe(t *testing.T) {
+	calls := fakeOVProbeChild(t, "ok")
+	markOVCoreLoadedForTest(t, true, "libopenvino_c.so")
+
+	assert.False(t, OpenVINOHasDevice("GPU"))
+	assert.False(t, OpenVINOHasDevice("CPU"))
+	assert.Equal(t, 0, calls.count(), "a status reader must not launch the probe child")
+}
+
+// TestEnsureOpenVINOProbeRunsChildOnce pins that EnsureOpenVINOProbe probes the
+// library the core was loaded from, out of process and once, after which status
+// readers answer from the probe.
+func TestEnsureOpenVINOProbeRunsChildOnce(t *testing.T) {
+	calls := fakeOVProbeChild(t, "ok")
+	markOVCoreLoadedForTest(t, true, "/opt/custom/libopenvino_c.so")
+
+	EnsureOpenVINOProbe()
+	EnsureOpenVINOProbe()
+
+	if !ov.Supported {
+		assert.Equal(t, 0, calls.count(), "without the openvino build tag there is nothing to probe")
+		return
+	}
+	assert.Equal(t, 1, calls.count(), "the verdict is cached, so a second call launches no child")
+	ovProbe.mu.Lock()
+	_, probedLoadedPath := ovProbe.results["/opt/custom/libopenvino_c.so"]
+	ovProbe.mu.Unlock()
+	assert.True(t, probedLoadedPath, "the probe must target the library the core was loaded from")
+	assert.True(t, OpenVINOHasDevice("GPU"), "readers answer from the probe once it has run")
+}
+
+// TestEnsureOpenVINOProbeNoopWithoutCore pins that a host with no OpenVINO core
+// loaded never launches a probe child.
+func TestEnsureOpenVINOProbeNoopWithoutCore(t *testing.T) {
+	calls := fakeOVProbeChild(t, "ok")
+	markOVCoreLoadedForTest(t, false, "")
+
+	EnsureOpenVINOProbe()
+
+	assert.Equal(t, 0, calls.count())
+}
