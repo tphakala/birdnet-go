@@ -261,7 +261,7 @@ Before pushing or creating a PR, verify each item by actually executing the comm
 - [ ] No secrets or PII: no hardcoded credentials, API keys, or personal data in diff
 ```
 
-Include this certification in the PR description under a "Preflight Status" heading.
+This certification is a private self-check. Do not paste it or any preflight findings into the PR description; the PR gets only a single `- [x] Preflight passed` checkbox.
 
 ## Static Analysis False Positive Patterns
 

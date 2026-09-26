@@ -136,8 +136,8 @@ These checks cover only the default build tags and your own OS:
 When creating a pull request, you MUST:
 
 1. Verify the PR addresses exactly ONE feature, fix, or refactor
-2. Include a "Preflight Status" section in the description showing what the
-   gate found and fixed
+2. Include a single `- [x] Preflight passed` checkbox in the description. Do
+   not add a preflight report: no findings, no fix list, no review details
 3. Verify all linters pass (`task lint`, `npm run check:all`)
 4. Verify all tests pass (`task test`, `npm test`)
 5. Confirm the diff contains ONLY changes relevant to the stated goal
@@ -147,8 +147,8 @@ When creating a pull request, you MUST:
 
 Actually execute the verification commands and observe passing output before
 claiming they pass. Do not tick boxes from assumption or prior knowledge. PRs
-without the preflight certification take multiple review rounds; the gate
-catches the same issues reviewers find.
+that skip preflight take multiple review rounds; the gate catches the same
+issues reviewers find.
 
 ## Interpreting CI Failures
 
