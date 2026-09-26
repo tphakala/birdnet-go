@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   deduplicateNotifications,
   mergeAndDeduplicateNotifications,
+  removeNotificationById,
   groupNotifications,
   createGroupingKey,
   sanitizeNotificationMessage,
@@ -484,5 +485,28 @@ describe('translateNotification', () => {
     expect(notification.title_key).toBe('some.key');
     expect(notification.message_params).toEqual({ foo: 'bar' });
     expect(notification.title).toBe('Original');
+  });
+});
+
+describe('removeNotificationById', () => {
+  it('removes the notification and reports whether unread ones remain', () => {
+    const list = [
+      createTestNotification({ id: 'a', read: false }),
+      createTestNotification({ id: 'b', read: true }),
+    ];
+
+    const result = removeNotificationById(list, 'a');
+
+    expect(result.notifications.map(n => n.id)).toEqual(['b']);
+    expect(result.hasUnread).toBe(false);
+  });
+
+  it('returns the same list for an id it does not hold', () => {
+    const list = [createTestNotification({ id: 'a', read: false })];
+
+    const result = removeNotificationById(list, 'missing');
+
+    expect(result.notifications).toBe(list);
+    expect(result.hasUnread).toBe(true);
   });
 });

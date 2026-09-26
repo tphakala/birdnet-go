@@ -7,6 +7,7 @@ import {
   sanitizeNotificationMessage,
   isValidNotification,
   translateField,
+  NOTIFICATION_DELETED_WINDOW_EVENT,
   type Notification,
 } from '$lib/utils/notifications';
 import { onSSEActivity, onSSEError } from '$lib/stores/connectionState.svelte';
@@ -23,8 +24,7 @@ const TOAST_DEFAULT_POSITION: ToastPosition = 'top-right';
 
 /** SSE event the server sends when it deletes a notification (backend sseEventNotificationDeleted). */
 export const NOTIFICATION_DELETED_SSE_EVENT = 'notification_deleted';
-/** Window event the bell and the notifications page listen on (and dispatch) for deletes. */
-export const NOTIFICATION_DELETED_WINDOW_EVENT = 'notification-deleted';
+export { NOTIFICATION_DELETED_WINDOW_EVENT };
 
 /** Returns the notification ID from a notification_deleted payload, or null when malformed. */
 export function parseDeletedNotificationId(payload: unknown): string | null {

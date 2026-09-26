@@ -19,6 +19,8 @@
   import { t } from '$lib/i18n';
   import { safeGet } from '$lib/utils/security';
   import {
+    NOTIFICATION_DELETED_WINDOW_EVENT,
+    removeNotificationById,
     deduplicateNotifications,
     sanitizeNotificationMessage,
     translateNotification,
@@ -340,7 +342,7 @@
 
       // Dispatch event for notification bell update
       window.dispatchEvent(
-        new CustomEvent('notification-deleted', {
+        new CustomEvent(NOTIFICATION_DELETED_WINDOW_EVENT, {
           detail: { id, wasUnread },
         })
       );
@@ -436,8 +438,26 @@
     return formatDate(date);
   }
 
+  /**
+   * Drop a notification deleted elsewhere: in another tab, by the bell, or on the
+   * server (a cleared or replaced persistent notice, relayed by the SSE store).
+   * This page's own deletes dispatch the same event after removing the row, so
+   * the id is already gone and the call is a no-op.
+   * @param {Event} event
+   */
+  function handleNotificationDeleted(event) {
+    const id = /** @type {CustomEvent<{ id: string }>} */ (event).detail?.id;
+    if (typeof id !== 'string') return;
+    const next = removeNotificationById(notifications, id);
+    notifications = next.notifications;
+    hasUnread = next.hasUnread;
+  }
+
   onMount(() => {
     loadNotifications();
+    window.addEventListener(NOTIFICATION_DELETED_WINDOW_EVENT, handleNotificationDeleted);
+    return () =>
+      window.removeEventListener(NOTIFICATION_DELETED_WINDOW_EVENT, handleNotificationDeleted);
   });
 </script>
 

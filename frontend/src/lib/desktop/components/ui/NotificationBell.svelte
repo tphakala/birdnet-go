@@ -12,6 +12,7 @@
   import {
     type Notification,
     mergeAndDeduplicateNotifications,
+    NOTIFICATION_DELETED_WINDOW_EVENT,
     isExistingNotification,
     shouldShowNotification,
     sanitizeNotificationMessage,
@@ -434,7 +435,7 @@
       // Add event listeners
       globalThis.document.addEventListener('click', handleClickOutside);
       globalThis.window.addEventListener(
-        'notification-deleted',
+        NOTIFICATION_DELETED_WINDOW_EVENT,
         handleNotificationDeleted as globalThis.EventListener
       );
 
@@ -450,7 +451,7 @@
       return () => {
         globalThis.document.removeEventListener('click', handleClickOutside);
         globalThis.window.removeEventListener(
-          'notification-deleted',
+          NOTIFICATION_DELETED_WINDOW_EVENT,
           handleNotificationDeleted as globalThis.EventListener
         );
         cleanup();

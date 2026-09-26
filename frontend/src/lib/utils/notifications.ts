@@ -6,6 +6,26 @@
 import { getHigherPriority, createNotificationKey, type Priority } from './priority';
 import { t } from '$lib/i18n';
 
+/**
+ * Window event the bell and the notifications page listen on (and dispatch) for
+ * deletes, whether made in this tab or pushed by the server (notification_deleted).
+ */
+export const NOTIFICATION_DELETED_WINDOW_EVENT = 'notification-deleted';
+
+/**
+ * Returns the list without the notification with the given id and whether any
+ * unread one remains. An id that is not in the list returns the list unchanged.
+ */
+export function removeNotificationById(
+  notifications: Notification[],
+  id: string
+): { notifications: Notification[]; hasUnread: boolean } {
+  const remaining = notifications.some(n => n.id === id)
+    ? notifications.filter(n => n.id !== id)
+    : notifications;
+  return { notifications: remaining, hasUnread: remaining.some(n => !n.read) };
+}
+
 // Constant for toast notification title - must match backend ToastNotificationTitle
 export const TOAST_NOTIFICATION_TITLE = 'Toast Message';
 
