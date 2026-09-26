@@ -323,8 +323,7 @@ func (c *client) handleConnectionFailure(connectErr error, clientToConnect mqtt.
 	c.mu.Unlock()
 
 	// Enhance error if needed
-	var enhancedErr *errors.EnhancedError
-	if !errors.As(connectErr, &enhancedErr) {
+	if _, ok := errors.AsType[*errors.EnhancedError](connectErr); !ok {
 		connectErr = errors.New(connectErr).
 			Component("mqtt").
 			Category(errors.CategoryMQTTConnection).
@@ -702,8 +701,7 @@ func (c *client) performDNSResolution(ctx context.Context, log logger.Logger) er
 			log.Error("Failed to resolve broker hostname",
 				logger.String("host", host),
 				logger.Error(err))
-			var dnsErr *net.DNSError
-			if errors.As(err, &dnsErr) {
+			if dnsErr, ok := errors.AsType[*net.DNSError](err); ok {
 				c.mu.Lock()
 				c.lastConnAttempt = time.Now()
 				c.mu.Unlock()
@@ -1194,8 +1192,7 @@ func (c *client) handleReconnectFailure(log logger.Logger, err error) {
 
 	// Extract error category for metrics (always track, even when log is suppressed)
 	errorCategory := "generic"
-	var enhancedErr *errors.EnhancedError
-	if errors.As(err, &enhancedErr) {
+	if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
 		errorCategory = enhancedErr.GetCategory()
 	}
 	c.metrics.IncrementErrorsWithCategory(errorCategory, "reconnect_failed")

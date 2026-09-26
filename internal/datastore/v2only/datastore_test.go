@@ -974,8 +974,8 @@ func TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry(t *testing.T) {
 		require.Error(t, err)
 		require.ErrorIs(t, err, repository.ErrDynamicThresholdNotFound,
 			"not-found sentinel must propagate so callers can distinguish a benign miss from a genuine DB fault")
-		var ee *errors.EnhancedError
-		require.True(t, errors.As(err, &ee),
+		ee, ok := errors.AsType[*errors.EnhancedError](err)
+		require.True(t, ok,
 			"not-found must be a CategoryNotFound EnhancedError so the API maps it to 404")
 		assert.Equal(t, string(errors.CategoryNotFound), ee.GetCategory(),
 			"not-found must be CategoryNotFound, never CategoryDatabase (which would be Sentry noise)")
@@ -991,8 +991,8 @@ func TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry(t *testing.T) {
 		assertDatastoreWrapped := func(t *testing.T, err error, op string) {
 			t.Helper()
 			require.Error(t, err, "%s should surface the DB error", op)
-			var ee *errors.EnhancedError
-			require.True(t, errors.As(err, &ee), "%s error must be an EnhancedError", op)
+			ee, ok := errors.AsType[*errors.EnhancedError](err)
+			require.True(t, ok, "%s error must be an EnhancedError", op)
 			assert.Equal(t, "datastore", ee.GetComponent(), "%s must tag datastore component", op)
 			assert.Equal(t, string(errors.CategoryDatabase), ee.GetCategory(), "%s must tag database category", op)
 		}

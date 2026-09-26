@@ -174,8 +174,7 @@ func runNetworkTest(ctx context.Context, stage TestStage, test networkTest) Test
 // categorizeError determines the error category based on error type and content
 func categorizeError(err error) string {
 	// Check if it's already an enhanced error
-	var enhancedErr *errors.EnhancedError
-	if errors.As(err, &enhancedErr) {
+	if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
 		return enhancedErr.GetCategory()
 	}
 
@@ -346,8 +345,7 @@ func (c *client) testPublishStage(ctx context.Context) TestResult {
 		err = c.Publish(ctx, testTopic, string(noteJson))
 		if err != nil {
 			// Add test-specific context to publish errors
-			var enhancedErr *errors.EnhancedError
-			if errors.As(err, &enhancedErr) {
+			if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
 				// Add test context to existing enhanced error
 				enhancedErr.Context["test_topic"] = testTopic
 				enhancedErr.Context["test_payload_size"] = len(noteJson)

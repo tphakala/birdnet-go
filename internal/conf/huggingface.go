@@ -223,8 +223,7 @@ func isSchemeName(s string) bool {
 // raw value entirely rather than trying to redact it, and the inner reason
 // ("invalid port ...", "invalid URL escape ...") never contains userinfo.
 func parseFailureReason(err error) string {
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) && urlErr.Err != nil {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok && urlErr.Err != nil {
 		return urlErr.Err.Error()
 	}
 	// Unknown error shape: report nothing rather than risk echoing the value.

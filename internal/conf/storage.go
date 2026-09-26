@@ -369,8 +369,7 @@ func initViper() error {
 
 		// For default path search: ConfigFileNotFoundError means no config
 		// exists yet, so create one with defaults.
-		var configFileNotFoundError viper.ConfigFileNotFoundError
-		if errors.As(err, &configFileNotFoundError) {
+		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); ok {
 			return createDefaultConfig()
 		}
 

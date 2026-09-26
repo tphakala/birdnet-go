@@ -903,7 +903,7 @@ func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 }
 
 // TestGetSoxSpectrogramArgs_BatProfile verifies that the bat frequency profile
-// resamples to 256 kHz (Nyquist = 128 kHz) so the fixed 0–128 kHz UI axis is
+// resamples to 256 kHz (Nyquist = 128 kHz) so the fixed 0-128 kHz UI axis is
 // always accurate, regardless of the original capture rate.
 func TestGetSoxSpectrogramArgs_BatProfile(t *testing.T) {
 	env := setupTestEnv(t)
@@ -916,7 +916,7 @@ func TestGetSoxSpectrogramArgs_BatProfile(t *testing.T) {
 
 	args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0, BatProfile())
 
-	// Bat profile: resampled to 256 kHz – no sinc filter.
+	// Bat profile: resampled to 256 kHz, no sinc filter.
 	assert.NotContains(t, args, "sinc", "bat profile should not apply a high-pass filter")
 	assert.Contains(t, args, "rate", "bat profile should resample to 256 kHz")
 	assert.Contains(t, args, "256000", "bat profile should resample to 256000 Hz")
@@ -1108,8 +1108,8 @@ func TestOperationalErrors_SetLowPriority(t *testing.T) {
 			err := gen.GenerateFromPCM(ctx, pcmData, outputPath, 400, false, 0)
 			require.Error(t, err, "expected error from cancelled/expired context")
 
-			var enhancedErr *errors.EnhancedError
-			require.True(t, errors.As(err, &enhancedErr), "error should be an EnhancedError")
+			enhancedErr, ok := errors.AsType[*errors.EnhancedError](err)
+			require.True(t, ok, "error should be an EnhancedError")
 			assert.Equal(t, tt.wantPriority, enhancedErr.GetPriority(),
 				"operational error should have PriorityLow to prevent dashboard notifications")
 		})
@@ -1131,17 +1131,17 @@ func TestNonOperationalErrors_NoExplicitPriority(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "test_non_op.png")
 	pcmData := []byte{0, 1, 2, 3}
 
-	// Use a valid (non-cancelled) context — the error will be "exec: /nonexistent/sox: not found"
+	// Use a valid (non-cancelled) context; the error will be "exec: /nonexistent/sox: not found"
 	// which is NOT an operational error
 	err := gen.GenerateFromPCM(t.Context(), pcmData, outputPath, 400, false, 0)
 	require.Error(t, err, "expected error from missing binary execution")
 
-	var enhancedErr *errors.EnhancedError
-	require.True(t, errors.As(err, &enhancedErr), "error should be an EnhancedError")
+	enhancedErr, ok := errors.AsType[*errors.EnhancedError](err)
+	require.True(t, ok, "error should be an EnhancedError")
 
 	// Non-operational errors should NOT have explicit `PriorityLow`
 	assert.NotEqual(t, errors.PriorityLow, enhancedErr.GetPriority(),
-		"non-operational error should not have PriorityLow — it should generate notifications")
+		"non-operational error should not have PriorityLow; it should generate notifications")
 }
 
 // TestGetFileSizeBytes_ReturnsSize tests that getFileSizeBytes returns the correct size for an existing file.

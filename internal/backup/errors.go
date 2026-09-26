@@ -120,11 +120,10 @@ func NewError(code ErrorCode, message string, err error) error {
 
 // IsErrorCode checks if an error is a backup error with the specified code
 func IsErrorCode(err error, code ErrorCode) bool {
-	var backupErr *Error
 	if err == nil {
 		return false
 	}
-	if errors.As(err, &backupErr) {
+	if backupErr, ok := errors.AsType[*Error](err); ok {
 		return backupErr.Code == code
 	}
 	return false

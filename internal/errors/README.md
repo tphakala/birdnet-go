@@ -414,8 +414,7 @@ The enhanced error system preserves standard error interfaces:
 if errors.Is(err, ErrNotFound) { ... }
 
 // Enhanced error checking
-var enhancedErr *errors.EnhancedError
-if errors.As(err, &enhancedErr) {
+if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
     component := enhancedErr.GetComponent()
     category := enhancedErr.GetCategory()
 }
@@ -531,7 +530,7 @@ import "github.com/tphakala/birdnet-go/internal/errors"
 // Available passthrough functions:
 errors.Is(err, target)                       // Standard error checking
 errors.AsType[*fs.PathError](err)            // Type-safe error unwrapping (preferred)
-errors.As(err, &target)                      // Standard error unwrapping
+errors.As(err, &target)                      // Legacy form; the ErrorsAsType lint rule flags it, use AsType
 errors.Unwrap(err)                           // Standard error unwrapping
 errors.Join(errs...)                         // Standard error joining
 errors.NewStd("not found")                   // Standard errors.New, for sentinels

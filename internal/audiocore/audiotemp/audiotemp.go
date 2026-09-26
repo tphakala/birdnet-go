@@ -188,8 +188,8 @@ func WriteFile(ctx context.Context, component, finalPath string, encode func(f *
 // filesystem failures, not as codec failures, or a full disk shows up in
 // telemetry as an audio bug carrying a sample rate and a bitrate.
 func IsWriteFault(err error) bool {
-	var pathErr *os.PathError
-	return errors.As(err, &pathErr)
+	_, ok := errors.AsType[*os.PathError](err)
+	return ok
 }
 
 // fileIOErr tags a filesystem failure against the caller's component. Keeping

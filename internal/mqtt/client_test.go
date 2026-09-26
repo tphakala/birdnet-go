@@ -218,10 +218,9 @@ func verifyDNSError(t *testing.T, err error) {
 // verifyNetworkError verifies that the error is either a DNS or net.Error
 func verifyNetworkError(t *testing.T, err error) {
 	t.Helper()
-	var dnsErr *net.DNSError
-	var netErr net.Error
-	//nolint:gocritic // OR condition with different error types - AsType would require two separate calls
-	assert.True(t, errors.As(err, &dnsErr) || errors.As(err, &netErr),
+	_, isDNSErr := errors.AsType[*net.DNSError](err)
+	_, isNetErr := errors.AsType[net.Error](err)
+	assert.True(t, isDNSErr || isNetErr,
 		"Expected either a DNS error or a net.Error, got: %v", err)
 }
 
