@@ -997,3 +997,29 @@ func TestBuildModelHealth(t *testing.T) {
 		})
 	}
 }
+
+// TestModelHealthInfo_JSONFieldNames pins the wire names the frontend reads
+// (inference.types.ts InferenceModelHealth and the acoustic model store).
+func TestModelHealthInfo_JSONFieldNames(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(ModelHealthInfo{
+		State: modelHealthFailing, ConsecutiveFailures: 12, FailureThreshold: 10, InferenceCount: 40,
+		LastInferenceAtUnix: 2, LastSuccessAtUnix: 1, ErrorClass: classifier.InferenceErrorClassNonFinite,
+	})
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, map[string]any{
+		"state":               "failing",
+		"consecutiveFailures": float64(12),
+		"failureThreshold":    float64(10),
+		"inferenceCount":      float64(40),
+		"lastInferenceAtUnix": float64(2),
+		"lastSuccessAtUnix":   float64(1),
+		"errorClass":          "non_finite_output",
+	}, got)
+
+	raw, err = json.Marshal(InferenceModelStatus{ID: "m", Health: &ModelHealthInfo{State: modelHealthIdle}})
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"health":{"state":"idle"`)
+}

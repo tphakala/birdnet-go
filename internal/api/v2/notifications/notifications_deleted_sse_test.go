@@ -1,8 +1,11 @@
 package notifications
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,8 +45,9 @@ func runLoopWithDeletions(t *testing.T, guest bool, events ...notification.Delet
 	go func() { errCh <- c.runNotificationEventLoop(ctx, client) }()
 
 	// Wait until the loop drained the queued events, then disconnect it.
+	// The loop writes each received event before it selects again, so once the
+	// queue is drained the Done signal is seen only after the last write.
 	require.Eventually(t, func() bool { return len(deletions) == 0 }, 2*time.Second, time.Millisecond)
-	time.Sleep(20 * time.Millisecond) // let the last drained event reach the writer
 	client.Done <- struct{}{}
 	select {
 	case err := <-errCh:
@@ -69,4 +73,60 @@ func TestNotificationEventLoop_GuestOnlyGetsDetectionDeletions(t *testing.T) {
 	)
 	assert.NotContains(t, body, "operational-1", "guests never saw operational notices, so they get no deletion for them")
 	assert.Contains(t, body, `"id":"detection-1"`)
+}
+
+// syncRecorder is an httptest.ResponseRecorder whose writes can be read while
+// the SSE handler is still streaming.
+type syncRecorder struct {
+	*httptest.ResponseRecorder
+	mu sync.Mutex
+}
+
+func (r *syncRecorder) Write(b []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.ResponseRecorder.Write(b)
+}
+
+func (r *syncRecorder) body() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.Body.String()
+}
+
+// TestStreamNotifications_PushesServerDeletes drives the real stream handler:
+// it subscribes to deletions, so deleting a notification on the service reaches
+// the client as a notification_deleted event.
+func TestStreamNotifications_PushesServerDeletes(t *testing.T) {
+	t.Parallel()
+	h, svc := newNotificationTestHandler(t)
+	h.SetTestContext(t.Context(), nil)
+
+	e := echo.New()
+	reqCtx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, sseEndpoint, http.NoBody).WithContext(reqCtx)
+	rec := &syncRecorder{ResponseRecorder: httptest.NewRecorder()}
+	ctx := e.NewContext(req, rec)
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.StreamNotifications(ctx) }()
+	require.Eventually(t, func() bool { return strings.Contains(rec.body(), "event: connected") },
+		2*time.Second, time.Millisecond)
+
+	// A detection notice, so the event also passes the guest filter.
+	n := notification.NewNotification(notification.TypeDetection, notification.PriorityMedium, "t", "m")
+	require.NoError(t, svc.CreateWithMetadata(n))
+	require.NoError(t, svc.Delete(n.ID))
+	require.Eventually(t, func() bool {
+		body := rec.body()
+		return strings.Contains(body, "event: "+sseEventNotificationDeleted) && strings.Contains(body, n.ID)
+	}, 2*time.Second, time.Millisecond)
+
+	cancel()
+	select {
+	case <-errCh:
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "stream handler did not return after the client left")
+	}
 }

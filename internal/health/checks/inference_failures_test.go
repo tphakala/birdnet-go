@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/health"
 )
@@ -59,4 +60,28 @@ func TestInferenceFailuresCheck(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestInferenceFailuresCheck_Details pins the per-model details and the joined
+// list of failing models.
+func TestInferenceFailuresCheck_Details(t *testing.T) {
+	t.Parallel()
+	c := NewInferenceFailuresCheck(func() []ModelInferenceFailureInfo {
+		return []ModelInferenceFailureInfo{
+			{ModelID: "a", ModelName: "Model A", ConsecutiveFailures: 11, Failing: true, ErrorClass: "non_finite_output"},
+			{ModelID: "b", ModelName: "Model B"},
+			{ModelID: "c", ModelName: "Model C", ConsecutiveFailures: 30, Failing: true, ErrorClass: "inference_error"},
+		}
+	})
+	r := c.Run(t.Context())
+	assert.Equal(t, health.StatusCritical, r.Status)
+	assert.Equal(t, "Every analysis fails for: Model A, Model C (see the AI Models page)", r.Message)
+	assert.Equal(t, 2, r.Details["failing_count"])
+	models, ok := r.Details["models"].([]map[string]any)
+	require.True(t, ok)
+	require.Len(t, models, 3)
+	assert.Equal(t, map[string]any{
+		"model_id": "c", "model_name": "Model C", "consecutive_failures": int64(30),
+		"failing": true, "error_class": "inference_error",
+	}, models[2])
 }

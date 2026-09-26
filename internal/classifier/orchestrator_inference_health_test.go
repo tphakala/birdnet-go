@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -329,4 +330,55 @@ func TestInferenceHealth_NamelessModelFallsBackToID(t *testing.T) {
 	health := o.InferenceHealth()
 	require.Len(t, health, 1)
 	assert.Equal(t, modelID, health[0].Name)
+}
+
+// TestInferenceFailureNotice_ReloadClearsNotice pins that replacing a failing
+// model's instance (a variant swap or settings reload) clears its notice: the new
+// instance starts with a fresh record and is not failing.
+func TestInferenceFailureNotice_ReloadClearsNotice(t *testing.T) {
+	// Not parallel: uses the process-global notification service, settings and health records.
+	setTestGlobalSettings(t)
+	svc := setupTestNotification(t)
+	dropInferenceHealth(RegistryIDBirdNETV24)
+	t.Cleanup(func() { dropInferenceHealth(RegistryIDBirdNETV24) })
+
+	m := newFailingModel(RegistryIDBirdNETV24)
+	o := newTestOrchestrator(t, m.mock)
+	m.fail.Store(true)
+	predictN(t, o, RegistryIDBirdNETV24, InferenceFailureNoticeThreshold)
+	o.inferenceHealth.inFlight.Wait()
+	require.Len(t, failureNotices(t, svc), 1)
+
+	fresh := newFailingModel(RegistryIDBirdNETV24)
+	swapped, err := o.reloadEntry(RegistryIDBirdNETV24, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+		return fresh.mock, nil
+	}, reloadOpts{})
+	require.NoError(t, err)
+	require.True(t, swapped)
+	o.inferenceHealth.inFlight.Wait()
+
+	assert.Empty(t, failureNotices(t, svc), "the replaced instance's notice is cleared")
+	health := o.InferenceHealth()
+	require.Len(t, health, 1)
+	assert.Zero(t, health[0].ConsecutiveFailures, "the new instance starts with a fresh record")
+}
+
+// TestKickInferenceHealthSyncIfTracked_UntrackedStartsNothing pins the common
+// case: unloading a healthy model with no notice latched queues no reconcile.
+func TestKickInferenceHealthSyncIfTracked_UntrackedStartsNothing(t *testing.T) {
+	// Not parallel: uses the package-global health records.
+	const modelID = "untracked-unload-model"
+	dropInferenceHealth(modelID)
+	t.Cleanup(func() { dropInferenceHealth(modelID) })
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: modelID})
+	predictN(t, o, modelID, 3)
+	require.NoError(t, o.UnloadModel(modelID))
+
+	// Wait out any pass, then check none ran: a reconcile pass always records
+	// the failing set (an empty, non-nil map when nothing fails).
+	o.inferenceHealth.inFlight.Wait()
+	o.inferenceHealth.mu.Lock()
+	defer o.inferenceHealth.mu.Unlock()
+	assert.Nil(t, o.inferenceHealth.failing, "no reconcile ran for an untracked unload")
 }
