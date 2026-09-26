@@ -30,6 +30,7 @@ const (
 	ovReasonNoDevice       = "no supported OpenVINO device (needs an ARMv8.2+/A76 CPU with native f16, or an Intel OpenVINO GPU)"
 	ovReasonNotBirdNETv24  = "model is not the stock BirdNET v2.4 classifier"
 	ovReasonNotPerchNoDFT  = "model is not the Perch no_dft variant"
+	ovReasonINT8Model      = "INT8 model runs on ONNX Runtime (set backend to openvino to force OpenVINO at f32)"
 )
 
 // openVINOPlan describes how a model should run on the OpenVINO backend.
@@ -104,9 +105,11 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 // (2026-06-18), f16 collapses on realistic low-SNR audio (max confidence error
 // ~0.8, wrong top-1, confidences fall to ~0) while a loud single-species clip
 // survives by luck; f32 is bit-exact with ORT (~6e-6) and still ~4.6x faster than
-// ORT CPU. CPU f16 (incl. ARM A76) is unaffected, so the override is scoped to
-// the GPU path. Do NOT widen it to f16 without re-running the
-// inference/openvino_parity_functional_test.go soundscape parity check.
+// ORT CPU. CPU f16 (incl. ARM A76) is unaffected for FP32-weight files, so the
+// override is scoped to the GPU path. Do NOT widen it to f16 without re-running the
+// inference/openvino_parity_functional_test.go soundscape parity check. INT8-weight
+// files are the exception on the CPU too; that depends on the file, not the
+// registry ID, so it is handled by applyOpenVINOQuantizationPolicy instead.
 //
 // Perch v2 is likewise forced to f32 on the GPU. Its f16-GPU path was validated
 // on an Iris Xe iGPU, but on an Intel Arc A380 (dGPU) the f16 kernel returns
@@ -278,13 +281,47 @@ func (bn *BirdNET) openVINOPlan() (plan openVINOPlan, ok bool, reason string) {
 	if bn.ModelInfo.ID != DefaultModelVersion {
 		return openVINOPlan{}, false, ovReasonNotBirdNETv24
 	}
-	return openVINOPlanFor(
-		bn.Settings.BirdNET.Backend,
-		bn.Settings.BirdNET.OpenVINODevice,
-		bn.ModelInfo.ID,
-		bn.Settings.BirdNET.OpenVINOPath,
+	return birdnetV24OpenVINOPlan(&bn.Settings.BirdNET, bn.ModelInfo.Quantization)
+}
+
+// birdnetV24OpenVINOPlan returns the OpenVINO plan for a BirdNET v2.4 model file
+// whose weights have the given quantization. It is shared by model init
+// ((*BirdNET).openVINOPlan) and the installed-variant load gate
+// (Orchestrator.primaryVariantUsable) so the two can never disagree about which
+// backend a file will run on.
+func birdnetV24OpenVINOPlan(cfg *conf.BirdNETConfig, quant Quantization) (plan openVINOPlan, ok bool, reason string) {
+	plan, ok, reason = openVINOPlanFor(
+		cfg.Backend,
+		cfg.OpenVINODevice,
+		DefaultModelVersion,
+		cfg.OpenVINOPath,
 		birdnetLogitsOutputIndex,
 	)
+	return applyOpenVINOQuantizationPolicy(plan, ok, reason, cfg.Backend, quant)
+}
+
+// applyOpenVINOQuantizationPolicy adjusts an OpenVINO plan for the weight
+// precision of the model file, which openVINOPrecisionFor cannot see (it keys on
+// the registry ID only). A declined plan passes through unchanged.
+//
+// INT8 BirdNET v2.4 weights overflow under OpenVINO's default f16 execution on
+// the A76 CPU: every inference returns +Inf logits and the wrong top-1, so every
+// analysis window is dropped as non-finite (GitHub #4423). Measured on a
+// Raspberry Pi 5 (OpenVINO 2026.2, ORT 1.25.1, one thread, real soundscape
+// clips), both INT8 builds (the stock BirdNET_INT8_ARM.onnx and the gallery's
+// int8-arm-dfttrunc) match ONNX Runtime at f32 (confidence error ~2e-6), but ORT
+// is also faster than OpenVINO f32 (143 vs ~165 ms and 77 vs 87 ms per window).
+// So on the auto backend an INT8 model is declined here and runs on ORT. An
+// explicit backend=openvino is honored, forced to f32 so it stays correct.
+func applyOpenVINOQuantizationPolicy(plan openVINOPlan, ok bool, reason, backendPref string, quant Quantization) (outPlan openVINOPlan, outOK bool, outReason string) {
+	if !ok || quant != QuantizationINT8 {
+		return plan, ok, reason
+	}
+	if backendPref != conf.BackendPrefOpenVINO {
+		return openVINOPlan{}, false, ovReasonINT8Model
+	}
+	plan.precision = inference.OVPrecisionF32
+	return plan, true, ""
 }
 
 // shouldTryOpenVINO reports whether the OpenVINO backend is eligible for the

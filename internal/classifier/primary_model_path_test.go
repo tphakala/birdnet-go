@@ -183,13 +183,7 @@ func TestResolvePrimaryModelPath(t *testing.T) {
 		if settings == nil {
 			settings = &conf.Settings{}
 		}
-		_, planOK, _ := openVINOPlanFor(
-			settings.BirdNET.Backend,
-			settings.BirdNET.OpenVINODevice,
-			DefaultModelVersion,
-			settings.BirdNET.OpenVINOPath,
-			birdnetLogitsOutputIndex,
-		)
+		_, planOK, _ := birdnetV24OpenVINOPlan(&settings.BirdNET, detectQuantization(installed))
 		if !planOK {
 			assert.Empty(t, res.resolved.model,
 				"with no obtainable OpenVINO plan there is no OpenVINO leg to take")

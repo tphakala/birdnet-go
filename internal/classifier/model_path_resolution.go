@@ -625,13 +625,8 @@ func (o *Orchestrator) primaryVariantUsable(modelPath string) bool {
 	// OpenVINO library straight to the ONNX path it has no runtime for, which is
 	// the hard startup failure this gate exists to prevent, reached from the other
 	// side. So the plan must be usable AND the library must actually load.
-	if _, ok, _ := openVINOPlanFor(
-		settings.BirdNET.Backend,
-		settings.BirdNET.OpenVINODevice,
-		DefaultModelVersion,
-		settings.BirdNET.OpenVINOPath,
-		birdnetLogitsOutputIndex,
-	); ok && o.openVINOLoads(settings.BirdNET.OpenVINOPath) {
+	if _, ok, _ := birdnetV24OpenVINOPlan(&settings.BirdNET, detectQuantization(modelPath)); ok &&
+		o.openVINOLoads(settings.BirdNET.OpenVINOPath) {
 		return true
 	}
 
