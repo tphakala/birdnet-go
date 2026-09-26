@@ -1,6 +1,6 @@
 <!--
   AcousticModelBanner - Dashboard banner shown while no acoustic model is
-  analyzing audio.
+  loaded, or while a loaded model fails every analysis.
 
   Watches the shared acoustic model store (one topology SSE per dashboard) and
   renders for the two explicit no-model verdicts and for loaded models that fail

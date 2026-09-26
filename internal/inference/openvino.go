@@ -131,8 +131,8 @@ func EnsureOpenVINOProbe() {
 
 // ovProbeFailureWarned records the library paths whose probe failure has been
 // logged at WARN (value: struct{}), so a failing probe is diagnosable from the
-// log without a WARN line per re-probe (a timed-out probe is not cached and is
-// retried by later callers).
+// log without a WARN line per call (a cached probe failure is returned to every
+// caller, and a timed-out probe is retried by later callers).
 //
 //nolint:gochecknoglobals // process-wide once-per-path log guard
 var ovProbeFailureWarned sync.Map

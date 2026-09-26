@@ -128,10 +128,15 @@ func recordInferenceSuccess(modelID string, now time.Time) int64 {
 	return h.streak.Swap(0)
 }
 
-// isCancellation reports whether a PredictModel error is the caller's context
-// ending (shutdown, a cancelled window) rather than a model fault.
+// isCancellation reports whether a PredictModel error came with the caller's
+// context ending rather than a model fault. Only the caller's context decides: a
+// backend that returns a timeout or cancellation error of its own while the
+// caller is still running is a failing model. The analysis path currently passes
+// context.Background(), so this only applies to callers with a cancellable
+// context (tests, future per-window contexts); a caller that adds a per-window
+// deadline must decide whether a timed-out window counts as a model failure.
 func isCancellation(ctx context.Context, err error) bool {
-	return ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+	return err != nil && ctx.Err() != nil
 }
 
 // inferenceFailureLogsAtError reports whether the streak-th consecutive failure
@@ -165,7 +170,7 @@ type ModelInferenceHealth struct {
 	// LastSuccessAt is when the last window succeeded; zero when none has.
 	LastSuccessAt time.Time
 	// ErrorClass is the class of the latest failure (InferenceErrorClass*), ""
-	// while the model is not failing.
+	// when no failure run is in progress (ConsecutiveFailures == 0).
 	ErrorClass string
 	// Failing is true when ConsecutiveFailures reached
 	// InferenceFailureNoticeThreshold.
@@ -240,8 +245,9 @@ type inferenceHealthState struct {
 	failing map[string]bool                           // failing set at the last reconcile
 }
 
-// SetInferenceHealthChangedCallback registers cb, called (on a background
-// goroutine, holding no orchestrator lock) whenever the set of failing models
+// SetInferenceHealthChangedCallback registers cb, called holding no
+// orchestrator lock (on a background goroutine, except for the final pass that
+// Orchestrator.Delete runs inline) whenever the set of failing models
 // changes. The api facade wires it to the inference topology SSE broadcast so
 // the dashboard re-reads the status snapshot. A nil cb disables it.
 func (o *Orchestrator) SetInferenceHealthChangedCallback(cb func()) {
@@ -293,9 +299,10 @@ func (o *Orchestrator) kickInferenceHealthSyncIfTracked() {
 //
 // The health snapshot is read under st.mu, so overlapping passes apply in order
 // and a slower pass cannot re-raise a notice from a stale snapshot. Lock order:
-// st.mu -> o.mu (the snapshot) and st.mu -> PersistentNotice.mu; no caller holds
-// o.mu while taking st.mu (kicks run on their own goroutine, and Delete runs the
-// final pass after releasing o.mu).
+// st.mu -> o.mu and entry.mu (the snapshot) and st.mu -> PersistentNotice.mu; no
+// caller holds o.mu or entry.mu while taking st.mu (PredictModel, UnloadModel and
+// reloadEntry only kick, which runs the pass on its own goroutine, and Delete
+// runs the final pass after releasing both).
 func (o *Orchestrator) syncInferenceHealth() {
 	st := &o.inferenceHealth
 	st.mu.Lock()

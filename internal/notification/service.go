@@ -275,7 +275,10 @@ func (s *Service) MarkAsAcknowledged(id string) error {
 	return nil
 }
 
-// Delete removes a notification
+// Delete removes a notification and, when one was actually removed, sends a
+// DeletedEvent to every SubscribeDeletions subscriber. A missing ID is not an
+// error: Delete returns nil and sends nothing, so callers can treat a
+// user-deleted notification as already gone.
 func (s *Service) Delete(id string) error {
 	if id == "" {
 		return errors.Newf("notification ID cannot be empty").

@@ -23,7 +23,7 @@ const TOAST_DEFAULT_POSITION: ToastPosition = 'top-right';
 
 /** SSE event the server sends when it deletes a notification (backend sseEventNotificationDeleted). */
 export const NOTIFICATION_DELETED_SSE_EVENT = 'notification_deleted';
-/** Window event the bell and the notifications page listen on for deletes. */
+/** Window event the bell and the notifications page listen on (and dispatch) for deletes. */
 export const NOTIFICATION_DELETED_WINDOW_EVENT = 'notification-deleted';
 
 /** Returns the notification ID from a notification_deleted payload, or null when malformed. */

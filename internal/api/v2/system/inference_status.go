@@ -221,7 +221,7 @@ type InferenceModelStatus struct {
 	RecentDetections []LastDetectionInfo `json:"recentDetections"`
 	// Health is the model's current inference health: whether its analysis
 	// windows are succeeding, with per-model telemetry. Absent when no
-	// orchestrator is wired.
+	// orchestrator is wired, or for a model that loaded during the request.
 	Health *ModelHealthInfo `json:"health,omitempty"`
 }
 

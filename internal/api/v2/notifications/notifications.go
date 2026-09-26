@@ -152,7 +152,8 @@ type NotificationClient struct {
 	Channel      chan *notification.Notification
 	Done         chan struct{} // Signal-only channel for shutdown notification
 	SubscriberCh <-chan *notification.Notification
-	// DeletionCh receives the IDs of notifications deleted on the server.
+	// DeletionCh receives a DeletedEvent (ID and type) for each notification
+	// deleted on the server.
 	DeletionCh <-chan notification.DeletedEvent
 	Context    context.Context
 	// Guest is true when the SSE connection was opened by an unauthenticated
@@ -621,7 +622,8 @@ func (c *Handler) runNotificationEventLoop(ctx echo.Context, client *Notificatio
 
 		case ev := <-client.DeletionCh:
 			// Guests only ever received detection notifications, so they only
-			// need deletions of those (the same filter as creates above).
+			// need deletions of those: the type half of the create filter above
+			// (a DeletedEvent carries no metadata, and a bare ID leaks nothing).
 			if client.Guest && ev.Type != notification.TypeDetection {
 				continue
 			}

@@ -749,8 +749,8 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 
 	switch {
 	case err != nil && isCancellation(ctx, err):
-		// The caller's context ended (shutdown, a cancelled window): not a model
-		// fault, so it neither advances nor ends the failure streak.
+		// The caller's context ended: not a model fault, so it neither advances
+		// nor ends the failure streak (see isCancellation).
 		globalInferenceCounters.RecordError(modelID)
 		log.Debug("PredictModel cancelled",
 			logger.String("model_id", modelID),
@@ -1804,8 +1804,8 @@ func (o *Orchestrator) Delete() {
 		entry.mu.Unlock()
 	}
 
-	// Clear the failure notices of the models just closed and stop their retries
-	// (no model is loaded now, so the reconcile clears every latch).
+	// Clear the failure notices of the models just closed and stop their latches
+	// (no model is loaded now; a latch whose delete fails is kept for a retry).
 	o.syncInferenceHealth()
 	// A retry of a failed acoustic-model notice must not raise a "no model"
 	// notice for this torn-down orchestrator.

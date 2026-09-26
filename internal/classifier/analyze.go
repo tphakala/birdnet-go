@@ -156,6 +156,7 @@ var ErrNonFiniteScore = errors.NewStd("non-finite classifier output")
 
 // nonFiniteScoreError carries the non-finite score message unchanged (so log and
 // telemetry grouping by message are unaffected) while matching ErrNonFiniteScore.
+// Only the telemetry error_type tag, taken from the wrapped error's type, differs.
 type nonFiniteScoreError string
 
 // Error returns the message.

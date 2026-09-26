@@ -13,10 +13,11 @@ const ComponentClassifier = "classifier"
 // Persistent-notice retry bounds. A create can fail transiently, most often on
 // the shared notification rate limit (DefaultRateLimitMaxEvents per minute) at a
 // busy startup, so a failed raise is retried a bounded number of times with a
-// doubling delay whose first step is one rate-limit window (DefaultServiceConfig).
+// doubling delay whose first step is the default rate-limit window (one minute,
+// DefaultServiceConfig).
 const (
-	persistentNoticeRetryBaseDelay   = time.Minute
-	persistentNoticeRetryMaxAttempts = 4
+	persistentNoticeRetryBaseDelay = time.Minute
+	persistentNoticeMaxRetries     = 4
 )
 
 // NoticeService is the slice of the notification service a PersistentNotice
@@ -33,7 +34,7 @@ type NoticeService interface {
 // re-raised until the condition changes or the process restarts.
 //
 // A failed create is not latched and is retried by the retry callback (see
-// SetRetry) up to persistentNoticeRetryMaxAttempts times with a doubling delay;
+// SetRetry) up to persistentNoticeMaxRetries times with a doubling delay;
 // any later trigger also retries. A failed delete keeps the latch, so the next
 // trigger retries it instead of raising a second notice beside the old one.
 //
@@ -135,7 +136,7 @@ func (p *PersistentNotice) armRetryLocked(sig string) {
 	}
 	p.attempts++
 	p.stopTimerLocked()
-	if p.retry == nil || p.stopped || p.attempts > persistentNoticeRetryMaxAttempts {
+	if p.retry == nil || p.stopped || p.attempts > persistentNoticeMaxRetries {
 		return
 	}
 	base := p.retryDelay

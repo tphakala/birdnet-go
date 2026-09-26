@@ -130,16 +130,16 @@ func TestPersistentNotice_BoundedRetry(t *testing.T) {
 	})
 
 	require.Error(t, p.Reconcile(svc, want("a")))
-	// The first failure plus persistentNoticeRetryMaxAttempts retries, then the
+	// The first failure plus persistentNoticeMaxRetries retries, then the
 	// budget is spent and no further timer is armed.
 	require.Eventually(t, func() bool {
 		mu.Lock()
 		defer mu.Unlock()
-		return retries == persistentNoticeRetryMaxAttempts
+		return retries == persistentNoticeMaxRetries
 	}, 5*time.Second, time.Millisecond)
 	time.Sleep(50 * time.Millisecond)
 	mu.Lock()
-	assert.Equal(t, persistentNoticeRetryMaxAttempts, retries, "retries are bounded")
+	assert.Equal(t, persistentNoticeMaxRetries, retries, "retries are bounded")
 	mu.Unlock()
 	assert.Empty(t, p.ID())
 }

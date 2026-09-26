@@ -9,7 +9,7 @@
  * - subscribeAcousticModels(): fetch once for the first subscriber (and again on
  *   every remount after the last one left), cached for the rest. Editors use it.
  * - watchAcousticModels(): subscribe plus one shared topology SSE while any
- *   watcher is mounted, so the banner clears the moment a model loads. Only the
+ *   watcher is mounted, so the banner clears the moment a model loads or recovers. Only the
  *   dashboard banner uses it, so a dashboard holds a single extra SSE.
  *
  * There are no timers: state refreshes on (re)mount, on SSE (re)connect and on

@@ -1103,7 +1103,7 @@
                        one healthy source out of this alarm: during silence it reads "idle"
                        instead of flapping to "not analyzing" and back when a bird sings, and
                        the specific down source is still flagged by its badge below.
-                       Precedence: paused > not-analyzing > active > idle. -->
+                       Precedence: failing > paused > not-analyzing > active > idle. -->
                   <span
                     class="ml-auto flex items-center gap-1.5"
                     role="status"

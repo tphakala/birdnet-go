@@ -21,12 +21,15 @@ type ModelInferenceFailureInfo struct {
 	ConsecutiveFailures int64
 	// Failing is the classifier's verdict: the run reached its failure threshold.
 	Failing bool
-	// ErrorClass is the class of the latest failure, "" when not failing.
+	// ErrorClass is the class of the latest failure, "" when no failure run is in
+	// progress (ConsecutiveFailures == 0).
 	ErrorClass string
 }
 
 // InferenceFailuresCheck reports Critical while any loaded model fails every
-// analysis window, and Healthy otherwise. It is streak based (the classifier's
+// analysis window, Healthy while every loaded model is analyzing, and Skipped
+// when no model information is available (no orchestrator, or no loaded
+// model). It is streak based (the classifier's
 // consecutive-failure count, cleared by the first success) rather than a
 // windowed error rate, so it has no reset-on-read counters or window
 // boundaries to flap on, and it clears as soon as the model recovers.
