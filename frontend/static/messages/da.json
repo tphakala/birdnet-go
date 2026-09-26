@@ -489,7 +489,7 @@
       },
       "modelOptimize": {
         "title": "{count, plural, one {# model har en bedre version til dette system} other {# modeller har bedre versioner til dette system}}",
-        "message": "En version af {models}, der passer bedre til dette systems hardware eller placering, er tilgængelig. Åbn Indstillinger > Analyse > Modelgalleri, og vælg Optimer for at skifte."
+        "message": "En version, der passer bedre til systemets hardware eller placering, er tilgængelig for: {models}. Åbn Indstillinger > Analyse > Modeller, og vælg Optimer for at skifte."
       },
       "alert": {
         "firedTitle": "{rule_name}",

@@ -326,6 +326,9 @@ func TestApplyOptimizeNotice_ReplacesChangedOfferSet(t *testing.T) {
 	assert.Equal(t, []string{notices.created[0].ID}, notices.deleted, "the old notice is deleted exactly once")
 	assert.Equal(t, notices.created[1].ID, h.optimize.id, "the latch holds the new notice")
 	assert.Equal(t, 2, notices.created[1].TitleParams["count"])
+	assert.Equal(t, "2 models have better builds for this system", notices.created[1].Title,
+		"the plural English fallback matches en.json")
+	assert.Equal(t, "Model A, Model B", notices.created[1].MessageParams["models"])
 }
 
 // TestSyncOptimizeNotice_Concurrent runs overlapping evaluations under -race:
@@ -366,7 +369,10 @@ func TestSyncOptimizeNotice_RaisesForBuiltinOnRecommendedHost(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, v24.Name, n.MessageParams["models"], "the notice names exactly the model with the offer")
 	assert.Equal(t, "1 model has a better build for this system", n.Title)
-	assert.Equal(t, 1, n.Metadata[optimizeOfferCountMetadataKey])
+	assert.Equal(t,
+		"A build better matched to this system's hardware or location is available for: "+v24.Name+". Open Settings > Analysis > Models and choose Optimize to switch.",
+		n.Message, "the English fallback matches en.json")
+	assert.Empty(t, n.Metadata, "no metadata: the bell renders every scalar metadata key as a raw context line")
 }
 
 // TestSyncOptimizeNotice_Lifecycle covers the latch: an unchanged offer set is a

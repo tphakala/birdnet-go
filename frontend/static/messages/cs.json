@@ -489,7 +489,7 @@
       },
       "modelOptimize": {
         "title": "{count, plural, one {# model má lepší sestavení pro tento systém} few {# modely mají lepší sestavení pro tento systém} many {# modelů má lepší sestavení pro tento systém} other {# modelů má lepší sestavení pro tento systém}}",
-        "message": "Je k dispozici sestavení modelu {models}, které lépe odpovídá hardwaru nebo poloze tohoto systému. Otevřete Nastavení > Analýza > Galerie modelů a zvolte Optimalizovat."
+        "message": "Sestavení lépe odpovídající hardwaru nebo poloze tohoto systému je k dispozici pro: {models}. Otevřete Nastavení > Analýza > Modely a zvolte Optimalizovat."
       },
       "alert": {
         "firedTitle": "{rule_name}",

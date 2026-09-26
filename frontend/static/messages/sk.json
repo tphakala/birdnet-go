@@ -488,8 +488,8 @@
         "loadFailedMessage": "Povolený akustický model sa nepodarilo načítať, takže zvuk sa zaznamenáva, ale neanalyzuje. Skontrolujte model na stránke Systém > Modely AI."
       },
       "modelOptimize": {
-        "title": "{count, plural, one {# model má lepšiu zostavu pre tento systém} few {# modely majú lepšie zostavy pre tento systém} many {# modelov má lepšie zostavy pre tento systém} other {# modelov má lepšie zostavy pre tento systém}}",
-        "message": "K dispozícii je zostava modelu {models}, ktorá lepšie zodpovedá hardvéru alebo polohe tohto systému. Otvorte Nastavenia > Analýza > Galéria modelov a zvoľte Optimalizovať."
+        "title": "{count, plural, one {# model má lepšie zostavenie pre tento systém} few {# modely majú lepšie zostavenia pre tento systém} many {# modelov má lepšie zostavenia pre tento systém} other {# modelov má lepšie zostavenia pre tento systém}}",
+        "message": "Zostavenie, ktoré lepšie zodpovedá hardvéru alebo polohe tohto systému, je k dispozícii pre: {models}. Otvorte Nastavenia > Analýza > Modely a zvoľte Optimalizovať."
       },
       "alert": {
         "firedTitle": "{rule_name}",

@@ -489,7 +489,7 @@
       },
       "modelOptimize": {
         "title": "{count, plural, one {# model ma lepszą wersję dla tego systemu} few {# modele mają lepsze wersje dla tego systemu} many {# modeli ma lepsze wersje dla tego systemu} other {# modeli ma lepsze wersje dla tego systemu}}",
-        "message": "Dostępna jest wersja modelu {models} lepiej dopasowana do sprzętu lub lokalizacji tego systemu. Otwórz Ustawienia > Analiza > Galeria modeli i wybierz Optymalizuj, aby przełączyć."
+        "message": "Wersja lepiej dopasowana do sprzętu lub lokalizacji tego systemu jest dostępna dla: {models}. Otwórz Ustawienia > Analiza > Modele i wybierz Optymalizuj, aby przełączyć."
       },
       "alert": {
         "firedTitle": "{rule_name}",

@@ -31,9 +31,6 @@ const optimizeNoticeDebounce = 3 * time.Second
 // matching the other classifier-originated bell notices.
 const optimizeNoticeComponent = "classifier"
 
-// optimizeOfferCountMetadataKey carries the number of offers on the notice.
-const optimizeOfferCountMetadataKey = "optimize_offer_count"
-
 // optimizeOffer is one installed model whose host-recommended variant differs
 // from the installed one. It mirrors the frontend OptimizeOffer
 // (frontend/src/lib/utils/variantSelection.ts).
@@ -232,12 +229,14 @@ func newOptimizeNotification(offers []optimizeOffer) *notification.Notification 
 	models := strings.Join(names, ", ")
 	// Neutral wording: an offer is a build better matched to this host's hardware
 	// or to its resolved region, and a regional offer is not necessarily faster.
-	title := fmt.Sprintf("%d models have a better build for this system", len(offers))
+	// The English fallbacks mirror en.json. The model list follows a fixed noun so
+	// the sentence reads the same for one model or several.
+	title := fmt.Sprintf("%d models have better builds for this system", len(offers))
 	if len(offers) == 1 {
 		title = "1 model has a better build for this system"
 	}
 	message := fmt.Sprintf(
-		"A build of %s that better matches this system's hardware or location is available. Open Settings > Analysis > Model gallery and choose Optimize to switch.",
+		"A build better matched to this system's hardware or location is available for: %s. Open Settings > Analysis > Models and choose Optimize to switch.",
 		models)
 	return notification.NewNotification(
 		notification.TypeInfo,
@@ -248,7 +247,6 @@ func newOptimizeNotification(offers []optimizeOffer) *notification.Notification 
 		WithComponent(optimizeNoticeComponent).
 		WithTitleKey(notification.MsgModelOptimizeTitle, map[string]any{"count": len(offers)}).
 		WithMessageKey(notification.MsgModelOptimizeMessage, map[string]any{"models": models}).
-		WithMetadata(optimizeOfferCountMetadataKey, len(offers)).
 		WithDeliveryTarget(notification.DeliveryTargetBell)
 }
 

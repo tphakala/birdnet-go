@@ -489,7 +489,7 @@
       },
       "modelOptimize": {
         "title": "{count, plural, one {# modellnek van jobb változata ehhez a rendszerhez} other {# modellnek van jobb változata ehhez a rendszerhez}}",
-        "message": "Elérhető a(z) {models} olyan változata, amely jobban illik a rendszer hardveréhez vagy helyéhez. Nyissa meg a Beállítások > Elemzés > Modellgaléria oldalt, és váltson az Optimalizálás gombbal."
+        "message": "A rendszer hardveréhez vagy helyéhez jobban illő változat érhető el a következőkhöz: {models}. Nyissa meg a Beállítások > Elemzés > Modellek oldalt, és váltson az Optimalizálás gombbal."
       },
       "alert": {
         "firedTitle": "{rule_name}",

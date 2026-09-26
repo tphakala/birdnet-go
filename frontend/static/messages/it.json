@@ -489,7 +489,7 @@
       },
       "modelOptimize": {
         "title": "{count, plural, one {# modello ha una build migliore per questo sistema} other {# modelli hanno build migliori per questo sistema}}",
-        "message": "È disponibile una build di {models} più adatta all'hardware o alla posizione di questo sistema. Apri Impostazioni > Analisi > Galleria modelli e scegli Ottimizza per passare."
+        "message": "È disponibile una build più adatta all'hardware o alla posizione di questo sistema per: {models}. Apri Impostazioni > Analisi > Modelli e scegli Ottimizza per passare."
       },
       "alert": {
         "firedTitle": "{rule_name}",

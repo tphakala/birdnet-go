@@ -488,8 +488,8 @@
         "loadFailedMessage": "Käytössä olevan akustisen mallin lataus epäonnistui, joten ääntä tallennetaan, mutta sitä ei analysoida. Tarkista malli sivulla Järjestelmä > Tekoälymallit."
       },
       "modelOptimize": {
-        "title": "{count, plural, one {# mallille on parempi versio tähän järjestelmään} other {# mallille on paremmat versiot tähän järjestelmään}}",
-        "message": "Mallista {models} on saatavilla versio, joka sopii paremmin tämän järjestelmän laitteistoon tai sijaintiin. Avaa Asetukset > Analyysi > Malligalleria ja vaihda valitsemalla Optimoi."
+        "title": "{count, plural, one {# mallille on saatavilla parempi versio tälle järjestelmälle} other {# mallille on saatavilla parempia versioita tälle järjestelmälle}}",
+        "message": "Tämän järjestelmän laitteistoon tai sijaintiin paremmin sopiva versio on saatavilla seuraaville malleille: {models}. Avaa Asetukset > Analyysi > Mallit ja vaihda valitsemalla Optimoi."
       },
       "alert": {
         "firedTitle": "{rule_name}",

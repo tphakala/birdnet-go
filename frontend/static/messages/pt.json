@@ -489,7 +489,7 @@
       },
       "modelOptimize": {
         "title": "{count, plural, one {# modelo tem uma versão melhor para este sistema} other {# modelos têm versões melhores para este sistema}}",
-        "message": "Está disponível uma versão de {models} mais adequada ao hardware ou à localização deste sistema. Abra Configurações > Análise > Galeria de modelos e escolha Otimizar para mudar."
+        "message": "Está disponível uma versão mais adequada ao hardware ou à localização deste sistema para: {models}. Abra Configurações > Análise > Modelos e escolha Otimizar para mudar."
       },
       "alert": {
         "firedTitle": "{rule_name}",

@@ -489,7 +489,7 @@
       },
       "modelOptimize": {
         "title": "{count, plural, one {# model has a better build for this system} other {# models have better builds for this system}}",
-        "message": "A build of {models} that better matches this system's hardware or location is available. Open Settings > Analysis > Model gallery and choose Optimize to switch."
+        "message": "A build better matched to this system's hardware or location is available for: {models}. Open Settings > Analysis > Models and choose Optimize to switch."
       },
       "alert": {
         "firedTitle": "{rule_name}",

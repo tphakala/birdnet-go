@@ -489,7 +489,7 @@
       },
       "modelOptimize": {
         "title": "{count, plural, one {# Modell hat einen besseren Build für dieses System} other {# Modelle haben bessere Builds für dieses System}}",
-        "message": "Ein Build von {models}, der besser zur Hardware oder zum Standort dieses Systems passt, ist verfügbar. Öffnen Sie Einstellungen > Analyse > Modellgalerie und wählen Sie Optimieren, um zu wechseln."
+        "message": "Ein Build, der besser zur Hardware oder zum Standort dieses Systems passt, ist verfügbar für: {models}. Öffnen Sie Einstellungen > Analyse > Modelle und wählen Sie Optimieren, um zu wechseln."
       },
       "alert": {
         "firedTitle": "{rule_name}",
