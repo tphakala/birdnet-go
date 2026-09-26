@@ -2602,6 +2602,13 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.notifyRegionStaleness(oldSettings, currentSettings)
 	}
 
+	// Neither a location nor a ModelRegion change fires a model topology event,
+	// but both feed the optimize offers, so re-evaluate the bell notice here. The
+	// evaluation is debounced and runs off this goroutine.
+	if optimizeRegionInputsChanged(oldSettings, currentSettings) {
+		c.scheduleOptimizeNoticeSync()
+	}
+
 	// Trigger reconfigurations asynchronously.
 	// Capture debug flag from the settings snapshot so the goroutine never
 	// reloads settings (which may be republished by a concurrent update).
@@ -2760,6 +2767,26 @@ func coordinatesChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return oldSettings.BirdNET.LocationConfigured != currentSettings.BirdNET.LocationConfigured ||
 		oldSettings.BirdNET.Latitude != currentSettings.BirdNET.Latitude ||
 		oldSettings.BirdNET.Longitude != currentSettings.BirdNET.Longitude
+}
+
+// optimizeRegionInputsChanged reports whether a settings change alters the
+// region the model recommender scores against: the station location (auto
+// region mode resolves from it) or the ModelRegion mode itself. Either can make
+// a different regional build the recommended one, and so change the model
+// optimize offers.
+func optimizeRegionInputsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return coordinatesChanged(oldSettings, currentSettings) ||
+		oldSettings.BirdNET.ModelRegion != currentSettings.BirdNET.ModelRegion
+}
+
+// scheduleOptimizeNoticeSync asks the models handler to re-evaluate the model
+// optimize bell notice. It is a no-op until NewWithOptions publishes the
+// handler, which it does only when a ModelManager is wired and routes are
+// initialized.
+func (c *Controller) scheduleOptimizeNoticeSync() {
+	if h := c.optimizeNotices.Load(); h != nil {
+		h.ScheduleOptimizeNoticeSync()
+	}
 }
 
 // notifyRegionStaleness runs the recommend-only region staleness detector after

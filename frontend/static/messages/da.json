@@ -487,6 +487,10 @@
         "loadFailedTitle": "Akustisk model kunne ikke indlæses",
         "loadFailedMessage": "En aktiveret akustisk model kunne ikke indlæses, så lyd optages, men analyseres ikke. Tjek modellen på siden System > AI-modeller."
       },
+      "modelOptimize": {
+        "title": "{count, plural, one {# model har en bedre version til dette system} other {# modeller har bedre versioner til dette system}}",
+        "message": "En version af {models}, der passer bedre til dette systems hardware eller placering, er tilgængelig. Åbn Indstillinger > Analyse > Modelgalleri, og vælg Optimer for at skifte."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuel værdi: {value}% (grænse: {threshold}%)",

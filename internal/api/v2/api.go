@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -177,6 +178,13 @@ type Controller struct {
 	topologyReconfigureMu       sync.Mutex
 	topologyReconfigureTimer    *time.Timer
 	topologyReconfigureShutdown bool
+
+	// optimizeNotices is the models handler that keeps the model optimize bell
+	// notice in sync, published once the handler is constructed. It is atomic
+	// because the model topology callback is wired by the WithModelManager option,
+	// before New constructs c.models, and can fire from the analyzer's goroutines
+	// while New is still running; reading the plain c.models field there would race.
+	optimizeNotices atomic.Pointer[models.Handler]
 
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
@@ -597,6 +605,14 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// changes after this point, so capturing it here is behaviorally identical to
 	// a per-request read; every other models dependency promotes from c.Core.
 	c.models = models.New(c.Core, c.authService)
+	// Keep the model optimize bell notice in sync: evaluate it once at startup
+	// (the analyzer scans the installed models before it builds the web server),
+	// then on topology and location changes. Skipped when routes are not
+	// initialized (tests), like every other background activity here.
+	if c.ModelManager != nil && initializeRoutes {
+		c.optimizeNotices.Store(c.models)
+		c.models.ScheduleOptimizeNoticeSync()
+	}
 
 	// Log auth configuration status
 	log := GetLogger()
@@ -852,6 +868,11 @@ func (c *Controller) Shutdown() {
 		c.topologyReconfigureTimer = nil
 	}
 	c.topologyReconfigureMu.Unlock()
+
+	// Stop the pending model optimize notice evaluation, and ignore later ones.
+	if h := c.optimizeNotices.Load(); h != nil {
+		h.StopOptimizeNotice()
+	}
 
 	// Cancel context to stop all goroutines, then wait for them to finish.
 	c.Cancel()

@@ -224,4 +224,9 @@ const (
 	MsgAcousticModelsNoneMessage       = "notifications.content.acousticModels.noneMessage"
 	MsgAcousticModelsLoadFailedTitle   = "notifications.content.acousticModels.loadFailedTitle"
 	MsgAcousticModelsLoadFailedMessage = "notifications.content.acousticModels.loadFailedMessage"
+
+	// Model optimize notifications (an installed model has a better build for this
+	// host in the model gallery; recommend-only, never swaps a model by itself)
+	MsgModelOptimizeTitle   = "notifications.content.modelOptimize.title"
+	MsgModelOptimizeMessage = "notifications.content.modelOptimize.message"
 )

@@ -49,6 +49,13 @@ type Handler struct {
 	// It receives the request's already-probed ONNX Runtime status so the default
 	// probe does not re-check ORT that GetModelCatalog just checked.
 	hardwareProfile func(ort inference.ORTStatus) hwprofile.Profile
+	// notices is the notification sink for the optimize bell notice. nil means
+	// the process-wide notification service; tests inject a fake.
+	notices noticeService
+	// optimize latches the optimize bell notice and its debounce timer
+	// (optimize_notice.go). Handler is only ever used by pointer, so the mutexes
+	// inside are never copied.
+	optimize optimizeNotice
 }
 
 // New builds a models Handler around the shared core and the facade-injected

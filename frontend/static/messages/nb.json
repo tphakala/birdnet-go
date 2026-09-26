@@ -487,6 +487,10 @@
         "loadFailedTitle": "Akustisk modell kunne ikke lastes inn",
         "loadFailedMessage": "En aktivert akustisk modell kunne ikke lastes inn, så lyd tas opp, men analyseres ikke. Sjekk modellen på siden System > AI-modeller."
       },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modell har en bedre versjon for dette systemet} other {# modeller har bedre versjoner for dette systemet}}",
+        "message": "En versjon av {models} som passer bedre til maskinvaren eller plasseringen til dette systemet, er tilgjengelig. Åpne Innstillinger > Analyse > Modellgalleri og velg Optimer for å bytte."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Gjeldende verdi: {value}% (terskel: {threshold}%)",
