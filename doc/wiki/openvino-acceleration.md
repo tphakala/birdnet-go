@@ -248,7 +248,7 @@ The runtime user is not in the render group. In Docker the entrypoint handles th
 
 ### Models still run on `CPU` / ORT with OpenVINO enabled
 
-Check the model is OpenVINO-eligible (see [What OpenVINO Accelerates](#what-openvino-accelerates)). INT8 BirdNET v2.4 models (on `auto`), BirdNET v2.4 model files whose name carries no `fp32` or `fp16` token (on `auto`), INT8 Perch builds, the stock `perch_v2.onnx` with the DFT layer, and custom models stay on ONNX Runtime by design. Also confirm `birdnet.backend` is not set to `onnx`.
+Check the model is OpenVINO-eligible (see [What OpenVINO Accelerates](#what-openvino-accelerates)). INT8 BirdNET v2.4 models (on `auto`), BirdNET v2.4 model files whose name carries no precision token or more than one (on `auto`), INT8 Perch builds, the stock `perch_v2.onnx` with the DFT layer, and custom models stay on ONNX Runtime by design. Also confirm `birdnet.backend` is not set to `onnx`.
 
 ### Detections look wrong after forcing GPU f16
 
