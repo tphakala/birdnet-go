@@ -68,7 +68,8 @@ func emitORTUnavailableNotification(modelName, ortError string) {
 // notification.PersistentNotice keyed by the not-ok state. Idempotent and nil-safe on the
 // notification service (not yet initialized, or in tests): a raise that finds no service
 // latches nothing, so the next call (NewOrchestrator, ScanInstalled, LoadModel, UnloadModel)
-// retries it, and a failed create is re-armed a bounded number of times. Across restarts the
+// retries it, and a failed create is re-armed a bounded number of times. A failed
+// update is logged at WARN. Across restarts the
 // in-memory store is empty, so "raised once per process" is the dedupe.
 func (o *Orchestrator) syncAcousticModelsNotice() {
 	svc := notification.GetService()
@@ -79,7 +80,7 @@ func (o *Orchestrator) syncAcousticModelsNotice() {
 	// Reconcile reads the state under the latch lock, so a concurrent LoadModel/UnloadModel/
 	// ScanInstalled sync cannot act on a state that disagrees with the latch (raise a notice
 	// another just cleared, or clear one another just raised).
-	_ = o.acousticNotice.Reconcile(svc, func() (string, func() *notification.Notification) {
+	if err := o.acousticNotice.Reconcile(svc, func() (string, func() *notification.Notification) {
 		state := o.AcousticModelsState()
 		if state == AcousticModelsOK {
 			return "", nil
@@ -87,7 +88,9 @@ func (o *Orchestrator) syncAcousticModelsNotice() {
 		return string(state), func() *notification.Notification {
 			return newAcousticModelsNotification(state)
 		}
-	})
+	}); err != nil {
+		GetLogger().Warn("failed to update acoustic model notification", logger.Error(err))
+	}
 }
 
 // newAcousticModelsNotification builds the persistent bell notification for a not-ok

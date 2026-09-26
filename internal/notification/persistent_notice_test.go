@@ -324,3 +324,44 @@ func TestPersistentNotice_StoppedRefusesRaiseButClears(t *testing.T) {
 	created, _ = svc.counts()
 	assert.Equal(t, 1, created, "nor a fresh notice")
 }
+
+// TestPersistentNotice_RejectsUnidentifiableNotice pins that a missing builder,
+// a nil notice or an ID-less notice is an error and latches nothing (an ID-less
+// notice could never be deleted).
+func TestPersistentNotice_RejectsUnidentifiableNotice(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		build func() *Notification
+	}{
+		{name: "nil builder", build: nil},
+		{name: "nil notice", build: func() *Notification { return nil }},
+		{name: "empty id", build: func() *Notification { return &Notification{Title: "t"} }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			svc := &fakeNoticeService{}
+			var p PersistentNotice
+			err := p.Reconcile(svc, func() (string, func() *Notification) { return "a", tt.build })
+			require.Error(t, err)
+			assert.Empty(t, p.ID())
+			created, _ := svc.counts()
+			assert.Zero(t, created)
+		})
+	}
+}
+
+// TestService_StopDropsDeletionSubscribers pins that Stop cancels and drops the
+// deletion registrations along with the notification subscribers.
+func TestService_StopDropsDeletionSubscribers(t *testing.T) {
+	t.Parallel()
+	svc := NewService(DefaultServiceConfig())
+	_, ctx := svc.SubscribeDeletions()
+	svc.Stop()
+
+	require.Error(t, ctx.Err())
+	svc.deletionSubsMu.Lock()
+	defer svc.deletionSubsMu.Unlock()
+	assert.Nil(t, svc.deletionSubs)
+}

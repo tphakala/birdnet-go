@@ -11,6 +11,7 @@ package classifier
 // inference_failures health check.
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -212,16 +213,7 @@ func (o *Orchestrator) InferenceHealth() []ModelInferenceHealth {
 		mh.Device, mh.Backend, mh.Precision = o.GetModelRuntimeInfo(id)
 		out = append(out, mh)
 	}
-	slices.SortFunc(out, func(a, b ModelInferenceHealth) int {
-		switch {
-		case a.ModelID < b.ModelID:
-			return -1
-		case a.ModelID > b.ModelID:
-			return 1
-		default:
-			return 0
-		}
-	})
+	slices.SortFunc(out, func(a, b ModelInferenceHealth) int { return cmp.Compare(a.ModelID, b.ModelID) })
 	return out
 }
 

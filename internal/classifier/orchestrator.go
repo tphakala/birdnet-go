@@ -745,7 +745,8 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 
 	start := time.Now()
 	results, err := entry.instance.Predict(ctx, sample)
-	duration := time.Since(start)
+	end := time.Now()
+	duration := end.Sub(start)
 
 	switch {
 	case err != nil && isCancellation(ctx, err):
@@ -761,7 +762,7 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 		// after the first failure only every inferenceFailureLogEvery-th repeat is
 		// logged at ERROR; the rest go to DEBUG. The metrics counter above still
 		// records each one.
-		streak := recordInferenceFailure(modelID, err, time.Now())
+		streak := recordInferenceFailure(modelID, err, end)
 		emit := log.Debug
 		if inferenceFailureLogsAtError(streak) {
 			emit = log.Error
@@ -775,7 +776,7 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 			o.kickInferenceHealthSync()
 		}
 	default:
-		if ended := recordInferenceSuccess(modelID, time.Now()); ended >= InferenceFailureNoticeThreshold {
+		if ended := recordInferenceSuccess(modelID, end); ended >= InferenceFailureNoticeThreshold {
 			o.kickInferenceHealthSync()
 		}
 		globalInferenceCounters.RecordInvoke(modelID, duration.Microseconds())

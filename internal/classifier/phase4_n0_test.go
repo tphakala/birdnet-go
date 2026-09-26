@@ -211,7 +211,7 @@ func TestSyncAcousticModelsNotice(t *testing.T) {
 	o.syncAcousticModelsNotice()
 	notes := list()
 	require.Len(t, notes, 1, "N = 0 raises exactly one bell notification")
-	assert.Equal(t, "classifier", notes[0].Component)
+	assert.Equal(t, notification.ComponentClassifier, notes[0].Component)
 	assert.Equal(t, string(AcousticModelsNoneInstalled), notes[0].Metadata["acoustic_models_state"])
 	assert.Contains(t, notes[0].Message, "Enable a model")
 	require.NotEmpty(t, o.acousticNotice.ID(), "the notification id is latched")

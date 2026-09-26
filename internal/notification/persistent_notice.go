@@ -3,6 +3,8 @@ package notification
 import (
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // ComponentClassifier is the notification component for notices raised by the
@@ -68,7 +70,8 @@ func (p *PersistentNotice) SetRetry(fn func()) {
 // disagrees with the latch; it returns the signature ("" when no notice is due)
 // and a builder for the notice, called only when a new notice must be created.
 // After Stop it still clears but raises nothing. It returns the delete or
-// create error, if any.
+// create error, if any, or an error without latching when the builder is nil or
+// builds no notification with an ID.
 func (p *PersistentNotice) Reconcile(svc NoticeService, compute func() (sig string, build func() *Notification)) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -99,7 +102,16 @@ func (p *PersistentNotice) Reconcile(svc NoticeService, compute func() (sig stri
 		// already fired when Stop ran).
 		return nil
 	}
+	if build == nil {
+		return errors.Newf("persistent notice %q has no builder", sig).
+			Component("notification").Category(errors.CategoryValidation).Build()
+	}
 	notif := build()
+	if notif == nil || notif.ID == "" {
+		// An ID-less notice could never be deleted, so it must not be latched.
+		return errors.Newf("persistent notice %q built no identifiable notification", sig).
+			Component("notification").Category(errors.CategoryValidation).Build()
+	}
 	if err := svc.CreateWithMetadata(notif); err != nil {
 		p.armRetryLocked(sig)
 		return err

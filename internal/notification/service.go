@@ -709,6 +709,15 @@ func (s *Service) Stop() {
 	s.subscribers = nil
 	s.subscribersMu.Unlock()
 
+	// Deletion subscribers' contexts derive from s.ctx, so s.cancel ended them;
+	// drop the registrations too, as for the subscribers above.
+	s.deletionSubsMu.Lock()
+	for _, sub := range s.deletionSubs {
+		sub.cancel()
+	}
+	s.deletionSubs = nil
+	s.deletionSubsMu.Unlock()
+
 	s.logger.Info("notification service stopped",
 		logger.Int("subscribers_cancelled", subscriberCount))
 
