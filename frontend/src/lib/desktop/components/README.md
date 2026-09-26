@@ -171,7 +171,6 @@ The following components are located in their feature directories:
 
 - `FilterForm.svelte` - Generic filtering form
 - `SpeciesFilterForm.svelte` - Species-specific filtering
-- `SpeciesCard.svelte` - Species information card
 - `StatCard.svelte` - Statistics card
 
 ### Settings (`features/settings/components/`)
