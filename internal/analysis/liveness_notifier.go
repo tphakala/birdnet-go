@@ -33,6 +33,13 @@ const (
 // service. The real sender calls notification.Service.CreateWithComponent.
 type livenessNotifySender func(priority notification.Priority, title, body string)
 
+// livenessNameResolver maps an audio source ID to the user-facing name shown in
+// notification text (the registry DisplayName, e.g. "Backyard feeder" rather
+// than "rtsp_832ca5de"). It is injected so the coalescing policy can be
+// unit-tested without a source registry. Implementations must never return a
+// raw connection string, which may carry credentials.
+type livenessNameResolver func(sourceID string) string
+
 // livenessNotifier coalesces repeated transient silence/recovery notifications
 // for a flapping audio source into a single summary, while letting critical
 // (escalated/failed) states through immediately and unbatched. It exists to stop
@@ -40,25 +47,39 @@ type livenessNotifySender func(priority notification.Priority, title, body strin
 // keeps tearing down its session) from producing a high-priority notification on
 // every cycle, without changing any stream or recovery behavior.
 type livenessNotifier struct {
-	burst *notification.ErrorBurstTracker
-	send  livenessNotifySender
+	burst  *notification.ErrorBurstTracker
+	send   livenessNotifySender
+	nameOf livenessNameResolver
 }
 
-// newLivenessNotifier builds a notifier that dispatches through send. A nil send
-// is replaced with a no-op so notify never panics on a misconfigured caller.
-func newLivenessNotifier(send livenessNotifySender) *livenessNotifier {
+// newLivenessNotifier builds a notifier that dispatches through send and labels
+// sources using nameOf. A nil send is replaced with a no-op and a nil nameOf
+// with the identity, so notify never panics on a misconfigured caller.
+func newLivenessNotifier(send livenessNotifySender, nameOf livenessNameResolver) *livenessNotifier {
 	if send == nil {
 		send = func(notification.Priority, string, string) {}
 	}
+	if nameOf == nil {
+		nameOf = func(sourceID string) string { return sourceID }
+	}
 	return &livenessNotifier{
-		burst: notification.NewErrorBurstTracker(livenessBurstThreshold, livenessBurstWindow),
-		send:  send,
+		burst:  notification.NewErrorBurstTracker(livenessBurstThreshold, livenessBurstWindow),
+		send:   send,
+		nameOf: nameOf,
 	}
 }
 
 // notify dispatches a watchdog state change to the user, coalescing transient
 // flapping but never suppressing a genuinely-down source.
 func (n *livenessNotifier) notify(sourceID string, state audiocore.LivenessState, msg string) {
+	// Notification text uses the friendly name, but burst coalescing stays keyed
+	// on sourceID: the ID is stable for the life of the source, whereas a rename
+	// mid-window would otherwise split one flapping incident into two buckets.
+	name := n.nameOf(sourceID)
+	if name == "" {
+		name = sourceID
+	}
+
 	// Escalated/failed mean the source did not recover on its own; always alert
 	// immediately and bypass coalescing so a real outage is never hidden. Reset the
 	// burst window as well, so the "recovered" all-clear that follows a critical
@@ -66,7 +87,7 @@ func (n *livenessNotifier) notify(sourceID string, state audiocore.LivenessState
 	// that preceded the escalation.
 	if state == audiocore.StateEscalated || state == audiocore.StateFailed {
 		n.burst.Reset(sourceID, livenessBurstCategory)
-		n.send(notification.PriorityCritical, "Audio source "+msg, "Source "+sourceID+": "+msg)
+		n.send(notification.PriorityCritical, "Audio source "+msg, "Source "+name+": "+msg)
 		return
 	}
 
@@ -74,7 +95,7 @@ func (n *livenessNotifier) notify(sourceID string, state audiocore.LivenessState
 	action, summary := n.burst.Record(sourceID, livenessBurstCategory, msg)
 	switch action {
 	case notification.BurstActionAllow:
-		n.send(notification.PriorityHigh, "Audio source "+msg, "Source "+sourceID+": "+msg)
+		n.send(notification.PriorityHigh, "Audio source "+msg, "Source "+name+": "+msg)
 	case notification.BurstActionSummary:
 		// One summary stands in for the rest of the window. Say the source is
 		// unstable (not down) and point at the dashboard, since further transient
@@ -83,7 +104,7 @@ func (n *livenessNotifier) notify(sourceID string, state audiocore.LivenessState
 		// delivered rather than grouped.)
 		body := fmt.Sprintf("Source %s is unstable: %d silence/recovery events in %d min. "+
 			"Further alerts are grouped to reduce noise; see the dashboard for live status.",
-			sourceID, summary.Count, summary.WindowMin)
+			name, summary.Count, summary.WindowMin)
 		n.send(notification.PriorityHigh, "Audio source flapping", body)
 	case notification.BurstActionSuppress:
 		// Already summarized this window; drop to avoid notification spam.

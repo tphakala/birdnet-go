@@ -496,6 +496,7 @@
         "metricExceeded": "Aktuální hodnota: {value} % (práh: {threshold} %)",
         "detectionOccurred": "{species_name} detekován se spolehlivostí {confidence} %",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} odpojen",
         "error": {
           "authError": "Ověření selhalo - zkontrolujte API klíč nebo přihlašovací údaje",

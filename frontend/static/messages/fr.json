@@ -496,6 +496,7 @@
         "metricExceeded": "Valeur actuelle : {value}% (seuil : {threshold}%)",
         "detectionOccurred": "{species_name} détecté avec {confidence}% de confiance",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}\u00a0: {error}",
         "disconnected": "{source_name} déconnecté",
         "error": {
           "authError": "Échec de l'authentification - vérifiez votre clé API ou vos identifiants",
