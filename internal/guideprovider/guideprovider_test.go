@@ -152,6 +152,47 @@ func (p *closableProvider) Close() error {
 // went untested while no provider implemented one — the Wikipedia provider now
 // does (it owns a pooled HTTP client), so a regression here silently leaks its
 // connections on every hot-reload rebuild.
+// TestGuideCache_StartCloseRace pins that every goroutine Start launches goes through
+// goIfOpen, so a Start racing a Close cannot wg.Add concurrently with Close's wg.Wait.
+//
+// startCacheRefresh was previously launched with c.wg.Go, which does its own Add with
+// no lock and no closed check. goIfOpen instead Adds under lifecycleMu after checking
+// closed, and Close sets closed under that same mutex before calling Wait, so the two
+// are serialized: either the Add happens first and Close waits for the goroutine, or
+// Close wins and goIfOpen declines to launch. Unguarded, the interleaving could panic
+// with "sync: WaitGroup misuse: Add called concurrently with Wait", or leave the
+// refresh loop running unwaited past shutdown.
+//
+// The window is narrow, so the two calls are released from a common gate over many
+// iterations; the package's goleak check catches a refresh loop that outlives Close.
+func TestGuideCache_StartCloseRace(t *testing.T) {
+	t.Parallel()
+
+	for range 300 {
+		c := NewGuideCache(newFakeStore(), noopMetrics{})
+
+		gate := make(chan struct{})
+		var racers sync.WaitGroup
+		racers.Add(2)
+		go func() {
+			defer racers.Done()
+			<-gate
+			c.Start()
+		}()
+		go func() {
+			defer racers.Done()
+			<-gate
+			c.Close()
+		}()
+		close(gate)
+		racers.Wait()
+
+		// Idempotent: if Close lost the race it already ran, and if it won, Start
+		// launched nothing to drain.
+		c.Close()
+	}
+}
+
 func TestGuideCache_CloseReleasesProviders(t *testing.T) {
 	t.Parallel()
 

@@ -423,7 +423,13 @@ func (c *GuideCache) Start() {
 		// inline it delayed the HTTP listener at startup, and stalled the single
 		// control-monitor goroutine on every cache rebuild.
 		c.goIfOpen(c.loadFromDB)
-		c.wg.Go(c.startCacheRefresh)
+		// Launched through goIfOpen, not c.wg.Go, for the same reason every other
+		// background goroutine here is: goIfOpen does its wg.Add under lifecycleMu
+		// after checking closed, and Close sets closed under that same mutex before
+		// calling wg.Wait. c.wg.Go does its own unguarded Add, so a Start racing a
+		// Close could Add concurrently with Wait ("sync: WaitGroup misuse") or leave
+		// the refresh loop running unwaited after shutdown.
+		c.goIfOpen(c.startCacheRefresh)
 	})
 }
 
