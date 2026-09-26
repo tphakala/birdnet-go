@@ -107,8 +107,8 @@ const modelTopologyReconfigureDebounce = 2 * time.Second
 //
 // The audio-source reconfigure is the fix for GitHub issues #4201 and #4204.
 // Loading a model into the orchestrator does not attach it to anything: the
-// audio router fans a
-// source out to the models registered for it, and that registration is computed
+// audio router fans a source out to the models registered for it, and that
+// registration is computed
 // only at startup and when settings change. So a model installed from the
 // gallery while the server ran would load, report itself as installed, and then
 // receive no audio at all until the user toggled the model assignment on the

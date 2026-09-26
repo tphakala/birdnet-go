@@ -204,10 +204,10 @@ func TestOptimizeOffers(t *testing.T) {
 	}
 }
 
-// TestEnsureHostProbed_BeforeLiveRanking pins that the rankings that decide
-// something lasting (the optimize notice and the install gate) run the
-// out-of-process OpenVINO probe first when they use the live host profile, and
-// never under the test profile seam.
+// TestEnsureHostProbed_BeforeLiveRanking pins that the optimize evaluation runs
+// the out-of-process OpenVINO probe before ranking with the live host profile,
+// that the install gate never waits on it (it runs on the request path), and
+// that nothing probes under the test profile seam.
 func TestEnsureHostProbed_BeforeLiveRanking(t *testing.T) {
 	core := apitest.NewCore(t)
 	mm := classifier.NewModelManager(t.TempDir(), nil, nil)
@@ -220,18 +220,17 @@ func TestEnsureHostProbed_BeforeLiveRanking(t *testing.T) {
 	entry, ok := classifier.GetCatalogEntry("birdnet-v2.4")
 	require.True(t, ok)
 
-	// Live host profile (no seam): both callers probe first.
+	// Live host profile (no seam).
 	h.currentOptimizeOffers()
 	assert.Equal(t, int32(1), probes.Load(), "the optimize evaluation probes before ranking")
 	h.requestedVariantCompatibility(&entry, "", inference.ORTStatus{})
-	assert.Equal(t, int32(2), probes.Load(), "the install gate probes before ranking")
+	assert.Equal(t, int32(1), probes.Load(), "the install gate must not wait on the probe")
 
 	// Synthetic profile: nothing to probe.
 	profile := tfliteOnlyProfile()
 	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return profile }
 	h.currentOptimizeOffers()
-	h.requestedVariantCompatibility(&entry, "", inference.ORTStatus{})
-	assert.Equal(t, int32(2), probes.Load(), "the test profile seam never probes")
+	assert.Equal(t, int32(1), probes.Load(), "the test profile seam never probes")
 }
 
 func TestWithoutCustomPrimaryOffer(t *testing.T) {
@@ -607,6 +606,11 @@ func TestFireOptimizeNoticeSync_JoinedByCoreWait(t *testing.T) {
 	h, _, _ := newCountingOptimizeTestHandler(t, &profile)
 	entered := make(chan struct{})
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseEval := func() { releaseOnce.Do(func() { close(release) }) }
+	// Registered after apitest.NewCore, so it runs before the Core's Wait: a
+	// failed assertion below cannot leave the evaluation blocked and hang cleanup.
+	t.Cleanup(releaseEval)
 	var once sync.Once
 	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile {
 		once.Do(func() { close(entered) })
@@ -636,7 +640,7 @@ func TestFireOptimizeNoticeSync_JoinedByCoreWait(t *testing.T) {
 		}
 	}, 100*time.Millisecond, 10*time.Millisecond, "Core.Wait returned while the evaluation was still running")
 
-	close(release)
+	releaseEval()
 	select {
 	case <-waited:
 	case <-time.After(5 * time.Second):

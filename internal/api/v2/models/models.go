@@ -627,8 +627,10 @@ func (c *Handler) rankCatalog(entries []classifier.CatalogEntry, ort inference.O
 // entry with no variants, or a variant it produced no verdict for), for which
 // there is nothing to gate; callers must treat gated==false as "allow". An empty
 // variantID resolves to the entry's default variant, matching install semantics.
-// It first ensures the OpenVINO device probe has run (ensureHostProbed), so the
-// gate does not refuse a GPU variant on a host whose core was never probed.
+// It does not wait for the OpenVINO device probe: this runs on the install
+// request, and a probe child that hangs can take up to its timeout, longer than
+// the server's write timeout. The startup optimize evaluation runs the probe a
+// few seconds after boot, and allowIncompatible overrides the gate.
 func (c *Handler) requestedVariantCompatibility(entry *classifier.CatalogEntry, variantID string, ort inference.ORTStatus) (compatible, gated bool, blockers []recommend.Reason, hostArch string) {
 	if entry == nil || len(entry.Variants) == 0 {
 		return true, false, nil, ""
@@ -637,7 +639,6 @@ func (c *Handler) requestedVariantCompatibility(entry *classifier.CatalogEntry, 
 	if resolvedID == "" {
 		resolvedID = classifier.DefaultVariantID(entry)
 	}
-	c.ensureHostProbed()
 	byVariant, _, hostArch := c.rankCatalog([]classifier.CatalogEntry{*entry}, ort)
 	rec, ok := byVariant[entry.ID][resolvedID]
 	if !ok {
@@ -650,13 +651,13 @@ func (c *Handler) requestedVariantCompatibility(entry *classifier.CatalogEntry, 
 }
 
 // ensureHostProbed runs the out-of-process OpenVINO device probe when the live
-// host profile is in use, so a ranking that decides something lasting (the
-// install gate, the optimize bell notice) sees the real device list. Without it,
-// a host that loaded the OpenVINO core without probing (the explicit-CPU plan
-// path) reports no OpenVINO device, because inference.OpenVINOHasDevice never
-// enumerates in-process (issue #4236). It blocks once per process while the
-// probe child runs, so the gallery's per-request catalog does not call it. It is
-// a no-op under the hardwareProfile test seam.
+// host profile is in use, so the optimize bell notice, which persists until the
+// next trigger, sees the real device list. Without it, a host that loaded the
+// OpenVINO core without probing (the explicit-CPU plan path) reports no OpenVINO
+// device, because inference.OpenVINOHasDevice never enumerates in-process (issue
+// #4236). It blocks while a probe child runs (a cached verdict returns at once;
+// a timed-out probe is retried on the next call), so it is only called off the
+// request path. It is a no-op under the hardwareProfile test seam.
 func (c *Handler) ensureHostProbed() {
 	if c.hardwareProfile != nil {
 		return
