@@ -252,6 +252,24 @@ func TestSyncAcousticModelsNotice_LoadFailedMessage(t *testing.T) {
 	assert.NotContains(t, notes[0].Message, "install one", "load_failed must not tell the user to install a model they already have")
 }
 
+// TestSyncAcousticModelsNotice_NoRaiseAfterDelete pins that a torn-down
+// orchestrator raises no "no acoustic model" notice, even when a sync (for
+// example a retry of a failed create) runs after Delete.
+func TestSyncAcousticModelsNotice_NoRaiseAfterDelete(t *testing.T) {
+	// Not parallel: uses the process-global notification service.
+	svc := setupTestNotification(t)
+	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+	o.syncAcousticModelsNotice()
+	o.Delete()
+
+	o.syncAcousticModelsNotice()
+	notes, err := svc.List(nil)
+	require.NoError(t, err)
+	for _, n := range notes {
+		assert.NotEqual(t, notification.MsgAcousticModelsNoneTitle, n.TitleKey, "no no-model notice after Delete")
+	}
+}
+
 // TestSyncAcousticModelsNotice_NilServiceNoPanic pins that a sync with no notification
 // service (not yet initialized, or a bare test) is a safe no-op that latches nothing.
 func TestSyncAcousticModelsNotice_NilServiceNoPanic(t *testing.T) {

@@ -1807,6 +1807,9 @@ func (o *Orchestrator) Delete() {
 	// Clear the failure notices of the models just closed and stop their retries
 	// (no model is loaded now, so the reconcile clears every latch).
 	o.syncInferenceHealth()
+	// A retry of a failed acoustic-model notice must not raise a "no model"
+	// notice for this torn-down orchestrator.
+	o.acousticNotice.Stop()
 
 	CloseHeatmapService()
 }
@@ -2346,7 +2349,7 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 
 	// Unloading may have reached N = 0 (or cleared a load failure): re-evaluate the
 	// acoustic-model notice. Called after the locked closures release o.mu, since the sync
-	// reads AcousticModelsState() under o.mu.RLock (acousticNotice.mu -> o.mu leaf edge).
+	// reads AcousticModelsState() under o.mu.RLock (the acousticNotice latch's internal mu -> o.mu leaf edge).
 	o.syncAcousticModelsNotice()
 
 	return nil

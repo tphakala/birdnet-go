@@ -66,7 +66,8 @@ func (p *PersistentNotice) SetRetry(fn func()) {
 // the latch lock, so concurrent reconciles cannot act on a condition that
 // disagrees with the latch; it returns the signature ("" when no notice is due)
 // and a builder for the notice, called only when a new notice must be created.
-// It returns the delete or create error, if any.
+// After Stop it still clears but raises nothing. It returns the delete or
+// create error, if any.
 func (p *PersistentNotice) Reconcile(svc NoticeService, compute func() (sig string, build func() *Notification)) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -91,6 +92,12 @@ func (p *PersistentNotice) Reconcile(svc NoticeService, compute func() (sig stri
 		p.resetRetryLocked()
 		return nil
 	}
+	if p.stopped {
+		// A stopped latch belongs to a torn-down owner: it may still clear its
+		// notice, but it raises no new one (this also covers a retry that had
+		// already fired when Stop ran).
+		return nil
+	}
 	notif := build()
 	if err := svc.CreateWithMetadata(notif); err != nil {
 		p.armRetryLocked(sig)
@@ -109,8 +116,9 @@ func (p *PersistentNotice) ID() string {
 	return p.id
 }
 
-// Stop cancels a pending retry and disables later ones. The latched notice is
-// left in place; clear it first with a Reconcile to "" if it must go.
+// Stop cancels a pending retry and disables later ones, and makes later
+// Reconciles refuse to raise a new notice; clearing still works. The latched
+// notice is left in place; clear it first with a Reconcile to "" if it must go.
 func (p *PersistentNotice) Stop() {
 	p.mu.Lock()
 	defer p.mu.Unlock()

@@ -164,48 +164,61 @@ func TestPersistentNotice_RetryRaisesOnceServiceRecovers(t *testing.T) {
 func TestPersistentNotice_StopCancelsRetry(t *testing.T) {
 	t.Parallel()
 	svc := &fakeNoticeService{createErr: errors.NewStd("rate limit exceeded")}
-	p := &PersistentNotice{retryDelay: 20 * time.Millisecond}
-	var mu sync.Mutex
-	retried := false
-	p.SetRetry(func() {
-		mu.Lock()
-		retried = true
-		mu.Unlock()
-	})
+	// An hour-long delay never fires during the test, so the assertions read
+	// the armed timer directly instead of racing a real one.
+	p := &PersistentNotice{retryDelay: time.Hour}
+	p.SetRetry(func() {})
 
 	require.Error(t, p.Reconcile(svc, want("a")))
+	require.True(t, retryArmed(p), "a failed create arms a retry")
+
 	p.Stop()
-	time.Sleep(100 * time.Millisecond)
-	mu.Lock()
-	assert.False(t, retried, "Stop cancels the pending retry")
-	mu.Unlock()
+	assert.False(t, retryArmed(p), "Stop cancels the pending retry")
 
-	require.Error(t, p.Reconcile(svc, want("a")))
-	time.Sleep(100 * time.Millisecond)
-	mu.Lock()
-	assert.False(t, retried, "no retry is armed after Stop")
-	mu.Unlock()
+	require.NoError(t, p.Reconcile(svc, want("a")), "a stopped latch does not try to raise")
+	assert.False(t, retryArmed(p), "and arms no retry")
 }
 
 func TestPersistentNotice_RecoveryCancelsRetry(t *testing.T) {
 	t.Parallel()
 	svc := &fakeNoticeService{createErr: errors.NewStd("rate limit exceeded")}
-	p := &PersistentNotice{retryDelay: 20 * time.Millisecond}
-	var mu sync.Mutex
-	retried := false
-	p.SetRetry(func() {
-		mu.Lock()
-		retried = true
-		mu.Unlock()
-	})
+	p := &PersistentNotice{retryDelay: time.Hour}
+	p.SetRetry(func() {})
 
 	require.Error(t, p.Reconcile(svc, want("a")))
+	require.True(t, retryArmed(p))
 	// The condition clears before the retry fires: the retry is cancelled.
 	require.NoError(t, p.Reconcile(svc, want("")))
-	time.Sleep(100 * time.Millisecond)
-	mu.Lock()
-	assert.False(t, retried)
-	mu.Unlock()
+	assert.False(t, retryArmed(p))
+}
+
+// TestPersistentNotice_ReplaceWithFailingDeleteKeepsOldNotice pins the replace
+// step's first-step failure: the old notice stays latched, and a later apply of
+// the new signature deletes it before raising the replacement.
+func TestPersistentNotice_ReplaceWithFailingDeleteKeepsOldNotice(t *testing.T) {
+	t.Parallel()
+	svc := &fakeNoticeService{}
+	p := &PersistentNotice{retryDelay: time.Hour}
+	require.NoError(t, p.Reconcile(svc, want("a")))
+	old := p.ID()
+
+	svc.deleteErr = errors.NewStd("store down")
+	require.Error(t, p.Reconcile(svc, want("b")))
+	assert.Equal(t, old, p.ID(), "the old notice is still latched")
+	created, _ := svc.counts()
+	assert.Equal(t, 1, created, "no replacement beside the undeleted notice")
+
+	svc.deleteErr = nil
+	require.NoError(t, p.Reconcile(svc, want("b")))
+	require.Equal(t, []string{old}, svc.deleted)
+	assert.NotEqual(t, old, p.ID())
+}
+
+// retryArmed reports whether p has a pending retry timer.
+func retryArmed(p *PersistentNotice) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.timer != nil
 }
 
 func TestService_DeleteBroadcastsDeletion(t *testing.T) {
@@ -289,4 +302,25 @@ func TestService_DeletionFanOutNeverBlocks(t *testing.T) {
 	n := len(svc.deletionSubs)
 	svc.deletionSubsMu.Unlock()
 	assert.Equal(t, 1, n, "the cancelled subscriber is pruned")
+}
+
+// TestPersistentNotice_StoppedRefusesRaiseButClears pins that a stopped latch
+// raises no new notice (its owner is torn down) while it can still clear one.
+func TestPersistentNotice_StoppedRefusesRaiseButClears(t *testing.T) {
+	t.Parallel()
+	svc := &fakeNoticeService{}
+	var p PersistentNotice
+	require.NoError(t, p.Reconcile(svc, want("a")))
+	require.NotEmpty(t, p.ID())
+
+	p.Stop()
+	require.NoError(t, p.Reconcile(svc, want("b")))
+	created, deleted := svc.counts()
+	assert.Equal(t, 1, created, "a stopped latch raises no replacement")
+	assert.Equal(t, 1, deleted, "but the stale notice is still deleted")
+	assert.Empty(t, p.ID())
+
+	require.NoError(t, p.Reconcile(svc, want("c")))
+	created, _ = svc.counts()
+	assert.Equal(t, 1, created, "nor a fresh notice")
 }
