@@ -34,7 +34,6 @@
     privacyFilterSettings,
     dogBarkFilterSettings,
     daylightFilterSettings,
-    realtimeSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { api, ApiError } from '$lib/utils/api';
@@ -209,21 +208,18 @@
   // Privacy filter update handlers
   function updatePrivacyEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
       privacyFilter: { ...settings.privacy, enabled },
     });
   }
 
   function updatePrivacyConfidence(confidence: number) {
     settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
       privacyFilter: { ...settings.privacy, confidence },
     });
   }
 
   function updateVADEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
       privacyFilter: {
         ...settings.privacy,
         vad: {
@@ -236,7 +232,6 @@
 
   function updateVADThreshold(threshold: number) {
     settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
       privacyFilter: {
         ...settings.privacy,
         vad: {
@@ -250,21 +245,18 @@
   // Dog bark filter update handlers
   function updateDogBarkEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
       dogBarkFilter: { ...settings.dogBark, enabled },
     });
   }
 
   function updateDogBarkConfidence(confidence: number) {
     settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
       dogBarkFilter: { ...settings.dogBark, confidence },
     });
   }
 
   function updateDogBarkRemember(remember: number) {
     settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
       dogBarkFilter: { ...settings.dogBark, remember },
     });
   }
@@ -272,7 +264,6 @@
   // Species change handlers
   function handleDogBarkSpeciesChange(updatedSpecies: string[]) {
     settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
       dogBarkFilter: { ...settings.dogBark, species: updatedSpecies },
     });
   }
@@ -280,21 +271,18 @@
   // Daylight filter update handlers
   function updateDaylightEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
       daylightFilter: { ...settings.daylight, enabled },
     });
   }
 
   function updateDaylightOffset(offset: number) {
     settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
       daylightFilter: { ...settings.daylight, offset },
     });
   }
 
   function handleDaylightSpeciesChange(updatedSpecies: string[]) {
     settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
       daylightFilter: { ...settings.daylight, species: updatedSpecies },
     });
   }

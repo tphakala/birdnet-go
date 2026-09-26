@@ -821,7 +821,7 @@ func AvailableDevices() ([]string, error) {
 
 	n := int(C.ovbind_devices_count(&list))
 	devices := make([]string, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		cName := C.ovbind_devices_at(&list, C.size_t(i))
 		if cName == nil {
 			continue

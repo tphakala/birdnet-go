@@ -6,6 +6,75 @@
 import { getHigherPriority, createNotificationKey, type Priority } from './priority';
 import { t } from '$lib/i18n';
 
+/**
+ * Window event the bell and the notifications page listen on (and dispatch) for
+ * deletes, whether made in this tab or pushed by the server (notification_deleted).
+ */
+export const NOTIFICATION_DELETED_WINDOW_EVENT = 'notification-deleted';
+
+/**
+ * How long a notification deleted on the server stays remembered. It covers a
+ * create event that arrives after its own delete (the SSE stream carries the two
+ * on separate channels) and a list load that was already in flight when the
+ * delete landed.
+ */
+export const DELETED_NOTIFICATION_MEMORY_MS = 60_000;
+
+/** Most deleted IDs remembered at once; the oldest is forgotten first. */
+export const DELETED_NOTIFICATION_MEMORY_MAX = 200;
+
+/** Recently deleted notification IDs and when each is forgotten (epoch ms). */
+const recentlyDeleted = new Map<string, number>();
+
+/** Remembers that the notification with this id was deleted on the server. */
+export function rememberDeletedNotification(id: string, now: number = Date.now()): void {
+  recentlyDeleted.delete(id);
+  recentlyDeleted.set(id, now + DELETED_NOTIFICATION_MEMORY_MS);
+  while (recentlyDeleted.size > DELETED_NOTIFICATION_MEMORY_MAX) {
+    const oldest = recentlyDeleted.keys().next().value;
+    if (oldest === undefined) break;
+    recentlyDeleted.delete(oldest);
+  }
+}
+
+/** Reports whether the notification with this id was deleted within the memory window. */
+export function wasRecentlyDeleted(id: string, now: number = Date.now()): boolean {
+  const until = recentlyDeleted.get(id);
+  if (until === undefined) return false;
+  if (until <= now) {
+    recentlyDeleted.delete(id);
+    return false;
+  }
+  return true;
+}
+
+/** Drops recently deleted notifications from a freshly loaded list. */
+export function withoutRecentlyDeleted<T extends { id: string }>(
+  notifications: T[],
+  now: number = Date.now()
+): T[] {
+  return notifications.filter(n => !wasRecentlyDeleted(n.id, now));
+}
+
+/** Test-only: forget every remembered deletion. */
+export function resetDeletedNotificationsForTest(): void {
+  recentlyDeleted.clear();
+}
+
+/**
+ * Returns the list without the notification with the given id and whether any
+ * unread one remains. An id that is not in the list returns the list unchanged.
+ */
+export function removeNotificationById(
+  notifications: Notification[],
+  id: string
+): { notifications: Notification[]; hasUnread: boolean } {
+  const remaining = notifications.some(n => n.id === id)
+    ? notifications.filter(n => n.id !== id)
+    : notifications;
+  return { notifications: remaining, hasUnread: remaining.some(n => !n.read) };
+}
+
 // Constant for toast notification title - must match backend ToastNotificationTitle
 export const TOAST_NOTIFICATION_TITLE = 'Toast Message';
 
@@ -183,7 +252,16 @@ export function isExistingNotification(
 }
 
 /**
- * Merge and deduplicate notifications arrays
+ * Merge and deduplicate notifications arrays.
+ *
+ * Entries are keyed by id: a new notification with the id of an existing one
+ * refreshes it (timestamp, higher priority) and keeps the local read state. A
+ * new notification whose text matches an existing entry with a DIFFERENT id
+ * collapses into one row that carries the NEW id, so the row always points at
+ * the live notification (a superseded id may already be deleted on the server,
+ * and acting on it would 404), while the read state and the higher priority
+ * carry over so a repeat of already-read text does not re-alert.
+ *
  * @param existingNotifications - Current notifications array
  * @param newNotifications - New notifications to merge
  * @param options - Configuration options
@@ -205,8 +283,12 @@ export function mergeAndDeduplicateNotifications(
     return existingNotifications;
   }
 
+  const existingById = new Map(existingNotifications.map(n => [n.id, n]));
+  const textKeyOf = (n: Notification) => createNotificationKey(n.message, n.title, n.type);
+
   const result: Notification[] = [];
-  const processedKeys = new Set<string>();
+  const takenIds = new Set<string>();
+  const takenTextKeys = new Set<string>();
 
   // Process new notifications first (they get priority)
   for (const newNotification of newNotifications) {
@@ -214,47 +296,50 @@ export function mergeAndDeduplicateNotifications(
       continue;
     }
 
-    const notificationKey = createNotificationKey(
-      newNotification.message,
-      newNotification.title,
-      newNotification.type
-    );
-
-    if (processedKeys.has(notificationKey)) {
-      continue; // Skip if we've already processed this key
+    const textKey = textKeyOf(newNotification);
+    if (takenIds.has(newNotification.id) || takenTextKeys.has(textKey)) {
+      continue; // Already represented by an earlier (newer) entry
     }
 
-    // Check for duplicate in existing notifications
-    const existingNotification = existingNotifications.find(
-      n => createNotificationKey(n.message, n.title, n.type) === notificationKey
-    );
-
-    if (existingNotification) {
-      // Merge with existing: update timestamp, preserve read status, upgrade priority
-      const merged: Notification = {
-        ...existingNotification,
+    const sameId = existingById.get(newNotification.id);
+    if (sameId) {
+      // Same notification: update timestamp, preserve read status, upgrade priority
+      result.push({
+        ...sameId,
         timestamp: newNotification.timestamp,
-        read: existingNotification.read, // Preserve read status
-        status: existingNotification.status, // Preserve status
-        priority: getHigherPriority(existingNotification.priority, newNotification.priority),
-      };
-      result.push(merged);
+        read: sameId.read,
+        status: sameId.status,
+        priority: getHigherPriority(sameId.priority, newNotification.priority),
+      });
     } else {
-      // Add new notification
-      result.push(newNotification);
+      // New id. If it repeats an existing entry's text, it supersedes that entry
+      // (dropped below via takenTextKeys), keeping its read state and priority.
+      const sameText = existingNotifications.find(n => textKeyOf(n) === textKey);
+      result.push(
+        sameText
+          ? {
+              ...newNotification,
+              read: sameText.read,
+              status: sameText.status,
+              priority: getHigherPriority(sameText.priority, newNotification.priority),
+            }
+          : newNotification
+      );
     }
 
-    processedKeys.add(notificationKey);
+    takenIds.add(newNotification.id);
+    takenTextKeys.add(textKey);
   }
 
-  // Add remaining existing notifications that weren't duplicates
+  // Add remaining existing notifications that were not merged or superseded
   for (const existing of existingNotifications) {
-    const notificationKey = createNotificationKey(existing.message, existing.title, existing.type);
-
-    if (!processedKeys.has(notificationKey)) {
-      result.push(existing);
-      processedKeys.add(notificationKey);
+    const textKey = textKeyOf(existing);
+    if (takenIds.has(existing.id) || takenTextKeys.has(textKey)) {
+      continue;
     }
+    result.push(existing);
+    takenIds.add(existing.id);
+    takenTextKeys.add(textKey);
   }
 
   // Sort by timestamp (newest first) for deterministic order

@@ -851,3 +851,26 @@ func generateLargeTestResults(count int) []datastore.Results {
 	}
 	return results
 }
+
+// TestFirstNonFinite pins the scanner every ModelInstance.Predict uses to reject
+// a backend that produced NaN or Inf scores.
+func TestFirstNonFinite(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		scores []float32
+		want   int
+	}{
+		{name: "empty", scores: nil, want: noNonFiniteScore},
+		{name: "all finite", scores: []float32{0.2, 0.1, 0.0, -3.5}, want: noNonFiniteScore},
+		{name: "NaN", scores: []float32{0.2, float32(math.NaN()), 0.1}, want: 1},
+		{name: "+Inf first", scores: []float32{float32(math.Inf(1)), 0.2}, want: 0},
+		{name: "-Inf last", scores: []float32{0.2, 0.1, float32(math.Inf(-1))}, want: 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, firstNonFinite(tt.scores))
+		})
+	}
+}

@@ -15,10 +15,10 @@
 
 /* eslint-disable no-console, no-undef */
 
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { parse as parseICU } from '@formatjs/icu-messageformat-parser';
 import { LOCALE_CODES, DEFAULT_LOCALE } from './config.js';
+import { extractICUParameters, findICUSyntaxError } from './icuMessage.js';
 
 interface ValidationResult {
   locale: string;
@@ -27,6 +27,10 @@ interface ValidationResult {
   extraKeys: string[];
   emptyValues: string[];
   untranslated: string[];
+  // untranslated entries not grandfathered by the baseline: keys back-filled with
+  // the English placeholder that have not been translated yet. These MUST be
+  // translated before the change lands (see --fail-on-untranslated).
+  newUntranslated: string[];
   invalidICU: Array<{ key: string; error: string }>;
   parameterMismatches: Array<{ key: string; expected: string[]; actual: string[] }>;
   errors: string[];
@@ -38,13 +42,23 @@ interface ValidationOptions {
   allowUntranslated?: boolean;
   minCoverage?: number; // Percentage (0-100)
   failOnWarnings?: boolean;
+  // Fail the run when a NEW untranslated entry (English placeholder not in the
+  // grandfathered baseline) is present, and print the REQUIRED-TASK message.
+  failOnUntranslated?: boolean;
   verbose?: boolean; // Show all keys with English values
   showSamples?: number; // Number of sample keys to show per category
 }
 
-// Keywords that legitimately stay the same across languages (technical terms, service names, etc.)
+// Terms that legitimately stay identical across every supported language:
+// service/brand names, protocols, technical abbreviations, and units. This list
+// is deliberately narrow. It must NOT contain ordinary words that happen to be
+// spelled the same in some locales (e.g. "database", "password", "options",
+// month names), because a whitelisted word makes any new key whose English
+// value is that word invisible to the --fail-on-untranslated gate. Words that
+// are genuinely translatable belong in the untranslated baseline (accepted,
+// tracked debt), not here.
 const SKIP_UNTRANSLATED_KEYWORDS = [
-  // Service/Provider names
+  // Service/provider names
   'discord',
   'telegram',
   'slack',
@@ -55,10 +69,11 @@ const SKIP_UNTRANSLATED_KEYWORDS = [
   'webhook',
   'mqtt',
   'birdweather',
+  'pirate weather',
   'ifttt',
   'google',
   'oauth',
-  // Database/Technical terms
+  // Database engines, protocols, and technical identifiers
   'sqlite',
   'mysql',
   'cpu',
@@ -78,7 +93,7 @@ const SKIP_UNTRANSLATED_KEYWORDS = [
   'dbtp',
   'ebu',
   'r128',
-  // Brand names
+  // Brand and model names
   'birdnet',
   'birdnet-pi',
   'birdnet-go',
@@ -94,9 +109,7 @@ const SKIP_UNTRANSLATED_KEYWORDS = [
   'perch',
   'perchv2',
   'rtf',
-  'gain',
   'tls',
-  'https',
   'loopback',
   // Hardware and ML terms
   'fp16',
@@ -104,13 +117,11 @@ const SKIP_UNTRANSLATED_KEYWORDS = [
   'soc',
   'gpu',
   'cpus',
-  'pid',
   'hpa',
   'khz',
   'inferno',
   'viridis',
-  'residency',
-  // Units and formats
+  // Units and physical abbreviations
   '°c',
   '°f',
   'db',
@@ -120,108 +131,99 @@ const SKIP_UNTRANSLATED_KEYWORDS = [
   'min',
   'max',
   'sec',
+  'h',
   // Common technical abbreviations
   'ok',
   'id',
   // Error codes
   '404',
   '500',
-  // Words that are often the same across languages
+  // Terms that are effectively identical across the supported languages
   'email',
-  'stream',
-  'standard',
-  'imperial',
   'logo',
-  'pause',
-  'minimum',
-  'maximum',
-  'date',
-  'journal',
-  'service',
-  'source',
-  'actions',
-  'conditions',
-  'observation',
-  'options',
-  'status',
   'info',
-  'version',
-  'terminal',
-  'checkpoints',
-  'threads',
-  'engine',
-  'legacy',
-  'migration',
-  'scopes',
-  'system',
-  'hardware',
-  'board',
   'audio',
-  'port',
-  'name',
-  'operator',
-  'integration',
-  'application',
-  'description',
-  'notifications',
-  'score',
-  'mode',
-  'type',
-  'total',
-  'tables',
-  'table',
-  'original',
-  'stable',
-  'configuration',
-  'import',
-  'export',
-  'trend',
-  'trends',
-  'violet',
-  'rose',
-  'latitude',
-  'longitude',
-  'volume',
-  'message',
-  'limit',
-  'online',
-  'host',
-  'winter',
-  'april',
-  'august',
-  'september',
-  'november',
-  'december',
-  'database',
-  'general',
-  'password',
-  'trigger',
-  'component',
-  'percentage',
   'copyright',
-  'phylum',
-  'error',
-  'no',
-  'region',
-  'wind',
-  'notes',
-  'image',
-  'help',
-  'filters',
-  'overlap',
-  'logs',
-  'optional',
-  'amber',
-  'h',
-  // Format placeholders (these often stay the same)
-  'format',
-  'placeholder',
 ];
+
+// Composite membership key for the grandfathered-untranslated baseline set,
+// spelled in one place so the load side and the lookup side cannot drift.
+function baselineKey(locale: string, key: string): string {
+  return `${locale}:${key}`;
+}
 
 class TranslationValidator {
   private readonly messagesPath = join(process.cwd(), 'static/messages');
+  // Grandfathered untranslated entries: pre-existing (locale, key) pairs whose
+  // value equals the English reference and are accepted as debt, so the
+  // --fail-on-untranslated gate only trips on NEWLY back-filled placeholders.
+  // Regenerate with `npm run i18n:baseline:untranslated` after translating debt
+  // or after intentionally accepting an identical string.
+  private readonly untranslatedBaselinePath = join(
+    this.messagesPath,
+    '.i18n-untranslated-baseline.json'
+  );
   private referenceMessages: Record<string, unknown> = {};
   private readonly results: ValidationResult[] = [];
+
+  // Loads the grandfathered set as "locale:key" strings; empty when no baseline
+  // exists, so every untranslated entry is then treated as new.
+  private loadUntranslatedBaseline(): Set<string> {
+    const set = new Set<string>();
+    try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      const raw: unknown = JSON.parse(readFileSync(this.untranslatedBaselinePath, 'utf-8'));
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        // Valid JSON but the wrong shape (an array or a scalar). Do not bypass it
+        // silently: without a diagnostic the missing grandfathering surfaces as
+        // "new untranslated" with no hint the baseline itself is malformed.
+        console.error(
+          `⚠️  Ignoring ${this.untranslatedBaselinePath}: expected a JSON object mapping each locale to an array of keys, got ${Array.isArray(raw) ? 'an array' : typeof raw}. Regenerate it with: npm run i18n:baseline:untranslated`
+        );
+        return set;
+      }
+      for (const [locale, keys] of Object.entries(raw as Record<string, unknown>)) {
+        if (!Array.isArray(keys)) {
+          console.error(
+            `⚠️  Ignoring locale "${locale}" in ${this.untranslatedBaselinePath}: expected an array of keys, got ${typeof keys}.`
+          );
+          continue;
+        }
+        for (const k of keys) {
+          if (typeof k === 'string') set.add(baselineKey(locale, k));
+        }
+      }
+    } catch (err) {
+      // A missing baseline is normal: every untranslated entry is then new.
+      // But an existing-yet-unparseable baseline would silently resurface all
+      // grandfathered entries as "new" (turning CI red with no obvious cause),
+      // so warn loudly to disambiguate corruption from absence.
+      const code = (err as NodeJS.ErrnoException | null)?.code;
+      if (code !== 'ENOENT') {
+        console.error(
+          `⚠️  Could not read ${this.untranslatedBaselinePath} (${(err as Error).message}); treating every untranslated entry as new.`
+        );
+      }
+    }
+    return set;
+  }
+
+  // Snapshots the CURRENT untranslated set as the new grandfathered baseline.
+  writeUntranslatedBaseline(): void {
+    const data: Record<string, string[]> = {};
+    let total = 0;
+    for (const r of this.results) {
+      if (r.untranslated.length > 0) {
+        data[r.locale] = [...r.untranslated].sort();
+        total += r.untranslated.length;
+      }
+    }
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixed constant path
+    writeFileSync(this.untranslatedBaselinePath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
+    console.log(
+      `Wrote untranslated baseline: ${total} grandfathered entr(ies) across ${Object.keys(data).length} locale(s).`
+    );
+  }
 
   async validate(options: ValidationOptions = {}): Promise<boolean> {
     console.log('🌍 Validating translation files...\n');
@@ -232,11 +234,18 @@ class TranslationValidator {
 
     console.log(`📚 Reference (${DEFAULT_LOCALE}.json): ${referenceKeys.length} keys\n`);
 
+    const untranslatedBaseline = this.loadUntranslatedBaseline();
+
     // Validate each locale
     for (const locale of LOCALE_CODES) {
       if (locale === DEFAULT_LOCALE) continue;
 
-      const result = await this.validateLocale(locale, referenceKeys, options);
+      const result = await this.validateLocale(
+        locale,
+        referenceKeys,
+        options,
+        untranslatedBaseline
+      );
       this.results.push(result);
     }
 
@@ -300,7 +309,8 @@ class TranslationValidator {
   private async validateLocale(
     locale: string,
     referenceKeys: string[],
-    options: ValidationOptions
+    options: ValidationOptions,
+    untranslatedBaseline: Set<string>
   ): Promise<ValidationResult> {
     const result: ValidationResult = {
       locale,
@@ -309,6 +319,7 @@ class TranslationValidator {
       extraKeys: [],
       emptyValues: [],
       untranslated: [],
+      newUntranslated: [],
       invalidICU: [],
       parameterMismatches: [],
       errors: [],
@@ -352,6 +363,12 @@ class TranslationValidator {
         this.validateParameters(key, referenceValue, value, result);
       }
     }
+
+    // Untranslated entries not grandfathered by the baseline are NEW: a key was
+    // back-filled with the English placeholder and never translated.
+    result.newUntranslated = result.untranslated.filter(
+      key => !untranslatedBaseline.has(baselineKey(locale, key))
+    );
 
     return result;
   }
@@ -406,21 +423,14 @@ class TranslationValidator {
   }
 
   private validateICUSyntax(key: string, value: string, result: ValidationResult): void {
-    // Skip ICU validation for placeholder keys that contain literal template syntax examples
-    // These keys (e.g., titlePlaceholder, messagePlaceholder) show users Go template syntax
-    // like {{.CommonName}} which is not ICU MessageFormat and should not be validated
-    if (key.endsWith('Placeholder')) return;
-
-    // Check if message contains ICU syntax
-    if (!value.includes('{')) return;
-
-    try {
-      parseICU(value);
-    } catch (error) {
-      result.invalidICU.push({
-        key,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    // Every value is parsed, including ones without `{` (such as HTML-only
+    // strings). The value is read the way the runtime reads it: HTML tags and
+    // apostrophes are literal text, and Go template field references like
+    // {{.CommonName}} (alert template placeholders) stand in as plain words
+    // (see icuMessage.ts).
+    const error = findICUSyntaxError(value);
+    if (error !== null) {
+      result.invalidICU.push({ key, error });
     }
   }
 
@@ -447,55 +457,8 @@ class TranslationValidator {
   }
 
   private extractParameters(text: string): string[] {
-    const params = new Set<string>();
-
-    // Use ICU parser to properly extract parameters from AST
-    // This avoids false positives from words inside literal text
-    try {
-      const ast = parseICU(text);
-      this.extractParamsFromAST(ast, params);
-    } catch {
-      // If parsing fails, fall back to simple regex for non-ICU messages
-      // This regex only matches simple {param} patterns without any commas
-      const simpleParamRegex = /\{(\w+)\}/g;
-      let match;
-      while ((match = simpleParamRegex.exec(text)) !== null) {
-        params.add(match[1]);
-      }
-    }
-
-    return Array.from(params).sort();
-  }
-
-  private extractParamsFromAST(elements: ReturnType<typeof parseICU>, params: Set<string>): void {
-    for (const element of elements) {
-      // Handle different AST node types based on type field
-      const node = element as unknown as Record<string, unknown>;
-
-      // Type 1 = argument (actual ICU parameter like {name})
-      if ('type' in node && node.type === 1 && 'value' in node && typeof node.value === 'string') {
-        params.add(node.value);
-      }
-
-      // Type 6 = plural/select node (like {count, plural, ...})
-      if ('type' in node && node.type === 6 && 'value' in node && typeof node.value === 'string') {
-        // Add the parameter name (e.g., "count" from {count, plural, ...})
-        params.add(node.value);
-      }
-
-      // Recursively process nested options in plural/select nodes
-      if ('options' in node && typeof node.options === 'object' && node.options !== null) {
-        const options = node.options as Record<string, unknown>;
-        for (const option of Object.values(options)) {
-          if (option && typeof option === 'object' && 'value' in option) {
-            const optionObj = option as Record<string, unknown>;
-            if (Array.isArray(optionObj.value)) {
-              this.extractParamsFromAST(optionObj.value as ReturnType<typeof parseICU>, params);
-            }
-          }
-        }
-      }
-    }
+    // Sorted so the mismatch report is order-independent.
+    return extractICUParameters(text).sort();
   }
 
   private groupKeysBySection(keys: string[]): Map<string, string[]> {
@@ -625,6 +588,48 @@ class TranslationValidator {
 
       console.log('');
     }
+
+    this.printUntranslatedActionRequired();
+  }
+
+  // Emits the required-task notice for NEW untranslated entries (English
+  // placeholders not grandfathered by the baseline). Printed whenever any exist,
+  // so the message surfaces even before --fail-on-untranslated turns it into a
+  // hard failure. Written to stderr on purpose: --json and --report suppress
+  // console.log (to keep stdout clean for the report), and the CI job redirects
+  // only stdout into validation-report.json, so stderr is what carries this
+  // actionable list into the Actions log when the gate trips.
+  private printUntranslatedActionRequired(): void {
+    const offenders = this.results.filter(r => r.newUntranslated.length > 0);
+    const total = offenders.reduce((sum, r) => sum + r.newUntranslated.length, 0);
+    if (total === 0) return;
+
+    console.error(
+      '\n⚠️  ACTION REQUIRED: manual translation of back-filled entries is a REQUIRED task.'
+    );
+    console.error(
+      `    ${total} entr${total === 1 ? 'y' : 'ies'} across ${offenders.length} locale(s) still hold the English text`
+    );
+    console.error(
+      '    as a placeholder (a key back-filled by i18n:sync and never translated). These are NOT'
+    );
+    console.error(
+      '    translations. Translate each in its locale file before this change can land:'
+    );
+    for (const r of offenders) {
+      for (const key of r.newUntranslated) {
+        const enValue = this.truncateValue(
+          String(this.getValueByPath(this.referenceMessages, key))
+        );
+        console.error(`      - ${r.locale}:${key}  ("${enValue}")`);
+      }
+    }
+    console.error(
+      '    If an entry is intentionally identical to English (a proper noun or unit), add the term to'
+    );
+    console.error(
+      '    SKIP_UNTRANSLATED_KEYWORDS, or accept it as debt with: npm run i18n:baseline:untranslated'
+    );
   }
 
   private getStatus(result: ValidationResult, options: ValidationOptions): string {
@@ -635,8 +640,12 @@ class TranslationValidator {
 
     const coverage = (result.totalKeys / this.getAllKeys(this.referenceMessages).length) * 100;
     const belowThreshold = options.minCoverage && coverage < options.minCoverage;
+    // A new untranslated entry fails the run under --fail-on-untranslated, so the
+    // locale is failed, not merely warned; keep the icon consistent with the exit.
+    const failsUntranslated =
+      Boolean(options.failOnUntranslated) && result.newUntranslated.length > 0;
 
-    if (hasErrors || belowThreshold) return '❌';
+    if (hasErrors || belowThreshold || failsUntranslated) return '❌';
     if (result.missingKeys.length > 0 || result.untranslated.length > 0) return '⚠️ ';
     return '✅';
   }
@@ -669,6 +678,12 @@ class TranslationValidator {
       if (options.failOnWarnings && result.missingKeys.length > 0) {
         passed = false;
       }
+
+      // A newly back-filled English placeholder is a required translation task,
+      // not a soft warning: fail so it cannot land silently.
+      if (options.failOnUntranslated && result.newUntranslated.length > 0) {
+        passed = false;
+      }
     }
 
     return passed;
@@ -694,7 +709,10 @@ class TranslationValidator {
     for (const result of this.results) {
       const coverage = ((result.totalKeys / refKeyCount) * 100).toFixed(2);
       const issues =
-        result.emptyValues.length + result.invalidICU.length + result.parameterMismatches.length;
+        result.emptyValues.length +
+        result.invalidICU.length +
+        result.parameterMismatches.length +
+        result.newUntranslated.length;
       lines.push(
         `| ${result.locale} | ${result.totalKeys} | ${coverage}% | ${result.missingKeys.length} | ${result.extraKeys.length} | ${issues} |`
       );
@@ -727,6 +745,15 @@ class TranslationValidator {
         });
         lines.push('');
       }
+
+      if (result.newUntranslated.length > 0) {
+        lines.push(
+          `**New Untranslated (${result.newUntranslated.length}) - back-filled English, must translate:**\n`
+        );
+        lines.push('```');
+        lines.push(result.newUntranslated.join('\n'));
+        lines.push('```\n');
+      }
     }
 
     return lines.join('\n');
@@ -750,8 +777,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const jsonOutput = args.includes('--json');
   const options: ValidationOptions = {
     strictMode: args.includes('--strict'),
-    allowUntranslated: args.includes('--allow-untranslated'),
+    // --fail-on-untranslated wins over --allow-untranslated: the latter skips
+    // computing untranslated entries entirely, which would silently disarm the
+    // gate, so the two contradictory flags together must not turn it off.
+    allowUntranslated:
+      args.includes('--allow-untranslated') && !args.includes('--fail-on-untranslated'),
     failOnWarnings: args.includes('--fail-on-warnings'),
+    failOnUntranslated: args.includes('--fail-on-untranslated'),
     verbose: args.includes('--verbose') || args.includes('-v'),
     minCoverage: (() => {
       if (!args.includes('--min-coverage')) return undefined;
@@ -800,7 +832,11 @@ Options:
   --samples N        Show N sample keys per section (default: 5)
   --allow-untranslated  Don't warn about untranslated keys
   --min-coverage N   Require at least N% translation coverage
-  --fail-on-warnings Exit with error on warnings (missing keys, untranslated)
+  --fail-on-warnings Exit with error on warnings (missing keys)
+  --fail-on-untranslated  Exit with error when a NEW untranslated entry (an English
+                     placeholder not in .i18n-untranslated-baseline.json) is present
+  --update-baseline  Rewrite .i18n-untranslated-baseline.json to grandfather the
+                     current untranslated entries, then exit
   --json             Output machine-readable JSON
   --report           Generate report
   --format=markdown  Use markdown format for report
@@ -815,6 +851,33 @@ Examples:
     process.exit(0);
   }
 
+  // Regenerate the grandfathered-untranslated baseline and exit. Run this after
+  // translating debt, or after intentionally accepting a string that is legitimately
+  // identical to English, so the --fail-on-untranslated gate stays meaningful.
+  if (args.includes('--update-baseline')) {
+    // Only snapshot a baseline from a complete, valid set of locale files. A
+    // locale that failed to load comes back empty (all keys missing), and
+    // without these gates validate() can still pass, writing a baseline that
+    // omits that locale's entries; a later run would then flag them as new.
+    const ok = await validator.validate({
+      ...options,
+      allowUntranslated: false,
+      // Never fail the pre-write validation on untranslated entries: snapshotting
+      // them (new and grandfathered alike) is exactly what --update-baseline does.
+      failOnUntranslated: false,
+      failOnWarnings: true,
+      minCoverage: 100,
+    });
+    if (!ok) {
+      console.error(
+        'Refusing to update the untranslated baseline: translation validation failed (missing keys, empty values, invalid ICU, or coverage below 100%). Fix those first so the baseline is not written from an incomplete set.'
+      );
+      process.exit(1);
+    }
+    validator.writeUntranslatedBaseline();
+    process.exit(0);
+  }
+
   // Suppress console output if JSON output requested
   if (jsonOutput) {
     const originalLog = console.log;
@@ -825,6 +888,19 @@ Examples:
     // Output LLM-friendly structured JSON
     const results = validator.getResults();
     const referenceKeys = validator.getReferenceKeys();
+    // New untranslated entries are errors only when the gate is enforcing them
+    // (--fail-on-untranslated). Without the flag the run still passes, so they
+    // stay ordinary untranslated warnings; keying the error math on this keeps
+    // the report internally consistent (success never coexists with errors).
+    const failingUntranslated = (r: ValidationResult): string[] =>
+      options.failOnUntranslated ? r.newUntranslated : [];
+    // The untranslated entries reported as warnings (everything not counted as a
+    // failing error). Uses a Set for membership so it stays O(n) even when a whole
+    // locale is untranslated (e.g. a missing baseline while the gate enforces).
+    const warningUntranslated = (r: ValidationResult): string[] => {
+      const failing = new Set(failingUntranslated(r));
+      return r.untranslated.filter(key => !failing.has(key));
+    };
     const jsonReport = {
       success: passed,
       timestamp: new Date().toISOString(),
@@ -836,15 +912,25 @@ Examples:
             r.missingKeys.length === 0 &&
             r.emptyValues.length === 0 &&
             r.invalidICU.length === 0 &&
-            r.parameterMismatches.length === 0
+            r.parameterMismatches.length === 0 &&
+            failingUntranslated(r).length === 0
         ).length,
         totalErrors: results.reduce(
           (sum, r) =>
-            sum + r.emptyValues.length + r.invalidICU.length + r.parameterMismatches.length,
+            sum +
+            r.emptyValues.length +
+            r.invalidICU.length +
+            r.parameterMismatches.length +
+            failingUntranslated(r).length,
           0
         ),
+        // When the gate is enforcing, new untranslated entries are counted as
+        // errors above, so exclude them from the untranslated warning total to
+        // avoid double-counting; grandfathered (and, without the flag, all)
+        // untranslated debt stays a warning.
         totalWarnings: results.reduce(
-          (sum, r) => sum + r.missingKeys.length + r.untranslated.length,
+          (sum, r) =>
+            sum + r.missingKeys.length + (r.untranslated.length - failingUntranslated(r).length),
           0
         ),
       },
@@ -884,6 +970,19 @@ Examples:
           fixable: true,
           suggestedFix: `Update parameters to match: {${expected.join('}, {')}}`,
         })),
+        // Newly back-filled English placeholders that are not grandfathered,
+        // when the gate is enforcing: surface them as errors (with the offending
+        // key) rather than burying them in the generic untranslated warnings.
+        ...failingUntranslated(r).map(key => ({
+          type: 'new_untranslated',
+          locale: r.locale,
+          key,
+          severity: 'error',
+          message: `Key "${key}" is back-filled with the English text and not translated in ${r.locale}.json`,
+          file: `static/messages/${r.locale}.json`,
+          fixable: true,
+          suggestedFix: `Translate "${key}" in ${r.locale}.json, or accept it as debt with: npm run i18n:baseline:untranslated`,
+        })),
       ]),
       warnings: results.flatMap(r => [
         ...r.missingKeys.map(key => ({
@@ -897,7 +996,10 @@ Examples:
           fixable: true,
           suggestedFix: `Copy key from ${DEFAULT_LOCALE}.json and translate`,
         })),
-        ...r.untranslated.map(key => ({
+        // Untranslated debt that is not being reported as an error above stays a
+        // warning: grandfathered entries always, and every untranslated entry
+        // when the gate is not enforcing (--fail-on-untranslated absent).
+        ...warningUntranslated(r).map(key => ({
           type: 'untranslated',
           locale: r.locale,
           key,
@@ -922,8 +1024,13 @@ Examples:
         locale: r.locale,
         totalKeys: r.totalKeys,
         coverage: Number(((r.totalKeys / referenceKeys.length) * 100).toFixed(2)),
-        errors: r.emptyValues.length + r.invalidICU.length + r.parameterMismatches.length,
-        warnings: r.missingKeys.length + r.untranslated.length,
+        errors:
+          r.emptyValues.length +
+          r.invalidICU.length +
+          r.parameterMismatches.length +
+          failingUntranslated(r).length,
+        warnings: r.missingKeys.length + (r.untranslated.length - failingUntranslated(r).length),
+        newUntranslated: r.newUntranslated.length,
         info: r.extraKeys.length,
       })),
     };
@@ -935,15 +1042,15 @@ Examples:
   // Suppress console output if generating report
   const generateReport = args.includes('--report');
   if (generateReport) {
+    // Only stdout carries the report, so mute console.log during validation to
+    // keep it clean. Leave console.error alone (as --json does) so the ACTION
+    // REQUIRED notice still reaches stderr; the CI report step captures it.
     const originalLog = console.log;
-    const originalError = console.error;
     console.log = () => {};
-    console.error = () => {};
 
     const passed = await validator.validate(options);
 
     console.log = originalLog;
-    console.error = originalError;
 
     const format = args.includes('--format=markdown') ? 'markdown' : 'json';
     const report = validator.generateReport(format);

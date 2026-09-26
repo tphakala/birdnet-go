@@ -4,7 +4,6 @@ package weather
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // setupWeatherTestEnvironment creates a test environment with Echo, a mock
@@ -169,7 +169,7 @@ func TestGetDailyWeatherDatabaseError(t *testing.T) {
 	e, mockDS, controller := setupWeatherTestEnvironment(t)
 
 	// Setup mock expectations to return an error
-	mockDS.On("GetDailyEvents", "2023-01-01").Return(datastore.DailyEvents{}, errors.New("database error"))
+	mockDS.On("GetDailyEvents", "2023-01-01").Return(datastore.DailyEvents{}, errors.NewStd("database error"))
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/weather/daily/2023-01-01", http.NoBody)
@@ -348,7 +348,7 @@ func TestGetHourlyWeatherForDayDatabaseError(t *testing.T) {
 	e, mockDS, controller := setupWeatherTestEnvironment(t)
 
 	// Setup mock expectations to return an error
-	mockDS.On("GetHourlyWeather", "2023-01-01").Return([]datastore.HourlyWeather{}, errors.New("database error"))
+	mockDS.On("GetHourlyWeather", "2023-01-01").Return([]datastore.HourlyWeather{}, errors.NewStd("database error"))
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/weather/hourly/2023-01-01", http.NoBody)

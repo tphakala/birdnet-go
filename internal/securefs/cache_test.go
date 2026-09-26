@@ -1,13 +1,13 @@
 package securefs
 
 import (
-	"errors"
 	"io/fs"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Test constants for path resolution testing.
@@ -17,7 +17,7 @@ const testResolvedPath = "/resolved/path"
 func TestGetSymlinkResolutionDoesNotCacheErrors(t *testing.T) {
 	pc := NewPathCache()
 	callCount := 0
-	transientErr := errors.New("transient error")
+	transientErr := errors.NewStd("transient error")
 
 	compute := func(path string) (string, error) {
 		callCount++
@@ -42,7 +42,7 @@ func TestGetSymlinkResolutionDoesNotCacheErrors(t *testing.T) {
 func TestGetStatDoesNotCacheErrors(t *testing.T) {
 	pc := NewPathCache()
 	callCount := 0
-	transientErr := errors.New("file temporarily unavailable")
+	transientErr := errors.NewStd("file temporarily unavailable")
 
 	compute := func(path string) (fs.FileInfo, error) {
 		callCount++
@@ -68,7 +68,7 @@ func TestGetStatDoesNotCacheErrors(t *testing.T) {
 func TestGetAbsPathDoesNotCacheErrors(t *testing.T) {
 	pc := NewPathCache()
 	callCount := 0
-	transientErr := errors.New("transient error")
+	transientErr := errors.NewStd("transient error")
 
 	compute := func(path string) (string, error) {
 		callCount++
@@ -93,7 +93,7 @@ func TestGetAbsPathDoesNotCacheErrors(t *testing.T) {
 func TestGetValidatePathDoesNotCacheErrors(t *testing.T) {
 	pc := NewPathCache()
 	callCount := 0
-	transientErr := errors.New("transient error")
+	transientErr := errors.NewStd("transient error")
 
 	compute := func(path string) (string, error) {
 		callCount++
@@ -118,7 +118,7 @@ func TestGetValidatePathDoesNotCacheErrors(t *testing.T) {
 func TestGetWithinBaseDoesNotCacheErrors(t *testing.T) {
 	pc := NewPathCache()
 	callCount := 0
-	transientErr := errors.New("transient error")
+	transientErr := errors.NewStd("transient error")
 
 	compute := func() (bool, error) {
 		callCount++

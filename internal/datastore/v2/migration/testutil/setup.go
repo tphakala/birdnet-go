@@ -171,9 +171,9 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 
 	// Create V2 manager
 	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
-		DataDir: tmpDir,
-		Debug:   false,
-		Logger:  ctx.Logger,
+		ConfiguredPath: filepath.Join(tmpDir, "birdnet.db"),
+		Debug:          false,
+		Logger:         ctx.Logger,
 	})
 	require.NoError(t, err, "failed to create V2 manager")
 
@@ -826,9 +826,7 @@ func (s *testLegacyInterface) GetNotificationHistory(_ context.Context, _, _ str
 func (s *testLegacyInterface) DeleteExpiredNotificationHistory(_ context.Context, _ time.Time) (int64, error) {
 	return 0, nil
 }
-func (s *testLegacyInterface) SchemaVersion() string                           { return datastore.SchemaVersionLegacy }
-func (s *testLegacyInterface) UpdateNameMaps(_ []string)                       {}
-func (s *testLegacyInterface) SetNameResolver(_ datastore.SpeciesNameResolver) {}
+func (s *testLegacyInterface) SchemaVersion() string { return datastore.SchemaVersionLegacy }
 func (s *testLegacyInterface) GetDatabaseStats(_ context.Context) (*datastore.DatabaseStats, error) {
 	return nil, nil //nolint:nilnil // stub
 }

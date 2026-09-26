@@ -188,6 +188,9 @@ func recentSpeciesTimestampExpression(dialect string) (string, error) {
 // elapsed time. Comparing the stored wall-clock timestamps to these boundaries
 // preserves bucket widths when the local clock crosses a DST transition.
 func recentSpeciesBucketExpression(start, end time.Time, buckets int) (expression string, args []any) {
+	if buckets == 1 {
+		return "0", nil
+	}
 	var query strings.Builder
 	query.WriteString("CASE")
 	args = make([]any, 0, buckets-1)

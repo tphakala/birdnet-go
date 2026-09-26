@@ -7,7 +7,6 @@
 package weather
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -15,7 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	errors_pkg "github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"gorm.io/gorm"
@@ -23,9 +22,7 @@ import (
 
 // Weather constants (package-local)
 const (
-	timePeriodNight        = datastore.TimeOfDayNight
-	minTimeStringLength    = 2  // Minimum length for parsing hour from time string
-	weatherSunWindowMinute = 30 // Minutes before/after sunrise/sunset for weather
+	minTimeStringLength = 2 // Minimum length for parsing hour from time string
 )
 
 // Handler serves the weather domain endpoints. It embeds *apicore.Core BY
@@ -407,7 +404,7 @@ func (c *Handler) findHourlyWeatherByHourString(hourlyWeatherList []datastore.Ho
 // determineTimeOfDayForDetection calculates the time of day string ("day", "night", etc.)
 // It returns the parsed detection time, the calculated timeOfDay string, and any error during parsing or calculation.
 func (c *Handler) determineTimeOfDayForDetection(note *datastore.Note, date, detectionID string) (*time.Time, string, error) {
-	timeOfDay := timePeriodNight // Default
+	timeOfDay := datastore.TimeOfDayNight // Default
 
 	detectionTimeStr := date + " " + note.Time
 	detectionTime, parseErr := time.ParseInLocation("2006-01-02 15:04:05", detectionTimeStr, time.Local)
@@ -427,7 +424,7 @@ func (c *Handler) determineTimeOfDayForDetection(note *datastore.Note, date, det
 		return &detectionTime, timeOfDay, sunErr
 	}
 
-	timeOfDay = c.calculateTimeOfDay(detectionTime, &sunTimes)
+	timeOfDay = suncalc.ClassifyTimeOfDay(detectionTime, &sunTimes)
 	return &detectionTime, timeOfDay, nil
 }
 
@@ -569,31 +566,6 @@ func (c *Handler) GetLatestWeather(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, response)
 }
 
-// calculateTimeOfDay determines the time of day based on the detection time and sun events
-func (c *Handler) calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTimes) string {
-	// Convert all times to the same format for comparison
-	detTime := detectionTime.Format(time.TimeOnly)
-	sunriseTime := sunEvents.Sunrise.Format(time.TimeOnly)
-	sunsetTime := sunEvents.Sunset.Format(time.TimeOnly)
-
-	// Define sunrise/sunset window (30 minutes before and after)
-	sunriseStart := sunEvents.Sunrise.Add(-weatherSunWindowMinute * time.Minute).Format(time.TimeOnly)
-	sunriseEnd := sunEvents.Sunrise.Add(weatherSunWindowMinute * time.Minute).Format(time.TimeOnly)
-	sunsetStart := sunEvents.Sunset.Add(-weatherSunWindowMinute * time.Minute).Format(time.TimeOnly)
-	sunsetEnd := sunEvents.Sunset.Add(weatherSunWindowMinute * time.Minute).Format(time.TimeOnly)
-
-	switch {
-	case detTime >= sunriseStart && detTime <= sunriseEnd:
-		return datastore.TimeOfDaySunrise
-	case detTime >= sunsetStart && detTime <= sunsetEnd:
-		return datastore.TimeOfDaySunset
-	case detTime >= sunriseTime && detTime < sunsetTime:
-		return datastore.TimeOfDayDay
-	default:
-		return timePeriodNight
-	}
-}
-
 // GetMoonPhase handles GET /api/v2/weather/moon/:date
 // Returns the moon phase for a given date.
 func (c *Handler) GetMoonPhase(ctx echo.Context) error {
@@ -660,9 +632,9 @@ func (c *Handler) GetSunTimes(ctx echo.Context) error {
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		return c.HandleError(ctx, errors_pkg.New(errors.New("sun calculator not available")).
+		return c.HandleError(ctx, errors.New(errors.NewStd("sun calculator not available")).
 			Component("weather_api").
-			Category(errors_pkg.CategoryConfiguration).
+			Category(errors.CategoryConfiguration).
 			Build(), "Sun calculator not initialized", http.StatusInternalServerError)
 	}
 
@@ -678,14 +650,16 @@ func (c *Handler) GetSunTimes(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to calculate sun times", http.StatusInternalServerError)
 	}
 
-	// Build response
+	// Build response. The timezone is taken from the returned times, which carry the zone of the
+	// state they were computed from: asking the calculator again could observe a location
+	// changed in between and label these times with the new location's zone.
 	response := sunTimesResponse{
 		Date:      date,
 		Sunrise:   sunTimes.Sunrise,
 		Sunset:    sunTimes.Sunset,
 		CivilDawn: sunTimes.CivilDawn,
 		CivilDusk: sunTimes.CivilDusk,
-		Timezone:  c.SunCalc.LocationName(),
+		Timezone:  sunTimes.Sunrise.Location().String(),
 	}
 
 	c.LogInfoIfEnabled("Calculated sun times",

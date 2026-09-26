@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -135,7 +136,7 @@ func buildAnalysisArgs(url string, ffmpegMajor int, audioOnly bool) []string {
 		// Restrict the RTSP handshake to audio tracks; -vn below only drops video
 		// after decode, so without this the camera's video track is still SETUP
 		// (issue #3798). audioOnly is false on the full-stream fallback (#3902).
-		args = appendRTSPMediaArgs(args, "tcp", audioOnly)
+		args = appendRTSPMediaArgs(args, conf.DefaultTransport, audioOnly)
 		timeoutFlag = rtspTimeoutParamForMajor(ffmpegMajor)
 	}
 

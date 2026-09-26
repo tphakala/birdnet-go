@@ -380,6 +380,14 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
     // Always coerce enabled to boolean to ensure stable type
     coercedExport.enabled = coerceBoolean(exp.enabled, false);
 
+    // Backfill the ultrasonic export format for configs saved before this setting
+    // existed (or with an out-of-range value), so the WAV/FLAC dropdown always has
+    // a valid lossless value rather than rendering blank. The backend is the
+    // source of truth and re-validates on save.
+    if (coercedExport.ultrasonicType !== 'wav' && coercedExport.ultrasonicType !== 'flac') {
+      coercedExport.ultrasonicType = 'flac';
+    }
+
     // Clamp capture length between 10 and 60 seconds (backend validation)
     if ('length' in exp) {
       coercedExport.length = coerceNumber(exp.length, 10, 60, 15);

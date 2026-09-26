@@ -164,6 +164,14 @@ birdnet:
   modelregion: auto       # regional model preference: auto (from coordinates), global (all species), or a region slug (e.g. iberia)
   usexnnpack: true        # true to use XNNPACK delegate for inference acceleration
 
+# Global acoustic model configuration. models.enabled is the authoritative, ordered list of
+# acoustic models to load; "birdnet" is the built-in BirdNET v2.4. Entries load in order, so
+# the first one loads first. An empty list means no acoustic model is loaded (a valid state).
+# Gallery-installed models are added here (e.g. perch_v2, birdnet_v3.0).
+models:
+  enabled:
+    - birdnet             # BirdNET v2.4 (built-in)
+
 # Optional taxonomy synonym overrides for image lookups.
 # Built-in mappings are always loaded first; entries below override/add to them.
 # Format: "old scientific name": "new scientific name"
@@ -210,6 +218,7 @@ realtime:
       debug: false        # true to enable audio export debug messages
       path: clips/        # path to audio clip export directory
       type: wav           # wav, flac, aac, opus, mp3. Formats other than wav and flac require ffmpeg.
+      ultrasonictype: flac # wav or flac only; used for bat/ultrasonic captures above 48 kHz (stored losslessly at full source rate)
       bitrate: 96k        # bitrate for aac and opus exports
       retention:
         policy: usage     # retention policy: none, age or usage
@@ -291,6 +300,9 @@ realtime:
       endpoint: "https://api.openweathermap.org/data/2.5/weather" # OpenWeather API endpoint
       units: metric     # metric or imperial
       language: en      # language code
+    pirateweather:
+      apikey: ""        # Pirate Weather API key
+      endpoint: "https://api.pirateweather.net/forecast" # Pirate Weather API endpoint
 
   mqtt:
     enabled: false        # true to enable MQTT

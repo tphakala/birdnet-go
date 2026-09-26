@@ -375,9 +375,7 @@ func (m *mockStore) DeleteExpiredNotificationHistory(_ context.Context, before t
 	return 0, nil
 }
 
-func (m *mockStore) SchemaVersion() string                           { return datastore.SchemaVersionLegacy }
-func (m *mockStore) UpdateNameMaps(_ []string)                       {}
-func (m *mockStore) SetNameResolver(_ datastore.SpeciesNameResolver) {}
+func (m *mockStore) SchemaVersion() string { return datastore.SchemaVersionLegacy }
 func (m *mockStore) GetDatabaseStats(_ context.Context) (*datastore.DatabaseStats, error) {
 	return &datastore.DatabaseStats{
 		Type:      "mock",
@@ -440,9 +438,7 @@ type mockFailingStore struct {
 
 func newMockFailingStore() *mockFailingStore {
 	return &mockFailingStore{
-		mockStore: mockStore{
-			images: make(map[string]*datastore.ImageCache),
-		},
+		images: make(map[string]*datastore.ImageCache),
 	}
 }
 
@@ -1081,8 +1077,8 @@ func TestBackgroundRequestsRateLimited(t *testing.T) {
 
 	fetchAttempts := make(chan time.Time, 2*numStaleEntries)
 	mockProvider := &mockProviderWithContext{
-		mockImageProvider: mockImageProvider{fetchDelay: 5 * time.Millisecond},
-		fetchChannel:      fetchAttempts,
+		fetchDelay:   5 * time.Millisecond,
+		fetchChannel: fetchAttempts,
 	}
 
 	store := newMockStore()
@@ -1132,9 +1128,6 @@ func TestMain(m *testing.M) {
 	conftest.NewTestSettings().Apply()
 
 	goleak.VerifyTestMain(m,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		// NOTE: startCacheRefresh.func1 is deliberately NOT ignored. Close() stops it, so
 		// ignoring it hid every test that constructed a cache and never closed it.
 		// Ignore HTTP/2 client connection goroutines from the shared imageHTTPClient

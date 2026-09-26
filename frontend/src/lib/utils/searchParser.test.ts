@@ -166,9 +166,8 @@ describe('formatFiltersForAPI', () => {
     expect(result).toEqual({ timeOfDay: 'dawn' });
   });
 
-  // location and source are aliases for the same backend dimension (source_node),
-  // exposed by GET /api/v2/detections as the single `location` query param.
-  it('should map source filter to the location API param (shared source_node dimension)', () => {
+  // source: maps to the `source` query param; location: to `location` (node name).
+  it('should map source filter to the source API param', () => {
     const filters = [
       {
         type: 'source' as const,
@@ -179,7 +178,7 @@ describe('formatFiltersForAPI', () => {
     ];
 
     const result = formatFiltersForAPI(filters);
-    expect(result).toEqual({ location: 'rtsp_87b89761' });
+    expect(result).toEqual({ source: 'rtsp_87b89761' });
   });
 
   it('should map location filter to the location API param', () => {

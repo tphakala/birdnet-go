@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -309,4 +310,24 @@ func TestConvertToAdditionalResults_SetsRawLabelFromSpecies(t *testing.T) {
 	require.Len(t, result, 2)
 	assert.Equal(t, "male_speech_and_man_speaking", result[0].RawLabel, "raw label must equal the original r.Species string")
 	assert.Equal(t, "Turdus merula_Common Blackbird", result[1].RawLabel, "raw label must equal the original r.Species string")
+}
+
+// TestConvertToAdditionalResults_SkipsNonFiniteConfidence verifies that a
+// top-K entry carrying a NaN or Inf confidence is dropped from the additional
+// results rather than persisted (NULL on SQLite, a rejected insert on MySQL).
+func TestConvertToAdditionalResults_SkipsNonFiniteConfidence(t *testing.T) {
+	t.Parallel()
+
+	input := []datastore.Results{
+		{Species: "Periparus ater_Coal Tit", Confidence: 0.80},
+		{Species: "Parus major_Great Tit", Confidence: float32(math.NaN())},
+		{Species: "Corvus corax_Common Raven", Confidence: float32(math.Inf(1))},
+		{Species: "Turdus merula_Common Blackbird", Confidence: 0.40},
+	}
+
+	result := convertToAdditionalResults(input, "")
+
+	require.Len(t, result, 2, "non-finite entries must be skipped")
+	assert.Equal(t, "Periparus ater", result[0].Species.ScientificName)
+	assert.Equal(t, "Turdus merula", result[1].Species.ScientificName)
 }

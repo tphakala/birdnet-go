@@ -8,48 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/privacy"
-)
-
-// FFmpeg error type constants for categorizing error conditions.
-//
-// Error classification for retry and circuit breaker decisions:
-//
-// Transient errors (may recover on retry):
-//   - ErrTypeConnectionTimeout — host unreachable or slow network
-//   - ErrTypeNetworkUnreachable — network transition, interface coming up
-//   - ErrTypeRTSP503 — server overloaded, may recover
-//   - ErrTypeInvalidData — stream corruption, may be temporary
-//   - ErrTypeEOF — stream ended unexpectedly, may restart
-//
-// Permanent errors (require configuration fix, no retry):
-//   - ErrTypeRTSP404 — stream path does not exist
-//   - ErrTypeConnectionRefused — no server listening on port
-//   - ErrTypeAuthFailed — invalid credentials (401)
-//   - ErrTypeAuthForbidden — insufficient permissions (403)
-//   - ErrTypeNoRoute — routing table problem for specific host
-//   - ErrTypeOperationNotPermit — firewall/SELinux blocking
-//   - ErrTypeSSLError — certificate or TLS configuration issue
-//   - ErrTypeDNSResolutionFailed — hostname does not resolve
-//   - ErrTypeProtocolError — unsupported protocol in URL
-//
-// See ShouldOpenCircuit() and ShouldRestart() for how these classifications
-// drive circuit breaker and restart behaviour.
-const (
-	ErrTypeConnectionTimeout   = "connection_timeout"
-	ErrTypeNetworkUnreachable  = "network_unreachable"
-	ErrTypeRTSP503             = "rtsp_503"
-	ErrTypeInvalidData         = "invalid_data"
-	ErrTypeEOF                 = "eof"
-	ErrTypeRTSP404             = "rtsp_404"
-	ErrTypeConnectionRefused   = "connection_refused"
-	ErrTypeAuthFailed          = "auth_failed"
-	ErrTypeAuthForbidden       = "auth_forbidden"
-	ErrTypeNoRoute             = "no_route"
-	ErrTypeOperationNotPermit  = "operation_not_permitted"
-	ErrTypeSSLError            = "ssl_error"
-	ErrTypeDNSResolutionFailed = "dns_resolution_failed"
-	ErrTypeProtocolError       = "protocol_error"
 )
 
 // Pre-compiled regular expressions for FFmpeg error parsing.
@@ -66,26 +26,6 @@ var (
 	reConnectionToTCP = regexp.MustCompile(`Connection to (tcp://\S+)`)
 	reSSLError        = regexp.MustCompile(`SSL.*error|TLS.*error|certificate.*error`)
 )
-
-// ErrorContext contains rich information extracted from FFmpeg output.
-// It provides detailed diagnostics for user-facing error messages and troubleshooting.
-type ErrorContext struct {
-	ErrorType       string        // "connection_timeout", "rtsp_404", "auth_failed", etc.
-	PrimaryMessage  string        // Main error message
-	TargetHost      string        // Extracted host/IP (sanitized - no credentials)
-	TargetPort      int           // Extracted port
-	TimeoutDuration time.Duration // Extracted timeout (if applicable)
-	HTTPStatus      int           // HTTP/RTSP status code (if applicable)
-	RTSPMethod      string        // RTSP method that failed (if applicable)
-	// RawFFmpegOutput stores the sanitized FFmpeg stderr output for debugging.
-	// SECURITY: This field is sanitized using privacy.SanitizeFFmpegError() to remove
-	// credentials from RTSP URLs (e.g., rtsp://user:pass@host → rtsp://***:***@host).
-	// The json:"-" tag prevents accidental credential leakage via JSON marshaling.
-	RawFFmpegOutput string    `json:"-"` // Full FFmpeg output for debugging (sanitized)
-	UserFacingMsg   string    // Friendly message for user
-	TroubleShooting []string  // List of troubleshooting steps
-	Timestamp       time.Time // When this error was detected
-}
 
 // extractHostWithoutCredentials safely extracts hostname from a URL string,
 // stripping any userinfo (username:password) to prevent credential leakage.
@@ -153,14 +93,14 @@ func extractHostAndPortFromConnectionURL(connectionURL string) (hostname string,
 // It returns nil if no recognizable error pattern is found.
 //
 // Error patterns are checked in order of specificity and diagnostic value:
-//  1. Socket-level errors (connection refused, timeout) — most specific about network failure
-//  2. RTSP protocol errors (404, 401, 403, 503) — application-layer specific issues
-//  3. Network-layer errors (no route, network unreachable) — broader network configuration
-//  4. DNS errors — name resolution layer
-//  5. Security/permission errors (SSL, operation not permitted) — system policy layer
-//  6. Data errors (invalid data, EOF) — stream content issues
-//  7. Generic errors (protocol not found) — catch-all patterns
-func ExtractErrorContext(stderrOutput string) *ErrorContext {
+//  1. Socket-level errors (connection refused, timeout) - most specific about network failure
+//  2. RTSP protocol errors (404, 401, 403, 503) - application-layer specific issues
+//  3. Network-layer errors (no route, network unreachable) - broader network configuration
+//  4. DNS errors - name resolution layer
+//  5. Security/permission errors (SSL, operation not permitted) - system policy layer
+//  6. Data errors (invalid data, EOF) - stream content issues
+//  7. Generic errors (protocol not found) - catch-all patterns
+func ExtractErrorContext(stderrOutput string) *audiocore.StreamErrorContext {
 	if stderrOutput == "" {
 		return nil
 	}
@@ -169,136 +109,136 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 	// before storing. This prevents credential leakage via logs, health APIs, etc.
 	sanitizedOutput := privacy.SanitizeFFmpegError(stderrOutput)
 
-	ctx := &ErrorContext{
-		RawFFmpegOutput: sanitizedOutput,
-		Timestamp:       time.Now(),
+	ctx := &audiocore.StreamErrorContext{
+		RawProducerOutput: sanitizedOutput,
+		Timestamp:         time.Now(),
 	}
 
-	// Connection timeout — very common with unreachable hosts.
+	// Connection timeout - very common with unreachable hosts.
 	if strings.Contains(stderrOutput, "Connection timed out") {
-		ctx.ErrorType = ErrTypeConnectionTimeout
-		ctx.extractConnectionTimeout(stderrOutput)
-		ctx.buildConnectionTimeoutMessage()
+		ctx.ErrorType = audiocore.ErrTypeConnectionTimeout
+		extractConnectionTimeout(ctx, stderrOutput)
+		buildConnectionTimeoutMessage(ctx)
 
 		return ctx
 	}
 
-	// RTSP 404 — stream path doesn't exist.
+	// RTSP 404 - stream path doesn't exist.
 	if strings.Contains(stderrOutput, "404 Not Found") {
-		ctx.ErrorType = ErrTypeRTSP404
-		ctx.extractRTSP404(stderrOutput)
-		ctx.buildRTSP404Message()
+		ctx.ErrorType = audiocore.ErrTypeRTSP404
+		extractRTSP404(ctx, stderrOutput)
+		buildRTSP404Message(ctx)
 
 		return ctx
 	}
 
-	// Connection refused — server not listening.
+	// Connection refused - server not listening.
 	if strings.Contains(stderrOutput, "Connection refused") {
-		ctx.ErrorType = ErrTypeConnectionRefused
-		ctx.extractConnectionRefused(stderrOutput)
-		ctx.buildConnectionRefusedMessage()
+		ctx.ErrorType = audiocore.ErrTypeConnectionRefused
+		extractConnectionRefused(ctx, stderrOutput)
+		buildConnectionRefusedMessage(ctx)
 
 		return ctx
 	}
 
 	// Authentication failure.
 	if strings.Contains(stderrOutput, "401 Unauthorized") {
-		ctx.ErrorType = ErrTypeAuthFailed
-		ctx.extractAuthFailure(stderrOutput)
-		ctx.buildAuthFailureMessage()
+		ctx.ErrorType = audiocore.ErrTypeAuthFailed
+		extractAuthFailure(ctx, stderrOutput)
+		buildAuthFailureMessage(ctx)
 
 		return ctx
 	}
 
 	// 403 Forbidden.
 	if strings.Contains(stderrOutput, "403 Forbidden") {
-		ctx.ErrorType = ErrTypeAuthForbidden
-		ctx.extractAuthForbidden(stderrOutput)
-		ctx.buildAuthForbiddenMessage()
+		ctx.ErrorType = audiocore.ErrTypeAuthForbidden
+		extractAuthForbidden(ctx, stderrOutput)
+		buildAuthForbiddenMessage(ctx)
 
 		return ctx
 	}
 
 	// No route to host.
 	if strings.Contains(stderrOutput, "No route to host") {
-		ctx.ErrorType = ErrTypeNoRoute
-		ctx.extractNoRoute(stderrOutput)
-		ctx.buildNoRouteMessage()
+		ctx.ErrorType = audiocore.ErrTypeNoRoute
+		extractNoRoute(ctx, stderrOutput)
+		buildNoRouteMessage(ctx)
 
 		return ctx
 	}
 
-	// Network unreachable — different from no route.
+	// Network unreachable - different from no route.
 	if strings.Contains(stderrOutput, "Network unreachable") {
-		ctx.ErrorType = ErrTypeNetworkUnreachable
-		ctx.extractNetworkUnreachable(stderrOutput)
-		ctx.buildNetworkUnreachableMessage()
+		ctx.ErrorType = audiocore.ErrTypeNetworkUnreachable
+		extractNetworkUnreachable(ctx, stderrOutput)
+		buildNetworkUnreachableMessage(ctx)
 
 		return ctx
 	}
 
-	// Operation not permitted — firewall/SELinux.
+	// Operation not permitted - firewall/SELinux.
 	if strings.Contains(stderrOutput, "Operation not permitted") {
-		ctx.ErrorType = ErrTypeOperationNotPermit
-		ctx.extractOperationNotPermitted(stderrOutput)
-		ctx.buildOperationNotPermittedMessage()
+		ctx.ErrorType = audiocore.ErrTypeOperationNotPermit
+		extractOperationNotPermitted(ctx, stderrOutput)
+		buildOperationNotPermittedMessage(ctx)
 
 		return ctx
 	}
 
 	// SSL/TLS errors for rtsps://.
 	if reSSLError.MatchString(stderrOutput) {
-		ctx.ErrorType = ErrTypeSSLError
-		ctx.extractSSLError(stderrOutput)
-		ctx.buildSSLErrorMessage()
+		ctx.ErrorType = audiocore.ErrTypeSSLError
+		extractSSLError(ctx, stderrOutput)
+		buildSSLErrorMessage(ctx)
 
 		return ctx
 	}
 
-	// RTSP 503 Service Unavailable — server overload.
+	// RTSP 503 Service Unavailable - server overload.
 	if strings.Contains(stderrOutput, "503 Service Unavailable") {
-		ctx.ErrorType = ErrTypeRTSP503
-		ctx.extractRTSP503(stderrOutput)
-		ctx.buildRTSP503Message()
+		ctx.ErrorType = audiocore.ErrTypeRTSP503
+		extractRTSP503(ctx, stderrOutput)
+		buildRTSP503Message(ctx)
 
 		return ctx
 	}
 
-	// DNS resolution failures — common with typos in hostnames.
+	// DNS resolution failures - common with typos in hostnames.
 	if strings.Contains(stderrOutput, "Name or service not known") ||
 		strings.Contains(stderrOutput, "nodename nor servname provided") ||
 		strings.Contains(stderrOutput, "Temporary failure in name resolution") ||
 		strings.Contains(stderrOutput, "Could not resolve hostname") {
-		ctx.ErrorType = ErrTypeDNSResolutionFailed
-		ctx.extractDNSError(stderrOutput)
-		ctx.buildDNSErrorMessage()
+		ctx.ErrorType = audiocore.ErrTypeDNSResolutionFailed
+		extractDNSError(ctx, stderrOutput)
+		buildDNSErrorMessage(ctx)
 
 		return ctx
 	}
 
-	// Invalid data — stream corruption.
+	// Invalid data - stream corruption.
 	if strings.Contains(stderrOutput, "Invalid data found") {
-		ctx.ErrorType = ErrTypeInvalidData
-		ctx.extractInvalidData(stderrOutput)
-		ctx.buildInvalidDataMessage()
+		ctx.ErrorType = audiocore.ErrTypeInvalidData
+		extractInvalidData(ctx, stderrOutput)
+		buildInvalidDataMessage(ctx)
 
 		return ctx
 	}
 
-	// End of file — stream ended unexpectedly.
+	// End of file - stream ended unexpectedly.
 	if strings.Contains(stderrOutput, "End of file") {
-		ctx.ErrorType = ErrTypeEOF
+		ctx.ErrorType = audiocore.ErrTypeEOF
 		ctx.PrimaryMessage = "Stream ended unexpectedly"
-		ctx.buildEOFMessage()
+		buildEOFMessage(ctx)
 
 		return ctx
 	}
 
 	// Protocol not found.
 	if strings.Contains(stderrOutput, "Protocol not found") {
-		ctx.ErrorType = ErrTypeProtocolError
+		ctx.ErrorType = audiocore.ErrTypeProtocolError
 		ctx.PrimaryMessage = "Unsupported protocol"
-		ctx.buildProtocolErrorMessage()
+		buildProtocolErrorMessage(ctx)
 
 		return ctx
 	}
@@ -308,7 +248,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 }
 
 // extractConnectionTimeout parses connection timeout details from FFmpeg output.
-func (ctx *ErrorContext) extractConnectionTimeout(output string) {
+func extractConnectionTimeout(ctx *audiocore.StreamErrorContext, output string) {
 	// Extract target host and port.
 	// Pattern: "Connection attempt to 192.168.44.3 port 8554 failed"
 	if matches := reConnectionAttempt.FindStringSubmatch(output); len(matches) == 3 {
@@ -329,7 +269,7 @@ func (ctx *ErrorContext) extractConnectionTimeout(output string) {
 	ctx.PrimaryMessage = "Connection timed out"
 }
 
-func (ctx *ErrorContext) buildConnectionTimeoutMessage() {
+func buildConnectionTimeoutMessage(ctx *audiocore.StreamErrorContext) {
 	// Handle timeout duration display:
 	//   Positive duration: show explicit timeout value (e.g., "10s").
 	//   Zero duration: indicates infinite timeout (no timeout was set, but connection still failed).
@@ -359,7 +299,7 @@ func (ctx *ErrorContext) buildConnectionTimeoutMessage() {
 }
 
 // extractRTSP404 parses RTSP 404 error details from FFmpeg output.
-func (ctx *ErrorContext) extractRTSP404(output string) {
+func extractRTSP404(ctx *audiocore.StreamErrorContext, output string) {
 	ctx.HTTPStatus = 404
 
 	// Extract RTSP method.
@@ -377,7 +317,7 @@ func (ctx *ErrorContext) extractRTSP404(output string) {
 	ctx.PrimaryMessage = "RTSP stream not found"
 }
 
-func (ctx *ErrorContext) buildRTSP404Message() {
+func buildRTSP404Message(ctx *audiocore.StreamErrorContext) {
 	method := ctx.RTSPMethod
 	if method == "" {
 		method = "DESCRIBE"
@@ -400,7 +340,7 @@ func (ctx *ErrorContext) buildRTSP404Message() {
 }
 
 // extractConnectionRefused parses connection refused details from FFmpeg output.
-func (ctx *ErrorContext) extractConnectionRefused(output string) {
+func extractConnectionRefused(ctx *audiocore.StreamErrorContext, output string) {
 	// Pattern: "Connection to tcp://localhost:8553?timeout=0 failed"
 	// Use URL parsing to handle IPv6, credentials, and query parameters correctly.
 	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 2 {
@@ -413,7 +353,7 @@ func (ctx *ErrorContext) extractConnectionRefused(output string) {
 	ctx.PrimaryMessage = "Connection refused"
 }
 
-func (ctx *ErrorContext) buildConnectionRefusedMessage() {
+func buildConnectionRefusedMessage(ctx *audiocore.StreamErrorContext) {
 	ctx.UserFacingMsg = fmt.Sprintf(
 		"🚫 Connection refused: %s:%d\n"+
 			"   The connection was actively refused by the target.\n"+
@@ -431,7 +371,7 @@ func (ctx *ErrorContext) buildConnectionRefusedMessage() {
 }
 
 // extractAuthFailure parses authentication failure details from FFmpeg output.
-func (ctx *ErrorContext) extractAuthFailure(output string) {
+func extractAuthFailure(ctx *audiocore.StreamErrorContext, output string) {
 	ctx.HTTPStatus = 401
 	ctx.PrimaryMessage = "Authentication required"
 
@@ -441,7 +381,7 @@ func (ctx *ErrorContext) extractAuthFailure(output string) {
 	}
 }
 
-func (ctx *ErrorContext) buildAuthFailureMessage() {
+func buildAuthFailureMessage(ctx *audiocore.StreamErrorContext) {
 	ctx.UserFacingMsg = "🔐 Authentication required (401 Unauthorized)\n" +
 		"   The RTSP server requires username and password.\n" +
 		"   Credentials were not provided or are incorrect."
@@ -456,12 +396,12 @@ func (ctx *ErrorContext) buildAuthFailureMessage() {
 }
 
 // extractAuthForbidden parses forbidden access details from FFmpeg output.
-func (ctx *ErrorContext) extractAuthForbidden(_ string) {
+func extractAuthForbidden(ctx *audiocore.StreamErrorContext, _ string) {
 	ctx.HTTPStatus = 403
 	ctx.PrimaryMessage = "Access forbidden"
 }
 
-func (ctx *ErrorContext) buildAuthForbiddenMessage() {
+func buildAuthForbiddenMessage(ctx *audiocore.StreamErrorContext) {
 	ctx.UserFacingMsg = "⛔ Access forbidden (403)\n" +
 		"   The RTSP server understood the request but refuses to authorize it.\n" +
 		"   The credentials may be valid but lack permissions."
@@ -475,7 +415,7 @@ func (ctx *ErrorContext) buildAuthForbiddenMessage() {
 }
 
 // extractNoRoute parses no route to host details from FFmpeg output.
-func (ctx *ErrorContext) extractNoRoute(output string) {
+func extractNoRoute(ctx *audiocore.StreamErrorContext, output string) {
 	// Use URL parsing to handle IPv6, credentials, and query parameters correctly.
 	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 2 {
 		if host, port, ok := extractHostAndPortFromConnectionURL(matches[1]); ok {
@@ -487,7 +427,7 @@ func (ctx *ErrorContext) extractNoRoute(output string) {
 	ctx.PrimaryMessage = "No route to host"
 }
 
-func (ctx *ErrorContext) buildNoRouteMessage() {
+func buildNoRouteMessage(ctx *audiocore.StreamErrorContext) {
 	ctx.UserFacingMsg = fmt.Sprintf(
 		"🗺️  No route to host: %s\n"+
 			"   The network cannot find a route to reach the target host.\n"+
@@ -505,7 +445,7 @@ func (ctx *ErrorContext) buildNoRouteMessage() {
 }
 
 // extractNetworkUnreachable parses network unreachable details from FFmpeg output.
-func (ctx *ErrorContext) extractNetworkUnreachable(output string) {
+func extractNetworkUnreachable(ctx *audiocore.StreamErrorContext, output string) {
 	// Use URL parsing to handle IPv6, credentials, and query parameters correctly.
 	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 2 {
 		if host, port, ok := extractHostAndPortFromConnectionURL(matches[1]); ok {
@@ -517,7 +457,7 @@ func (ctx *ErrorContext) extractNetworkUnreachable(output string) {
 	ctx.PrimaryMessage = "Network unreachable"
 }
 
-func (ctx *ErrorContext) buildNetworkUnreachableMessage() {
+func buildNetworkUnreachableMessage(ctx *audiocore.StreamErrorContext) {
 	ctx.UserFacingMsg = fmt.Sprintf(
 		"🌐 Network unreachable: %s\n"+
 			"   The network is unreachable from this host.\n"+
@@ -536,7 +476,7 @@ func (ctx *ErrorContext) buildNetworkUnreachableMessage() {
 }
 
 // extractOperationNotPermitted parses operation not permitted details from FFmpeg output.
-func (ctx *ErrorContext) extractOperationNotPermitted(output string) {
+func extractOperationNotPermitted(ctx *audiocore.StreamErrorContext, output string) {
 	// Use URL parsing to handle IPv6, credentials, and query parameters correctly.
 	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 2 {
 		if host, port, ok := extractHostAndPortFromConnectionURL(matches[1]); ok {
@@ -548,7 +488,7 @@ func (ctx *ErrorContext) extractOperationNotPermitted(output string) {
 	ctx.PrimaryMessage = "Operation not permitted"
 }
 
-func (ctx *ErrorContext) buildOperationNotPermittedMessage() {
+func buildOperationNotPermittedMessage(ctx *audiocore.StreamErrorContext) {
 	ctx.UserFacingMsg = "🔒 Operation not permitted\n" +
 		"   The system denied the network operation.\n" +
 		"   This is typically caused by firewall rules or security policies (SELinux/AppArmor)."
@@ -564,7 +504,7 @@ func (ctx *ErrorContext) buildOperationNotPermittedMessage() {
 }
 
 // extractSSLError parses SSL/TLS error details from FFmpeg output.
-func (ctx *ErrorContext) extractSSLError(output string) {
+func extractSSLError(ctx *audiocore.StreamErrorContext, output string) {
 	// Try to extract URL to get host info.
 	// SECURITY: Use safe extraction to prevent credential leakage.
 	if matches := reErrorOpeningInput.FindStringSubmatch(output); len(matches) == 2 {
@@ -574,7 +514,7 @@ func (ctx *ErrorContext) extractSSLError(output string) {
 	ctx.PrimaryMessage = "SSL/TLS error"
 }
 
-func (ctx *ErrorContext) buildSSLErrorMessage() {
+func buildSSLErrorMessage(ctx *audiocore.StreamErrorContext) {
 	ctx.UserFacingMsg = "🔐 SSL/TLS connection error\n" +
 		"   Failed to establish a secure connection to the RTSP server.\n" +
 		"   This could be due to certificate issues or TLS configuration problems."
@@ -590,7 +530,7 @@ func (ctx *ErrorContext) buildSSLErrorMessage() {
 }
 
 // extractRTSP503 parses RTSP 503 error details from FFmpeg output.
-func (ctx *ErrorContext) extractRTSP503(output string) {
+func extractRTSP503(ctx *audiocore.StreamErrorContext, output string) {
 	ctx.HTTPStatus = 503
 
 	// Extract RTSP method if available.
@@ -607,7 +547,7 @@ func (ctx *ErrorContext) extractRTSP503(output string) {
 	ctx.PrimaryMessage = "RTSP service unavailable"
 }
 
-func (ctx *ErrorContext) buildRTSP503Message() {
+func buildRTSP503Message(ctx *audiocore.StreamErrorContext) {
 	ctx.UserFacingMsg = "⏳ RTSP service unavailable (503)\n" +
 		"   The RTSP server is temporarily unable to handle the request.\n" +
 		"   This typically indicates server overload or maintenance."
@@ -623,7 +563,7 @@ func (ctx *ErrorContext) buildRTSP503Message() {
 }
 
 // extractDNSError parses DNS resolution error details from FFmpeg output.
-func (ctx *ErrorContext) extractDNSError(output string) {
+func extractDNSError(ctx *audiocore.StreamErrorContext, output string) {
 	// Try to extract hostname from URL.
 	// SECURITY: Use safe extraction to prevent credential leakage.
 	if matches := reErrorOpeningInput.FindStringSubmatch(output); len(matches) == 2 {
@@ -649,7 +589,7 @@ func (ctx *ErrorContext) extractDNSError(output string) {
 	ctx.PrimaryMessage = "DNS resolution failed"
 }
 
-func (ctx *ErrorContext) buildDNSErrorMessage() {
+func buildDNSErrorMessage(ctx *audiocore.StreamErrorContext) {
 	hostInfo := "the hostname"
 	if ctx.TargetHost != "" {
 		hostInfo = fmt.Sprintf("'%s'", ctx.TargetHost)
@@ -685,11 +625,11 @@ func (ctx *ErrorContext) buildDNSErrorMessage() {
 }
 
 // extractInvalidData parses invalid data details from FFmpeg output.
-func (ctx *ErrorContext) extractInvalidData(_ string) {
+func extractInvalidData(ctx *audiocore.StreamErrorContext, _ string) {
 	ctx.PrimaryMessage = "Invalid or corrupted stream data"
 }
 
-func (ctx *ErrorContext) buildInvalidDataMessage() {
+func buildInvalidDataMessage(ctx *audiocore.StreamErrorContext) {
 	ctx.UserFacingMsg = "📺 Invalid or corrupted stream data\n" +
 		"   FFmpeg detected invalid data when processing the stream.\n" +
 		"   The stream may be corrupted or using an unsupported format."
@@ -704,7 +644,7 @@ func (ctx *ErrorContext) buildInvalidDataMessage() {
 }
 
 // buildEOFMessage builds the user-facing message for unexpected stream end.
-func (ctx *ErrorContext) buildEOFMessage() {
+func buildEOFMessage(ctx *audiocore.StreamErrorContext) {
 	ctx.UserFacingMsg = "📡 Stream ended unexpectedly\n" +
 		"   The RTSP stream terminated without proper closure."
 
@@ -717,7 +657,7 @@ func (ctx *ErrorContext) buildEOFMessage() {
 }
 
 // buildProtocolErrorMessage builds the user-facing message for unsupported protocols.
-func (ctx *ErrorContext) buildProtocolErrorMessage() {
+func buildProtocolErrorMessage(ctx *audiocore.StreamErrorContext) {
 	ctx.UserFacingMsg = "🔌 Unsupported protocol\n" +
 		"   FFmpeg does not support the requested protocol.\n" +
 		"   This usually indicates an incorrect URL format."
@@ -727,64 +667,5 @@ func (ctx *ErrorContext) buildProtocolErrorMessage() {
 		"Check if the URL format is correct",
 		"Ensure FFmpeg was compiled with RTSP support",
 		"Try a different transport method (TCP vs UDP)",
-	}
-}
-
-// FormatForConsole returns a formatted string for console output.
-func (ctx *ErrorContext) FormatForConsole() string {
-	var sb strings.Builder
-
-	// User-facing message.
-	sb.WriteString(ctx.UserFacingMsg)
-	sb.WriteString("\n")
-
-	// Troubleshooting steps.
-	if len(ctx.TroubleShooting) > 0 {
-		sb.WriteString("\n   Troubleshooting steps:\n")
-		for _, step := range ctx.TroubleShooting {
-			fmt.Fprintf(&sb, "   • %s\n", step)
-		}
-	}
-
-	return sb.String()
-}
-
-// ShouldOpenCircuit determines if this error should immediately open the circuit breaker.
-// Returns true for permanent failures (404, auth, connection refused, DNS errors, etc.)
-//
-// Network unreachable handling:
-// ENETUNREACH is treated as transient because it often occurs during network transitions
-// (interface coming up, gateway being configured, switching networks). Unlike EHOSTUNREACH
-// (no_route), which indicates a specific routing table problem, ENETUNREACH suggests
-// the entire network is currently unavailable but may recover. We allow retry with
-// exponential backoff via the existing circuit breaker graduated failure thresholds,
-// which will eventually open the circuit if the network remains unreachable.
-func (ctx *ErrorContext) ShouldOpenCircuit() bool {
-	switch ctx.ErrorType {
-	case ErrTypeRTSP404, ErrTypeAuthFailed, ErrTypeAuthForbidden, ErrTypeConnectionRefused,
-		ErrTypeNoRoute, ErrTypeProtocolError, ErrTypeDNSResolutionFailed,
-		ErrTypeOperationNotPermit, ErrTypeSSLError:
-		return true // Permanent failures — require configuration fix.
-	case ErrTypeConnectionTimeout, ErrTypeInvalidData, ErrTypeEOF, ErrTypeNetworkUnreachable, ErrTypeRTSP503:
-		return false // Transient failures — allow retry with backoff.
-	default:
-		return false
-	}
-}
-
-// ShouldRestart determines if this error should trigger an automatic restart.
-// Returns true for transient failures that might recover on retry.
-//
-// Network unreachable is treated as transient with bounded retry:
-//   - Allows restart (returns true) to handle network transitions.
-//   - Circuit breaker's graduated failure thresholds provide bounded retry.
-//   - After circuitBreakerRapidThreshold (5) failures in < 5 seconds, circuit opens.
-//   - This prevents infinite restarts while allowing recovery from brief network issues.
-func (ctx *ErrorContext) ShouldRestart() bool {
-	switch ctx.ErrorType {
-	case ErrTypeConnectionTimeout, ErrTypeInvalidData, ErrTypeEOF, ErrTypeNetworkUnreachable, ErrTypeRTSP503:
-		return true // Transient failures — might recover with bounded retry.
-	default:
-		return false
 	}
 }

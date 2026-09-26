@@ -351,8 +351,7 @@ func (t *GDriveTarget) isAPIError(err error) (bool, error) {
 		return false, nil
 	}
 
-	var apiErr *googleapi.Error
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*googleapi.Error](err); ok {
 		switch apiErr.Code {
 		case HTTPUnauthorized:
 			// Token expired or invalid, try to refresh
@@ -689,12 +688,10 @@ func (t *GDriveTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 				}
 
 				backups = append(backups, backup.BackupInfo{
-					Target: file.Name,
-					Metadata: backup.Metadata{
-						ID:        file.Id,
-						Timestamp: createdTime,
-						Size:      file.Size,
-					},
+					Target:    file.Name,
+					ID:        file.Id,
+					Timestamp: createdTime,
+					Size:      file.Size,
 				})
 			}
 

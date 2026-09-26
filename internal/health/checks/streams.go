@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -16,12 +16,28 @@ type StreamHealthInfo struct {
 	URL string
 	// IsHealthy indicates whether the stream is considered healthy.
 	IsHealthy bool
-	// ProcessState is the current state of the underlying FFmpeg process (e.g. "running", "stopped").
-	ProcessState string
+	// State is the producer-neutral connection state of the underlying stream.
+	State audiocore.StreamState
 	// RestartCount is the number of times this stream has been restarted.
 	RestartCount int
 	// Error holds the most recent error message, if any.
 	Error string
+	// Engine names the ingest producer ("native" or "ffmpeg").
+	Engine string
+	// Codec is the decoded source codec label (native ingest; empty for FFmpeg).
+	Codec string
+	// WireBytesPerSecond is the wire data rate (native ingest; zero for FFmpeg).
+	WireBytesPerSecond float64
+	// Per-session RTP counters (native ingest; zero for FFmpeg).
+	Packets    uint64
+	SeqGaps    uint64
+	Duplicates uint64
+	Malformed  uint64
+	SSRCResets uint64
+	// SourceFiltered counts datagrams dropped because their source did not match
+	// the negotiated media peer or configured allowlist (native UDP only; zero
+	// on TCP-interleaved transport and for FFmpeg).
+	SourceFiltered uint64
 }
 
 // StreamConnectivityCheck verifies that all configured RTSP streams are reachable and healthy.
@@ -54,8 +70,8 @@ func (c *StreamConnectivityCheck) Run(_ context.Context) health.Result {
 	}
 
 	unhealthy := 0
-	for _, s := range streams {
-		if !s.IsHealthy {
+	for i := range streams {
+		if !streams[i].IsHealthy {
 			unhealthy++
 		}
 	}
@@ -181,11 +197,11 @@ func (c *FFmpegHealthCheck) Run(_ context.Context) health.Result {
 	stoppedCount := 0
 	notRunningCount := 0
 
-	for _, s := range streams {
-		switch s.ProcessState {
-		case ffmpeg.ProcessStateRunning:
+	for i := range streams {
+		switch streams[i].State {
+		case audiocore.StreamStateConnected:
 			// healthy
-		case ffmpeg.ProcessStateStopped:
+		case audiocore.StreamStateStopped:
 			stoppedCount++
 		default:
 			notRunningCount++

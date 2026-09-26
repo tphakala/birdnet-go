@@ -209,8 +209,8 @@ func TestValidateCommandPath_NonExistentFile(t *testing.T) {
 	// CategoryFileIO. Previously the caller re-wrapped this into
 	// CategoryValidation, producing a second Sentry fingerprint per failed
 	// execution. See execute.go ExecuteContext for the consolidation.
-	var enhancedErr *errors.EnhancedError
-	require.True(t, errors.As(err, &enhancedErr), "expected enhanced error")
+	enhancedErr, ok := errors.AsType[*errors.EnhancedError](err)
+	require.True(t, ok, "expected enhanced error")
 	assert.Equal(t, errors.CategoryFileIO, enhancedErr.Category,
 		"missing-file path validation must use CategoryFileIO as its single fingerprint")
 }

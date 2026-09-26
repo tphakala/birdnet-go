@@ -8,7 +8,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -464,44 +463,6 @@ func TestStream_CircuitBreakerCooldown(t *testing.T) {
 
 	// Failures should be reset.
 	assert.Equal(t, 0, stream.getConsecutiveFailures())
-}
-
-func TestStream_DataRateCalculation(t *testing.T) {
-	// getRate divides total bytes by the time span between the first and last
-	// sample, returning 0 when that span is zero (div-by-zero guard). On
-	// coarse-timer platforms (Windows, ~15ms resolution) three back-to-back
-	// addSample calls can share a timestamp, making the span zero and the rate
-	// zero. Use synctest's fake clock advanced by time.Sleep so the samples get
-	// distinct timestamps deterministically on every platform.
-	synctest.Test(t, func(t *testing.T) {
-		calc := newDataRateCalculator(dataRateWindowSize)
-
-		calc.addSample(1024)
-		time.Sleep(time.Millisecond)
-		calc.addSample(2048)
-		time.Sleep(time.Millisecond)
-		calc.addSample(1536)
-
-		rate := calc.getRate()
-		assert.Greater(t, rate, 0.0)
-	})
-}
-
-func TestStream_DataRateCalculator_EmptyRate(t *testing.T) {
-	t.Parallel()
-
-	calc := newDataRateCalculator(dataRateWindowSize)
-	assert.InDelta(t, 0.0, calc.getRate(), 0.001)
-}
-
-func TestStream_DataRateCalculator_SingleSampleRate(t *testing.T) {
-	t.Parallel()
-
-	calc := newDataRateCalculator(dataRateWindowSize)
-	calc.addSample(1024)
-
-	rate := calc.getRate()
-	assert.InDelta(t, 1024.0, rate, 0.01, "Single recent sample should return instantaneous rate")
 }
 
 func TestStream_HealthTracking(t *testing.T) {
@@ -1239,8 +1200,8 @@ func TestStream_ErrorContextTracking(t *testing.T) {
 	assert.Nil(t, stream.getLastErrorContext())
 	assert.Empty(t, stream.getErrorContexts())
 
-	ctx1 := &ErrorContext{ErrorType: ErrTypeConnectionTimeout, PrimaryMessage: "test1"}
-	ctx2 := &ErrorContext{ErrorType: ErrTypeConnectionRefused, PrimaryMessage: "test2"}
+	ctx1 := &audiocore.StreamErrorContext{ErrorType: audiocore.ErrTypeConnectionTimeout, PrimaryMessage: "test1"}
+	ctx2 := &audiocore.StreamErrorContext{ErrorType: audiocore.ErrTypeConnectionRefused, PrimaryMessage: "test2"}
 
 	stream.recordErrorContext(ctx1)
 	assert.Equal(t, ctx1, stream.getLastErrorContext())
@@ -1395,26 +1356,32 @@ func TestStreamConfig_NeedsOutputResampling(t *testing.T) {
 		name             string
 		sampleRate       int
 		sourceSampleRate int
+		estimated        bool
 		want             bool
 	}{
-		{"unknown_source_resamples", 48000, 0, true},
-		{"8kHz_to_48kHz_resamples", 48000, 8000, true},
-		{"16kHz_to_48kHz_resamples", 48000, 16000, true},
-		{"44100Hz_to_48kHz_resamples", 48000, 44100, true},
-		{"48kHz_to_48kHz_passthrough", 48000, 48000, false},
-		{"96kHz_source_downsampled_for_bird", 48000, 96000, true},
-		{"96kHz_bat_passthrough", 96000, 96000, false},
-		{"192kHz_bat_passthrough", 192000, 192000, false},
-		{"256kHz_bat_passthrough", 256000, 256000, false},
-		{"384kHz_bat_passthrough", 384000, 384000, false},
+		{"unknown_source_resamples", 48000, 0, false, true},
+		{"8kHz_to_48kHz_resamples", 48000, 8000, false, true},
+		{"16kHz_to_48kHz_resamples", 48000, 16000, false, true},
+		{"44100Hz_to_48kHz_resamples", 48000, 44100, false, true},
+		{"48kHz_to_48kHz_passthrough", 48000, 48000, false, false},
+		{"96kHz_source_downsampled_for_bird", 48000, 96000, false, true},
+		{"96kHz_bat_passthrough", 96000, 96000, false, false},
+		{"192kHz_bat_passthrough", 192000, 192000, false, false},
+		{"256kHz_bat_passthrough", 256000, 256000, false, false},
+		{"384kHz_bat_passthrough", 384000, 384000, false, false},
+		// A fallback estimate forces resampling even when source == target, because
+		// the live rate may have drifted from the estimate (#4350).
+		{"estimated_matching_rate_forces_resample", 250000, 250000, true, true},
+		{"estimated_bird_rate_forces_resample", 48000, 48000, true, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := StreamConfig{
-				SampleRate:       tt.sampleRate,
-				SourceSampleRate: tt.sourceSampleRate,
+				SampleRate:                tt.sampleRate,
+				SourceSampleRate:          tt.sourceSampleRate,
+				SourceSampleRateEstimated: tt.estimated,
 			}
 			assert.Equal(t, tt.want, cfg.needsOutputResampling())
 		})

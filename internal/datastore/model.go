@@ -28,7 +28,12 @@ type Note struct {
 	// internal/datastore/v2/entities). On the legacy v1 datastore the field is
 	// never rehydrated on read, so the detections API returns a nil Source for
 	// historical detections saved through that path.
-	Source      AudioSource         `gorm:"-"`
+	Source AudioSource `gorm:"-"`
+	// FirstTime is runtime-only: the per-species summary queries (GetTopBirdsData) collapse a
+	// day's detections into one Note per species whose Time is the latest detection, and carry
+	// the earliest one here so the daily summary can report first heard and last heard apart.
+	// Empty on every other read path.
+	FirstTime   string              `gorm:"-" json:"-"`
 	Model       detection.ModelInfo `gorm:"-"` // Runtime only: model that produced this detection
 	BeginTime   time.Time
 	EndTime     time.Time

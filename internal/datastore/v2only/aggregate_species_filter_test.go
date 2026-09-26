@@ -234,3 +234,97 @@ func TestV2OnlyDatastore_HourlyChartsSpeciesFilter(t *testing.T) {
 		assert.Equal(t, "Troglodytes troglodytes", got[1].ScientificName)
 	})
 }
+
+// TestV2OnlyDatastore_SpeciesFilterSpansModels pins the species filter of the single-species
+// time analytics (daily counts, hourly counts, activity heatmap, dawn-chorus onset) to every
+// label of the species, not just the first one.
+//
+// A species has one label per AI model, and each detection references the label of the model
+// that made it. On a multi-model station the first label for a name typically belongs to the
+// permanently installed primary model, which may have no streams assigned; resolving the filter
+// to that single label returned empty results for every species even while the other models
+// were detecting it all day.
+func TestV2OnlyDatastore_SpeciesFilterSpansModels(t *testing.T) {
+	t.Parallel()
+	ds, cleanup := setupTestDatastore(t)
+	t.Cleanup(cleanup)
+	ds.timezone = time.UTC
+	ctx := t.Context()
+
+	const (
+		species   = "Megascops asio"
+		startDate = "2026-03-01"
+		endDate   = "2026-03-02"
+	)
+
+	// The default (primary) model gets the label first, and never detects the species.
+	_, err := ds.label.GetOrCreate(ctx, species, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+
+	// A second model, the one actually listening, owns every detection.
+	otherModel, err := ds.model.GetOrCreate(ctx, "Perch", "1.0", "default", entities.ModelTypeBird, nil)
+	require.NoError(t, err)
+	otherLabel, err := ds.label.GetOrCreate(ctx, species, otherModel.ID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+	const calls = 4
+	for i := range calls {
+		require.NoError(t, ds.detection.Save(ctx, &entities.Detection{
+			ModelID:    otherModel.ID,
+			LabelID:    otherLabel.ID,
+			DetectedAt: time.Date(2026, 3, 1, 5, 10*i, 0, 0, time.UTC).Unix(),
+			Confidence: 0.9,
+		}))
+	}
+
+	t.Run("daily counts", func(t *testing.T) {
+		t.Parallel()
+		got, err := ds.GetDailyAnalyticsData(ctx, startDate, endDate, species)
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, calls, got[0].Count)
+	})
+
+	t.Run("hourly counts", func(t *testing.T) {
+		t.Parallel()
+		got, err := ds.GetHourlyAnalyticsData(ctx, startDate, species)
+		require.NoError(t, err)
+		total := 0
+		for _, h := range got {
+			total += h.Count
+		}
+		assert.Equal(t, calls, total)
+	})
+
+	t.Run("hourly distribution", func(t *testing.T) {
+		t.Parallel()
+		got, err := ds.GetHourlyDistribution(ctx, startDate, endDate, species)
+		require.NoError(t, err)
+		total := 0
+		for _, h := range got {
+			total += h.Count
+		}
+		assert.Equal(t, calls, total)
+	})
+
+	t.Run("activity heatmap", func(t *testing.T) {
+		t.Parallel()
+		got, err := ds.GetActivityHeatmap(ctx, startDate, endDate, species)
+		require.NoError(t, err)
+		total := 0
+		for _, c := range got.CellCount {
+			total += c
+		}
+		assert.Equal(t, calls, total)
+	})
+
+	t.Run("dawn chorus onset", func(t *testing.T) {
+		t.Parallel()
+		got, err := ds.GetDailyActivityOnset(ctx, startDate, endDate, species)
+		require.NoError(t, err)
+		counted := 0
+		for _, d := range got {
+			counted += d.DetectionCount
+		}
+		assert.Equal(t, calls, counted)
+	})
+}

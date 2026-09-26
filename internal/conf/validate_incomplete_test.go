@@ -972,7 +972,10 @@ func TestNormalizeSpeciesTracking_DefaultsResetDayIndependently(t *testing.T) {
 }
 
 // TestNormalizeAudioExport_AppliesDefaults covers the section users hand-edit most,
-// where viper drops a nested default whenever the parent key is present.
+// where viper drops a nested default whenever the parent key is present. The blank
+// lossy bitrate is not filled here (it is healed and persisted by the Load-time
+// migrateEmptyLossyExportBitrate; see TestLoad_EmptyLossyExportBitrate_*), so this
+// input carries a valid bitrate and asserts only the fields normalize still owns.
 func TestNormalizeAudioExport_AppliesDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -980,6 +983,7 @@ func TestNormalizeAudioExport_AppliesDefaults(t *testing.T) {
 	s.Realtime.Audio.Export = ExportSettings{
 		Enabled:       true,
 		Type:          AudioExportTypeOPUS,
+		Bitrate:       DefaultAudioExportBitrate,
 		Normalization: NormalizationSettings{Enabled: true},
 	}
 	s.Realtime.Audio.Export.Retention = RetentionSettings{Policy: RetentionPolicyAge}
@@ -988,7 +992,6 @@ func TestNormalizeAudioExport_AppliesDefaults(t *testing.T) {
 
 	export := s.Realtime.Audio.Export
 	assert.Equal(t, DefaultAudioExportLength, export.Length)
-	assert.Equal(t, DefaultAudioExportBitrate, export.Bitrate)
 	assert.InDelta(t, DefaultNormalizationTargetLUFS, export.Normalization.TargetLUFS, 0.0001)
 	assert.Equal(t, DefaultRetentionMaxAge, export.Retention.MaxAge)
 	require.NoError(t, ValidateSettings(s))

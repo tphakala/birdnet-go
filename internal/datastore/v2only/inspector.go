@@ -5,7 +5,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync/atomic"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"gorm.io/gorm"
@@ -145,21 +144,7 @@ func (ds *Datastore) GetTableStats() ([]datastore.TableStats, error) {
 // to row-count proportional estimation. Caches dbstat availability to avoid
 // repeated WARN logs when the virtual table is not compiled in.
 func (ds *Datastore) getSQLiteTableStats() ([]datastore.TableStats, error) {
-	cached := atomic.LoadInt32(&ds.dbstatAvailable)
-	if cached == -1 {
-		// Already known to be unavailable — skip directly to estimation
-		return ds.getSQLiteTableStatsEstimated()
-	}
-
-	stats, err := ds.getSQLiteTableStatsViaDBStat()
-	if err == nil {
-		atomic.StoreInt32(&ds.dbstatAvailable, 1)
-		return stats, nil
-	}
-
-	// Mark as unavailable so we don't retry on every refresh
-	atomic.StoreInt32(&ds.dbstatAvailable, -1)
-	return ds.getSQLiteTableStatsEstimated()
+	return datastore.ResolveCachedTableStats(&ds.dbstatAvailable, ds.getSQLiteTableStatsViaDBStat, ds.getSQLiteTableStatsEstimated)
 }
 
 // getSQLiteTableStatsViaDBStat uses the dbstat virtual table.

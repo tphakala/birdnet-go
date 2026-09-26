@@ -6,6 +6,12 @@ const (
 	actionReconfigureSoundLevel   = "reconfigure_sound_level"
 	actionReconfigureAudioSources = "reconfigure_audio_sources"
 	actionRebuildExtendedCapture  = "rebuild_extended_capture"
+	// actionRestartAudioCapture tears down and rebuilds all audio capture,
+	// reallocating every analysis buffer. Used for changes the diff-based
+	// reconfigure_audio_sources cannot see because they are not per-source audio
+	// properties, e.g. birdnet.overlap (which changes the analysis buffer
+	// read/overlap dimensions).
+	actionRestartAudioCapture = "restart_audio_capture"
 )
 
 // SettingsChangeActions returns all action strings declared in the

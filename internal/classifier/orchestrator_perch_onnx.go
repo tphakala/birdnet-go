@@ -72,7 +72,7 @@ func (o *Orchestrator) loadPerch(threads int) error {
 	// the exact configuration the instance was built against. This is what makes
 	// an out-of-band runtime install (LoadModel) reconcile correctly: the entry
 	// records its own triplet, so a later ReloadSecondaryModels rebuilds it only
-	// when the backend/device actually changes (Forgejo #1119).
+	// when the backend/device actually changes.
 	settings := o.currentSettings()
 	before := o.captureRSSBefore()
 	perch, res, err := o.buildPerch(settings, threads)

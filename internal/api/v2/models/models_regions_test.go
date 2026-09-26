@@ -278,33 +278,6 @@ func TestGetRegionCoverageMap_NotFound(t *testing.T) {
 	}
 }
 
-// TestIfNoneMatch covers the conditional-request matcher directly, including the
-// wildcard, comma-separated lists, and the weak-validator form a proxy may send.
-func TestIfNoneMatch(t *testing.T) {
-	t.Parallel()
-	const etag = `"abc123"`
-	cases := []struct {
-		name   string
-		header string
-		want   bool
-	}{
-		{"empty header", "", false},
-		{"exact strong match", `"abc123"`, true},
-		{"wildcard", "*", true},
-		{"weak-validator form", `W/"abc123"`, true},
-		{"comma list contains match", `"nope", "abc123"`, true},
-		{"comma list contains weak match", `W/"x", W/"abc123"`, true},
-		{"no match", `"different"`, false},
-		{"prefix-only, not a real tag", `"abc"`, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tc.want, ifNoneMatch(tc.header, etag), "header %q", tc.header)
-		})
-	}
-}
-
 // TestGetRegionCoverageMap_MismatchedETagServesBody confirms a stale/mismatched
 // If-None-Match still gets the full SVG (200), not a 304.
 func TestGetRegionCoverageMap_MismatchedETagServesBody(t *testing.T) {

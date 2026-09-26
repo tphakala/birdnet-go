@@ -102,7 +102,10 @@ cd /workspaces/birdnet-go
 # Install Go development tools
 echo "Installing Go tools..."
 go install github.com/air-verse/air@latest
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+# Pin to the v2 module path and the same version CI uses (.github/workflows/golangci-lint.yml, Taskfile.yml).
+# The legacy v1 path (github.com/golangci/golangci-lint/cmd/golangci-lint) installs golangci-lint v1,
+# which cannot read this project's v2 .golangci.yaml config.
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
 go install golang.org/x/tools/gopls@latest
 go install github.com/go-delve/delve/cmd/dlv@latest
 go install golang.org/x/tools/cmd/goimports@latest
@@ -218,7 +221,7 @@ fi
 echo ""
 echo "=== Available Linting Commands ==="
 echo "Go linting:"
-echo "  - golangci-lint run        (comprehensive Go linting)"
+echo "  - task lint                (whole-module Go linting)"
 echo "  - go vet ./...             (basic Go static analysis)"
 echo ""
 echo "Frontend linting:"
@@ -230,7 +233,7 @@ echo "  - npm run ast:all          (AST-grep security/pattern checks)"
 echo "  - npx ast-grep scan        (manual AST-grep usage)"
 echo ""
 echo "Pre-commit checks:"
-echo "  - golangci-lint run        (before Go commits)"
+echo "  - task lint                (before Go commits)"
 echo "  - task frontend-quality    (before frontend commits)"
 
 echo ""
@@ -247,7 +250,7 @@ echo "  - task frontend-test       (run frontend tests)"
 echo "  - task frontend-quality    (run comprehensive frontend quality checks)"
 echo ""
 echo "Linting:"
-echo "  - golangci-lint run        (comprehensive Go linting)"
+echo "  - task lint                (whole-module Go linting)"
 echo "  - task frontend-lint       (frontend ESLint + Prettier + Stylelint)"
 echo "  - npm run ast:security     (AST-grep security scanning)"
 echo ""  

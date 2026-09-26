@@ -161,6 +161,8 @@ func sanitizeConfig(config *conf.Settings) *conf.Settings {
 	sanitized.Output.MySQL.Password = ""
 	sanitized.Realtime.MQTT.Password = ""
 	sanitized.Realtime.Weather.OpenWeather.APIKey = ""
+	sanitized.Realtime.Weather.Wunderground.APIKey = ""
+	sanitized.Realtime.Weather.PirateWeather.APIKey = ""
 
 	return &sanitized
 }
@@ -307,9 +309,7 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 	sourcesLen := len(m.sources)
 	targetsLen := len(m.targets)
 	sources := make(map[string]Source, sourcesLen)
-	for k, v := range m.sources {
-		sources[k] = v
-	}
+	maps.Copy(sources, m.sources)
 	m.mu.RUnlock()
 
 	// Early-return when neither sources nor targets have been registered.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -35,6 +36,7 @@ const (
 	dawnChorusStartHour         = 4
 	dawnChorusEndHour           = 10
 	dawnChorusMinDaysObserved   = 3
+	dawnChorusMaxPeriodDays     = 365
 	migrationRecentDays         = 14
 	migrationMinTotalDetections = 5
 	expectedTodayWindowDays     = 3  // +/- days around today's DOY
@@ -95,6 +97,7 @@ type PhantomSpeciesItem struct {
 type DawnChorusResponse struct {
 	Species    []DawnChorusItem `json:"species"`
 	PeriodDays int              `json:"period_days"`
+	MinDays    int              `json:"min_days"`
 	StartHour  int              `json:"start_hour"`
 	EndHour    int              `json:"end_hour"`
 }
@@ -466,8 +469,34 @@ func (c *Handler) GetDawnChorus(ctx echo.Context) error {
 	return c.getDawnChorusImpl(ctx)
 }
 
+// parseBoundedDays parses a day-count query value. Absent falls back to def; a value that is not
+// a positive integer is an error, like the package's other integer parameters; the result is
+// clamped to maxDays (the default too, so min_days never exceeds period_days).
+func parseBoundedDays(raw string, def, maxDays int) (int, error) {
+	n := def
+	if raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v < 1 {
+			return 0, fmt.Errorf("must be a positive integer")
+		}
+		n = v
+	}
+	if n > maxDays {
+		n = maxDays
+	}
+	return n, nil
+}
+
 func (c *Handler) getDawnChorusImpl(ctx echo.Context) error {
-	since := time.Now().AddDate(0, 0, -dawnChorusPeriodDays).Unix()
+	periodDays, err := parseBoundedDays(ctx.QueryParam("period_days"), dawnChorusPeriodDays, dawnChorusMaxPeriodDays)
+	if err != nil {
+		return c.HandleError(ctx, err, "period_days must be a positive integer", http.StatusBadRequest)
+	}
+	minDays, err := parseBoundedDays(ctx.QueryParam("min_days"), dawnChorusMinDaysObserved, periodDays)
+	if err != nil {
+		return c.HandleError(ctx, err, "min_days must be a positive integer", http.StatusBadRequest)
+	}
+	since := time.Now().AddDate(0, 0, -periodDays).Unix()
 
 	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), insightsQueryTimeout)
 	defer cancel()
@@ -511,7 +540,7 @@ func (c *Handler) getDawnChorusImpl(ctx echo.Context) error {
 
 	items := make([]DawnChorusItem, 0, len(speciesMap))
 	for _, sd := range speciesMap {
-		if sd.daysObserved < dawnChorusMinDaysObserved {
+		if sd.daysObserved < minDays {
 			continue
 		}
 		avgSeconds := sd.secondsSum / sd.daysObserved
@@ -531,7 +560,8 @@ func (c *Handler) getDawnChorusImpl(ctx echo.Context) error {
 
 	return ctx.JSON(http.StatusOK, DawnChorusResponse{
 		Species:    items,
-		PeriodDays: dawnChorusPeriodDays,
+		PeriodDays: periodDays,
+		MinDays:    minDays,
 		StartHour:  dawnChorusStartHour,
 		EndHour:    dawnChorusEndHour,
 	})

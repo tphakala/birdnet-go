@@ -109,6 +109,14 @@
       "closeModal": "Stäng dialogruta",
       "dismissAlert": "Avfärda varning",
       "closeNotification": "Stäng avisering",
+      "toastRegion": {
+        "topLeft": "Aviseringar, uppe till vänster",
+        "topCenter": "Aviseringar, uppe i mitten",
+        "topRight": "Aviseringar, uppe till höger",
+        "bottomLeft": "Aviseringar, nere till vänster",
+        "bottomCenter": "Aviseringar, nere i mitten",
+        "bottomRight": "Aviseringar, nere till höger"
+      },
       "toggleDropdown": "Växla rullgardinsmeny",
       "sortAscending": "Sortera stigande",
       "selectLanguage": "Välj språk",
@@ -130,7 +138,6 @@
       "selectToday": "Välj idag",
       "dateSelected": "Datum valt: {date}",
       "calendarNavigation": "Använd piltangenterna för att navigera i kalendern, Enter för att välja, Escape för att stänga",
-      "downloadCsv": "Ladda ner artlistan som CSV",
       "visitEbirdLink": "Öppna eBird.org i en ny flik",
       "learnEbirdTaxonomyLink": "Öppna eBird Taxonomy i en ny flik",
       "resizeHandle": "Dra för att ändra storlek",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Ljudanalys överbelastad",
-        "overloadMessage": "Ditt system förlorar {dropRate}% av ljudsamplingarna för källa ''{sourceName}'' eftersom det inte kan hålla jämna steg med analysen. Minska BirdNET-överlappningsvärdet i detektionsinställningarna eller överväg att uppgradera till en snabbare CPU."
+        "overloadMessage": "Ditt system förlorar {dropRate}% av ljudsamplingarna för källa '{sourceName}' eftersom det inte kan hålla jämna steg med analysen. Minska BirdNET-överlappningsvärdet i detektionsinställningarna eller överväg att uppgradera till en snabbare CPU."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime inte tillgänglig",
@@ -472,7 +479,17 @@
         "unreadableMessage": "Modellfilen som konfigurerats för {modelName} finns men kunde inte läsas, så den installerade modellen på {modelPath} används i stället. Din konfiguration lämnades oförändrad. Kontrollera filens behörigheter och att dess lagring är monterad.",
         "builtinMessage": "Modellfilen som konfigurerats för {modelName} hittades inte på disken och det finns ingen installerad modell tillgänglig att ersätta den med, så den inbyggda modellen används i stället. Din konfiguration lämnades oförändrad.",
         "notRegisteredTitle": "Ingen modell analyserar {sourceName}",
-        "notRegisteredMessage": "Inget ljud når {models} på ljudkällan \"{sourceName}\", så det produceras inga detektioner. Öppna modellgalleriet i Inställningar för att kontrollera status."
+        "notRegisteredMessage": "Inget ljud når {models} på ljudkällan \"{sourceName}\", så det produceras inga detektioner. Öppna System > AI-modeller för att kontrollera dess status per källa, och bekräfta att ljudkällan är ansluten och skickar ljud."
+      },
+      "acousticModels": {
+        "noneTitle": "Ingen akustisk modell aktiverad",
+        "noneMessage": "Ingen akustisk modell är inläst, så ljud spelas in men analyseras inte. Aktivera en modell i Inställningar > Analys, eller installera en från modellgalleriet.",
+        "loadFailedTitle": "Akustisk modell kunde inte läsas in",
+        "loadFailedMessage": "En aktiverad akustisk modell kunde inte läsas in, så ljud spelas in men analyseras inte. Kontrollera modellen på sidan System > AI-modeller."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modell har en bättre version för det här systemet} other {# modeller har bättre versioner för det här systemet}}",
+        "message": "En version som passar bättre för systemets hårdvara eller plats finns tillgänglig för: {models}. Öppna Inställningar > Analys > Modeller och välj Optimera för att byta."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -493,6 +510,11 @@
           "diskFull": "Disken är full - frigör utrymme",
           "permissionDenied": "Åtkomst nekad - kontrollera fil- eller tjänstbehörigheter"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} misslyckas vid varje analys",
+        "message": "{modelName} är inläst, men de senaste {failures} analyserna i rad misslyckades på {runtime}: inferensen returnerade ett fel. Ljud spelas in, men den här modellen upptäcker ingenting. Kontrollera modellen på sidan System > AI-modeller.",
+        "nonFiniteMessage": "{modelName} är inläst, men de senaste {failures} analyserna i rad misslyckades på {runtime}: modellen returnerade ogiltiga poäng (NaN eller oändliga). Ljud spelas in, men den här modellen upptäcker ingenting. Kontrollera modellen på sidan System > AI-modeller."
       }
     },
     "loading": "Laddar aviseringar..."
@@ -763,6 +785,16 @@
       "recentHearingFetch": "Det gick inte att hämta nylig artaktivitet: {status}",
       "recentHearingLoad": "Det gick inte att läsa in nylig artaktivitet",
       "configFetch": "Kunde inte hämta instrumentpanelens konfiguration: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Ingen akustisk modell aktiverad",
+      "noneMessage": "Ljud fångas, men analyseras inte. Aktivera en modell i modellgalleriet för att börja detektera arter.",
+      "noneAction": "Öppna modellgalleri",
+      "loadFailedTitle": "Akustisk modell kunde inte läsas in",
+      "loadFailedMessage": "En aktiverad modell kunde inte läsas in, så inget ljud analyseras. Sidan AI-modeller visar vilken modell som misslyckades och varför.",
+      "loadFailedAction": "Visa status för AI-modeller",
+      "failingTitle": "{count, plural, one {En modell misslyckas vid varje analys} other {# modeller misslyckas vid varje analys}}",
+      "failingMessage": "{count, plural, one {{models} är inläst, men varje analys misslyckas, så den upptäcker ingenting.} other {{models} är inlästa, men varje analys misslyckas, så de upptäcker ingenting.}} Sidan AI-modeller visar backend och felet."
     },
     "banner": {
       "title": "Titel",
@@ -1794,7 +1826,10 @@
       "noSources": "Inga källor anslutna",
       "primaryFallback": "primär (reserv)",
       "sourceNotRunning": "analyserar inte",
-      "sourceNotRunningTooltip": "Denna källa är tilldelad modellen i inställningarna, men dess ljud når inte modellen, så den producerar inga detektioner. Öppna modellgalleriet i Inställningar för att kontrollera dess status.",
+      "sourceNotRunningTooltip": "Denna källa är tilldelad modellen i inställningarna, men dess ljud når inte modellen, så den producerar inga detektioner. Kontrollera att ljudkällan är ansluten och skickar ljud.",
+      "modelNotAnalyzingTooltip": "En eller flera ljudkällor tilldelade denna modell skickar inte ljud till den, så den producerar inga detektioner. Se källorna som anges nedan.",
+      "sourcesDegraded": "{count} av {total} källor nere",
+      "sourcesDegradedTooltip": "Vissa, men inte alla av denna modells ljudkällor är nere, så den analyserar fortfarande via de fungerande. Den specifika källan som är nere och hur den åtgärdas anges nedan.",
       "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -1836,7 +1871,14 @@
       "fp16Help": "16-bitars flyttal. Hårdvara som stöder det kan köra vissa modeller snabbare och med mindre minne.",
       "invocationsHelp": "Totalt antal ljudsegment som denna modell har analyserat sedan start.",
       "noModelsHint": "Ingen ljudkälla konfigurerad ännu?",
-      "noModelsHintLink": "Konfigurera ljudkällor"
+      "noModelsHintLink": "Konfigurera ljudkällor",
+      "modelFailing": "varje analys misslyckas",
+      "lastSuccess": "Senaste lyckade",
+      "lastSuccessHelp": "När den här modellen senast analyserade ljud utan fel.",
+      "lastSuccessNever": "Ingen sedan modellen lästes in",
+      "modelFailingHelp": "{reason} Prova en annan version av den här modellen under Inställningar > Analys > Modeller, eller kontrollera den backend och precision som visas ovan.",
+      "modelFailingReasonNonFinite": "Alla senaste analyser misslyckades eftersom modellen returnerade ogiltiga poäng (NaN eller oändliga), så den upptäcker ingenting.",
+      "modelFailingReasonError": "Alla senaste analyser misslyckades eftersom inferensen returnerade ett fel, så modellen upptäcker ingenting."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2352,7 +2394,7 @@
           "title": "Falskpositivfilter",
           "description": "Minska felaktiga detektioner genom att kräva flera bekräftelser över överlappande ljudsegment",
           "level": {
-            "label": "Filternivå"
+            "label": "Styrka för falskpositivfilter"
           },
           "detectionCount": "{count} bekräftelser krävs. {description}",
           "levels": {
@@ -2382,7 +2424,19 @@
           "description": "Begränsa detektion till arter som är sannolika i ditt geografiska område",
           "stationLocation": {
             "label": "Stationsplats",
-            "helpText": "Stationsplats, används för väderdata och för att begränsa fågelarter till de som är sannolika i regionen."
+            "helpText": "Stationsplats, används för väderdata och för att begränsa fågelarter till de som är sannolika i regionen.",
+            "automaticLocation": "Automatisk plats",
+            "useCurrentLocation": "Använd webbläsarens plats",
+            "locationHelp": "Fyller i koordinaterna med hjälp av den här webbläsarens plats.",
+            "locating": "Söker plats...",
+            "accuracy": "Uppskattad noggrannhet: inom {accuracy} m",
+            "locationDetected": "Webbläsarens plats hittades.",
+            "geolocationUnsupported": "Den här webbläsaren stöder inte enhetspositionering. Ange koordinater manuellt eller använd kartan.",
+            "geolocationRequiresHttps": "Webbläsarens platsbestämning kräver HTTPS eller localhost. Ange koordinater manuellt eller använd kartan.",
+            "geolocationDenied": "Platsbehörighet nekades. Ange koordinater manuellt eller använd kartan.",
+            "geolocationUnavailable": "Enheten kunde inte fastställa sin plats. Ange koordinater manuellt eller använd kartan.",
+            "geolocationTimedOut": "Platsbegäran överskred tidsgränsen. Försök igen, ange koordinater manuellt eller använd kartan.",
+            "geolocationFailed": "Det gick inte att fastställa enhetens plats. Ange koordinater manuellt eller använd kartan."
           },
           "latitude": {
             "label": "Latitud",
@@ -2638,9 +2692,9 @@
           "label": "Språk",
           "helpText": "Språk för översatta artnamn."
         },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU-trådar",
-          "helpText": "Antal CPU-trådar. Ange 0 för att använda alla tillgängliga trådar."
+        "inferenceThreads": {
+          "label": "CPU-trådar för inferens",
+          "helpText": "Antal CPU-trådar som används för modellinferens. Ange 0 för att använda alla tillgängliga trådar. Har ingen effekt på modeller som körs på en GPU."
         }
       },
       "errors": {
@@ -2920,6 +2974,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Spara leverantör",
+          "saveWaitingNtfyCheck": "Väntar på att ntfy-anslutningskontrollen ska slutföras",
           "savingButton": "Sparar...",
           "cancelButton": "Avbryt",
           "testButton": "Testa",
@@ -2991,6 +3046,7 @@
               "http": "HTTP fungerar - servern använder inte HTTPS"
             },
             "connectionFailed": "Kunde inte ansluta - kontrollera värdnamn och serverstatus",
+            "checkError": "Det gick inte att verifiera servern - kontrollera adressen eller ladda om sidan och försök igen",
             "auth": {
               "label": "Autentisering (valfritt)",
               "username": {
@@ -3245,7 +3301,7 @@
             "label": "Enhetsnamn",
             "helpText": "Basnamnet för enheter som de visas i Home Assistant. Varje ljudkälla har sin egen enhet kopplad till denna huvudsakliga BirdNET-Go-enhet."
           },
-          "sensorsNote": "<strong>Skapade sensorer:</strong> För varje ljudkälla tar Home Assistant emot: Senaste art, Konfidens, Vetenskapligt namn och Ljudnivå (om aktiverat). Bryggenheten inkluderar tillgänglighetsstatus online/offline.",
+          "sensorsNote": "<strong>Skapade sensorer:</strong> För varje ljudkälla tar Home Assistant emot: Senaste art, Konfidens, Vetenskapligt namn och Ljudnivå (om aktiverat). Bryggenheten inkluderar tillgänglighetsstatus online/offline. Varje källas detekteringssensorer läser källans eget MQTT-ämne, &lt;base_topic&gt;/sources/&lt;source_id&gt;, och dess Ljudnivå-sensor läser underämnet &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, så en detektering från en källa aldrig nollställer en annan källas sensorer.",
           "discovery": {
             "button": "Skicka Discovery",
             "success": "Identifieringsmeddelanden skickade till Home Assistant",
@@ -3291,7 +3347,8 @@
             "none": "Ingen",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3312,6 +3369,16 @@
             "helpText": "Välj enheter för temperatur och vindhastighet (m = Metrisk, e = Imperial, h = UK Hybrid)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API-nyckel",
+            "helpText": "Ange din Pirate Weather API-nyckel. Krävs för väderdata."
+          },
+          "endpoint": {
+            "label": "API-slutpunkt",
+            "helpText": "Åsidosätt standardslutpunkten för Pirate Weather API vid behov. Använder https://api.pirateweather.net/forecast som standard om det lämnas tomt."
+          }
+        },
         "notes": {
           "none": "Ingen väderdata kommer att hämtas.",
           "yrno": {
@@ -3319,7 +3386,8 @@
             "freeService": "Yr är en gratis väderdatatjänst. För mer information, besök <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Användning av OpenWeather kräver en API-nyckel, registrera dig för en gratis API-nyckel på <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Kräver en Weather Underground API-nyckel och ett giltigt PWS-stations-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> för detaljer."
+          "wunderground": "Kräver en Weather Underground API-nyckel och ett giltigt PWS-stations-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> för detaljer.",
+          "pirateweather": "Användning av Pirate Weather kräver en API-nyckel, registrera dig på <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API-nyckel",
@@ -3692,6 +3760,7 @@
         "dataOutputTitle": "Utdata för ljudnivå",
         "dataOutputDescription": "När aktiverad publiceras ljudnivåmätningar via:",
         "mqttTopic": "MQTT-ämne:",
+        "mqttSourceTopic": "MQTT-ämne per källa (med Home Assistant discovery):",
         "sseEndpoint": "SSE-slutpunkt:",
         "prometheusMetrics": "Prometheus-mätvärden:"
       },
@@ -3753,6 +3822,8 @@
         "pathHelp": "Katalog där ljudklipp sparas. Relativa sökvägar utgår från applikationskatalogen. Exempel: 'clips/' eller '/var/audio/birds/'",
         "typeLabel": "Ljudformat",
         "typeHelp": "Ljudformat för sparade klipp. WAV och FLAC är förlustfria (bästa kvalitet, större filer). MP3, AAC och Opus är förlustbehäftade (mindre filer, viss kvalitetsförlust).",
+        "ultrasonicTypeLabel": "Ultraljudsformat",
+        "ultrasonicTypeHelp": "Förlustfritt format (WAV eller FLAC) som endast används för fladdermus- och ultraljudsinspelningar över 48 kHz. Dessa sparas med sin fulla källsamplingsfrekvens i stället för formatet ovan, så att inga ultraljudsdetaljer går förlorade.",
         "bitrateLabel": "Bithastighet",
         "bitrateHelp": "Ljudkomprimeringens bithastighet för förlustbehäftade format. Intervall: {min}-{max} kbps. Högre värden ger bättre kvalitet men större filer.",
         "losslessBitrateValue": "Ej tillämpligt - Förlustfri",
@@ -3821,7 +3892,17 @@
       },
       "models": {
         "recommendBoth": "För bästa artdetekteringstäckning rekommenderas att köra både BirdNET och Perch tillsammans.",
-        "perchOnlyWarning": "Perch ensamt ger färre detektioner. Sänk konfidensströskeln till 0.50 för meningsfulla resultat, eller aktivera BirdNET bredvid för bästa täckning."
+        "perchOnlyWarning": "Perch ensamt ger färre detektioner. Sänk konfidensströskeln till 0.50 för meningsfulla resultat, eller aktivera BirdNET bredvid för bästa täckning.",
+        "loading": "Laddar detektionsmodeller...",
+        "noneEnabledTitle": "Ingen detektionsmodell aktiverad.",
+        "noneEnabledHelp": "Du kan fortfarande spara den här källan. Dess ljud kommer att analyseras av standardmodellerna så snart en har aktiverats.",
+        "noneEnabledLink": "Öppna modellgalleri",
+        "noneAvailable": "Inga detektionsmodeller är aktiverade på den här servern.",
+        "loadFailedWarning": "En detektionsmodell kunde inte läsas in, så den här källan analyseras inte förrän den återställs.",
+        "loadFailedLink": "Visa status för AI-modeller",
+        "defaultBadge": "{models} (standard)",
+        "defaultPendingBadge": "Standardmodeller",
+        "noneBadge": "Ingen modell inläst"
       }
     },
     "security": {
@@ -4367,7 +4448,7 @@
       "dynamicThreshold": {
         "tabLabel": "Inlärda",
         "title": "Inlärda tröskelvärden",
-        "description": "Denna sida visar körtidsdata för dynamiska tröskelvärden. När aktiverad i Huvudinställningar -> Detektering justeras tröskelvärden automatiskt av flera högkonfidensdetekteringar. Arter som visas här antas finnas på denna plats.",
+        "description": "Denna sida visar körtidsdata för dynamiska tröskelvärden. När aktiverad justeras tröskelvärden automatiskt av flera högkonfidensdetekteringar. Arter som visas här antas finnas på denna plats.",
         "stats": {
           "active": "Aktiva",
           "atMinimum": "Vid minimum",
@@ -4869,7 +4950,16 @@
       "streamTitleDefault": "Fågelljudström",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Livestream",
-      "playbackError": "Uppspelningsfel: {details}"
+      "playbackError": "Uppspelningsfel: {details}",
+      "audibleBats": {
+        "title": "Hörbar fladdermusuppspelning",
+        "subtitle": "Sakta ned ultraljudsläten till människans hörselområde.",
+        "timeExpansion": "Tidsutvidgning",
+        "enable": "Aktivera",
+        "disable": "Inaktivera",
+        "generating": "Genererar härlett ljud…",
+        "error": "Det gick inte att generera hörbart fladdermusljud"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammet har inte genererats ännu",
@@ -5092,6 +5182,7 @@
       "birdweatherClientFailed": "Kunde inte skapa BirdWeather-klient",
       "noWeatherProvider": "Ingen väderleverantör vald",
       "openWeatherKeyRequired": "OpenWeather API-nyckel krävs",
+      "pirateWeatherKeyRequired": "Pirate Weather API-nyckel krävs",
       "processorUnavailable": "Processor inte tillgänglig",
       "discoveryFailed": "Kunde inte utlösa Home Assistant-upptäckt"
     },
@@ -5101,6 +5192,7 @@
       "notFound": "Avisering hittades inte",
       "hostRequired": "Värdparameter krävs",
       "invalidHost": "Ogiltig värdparameter",
+      "invalidBody": "Ogiltig förfrågningstext",
       "rateLimit": "För många anslutningsförsök till aviseringsströmmen, vänta innan du försöker igen"
     },
     "streams": {

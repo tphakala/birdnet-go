@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -36,9 +37,10 @@ import (
 // are owned by the integrations domain (the only consumer) and name the provider
 // the settings UI selects.
 const (
-	WeatherProviderOpenWeather  = "openweather"
-	WeatherProviderWunderground = "wunderground"
-	WeatherProviderYrno         = "yrno"
+	WeatherProviderOpenWeather   = "openweather"
+	WeatherProviderWunderground  = "wunderground"
+	WeatherProviderYrno          = "yrno"
+	WeatherProviderPirateWeather = "pirateweather"
 )
 
 // Integration constants (file-local)
@@ -221,6 +223,23 @@ func runStreamingIntegrationTest[T any](
 			writeMu.Lock()
 			defer writeMu.Unlock()
 
+			// Re-check under the lock before touching ctx. The handler may have
+			// returned (encode error or client disconnect) while we were blocked
+			// acquiring writeMu; on those paths it closes doneChan / cancels
+			// testCtx before releasing the lock, so observing either here means
+			// the handler has gone. Writing to ctx after the handler returns
+			// touches a recycled echo.Context/Response and races with the next
+			// request that reuses it (issue #4292 bug class).
+			select {
+			case <-doneChan:
+				c.Debug("HTTP client disconnected, skipping final result")
+				return
+			case <-testCtx.Done():
+				c.Debug("Test context cancelled: %v", testCtx.Err())
+				return
+			default:
+			}
+
 			finalResult := map[string]any{
 				"elapsed_time_ms": elapsedTime,
 				"state":           "completed",
@@ -257,9 +276,14 @@ func runStreamingIntegrationTest[T any](
 				logger.String("integration", integrationName),
 				logger.Error(err),
 			)
-			writeMu.Unlock()
+			// Signal shutdown BEFORE releasing writeMu so a worker goroutine
+			// blocked on writeMu.Lock() observes the closed doneChan (and the
+			// cancelled testCtx) once it acquires the lock, and skips its final
+			// write instead of touching the recycled ctx after this handler
+			// returns (issue #4292 bug class).
 			safeDoneClose()
 			cancel()
+			writeMu.Unlock()
 			drainResultChan()
 			return nil
 		}
@@ -270,8 +294,19 @@ func runStreamingIntegrationTest[T any](
 		select {
 		case <-httpCtx.Done():
 			c.Debug("HTTP client disconnected during %s test", integrationName)
+			// Signal shutdown under writeMu, mirroring the encode-error path
+			// above. Acquiring the lock blocks until any in-progress worker
+			// final write finishes (so ctx is not recycled mid-write), and it
+			// establishes the happens-before that makes a worker later blocked
+			// on writeMu.Lock() observe the closed doneChan and skip its write.
+			// Signalling after the unlock instead would leave a window where the
+			// worker touches the recycled ctx after this handler returns, since
+			// testCtx cancellation propagates from httpCtx only after httpCtx's
+			// own Done channel is already closed (issue #4292 bug class).
+			writeMu.Lock()
 			safeDoneClose()
 			cancel()
+			writeMu.Unlock()
 			drainResultChan()
 			return nil
 		default:
@@ -554,11 +589,12 @@ type EBirdTestRequest struct {
 
 // WeatherTestRequest represents a request to test weather provider connectivity
 type WeatherTestRequest struct {
-	Provider     string                    `json:"provider"`
-	PollInterval int                       `json:"pollInterval"`
-	Debug        bool                      `json:"debug"`
-	OpenWeather  conf.OpenWeatherSettings  `json:"openWeather"`
-	Wunderground conf.WundergroundSettings `json:"wunderground"`
+	Provider      string                     `json:"provider"`
+	PollInterval  int                        `json:"pollInterval"`
+	Debug         bool                       `json:"debug"`
+	OpenWeather   conf.OpenWeatherSettings   `json:"openWeather"`
+	Wunderground  conf.WundergroundSettings  `json:"wunderground"`
+	PirateWeather conf.PirateWeatherSettings `json:"pirateWeather"`
 }
 
 // WeatherTestStage represents the result of a weather test stage
@@ -586,6 +622,7 @@ func (c *Handler) TestWeatherConnection(ctx echo.Context) error {
 	current := c.CurrentSettings()
 	apicore.RestoreRedactedSecret(current.Realtime.Weather.OpenWeather.APIKey, &request.OpenWeather.APIKey)
 	apicore.RestoreRedactedSecret(current.Realtime.Weather.Wunderground.APIKey, &request.Wunderground.APIKey)
+	apicore.RestoreRedactedSecret(current.Realtime.Weather.PirateWeather.APIKey, &request.PirateWeather.APIKey)
 
 	// Validate provider
 	if request.Provider == "" || request.Provider == "none" {
@@ -597,17 +634,23 @@ func (c *Handler) TestWeatherConnection(ctx echo.Context) error {
 		return c.HandleErrorWithKey(ctx, nil, "OpenWeather API key is required", http.StatusBadRequest, notification.MsgErrIntegOWKeyRequired, nil)
 	}
 
+	// Validate Pirate Weather specific requirements
+	if request.Provider == WeatherProviderPirateWeather && request.PirateWeather.APIKey == "" {
+		return c.HandleErrorWithKey(ctx, nil, "Pirate Weather API key is required", http.StatusBadRequest, notification.MsgErrIntegPWKeyRequired, nil)
+	}
+
 	// Set up streaming response
 	setStreamingHeaders(ctx, mimeNDJSON)
 
 	// Clone current settings and override only Weather fields from the request
 	testSettings := conf.CloneSettings(current)
 	testSettings.Realtime.Weather = conf.WeatherSettings{
-		Provider:     request.Provider,
-		Debug:        request.Debug,
-		PollInterval: request.PollInterval,
-		OpenWeather:  request.OpenWeather,
-		Wunderground: request.Wunderground,
+		Provider:      request.Provider,
+		Debug:         request.Debug,
+		PollInterval:  request.PollInterval,
+		OpenWeather:   request.OpenWeather,
+		Wunderground:  request.Wunderground,
+		PirateWeather: request.PirateWeather,
 	}
 
 	// Create test context with timeout
@@ -703,11 +746,13 @@ func (c *Handler) testWeatherAPIConnectivity(ctx context.Context, settings *conf
 		testURL = "https://api.openweathermap.org"
 	case WeatherProviderWunderground:
 		testURL = "https://api.weather.com"
+	case WeatherProviderPirateWeather:
+		testURL = "https://api.pirateweather.net"
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", provider)
 	}
 
-	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+	client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
 	req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -741,7 +786,7 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 
 		testURL := fmt.Sprintf("%s?lat=0&lon=0&appid=%s", endpoint, apiKey)
 
-		client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+		client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
 		req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
 		if err != nil {
 			// Scrub before wrapping: the *url.Error embeds testURL, which carries
@@ -761,7 +806,7 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 			}
 		}()
 
-		if resp.StatusCode == http.StatusUnauthorized {
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			return "", fmt.Errorf("invalid API key - please check your OpenWeather API key")
 		}
 
@@ -772,6 +817,47 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 		// since there's no separate auth endpoint
 		return "Authentication will be verified during data fetch", nil
 
+	case WeatherProviderPirateWeather:
+		apiKey := settings.Realtime.Weather.PirateWeather.APIKey
+		endpoint := settings.Realtime.Weather.PirateWeather.Endpoint
+		if endpoint == "" {
+			endpoint = "https://api.pirateweather.net/forecast"
+		}
+
+		// The API key is part of the URL PATH for this API
+		// (/forecast/{apikey}/{lat},{lon}), not a query parameter.
+		testURL := fmt.Sprintf("%s/%s/0,0", strings.TrimSuffix(endpoint, "/"), neturl.PathEscape(apiKey))
+
+		client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
+		req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
+		if err != nil {
+			// Scrub before wrapping: the *url.Error embeds testURL, which carries
+			// the API key in its path, and this error is returned to the API
+			// client and logs.
+			return "", fmt.Errorf("failed to create authentication request: %w", privacy.WrapError(err))
+		}
+
+		req.Header.Set("User-Agent", "BirdNET-Go Weather Test")
+		resp, err := client.Do(req)
+		if err != nil {
+			// Scrub before wrapping: the transport *url.Error embeds the API key.
+			return "", fmt.Errorf("failed to authenticate with Pirate Weather API: %w", privacy.WrapError(err))
+		}
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				apicore.GetLogger().Warn("Failed to close response body", logger.Error(err))
+			}
+		}()
+
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return "", fmt.Errorf("invalid API key - please check your Pirate Weather API key")
+		}
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("unexpected response from Pirate Weather API (status %d)", resp.StatusCode)
+		}
+
+		return "Successfully authenticated with Pirate Weather API", nil
+
 	default:
 		return "Authentication not required for this provider", nil
 	}
@@ -779,14 +865,20 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 
 // testWeatherDataFetch tests fetching actual weather data
 func (c *Handler) testWeatherDataFetch(ctx context.Context, settings *conf.Settings) (string, error) {
+	// Inject the SSRF-guarded client so a user-configured OpenWeather/Wunderground
+	// endpoint cannot be pointed at link-local / cloud-metadata targets during the
+	// data-fetch test. Matches the guarded client the running service uses.
+	guarded := httpclient.NewGuardedHTTPClient(weather.RequestTimeout)
 	var provider weather.Provider
 	switch settings.Realtime.Weather.Provider {
 	case WeatherProviderYrno:
-		provider = weather.NewYrNoProvider(nil)
+		provider = weather.NewYrNoProvider(guarded)
 	case WeatherProviderOpenWeather:
-		provider = weather.NewOpenWeatherProvider(nil)
+		provider = weather.NewOpenWeatherProvider(guarded)
 	case WeatherProviderWunderground:
-		provider = weather.NewWundergroundProvider(nil)
+		provider = weather.NewWundergroundProvider(guarded)
+	case WeatherProviderPirateWeather:
+		provider = weather.NewPirateWeatherProvider(guarded)
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", settings.Realtime.Weather.Provider)
 	}
@@ -819,6 +911,8 @@ func getProviderDisplayName(provider string) string {
 		return "OpenWeather"
 	case WeatherProviderWunderground:
 		return "Weather Underground"
+	case WeatherProviderPirateWeather:
+		return "Pirate Weather"
 	default:
 		// Simple capitalization for unknown providers
 		if provider != "" {
@@ -993,7 +1087,7 @@ func (c *Handler) TestEBirdConnection(ctx echo.Context) error {
 
 // testEBirdConnectivity tests basic connectivity to the eBird API
 func (c *Handler) testEBirdConnectivity(ctx context.Context) (string, error) {
-	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+	client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
 	req, err := http.NewRequestWithContext(ctx, "HEAD", "https://api.ebird.org/v2/ref/taxonomy/ebird", http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -1022,7 +1116,7 @@ func (c *Handler) testEBirdConnectivity(ctx context.Context) (string, error) {
 
 // testEBirdAuthentication tests authentication with the eBird API using a small taxonomy request
 func (c *Handler) testEBirdAuthentication(ctx context.Context, apiKey, locale string) (string, error) {
-	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+	client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
 
 	url := fmt.Sprintf("https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&cat=species&maxResults=1&locale=%s", neturl.QueryEscape(locale))
 

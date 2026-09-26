@@ -35,7 +35,9 @@
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
-  import { DEFAULT_MODEL_ID } from '$lib/stores/models.svelte';
+  import { modelsLoading } from '$lib/stores/models.svelte';
+  import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
+  import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import { maskUrlCredentials } from '$lib/utils/security';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import Checkbox from './Checkbox.svelte';
@@ -93,6 +95,8 @@
     status?: StreamStatus;
     availableModels: Array<{
       id: string;
+      /** Classifier registry ID; the join key for default-target mapping. Absent on an older server. */
+      registryId?: string;
       name: string;
       category: string;
       minSampleRate?: number;
@@ -112,6 +116,8 @@
     onUpdate,
     onDelete,
   }: Props = $props();
+
+  const acousticAvailability = $derived(acousticModelAvailability());
 
   // Get the stream health state from context - the $state object is passed directly
   // Mutations to this object are reactive and will trigger re-renders
@@ -175,7 +181,8 @@
   // Derive connection stability status
   let connectionStatus = $derived.by(() => {
     if (!health) return 'Unknown';
-    if (health.process_state === 'circuit_open') return 'Failed';
+    if (health.process_state === 'circuit_open' || health.process_state === 'failed')
+      return 'Failed';
     if (health.process_state === 'backoff' || health.process_state === 'restarting')
       return 'Degraded';
     if (health.is_healthy && health.is_receiving_data) return 'Stable';
@@ -336,7 +343,9 @@
     editStreamType = stream.type;
     editEnabled = stream.enabled;
     editGain = stream.gain ?? 0;
-    editModels = stream.models?.length ? [...stream.models] : [DEFAULT_MODEL_ID];
+    editModels = stream.models?.length
+      ? [...stream.models]
+      : defaultModelSelection(acousticAvailability, availableModels);
     editEqualizer = stream.equalizer
       ? { ...stream.equalizer, filters: [...stream.equalizer.filters] }
       : { enabled: false, filters: [] };
@@ -365,6 +374,14 @@
   function saveEdit() {
     if (needsTest) return;
     if (editName.trim() && editUrl.trim()) {
+      // Rewrite an empty model list to the defaults so a cleared selection saves
+      // the classifier defaults rather than []. This is a no-op at N=0, where
+      // defaultModelSelection returns [] (no acoustic model to map), preserving
+      // the empty-list save the backend resolves to its own defaults.
+      if (editModels.length === 0) {
+        editModels = defaultModelSelection(acousticAvailability, availableModels);
+      }
+
       const transformedEqualizer =
         editEqualizer.enabled || editEqualizer.filters.length > 0
           ? {
@@ -639,6 +656,8 @@
           selectedModels={editModels}
           {sourceSampleRate}
           isStream={true}
+          loading={modelsLoading()}
+          availability={acousticAvailability}
           {disabled}
           onToggle={models => (editModels = models)}
         />
@@ -893,7 +912,9 @@
               <span
                 class={cn(
                   'ml-2',
-                  health?.process_state === 'circuit_open' || health?.process_state === 'stopped'
+                  health?.process_state === 'circuit_open' ||
+                    health?.process_state === 'failed' ||
+                    health?.process_state === 'stopped'
                     ? 'text-[var(--color-error)]'
                     : 'text-[var(--color-base-content)]'
                 )}

@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -51,10 +52,7 @@ func (o *Orchestrator) warmupAndRecordRSS(modelID string, before uint64, instanc
 	if err != nil || before == 0 {
 		return // RSS unavailable: leave the model out of modelRSS (endpoint shows n/a)
 	}
-	delta := int64(after) - int64(before)
-	if delta < 0 {
-		delta = 0
-	}
+	delta := max(int64(after)-int64(before), 0)
 	o.rssMu.Lock()
 	o.modelRSS[modelID] = delta
 	o.rssMu.Unlock()
@@ -140,8 +138,6 @@ func (o *Orchestrator) ModelRSS() (perModel map[string]int64, runtimeBaseline in
 	o.rssMu.Lock()
 	defer o.rssMu.Unlock()
 	out := make(map[string]int64, len(o.modelRSS))
-	for k, v := range o.modelRSS {
-		out[k] = v
-	}
+	maps.Copy(out, o.modelRSS)
 	return out, o.runtimeBaseline
 }

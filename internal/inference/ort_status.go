@@ -126,13 +126,13 @@ func inferVersionFromPath(libPath string) string {
 	base := filepath.Base(resolved)
 
 	// Linux convention: "libonnxruntime.so.1.25.1" -> "1.25.1"
-	if idx := strings.Index(base, ".so."); idx >= 0 {
-		return base[idx+len(".so."):]
+	if _, after, ok := strings.Cut(base, ".so."); ok {
+		return after
 	}
 
 	// macOS convention: "libonnxruntime.1.25.1.dylib" -> "1.25.1"
-	if strings.HasSuffix(base, ".dylib") {
-		name := strings.TrimSuffix(base, ".dylib")
+	if before, ok := strings.CutSuffix(base, ".dylib"); ok {
+		name := before
 		for i := range len(name) {
 			if name[i] == '.' && i+1 < len(name) && name[i+1] >= '0' && name[i+1] <= '9' {
 				return name[i+1:]

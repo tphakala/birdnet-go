@@ -68,6 +68,14 @@ type LivenessConfig struct {
 	// EscalationTimeout is how long to wait in ESCALATED before transitioning
 	// to FAILED.
 	EscalationTimeout time.Duration
+
+	// ProducerRecoveryCeiling bounds how long the watchdog defers a restart to a
+	// producer that is reconnecting in place (RecoveryInProgress). Past the
+	// ceiling the legacy restart ladder resumes so a genuinely dead source is not
+	// parked forever. Zero disables the coordination (legacy behaviour), which is
+	// the effective state under the FFmpeg gate since FFmpeg reports
+	// RecoveryUnknown.
+	ProducerRecoveryCeiling time.Duration
 }
 
 // DefaultLivenessConfig returns production defaults.
@@ -79,6 +87,10 @@ func DefaultLivenessConfig() LivenessConfig {
 		RetryBackoff:       5 * time.Second,
 		CooldownAfterRecov: 60 * time.Second,
 		EscalationTimeout:  60 * time.Second,
+		// Five minutes matches the native supervisor's default capped-exponential
+		// reconnect budget; past this the source is treated as stuck and the
+		// legacy restart takes over. Not user-configurable yet.
+		ProducerRecoveryCeiling: 5 * time.Minute,
 	}
 }
 
@@ -98,9 +110,9 @@ type SourceHealthSnapshot struct {
 	SourceID     string        `json:"source_id"`
 	State        string        `json:"state"`
 	Retries      int           `json:"retries"`
-	LastRestart  time.Time     `json:"last_restart,omitempty"`
+	LastRestart  time.Time     `json:"last_restart,omitzero"`
 	StateEntered time.Time     `json:"state_entered"`
-	LastDispatch time.Time     `json:"last_dispatch,omitempty"`
+	LastDispatch time.Time     `json:"last_dispatch,omitzero"`
 	RawState     LivenessState `json:"-"`
 }
 
@@ -121,6 +133,13 @@ type LivenessCallbacks struct {
 	// given source. Per-source granularity is required because sound card and
 	// RTSP sources have independent quiet hours schedules.
 	IsQuietHours func(sourceID string) bool
+
+	// RecoveryState reports a producer's recovery intent and when that intent was
+	// last entered, so the watchdog can defer a restart to a producer (the native
+	// stream supervisor) that is reconnecting in place. Optional; when nil the
+	// watchdog always takes the legacy restart path. A lookup miss should return
+	// (RecoveryUnknown, time.Time{}), which also takes the legacy path.
+	RecoveryState func(sourceID string) (RecoveryState, time.Time)
 }
 
 // livenessAction describes a callback to execute outside the mutex.
@@ -296,6 +315,38 @@ func (w *LivenessWatchdog) checkAll() {
 	w.executeActions(actions)
 }
 
+// restartDisposition is the watchdog's decision on whether to tear a source down
+// and restart it, or defer to a producer that is recovering in place.
+type restartDisposition int
+
+const (
+	// restartLegacy takes the pre-native restart ladder. It covers RecoveryUnknown
+	// (FFmpeg, and a nil callback), RecoveryIdle, RecoveryGivenUp, and
+	// RecoveryInProgress once it has run past ProducerRecoveryCeiling.
+	restartLegacy restartDisposition = iota
+	// restartSuppress defers the restart while the producer's supervisor is
+	// reconnecting within the ceiling, so the watchdog does not abort a reconnect.
+	restartSuppress
+)
+
+// restartDisposition consults the optional RecoveryState callback to decide
+// whether to restart a silent source now or let the producer's own supervisor
+// finish an in-progress reconnect. A nil callback, an unknown or idle intent, a
+// give-up, or a producer that has been recovering longer than the ceiling all
+// take the legacy restart path. A nil callback or a non-positive ceiling
+// (coordination disabled) short-circuits to the legacy path without invoking the
+// callback at all.
+func (w *LivenessWatchdog) restartDisposition(sourceID string, now time.Time) restartDisposition {
+	if w.callbacks.RecoveryState == nil || w.cfg.ProducerRecoveryCeiling <= 0 {
+		return restartLegacy
+	}
+	recovery, since := w.callbacks.RecoveryState(sourceID)
+	if recovery == RecoveryInProgress && !since.IsZero() && now.Sub(since) < w.cfg.ProducerRecoveryCeiling {
+		return restartSuppress
+	}
+	return restartLegacy
+}
+
 // checkSource drives the state machine for a single source. State transitions
 // happen under the mutex; callbacks are collected into actions for deferred
 // execution. The caller must hold w.mu.
@@ -347,11 +398,26 @@ func (w *LivenessWatchdog) checkSource(sourceID string, now time.Time, actions [
 		}
 		h.state = StateRecovering
 		h.stateEntered = now
+		// A native producer whose supervisor is already reconnecting recovers in
+		// place; RestartSource would tear that reconnect down. Defer the restart
+		// while it reports RecoveryInProgress within the ceiling (the alarm has
+		// already fired on the HEALTHY->ALARMED edge, so this still alarms once).
+		// FFmpeg reports RecoveryUnknown, so this is a no-op under the ffmpeg gate.
+		if w.restartDisposition(sourceID, now) == restartSuppress {
+			return actions
+		}
 		actions = w.collectRestart(h, sourceID, now, actions)
 
 	case StateRecovering:
 		if framesFlowing {
 			actions = w.collectRecover(h, sourceID, now, actions)
+			return actions
+		}
+		// Keep waiting while the producer's supervisor reconnects within the
+		// ceiling: no retry is consumed, so the escalation ladder does not advance
+		// on a source the producer is actively recovering. Past the ceiling (or
+		// GivenUp/Idle/Unknown) the legacy ladder below resumes.
+		if w.restartDisposition(sourceID, now) == restartSuppress {
 			return actions
 		}
 		if h.retries >= w.cfg.MaxRetries {

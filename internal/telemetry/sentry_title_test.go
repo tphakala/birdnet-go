@@ -1,10 +1,10 @@
 package telemetry
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 func TestParseErrorType(t *testing.T) {
@@ -111,8 +111,8 @@ func TestTitleCaseComponent(t *testing.T) {
 	}{
 		{
 			name:      "http prefix",
-			component: "httpcontroller",
-			expected:  "HTTP Controller",
+			component: "httphandler",
+			expected:  "HTTP Handler",
 		},
 		{
 			name:      "rtsp prefix",
@@ -173,43 +173,43 @@ func TestGenerateErrorTitle(t *testing.T) {
 	}{
 		{
 			name:      "nil pointer with component",
-			err:       errors.New("runtime error: invalid memory address or nil pointer dereference"),
+			err:       errors.NewStd("runtime error: invalid memory address or nil pointer dereference"),
 			component: "media_handler",
 			expected:  "Media Handler: Nil Pointer Dereference",
 		},
 		{
 			name:      "nil pointer without component",
-			err:       errors.New("runtime error: invalid memory address or nil pointer dereference"),
+			err:       errors.NewStd("runtime error: invalid memory address or nil pointer dereference"),
 			component: "",
 			expected:  "Nil Pointer Dereference",
 		},
 		{
 			name:      "index out of range with http component",
-			err:       errors.New("runtime error: index out of range [5] with length 3"),
-			component: "httpcontroller",
-			expected:  "HTTP Controller: Index Out of Range",
+			err:       errors.NewStd("runtime error: index out of range [5] with length 3"),
+			component: "httphandler",
+			expected:  "HTTP Handler: Index Out of Range",
 		},
 		{
 			name:      "concurrent map write with api component",
-			err:       errors.New("concurrent map writes"),
+			err:       errors.NewStd("concurrent map writes"),
 			component: "apihandler",
 			expected:  "API Handler: Concurrent Map Write",
 		},
 		{
 			name:      "generic error with component",
-			err:       errors.New("connection timeout"),
+			err:       errors.NewStd("connection timeout"),
 			component: "database",
 			expected:  "Database: connection timeout",
 		},
 		{
 			name:      "panic with component",
-			err:       errors.New("panic: unexpected condition"),
+			err:       errors.NewStd("panic: unexpected condition"),
 			component: "spectrogram",
 			expected:  "Spectrogram: Panic: unexpected condition",
 		},
 		{
 			name:      "unknown component treated as empty",
-			err:       errors.New("some error"),
+			err:       errors.NewStd("some error"),
 			component: "unknown",
 			expected:  "some error",
 		},
@@ -233,19 +233,19 @@ func TestGenerateErrorTitleRealWorldExamples(t *testing.T) {
 	}{
 		{
 			name:      "sentry issue 69275744 - spectrogram nil pointer",
-			err:       errors.New("runtime error: invalid memory address or nil pointer dereference"),
+			err:       errors.NewStd("runtime error: invalid memory address or nil pointer dereference"),
 			component: "media",
 			expected:  "Media: Nil Pointer Dereference",
 		},
 		{
 			name:      "http handler panic",
-			err:       errors.New("panic: Handler.ServeHTTP panic"),
-			component: "httpcontroller",
-			expected:  "HTTP Controller: Panic: Handler.ServeHTTP panic",
+			err:       errors.NewStd("panic: Handler.ServeHTTP panic"),
+			component: "httphandler",
+			expected:  "HTTP Handler: Panic: Handler.ServeHTTP panic",
 		},
 		{
 			name:      "database connection error",
-			err:       errors.New("failed to connect to database: connection refused"),
+			err:       errors.NewStd("failed to connect to database: connection refused"),
 			component: "datastore",
 			expected:  "Datastore: failed to connect to database: connection refused",
 		},

@@ -94,14 +94,6 @@ test.describe('New UI Routing - /ui/ paths only', () => {
 
     // Should have at least some modern UI structure
     expect(hasModernUI).toBe(true);
-
-    // Should not have obvious HTMX artifacts (if we can detect them)
-    const htmxElements = page.locator('[hx-get], [hx-post], [hx-target], script:has-text("htmx")');
-    const htmxCount = await htmxElements.count();
-
-    if (htmxCount > 0) {
-      console.warn(`Found ${htmxCount} potential HTMX elements - ensure tests focus on new UI`);
-    }
   });
 
   test('New UI handles client-side routing', async ({ page }) => {

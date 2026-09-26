@@ -163,10 +163,10 @@ func NotifyRegionStaleness(changes []RegionStalenessChange) {
 			"Model region may be outdated",
 			fallbackMsg,
 		).
-			WithComponent("classifier").
+			WithComponent(notification.ComponentClassifier).
 			WithTitleKey(notification.MsgModelRegionStaleTitle, nil).
 			WithMessageKey(messageKey, args).
-			WithDeliveryTarget("bell")
+			WithDeliveryTarget(notification.DeliveryTargetBell)
 		_ = svc.CreateWithMetadata(notif)
 	}
 }

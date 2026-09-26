@@ -601,15 +601,16 @@ export function formatFiltersForAPI(filters: SearchFilter[]): Record<string, str
         params.species = filter.value.toString();
         break;
 
-      // location and source are aliases for the same backend dimension: both map
-      // to the notes.source_node column (datastore AdvancedSearchFilters.Location),
-      // which the GET /api/v2/detections endpoint reads from the `location` query
-      // param. There is no separate `source` param on that endpoint, so source:
-      // intentionally serializes to params.location too. A query that sets both
-      // keys collides on this single param (last one wins) by design.
+      // location: filters by node name (the `location` query param, notes.source_node).
       case 'location':
-      case 'source':
         params.location = filter.value.toString();
+        break;
+
+      // source: filters by audio source (the `source` query param), which the server
+      // resolves by numeric id, display name, node name or source URI. When both are
+      // given the server intersects them.
+      case 'source':
+        params.source = filter.value.toString();
         break;
 
       case 'locked':

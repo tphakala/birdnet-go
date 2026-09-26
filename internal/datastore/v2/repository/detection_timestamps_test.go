@@ -31,7 +31,7 @@ func TestGetDetectionTimestamps(t *testing.T) {
 	})
 
 	t.Run("species filter", func(t *testing.T) {
-		got, err := repo.GetDetectionTimestamps(ctx, 500, 5000, &labelA)
+		got, err := repo.GetDetectionTimestamps(ctx, 500, 5000, []uint{labelA})
 		require.NoError(t, err)
 		assert.ElementsMatch(t, []int64{1000, 2000}, got)
 	})

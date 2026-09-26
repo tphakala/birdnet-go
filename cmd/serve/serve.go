@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -46,13 +47,25 @@ The "realtime" command is an alias for backward compatibility.`,
 			// depends on SunCalc and ControlChan that are only available
 			// after APIServerService.Start(), so it is set later via
 			// AudioEngine.SetScheduler().
+			// Resolve the engine-wide default transport. A migrated config can
+			// persist an empty global transport, which would otherwise reach
+			// FFmpeg as -rtsp_transport "" and fail every stream that does not
+			// carry its own per-stream transport. ResolveTransport("") falls back
+			// to the global, then to conf.DefaultTransport.
+			engineTransport := settings.Realtime.RTSP.ResolveTransport("")
+
 			audioEngine := engine.New(cmd.Context(), &engine.Config{
-				FFmpegPath:           settings.Realtime.Audio.FfmpegPath,
-				SoxPath:              settings.Realtime.Audio.SoxPath,
-				Transport:            settings.Realtime.RTSP.Transport,
-				FFmpegParameters:     settings.Realtime.RTSP.FFmpegParameters,
-				Debug:                settings.Debug,
-				CaptureBufferSeconds: settings.Realtime.ExtendedCapture.EffectiveCaptureBufferSeconds(settings.Realtime.Audio.Export.PreCapture),
+				FFmpegPath:               settings.Realtime.Audio.FfmpegPath,
+				SoxPath:                  settings.Realtime.Audio.SoxPath,
+				Transport:                engineTransport,
+				FFmpegParameters:         settings.Realtime.RTSP.FFmpegParameters,
+				Debug:                    settings.Debug,
+				CaptureBufferSeconds:     settings.Realtime.ExtendedCapture.EffectiveCaptureBufferSeconds(settings.Realtime.Audio.Export.PreCapture),
+				LivenessSilenceThreshold: time.Duration(settings.Realtime.Audio.Watchdog.SilenceThreshold) * time.Second,
+				// StreamMetrics is the concrete Prometheus collector for both the
+				// FFmpeg and native stream producers. The engine forwards it to
+				// whichever manager the BIRDNET_STREAM_INGEST gate selects.
+				StreamMetrics: metrics.AudioStream,
 			}, nil)
 			defer audioEngine.Stop()
 
@@ -97,11 +110,12 @@ func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	// Every flag default comes from the loaded settings rather than from viper, for
 	// the same reason as --locale in cmd/root.go: cobra assigns the default into the
 	// bound variable at registration time, so passing the raw viper value writes it
-	// straight back over whatever load produced. For --source, --rtsp and
-	// --rtsptransport that would resurrect the legacy keys MigrateAudioSourceConfig
-	// and MigrateRTSPConfig deliberately cleared, and the next save would write them
-	// back into config.yaml. For --listen it would undo the normalized telemetry
-	// address, leaving the endpoint with nothing to bind.
+	// straight back over whatever load produced. For --source and --rtsp that would
+	// resurrect the legacy keys MigrateAudioSourceConfig and MigrateRTSPConfig
+	// deliberately cleared, and the next save would write them back into config.yaml.
+	// (MigrateRTSPConfig no longer clears the global rtsp.transport, so --rtsptransport
+	// simply re-defaults from the preserved value.) For --listen it would undo the
+	// normalized telemetry address, leaving the endpoint with nothing to bind.
 	//
 	// The remaining flags are read from settings too, even though nothing rewrites
 	// their keys today. Since the bound field already holds the loaded value, each

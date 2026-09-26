@@ -144,12 +144,14 @@ func TestNotificationTiming_BeginTimeUsed(t *testing.T) {
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())
 
-	// Create a Result with BeginTime set to a specific time
-	// This simulates the detection time being different from processing time
-	beginTime := time.Date(2025, 6, 15, 14, 30, 0, 0, time.UTC)
+	// A later, higher-confidence result can replace the pending detection while
+	// BeginTime stays at the recording's start. Keep the timestamps distinct so
+	// a switch to Result.Timestamp cannot silently move tracking into the next year.
+	beginTime := time.Date(time.Now().Year(), 12, 31, 23, 55, 0, 0, time.UTC)
+	savedTime := beginTime.Add(10 * time.Minute)
 
 	testResult := detection.Result{
-		Timestamp: beginTime,
+		Timestamp: savedTime,
 		BeginTime: beginTime,
 		Species: detection.Species{
 			CommonName:     "Great Tit",
@@ -197,6 +199,11 @@ func TestNotificationTiming_BeginTimeUsed(t *testing.T) {
 	// The species should have been recorded as first seen at BeginTime
 	assert.True(t, status.IsNew, "Species should be marked as new based on BeginTime")
 	assert.Equal(t, 0, status.DaysSinceFirst, "DaysSinceFirst should be 0 for a new detection")
+	assert.True(t, status.FirstSeenTime.Equal(beginTime), "first-seen must use the recording start")
+	require.NotNil(t, status.FirstThisYear, "the detection belongs to the recording's year")
+	assert.True(t, status.FirstThisYear.Equal(beginTime), "yearly tracking must use the recording start")
+	_, notificationTime := action.shouldSuppressNewSpeciesNotification()
+	assert.True(t, notificationTime.Equal(beginTime), "suppression must use the same recording time")
 
 	t.Logf("Species status: IsNew=%v, DaysSinceFirst=%d, IsNewThisYear=%v",
 		status.IsNew, status.DaysSinceFirst, status.IsNewThisYear)

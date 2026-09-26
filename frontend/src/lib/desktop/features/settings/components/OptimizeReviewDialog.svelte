@@ -9,6 +9,7 @@
   import type { OptimizeOffer } from '$lib/utils/variantSelection';
   import { variantLabel, variantHardwareLabel } from '$lib/utils/variantSelection';
   import { t } from '$lib/i18n';
+  import { generateId } from '$lib/utils/uuid';
   import { ArrowRight, Check, Loader2, Sparkles, TriangleAlert, X } from '@lucide/svelte';
 
   interface Props {
@@ -50,8 +51,10 @@
   // gallery action runs. Apply/Apply-all reference it via aria-describedby and stay
   // tab-focusable (aria-disabled, not native disabled) so the reason is reachable by
   // keyboard and screen readers, and visible on touch devices where a title tooltip
-  // never appears (see frontend/CLAUDE.md "No Ambiguous Disabled States").
-  const IN_FLIGHT_STATUS_ID = 'optimize-inflight-status';
+  // never appears (see frontend/AGENTS.md "No Ambiguous Disabled States").
+  // Per-instance ids so two mounted dialogs never share an id.
+  const IN_FLIGHT_STATUS_ID = generateId('optimize-inflight-status');
+  const TITLE_ID = generateId('optimize-dialog-title');
 
   // Reflect the `open` prop onto the native dialog. showModal()/close() are
   // idempotent, so re-running on unrelated prop changes is harmless.
@@ -72,12 +75,12 @@
     if (open) onClose();
   }}
   class="m-auto w-full max-w-lg rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 shadow-xl backdrop:bg-black/50"
-  aria-labelledby="optimize-dialog-title"
+  aria-labelledby={TITLE_ID}
 >
   <div class="p-6">
     <div class="flex items-start justify-between gap-3">
       <h3
-        id="optimize-dialog-title"
+        id={TITLE_ID}
         class="flex items-center gap-2 text-lg font-semibold text-[var(--color-base-content)]"
       >
         <Sparkles class="size-5 text-[var(--color-primary)]" aria-hidden="true" />
@@ -99,16 +102,18 @@
 
     <!-- Live reason line: why Apply is blocked while another gallery action runs.
          Referenced by the Apply/Apply-all buttons' aria-describedby, so the reason
-         reaches keyboard, screen-reader and touch users (no hover tooltip needed). -->
-    {#if inFlight}
-      <p
-        id={IN_FLIGHT_STATUS_ID}
-        role="status"
-        class="mt-2 text-xs text-[var(--color-base-content)]/70"
-      >
+         reaches keyboard, screen-reader and touch users (no hover tooltip needed).
+         The status container is always rendered so screen readers register it
+         before its text changes; only the content toggles. -->
+    <p
+      id={IN_FLIGHT_STATUS_ID}
+      role="status"
+      class={inFlight ? 'mt-2 text-xs text-[var(--color-base-content)]/70' : undefined}
+    >
+      {#if inFlight}
         {t('analysis.gallery.actionInProgress')}
-      </p>
-    {/if}
+      {/if}
+    </p>
 
     {#if offers.length === 0}
       <p class="mt-4 text-sm text-[var(--color-base-content)]/80">
@@ -176,7 +181,7 @@
                   <span
                     class="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-base-content)]/80"
                   >
-                    <Loader2 class="size-3.5 animate-spin" />
+                    <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
                     {t('analysis.gallery.optimize.applying')}
                   </span>
                 {:else}

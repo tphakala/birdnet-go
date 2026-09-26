@@ -407,12 +407,9 @@ func TestBufferConsumer_SingleModel_FullPipeline(t *testing.T) {
 		capacity       = sampleRate * clipLength * bytesPerSample // 288000
 	)
 
-	userOverlap := 1 * time.Second
-	baseClip := 3 * time.Second
-	modelClip := 3 * time.Second
-	scaled := effectiveOverlap(userOverlap, baseClip, modelClip)
-	oBytes := overlapBytes(scaled, sampleRate, bytesPerSample)
-
+	// 1s overlap on a 3s / 48kHz mono 16-bit clip -> 96000 overlap bytes,
+	// leaving a 192000-byte (2s) read step.
+	const oBytes = 1 * sampleRate * bytesPerSample // 96000
 	readSize := capacity - oBytes
 
 	require.NoError(t, mgr.AllocateAnalysis("mic1", "birdnet-v2.4", capacity, oBytes, readSize))

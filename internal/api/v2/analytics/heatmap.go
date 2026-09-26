@@ -339,10 +339,7 @@ func (c *Handler) computeHeatmapGrid(birdnet *classifier.Orchestrator, params *h
 
 		// Process in chunks of heatmapBatchSize to release the lock between calls
 		for chunkStart := 0; chunkStart < totalCells; chunkStart += heatmapBatchSize {
-			chunkEnd := chunkStart + heatmapBatchSize
-			if chunkEnd > totalCells {
-				chunkEnd = totalCells
-			}
+			chunkEnd := min(chunkStart+heatmapBatchSize, totalCells)
 			chunkSize := chunkEnd - chunkStart
 
 			chunkInputs := inputs[chunkStart*3 : chunkEnd*3]

@@ -86,6 +86,18 @@ import * as modelsApi from '$lib/utils/modelsApi';
 import { settingsStore } from '$lib/stores/settings';
 import { toastActions } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
+import { navigation } from '$lib/stores/navigation.svelte';
+
+beforeEach(() => {
+  // Use jsdom's real Location so pushState updates the URL used by nested tabs.
+  // The shared setup substitutes a static location object for navigation spies.
+  Object.defineProperty(window, 'location', {
+    value: document.location,
+    writable: true,
+    configurable: true,
+  });
+  navigation.redirect('/ui/settings/analysis');
+});
 
 // A network-shaped download failure (matches isNetworkDownloadError's real regex).
 const NETWORK_ERROR = 'HTTP request failed for https://huggingface.co/model: connection refused';
@@ -147,6 +159,32 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
         onError(NETWORK_ERROR);
         return () => {};
       }
+    );
+  });
+
+  it('renders a nested deep link and reacts to query-only router navigation', async () => {
+    navigation.redirect('/ui/settings/analysis?tab=models&modelTab=available');
+    render(AnalysisSettingsPage);
+    await screen.findByRole('button', { name: installButtonName });
+    expect(screen.getByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+
+    navigation.navigate('/ui/settings/analysis?tab=models');
+    await waitFor(() =>
+      expect(
+        screen.getByRole('tab', { name: /analysis\.gallery\.tabs\.installed/ })
+      ).toHaveAttribute('aria-selected', 'true')
+    );
+    navigation.navigate('/ui/settings/analysis?tab=models&modelTab=available');
+    await screen.findByRole('button', { name: installButtonName });
+    navigation.navigate('/ui/settings/analysis?tab=removed&modelTab=available');
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: /analysis\.tabs\.settings/ })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
     );
   });
 

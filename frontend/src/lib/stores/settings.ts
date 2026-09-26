@@ -39,6 +39,10 @@
  * - Automatic persistence to server
  * - Error handling and user feedback
  */
+import type {
+  ExportFormat,
+  LosslessExportFormat,
+} from '$lib/desktop/features/settings/pages/audioExportFormat';
 import { t } from '$lib/i18n';
 import { getLogger } from '$lib/utils/logger';
 import { safeGet, safeSpread } from '$lib/utils/security';
@@ -316,7 +320,8 @@ export interface EqualizerFilter {
 }
 
 export interface ExportSettings {
-  type: 'wav' | 'mp3' | 'flac' | 'aac' | 'opus';
+  type: ExportFormat;
+  ultrasonicType: LosslessExportFormat; // bat/ultrasonic captures above 48 kHz; WAV or FLAC only
   bitrate: string;
   enabled: boolean;
   debug?: boolean;
@@ -459,12 +464,18 @@ export interface WundergroundSettings {
   units: 'm' | 'e' | 'h'; // m=metric, e=imperial/english, h=UK hybrid
 }
 
+export interface PirateWeatherSettings {
+  apiKey: string;
+  endpoint: string;
+}
+
 export interface WeatherSettings {
-  provider: 'none' | 'yrno' | 'openweather' | 'wunderground';
+  provider: 'none' | 'yrno' | 'openweather' | 'wunderground' | 'pirateweather';
   pollInterval: number;
   debug: boolean;
   openWeather: OpenWeatherSettings;
   wunderground: WundergroundSettings;
+  pirateWeather: PirateWeatherSettings;
 }
 
 // New array-based OAuth provider configuration
@@ -972,6 +983,7 @@ function createEmptySettings(): SettingsFormData {
         streamTransport: 'auto',
         export: {
           type: 'wav',
+          ultrasonicType: 'flac',
           bitrate: '96k',
           enabled: false,
           debug: false,

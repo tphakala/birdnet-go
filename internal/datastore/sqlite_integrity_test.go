@@ -30,7 +30,7 @@ func newIntegrityTestStore(t *testing.T) *SQLiteStore {
 	})
 
 	return &SQLiteStore{
-		DataStore: DataStore{DB: db},
+		DB: db,
 	}
 }
 
@@ -175,7 +175,7 @@ func TestPerformStartupIntegrityCheck_CorruptedDatabase(t *testing.T) {
 	})
 
 	store := &SQLiteStore{
-		DataStore: DataStore{DB: db2},
+		DB: db2,
 	}
 
 	store.performStartupIntegrityCheck()

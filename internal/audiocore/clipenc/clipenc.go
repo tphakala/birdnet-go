@@ -34,4 +34,6 @@ const (
 	NativeAAC = "native-aac"
 	// NativeOpus is the in-tree go-opus encoder.
 	NativeOpus = "native-opus"
+	// NativeMP3 is the in-tree go-mp3 encoder.
+	NativeMP3 = "native-mp3"
 )

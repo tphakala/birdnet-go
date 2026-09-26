@@ -132,10 +132,7 @@ func (r *hourlyRing) recentBuckets(n int) []HourlyBucket {
 	if r.size == 0 || n <= 0 {
 		return nil
 	}
-	count := n
-	if count > r.size {
-		count = r.size
-	}
+	count := min(n, r.size)
 	result := make([]HourlyBucket, count)
 	for i := range count {
 		idx := (r.head - count + 1 + i + len(r.buckets)) % len(r.buckets)

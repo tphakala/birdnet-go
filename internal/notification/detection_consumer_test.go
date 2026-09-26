@@ -1,7 +1,6 @@
 package notification
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -15,12 +14,8 @@ import (
 // TestMain provides goleak verification to detect goroutine leaks
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/notification.(*Service).cleanupLoop"),
 	)
-	os.Exit(m.Run())
 }
 
 // setupTestServiceAndConsumer creates a notification service and consumer for testing.

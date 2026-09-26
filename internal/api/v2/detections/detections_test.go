@@ -5,7 +5,6 @@ package detections
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // executeNoteCommentsHandler simulates the handler behavior for getting comments.
@@ -644,7 +644,7 @@ func TestGetDetection(t *testing.T) {
 			name:        "Detection not found",
 			detectionID: "999",
 			mockSetup: func(m *mock.Mock) {
-				m.On("Get", "999").Return(datastore.Note{}, errors.New("record not found"))
+				m.On("Get", "999").Return(datastore.Note{}, errors.NewStd("record not found"))
 			},
 			expectedStatus: http.StatusNotFound,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
@@ -1003,7 +1003,7 @@ func TestGetRecentDetections(t *testing.T) {
 			name:  "Database error",
 			limit: "5",
 			mockSetup: func(m *mock.Mock) {
-				m.On("GetLastDetections", 5).Return([]datastore.Note{}, errors.New("database error"))
+				m.On("GetLastDetections", 5).Return([]datastore.Note{}, errors.NewStd("database error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedCount:  0,
@@ -1090,7 +1090,7 @@ func TestDeleteDetection(t *testing.T) {
 			name:        "Detection not found",
 			detectionID: "999",
 			mockSetup: func(m *mock.Mock) {
-				m.On("Get", "999").Return(datastore.Note{}, errors.New("record not found"))
+				m.On("Get", "999").Return(datastore.Note{}, errors.NewStd("record not found"))
 			},
 			expectedStatus: http.StatusNotFound,
 		},
@@ -1099,7 +1099,7 @@ func TestDeleteDetection(t *testing.T) {
 			detectionID: "3",
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "3").Return(datastore.Note{ID: 3, Locked: false}, nil)
-				m.On("Delete", "3").Return(errors.New("database error"))
+				m.On("Delete", "3").Return(errors.NewStd("database error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
 		},
@@ -2156,7 +2156,7 @@ func TestAddCommentMethod(t *testing.T) {
 			noteID:      1,
 			commentText: "This is a test comment",
 			mockSetup: func(m *mock.Mock) {
-				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(errors.New("database error"))
+				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(errors.NewStd("database error"))
 			},
 			expectError: true,
 		},
@@ -2344,7 +2344,7 @@ func TestGetNoteCommentsWithHandler(t *testing.T) {
 			name:        "Detection not found",
 			detectionID: "999",
 			mockSetup: func(m *mock.Mock) {
-				m.On("GetNoteComments", "999").Return([]datastore.NoteComment{}, errors.New("record not found"))
+				m.On("GetNoteComments", "999").Return([]datastore.NoteComment{}, errors.NewStd("record not found"))
 			},
 			expectedStatus: http.StatusNotFound,
 			expectedCount:  0,

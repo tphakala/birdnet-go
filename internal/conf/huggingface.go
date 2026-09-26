@@ -223,8 +223,7 @@ func isSchemeName(s string) bool {
 // raw value entirely rather than trying to redact it, and the inner reason
 // ("invalid port ...", "invalid URL escape ...") never contains userinfo.
 func parseFailureReason(err error) string {
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) && urlErr.Err != nil {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok && urlErr.Err != nil {
 		return urlErr.Err.Error()
 	}
 	// Unknown error shape: report nothing rather than risk echoing the value.
@@ -235,7 +234,9 @@ func parseFailureReason(err error) string {
 // segment. Callers must pass url.URL.Path, which url.Parse has already
 // percent-decoded; decoding again here would reject a legitimate literal "%"
 // in the path and would treat a double-encoded segment as traversal when it is
-// not.
+// not. It splits on '/' only, because '\' is not a URL path separator;
+// hasParentDirSegment in validate_audio.go is the file-path variant that also
+// splits on '\'.
 func hasDotDotSegment(path string) bool {
 	return slices.Contains(strings.Split(path, "/"), "..")
 }

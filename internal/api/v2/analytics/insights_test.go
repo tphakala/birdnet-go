@@ -391,3 +391,72 @@ func TestSecondsToTimeString(t *testing.T) {
 	assert.Equal(t, "00:00", secondsToTimeString(0))
 	assert.Equal(t, "23:59", secondsToTimeString(23*3600+59*60))
 }
+
+// TestGetDawnChorus_PeriodAndMinDays pins the period_days and min_days query parameters: the
+// window and the days-observed threshold follow the request (bounded), and the response echoes
+// both so a caller can see what it got. A two-day-old station asking for min_days=1 sees its
+// chorus instead of an empty list.
+func TestGetDawnChorus_PeriodAndMinDays(t *testing.T) {
+	t.Parallel()
+	loc := time.Local
+	day := func(d, h int) int64 { return time.Date(2026, 3, d, h, 0, 0, 0, loc).Unix() }
+	mockRepo := &mockInsightsRepo{
+		dawnChorusRaw: []repository.DawnChorusRawEntry{
+			{ScientificName: "Parus major", Date: "2026-03-01", EarliestAt: day(1, 5)},
+			{ScientificName: "Parus major", Date: "2026-03-02", EarliestAt: day(2, 5)},
+			{ScientificName: "Turdus merula", Date: "2026-03-02", EarliestAt: day(2, 6)},
+		},
+	}
+	e, controller := setupInsightsTestController(t, mockRepo)
+
+	tests := []struct {
+		name        string
+		query       string
+		wantPeriod  int
+		wantMinDays int
+		wantSpecies []string
+	}{
+		{name: "defaults", query: "", wantPeriod: dawnChorusPeriodDays, wantMinDays: dawnChorusMinDaysObserved, wantSpecies: []string{}},
+		{name: "young station", query: "?period_days=7&min_days=1", wantPeriod: 7, wantMinDays: 1, wantSpecies: []string{"Parus major", "Turdus merula"}},
+		{name: "two days observed", query: "?period_days=7&min_days=2", wantPeriod: 7, wantMinDays: 2, wantSpecies: []string{"Parus major"}},
+		{name: "period is bounded", query: "?period_days=9999", wantPeriod: dawnChorusMaxPeriodDays, wantMinDays: dawnChorusMinDaysObserved, wantSpecies: []string{}},
+		{name: "min days cannot exceed period", query: "?period_days=2&min_days=5", wantPeriod: 2, wantMinDays: 2, wantSpecies: []string{"Parus major"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/insights/dawn-chorus"+tt.query, http.NoBody)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			require.NoError(t, controller.getDawnChorusImpl(ctx))
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			var resp DawnChorusResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, tt.wantPeriod, resp.PeriodDays)
+			assert.Equal(t, tt.wantMinDays, resp.MinDays)
+			got := make([]string, 0, len(resp.Species))
+			for _, s := range resp.Species {
+				got = append(got, s.ScientificName)
+			}
+			assert.ElementsMatch(t, tt.wantSpecies, got)
+		})
+	}
+}
+
+// TestGetDawnChorus_RejectsMalformedDays pins the package convention that a malformed integer
+// parameter is a 400, not a silent fallback.
+func TestGetDawnChorus_RejectsMalformedDays(t *testing.T) {
+	t.Parallel()
+	e, controller := setupInsightsTestController(t, &mockInsightsRepo{})
+	for _, q := range []string{"?period_days=abc", "?period_days=0", "?min_days=-2", "?min_days=x"} {
+		t.Run(q, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/insights/dawn-chorus"+q, http.NoBody)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			_ = controller.getDawnChorusImpl(ctx)
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+		})
+	}
+}

@@ -2,6 +2,7 @@
 package buffer_test
 
 import (
+	"bytes"
 	"io"
 	"testing"
 	"time"
@@ -92,14 +93,81 @@ func TestAnalysisBuffer_Overwrite(t *testing.T) {
 	assert.True(t, overwriteSeen, "expected overwrite to be recorded after filling buffer")
 }
 
-// TestAnalysisBuffer_ReadSizeLessThanOverlapSize verifies that the constructor
-// rejects readSize < overlapSize with a validation error.
+// TestAnalysisBuffer_ReadSizeLessThanOverlapSize verifies that overlap greater
+// than 50% of the window (readSize < overlapSize) is now supported. The analysis
+// buffer must handle every configurable overlap value: a false-positive filter
+// level can drive birdnet.overlap to 2.4s on a 3s clip (80% overlap, i.e.
+// readSize 57600 < overlapSize 230400), and rejecting it stalled all analysis.
 func TestAnalysisBuffer_ReadSizeLessThanOverlapSize(t *testing.T) {
 	t.Parallel()
 
-	_, err := buffer.NewAnalysisBuffer(4096, 1024, 512, "test-source", newTestLogger(), nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "read size 512 must be >= overlap size 1024")
+	ab, err := buffer.NewAnalysisBuffer(4096, 1024, 512, "test-source", newTestLogger(), nil)
+	require.NoError(t, err, "readSize < overlapSize (overlap > 50%%) must be supported")
+	require.NotNil(t, ab)
+}
+
+// TestAnalysisBuffer_OverlapExceedsReadSize is the regression guard for the
+// idle-inference bug: when overlap exceeds 50% of the window (overlapSize >
+// readSize), consecutive windows must still slide by exactly readSize and carry
+// the full overlapSize-byte overlap forward with no zero-fill holes. Uses an
+// incrementing stream so a dropped/zeroed overlap byte is detected.
+func TestAnalysisBuffer_OverlapExceedsReadSize(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity    = 4096
+		overlapSize = 6 // 75% overlap of an 8-byte window
+		readSize    = 2
+		windowSize  = overlapSize + readSize
+	)
+
+	ab, err := buffer.NewAnalysisBuffer(capacity, overlapSize, readSize, "big-overlap", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	var next byte // incrementing stream source
+	writeNext := func(n int) {
+		t.Helper()
+		buf := make([]byte, n)
+		for i := range buf {
+			buf[i] = next
+			next++
+		}
+		require.NoError(t, ab.Write(buf))
+	}
+
+	var windows [][]byte
+	writeNext(readSize)
+	for len(windows) < 6 {
+		w, release, rerr := ab.Read()
+		require.NoError(t, rerr)
+		if w == nil {
+			writeNext(readSize)
+			continue
+		}
+		windows = append(windows, bytes.Clone(w)) // copy out of the pooled slice
+		release()
+		writeNext(readSize)
+	}
+
+	for _, w := range windows {
+		require.Len(t, w, windowSize)
+	}
+
+	// Sliding invariant: each window's last overlapSize bytes are the next
+	// window's first overlapSize bytes. The pre-fix carry zeroed the older
+	// overlap here, breaking this for overlapSize > readSize.
+	for k := 0; k+1 < len(windows); k++ {
+		assert.Equal(t, windows[k][readSize:], windows[k+1][:overlapSize],
+			"window %d tail must equal window %d head (overlap continuity)", k, k+1)
+	}
+
+	// Once warmed up (leading zeros flushed after ceil(overlapSize/readSize)
+	// reads), a window must be a contiguous slice of the stream with no holes.
+	last := windows[len(windows)-1]
+	for i := 1; i < len(last); i++ {
+		assert.Equal(t, last[i-1]+1, last[i],
+			"warmed-up window must be a contiguous stream slice at index %d", i)
+	}
 }
 
 // TestAnalysisBuffer_OverlapRead verifies that consecutive reads include the

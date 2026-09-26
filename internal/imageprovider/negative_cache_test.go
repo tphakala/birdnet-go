@@ -191,13 +191,13 @@ func TestNegativeCachePersistence(t *testing.T) {
 
 // mockProviderWithNotFound returns not found for specific species
 type mockProviderWithNotFound struct {
-	apiCallCount    int64
+	apiCallCount    atomic.Int64
 	notFoundSpecies map[string]bool
 	mu              sync.RWMutex
 }
 
 func (m *mockProviderWithNotFound) Fetch(scientificName string) (imageprovider.BirdImage, error) {
-	atomic.AddInt64(&m.apiCallCount, 1)
+	m.apiCallCount.Add(1)
 
 	m.mu.RLock()
 	isNotFound := m.notFoundSpecies[scientificName]
@@ -218,21 +218,21 @@ func (m *mockProviderWithNotFound) Fetch(scientificName string) (imageprovider.B
 }
 
 func (m *mockProviderWithNotFound) getAPICallCount() int64 {
-	return atomic.LoadInt64(&m.apiCallCount)
+	return m.apiCallCount.Load()
 }
 
 func (m *mockProviderWithNotFound) resetCounters() {
-	atomic.StoreInt64(&m.apiCallCount, 0)
+	m.apiCallCount.Store(0)
 }
 
 // mockProviderWithTransientError simulates transient errors
 type mockProviderWithTransientError struct {
-	apiCallCount int64
+	apiCallCount atomic.Int64
 	errorMessage string
 }
 
 func (m *mockProviderWithTransientError) Fetch(scientificName string) (imageprovider.BirdImage, error) {
-	atomic.AddInt64(&m.apiCallCount, 1)
+	m.apiCallCount.Add(1)
 	// Return a network error (not ErrImageNotFound) to simulate transient error
 	return imageprovider.BirdImage{}, errors.New(errors.NewStd(m.errorMessage)).
 		Component("imageprovider").
@@ -242,7 +242,7 @@ func (m *mockProviderWithTransientError) Fetch(scientificName string) (imageprov
 }
 
 func (m *mockProviderWithTransientError) getAPICallCount() int64 {
-	return atomic.LoadInt64(&m.apiCallCount)
+	return m.apiCallCount.Load()
 }
 
 // TestNegativeCacheTTLValue pins the negative-cache TTL.

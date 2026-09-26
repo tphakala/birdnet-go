@@ -109,6 +109,14 @@
       "closeModal": "Chiudi modale",
       "dismissAlert": "Ignora avviso",
       "closeNotification": "Chiudi notifica",
+      "toastRegion": {
+        "topLeft": "Notifiche, in alto a sinistra",
+        "topCenter": "Notifiche, in alto al centro",
+        "topRight": "Notifiche, in alto a destra",
+        "bottomLeft": "Notifiche, in basso a sinistra",
+        "bottomCenter": "Notifiche, in basso al centro",
+        "bottomRight": "Notifiche, in basso a destra"
+      },
       "toggleDropdown": "Attiva/disattiva menu a discesa",
       "sortAscending": "Ordina in modo crescente",
       "selectLanguage": "Seleziona lingua",
@@ -130,7 +138,6 @@
       "selectToday": "Seleziona oggi",
       "dateSelected": "Data selezionata: {date}",
       "calendarNavigation": "Usa le frecce per navigare nel calendario, Invio per selezionare, Esc per chiudere",
-      "downloadCsv": "Scarica elenco specie come CSV",
       "visitEbirdLink": "Apri eBird.org in una nuova scheda",
       "learnEbirdTaxonomyLink": "Apri Tassonomia eBird in una nuova scheda",
       "resizeHandle": "Trascina per ridimensionare",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Analisi audio sovraccaricata",
-        "overloadMessage": "Il sistema sta scartando il {dropRate} % dei campioni audio della sorgente ''{sourceName}'' perché non riesce a tenere il passo con l'analisi. Riduci il valore di sovrapposizione BirdNET nelle impostazioni di rilevamento o considera l'aggiornamento a una CPU più veloce."
+        "overloadMessage": "Il sistema sta scartando il {dropRate} % dei campioni audio della sorgente '{sourceName}' perché non riesce a tenere il passo con l'analisi. Riduci il valore di sovrapposizione BirdNET nelle impostazioni di rilevamento o considera l'aggiornamento a una CPU più veloce."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime non disponibile",
@@ -472,7 +479,17 @@
         "unreadableMessage": "Il file del modello configurato per {modelName} esiste ma non è stato possibile leggerlo, quindi viene utilizzato il modello installato in {modelPath}. La tua configurazione non è stata modificata. Controlla i permessi del file e che il suo spazio di archiviazione sia montato.",
         "builtinMessage": "Il file del modello configurato per {modelName} non è stato trovato sul disco e nessun modello installato è disponibile per sostituirlo, quindi viene utilizzato il modello integrato. La tua configurazione non è stata modificata.",
         "notRegisteredTitle": "Nessun modello sta analizzando {sourceName}",
-        "notRegisteredMessage": "Nessun audio raggiunge {models} sulla sorgente audio \"{sourceName}\", quindi non vengono prodotti rilevamenti. Apri la galleria dei modelli in Impostazioni per verificare lo stato."
+        "notRegisteredMessage": "Nessun audio raggiunge {models} sulla sorgente audio \"{sourceName}\", quindi non vengono prodotti rilevamenti. Apri Sistema > Modelli IA per verificarne lo stato per sorgente e confermare che la sorgente audio sia connessa e invii audio."
+      },
+      "acousticModels": {
+        "noneTitle": "Nessun modello acustico abilitato",
+        "noneMessage": "Nessun modello acustico è caricato, quindi l'audio viene acquisito ma non analizzato. Abilita un modello in Impostazioni > Analisi, o installane uno dalla galleria modelli.",
+        "loadFailedTitle": "Impossibile caricare il modello acustico",
+        "loadFailedMessage": "Un modello acustico abilitato non è stato caricato, quindi l'audio viene acquisito ma non analizzato. Controlla il modello nella pagina Sistema > Modelli IA."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modello ha una build migliore per questo sistema} other {# modelli hanno build migliori per questo sistema}}",
+        "message": "È disponibile una build più adatta all'hardware o alla posizione di questo sistema per: {models}. Apri Impostazioni > Analisi > Modelli e scegli Ottimizza per passare."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -493,6 +510,11 @@
           "diskFull": "Disco pieno - libera spazio",
           "permissionDenied": "Permesso negato - controlla i permessi del file o del servizio"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} fallisce ogni analisi",
+        "message": "{modelName} è caricato, ma le sue ultime {failures} analisi consecutive sono fallite su {runtime}: l'inferenza ha restituito un errore. L'audio viene acquisito, ma questo modello non rileva nulla. Controlla il modello nella pagina Sistema > Modelli IA.",
+        "nonFiniteMessage": "{modelName} è caricato, ma le sue ultime {failures} analisi consecutive sono fallite su {runtime}: il modello ha restituito punteggi non validi (NaN o infiniti). L'audio viene acquisito, ma questo modello non rileva nulla. Controlla il modello nella pagina Sistema > Modelli IA."
       }
     },
     "loading": "Caricamento notifiche..."
@@ -763,6 +785,16 @@
       "recentHearingFetch": "Impossibile recuperare l'attività recente delle specie: {status}",
       "recentHearingLoad": "Impossibile caricare l'attività recente delle specie",
       "configFetch": "Impossibile recuperare la configurazione della dashboard: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Nessun modello acustico abilitato",
+      "noneMessage": "L'audio viene acquisito ma non analizzato. Abilita un modello nella galleria modelli per iniziare a rilevare le specie.",
+      "noneAction": "Apri galleria modelli",
+      "loadFailedTitle": "Impossibile caricare il modello acustico",
+      "loadFailedMessage": "Impossibile caricare un modello abilitato, quindi nessun audio viene analizzato. La pagina Modelli IA mostra quale modello ha fallito e perché.",
+      "loadFailedAction": "Visualizza stato Modelli IA",
+      "failingTitle": "{count, plural, one {Un modello fallisce ogni analisi} other {# modelli falliscono ogni analisi}}",
+      "failingMessage": "{count, plural, one {{models} è caricato, ma ogni analisi fallisce, quindi non rileva nulla.} other {{models} sono caricati, ma ogni analisi fallisce, quindi non rilevano nulla.}} La pagina Modelli IA mostra il backend e l'errore."
     },
     "banner": {
       "title": "Titolo",
@@ -1794,7 +1826,10 @@
       "noSources": "Nessuna sorgente collegata",
       "primaryFallback": "principale (fallback)",
       "sourceNotRunning": "non sta analizzando",
-      "sourceNotRunningTooltip": "Questa sorgente è assegnata al modello nelle impostazioni, ma il suo audio non raggiunge il modello, quindi non produce rilevamenti. Apri la galleria dei modelli in Impostazioni per verificarne lo stato.",
+      "sourceNotRunningTooltip": "Questa sorgente è assegnata al modello nelle impostazioni, ma il suo audio non raggiunge il modello, quindi non produce rilevamenti. Verifica che la sorgente audio sia connessa e invii audio.",
+      "modelNotAnalyzingTooltip": "Una o più sorgenti audio assegnate a questo modello non gli inviano audio, quindi non produce rilevamenti. Vedi le sorgenti elencate qui sotto.",
+      "sourcesDegraded": "{count} su {total} sorgenti non disponibili",
+      "sourcesDegradedTooltip": "Alcune sorgenti audio di questo modello, ma non tutte, non sono disponibili, quindi continua ad analizzare tramite quelle funzionanti. La sorgente non disponibile specifica e le indicazioni per risolvere il problema sono elencate qui sotto.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -1836,7 +1871,14 @@
       "fp16Help": "Virgola mobile a 16 bit. L'hardware che lo supporta può eseguire alcuni modelli più velocemente e con meno memoria.",
       "invocationsHelp": "Totale dei segmenti audio che questo modello ha analizzato dall'avvio.",
       "noModelsHint": "Nessuna sorgente audio configurata ancora?",
-      "noModelsHintLink": "Configura sorgenti audio"
+      "noModelsHintLink": "Configura sorgenti audio",
+      "modelFailing": "ogni analisi fallisce",
+      "lastSuccess": "Ultimo successo",
+      "lastSuccessHelp": "Quando questo modello ha analizzato l'audio senza errori l'ultima volta.",
+      "lastSuccessNever": "Nessuno dal caricamento del modello",
+      "modelFailingHelp": "{reason} Prova un'altra versione di questo modello in Impostazioni > Analisi > Modelli, oppure controlla il backend e la precisione mostrati sopra.",
+      "modelFailingReasonNonFinite": "Tutte le analisi recenti sono fallite perché il modello ha restituito punteggi non validi (NaN o infiniti), quindi non rileva nulla.",
+      "modelFailingReasonError": "Tutte le analisi recenti sono fallite perché l'inferenza ha restituito un errore, quindi il modello non rileva nulla."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2352,7 +2394,7 @@
           "title": "Filtro Falsi Positivi",
           "description": "Riduce i falsi rilevamenti richiedendo conferme multiple su segmenti audio sovrapposti",
           "level": {
-            "label": "Livello Filtro"
+            "label": "Intensità del Filtro Falsi Positivi"
           },
           "detectionCount": "{count} conferme richieste. {description}",
           "levels": {
@@ -2382,7 +2424,19 @@
           "description": "Limita il rilevamento alle specie probabili nella tua regione geografica",
           "stationLocation": {
             "label": "Posizione Stazione",
-            "helpText": "Posizione della stazione, usata per dati meteo e per limitare le specie di uccelli a quelle probabili nella regione."
+            "helpText": "Posizione della stazione, usata per dati meteo e per limitare le specie di uccelli a quelle probabili nella regione.",
+            "automaticLocation": "Posizione automatica",
+            "useCurrentLocation": "Usa la posizione del browser",
+            "locationHelp": "Compila le coordinate usando la posizione di questo browser.",
+            "locating": "Localizzazione in corso...",
+            "accuracy": "Precisione stimata: entro {accuracy} m",
+            "locationDetected": "Posizione del browser rilevata.",
+            "geolocationUnsupported": "Questo browser non supporta la posizione del dispositivo. Inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationRequiresHttps": "La posizione del browser richiede HTTPS o localhost. Inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationDenied": "L'autorizzazione alla posizione è stata negata. Inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationUnavailable": "Il dispositivo non ha potuto determinare la propria posizione. Inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationTimedOut": "La richiesta di posizione è scaduta. Riprova, inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationFailed": "Impossibile determinare la posizione del dispositivo. Inserisci le coordinate manualmente o usa la mappa."
           },
           "latitude": {
             "label": "Latitudine",
@@ -2638,9 +2692,9 @@
           "label": "Lingua",
           "helpText": "Lingua per nomi comuni specie tradotti."
         },
-        "tensorflowThreads": {
-          "label": "Thread CPU TensorFlow",
-          "helpText": "Numero di thread CPU. Imposta a 0 per usare tutti i thread disponibili."
+        "inferenceThreads": {
+          "label": "Thread CPU per inferenza",
+          "helpText": "Numero di thread CPU utilizzati per l'inferenza del modello. Imposta a 0 per usare tutti i thread disponibili. Non ha effetto sui modelli in esecuzione su una GPU."
         }
       },
       "errors": {
@@ -2920,6 +2974,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Salva Fornitore",
+          "saveWaitingNtfyCheck": "In attesa del completamento del controllo della connessione ntfy",
           "savingButton": "Salvataggio...",
           "cancelButton": "Annulla",
           "testButton": "Test",
@@ -2991,6 +3046,7 @@
               "http": "HTTP funziona - il server non usa HTTPS"
             },
             "connectionFailed": "Impossibile connettersi - controlla hostname e stato del server",
+            "checkError": "Impossibile verificare il server: controlla l'indirizzo oppure ricarica la pagina e riprova",
             "auth": {
               "label": "Autenticazione (opzionale)",
               "username": {
@@ -3245,7 +3301,7 @@
             "label": "Nome Dispositivo",
             "helpText": "Il nome base per i dispositivi come appaiono in Home Assistant. Ogni sorgente audio avrà il proprio dispositivo collegato a questo dispositivo principale BirdNET-Go."
           },
-          "sensorsNote": "<strong>Sensori Creati:</strong> Per ogni sorgente audio, Home Assistant riceverà: Ultima Specie, Confidenza, Nome Scientifico e Livello Sonoro (se abilitato). Il dispositivo bridge include stato disponibilità online/offline.",
+          "sensorsNote": "<strong>Sensori Creati:</strong> Per ogni sorgente audio, Home Assistant riceverà: Ultima Specie, Confidenza, Nome Scientifico e Livello Sonoro (se abilitato). Il dispositivo bridge include stato disponibilità online/offline. I sensori di rilevamento di ogni sorgente leggono il topic MQTT proprio di quella sorgente, &lt;base_topic&gt;/sources/&lt;source_id&gt;, e il suo sensore Livello Sonoro legge il sotto-topic &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, in modo che un rilevamento da una sorgente non azzeri mai i sensori di un'altra sorgente.",
           "discovery": {
             "button": "Invia Discovery",
             "success": "Messaggi discovery inviati a Home Assistant",
@@ -3291,7 +3347,8 @@
             "none": "Nessuno",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3312,6 +3369,16 @@
             "helpText": "Seleziona unità per temperatura e velocità vento (m = Metrico, e = Imperiale, h = Ibrido UK)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Chiave API Pirate Weather",
+            "helpText": "Inserisci la tua chiave API Pirate Weather. Richiesta per dati meteo."
+          },
+          "endpoint": {
+            "label": "Endpoint API",
+            "helpText": "Sovrascrivi l'endpoint API predefinito di Pirate Weather se necessario. Predefinito https://api.pirateweather.net/forecast se lasciato vuoto."
+          }
+        },
         "notes": {
           "none": "Nessun dato meteo verrà recuperato.",
           "yrno": {
@@ -3319,7 +3386,8 @@
             "freeService": "Yr è un servizio dati meteo gratuito. Per maggiori informazioni, visita <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "L'uso di OpenWeather richiede una chiave API, registrati per una chiave API gratuita su <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Richiede una chiave API Weather Underground e un ID stazione PWS valido. Vedi <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> per dettagli."
+          "wunderground": "Richiede una chiave API Weather Underground e un ID stazione PWS valido. Vedi <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> per dettagli.",
+          "pirateweather": "L'uso di Pirate Weather richiede una chiave API, registrati su <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "Chiave API",
@@ -3692,6 +3760,7 @@
         "dataOutputTitle": "Output Dati Livello Sonoro",
         "dataOutputDescription": "Quando abilitato, misurazioni livello sonoro vengono pubblicate via:",
         "mqttTopic": "Topic MQTT:",
+        "mqttSourceTopic": "Topic MQTT per sorgente (con Home Assistant discovery):",
         "sseEndpoint": "Endpoint SSE:",
         "prometheusMetrics": "Metriche Prometheus:"
       },
@@ -3753,6 +3822,8 @@
         "pathHelp": "Directory dove clip audio saranno salvate. Percorsi relativi sono dalla directory applicazione. Esempio: 'clips/' o '/var/audio/birds/'",
         "typeLabel": "Formato Audio",
         "typeHelp": "Formato audio per clip salvate. WAV e FLAC sono lossless (migliore qualità, file più grandi). MP3, AAC e Opus sono lossy (file più piccoli, leggera perdita qualità).",
+        "ultrasonicTypeLabel": "Formato Ultrasonico",
+        "ultrasonicTypeHelp": "Formato lossless (WAV o FLAC) utilizzato solo per catture di pipistrelli e ultrasoniche sopra i 48 kHz. Queste vengono salvate alla frequenza di campionamento originale completa anziché nel formato sopra indicato, così da non perdere alcun dettaglio ultrasonico.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Bitrate compressione audio per formati lossy. Intervallo: {min}-{max} kbps. Valori più alti forniscono migliore qualità ma file più grandi.",
         "losslessBitrateValue": "N/D - Senza perdita",
@@ -3821,7 +3892,17 @@
       },
       "models": {
         "recommendBoth": "Per la migliore copertura di rilevamento delle specie, si consiglia di eseguire insieme sia BirdNET che Perch.",
-        "perchOnlyWarning": "Perch da solo produce meno rilevamenti. Abbassare la soglia di confidenza a 0.50 per risultati significativi, oppure attivare BirdNET per una migliore copertura."
+        "perchOnlyWarning": "Perch da solo produce meno rilevamenti. Abbassare la soglia di confidenza a 0.50 per risultati significativi, oppure attivare BirdNET per una migliore copertura.",
+        "loading": "Caricamento modelli di rilevamento...",
+        "noneEnabledTitle": "Nessun modello di rilevamento abilitato.",
+        "noneEnabledHelp": "Puoi ancora salvare questa fonte. Il suo audio verrà analizzato dai modelli predefiniti non appena ne verrà abilitato uno.",
+        "noneEnabledLink": "Apri galleria modelli",
+        "noneAvailable": "Nessun modello di rilevamento è abilitato su questo server.",
+        "loadFailedWarning": "Impossibile caricare un modello di rilevamento, quindi questa fonte non verrà analizzata finché il modello non sarà ripristinato.",
+        "loadFailedLink": "Visualizza stato Modelli IA",
+        "defaultBadge": "{models} (predefinito)",
+        "defaultPendingBadge": "Modelli predefiniti",
+        "noneBadge": "Nessun modello caricato"
       }
     },
     "security": {
@@ -4367,7 +4448,7 @@
       "dynamicThreshold": {
         "tabLabel": "Appreso",
         "title": "Soglie Apprese",
-        "description": "Questa pagina mostra dati runtime Soglia Dinamica. Quando abilitata in Impostazioni Principali → Rilevamento, soglie vengono regolate automaticamente da rilevamenti multipli alta confidenza. Specie mostrate qui si assume esistano in questa posizione.",
+        "description": "Questa pagina mostra dati runtime Soglia Dinamica. Quando abilitata, soglie vengono regolate automaticamente da rilevamenti multipli alta confidenza. Specie mostrate qui si assume esistano in questa posizione.",
         "stats": {
           "active": "Attivo",
           "atMinimum": "Al Minimo",
@@ -4869,7 +4950,16 @@
       "streamTitleDefault": "Stream audio uccelli",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Diretta",
-      "playbackError": "Errore di riproduzione: {details}"
+      "playbackError": "Errore di riproduzione: {details}",
+      "audibleBats": {
+        "title": "Riproduzione udibile dei pipistrelli",
+        "subtitle": "Rallenta i richiami ultrasonici fino alla gamma udibile dall’uomo.",
+        "timeExpansion": "Espansione temporale",
+        "enable": "Attiva",
+        "disable": "Disattiva",
+        "generating": "Generazione audio derivato…",
+        "error": "Impossibile generare l’audio udibile dei pipistrelli"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spettrogramma non ancora generato",
@@ -5092,6 +5182,7 @@
       "birdweatherClientFailed": "Impossibile creare il client BirdWeather",
       "noWeatherProvider": "Nessun fornitore meteo selezionato",
       "openWeatherKeyRequired": "La chiave API di OpenWeather è obbligatoria",
+      "pirateWeatherKeyRequired": "La chiave API di Pirate Weather è obbligatoria",
       "processorUnavailable": "Processore non disponibile",
       "discoveryFailed": "Impossibile avviare il rilevamento di Home Assistant"
     },
@@ -5101,6 +5192,7 @@
       "notFound": "Notifica non trovata",
       "hostRequired": "Il parametro host è obbligatorio",
       "invalidHost": "Parametro host non valido",
+      "invalidBody": "Corpo della richiesta non valido",
       "rateLimit": "Troppi tentativi di connessione al flusso di notifiche, attendere prima di riprovare"
     },
     "streams": {

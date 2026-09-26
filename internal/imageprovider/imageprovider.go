@@ -256,7 +256,7 @@ type BirdImageCache struct {
 	// loadFromDBCache, saveToDB and loadCachedImages all return ErrCacheMiss
 	// (and the refresh path short-circuits too) without touching the DB, so the cache continues
 	// to serve fresh fetches from the provider instead of generating an
-	// unbounded stream of Sentry events (Forgejo #762, BIRDNET-GO-ZR/ZS).
+	// unbounded stream of Sentry events.
 	dbCorrupted atomic.Bool
 	wg          sync.WaitGroup // Tracks in-flight DB and background operations
 	// initializing holds the per-species initialization lock (see initLock). It is
@@ -570,7 +570,7 @@ func (c *BirdImageCache) refreshStaleEntries() {
 
 	// Skip the hourly refresh once the DB has been latched corrupted; otherwise
 	// the ticker would keep emitting one Sentry event per hour for the lifetime
-	// of the process (Forgejo #762).
+	// of the process.
 	if c.dbCorrupted.Load() {
 		log.Debug("Skipping cache refresh: image cache database is corrupted")
 		return
@@ -588,8 +588,7 @@ func (c *BirdImageCache) refreshStaleEntries() {
 
 	entries, err := c.store.GetAllImageCaches(c.providerName)
 	if err != nil {
-		// Latch on corruption so the refresh ticker stops issuing read errors
-		// (Forgejo #762).
+		// Latch on corruption so the refresh ticker stops issuing read errors.
 		if c.handleDBCorruption(err, "get_cached_entries_for_refresh") {
 			return
 		}
@@ -729,8 +728,8 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 
 	if err != nil {
 		// Check if it's already an enhanced error, if not enhance it
-		var enhancedErr *errors.EnhancedError
-		if !errors.As(err, &enhancedErr) {
+		enhancedErr, ok := errors.AsType[*errors.EnhancedError](err)
+		if !ok {
 			enhancedErr = errors.New(err).
 				Component("imageprovider").
 				Category(errors.CategoryImageFetch).
@@ -787,8 +786,7 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	// Ensure ScientificName is populated from the request before persisting,
 	// mirroring storeSuccessfulFetch. Providers can return a BirdImage with an
 	// empty ScientificName, which would otherwise cause a NOT NULL constraint
-	// violation on image_caches.scientific_name during background refresh too
-	// (Forgejo #756 sibling-callsite fix).
+	// violation on image_caches.scientific_name during background refresh too.
 	birdImage.ScientificName = scientificName
 
 	// Update memory cache
@@ -979,7 +977,7 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 // in v2-only mode, so we cannot safely DROP or recreate the table from here.
 // A latch keeps the service healthy (fresh fetches from the provider) and
 // stops a single bad file from generating thousands of Sentry events
-// (Forgejo #762: 1,763 events from one corrupted system over 2+ months).
+// (one corrupted system once produced 1,763 events over 2+ months).
 func (c *BirdImageCache) handleDBCorruption(err error, operation string) bool {
 	if !datastore.IsDatabaseCorruption(err) {
 		return false
@@ -1041,7 +1039,7 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 			return nil, ErrCacheMiss
 		}
 		// Treat SQLite corruption as a permanent cache miss and disable future
-		// DB reads/writes for this session (Forgejo #762).
+		// DB reads/writes for this session.
 		if c.handleDBCorruption(err, "query_image_cache") {
 			return nil, ErrCacheMiss
 		}
@@ -1138,7 +1136,7 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 
 	if err := c.store.SaveImageCache(dbEntry); err != nil {
 		// SQLite corruption is permanent at this point; latch the flag so
-		// future saves short-circuit rather than re-reporting (Forgejo #762).
+		// future saves short-circuit rather than re-reporting.
 		if c.handleDBCorruption(err, "save_image_cache") {
 			return
 		}
@@ -1175,7 +1173,7 @@ func (c *BirdImageCache) loadCachedImages() error {
 	entries, err := c.store.GetAllImageCaches(c.providerName) // Get entries specific to this provider
 	if err != nil {
 		// On corruption at startup, latch the flag and skip the warmup load
-		// without surfacing an error so init can still complete (Forgejo #762).
+		// without surfacing an error so init can still complete.
 		if c.handleDBCorruption(err, "get_all_image_caches") {
 			return nil
 		}
@@ -1216,7 +1214,7 @@ func (c *BirdImageCache) loadCachedImages() error {
 			// birdImage is already a *BirdImage; store it directly. Storing
 			// &birdImage would put a **BirdImage in the map, which every reader
 			// (checkCachedEntryAfterLock, MemoryUsage) fails to type-assert as
-			// *BirdImage, silently defeating the startup warmup (Forgejo #1311).
+			// *BirdImage, silently defeating the startup warmup.
 			c.dataMap.Store(birdImage.ScientificName, birdImage)
 			loadedCount++
 			if birdImage.IsNegativeEntry() {
@@ -1360,8 +1358,8 @@ func (c *BirdImageCache) logInitializeError(err error, scientificName string, lo
 		return
 	}
 
-	var enhancedErr *errors.EnhancedError
-	if !errors.As(err, &enhancedErr) {
+	enhancedErr, ok := errors.AsType[*errors.EnhancedError](err)
+	if !ok {
 		enhancedErr = errors.New(err).
 			Component("imageprovider").
 			Category(errors.CategoryImageProvider).
@@ -1437,7 +1435,7 @@ func (c *BirdImageCache) GetWithContext(ctx context.Context, scientificName stri
 		// IMPORTANT: only short-circuit when the primary itself returned
 		// ErrImageNotFound. Transient failures (network errors, DB errors,
 		// provider initialization errors) must NOT be silently converted
-		// into a 15-minute "not found" response — those should still try
+		// into a 15-minute "not found" response: those should still try
 		// the fallback chain so a working provider can serve the request.
 		if errors.Is(err, ErrImageNotFound) && c.isSpeciesExhausted(scientificName) {
 			log.Debug("Species already exhausted by all providers, skipping fallback chain")
@@ -1958,7 +1956,7 @@ func (c *BirdImageCache) handleProviderFetchError(scientificName string, fetchEr
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
 
-	// Check for expected "not found" condition first — this is not an error.
+	// Check for expected "not found" condition first: this is not an error.
 	// Many species legitimately have no images in AviCommons or Wikipedia.
 	if errors.Is(fetchErr, ErrImageNotFound) {
 		if c.metrics != nil {
@@ -1967,7 +1965,7 @@ func (c *BirdImageCache) handleProviderFetchError(scientificName string, fetchEr
 		return c.storeNegativeCacheEntry(scientificName, fetchErr)
 	}
 
-	// Actual provider errors — log at error level
+	// Actual provider errors: log at error level
 	enhancedErr := c.enhanceFetchError(fetchErr, scientificName)
 	log.Error("Failed to fetch image from provider", logger.Error(enhancedErr))
 
@@ -1984,9 +1982,8 @@ func (c *BirdImageCache) handleProviderFetchError(scientificName string, fetchEr
 // wrapped error preserving the original category to avoid false positives in
 // category-based errors.Is matching.
 func (c *BirdImageCache) enhanceFetchError(fetchErr error, scientificName string) *errors.EnhancedError {
-	var enhancedErr *errors.EnhancedError
-	if errors.As(fetchErr, &enhancedErr) {
-		// Already enhanced — check if it has species context
+	if enhancedErr, ok := errors.AsType[*errors.EnhancedError](fetchErr); ok {
+		// Already enhanced: check if it has species context
 		if _, hasName := enhancedErr.Context["scientific_name"]; hasName {
 			return enhancedErr
 		}
@@ -2037,8 +2034,7 @@ func (c *BirdImageCache) storeSuccessfulFetch(scientificName string, fetchedImag
 	// Ensure ScientificName is populated from the request before persisting,
 	// mirroring storeNegativeCacheEntry. Some providers return a BirdImage with
 	// an empty ScientificName, which would otherwise cause a NOT NULL constraint
-	// violation on image_caches.scientific_name when saved via the fetch path
-	// (Forgejo #756).
+	// violation on image_caches.scientific_name when saved via the fetch path.
 	fetchedImage.ScientificName = scientificName
 	fetchedImage.CachedAt = time.Now()
 	fetchedImage.SourceProvider = c.providerName
@@ -2125,7 +2121,7 @@ func (c *BirdImageCache) recordSpeciesExhausted(scientificName string) {
 //
 // Concurrency: sync.Map.Load/Delete are safe for concurrent access. A race
 // between "isSpeciesExhausted observed entry as fresh" and another goroutine
-// deleting it is fine — the caller just treats it as exhausted for this call,
+// deleting it is fine: the caller just treats it as exhausted for this call,
 // and the next call will re-check. No double-fetch of providers can occur as
 // a result of this read, because recording only happens after all providers
 // have already been tried (see tryFallbackProviders).
@@ -2280,7 +2276,7 @@ func (c *BirdImageCache) tryFallbackProviders(ctx context.Context, scientificNam
 	// of having been tried before this function is called) report
 	// "not found" do we record the species as exhausted. Transient failures
 	// (network errors, DB errors, provider init failures) must not poison
-	// the exhausted-species cache for the TTL window — they should be
+	// the exhausted-species cache for the TTL window: they should be
 	// retried on the next Get().
 	allFallbacksNotFound := true
 	anyFallbackTried := false

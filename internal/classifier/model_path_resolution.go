@@ -330,14 +330,7 @@ func (o *Orchestrator) resolveSiblingSet(registryID, modelPath string) (set mode
 		if entry.RegistryID != registryID {
 			continue
 		}
-		fileSets := [][]CatalogFile{entry.Files}
-		if len(entry.Variants) > 0 {
-			fileSets = fileSets[:0]
-			for j := range entry.Variants {
-				fileSets = append(fileSets, entry.Variants[j].Files)
-			}
-		}
-		for _, files := range fileSets {
+		for _, files := range entryFileSets(entry) {
 			if !declaresModelFile(files, base) {
 				continue
 			}
@@ -367,6 +360,27 @@ func declaresModelFile(files []CatalogFile, localName string) bool {
 		}
 	}
 	return false
+}
+
+// entryFileSets returns the catalog file sets to probe for entry: each variant's
+// files when the entry declares variants, otherwise the entry's own files.
+//
+// A variant entry's resolved top-level Files name only the DEFAULT variant
+// (resolveVariantDefaults overwrites them, and validateCatalogEntryFiles forbids an
+// entry from declaring both Files and Variants), so a non-default install is found
+// only by probing each variant's own files. For a flat entry the single set is
+// entry.Files. Callers that stop at the first match (isGalleryManagedPath) are
+// unaffected by no longer searching the default variant twice, because the default
+// remains one of the returned variant sets.
+func entryFileSets(entry *CatalogEntry) [][]CatalogFile {
+	if len(entry.Variants) > 0 {
+		sets := make([][]CatalogFile, 0, len(entry.Variants))
+		for j := range entry.Variants {
+			sets = append(sets, entry.Variants[j].Files)
+		}
+		return sets
+	}
+	return [][]CatalogFile{entry.Files}
 }
 
 // isGalleryManagedPath reports whether path looks like a file the model gallery
@@ -436,13 +450,9 @@ func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
 		if entry.RegistryID != registryID {
 			continue
 		}
-		// Check the entry's own files and every variant's files as a union: the
-		// stale configured path could name any installed variant's file.
-		fileSets := [][]CatalogFile{entry.Files}
-		for j := range entry.Variants {
-			fileSets = append(fileSets, entry.Variants[j].Files)
-		}
-		for _, files := range fileSets {
+		// Probe the flat entry's files or each variant's files; see entryFileSets.
+		// The stale configured path could name any installed variant's file.
+		for _, files := range entryFileSets(entry) {
 			for _, f := range files {
 				if f.LocalName != base {
 					continue
@@ -478,12 +488,13 @@ type primaryPathResolver func(configured string) pathResolution
 // NewBirdNET fail outright, so there is no analysis at all rather than one
 // missing optional model.
 //
-// The primary is deliberately NOT a modelFileSet family. Its label set is
-// embedded and identical across v2.4 variants, which is why
-// applyConfigForPrimarySwap writes BirdNET.ModelPath alone and documents that it
-// never touches BirdNET.LabelPath: a user-configured custom label path must
-// survive a variant swap. So there is exactly one path to resolve and no
-// cross-variant pairing hazard to protect against.
+// The primary resolves a model path only: its label set is embedded and identical
+// across v2.4 variants, which is why applyConfigForVariantSwap writes
+// BirdNET.ModelPath alone and a user-configured custom label path must survive a
+// variant swap. This function never populates resolved.labels or resolved.embeddings,
+// which is exactly what lets planPathCorrection skip the primary's label field even
+// though familyFields now exposes its Labels pointer. So there is one path to resolve
+// and no cross-variant pairing hazard to protect against.
 func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution {
 	if configured == "" {
 		// No configured path at all: the Tier-4 default (the embedded model, or the
@@ -527,7 +538,7 @@ func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution
 
 	// CONFIRMED absent. Recover to the installed gallery variant when there is one
 	// AND that variant can actually run on this host.
-	if installed, _, _ := o.resolveInstalledPaths(permanentRegistryID); installed != "" && o.primaryVariantUsable(installed) {
+	if installed, _, _ := o.resolveInstalledPaths(RegistryIDBirdNETV24); installed != "" && o.primaryVariantUsable(installed) {
 		GetLogger().Info("configured primary model path is missing on disk, recovering the installed variant",
 			logger.String("configured_model_path", configured),
 			logger.String("resolved_model_path", installed))
@@ -578,13 +589,17 @@ func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution
 // return a DFT-truncated ONNX build for this family. Recovering onto one that
 // cannot load would turn a recoverable stale path into a hard startup failure,
 // which is precisely the outcome this recovery exists to prevent. Reporting false
-// makes the caller fall through to the built-in baseline, which always loads.
+// makes the caller fall through to the built-in baseline, which loads wherever
+// its backend is available (on arm64 it is the INT8 ONNX model, which needs ONNX
+// Runtime on the auto backend; see applyOpenVINOQuantizationPolicy).
 //
 // "Can load" is deliberately NOT "ONNX Runtime is available". initializeModel
 // tries OPENVINO FIRST for the v2.4 identity and only falls through to ONNX
 // Runtime when OpenVINO declines, so an openvino-tagged build on an A76/Pi5 or an
-// Intel iGPU runs these variants with no ORT installed at all. Gating on ORT alone
-// would refuse a variant that would have loaded, silently dropping such a host to
+// Intel iGPU runs these variants with no ORT installed at all (except an INT8 or
+// unrecognized-precision build on the auto backend, which OpenVINO declines; see
+// applyOpenVINOQuantizationPolicy). Gating on ORT alone would refuse a variant
+// that would have loaded, silently dropping such a host to
 // the embedded model and telling the user no installed model was available, which
 // is false.
 //
@@ -614,13 +629,8 @@ func (o *Orchestrator) primaryVariantUsable(modelPath string) bool {
 	// OpenVINO library straight to the ONNX path it has no runtime for, which is
 	// the hard startup failure this gate exists to prevent, reached from the other
 	// side. So the plan must be usable AND the library must actually load.
-	if _, ok, _ := openVINOPlanFor(
-		settings.BirdNET.Backend,
-		settings.BirdNET.OpenVINODevice,
-		DefaultModelVersion,
-		settings.BirdNET.OpenVINOPath,
-		birdnetLogitsOutputIndex,
-	); ok && o.openVINOLoads(settings.BirdNET.OpenVINOPath) {
+	if _, ok, _ := birdnetV24OpenVINOPlan(&settings.BirdNET, detectQuantization(modelPath)); ok &&
+		o.openVINOLoads(settings.BirdNET.OpenVINOPath) {
 		return true
 	}
 

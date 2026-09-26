@@ -61,6 +61,7 @@
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
+  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -89,6 +90,7 @@
   } from '$lib/utils/variantSelection';
   import OptimizeReviewDialog from '$lib/desktop/features/settings/components/OptimizeReviewDialog.svelte';
   import { safeArrayAccess } from '$lib/utils/security';
+  import { generateId } from '$lib/utils/uuid';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
   import {
@@ -233,6 +235,8 @@
   const installBlocked = $derived(
     licenseSelectedVariant != null && !licenseSelectedVariant.compatible
   );
+  // Links the blocked (aria-disabled) Install button to the visible reason.
+  const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
   // Element bindings should NOT use $state - causes showModal() to fail
@@ -343,7 +347,7 @@
   const offerByEntry = $derived(new Map(offers.map(o => [o.entry.id, o])));
 
   // Session-scoped banner dismissal, guarded so a private-window/blocked
-  // sessionStorage never throws (see frontend/CLAUDE.md).
+  // sessionStorage never throws (see frontend/AGENTS.md).
   const OPTIMIZE_BANNER_DISMISS_KEY = 'birdnet.optimizeBannerDismissed';
   function readOptimizeDismissed(): boolean {
     try {
@@ -1216,7 +1220,8 @@
   function handleInstall() {
     if (!licenseModel) return;
     // Never install a variant the recommender flagged incompatible with this host
-    // (the button is disabled in this state; this guards a programmatic call too).
+    // (the button is only aria-disabled so it stays focusable, which makes this
+    // guard what actually blocks the click and keyboard activation).
     if (installBlocked) return;
     // Do not start an install while any gallery action is in flight; they share
     // the single downloadProgress state and SSE subscription.
@@ -1705,10 +1710,17 @@
                 : '-'}
             </div>
             {#if rangeFilterState.testing}
-              <span
-                class="inline-block w-4 h-4 border-2 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-              ></span>
+              <!-- Decorative: the status region below announces the state. -->
+              <LoadingSpinner size="sm" aria-hidden="true" />
             {/if}
+            <!-- Always rendered so screen readers hear loading and the new count. -->
+            <span class="sr-only" role="status">
+              {rangeFilterState.testing
+                ? t('settings.main.sections.rangeFilter.speciesCount.loading')
+                : rangeFilterState.speciesCount !== null
+                  ? `${t('settings.main.sections.rangeFilter.speciesCount.label')}: ${formatNumber(rangeFilterState.speciesCount)}`
+                  : ''}
+            </span>
           </div>
           <div class="flex gap-2 mt-2">
             <button
@@ -1731,7 +1743,6 @@
                 rangeFilterState.downloading ||
                 !birdnet?.locationConfigured}
               onclick={downloadSpeciesCSV}
-              aria-label={t('common.aria.downloadCsv')}
             >
               <Download class="size-4" />
               {t('analytics.filters.exportCsv')}
@@ -1932,13 +1943,13 @@
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <NumberField
-          label={t('settings.main.fields.tensorflowThreads.label')}
+          label={t('settings.main.fields.inferenceThreads.label')}
           value={birdnet?.threads ?? 0}
           onUpdate={value => updateBirdnetSetting('threads', value)}
           min={0}
           max={32}
           step={1}
-          helpText={t('settings.main.fields.tensorflowThreads.helpText')}
+          helpText={t('settings.main.fields.inferenceThreads.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
       </div>
@@ -2098,7 +2109,13 @@
         </div>
       {/if}
 
-      <SettingsTabs tabs={galleryTabs} bind:activeTab={galleryTab} showActions={false} />
+      <SettingsTabs
+        tabs={galleryTabs}
+        bind:activeTab={galleryTab}
+        queryParam="modelTab"
+        defaultTab="installed"
+        showActions={false}
+      />
     </SettingsSection>
 
     <SettingsSection
@@ -2465,7 +2482,7 @@
                   aria-label="{t('analysis.gallery.reinstall')} {entry.name}"
                 >
                   {#if isReinstalling}
-                    <Loader2 class="size-3.5 animate-spin" />
+                    <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
                     {t('analysis.gallery.reinstalling')}
                   {:else}
                     <RefreshCw class="size-3.5" />
@@ -2493,7 +2510,7 @@
                   aria-label="{t('analysis.gallery.remove')} {entry.name}"
                 >
                   {#if isDeleting}
-                    <Loader2 class="size-3.5 animate-spin" />
+                    <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
                     {t('analysis.gallery.removing')}
                   {:else}
                     <Trash2 class="size-3.5" />
@@ -2715,7 +2732,7 @@
         aria-label="{t('analysis.gallery.install')} {entry.name}"
       >
         {#if isInstalling}
-          <Loader2 class="size-3.5 animate-spin" />
+          <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
           {t('analysis.gallery.installing')}
         {:else}
           <Download class="size-3.5" />
@@ -2954,7 +2971,7 @@
       </div>
 
       {#if installBlocked}
-        <p class="mt-4 text-sm text-[var(--color-error)]" role="alert">
+        <p id={INSTALL_BLOCKED_HELP_ID} class="mt-4 text-sm text-[var(--color-error)]" role="alert">
           {t('analysis.gallery.variants.incompatible')}
         </p>
       {/if}
@@ -2969,9 +2986,10 @@
         <button
           type="button"
           onclick={handleInstall}
-          disabled={installBlocked}
+          aria-disabled={installBlocked ? 'true' : undefined}
+          aria-describedby={installBlocked ? INSTALL_BLOCKED_HELP_ID : undefined}
           title={installBlocked ? t('analysis.gallery.variants.incompatible') : undefined}
-          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-[var(--color-primary)]"
         >
           <Download class="size-4" />
           {t('analysis.gallery.license.acceptAndInstall')}
@@ -3121,9 +3139,7 @@
       <div class="flex-1 overflow-auto">
         {#if rangeFilterState.loading}
           <div class="text-center py-12">
-            <span
-              class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-            ></span>
+            <LoadingSpinner size="lg" aria-hidden="true" />
             <p class="mt-3 text-[var(--color-base-content)] opacity-90">
               {t('settings.main.sections.rangeFilter.modal.loadingSpecies')}
             </p>
@@ -3156,7 +3172,6 @@
           disabled={rangeFilterState.loading ||
             rangeFilterState.downloading ||
             !rangeFilterState.speciesCount}
-          aria-label={t('common.aria.downloadCsv')}
         >
           <Download class="size-4" />
           {t('analytics.filters.exportCsv')}

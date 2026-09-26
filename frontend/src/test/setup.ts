@@ -136,6 +136,27 @@ const translations: Record<string, string> = {
   'settings.species.customConfiguration.title': 'Custom Configuration',
   'settings.species.customConfiguration.description': 'Configure custom settings for species',
   'common.ui.loading': 'Loading...',
+  'settings.main.sections.rangeFilter.stationLocation.useCurrentLocation': 'Use browser location',
+  'settings.main.sections.rangeFilter.stationLocation.automaticLocation': 'Automatic location',
+  'settings.main.sections.rangeFilter.stationLocation.locationHelp':
+    "Fills the coordinates using this browser's location.",
+  'settings.main.sections.rangeFilter.stationLocation.locating': 'Locating...',
+  'settings.main.sections.rangeFilter.stationLocation.accuracy':
+    'Estimated accuracy: within {accuracy} m',
+  'settings.main.sections.rangeFilter.stationLocation.locationDetected':
+    'Browser location detected.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationUnsupported':
+    'Device location is unsupported.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationRequiresHttps':
+    'Browser location requires HTTPS or localhost.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationDenied':
+    'Location permission was denied.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationUnavailable':
+    'The device could not determine its location.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationTimedOut':
+    'The location request timed out.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationFailed':
+    'Could not determine the device location.',
   'common.close': 'Close',
   'common.confirm': 'Confirm',
   'common.cancel': 'Cancel',
@@ -733,12 +754,10 @@ Object.defineProperty(window, 'location', {
 });
 
 // Mock security utilities - consolidated mock for consistent test behavior
-vi.mock('$lib/utils/security', () => ({
-  isPlainObject: vi.fn((value: unknown): value is Record<string, unknown> => {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-    const proto = Object.getPrototypeOf(value);
-    return proto === null || proto === Object.prototype;
-  }),
+// Real exports pass through (isPlainObject, maskUrlCredentials, ...); only the
+// functions below are overridden.
+vi.mock('$lib/utils/security', async importOriginal => ({
+  ...(await importOriginal<typeof import('$lib/utils/security')>()),
   safeGet: vi.fn(
     (
       obj: Record<string, unknown> | null | undefined,
@@ -929,8 +948,8 @@ vi.mock('$lib/utils/security', () => ({
 
 // Global test utilities
 export const testUtils = {
-  // Helper to reset all mocked functions
-  resetAllMocks: () => {
+  // Clears call history only (vi.clearAllMocks); mock implementations are kept
+  clearAllMocks: () => {
     vi.clearAllMocks();
   },
 

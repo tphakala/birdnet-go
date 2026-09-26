@@ -64,6 +64,18 @@ func TestGetRecentSpeciesData(t *testing.T) {
 
 	assert.Equal(t, 2, bySpeciesBucket[speciesBucket{species: "Setophaga petechia", bucket: 2}].Bucket)
 	assert.Equal(t, 3, bySpeciesBucket[speciesBucket{species: "Cyanocitta cristata", bucket: 3}].Bucket)
+
+	rows, err = ds.GetRecentSpeciesData(t.Context(), start, end, 0.7, 1)
+	require.NoError(t, err)
+	require.Len(t, rows, 3)
+	for i := range rows {
+		assert.Zero(t, rows[i].Bucket)
+		if rows[i].ScientificName == "Turdus migratorius" {
+			assert.Equal(t, 3, rows[i].Count)
+			assert.Equal(t, notes[5].ID, rows[i].LatestDetectionID)
+			assert.InDelta(t, 0.9, rows[i].BucketMaxConfidence, 0.001)
+		}
+	}
 }
 
 func TestGetRecentSpeciesDataHonorsContextCancellation(t *testing.T) {

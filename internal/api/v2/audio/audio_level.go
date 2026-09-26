@@ -58,7 +58,7 @@ type audioLevelManager struct {
 	// Mutex for connection count operations
 	connectionMu sync.Mutex
 	// Total connection counter for monitoring
-	totalConnections int64
+	totalConnections atomic.Int64
 	// Stream anonymization map for non-authenticated users (bounded to maxStreamSources)
 	streamAnonymMap map[string]string
 	streamAnonymMu  sync.RWMutex
@@ -280,11 +280,11 @@ func (c *Handler) StreamAudioLevel(ctx echo.Context) error {
 			}
 		}
 		audioLevelMgr.connectionMu.Unlock()
-		atomic.AddInt64(&audioLevelMgr.totalConnections, -1)
+		audioLevelMgr.totalConnections.Add(-1)
 	}()
 
 	// Track connection
-	atomic.AddInt64(&audioLevelMgr.totalConnections, 1)
+	audioLevelMgr.totalConnections.Add(1)
 
 	// Track metrics if available
 	if c.Metrics != nil && c.Metrics.HTTP != nil {
@@ -333,7 +333,7 @@ func (c *Handler) StreamAudioLevel(ctx echo.Context) error {
 	// Log connection
 	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Audio level SSE client connected",
 		logger.Bool("authenticated", isAuthenticated),
-		logger.Int64("total_connections", atomic.LoadInt64(&audioLevelMgr.totalConnections)))
+		logger.Int64("total_connections", audioLevelMgr.totalConnections.Load()))
 
 	// Send initial empty update to establish connection
 	if err := c.sendAudioLevelUpdate(ctx, levels); err != nil {

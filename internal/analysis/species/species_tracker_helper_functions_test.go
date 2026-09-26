@@ -7,7 +7,6 @@
 package species
 
 import (
-	"errors"
 	"maps"
 	"testing"
 	"time"
@@ -17,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // ============================================================================
@@ -67,7 +67,7 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 			windowDays:            7,
 			existingFirstSeen:     new(time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC)),
 			detectionTime:         time.Date(2025, 6, 8, 10, 0, 0, 0, time.UTC), // exactly 7 days
-			expectedIsNew:         true,                                         // daysSince == windowDays is still "new"
+			expectedIsNew:         false,                                        // The notification window has expired
 			expectedDaysSince:     7,
 			expectedFirstSeenTime: time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC),
 		},
@@ -103,7 +103,7 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 			windowDays:            0,
 			existingFirstSeen:     new(time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)),
 			detectionTime:         time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC),
-			expectedIsNew:         true, // daysSince 0 <= windowDays 0
+			expectedIsNew:         false, // A zero-length notification window has expired
 			expectedDaysSince:     0,
 			expectedFirstSeenTime: time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC),
 		},
@@ -207,7 +207,7 @@ func TestLoadNotificationHistoryFromDatabase_EdgeCases(t *testing.T) {
 			name:              "database_error_returns_error",
 			suppressionWindow: 24 * time.Hour,
 			mockHistories:     nil,
-			mockError:         errors.New("database connection failed"),
+			mockError:         errors.NewStd("database connection failed"),
 			expectedMapSize:   0,
 			expectError:       true,
 		},
@@ -575,7 +575,7 @@ func TestLoadSingleSeasonData_ErrorPaths(t *testing.T) {
 			name:        "database_error_returns_error",
 			seasonName:  "winter",
 			mockData:    nil,
-			mockError:   errors.New("database unavailable"),
+			mockError:   errors.NewStd("database unavailable"),
 			expectError: true,
 		},
 		{

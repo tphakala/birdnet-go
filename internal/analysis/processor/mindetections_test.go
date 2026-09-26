@@ -2,6 +2,7 @@ package processor
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -1105,4 +1106,75 @@ func TestValidateAndLogBatFilterConfig(t *testing.T) {
 		validateAndLogBatFilterConfig(settings)
 		assert.Equal(t, 0, settings.Bat.FalsePositiveFilter.Level)
 	})
+}
+
+// TestFPInterval_MatchesBufferInterval is the regression guard for issue #4096:
+// the analysis step the false-positive filter assumes when computing
+// minDetections must equal the step the allocated analysis buffer actually
+// advances by (ModelSpec.BufferInterval with the resolved overlap). Before the
+// fix the buffer was hardcoded at 50% while the FP math used the configured
+// overlap, so the two diverged and legitimate detections were discarded.
+func TestFPInterval_MatchesBufferInterval(t *testing.T) {
+	t.Parallel()
+
+	birdSpec := classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}
+
+	// BirdNET (3s clip): the FP filter's assumed segment is (3.0 - overlap)s.
+	// The buffer step is BufferInterval(ResolveModelOverlap), which must match.
+	for _, overlap := range []float64{0.0, 1.0, 1.5, 2.0, 2.4, 2.9} {
+		s := &conf.Settings{}
+		s.BirdNET.Overlap = overlap
+		resolved := classifier.ResolveModelOverlap("BirdNET_V2.4", birdSpec, s)
+		bufferStep := birdSpec.BufferInterval(resolved).Seconds()
+		fpSegment := 3.0 - overlap // the segment length calculateMinDetectionsFromSettings uses
+		assert.InDelta(t, fpSegment, bufferStep, 1e-6,
+			"overlap %.1f: FP segment %.3fs != buffer step %.3fs", overlap, fpSegment, bufferStep)
+	}
+
+	// Bat: fixed 50% overlap -> fixed 1.5s step, matching calculateBatMinDetections.
+	batSpec := classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second, RawSampleRate: 256000}
+	s := &conf.Settings{}
+	s.BirdNET.Overlap = 2.4 // ignored for bat
+	batStep := batSpec.BufferInterval(classifier.ResolveModelOverlap(classifier.RegistryIDBat, batSpec, s)).Seconds()
+	assert.InDelta(t, 1.5, batStep, 1e-6, "bat step must stay fixed at 1.5s regardless of overlap")
+}
+
+// TestCalculateBatMinDetections_AllLevels pins the bat model's minDetections
+// (fixed 1.5s step -> 4 possible detections in the 6s window) before the shared
+// formula refactor, so any behavior drift surfaces as a failure.
+func TestCalculateBatMinDetections_AllLevels(t *testing.T) {
+	t.Parallel()
+	cases := map[int]int{0: 1, 1: 1, 2: 2, 3: 2, 4: 3, 5: 3}
+	for level, want := range cases {
+		s := &conf.Settings{}
+		s.Bat.FalsePositiveFilter.Level = level
+		assert.Equal(t, want, calculateBatMinDetections(s), "bat level %d", level)
+	}
+}
+
+// TestCalculateMinDetectionsForModel_PerModelClip verifies that the runtime flush
+// path (calculateMinDetectionsForModel) aligns the FP confirmation window with the
+// buffer cadence per model: BirdNET (3s) stays identical to the bird default,
+// while a 5s model (Perch) derives its step from its own clip and overlap so the
+// two subsystems agree (issue #4096).
+func TestCalculateMinDetectionsForModel_PerModelClip(t *testing.T) {
+	t.Parallel()
+
+	for _, overlap := range []float64{0.0, 1.5, 2.4} {
+		s := &conf.Settings{}
+		s.Realtime.FalsePositiveFilter.Level = 3
+		s.BirdNET.Overlap = overlap
+
+		// BirdNET 3s: routed path must equal the unchanged bird default.
+		assert.Equal(t, calculateMinDetectionsFromSettings(s),
+			calculateMinDetectionsForModel(s, "BirdNET_V2.4"),
+			"BirdNET routed minDetections must match the bird default (overlap %.1f)", overlap)
+
+		// Perch 5s: FP step must equal the model's buffer step (ratio-scaled overlap).
+		perchSpec := classifier.ModelRegistry[classifier.RegistryIDPerchV2].Spec
+		wantStep := perchSpec.BufferInterval(classifier.ResolveModelOverlap(classifier.RegistryIDPerchV2, perchSpec, s)).Seconds()
+		wantMin := minDetectionsForSegment(wantStep, 3)
+		assert.Equal(t, wantMin, calculateMinDetectionsForModel(s, classifier.RegistryIDPerchV2),
+			"Perch routed minDetections must derive from its 5s buffer step (overlap %.1f)", overlap)
+	}
 }

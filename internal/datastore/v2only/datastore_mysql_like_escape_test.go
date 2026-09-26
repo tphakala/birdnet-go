@@ -20,6 +20,7 @@ import (
 // for deterministic date bucketing) and registers container/datastore cleanup.
 func setupMySQLDatastore(t *testing.T) *Datastore {
 	t.Helper()
+	containers.SkipIfContainerRuntimeUnavailable(t)
 
 	ctx := t.Context()
 

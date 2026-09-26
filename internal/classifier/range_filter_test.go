@@ -1,6 +1,9 @@
 package classifier
 
 import (
+	"fmt"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -8,7 +11,34 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/inference"
 )
+
+// newTestRangeFilterService returns a range-filter service whose state holds the
+// given backend, for tests that inject a fake range filter without loading real
+// model files. The range filter moved off *BirdNET into this orchestrator-owned
+// service, so tests set the backend here instead of assigning bn.rangeFilter. A nil
+// backend means "no filter loaded".
+func newTestRangeFilterService(backend inference.RangeFilter) *rangeFilterService {
+	rfs := newRangeFilterService(nil)
+	rfs.state.Store(&rangeFilterState{backend: backend})
+	return rfs
+}
+
+// swapTestBackend atomically installs backend as the current range-filter backend
+// and closes the previous one, under rfs.mu, mirroring reload's swap step without
+// building from disk. Test seam for the backend-lifecycle race test.
+func (rfs *rangeFilterService) swapTestBackend(backend inference.RangeFilter) {
+	rfs.mu.Lock()
+	old := rfs.loadState()
+	// Bump the generation exactly as reload does, so the occurrence cache is
+	// invalidated across the swap in tests that exercise it.
+	rfs.state.Store(&rangeFilterState{backend: backend, generation: old.generation + 1})
+	if old.backend != nil && old.backend != backend {
+		old.backend.Close()
+	}
+	rfs.mu.Unlock()
+}
 
 // fakeUniversalRangeFilter implements inference.RangeFilter and
 // UniversalSpeciesPredictor for testing BuildRangeFilter.
@@ -49,20 +79,30 @@ func (f *fakeUniversalRangeFilter) GeomodelLabels() []string {
 func buildTestOrchestrator(t *testing.T, settings *conf.Settings, rf interface{ Close() }) *Orchestrator {
 	t.Helper()
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
-	}
-	if irf, ok := rf.(interface {
-		Predict(float32, float32, float32) ([]float32, error)
-		NumSpecies() int
-		Close()
-	}); ok {
-		bn.rangeFilter = irf
-	}
-	return &Orchestrator{
 		Settings: settings,
-		primary:  bn,
 	}
+	o := &Orchestrator{
+		Settings: settings,
+		// Register bn as the loaded v2.4 entry so the range-filter accessors, which
+		// key off the o.models anchor, resolve it (mirrors a real orchestrator).
+		models: map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}},
+	}
+	o.settingsAtomic.Store(settings)
+	var backend inference.RangeFilter
+	if irf, ok := rf.(inference.RangeFilter); ok {
+		backend = irf
+	}
+	o.rangeFilter = newTestRangeFilterService(backend)
+	// Publish the covered-label space and participant snapshot a real reload records, so the
+	// legacy predictFilter path (which labels MData scores from coveredLabels) and the shared
+	// display/gate helper see the v2.4 label set instead of an empty one.
+	o.rangeFilter.state.Store(&rangeFilterState{
+		backend:       backend,
+		coveredLabels: settings.BirdNET.Labels,
+		participants:  []participantLabels{{id: RegistryIDBirdNETV24, labels: settings.BirdNET.Labels}},
+		anchoredOnV24: true,
+	})
+	return o
 }
 
 func TestBuildRangeFilter_PassUnmappedSpecies(t *testing.T) {
@@ -140,6 +180,869 @@ func TestBuildRangeFilter_PassUnmappedSpecies(t *testing.T) {
 	}
 }
 
+// TestBuildRangeFilter_SecondaryOnly_FailsOpenNoBackend is the regression guard for the
+// fail-CLOSED bug the range-filter decoupling fixes: before this change the whole range
+// filter was gated on BirdNET v2.4 being loaded, so a Perch-only or v3.0-only install
+// with a location set published an EMPTY inclusion list and processor.shouldFilterDetection
+// dropped every detection. After decoupling, such an install must fail OPEN over its own
+// participant labels, and the status must report it without a v2.4 gate.
+func TestBuildRangeFilter_SecondaryOnly_FailsOpenNoBackend(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.Labels = nil // no BirdNET v2.4 label set (v2.4 not loaded)
+	settings.BirdNET.RangeFilter.Model = ""
+	settings.BirdNET.RangeFilter.ModelPath = ""
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	perchLabels := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	o := &Orchestrator{
+		Settings: settings,
+		models: map[string]*modelEntry{
+			RegistryIDPerchV2: {instance: &mockModelInstance{id: RegistryIDPerchV2, labels: perchLabels, numSpecies: len(perchLabels)}},
+		},
+	}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newRangeFilterService(nil)
+	// No geomodel config and no v2.4 yields no backend (kind none); the covered label
+	// space is Perch's own labels, captured under reload's own lock.
+	require.NoError(t, o.rangeFilter.reload(settings, o.rangeFilterView))
+	require.Nil(t, o.rangeFilter.loadState().backend, "no backend expected for a Perch-only install without a geomodel")
+
+	require.NoError(t, BuildRangeFilter(o))
+	included := conf.GetSettings().GetIncludedSpecies()
+	require.NotEmpty(t, included, "a Perch-only install with a location must fail open, not drop every detection")
+	assert.Contains(t, included, "Turdus merula_Common Blackbird")
+	assert.Contains(t, included, "Parus major_Great Tit")
+
+	// Status must report the Perch participant without a v2.4 gate, and honestly mark it
+	// inactive (no backend) so health can flag the fail-open.
+	status := o.RangeFilterStatus()
+	assert.True(t, status.ParticipantsLoaded, "a loaded Perch participates in range filtering")
+	assert.False(t, status.Active, "no range-filter backend is loaded")
+	assert.Equal(t, string(rfKindNone), status.Backend)
+	require.Len(t, status.Classifiers, 1)
+	assert.Equal(t, RegistryIDPerchV2, status.Classifiers[0].ID)
+	assert.False(t, status.Classifiers[0].CoveredByBackend)
+}
+
+// TestRebuildRangeFilterAfterModelChange_AddsParticipantSpecies guards the runtime
+// remap hook: LoadModel/UnloadModel update the species index but not the range-filter
+// inclusion list, so rebuildRangeFilterAfterModelChange (invoked from both) must rebuild
+// the backend and inclusion list. Installing a participant at runtime must add its
+// species; N=0 before that must report participantsLoaded=false with an empty list.
+func TestRebuildRangeFilterAfterModelChange_AddsParticipantSpecies(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.Labels = nil
+	settings.BirdNET.RangeFilter.Model = ""
+	settings.BirdNET.RangeFilter.ModelPath = ""
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{}}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newRangeFilterService(nil)
+	require.NoError(t, o.rangeFilter.reload(settings, o.rangeFilterView))
+	require.NoError(t, BuildRangeFilter(o))
+
+	// N=0: nothing participates, so the inclusion list is empty (nothing to filter) and
+	// the status reports participantsLoaded=false.
+	assert.Empty(t, conf.GetSettings().GetIncludedSpecies(), "N=0 must publish an empty inclusion list")
+	assert.False(t, o.RangeFilterStatus().ParticipantsLoaded, "N=0 has no range-filter participant")
+
+	// Install a Perch participant at runtime (mirrors LoadModel writing o.models), then
+	// run the hook LoadModel/UnloadModel call.
+	perchLabels := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	o.mu.Lock()
+	o.models[RegistryIDPerchV2] = &modelEntry{instance: &mockModelInstance{id: RegistryIDPerchV2, labels: perchLabels, numSpecies: len(perchLabels)}}
+	o.mu.Unlock()
+	o.rebuildRangeFilterAfterModelChange()
+
+	included := conf.GetSettings().GetIncludedSpecies()
+	assert.Contains(t, included, "Turdus merula_Common Blackbird", "installing a participant must add its species to the inclusion list")
+	assert.Contains(t, included, "Parus major_Great Tit")
+	assert.True(t, o.RangeFilterStatus().ParticipantsLoaded)
+}
+
+// TestBuildRangeFilter_UniversalInferenceError_FailsOpen guards BuildRangeFilter's
+// fail-open-on-inference-error branch: if a loaded geomodel throws during
+// PredictSpeciesScores, the rebuild must NOT abort and leave the inclusion list empty
+// (which, with a location set, would drop every detection). It must fail open over the
+// covered labels instead.
+func TestBuildRangeFilter_UniversalInferenceError_FailsOpen(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.RangeFilter.Threshold = 0.01
+	classifierLabels := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	settings.BirdNET.Labels = classifierLabels
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	// A universal geomodel backend whose prediction errors at rebuild time.
+	rf := &fakeUniversalRangeFilter{geoLabels: classifierLabels, err: assert.AnError}
+	o := buildTestOrchestrator(t, settings, rf)
+	// Publish covered labels as reload would, so the fail-open path scores over them.
+	o.rangeFilter.state.Store(&rangeFilterState{backend: rf, coveredLabels: classifierLabels, kind: rfKindGeomodelV3, generation: 1})
+
+	require.NoError(t, BuildRangeFilter(o), "a geomodel inference error must not abort the rebuild")
+	included := conf.GetSettings().GetIncludedSpecies()
+	require.NotEmpty(t, included, "an inference error must fail OPEN over the covered labels, not drop every detection")
+	assert.Contains(t, included, "Turdus merula_Common Blackbird")
+	assert.Contains(t, included, "Parus major_Great Tit")
+}
+
+// TestReload_GeomodelBuildFailure_NoBackend_PublishesCoveredLabels guards the fail-open
+// publish on a FAILED reload: when a configured geomodel cannot be built and no backend is
+// currently loaded (a fresh Perch-only or v3.0-only install), reload must still publish the
+// covered participant labels with no backend, so the later fail-open path scores over them
+// instead of leaving coveredLabels nil and dropping every detection. Reproduces the
+// reload-early-return finding on PR #4385.
+func TestReload_GeomodelBuildFailure_NoBackend_PublishesCoveredLabels(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.Labels = nil // no BirdNET v2.4 label set (v2.4 not loaded)
+	// A configured geomodel that cannot build (model "v3" with no model path) forces
+	// buildMetaModel to error on a non-v2.4 install: there is no MData fallback, so the
+	// error propagates out of reload.
+	settings.BirdNET.RangeFilter.Model = "v3"
+	settings.BirdNET.RangeFilter.ModelPath = ""
+	settings.BirdNET.RangeFilter.LabelsPath = ""
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	perchLabels := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	o := &Orchestrator{
+		Settings:  settings,
+		modelsDir: t.TempDir(), // empty: no auto-select geomodel files present
+		models: map[string]*modelEntry{
+			RegistryIDPerchV2: {instance: &mockModelInstance{id: RegistryIDPerchV2, labels: perchLabels, numSpecies: len(perchLabels)}},
+		},
+	}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newRangeFilterService(nil)
+
+	// The geomodel build fails, so reload surfaces the error and loads no backend...
+	require.Error(t, o.rangeFilter.reload(settings, o.rangeFilterView),
+		"a configured geomodel that cannot build must surface an error")
+	require.Nil(t, o.rangeFilter.loadState().backend, "no backend is loaded after the failed build")
+	// ...but it must have published the participant covered labels so the fail-open path has
+	// a non-empty label space to score over.
+	require.NotEmpty(t, o.rangeFilter.loadState().coveredLabels,
+		"a failed initial build must still publish the participant covered labels for fail-open")
+
+	require.NoError(t, BuildRangeFilter(o))
+	included := conf.GetSettings().GetIncludedSpecies()
+	require.NotEmpty(t, included,
+		"a failed geomodel build on a Perch-only install with a location must fail open, not drop every detection")
+	assert.Contains(t, included, "Turdus merula_Common Blackbird")
+	assert.Contains(t, included, "Parus major_Great Tit")
+}
+
+// TestFailOpenScores_ResolvesOverridesAgainstCoveredLabels guards that fail-open user
+// overrides resolve against the covered participant labels, not settings.BirdNET.Labels
+// (empty on a Perch-only or v3.0-only install). A species that is force-included AND
+// excluded must be restored as its canonical covered label, not the raw user entry.
+// Reproduces the fail-open override finding on PR #4385.
+func TestFailOpenScores_ResolvesOverridesAgainstCoveredLabels(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Labels = nil // Perch-only: no v2.4 classifier label set
+	settings.Realtime.Species.Exclude = []string{"Common Blackbird"}
+	settings.Realtime.Species.Include = []string{"Common Blackbird"}
+
+	covered := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
+
+	labels := speciesScoreLabels(failOpenScores(covered, excluder, settings, nil))
+
+	// The excluded species is force-included by the override and must come back as its
+	// canonical covered label (resolved via coveredLabels), not the raw "Common Blackbird".
+	assert.Contains(t, labels, "Turdus merula_Common Blackbird",
+		"a force-included excluded species must be restored as its canonical covered label")
+	assert.NotContains(t, labels, "Common Blackbird",
+		"the raw override entry must not leak in unresolved")
+	// The other covered species stays in the fail-open list.
+	assert.Contains(t, labels, "Parus major_Great Tit")
+}
+
+// TestRangeFilterStatus_FreshServiceReportsNoneBackend pins the backendKind() contract: a
+// fresh service (its zero-value state has an empty kind) must report Backend "none" on the
+// status surface, never the empty string that would violate the JSON backend enum. Guards
+// the empty-kind normalization directly; without it, leaking loadState().kind ("") would
+// pass every other test.
+func TestRangeFilterStatus_FreshServiceReportsNoneBackend(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Labels = nil
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{}}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newRangeFilterService(nil) // zero-value state: kind == ""
+
+	status := o.RangeFilterStatus()
+	assert.Equal(t, string(rfKindNone), status.Backend,
+		"an unpublished (empty-kind) state must normalize to \"none\", never leak \"\"")
+	assert.False(t, status.Active, "a fresh service has no backend loaded")
+}
+
+// classifierCoverageByID returns the coverage entry the status reports for a registry ID.
+func classifierCoverageByID(status *RangeFilterStatusResponse, id string) (ClassifierCoverage, bool) {
+	for _, c := range status.Classifiers {
+		if c.ID == id {
+			return c, true
+		}
+	}
+	return ClassifierCoverage{}, false
+}
+
+// TestRangeFilterStatus_CoveredByBackend_FromBuiltState verifies that per-participant
+// coverage is reported from the participant set the ACTIVE backend was built over
+// (rangeFilterState.participants), not the live view. After a failed rebuild the service
+// keeps the previous backend (rollback) while the live view already shows a newly loaded
+// participant; keying coverage on the live view would falsely mark that participant as
+// covered before the retained backend ever mapped its labels.
+func TestRangeFilterStatus_CoveredByBackend_FromBuiltState(t *testing.T) {
+	v24Labels := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	perchLabels := []string{"Cyanistes caeruleus_Eurasian Blue Tit"}
+
+	tests := []struct {
+		name          string
+		participants  []participantLabels
+		anchoredOnV24 bool
+		wantCovered   map[string]bool
+	}{
+		{
+			name:          "v2.4 backend; Perch loaded after a failed rebuild is not covered",
+			participants:  []participantLabels{{id: RegistryIDBirdNETV24, labels: v24Labels}},
+			anchoredOnV24: true,
+			wantCovered:   map[string]bool{RegistryIDBirdNETV24: true, RegistryIDPerchV2: false},
+		},
+		{
+			name:          "union backend built over Perch only; v2.4 loaded after is not covered",
+			participants:  []participantLabels{{id: RegistryIDPerchV2, labels: perchLabels}},
+			anchoredOnV24: false,
+			wantCovered:   map[string]bool{RegistryIDPerchV2: true, RegistryIDBirdNETV24: false},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := conftest.GetTestSettings()
+			settings.BirdNET.Labels = v24Labels
+			conftest.SetTestSettings(settings)
+			t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+			// Live view: both v2.4 and Perch are loaded now.
+			o := &Orchestrator{
+				Settings: settings,
+				models: map[string]*modelEntry{
+					RegistryIDBirdNETV24: {instance: &BirdNET{Settings: settings}},
+					RegistryIDPerchV2:    {instance: &mockModelInstance{id: RegistryIDPerchV2, labels: perchLabels, numSpecies: len(perchLabels)}},
+				},
+			}
+			o.settingsAtomic.Store(settings)
+			o.rangeFilter = newRangeFilterService(nil)
+			// Publish a backend built over a DIFFERENT participant set than the live view.
+			o.rangeFilter.state.Store(&rangeFilterState{
+				backend:       &fakeUniversalRangeFilter{geoLabels: v24Labels},
+				kind:          rfKindGeomodelV3,
+				participants:  tt.participants,
+				anchoredOnV24: tt.anchoredOnV24,
+				coveredLabels: v24Labels,
+				generation:    1,
+			})
+
+			status := o.RangeFilterStatus()
+			for id, want := range tt.wantCovered {
+				c, ok := classifierCoverageByID(&status, id)
+				require.Truef(t, ok, "status must list loaded classifier %s from the live view", id)
+				assert.Equalf(t, want, c.CoveredByBackend,
+					"CoveredByBackend(%s) must reflect the built-over participant set, not the live view", id)
+			}
+		})
+	}
+}
+
+// TestReload_PublishesParticipantSnapshot verifies reload records the participant set and
+// the v2.4 anchor on the published state, including on the no-backend fail-open path, so
+// coverage and the inclusion backfill read exactly what the backend was built over.
+func TestReload_PublishesParticipantSnapshot(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Labels = nil // v2.4 not loaded
+	settings.BirdNET.RangeFilter.Model = ""
+	settings.BirdNET.RangeFilter.ModelPath = ""
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	perchLabels := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	o := &Orchestrator{
+		Settings: settings,
+		models: map[string]*modelEntry{
+			RegistryIDPerchV2: {instance: &mockModelInstance{id: RegistryIDPerchV2, labels: perchLabels, numSpecies: len(perchLabels)}},
+		},
+	}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newRangeFilterService(nil)
+
+	// Perch-only without a geomodel yields no backend; the fail-open branch still
+	// publishes the participant snapshot so status coverage stays honest.
+	require.NoError(t, o.rangeFilter.reload(settings, o.rangeFilterView))
+	state := o.rangeFilter.loadState()
+	require.Nil(t, state.backend, "Perch-only without a geomodel yields no backend")
+	require.Len(t, state.participants, 1, "the no-backend fail-open publish must carry the participant snapshot")
+	assert.Equal(t, RegistryIDPerchV2, state.participants[0].id)
+	assert.False(t, state.anchoredOnV24, "no v2.4 loaded, so the state must not be anchored on v2.4")
+}
+
+// TestRangeFilterStatus_CoveredByBackend_Race exercises RangeFilterStatus concurrently
+// with state swaps carrying different participant sets, to prove the status read path is
+// race-free against the atomic state publish (run with -race).
+func TestRangeFilterStatus_CoveredByBackend_Race(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	v24Labels := []string{"Turdus merula_Common Blackbird"}
+	settings.BirdNET.Labels = v24Labels
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	o := &Orchestrator{
+		Settings: settings,
+		models: map[string]*modelEntry{
+			RegistryIDBirdNETV24: {instance: &BirdNET{Settings: settings}},
+			RegistryIDPerchV2:    {instance: &mockModelInstance{id: RegistryIDPerchV2, labels: []string{"Parus major_Great Tit"}, numSpecies: 1}},
+		},
+	}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newRangeFilterService(nil)
+
+	states := []*rangeFilterState{
+		{kind: rfKindNone, generation: 1},
+		{backend: &fakeUniversalRangeFilter{geoLabels: v24Labels}, kind: rfKindGeomodelV3, participants: []participantLabels{{id: RegistryIDBirdNETV24, labels: v24Labels}}, anchoredOnV24: true, generation: 2},
+		{backend: &fakeUniversalRangeFilter{geoLabels: v24Labels}, kind: rfKindGeomodelV3, participants: []participantLabels{{id: RegistryIDPerchV2, labels: []string{"Parus major_Great Tit"}}}, anchoredOnV24: false, generation: 3},
+	}
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				_ = o.RangeFilterStatus()
+			}
+		}
+	})
+	wg.Go(func() {
+		defer close(stop)
+		for i := range 2000 {
+			o.rangeFilter.state.Store(states[i%len(states)])
+		}
+	})
+	wg.Wait()
+}
+
+// buildV24PlusPerchOrchestrator builds an orchestrator with BirdNET v2.4 and Perch both
+// loaded and a range-filter state anchored on v2.4 whose participant snapshot carries both,
+// for the display/gate reconciliation tests. backend and kind describe the loaded backend.
+func buildV24PlusPerchOrchestrator(t *testing.T, settings *conf.Settings, backend inference.RangeFilter, kind rangeFilterBackendKind, v24Labels, perchLabels []string) *Orchestrator {
+	t.Helper()
+	o := &Orchestrator{
+		Settings: settings,
+		models: map[string]*modelEntry{
+			RegistryIDBirdNETV24: {instance: &BirdNET{Settings: settings}},
+			RegistryIDPerchV2:    {instance: &mockModelInstance{id: RegistryIDPerchV2, labels: perchLabels, numSpecies: len(perchLabels)}},
+		},
+	}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newRangeFilterService(nil)
+	o.rangeFilter.state.Store(&rangeFilterState{
+		backend:       backend,
+		kind:          kind,
+		participants:  []participantLabels{{id: RegistryIDBirdNETV24, labels: v24Labels}, {id: RegistryIDPerchV2, labels: perchLabels}},
+		anchoredOnV24: true,
+		coveredLabels: v24Labels,
+		generation:    1,
+	})
+	return o
+}
+
+// canonicalSet returns the deduped set of canonical scientific keys for the labels.
+func canonicalSet(labels []string) map[string]bool {
+	out := make(map[string]bool, len(labels))
+	for _, l := range labels {
+		out[canonicalSpeciesKey(l)] = true
+	}
+	return out
+}
+
+// TestBuildRangeFilter_PassUnmapped_CoversAllParticipants verifies that on a v2.4 + Perch
+// install under the universal geomodel, the inclusion (gate) list covers a Perch-unique
+// species the geomodel has no range data for, gated by the "allow species without range
+// data" toggle, while a Perch species the geomodel knows but that is out of range, and an
+// excluded species, are never included.
+func TestBuildRangeFilter_PassUnmapped_CoversAllParticipants(t *testing.T) {
+	geoLabels := []string{
+		"Turdus merula_Common Blackbird",        // shared, in range
+		"Cyanistes caeruleus_Eurasian Blue Tit", // Perch species the geomodel knows, out of range
+	}
+	geoScores := []SpeciesScore{{Score: 0.9, Label: "Turdus merula_Common Blackbird"}}
+	v24Labels := []string{"Turdus merula_Common Blackbird", "Corvus corax_Northern Raven"} // Corvus: v2.4 residual
+	perchLabels := []string{
+		"Cyanistes caeruleus_Eurasian Blue Tit", // in geomodel vocab, out of range
+		"Regulus regulus_Goldcrest",             // Perch-unique, geomodel-unknown
+		"Ficedula hypoleuca_Pied Flycatcher",    // Perch-unique, geomodel-unknown, excluded
+	}
+
+	tests := []struct {
+		name         string
+		passUnmapped bool
+		wantIn       []string
+		wantOut      []string
+	}{
+		{
+			name:         "toggle off: only in-range geomodel species",
+			passUnmapped: false,
+			wantIn:       []string{"Turdus merula_Common Blackbird"},
+			wantOut:      []string{"Corvus corax_Northern Raven", "Regulus regulus_Goldcrest", "Cyanistes caeruleus_Eurasian Blue Tit", "Ficedula hypoleuca_Pied Flycatcher"},
+		},
+		{
+			name:         "toggle on: v2.4 residual and Perch-unique geomodel-unknown species pass",
+			passUnmapped: true,
+			wantIn:       []string{"Turdus merula_Common Blackbird", "Corvus corax_Northern Raven", "Regulus regulus_Goldcrest"},
+			wantOut:      []string{"Cyanistes caeruleus_Eurasian Blue Tit", "Ficedula hypoleuca_Pied Flycatcher"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := conftest.GetTestSettings()
+			settings.BirdNET.Latitude = 60.0
+			settings.BirdNET.Longitude = 25.0
+			settings.BirdNET.LocationConfigured = true
+			settings.BirdNET.RangeFilter.Threshold = 0.01
+			settings.BirdNET.RangeFilter.PassUnmappedSpecies = tt.passUnmapped
+			settings.BirdNET.Labels = v24Labels
+			settings.Realtime.Species.Exclude = []string{"Pied Flycatcher"}
+			conftest.SetTestSettings(settings)
+			t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+			rf := &fakeUniversalRangeFilter{geoLabels: geoLabels, scores: geoScores, rawScores: []float32{0.9, 0.0}}
+			o := buildV24PlusPerchOrchestrator(t, settings, rf, rfKindGeomodelV3, v24Labels, perchLabels)
+
+			require.NoError(t, BuildRangeFilter(o))
+			included := conf.GetSettings().GetIncludedSpecies()
+			for _, want := range tt.wantIn {
+				assert.Containsf(t, included, want, "expected %q in the gate list", want)
+			}
+			for _, notWant := range tt.wantOut {
+				assert.NotContainsf(t, included, notWant, "did not expect %q in the gate list", notWant)
+			}
+		})
+	}
+}
+
+// TestBuildRangeFilter_LegacyBackend_UncoveredParticipantFailsOpen verifies that under the
+// legacy v2.4-only MData backend, a non-v2.4 participant is not mapped and therefore fails
+// open wholesale (every non-excluded label included) regardless of the toggle.
+func TestBuildRangeFilter_LegacyBackend_UncoveredParticipantFailsOpen(t *testing.T) {
+	v24Labels := []string{"Turdus merula_Common Blackbird", "Corvus corax_Northern Raven"}
+	perchLabels := []string{"Regulus regulus_Goldcrest", "Ficedula hypoleuca_Pied Flycatcher"}
+
+	for _, passUnmapped := range []bool{false, true} {
+		t.Run(fmt.Sprintf("passUnmapped=%t", passUnmapped), func(t *testing.T) {
+			settings := conftest.GetTestSettings()
+			settings.BirdNET.Latitude = 60.0
+			settings.BirdNET.Longitude = 25.0
+			settings.BirdNET.LocationConfigured = true
+			settings.BirdNET.RangeFilter.Threshold = 0.01
+			settings.BirdNET.RangeFilter.PassUnmappedSpecies = passUnmapped
+			settings.BirdNET.Labels = v24Labels
+			settings.Realtime.Species.Exclude = []string{"Pied Flycatcher"}
+			conftest.SetTestSettings(settings)
+			t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+			// Legacy backend: scores aligned to v24Labels, both above threshold.
+			rf := &fakeRangeFilter{scores: []float32{0.9, 0.8}}
+			o := buildV24PlusPerchOrchestrator(t, settings, rf, rfKindMDataV2, v24Labels, perchLabels)
+
+			require.NoError(t, BuildRangeFilter(o))
+			included := conf.GetSettings().GetIncludedSpecies()
+			assert.Contains(t, included, "Regulus regulus_Goldcrest",
+				"a non-v2.4 participant fails open wholesale under the legacy backend, regardless of the toggle")
+			assert.NotContains(t, included, "Ficedula hypoleuca_Pied Flycatcher",
+				"an excluded participant species must never be included")
+			assert.Contains(t, included, "Turdus merula_Common Blackbird")
+		})
+	}
+}
+
+// TestGetAllProbableSpecies_AgreesWithGateList proves the display list and the gate list
+// contain the same species (by canonical name) for both toggle values, so the Settings
+// preview never shows a species the processor would drop and vice versa.
+func TestGetAllProbableSpecies_AgreesWithGateList(t *testing.T) {
+	geoLabels := []string{"Turdus merula_Common Blackbird", "Cyanistes caeruleus_Eurasian Blue Tit"}
+	geoScores := []SpeciesScore{{Score: 0.9, Label: "Turdus merula_Common Blackbird"}}
+	v24Labels := []string{"Turdus merula_Common Blackbird", "Corvus corax_Northern Raven"}
+	perchLabels := []string{"Cyanistes caeruleus_Eurasian Blue Tit", "Regulus regulus_Goldcrest"}
+
+	for _, passUnmapped := range []bool{false, true} {
+		t.Run(fmt.Sprintf("passUnmapped=%t", passUnmapped), func(t *testing.T) {
+			settings := conftest.GetTestSettings()
+			settings.BirdNET.Latitude = 60.0
+			settings.BirdNET.Longitude = 25.0
+			settings.BirdNET.LocationConfigured = true
+			settings.BirdNET.RangeFilter.Threshold = 0.01
+			settings.BirdNET.RangeFilter.PassUnmappedSpecies = passUnmapped
+			settings.BirdNET.Labels = v24Labels
+			conftest.SetTestSettings(settings)
+			t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+			rf := &fakeUniversalRangeFilter{geoLabels: geoLabels, scores: geoScores, rawScores: []float32{0.9, 0.0}}
+			o := buildV24PlusPerchOrchestrator(t, settings, rf, rfKindGeomodelV3, v24Labels, perchLabels)
+
+			require.NoError(t, BuildRangeFilter(o))
+			gate := canonicalSet(conf.GetSettings().GetIncludedSpecies())
+
+			display, err := o.GetAllProbableSpeciesWithSettings(time.Now(), 0, settings)
+			require.NoError(t, err)
+			displayLabels := make([]string, 0, len(display))
+			for _, s := range display {
+				displayLabels = append(displayLabels, s.Label)
+			}
+			assert.Equal(t, gate, canonicalSet(displayLabels),
+				"the display list and the gate list must contain the same species by canonical name")
+		})
+	}
+}
+
+// TestGetAllProbableSpecies_V24Only_ByteIdentical verifies that on a v2.4-only install the
+// shared helper contributes nothing, so the display output is unchanged from the base
+// range-filter scores (invariant I1 for single-classifier installs).
+func TestGetAllProbableSpecies_V24Only_ByteIdentical(t *testing.T) {
+	geoLabels := []string{"Turdus merula_Common Blackbird"}
+	geoScores := []SpeciesScore{{Score: 0.9, Label: "Turdus merula_Common Blackbird"}}
+	v24Labels := []string{"Turdus merula_Common Blackbird", "Corvus corax_Northern Raven"}
+
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.RangeFilter.Threshold = 0.01
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
+	settings.BirdNET.Labels = v24Labels
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	rf := &fakeUniversalRangeFilter{geoLabels: geoLabels, scores: geoScores, rawScores: []float32{0.9}}
+	o := buildTestOrchestrator(t, settings, rf) // v2.4 only
+	o.rangeFilter.state.Store(&rangeFilterState{
+		backend:       rf,
+		kind:          rfKindGeomodelV3,
+		participants:  []participantLabels{{id: RegistryIDBirdNETV24, labels: v24Labels}},
+		anchoredOnV24: true,
+		coveredLabels: v24Labels,
+		generation:    1,
+	})
+
+	display, err := o.GetAllProbableSpeciesWithSettings(time.Now(), 0, settings)
+	require.NoError(t, err)
+	got := canonicalSet(labelsOf(display))
+	// Only the in-range Blackbird and the v2.4 residual Corvus (toggle on); no secondary rows.
+	assert.Equal(t, canonicalSet([]string{"Turdus merula_Common Blackbird", "Corvus corax_Northern Raven"}), got)
+}
+
+// labelsOf extracts the labels from a slice of species scores.
+func labelsOf(scores []SpeciesScore) []string {
+	out := make([]string, 0, len(scores))
+	for _, s := range scores {
+		out = append(out, s.Label)
+	}
+	return out
+}
+
+// TestUncoveredParticipantSpecies_Table exercises the shared helper directly across the
+// anchor, backend-kind (geomodel vocabulary present vs nil) and toggle combinations.
+func TestUncoveredParticipantSpecies_Table(t *testing.T) {
+	v24Labels := []string{"Turdus merula_Common Blackbird"}
+	perchLabels := []string{
+		"Cyanistes caeruleus_Eurasian Blue Tit", // in geomodel vocab
+		"Regulus regulus_Goldcrest",             // geomodel-unknown
+		"Ficedula hypoleuca_Pied Flycatcher",    // geomodel-unknown, excluded
+	}
+	geo := NewLabelVocabulary([]string{"Turdus merula_Common Blackbird", "Cyanistes caeruleus_Eurasian Blue Tit"})
+	participants := []participantLabels{
+		{id: RegistryIDBirdNETV24, labels: v24Labels},
+		{id: RegistryIDPerchV2, labels: perchLabels},
+	}
+
+	tests := []struct {
+		name          string
+		anchoredOnV24 bool
+		geo           *LabelVocabulary
+		passUnmapped  bool
+		want          []string
+	}{
+		{name: "not anchored on v2.4: nothing (union already covered)", anchoredOnV24: false, geo: geo, passUnmapped: true, want: nil},
+		{name: "geomodel, toggle off: nothing", anchoredOnV24: true, geo: geo, passUnmapped: false, want: nil},
+		{name: "geomodel, toggle on: only geomodel-unknown, non-excluded", anchoredOnV24: true, geo: geo, passUnmapped: true, want: []string{"Regulus regulus_Goldcrest"}},
+		{name: "no vocab (legacy), toggle off: all non-excluded", anchoredOnV24: true, geo: nil, passUnmapped: false, want: []string{"Cyanistes caeruleus_Eurasian Blue Tit", "Regulus regulus_Goldcrest"}},
+		{name: "no vocab (legacy), toggle on: all non-excluded", anchoredOnV24: true, geo: nil, passUnmapped: true, want: []string{"Cyanistes caeruleus_Eurasian Blue Tit", "Regulus regulus_Goldcrest"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := conftest.GetTestSettings()
+			settings.BirdNET.RangeFilter.PassUnmappedSpecies = tt.passUnmapped
+			conftest.SetTestSettings(settings)
+			t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+			rfs := newRangeFilterService(nil)
+			rfs.state.Store(&rangeFilterState{participants: participants, anchoredOnV24: tt.anchoredOnV24})
+			excluder := newExcludeMatcher([]string{"Pied Flycatcher"}, "en-us")
+
+			out := rfs.uncoveredParticipantSpecies(rfs.loadState(), settings, tt.geo, excluder, map[string]bool{})
+			assert.ElementsMatch(t, tt.want, labelsOf(out))
+		})
+	}
+}
+
+// TestUncoveredParticipantSpecies_Race runs loadState + the shared helper concurrently with
+// state swaps carrying different participant sets, to prove the load-and-use path is race-free
+// (the helper reads only the immutable snapshot it is handed, never rfs.state directly).
+func TestUncoveredParticipantSpecies_Race(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	rfs := newRangeFilterService(nil)
+	excluder := newExcludeMatcher(nil, "en-us")
+	geo := NewLabelVocabulary([]string{"Turdus merula_Common Blackbird"})
+	states := []*rangeFilterState{
+		{anchoredOnV24: false},
+		{anchoredOnV24: true, participants: []participantLabels{{id: RegistryIDBirdNETV24, labels: []string{"Turdus merula_Common Blackbird"}}, {id: RegistryIDPerchV2, labels: []string{"Regulus regulus_Goldcrest"}}}},
+	}
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				_ = rfs.uncoveredParticipantSpecies(rfs.loadState(), settings, geo, excluder, map[string]bool{})
+			}
+		}
+	})
+	wg.Go(func() {
+		defer close(stop)
+		for i := range 2000 {
+			rfs.state.Store(states[i%len(states)])
+		}
+	})
+	wg.Wait()
+}
+
+// TestReload_GeomodelBuildFailure_PreservesLoadedBackend guards the rollback half of the
+// fail-open publish: a reload whose build fails while a backend IS loaded must keep that
+// backend serving and NOT republish a fail-open state (the fail-open publish is gated on
+// cur.backend == nil). Without the gate, a transient reload failure would tear down a
+// working range filter.
+func TestReload_GeomodelBuildFailure_PreservesLoadedBackend(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.Labels = nil
+	// A configured geomodel that cannot build, so the reload errors.
+	settings.BirdNET.RangeFilter.Model = "v3"
+	settings.BirdNET.RangeFilter.ModelPath = ""
+	settings.BirdNET.RangeFilter.LabelsPath = ""
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	perchLabels := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	o := &Orchestrator{
+		Settings:  settings,
+		modelsDir: t.TempDir(),
+		models: map[string]*modelEntry{
+			RegistryIDPerchV2: {instance: &mockModelInstance{id: RegistryIDPerchV2, labels: perchLabels, numSpecies: len(perchLabels)}},
+		},
+	}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newRangeFilterService(nil)
+
+	// Pre-load a working backend; the failing reload must preserve it (rollback contract).
+	existing := &fakeUniversalRangeFilter{geoLabels: perchLabels}
+	o.rangeFilter.state.Store(&rangeFilterState{backend: existing, kind: rfKindGeomodelV3, coveredLabels: perchLabels, generation: 7})
+
+	require.Error(t, o.rangeFilter.reload(settings, o.rangeFilterView),
+		"a configured geomodel that cannot build must surface an error")
+	st := o.rangeFilter.loadState()
+	assert.Same(t, existing, st.backend, "a build failure must not discard the loaded backend")
+	assert.Equal(t, rfKindGeomodelV3, st.kind, "the loaded backend's kind must be preserved on rollback")
+	assert.Equal(t, uint64(7), st.generation, "no state republish (no generation bump) when a backend is already loaded")
+}
+
+// TestBuildRangeFilterMatchesProbableSpecies_UniversalDedup guards the shared-path
+// dedup: BuildRangeFilter and GetProbableSpecies now share one locked predict and one
+// scoring tail (scoreProbableSpecies), so the inclusion list BuildRangeFilter persists
+// must be the exact SET of labels GetProbableSpecies returns on the universal geomodel
+// path, including the pass-unmapped backfill. PassUnmappedSpecies is true here to cover
+// the backfill branch the invariance harness (which uses false) does not.
+func TestBuildRangeFilterMatchesProbableSpecies_UniversalDedup(t *testing.T) {
+	geoLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+	}
+	classifierLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Ficedula hypoleuca_Pied Flycatcher", // not in geomodel -> unmapped
+		"Regulus regulus_Goldcrest",          // not in geomodel -> unmapped
+	}
+
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.RangeFilter.Threshold = 0.01
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
+	settings.BirdNET.Locale = "en-us"
+	settings.BirdNET.Labels = classifierLabels
+	settings.Realtime.Species.Exclude = nil
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	rf := &fakeUniversalRangeFilter{
+		geoLabels: geoLabels,
+		scores: []SpeciesScore{
+			{Score: 0.9, Label: "Turdus merula_Common Blackbird"},
+			{Score: 0.8, Label: "Parus major_Great Tit"},
+		},
+		rawScores: []float32{0.9, 0.8},
+	}
+	o := buildTestOrchestrator(t, settings, rf)
+	date := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+
+	scores, err := o.GetProbableSpeciesWithSettings(date, 0, settings)
+	require.NoError(t, err)
+	fromProbable := make([]string, 0, len(scores))
+	for _, s := range scores {
+		fromProbable = append(fromProbable, s.Label)
+	}
+	slices.Sort(fromProbable)
+
+	require.NoError(t, BuildRangeFilter(o))
+	fromBuild := slices.Clone(conf.GetSettings().GetIncludedSpecies())
+	slices.Sort(fromBuild)
+
+	assert.Equal(t, fromProbable, fromBuild,
+		"BuildRangeFilter inclusion list and GetProbableSpecies must agree on the universal path (shared predict and scoring tail)")
+
+	// Independently pin the full expected set: both mapped geomodel species (Blackbird,
+	// Great Tit) and both unmapped classifier species backfilled by PassUnmappedSpecies
+	// (Pied Flycatcher, Goldcrest). Asserting the exact set, not just Contains, catches a
+	// shared-tail regression that drops rows on BOTH paths, which the symmetric equality
+	// above would otherwise hide.
+	wantLabels := []string{
+		"Ficedula hypoleuca_Pied Flycatcher",
+		"Parus major_Great Tit",
+		"Regulus regulus_Goldcrest",
+		"Turdus merula_Common Blackbird",
+	}
+	slices.Sort(wantLabels)
+	assert.Equal(t, wantLabels, fromBuild,
+		"inclusion list must contain both mapped geomodel species and both unmapped classifier species")
+}
+
+// TestScoreProbableSpecies_ReturnsUnmappedAddedCount pins the pass-unmapped count that
+// the shared scoring tail returns for BuildRangeFilter's "unmapped_species_added" log.
+// It must count only the backfilled classifier species, never the geomodel-scored ones,
+// and must be zero when PassUnmappedSpecies is off.
+func TestScoreProbableSpecies_ReturnsUnmappedAddedCount(t *testing.T) {
+	classifierLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Ficedula hypoleuca_Pied Flycatcher", // not in geomodel -> unmapped
+		"Regulus regulus_Goldcrest",          // not in geomodel -> unmapped
+	}
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Labels = classifierLabels
+	settings.BirdNET.Locale = "en-us"
+	settings.Realtime.Species.Exclude = nil
+	settings.Realtime.Species.Include = nil
+	settings.Realtime.Species.Config = nil
+
+	rawScores := []SpeciesScore{
+		{Score: 0.9, Label: "Turdus merula_Common Blackbird"},
+		{Score: 0.8, Label: "Parus major_Great Tit"},
+	}
+	allGeoLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+	}
+	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
+
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
+	scored, unmappedAdded := scoreProbableSpecies(nil, excluder, rawScores, allGeoLabels, nil, settings.BirdNET.Labels, settings)
+	assert.Equal(t, 2, unmappedAdded, "both unmapped classifier species must be counted")
+	assert.Len(t, scored, 4, "two scored geomodel species plus two unmapped backfills")
+
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = false
+	scored, unmappedAdded = scoreProbableSpecies(nil, excluder, rawScores, allGeoLabels, nil, settings.BirdNET.Labels, settings)
+	assert.Equal(t, 0, unmappedAdded, "no backfill when PassUnmappedSpecies is disabled")
+	assert.Len(t, scored, 2, "only the two scored geomodel species")
+}
+
+// TestBuildRangeFilter_LegacyBackendFallback covers the build-side legacy path: a
+// non-universal backend (fakeRangeFilter satisfies inference.RangeFilter but not
+// UniversalSpeciesPredictor) drives predict to predictLegacy, so BuildRangeFilter falls
+// back to o.GetProbableSpecies. The universal-path tests never reach this dispatch branch.
+func TestBuildRangeFilter_LegacyBackendFallback(t *testing.T) {
+	classifierLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Corvus corax_Northern Raven",
+	}
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.RangeFilter.Threshold = 0.01
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = false
+	settings.BirdNET.Locale = "en-us"
+	settings.BirdNET.Labels = classifierLabels
+	settings.Realtime.Species.Exclude = nil
+	settings.Realtime.Species.Include = nil
+	settings.Realtime.Species.Config = nil
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	// Scores aligned to classifierLabels; all clear the 0.01 threshold.
+	rf := &fakeRangeFilter{scores: []float32{0.9, 0.05, 0.8}}
+	o := buildTestOrchestrator(t, settings, rf)
+
+	require.NoError(t, BuildRangeFilter(o))
+
+	included := slices.Clone(conf.GetSettings().GetIncludedSpecies())
+	slices.Sort(included)
+	want := slices.Clone(classifierLabels)
+	slices.Sort(want)
+	assert.Equal(t, want, included,
+		"legacy-backend BuildRangeFilter fallback must include every classifier species over the threshold")
+}
+
 func TestBuildRangeFilter_PassUnmappedSpecies_RespectsExcludeList(t *testing.T) {
 	geoLabels := []string{
 		"Turdus merula_Common Blackbird",
@@ -208,15 +1111,7 @@ func TestBuildRangeFilter_UpdatesUnmappedScore(t *testing.T) {
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
-	bn := &BirdNET{
-		Settings:     settings,
-		rangeFilter:  mrf,
-		speciesCache: make(map[string]*speciesCacheEntry),
-	}
-	o := &Orchestrator{
-		Settings: settings,
-		primary:  bn,
-	}
+	o := buildTestOrchestrator(t, settings, mrf)
 
 	err := BuildRangeFilter(o)
 	require.NoError(t, err)
@@ -284,13 +1179,9 @@ func TestGetProbableSpecies_PassUnmappedSpecies(t *testing.T) {
 				rawScores: []float32{0.9, 0.8},
 			}
 
-			bn := &BirdNET{
-				Settings:     settings,
-				rangeFilter:  rf,
-				speciesCache: make(map[string]*speciesCacheEntry),
-			}
+			rfs := newTestRangeFilterService(rf)
 
-			scores, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+			scores, _, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 			require.NoError(t, err)
 			assert.GreaterOrEqual(t, len(scores), tt.wantMinSpecies)
 
@@ -306,6 +1197,194 @@ func TestGetProbableSpecies_PassUnmappedSpecies(t *testing.T) {
 				"unmapped species presence should match expectation")
 		})
 	}
+}
+
+// assertAllOccurrenceValues asserts every value in an occurrence map equals want.
+// buildOccurrenceIndex may store both a raw and a canonical key for one species, so
+// this checks all entries rather than assuming a specific key spelling.
+func assertAllOccurrenceValues(t *testing.T, scores map[string]float64, want float64) {
+	t.Helper()
+	require.NotEmpty(t, scores)
+	for k, v := range scores {
+		assert.InDelta(t, want, v, 0.001, "occurrence score for %q", k)
+	}
+}
+
+// TestRangeFilterService_CacheInvalidatedOnBackendSwap verifies the occurrence cache
+// is invalidated across a backend swap by the generation tag alone.
+// swapTestBackend bumps the generation exactly as reload does but, unlike reload, does
+// NOT call clearSpeciesCache, so a stale entry survives in the map. If the generation
+// gate in getCachedSpeciesScores did not reject it, the post-swap read would return the
+// pre-swap backend's scores.
+func TestRangeFilterService_CacheInvalidatedOnBackendSwap(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.RangeFilter.Threshold = 0.01
+	settings.BirdNET.Labels = []string{"Turdus merula_Common Blackbird"}
+
+	geoLabels := []string{"Turdus merula_Common Blackbird"}
+	backendA := &fakeUniversalRangeFilter{
+		geoLabels: geoLabels,
+		scores:    []SpeciesScore{{Score: 0.9, Label: "Turdus merula_Common Blackbird"}},
+		rawScores: []float32{0.9},
+	}
+	backendB := &fakeUniversalRangeFilter{
+		geoLabels: geoLabels,
+		scores:    []SpeciesScore{{Score: 0.1, Label: "Turdus merula_Common Blackbird"}},
+		rawScores: []float32{0.1},
+	}
+
+	rfs := newTestRangeFilterService(backendA)
+	date := time.Now()
+
+	// Populate the cache against backend A, then confirm the second read is a hit.
+	got, err := rfs.getCachedSpeciesScores(date, settings)
+	require.NoError(t, err)
+	assertAllOccurrenceValues(t, got, 0.9)
+	assert.Equal(t, 1, rfs.speciesCacheLen(), "first read should populate the cache")
+
+	hit, err := rfs.getCachedSpeciesScores(date, settings)
+	require.NoError(t, err)
+	assert.Equal(t, got, hit, "second read should be a cache hit with identical scores")
+
+	// Swap in backend B: bumps the generation but leaves the stale gen-0 entry in the
+	// map, so only the generation tag can prevent serving backend A's scores.
+	rfs.swapTestBackend(backendB)
+
+	after, err := rfs.getCachedSpeciesScores(date, settings)
+	require.NoError(t, err)
+	assertAllOccurrenceValues(t, after, 0.1)
+
+	// A subsequent read is a cache hit at the new generation.
+	afterHit, err := rfs.getCachedSpeciesScores(date, settings)
+	require.NoError(t, err)
+	assert.Equal(t, after, afterHit, "read after swap should re-cache at the new generation")
+}
+
+// TestRangeFilterService_CacheGenerationRace exercises concurrent occurrence-cache
+// reads against a stream of backend swaps under the race detector, proving the
+// generation reads (atomic loadState) and the cache access (speciesCacheMu) are
+// race-free and that a reader never serves an out-of-range (torn) score.
+func TestRangeFilterService_CacheGenerationRace(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.RangeFilter.Threshold = 0.01
+	settings.BirdNET.Labels = []string{"Turdus merula_Common Blackbird"}
+
+	newBackend := func(score float64) *fakeUniversalRangeFilter {
+		return &fakeUniversalRangeFilter{
+			geoLabels: []string{"Turdus merula_Common Blackbird"},
+			scores:    []SpeciesScore{{Score: score, Label: "Turdus merula_Common Blackbird"}},
+			rawScores: []float32{float32(score)},
+		}
+	}
+
+	rfs := newTestRangeFilterService(newBackend(0.5))
+	date := time.Now()
+
+	var wg sync.WaitGroup
+	const readers = 8
+	for range readers {
+		wg.Go(func() {
+			for range 200 {
+				got, err := rfs.getCachedSpeciesScores(date, settings)
+				if err != nil {
+					t.Errorf("getCachedSpeciesScores: %v", err)
+					return
+				}
+				for _, v := range got {
+					if v < 0 || v > 1 {
+						t.Errorf("out-of-range occurrence score %v", v)
+						return
+					}
+				}
+			}
+		})
+	}
+	wg.Go(func() {
+		for i := range 100 {
+			rfs.swapTestBackend(newBackend(float64(i%10) / 10.0))
+		}
+	})
+	wg.Wait()
+
+	// Positive control: the swapper actually ran and advanced the generation, so the
+	// readers were exercised against a moving backend rather than an all-cache-hit run.
+	require.Positive(t, rfs.loadState().generation, "concurrent swaps should have advanced the generation")
+}
+
+// speciesCacheLen returns the occurrence-cache size under the cache lock, so tests can
+// assert on caching behavior without racing the map (the -race detector flags an
+// unsynchronized len() otherwise).
+func (rfs *rangeFilterService) speciesCacheLen() int {
+	rfs.speciesCacheMu.RLock()
+	defer rfs.speciesCacheMu.RUnlock()
+	return len(rfs.speciesCache)
+}
+
+// fakeReloadingRangeFilter simulates a reload that commits a new backend generation WHILE
+// a prediction is in flight, to deterministically exercise the write-path skip-caching
+// guard (genBefore != genNow) in getCachedSpeciesScores. probableSpecies calls
+// PredictSpeciesScores while holding rfs.mu, which is the same lock that guards generation
+// writes, so this bumps the published state directly here; calling swapTestBackend instead
+// would self-deadlock on rfs.mu. The bump fires once, so a later uncontended read caches
+// normally.
+type fakeReloadingRangeFilter struct {
+	fakeUniversalRangeFilter
+	rfs  *rangeFilterService
+	once sync.Once
+}
+
+func (f *fakeReloadingRangeFilter) PredictSpeciesScores(lat, lon, week, threshold float32) ([]SpeciesScore, error) {
+	f.once.Do(func() {
+		// Publish a new generation carrying the same backend, mimicking a concurrent
+		// reload that swapped the range filter during this prediction. Safe under the
+		// held rfs.mu; the counter only ever increases.
+		old := f.rfs.loadState()
+		f.rfs.state.Store(&rangeFilterState{backend: old.backend, fellBack: old.fellBack, generation: old.generation + 1})
+	})
+	return f.fakeUniversalRangeFilter.PredictSpeciesScores(lat, lon, week, threshold)
+}
+
+// TestRangeFilterService_CacheSkippedWhenReloadRacesPrediction verifies the write-path
+// anti-poisoning guard: when the backend generation changes DURING probableSpecies (a
+// reload racing the prediction), getCachedSpeciesScores must return the fresh scores
+// WITHOUT caching them, because they may reflect a superseded backend. Without the guard
+// they would be cached tagged with the new generation and later served as if current.
+func TestRangeFilterService_CacheSkippedWhenReloadRacesPrediction(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.RangeFilter.Threshold = 0.01
+	settings.BirdNET.Labels = []string{"Turdus merula_Common Blackbird"}
+
+	inner := fakeUniversalRangeFilter{
+		geoLabels: []string{"Turdus merula_Common Blackbird"},
+		scores:    []SpeciesScore{{Score: 0.7, Label: "Turdus merula_Common Blackbird"}},
+		rawScores: []float32{0.7},
+	}
+	backend := &fakeReloadingRangeFilter{fakeUniversalRangeFilter: inner}
+	rfs := newTestRangeFilterService(backend)
+	backend.rfs = rfs
+	date := time.Now()
+
+	// First read: the fake bumps the generation mid-prediction, so genBefore != genNow.
+	// The caller still gets the fresh scores, but they must NOT be cached.
+	got, err := rfs.getCachedSpeciesScores(date, settings)
+	require.NoError(t, err)
+	assertAllOccurrenceValues(t, got, 0.7)
+	assert.Zero(t, rfs.speciesCacheLen(), "scores computed across a mid-prediction reload must not be cached")
+
+	// Second read: the fake no longer bumps (once fired), so genBefore == genNow and the
+	// entry caches normally, proving the skip was specific to the raced generation.
+	_, err = rfs.getCachedSpeciesScores(date, settings)
+	require.NoError(t, err)
+	assert.Equal(t, 1, rfs.speciesCacheLen(), "an uncontended read should cache normally")
 }
 
 func TestBuildRangeFilter_UnmappedSpeciesInIsSpeciesIncluded(t *testing.T) {

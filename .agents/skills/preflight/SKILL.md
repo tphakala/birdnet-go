@@ -70,7 +70,7 @@ Review changes for bugs that cause crashes, data loss, or security incidents.
 7. **Common bugs**: Go (= vs :=, missing rows.Err(), modify slice while iterating, defer in loop, missing return after http.Error), TS (truthy on 0/"", .find() without undefined check, unwaited promise, == vs ===), Svelte ($state destructuring, $effect for derived values, missing cleanup, $state.raw mutation).
 8. **Non-DST-safe time arithmetic**: `time.Now().Add(-N * 24 * time.Hour)` loses or gains an hour near DST transitions. Use `time.Now().AddDate(0, 0, -N)` for calendar-day arithmetic. Flag any `N * 24 * time.Hour` used for day-level offsets.
 9. **Event emission ordering (query-before-emit)**: emitting a new event before querying for the previous one creates a race where you read back your own event. Always query history before emitting new entries in event-sourced patterns.
-10. **Context lifecycle through embedded structs**: when code reads or writes a `context.Context` field on a struct, grep for ALL assignments to that field across the entire package (`grep -rn 'fieldName\s*=' pkg/`). Embedded struct methods can cancel and replace contexts set by the parent. A goroutine capturing a context may be killed when an embedded method replaces it. Especially important for lifecycle methods (`Start`, `Stop`, `Open`, `Close`, `Monitor`).
+10. **Context lifecycle through embedded structs**: when code reads or writes a `context.Context` field on a struct, grep for ALL assignments to that field across the entire package (`grep -rn 'fieldName\s*=' <package-dir>/`, the directory of the package that declares the struct, usually under `internal/` but also `cmd/` or the repository root). Embedded struct methods can cancel and replace contexts set by the parent. A goroutine capturing a context may be killed when an embedded method replaces it. Especially important for lifecycle methods (`Start`, `Stop`, `Open`, `Close`, `Monitor`).
 
 **Safety:**
 11. **Security**: SQL/command/path injection, XSS (@html without sanitize, innerHTML), hardcoded secrets, insecure crypto, missing auth/authz, CORS misconfiguration.
@@ -249,8 +249,9 @@ Before pushing or creating a PR, verify each item by actually executing the comm
 
 - [ ] Single concern: PR contains exactly ONE feature, ONE fix, or ONE refactor
 - [ ] Preflight passed: All Phase 1-3 findings resolved or filed as issues
-- [ ] Linters clean: golangci-lint run -v and npm run check:all pass (zero warnings)
-- [ ] Tests pass: go test -race ./... and npm test pass
+- [ ] Linters clean: task lint (golangci-lint over the whole module) and npm run check:all (from frontend/) pass (zero warnings)
+- [ ] Tests pass: task test (go test -race) and npm test pass
+- [ ] Tagged or OS-specific Go files changed: linted with those build tags (task lint BASE_BUILD_TAGS=<tags>), and OS-specific files called out in the PR so the maintainer can add the `full-ci` label (see the root AGENTS.md)
 - [ ] No unrelated changes: diff contains only changes relevant to the stated goal
 - [ ] Scope complete: PR fully implements what it claims; no TODO/FIXME for core functionality
 - [ ] No regression/backward-compat break: no orphaned config keys, removed/renamed API fields, destructive migrations, changed detection defaults, or read-time filters that hide data an existing feature kept on purpose (Reviewer 6)
@@ -260,7 +261,7 @@ Before pushing or creating a PR, verify each item by actually executing the comm
 - [ ] No secrets or PII: no hardcoded credentials, API keys, or personal data in diff
 ```
 
-Include this certification in the PR description under a "Preflight Status" heading.
+This certification is a private self-check. Do not paste it or any preflight findings into the PR description; the PR gets only a single `- [x] Preflight passed` checkbox.
 
 ## Static Analysis False Positive Patterns
 

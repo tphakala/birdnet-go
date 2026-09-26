@@ -292,14 +292,21 @@
     }
   }
 
-  async function runDiagnostics() {
+  async function runDiagnostics(forceIntegrity = false) {
     if (running) return;
     running = true;
     error = null;
     try {
-      report = await api.post<DiagnosticsReport>(
-        `/api/v2/system/diagnostics/run?window=${selectedWindow}`
-      );
+      // forceIntegrity clears the server-side cached database integrity result so
+      // this run re-runs the SQLite PRAGMA quick_check instead of reusing a result
+      // cached up to 24h. Only the explicit "Run diagnostics" click sets it; the
+      // auto-run on mount and the window switch reuse the cache, because
+      // quick_check runs on the single pinned SQLite connection and can stall
+      // writes on a large database (#3939).
+      const url = `/api/v2/system/diagnostics/run?window=${selectedWindow}${
+        forceIntegrity ? '&refresh_integrity=true' : ''
+      }`;
+      report = await api.post<DiagnosticsReport>(url);
     } catch {
       error = t('health.errors.fetchFailed');
     } finally {
@@ -577,7 +584,7 @@
         {/if}
         <button
           type="button"
-          onclick={runDiagnostics}
+          onclick={() => runDiagnostics(true)}
           disabled={running}
           aria-label={t('health.refresh')}
           title={t('health.refresh')}

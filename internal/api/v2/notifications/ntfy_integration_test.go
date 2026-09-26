@@ -3,6 +3,7 @@
 package notifications
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 // setupNtfyContainerForAPI creates a no-auth ntfy container for API integration tests.
 func setupNtfyContainerForAPI(t *testing.T) *containers.NtfyContainer {
 	t.Helper()
+	containers.SkipIfContainerRuntimeUnavailable(t)
 	ctx := t.Context()
 	c, err := containers.NewNtfyContainer(ctx, nil)
 	require.NoError(t, err, "failed to start ntfy container")
@@ -59,8 +61,11 @@ func TestCheckNtfyServer_RealContainer(t *testing.T) {
 		ctrl := New(&apicore.Core{}, nil, nil)
 		ctrl.Settings.Store(apitest.NewValidTestSettings())
 
-		req := httptest.NewRequest(http.MethodGet,
-			"/api/v2/notifications/check-ntfy-server?host="+host, http.NoBody)
+		reqBody, mErr := json.Marshal(map[string]string{"host": host})
+		require.NoError(t, mErr)
+		req := httptest.NewRequest(http.MethodPost,
+			"/api/v2/notifications/check-ntfy-server", bytes.NewReader(reqBody))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		echoCtx := e.NewContext(req, rec)
 

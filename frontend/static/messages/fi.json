@@ -109,6 +109,14 @@
       "closeModal": "Sulje modaali-ikkuna",
       "dismissAlert": "Hylkää ilmoitus",
       "closeNotification": "Sulje ilmoitus",
+      "toastRegion": {
+        "topLeft": "Ilmoitukset, ylhäällä vasemmalla",
+        "topCenter": "Ilmoitukset, ylhäällä keskellä",
+        "topRight": "Ilmoitukset, ylhäällä oikealla",
+        "bottomLeft": "Ilmoitukset, alhaalla vasemmalla",
+        "bottomCenter": "Ilmoitukset, alhaalla keskellä",
+        "bottomRight": "Ilmoitukset, alhaalla oikealla"
+      },
       "toggleDropdown": "Vaihda pudotusvalikon tila",
       "sortAscending": "Lajittele nousevasti",
       "selectLanguage": "Valitse kieli",
@@ -130,7 +138,6 @@
       "selectToday": "Valitse tänään",
       "dateSelected": "Päivämäärä valittu: {date}",
       "calendarNavigation": "Käytä nuolinäppäimiä kalenterissa liikkumiseen, Enter valitsee, Esc sulkee",
-      "downloadCsv": "Lataa lajilista CSV-tiedostona",
       "visitEbirdLink": "Avaa eBird.org uuteen välilehteen",
       "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen",
       "resizeHandle": "Vedä muuttaaksesi kokoa",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Äänianalyysi ylikuormitettu",
-        "overloadMessage": "Järjestelmäsi hylkää {dropRate} % lähteen ''{sourceName}'' ääninäytteistä, koska se ei pysy analyysin tahdissa. Pienennä BirdNET-päällekkäisyysarvoa tunnistusasetuksista tai harkitse nopeamman suorittimen hankkimista."
+        "overloadMessage": "Järjestelmäsi hylkää {dropRate} % lähteen '{sourceName}' ääninäytteistä, koska se ei pysy analyysin tahdissa. Pienennä BirdNET-päällekkäisyysarvoa tunnistusasetuksista tai harkitse nopeamman suorittimen hankkimista."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime ei ole käytettävissä",
@@ -472,7 +479,17 @@
         "unreadableMessage": "Mallille {modelName} määritetty mallitiedosto on olemassa, mutta sitä ei voitu lukea, joten sen sijaan käytetään asennettua mallia sijainnissa {modelPath}. Asetuksiasi ei muutettu. Tarkista tiedoston käyttöoikeudet ja se, että sen tallennustila on liitetty.",
         "builtinMessage": "Mallille {modelName} määritettyä mallitiedostoa ei löytynyt levyltä eikä korvaavaa asennettua mallia ole saatavilla, joten sen sijaan käytetään sisäänrakennettua mallia. Asetuksiasi ei muutettu.",
         "notRegisteredTitle": "Mikään malli ei analysoi kohdetta {sourceName}",
-        "notRegisteredMessage": "Ääni ei tavoita kohdetta {models} äänilähteessä \"{sourceName}\", joten havaintoja ei tuoteta. Avaa Asetusten malligalleria tarkistaaksesi tilan."
+        "notRegisteredMessage": "Ääni ei tavoita kohdetta {models} äänilähteessä \"{sourceName}\", joten havaintoja ei tuoteta. Avaa Järjestelmä > Tekoälymallit tarkistaaksesi sen lähdekohtaisen tilan ja varmistaaksesi, että äänilähde on yhdistetty ja lähettää ääntä."
+      },
+      "acousticModels": {
+        "noneTitle": "Akustista mallia ei ole käytössä",
+        "noneMessage": "Akustista mallia ei ole ladattu, joten ääntä tallennetaan, mutta sitä ei analysoida. Ota malli käyttöön kohdassa Asetukset > Analyysi tai asenna sellainen malligalleriasta.",
+        "loadFailedTitle": "Akustisen mallin lataus epäonnistui",
+        "loadFailedMessage": "Käytössä olevan akustisen mallin lataus epäonnistui, joten ääntä tallennetaan, mutta sitä ei analysoida. Tarkista malli sivulla Järjestelmä > Tekoälymallit."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# mallille on saatavilla parempi versio tälle järjestelmälle} other {# mallille on saatavilla parempia versioita tälle järjestelmälle}}",
+        "message": "Tämän järjestelmän laitteistoon tai sijaintiin paremmin sopiva versio on saatavilla seuraaville malleille: {models}. Avaa Asetukset > Analyysi > Mallit ja vaihda valitsemalla Optimoi."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -493,6 +510,11 @@
           "diskFull": "Levy on täynnä - vapauta tilaa",
           "permissionDenied": "Käyttö estetty - tarkista tiedosto- tai palveluoikeudet"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} epäonnistuu jokaisessa analyysissä",
+        "message": "{modelName} on ladattu, mutta sen viimeiset {failures} analyysiä peräkkäin epäonnistuivat taustajärjestelmällä {runtime}: päättely palautti virheen. Ääntä tallennetaan, mutta tämä malli ei tunnista mitään. Tarkista malli sivulla Järjestelmä > Tekoälymallit.",
+        "nonFiniteMessage": "{modelName} on ladattu, mutta sen viimeiset {failures} analyysiä peräkkäin epäonnistuivat taustajärjestelmällä {runtime}: malli palautti virheellisiä pisteitä (NaN tai äärettömiä). Ääntä tallennetaan, mutta tämä malli ei tunnista mitään. Tarkista malli sivulla Järjestelmä > Tekoälymallit."
       }
     },
     "loading": "Ladataan ilmoituksia..."
@@ -763,6 +785,16 @@
       "recentHearingFetch": "Viimeaikaisen lajitoiminnan haku epäonnistui: {status}",
       "recentHearingLoad": "Viimeaikaisen lajitoiminnan lataus epäonnistui",
       "configFetch": "Etusivun asetusten haku epäonnistui: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Akustista mallia ei ole käytössä",
+      "noneMessage": "Ääntä tallennetaan, mutta ei analysoida. Ota malli käyttöön malligalleriassa aloittaaksesi lajien tunnistuksen.",
+      "noneAction": "Avaa malligalleria",
+      "loadFailedTitle": "Akustisen mallin lataus epäonnistui",
+      "loadFailedMessage": "Käytössä olevaa mallia ei voitu ladata, joten ääntä ei analysoida. Tekoälymallit-sivu näyttää, mikä malli epäonnistui ja miksi.",
+      "loadFailedAction": "Näytä Tekoälymallit-tila",
+      "failingTitle": "{count, plural, one {Malli epäonnistuu jokaisessa analyysissä} other {# mallia epäonnistuu jokaisessa analyysissä}}",
+      "failingMessage": "{count, plural, one {{models} on ladattu, mutta jokainen analyysi epäonnistuu, joten se ei tunnista mitään.} other {{models} on ladattu, mutta jokainen analyysi epäonnistuu, joten ne eivät tunnista mitään.}} Tekoälymallit-sivulla näkyy taustajärjestelmä ja virhe."
     },
     "banner": {
       "title": "Otsikko",
@@ -1794,7 +1826,10 @@
       "noSources": "Ei liitettyjä lähteitä",
       "primaryFallback": "ensisijainen (vara)",
       "sourceNotRunning": "ei analysoida",
-      "sourceNotRunningTooltip": "Tämä lähde on liitetty malliin asetuksissa, mutta sen ääni ei tavoita mallia, joten se ei tuota havaintoja. Avaa Asetusten malligalleria tarkistaaksesi sen tilan.",
+      "sourceNotRunningTooltip": "Tämä lähde on liitetty malliin asetuksissa, mutta sen ääni ei tavoita mallia, joten se ei tuota havaintoja. Tarkista, että äänilähde on yhdistetty ja lähettää ääntä.",
+      "modelNotAnalyzingTooltip": "Yksi tai useampi tähän malliin liitetyistä äänilähteistä ei lähetä sille ääntä, joten se ei tuota havaintoja. Katso alla luetellut lähteet.",
+      "sourcesDegraded": "{count}/{total} lähdettä alhaalla",
+      "sourcesDegradedTooltip": "Osa tämän mallin äänilähteistä on alhaalla, mutta ei kaikki, joten se analysoi edelleen toimivien kautta. Kyseinen alhaalla oleva lähde ja sen korjausohjeet on lueteltu alla.",
       "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -1836,7 +1871,14 @@
       "fp16Help": "16-bittinen liukuluku. Sitä tukeva laitteisto voi suorittaa jotkin mallit nopeammin ja vähemmällä muistilla.",
       "invocationsHelp": "Tämän mallin analysoimien äänisegmenttien kokonaismäärä käynnistyksen jälkeen.",
       "noModelsHint": "Ei äänilähteitä määritettynä vielä?",
-      "noModelsHintLink": "Määritä äänilähteet"
+      "noModelsHintLink": "Määritä äänilähteet",
+      "modelFailing": "jokainen analyysi epäonnistuu",
+      "lastSuccess": "Viimeisin onnistuminen",
+      "lastSuccessHelp": "Milloin tämä malli viimeksi analysoi ääntä ilman virhettä.",
+      "lastSuccessNever": "Ei yhtään mallin latauksen jälkeen",
+      "modelFailingHelp": "{reason} Kokeile tämän mallin toista versiota kohdassa Asetukset > Analyysi > Mallit tai tarkista yllä näkyvä taustajärjestelmä ja tarkkuus.",
+      "modelFailingReasonNonFinite": "Kaikki viimeaikaiset analyysit epäonnistuivat, koska malli palautti virheellisiä pisteitä (NaN tai äärettömiä), joten se ei tunnista mitään.",
+      "modelFailingReasonError": "Kaikki viimeaikaiset analyysit epäonnistuivat, koska päättely palautti virheen, joten malli ei tunnista mitään."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2352,7 +2394,7 @@
           "title": "Väärien positiivisten suodatin",
           "description": "Vähentää virheellisiä havaintoja vaatimalla useita vahvistuksia päällekkäisistä äänisegmenteistä",
           "level": {
-            "label": "Suodatustaso"
+            "label": "Väärien positiivisten suodattimen voimakkuus"
           },
           "detectionCount": "{count} vahvistusta vaaditaan. {description}",
           "levels": {
@@ -2382,7 +2424,19 @@
           "description": "Rajoita tunnistus lajeihin, jotka ovat todennäköisiä maantieteellisellä alueellasi",
           "stationLocation": {
             "label": "Aseman sijainti",
-            "helpText": "Aseman sijainti, jota käytetään säätietoihin ja lintulajien rajoittamiseen alueella todennäköisiin lajeihin."
+            "helpText": "Aseman sijainti, jota käytetään säätietoihin ja lintulajien rajoittamiseen alueella todennäköisiin lajeihin.",
+            "automaticLocation": "Automaattinen sijainti",
+            "useCurrentLocation": "Käytä selaimen sijaintia",
+            "locationHelp": "Täyttää koordinaatit tämän selaimen sijainnin perusteella.",
+            "locating": "Paikannetaan...",
+            "accuracy": "Arvioitu tarkkuus: {accuracy} m:n sisällä",
+            "locationDetected": "Selaimen sijainti havaittu.",
+            "geolocationUnsupported": "Tämä selain ei tue laitteen paikannusta. Anna koordinaatit manuaalisesti tai käytä karttaa.",
+            "geolocationRequiresHttps": "Selaimen paikannus vaatii HTTPS-yhteyden tai localhostin. Anna koordinaatit manuaalisesti tai käytä karttaa.",
+            "geolocationDenied": "Sijaintilupa evättiin. Anna koordinaatit manuaalisesti tai käytä karttaa.",
+            "geolocationUnavailable": "Laite ei pystynyt määrittämään sijaintiaan. Anna koordinaatit manuaalisesti tai käytä karttaa.",
+            "geolocationTimedOut": "Sijaintipyyntö aikakatkaistiin. Yritä uudelleen, anna koordinaatit manuaalisesti tai käytä karttaa.",
+            "geolocationFailed": "Laitteen sijaintia ei voitu määrittää. Anna koordinaatit manuaalisesti tai käytä karttaa."
           },
           "latitude": {
             "label": "Leveysaste",
@@ -2638,9 +2692,9 @@
           "label": "Kieli",
           "helpText": "Kieli käännetyille lajien nimille."
         },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU-säikeet",
-          "helpText": "CPU-säikeiden määrä. Aseta 0 käyttääksesi kaikkia saatavilla olevia säikeitä."
+        "inferenceThreads": {
+          "label": "Inferenssin CPU-säikeet",
+          "helpText": "Mallin inferenssiin käytettävien CPU-säikeiden määrä. Aseta 0 käyttääksesi kaikkia saatavilla olevia säikeitä. Ei vaikuta GPU:lla suoritettaviin malleihin."
         }
       },
       "errors": {
@@ -2920,6 +2974,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Tallenna palveluntarjoaja",
+          "saveWaitingNtfyCheck": "Odotetaan ntfy-yhteyden tarkistuksen valmistumista",
           "savingButton": "Tallennetaan...",
           "cancelButton": "Peruuta",
           "testButton": "Testaa",
@@ -2991,6 +3046,7 @@
               "http": "HTTP toimii - palvelin ei käytä HTTPS:ää"
             },
             "connectionFailed": "Yhteys epäonnistui - tarkista isäntänimi ja palvelimen tila",
+            "checkError": "Palvelimen tarkistus epäonnistui - tarkista osoite tai lataa sivu uudelleen ja yritä uudestaan",
             "auth": {
               "label": "Todennus (valinnainen)",
               "username": {
@@ -3245,7 +3301,7 @@
             "label": "Laitteen nimi",
             "helpText": "Laitteiden perusnimi sellaisena kuin ne näkyvät Home Assistantissa. Jokaisella äänilähteellä on oma laite, joka on linkitetty tähän BirdNET-Go-päälaitteeseen."
           },
-          "sensorsNote": "<strong>Luodut anturit:</strong> Jokaista äänilähdettä kohden Home Assistant saa: Viimeisin laji, Luottamus, Tieteellinen nimi ja Äänitaso (jos käytössä). Siltalaitteessa on online/offline-saatavuustila.",
+          "sensorsNote": "<strong>Luodut anturit:</strong> Jokaista äänilähdettä kohden Home Assistant saa: Viimeisin laji, Luottamus, Tieteellinen nimi ja Äänitaso (jos käytössä). Siltalaitteessa on online/offline-saatavuustila. Kunkin lähteen havaintoanturit lukevat kyseisen lähteen omaa MQTT-aihetta, &lt;base_topic&gt;/sources/&lt;source_id&gt;, ja sen Äänitaso-anturi lukee aliaihetta &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, joten yhden lähteen havainto ei koskaan nollaa toisen lähteen antureita.",
           "discovery": {
             "button": "Lähetä Discovery",
             "success": "Discovery-viestit lähetetty Home Assistantiin",
@@ -3291,7 +3347,8 @@
             "none": "Ei mitään",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3312,6 +3369,16 @@
             "helpText": "Valitse lämpötilan näyttöyksiköt"
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API-avain",
+            "helpText": "Pirate Weather API-avaimesi. Pidä tämä salassa!"
+          },
+          "endpoint": {
+            "label": "API-päätepiste",
+            "helpText": "Korvaa tarvittaessa Pirate Weatherin oletus-API-päätepiste. Oletuksena käytetään https://api.pirateweather.net/forecast jos jätetään tyhjäksi."
+          }
+        },
         "notes": {
           "none": "Säätietoja ei haeta.",
           "yrno": {
@@ -3319,7 +3386,8 @@
             "freeService": "Yr on ilmainen säätietopalvelu. Lisätietoja: <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "OpenWeatherin käyttö vaatii API-avaimen, rekisteröidy ilmaiselle API-avaimelle osoitteessa <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Vaatii Weather Underground API-avaimen ja kelvollisen PWS-asematunnuksen. Katso lisätietoja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>."
+          "wunderground": "Vaatii Weather Underground API-avaimen ja kelvollisen PWS-asematunnuksen. Katso lisätietoja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>.",
+          "pirateweather": "Pirate Weatherin käyttö vaatii API-avaimen, rekisteröidy osoitteessa <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API-avain",
@@ -3692,6 +3760,7 @@
         "dataOutputTitle": "Äänitasotietojen lähtö",
         "dataOutputDescription": "Kun käytössä, äänitasomittaukset julkaistaan kautta:",
         "mqttTopic": "MQTT-aihe:",
+        "mqttSourceTopic": "Lähdekohtainen MQTT-aihe (Home Assistant discovery käytössä):",
         "sseEndpoint": "SSE-päätepiste:",
         "prometheusMetrics": "Prometheus-mittarit:"
       },
@@ -3753,6 +3822,8 @@
         "pathHelp": "Hakemisto, johon äänileikkeet tallennetaan. Suhteelliset polut ovat sovellushakemistosta. Esimerkki: 'clips/' tai '/var/audio/birds/'",
         "typeLabel": "Äänimuoto",
         "typeHelp": "Tallennettujen leikkeiden äänimuoto. WAV ja FLAC ovat häviöttömiä (paras laatu, suuremmat tiedostot). MP3, AAC ja Opus ovat häviöllisiä (pienemmät tiedostot, pieni laatutappio).",
+        "ultrasonicTypeLabel": "Ultraäänimuoto",
+        "ultrasonicTypeHelp": "Häviötön muoto (WAV tai FLAC), jota käytetään vain lepakko- ja ultraäänitallenteille yli 48 kHz taajuuksilla. Ne tallennetaan täydellä lähdenäytteenottotaajuudella yllä olevan muodon sijaan, jotta ultraäänen yksityiskohtia ei menetetä.",
         "bitrateLabel": "Bittinopeus",
         "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
         "losslessBitrateValue": "Ei saatavilla - Häviötön",
@@ -3821,7 +3892,17 @@
       },
       "models": {
         "recommendBoth": "Parhaan lajien havainnointikattavuuden saavuttamiseksi suositellaan käyttämään sekä BirdNET- että Perch-malleja yhdessä.",
-        "perchOnlyWarning": "Perch yksinään tuottaa vähemmän havaintoja. Laske luottamuskynnys arvoon 0.50 mielekkäiden tulosten saamiseksi tai ota BirdNET käyttöön rinnalle paremman kattavuuden saavuttamiseksi."
+        "perchOnlyWarning": "Perch yksinään tuottaa vähemmän havaintoja. Laske luottamuskynnys arvoon 0.50 mielekkäiden tulosten saamiseksi tai ota BirdNET käyttöön rinnalle paremman kattavuuden saavuttamiseksi.",
+        "loading": "Ladataan tunnistusmalleja...",
+        "noneEnabledTitle": "Ei tunnistusmallia käytössä.",
+        "noneEnabledHelp": "Voit silti tallentaa tämän lähteen. Oletusmallit analysoivat sen äänen heti, kun jokin niistä on otettu käyttöön.",
+        "noneEnabledLink": "Avaa malligalleria",
+        "noneAvailable": "Tällä palvelimella ei ole käytössä tunnistusmalleja.",
+        "loadFailedWarning": "Tunnistusmallin lataus epäonnistui, joten tätä lähdettä ei analysoida ennen kuin se palautuu.",
+        "loadFailedLink": "Näytä Tekoälymallit-tila",
+        "defaultBadge": "{models} (oletus)",
+        "defaultPendingBadge": "Oletusmallit",
+        "noneBadge": "Ei ladattua mallia"
       }
     },
     "security": {
@@ -4367,7 +4448,7 @@
       "dynamicThreshold": {
         "tabLabel": "Opitut",
         "title": "Opitut kynnysarvot",
-        "description": "Tämä sivu näyttää dynaamisten kynnysarvojen suoritusaikaiset tiedot. Kun käytössä kohdassa Pääasetukset → Tunnistus, kynnysarvoja säädetään automaattisesti useiden korkean luottamuksen havaintojen perusteella. Täällä näkyvien lajien oletetaan esiintyvän tässä sijainnissa.",
+        "description": "Tämä sivu näyttää dynaamisten kynnysarvojen suoritusaikaiset tiedot. Kun käytössä, kynnysarvoja säädetään automaattisesti useiden korkean luottamuksen havaintojen perusteella. Täällä näkyvien lajien oletetaan esiintyvän tässä sijainnissa.",
         "stats": {
           "active": "Aktiiviset",
           "atMinimum": "Minimissä",
@@ -4869,7 +4950,16 @@
       "streamTitleDefault": "Lintujen äänistriimi",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Suora lähetys",
-      "playbackError": "Toistovirhe: {details}"
+      "playbackError": "Toistovirhe: {details}",
+      "audibleBats": {
+        "title": "Kuultava lepakoiden toisto",
+        "subtitle": "Hidasta ultraäänikutsut ihmisen kuuloalueelle.",
+        "timeExpansion": "Aikavenytys",
+        "enable": "Aktivoi",
+        "disable": "Deaktivoi",
+        "generating": "Luodaan johdettua ääntä…",
+        "error": "Kuultavaa lepakkoääntä ei voitu luoda"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammia ei ole vielä generoitu",
@@ -5092,6 +5182,7 @@
       "birdweatherClientFailed": "BirdWeather-asiakasohjelman luominen epäonnistui",
       "noWeatherProvider": "Sääpalvelua ei ole valittu",
       "openWeatherKeyRequired": "OpenWeather API-avain on pakollinen",
+      "pirateWeatherKeyRequired": "Pirate Weather API-avain on pakollinen",
       "processorUnavailable": "Prosessori ei ole käytettävissä",
       "discoveryFailed": "Home Assistant -laitteen löytäminen epäonnistui"
     },
@@ -5101,6 +5192,7 @@
       "notFound": "Ilmoitusta ei löytynyt",
       "hostRequired": "Host-parametri on pakollinen",
       "invalidHost": "Virheellinen host-parametri",
+      "invalidBody": "Virheellinen pyynnön sisältö",
       "rateLimit": "Liian monta yhteysyritystä ilmoitusstriimiin, odota hetki ennen uutta yritystä"
     },
     "streams": {

@@ -39,7 +39,7 @@ type SQLiteStore struct {
 
 	// dbstatAvailable caches whether the dbstat virtual table exists.
 	// 0 = unchecked, 1 = available, -1 = not available.
-	dbstatAvailable int32
+	dbstatAvailable atomic.Int32
 
 	// Guards to prevent starting monitoring loops more than once.
 	integrityOnce     sync.Once

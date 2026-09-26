@@ -1,0 +1,8 @@
+Myotis daubentonii_Water Bat
+Pipistrellus pipistrellus_Common Pipistrelle
+Nyctalus noctula_Noctule
+Eptesicus serotinus_Serotine
+Myotis nattereri_Natterer's Bat
+Barbastella barbastellus_Barbastelle
+Plecotus auritus_Long-eared Bat
+Plecotus austriacus_Long-eared Bat

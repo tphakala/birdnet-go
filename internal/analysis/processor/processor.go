@@ -116,6 +116,27 @@ type Processor struct {
 	discoveryDebounceMu     sync.Mutex
 	defaultDiscoveryCleanup sync.Once // ensures stale "default" discovery cleanup runs at most once
 
+	// haDiscoveryMu serializes HA discovery publishing and retirement, so a
+	// publish that was already queued cannot interleave with (or undo) a retire.
+	haDiscoveryMu sync.Mutex
+	// haPublishedConfig is the discovery identity (prefix, base topic, node) this
+	// process last published under, or nil when nothing needs retiring. It holds
+	// no per-entity state: retirement recomputes the entities from the registry.
+	// Guarded by haDiscoveryMu.
+	haPublishedConfig *mqtt.DiscoveryConfig
+
+	// haPendingRemovals holds HA entity removals requested by user actions (a
+	// stream deleted or renamed in settings) until the next discovery publish
+	// or retirement performs them. haPendingMu guards it and is never held across
+	// network I/O, so the audio pipeline may queue while holding its own locks.
+	haPendingMu       sync.Mutex
+	haPendingRemovals []haPendingRemoval
+
+	// haLegacyStatusCleared is the pre-fix status topic ("<base>//status" for a
+	// base topic with a trailing slash) this process has already cleared, so it
+	// is cleared once per distinct base. Guarded by haDiscoveryMu.
+	haLegacyStatusCleared string
+
 	// BufferMgr provides access to capture buffers for audio clip extraction.
 	// Set once during pipeline initialization (audio_pipeline_service.go) and never replaced;
 	// no synchronization needed for concurrent reads.
@@ -167,7 +188,7 @@ type Processor struct {
 	// operators get a startup-time error for any broken path already
 	// configured. The map is then consulted from detection goroutines
 	// (read) and extended on-demand (write) when a species that was
-	// added or edited *after* startup first fires — that hot-reload
+	// added or edited *after* startup first fires: that hot-reload
 	// path is why we use sync.Map instead of a plain map + mutex: the
 	// Processor itself is never recreated on settings reload (mutation
 	// in place by ControlMonitor), and concurrent reads from detection
@@ -180,7 +201,7 @@ type Processor struct {
 	// (e.g. the operator fixed permissions or restored a missing file),
 	// the entry is deleted and the action becomes active immediately
 	// without waiting for a process restart. This satisfies the
-	// hot-reload requirement in CLAUDE.md while still suppressing the
+	// hot-reload requirement in AGENTS.md while still suppressing the
 	// per-detection Sentry spam between rechecks.
 	invalidCommandPaths sync.Map
 }
@@ -628,12 +649,12 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 }
 
 // Start launches the background goroutines that process detections.
-// It must be called AFTER BufferMgr and Registry are wired — otherwise
+// It must be called AFTER BufferMgr and Registry are wired: otherwise
 // detections arrive before the buffer manager is available and audio
 // clip export silently fails.
 func (p *Processor) Start() {
 	p.startOnce.Do(func() {
-		GetLogger().Info("Processor.Start() called — BufferMgr and Registry wired, launching detection goroutines",
+		GetLogger().Info("Processor.Start() called: BufferMgr and Registry wired, launching detection goroutines",
 			logger.Bool("buffer_mgr_set", p.BufferMgr != nil),
 			logger.Bool("registry_set", p.Registry() != nil),
 			logger.String("operation", "processor_start"))
@@ -799,8 +820,11 @@ func (p *Processor) processDetections(item classifier.Results) {
 			p.applyExtendedCapture(mapKey, now, detectionWindow)
 		}
 
-		// Update the dynamic threshold for this species if enabled
-		p.updateDynamicThreshold(item.ModelID, commonName, confidence)
+		// Note: the dynamic-threshold expiry timer is renewed only from approved,
+		// filter-passing detections above Trigger in LearnFromApprovedDetection
+		// (via processApprovedDetection). Renewing it here from pending detections
+		// above the model base let sub-trigger noise sustain a lowered gate
+		// indefinitely (#4194), so no renewal happens on the pending path.
 
 		// Unlock the mutex to allow other goroutines to access shared resources
 		p.pendingMutex.Unlock()
@@ -979,11 +1003,13 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 	}
 
 	// Log placeholder taxonomy codes if a custom model is actually running. Read the
-	// RESOLVED primary path, not settings.BirdNET.ModelPath: after a stale-path
-	// recovery the configured value can name a file the instance is not running (or
-	// the built-in baseline is running while config still points at a custom path),
-	// so the raw setting would misclassify which model produced the code.
-	if p.Bn.PrimaryResolvedModelPath() != "" && settings.Debug && speciesCode != "" {
+	// RESOLVED path of the model that produced this detection, not
+	// settings.BirdNET.ModelPath: after a stale-path recovery the configured value can
+	// name a file the instance is not running (or the built-in baseline is running
+	// while config still points at a custom path), so the raw setting would
+	// misclassify which model produced the code. For a v2.4 install item.ModelID is
+	// RegistryIDBirdNETV24, so this is identical to the previous primary read.
+	if p.Bn.ResolvedModelPathForID(item.ModelID) != "" && settings.Debug && speciesCode != "" {
 		if len(speciesCode) == 8 && (speciesCode[:2] == "XX" || (speciesCode[0] >= 'A' && speciesCode[0] <= 'Z' && speciesCode[1] >= 'A' && speciesCode[1] <= 'Z')) {
 			GetLogger().Debug("using placeholder taxonomy code",
 				logger.String("taxonomy_code", speciesCode),
@@ -1003,25 +1029,64 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 }
 
 // shouldApplyRangeFilter returns true if the given model should have its
-// detections filtered by the geographic range filter.
-// BirdNET (any version), Perch, and unknown models are filtered. Perch returns
-// scientific-name labels, and the included-species set stores scientific names
-// for O(1) lookup, so the normal range list applies even when the active range
-// model is the embedded BirdNET geomodel rather than v3.
-// Bat/BSG: never filtered (independent species sets, no geomodel coverage).
+// detections filtered by the geographic range filter. The decision is a registry
+// capability, not a display-name check: BirdNET (any version) and Perch participate
+// (their label spaces are range-filter compatible), while Bat and BSG classify their
+// own label spaces and never participate. An unknown or custom model ID does NOT
+// participate: its label space is arbitrary, and unregistered IDs never reach a live
+// detection anyway (LoadModel rejects them), so this only pins the intended semantics.
+// Perch returns scientific-name labels, and the included-species set stores
+// scientific names for O(1) lookup, so the normal range list applies even when the
+// active range model is the embedded BirdNET geomodel rather than v3.
 func shouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
 	if settings == nil || !settings.BirdNET.LocationConfigured {
 		return false
 	}
-	mInfo := classifier.DetectionModelInfoForID(modelID)
-	if mInfo.Name == detection.DefaultModelName || mInfo.Name == classifier.DetectionNamePerch {
-		return true
-	}
-	return false
+	return classifier.ParticipatesInRangeFilter(modelID)
+}
+
+// nonFiniteConfidenceWarned guards the once-per-(model, source) warning for
+// non-finite confidences in shouldFilterDetection. Keyed on both so a second
+// broken backend or source still announces itself.
+//
+//nolint:gochecknoglobals // log-flood guard, see onceByKey
+var nonFiniteConfidenceWarned onceByKey
+
+// isFiniteConfidence reports whether c is a usable score: not NaN and not Inf.
+func isFiniteConfidence(c float32) bool {
+	f := float64(c)
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
 }
 
 // shouldFilterDetection checks if a detection should be filtered out
 func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datastore.Results, commonName, scientificName, speciesLowercase string, baseThreshold float32, source, modelID string) (shouldFilter bool, confidenceThreshold float32) {
+	// A non-finite confidence (NaN or Inf) is a classifier fault, not a score. NaN
+	// compares false against every threshold, so the "<= threshold" gate below
+	// would let it through and it would be saved as a detection, with a "NaNp"
+	// confidence token in the clip name. Drop it first, ahead of the privacy and
+	// exclusion filters, so every non-finite value reaches the diagnostic below
+	// no matter which label it landed on. It is logged once per model and source
+	// at WARN (the fault repeats every window while the backend is broken, so a
+	// per-hit line would flood the log) and per hit at DEBUG.
+	if !isFiniteConfidence(result.Confidence) {
+		nonFiniteConfidenceWarned.do(modelID+"|"+source, func() {
+			GetLogger().Warn("Classifier returned a non-finite confidence; dropping such detections",
+				logger.String("species", result.Species),
+				logger.String("source", p.getDisplayNameForSource(source)),
+				logger.String("model_id", modelID),
+				logger.String("operation", "confidence_filter"))
+		})
+		if settings.Debug {
+			GetLogger().Debug("Detection filtered out due to non-finite confidence",
+				logger.String("species", result.Species),
+				logger.Float32("confidence", result.Confidence),
+				logger.String("source", p.getDisplayNameForSource(source)),
+				logger.String("model_id", modelID),
+				logger.String("operation", "confidence_filter"))
+		}
+		return true, 0
+	}
+
 	// Check human detection privacy filter. Match the raw label so Perch v2's
 	// FSD50K human classes are caught too, not just BirdNET's "Human *" classes.
 	if isHumanVocalization(result.Species) && result.Confidence > baseThreshold {
@@ -1251,6 +1316,13 @@ func convertToAdditionalResults(results []datastore.Results, primaryScientificNa
 	additional := make([]detection.AdditionalResult, 0, len(results))
 	seen := make(map[string]int, len(results)) // scientificName → index in additional
 	for _, r := range results {
+		// A non-finite confidence never reaches the primary detection (see
+		// shouldFilterDetection) and must not ride along as an additional result
+		// either: it would be persisted as NULL on SQLite and rejected by MySQL,
+		// failing the whole save.
+		if !isFiniteConfidence(r.Confidence) {
+			continue
+		}
 		sp := detection.ParseSpeciesString(r.Species)
 		// Canonicalize the candidate's scientific name so the primary species is
 		// excluded even when this prediction carries it under a legacy/alias name.
@@ -1400,25 +1472,32 @@ func (p *Processor) resolveClipName(settings *conf.Settings, item *classifier.Re
 	}
 
 	clipName := p.generateClipName(settings, scientificName, confidence)
-	return p.applyBatFormatFallback(settings, clipName, item.ModelID, item.Source)
+	return p.applyExportFormatExtension(settings, clipName, item.ModelID, item.Source)
 }
 
-// applyBatFormatFallback overrides a clip name's extension to .wav when a bat model
-// at a high source sample rate is exported to a format (MP3/Opus/AAC) that cannot
-// carry rates above 48kHz, so the stored ClipName matches the file the exporter
-// actually writes. It is shared by the createDetection and extended-capture paths
-// so both persist the same fallback extension. An empty clip name is returned
-// unchanged.
-func (p *Processor) applyBatFormatFallback(settings *conf.Settings, clipName, modelID string, source datastore.AudioSource) string {
+// applyExportFormatExtension overrides a clip name's extension to match the
+// container the exporter will actually write, keeping the persisted ClipName in
+// lockstep with the on-disk file. buildClipPath derives the extension from
+// Export.Type; a bat/ultrasonic capture above the analysis rate is stored in the
+// dedicated Export.UltrasonicType instead (resolveExportFormat), so its extension
+// must be rewritten here. Shared by the createDetection and extended-capture paths
+// so both persist the same extension. An empty clip name is returned unchanged.
+func (p *Processor) applyExportFormatExtension(settings *conf.Settings, clipName, modelID string, source datastore.AudioSource) string {
 	if clipName == "" {
 		return clipName
 	}
 	mInfo := classifier.DetectionModelInfoForID(modelID)
 	sourceRate := p.resolveAudioSource(source).SampleRate
-	if needsBatFormatFallback(mInfo.Name, mInfo.Version, sourceRate, settings.Realtime.Audio.Export.Type) {
-		return replaceExtension(clipName, ".wav")
+	format := exportFormatForModel(mInfo.Name, mInfo.Version, sourceRate, &settings.Realtime.Audio.Export)
+	// GetFileExtension returns the extension WITHOUT a leading dot; replaceExtension
+	// expects the dot. Guard against an empty extension (only reachable with an
+	// unvalidated empty format) so buildClipPath's own extension is preserved rather
+	// than clobbered to a trailing dot (GitHub #2810/#2814).
+	ext := convert.GetFileExtension(format)
+	if ext == "" {
+		return clipName
 	}
-	return clipName
+	return replaceExtension(clipName, "."+ext)
 }
 
 // generateClipName generates a clip name for the given scientific name and confidence.
@@ -1692,16 +1771,10 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 // calculateMinDetectionsFromSettings computes minimum detections from settings alone.
 // This is a standalone function that doesn't require a Processor instance.
 func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
-	// BirdNET uses 3-second chunks for analysis
+	// BirdNET uses 3-second chunks for analysis. Since Option A (issue #4096) the
+	// realtime buffer honors birdnet.overlap, so the analysis step is
+	// chunkDurationSeconds - overlap, matching the buffer's BufferInterval.
 	const chunkDurationSeconds = 3.0
-	// Bird vocalization reference window - typical duration of a bird call
-	// Used to calculate how many detections are possible within a single vocalization
-	const referenceWindowSeconds = 6.0
-	// Minimum segment length to prevent division by near-zero values
-	const minSegmentLength = 0.1
-	// Small epsilon to prevent floating-point rounding errors in ceil()
-	// Without this, values like 5.0000000003 would ceil to 6 instead of 5
-	const epsilon = 1e-9
 
 	// Get filtering level from settings
 	level := settings.Realtime.FalsePositiveFilter.Level
@@ -1718,7 +1791,7 @@ func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
 			logger.Float64("overlap", overlap),
 			logger.Float64("chunk_duration", chunkDurationSeconds),
 			logger.String("operation", "calculate_min_detections"))
-		// Continue with safe fallback
+		// Continue with safe fallback (segment length is floored in the helper)
 	}
 
 	// Validate overlap meets minimum for level (warning only, don't block)
@@ -1733,24 +1806,8 @@ func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
 		// Continue with calculation - system will work but may not achieve target filtering
 	}
 
-	// Calculate segment length (how often we analyze)
-	segmentLength := math.Max(minSegmentLength, chunkDurationSeconds-overlap)
-
-	// How many detections are possible within a 6-second bird vocalization window?
-	maxDetectionsIn6s := referenceWindowSeconds / segmentLength
-
-	// Get threshold percentage for this level
-	threshold := getThresholdForLevel(level)
-
-	// Calculate minimum required detections
-	// Use Ceil to ensure we require at least the threshold percentage
-	// Subtract epsilon before ceiling to handle floating-point precision issues
-	// (e.g., 5.0000000003 becomes 4.9999999993, which correctly ceils to 5)
-	// Always require at least 1 detection
-	required := maxDetectionsIn6s*threshold - epsilon
-	minDetections := int(math.Max(1, math.Ceil(required)))
-
-	return minDetections
+	// The analysis step (how often a new window is produced) is chunk - overlap.
+	return minDetectionsForSegment(chunkDurationSeconds-overlap, level)
 }
 
 // calculateMinDetections is a convenience method that calls calculateMinDetectionsFromSettings
@@ -1978,7 +2035,7 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 					// the only branch where we know for sure that the
 					// user configured a working action and the path is
 					// temporarily broken. Unimplemented action types
-					// must not trip this flag — they are a separate
+					// must not trip this flag: they are a separate
 					// issue and should fall through to defaults.
 					brokenCommandPathSkipped = true
 					continue
@@ -2136,15 +2193,25 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 		if mqttClient != nil {
 			mqttRetryConfig := retryConfigFromSettings(settings.Realtime.MQTT.RetrySettings)
 
+			// Derive the narrow species-time capability from the datastore. Both
+			// backends (*datastore.DataStore and *v2only.Datastore) implement it;
+			// a nil or unsupported datastore (DB disabled) yields nil, so the
+			// MQTT payload carries null fields.
+			var speciesTimeSource speciesDetectionTimeSource
+			if src, ok := any(p.Ds).(speciesDetectionTimeSource); ok {
+				speciesTimeSource = src
+			}
+
 			mqttAction = &MqttAction{
-				Settings:       settings,
-				MqttClient:     mqttClient,
-				EventTracker:   p.GetEventTracker(),
-				DetectionCtx:   detectionCtx, // Share context from DatabaseAction
-				Result:         det.Result,   // Domain model (single source of truth)
-				BirdImageCache: p.BirdImageCache,
-				RetryConfig:    mqttRetryConfig,
-				CorrelationID:  det.CorrelationID,
+				Settings:          settings,
+				MqttClient:        mqttClient,
+				EventTracker:      p.GetEventTracker(),
+				DetectionCtx:      detectionCtx, // Share context from DatabaseAction
+				Result:            det.Result,   // Domain model (single source of truth)
+				BirdImageCache:    p.BirdImageCache,
+				RetryConfig:       mqttRetryConfig,
+				CorrelationID:     det.CorrelationID,
+				SpeciesTimeSource: speciesTimeSource,
 			}
 		}
 	}
@@ -2303,6 +2370,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 			ClipName:         det.Result.ClipName,
 			sourceSampleRate: det.Result.AudioSource.SampleRate,
 			modelName:        det.Result.Model.Name,
+			modelVersion:     det.Result.Model.Version,
 			species:          strings.ToLower(det.Result.Species.CommonName),
 			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 			PreRenderer:      p.preRenderer,
@@ -2622,11 +2690,11 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 		p.vadGate.close()
 	}
 
-	// Stop the job queue — use remaining context budget, not a hardcoded 30 seconds.
+	// Stop the job queue: use remaining context budget, not a hardcoded 30 seconds.
 	// Always send the stop signal even if the deadline has passed (remaining <= 0)
 	// so the queue's workers are notified and don't keep running after DB close.
 	// Enforce a minimum grace period so in-flight DB writes can complete before
-	// closeDataStore runs — a zero timeout would return immediately, risking
+	// closeDataStore runs: a zero timeout would return immediately, risking
 	// writes to a closed database connection.
 	// Check ctx.Err() first to handle cancellation without deadline (WithCancel).
 	queueStopTimeout := 30 * time.Second
@@ -2647,13 +2715,13 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	// reconnect loop armed, and Disconnect is what cancels that loop, so skipping
 	// it would leave the timer running past shutdown. Disconnect already handles
 	// the not-connected case, and for a client that never connected it does no
-	// blocking work at all — otherwise it is bounded by ShutdownDisconnectTimeout.
+	// blocking work at all: otherwise it is bounded by ShutdownDisconnectTimeout.
 	mqttClient := p.GetMQTTClient()
 	if mqttClient != nil {
 		mqttClient.Disconnect()
 	}
 
-	// Skip remaining cleanup if context is already expired — these are
+	// Skip remaining cleanup if context is already expired: these are
 	// nice-to-have disconnects, not critical for data integrity.
 	// Context expiration is expected, not an error condition for the caller.
 	if ctx.Err() != nil {

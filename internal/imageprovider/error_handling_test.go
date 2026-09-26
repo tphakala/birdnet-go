@@ -15,8 +15,8 @@ import (
 // verifyEnhancedError validates that an error is properly enhanced with component and category.
 func verifyEnhancedError(t *testing.T, err error, expectCategory errors.ErrorCategory) {
 	t.Helper()
-	var enhancedErr *errors.EnhancedError
-	if !errors.As(err, &enhancedErr) {
+	enhancedErr, ok := errors.AsType[*errors.EnhancedError](err)
+	if !ok {
 		// ErrImageNotFound is a sentinel error and is the only valid non-enhanced case
 		if errors.Is(err, imageprovider.ErrImageNotFound) {
 			return // Accept sentinel error as valid
@@ -38,9 +38,7 @@ func createDatabaseErrorTestFunc(t *testing.T) func() error {
 	t.Helper()
 	return func() error {
 		failingStore := &mockFailingStore{
-			mockStore: mockStore{
-				images: make(map[string]*datastore.ImageCache),
-			},
+			images:       make(map[string]*datastore.ImageCache),
 			failGetCache: true,
 		}
 		metrics, err := observability.NewMetrics()
@@ -111,8 +109,8 @@ func TestErrorContextData(t *testing.T) {
 		return
 	}
 
-	var enhancedErr *errors.EnhancedError
-	if !errors.As(err, &enhancedErr) {
+	enhancedErr, ok := errors.AsType[*errors.EnhancedError](err)
+	if !ok {
 		return
 	}
 

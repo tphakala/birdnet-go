@@ -785,7 +785,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 // map is nil-and-omitted on the overwhelmingly common install where no gate is
 // set, instead of adding a block of empty strings to every dump. os.Getenv
 // cannot tell those two states apart, and for these gates nothing does: an
-// empty value fails nativeEncoderSelected exactly as an unset one does, so a
+// empty value fails nativeSelected exactly as an unset one does, so a
 // dump loses no triage signal by collapsing them.
 //
 // Values are redacted by key even though the allowlist is supposed to make that
@@ -1080,7 +1080,7 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 	// Skip journal collection in container runtimes (Docker, Podman, LXC,
 	// systemd-nspawn) where journald is typically unavailable. Uses
 	// sysinfo.IsContainer() so the check matches the same gate that
-	// addJournaldLogs uses on the archive path — keeping both journald
+	// addJournaldLogs uses on the archive path, keeping both journald
 	// collection paths consistent and removing the now-redundant local
 	// Docker-only helper.
 	if sysinfo.IsContainer() {
@@ -1203,8 +1203,7 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 		// This is not a fatal error, just means no journald logs available
 		getLogger().Debug("journalctl unavailable or service not found", logger.Error(err))
 		diagnostics.Details["error_type"] = "command_failed"
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			diagnostics.Details["exit_code"] = exitErr.ExitCode()
 			diagnostics.Details["stderr"] = string(exitErr.Stderr)
 		}

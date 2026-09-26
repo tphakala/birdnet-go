@@ -26,12 +26,10 @@ type collectingConsumer struct {
 
 func newCollectingConsumer(sampleRate int) *collectingConsumer {
 	return &collectingConsumer{
-		mockConsumer: mockConsumer{
-			id:         "align-consumer",
-			sampleRate: sampleRate,
-			bitDepth:   16,
-			channels:   1,
-		},
+		id:         "align-consumer",
+		sampleRate: sampleRate,
+		bitDepth:   16,
+		channels:   1,
 	}
 }
 

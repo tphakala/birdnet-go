@@ -109,6 +109,14 @@
       "closeModal": "Fechar janela modal",
       "dismissAlert": "Descartar alerta",
       "closeNotification": "Fechar notificação",
+      "toastRegion": {
+        "topLeft": "Notificações, canto superior esquerdo",
+        "topCenter": "Notificações, parte superior central",
+        "topRight": "Notificações, canto superior direito",
+        "bottomLeft": "Notificações, canto inferior esquerdo",
+        "bottomCenter": "Notificações, parte inferior central",
+        "bottomRight": "Notificações, canto inferior direito"
+      },
       "toggleDropdown": "Alternar menu suspenso",
       "sortAscending": "Ordenar crescente",
       "selectLanguage": "Selecionar idioma",
@@ -130,7 +138,6 @@
       "selectToday": "Selecionar hoje",
       "dateSelected": "Data selecionada: {date}",
       "calendarNavigation": "Use as teclas de seta para navegar no calendário, Enter para selecionar, Escape para fechar",
-      "downloadCsv": "Baixar lista de espécies em CSV",
       "visitEbirdLink": "Abrir eBird.org em uma nova aba",
       "learnEbirdTaxonomyLink": "Abrir Taxonomia eBird em uma nova aba",
       "resizeHandle": "Arraste para redimensionar",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Análise de áudio sobrecarregada",
-        "overloadMessage": "O seu sistema está a descartar {dropRate} % das amostras de áudio da fonte ''{sourceName}'' porque não consegue acompanhar a análise. Reduza o valor de sobreposição do BirdNET nas definições de deteção ou considere atualizar para um CPU mais rápido."
+        "overloadMessage": "O seu sistema está a descartar {dropRate} % das amostras de áudio da fonte '{sourceName}' porque não consegue acompanhar a análise. Reduza o valor de sobreposição do BirdNET nas definições de deteção ou considere atualizar para um CPU mais rápido."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime não disponível",
@@ -472,7 +479,17 @@
         "unreadableMessage": "O ficheiro de modelo configurado para {modelName} existe, mas não pôde ser lido, pelo que o modelo instalado em {modelPath} está a ser utilizado em vez disso. A sua configuração não foi alterada. Verifique as permissões do ficheiro e se o seu armazenamento está montado.",
         "builtinMessage": "O ficheiro de modelo configurado para {modelName} não foi encontrado no disco e não existe nenhum modelo instalado disponível para o substituir, pelo que o modelo integrado está a ser utilizado em vez disso. A sua configuração não foi alterada.",
         "notRegisteredTitle": "Nenhum modelo está a analisar {sourceName}",
-        "notRegisteredMessage": "Nenhum áudio está a chegar a {models} na fonte de áudio \"{sourceName}\", pelo que não são produzidas deteções. Abra a galeria de modelos nas Configurações para verificar o estado."
+        "notRegisteredMessage": "Nenhum áudio está a chegar a {models} na fonte de áudio \"{sourceName}\", pelo que não são produzidas deteções. Abra Sistema > Modelos de IA para verificar o seu estado por fonte e confirmar que a fonte de áudio está conectada e a enviar áudio."
+      },
+      "acousticModels": {
+        "noneTitle": "Nenhum modelo acústico ativado",
+        "noneMessage": "Nenhum modelo acústico está carregado, pelo que o áudio é capturado mas não é analisado. Ative um modelo em Configurações > Análise, ou instale um a partir da galeria de modelos.",
+        "loadFailedTitle": "Não foi possível carregar o modelo acústico",
+        "loadFailedMessage": "Um modelo acústico ativado falhou ao carregar, pelo que o áudio é capturado mas não é analisado. Verifique o modelo na página Sistema > Modelos de IA."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modelo tem uma versão melhor para este sistema} other {# modelos têm versões melhores para este sistema}}",
+        "message": "Está disponível uma versão mais adequada ao hardware ou à localização deste sistema para: {models}. Abra Configurações > Análise > Modelos e escolha Otimizar para mudar."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -493,6 +510,11 @@
           "diskFull": "Disco cheio - liberte espaço",
           "permissionDenied": "Permissão negada - verifique as permissões do ficheiro ou serviço"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} falha em todas as análises",
+        "message": "{modelName} está carregado, mas as suas últimas {failures} análises seguidas falharam em {runtime}: a inferência devolveu um erro. O áudio é capturado, mas este modelo não deteta nada. Verifique o modelo na página Sistema > Modelos de IA.",
+        "nonFiniteMessage": "{modelName} está carregado, mas as suas últimas {failures} análises seguidas falharam em {runtime}: o modelo devolveu pontuações inválidas (NaN ou infinitas). O áudio é capturado, mas este modelo não deteta nada. Verifique o modelo na página Sistema > Modelos de IA."
       }
     },
     "loading": "Carregando notificações..."
@@ -763,6 +785,16 @@
       "recentHearingFetch": "Falha ao buscar atividade recente de espécies: {status}",
       "recentHearingLoad": "Falha ao carregar atividade recente de espécies",
       "configFetch": "Falha ao buscar configuração do painel: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Nenhum modelo acústico ativado",
+      "noneMessage": "O áudio está sendo capturado, mas não analisado. Ative um modelo na galeria de modelos para começar a detectar espécies.",
+      "noneAction": "Abrir galeria de modelos",
+      "loadFailedTitle": "Não foi possível carregar o modelo acústico",
+      "loadFailedMessage": "Não foi possível carregar um modelo ativado, então nenhum áudio está sendo analisado. A página Modelos de IA mostra qual modelo falhou e por quê.",
+      "loadFailedAction": "Ver status de Modelos de IA",
+      "failingTitle": "{count, plural, one {Um modelo falha em todas as análises} other {# modelos falham em todas as análises}}",
+      "failingMessage": "{count, plural, one {{models} está carregado, mas todas as análises falham, pelo que não deteta nada.} other {{models} estão carregados, mas todas as análises falham, pelo que não detetam nada.}} A página Modelos de IA mostra o backend e o erro."
     },
     "banner": {
       "title": "Título",
@@ -1794,7 +1826,10 @@
       "noSources": "Nenhuma fonte conectada",
       "primaryFallback": "primária (reserva)",
       "sourceNotRunning": "não está a analisar",
-      "sourceNotRunningTooltip": "Esta fonte está atribuída ao modelo nas configurações, mas o seu áudio não está a chegar ao modelo, pelo que não produz deteções. Abra a galeria de modelos nas Configurações para verificar o seu estado.",
+      "sourceNotRunningTooltip": "Esta fonte está atribuída ao modelo nas configurações, mas o seu áudio não está a chegar ao modelo, pelo que não produz deteções. Verifique se a fonte de áudio está conectada e a enviar áudio.",
+      "modelNotAnalyzingTooltip": "Uma ou mais fontes de áudio atribuídas a este modelo não lhe estão a enviar áudio, pelo que não produz deteções. Consulte as fontes listadas abaixo.",
+      "sourcesDegraded": "{count} de {total} fontes indisponíveis",
+      "sourcesDegradedTooltip": "Algumas fontes de áudio deste modelo, mas não todas, estão indisponíveis, pelo que continua a analisar através das que estão operacionais. A fonte indisponível específica e como resolver o problema estão listadas abaixo.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -1836,7 +1871,14 @@
       "fp16Help": "Ponto flutuante de 16 bits. O hardware que o suporta pode executar alguns modelos mais rapidamente e com menos memória.",
       "invocationsHelp": "Total de segmentos de áudio que este modelo analisou desde a inicialização.",
       "noModelsHint": "Nenhuma fonte de áudio configurada ainda?",
-      "noModelsHintLink": "Configurar fontes de áudio"
+      "noModelsHintLink": "Configurar fontes de áudio",
+      "modelFailing": "todas as análises falham",
+      "lastSuccess": "Último sucesso",
+      "lastSuccessHelp": "Quando este modelo analisou áudio sem erros pela última vez.",
+      "lastSuccessNever": "Nenhum desde que o modelo foi carregado",
+      "modelFailingHelp": "{reason} Experimente outra versão deste modelo em Configurações > Análise > Modelos, ou verifique o backend e a precisão mostrados acima.",
+      "modelFailingReasonNonFinite": "Todas as análises recentes falharam porque o modelo devolveu pontuações inválidas (NaN ou infinitas), pelo que não deteta nada.",
+      "modelFailingReasonError": "Todas as análises recentes falharam porque a inferência devolveu um erro, pelo que o modelo não deteta nada."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2352,7 +2394,7 @@
           "title": "Filtro de Falsos Positivos",
           "description": "Reduz detecções falsas exigindo múltiplas confirmações em segmentos de áudio sobrepostos",
           "level": {
-            "label": "Nível do Filtro"
+            "label": "Intensidade do Filtro de Falsos Positivos"
           },
           "detectionCount": "{count} confirmações necessárias. {description}",
           "levels": {
@@ -2382,7 +2424,19 @@
           "description": "Limita a detecção a espécies prováveis em sua região geográfica",
           "stationLocation": {
             "label": "Localização da estação",
-            "helpText": "Localização da estação, usada para dados meteorológicos e para limitar as espécies de pássaros àquelas prováveis na região."
+            "helpText": "Localização da estação, usada para dados meteorológicos e para limitar as espécies de pássaros àquelas prováveis na região.",
+            "automaticLocation": "Localização automática",
+            "useCurrentLocation": "Usar localização do navegador",
+            "locationHelp": "Preenche as coordenadas usando a localização deste navegador.",
+            "locating": "A determinar a localização...",
+            "accuracy": "Precisão estimada: num raio de {accuracy} m",
+            "locationDetected": "Localização do navegador detetada.",
+            "geolocationUnsupported": "Este navegador não suporta a localização do dispositivo. Introduza as coordenadas manualmente ou use o mapa.",
+            "geolocationRequiresHttps": "A localização do navegador requer HTTPS ou localhost. Introduza as coordenadas manualmente ou use o mapa.",
+            "geolocationDenied": "A permissão de localização foi negada. Introduza as coordenadas manualmente ou use o mapa.",
+            "geolocationUnavailable": "O dispositivo não conseguiu determinar a localização. Introduza as coordenadas manualmente ou use o mapa.",
+            "geolocationTimedOut": "O pedido de localização excedeu o tempo limite. Tente novamente, introduza as coordenadas manualmente ou use o mapa.",
+            "geolocationFailed": "Não foi possível determinar a localização do dispositivo. Introduza as coordenadas manualmente ou use o mapa."
           },
           "latitude": {
             "label": "Latitude",
@@ -2638,9 +2692,9 @@
           "label": "Idioma",
           "helpText": "Idioma para nomes comuns de espécies traduzidos."
         },
-        "tensorflowThreads": {
-          "label": "Threads de CPU do TensorFlow",
-          "helpText": "Número de threads de CPU. Defina como 0 para usar todos os threads disponíveis."
+        "inferenceThreads": {
+          "label": "Threads de CPU para inferência",
+          "helpText": "Número de threads de CPU utilizados na inferência do modelo. Defina como 0 para usar todos os threads disponíveis. Não tem efeito em modelos executados numa GPU."
         }
       },
       "errors": {
@@ -2920,6 +2974,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Salvar provedor",
+          "saveWaitingNtfyCheck": "Aguardando a conclusão da verificação de conexão do ntfy",
           "savingButton": "Salvando...",
           "cancelButton": "Cancelar",
           "testButton": "Testar",
@@ -2991,6 +3046,7 @@
               "http": "HTTP funciona - o servidor não usa HTTPS"
             },
             "connectionFailed": "Não foi possível ligar - verifique o nome do host e o estado do servidor",
+            "checkError": "Não foi possível verificar o servidor - verifique o endereço ou recarregue a página e tente novamente",
             "auth": {
               "label": "Autenticação (opcional)",
               "username": {
@@ -3245,7 +3301,7 @@
             "label": "Nome do dispositivo",
             "helpText": "O nome base para dispositivos conforme aparecem no Home Assistant. Cada fonte de áudio terá seu próprio dispositivo vinculado a este dispositivo principal do BirdNET-Go."
           },
-          "sensorsNote": "<strong>Sensores criados:</strong> Para cada fonte de áudio, o Home Assistant receberá: Última espécie, Confiança, Nome científico e Nível de som (se ativado). O dispositivo ponte inclui status de disponibilidade online/offline.",
+          "sensorsNote": "<strong>Sensores criados:</strong> Para cada fonte de áudio, o Home Assistant receberá: Última espécie, Confiança, Nome científico e Nível de som (se ativado). O dispositivo ponte inclui status de disponibilidade online/offline. Os sensores de deteção de cada fonte leem o tópico MQTT próprio dessa fonte, &lt;base_topic&gt;/sources/&lt;source_id&gt;, e o seu sensor de Nível de som lê o subtópico &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, de modo que uma deteção de uma fonte nunca reinicia os sensores de outra fonte.",
           "discovery": {
             "button": "Enviar Discovery",
             "success": "Mensagens de descoberta enviadas ao Home Assistant",
@@ -3291,7 +3347,8 @@
             "none": "Nenhum",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3312,6 +3369,16 @@
             "helpText": "Selecione unidades para temperatura e velocidade do vento (m = Métrico, e = Imperial, h = Híbrido UK)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Chave API do Pirate Weather",
+            "helpText": "Digite sua chave API do Pirate Weather. Necessária para dados meteorológicos."
+          },
+          "endpoint": {
+            "label": "Endpoint da API",
+            "helpText": "Substitua o endpoint padrão da API do Pirate Weather, se necessário. O padrão é https://api.pirateweather.net/forecast se deixado vazio."
+          }
+        },
         "notes": {
           "none": "Nenhum dado meteorológico será recuperado.",
           "yrno": {
@@ -3319,7 +3386,8 @@
             "freeService": "Yr é um serviço gratuito de dados meteorológicos. Para mais informações, visite <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "O uso do OpenWeather requer uma chave de API. Inscreva-se para uma chave de API gratuita em <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Requer uma chave API do Weather Underground e um ID de estação PWS válido. Veja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> para detalhes."
+          "wunderground": "Requer uma chave API do Weather Underground e um ID de estação PWS válido. Veja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> para detalhes.",
+          "pirateweather": "O uso do Pirate Weather requer uma chave de API, inscreva-se em <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "Chave de API",
@@ -3692,6 +3760,7 @@
         "dataOutputTitle": "Saída de dados do nível sonoro",
         "dataOutputDescription": "Quando ativado, as medições do nível sonoro são publicadas via:",
         "mqttTopic": "Tópico MQTT:",
+        "mqttSourceTopic": "Tópico MQTT por fonte (com Home Assistant discovery):",
         "sseEndpoint": "Endpoint SSE:",
         "prometheusMetrics": "Métricas Prometheus:"
       },
@@ -3753,6 +3822,8 @@
         "pathHelp": "Diretório onde os clipes de áudio serão salvos. Caminhos relativos são do diretório da aplicação. Exemplo: 'clips/' ou '/var/audio/birds/'",
         "typeLabel": "Formato de Áudio",
         "typeHelp": "Formato de áudio para clipes salvos. WAV e FLAC são sem perdas (melhor qualidade, arquivos maiores). MP3, AAC e Opus são com perdas (arquivos menores, pequena perda de qualidade).",
+        "ultrasonicTypeLabel": "Formato Ultrassónico",
+        "ultrasonicTypeHelp": "Formato sem perdas (WAV ou FLAC) usado apenas para capturas de morcegos e ultrassónicas acima de 48 kHz. Estas são salvas na sua taxa de amostragem de origem completa em vez do formato acima, para que nenhum detalhe ultrassónico seja perdido.",
         "bitrateLabel": "Taxa de bits",
         "bitrateHelp": "Taxa de bits de compressão de áudio para formatos com perdas. Intervalo: {min}-{max} kbps. Valores mais altos fornecem melhor qualidade, mas arquivos maiores.",
         "losslessBitrateValue": "N/D - Sem perda",
@@ -3821,7 +3892,17 @@
       },
       "models": {
         "recommendBoth": "Para melhor cobertura de deteção de espécies, recomenda-se executar tanto o BirdNET como o Perch em conjunto.",
-        "perchOnlyWarning": "O Perch sozinho produz menos deteções. Reduza o limiar de confiança para 0.50 para resultados significativos, ou ative o BirdNET em paralelo para melhor cobertura."
+        "perchOnlyWarning": "O Perch sozinho produz menos deteções. Reduza o limiar de confiança para 0.50 para resultados significativos, ou ative o BirdNET em paralelo para melhor cobertura.",
+        "loading": "Carregando modelos de deteção...",
+        "noneEnabledTitle": "Nenhum modelo de deteção ativado.",
+        "noneEnabledHelp": "Você ainda pode salvar esta fonte. O seu áudio será analisado pelos modelos padrão assim que um for ativado.",
+        "noneEnabledLink": "Abrir galeria de modelos",
+        "noneAvailable": "Não há modelos de deteção ativados neste servidor.",
+        "loadFailedWarning": "Não foi possível carregar um modelo de deteção, portanto esta fonte não será analisada até que se recupere.",
+        "loadFailedLink": "Ver status de Modelos de IA",
+        "defaultBadge": "{models} (padrão)",
+        "defaultPendingBadge": "Modelos padrão",
+        "noneBadge": "Nenhum modelo carregado"
       }
     },
     "security": {
@@ -4367,7 +4448,7 @@
       "dynamicThreshold": {
         "tabLabel": "Aprendido",
         "title": "Limiares aprendidos",
-        "description": "Esta página mostra dados de execução dos limiares dinâmicos. Quando ativado em Configurações principais → Detecção, os limiares são ajustados automaticamente por múltiplas detecções de alta confiança. As espécies mostradas aqui são consideradas existentes nesta localização.",
+        "description": "Esta página mostra dados de execução dos limiares dinâmicos. Quando ativado, os limiares são ajustados automaticamente por múltiplas detecções de alta confiança. As espécies mostradas aqui são consideradas existentes nesta localização.",
         "stats": {
           "active": "Ativos",
           "atMinimum": "No mínimo",
@@ -4869,7 +4950,16 @@
       "streamTitleDefault": "Transmissão de áudio de pássaros",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Transmissão ao vivo",
-      "playbackError": "Erro de reprodução: {details}"
+      "playbackError": "Erro de reprodução: {details}",
+      "audibleBats": {
+        "title": "Reprodução audível de morcegos",
+        "subtitle": "Desacelera chamadas ultrassónicas para a faixa audível humana.",
+        "timeExpansion": "Expansão de tempo",
+        "enable": "Ativar",
+        "disable": "Desativar",
+        "generating": "A gerar áudio derivado…",
+        "error": "Falha ao gerar áudio audível de morcegos"
+      }
     },
     "spectrogram": {
       "notGenerated": "Espectrograma ainda não gerado",
@@ -5092,6 +5182,7 @@
       "birdweatherClientFailed": "Não foi possível criar o cliente BirdWeather",
       "noWeatherProvider": "Nenhum fornecedor de meteorologia selecionado",
       "openWeatherKeyRequired": "A chave API do OpenWeather é obrigatória",
+      "pirateWeatherKeyRequired": "A chave API do Pirate Weather é obrigatória",
       "processorUnavailable": "Processador não disponível",
       "discoveryFailed": "Não foi possível iniciar a deteção do Home Assistant"
     },
@@ -5101,6 +5192,7 @@
       "notFound": "Notificação não encontrada",
       "hostRequired": "O parâmetro de host é obrigatório",
       "invalidHost": "Parâmetro de host inválido",
+      "invalidBody": "Corpo da solicitação inválido",
       "rateLimit": "Demasiadas tentativas de ligação ao fluxo de notificações, aguarde antes de tentar novamente"
     },
     "streams": {

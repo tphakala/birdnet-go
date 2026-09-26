@@ -34,6 +34,7 @@
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
   import TestSuccessNote from '$lib/desktop/components/ui/TestSuccessNote.svelte';
   import SettingsButton from '$lib/desktop/features/settings/components/SettingsButton.svelte';
+  import CurrentLocationButton from '$lib/desktop/features/settings/components/CurrentLocationButton.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -56,7 +57,11 @@
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
   import { formatBytes } from '$lib/utils/formatters';
-  import { wundergroundDefaults, weatherDefaults } from '$lib/utils/weatherDefaults';
+  import {
+    wundergroundDefaults,
+    pirateWeatherDefaults,
+    weatherDefaults,
+  } from '$lib/utils/weatherDefaults';
   import {
     MAP_CONFIG,
     createMapStyle as createMapStyleFromConfig,
@@ -151,10 +156,12 @@
       {
         latitude: store.originalData.birdnet?.latitude,
         longitude: store.originalData.birdnet?.longitude,
+        locationConfigured: store.originalData.birdnet?.locationConfigured,
       },
       {
         latitude: store.formData.birdnet?.latitude,
         longitude: store.formData.birdnet?.longitude,
+        locationConfigured: store.formData.birdnet?.locationConfigured,
       }
     ) || hasSettingsChanged(store.originalData.realtime?.weather, store.formData.realtime?.weather)
   );
@@ -530,13 +537,31 @@
     }
   }
 
-  // Centralized location update: marks locationConfigured and pushes coordinates to the store
-  function updateLocationSettings(lat: number, lng: number) {
+  // Every user-initiated coordinate update advances this version, including a
+  // map action whose rounded values equal the current coordinates. Track raw
+  // input separately so pending browser results also cannot overwrite text
+  // before a NumberField change/blur commit occurs.
+  let coordinateIntentVersion = $state(0);
+
+  function applyLocationSettings(lat: number, lng: number) {
     settingsActions.updateSection('birdnet', {
       latitude: lat,
       longitude: lng,
       locationConfigured: true,
     });
+  }
+
+  function updateLocationSettings(lat: number, lng: number) {
+    advanceCoordinateIntentVersion();
+    applyLocationSettings(lat, lng);
+  }
+
+  function updateBrowserLocation(lat: number, lng: number) {
+    applyLocationSettings(lat, lng);
+  }
+
+  function advanceCoordinateIntentVersion() {
+    coordinateIntentVersion += 1;
   }
 
   function updateMarker(lat: number, lng: number) {
@@ -785,7 +810,7 @@
     settingsActions.updateSection('realtime', {
       weather: {
         ...settings.weather,
-        provider: provider as 'none' | 'yrno' | 'openweather' | 'wunderground',
+        provider: provider as 'none' | 'yrno' | 'openweather' | 'wunderground' | 'pirateweather',
       },
     });
   }
@@ -802,6 +827,18 @@
         ...settings.weather,
         wunderground: {
           ...(settings.weather?.wunderground ?? wundergroundDefaults),
+          [key]: value,
+        },
+      },
+    });
+  }
+
+  function updatePirateWeatherSetting(key: keyof typeof pirateWeatherDefaults, value: string) {
+    settingsActions.updateSection('realtime', {
+      weather: {
+        ...settings.weather,
+        pirateWeather: {
+          ...(settings.weather?.pirateWeather ?? pirateWeatherDefaults),
           [key]: value,
         },
       },
@@ -833,6 +870,10 @@
           stationId: currentWeather.wunderground?.stationId ?? '',
           endpoint: currentWeather.wunderground?.endpoint ?? '',
           units: currentWeather.wunderground?.units ?? 'm',
+        },
+        pirateWeather: {
+          apiKey: currentWeather.pirateWeather?.apiKey ?? '',
+          endpoint: currentWeather.pirateWeather?.endpoint ?? '',
         },
       };
 
@@ -1039,14 +1080,19 @@
       originalData={{
         latitude: store.originalData.birdnet?.latitude,
         longitude: store.originalData.birdnet?.longitude,
+        locationConfigured: store.originalData.birdnet?.locationConfigured,
       }}
       currentData={{
         latitude: settings.birdnet.latitude,
         longitude: settings.birdnet.longitude,
+        locationConfigured: settings.birdnet.locationConfigured,
       }}
     >
       <!-- Coordinates -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+      <div
+        class="mb-4 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3"
+        oninput={advanceCoordinateIntentVersion}
+      >
         <NumberField
           label={t('settings.main.sections.rangeFilter.latitude.label')}
           value={settings.birdnet.latitude}
@@ -1068,6 +1114,16 @@
           helpText={t('settings.main.sections.rangeFilter.longitude.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
+
+        <div class="md:col-span-2 xl:col-span-1 xl:border-l xl:border-[var(--border-100)] xl:pl-6">
+          <CurrentLocationButton
+            latitude={settings.birdnet.latitude}
+            longitude={settings.birdnet.longitude}
+            {coordinateIntentVersion}
+            onLocation={updateBrowserLocation}
+            disabled={store.isLoading || store.isSaving}
+          />
+        </div>
       </div>
 
       <!-- Map -->
@@ -1176,6 +1232,11 @@
               label: t('settings.integration.weather.provider.options.wunderground'),
               providerCode: 'wunderground',
             },
+            {
+              value: 'pirateweather',
+              label: t('settings.integration.weather.provider.options.pirateweather'),
+              providerCode: 'pirateweather',
+            },
           ] as WeatherOption[]}
           value={settings.weather.provider}
           label={t('settings.integration.weather.provider.label')}
@@ -1264,6 +1325,31 @@
               disabled={store.isLoading || store.isSaving}
             />
           </div>
+        {:else if settings.weather.provider === 'pirateweather'}
+          <SettingsNote>
+            <span>{@html t('settings.integration.weather.notes.pirateweather')}</span>
+          </SettingsNote>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <PasswordField
+              label={t('settings.integration.weather.pirateweather.apiKey.label')}
+              value={settings.weather.pirateWeather?.apiKey ?? ''}
+              onUpdate={apiKey => updatePirateWeatherSetting('apiKey', apiKey)}
+              placeholder=""
+              helpText={t('settings.integration.weather.pirateweather.apiKey.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              allowReveal={true}
+            />
+
+            <TextInput
+              label={t('settings.integration.weather.pirateweather.endpoint.label')}
+              value={settings.weather.pirateWeather?.endpoint ?? ''}
+              onchange={endpoint => updatePirateWeatherSetting('endpoint', endpoint)}
+              placeholder={pirateWeatherDefaults.endpoint}
+              helpText={t('settings.integration.weather.pirateweather.endpoint.helpText')}
+              disabled={store.isLoading || store.isSaving}
+            />
+          </div>
         {/if}
 
         {#if settings.weather.provider !== 'none'}
@@ -1279,6 +1365,8 @@
                   (settings.weather.provider === 'wunderground' &&
                     (!settings.weather.wunderground?.apiKey ||
                       !settings.weather.wunderground?.stationId)) ||
+                  (settings.weather.provider === 'pirateweather' &&
+                    !settings.weather.pirateWeather?.apiKey) ||
                   weatherTestState.isRunning}
               >
                 {t('settings.integration.weather.test.button')}
@@ -1287,6 +1375,8 @@
                 {#if settings.weather.provider === 'openweather' && !settings.weather.openWeather?.apiKey}
                   {t('settings.integration.weather.test.apiKeyRequired')}
                 {:else if settings.weather.provider === 'wunderground' && (!settings.weather.wunderground?.apiKey || !settings.weather.wunderground?.stationId)}
+                  {t('settings.integration.weather.test.apiKeyRequired')}
+                {:else if settings.weather.provider === 'pirateweather' && !settings.weather.pirateWeather?.apiKey}
                   {t('settings.integration.weather.test.apiKeyRequired')}
                 {:else if weatherTestState.isRunning}
                   {t('settings.integration.weather.test.inProgress')}
@@ -1548,7 +1638,7 @@
 
 <!-- Main Content -->
 <main class="settings-page-content" aria-label="Main settings configuration">
-  <SettingsTabs {tabs} bind:activeTab />
+  <SettingsTabs {tabs} bind:activeTab onReset={advanceCoordinateIntentVersion} />
 </main>
 
 <!-- Map Modal -->

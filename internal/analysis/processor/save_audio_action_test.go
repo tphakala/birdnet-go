@@ -196,10 +196,7 @@ func TestSaveAudioDeferredMaxRetries_ScalesWithDuration(t *testing.T) {
 			delay := saveAudioDeferredInitialDelay
 			for range retries {
 				total += delay
-				delay = time.Duration(float64(delay) * saveAudioDeferredMultiplier)
-				if delay > saveAudioDeferredMaxDelay {
-					delay = saveAudioDeferredMaxDelay
-				}
+				delay = min(time.Duration(float64(delay)*saveAudioDeferredMultiplier), saveAudioDeferredMaxDelay)
 			}
 			assert.GreaterOrEqual(t, total, tt.minTotal,
 				"retry schedule must cover capture duration + margin for %s", tt.name)

@@ -6,12 +6,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // TestToastNotificationsExcludedFromList verifies that toast notifications
 // are never returned in notification lists, even when they exist in the store
 func TestToastNotificationsExcludedFromList(t *testing.T) {
+	// Snapshot goroutines first; the check runs after the service's cleanup.
+	testutil.VerifyNoLeaks(t)
+
 	// Create service with test config
 	config := &ServiceConfig{
 		Debug:              false,
@@ -21,12 +24,7 @@ func TestToastNotificationsExcludedFromList(t *testing.T) {
 		RateLimitMaxEvents: 60,
 	}
 	service := NewService(config)
-
-	// Stop service before goleak check (defer runs in LIFO order)
-	defer goleak.VerifyNone(t,
-		goleak.IgnoreCurrent(),
-	)
-	defer service.Stop()
+	t.Cleanup(service.Stop)
 
 	// Create a regular notification
 	regularNotif, err := service.Create(TypeInfo, PriorityMedium, "Regular Alert", "This is a regular notification")
@@ -97,6 +95,9 @@ func TestToastNotificationsExcludedFromList(t *testing.T) {
 // TestToastNotificationsStillBroadcast verifies that toast notifications
 // are still broadcast to subscribers even though they're excluded from lists
 func TestToastNotificationsStillBroadcast(t *testing.T) {
+	// Snapshot goroutines first; the check runs after the service's cleanup.
+	testutil.VerifyNoLeaks(t)
+
 	// Create service with test config
 	config := &ServiceConfig{
 		Debug:              false,
@@ -106,12 +107,7 @@ func TestToastNotificationsStillBroadcast(t *testing.T) {
 		RateLimitMaxEvents: 60,
 	}
 	service := NewService(config)
-
-	// Stop service before goleak check (defer runs in LIFO order)
-	defer goleak.VerifyNone(t,
-		goleak.IgnoreCurrent(),
-	)
-	defer service.Stop()
+	t.Cleanup(service.Stop)
 
 	// Subscribe to notifications
 	notifCh, _ := service.Subscribe()

@@ -111,8 +111,7 @@ func (c *Core) LoggingMiddleware() echo.MiddlewareFunc {
 			// is still the default 200. Extract the real code from the error.
 			status := res.Status
 			if err != nil {
-				var he *echo.HTTPError
-				if errors.As(err, &he) {
+				if he, ok := errors.AsType[*echo.HTTPError](err); ok {
 					status = he.Code
 				} else if status < http.StatusBadRequest {
 					// Non-HTTP errors (e.g. database errors) won't have a

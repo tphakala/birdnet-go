@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
+	"github.com/tphakala/birdnet-go/internal/audiocore/mp3"
 	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
 	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
@@ -808,11 +809,11 @@ func (a *SaveAudioAction) logExportFailure(enc *clipEncoding, exportFormat strin
 //
 // WAV and FLAC are always native (the WAV writer and go-flac); FFmpeg is never
 // used for them. Opus is native by default (go-opus); FFmpeg encodes it only as a
-// fallback for a clip go-opus cannot carry. AAC has a native encoder too, but it
-// is opt-in while it earns field confidence, so it reaches go-aac/go-m4a only
-// when the gate in internal/conf is set and the encoder accepts the clip's shape.
-// Everything else, a non-gated AAC clip, and an Opus clip go-opus cannot carry go
-// to FFmpeg.
+// fallback for a clip go-opus cannot carry. AAC and MP3 each have a native
+// encoder too, but both are opt-in while they earn field confidence, so AAC
+// reaches go-aac/go-m4a and MP3 reaches go-mp3 only when the matching gate in
+// internal/conf is set and the encoder accepts the clip's shape. Everything else,
+// a non-gated AAC or MP3 clip, and an Opus clip go-opus cannot carry go to FFmpeg.
 func selectEncoder(exportFormat string, exportRate int) string {
 	switch exportFormat {
 	case ffmpeg.FormatWAV:
@@ -832,9 +833,15 @@ func selectEncoder(exportFormat string, exportRate int) string {
 			return clipenc.NativeOpus
 		}
 		return clipenc.FFmpeg
+	case ffmpeg.FormatMP3:
+		// Opt-in; see internal/conf/native_encoders.go for the gate and its removal.
+		if nativeMP3Selected(exportRate) {
+			return clipenc.NativeMP3
+		}
+		return clipenc.FFmpeg
 	default:
-		// MP3 and ALAC are the only remaining formats, and FFmpeg owns their
-		// codecs only; the loudness gain is resolved in Go first.
+		// ALAC is the only remaining format, and FFmpeg owns its codec only; the
+		// loudness gain is resolved in Go first.
 		return clipenc.FFmpeg
 	}
 }
@@ -867,9 +874,18 @@ func lossyBitrateKbps(exportFormat, bitrate string) int {
 // handling an error can still report the encoder and, past gain resolution, the
 // gain that was going to be applied.
 func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, exportFormat, outputPath string) (clipEncoding, error) {
+	bitrateKbps := lossyBitrateKbps(exportFormat, a.Settings.Realtime.Audio.Export.Bitrate)
+	encoder := selectEncoder(exportFormat, exportRate)
+	if encoder == clipenc.NativeMP3 {
+		// go-mp3 codes only the 14 fixed MPEG-1 rates and the wrapper rounds the
+		// requested bitrate to the nearest, so report that rounded value here to keep
+		// the encoding log and the file on disk in agreement. The FFmpeg MP3 path
+		// keeps the clamped EffectiveBitrateKbps, which is what FFmpeg is handed.
+		bitrateKbps = mp3.RoundBitrateKbps(bitrateKbps)
+	}
 	enc := clipEncoding{
-		Encoder:     selectEncoder(exportFormat, exportRate),
-		BitrateKbps: lossyBitrateKbps(exportFormat, a.Settings.Realtime.Audio.Export.Bitrate),
+		Encoder:     encoder,
+		BitrateKbps: bitrateKbps,
 	}
 
 	measureStart := time.Now()
@@ -900,9 +916,10 @@ func (a *SaveAudioAction) runEncoder(ctx context.Context, encoder string, export
 		// one exception, writing captured samples verbatim, which meant an
 		// operator with normalization or Export.Gain configured silently got
 		// neither. That was easy to miss because WAV is not only a chosen format:
-		// resolveExportParams downgrades to it for bat/ultrasonic clips
-		// (needsBatFormatFallback) and for installs with no usable encoder
-		// (strandedWithoutEncoder), so a user could land here without asking to.
+		// resolveExportParams also downgrades to WAV for installs with no usable
+		// encoder (strandedWithoutEncoder), so a user could land here without
+		// asking to. (A bat/ultrasonic capture above the analysis rate is stored
+		// losslessly in Export.UltrasonicType, not downgraded.)
 		pcm := a.pcmData
 		if gainDB != 0 {
 			// Applied returns a gained copy, so a.pcmData stays pristine for the
@@ -927,6 +944,9 @@ func (a *SaveAudioAction) runEncoder(ctx context.Context, encoder string, export
 
 	case clipenc.NativeOpus:
 		return a.encodeClipNativeOpus(ctx, exportRate, bitrateKbps, outputPath, gainDB)
+
+	case clipenc.NativeMP3:
+		return a.encodeClipNativeMP3(ctx, exportRate, bitrateKbps, outputPath, gainDB)
 
 	default:
 		return a.encodeClipFFmpeg(ctx, exportRate, exportFormat, outputPath, gainDB)
@@ -993,6 +1013,22 @@ func (a *SaveAudioAction) encodeClipNativeOpus(ctx context.Context, exportRate, 
 	})
 }
 
+// encodeClipNativeMP3 encodes the clip to CBR MP3 (.mp3) with go-mp3. As with
+// AAC, a failure is surfaced rather than falling back to FFmpeg: the operator
+// opted this clip into the native encoder, and a silent fallback would hide the
+// failures this rollout exists to surface.
+func (a *SaveAudioAction) encodeClipNativeMP3(ctx context.Context, exportRate, bitrateKbps int, outputPath string, gainDB float64) error {
+	return mp3.EncodePCM(ctx, &mp3.Options{
+		PCMData:     a.pcmData,
+		OutputPath:  outputPath,
+		SampleRate:  exportRate,
+		Channels:    conf.NumChannels,
+		BitDepth:    conf.BitDepth,
+		BitrateKbps: bitrateKbps,
+		GainDB:      gainDB,
+	})
+}
+
 // nativeAACSelected reports whether this clip should take the native AAC path:
 // the operator opted in AND go-aac accepts the clip's rate, depth and channel
 // count. A gated-on clip the encoder cannot carry falls back to FFmpeg with a
@@ -1023,6 +1059,24 @@ func nativeAACSelected(exportRate int) bool {
 func nativeOpusSelected(exportRate int) bool {
 	if err := opus.Supports(exportRate, conf.BitDepth, conf.NumChannels); err != nil {
 		logNativeEncoderSkipped(ffmpeg.FormatOpus, exportRate, err)
+		return false
+	}
+	return true
+}
+
+// nativeMP3Selected reports whether this clip should take the native MP3 path:
+// the operator opted in AND go-mp3 accepts the clip's rate, depth and channel
+// count. Bitrate is not part of the check: go-mp3 codes only the 14 fixed MPEG-1
+// Layer III rates, but the encoder rounds any configured value (BirdNET-Go allows
+// any 32-320k) to the nearest of them, so a bitrate is never a reason to fall back.
+// This mirrors nativeAACSelected and goes away when the native encoder becomes the
+// default.
+func nativeMP3Selected(exportRate int) bool {
+	if !conf.NativeMP3EncoderEnabled() {
+		return false
+	}
+	if err := mp3.Supports(exportRate, conf.BitDepth, conf.NumChannels); err != nil {
+		logNativeEncoderSkipped(ffmpeg.FormatMP3, exportRate, err)
 		return false
 	}
 	return true
@@ -1102,45 +1156,20 @@ const (
 //nolint:gochecknoglobals // process-lifetime log-flood guards
 var (
 	nativeEncoderSkipLogged   onceByKey
-	batFormatDowngradeLogged  onceByKey
 	strandedFormatLogged      onceByKey
 	normalizeSkipLogged       onceByKey
 	resampleFailureLogged     onceByKey
 	clipPathExtFallbackLogged onceByKey
 )
 
-// logBatFormatDowngrade explains why an install configured for a lossy format is
-// producing .wav files: an ultrasonic capture runs at a rate the configured
-// container cannot carry, so the export switched to WAV. The sibling downgrade
-// in strandedWithoutEncoder already logged its reason; this one did not, leaving
-// the operator with no explanation for a format they did not choose.
-//
-// Logged at WARN, matching the sibling downgrade in resolveExportParams: both
-// mean "you are not getting the export format you configured", which is a
-// configuration mismatch the operator should act on rather than a note.
-//
-// Guarded per (format, rate) rather than once per process: a bat install left on
-// a lossy export format takes this path on every single detection, but the two
-// inputs still vary, by hot-reloaded Export.Type and by capture source.
-func logBatFormatDowngrade(requestedFormat string, rate int) {
-	batFormatDowngradeLogged.do(formatRateKey(requestedFormat, rate), func() {
-		GetLogger().Warn("Ultrasonic clip format downgraded to WAV; the configured format cannot carry this sample rate",
-			logger.String("component", "analysis.processor.actions"),
-			logger.String("requested_format", requestedFormat),
-			logger.Int("sample_rate", rate),
-			logger.String("operation", "audio_export_bat_format_fallback"))
-	})
-}
-
 // logStrandedFormatFallback explains why an install with no FFmpeg is producing
 // .wav files: the operator opted a lossy format into its native encoder, which
 // kept config validation from downgrading the format, and the native encoder
 // then turned out not to accept this clip's shape.
 //
-// Same level and same guard as logBatFormatDowngrade, because it means the same
-// thing to the operator: you are not getting the format you configured. It used
-// to be the sibling's opposite on both counts, warning on every single clip
-// forever where the bat downgrade logged once.
+// Logged at WARN and guarded per (format, rate): it means the operator is not
+// getting the format they configured, which is a configuration mismatch to act
+// on rather than a per-clip note.
 //
 // No detection_id, matching the sibling. Once the line is guarded the id names
 // whichever clip happened to arrive first, which can be hours stale by the time
@@ -1443,51 +1472,89 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 	return gainDB, nil
 }
 
+// resolveExportFormat is the single source of truth for the container/codec a
+// clip is stored in. A bat/ultrasonic capture above the analysis rate is stored
+// losslessly in Export.UltrasonicType (WAV/FLAC, default FLAC) at full source
+// rate; every other case (including a non-bat capture above the analysis rate,
+// which resolveExportParams downsamples to conf.SampleRate) uses the configured
+// Export.Type. Both the on-disk file (resolveExportParams) and the persisted clip
+// name (applyExportFormatExtension) call it, so they cannot drift. Pass the
+// ORIGINAL source rate (pre-downsample).
+func resolveExportFormat(isBat bool, sourceRate int, export *conf.ExportSettings) string {
+	if isBat && sourceRate > conf.SampleRate {
+		return export.UltrasonicType
+	}
+	return export.Type
+}
+
+// exportFormatForModel resolves the export container for a clip from its model
+// identity and source rate, encapsulating the bat/ultrasonic model-type check so
+// the DB clip-name path (applyExportFormatExtension) picks the same format as the
+// encoder without duplicating the ResolveModelType call.
+func exportFormatForModel(modelName, modelVersion string, sourceRate int, export *conf.ExportSettings) string {
+	isBat := detection.ResolveModelType(modelName, modelVersion) == entities.ModelTypeBat
+	return resolveExportFormat(isBat, sourceRate, export)
+}
+
 // resolveExportParams determines the export sample rate, format, and output
-// path. Bird audio at rates above 48kHz is downsampled. Bat audio keeps the
-// native rate; if the configured format cannot carry it, the format is
-// silently switched to WAV.
+// path. The format comes from resolveExportFormat, the single source of truth
+// shared with the DB clip-name path so the file and the stored name cannot drift.
+// Bat/ultrasonic audio above the analysis rate keeps its full source rate and is
+// stored losslessly in Export.UltrasonicType; it is never resampled. Non-bat audio
+// above the analysis rate is downsampled to it and stored in Export.Type. Non-bat
+// audio below the analysis rate whose configured lossy native encoder cannot carry
+// the source rate is resampled UP to the analysis rate (which every native lossy
+// encoder accepts) so the configured format is kept rather than stranded to WAV,
+// on an install with no FFmpeg to take the source rate directly. A clip no encoder
+// can carry is downgraded to WAV as a last resort.
 func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, format, path string) {
 	rate = a.sourceSampleRate
 	if rate <= 0 {
 		rate = conf.SampleRate
 	}
 
-	format = a.Settings.Realtime.Audio.Export.Type
+	export := &a.Settings.Realtime.Audio.Export
 	path = outputPath
 
-	isBat := detection.ResolveModelType(a.modelName, "") == entities.ModelTypeBat
+	// Pair modelName with modelVersion (matching the naming path's
+	// applyExportFormatExtension) so the encode-side isBat check cannot skew from
+	// the clip-name side for a future version-specific model type.
+	isBat := detection.ResolveModelType(a.modelName, a.modelVersion) == entities.ModelTypeBat
 
-	if needsBatFormatFallback(a.modelName, "", rate, format) {
-		logBatFormatDowngrade(format, rate)
-		format = ffmpeg.FormatWAV
-		path = replaceExtension(path, ".wav")
-	} else if rate > conf.SampleRate && !isBat {
-		resampled, err := resample.ResampleBytes(a.pcmData, rate, conf.SampleRate)
-		if err != nil {
-			// Guarded per rate pair: resampling a fixed pair either works or it
-			// does not, so an affected source fails on every detection forever.
-			// The target is conf.SampleRate today, but it is keyed rather than
-			// assumed so a future variable target cannot silence the new pair.
-			resampleFailureLogged.do(resampleKey(rate, conf.SampleRate), func() {
-				GetLogger().Warn("Resampling failed, exporting at source rate",
-					logger.String("component", "analysis.processor.actions"),
-					logger.Int("source_rate", rate),
-					logger.Int("target_rate", conf.SampleRate),
-					logger.Error(err),
-					logger.String("operation", "audio_export_resample"))
-			})
-		} else {
-			a.pcmData = resampled
-			a.sourceSampleRate = conf.SampleRate
-			rate = conf.SampleRate
-		}
+	// Decide the format from the ORIGINAL source rate, before the resample below
+	// can mutate it. Shared with applyExportFormatExtension on the naming path.
+	format = resolveExportFormat(isBat, rate, export)
+
+	switch {
+	case rate > conf.SampleRate && !isBat:
+		// Non-bat audio above the analysis rate is downsampled to it so it can be
+		// stored in the configured (possibly lossy) Export.Type. Bat/ultrasonic
+		// audio above the analysis rate is kept at full source rate (format is
+		// UltrasonicType, decided above) and never resampled.
+		rate = a.resampleExportTo(rate, conf.SampleRate)
+	case rate < conf.SampleRate && !isBat && a.nativeEncoderNeedsUpsample(rate, format):
+		// The configured lossy native encoder cannot carry this sub-48k rate and
+		// there is no FFmpeg to take it. Resample up to conf.SampleRate (accepted by
+		// every native lossy encoder) rather than stranding to WAV; on a resample
+		// failure the rate is unchanged and strandedWithoutEncoder below downgrades
+		// to WAV so the clip survives.
+		rate = a.resampleExportTo(rate, conf.SampleRate)
 	}
 
 	if a.strandedWithoutEncoder(rate, format) {
 		logStrandedFormatFallback(format, rate)
 		format = ffmpeg.FormatWAV
-		path = replaceExtension(path, ".wav")
+	}
+
+	// Keep the on-disk extension in lockstep with the resolved format: the
+	// ultrasonic case built outputPath from Export.Type, and a strand switched the
+	// format to WAV. applyExportFormatExtension mirrors the deterministic cases
+	// into the persisted clip name; the rare resample-failure strand is covered by
+	// the media serve fallback. Guard against an empty extension (only reachable
+	// with an unvalidated empty format) so the path keeps buildClipPath's own
+	// extension rather than being clobbered to a trailing dot (GitHub #2810/#2814).
+	if ext := convert.GetFileExtension(format); ext != "" {
+		path = replaceExtension(path, "."+ext)
 	}
 
 	return rate, format, path
@@ -1497,18 +1564,18 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 // validation did not downgrade the format to WAV despite FFmpeg being absent, but
 // the native encoder turns out not to accept this clip's shape. For Opus that is
 // always possible (go-opus is the default, so validation never downgrades .opus);
-// for AAC it only applies once the operator has opted that format into its native
-// encoder.
+// for AAC and MP3 it only applies once the operator has opted that format into
+// its native encoder.
 //
 // Without this the export would call FFmpeg with an empty binary path and the
 // recording would be lost. Resolving it here rather than at the encode step
 // matters because the clip path still gets its extension corrected, so the file
 // on disk and the name recorded in the database cannot disagree.
 //
-// REMOVAL: the AAC branch goes away with the AAC gate. Once the native AAC
-// encoder is the default too, config validation stops downgrading it at all and
-// the question becomes a plain "can the native encoder carry it", as it already
-// is for Opus.
+// REMOVAL: the AAC and MP3 branches go away with their gates. Once a native
+// encoder is the default too, config validation stops downgrading that format at
+// all and the question becomes a plain "can the native encoder carry it", as it
+// already is for Opus.
 func (a *SaveAudioAction) strandedWithoutEncoder(rate int, format string) bool {
 	if a.Settings.Realtime.Audio.FfmpegPath != "" {
 		return false // FFmpeg can still take it
@@ -1516,6 +1583,13 @@ func (a *SaveAudioAction) strandedWithoutEncoder(rate int, format string) bool {
 	switch format {
 	case ffmpeg.FormatAAC:
 		return conf.NativeAACEncoderEnabled() && !nativeAACSelected(rate)
+	case ffmpeg.FormatMP3:
+		// Like AAC: opting MP3 into its native encoder stops config validation from
+		// downgrading it to WAV, so a clip go-mp3 cannot carry is stranded without
+		// FFmpeg and must be downgraded here. Bitrate is no longer a reason (the
+		// encoder rounds any configured value to a valid MPEG-1 rate); only an
+		// unsupported sample rate can strand an MP3 clip now.
+		return conf.NativeMP3EncoderEnabled() && !nativeMP3Selected(rate)
 	case ffmpeg.FormatOpus:
 		// go-opus is the default, so config validation never downgrades .opus to
 		// WAV: if go-opus cannot carry this clip and there is no FFmpeg, it is
@@ -1524,7 +1598,67 @@ func (a *SaveAudioAction) strandedWithoutEncoder(rate int, format string) bool {
 	default:
 		// Every other format either has an unconditional native encoder (WAV,
 		// FLAC) or was already downgraded to WAV by config validation when
-		// FFmpeg went missing (MP3).
+		// FFmpeg went missing (ALAC).
+		return false
+	}
+}
+
+// resampleExportTo converts the captured PCM from srcRate to dstRate for export,
+// updating the action's PCM buffer and source rate on success and returning the
+// rate the clip is now at. On failure it logs once per rate pair and leaves the
+// clip at srcRate for the caller's fallback to handle.
+//
+// The failure log is keyed per rate pair because resampling a fixed pair either
+// works or it does not, so an affected source would otherwise warn on every
+// detection forever; keying by the pair (rather than assuming a fixed target) keeps
+// a future variable target from silencing a new pair.
+func (a *SaveAudioAction) resampleExportTo(srcRate, dstRate int) int {
+	resampled, err := resample.ResampleBytes(a.pcmData, srcRate, dstRate)
+	if err != nil {
+		resampleFailureLogged.do(resampleKey(srcRate, dstRate), func() {
+			GetLogger().Warn("Resampling failed, exporting at source rate",
+				logger.String("component", "analysis.processor.actions"),
+				logger.Int("source_rate", srcRate),
+				logger.Int("target_rate", dstRate),
+				logger.Error(err),
+				logger.String("operation", "audio_export_resample"))
+		})
+		return srcRate
+	}
+	a.pcmData = resampled
+	a.sourceSampleRate = dstRate
+	return dstRate
+}
+
+// nativeEncoderNeedsUpsample reports whether a sub-48k clip must be resampled up to
+// conf.SampleRate to be encodable in its configured lossy format. It is the
+// resample counterpart to strandedWithoutEncoder: the same precondition (no FFmpeg,
+// and the format's active native encoder does not accept the source rate), but the
+// remedy is conversion to 48kHz (accepted by every native lossy encoder) instead of
+// a WAV downgrade.
+//
+// It checks the encoders' Supports directly rather than through nativeXSelected,
+// because a clip about to be resampled is not being skipped and must not emit the
+// "native encoder skipped" log. Opus is always native; AAC and MP3 only once opted
+// in, matching strandedWithoutEncoder. In this pipeline bit depth and channels are
+// fixed (conf.BitDepth, conf.NumChannels), so the only thing Supports rejects here
+// is the sample rate, which 48kHz resolves.
+//
+// REMOVAL: the FfmpegPath guard and the AAC/MP3 gates go away with FFmpeg and the
+// opt-in gates, leaving a plain "resample if the native encoder cannot carry it".
+func (a *SaveAudioAction) nativeEncoderNeedsUpsample(rate int, format string) bool {
+	if a.Settings.Realtime.Audio.FfmpegPath != "" {
+		return false // FFmpeg encodes the source rate directly; no resample needed
+	}
+	switch format {
+	case ffmpeg.FormatAAC:
+		return conf.NativeAACEncoderEnabled() && aac.Supports(rate, conf.BitDepth, conf.NumChannels) != nil
+	case ffmpeg.FormatMP3:
+		return conf.NativeMP3EncoderEnabled() && mp3.Supports(rate, conf.BitDepth, conf.NumChannels) != nil
+	case ffmpeg.FormatOpus:
+		return opus.Supports(rate, conf.BitDepth, conf.NumChannels) != nil
+	default:
+		// WAV and FLAC carry any rate; ALAC is FFmpeg-only. Nothing to resample for.
 		return false
 	}
 }
@@ -1536,21 +1670,4 @@ func replaceExtension(path, newExt string) string {
 		return path + newExt
 	}
 	return path[:len(path)-len(ext)] + newExt
-}
-
-// needsBatFormatFallback returns true when the model is a bat classifier
-// and the actual source sample rate exceeds what the configured export
-// format can carry (MP3/Opus/AAC cap at 48kHz).
-func needsBatFormatFallback(modelName, modelVersion string, sourceRate int, exportFormat string) bool {
-	if detection.ResolveModelType(modelName, modelVersion) != entities.ModelTypeBat {
-		return false
-	}
-	if sourceRate <= conf.SampleRate {
-		return false
-	}
-	switch exportFormat {
-	case "mp3", "opus", "aac":
-		return true
-	}
-	return false
 }

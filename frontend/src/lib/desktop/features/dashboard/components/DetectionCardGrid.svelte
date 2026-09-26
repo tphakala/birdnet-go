@@ -89,6 +89,22 @@
   let dropdownButtonRef = $state<HTMLButtonElement | undefined>(undefined);
   const limitOptions = [6, 12, 24, 48];
 
+  // Guard against a duplicate detection id in the incoming data: a repeated id in a
+  // keyed {#each} throws each_key_duplicate and, with no error boundary, white-screens
+  // the whole dashboard. De-duplicate by id (first occurrence wins) so the id key stays
+  // stable (no re-render churn, unlike appending the index) while a collision can never
+  // crash the page.
+  const uniqueData = $derived.by(() => {
+    const seen = new Set<Detection['id']>();
+    const out: Detection[] = [];
+    for (const d of data) {
+      if (seen.has(d.id)) continue;
+      seen.add(d.id);
+      out.push(d);
+    }
+    return out;
+  });
+
   // Toggle dropdown
   function toggleLimitDropdown() {
     showLimitDropdown = !showLimitDropdown;
@@ -271,7 +287,7 @@
 
         <!-- Detection Cards Grid -->
         <div class="detection-cards-grid gap-4">
-          {#each data.slice(0, selectedLimit) as detection (detection.id)}
+          {#each uniqueData.slice(0, selectedLimit) as detection (detection.id)}
             <DetectionCard
               {detection}
               isNew={newDetectionIds.has(detection.id)}

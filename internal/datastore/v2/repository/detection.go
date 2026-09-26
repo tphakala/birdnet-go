@@ -239,14 +239,17 @@ type DetectionRepository interface {
 
 	// GetHourlyDistribution returns detection counts by hour. tzOffsetSeconds is the
 	// configured timezone's UTC offset, applied so detections bucket by wall-clock hour in
-	// that zone rather than the database/OS-local zone. labelID and modelID are optional filters.
-	GetHourlyDistribution(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]HourlyDistributionData, error)
+	// that zone rather than the database/OS-local zone. labelIDs (every label of one species across
+	// models) and modelID are optional filters: nil or empty labelIDs means no label filter, so a
+	// caller that resolved a species to no labels must return its own empty result (or pass the
+	// no-match sentinel) rather than forward the empty slice.
+	GetHourlyDistribution(ctx context.Context, start, end int64, tzOffsetSeconds int, labelIDs []uint, modelID *uint) ([]HourlyDistributionData, error)
 
 	// GetDetectionTimestamps returns the raw detected_at epochs (seconds) for the half-open
-	// range [start, end), excluding false positives, in no particular order. labelID is an
-	// optional species filter. Callers bucket the timestamps in Go (e.g. the seasonal heatmap),
+	// range [start, end), excluding false positives, in no particular order. labelIDs is an
+	// optional species filter (every label of the species; nil or empty for none). Callers bucket the timestamps in Go (e.g. the seasonal heatmap),
 	// which keeps the slot/date math out of dialect SQL and correct across DST.
-	GetDetectionTimestamps(ctx context.Context, start, end int64, labelID *uint) ([]int64, error)
+	GetDetectionTimestamps(ctx context.Context, start, end int64, labelIDs []uint) ([]int64, error)
 
 	// GetBatchConfidences returns the per-label-ID detection confidences for the given label IDs over
 	// the half-open range [start, end), false positives excluded and filtered by minConfidence. Results
@@ -258,8 +261,9 @@ type DetectionRepository interface {
 	// GetDailyAnalytics returns daily statistics.
 	// tzOffsetSeconds is the configured timezone's UTC offset, applied so detections bucket by
 	// wall-clock date in that zone rather than the database/OS-local zone.
-	// labelID and modelID are optional filters.
-	GetDailyAnalytics(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]DailyAnalyticsData, error)
+	// labelIDs (every label of one species across models) and modelID are optional filters; nil or
+	// empty labelIDs means no label filter (see GetHourlyDistribution).
+	GetDailyAnalytics(ctx context.Context, start, end int64, tzOffsetSeconds int, labelIDs []uint, modelID *uint) ([]DailyAnalyticsData, error)
 
 	// GetDetectionTrends returns detection trends over time.
 	// period is "day", "week", or "month".

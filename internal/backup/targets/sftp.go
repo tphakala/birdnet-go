@@ -607,11 +607,9 @@ func (t *SFTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 				}
 
 				backups = append(backups, backup.BackupInfo{
-					Target: entry.Name(),
-					Metadata: backup.Metadata{
-						Timestamp: entry.ModTime(),
-						Size:      entry.Size(),
-					},
+					Target:    entry.Name(),
+					Timestamp: entry.ModTime(),
+					Size:      entry.Size(),
 				})
 			}
 

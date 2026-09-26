@@ -9,11 +9,27 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 const bufferMonitorDebugEveryTicks = 300
+
+// bufferAllocGraceTicks bounds how long a monitor tolerates a missing analysis
+// buffer before it is (re)allocated. The buffer is transiently absent on every
+// source (re)start (the stream-reset callback starts the monitor before
+// registerConsumersForSources allocates the buffer) and across a kept-source
+// reconfigure (ReconfigureSource deallocates the buffer before
+// registerConsumersForSources reallocates it). Polling through this grace
+// (pollInterval each) keeps the monitor alive across that window instead of
+// dropping it, while a model that is not a target for the source (no buffer ever
+// appears) still stops once the grace elapses. Genuine (source, model) removal is
+// handled separately by closing the monitor's quit channel, so the grace never
+// keeps a removed monitor alive. At 100ms per tick this is a 5s window: far longer
+// than the sub-tick (re)allocation normally takes, short enough to bound a stuck
+// monitor.
+const bufferAllocGraceTicks = 50
 
 // monitorKey identifies a unique monitor (one per source x model).
 type monitorKey struct {
@@ -30,10 +46,74 @@ type monitorConfig struct {
 	overlapSize int // bytes, scaled from user config, PCM-aligned
 }
 
+// monitorTickState is the per-monitor state threaded across processMonitorTick
+// calls by analysisBufferMonitor. hasReadBuffer flips the "buffer removed" log
+// level once the buffer has been seen at least once; notLoadedWarned is the
+// warn-once latch for the model-not-loaded skip, so a monitor that outlives its
+// model during a reconfigure logs one warning rather than one per window;
+// notFoundTicks bounds the startup allocation grace before the buffer is first found.
+type monitorTickState struct {
+	hasReadBuffer   bool
+	notLoadedWarned bool
+	// notFoundTicks counts consecutive ticks on which the analysis buffer was not
+	// found, bounding the (re)allocation grace in processMonitorTick (see
+	// bufferAllocGraceTicks); the grace applies both before the buffer is first found
+	// (startup) and after it disappears on a kept-source reconfigure. It resets once
+	// the buffer is found again. hasReadBuffer flips when AnalysisBuffer first
+	// succeeds (the buffer is found), before any window is read.
+	notFoundTicks int
+}
+
+// classifierBackend is the analysis package's view of *classifier.Orchestrator:
+// the exact set of methods BufferManager and ProcessData call on it. Declaring
+// the dependency as a consumer-side interface (accept interfaces, return concrete
+// types) lets buffer-manager tests inject a fake to drive the not-loaded ->
+// loaded and active/inactive transitions the monitor resume path depends on; a
+// real Orchestrator only reaches those states with fully loaded models, and its
+// models map and bat scheduler are package-private to internal/classifier.
+// *classifier.Orchestrator satisfies this in production.
+type classifierBackend interface {
+	IsModelLoaded(modelID string) bool
+	IsModelActive(modelID string) bool
+	ModelInfos() []classifier.ModelInfo
+	DefaultTargets() []classifier.ModelInfo
+	PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error)
+	CurrentSettings() *conf.Settings
+	ModelSpecFor(modelID string) (classifier.ModelSpec, bool)
+}
+
+// defaultTargetIDs returns the registry IDs of DefaultTargets() in order: the set a
+// source with no resolvable model list is analyzed with. Nil at N = 0 or when no
+// default target is loaded.
+func defaultTargetIDs(bn classifierBackend) []string {
+	targets := bn.DefaultTargets()
+	if len(targets) == 0 {
+		return nil
+	}
+	ids := make([]string, len(targets))
+	for i := range targets {
+		ids[i] = targets[i].ID
+	}
+	return ids
+}
+
+// fallbackTargets returns the analysis targets for a source whose configured models
+// resolved to nothing. An empty config list means "the orchestrator's default
+// targets", so it fans out to every default. A non-empty list whose models are all
+// unknown or unloaded (a misconfigured source) falls back to the FIRST default only
+// (BirdNET v2.4 when loaded), preserving pre-Phase-4 behavior so an upgrade never adds
+// a model to it. Empty when no default target is loaded (N = 0).
+func fallbackTargets(configModelIDs []string, defaults []classifier.ModelInfo) []classifier.ModelInfo {
+	if len(configModelIDs) == 0 || len(defaults) == 0 {
+		return defaults
+	}
+	return defaults[:1]
+}
+
 // BufferManager handles the lifecycle of analysis buffer monitors
 type BufferManager struct {
 	monitors  sync.Map // keyed by monitorKey -> chan struct{}
-	bn        *classifier.Orchestrator
+	bn        classifierBackend
 	bufferMgr *buffer.Manager
 	quitChan  chan struct{}
 	wg        *sync.WaitGroup
@@ -144,19 +224,12 @@ func (m *BufferManager) AddMonitor(source string) error {
 			Build()
 	}
 
-	// Build monitorConfigs for all loaded models.
+	// Build monitorConfigs for all loaded models. With no models loaded (N = 0) this
+	// is empty and AddMonitors starts no analysis monitors, which is correct.
 	allInfos := m.bn.ModelInfos()
 	configs := make([]monitorConfig, 0, len(allInfos))
 	for i := range allInfos {
 		configs = append(configs, buildMonitorConfig(source, &allInfos[i]))
-	}
-
-	// Fallback to primary model for backward compatibility when no
-	// models are registered via the orchestrator's model map.
-	if len(configs) == 0 {
-		primaryInfo := m.bn.PrimaryModelInfo()
-		cfg := buildMonitorConfig(source, &primaryInfo)
-		configs = []monitorConfig{cfg}
 	}
 
 	return m.AddMonitors(source, configs)
@@ -392,7 +465,7 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monit
 	const pollInterval = 100 * time.Millisecond
 
 	analysisWindowBytes := cfg.readSize
-	hasReadBuffer := false
+	var state monitorTickState
 	var tickCount int64
 
 	ticker := time.NewTicker(pollInterval)
@@ -404,9 +477,7 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monit
 			return
 		case <-ticker.C:
 			tickCount++
-			keepRunning, newHasReadBuffer := m.processMonitorTick(quitChan, cfg, analysisWindowBytes, detectionOffset, hasReadBuffer, tickCount)
-			hasReadBuffer = newHasReadBuffer
-			if !keepRunning {
+			if !m.processMonitorTick(quitChan, cfg, analysisWindowBytes, detectionOffset, &state, tickCount) {
 				return
 			}
 		}
@@ -417,10 +488,15 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monit
 // up the current AnalysisBuffer for (sourceID, modelID), reads one window,
 // and dispatches it to ProcessData when a full readSize window is present.
 //
-// Returns keepRunning=false when the buffer was not found OR the goroutine was
-// asked to shut down during a backoff. The updated hasReadBuffer flag is
-// propagated back so the caller can toggle its "once seen, log on later loss"
-// log-level preference across ticks.
+// Returns keepRunning=false only after a bounded grace (bufferAllocGraceTicks) has
+// elapsed with the analysis buffer still absent, or when the goroutine was asked to
+// shut down during a backoff. While the buffer is missing but the grace has not
+// elapsed it returns keepRunning=true, so a monitor survives the (re)allocation window
+// on startup and across a kept-source reconfigure; a genuine (source, model) removal
+// is handled by closing the monitor's quit channel, not by this return. The
+// per-monitor state (see monitorTickState) is updated in place across ticks so the
+// caller can toggle its "once seen, log on later loss" log-level preference and hold
+// the model-not-loaded warn-once latch and the not-found grace counter.
 //
 // The window's backing slice is always returned to its pool via a
 // "defer release()" immediately after Read, so every exit path including the
@@ -430,23 +506,45 @@ func (m *BufferManager) processMonitorTick(
 	cfg *monitorConfig,
 	analysisWindowBytes int,
 	detectionOffset time.Duration,
-	hasReadBuffer bool,
+	state *monitorTickState,
 	tickCount int64,
-) (keepRunning, updatedHasReadBuffer bool) {
+) (keepRunning bool) {
 	ab, err := m.bufferMgr.AnalysisBuffer(cfg.sourceID, cfg.modelID)
 	if err != nil {
-		if hasReadBuffer {
-			m.logger.Info("analysis buffer removed, stopping monitor",
+		// The analysis buffer is not currently allocated. This is transient in two
+		// cases, and the monitor must survive both rather than stop and be silently
+		// dropped:
+		//   - startup: the stream-reset callback (fireReset -> AddMonitor) starts this
+		//     monitor as soon as StartStream fires, before registerConsumersForSources
+		//     allocates the buffer;
+		//   - reconfigure: on a kept-source reconfigure, ReconfigureSource deallocates
+		//     the analysis buffer and registerConsumersForSources reallocates it a few
+		//     steps later, so a monitor that already read the old buffer briefly finds
+		//     none (this gap widens with the number of reconfigured sources).
+		// Poll through a bounded grace so the monitor picks the (re)allocated buffer
+		// back up instead of dying in the window. A genuinely removed (source, model)
+		// is torn down by UpdateMonitors/RemoveMonitor closing this monitor's quit
+		// channel, which analysisBufferMonitor's outer select exits on regardless of
+		// this grace, so the grace never keeps a removed monitor alive; it only bridges
+		// the reallocation gap. If the buffer never returns within the grace, stop as a
+		// safety net so a monitor cannot poll forever.
+		state.notFoundTicks++
+		if state.notFoundTicks <= bufferAllocGraceTicks {
+			return true
+		}
+		if state.hasReadBuffer {
+			m.logger.Info("analysis buffer removed and not reallocated within grace, stopping monitor",
 				logger.String("source_id", cfg.sourceID),
 				logger.String("model_id", cfg.modelID))
 		} else {
-			m.logger.Warn("analysis buffer not found for monitor, may not be allocated",
+			m.logger.Warn("analysis buffer not found for monitor after allocation grace, stopping",
 				logger.String("source_id", cfg.sourceID),
 				logger.String("model_id", cfg.modelID))
 		}
-		return false, hasReadBuffer
+		return false
 	}
-	hasReadBuffer = true
+	state.hasReadBuffer = true
+	state.notFoundTicks = 0
 
 	data, release, readErr := ab.Read()
 	defer release()
@@ -457,9 +555,9 @@ func (m *BufferManager) processMonitorTick(
 			logger.Error(readErr))
 		select {
 		case <-time.After(1 * time.Second):
-			return true, hasReadBuffer
+			return true
 		case <-quitChan:
-			return false, hasReadBuffer
+			return false
 		}
 	}
 
@@ -471,14 +569,48 @@ func (m *BufferManager) processMonitorTick(
 				logger.Int("data_len", len(data)),
 				logger.Int("expected", analysisWindowBytes))
 		}
-		return true, hasReadBuffer
+		return true
+	}
+
+	// Skip inference when the model is not loaded in the orchestrator. A monitor
+	// can briefly outlive its model's registration: UnloadModel (uninstall,
+	// reinstall, variant switch) removes the model immediately, but monitor
+	// teardown is asynchronous (the topology-reconfigure debounce). Dispatching in
+	// that window would hand the orchestrator a model it no longer has, producing a
+	// stream of "model not loaded" errors (Sentry BIRDNET-GO-2G6 / 1S1). Skip
+	// quietly instead, warning once per monitor so a genuinely stuck reconfigure is
+	// still visible; the window was already read and is released by the defer above.
+	// The monitor keeps running rather than stopping, so a reinstall or variant
+	// switch that re-registers the same registry ID resumes inference immediately,
+	// while UpdateMonitors still removes it if the model is gone for good.
+	if !m.bn.IsModelLoaded(cfg.modelID) {
+		switch {
+		case !state.notLoadedWarned:
+			m.logger.Warn("model not loaded, skipping inference window (a model reconfigure or reinstall may be in progress)",
+				logger.String("source_id", cfg.sourceID),
+				logger.String("model_id", cfg.modelID))
+			state.notLoadedWarned = true
+		case tickCount%bufferMonitorDebugEveryTicks == 0:
+			m.logger.Debug("model still not loaded, skipping inference window",
+				logger.String("source_id", cfg.sourceID),
+				logger.String("model_id", cfg.modelID))
+		}
+		return true
+	}
+	if state.notLoadedWarned {
+		// The model came back (a reinstall or variant switch re-registered the same
+		// registry ID). Resume inference and reset the warn-once latch.
+		m.logger.Info("model loaded again, resuming inference",
+			logger.String("source_id", cfg.sourceID),
+			logger.String("model_id", cfg.modelID))
+		state.notLoadedWarned = false
 	}
 
 	// Skip inference for models that are currently inactive (e.g., bat model
 	// during daytime when nighttime-only scheduling is enabled). The buffered
 	// audio data is released by the existing defer release().
 	if !m.bn.IsModelActive(cfg.modelID) {
-		return true, hasReadBuffer
+		return true
 	}
 
 	m.logger.Debug("buffer monitor dispatching to ProcessData",
@@ -490,13 +622,19 @@ func (m *BufferManager) processMonitorTick(
 	beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
 	startTime := time.Now().Add(-beginTimeOffset)
 
-	if processErr := ProcessData(context.Background(), m.bn, m.bufferMgr, data, startTime, audioCapturedAt, cfg.sourceID, cfg.modelID); processErr != nil {
+	if processErr := ProcessData(context.Background(), m.bn, m.bufferMgr, &ProcessRequest{
+		Data:            data,
+		StartTime:       startTime,
+		AudioCapturedAt: audioCapturedAt,
+		Source:          cfg.sourceID,
+		ModelID:         cfg.modelID,
+	}); processErr != nil {
 		m.logger.Error("error processing data",
 			logger.String("source_id", cfg.sourceID),
 			logger.String("model_id", cfg.modelID),
 			logger.Error(processErr))
 	}
-	return true, hasReadBuffer
+	return true
 }
 
 // buildMonitorConfig builds a monitorConfig from a ModelInfo.

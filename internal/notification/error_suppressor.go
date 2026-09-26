@@ -158,10 +158,7 @@ func nextReminderInterval(reportCount int) time.Duration {
 	// maxSuppressionReminderInterval to avoid any chance of signed-int
 	// overflow if reportCount grows unbounded during a very long outage.
 	const maxShift = 20
-	shift := reportCount - 1
-	if shift > maxShift {
-		shift = maxShift
-	}
+	shift := min(reportCount-1, maxShift)
 
 	multiplier := int64(1) << shift
 	interval := time.Duration(multiplier) * suppressionReminderInterval

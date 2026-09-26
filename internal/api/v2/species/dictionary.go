@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/speciesdict"
 )
@@ -88,9 +89,10 @@ func (c *Handler) ServeSpeciesDictionary(ctx echo.Context) error {
 		hdr.Set("Cache-Control", dictCacheShort)
 	}
 
-	// Respond with 304 if the client already has the current version. Accept the weak
-	// form too, since reverse proxies and CDNs often weaken a strong ETag to W/"...".
-	if clientETag := ctx.Request().Header.Get("If-None-Match"); clientETag == etag || clientETag == "W/"+etag {
+	// Respond with 304 if the client already has the current version. The shared
+	// helper honors the "*" wildcard, comma-separated lists, and the weak W/"..."
+	// form that reverse proxies and CDNs often apply (RFC 7232).
+	if apicore.MatchIfNoneMatch(ctx.Request().Header.Get("If-None-Match"), etag) {
 		return ctx.NoContent(http.StatusNotModified)
 	}
 

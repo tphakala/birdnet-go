@@ -2,8 +2,9 @@ package migration
 
 import (
 	"context"
-	"errors"
+	"database/sql"
 	"io"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -15,8 +16,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gorm_logger "gorm.io/gorm/logger"
 )
 
 func TestWorker_PanicDoesNotTriggerCancelledTelemetry(t *testing.T) {
@@ -37,7 +43,7 @@ func TestWorker_PanicDoesNotTriggerCancelledTelemetry(t *testing.T) {
 		stopCh:       make(chan struct{}),
 		pauseCh:      make(chan struct{}),
 		resumeCh:     make(chan struct{}),
-		// legacy is nil — processBatch() will panic on nil pointer dereference
+		// legacy is nil: processBatch() will panic on nil pointer dereference
 	}
 
 	w.mu.Lock()
@@ -72,7 +78,7 @@ func setupWorkerTest(t *testing.T) (sm *datastoreV2.StateManager, cleanup func()
 	t.Helper()
 
 	tmpDir := t.TempDir()
-	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{DataDir: tmpDir})
+	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{ConfiguredPath: filepath.Join(tmpDir, "birdnet.db")})
 	require.NoError(t, err)
 
 	err = mgr.Initialize()
@@ -359,7 +365,7 @@ func (m *mockFailingStateManager) Complete() error {
 	m.mu.Unlock()
 
 	if calls <= failCount {
-		return errors.New("simulated complete failure")
+		return errors.NewStd("simulated complete failure")
 	}
 	return m.StateManager.Complete()
 }
@@ -459,39 +465,39 @@ func TestWorker_TailSyncRetriesDirtyIDs(t *testing.T) {
 type failingModelRepo struct{}
 
 func (f *failingModelRepo) GetOrCreate(_ context.Context, _, _, _ string, _ entities.ModelType, _ *string) (*entities.AIModel, error) {
-	return nil, errors.New("model repo unavailable in test")
+	return nil, errors.NewStd("model repo unavailable in test")
 }
 
 func (f *failingModelRepo) GetByID(_ context.Context, _ uint) (*entities.AIModel, error) {
-	return nil, errors.New("not implemented")
+	return nil, errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) GetByNameVersionVariant(_ context.Context, _, _, _ string) (*entities.AIModel, error) {
-	return nil, errors.New("not implemented")
+	return nil, errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) GetAll(_ context.Context) ([]*entities.AIModel, error) {
-	return nil, errors.New("not implemented")
+	return nil, errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) Count(_ context.Context) (int64, error) {
-	return 0, errors.New("not implemented")
+	return 0, errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) CountLabels(_ context.Context, _ uint) (int64, error) {
-	return 0, errors.New("not implemented")
+	return 0, errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) Delete(_ context.Context, _ uint) error {
-	return errors.New("not implemented")
+	return errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) GetByIDs(_ context.Context, _ []uint) (map[uint]*entities.AIModel, error) {
-	return nil, errors.New("not implemented")
+	return nil, errors.NewStd("not implemented")
 }
 
 func (f *failingModelRepo) Exists(_ context.Context, _ uint) (bool, error) {
-	return false, errors.New("not implemented")
+	return false, errors.NewStd("not implemented")
 }
 
 func TestWorker_SwitchStatementCoverage(t *testing.T) {
@@ -560,4 +566,200 @@ func TestWorker_SwitchStatementCoverage(t *testing.T) {
 			assert.Equal(t, tt.checkState, state.State)
 		})
 	}
+}
+
+// newOnDiskDetectionRepo builds a real v2 detection repository over an isolated
+// on-disk SQLite database with foreign-key constraints disabled, so a bare ghost
+// detection can be planted without wiring up label/model rows. The returned
+// *sql.DB lets a test close the connection to force a non-not-found delete error.
+func newOnDiskDetectionRepo(t *testing.T) (repository.DetectionRepository, *sql.DB) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "v2det.db")), &gorm.Config{
+		Logger:                                   gorm_logger.Default.LogMode(gorm_logger.Silent),
+		DisableForeignKeyConstraintWhenMigrating: true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&entities.Detection{}, &entities.DetectionLock{}, &entities.DetectionReview{}))
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { assert.NoError(t, sqlDB.Close()) })
+	return repository.NewDetectionRepository(db, nil, false, false), sqlDB
+}
+
+// plantGhostDetection inserts a v2 detection row that has no matching legacy row,
+// simulating a dual-write delete where the legacy row was removed but the v2 delete
+// failed and the id was marked dirty.
+func plantGhostDetection(t *testing.T, repo repository.DetectionRepository, id uint) {
+	t.Helper()
+	require.NoError(t, repo.SaveWithID(t.Context(), &entities.Detection{
+		ID:         id,
+		ModelID:    1,
+		LabelID:    1,
+		DetectedAt: time.Now().Unix(),
+		Confidence: 0.9,
+	}))
+}
+
+// TestWorker_ProcessDirtyIDsBatch_DeletesV2GhostWhenLegacyDeleted verifies the
+// ghost-resurrection fix: a dirty id whose legacy row is gone means the detection was
+// deleted, so the orphaned v2 row must be removed (not just the dirty marker),
+// otherwise the deleted detection resurrects after v2 promotion.
+func TestWorker_ProcessDirtyIDsBatch_DeletesV2GhostWhenLegacyDeleted(t *testing.T) {
+	sm, cleanup := setupWorkerTest(t)
+	defer cleanup()
+
+	v2Repo, _ := newOnDiskDetectionRepo(t)
+	const ghostID = uint(4242)
+	plantGhostDetection(t, v2Repo, ghostID)
+	require.NoError(t, sm.AddDirtyID(ghostID))
+
+	// Positive control: the ghost really is present in v2 before reconciliation, so the
+	// post-condition below proves a deletion happened rather than the row never existing.
+	_, preErr := v2Repo.Get(t.Context(), ghostID)
+	require.NoError(t, preErr, "ghost detection must exist before reconciliation")
+
+	// Legacy no longer has the row: Search returns no results.
+	mockLegacy := mocks.NewMockDetectionRepository(t)
+	mockLegacy.EXPECT().
+		Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).
+		Once()
+
+	w := &Worker{
+		stateManager: sm,
+		legacy:       mockLegacy,
+		v2Detection:  v2Repo,
+		logger:       testLogger(),
+		batchSize:    DefaultBatchSize,
+	}
+
+	caught, err := w.processDirtyIDsBatch(t.Context(), []uint{ghostID})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), caught, "a reconciled ghost counts as progress so catch-up does not stop early")
+
+	_, getErr := v2Repo.Get(t.Context(), ghostID)
+	require.ErrorIs(t, getErr, repository.ErrDetectionNotFound,
+		"orphaned v2 detection must be deleted so it cannot resurrect after promotion")
+
+	count, err := sm.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count, "dirty id should be cleared after v2 ghost reconciliation")
+}
+
+// TestWorker_ProcessDirtyIDsBatch_ClearsDirtyWhenNeitherHasRow verifies that a
+// dirty id absent from both legacy and v2 is treated as reconciled: the v2 delete
+// returns ErrDetectionNotFound (a no-op) and the dirty marker is cleared.
+func TestWorker_ProcessDirtyIDsBatch_ClearsDirtyWhenNeitherHasRow(t *testing.T) {
+	sm, cleanup := setupWorkerTest(t)
+	defer cleanup()
+
+	v2Repo, _ := newOnDiskDetectionRepo(t)
+	const missingID = uint(999)
+	require.NoError(t, sm.AddDirtyID(missingID))
+
+	mockLegacy := mocks.NewMockDetectionRepository(t)
+	mockLegacy.EXPECT().
+		Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).
+		Once()
+
+	w := &Worker{
+		stateManager: sm,
+		legacy:       mockLegacy,
+		v2Detection:  v2Repo,
+		logger:       testLogger(),
+		batchSize:    DefaultBatchSize,
+	}
+
+	caught, err := w.processDirtyIDsBatch(t.Context(), []uint{missingID})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), caught, "a not-found ghost is reconciled and counts as progress")
+
+	count, err := sm.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count, "dirty id should be cleared when v2 delete is a no-op")
+}
+
+// TestWorker_ProcessDirtyIDsBatch_KeepsDirtyWhenV2DeleteErrors verifies that a
+// non-not-found v2 delete error leaves the id dirty for a later retry rather than
+// dropping the marker (which would strand the orphaned v2 row).
+func TestWorker_ProcessDirtyIDsBatch_KeepsDirtyWhenV2DeleteErrors(t *testing.T) {
+	sm, cleanup := setupWorkerTest(t)
+	defer cleanup()
+
+	v2Repo, v2SQLDB := newOnDiskDetectionRepo(t)
+	const ghostID = uint(555)
+	plantGhostDetection(t, v2Repo, ghostID)
+	require.NoError(t, sm.AddDirtyID(ghostID))
+
+	// Force the v2 delete to fail with a non-retryable, non-not-found error by dropping the
+	// locks table its NOT EXISTS subquery references. Closing the DB would instead surface as a
+	// retryable "database is closed" error and burn the full retry backoff (~9s).
+	_, dropErr := v2SQLDB.Exec("DROP TABLE detection_locks")
+	require.NoError(t, dropErr)
+
+	mockLegacy := mocks.NewMockDetectionRepository(t)
+	mockLegacy.EXPECT().
+		Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).
+		Once()
+
+	w := &Worker{
+		stateManager: sm,
+		legacy:       mockLegacy,
+		v2Detection:  v2Repo,
+		logger:       testLogger(),
+		batchSize:    DefaultBatchSize,
+	}
+
+	caught, err := w.processDirtyIDsBatch(t.Context(), []uint{ghostID})
+	require.NoError(t, err, "a per-id v2 delete failure is logged, not returned")
+	assert.Equal(t, int64(0), caught)
+
+	count, err := sm.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count, "dirty id must remain for retry when the v2 delete fails")
+}
+
+// TestWorker_ProcessDirtyIDsBatch_KeepsLockedGhostButClearsDirty verifies that when the v2
+// ghost is locked (user-verified) and its legacy row is gone, the reconciler does not
+// force-delete the protected row but still clears the dirty marker, so the id cannot block
+// migration validation forever.
+func TestWorker_ProcessDirtyIDsBatch_KeepsLockedGhostButClearsDirty(t *testing.T) {
+	sm, cleanup := setupWorkerTest(t)
+	defer cleanup()
+
+	v2Repo, _ := newOnDiskDetectionRepo(t)
+	const ghostID = uint(7777)
+	plantGhostDetection(t, v2Repo, ghostID)
+	require.NoError(t, v2Repo.Lock(t.Context(), ghostID))
+	require.NoError(t, sm.AddDirtyID(ghostID))
+
+	mockLegacy := mocks.NewMockDetectionRepository(t)
+	mockLegacy.EXPECT().
+		Search(mock.Anything, mock.Anything).
+		Return(nil, int64(0), nil).
+		Once()
+
+	w := &Worker{
+		stateManager: sm,
+		legacy:       mockLegacy,
+		v2Detection:  v2Repo,
+		logger:       testLogger(),
+		batchSize:    DefaultBatchSize,
+	}
+
+	caught, err := w.processDirtyIDsBatch(t.Context(), []uint{ghostID})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), caught, "a locked ghost is reconciled (marker cleared) and counts as progress")
+
+	// The locked, user-verified row must NOT be force-deleted.
+	_, getErr := v2Repo.Get(t.Context(), ghostID)
+	require.NoError(t, getErr, "a locked v2 detection must be preserved, not force-deleted")
+
+	// But the dirty marker is cleared so it cannot block migration validation forever.
+	count, err := sm.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count, "dirty id must be cleared even when the v2 row is locked")
 }

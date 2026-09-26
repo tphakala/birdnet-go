@@ -211,7 +211,7 @@ func TestLoadModel_RunsDeferredWarmup(t *testing.T) {
 
 // TestRunPendingWarmups_DoesNotHoldMapLockDuringWarmup is the core regression
 // guard: while the deferred warm-up inference runs, callers that take
-// o.mu.RLock (PredictModel, ModelInfos, PrimaryModelID) must not block. The
+// o.mu.RLock (PredictModel, ModelInfos, DefaultTargets) must not block. The
 // warm-up serializes via inferenceMu instead, exactly like a normal inference.
 func TestRunPendingWarmups_DoesNotHoldMapLockDuringWarmup(t *testing.T) {
 	started := make(chan struct{})

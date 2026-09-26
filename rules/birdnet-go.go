@@ -37,6 +37,10 @@ func ErrorsNewf(m dsl.Matcher) {
 	m.Match(
 		`errors.New(fmt.Errorf($format, $*args))`,
 	).
-		Report("use errors.Newf($format, $args) instead of errors.New(fmt.Errorf(...))").
-		Suggest("errors.Newf($format, $args)")
+		// Do not interpolate $args (a $* NodeSlice) into Report OR Suggest: go-ruleguard
+		// renders both templates through the same nodeText path, which falls back to
+		// go/printer and panics on *gogrep.NodeSlice ("unsupported node type"), crashing
+		// gocritic on any file that matches (e.g. the openvino backend). That is why this
+		// rule reports a static message and provides no Suggest quickfix.
+		Report("use errors.Newf($format, ...) instead of errors.New(fmt.Errorf(...))")
 }

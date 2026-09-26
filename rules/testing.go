@@ -50,8 +50,9 @@ func BenchmarkLoop(m dsl.Matcher) {
 		`for range $b.N { $*body }`,
 	).
 		Where(m["b"].Type.Is("*testing.B")).
-		Report("use for $b.Loop() { ... } instead of for range $b.N (Go 1.24+)").
-		Suggest("for $b.Loop() { $body }")
+		// No Suggest: $*body is a NodeSlice that go-ruleguard cannot render
+		// (go/printer panics), which crashes gocritic on any matching file.
+		Report("use for $b.Loop() { ... } instead of for range $b.N (Go 1.24+)")
 }
 
 // TestingContext detects context.Background() or context.TODO() in test functions
@@ -127,7 +128,7 @@ func TestingContext(m dsl.Matcher) {
 //	func TestFoo(t *testing.T) {
 //	    dir := t.ArtifactDir()
 //	    // write test artifacts to dir
-//	    // directory persists after test for inspection
+//	    // kept for inspection only when go test runs with -artifacts
 //	}
 //
 // Benefits:

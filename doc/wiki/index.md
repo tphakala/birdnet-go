@@ -52,6 +52,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 ## Troubleshooting & Support
 
 - [Frequently Asked Questions](faq.md) - Common questions, problems, and quick fixes
+- [install.sh Troubleshooting](installation.md#troubleshooting-installsh) - Fixing installer failures (systemd, Docker access, WSL)
 - [RTSP Troubleshooting](rtsp-troubleshooting.md) - Comprehensive guide for RTSP camera issues and configuration
 - [Docker Troubleshooting](guide.md#docker-installation-troubleshooting) - Resolving common Docker issues
 - [Support Script](guide.md#support-script) - Generating diagnostic information

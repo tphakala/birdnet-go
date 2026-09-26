@@ -104,7 +104,7 @@ func cleanupTestArtifacts() {
 - [ ] Cache logger at function start: `log := GetLogger()`
 - [ ] Never call `GetLogger()` inside loops
 - [ ] Use structured fields: `logger.String()`, `logger.Int()`, `logger.Error()`, etc.
-- [ ] Run `golangci-lint run ./internal/mypackage/...`
+- [ ] Run `task lint` (whole module, from the repository root)
 - [ ] Run `go test ./internal/mypackage/...`
 
 ---
@@ -160,6 +160,7 @@ ERROR [api] Request failed status=500 error="timeout"
 ```
 
 **In journald/systemd**:
+
 ```
 Dec 28 13:43:08 birdnet-go[1234]: INFO  [main] Application started version=1.0.0 port=8080
 Dec 28 13:43:09 birdnet-go[1234]: ERROR [api] Request failed status=500 error="timeout"
@@ -209,6 +210,7 @@ especially important during daylight saving time transitions.
 ```
 
 **Why Dual Format?**
+
 - **Console**: Optimized for humans scanning logs during development
 - **Files**: Optimized for machines parsing logs in production (ELK, Loki, etc.)
 
@@ -222,10 +224,10 @@ Automatic size-based log rotation prevents log files from growing unbounded.
 file_output:
   enabled: true
   path: "logs/app.log"
-  max_size: 100           # MB - rotate when file exceeds this size (0 = disabled)
-  max_age: 30             # days - delete rotated files older than this (0 = no limit)
-  max_rotated_files: 10   # keep at most this many rotated files (0 = no limit)
-  compress: false         # gzip rotated files (disabled by default)
+  max_size: 100 # MB - rotate when file exceeds this size (0 = disabled)
+  max_age: 30 # days - delete rotated files older than this (0 = no limit)
+  max_rotated_files: 10 # keep at most this many rotated files (0 = no limit)
+  compress: false # gzip rotated files (disabled by default)
 ```
 
 ### Behavior
@@ -238,12 +240,12 @@ file_output:
 
 ### Defaults
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `max_size` | 100 | MB before rotation |
-| `max_age` | 30 | Days to keep rotated files |
-| `max_rotated_files` | 10 | Max rotated files to keep |
-| `compress` | false | Gzip compression (opt-in) |
+| Setting             | Default | Description                |
+| ------------------- | ------- | -------------------------- |
+| `max_size`          | 100     | MB before rotation         |
+| `max_age`           | 30      | Days to keep rotated files |
+| `max_rotated_files` | 10      | Max rotated files to keep  |
+| `compress`          | false   | Gzip compression (opt-in)  |
 
 ### Module-Specific Rotation
 
@@ -254,9 +256,9 @@ modules:
   audio:
     enabled: true
     file_path: "logs/audio.log"
-    max_size: 50           # Override: smaller max size
-    max_rotated_files: 5   # Override: keep fewer files
-    compress: true         # Override: enable compression
+    max_size: 50 # Override: smaller max size
+    max_rotated_files: 5 # Override: keep fewer files
+    compress: true # Override: enable compression
 ```
 
 Zero values in module config fall back to `file_output` defaults.
@@ -300,7 +302,7 @@ logging:
       enabled: true
       file_path: "logs/analysis.log"
       level: "debug"
-      console_also: false  # Don't duplicate to console
+      console_also: false # Don't duplicate to console
     mqtt:
       enabled: true
       file_path: "logs/mqtt.log"
@@ -332,16 +334,16 @@ logger.Info("User login", "user_id", "123", "attempt", 1)
 
 ### Available Field Types
 
-| Function | Type | Example |
-|----------|------|---------|
-| `logger.String(key, val)` | string | `logger.String("user", "alice")` |
-| `logger.Int(key, val)` | int | `logger.Int("count", 42)` |
-| `logger.Int64(key, val)` | int64 | `logger.Int64("bytes", 1024000)` |
-| `logger.Bool(key, val)` | bool | `logger.Bool("enabled", true)` |
-| `logger.Error(err)` | error | `logger.Error(err)` (key is "error") |
+| Function                    | Type          | Example                                     |
+| --------------------------- | ------------- | ------------------------------------------- |
+| `logger.String(key, val)`   | string        | `logger.String("user", "alice")`            |
+| `logger.Int(key, val)`      | int           | `logger.Int("count", 42)`                   |
+| `logger.Int64(key, val)`    | int64         | `logger.Int64("bytes", 1024000)`            |
+| `logger.Bool(key, val)`     | bool          | `logger.Bool("enabled", true)`              |
+| `logger.Error(err)`         | error         | `logger.Error(err)` (key is "error")        |
 | `logger.Duration(key, val)` | time.Duration | `logger.Duration("timeout", 5*time.Second)` |
-| `logger.Time(key, val)` | time.Time | `logger.Time("scheduled", t)` |
-| `logger.Any(key, val)` | any | `logger.Any("data", complexStruct)` |
+| `logger.Time(key, val)`     | time.Time     | `logger.Time("scheduled", t)`               |
+| `logger.Any(key, val)`      | any           | `logger.Any("data", complexStruct)`         |
 
 ## Echo Framework Integration
 
@@ -367,6 +369,7 @@ e.Logger.Info("Starting server")  // Routes through pkg/logger
 ```
 
 **Benefits**:
+
 - All logs use consistent format
 - Echo logs appear in unified log files
 - Module scoping applies to Echo logs
@@ -423,6 +426,7 @@ config.Instance().SetLogger(appLogger.Module("config"))
 ```
 
 **Components using this pattern:**
+
 - `config.Instance()` - Config file watcher
 - `database.GetVendorCache()` - Vendor cache
 - Echo framework - Via constructor parameter
@@ -526,10 +530,10 @@ logging:
     enabled: true
     path: "logs/app.log"
     level: "debug"
-    max_size: 100           # MB - rotate when file exceeds this size
-    max_age: 30             # days - delete rotated files older than this
-    max_rotated_files: 10   # keep at most this many rotated files
-    compress: false         # gzip rotated files (opt-in)
+    max_size: 100 # MB - rotate when file exceeds this size
+    max_age: 30 # days - delete rotated files older than this
+    max_rotated_files: 10 # keep at most this many rotated files
+    compress: false # gzip rotated files (opt-in)
     # JSON timestamps use RFC3339 format with timezone offset
 
   module_levels:
@@ -577,12 +581,12 @@ logging:
 
 The `timezone` setting controls the timezone used in JSON file timestamps:
 
-| Value | Behavior |
-|-------|----------|
-| `"Local"` | Uses system's local timezone (default) |
-| `""` (empty) | Same as "Local" |
-| `"UTC"` | Coordinated Universal Time |
-| `"Europe/Helsinki"` | Any valid IANA timezone name |
+| Value               | Behavior                               |
+| ------------------- | -------------------------------------- |
+| `"Local"`           | Uses system's local timezone (default) |
+| `""` (empty)        | Same as "Local"                        |
+| `"UTC"`             | Coordinated Universal Time             |
+| `"Europe/Helsinki"` | Any valid IANA timezone name           |
 
 The timezone database is embedded in the binary for cross-platform compatibility,
 ensuring timezone operations work consistently on Linux, macOS, and Windows.
@@ -592,6 +596,7 @@ ensuring timezone operations work consistently on Linux, macOS, and Windows.
 **Console output**: No timestamps. Following the [Twelve-Factor App](https://12factor.net/logs)
 methodology, timestamps are omitted from console output. The execution environment
 (systemd/journald, Docker) adds timestamps automatically, avoiding redundancy like:
+
 ```
 Dec 28 13:43:08 birdnet-go[1234]: [28.12.2025 13:43:08] INFO ...  # Redundant!
 ```
@@ -605,16 +610,19 @@ when the same local time can occur twice (fall-back) or be skipped (spring-forwa
 ### DO
 
 ✅ Use module scoping to identify log sources:
+
 ```go
 logger := centralLogger.Module("api")
 ```
 
 ✅ Use structured fields, not string concatenation:
+
 ```go
 logger.Info("Request received", logger.String("path", path))
 ```
 
 ✅ Log errors with context:
+
 ```go
 logger.Error("Failed to save user",
     logger.Error(err),
@@ -623,6 +631,7 @@ logger.Error("Failed to save user",
 ```
 
 ✅ Call `Flush()` and `Close()` on shutdown:
+
 ```go
 defer centralLogger.Close()
 ```
@@ -630,6 +639,7 @@ defer centralLogger.Close()
 ### DON'T
 
 ❌ Don't use string formatting in log messages:
+
 ```go
 // Bad
 logger.Info(fmt.Sprintf("User %s logged in", userID))
@@ -639,6 +649,7 @@ logger.Info("User logged in", logger.String("user_id", userID))
 ```
 
 ❌ Don't log sensitive data:
+
 ```go
 // Bad - logs password!
 logger.Info("Login attempt", logger.String("password", pwd))
@@ -648,6 +659,7 @@ logger.Info("Login attempt", logger.String("user", username))
 ```
 
 ❌ Don't mix log levels inappropriately:
+
 ```go
 // Bad - normal operation is not an error
 logger.Error("Request completed successfully")
@@ -708,6 +720,7 @@ logger.Info("Cache loaded", logger.Int("item_count", count))
 ### Logs not appearing
 
 **Check log level configuration**:
+
 ```go
 // Console level too restrictive?
 Console: &logger.ConsoleOutput{
@@ -717,16 +730,18 @@ Console: &logger.ConsoleOutput{
 ```
 
 **Check module configuration**:
+
 ```yaml
 modules:
   mymodule:
-    enabled: true  # Make sure this is true
+    enabled: true # Make sure this is true
     level: "debug"
 ```
 
 ### JSON appearing in console
 
 **Verify text handler is configured** (should be automatic):
+
 ```go
 // CentralLogger automatically uses text handler for console
 // If you're creating SlogLogger directly:
@@ -737,6 +752,7 @@ logger := logger.NewSlogLogger(os.Stdout, ...)  // Uses JSON
 ### Echo logs not appearing
 
 **Check Echo adapter is wired**:
+
 ```go
 e.Logger = logger.NewEchoLoggerAdapter(appLogger.Module("echo"))
 ```

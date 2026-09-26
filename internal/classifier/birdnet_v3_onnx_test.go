@@ -203,3 +203,26 @@ func TestBirdNETV3_Close(t *testing.T) {
 	_, err := b.Predict(t.Context(), [][]float32{{0.1}})
 	require.Error(t, err, "Predict after Close must fail via the nil-classifier guard")
 }
+
+// TestBirdNETV3Predict_RejectsNonFiniteScores verifies that a backend returning a
+// NaN or Inf score fails the window instead of handing a non-finite confidence to
+// the processor, where it would bypass the threshold filter. BirdNET v3.0 runs
+// the OpenVINO f16 GPU path that produced all-NaN Perch logits on Intel Arc, so
+// it needs the same guard.
+func TestBirdNETV3Predict_RejectsNonFiniteScores(t *testing.T) {
+	t.Parallel()
+	labels := []string{"Aaa aaa_Alpha", "Bbb bbb_Beta", "Ccc ccc_Gamma"}
+	for name, scores := range map[string][]float32{
+		"NaN":  {0.9, float32(math.NaN()), 0.1},
+		"+Inf": {float32(math.Inf(1)), 0.2, 0.1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			b := newTestBirdNETV3(&predTelemetryClassifier{logits: scores}, labels)
+			results, err := b.Predict(t.Context(), [][]float32{{0.1, 0.2, 0.3}})
+			require.Error(t, err)
+			assert.Nil(t, results)
+			assert.Contains(t, err.Error(), "non-finite score")
+		})
+	}
+}

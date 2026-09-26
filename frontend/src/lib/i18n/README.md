@@ -63,19 +63,13 @@ The i18n system consists of seven core components:
 
 ### 🌍 Multi-Language Support
 
-Currently supports 7 languages:
-
-- 🇺🇸 English (en) - Default
-- 🇩🇪 German (de)
-- 🇫🇷 French (fr)
-- 🇪🇸 Spanish (es)
-- 🇫🇮 Finnish (fi)
-- 🇵🇹 Portuguese (pt)
-- 🇯🇵 Japanese (ja)
+The supported languages are the `LOCALES` entries in `config.ts`, one per
+translation file in `frontend/static/messages/`. English (`en`) is the default
+and the source of truth.
 
 ### 🔒 Type-Safe Translations
 
-- **674+ translation keys** with full TypeScript support
+- **Every translation key** in `en.json` has full TypeScript support
 - Auto-generated types from translation files
 - Compile-time validation of keys and parameters
 - IDE autocomplete for all translations
@@ -120,14 +114,30 @@ let previousMessages = $state<Record<string, string>>({});
 Translations are persisted to localStorage for instant loading on app startup:
 
 ```typescript
+// cacheKey(locale) is `birdnet-messages-${locale}-${I18N_CACHE_VERSION}`, where
+// I18N_CACHE_VERSION is a hash of the message files computed in vite.config.js
+// ('dev' only when there are no message files), so the cache turns over when
+// they change.
+// Storage access can throw (blocked site data, private browsing), so every
+// call is wrapped in try/catch and failures fall back to the network fetch.
+
 // On startup - synchronous load from cache
-const cachedMessages = localStorage.getItem(`birdnet-messages-${locale}`);
+let cachedMessages: string | null = null;
+try {
+  cachedMessages = localStorage.getItem(cacheKey(locale));
+} catch {
+  // Storage unavailable; continue with the async load
+}
 if (cachedMessages) {
   messages = JSON.parse(cachedMessages);
 }
 
 // After successful fetch - update cache
-localStorage.setItem(`birdnet-messages-${locale}`, JSON.stringify(messages));
+try {
+  localStorage.setItem(cacheKey(locale), JSON.stringify(messages));
+} catch {
+  // Ignore storage errors
+}
 ```
 
 - Eliminates initial load flickering
@@ -358,6 +368,10 @@ t('items.count');
 
 ## Adding New Languages
 
+The full checklist (including the backend fallback list and the preflight
+locale loops) is in `frontend/static/messages/README.md` under "Adding New
+Languages".
+
 ### 1. Add Locale Configuration
 
 Update `config.ts`:
@@ -365,22 +379,18 @@ Update `config.ts`:
 ```typescript
 export const LOCALES = {
   // ... existing locales
-  it: {
-    code: 'it',
-    name: 'Italiano',
-    flag: '🇮🇹',
-  },
+  ja: { name: '日本語' },
 } as const;
 ```
 
 ### 2. Create Translation File
 
-Create `public/messages/it.json`:
+Create `frontend/static/messages/ja.json`:
 
 ```json
 {
-  "common.save": "Salva",
-  "common.cancel": "Annulla"
+  "common.save": "保存",
+  "common.cancel": "キャンセル"
   // ... all other keys
 }
 ```
@@ -694,8 +704,8 @@ tCommon('save'); // Translates 'common.save'
 
 ### Adding New Translation Keys
 
-1. Add to `public/messages/en.json` first
-2. Run type generation: `node generateTypes.js`
+1. Add to `frontend/static/messages/en.json` first
+2. Run type generation: `npm run generate:i18n-types`
 3. Use the new key in your components
 4. Add translations for other languages
 

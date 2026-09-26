@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -38,9 +39,8 @@ func (e *dateValidationError) Error() string { return e.message }
 
 // Detection constants (file-local)
 const (
-	defaultNumResults     = 100  // Default number of results
-	maxNumResults         = 1000 // Maximum number of results
-	sunEventWindowMinutes = 30   // Minutes before/after sunrise/sunset
+	defaultNumResults = 100  // Default number of results
+	maxNumResults     = 1000 // Maximum number of results
 
 	// queryType values for detection queries
 	queryTypeHourly  = "hourly"
@@ -240,6 +240,7 @@ type detectionQueryParams struct {
 	HourRange  string
 	Verified   string
 	Location   string
+	Source     string
 	Locked     string
 	// Sorting
 	SortBy string
@@ -248,13 +249,15 @@ type detectionQueryParams struct {
 }
 
 // advancedSearchCacheKey generates a deterministic cache key for advanced search queries.
-// Includes all filter parameters to avoid cache collisions.
+// Includes all filter parameters to avoid cache collisions. Free-text values (search text,
+// species, location, source, which may be URIs) are quoted so a delimiter inside a value
+// cannot make two different requests share a key.
 func (p *detectionQueryParams) advancedSearchCacheKey() string {
-	return fmt.Sprintf("adv_search:%s:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%d",
+	return fmt.Sprintf("adv_search:%q:%q:%d:%d:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%d",
 		p.Search, strings.Join(p.SearchScientific, "\x00"), p.NumResults, p.Offset,
 		p.Confidence, p.TimeOfDay, p.HourRange,
-		p.Verified, p.Location, p.Locked,
-		p.Species, p.Date, p.StartDate+":"+p.EndDate,
+		p.Verified, p.Location, p.Source, p.Locked,
+		p.Species, p.Date, p.StartDate, p.EndDate,
 		p.SortBy, p.QueryType, p.Hour, p.Duration)
 }
 
@@ -274,6 +277,7 @@ func (c *Handler) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryPa
 		HourRange:  ctx.QueryParam("hourRange"),
 		Verified:   ctx.QueryParam("verified"),
 		Location:   ctx.QueryParam("location"),
+		Source:     ctx.QueryParam("source"),
 		Locked:     ctx.QueryParam("locked"),
 		// Sorting
 		SortBy: ctx.QueryParam("sortBy"),
@@ -336,7 +340,7 @@ func (c *Handler) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryPa
 	}
 
 	// Auto-infer queryType from provided parameters when not explicitly set.
-	// This prevents silent parameter ignoring — e.g., ?species=Robin without
+	// This prevents silent parameter ignoring, e.g., ?species=Robin without
 	// queryType=species would previously fall through to the "all" path.
 	if params.QueryType == "" {
 		switch {
@@ -526,8 +530,7 @@ func (c *Handler) GetDetections(ctx echo.Context) error {
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		var dateErr *dateValidationError
-		if errors.As(err, &dateErr) {
+		if dateErr, ok := errors.AsType[*dateValidationError](err); ok {
 			return c.HandleErrorWithKey(ctx, err, dateErr.Error(), http.StatusBadRequest, notification.MsgErrDetectionInvalidDate, map[string]any{"paramName": dateErr.paramName})
 		}
 		return c.HandleError(ctx, err, "Invalid detection query parameters", http.StatusBadRequest)
@@ -589,7 +592,7 @@ func (c *Handler) GetDetections(ctx echo.Context) error {
 func (p *detectionQueryParams) needsAdvancedRouting() bool {
 	if p.Confidence != "" || p.TimeOfDay != "" ||
 		p.HourRange != "" || p.Verified != "" ||
-		p.Location != "" || p.Locked != "" ||
+		p.Location != "" || p.Source != "" || p.Locked != "" ||
 		p.StartDate != "" || p.EndDate != "" {
 		return true
 	}
@@ -778,7 +781,7 @@ func (c *Handler) applySpeciesTrackingMetadata(detection *DetectionResponse, sci
 	detection.IsNewThisSeason = status.FirstThisSeason != nil &&
 		detectionDate == status.FirstThisSeason.Format(time.DateOnly)
 
-	// DaysSinceFirstSeen is relative to now — tells the user how long ago
+	// DaysSinceFirstSeen is relative to now; it tells the user how long ago
 	// this species was first observed overall.
 	detection.DaysSinceFirstSeen = status.DaysSinceFirst
 	detection.DaysThisYear = status.DaysThisYear
@@ -828,7 +831,7 @@ func (c *Handler) calculateDetectionTimeOfDay(detectionTime time.Time) string {
 	if err != nil {
 		return ""
 	}
-	return calculateTimeOfDay(detectionTime, &sunTimes)
+	return suncalc.ClassifyTimeOfDay(detectionTime, &sunTimes)
 }
 
 // getWeatherForDetectionTime retrieves weather data for a detection time
@@ -1040,8 +1043,9 @@ func (c *Handler) getSearchDetectionsAdvanced(params *detectionQueryParams) ([]d
 
 	notes, totalCount, err := c.DS.SearchNotesAdvanced(&filters)
 	if err != nil {
+		// Filters carry request text, and a source value may be a URI with credentials.
 		c.LogErrorIfEnabled("Failed to perform advanced search",
-			logger.String("filters", fmt.Sprintf("%+v", filters)),
+			logger.String("filters", privacy.ScrubMessage(fmt.Sprintf("%+v", filters))),
 			logger.Error(err),
 		)
 		return nil, 0, err
@@ -1108,6 +1112,9 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 	}
 	if params.Location != "" {
 		filters.Location = []string{params.Location}
+	}
+	if params.Source != "" {
+		filters.Source = []string{params.Source}
 	}
 
 	// Apply boolean filters
@@ -1843,7 +1850,7 @@ func (c *Handler) GetDetectionTimeOfDay(ctx echo.Context) error {
 	dateTimeStr := fmt.Sprintf("%s %s", note.Date, note.Time)
 	layout := "2006-01-02 15:04:05" // Adjust based on your actual date/time format
 
-	detectionTime, err := time.Parse(layout, dateTimeStr)
+	detectionTime, err := time.ParseInLocation(layout, dateTimeStr, time.Local)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to parse detection time", http.StatusInternalServerError)
 	}
@@ -1860,37 +1867,12 @@ func (c *Handler) GetDetectionTimeOfDay(ctx echo.Context) error {
 	}
 
 	// Determine time of day based on the detection time and sun events
-	timeOfDay := calculateTimeOfDay(detectionTime, &sunEvents)
+	timeOfDay := suncalc.ClassifyTimeOfDay(detectionTime, &sunEvents)
 
 	// Return the time of day
 	return ctx.JSON(http.StatusOK, TimeOfDayResponse{
 		TimeOfDay: timeOfDay,
 	})
-}
-
-// calculateTimeOfDay determines the time of day based on the detection time and sun events
-func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTimes) string {
-	// Convert all times to the same format for comparison
-	detTime := detectionTime.Format(time.TimeOnly)
-	sunriseTime := sunEvents.Sunrise.Format(time.TimeOnly)
-	sunsetTime := sunEvents.Sunset.Format(time.TimeOnly)
-
-	// Define sunrise/sunset window (30 minutes before and after)
-	sunriseStart := sunEvents.Sunrise.Add(-sunEventWindowMinutes * time.Minute).Format(time.TimeOnly)
-	sunriseEnd := sunEvents.Sunrise.Add(sunEventWindowMinutes * time.Minute).Format(time.TimeOnly)
-	sunsetStart := sunEvents.Sunset.Add(-sunEventWindowMinutes * time.Minute).Format(time.TimeOnly)
-	sunsetEnd := sunEvents.Sunset.Add(sunEventWindowMinutes * time.Minute).Format(time.TimeOnly)
-
-	switch {
-	case detTime >= sunriseStart && detTime <= sunriseEnd:
-		return datastore.TimeOfDaySunrise
-	case detTime >= sunsetStart && detTime <= sunsetEnd:
-		return datastore.TimeOfDaySunset
-	case detTime >= sunriseTime && detTime < sunsetTime:
-		return datastore.TimeOfDayDay
-	default:
-		return datastore.TimeOfDayNight
-	}
 }
 
 // getWeatherUnits returns the temperature display unit based on user preference.

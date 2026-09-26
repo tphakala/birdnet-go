@@ -9,22 +9,24 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
-// newTestManagerConfig returns a minimal StreamConfig suitable for manager unit tests.
-// It uses a fake sourceID and URL; no real FFmpeg process is spawned during these tests.
-func newTestManagerConfig(sourceID, url string) *StreamConfig {
-	return &StreamConfig{
+// newTestManagerSpec returns a minimal StreamSpec suitable for manager unit
+// tests. It uses a fake sourceID and URL; no real FFmpeg process is spawned
+// during these tests. The FFmpeg binary path and log level are manager-level
+// Options, not spec fields, and are irrelevant here because no process starts.
+func newTestManagerSpec(sourceID, url string) *audiocore.StreamSpec {
+	return &audiocore.StreamSpec{
 		SourceID:   sourceID,
 		SourceName: "Test Stream " + sourceID,
 		URL:        url,
-		Type:       "rtsp",
+		Type:       audiocore.SourceTypeRTSP,
 		SampleRate: 48000,
 		BitDepth:   16,
 		Channels:   1,
-		FFmpegPath: "/usr/bin/ffmpeg",
 		Transport:  "tcp",
-		LogLevel:   "error",
 	}
 }
 
@@ -42,7 +44,7 @@ func TestManager_StartStopStream(t *testing.T) {
 	mgr := newTestManager(t)
 	t.Cleanup(func() { _ = mgr.Shutdown() })
 
-	cfg := newTestManagerConfig("src-1", "rtsp://test.example.com/stream")
+	cfg := newTestManagerSpec("src-1", "rtsp://test.example.com/stream")
 
 	// Start the stream.
 	require.NoError(t, mgr.StartStream(cfg))
@@ -78,8 +80,8 @@ func TestManager_ReconfigureStream(t *testing.T) {
 	t.Cleanup(func() { _ = mgr.Shutdown() })
 
 	const sourceID = "src-reconfig"
-	originalCfg := newTestManagerConfig(sourceID, "rtsp://original.example.com/stream")
-	updatedCfg := newTestManagerConfig(sourceID, "rtsp://updated.example.com/stream")
+	originalCfg := newTestManagerSpec(sourceID, "rtsp://original.example.com/stream")
+	updatedCfg := newTestManagerSpec(sourceID, "rtsp://updated.example.com/stream")
 	updatedCfg.Transport = "udp"
 
 	// Start with the original config.
@@ -90,7 +92,7 @@ func TestManager_ReconfigureStream(t *testing.T) {
 	require.Contains(t, ids, sourceID)
 
 	// Reconfigure to the new config.
-	require.NoError(t, mgr.ReconfigureStream(sourceID, updatedCfg))
+	require.NoError(t, mgr.ReconfigureStream(sourceID, mgr.streamConfigFromSpec(updatedCfg)))
 
 	// Stream must still be tracked under the same sourceID.
 	ids = mgr.GetActiveStreamIDs()
@@ -123,7 +125,7 @@ func TestManager_AllStreamHealth(t *testing.T) {
 	}
 
 	for _, s := range sources {
-		require.NoError(t, mgr.StartStream(newTestManagerConfig(s.id, s.url)))
+		require.NoError(t, mgr.StartStream(newTestManagerSpec(s.id, s.url)))
 	}
 
 	health := mgr.AllStreamHealth()
@@ -156,7 +158,7 @@ func TestManager_Shutdown(t *testing.T) {
 	sources := []string{"shutdown-1", "shutdown-2", "shutdown-3"}
 	for _, id := range sources {
 		require.NoError(t, mgr.StartStream(
-			newTestManagerConfig(id, "rtsp://"+id+".example.com/stream")))
+			newTestManagerSpec(id, "rtsp://"+id+".example.com/stream")))
 	}
 
 	// All streams should be tracked before shutdown.
@@ -181,7 +183,7 @@ func TestManager_ShutdownWithContext(t *testing.T) {
 	t.Run("completes within deadline", func(t *testing.T) {
 		mgr := newTestManager(t)
 		require.NoError(t, mgr.StartStream(
-			newTestManagerConfig("ctx-1", "rtsp://ctx.example.com/stream")))
+			newTestManagerSpec("ctx-1", "rtsp://ctx.example.com/stream")))
 
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer cancel()
@@ -219,7 +221,7 @@ func TestManager_SetOnStreamReset(t *testing.T) {
 	})
 
 	require.NoError(t, mgr.StartStream(
-		newTestManagerConfig("reset-src", "rtsp://reset.example.com/stream")))
+		newTestManagerSpec("reset-src", "rtsp://reset.example.com/stream")))
 
 	// The callback must have been invoked with the correct sourceID.
 	stored := calledWith.Load()
@@ -239,8 +241,8 @@ func TestManager_ReconfigureStream_SourceIDMismatch(t *testing.T) {
 	mgr := newTestManager(t)
 	t.Cleanup(func() { _ = mgr.Shutdown() })
 
-	cfg := newTestManagerConfig("id-A", "rtsp://a.example.com/stream")
-	err := mgr.ReconfigureStream("id-B", cfg)
+	cfg := newTestManagerSpec("id-A", "rtsp://a.example.com/stream")
+	err := mgr.ReconfigureStream("id-B", mgr.streamConfigFromSpec(cfg))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sourceID mismatch")
 }
@@ -264,7 +266,7 @@ func TestManager_WatchdogForceReset(t *testing.T) {
 
 		const sourceID = "stuck-stream"
 		require.NoError(t, mgr.StartStream(
-			newTestManagerConfig(sourceID, "rtsp://stuck.example.com/stream")))
+			newTestManagerSpec(sourceID, "rtsp://stuck.example.com/stream")))
 
 		// Advance the stream creation time so the watchdog considers it stuck.
 		mgr.mu.Lock()
@@ -307,7 +309,7 @@ func TestManager_StartStream_EmptySourceID(t *testing.T) {
 	mgr := newTestManager(t)
 	t.Cleanup(func() { _ = mgr.Shutdown() })
 
-	cfg := newTestManagerConfig("", "rtsp://empty.example.com/stream")
+	cfg := newTestManagerSpec("", "rtsp://empty.example.com/stream")
 	err := mgr.StartStream(cfg)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sourceID must not be empty")
@@ -332,7 +334,7 @@ func TestManager_RestartStreamResetsBackoff(t *testing.T) {
 	// Stream.Restart(true) resets the backoff counters) and makes it
 	// deterministic on every platform. Shutdown still stops the stream safely.
 	stream := NewStream(
-		newTestManagerConfig(sourceID, "rtsp://restart.example.com/stream"),
+		mgr.streamConfigFromSpec(newTestManagerSpec(sourceID, "rtsp://restart.example.com/stream")),
 		nil, nil, nil, nil)
 	mgr.mu.Lock()
 	mgr.streams[sourceID] = stream

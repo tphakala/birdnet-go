@@ -17,7 +17,6 @@ package species
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // =============================================================================
@@ -151,7 +151,7 @@ func TestInitFromDatabase_GetNewSpeciesDetectionsError(t *testing.T) {
 
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, errors.New("database connection failed"))
+		Return([]datastore.NewSpeciesData{}, errors.NewStd("database connection failed"))
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -452,7 +452,7 @@ func TestRestartScenario_FailedInitialization(t *testing.T) {
 	// Simulate restart where InitFromDatabase fails
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, errors.New("database locked"))
+		Return([]datastore.NewSpeciesData{}, errors.NewStd("database locked"))
 
 	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
@@ -490,7 +490,7 @@ func TestRecovery_SyncAfterFailedInit(t *testing.T) {
 
 	// First call fails
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, errors.New("connection failed")).Once()
+		Return([]datastore.NewSpeciesData{}, errors.NewStd("connection failed")).Once()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -650,7 +650,7 @@ func TestInitFromDatabase_LogsError(t *testing.T) {
 
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, errors.New("connection refused"))
+		Return([]datastore.NewSpeciesData{}, errors.NewStd("connection refused"))
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,

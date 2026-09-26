@@ -78,10 +78,12 @@ func newClipGatingProcessor(exportEnabled bool) *Processor {
 	}
 }
 
-// TestApplyBatFormatFallback verifies the shared bat WAV fallback used by both the
-// createDetection and extended-capture paths: a bat model above 48kHz exported to a
-// format that cannot carry that rate keeps the .wav extension the exporter writes.
-func TestApplyBatFormatFallback(t *testing.T) {
+// TestApplyExportFormatExtension verifies the shared clip-name extension override
+// used by both the createDetection and extended-capture paths: a bat model above
+// 48kHz is stored in the dedicated ultrasonic format (WAV or FLAC), while every
+// other case keeps the configured Export.Type extension. This keeps the persisted
+// ClipName in lockstep with the file resolveExportParams writes.
+func TestApplyExportFormatExtension(t *testing.T) {
 	t.Parallel()
 
 	reg := audiocore.NewSourceRegistry(audiocore.GetLogger())
@@ -90,40 +92,55 @@ func TestApplyBatFormatFallback(t *testing.T) {
 		Type:             audiocore.SourceTypeRTSP,
 		ConnectionString: "rtsp://cam/ultrasonic",
 		DisplayName:      "Bat mic",
-		SampleRate:       96000, // above 48kHz -> triggers the bat WAV fallback
+		SampleRate:       96000, // above 48kHz -> uses the ultrasonic export format
 		BitDepth:         16,
 		Channels:         1,
 	})
 	require.NoError(t, err)
 
-	p := &Processor{
-		Settings: &conf.Settings{
-			Realtime: conf.RealtimeSettings{
-				Audio: conf.AudioSettings{
-					Export: conf.ExportSettings{Enabled: true, Type: "mp3"},
+	newProc := func(exportType, ultrasonicType string) *Processor {
+		p := &Processor{
+			Settings: &conf.Settings{
+				Realtime: conf.RealtimeSettings{
+					Audio: conf.AudioSettings{
+						Export: conf.ExportSettings{Enabled: true, Type: exportType, UltrasonicType: ultrasonicType},
+					},
 				},
 			},
-		},
+		}
+		p.registry = reg
+		return p
 	}
-	p.registry = reg
 	batSource := datastore.AudioSource{ID: "bat_src"}
 
 	t.Run("empty clip name is returned unchanged", func(t *testing.T) {
 		t.Parallel()
-		assert.Empty(t, p.applyBatFormatFallback(p.Settings, "", classifier.RegistryIDBat, batSource))
+		p := newProc("mp3", "flac")
+		assert.Empty(t, p.applyExportFormatExtension(p.Settings, "", classifier.RegistryIDBat, batSource))
 	})
 
-	t.Run("bat model above 48kHz with mp3 export forces .wav", func(t *testing.T) {
+	t.Run("bat model above 48kHz uses the ultrasonic format (flac)", func(t *testing.T) {
 		t.Parallel()
-		got := p.applyBatFormatFallback(p.Settings, "2024/01/myotis_85p_x.mp3", classifier.RegistryIDBat, batSource)
-		assert.Equal(t, "2024/01/myotis_85p_x.wav", got,
-			"a bat detection above 48kHz must keep the .wav extension the exporter writes")
+		p := newProc("mp3", "flac")
+		got := p.applyExportFormatExtension(p.Settings, "2024/01/myotis_85p_x.mp3", classifier.RegistryIDBat, batSource)
+		assert.Equal(t, "2024/01/myotis_85p_x.flac", got,
+			"a bat detection above 48kHz is stored in the dedicated ultrasonic format")
 	})
 
-	t.Run("non-bat model keeps the configured extension", func(t *testing.T) {
+	t.Run("bat model above 48kHz uses the ultrasonic format (wav)", func(t *testing.T) {
 		t.Parallel()
-		got := p.applyBatFormatFallback(p.Settings, "2024/01/parus_85p_x.mp3", "", batSource)
-		assert.Equal(t, "2024/01/parus_85p_x.mp3", got)
+		p := newProc("mp3", "wav")
+		got := p.applyExportFormatExtension(p.Settings, "2024/01/myotis_85p_x.mp3", classifier.RegistryIDBat, batSource)
+		assert.Equal(t, "2024/01/myotis_85p_x.wav", got)
+	})
+
+	t.Run("non-bat model keeps the configured Export.Type extension", func(t *testing.T) {
+		t.Parallel()
+		p := newProc("mp3", "flac")
+		got := p.applyExportFormatExtension(p.Settings, "2024/01/parus_85p_x.mp3", "", batSource)
+		assert.Equal(t, "2024/01/parus_85p_x.mp3", got,
+			"a non-bat capture is stored in the configured Export.Type even above 48kHz "+
+				"(resolveExportParams downsamples it to 48kHz)")
 	})
 }
 
