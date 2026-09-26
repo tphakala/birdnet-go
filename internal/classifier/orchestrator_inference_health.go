@@ -188,7 +188,7 @@ type ModelInferenceHealth struct {
 
 // InferenceHealth returns the inference health of every loaded model, sorted by
 // registry ID. Each entry carries both the display name (ModelName) and the plain
-// name (Name, the registry ID for a model without one). A model paused by its
+// name (Name); a model without a name reports its registry ID in both. A model paused by its
 // schedule keeps the verdict of its last window, since it runs none while paused.
 func (o *Orchestrator) InferenceHealth() []ModelInferenceHealth {
 	infos := o.ModelInfos()
@@ -198,6 +198,7 @@ func (o *Orchestrator) InferenceHealth() []ModelInferenceHealth {
 		mh := ModelInferenceHealth{ModelID: id, ModelName: infos[i].DisplayName(), Name: infos[i].Name}
 		if mh.Name == "" {
 			mh.Name = id
+			mh.ModelName = id // DisplayName of a nameless model is only a backend suffix
 		}
 		if v, ok := inferenceHealthRecords.Load(id); ok {
 			h := v.(*modelInferenceHealth) //nolint:errcheck // stored type is fixed

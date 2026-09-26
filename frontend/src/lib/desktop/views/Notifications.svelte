@@ -21,6 +21,7 @@
   import {
     NOTIFICATION_DELETED_WINDOW_EVENT,
     removeNotificationById,
+    withoutRecentlyDeleted,
     deduplicateNotifications,
     sanitizeNotificationMessage,
     translateNotification,
@@ -129,7 +130,8 @@
       // Map API notifications to frontend format (status -> read)
       // then apply deduplication to remove duplicate notifications
       const rawNotifications = data.notifications || [];
-      const mappedNotifications = mapApiNotifications(rawNotifications);
+      // A notification deleted while this load was in flight must not come back.
+      const mappedNotifications = withoutRecentlyDeleted(mapApiNotifications(rawNotifications));
       notifications = deduplicateNotifications(mappedNotifications, {
         excludeToasts: false, // Show all notifications in the full view
       });

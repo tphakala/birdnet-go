@@ -13,6 +13,7 @@
     type Notification,
     mergeAndDeduplicateNotifications,
     NOTIFICATION_DELETED_WINDOW_EVENT,
+    withoutRecentlyDeleted,
     isExistingNotification,
     shouldShowNotification,
     sanitizeNotificationMessage,
@@ -139,7 +140,10 @@
         `/api/v2/notifications?limit=${NOTIFICATIONS_LIMIT}&status=unread`
       );
       // Map API notifications to frontend format (status -> read)
-      const apiNotifications = mapApiNotifications(data?.notifications ?? []);
+      // A notification deleted while this load was in flight must not come back.
+      const apiNotifications = withoutRecentlyDeleted(
+        mapApiNotifications(data?.notifications ?? [])
+      );
 
       // Apply deduplication to API-fetched notifications
       // This ensures consistent deduplication behavior between SSE and API

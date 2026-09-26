@@ -28,6 +28,7 @@ vi.mock('$lib/utils/logger', async importOriginal => {
   return { ...actual, loggers: { ...actual.loggers, sse: log } };
 });
 
+import { resetDeletedNotificationsForTest } from '$lib/utils/notifications';
 import {
   NOTIFICATION_DELETED_SSE_EVENT,
   NOTIFICATION_DELETED_WINDOW_EVENT,
@@ -54,6 +55,7 @@ describe('parseDeletedNotificationId', () => {
 describe('notification_deleted relay', () => {
   afterEach(() => {
     sseNotifications.disconnect();
+    resetDeletedNotificationsForTest();
   });
 
   function deliver(data: string): CustomEvent[] {
@@ -85,5 +87,31 @@ describe('notification_deleted relay', () => {
     expect(deliver(JSON.stringify({ nope: true }))).toHaveLength(0);
     expect(log.warn).toHaveBeenCalledTimes(1);
     expect(log.error).not.toHaveBeenCalled();
+  });
+
+  it('drops a create event that arrives after its own delete', () => {
+    deliver(JSON.stringify({ id: 'late-1' }));
+    const received: unknown[] = [];
+    const unsubscribe = sseNotifications.registerNotificationCallback(n => received.push(n));
+    try {
+      const onNotification = sources.at(-1)?.listeners.get('notification');
+      const payload = {
+        id: 'late-1',
+        type: 'error',
+        title: 't',
+        message: 'm',
+        timestamp: '2026-01-01T00:00:00Z',
+        priority: 'high',
+      };
+      onNotification?.(new MessageEvent('notification', { data: JSON.stringify(payload) }));
+      onNotification?.(
+        new MessageEvent('notification', { data: JSON.stringify({ ...payload, id: 'fresh-1' }) })
+      );
+    } finally {
+      unsubscribe();
+    }
+
+    expect(received).toHaveLength(1);
+    expect((received[0] as { id: string }).id).toBe('fresh-1');
   });
 });

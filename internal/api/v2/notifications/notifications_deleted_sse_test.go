@@ -69,9 +69,13 @@ func TestNotificationEventLoop_GuestOnlyGetsDetectionDeletions(t *testing.T) {
 	t.Parallel()
 	body := runLoopWithDeletions(t, true,
 		notification.DeletedEvent{ID: "operational-1", Type: notification.TypeError},
+		notification.DeletedEvent{ID: "toast-1", Type: notification.TypeDetection, Toast: true},
+		notification.DeletedEvent{ID: "unknown-1"},
 		notification.DeletedEvent{ID: "detection-1", Type: notification.TypeDetection},
 	)
 	assert.NotContains(t, body, "operational-1", "guests never saw operational notices, so they get no deletion for them")
+	assert.NotContains(t, body, "toast-1", "nor toasts")
+	assert.NotContains(t, body, "unknown-1", "nor a deletion whose type is unknown")
 	assert.Contains(t, body, `"id":"detection-1"`)
 }
 

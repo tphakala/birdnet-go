@@ -1,8 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
   deduplicateNotifications,
   mergeAndDeduplicateNotifications,
   removeNotificationById,
+  rememberDeletedNotification,
+  wasRecentlyDeleted,
+  withoutRecentlyDeleted,
+  resetDeletedNotificationsForTest,
+  DELETED_NOTIFICATION_MEMORY_MS,
+  DELETED_NOTIFICATION_MEMORY_MAX,
   groupNotifications,
   createGroupingKey,
   sanitizeNotificationMessage,
@@ -508,5 +514,35 @@ describe('removeNotificationById', () => {
 
     expect(result.notifications).toBe(list);
     expect(result.hasUnread).toBe(true);
+  });
+});
+
+describe('recently deleted notification memory', () => {
+  afterEach(() => {
+    resetDeletedNotificationsForTest();
+  });
+
+  it('remembers a deletion for the memory window, then forgets it', () => {
+    rememberDeletedNotification('gone', 1000);
+
+    expect(wasRecentlyDeleted('gone', 1000 + DELETED_NOTIFICATION_MEMORY_MS - 1)).toBe(true);
+    expect(wasRecentlyDeleted('gone', 1000 + DELETED_NOTIFICATION_MEMORY_MS)).toBe(false);
+    expect(wasRecentlyDeleted('never-deleted', 1000)).toBe(false);
+  });
+
+  it('drops recently deleted notifications from a loaded list', () => {
+    rememberDeletedNotification('gone', 1000);
+    const loaded = [createTestNotification({ id: 'gone' }), createTestNotification({ id: 'kept' })];
+
+    expect(withoutRecentlyDeleted(loaded, 1001).map(n => n.id)).toEqual(['kept']);
+  });
+
+  it('forgets the oldest deletion beyond the cap', () => {
+    for (let i = 0; i <= DELETED_NOTIFICATION_MEMORY_MAX; i++) {
+      rememberDeletedNotification(`id-${i}`, 1000);
+    }
+
+    expect(wasRecentlyDeleted('id-0', 1001)).toBe(false);
+    expect(wasRecentlyDeleted(`id-${DELETED_NOTIFICATION_MEMORY_MAX}`, 1001)).toBe(true);
   });
 });

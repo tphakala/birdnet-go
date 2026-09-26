@@ -330,6 +330,7 @@ func TestInferenceHealth_NamelessModelFallsBackToID(t *testing.T) {
 	health := o.InferenceHealth()
 	require.Len(t, health, 1)
 	assert.Equal(t, modelID, health[0].Name)
+	assert.Equal(t, modelID, health[0].ModelName, "the display name falls back to the ID too")
 }
 
 // TestInferenceFailureNotice_ReloadClearsNotice pins that replacing a failing

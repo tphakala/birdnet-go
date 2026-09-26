@@ -621,10 +621,9 @@ func (c *Handler) runNotificationEventLoop(ctx echo.Context, client *Notificatio
 			}
 
 		case ev := <-client.DeletionCh:
-			// Guests only ever received detection notifications, so they only
-			// need deletions of those: the type half of the create filter above
-			// (a DeletedEvent carries no metadata, and a bare ID leaks nothing).
-			if client.Guest && ev.Type != notification.TypeDetection {
+			// Guests only ever received non-toast detection notifications, so they
+			// only get deletions of those (the same filter as creates above).
+			if client.Guest && (ev.Type != notification.TypeDetection || ev.Toast) {
 				continue
 			}
 			if err := c.sendNotificationDeletedEvent(ctx, client.ID, ev.ID); err != nil {

@@ -13,6 +13,55 @@ import { t } from '$lib/i18n';
 export const NOTIFICATION_DELETED_WINDOW_EVENT = 'notification-deleted';
 
 /**
+ * How long a notification deleted on the server stays remembered. It covers a
+ * create event that arrives after its own delete (the SSE stream carries the two
+ * on separate channels) and a list load that was already in flight when the
+ * delete landed.
+ */
+export const DELETED_NOTIFICATION_MEMORY_MS = 60_000;
+
+/** Most deleted IDs remembered at once; the oldest is forgotten first. */
+export const DELETED_NOTIFICATION_MEMORY_MAX = 200;
+
+/** Recently deleted notification IDs and when each is forgotten (epoch ms). */
+const recentlyDeleted = new Map<string, number>();
+
+/** Remembers that the notification with this id was deleted on the server. */
+export function rememberDeletedNotification(id: string, now: number = Date.now()): void {
+  recentlyDeleted.delete(id);
+  recentlyDeleted.set(id, now + DELETED_NOTIFICATION_MEMORY_MS);
+  while (recentlyDeleted.size > DELETED_NOTIFICATION_MEMORY_MAX) {
+    const oldest = recentlyDeleted.keys().next().value;
+    if (oldest === undefined) break;
+    recentlyDeleted.delete(oldest);
+  }
+}
+
+/** Reports whether the notification with this id was deleted within the memory window. */
+export function wasRecentlyDeleted(id: string, now: number = Date.now()): boolean {
+  const until = recentlyDeleted.get(id);
+  if (until === undefined) return false;
+  if (until <= now) {
+    recentlyDeleted.delete(id);
+    return false;
+  }
+  return true;
+}
+
+/** Drops recently deleted notifications from a freshly loaded list. */
+export function withoutRecentlyDeleted<T extends { id: string }>(
+  notifications: T[],
+  now: number = Date.now()
+): T[] {
+  return notifications.filter(n => !wasRecentlyDeleted(n.id, now));
+}
+
+/** Test-only: forget every remembered deletion. */
+export function resetDeletedNotificationsForTest(): void {
+  recentlyDeleted.clear();
+}
+
+/**
  * Returns the list without the notification with the given id and whether any
  * unread one remains. An id that is not in the list returns the list unchanged.
  */

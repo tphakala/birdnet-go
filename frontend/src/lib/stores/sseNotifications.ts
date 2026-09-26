@@ -8,6 +8,8 @@ import {
   isValidNotification,
   translateField,
   NOTIFICATION_DELETED_WINDOW_EVENT,
+  rememberDeletedNotification,
+  wasRecentlyDeleted,
   type Notification,
 } from '$lib/utils/notifications';
 import { onSSEActivity, onSSEError } from '$lib/stores/connectionState.svelte';
@@ -184,6 +186,8 @@ class SSENotificationManager {
             });
             return;
           }
+          // A create that arrives after its own delete is stale: drop it.
+          if (wasRecentlyDeleted(parsed.id)) return;
           this.notifyCallbacks(parsed);
         } catch (error) {
           logger.error('Error processing notification event', error, {
@@ -209,6 +213,7 @@ class SSENotificationManager {
             });
             return;
           }
+          rememberDeletedNotification(id);
           globalThis.window.dispatchEvent(
             new CustomEvent(NOTIFICATION_DELETED_WINDOW_EVENT, {
               detail: { id, wasUnread: false },

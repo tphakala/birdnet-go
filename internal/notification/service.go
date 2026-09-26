@@ -275,8 +275,9 @@ func (s *Service) MarkAsAcknowledged(id string) error {
 	return nil
 }
 
-// Delete removes a notification and, when one was actually removed, sends a
-// DeletedEvent to every SubscribeDeletions subscriber. A missing ID is not an
+// Delete removes a notification and, when one was removed (or the pre-delete
+// lookup failed for a reason other than not-found, so absence is unproven), sends
+// a DeletedEvent to every SubscribeDeletions subscriber. A missing ID is not an
 // error: Delete returns nil and sends nothing, so callers can treat a
 // user-deleted notification as already gone.
 func (s *Service) Delete(id string) error {
@@ -294,13 +295,22 @@ func (s *Service) Delete(id string) error {
 	// duplicate event is harmless.
 	existing, getErr := s.store.Get(id)
 	found := getErr == nil && existing != nil
+	// A lookup that failed for another reason cannot prove the ID is absent, so a
+	// successful delete is still broadcast, with an unknown type (which the SSE
+	// stream withholds from guests).
+	unknown := getErr != nil && !errors.Is(getErr, ErrNotificationNotFound)
 
 	err := s.store.Delete(id)
 	if err != nil && errors.Is(err, ErrNotificationNotFound) {
 		return nil
 	}
-	if err == nil && found {
-		s.broadcastDeletion(DeletedEvent{ID: id, Type: existing.Type})
+	if err == nil && (found || unknown) {
+		ev := DeletedEvent{ID: id}
+		if found {
+			ev.Type = existing.Type
+			ev.Toast, _ = existing.Metadata[MetadataKeyIsToast].(bool)
+		}
+		s.broadcastDeletion(ev)
 	}
 	return err
 }
@@ -309,8 +319,11 @@ func (s *Service) Delete(id string) error {
 type DeletedEvent struct {
 	// ID is the deleted notification's ID.
 	ID string
-	// Type is the deleted notification's type.
+	// Type is the deleted notification's type, empty when it could not be read.
 	Type Type
+	// Toast is true for a toast notification (MetadataKeyIsToast), which the SSE
+	// stream never shows to guests, so it withholds the deletion too.
+	Toast bool
 }
 
 // deletionSubscriber is one SubscribeDeletions registration.

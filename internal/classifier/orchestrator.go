@@ -1753,6 +1753,11 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 // Delete releases all resources held by the Orchestrator and its models.
 // After calling Delete, the Orchestrator must not be used.
 func (o *Orchestrator) Delete() {
+	// Stop the acoustic-model latch first, before o.mu (its sync takes the latch lock
+	// and then o.mu): a retry of a failed "no acoustic model" notice must not raise one
+	// for this torn-down orchestrator.
+	o.acousticNotice.Stop()
+
 	// Snapshot the models, stop the scheduler, and clear o.models under o.mu so the
 	// accessors (which resolve the range-filter anchor from o.models under o.mu)
 	// observe the deleted state immediately and fail fast. Then release o.mu before the
@@ -1808,9 +1813,6 @@ func (o *Orchestrator) Delete() {
 	// Clear the failure notices of the models just closed and stop their latches
 	// (no model is loaded now; a latch whose delete fails is kept for a retry).
 	o.syncInferenceHealth()
-	// A retry of a failed acoustic-model notice must not raise a "no model"
-	// notice for this torn-down orchestrator.
-	o.acousticNotice.Stop()
 
 	CloseHeatmapService()
 }

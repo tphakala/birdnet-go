@@ -365,3 +365,58 @@ func TestService_StopDropsDeletionSubscribers(t *testing.T) {
 	defer svc.deletionSubsMu.Unlock()
 	assert.Nil(t, svc.deletionSubs)
 }
+
+// failingGetStore is an in-memory store whose Get fails with an error that is
+// not ErrNotificationNotFound, while Delete still works.
+type failingGetStore struct {
+	*InMemoryStore
+}
+
+func (s failingGetStore) Get(string) (*Notification, error) {
+	return nil, errors.NewStd("store read failed")
+}
+
+// TestService_DeleteBroadcastsDespiteLookupError pins that a successful delete
+// is broadcast even when the pre-delete lookup failed for another reason, with
+// an unknown type (the SSE stream withholds such events from guests).
+func TestService_DeleteBroadcastsDespiteLookupError(t *testing.T) {
+	t.Parallel()
+	svc := NewService(DefaultServiceConfig())
+	t.Cleanup(svc.Stop)
+	mem := NewInMemoryStore(DefaultMaxNotifications)
+	n := NewNotification(TypeError, PriorityHigh, "t", "m")
+	require.NoError(t, mem.Save(n))
+	svc.store = failingGetStore{InMemoryStore: mem}
+
+	delCh, _ := svc.SubscribeDeletions()
+	t.Cleanup(func() { svc.UnsubscribeDeletions(delCh) })
+	require.NoError(t, svc.Delete(n.ID))
+	select {
+	case ev := <-delCh:
+		assert.Equal(t, n.ID, ev.ID)
+		assert.Empty(t, ev.Type, "the type is unknown")
+	case <-time.After(time.Second):
+		require.Fail(t, "a successful delete must be broadcast")
+	}
+}
+
+// TestService_DeleteMarksToasts pins that a deleted toast is marked as one, so
+// the SSE stream can withhold it from guests as it does its creation.
+func TestService_DeleteMarksToasts(t *testing.T) {
+	t.Parallel()
+	svc := NewService(DefaultServiceConfig())
+	t.Cleanup(svc.Stop)
+	delCh, _ := svc.SubscribeDeletions()
+	t.Cleanup(func() { svc.UnsubscribeDeletions(delCh) })
+
+	n := NewNotification(TypeDetection, PriorityMedium, "t", "m").WithMetadata(MetadataKeyIsToast, true)
+	require.NoError(t, svc.CreateWithMetadata(n))
+	require.NoError(t, svc.Delete(n.ID))
+	select {
+	case ev := <-delCh:
+		assert.True(t, ev.Toast)
+		assert.Equal(t, TypeDetection, ev.Type)
+	case <-time.After(time.Second):
+		require.Fail(t, "no deletion event")
+	}
+}
