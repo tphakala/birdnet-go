@@ -1,4 +1,5 @@
 import { formatLocalDateTime } from '$lib/utils/date';
+import { t } from '$lib/i18n';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { waitFor, cleanup } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../test/render-helpers';
@@ -1220,9 +1221,38 @@ describe('SystemInference', () => {
     expect(
       container.querySelector('[data-testid="model-failing"]')?.getAttribute('aria-describedby')
     ).toBe(help?.id);
+    // The reason matches the error class.
+    expect(t).toHaveBeenCalledWith('system.inference.modelFailingHelp', {
+      reason: 'system.inference.modelFailingReasonNonFinite',
+    });
     // Never succeeded since the instance loaded.
     expect(container.textContent).toContain('system.inference.lastSuccess');
     expect(container.textContent).toContain('system.inference.lastSuccessNever');
+  });
+
+  it('names an inference error as the reason for any other error class', async () => {
+    const model = makeModel({
+      health: {
+        state: 'failing',
+        consecutiveFailures: 10,
+        failureThreshold: 10,
+        inferenceCount: 10,
+        errorClass: 'inference_error',
+      },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="model-failing-help"]')).not.toBeNull();
+    });
+    expect(t).toHaveBeenCalledWith('system.inference.modelFailingHelp', {
+      reason: 'system.inference.modelFailingReasonError',
+    });
+    expect(t).not.toHaveBeenCalledWith('system.inference.modelFailingHelp', {
+      reason: 'system.inference.modelFailingReasonNonFinite',
+    });
   });
 
   it('shows the date and time of the last success once a model has succeeded', async () => {

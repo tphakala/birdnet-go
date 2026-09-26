@@ -29,10 +29,10 @@ type ModelInferenceFailureInfo struct {
 // InferenceFailuresCheck reports Critical while any loaded model fails every
 // analysis window, Healthy while every loaded model is analyzing, and Skipped
 // when no model information is available (no orchestrator, or no loaded
-// model). It is streak based (the classifier's
-// consecutive-failure count, cleared by the first success) rather than a
-// windowed error rate, so it has no reset-on-read counters or window
-// boundaries to flap on, and it clears as soon as the model recovers.
+// model). It is streak based (the classifier's consecutive-failure count,
+// cleared by the first success) rather than a windowed error rate, so it has no
+// reset-on-read counters or window boundaries to flap on, and it clears as soon
+// as the model recovers.
 type InferenceFailuresCheck struct {
 	getInfo func() []ModelInferenceFailureInfo
 }

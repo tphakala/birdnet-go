@@ -510,8 +510,9 @@ func applyRuntimeBackend(status *InferenceModelStatus, backend, precision string
 // GetInferenceStatus handles GET /api/v2/system/inference. It returns a
 // read-only snapshot of the inference subsystem: hardware, backends, loaded
 // models with per-model stats, memory and current inference health, source
-// attachment, and audio pipeline metrics. The snapshot is assembled from live sources on every request so it
-// reflects hot-reload changes without any caching.
+// attachment, and audio pipeline metrics. The snapshot is assembled from live
+// sources on every request so it reflects hot-reload changes without any
+// caching.
 func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	settings := c.CurrentSettings()
 

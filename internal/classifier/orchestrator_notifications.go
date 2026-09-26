@@ -68,9 +68,9 @@ func emitORTUnavailableNotification(modelName, ortError string) {
 // notification.PersistentNotice keyed by the not-ok state. Idempotent and nil-safe on the
 // notification service (not yet initialized, or in tests): a raise that finds no service
 // latches nothing, so the next call (NewOrchestrator, ScanInstalled, LoadModel, UnloadModel)
-// retries it, and a failed create is re-armed a bounded number of times. A failed
-// update is logged at WARN. Across restarts the
-// in-memory store is empty, so "raised once per process" is the dedupe.
+// retries it, and a failed create is re-armed a bounded number of times. A failed update is
+// logged at WARN. Across restarts the in-memory store is empty, so "raised once per process"
+// is the dedupe.
 func (o *Orchestrator) syncAcousticModelsNotice() {
 	svc := notification.GetService()
 	if svc == nil {

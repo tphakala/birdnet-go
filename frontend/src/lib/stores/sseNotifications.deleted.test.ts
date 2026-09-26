@@ -2,8 +2,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 
 type Listener = (event: Event) => void;
 
-const { sources } = vi.hoisted(() => ({
+const { sources, log } = vi.hoisted(() => ({
   sources: [] as Array<{ listeners: Map<string, Listener> }>,
+  log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock('$lib/utils/ReconnectingEventSource', () => ({
@@ -24,7 +25,6 @@ vi.mock('$lib/utils/ReconnectingEventSource', () => ({
 
 vi.mock('$lib/utils/logger', async importOriginal => {
   const actual = await importOriginal<typeof import('$lib/utils/logger')>();
-  const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   return { ...actual, loggers: { ...actual.loggers, sse: log } };
 });
 
@@ -79,7 +79,11 @@ describe('notification_deleted relay', () => {
     expect(received[0].detail).toEqual({ id: 'abc-123', wasUnread: false });
   });
 
-  it('ignores a malformed payload', () => {
+  it('ignores a malformed payload with a warning, not an error', () => {
+    log.warn.mockClear();
+    log.error.mockClear();
     expect(deliver(JSON.stringify({ nope: true }))).toHaveLength(0);
+    expect(log.warn).toHaveBeenCalledTimes(1);
+    expect(log.error).not.toHaveBeenCalled();
   });
 });

@@ -441,7 +441,6 @@
     return (hz / HZ_PER_KHZ).toFixed(hz % HZ_PER_KHZ === 0 ? 0 : 1);
   }
 
-  // RTF is absent or meaningless when there are no invocations.
   /**
    * The visible explanation for a failing model: why its analyses fail (from the
    * backend error class) and what to try next.
@@ -454,6 +453,7 @@
     return t('system.inference.modelFailingHelp', { reason });
   }
 
+  // RTF is absent or meaningless when there are no invocations.
   function rtfDisplay(model: InferenceModel): string {
     const { invocations, rtf } = model.stats;
     if (invocations <= 0 || rtf == null) return '-';
