@@ -69,6 +69,8 @@ bash ./install.sh
 
 Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binaries for Linux, Windows, and macOS ship with each [release](https://github.com/tphakala/birdnet-go/releases). See the [installation guide](https://github.com/tphakala/birdnet-go/wiki/installation), [hardware recommendations](https://github.com/tphakala/birdnet-go/wiki/hardware), and [security guide](https://github.com/tphakala/birdnet-go/wiki/security) for details.
 
+You can also deploy BirdNET-Go with one click using the official [Easypanel](https://easypanel.io/) template: https://easypanel.io/templates/birdnetgo
+
 ## Web Dashboard
 
 <img src="doc/BirdNET-Go-dashboard.webp" />
