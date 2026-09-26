@@ -26,7 +26,7 @@ func TestGetRecentObservations(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "GET", r.Method)
-		assert.Contains(t, r.URL.Path, "/v2/data/obs/geo/recent")
+		assert.Equal(t, "/data/obs/geo/recent", r.URL.Path)
 		assert.Equal(t, "test-key", r.Header.Get("X-eBirdApiToken"))
 
 		w.Header().Set("Content-Type", "application/json")
@@ -63,6 +63,27 @@ func TestGetRecentObservations_DefaultDays(t *testing.T) {
 
 	// days=0 should default to 14
 	results, err := client.GetRecentObservations(t.Context(), 60.17, 24.94, 0)
+	require.NoError(t, err)
+	assert.Empty(t, results)
+}
+
+func TestGetRecentObservations_BaseURLWithPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v2/data/obs/geo/recent", r.URL.Path)
+		assert.NotContains(t, r.URL.Path, "/v2/v2")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("[]"))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL + "/v2",
+	})
+	require.NoError(t, err)
+	defer client.Close()
+
+	results, err := client.GetRecentObservations(t.Context(), 60.17, 24.94, 14)
 	require.NoError(t, err)
 	assert.Empty(t, results)
 }
