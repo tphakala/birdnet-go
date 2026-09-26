@@ -15,14 +15,19 @@ import (
 	"go.uber.org/goleak"
 )
 
-// TestOptimizeRegionInputsChanged covers the settings gate that re-evaluates the
-// model optimize notice: a location change (including a first-time location set)
-// or a ModelRegion change triggers it, an unrelated save does not.
-func TestOptimizeRegionInputsChanged(t *testing.T) {
+// TestOptimizeNoticeInputsChanged covers the settings gate that re-evaluates the
+// model optimize notice: a location change (including a first-time location
+// set), a ModelRegion change or a primary model path change triggers it; an
+// unchanged save does not.
+func TestOptimizeNoticeInputsChanged(t *testing.T) {
 	t.Parallel()
 
 	withRegion := func(s *conf.Settings, region string) *conf.Settings {
 		s.BirdNET.ModelRegion = region
+		return s
+	}
+	withModelPath := func(s *conf.Settings, path string) *conf.Settings {
+		s.BirdNET.ModelPath = path
 		return s
 	}
 	tests := []struct {
@@ -40,11 +45,17 @@ func TestOptimizeRegionInputsChanged(t *testing.T) {
 			withRegion(regionTestSettings(60.17, 24.94, true), "global"),
 			true,
 		},
+		{
+			"custom primary model configured",
+			regionTestSettings(60.17, 24.94, true),
+			withModelPath(regionTestSettings(60.17, 24.94, true), "/data/models/my-birdnet.tflite"),
+			true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, optimizeRegionInputsChanged(tt.old, tt.next))
+			assert.Equal(t, tt.want, optimizeNoticeInputsChanged(tt.old, tt.next))
 		})
 	}
 }

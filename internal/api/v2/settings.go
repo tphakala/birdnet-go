@@ -2602,10 +2602,10 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.notifyRegionStaleness(oldSettings, currentSettings)
 	}
 
-	// Neither a location nor a ModelRegion change fires a model topology event,
-	// but both feed the optimize offers, so re-evaluate the bell notice here. The
-	// evaluation is debounced and runs off this goroutine.
-	if optimizeRegionInputsChanged(oldSettings, currentSettings) {
+	// Location, ModelRegion and the primary model path feed the optimize offers,
+	// and none of them fires a model topology event, so re-evaluate the bell
+	// notice here. The evaluation is debounced and runs off this goroutine.
+	if optimizeNoticeInputsChanged(oldSettings, currentSettings) {
 		c.scheduleOptimizeNoticeSync()
 	}
 
@@ -2769,14 +2769,15 @@ func coordinatesChanged(oldSettings, currentSettings *conf.Settings) bool {
 		oldSettings.BirdNET.Longitude != currentSettings.BirdNET.Longitude
 }
 
-// optimizeRegionInputsChanged reports whether a settings change alters the
-// region the model recommender scores against: the station location (auto
-// region mode resolves from it) or the ModelRegion mode itself. Either can make
-// a different regional build the recommended one, and so change the model
-// optimize offers.
-func optimizeRegionInputsChanged(oldSettings, currentSettings *conf.Settings) bool {
+// optimizeNoticeInputsChanged reports whether a settings change alters an input
+// of the model optimize offers: the region the recommender scores against (the
+// station location, which auto region mode resolves from, or the ModelRegion
+// mode itself), or the configured primary model path, which decides whether the
+// BirdNET v2.4 offer is withheld from a user running a custom model.
+func optimizeNoticeInputsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return coordinatesChanged(oldSettings, currentSettings) ||
-		oldSettings.BirdNET.ModelRegion != currentSettings.BirdNET.ModelRegion
+		oldSettings.BirdNET.ModelRegion != currentSettings.BirdNET.ModelRegion ||
+		oldSettings.BirdNET.ModelPath != currentSettings.BirdNET.ModelPath
 }
 
 // scheduleOptimizeNoticeSync asks the models handler to re-evaluate the model

@@ -115,7 +115,8 @@ func optimizeOffersSignature(offers []optimizeOffer) string {
 // currentOptimizeOffers computes the offers for this host from live state: the
 // visible catalog, the installed variants, and the same recommender pass the
 // catalog endpoint runs, after ensuring the OpenVINO device probe has run
-// (ensureHostProbed). It is not gated on request authentication because its
+// (ensureHostProbed), minus an offer that would replace a custom primary model
+// (withoutCustomPrimaryOffer). It is not gated on request authentication because its
 // only consumer is the bell notice, which guests cannot read (the notifications
 // API shows unauthenticated callers detection notices only).
 func (c *Handler) currentOptimizeOffers() []optimizeOffer {
@@ -129,10 +130,41 @@ func (c *Handler) currentOptimizeOffers() []optimizeOffer {
 			installed[visible[i].ID] = vid
 		}
 	}
-	ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
+	s := c.CurrentSettings()
+	ortStatus := inference.CheckORTAvailability(s.BirdNET.ONNXRuntimePath)
 	c.ensureHostProbed()
 	byVariant, recommended, _ := c.rankCatalog(visible, ortStatus)
-	return optimizeOffers(visible, installed, byVariant, recommended)
+	offers := optimizeOffers(visible, installed, byVariant, recommended)
+	return withoutCustomPrimaryOffer(offers, visible, s.BirdNET.ModelPath)
+}
+
+// withoutCustomPrimaryOffer drops the offer for the permanent BirdNET v2.4 entry
+// when the user configured their own primary model file. The installed-model
+// scan reports any configured file that is not a gallery build as the BuiltIn
+// baseline, so without this the bell would tell a user running a custom model to
+// "optimize" it away (the swap rewrites BirdNET.ModelPath to the gallery build).
+// A configured path that points at a deleted gallery build is also skipped:
+// that is a configuration the user may be troubleshooting, not one to push a
+// swap at. configuredPrimary is settings.BirdNET.ModelPath, the documented
+// "what did the user configure" read.
+func withoutCustomPrimaryOffer(offers []optimizeOffer, entries []classifier.CatalogEntry, configuredPrimary string) []optimizeOffer {
+	if configuredPrimary == "" {
+		return offers
+	}
+	return slices.DeleteFunc(offers, func(o optimizeOffer) bool {
+		for i := range entries {
+			e := &entries[i]
+			if e.ID != o.CatalogID || !classifier.IsPermanentEntry(e) {
+				continue
+			}
+			for j := range e.Variants {
+				if e.Variants[j].BuiltIn && e.Variants[j].ID == o.FromVariantID {
+					return true
+				}
+			}
+		}
+		return false
+	})
 }
 
 // noticeSvc resolves the notification service, preferring the test seam. It

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/recommend"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
@@ -225,6 +227,68 @@ func TestEnsureHostProbed_BeforeLiveRanking(t *testing.T) {
 	h.currentOptimizeOffers()
 	h.requestedVariantCompatibility(&entry, "", inference.ORTStatus{})
 	assert.Equal(t, int32(2), probes.Load(), "the test profile seam never probes")
+}
+
+func TestWithoutCustomPrimaryOffer(t *testing.T) {
+	t.Parallel()
+
+	v24, ok := classifier.GetCatalogEntry("birdnet-v2.4")
+	require.True(t, ok)
+	builtinID := ""
+	for i := range v24.Variants {
+		if v24.Variants[i].BuiltIn {
+			builtinID = v24.Variants[i].ID
+		}
+	}
+	require.NotEmpty(t, builtinID, "the permanent v2.4 entry carries a BuiltIn baseline")
+	other := variantEntry("perch-v2", "Perch v2", builtinID, "fast")
+	other.Variants[0].BuiltIn = true // only the permanent entry's baseline may be skipped
+	entries := []classifier.CatalogEntry{v24, other}
+
+	fromBuiltin := optimizeOffer{CatalogID: v24.ID, FromVariantID: builtinID, ToVariantID: "fp32-dfttrunc"}
+	fromDFT := optimizeOffer{CatalogID: v24.ID, FromVariantID: "int8-arm-dfttrunc", ToVariantID: "fp32-dfttrunc"}
+	otherModel := optimizeOffer{CatalogID: other.ID, FromVariantID: builtinID, ToVariantID: "fast"}
+
+	tests := []struct {
+		name       string
+		configured string
+		in         []optimizeOffer
+		want       []optimizeOffer
+	}{
+		{"default install keeps the baseline offer", "", []optimizeOffer{fromBuiltin}, []optimizeOffer{fromBuiltin}},
+		{"custom primary file drops the baseline offer", "/data/models/my-birdnet.tflite", []optimizeOffer{fromBuiltin}, []optimizeOffer{}},
+		{"a gallery build on disk keeps its offer", "/data/models/birdnet-v2.4/x.onnx", []optimizeOffer{fromDFT}, []optimizeOffer{fromDFT}},
+		{"another model's offer is untouched", "/data/models/my-birdnet.tflite", []optimizeOffer{otherModel}, []optimizeOffer{otherModel}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			in := slices.Clone(tc.in)
+			assert.Equal(t, tc.want, withoutCustomPrimaryOffer(in, entries, tc.configured))
+		})
+	}
+}
+
+// TestSyncOptimizeNotice_CustomPrimaryModelGetsNoNotice pins that a user whose
+// configured BirdNET v2.4 model is their own file is not told to optimize it away,
+// on the same host where a default install gets the notice.
+func TestSyncOptimizeNotice_CustomPrimaryModelGetsNoNotice(t *testing.T) {
+	core := apitest.NewCore(t, apitest.WithSettingsFunc(func(s *conf.Settings) {
+		s.BirdNET.ModelPath = "/data/models/my-birdnet.tflite"
+	}))
+	mm := classifier.NewModelManager(t.TempDir(), nil, nil)
+	mm.ScanInstalled()
+	core.ModelManager = mm
+	h := New(core, nil)
+	profile := aarch64LowRAMONNXProfile()
+	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return profile }
+	notices := &fakeNotices{}
+	h.notices = notices
+
+	h.SyncOptimizeNotice()
+
+	created, _ := notices.counts()
+	assert.Zero(t, created)
 }
 
 func TestOptimizeOffersSignature_OrderIndependent(t *testing.T) {
