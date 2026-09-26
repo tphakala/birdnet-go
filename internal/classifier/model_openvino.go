@@ -290,14 +290,23 @@ func (bn *BirdNET) openVINOPlan() (plan openVINOPlan, ok bool, reason string) {
 // (Orchestrator.primaryVariantUsable) so the two can never disagree about which
 // backend a file will run on.
 func birdnetV24OpenVINOPlan(cfg *conf.BirdNETConfig, quant Quantization) (plan openVINOPlan, ok bool, reason string) {
-	plan, ok, reason = openVINOPlanFor(
+	plan, ok, reason = birdnetV24BasePlan(cfg)
+	return applyOpenVINOQuantizationPolicy(plan, ok, reason, cfg.Backend, quant)
+}
+
+// birdnetV24BasePlan is the device and precision plan birdnetV24OpenVINOPlan
+// starts from, before the quantization policy is applied. It is a variable only
+// so tests can replace it: in the default (untagged) build openVINOPlanFor always
+// declines with ovReasonNotBuilt, which would leave the policy unreachable through
+// the production entry points.
+var birdnetV24BasePlan = func(cfg *conf.BirdNETConfig) (plan openVINOPlan, ok bool, reason string) {
+	return openVINOPlanFor(
 		cfg.Backend,
 		cfg.OpenVINODevice,
 		DefaultModelVersion,
 		cfg.OpenVINOPath,
 		birdnetLogitsOutputIndex,
 	)
-	return applyOpenVINOQuantizationPolicy(plan, ok, reason, cfg.Backend, quant)
 }
 
 // applyOpenVINOQuantizationPolicy adjusts an OpenVINO plan for the weight
