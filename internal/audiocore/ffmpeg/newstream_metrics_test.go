@@ -27,8 +27,8 @@ func (e *engineRecorder) DeleteStream(string) {}
 
 // TestNewStream_RecordsFFmpegEngine locks that the FFmpeg producer records its
 // ingest engine to the metrics collector at construction, so the
-// audio_stream_engine gauge is populated for the default FFmpeg path (Forgejo
-// #1646). The native producer emits EngineNative in its own constructor; this
+// audio_stream_engine gauge is populated for the default FFmpeg path.
+// The native producer emits EngineNative in its own constructor; this
 // closes the sibling gap where FFmpeg previously never called SetStreamEngine.
 func TestNewStream_RecordsFFmpegEngine(t *testing.T) {
 	t.Parallel()

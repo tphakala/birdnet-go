@@ -33,6 +33,12 @@ const (
 
 	// ExecuteCommandTimeout is the timeout for external command execution
 	ExecuteCommandTimeout = 5 * time.Minute
+
+	// speciesTimeQueryTimeout bounds the per-detection query for the first/last
+	// species detection times published in the MQTT payload. It is short because
+	// it runs on the MQTT hot path and a failure must degrade to null fields,
+	// not stall the publish.
+	speciesTimeQueryTimeout = 2 * time.Second
 )
 
 // DetectionContext provides thread-safe shared state for detection pipeline actions.
@@ -141,6 +147,8 @@ type SaveAudioAction struct {
 	readyAt          time.Time
 	sourceSampleRate int    // Actual source capture rate for correct export headers
 	modelName        string // Detection model name (e.g. "BattyBirdNET") for export strategy
+	modelVersion     string // Detection model version, paired with modelName for ResolveModelType so the
+	// encode-side model-type check matches the clip-name path exactly (no name/version skew).
 	// species is the detection's common name, LOWERCASED to match the casing the
 	// sibling detection operations log, carried so the export log lines can name
 	// it. GET /api/v2/system/events/detections attributes recorded clip paths to a
@@ -204,6 +212,14 @@ type BirdWeatherAction struct {
 	mu            sync.Mutex // Protect concurrent access to Result and pcmData
 }
 
+// speciesDetectionTimeSource is the minimal datastore capability MqttAction needs to
+// populate first/last species detection times. Both *datastore.DataStore (legacy) and
+// *v2only.Datastore satisfy it. Kept out of datastore.Interface on purpose (matches the
+// convention used by other per-species analytics queries).
+type speciesDetectionTimeSource interface {
+	GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Context, scientificName string, before time.Time) (first, last *time.Time, err error)
+}
+
 type MqttAction struct {
 	Settings       *conf.Settings
 	Result         detection.Result // Domain model (single source of truth)
@@ -215,6 +231,10 @@ type MqttAction struct {
 	Description    string
 	CorrelationID  string     // Detection correlation ID for log tracking
 	mu             sync.Mutex // Protect concurrent access to Result
+	// SpeciesTimeSource provides the species' first-ever and most-recent previous
+	// detection times for the MQTT payload. Nil when the database is disabled or
+	// the backend does not support the query; the payload then carries null fields.
+	SpeciesTimeSource speciesDetectionTimeSource
 }
 
 type UpdateRangeFilterAction struct {

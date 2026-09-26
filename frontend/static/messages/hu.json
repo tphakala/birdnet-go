@@ -109,6 +109,14 @@
       "closeModal": "Ablak bezárása",
       "dismissAlert": "Értesítés elutasítása",
       "closeNotification": "Értesítés bezárása",
+      "toastRegion": {
+        "topLeft": "Értesítések, bal felül",
+        "topCenter": "Értesítések, középen felül",
+        "topRight": "Értesítések, jobb felül",
+        "bottomLeft": "Értesítések, bal alul",
+        "bottomCenter": "Értesítések, középen alul",
+        "bottomRight": "Értesítések, jobb alul"
+      },
       "toggleDropdown": "Legördülő menü kapcsolása",
       "sortAscending": "Növekvő rendezés",
       "selectLanguage": "Nyelv kiválasztása",
@@ -130,7 +138,6 @@
       "selectToday": "Ma kiválasztása",
       "dateSelected": "Kiválasztott dátum: {date}",
       "calendarNavigation": "A naptárban a nyílbillentyűkkel navigálhat, Enter a kiválasztáshoz, Escape a bezáráshoz",
-      "downloadCsv": "Fajlista letöltése CSV formátumban",
       "visitEbirdLink": "eBird.org megnyitása új lapon",
       "learnEbirdTaxonomyLink": "eBird taxonómia megnyitása új lapon",
       "resizeHandle": "Húzza az átméretezéshez",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Hang elemzés túlterhelve",
-        "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a ''{sourceName}'' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
+        "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a '{sourceName}' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
       },
       "ort": {
         "unavailableTitle": "Az ONNX Runtime nem elérhető",
@@ -474,6 +481,16 @@
         "notRegisteredTitle": "Egyetlen modell sem elemzi a következőt: {sourceName}",
         "notRegisteredMessage": "Nem jut el hang a(z) {models} számára a(z) \"{sourceName}\" hangforráson, így nem jönnek létre detektálások. Nyissa meg a Rendszer > AI Modellek menüpontot a forrásonkénti állapot ellenőrzéséhez, és győződjön meg róla, hogy a hangforrás csatlakoztatva van és hangot küld."
       },
+      "acousticModels": {
+        "noneTitle": "Nincs engedélyezve akusztikai modell",
+        "noneMessage": "Nincs betöltve akusztikai modell, így a rendszer rögzíti a hangot, de nem elemzi. Engedélyezzen egy modellt a Beállítások > Elemzés menüpontban, vagy telepítsen egyet a modellgalériából.",
+        "loadFailedTitle": "Az akusztikai modellt nem sikerült betölteni",
+        "loadFailedMessage": "Egy engedélyezett akusztikai modellt nem sikerült betölteni, így a rendszer rögzíti a hangot, de nem elemzi. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modellnek van jobb változata ehhez a rendszerhez} other {# modellnek van jobb változata ehhez a rendszerhez}}",
+        "message": "A rendszer hardveréhez vagy helyéhez jobban illő változat érhető el a következőkhöz: {models}. Nyissa meg a Beállítások > Elemzés > Modellek oldalt, és váltson az Optimalizálás gombbal."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Jelenlegi érték: {value}% (küszöbérték: {threshold}%)",
@@ -493,6 +510,11 @@
           "diskFull": "A lemez megtelt - szabadítson fel helyet",
           "permissionDenied": "Engedély megtagadva - ellenőrizze a fájl vagy szolgáltatás engedélyeit"
         }
+      },
+      "inferenceFailing": {
+        "title": "A(z) {modelName} minden elemzésnél hibázik",
+        "message": "A(z) {modelName} be van töltve, de az utolsó {failures} egymást követő elemzése sikertelen volt ezen: {runtime}. A következtetés hibát adott. A rendszer rögzíti a hangot, de ez a modell semmit sem észlel. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon.",
+        "nonFiniteMessage": "A(z) {modelName} be van töltve, de az utolsó {failures} egymást követő elemzése sikertelen volt ezen: {runtime}. A modell érvénytelen (NaN vagy végtelen) pontszámokat adott. A rendszer rögzíti a hangot, de ez a modell semmit sem észlel. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon."
       }
     },
     "loading": "Értesítések betöltése..."
@@ -752,6 +774,16 @@
       "recentDetectionsFetch": "A legutóbbi detektálások betöltése sikertelen: {status}",
       "recentDetectionsLoad": "A legutóbbi detektálások betöltése sikertelen",
       "configFetch": "Az irányítópult konfigurációjának betöltése sikertelen: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Nincs engedélyezve akusztikai modell",
+      "noneMessage": "A hang rögzítése folyamatban van, de nincs elemezve. Engedélyezzen egy modellt a modellgalériában a fajok detektálásának megkezdéséhez.",
+      "noneAction": "Modellgaléria megnyitása",
+      "loadFailedTitle": "Az akusztikai modellt nem sikerült betölteni",
+      "loadFailedMessage": "Egy engedélyezett modellt nem sikerült betölteni, így a hang nincs elemezve. Az AI Modellek oldal mutatja, hogy melyik modell hibásodott meg és miért.",
+      "loadFailedAction": "AI Modellek állapotának megtekintése",
+      "failingTitle": "{count, plural, one {Egy modell minden elemzésnél hibázik} other {# modell minden elemzésnél hibázik}}",
+      "failingMessage": "{count, plural, one {A(z) {models} be van töltve, de minden elemzés sikertelen, így semmit sem észlel.} other {A(z) {models} be vannak töltve, de minden elemzés sikertelen, így semmit sem észlelnek.}} Az AI Modellek oldal mutatja a háttérrendszert és a hibát."
     },
     "banner": {
       "title": "Cím",
@@ -1834,7 +1866,14 @@
       "fp16Help": "16-bites lebegőpontos számok. Kisebb memóriát és gyorsabb futást eredményezhet.",
       "invocationsHelp": "Összes elemzett szegmens indítás óta.",
       "noModelsHint": "Még nincs beállítva hangforrás?",
-      "noModelsHintLink": "Hangforrások beállítása"
+      "noModelsHintLink": "Hangforrások beállítása",
+      "modelFailing": "minden elemzés sikertelen",
+      "lastSuccess": "Utolsó sikeres elemzés",
+      "lastSuccessHelp": "Mikor elemzett ez a modell utoljára hiba nélkül hangot.",
+      "lastSuccessNever": "Nincs a modell betöltése óta",
+      "modelFailingHelp": "{reason} Próbálja ki a modell egy másik változatát a Beállítások > Elemzés > Modellek oldalon, vagy ellenőrizze a fent látható háttérrendszert és pontosságot.",
+      "modelFailingReasonNonFinite": "Minden legutóbbi elemzés sikertelen volt, mert a modell érvénytelen (NaN vagy végtelen) pontszámokat adott, így semmit sem észlel.",
+      "modelFailingReasonError": "Minden legutóbbi elemzés sikertelen volt, mert a következtetés hibát adott, így a modell semmit sem észlel."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2354,7 +2393,7 @@
           "title": "Hamis pozitív szűrő",
           "description": "Csökkenti a hamis detektálásokat több megerősítést követelve az átfedő hangszegmensekben",
           "level": {
-            "label": "Szűrési szint"
+            "label": "Hamis pozitív szűrő erőssége"
           },
           "detectionCount": "{count} megerősítés szükséges. {description}",
           "levels": {
@@ -3261,7 +3300,7 @@
             "label": "Eszköz név",
             "helpText": "Az alap nevet az eszközökhöz, ahogy megjelennek a Home Assistant-ban. Minden hang forrásnak saját eszköze lesz, amely ehhez a fő BirdNET-Go eszközhöz lesz kapcsolva."
           },
-          "sensorsNote": "<strong>Létrehozott érzékelők:</strong> Minden hang forráshoz a Home Assistant megkapja: Utolsó faj, Megbízhatóság, Tudományos név és Hangszint (ha engedélyezve van). A bridge eszköz tartalmazza az online/offline elérhetőségi állapotot.",
+          "sensorsNote": "<strong>Létrehozott érzékelők:</strong> Minden hang forráshoz a Home Assistant megkapja: Utolsó faj, Megbízhatóság, Tudományos név és Hangszint (ha engedélyezve van). A bridge eszköz tartalmazza az online/offline elérhetőségi állapotot. Az egyes források észlelési érzékelői az adott forrás saját MQTT témáját olvassák, &lt;base_topic&gt;/sources/&lt;source_id&gt;, és annak Hangszint érzékelője a &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel altémát olvassa, így az egyik forrás észlelése soha nem állítja vissza egy másik forrás érzékelőit.",
           "discovery": {
             "button": "Felfedezés küldése",
             "success": "Felfedezés üzenetek elküldve a Home Assistant-nak",
@@ -3307,7 +3346,8 @@
             "none": "Nincs",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3328,6 +3368,16 @@
             "helpText": "Válassza ki a hőmérséklet és szélsebesség egységeit (m = Metrikus, e = Imperiális, h = UK hibrid)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API kulcs",
+            "helpText": "Adja meg a Pirate Weather API kulcsát. Az időjárási adatokhoz szükséges."
+          },
+          "endpoint": {
+            "label": "API végpont",
+            "helpText": "Felülbírálhatja az alapértelmezett Pirate Weather API végpontot, ha szükséges. Ha üresen hagyja, az alapértelmezett https://api.pirateweather.net/forecast."
+          }
+        },
         "notes": {
           "none": "Nem lesz időjárási adat lekérve.",
           "yrno": {
@@ -3335,7 +3385,8 @@
             "freeService": "Az Yr egy ingyenes időjárás adat szolgáltatás. További információkért látogasson el a <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a> oldalra."
           },
           "openweather": "Az OpenWeather használatához API kulcs szükséges, regisztráljon ingyenes API kulcsért a <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a> oldalon.",
-          "wunderground": "Weather Underground API kulcs és érvényes PWS állomás ID szükséges. Lásd <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> részletekért."
+          "wunderground": "Weather Underground API kulcs és érvényes PWS állomás ID szükséges. Lásd <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> részletekért.",
+          "pirateweather": "A Pirate Weather használatához API kulcs szükséges, regisztráljon a <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a> oldalon."
         },
         "apiKey": {
           "label": "API kulcs",
@@ -3708,6 +3759,7 @@
         "dataOutputTitle": "Hangszint adat kimenet",
         "dataOutputDescription": "Ha engedélyezve van, a hangszint mérések publikálásra kerülnek:",
         "mqttTopic": "MQTT téma:",
+        "mqttSourceTopic": "Forrásonkénti MQTT téma (Home Assistant discovery esetén):",
         "sseEndpoint": "SSE végpont:",
         "prometheusMetrics": "Prometheus metrikák:"
       },
@@ -3769,6 +3821,8 @@
         "pathHelp": "A könyvtár, ahová a hang klipek mentésre kerülnek. A relatív útvonalak az alkalmazás könyvtárból számítódnak. Példa: 'clips/' vagy '/var/audio/birds/'",
         "typeLabel": "Hang formátum",
         "typeHelp": "Hang formátum a mentett klipekhez. A WAV és FLAC veszteségmentes (legjobb minőség, nagyobb fájlok). Az MP3, AAC és Opus veszteséges (kisebb fájlok, enyhe minőségvesztés).",
+        "ultrasonicTypeLabel": "Ultrahang formátum",
+        "ultrasonicTypeHelp": "Veszteségmentes formátum (WAV vagy FLAC), amely kizárólag a 48 kHz feletti denevér- és ultrahang-felvételekhez használatos. Ezek a fenti formátum helyett a teljes forrás mintavételezési frekvenciájukkal kerülnek mentésre, így az ultrahangos részletek nem vesznek el.",
         "bitrateLabel": "Bitráta",
         "bitrateHelp": "Hang tömörítési bitráta a veszteséges formátumokhoz. Tartomány: {min}-{max} kbps. A magasabb értékek jobb minőséget, de nagyobb fájlokat eredményeznek.",
         "losslessBitrateValue": "N/A - Veszteségmentes",
@@ -3837,7 +3891,17 @@
       },
       "models": {
         "recommendBoth": "A legjobb fajészlelési lefedettség érdekében javasolt a BirdNET és a Perch modellek együttes futtatása.",
-        "perchOnlyWarning": "A Perch önmagában kevesebb észlelést produkál. Az érdemi eredményekhez csökkentse a megbízhatósági küszöböt 0.50-re, vagy aktiválja a BirdNET-et is a jobb lefedettség érdekében."
+        "perchOnlyWarning": "A Perch önmagában kevesebb észlelést produkál. Az érdemi eredményekhez csökkentse a megbízhatósági küszöböt 0.50-re, vagy aktiválja a BirdNET-et is a jobb lefedettség érdekében.",
+        "loading": "Detekciós modellek betöltése...",
+        "noneEnabledTitle": "Nincs engedélyezve detekciós modell.",
+        "noneEnabledHelp": "Ezt a forrást továbbra is mentheti. A hangját az alapértelmezett modellek elemzik, amint egyet engedélyeznek.",
+        "noneEnabledLink": "Modellgaléria megnyitása",
+        "noneAvailable": "Ezen a szerveren nincsenek engedélyezve detekciós modellek.",
+        "loadFailedWarning": "Egy detekciós modellt nem sikerült betölteni, ezért ez a forrás nem lesz elemezve, amíg helyre nem áll.",
+        "loadFailedLink": "AI Modellek állapotának megtekintése",
+        "defaultBadge": "{models} (alapértelmezett)",
+        "defaultPendingBadge": "Alapértelmezett modellek",
+        "noneBadge": "Nincs betöltve modell"
       }
     },
     "security": {
@@ -5117,6 +5181,7 @@
       "birdweatherClientFailed": "A BirdWeather kliens létrehozása sikertelen",
       "noWeatherProvider": "Nincs időjárás szolgáltató kiválasztva",
       "openWeatherKeyRequired": "Az OpenWeather API kulcs kötelező",
+      "pirateWeatherKeyRequired": "A Pirate Weather API kulcs kötelező",
       "processorUnavailable": "A processzor nem elérhető",
       "discoveryFailed": "A Home Assistant felfedezés indítása sikertelen"
     },

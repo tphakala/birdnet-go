@@ -192,7 +192,8 @@ export default defineConfig({
     // Optimize dependency handling
     deps: {
       optimizer: {
-        web: {
+        // vitest 5 renamed deps.optimizer.web to deps.optimizer.client
+        client: {
           // Pre-bundle heavy dependencies
           include: ['@testing-library/svelte', '@testing-library/jest-dom', 'jsdom'],
         },

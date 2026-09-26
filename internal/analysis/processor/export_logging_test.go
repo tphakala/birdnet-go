@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -38,8 +37,8 @@ func logLineContaining(t *testing.T, logs, marker string) string {
 	return found
 }
 
-// A bat model at an ultrasonic capture rate: the combination needsBatFormatFallback
-// downgrades to WAV, because no lossy container carries 256 kHz.
+// A bat model at an ultrasonic capture rate (above the 48 kHz analysis rate):
+// resolveExportFormat stores it losslessly in the dedicated UltrasonicType.
 const (
 	batModelName        = "BattyBirdNET"
 	batSourceSampleRate = 256000
@@ -618,75 +617,30 @@ func TestExecute_TimedOutExportStaysAtWarn(t *testing.T) {
 	assert.NotContains(t, out, "Audio clip export cancelled")
 }
 
-// An ultrasonic capture whose configured container cannot carry the sample rate
-// is exported as WAV. That downgrade used to be entirely silent, leaving an
-// operator configured for a lossy format with no explanation for the .wav files
-// on disk.
-func TestResolveExportParams_BatDowngradeIsLogged(t *testing.T) {
-	resetBatFormatDowngradeOnce()
+// A bat/ultrasonic capture above the analysis rate is stored losslessly in the
+// dedicated UltrasonicType (default FLAC) at its full source rate, not downgraded
+// to WAV. This is intended behavior, so unlike the old forced-WAV path it emits no
+// downgrade warning and never strands.
+func TestResolveExportParams_BatUltrasonicUsesUltrasonicType(t *testing.T) {
+	resetStrandedFormatOnce()
 	logs := logtest.CaptureBuffer(t)
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", ffmpeg.FormatMP3)
+	a.Settings.Realtime.Audio.Export.UltrasonicType = conf.AudioExportTypeFLAC
 	a.modelName = batModelName
 	a.sourceSampleRate = batSourceSampleRate
 
-	_, format, path := a.resolveExportParams("/clips/clip.mp3")
+	rate, format, path := a.resolveExportParams("/clips/clip.mp3")
 
-	require.Equal(t, ffmpeg.FormatWAV, format, "the downgrade itself must still happen")
-	assert.Equal(t, "/clips/clip.wav", path)
-	assert.Contains(t, logs.String(), "operation=audio_export_bat_format_fallback")
-	assert.Contains(t, logs.String(), "requested_format="+ffmpeg.FormatMP3)
-}
-
-// The downgrade fires on every single detection of a bat install, so repeating
-// the SAME condition must not repeat the log. (The companion test below covers
-// the other half: a DIFFERENT condition still gets its own line.)
-func TestResolveExportParams_BatDowngradeLoggedOncePerCondition(t *testing.T) {
-	resetBatFormatDowngradeOnce()
-	logs := logtest.CaptureBuffer(t)
-	a := newExportLogAction(t, t.TempDir(), "clip.mp3", ffmpeg.FormatMP3)
-	a.modelName = batModelName
-	a.sourceSampleRate = batSourceSampleRate
-
-	for range 3 {
-		_, _, _ = a.resolveExportParams("/clips/clip.mp3")
-	}
-
-	assert.Equal(t, 1, strings.Count(logs.String(), "audio_export_bat_format_fallback"),
-		"a bat install takes this path on every detection; the log must not repeat")
-}
-
-// The guard is keyed on the inputs the decision is made from, not on "have we
-// ever logged this". Both inputs vary at runtime: Export.Type is hot-reloadable,
-// and the capture rate belongs to the source, so a multi-source install runs
-// several at once. A bare sync.Once let the first condition silence every later,
-// DIFFERENT one, leaving the operator an explanation naming a format they had
-// since changed away from or a rate belonging to another source.
-func TestResolveExportParams_BatDowngradeLogsEachDistinctCondition(t *testing.T) {
-	resetBatFormatDowngradeOnce()
-	logs := logtest.CaptureBuffer(t)
-	a := newExportLogAction(t, t.TempDir(), "clip.mp3", ffmpeg.FormatMP3)
-	a.modelName = batModelName
-	a.sourceSampleRate = batSourceSampleRate
-
-	_, _, _ = a.resolveExportParams("/clips/clip.mp3")
-
-	// A second source at a different ultrasonic rate: same format, new condition.
-	const otherBatRate = 192000
-	a.sourceSampleRate = otherBatRate
-	_, _, _ = a.resolveExportParams("/clips/clip.mp3")
-
-	// The operator switches the export format in the UI without restarting.
-	a.Settings.Realtime.Audio.Export.Type = ffmpeg.FormatOpus
-	a.sourceSampleRate = batSourceSampleRate
-	_, _, _ = a.resolveExportParams("/clips/clip.opus")
-
+	assert.Equal(t, conf.AudioExportTypeFLAC, format,
+		"a bat capture above the analysis rate must use the ultrasonic format, not a WAV downgrade")
+	assert.Equal(t, batSourceSampleRate, rate, "ultrasonic audio must keep its full source rate")
+	assert.Equal(t, ".flac", filepath.Ext(path),
+		"the on-disk extension must follow the ultrasonic format")
 	out := logs.String()
-	assert.Equal(t, 3, strings.Count(out, "audio_export_bat_format_fallback"),
-		"each distinct format/rate combination must explain itself exactly once")
-	assert.Contains(t, out, "sample_rate="+strconv.Itoa(otherBatRate),
-		"the second source's rate must not be hidden by the first")
-	assert.Contains(t, out, "requested_format="+ffmpeg.FormatOpus,
-		"a hot-reloaded format must re-explain itself")
+	assert.NotContains(t, out, "audio_export_bat_format_fallback",
+		"routing to the ultrasonic format is intended behavior, not a downgrade to warn about")
+	assert.NotContains(t, out, "audio_export_no_encoder_fallback",
+		"FLAC carries any rate, so there is no strand")
 }
 
 // The sibling downgrade: an install with no FFmpeg whose opted-in native encoder

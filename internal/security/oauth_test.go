@@ -1428,8 +1428,9 @@ func TestInitializeProviders_OIDC_Success(t *testing.T) {
 	initializeProviders(settings)
 
 	providers := goth.GetProviders()
-	_, ok := providers[ProviderOIDC]
-	assert.True(t, ok, "OIDC provider should be registered with goth")
+	provider, ok := providers[ProviderOIDC]
+	require.True(t, ok, "OIDC provider should be registered with goth")
+	assert.IsType(t, &pkceOIDCProvider{}, provider, "OIDC provider should be wrapped with PKCE support")
 }
 
 // cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry.

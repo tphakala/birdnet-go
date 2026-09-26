@@ -23,7 +23,7 @@ const (
 	MsgIntegrationFailedTitle   = "notifications.content.integration.failedTitle"
 	MsgIntegrationFailedMessage = "notifications.content.integration.failedMessage"
 
-	// Error notifications (title keys only — messages are raw error strings)
+	// Error notifications (title keys only; messages are raw error strings)
 	MsgErrorCriticalSystem = "notifications.content.error.criticalSystem"
 	MsgErrorApplication    = "notifications.content.error.application"
 	MsgErrorImageProvider  = "notifications.content.error.imageProvider"
@@ -72,7 +72,7 @@ const (
 	MsgCleanupFailedTitle     = "notifications.content.cleanup.failedTitle"
 	MsgCleanupFailedMessage   = "notifications.content.cleanup.failedMessage"
 
-	// API error response keys — used in ErrorResponse.ErrorKey for frontend translation.
+	// API error response keys: used in ErrorResponse.ErrorKey for frontend translation.
 	// Namespace: errors.<handler>.<errorType>
 
 	// Auth errors
@@ -143,6 +143,7 @@ const (
 	MsgErrIntegBWClientFailed    = "errors.integration.birdweatherClientFailed"
 	MsgErrIntegNoWeatherProvider = "errors.integration.noWeatherProvider"
 	MsgErrIntegOWKeyRequired     = "errors.integration.openWeatherKeyRequired"
+	MsgErrIntegPWKeyRequired     = "errors.integration.pirateWeatherKeyRequired"
 	MsgErrIntegProcessorUnavail  = "errors.integration.processorUnavailable"
 	MsgErrIntegDiscoveryFailed   = "errors.integration.discoveryFailed"
 
@@ -213,4 +214,24 @@ const (
 	// not receiving audio, so it produces no detections)
 	MsgModelNotRegisteredTitle   = "notifications.content.modelPath.notRegisteredTitle"
 	MsgModelNotRegisteredMessage = "notifications.content.modelPath.notRegisteredMessage"
+
+	// Acoustic-model notifications (no acoustic model is loaded, so audio is captured
+	// but not analyzed; N = 0 in the model de-privilege epic, Phase 4). The two states
+	// carry different remedies: none_installed points at the gallery to install a model,
+	// load_failed points at the inference page because a model is installed but failed
+	// to load (missing ONNX Runtime, a corrupt or incompatible file).
+	MsgAcousticModelsNoneTitle         = "notifications.content.acousticModels.noneTitle"
+	MsgAcousticModelsNoneMessage       = "notifications.content.acousticModels.noneMessage"
+	MsgAcousticModelsLoadFailedTitle   = "notifications.content.acousticModels.loadFailedTitle"
+	MsgAcousticModelsLoadFailedMessage = "notifications.content.acousticModels.loadFailedMessage"
+
+	// Model optimize notifications (an installed model has a better build for this
+	// host in the model gallery; recommend-only, never swaps a model by itself)
+	MsgModelOptimizeTitle   = "notifications.content.modelOptimize.title"
+	MsgModelOptimizeMessage = "notifications.content.modelOptimize.message"
+
+	// Inference failure notice: a loaded model failed its last analyses in a row.
+	MsgInferenceFailingTitle            = "notifications.content.inferenceFailing.title"
+	MsgInferenceFailingMessage          = "notifications.content.inferenceFailing.message"
+	MsgInferenceFailingNonFiniteMessage = "notifications.content.inferenceFailing.nonFiniteMessage"
 )

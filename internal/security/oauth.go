@@ -171,7 +171,7 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 					continue
 				}
 
-				goth.UseProviders(oidcProvider)
+				goth.UseProviders(newPKCEOIDCProvider(oidcProvider))
 				secLog.Info("OIDC provider registered after background retry")
 				return
 			}
@@ -661,7 +661,7 @@ func initializeOIDCProvider(providerConfig *conf.OAuthProviderConfig, redirectUR
 		startOIDCRetry(ctx, *providerConfig, redirectURI, scopes)
 		return nil
 	}
-	return oidcProvider
+	return newPKCEOIDCProvider(oidcProvider)
 }
 
 // createSessionKey creates a key of the proper length for AES encryption from a seed string

@@ -42,9 +42,27 @@ if [ -n "$GO_FILES" ]; then
     echo "✅ All Go files are properly formatted"
   fi
   
-  # Run golangci-lint
+  # Run golangci-lint with the default build tags of `task lint`
+  # (noembed,skipfrontend skip model and frontend embedding, which also makes
+  # the run faster). CI additionally lints the integration, pebble_e2e and
+  # normcompare tags. The CGO settings are the ones `task lint` sets, so the
+  # TFLite cgo packages typecheck whatever the environment holds.
+  REPO_ROOT=$(git rev-parse --show-toplevel)
+  CACHE_DIR="$REPO_ROOT/.cache"
+  if [ ! -d "$CACHE_DIR/tensorflow" ]; then
+    # A linked worktree has no .cache of its own; use the main checkout's.
+    CACHE_DIR="$(git rev-parse --path-format=absolute --git-common-dir)/../.cache"
+  fi
+  case "$(uname -s)_$(uname -m)" in
+    Darwin_arm64) LIB_DIR="/opt/homebrew/lib" ;;
+    Darwin_*) LIB_DIR="/usr/local/lib" ;;
+    *) LIB_DIR="/usr/lib" ;;
+  esac
+  export CGO_ENABLED=1
+  export CGO_CFLAGS="-I$CACHE_DIR/tensorflow -I$CACHE_DIR/openvino/include"
+  export CGO_LDFLAGS="-L$LIB_DIR -ltensorflowlite_c"
   echo "   Linting Go files..."
-  if ! golangci-lint run -v; then
+  if ! golangci-lint run -v --build-tags=noembed,skipfrontend; then
     echo "❌ golangci-lint found issues in Go files"
     echo "💡 Fix the issues above before committing"
     echo "⚠️  Note: --no-verify bypasses are not accepted in this project"
@@ -74,9 +92,11 @@ fi
 echo "🔍 Running frontend pre-commit checks..."
 cd frontend || exit 1
 
-# Check i18n key sync if translation files are staged
+# Check i18n key sync if translation files are staged.
+# The frontend/ prefix is optional so the match still works under git diff.relative=true
+# (paths come out relative to the frontend/ cwd set above).
 I18N_FILES=$(git diff --cached --name-only --diff-filter=ACMR | \
-  grep 'frontend/static/messages/.*\.json$' || true)
+  grep -E '(frontend/)?static/messages/[^/]*\.json$' || true)
 
 if [ -n "$I18N_FILES" ]; then
   echo "🌍 Checking i18n key sync..."
@@ -91,7 +111,7 @@ fi
 # The frontend/ prefix is optional so the match still works under git diff.relative=true
 # (paths come out relative to the frontend/ cwd set above).
 I18N_TYPES_TRIGGER=$(git diff --cached --name-only --diff-filter=ACMR | \
-  grep -E '(frontend/)?static/messages/en\.json$|(frontend/)?src/lib/i18n/generateTypes\.ts$|(frontend/)?src/lib/i18n/types\.generated\.ts$' || true)
+  grep -E '(frontend/)?static/messages/en\.json$|(frontend/)?src/lib/i18n/generateTypes\.ts$|(frontend/)?src/lib/i18n/types\.generated\.ts$|(frontend/)?src/lib/i18n/icuMessage\.ts$' || true)
 
 if [ -n "$I18N_TYPES_TRIGGER" ]; then
   echo "🌍 Checking generated i18n types..."

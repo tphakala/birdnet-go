@@ -26,7 +26,12 @@
   import { validateProtocolURL, sanitizeUrlForComparison } from '$lib/utils/security';
   import { toastActions } from '$lib/stores/toast';
   import { quietHoursStore } from '$lib/stores/quietHours.svelte';
-  import { getAvailableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
+  import { getAvailableModels, fetchModels, modelsLoading } from '$lib/stores/models.svelte';
+  import {
+    acousticModelAvailability,
+    subscribeAcousticModels,
+  } from '$lib/stores/acousticModels.svelte';
+  import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import StreamCard, { type StreamStatus } from './StreamCard.svelte';
   import InlineSlider from './InlineSlider.svelte';
   import ModelCheckboxList from './ModelCheckboxList.svelte';
@@ -54,10 +59,21 @@
   const logger = loggers.audio;
 
   const availableModels = $derived(getAvailableModels());
+  const acousticAvailability = $derived(acousticModelAvailability());
 
   $effect(() => {
     return fetchModels();
   });
+
+  $effect(() => {
+    return subscribeAcousticModels();
+  });
+
+  // Pre-selection for a stream without an explicit list: the classifier's
+  // default targets when known, nothing at N=0, the legacy BirdNET pick otherwise.
+  function getDefaultModels(): string[] {
+    return defaultModelSelection(acousticAvailability, availableModels);
+  }
 
   // Maximum allowed URL length for stream configuration
   const MAX_STREAM_URL_LENGTH = 2048;
@@ -136,7 +152,7 @@
   let newTransport = $state<'tcp' | 'udp'>('tcp');
   let newStreamType = $state<StreamType>('rtsp');
   let newGain = $state(0);
-  let newModels = $state<string[]>([DEFAULT_MODEL_ID]);
+  let newModels = $state<string[]>([]);
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let newChannelMode = $state<ChannelMode>('downmix');
   let nameError = $state<string | null>(null);
@@ -400,7 +416,7 @@
     newStreamType = 'rtsp';
     newChannelMode = 'downmix';
     newGain = 0;
-    newModels = [DEFAULT_MODEL_ID];
+    newModels = getDefaultModels();
     newQuietHours = { ...defaultQuietHoursConfig };
     newTestResult = null;
     analysisResult = null;
@@ -415,6 +431,13 @@
   }
 
   // Add new stream
+  // Open add form with the default models pre-selected
+  function openAddForm() {
+    if (disabled) return;
+    newModels = getDefaultModels();
+    showAddForm = true;
+  }
+
   function addStream() {
     clearErrors();
 
@@ -449,6 +472,11 @@
     if (streams.some(s => s.url === trimmedUrl)) {
       urlError = t('settings.audio.streams.errors.duplicate');
       return;
+    }
+
+    // Ensure at least one model is selected when the classifier offers one
+    if (newModels.length === 0) {
+      newModels = getDefaultModels();
     }
 
     // Create new stream config - only include transport for RTSP/RTMP types
@@ -628,7 +656,7 @@
       primaryAction={{
         label: t('settings.audio.streams.addStream'),
         icon: Plus,
-        onclick: () => (showAddForm = true),
+        onclick: openAddForm,
       }}
     />
   {:else}
@@ -768,6 +796,8 @@
               selectedModels={newModels}
               sourceSampleRate={newSourceSampleRate}
               isStream={true}
+              loading={modelsLoading()}
+              availability={acousticAvailability}
               {disabled}
               onToggle={models => (newModels = models)}
             />
@@ -813,7 +843,7 @@
       <button
         type="button"
         class="w-full inline-flex items-center justify-center gap-2 h-8 px-3 text-sm rounded-lg border border-dashed border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-content)]/5 text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        onclick={() => (showAddForm = true)}
+        onclick={openAddForm}
         {disabled}
       >
         <Plus class="size-4" />

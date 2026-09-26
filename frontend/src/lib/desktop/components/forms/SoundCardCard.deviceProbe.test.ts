@@ -35,6 +35,14 @@ vi.mock('$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte
 }));
 vi.mock('$lib/stores/models.svelte', () => ({
   DEFAULT_MODEL_ID: 'birdnet',
+  modelsLoaded: vi.fn(() => true),
+  modelsLoading: vi.fn(() => false),
+}));
+
+// The card reads the acoustic model verdict for its default pick and badge; the
+// device probe flow under test never depends on it.
+vi.mock('$lib/stores/acousticModels.svelte', () => ({
+  acousticModelAvailability: vi.fn(() => ({ kind: 'unknown' })),
 }));
 
 const DEV1 = 'dev1';

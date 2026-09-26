@@ -7,7 +7,7 @@ The API v2 provides comprehensive access to BirdNET-Go's bird detection and moni
 ## Endpoint Registration Pattern
 
 > Architecture and the "add a new endpoint / add a new domain" recipes live in
-> `internal/api/v2/CLAUDE.md`. The summary below is the registration mechanics.
+> `internal/api/v2/AGENTS.md`. The summary below is the registration mechanics.
 
 ### Per-domain registration
 
@@ -90,26 +90,26 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 ### Analytics (`analytics/analytics.go`)
 
-| Method | Route                                 | Handler                    | Auth | Description                        |
-| ------ | ------------------------------------- | -------------------------- | ---- | ---------------------------------- |
-| GET    | `/analytics/species/daily`            | `GetDailySpeciesSummary`   | ❌   | Daily species detection summary (`first_heard` earliest, `latest_heard` latest call of the day) |
-| GET    | `/analytics/species/summary`          | `GetSpeciesSummary`        | ❌   | Overall species statistics         |
-| GET    | `/analytics/species/detections/new`   | `GetNewSpeciesDetections`  | ❌   | Recently detected new species, with the non-false-positive detection count in `count_in_period` |
-| GET    | `/analytics/species/thumbnails`       | `GetSpeciesThumbnails`     | ❌   | Species thumbnail images           |
-| GET    | `/analytics/species/accumulation`     | `GetSpeciesAccumulation`   | ❌   | Species accumulation curve (biodiversity collector's curve): per calendar day, the cumulative count of distinct species first detected within the range (false positives excluded; "first seen" is bounded to the window, not lifetime). All-species (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days) |
-| GET    | `/analytics/species/phenology`        | `GetSpeciesPhenology`      | ❌   | Arrival/departure phenology (residency-bar Gantt): per species, the first and last detection date (station-local, false positives excluded) plus the in-range detection count, for the top-N species by volume. All-species top-N (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `limit` optional (default 12, max 20) |
-| GET    | `/analytics/time/hourly`              | `GetHourlyAnalytics`       | ❌   | Hourly detection patterns          |
-| GET    | `/analytics/time/hourly/batch`        | `GetBatchHourlySpeciesData` | ❌  | Hour-of-day detection counts (24 buckets) for several species in one request, summed over the requested range. `species` required (repeatable; scientific or common name, capped at the batch limit); either `start_date`+`end_date` (both inclusive) for a range, or the legacy single `date` (equivalent to a one-day range); `min_confidence` optional |
-| GET    | `/analytics/time/daily`               | `GetDailyAnalytics`        | ❌   | Daily detection patterns           |
-| GET    | `/analytics/time/distribution/hourly` | `GetTimeOfDayDistribution` | ❌   | Time-of-day detection distribution |
-| GET    | `/analytics/time/distribution/species` | `GetSpeciesHourlyDistribution` | ❌ | Who-sings-when ridgeline: per-species hour-of-day distribution. `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional (repeatable scientific-name filter; when omitted, the top N species by volume; when set, just those species, still volume-ordered and capped at `limit`); `limit` optional (default 5, max 8) |
-| GET    | `/analytics/time/heatmap`             | `GetActivityHeatmap`       | ❌   | Seasonal density heatmap (date x intra-day slot; `?format=csv`) |
-| GET    | `/analytics/time/dawn-onset`          | `GetDawnChorusOnset`       | ❌   | Dawn-chorus onset tracker: per-day onset relative to civil dawn (minutes; negative = before civil dawn). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional |
-| GET    | `/analytics/time/succession`          | `GetAcousticSuccession`    | ❌   | Acoustic succession streamgraph: per species, the raw hour-of-day detection counts (24 buckets, false positives excluded), stacked into a streamgraph showing the diel acoustic handover. `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional (repeatable scientific-name filter; when omitted, the top-N species by volume; when set, just those species, still volume-ordered and capped at `limit`); `limit` optional (default 6, max 10) |
-| GET    | `/analytics/time/year-over-year`      | `GetYearOverYear`          | ❌   | Year-over-year tracker: current year-to-date cumulative detection counts versus the same calendar span one year earlier (false positives excluded), one point per current-year day with a per-day delta, aligned by calendar (month, day) with leap-day Feb 29 handled. All-species (no species filter). `date` optional (station-local YYYY-MM-DD; defaults to today) sets the inclusive end of both windows. Returns `{currentYear, previousYear, points[]}` |
-| GET    | `/analytics/sun`                      | `GetAnalyticsSun`          | ❌   | Sun times for the nocturnal activity clock's day/night shading: sunrise/sunset/civil-dawn/civil-dusk as minute-of-day in server-local time. `date` for a single day, or `start_date`/`end_date` for a range (collapsed to its midpoint); defaults to today. Returns `available:false` (not an error) on polar day/night or when SunCalc is unconfigured |
-| GET    | `/analytics/confidence/distribution`  | `GetConfidenceDistribution` | ❌  | Confidence distribution per species: per-species normalized histogram of detection confidence scores (Review & Accuracy tab). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional (single species filter; default is the top-N species by volume); `bins` optional (default 20, clamped to 5-50); `limit` optional (default 5, max 8) |
-| GET    | `/analytics/sources`                  | `GetAnalyticsSources`      | ❌   | Audio sources that have detections in range, powering the analytics hub's source/mic filter: each source's opaque id (string), display label, and in-range detection count (false positives excluded), most active first. `start_date`/`end_date` optional (omit both for all history). v2only (the legacy schema does not persist a detection's source; legacy returns an empty list). Source names are anonymized for unauthenticated clients; the opaque id is safe to expose. Returns `{sources[]}` (never null) |
+| Method | Route                                  | Handler                        | Auth | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------ | -------------------------------------- | ------------------------------ | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/analytics/species/daily`             | `GetDailySpeciesSummary`       | ❌   | Daily species detection summary (`first_heard` earliest, `latest_heard` latest call of the day)                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| GET    | `/analytics/species/summary`           | `GetSpeciesSummary`            | ❌   | Overall species statistics                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| GET    | `/analytics/species/detections/new`    | `GetNewSpeciesDetections`      | ❌   | Recently detected new species, with the non-false-positive detection count in `count_in_period`                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| GET    | `/analytics/species/thumbnails`        | `GetSpeciesThumbnails`         | ❌   | Species thumbnail images                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| GET    | `/analytics/species/accumulation`      | `GetSpeciesAccumulation`       | ❌   | Species accumulation curve (biodiversity collector's curve): per calendar day, the cumulative count of distinct species first detected within the range (false positives excluded; "first seen" is bounded to the window, not lifetime). All-species (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days)                                                                                                                                                            |
+| GET    | `/analytics/species/phenology`         | `GetSpeciesPhenology`          | ❌   | Arrival/departure phenology (residency-bar Gantt): per species, the first and last detection date (station-local, false positives excluded) plus the in-range detection count, for the top-N species by volume. All-species top-N (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `limit` optional (default 12, max 20)                                                                                                                                        |
+| GET    | `/analytics/time/hourly`               | `GetHourlyAnalytics`           | ❌   | Hourly detection patterns                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| GET    | `/analytics/time/hourly/batch`         | `GetBatchHourlySpeciesData`    | ❌   | Hour-of-day detection counts (24 buckets) for several species in one request, summed over the requested range. `species` required (repeatable; scientific or common name, capped at the batch limit); either `start_date`+`end_date` (both inclusive) for a range, or the legacy single `date` (equivalent to a one-day range); `min_confidence` optional                                                                                                                                                            |
+| GET    | `/analytics/time/daily`                | `GetDailyAnalytics`            | ❌   | Daily detection patterns                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| GET    | `/analytics/time/distribution/hourly`  | `GetTimeOfDayDistribution`     | ❌   | Time-of-day detection distribution                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| GET    | `/analytics/time/distribution/species` | `GetSpeciesHourlyDistribution` | ❌   | Who-sings-when ridgeline: per-species hour-of-day distribution. `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional (repeatable scientific-name filter; when omitted, the top N species by volume; when set, just those species, still volume-ordered and capped at `limit`); `limit` optional (default 5, max 8)                                                                                                                                                    |
+| GET    | `/analytics/time/heatmap`              | `GetActivityHeatmap`           | ❌   | Seasonal density heatmap (date x intra-day slot; `?format=csv`)                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| GET    | `/analytics/time/dawn-onset`           | `GetDawnChorusOnset`           | ❌   | Dawn-chorus onset tracker: per-day onset relative to civil dawn (minutes; negative = before civil dawn). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional                                                                                                                                                                                                                                                                                                         |
+| GET    | `/analytics/time/succession`           | `GetAcousticSuccession`        | ❌   | Acoustic succession streamgraph: per species, the raw hour-of-day detection counts (24 buckets, false positives excluded), stacked into a streamgraph showing the diel acoustic handover. `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional (repeatable scientific-name filter; when omitted, the top-N species by volume; when set, just those species, still volume-ordered and capped at `limit`); `limit` optional (default 6, max 10)                         |
+| GET    | `/analytics/time/year-over-year`       | `GetYearOverYear`              | ❌   | Year-over-year tracker: current year-to-date cumulative detection counts versus the same calendar span one year earlier (false positives excluded), one point per current-year day with a per-day delta, aligned by calendar (month, day) with leap-day Feb 29 handled. All-species (no species filter). `date` optional (station-local YYYY-MM-DD; defaults to today) sets the inclusive end of both windows. Returns `{currentYear, previousYear, points[]}`                                                       |
+| GET    | `/analytics/sun`                       | `GetAnalyticsSun`              | ❌   | Sun times for the nocturnal activity clock's day/night shading: sunrise/sunset/civil-dawn/civil-dusk as minute-of-day in server-local time. `date` for a single day, or `start_date`/`end_date` for a range (collapsed to its midpoint); defaults to today. Returns `available:false` (not an error) on polar day/night or when SunCalc is unconfigured                                                                                                                                                              |
+| GET    | `/analytics/confidence/distribution`   | `GetConfidenceDistribution`    | ❌   | Confidence distribution per species: per-species normalized histogram of detection confidence scores (Review & Accuracy tab). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional (single species filter; default is the top-N species by volume); `bins` optional (default 20, clamped to 5-50); `limit` optional (default 5, max 8)                                                                                                                                |
+| GET    | `/analytics/sources`                   | `GetAnalyticsSources`          | ❌   | Audio sources that have detections in range, powering the analytics hub's source/mic filter: each source's opaque id (string), display label, and in-range detection count (false positives excluded), most active first. `start_date`/`end_date` optional (omit both for all history). v2only (the legacy schema does not persist a detection's source; legacy returns an empty list). Source names are anonymized for unauthenticated clients; the opaque id is safe to expose. Returns `{sources[]}` (never null) |
 
 ### Control Operations (`control/control.go`)
 
@@ -133,21 +133,21 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 ### Detections (`detections/detections.go`)
 
-| Method | Route                         | Handler                 | Auth | Description                                |
-| ------ | ----------------------------- | ----------------------- | ---- | ------------------------------------------ |
-| GET    | `/detections`                 | `GetDetections`         | ❌   | List bird detections; `source` (id from `/analytics/sources`, display name, node name or URI) restricts to an audio source |
-| GET    | `/detections/:id`             | `GetDetection`          | ❌   | Get specific detection                     |
-| GET    | `/detections/recent`          | `GetRecentDetections`   | ❌   | Recent detections                          |
-| GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay` | ❌   | Detection time context                     |
-| DELETE | `/detections/:id`             | `DeleteDetection`       | ✅   | Delete detection record                    |
-| POST   | `/detections/:id/review`      | `ReviewDetection`       | ✅   | Review/verify detection                    |
-| POST   | `/detections/:id/lock`        | `LockDetection`         | ✅   | Lock detection from changes                |
-| POST   | `/detections/ignore`          | `IgnoreSpecies`         | ✅   | Toggle species in ignore list (add/remove) |
-| GET    | `/detections/ignored`         | `GetExcludedSpecies`    | ✅   | Get list of excluded species               |
-| POST   | `/detections/batch/delete`    | `BatchDeleteDetections` | ✅   | Bulk delete detections by ID               |
-| POST   | `/detections/batch/review`    | `BatchReviewDetections` | ✅   | Bulk set verification status               |
-| POST   | `/detections/batch/lock`      | `BatchLockDetections`   | ✅   | Bulk lock or unlock detections             |
-| POST   | `/detections/batch/resolve`   | `BatchResolveDetections`| ✅   | Resolve query params to detection IDs      |
+| Method | Route                         | Handler                  | Auth | Description                                                                                                                |
+| ------ | ----------------------------- | ------------------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/detections`                 | `GetDetections`          | ❌   | List bird detections; `source` (id from `/analytics/sources`, display name, node name or URI) restricts to an audio source |
+| GET    | `/detections/:id`             | `GetDetection`           | ❌   | Get specific detection                                                                                                     |
+| GET    | `/detections/recent`          | `GetRecentDetections`    | ❌   | Recent detections                                                                                                          |
+| GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay`  | ❌   | Detection time context                                                                                                     |
+| DELETE | `/detections/:id`             | `DeleteDetection`        | ✅   | Delete detection record                                                                                                    |
+| POST   | `/detections/:id/review`      | `ReviewDetection`        | ✅   | Review/verify detection                                                                                                    |
+| POST   | `/detections/:id/lock`        | `LockDetection`          | ✅   | Lock detection from changes                                                                                                |
+| POST   | `/detections/ignore`          | `IgnoreSpecies`          | ✅   | Toggle species in ignore list (add/remove)                                                                                 |
+| GET    | `/detections/ignored`         | `GetExcludedSpecies`     | ✅   | Get list of excluded species                                                                                               |
+| POST   | `/detections/batch/delete`    | `BatchDeleteDetections`  | ✅   | Bulk delete detections by ID                                                                                               |
+| POST   | `/detections/batch/review`    | `BatchReviewDetections`  | ✅   | Bulk set verification status                                                                                               |
+| POST   | `/detections/batch/lock`      | `BatchLockDetections`    | ✅   | Bulk lock or unlock detections                                                                                             |
+| POST   | `/detections/batch/resolve`   | `BatchResolveDetections` | ✅   | Resolve query params to detection IDs                                                                                      |
 
 ### Integrations (`integrations/integrations.go`)
 
@@ -166,21 +166,21 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 ### Media (`media/media.go`)
 
-| Method | Route                                | Handler                  | Auth | Description                        |
-| ------ | ------------------------------------ | ------------------------ | ---- | ---------------------------------- |
-| GET    | `/media/audio/:filename`             | `ServeAudioClip`         | ❌   | Serve audio file                   |
-| GET    | `/media/spectrogram/:filename`       | `ServeSpectrogram`       | ❌   | Serve spectrogram image            |
-| GET    | `/media/audio`                       | `ServeAudioByQueryID`    | ❌   | Serve audio by detection ID        |
-| GET    | `/media/species-image`               | `GetSpeciesImage`        | ❌   | Get species thumbnail image        |
-| GET    | `/media/species-image/info`          | `GetSpeciesImageInfo`    | ❌   | Get species image attribution      |
-| GET    | `/media/image/:scientific_name`      | `ServeSpeciesImageProxy` | ❌   | Serve cached bird image (proxy)    |
-| GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy` | ❌   | Alias for image proxy endpoint     |
-| GET    | `/audio/:id`                         | `ServeAudioByID`         | ❌   | Serve detection audio clip by ID   |
-| GET    | `/spectrogram/:id`                   | `ServeSpectrogramByID`   | ❌   | Serve detection spectrogram by ID  |
-| POST   | `/spectrogram/:id/generate`          | `GenerateSpectrogramByID` | ❌   | Trigger spectrogram generation     |
-| GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status  |
-| POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range |
-| POST   | `/audio/:id/audible-bats`            | `AudibleBatsByID`        | ✅   | Time-expand bat clip into audible range |
+| Method | Route                                | Handler                   | Auth | Description                             |
+| ------ | ------------------------------------ | ------------------------- | ---- | --------------------------------------- |
+| GET    | `/media/audio/:filename`             | `ServeAudioClip`          | ❌   | Serve audio file                        |
+| GET    | `/media/spectrogram/:filename`       | `ServeSpectrogram`        | ❌   | Serve spectrogram image                 |
+| GET    | `/media/audio`                       | `ServeAudioByQueryID`     | ❌   | Serve audio by detection ID             |
+| GET    | `/media/species-image`               | `GetSpeciesImage`         | ❌   | Get species thumbnail image             |
+| GET    | `/media/species-image/info`          | `GetSpeciesImageInfo`     | ❌   | Get species image attribution           |
+| GET    | `/media/image/:scientific_name`      | `ServeSpeciesImageProxy`  | ❌   | Serve cached bird image (proxy)         |
+| GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy`  | ❌   | Alias for image proxy endpoint          |
+| GET    | `/audio/:id`                         | `ServeAudioByID`          | ❌   | Serve detection audio clip by ID        |
+| GET    | `/spectrogram/:id`                   | `ServeSpectrogramByID`    | ❌   | Serve detection spectrogram by ID       |
+| POST   | `/spectrogram/:id/generate`          | `GenerateSpectrogramByID` | ❌   | Trigger spectrogram generation          |
+| GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`    | ❌   | Get spectrogram generation status       |
+| POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`    | ✅   | Extract audio clip from time range      |
+| POST   | `/audio/:id/audible-bats`            | `AudibleBatsByID`         | ✅   | Time-expand bat clip into audible range |
 
 **Pending species image (`503 + Retry-After`).** The image endpoints never contact an
 image provider on the request goroutine: a cold species can take minutes to resolve
@@ -207,30 +207,30 @@ reported to telemetry, since they are expected, self-resolving backpressure.
 
 ### Notifications (`notifications/notifications.go`)
 
-| Method | Route                              | Handler                            | Auth | Description                                                                                                         |
-| ------ | ---------------------------------- | ---------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/notifications/stream`            | `StreamNotifications`              | ❌⚡ | SSE notification & toast stream (public read-only, rate-limited). Used by dashboard NotificationBell.               |
-| GET    | `/notifications`                   | `GetNotifications`                 | ❌   | List notifications (public read-only). Used by dashboard NotificationBell.                                          |
-| GET    | `/notifications/:id`               | `GetNotification`                  | ✅   | Get specific notification                                                                                           |
-| PUT    | `/notifications/read-all`          | `MarkAllNotificationsRead`         | ✅   | Mark all unread notifications as read in one call. Returns `{"count": N}`.                                          |
-| PUT    | `/notifications/:id/read`          | `MarkNotificationRead`             | ✅   | Mark notification as read                                                                                           |
-| PUT    | `/notifications/:id/acknowledge`   | `MarkNotificationAcknowledged`     | ✅   | Acknowledge notification                                                                                            |
-| DELETE | `/notifications/:id`               | `DeleteNotification`               | ✅   | Delete notification                                                                                                 |
-| GET    | `/notifications/unread/count`      | `GetUnreadCount`                   | ❌   | Count unread notifications (public read-only). Used by dashboard NotificationBell.                                  |
-| POST   | `/notifications/test/new-species`  | `CreateTestNewSpeciesNotification` | ✅   | Create test new-species notification                                                                                |
+| Method | Route                              | Handler                            | Auth | Description                                                                                                                                                                                    |
+| ------ | ---------------------------------- | ---------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/notifications/stream`            | `StreamNotifications`              | ❌⚡ | SSE notification & toast stream (public read-only, rate-limited). Used by dashboard NotificationBell.                                                                                          |
+| GET    | `/notifications`                   | `GetNotifications`                 | ❌   | List notifications (public read-only). Used by dashboard NotificationBell.                                                                                                                     |
+| GET    | `/notifications/:id`               | `GetNotification`                  | ✅   | Get specific notification                                                                                                                                                                      |
+| PUT    | `/notifications/read-all`          | `MarkAllNotificationsRead`         | ✅   | Mark all unread notifications as read in one call. Returns `{"count": N}`.                                                                                                                     |
+| PUT    | `/notifications/:id/read`          | `MarkNotificationRead`             | ✅   | Mark notification as read                                                                                                                                                                      |
+| PUT    | `/notifications/:id/acknowledge`   | `MarkNotificationAcknowledged`     | ✅   | Acknowledge notification                                                                                                                                                                       |
+| DELETE | `/notifications/:id`               | `DeleteNotification`               | ✅   | Delete notification                                                                                                                                                                            |
+| GET    | `/notifications/unread/count`      | `GetUnreadCount`                   | ❌   | Count unread notifications (public read-only). Used by dashboard NotificationBell.                                                                                                             |
+| POST   | `/notifications/test/new-species`  | `CreateTestNewSpeciesNotification` | ✅   | Create test new-species notification                                                                                                                                                           |
 | POST   | `/notifications/check-ntfy-server` | `CheckNtfyServer`                  | ✅   | Probe NTFY host for HTTPS/HTTP connectivity. POST (CSRF-protected) with JSON body `{"host":"<hostname[:port]>"}`; the probe is SSRF-guarded so it cannot relay to link-local/metadata targets. |
 
 ### Range Filter (`range/range.go`)
 
-| Method | Route                   | Handler                       | Auth | Description                                                 |
-| ------ | ----------------------- | ----------------------------- | ---- | ----------------------------------------------------------- |
-| GET    | `/range/status`         | `GetRangeFilterStatus`        | ❌   | Per-classifier geomodel coverage, auto-selection, threshold |
-| GET    | `/range/species/scores` | `GetRangeFilterSpeciesScores` | ❌   | Raw geomodel scores, primary model only; excludes always-active secondary models (e.g. bats) by design |
-| GET    | `/range/species/count`  | `GetRangeFilterSpeciesCount`  | ❌   | Species count with range filter                             |
-| GET    | `/range/species/list`   | `GetRangeFilterSpeciesList`   | ❌   | Species list with taxonomy groups                           |
-| GET    | `/range/species/csv`    | `GetRangeFilterSpeciesCSV`    | ❌   | Export species as CSV; with custom params includes always-active secondary models (matches the test endpoint); no-param export returns the persisted filter |
-| POST   | `/range/species/test`   | `TestRangeFilter`             | ❌   | Test range filter; returns the active set (range-filtered birds plus always-active secondary models) |
-| POST   | `/range/rebuild`        | `RebuildRangeFilter`          | ❌   | Rebuild range filter data                                   |
+| Method | Route                   | Handler                       | Auth | Description                                                                                                                                                                                          |
+| ------ | ----------------------- | ----------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/range/status`         | `GetRangeFilterStatus`        | ❌   | Per-classifier geomodel coverage, auto-selection, threshold                                                                                                                                          |
+| GET    | `/range/species/scores` | `GetRangeFilterSpeciesScores` | ❌   | Raw geomodel scores, primary model only; excludes always-active secondary models (e.g. bats) by design                                                                                               |
+| GET    | `/range/species/count`  | `GetRangeFilterSpeciesCount`  | ❌   | Species count with range filter                                                                                                                                                                      |
+| GET    | `/range/species/list`   | `GetRangeFilterSpeciesList`   | ❌   | Species list with taxonomy groups                                                                                                                                                                    |
+| GET    | `/range/species/csv`    | `GetRangeFilterSpeciesCSV`    | ❌   | Export species as CSV; with custom params includes always-active secondary models (matches the test endpoint); no-param export returns the persisted filter                                          |
+| POST   | `/range/species/test`   | `TestRangeFilter`             | ❌   | Test range filter; returns the active set (range-filtered birds plus always-active secondary models), `filterActive` (false at N=0, where the species list is empty), and never a null species array |
+| POST   | `/range/rebuild`        | `RebuildRangeFilter`          | ❌   | Rebuild range filter data                                                                                                                                                                            |
 
 ### Search (`detections/search.go`)
 
@@ -277,21 +277,21 @@ Both verbs report identically under the `skippedFields` response key: it lists o
 
 ### Species (`species/species.go`)
 
-| Method | Route                      | Handler               | Auth | Description                                                       |
-| ------ | -------------------------- | --------------------- | ---- | ----------------------------------------------------------------- |
-| GET    | `/species`                          | `GetSpeciesInfo`          | ❌   | Get extended species information including rarity status          |
-| GET    | `/species/all`                      | `GetAllSpecies`           | ❌   | Get all BirdNET species labels (not filtered by location)         |
-| GET    | `/species/taxonomy`                 | `GetSpeciesTaxonomy`      | ❌   | Get detailed taxonomy data with subspecies and hierarchy          |
-| GET    | `/species/:code/thumbnail`          | `GetSpeciesThumbnail`     | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
-| GET    | `/species/dictionary/:locale`       | `ServeSpeciesDictionary`  | ❌   | Precompressed per-locale species name dictionary (gzip JSON)      |
+| Method | Route                         | Handler                  | Auth | Description                                                       |
+| ------ | ----------------------------- | ------------------------ | ---- | ----------------------------------------------------------------- |
+| GET    | `/species`                    | `GetSpeciesInfo`         | ❌   | Get extended species information including rarity status          |
+| GET    | `/species/all`                | `GetAllSpecies`          | ❌   | Get all BirdNET species labels (not filtered by location)         |
+| GET    | `/species/taxonomy`           | `GetSpeciesTaxonomy`     | ❌   | Get detailed taxonomy data with subspecies and hierarchy          |
+| GET    | `/species/:code/thumbnail`    | `GetSpeciesThumbnail`    | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
+| GET    | `/species/dictionary/:locale` | `ServeSpeciesDictionary` | ❌   | Precompressed per-locale species name dictionary (gzip JSON)      |
 
 ### Server-Sent Events (`sse/sse.go`)
 
-| Method | Route                 | Handler             | Auth | Description                  |
-| ------ | --------------------- | ------------------- | ---- | ---------------------------- |
+| Method | Route                 | Handler             | Auth | Description                                                                                                                                                                                                                           |
+| ------ | --------------------- | ------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET    | `/detections/stream`  | `StreamDetections`  | ❌⚡ | Real-time detection stream. Source display names are anonymized for unauthenticated clients (only the stable source id is exposed, on both the `detection` and `pending` events); authenticated clients receive the full display name |
-| GET    | `/soundlevels/stream` | `StreamSoundLevels` | ❌⚡ | Real-time audio level stream |
-| GET    | `/sse/status`         | `GetSSEStatus`      | ❌   | SSE connection status        |
+| GET    | `/soundlevels/stream` | `StreamSoundLevels` | ❌⚡ | Real-time audio level stream                                                                                                                                                                                                          |
+| GET    | `/sse/status`         | `GetSSEStatus`      | ❌   | SSE connection status                                                                                                                                                                                                                 |
 
 ### Audio Level SSE (`audio/audio_level.go`) and Stream Sources (`audio/audio_sources.go`)
 
@@ -420,12 +420,12 @@ HLS playlist and segment routes use token-based authentication instead of standa
 
 ### Stream Health Monitoring (`audio/streams_health.go`)
 
-| Method | Route                    | Handler                   | Auth | Description                                                                          |
-| ------ | ------------------------ | ------------------------- | ---- | ------------------------------------------------------------------------------------ |
-| GET    | `/streams/health`        | `GetAllStreamsHealth`     | ✅   | Get detailed health status of all RTSP streams (settings-only; URLs sanitized)       |
-| GET    | `/streams/health/:url`   | `GetStreamHealth`         | ✅   | Get detailed health status of a specific RTSP stream (settings-only; URLs sanitized) |
-| GET    | `/streams/status`        | `GetStreamsStatusSummary` | ✅   | Get high-level summary of all stream statuses with counts (settings-only)            |
-| GET    | `/streams/health/stream` | `StreamHealthUpdates`     | ✅⚡ | Real-time stream health updates via SSE (settings page, not dashboard)               |
+| Method | Route                    | Handler                   | Auth | Description                                                                                                    |
+| ------ | ------------------------ | ------------------------- | ---- | -------------------------------------------------------------------------------------------------------------- |
+| GET    | `/streams/health`        | `GetAllStreamsHealth`     | ✅   | Get detailed health status of all RTSP streams (settings-only; URLs sanitized)                                 |
+| GET    | `/streams/health/:url`   | `GetStreamHealth`         | ✅   | Get detailed health status of a specific RTSP stream (settings-only; URLs sanitized)                           |
+| GET    | `/streams/status`        | `GetStreamsStatusSummary` | ✅   | Get high-level summary of all stream statuses with counts (settings-only)                                      |
+| GET    | `/streams/health/stream` | `StreamHealthUpdates`     | ✅⚡ | Real-time stream health updates via SSE (settings page, not dashboard)                                         |
 | POST   | `/streams/test`          | `TestStream`              | ✅   | Test a stream URL to verify connectivity and discover audio properties (sample rate, codec, bat compatibility) |
 
 ### Quiet Hours Status (`audio/quiet_hours.go`)
@@ -460,21 +460,21 @@ HLS playlist and segment routes use token-based authentication instead of standa
 
 ### System Information (`system/system.go`)
 
-| Method | Route                            | Handler                   | Auth | Description                          |
-| ------ | -------------------------------- | ------------------------- | ---- | ------------------------------------ |
-| GET    | `/system/info`                   | `GetSystemInfo`           | ✅   | General system information           |
-| GET    | `/system/resources`              | `GetResourceInfo`         | ✅   | Resource usage information           |
-| GET    | `/system/disks`                  | `GetDiskInfo`             | ✅   | Disk usage information               |
-| GET    | `/system/jobs`                   | `GetJobQueueStats`        | ✅   | Job queue statistics                 |
-| GET    | `/system/processes`              | `GetProcessInfo`          | ✅   | Process information                  |
-| GET    | `/system/temperature/cpu`        | `GetSystemCPUTemperature` | ✅   | CPU temperature                      |
-| GET    | `/system/audio/devices`          | `GetAudioDevices`         | ✅   | Available audio devices              |
-| GET    | `/system/audio/active`           | `GetActiveAudioDevice`    | ✅   | Active audio device                  |
-| GET    | `/system/audio/equalizer/config` | `GetEqualizerConfig`      | ✅   | Audio equalizer filter configuration |
-| GET    | `/system/audio/sources`          | `ListAudioSources`        | ✅   | Active audio sources (all types)     |
-| GET    | `/system/network-interfaces`     | `GetNetworkInterfaces`    | ✅   | IPv4 network interfaces for binding  |
-| GET    | `/system/models`                 | `GetActiveModels`         | ✅   | Active model metadata                |
-| GET    | `/system/inference`              | `GetInferenceStatus`      | ✅   | Read-only snapshot of the inference subsystem: hardware, backends, loaded models with stats/RAM/source attachment, audio pipeline metrics, per-model error rate, load failures, last detection, and metric key names for time-series lookups. |
+| Method | Route                            | Handler                   | Auth | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------ | -------------------------------- | ------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/system/info`                   | `GetSystemInfo`           | ✅   | General system information                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| GET    | `/system/resources`              | `GetResourceInfo`         | ✅   | Resource usage information                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| GET    | `/system/disks`                  | `GetDiskInfo`             | ✅   | Disk usage information                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| GET    | `/system/jobs`                   | `GetJobQueueStats`        | ✅   | Job queue statistics                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| GET    | `/system/processes`              | `GetProcessInfo`          | ✅   | Process information                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| GET    | `/system/temperature/cpu`        | `GetSystemCPUTemperature` | ✅   | CPU temperature                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| GET    | `/system/audio/devices`          | `GetAudioDevices`         | ✅   | Available audio devices                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| GET    | `/system/audio/active`           | `GetActiveAudioDevice`    | ✅   | Active audio device                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| GET    | `/system/audio/equalizer/config` | `GetEqualizerConfig`      | ✅   | Audio equalizer filter configuration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| GET    | `/system/audio/sources`          | `ListAudioSources`        | ✅   | Active audio sources (all types)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| GET    | `/system/network-interfaces`     | `GetNetworkInterfaces`    | ✅   | IPv4 network interfaces for binding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| GET    | `/system/models`                 | `GetActiveModels`         | ✅   | Active model metadata                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| GET    | `/system/inference`              | `GetInferenceStatus`      | ✅   | Read-only snapshot of the inference subsystem: hardware, backends, loaded models with stats/RAM/source attachment, audio pipeline metrics, per-model error rate, load failures, per-model inference health (`health`: `state` ok, failing or idle, `consecutiveFailures`, `failureThreshold`, `inferenceCount`, last inference and last success timestamps, `errorClass`; omitted when no orchestrator is wired), last detection, metric key names for time-series lookups, the default target models (`defaultTargets`, empty at N=0) and the aggregate acoustic-model state (`acousticModelsState`: ok, none_installed or load_failed, or an empty string when the inference subsystem is not yet wired). |
 
 ### Events (`system/events.go`, `system/events_aggregation.go`)
 
@@ -546,26 +546,36 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 ### Models (`models/models.go`)
 
-| Method | Route                          | Handler                 | Auth | Description                                           |
-| ------ | ------------------------------ | ----------------------- | ---- | ----------------------------------------------------- |
-| GET    | `/models`                      | `ListModels`            | ❌   | List available classifier models                      |
-| GET    | `/models/catalog`              | `GetModelCatalog`       | ❌   | Model gallery catalog with install status             |
-| GET    | `/models/regions`              | `GetModelRegions`       | ✅   | Region selector data: selectable regions, the auto-resolved region for the configured coordinates, and per-family resolution (auth-gated; never echoes raw coordinates) |
-| GET    | `/models/regions/:slug/map`    | `GetRegionCoverageMap`  | ❌   | Embedded SVG coverage map for a region slug (public static asset; strong ETag, honors If-None-Match; 404 when no map exists for the slug) |
-| GET    | `/models/installed`            | `GetInstalledModels`    | ❌   | List downloaded models                                |
+| Method | Route                          | Handler                 | Auth | Description                                                                                                                                                                             |
+| ------ | ------------------------------ | ----------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/models`                      | `ListModels`            | ❌   | List available classifier models                                                                                                                                                        |
+| GET    | `/models/catalog`              | `GetModelCatalog`       | ❌   | Model gallery catalog with install status                                                                                                                                               |
+| GET    | `/models/regions`              | `GetModelRegions`       | ✅   | Region selector data: selectable regions, the auto-resolved region for the configured coordinates, and per-family resolution (auth-gated; never echoes raw coordinates)                 |
+| GET    | `/models/regions/:slug/map`    | `GetRegionCoverageMap`  | ❌   | Embedded SVG coverage map for a region slug (public static asset; strong ETag, honors If-None-Match; 404 when no map exists for the slug)                                               |
+| GET    | `/models/installed`            | `GetInstalledModels`    | ❌   | List downloaded models                                                                                                                                                                  |
 | POST   | `/models/install/:id`          | `InstallModel`          | ✅   | Download and install a catalog variant; body `{variantId?, allowIncompatible?}`. A variant incompatible with the detected hardware is rejected with 409 unless `allowIncompatible:true` |
-| POST   | `/models/reinstall/:id`        | `ReinstallModel`        | ✅   | Re-download missing/corrupt files for installed model |
-| DELETE | `/models/installed/:id`        | `UninstallModel`        | ✅   | Remove an installed model from disk                   |
-| GET    | `/models/install/:id/progress` | `StreamInstallProgress` | ❌   | SSE stream for install/reinstall progress             |
+| POST   | `/models/reinstall/:id`        | `ReinstallModel`        | ✅   | Re-download missing/corrupt files for installed model                                                                                                                                   |
+| DELETE | `/models/installed/:id`        | `UninstallModel`        | ✅   | Remove an installed model from disk                                                                                                                                                     |
+| GET    | `/models/install/:id/progress` | `StreamInstallProgress` | ❌   | SSE stream for install/reinstall progress                                                                                                                                               |
 
-**GET /api/v2/models** - Returns all classifier models registered in the model registry. Each entry includes a config alias (used in audio source configuration) and a human-readable display name.
+**GET /api/v2/models** - Returns all classifier models registered in the model registry. Each entry includes a config alias (`id`, used in audio source configuration), a human-readable display name, and the classifier `registryId` (e.g. `BirdNET_V2.4`) that joins against the registry-ID `defaultTargets` list served by `GET /api/v2/system/inference`.
 
 **Response:**
 
 ```json
 [
-  { "id": "birdnet", "name": "BirdNET GLOBAL 6K V2.4" },
-  { "id": "perch_v2", "name": "Google Perch V2" }
+  {
+    "id": "birdnet",
+    "name": "BirdNET GLOBAL 6K V2.4",
+    "registryId": "BirdNET_V2.4",
+    "category": "bird"
+  },
+  {
+    "id": "perch_v2",
+    "name": "Google Perch V2",
+    "registryId": "Perch_V2",
+    "category": "bird"
+  }
 ]
 ```
 
@@ -601,28 +611,28 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 ### Diagnostics (`system/diagnostics.go`)
 
-| Method | Route                            | Handler                  | Auth | Description                    |
-| ------ | -------------------------------- | ------------------------ | ---- | ------------------------------ |
-| GET    | `/system/diagnostics/status`     | `GetDiagnosticsStatus`   | ✅   | Health summary for UI badge    |
-| POST   | `/system/diagnostics/run`        | `RunDiagnostics`         | ✅   | Run full diagnostic suite      |
-| GET    | `/system/diagnostics/report/:id` | `GetDiagnosticsReport`   | ✅   | Retrieve completed report      |
-| GET    | `/system/diagnostics/errors`     | `GetRecentErrors`        | ✅   | Recent error log entries       |
+| Method | Route                            | Handler                | Auth | Description                 |
+| ------ | -------------------------------- | ---------------------- | ---- | --------------------------- |
+| GET    | `/system/diagnostics/status`     | `GetDiagnosticsStatus` | ✅   | Health summary for UI badge |
+| POST   | `/system/diagnostics/run`        | `RunDiagnostics`       | ✅   | Run full diagnostic suite   |
+| GET    | `/system/diagnostics/report/:id` | `GetDiagnosticsReport` | ✅   | Retrieve completed report   |
+| GET    | `/system/diagnostics/errors`     | `GetRecentErrors`      | ✅   | Recent error log entries    |
 
 ### Import (`imports/import.go`)
 
-| Method | Route                          | Handler              | Auth | Description                              |
-| ------ | ------------------------------ | -------------------- | ---- | ---------------------------------------- |
-| GET    | `/import/sources`              | `GetImportSources`   | ✅   | List auto-detected BirdNET-Pi databases and setup guidance |
-| POST   | `/import/validate`             | `ValidateImportSource` | ✅ | Probe a manually entered BirdNET-Pi database path |
-| POST   | `/import/elevate`              | `ElevateImport`      | ✅   | Stage an unreadable source via sudo elevation and launch import |
+| Method | Route                          | Handler                | Auth | Description                                                             |
+| ------ | ------------------------------ | ---------------------- | ---- | ----------------------------------------------------------------------- |
+| GET    | `/import/sources`              | `GetImportSources`     | ✅   | List auto-detected BirdNET-Pi databases and setup guidance              |
+| POST   | `/import/validate`             | `ValidateImportSource` | ✅   | Probe a manually entered BirdNET-Pi database path                       |
+| POST   | `/import/elevate`              | `ElevateImport`        | ✅   | Stage an unreadable source via sudo elevation and launch import         |
 | POST   | `/import/birdnet-pi`           | `StartBirdNETPiImport` | ✅   | Start a BirdNET-Pi import (`db-only`, or `db-audio` to also copy clips) |
-| GET    | `/import/jobs/:jobId/progress` | `StreamImportProgress` | ✅   | SSE progress stream for import job      |
-| POST   | `/import/jobs/:jobId/cancel`   | `CancelImport`         | ✅   | Cancel a running import                 |
-| GET    | `/import/status`               | `GetImportStatus`      | ✅   | Get current import status (polling)     |
+| GET    | `/import/jobs/:jobId/progress` | `StreamImportProgress` | ✅   | SSE progress stream for import job                                      |
+| POST   | `/import/jobs/:jobId/cancel`   | `CancelImport`         | ✅   | Cancel a running import                                                 |
+| GET    | `/import/status`               | `GetImportStatus`      | ✅   | Get current import status (polling)                                     |
 
 **GET /api/v2/system/diagnostics/status** - Returns the overall health status and per-category breakdown from the most recent diagnostic run. Returns `{"status": "unknown"}` if no diagnostics have been run yet.
 
-**POST /api/v2/system/diagnostics/run** - Executes all registered health checks in parallel (31 checks across 8 categories: system, audio, analysis, streams, database, network, config, logs). Returns a full `DiagnosticsReport` with per-check results, timing, and summary. Optional query params: `window` (analysis time window) and `refresh_integrity=true`, which clears the cached database integrity result so this run re-runs the SQLite `PRAGMA quick_check` instead of reusing a result cached up to 24h (a present but unparseable value returns 400). Leave `refresh_integrity` unset for the passive status page: `quick_check` runs on the single pinned SQLite connection and can stall writes on a large database. Forced refreshes are coalesced with a short cooldown, so repeated requests cannot re-trigger back-to-back scans.
+**POST /api/v2/system/diagnostics/run** - Executes all registered health checks in parallel (across 8 categories: system, audio, analysis, streams, database, network, config, logs). Returns a full `DiagnosticsReport` with per-check results, timing, and summary. Optional query params: `window` (analysis time window) and `refresh_integrity=true`, which clears the cached database integrity result so this run re-runs the SQLite `PRAGMA quick_check` instead of reusing a result cached up to 24h (a present but unparseable value returns 400). Leave `refresh_integrity` unset for the passive status page: `quick_check` runs on the single pinned SQLite connection and can stall writes on a large database. Forced refreshes are coalesced with a short cooldown, so repeated requests cannot re-trigger back-to-back scans.
 
 **GET /api/v2/system/diagnostics/report/:id** - Retrieves a previously completed diagnostics report by its UUID. Up to 10 reports are cached in memory.
 
@@ -639,7 +649,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 ## Adding New Endpoints
 
-See `internal/api/v2/CLAUDE.md` for the full architecture and the "add a new
+See `internal/api/v2/AGENTS.md` for the full architecture and the "add a new
 domain" recipe. To add an endpoint to an EXISTING domain:
 
 ### 1. Create the Handler method (on the domain's `*Handler`)
@@ -666,7 +676,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 
 No facade change is needed for a new endpoint in an existing domain. A brand-new
 domain additionally needs a `Controller` field, a `New(...)` call, and one ordered
-`RegisterRoutes` entry in `api.go:initRoutes()` (see CLAUDE.md Recipe B).
+`RegisterRoutes` entry in `api.go:initRoutes()` (see AGENTS.md Recipe B).
 
 ### 3. Update Documentation
 
@@ -761,6 +771,7 @@ The `/notifications/stream` endpoint provides both notifications and toast messa
 - `toast` - Temporary UI messages (success, info, warning, error - authenticated only)
 - `connected` - Connection established
 - `heartbeat` - Keep-alive signal
+- `notification_deleted` - A notification was deleted on the server (a cleared or replaced persistent notice, or a delete from another tab); payload `{"id": "..."}`. Guests receive it only for detection notifications.
 
 **Authentication:** Public read-only SSE, rate-limited (10 connections per minute per IP, burst of 15). Guests receive bird-detection events only; operational/admin notifications and toast messages are suppressed for unauthenticated subscribers so that integration errors and system warnings are never exposed anonymously. Authenticated subscribers receive the full stream.
 

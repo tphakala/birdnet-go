@@ -1080,7 +1080,7 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 	// Skip journal collection in container runtimes (Docker, Podman, LXC,
 	// systemd-nspawn) where journald is typically unavailable. Uses
 	// sysinfo.IsContainer() so the check matches the same gate that
-	// addJournaldLogs uses on the archive path — keeping both journald
+	// addJournaldLogs uses on the archive path, keeping both journald
 	// collection paths consistent and removing the now-redundant local
 	// Docker-only helper.
 	if sysinfo.IsContainer() {
@@ -1203,8 +1203,7 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 		// This is not a fatal error, just means no journald logs available
 		getLogger().Debug("journalctl unavailable or service not found", logger.Error(err))
 		diagnostics.Details["error_type"] = "command_failed"
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			diagnostics.Details["exit_code"] = exitErr.ExitCode()
 			diagnostics.Details["stderr"] = string(exitErr.Stderr)
 		}

@@ -51,7 +51,7 @@
     </button>
   {/if}
 
-  <!-- Primary Save button - matches old Alpine.js style -->
+  <!-- Primary Save button -->
   <button
     type="button"
     class="btn btn-primary"

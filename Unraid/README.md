@@ -19,7 +19,7 @@ BirdNET-Go is a real-time bird species identification system that uses deep lear
 - 🎧 **Multiple Audio Sources**: Support for USB microphones, sound cards, and RTSP streams
 - 🌍 **Location-based Filtering**: Species filtering based on your geographic location
 - 🔊 **Audio Clip Export**: Save interesting detections in multiple formats (WAV, FLAC, AAC, MP3, Opus)
-- 📱 **Mobile-Friendly**: Responsive design works great on phones and tablets
+- 📱 **Tablet and Desktop UI**: Responsive design for tablet and desktop screens, with touch support on tablets (phones are not a supported layout yet)
 - 🔌 **Integration Ready**: MQTT support for home automation and IoT projects
 
 ## Installation via Unraid Community Applications
@@ -194,15 +194,15 @@ Configure security in the web interface under **Settings** → **Security**.
 
 ### Home Assistant
 
-BirdNET-Go supports MQTT for Home Assistant integration:
+BirdNET-Go supports MQTT for Home Assistant integration. Enabling Home Assistant MQTT discovery in BirdNET-Go (Settings > Integrations > MQTT) registers the detection sensors automatically, so the manual sensor below is only needed if you prefer to configure it by hand. The example uses the default base topic `birdnet` (change it to match `realtime.mqtt.topic` if you set a custom topic) and reads the detection's common name from `value_json.CommonName`. Modern Home Assistant configures MQTT sensors under the `mqtt:` key:
 
 ```yaml
 # configuration.yaml
-sensor:
-  - platform: mqtt
-    name: "Latest Bird Detection"
-    state_topic: "birdnet/detection"
-    value_template: "{{ value_json.species }}"
+mqtt:
+  sensor:
+    - name: "Latest Bird Detection"
+      state_topic: "birdnet"
+      value_template: "{{ value_json.CommonName }}"
 ```
 
 ### Node-RED

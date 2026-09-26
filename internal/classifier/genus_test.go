@@ -100,8 +100,7 @@ func TestGetGenusByScientificName(t *testing.T) {
 			if tt.wantError {
 				require.Error(t, err, "Expected error but got none")
 				// Verify error is properly categorized
-				var enhancedErr *errors.EnhancedError
-				if errors.As(err, &enhancedErr) {
+				if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
 					assert.Equal(t, errors.CategoryNotFound, enhancedErr.Category)
 				}
 				return

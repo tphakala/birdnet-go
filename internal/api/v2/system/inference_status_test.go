@@ -47,7 +47,7 @@ func TestBuildSourceAttachments(t *testing.T) {
 		{Name: "Cam1", Type: "rtsp", Models: []string{"unknown_model"}}, // unresolved: falls back to primary
 	}
 
-	got := buildSourceAttachments(settings, models, primaryID, nil)
+	got := buildSourceAttachments(settings, models, []string{primaryID}, nil)
 
 	// Perch_V2 should have exactly Front Yard, attached without fallback.
 	perch := got[classifier.RegistryIDPerchV2]
@@ -84,7 +84,7 @@ func TestBuildSourceAttachments_ResolvesButNotLoaded(t *testing.T) {
 		{Name: "Studio", Models: []string{conf.ModelIDPerchV2}},
 	}
 
-	got := buildSourceAttachments(settings, models, primaryID, nil)
+	got := buildSourceAttachments(settings, models, []string{primaryID}, nil)
 
 	// Perch_V2 should have NO attachments (not loaded).
 	perch := got[classifier.RegistryIDPerchV2]
@@ -95,6 +95,58 @@ func TestBuildSourceAttachments_ResolvesButNotLoaded(t *testing.T) {
 	require.Len(t, prim, 1, "primary attachments must have 1 entry (Studio)")
 	assert.Equal(t, "Studio", prim[0].Name, "primary source name")
 	assert.True(t, prim[0].Fallback, "primary source must be a fallback")
+}
+
+// TestBuildSourceAttachments_FallbackFansOutToEveryDefaultTarget verifies the Phase 4
+// fallback: a source with no resolvable target attaches a fallback row to EVERY
+// default target (DefaultTargets can return more than one model), each carrying its
+// own liveness verdict, and at N = 0 (no defaults) it attaches no rows at all.
+func TestBuildSourceAttachments_FallbackFansOutToEveryDefaultTarget(t *testing.T) {
+	t.Parallel()
+
+	const v24 = classifier.DefaultModelVersion
+	v3 := classifier.RegistryIDBirdNETV3
+
+	models := []classifier.ModelInfo{{ID: v24}, {ID: v3}}
+	defaultIDs := []string{v24, v3}
+
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "Garage", Models: nil}, // no models: falls back to every default
+	}
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{Name: "Cam1", Type: "rtsp", Models: []string{"unknown_model"}}, // unresolved: same
+	}
+
+	t.Run("empty list fans out to every default; unresolvable list stays on v2.4", func(t *testing.T) {
+		t.Parallel()
+		// Garage's audio reaches v2.4 but not v3.0.
+		running := map[string]map[string]bool{"Garage": {v24: true}}
+		got := buildSourceAttachments(settings, models, defaultIDs, running)
+
+		// v2.4 (the first default) gets Garage (empty list fans out) AND Cam1 (the
+		// unresolvable stream falls back to the first default only).
+		require.Len(t, got[v24], 2, "v2.4 gets Garage and the unresolvable Cam1")
+		// v3.0 gets only Garage; the unresolvable Cam1 does not fan out to it (I1).
+		require.Len(t, got[v3], 1, "v3.0 gets only the empty-list Garage")
+		for id, rows := range got {
+			for _, r := range rows {
+				assert.True(t, r.Fallback, "attachment %q under %q must be a fallback", r.Name, id)
+			}
+		}
+		// Sources are appended before streams, so Garage is index 0 under v2.4.
+		assert.Equal(t, "Garage", got[v24][0].Name)
+		assert.False(t, got[v24][0].NotRunning, "Garage runs under v2.4")
+		assert.Equal(t, "Cam1", got[v24][1].Name, "the unresolvable stream falls back to v2.4")
+		assert.Equal(t, "Garage", got[v3][0].Name)
+		assert.True(t, got[v3][0].NotRunning, "Garage does not run under v3.0")
+	})
+
+	t.Run("no defaults at N=0 yields no fallback rows", func(t *testing.T) {
+		t.Parallel()
+		got := buildSourceAttachments(settings, models, nil, nil)
+		assert.Empty(t, got, "no resolvable target and no defaults attaches nothing")
+	})
 }
 
 // TestBuildSourceAttachments_MultiModelSourceAttachesAll verifies that a single
@@ -120,7 +172,7 @@ func TestBuildSourceAttachments_MultiModelSourceAttachesAll(t *testing.T) {
 		{Name: "Äänikortti", Models: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2, conf.ModelIDBat}},
 	}
 
-	got := buildSourceAttachments(settings, models, primaryID, nil)
+	got := buildSourceAttachments(settings, models, []string{primaryID}, nil)
 
 	// Every assigned, loaded model must show the source, none as a fallback.
 	for _, id := range []string{primaryID, classifier.RegistryIDPerchV2, classifier.RegistryIDBat} {
@@ -229,6 +281,37 @@ func TestGetInferenceStatus_HTTP200(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), "response body must unmarshal to InferenceStatusResponse")
 	assert.Equal(t, hwprofile.TFLiteLinked(), resp.Backends.TFLite.Available, "TFLite backend availability must match the compiled-in state (false under the notflite build tag)")
 	assert.NotZero(t, resp.SnapshotAtUnix, "SnapshotAtUnix must be a non-zero Unix timestamp")
+}
+
+// TestGetInferenceStatus_NoModelFieldsContract pins the Phase 4 no-model fields the
+// dashboard gates on: defaultTargets is always an array (never null), and
+// acousticModelsState is always present. This is the producer-side check that guards the
+// full-stack field-consumption contract (model de-privilege epic, Phase 4): with no
+// orchestrator wired (bare Core) the targets are empty and the state is "".
+func TestGetInferenceStatus_NoModelFieldsContract(t *testing.T) {
+	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
+	e := echo.New()
+	controller := &Handler{Core: apitest.NewCore(t, apitest.WithEcho(e))}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetInferenceStatus(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Assert against the raw JSON so a null-vs-[] regression (which a typed decode hides)
+	// is caught: the frontend indexes defaultTargets.
+	var raw map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+
+	dt, ok := raw["defaultTargets"]
+	require.True(t, ok, "defaultTargets must always be present")
+	assert.Equal(t, "[]", string(dt), "defaultTargets must marshal as an empty array (never null) with no orchestrator")
+
+	st, ok := raw["acousticModelsState"]
+	require.True(t, ok, "acousticModelsState must always be present")
+	assert.Equal(t, `""`, string(st), "acousticModelsState is empty with no orchestrator")
 }
 
 // eventInferenceTopologyChangedName is asserted against the package constant so
@@ -679,7 +762,7 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 			"Front Yard": {primaryID: true},
 		}
 
-		got := buildSourceAttachments(settings, models, primaryID, running)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 		perch := got[classifier.RegistryIDPerchV2]
 		require.Len(t, perch, 1)
@@ -700,7 +783,7 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 			"Front Yard": {primaryID: true, classifier.RegistryIDPerchV2: true},
 		}
 
-		got := buildSourceAttachments(settings, models, primaryID, running)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 		perch := got[classifier.RegistryIDPerchV2]
 		require.Len(t, perch, 1)
@@ -717,7 +800,7 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 		// must not invent a fallback row the runtime never creates.
 		running := map[string]map[string]bool{"Front Yard": {}}
 
-		got := buildSourceAttachments(settings, models, primaryID, running)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 		prim := got[primaryID]
 		require.Len(t, prim, 1, "only the genuine BirdNET assignment, no invented fallback row")
@@ -733,7 +816,7 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 	t.Run("nil live state keeps the config-derived view unmarked", func(t *testing.T) {
 		t.Parallel()
 
-		got := buildSourceAttachments(settings, models, primaryID, nil)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, nil)
 
 		perch := got[classifier.RegistryIDPerchV2]
 		require.Len(t, perch, 1)
@@ -750,7 +833,7 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 		// though live evidence exists for a different source.
 		running := map[string]map[string]bool{"A Different Source": {primaryID: true}}
 
-		got := buildSourceAttachments(settings, models, primaryID, running)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 		perch := got[classifier.RegistryIDPerchV2]
 		require.Len(t, perch, 1)
@@ -783,7 +866,7 @@ func TestBuildSourceAttachments_RTSPStream(t *testing.T) {
 	// The router feeds only BirdNET for this stream; Perch is assigned but idle.
 	running := map[string]map[string]bool{"Cam1": {primaryID: true}}
 
-	got := buildSourceAttachments(settings, models, primaryID, running)
+	got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 	perch := got[classifier.RegistryIDPerchV2]
 	require.Len(t, perch, 1)
@@ -825,7 +908,7 @@ func TestBuildSourceAttachments_FallbackRowCarriesLiveness(t *testing.T) {
 			"Front Yard": {"SomeOtherModel": true},
 		}
 
-		got := buildSourceAttachments(settings, models, primaryID, running)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 		prim := got[primaryID]
 		require.Len(t, prim, 1)
@@ -841,7 +924,7 @@ func TestBuildSourceAttachments_FallbackRowCarriesLiveness(t *testing.T) {
 			"Front Yard": {primaryID: true},
 		}
 
-		got := buildSourceAttachments(settings, models, primaryID, running)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 		prim := got[primaryID]
 		require.Len(t, prim, 1)
@@ -855,7 +938,7 @@ func TestBuildSourceAttachments_FallbackRowCarriesLiveness(t *testing.T) {
 
 		// A nil router map means the pipeline has not reported yet. Absence of
 		// evidence must not be rendered as a failure.
-		got := buildSourceAttachments(settings, models, primaryID, nil)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, nil)
 
 		prim := got[primaryID]
 		require.Len(t, prim, 1)
@@ -863,4 +946,80 @@ func TestBuildSourceAttachments_FallbackRowCarriesLiveness(t *testing.T) {
 		assert.False(t, prim[0].NotRunning,
 			"with no live evidence the row must not assert that the model is failing")
 	})
+}
+
+// TestBuildModelHealth pins the per-model health mapping: the state derives from
+// the classifier verdict (failing) and the window count (idle), and zero
+// timestamps are omitted.
+func TestBuildModelHealth(t *testing.T) {
+	t.Parallel()
+	at := time.Unix(1_790_000_000, 0)
+	tests := []struct {
+		name string
+		in   classifier.ModelInferenceHealth
+		want ModelHealthInfo
+	}{
+		{
+			name: "idle before the first window",
+			in:   classifier.ModelInferenceHealth{},
+			want: ModelHealthInfo{State: modelHealthIdle, FailureThreshold: classifier.InferenceFailureNoticeThreshold},
+		},
+		{
+			name: "ok with a short failure run",
+			in: classifier.ModelInferenceHealth{
+				ConsecutiveFailures: 2, InferenceCount: 50, LastInferenceAt: at, LastSuccessAt: at.Add(-time.Minute),
+				ErrorClass: classifier.InferenceErrorClassOther,
+			},
+			want: ModelHealthInfo{
+				State: modelHealthOK, ConsecutiveFailures: 2, FailureThreshold: classifier.InferenceFailureNoticeThreshold,
+				InferenceCount: 50, LastInferenceAtUnix: at.Unix(), LastSuccessAtUnix: at.Add(-time.Minute).Unix(),
+				ErrorClass: classifier.InferenceErrorClassOther,
+			},
+		},
+		{
+			name: "failing, never succeeded",
+			in: classifier.ModelInferenceHealth{
+				ConsecutiveFailures: 20, InferenceCount: 20, LastInferenceAt: at, Failing: true,
+				ErrorClass: classifier.InferenceErrorClassNonFinite,
+			},
+			want: ModelHealthInfo{
+				State: modelHealthFailing, ConsecutiveFailures: 20, FailureThreshold: classifier.InferenceFailureNoticeThreshold,
+				InferenceCount: 20, LastInferenceAtUnix: at.Unix(), ErrorClass: classifier.InferenceErrorClassNonFinite,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := buildModelHealth(&tt.in)
+			require.NotNil(t, got)
+			assert.Equal(t, tt.want, *got)
+		})
+	}
+}
+
+// TestModelHealthInfo_JSONFieldNames pins the wire names the frontend reads
+// (inference.types.ts InferenceModelHealth and the acoustic model store).
+func TestModelHealthInfo_JSONFieldNames(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(ModelHealthInfo{
+		State: modelHealthFailing, ConsecutiveFailures: 12, FailureThreshold: 10, InferenceCount: 40,
+		LastInferenceAtUnix: 2, LastSuccessAtUnix: 1, ErrorClass: classifier.InferenceErrorClassNonFinite,
+	})
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, map[string]any{
+		"state":               "failing",
+		"consecutiveFailures": float64(12),
+		"failureThreshold":    float64(10),
+		"inferenceCount":      float64(40),
+		"lastInferenceAtUnix": float64(2),
+		"lastSuccessAtUnix":   float64(1),
+		"errorClass":          "non_finite_output",
+	}, got)
+
+	raw, err = json.Marshal(InferenceModelStatus{ID: "m", Health: &ModelHealthInfo{State: modelHealthIdle}})
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"health":{"state":"idle"`)
 }

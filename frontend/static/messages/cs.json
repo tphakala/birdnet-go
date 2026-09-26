@@ -109,6 +109,14 @@
       "closeModal": "Zavřít modální okno",
       "dismissAlert": "Zavřít upozornění",
       "closeNotification": "Zavřít oznámení",
+      "toastRegion": {
+        "topLeft": "Oznámení, vlevo nahoře",
+        "topCenter": "Oznámení, uprostřed nahoře",
+        "topRight": "Oznámení, vpravo nahoře",
+        "bottomLeft": "Oznámení, vlevo dole",
+        "bottomCenter": "Oznámení, uprostřed dole",
+        "bottomRight": "Oznámení, vpravo dole"
+      },
       "toggleDropdown": "Přepnout rozbalovací nabídku",
       "sortAscending": "Seřadit vzestupně",
       "selectLanguage": "Vybrat jazyk",
@@ -130,7 +138,6 @@
       "selectToday": "Vybrat dnešek",
       "dateSelected": "Vybrané datum: {date}",
       "calendarNavigation": "Pro pohyb v kalendáři použijte šipky, Enter pro výběr, Escape pro zavření",
-      "downloadCsv": "Stáhnout seznam druhů jako CSV",
       "visitEbirdLink": "Otevřít eBird.org v nové kartě",
       "learnEbirdTaxonomyLink": "Otevřít taxonomii eBird v nové kartě",
       "resizeHandle": "Tažením změníte velikost",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Analýza zvuku přetížena",
-        "overloadMessage": "Váš systém zahazuje {dropRate} % zvukových vzorků ze zdroje ''{sourceName}'', protože nestíhá analýzu. Snižte hodnotu překryvu BirdNET v nastavení detekce nebo zvažte výkonnější procesor."
+        "overloadMessage": "Váš systém zahazuje {dropRate} % zvukových vzorků ze zdroje '{sourceName}', protože nestíhá analýzu. Snižte hodnotu překryvu BirdNET v nastavení detekce nebo zvažte výkonnější procesor."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime není k dispozici",
@@ -474,6 +481,16 @@
         "notRegisteredTitle": "Žádný model neanalyzuje {sourceName}",
         "notRegisteredMessage": "K {models} na zdroji zvuku \"{sourceName}\" se nedostává žádný zvuk, takže se nevytvářejí žádné detekce. Otevřete Systém > Modely AI, zkontrolujte jeho stav pro jednotlivé zdroje a ověřte, že je zdroj zvuku připojen a odesílá zvuk."
       },
+      "acousticModels": {
+        "noneTitle": "Není povolen žádný akustický model",
+        "noneMessage": "Není načten žádný akustický model, takže zvuk je zachycován, ale není analyzován. Povolte model v Nastavení > Analýza, nebo nějaký nainstalujte z galerie modelů.",
+        "loadFailedTitle": "Akustický model se nepodařilo načíst",
+        "loadFailedMessage": "Povolený akustický model se nepodařilo načíst, takže zvuk je zachycován, ale není analyzován. Zkontrolujte model na stránce Systém > Modely AI."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# model má lepší sestavení pro tento systém} few {# modely mají lepší sestavení pro tento systém} many {# modelů má lepší sestavení pro tento systém} other {# modelů má lepší sestavení pro tento systém}}",
+        "message": "Sestavení lépe odpovídající hardwaru nebo poloze tohoto systému je k dispozici pro: {models}. Otevřete Nastavení > Analýza > Modely a zvolte Optimalizovat."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuální hodnota: {value} % (práh: {threshold} %)",
@@ -493,6 +510,11 @@
           "diskFull": "Disk je plný - uvolněte místo",
           "permissionDenied": "Přístup odepřen - zkontrolujte oprávnění souboru nebo služby"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} selhává při každé analýze",
+        "message": "{modelName} je načten, ale posledních {failures} analýz za sebou selhalo na {runtime}: inference vrátila chybu. Zvuk je zachycován, ale tento model nic nedetekuje. Zkontrolujte model na stránce Systém > Modely AI.",
+        "nonFiniteMessage": "{modelName} je načten, ale posledních {failures} analýz za sebou selhalo na {runtime}: model vrátil neplatné skóre (NaN nebo nekonečné). Zvuk je zachycován, ale tento model nic nedetekuje. Zkontrolujte model na stránce Systém > Modely AI."
       }
     },
     "loading": "Načítání oznámení…"
@@ -752,6 +774,16 @@
       "recentDetectionsFetch": "Nepodařilo se získat nedávné detekce: {status}",
       "recentDetectionsLoad": "Nepodařilo se načíst nedávné detekce",
       "configFetch": "Nepodařilo se získat konfiguraci dashboardu: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Není povolen žádný akustický model",
+      "noneMessage": "Zvuk se zaznamenává, ale není analyzován. Povolte model v galerii modelů a začněte detekovat druhy.",
+      "noneAction": "Otevřít galerii modelů",
+      "loadFailedTitle": "Akustický model se nepodařilo načíst",
+      "loadFailedMessage": "Povolený model se nepodařilo načíst, takže se neanalyzuje žádný zvuk. Stránka Modely AI ukazuje, který model selhal a proč.",
+      "loadFailedAction": "Zobrazit stav Modely AI",
+      "failingTitle": "{count, plural, one {Model selhává při každé analýze} few {# modely selhávají při každé analýze} many {# modelů selhává při každé analýze} other {# modelů selhává při každé analýze}}",
+      "failingMessage": "{count, plural, one {{models} je načten, ale každá analýza selhává, takže nic nedetekuje.} few {{models} jsou načteny, ale každá analýza selhává, takže nic nedetekují.} many {{models} jsou načteny, ale každá analýza selhává, takže nic nedetekují.} other {{models} jsou načteny, ale každá analýza selhává, takže nic nedetekují.}} Stránka Modely AI ukazuje backend a chybu."
     },
     "banner": {
       "title": "Název",
@@ -1834,7 +1866,14 @@
       "fp16Help": "16bitová čísla s plovoucí desetinnou čárkou. Hardware s podporou může být rychlejší a spotřebuje méně paměti.",
       "invocationsHelp": "Celkový počet analyzovaných segmentů od spuštění.",
       "noModelsHint": "Zatím žádný zdroj zvuku?",
-      "noModelsHintLink": "Nakonfigurovat zdroje zvuku"
+      "noModelsHintLink": "Nakonfigurovat zdroje zvuku",
+      "modelFailing": "každá analýza selhává",
+      "lastSuccess": "Poslední úspěch",
+      "lastSuccessHelp": "Kdy tento model naposledy analyzoval zvuk bez chyby.",
+      "lastSuccessNever": "Od načtení modelu žádný",
+      "modelFailingHelp": "{reason} Zkuste jiné sestavení tohoto modelu v Nastavení > Analýza > Modely nebo zkontrolujte backend a přesnost uvedené výše.",
+      "modelFailingReasonNonFinite": "Všechny nedávné analýzy selhaly, protože model vrátil neplatné skóre (NaN nebo nekonečné), takže nic nedetekuje.",
+      "modelFailingReasonError": "Všechny nedávné analýzy selhaly, protože inference vrátila chybu, takže model nic nedetekuje."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2354,7 +2393,7 @@
           "title": "Filtr falešně pozitivních detekcí",
           "description": "Sníží počet falešných detekcí vyžadováním více potvrzení napříč překrývajícími se zvukovými segmenty",
           "level": {
-            "label": "Úroveň filtru"
+            "label": "Síla filtru falešně pozitivních detekcí"
           },
           "detectionCount": "Vyžadováno {count} potvrzení. {description}",
           "levels": {
@@ -3261,7 +3300,7 @@
             "label": "Název zařízení",
             "helpText": "Základní název zařízení, jak se zobrazují v Home Assistant. Každý zdroj zvuku bude mít své vlastní zařízení propojené s tímto hlavním zařízením BirdNET-Go."
           },
-          "sensorsNote": "<strong>Vytvořené senzory:</strong> Pro každý zdroj zvuku Home Assistant obdrží: Poslední druh, Jistotu, Vědecký název a Úroveň zvuku (pokud je povolena). Můstkové zařízení obsahuje stav dostupnosti online/offline.",
+          "sensorsNote": "<strong>Vytvořené senzory:</strong> Pro každý zdroj zvuku Home Assistant obdrží: Poslední druh, Jistotu, Vědecký název a Úroveň zvuku (pokud je povolena). Můstkové zařízení obsahuje stav dostupnosti online/offline. Detekční senzory každého zdroje čtou vlastní MQTT téma daného zdroje, &lt;base_topic&gt;/sources/&lt;source_id&gt;, a jeho senzor Úroveň zvuku čte podtéma &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, takže detekce z jednoho zdroje nikdy neresetuje senzory jiného zdroje.",
           "discovery": {
             "button": "Odeslat zjišťování",
             "success": "Zprávy o zjišťování byly odeslány do Home Assistant",
@@ -3307,7 +3346,8 @@
             "none": "Žádný",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3328,6 +3368,16 @@
             "helpText": "Vyberte jednotky pro teplotu a rychlost větru (m = metrické, e = imperiální, h = UK hybridní)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "API klíč Pirate Weather",
+            "helpText": "Zadejte svůj API klíč Pirate Weather. Vyžaduje se pro data o počasí."
+          },
+          "endpoint": {
+            "label": "API endpoint",
+            "helpText": "V případě potřeby přepište výchozí endpoint API Pirate Weather. Pokud zůstane prázdný, použije se ve výchozím nastavení https://api.pirateweather.net/forecast."
+          }
+        },
         "notes": {
           "none": "Nebudou získávána žádná data o počasí.",
           "yrno": {
@@ -3335,7 +3385,8 @@
             "freeService": "Yr je bezplatná služba dat o počasí. Pro více informací navštivte <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Použití OpenWeather vyžaduje API klíč, zaregistrujte se pro bezplatný API klíč na <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Vyžaduje API klíč Weather Underground a platné ID stanice PWS. Podrobnosti najdete na <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>."
+          "wunderground": "Vyžaduje API klíč Weather Underground a platné ID stanice PWS. Podrobnosti najdete na <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>.",
+          "pirateweather": "Použití Pirate Weather vyžaduje API klíč, zaregistrujte se na <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API klíč",
@@ -3708,6 +3759,7 @@
         "dataOutputTitle": "Výstup dat o úrovni zvuku",
         "dataOutputDescription": "Pokud je povoleno, měření úrovně zvuku jsou zveřejňována prostřednictvím:",
         "mqttTopic": "MQTT téma:",
+        "mqttSourceTopic": "MQTT téma pro jednotlivé zdroje (s Home Assistant discovery):",
         "sseEndpoint": "Koncový bod SSE:",
         "prometheusMetrics": "Metriky Prometheus:"
       },
@@ -3769,6 +3821,8 @@
         "pathHelp": "Adresář, kam se budou ukládat zvukové klipy. Relativní cesty jsou vůči adresáři aplikace. Příklad: 'clips/' nebo '/var/audio/birds/'",
         "typeLabel": "Formát zvuku",
         "typeHelp": "Formát zvuku pro uložené klipy. WAV a FLAC jsou bezeztrátové (nejlepší kvalita, větší soubory). MP3, AAC a Opus jsou ztrátové (menší soubory, mírná ztráta kvality).",
+        "ultrasonicTypeLabel": "Ultrazvukový formát",
+        "ultrasonicTypeHelp": "Bezeztrátový formát (WAV nebo FLAC) používaný pouze pro záznamy netopýrů a ultrazvuku nad 48 kHz. Ty se ukládají v plné zdrojové vzorkovací frekvenci namísto výše uvedeného formátu, takže nedochází ke ztrátě ultrazvukových detailů.",
         "bitrateLabel": "Datový tok",
         "bitrateHelp": "Datový tok komprese zvuku pro ztrátové formáty. Rozsah: {min}-{max} kbps. Vyšší hodnoty poskytují lepší kvalitu, ale větší soubory.",
         "losslessBitrateValue": "N/A - Bez ztráty kvality",
@@ -3837,7 +3891,17 @@
       },
       "models": {
         "recommendBoth": "Pro nejlepší pokrytí detekce druhů se doporučuje spustit oba modely BirdNET a Perch společně.",
-        "perchOnlyWarning": "Samotný Perch produkuje méně detekcí. Pro smysluplné výsledky snižte práh spolehlivosti na 0.50, nebo pro lepší pokrytí aktivujte i BirdNET."
+        "perchOnlyWarning": "Samotný Perch produkuje méně detekcí. Pro smysluplné výsledky snižte práh spolehlivosti na 0.50, nebo pro lepší pokrytí aktivujte i BirdNET.",
+        "loading": "Načítání detekčních modelů...",
+        "noneEnabledTitle": "Není povolen žádný detekční model.",
+        "noneEnabledHelp": "Tento zdroj můžete stále uložit. Jeho zvuk bude analyzován výchozími modely, jakmile bude některý povolen.",
+        "noneEnabledLink": "Otevřít galerii modelů",
+        "noneAvailable": "Na tomto serveru nejsou povoleny žádné detekční modely.",
+        "loadFailedWarning": "Detekční model se nepodařilo načíst, takže se tento zdroj nebude analyzovat, dokud se neobnoví.",
+        "loadFailedLink": "Zobrazit stav Modely AI",
+        "defaultBadge": "{models} (výchozí)",
+        "defaultPendingBadge": "Výchozí modely",
+        "noneBadge": "Není načten žádný model"
       }
     },
     "security": {
@@ -5117,6 +5181,7 @@
       "birdweatherClientFailed": "BirdWeather klienta se nepodařilo vytvořit",
       "noWeatherProvider": "Není vybrán žádný poskytovatel počasí",
       "openWeatherKeyRequired": "API klíč OpenWeather je povinný",
+      "pirateWeatherKeyRequired": "Je vyžadován API klíč Pirate Weather",
       "processorUnavailable": "Procesor není k dispozici",
       "discoveryFailed": "Objevování zařízení Home Assistant se nepodařilo spustit"
     },

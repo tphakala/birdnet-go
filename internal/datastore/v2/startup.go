@@ -887,9 +887,9 @@ var sqliteSidecarSuffixes = []string{"-wal", "-shm"}
 // The move is all-or-nothing: the main file is renamed first, then each present sidecar;
 // any failure (including a non-not-exist stat error on a sidecar, which may hide live WAL
 // data) rolls back every completed rename and returns an error, so the caller never sees a
-// half-moved database reported as success (Forgejo #1580). It deliberately does NOT reject an
-// existing destination, so it can also serve as the rollback restore path (which must be able
-// to overwrite); a forward caller is responsible for ensuring its destination is free.
+// half-moved database reported as success. It deliberately does NOT reject an existing
+// destination, so it can also serve as the rollback restore path (which must be able to
+// overwrite); a forward caller is responsible for ensuring its destination is free.
 func moveSQLiteDBFiles(from, to string, log logger.Logger) error {
 	if err := os.Rename(from, to); err != nil {
 		return fmt.Errorf("failed to rename SQLite database %q to %q: %w", from, to, err)
@@ -1355,9 +1355,9 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 	// Refuse to overwrite an existing backup destination (main file or a -wal/-shm sidecar)
 	// before doing any work. GenerateBackupPath is timestamped, so a collision means a
 	// same-second re-run; the legacy->backup rename would otherwise clobber a prior backup that
-	// the rollback could not restore, so fail closed (Forgejo #1580). moveSQLiteDBFiles itself
-	// stays overwrite-capable so it can serve as the rollback restore path.
-	// Check the primary file ("") plus each sidecar.
+	// the rollback could not restore, so fail closed. moveSQLiteDBFiles itself stays
+	// overwrite-capable so it can serve as the rollback restore path. Check the primary file
+	// ("") plus each sidecar.
 	for _, suffix := range append([]string{""}, sqliteSidecarSuffixes...) {
 		if _, statErr := os.Lstat(backupPath + suffix); statErr == nil {
 			return false, fmt.Errorf("consolidation aborted: backup destination %q already exists", backupPath+suffix)

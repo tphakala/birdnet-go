@@ -3,11 +3,49 @@ package classifier
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestCatalog_EntriesSharingRegistryIDShareCategoryAndRoles pins the assumption the
+// registry-keyed uninstall re-point depends on: any two catalog entries that write the
+// same settings family (same RegistryID) must share a Category and carry the same set
+// of file roles, so re-pointing config from one to the other produces a complete,
+// compatible set. Today the only multi-entry family is bat.
+func TestCatalog_EntriesSharingRegistryIDShareCategoryAndRoles(t *testing.T) {
+	t.Parallel()
+
+	type registryGroup struct {
+		category string
+		roles    []string // sorted, deduplicated
+	}
+	seen := map[string]registryGroup{}
+
+	for _, entry := range ActiveCatalog() {
+		if entry.RegistryID == "" {
+			continue // loader not implemented; no settings family to re-point
+		}
+		roleSet := map[string]struct{}{}
+		for _, f := range entry.Files {
+			roleSet[f.Role] = struct{}{}
+		}
+		roles := slices.Sorted(maps.Keys(roleSet))
+
+		first, ok := seen[entry.RegistryID]
+		if !ok {
+			seen[entry.RegistryID] = registryGroup{category: entry.Category, roles: roles}
+			continue
+		}
+		assert.Equalf(t, first.category, entry.Category,
+			"entries sharing RegistryID %q must share a Category; the re-point keys on RegistryID and asserts Category as belt-and-braces", entry.RegistryID)
+		assert.Equalf(t, first.roles, roles,
+			"entries sharing RegistryID %q must carry the same file roles so a re-point writes a complete, compatible set", entry.RegistryID)
+	}
+}
 
 func TestVariantFilesByID(t *testing.T) {
 	t.Parallel()
@@ -550,7 +588,7 @@ func TestEmbeddedCatalog_BirdNETv24Variants(t *testing.T) {
 	assert.Equal(t, CategoryBird, entry.Category, "birdnet-v2.4 must be a bird model")
 	assert.False(t, entry.Hidden, "birdnet-v2.4 must be visible (wired into its variant set)")
 	assert.False(t, entry.RequiresONNX, "birdnet-v2.4 ORT need is per-variant, not entry-level")
-	assert.Equal(t, permanentRegistryID, entry.RegistryID,
+	assert.Equal(t, RegistryIDBirdNETV24, entry.RegistryID,
 		"birdnet-v2.4 must map to the permanent BirdNET v2.4 registry ID")
 	assert.Equal(t, "tphakala/BirdNET-v2.4", entry.HuggingFaceRepo, "birdnet-v2.4 repo")
 	assert.Equal(t, birdnetV24SpeciesCount, entry.SpeciesCount,

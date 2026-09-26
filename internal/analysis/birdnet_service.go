@@ -69,8 +69,25 @@ func (a *BirdNETAnalyzer) Start(_ context.Context) error {
 
 	a.bn = bn
 
+	// species_count is the live label count of the default (primary) model. Resolve the
+	// default target's ID, then read its live NumSpecies from ModelInfos (which sources
+	// the count from the loaded instance). Byte-identical to the previous o.NumSpecies()
+	// for any primary family (not only v2.4), and independent of the o.primary accessor
+	// removed in Phase 3.
+	speciesCount := 0
+	if targets := bn.DefaultTargets(); len(targets) > 0 {
+		primaryID := targets[0].ID
+		infos := bn.ModelInfos()
+		for i := range infos {
+			if infos[i].ID == primaryID {
+				speciesCount = infos[i].NumSpecies
+				break
+			}
+		}
+	}
+
 	events.Emit(context.Background(), "detection", "model_loaded", "BirdNET model loaded", map[string]any{
-		"species_count": bn.NumSpecies(),
+		"species_count": speciesCount,
 	})
 
 	// Initialize ModelManager for the model gallery. Failure is non-fatal

@@ -6,7 +6,7 @@
  * Home Assistant X-Ingress-Path). Extracted from DailySummaryCard.svelte which
  * previously built these URLs inline without the basepath wrap, causing
  * hourly-grid and species-row anchors to 404 through reverse proxies when the
- * DB had detection rows (Forgejo #446).
+ * DB had detection rows.
  */
 
 import { buildAppUrl } from './urlHelpers';

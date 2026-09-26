@@ -149,13 +149,13 @@ func classifyError(err error, host string, port int) *audiocore.StreamErrorConte
 // the concrete error. The order matters: the most specific typed errors are
 // tested before the broad sentinels.
 func classifyInto(ctx *audiocore.StreamErrorContext, err error) {
-	var respErr *rtsp.ResponseError
-	var unauthErr *rtsp.UnauthorizedError
-	var redirectErr *audiostream.RedirectError
-	var certErr *x509.CertificateInvalidError
-	var authorityErr x509.UnknownAuthorityError
-	var netErr net.Error
-	isNetTimeout := errors.As(err, &netErr) && netErr.Timeout()
+	respErr, isRespErr := errors.AsType[*rtsp.ResponseError](err)
+	_, isUnauthErr := errors.AsType[*rtsp.UnauthorizedError](err)
+	_, isRedirectErr := errors.AsType[*audiostream.RedirectError](err)
+	_, isCertErr := errors.AsType[*x509.CertificateInvalidError](err)
+	_, isAuthorityErr := errors.AsType[x509.UnknownAuthorityError](err)
+	netErr, isNetErr := errors.AsType[net.Error](err)
+	isNetTimeout := isNetErr && netErr.Timeout()
 
 	switch {
 	case errors.Is(err, ErrNoAudioTrack):
@@ -166,15 +166,15 @@ func classifyInto(ctx *audiocore.StreamErrorContext, err error) {
 		ctx.ErrorType = errTypeUnsupportedCodec
 		ctx.UserFacingMsg = "The stream uses an audio codec native ingest cannot decode."
 		ctx.TroubleShooting = []string{"Reconfigure the source to AAC-LC, Opus, G.711, or L16.", "Or unset BIRDNET_STREAM_INGEST to fall back to FFmpeg."}
-	case errors.Is(err, rtsp.ErrAuthFailed), errors.Is(err, rtsp.ErrUnauthorized), errors.As(err, &unauthErr):
+	case errors.Is(err, rtsp.ErrAuthFailed), errors.Is(err, rtsp.ErrUnauthorized), isUnauthErr:
 		ctx.ErrorType = errTypeAuthFailed
 		ctx.UserFacingMsg = "Authentication with the stream failed."
 		ctx.TroubleShooting = []string{"Check the username and password in the stream URL."}
-	case errors.As(err, &respErr):
+	case isRespErr:
 		ctx.ErrorType = fmt.Sprintf("rtsp_%d", respErr.Code)
 		ctx.HTTPStatus = respErr.Code
 		ctx.UserFacingMsg = fmt.Sprintf("The stream server returned %d %s.", respErr.Code, respErr.Reason)
-	case errors.As(err, &redirectErr):
+	case isRedirectErr:
 		ctx.ErrorType = errTypeRedirect
 		ctx.UserFacingMsg = "The stream server issued a redirect."
 	case errors.Is(err, rtsp.ErrUDPSetupRejected):
@@ -186,7 +186,7 @@ func classifyInto(ctx *audiocore.StreamErrorContext, err error) {
 	case errors.Is(err, rtsp.ErrRequestTimeout), isNetTimeout:
 		ctx.ErrorType = errTypeConnectionTimeout
 		ctx.UserFacingMsg = "The connection to the stream timed out."
-	case errors.As(err, &certErr), errors.As(err, &authorityErr):
+	case isCertErr, isAuthorityErr:
 		ctx.ErrorType = errTypeTLSVerifyFailed
 		ctx.UserFacingMsg = "The stream's TLS certificate could not be verified."
 	case errors.Is(err, rtsp.ErrServerTeardown), errors.Is(err, rtsp.ErrConnectionClosed):
@@ -203,8 +203,7 @@ func classifyInto(ctx *audiocore.StreamErrorContext, err error) {
 // classifyConnClosed distinguishes a refused connection from a reset one by the
 // wrapped syscall, defaulting to reset.
 func classifyConnClosed(err error) string {
-	var opErr *net.OpError
-	if errors.As(err, &opErr) && opErr.Op == "dial" {
+	if opErr, ok := errors.AsType[*net.OpError](err); ok && opErr.Op == "dial" {
 		return errTypeConnectionRefused
 	}
 	return errTypeConnectionReset

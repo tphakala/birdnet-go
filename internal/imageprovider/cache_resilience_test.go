@@ -33,8 +33,8 @@ func (p *emptyNameProvider) Fetch(scientificName string) (imageprovider.BirdImag
 // TestStoreSuccessfulFetchPopulatesScientificName verifies that fetched images
 // are persisted with the requested scientific name even when the provider
 // returns a BirdImage with an empty ScientificName. Regression test for
-// Forgejo #756 (NOT NULL constraint on image_caches.scientific_name during
-// the warmup path).
+// a NOT NULL constraint violation on image_caches.scientific_name during
+// the warmup path.
 func TestStoreSuccessfulFetchPopulatesScientificName(t *testing.T) {
 	t.Parallel()
 
@@ -72,7 +72,7 @@ var errCorrupt = errors.NewStd("database disk image is malformed")
 // mockCorruptStore is a mockStore that returns a corruption error from
 // configurable image-cache read/write methods. It counts how many times each
 // method was invoked so tests can verify the cache short-circuits subsequent
-// calls once corruption has been detected (Forgejo #762).
+// calls once corruption has been detected.
 type mockCorruptStore struct {
 	mockStore
 	corruptGet     atomic.Bool
@@ -118,8 +118,8 @@ func (m *mockCorruptStore) GetNoteModelType(_ string) (string, error) { return "
 // TestImageCacheDisablesReadsOnCorruption verifies that once GetImageCache
 // reports SQLite corruption, the cache stops issuing further reads or writes
 // for the rest of the session. Without this latch the same fatal error gets
-// reported to Sentry on every detection cycle (Forgejo #762 collected 1,763
-// events from a single corrupted file before this fix).
+// reported to Sentry on every detection cycle (a single corrupted file
+// produced 1,763 events before this fix).
 func TestImageCacheDisablesReadsOnCorruption(t *testing.T) {
 	t.Parallel()
 
@@ -164,7 +164,7 @@ func TestImageCacheDisablesReadsOnCorruption(t *testing.T) {
 
 // TestImageCacheDisablesWritesOnCorruption verifies that a corruption error
 // from SaveImageCache also latches the disabled-DB flag, preventing further
-// save attempts from generating Sentry events (Forgejo #762 save path).
+// save attempts from generating Sentry events.
 func TestImageCacheDisablesWritesOnCorruption(t *testing.T) {
 	t.Parallel()
 
@@ -203,8 +203,7 @@ func TestImageCacheDisablesWritesOnCorruption(t *testing.T) {
 // TestImageCacheCorruptionAtStartup verifies that a corruption error raised
 // during the warmup load (loadCachedImages) latches the flag, lets init
 // complete cleanly, and prevents any further GetAll calls. Without this the
-// startup error would propagate and abort image cache init entirely
-// (Forgejo #762 startup path).
+// startup error would propagate and abort image cache init entirely.
 func TestImageCacheCorruptionAtStartup(t *testing.T) {
 	t.Parallel()
 

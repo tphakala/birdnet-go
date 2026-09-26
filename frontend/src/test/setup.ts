@@ -755,7 +755,10 @@ Object.defineProperty(window, 'location', {
 });
 
 // Mock security utilities - consolidated mock for consistent test behavior
-vi.mock('$lib/utils/security', () => ({
+// Real exports pass through (isPlainObject, maskUrlCredentials, ...); only the
+// functions below are overridden.
+vi.mock('$lib/utils/security', async importOriginal => ({
+  ...(await importOriginal<typeof import('$lib/utils/security')>()),
   safeGet: vi.fn(
     (
       obj: Record<string, unknown> | null | undefined,
@@ -946,8 +949,8 @@ vi.mock('$lib/utils/security', () => ({
 
 // Global test utilities
 export const testUtils = {
-  // Helper to reset all mocked functions
-  resetAllMocks: () => {
+  // Clears call history only (vi.clearAllMocks); mock implementations are kept
+  clearAllMocks: () => {
     vi.clearAllMocks();
   },
 

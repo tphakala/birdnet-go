@@ -23,10 +23,11 @@ linters:
       # always returns a non-nil error, so staticcheck's SA4023 flags the
       # `if err != nil` guards (and their related-information notes) as "always
       # true" under -tags notflite. Those guards are real runtime checks in the
-      # default tflite build; suppress the stub-only false positive for this
-      # file. CI never lints the notflite tag (it is a compile check only), so
-      # this only affects the notflite lint lane.
-      - path: internal/classifier/birdnet.go
+      # default tflite build; suppress the stub-only false positive. CI never
+      # lints the notflite tag (it is a compile check only), so this only affects
+      # the notflite lint lane. NewTFLiteClassifier is in birdnet.go;
+      # NewTFLiteRangeFilter moved to range_filter_service.go in epic #1682 Phase 2b.
+      - path: internal/classifier/(birdnet|range_filter_service)\.go
         text: "SA4023"
         linters:
           - staticcheck
@@ -72,6 +73,7 @@ linters:
     - gocyclo
     - modernize  # Re-enabled under golangci-lint v2.13.2 + Go 1.27: the earlier Go 1.26 atomic-types panic no longer reproduces, and the codebase was modernized in the same change
     - forbidigo  # Sensitive field name detection
+    - depguard  # Bans the standard errors package; use internal/errors
     # Performance linters
     - prealloc
     - exhaustive
@@ -84,6 +86,18 @@ linters:
       ignore-tests: true
     gocognit:
       min-complexity: 50
+    depguard:
+      rules:
+        # internal/errors is a drop-in replacement for the standard errors
+        # package (Is, As, AsType, Unwrap, Join, ErrUnsupported, NewStd). Only
+        # its own passthrough file may import the standard package.
+        stdlib-errors:
+          files:
+            - "$all"
+            - "!**/internal/errors/errors.go"
+          deny:
+            - pkg: "errors$"
+              desc: "import github.com/tphakala/birdnet-go/internal/errors instead; it passes through Is, As, AsType, Unwrap, Join, ErrUnsupported and NewStd (for errors.New)"
     gocritic:
       disabled-checks:
         - commentFormatting

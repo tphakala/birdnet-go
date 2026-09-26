@@ -148,15 +148,13 @@ func IsOperationalError(err error) bool {
 	// PriorityLow error from being misread as operational. Downstream consumers
 	// (prerenderer, API media handlers) then get a consistent answer without
 	// re-deriving it from a platform-dependent surface error.
-	var enhanced *errors.EnhancedError
-	if errors.As(err, &enhanced) && enhanced.GetPriority() == errors.PriorityLow &&
+	if enhanced, ok := errors.AsType[*errors.EnhancedError](err); ok && enhanced.GetPriority() == errors.PriorityLow &&
 		enhanced.Category == errors.CategorySystem {
 		return true
 	}
 
 	// Check for process termination via exit codes (more reliable than string matching)
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 		code := exitErr.ExitCode()
 		if code == exitCodeSIGKILL || code == exitCodeSIGTERM {
 			return true

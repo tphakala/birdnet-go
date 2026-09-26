@@ -19,7 +19,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -133,57 +132,14 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 		reconfigureMonitoringFn: reconfigureMonitoringFn,
 	}
 
-	// Share the orchestrator's authoritative OpenFauna name resolver with the
-	// display surfaces, then re-localize the cached name maps now that the resolver
-	// has been built (startup BuildRangeFilter already ran). Forward display reads
-	// the live resolver regardless of map state; only the reverse (search) maps
-	// depend on this re-localize. Locale changes later re-localize via
-	// handleReloadBirdnet (BuildRangeFilter runs before UpdateNameMaps there).
-	if cm.bn != nil {
-		var ds datastore.Interface
-		if cm.proc != nil && cm.proc.Ds != nil {
-			ds = cm.proc.Ds
-		}
-		var api commonNameController
-		if cm.apiController != nil {
-			api = cm.apiController
-		}
-		installNameResolver(cm.bn.OpenFaunaResolver(), cm.bn.AllLabels(), ds, api)
-	}
+	// The species-name index is orchestrator-owned since Phase 2a: the datastore is
+	// handed it in APIServerService.Start and the api/v2 facade via WithSpeciesIndex,
+	// both before this monitor is constructed, and the orchestrator rebuilds it on
+	// every model/locale change. There is nothing to install here.
 
 	// Initialize the sound level manager but don't start it yet
 	// It will be started by handleReconfigureSoundLevel based on settings
 	return cm
-}
-
-// commonNameController is the minimal api-controller surface installNameResolver
-// needs to share the resolver and refresh the cached name maps. *apiv2.Controller
-// satisfies it; tests substitute a spy.
-type commonNameController interface {
-	SetNameResolver(resolver datastore.SpeciesNameResolver)
-	UpdateCommonNameMap(labels []string)
-}
-
-// installNameResolver shares the orchestrator's authoritative OpenFauna resolver
-// with the display surfaces, then re-localizes their cached name maps. Order is
-// load-bearing: SetNameResolver must precede the map rebuild so the reverse
-// (search) maps pick up localized names; forward display reads the live resolver
-// regardless.
-//
-// There is intentionally no nil-resolver short-circuit: the maps must be rebuilt
-// from labels even when no resolver is available, otherwise search and insights
-// would start with empty maps. SetNameResolver already no-ops on a nil/typed-nil
-// resolver (datastore.IsNilResolver guard inside it), so a missing resolver simply
-// leaves the live forward path on the label maps.
-func installNameResolver(resolver datastore.SpeciesNameResolver, labels []string, ds datastore.Interface, api commonNameController) {
-	if ds != nil {
-		ds.SetNameResolver(resolver)
-		ds.UpdateNameMaps(labels)
-	}
-	if api != nil {
-		api.SetNameResolver(resolver)
-		api.UpdateCommonNameMap(labels)
-	}
 }
 
 // Start begins monitoring control signals.
@@ -321,6 +277,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleRebuildRangeFilter()
 	case "reload_birdnet":
 		cm.handleReloadBirdnet()
+	case "reconcile_models":
+		cm.handleReconcileModels()
 	case "reconfigure_mqtt":
 		cm.handleReconfigureMQTT()
 	case "reconfigure_rtsp_sources":
@@ -392,47 +350,6 @@ func (cm *ControlMonitor) handleReconfigureLiveStream() {
 	emitHotReload("livestream")
 }
 
-// sunCalcReconfigurable is implemented by the datastores that own a
-// suncalc.SunCalc built from the station coordinates. It is an optional
-// capability rather than part of datastore.Interface: only the two concrete
-// stores hold a SunCalc, and mocks/test doubles have no reason to care.
-type sunCalcReconfigurable interface {
-	// ReconfigureSunCalc repoints the sun calculator at the given station
-	// coordinates and reports whether anything changed.
-	ReconfigureSunCalc(latitude, longitude float64) bool
-}
-
-// reconfigureDatastoreSunCalc points the datastore's sun calculator at the
-// currently configured station coordinates.
-//
-// The datastore builds its SunCalc once at startup, so without this a location
-// edit made in the UI would leave time-of-day classification and the Search
-// page's time-of-day filter answering from the old observer until the process
-// restarted. Coordinate changes already route through rebuild_range_filter (see
-// coordinatesChanged in internal/api/v2/settings.go), so this rides that signal;
-// ReconfigureSunCalc is a no-op when the coordinates have not actually changed,
-// which is the common case for the signal's other triggers.
-func (cm *ControlMonitor) reconfigureDatastoreSunCalc() {
-	if cm.proc == nil || cm.proc.Ds == nil {
-		return
-	}
-	ds, ok := cm.proc.Ds.(sunCalcReconfigurable)
-	if !ok {
-		return
-	}
-	settings := conf.GetSettings()
-	if settings == nil {
-		return
-	}
-	if !ds.ReconfigureSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude) {
-		// Unchanged coordinates: the common case, since this signal also fires for
-		// species lists and range-filter settings. Stay quiet.
-		return
-	}
-	// Coordinates are PII, so the change is logged without the values themselves.
-	GetLogger().Info("Station location changed, datastore sun calculator rebuilt")
-}
-
 // handleRebuildRangeFilter rebuilds the range filter
 func (cm *ControlMonitor) handleRebuildRangeFilter() {
 	// Guard the orchestrator dereference for consistency with NewControlMonitor,
@@ -450,10 +367,6 @@ func (cm *ControlMonitor) handleRebuildRangeFilter() {
 		cm.notifySuccess("Range filter rebuilt successfully")
 		emitHotReload("range_filter")
 	}
-
-	// Station coordinates share this signal with the range filter, so reconcile
-	// the datastore's sun calculator here too.
-	cm.reconfigureDatastoreSunCalc()
 
 	// Perform log deduplicator cleanup when range filter is rebuilt
 	// This coupling is for practicality - we wanted to avoid creating new goroutines
@@ -477,14 +390,22 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		GetLogger().Warn("Cannot reload BirdNET model: orchestrator not initialized")
 		return
 	}
-	if err := cm.bn.ReloadModel(); err != nil {
-		GetLogger().Error("Failed to reload BirdNET model", logger.Error(err))
-		cm.notifyError("Failed to reload BirdNET model", err)
-		return
+	// Since Phase 4, BirdNET v2.4 may not be loaded (a Perch-only or N=0 runtime). ReloadModel
+	// reloads the v2.4 primary and errors when it is absent, so only reload it when it is
+	// actually loaded. The range-filter rebuild and secondary reload below still run, so a
+	// BirdNET-section settings change (e.g. locale, threads) still takes effect on such an
+	// instance instead of failing with a "model not loaded" toast.
+	if cm.bn.IsModelLoaded(classifier.RegistryIDBirdNETV24) {
+		if err := cm.bn.ReloadModel(); err != nil {
+			GetLogger().Error("Failed to reload BirdNET model", logger.Error(err))
+			cm.notifyError("Failed to reload BirdNET model", err)
+			return
+		}
+		GetLogger().Info("BirdNET model reloaded successfully")
+		cm.notifySuccess("BirdNET model reloaded successfully")
+	} else {
+		GetLogger().Info("BirdNET v2.4 not loaded; skipping primary model reload")
 	}
-
-	GetLogger().Info("BirdNET model reloaded successfully")
-	cm.notifySuccess("BirdNET model reloaded successfully")
 
 	// Rebuild range filter after model reload
 	if err := classifier.BuildRangeFilter(cm.bn); err != nil {
@@ -495,22 +416,10 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		cm.notifySuccess("Range filter rebuilt successfully")
 	}
 
-	// Rebuild name maps with new locale labels (use fresh settings, not stale pointer).
-	// Order matters: BuildRangeFilter above already rebuilt the OpenFauna resolver for
-	// the new locale, and the resolver was installed on Ds/apiController at startup
-	// (NewControlMonitor), so these calls re-localize the cached maps via the
-	// now-current resolver.
-	// Use the full multi-model label set so secondary-model species (bats,
-	// Perch-unique) stay searchable after a locale/model reload, not just the primary.
-	labels := cm.bn.AllLabels()
-	if cm.proc != nil && cm.proc.Ds != nil {
-		cm.proc.Ds.UpdateNameMaps(labels)
-		GetLogger().Info("Datastore name maps updated with new labels")
-	}
-	if cm.apiController != nil {
-		cm.apiController.UpdateCommonNameMap(labels)
-		GetLogger().Info("API controller common name map updated with new labels")
-	}
+	// The species-name index is orchestrator-owned since Phase 2a: ReloadModel above
+	// already republished it, and BuildRangeFilter re-localized the OpenFauna resolver
+	// for the new locale and republished it again. The datastore and the api/v2 facade
+	// read that same shared snapshot, so there is nothing to re-localize here.
 
 	// Reload OV-capable secondary models (e.g. Perch) so a backend/OpenVINO-device
 	// change moves them onto the new device without a restart. No-ops when the
@@ -529,6 +438,44 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 	}
 }
 
+// handleReconcileModels loads or unloads acoustic models to match models.enabled after a
+// runtime edit of the enabled set (Phase 4, where models.enabled is authoritative and N=0 is
+// valid). LoadModel/UnloadModel each rebuild the range filter and sync the acoustic-model
+// notice, so on any actual topology change this only needs to run the same SSE broadcast and
+// debounced audio-source reconfigure a gallery install does, so the newly loaded models start
+// receiving audio without a restart.
+func (cm *ControlMonitor) handleReconcileModels() {
+	if cm.bn == nil {
+		GetLogger().Warn("Cannot reconcile enabled models: orchestrator not initialized")
+		return
+	}
+	loaded, unloaded, err := cm.bn.ReconcileEnabledModels()
+	if err != nil {
+		GetLogger().Error("Failed to reconcile some enabled models", logger.Error(err))
+		cm.notifyError("Failed to apply some enabled model changes", err)
+		// Fall through: models that did load/unload still need the topology reconcile below.
+	}
+	if len(loaded) == 0 && len(unloaded) == 0 {
+		if err == nil {
+			GetLogger().Info("Enabled models already match the loaded set; nothing to reconcile")
+		}
+		return
+	}
+	GetLogger().Info("Reconciled enabled models",
+		logger.Int("loaded", len(loaded)),
+		logger.Int("unloaded", len(unloaded)))
+	if err == nil {
+		cm.notifySuccess("Applied enabled model changes")
+	}
+	// A load or unload changed the model topology: refresh the AI Models page and reconcile
+	// per-source model registration so the new set starts (or stops) receiving audio, exactly
+	// as a gallery install does.
+	if cm.apiController != nil {
+		cm.apiController.OnModelTopologyChanged()
+	}
+	emitHotReload("models")
+}
+
 // handleReconfigureMQTT reconfigures the MQTT connection
 func (cm *ControlMonitor) handleReconfigureMQTT() {
 	GetLogger().Info("Reconfiguring MQTT connection")
@@ -543,6 +490,13 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 			Build())
 		return
 	}
+
+	// If HA discovery was just turned off, remove its entities through the old
+	// client while it is still connected. If that is not possible, the retire
+	// handler registered on the new client retries on its first connect.
+	retireCtx, retireCancel := context.WithTimeout(context.Background(), mqttReconfigureConnectTimeout)
+	cm.proc.RetireHomeAssistantDiscovery(retireCtx, cm.proc.GetMQTTClient(), settings)
+	retireCancel()
 
 	// First, safely disconnect any existing client
 	cm.proc.DisconnectMQTTClient()
@@ -785,6 +739,12 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 		GetLogger().Error("Failed to reconfigure sound level monitoring", logger.Error(err))
 		cm.notifyError("Failed to reconfigure sound level monitoring", err)
 		return
+	}
+
+	// The Sound Level sensor exists in HA discovery only while monitoring is on,
+	// so refresh discovery to add or remove it without an MQTT reconnect.
+	if cm.proc != nil {
+		cm.proc.RefreshHomeAssistantDiscovery()
 	}
 
 	settings := conf.Setting()

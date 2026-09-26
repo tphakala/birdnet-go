@@ -271,12 +271,6 @@ type Interface interface {
 	CountDetectionsSince(ctx context.Context, since time.Time) (int, error)
 	// SchemaVersion returns the datastore schema version ("legacy" or "v2").
 	SchemaVersion() string
-	// UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
-	// Called after locale or model changes. No-op for legacy datastores.
-	UpdateNameMaps(labels []string)
-	// SetNameResolver installs the authoritative localized species-name resolver
-	// shared with the classifier orchestrator. No-op for legacy datastores.
-	SetNameResolver(resolver SpeciesNameResolver)
 
 	// Application event log (v2 only; legacy stores return nil/empty)
 	SaveAppEvent(ctx context.Context, category, eventType, message string, metadata map[string]any) error
@@ -345,8 +339,9 @@ func (ds *DataStore) CountDetectionsSince(ctx context.Context, since time.Time) 
 
 // NewDataStore creates a new DataStore instance based on the provided configuration context.
 func New(settings *conf.Settings) Interface {
-	// Create a SunCalc instance to be shared by all datastore implementations
-	sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
+	// Create a SunCalc instance to be shared by all datastore implementations. It follows the
+	// live station location so a location change in the settings takes effect without a restart.
+	sunCalc := suncalc.NewSunCalcWithSource(conf.LiveLocation(settings))
 
 	switch {
 	case settings.Output.SQLite.Enabled:
@@ -360,7 +355,7 @@ func New(settings *conf.Settings) Interface {
 			SunCalc:  sunCalc,
 		}
 	default:
-		// No database explicitly enabled — default to SQLite
+		// No database explicitly enabled, default to SQLite
 		return &SQLiteStore{
 			Settings: settings,
 			SunCalc:  sunCalc,
@@ -387,9 +382,6 @@ func (ds *DataStore) GetDBCounters() *dbstats.Counters {
 	return ds.dbCounters
 }
 
-// UpdateNameMaps is a no-op for legacy DataStore (common names stored directly in DB).
-func (ds *DataStore) UpdateNameMaps(_ []string) {}
-
 // SpeciesNameResolver resolves a scientific name to a localized common name,
 // returning "" when unknown. Satisfied by *openfauna.Resolver. The locale argument
 // is accepted for interface symmetry; resolvers are built for the active species
@@ -415,9 +407,6 @@ func IsNilResolver(r SpeciesNameResolver) bool {
 	return false
 }
 
-// SetNameResolver is a no-op for legacy DataStore (common names stored in DB).
-func (ds *DataStore) SetNameResolver(_ SpeciesNameResolver) {}
-
 // SetSunCalcMetrics sets the metrics instance for the SunCalc service
 func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {
 	ds.metricsMu.RLock()
@@ -430,21 +419,6 @@ func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {
 			sunCalc.SetMetrics(m)
 		}
 	}
-}
-
-// ReconfigureSunCalc repoints the datastore's sun calculator at new station
-// coordinates and reports whether anything changed.
-//
-// Without this, a location edit made in the UI would leave time-of-day
-// classification and the Search page's time-of-day filter answering from the
-// old observer until the process restarted. Invalidation lives entirely inside
-// SunCalc, which stamps its cached events with the location they were computed
-// under; the datastore keeps no sun-time cache of its own to go stale.
-func (ds *DataStore) ReconfigureSunCalc(latitude, longitude float64) bool {
-	if ds.SunCalc == nil {
-		return false
-	}
-	return ds.SunCalc.UpdateLocation(latitude, longitude)
 }
 
 // Save stores a note and its associated results as a single transaction in the database.
@@ -524,7 +498,7 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 			"total_duration_ms", time.Since(txStart).Milliseconds())
 	}
 
-	// Success — record metrics.
+	// Success: record metrics.
 	duration := time.Since(txStart)
 	txLogger.Info("Transaction completed",
 		logger.String("tx_id", txID),
@@ -2753,9 +2727,9 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 // (buildTimeOfDayConditions) built for that date. Both sides now go through
 // sunEventAnchor, so the filter and the label always agree.
 //
-// There is deliberately no cache here: SunCalc already memoizes by date, and a
-// second layer could not see SunCalc's location changes, so it would keep serving
-// the old station's events after a location edit.
+// There is deliberately no cache here: it relies on the SunCalc's own per-date
+// cache, which follows the live station location; caching here by date string
+// alone would keep serving the previous location's times after a location change.
 func (ds *DataStore) getSunEventsForDate(dateStr string) (suncalc.SunEventTimes, error) {
 	localDate, err := time.ParseInLocation(time.DateOnly, dateStr, time.Local)
 	if err != nil {

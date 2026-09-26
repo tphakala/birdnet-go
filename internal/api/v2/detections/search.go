@@ -472,8 +472,8 @@ func (c *Handler) validateSearchSortBy(path, ip string, req *SearchRequest) erro
 // multiple species) is returned trimmed but otherwise unchanged so the existing
 // LIKE search on scientific_name keeps working.
 //
-// The BirdNET label list is already cached in memory via UpdateCommonNameMap; there
-// is no I/O here. The lookup is O(1) for the common-name exact-match case.
+// The BirdNET label list is already cached in memory in the shared species-name
+// index; there is no I/O here. The lookup is O(1) for the common-name exact-match case.
 //
 // Returns the resolved (or trimmed passthrough) value and a hit flag. hit is true
 // only when a common-name lookup succeeded, so callers can log resolution events

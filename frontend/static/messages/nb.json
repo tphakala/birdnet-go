@@ -109,6 +109,14 @@
       "closeModal": "Lukk dialogboks",
       "dismissAlert": "Avvis varsel",
       "closeNotification": "Lukk varsel",
+      "toastRegion": {
+        "topLeft": "Varsler, øverst til venstre",
+        "topCenter": "Varsler, øverst i midten",
+        "topRight": "Varsler, øverst til høyre",
+        "bottomLeft": "Varsler, nederst til venstre",
+        "bottomCenter": "Varsler, nederst i midten",
+        "bottomRight": "Varsler, nederst til høyre"
+      },
       "toggleDropdown": "Veksle nedtrekksliste",
       "sortAscending": "Sorter stigende",
       "selectLanguage": "Velg språk",
@@ -130,7 +138,6 @@
       "selectToday": "Velg i dag",
       "dateSelected": "Dato valgt: {date}",
       "calendarNavigation": "Bruk piltaster for å navigere i kalender, Enter for å velge, Escape for å lukke",
-      "downloadCsv": "Last ned artsliste som CSV",
       "visitEbirdLink": "Åpne eBird.org i ny fane",
       "learnEbirdTaxonomyLink": "Åpne eBird-taksonomi i ny fane",
       "resizeHandle": "Dra for å endre størrelse",
@@ -412,7 +419,7 @@
         "updatingIntervals": "Oppdaterer registreringsintervaller...",
         "reconfiguringMqtt": "Oppdaterer MQTT-tilkobling...",
         "reconfiguringBirdweather": "Oppdaterer BirdWeather-integrasjon...",
-        "reconfiguringEbird": "Updating eBird integration...",
+        "reconfiguringEbird": "Oppdaterer eBird-integrasjon...",
         "reconfiguringStreams": "Oppdaterer lydstrømmer...",
         "reconfiguringTelemetry": "Oppdaterer telemetriinnstillinger...",
         "reconfiguringPushNotifications": "Konfigurerer push-varselleverandører på nytt...",
@@ -474,6 +481,16 @@
         "notRegisteredTitle": "Ingen modell analyserer {sourceName}",
         "notRegisteredMessage": "Ingen lyd når {models} på lydkilden \"{sourceName}\", så det produseres ingen registreringer. Åpne System > AI-modeller for å sjekke dens status per kilde, og bekreft at lydkilden er tilkoblet og sender lyd."
       },
+      "acousticModels": {
+        "noneTitle": "Ingen akustisk modell aktivert",
+        "noneMessage": "Ingen akustisk modell er lastet inn, så lyd tas opp, men analyseres ikke. Aktiver en modell i Innstillinger > Analyse, eller installer en fra modellgalleriet.",
+        "loadFailedTitle": "Akustisk modell kunne ikke lastes inn",
+        "loadFailedMessage": "En aktivert akustisk modell kunne ikke lastes inn, så lyd tas opp, men analyseres ikke. Sjekk modellen på siden System > AI-modeller."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modell har en bedre versjon for dette systemet} other {# modeller har bedre versjoner for dette systemet}}",
+        "message": "En versjon som passer bedre til systemets maskinvare eller plassering, er tilgjengelig for: {models}. Åpne Innstillinger > Analyse > Modeller og velg Optimer for å bytte."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Gjeldende verdi: {value}% (terskel: {threshold}%)",
@@ -493,6 +510,11 @@
           "diskFull": "Disken er full - frigjør litt plass",
           "permissionDenied": "Tilgang nektet - sjekk fil- eller tjenestetillatelser"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} feiler i hver analyse",
+        "message": "{modelName} er lastet inn, men de siste {failures} analysene på rad feilet på {runtime}: inferensen returnerte en feil. Lyd tas opp, men denne modellen oppdager ingenting. Sjekk modellen på siden System > AI-modeller.",
+        "nonFiniteMessage": "{modelName} er lastet inn, men de siste {failures} analysene på rad feilet på {runtime}: modellen returnerte ugyldige poeng (NaN eller uendelige). Lyd tas opp, men denne modellen oppdager ingenting. Sjekk modellen på siden System > AI-modeller."
       }
     },
     "loading": "Laster varsler..."
@@ -753,12 +775,22 @@
       "recentDetectionsLoad": "Innlasting av siste registreringer mislyktes",
       "configFetch": "Henting av dashbordkonfigurasjon mislyktes: {status}"
     },
+    "acousticModels": {
+      "noneTitle": "Ingen akustisk modell aktivert",
+      "noneMessage": "Lyd fanges opp, men analyseres ikke. Aktiver en modell i modellgalleriet for å begynne å oppdage arter.",
+      "noneAction": "Åpne modellgalleri",
+      "loadFailedTitle": "Akustisk modell kunne ikke lastes inn",
+      "loadFailedMessage": "En aktivert modell kunne ikke lastes inn, så ingen lyd analyseres. Siden AI-modeller viser hvilken modell som feilet og hvorfor.",
+      "loadFailedAction": "Vis status for AI-modeller",
+      "failingTitle": "{count, plural, one {En modell feiler i hver analyse} other {# modeller feiler i hver analyse}}",
+      "failingMessage": "{count, plural, one {{models} er lastet inn, men hver analyse feiler, så den oppdager ingenting.} other {{models} er lastet inn, men hver analyse feiler, så de oppdager ingenting.}} Siden AI-modeller viser backend og feilen."
+    },
     "banner": {
       "title": "Tittel",
       "titlePlaceholder": "Min fuglestasjon",
       "description": "Beskrivelse",
       "descriptionPlaceholder": "En kort beskrivelse av din fugleovervåkingsstasjon...",
-      "subElements": "Underlementer",
+      "subElements": "Underelementer",
       "showImage": "Vis egendefinert bilde",
       "imageUrl": "Bilde-URL eller sti",
       "imageUrlPlaceholder": "https://eksempel.no/stasjonsfoto.jpg",
@@ -1740,7 +1772,7 @@
       "sectionHardware": "Maskinvare",
       "sectionBackends": "Inferens-backends",
       "sectionModels": "Modeller",
-      "noModels": "No models are currently loaded",
+      "noModels": "Ingen modeller er lastet inn for øyeblikket",
       "architecture": "Arkitektur",
       "cpu": "CPU",
       "environment": "Miljø",
@@ -1768,8 +1800,8 @@
       "gpuReachable": "Tilgjengelig",
       "gpuNotReachable": "Ikke tilgjengelig",
       "gpuReasonRenderNodeUnavailable": "Ingen GPU-enhetsnode er synlig for serveren.",
-      "gpuReasonRenderNodePermission": "GPU-enhetsnoden kan ikke åpnes.",
-      "gpuReasonNoRuntime": "BirdNET-Go akselererer for tiden bare inferens på Intel-grafikk, så dette kortet vil ikke bli brukt.",
+      "gpuReasonRenderNodePermission": "Mangler tilgang til GPU-enhetsnoden.",
+      "gpuReasonNoRuntime": "BirdNET-Go akselererer for tiden bare inferens på Intel-grafikk, så denne GPU-en vil ikke bli brukt.",
       "gpuReasonUnknown": "Denne GPU-en kan ikke brukes til inferens i denne versjonen.",
       "stock": "Standard",
       "custom": "Egendefinert",
@@ -1834,7 +1866,14 @@
       "fp16Help": "16-bit flyttall.",
       "invocationsHelp": "Totalt antall lydsegmenter analysert av denne modellen.",
       "noModelsHint": "Ingen lydkilde konfigurert ennå?",
-      "noModelsHintLink": "Konfigurer lydkilder"
+      "noModelsHintLink": "Konfigurer lydkilder",
+      "modelFailing": "hver analyse feiler",
+      "lastSuccess": "Siste vellykkede",
+      "lastSuccessHelp": "Når denne modellen sist analyserte lyd uten feil.",
+      "lastSuccessNever": "Ingen siden modellen ble lastet inn",
+      "modelFailingHelp": "{reason} Prøv en annen versjon av denne modellen under Innstillinger > Analyse > Modeller, eller sjekk backend og presisjon som vises over.",
+      "modelFailingReasonNonFinite": "Alle de siste analysene feilet fordi modellen returnerte ugyldige poeng (NaN eller uendelige), så den oppdager ingenting.",
+      "modelFailingReasonError": "Alle de siste analysene feilet fordi inferensen returnerte en feil, så modellen oppdager ingenting."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2098,7 +2137,7 @@
         },
         "accumulation": {
           "title": "Artakkumuleringskurve",
-          "description": "Cumulative number of distinct species detected within the selected period. The curve climbs as new species appear and flattens toward an asymptote once the common ones have been recorded; a still-rising tail means more species are likely waiting to be found.",
+          "description": "Kumulativt antall ulike arter registrert innenfor den valgte perioden. Kurven stiger etter hvert som nye arter oppdages, og flater ut mot en asymptote når de vanlige artene er registrert; en kurve som fortsatt stiger i enden, tyder på at det sannsynligvis finnes flere arter å oppdage.",
           "noData": "Ingen artakkumuleringsdata tilgjengelig",
           "noDataHint": "Velg et bredere datointervall for å se artslisten bygge seg opp",
           "ariaLabel": "Artakkumuleringskurve: kumulative distinkte arter",
@@ -2110,11 +2149,11 @@
           "summary": "Kumulativ artakkumulering over {days} dager, som nådde {species} distinkte arter."
         },
         "yearOverYear": {
-          "title": "År-over-år sporer",
+          "title": "Endring fra år til år",
           "description": "Kumulative deteksjoner hittil i år mot samme tid i fjor.",
-          "noData": "Ingen år-over-år data tilgjengelig",
+          "noData": "Ingen data for årlig sammenligning er tilgjengelig",
           "noDataHint": "Deteksjoner fra i år og i fjor samles her",
-          "ariaLabel": "År-over-år sporer",
+          "ariaLabel": "Årlig sammenligning",
           "axisDate": "Dato",
           "axisCount": "Kumulative deteksjoner",
           "legendThis": "{year} (i år)",
@@ -2138,9 +2177,9 @@
         },
         "heatmap": {
           "title": "Sesongmessig aktivitetsvarmekart",
-          "description": "Detection density by date and time of day, revealing migration waves and dawn-chorus drift",
+          "description": "Deteksjonstetthet etter dato og tid på døgnet, som viser migrasjonsbølger og forskyvninger i morgenkoret",
           "noData": "Ingen aktivitetsdata tilgjengelig",
-          "noDataHint": "Select a date range to view seasonal activity patterns",
+          "noDataHint": "Velg et datointervall for å se sesongmessige aktivitetsmønstre",
           "axisDate": "Dato",
           "axisTime": "Tid på dagen",
           "tooltipTime": "Tid",
@@ -2152,9 +2191,9 @@
         },
         "ridgeline": {
           "title": "Hvem synger når",
-          "description": "Hour-of-day activity for the most-detected species, sorting dawn singers from all-day and nocturnal birds",
+          "description": "Aktivitet per time i døgnet for de mest registrerte artene, som skiller morgensangere fra dag- og nattaktive fugler",
           "noData": "Ingen aktivitetsdata for arter tilgjengelig",
-          "noDataHint": "Select a wider date range to compare species activity patterns",
+          "noDataHint": "Velg et bredere datointervall for å sammenligne aktivitetsmønstre for arter",
           "ariaLabel": "Aktivitetsdiagram: fordeling av aktivitet per time for hver art",
           "axisTime": "Tid på dagen",
           "note": "Viser de {count} mest oppdagede artene",
@@ -2164,11 +2203,11 @@
         },
         "succession": {
           "title": "Akustisk suksesjon",
-          "description": "How the soundscape's top species hand off through the day, shown as stacked bands of hourly detections from pre-dawn through night",
+          "description": "Hvordan lydlandskapets mest vanlige arter avløser hverandre gjennom døgnet, vist som stablede bånd med timevise registreringer fra før daggry og gjennom natten",
           "noData": "Ingen akustiske suksesjonsdata tilgjengelig",
-          "noDataHint": "Select a wider date range to see how species hand off through the day",
-          "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the top species",
-          "axisTime": "Tid på dagen",
+          "noDataHint": "Velg et bredere datointervall for å se hvordan artene avløser hverandre gjennom døgnet",
+          "ariaLabel": "Lydlandskapets artssuksesjon: stablede registreringer per time for de vanligste artene",
+          "axisTime": "Tid på døgnet",
           "note": "Kombinert timeaktivitet for de øverste {count} artene",
           "tooltipDetections": "Deteksjoner",
           "tooltipPeak": "Topp",
@@ -2178,7 +2217,7 @@
           "title": "Start av morgengry",
           "description": "Når morgengryet starter hver dag i forhold til borgerlig tussmørke.",
           "noData": "Ingen data for morgengry tilgjengelig",
-          "noDataHint": "Select a wider date range to track how the dawn chorus shifts across the seasons",
+          "noDataHint": "Velg et lengre tidsrom for å se hvordan morgenkoret forskyver seg gjennom sesongene",
           "ariaLabel": "Start av morgengry",
           "axisDate": "Dato",
           "axisOnset": "Minutter fra borgerlig tussmørke",
@@ -2354,7 +2393,7 @@
           "title": "Falsk positiv-filter",
           "description": "Reduser falske deteksjoner ved å kreve flere bekreftelser på tvers av overlappende lydsegmenter",
           "level": {
-            "label": "Filternivå"
+            "label": "Styrke for falsk positiv-filter"
           },
           "detectionCount": "{count} bekreftelser kreves. {description}",
           "levels": {
@@ -3261,7 +3300,7 @@
             "label": "Enhetsnavn",
             "helpText": "Grunnnavnet for enheter slik de vises i Home Assistant. Hver lydkilde vil ha sin egen enhet koblet til denne hoved-BirdNET-Go-enheten."
           },
-          "sensorsNote": "<strong>Sensorer opprettet:</strong> For hver lydkilde vil Home Assistant motta: Siste art, Sikkerhet, Vitenskapelig navn og Lydnivå (hvis aktivert). Bro-enheten inkluderer tilgjengelig/utilgjengelig-status.",
+          "sensorsNote": "<strong>Sensorer opprettet:</strong> For hver lydkilde vil Home Assistant motta: Siste art, Sikkerhet, Vitenskapelig navn og Lydnivå (hvis aktivert). Bro-enheten inkluderer tilgjengelig/utilgjengelig-status. Deteksjonssensorene til hver kilde leser kildens eget MQTT-emne, &lt;base_topic&gt;/sources/&lt;source_id&gt;, og dens Lydnivå-sensor leser underemnet &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, slik at en registrering fra én kilde aldri nullstiller sensorene til en annen kilde.",
           "discovery": {
             "button": "Send oppdagelse",
             "success": "Oppdagelsesmeldinger sendt til Home Assistant",
@@ -3307,7 +3346,8 @@
             "none": "Ingen",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3328,6 +3368,16 @@
             "helpText": "Velg enheter for temperatur og vindhastighet (m = metrisk, e = imperial, h = britisk hybrid)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API-nøkkel",
+            "helpText": "Skriv inn din Pirate Weather API-nøkkel. Kreves for værdata."
+          },
+          "endpoint": {
+            "label": "API-endepunkt",
+            "helpText": "Overstyr standard Pirate Weather API-endepunkt hvis nødvendig. Bruker https://api.pirateweather.net/forecast som standard hvis tom."
+          }
+        },
         "notes": {
           "none": "Ingen værdata hentes.",
           "yrno": {
@@ -3335,7 +3385,8 @@
             "freeService": "Yr er en gratis værdatatjeneste. For mer informasjon, besøk <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Bruk av OpenWeather krever en API-nøkkel. Registrer deg for en gratis API-nøkkel på <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Krever en Weather Underground API-nøkkel og en gyldig PWS-stasjon-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for detaljer."
+          "wunderground": "Krever en Weather Underground API-nøkkel og en gyldig PWS-stasjon-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for detaljer.",
+          "pirateweather": "Bruk av Pirate Weather krever en API-nøkkel. Registrer deg på <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API-nøkkel",
@@ -3708,6 +3759,7 @@
         "dataOutputTitle": "Lydnivådata-utdata",
         "dataOutputDescription": "Når aktivert, publiseres lydnivåmålinger via:",
         "mqttTopic": "MQTT-emne:",
+        "mqttSourceTopic": "MQTT-emne per kilde (med Home Assistant discovery):",
         "sseEndpoint": "SSE-endepunkt:",
         "prometheusMetrics": "Prometheus-målinger:"
       },
@@ -3769,6 +3821,8 @@
         "pathHelp": "Mappe der lydklipp lagres. Relative stier er fra applikasjonsmappen. Eksempel: «clips/» eller «/var/audio/birds/»",
         "typeLabel": "Lydformat",
         "typeHelp": "Lydformat for lagrede klipp. WAV og FLAC er tapsfrie (best kvalitet, større filer). MP3, AAC og Opus er tapsbringende (mindre filer, litt kvalitetstap).",
+        "ultrasonicTypeLabel": "Ultralydformat",
+        "ultrasonicTypeHelp": "Tapsfritt format (WAV eller FLAC) som kun brukes til flaggermus- og ultralydopptak over 48 kHz. Disse lagres med sin fulle kildesamplingshastighet i stedet for formatet ovenfor, slik at ingen ultralyddetaljer går tapt.",
         "bitrateLabel": "Bithastighet",
         "bitrateHelp": "Lydkompresjonsbithastighet for tapsbringende formater. Område: {min}-{max} kbps. Høyere verdier gir bedre kvalitet, men større filer.",
         "losslessBitrateValue": "Ikke relevant - Tapsfri",
@@ -3837,7 +3891,17 @@
       },
       "models": {
         "recommendBoth": "Det anbefales å kjøre BirdNET og Perch sammen for best artsdeteksjonsdekning.",
-        "perchOnlyWarning": "Perch alene gir færre registreringer. Senk sikkerhetsterskel til 0,50 for meningsfulle resultater, eller aktiver BirdNET i tillegg for best dekning."
+        "perchOnlyWarning": "Perch alene gir færre registreringer. Senk sikkerhetsterskel til 0,50 for meningsfulle resultater, eller aktiver BirdNET i tillegg for best dekning.",
+        "loading": "Laster inn deteksjonsmodeller...",
+        "noneEnabledTitle": "Ingen deteksjonsmodell aktivert.",
+        "noneEnabledHelp": "Du kan fortsatt lagre denne kilden. Lyden vil bli analysert av standardmodellene så snart en er aktivert.",
+        "noneEnabledLink": "Åpne modellgalleri",
+        "noneAvailable": "Ingen deteksjonsmodeller er aktivert på denne serveren.",
+        "loadFailedWarning": "En deteksjonsmodell kunne ikke lastes inn, så denne kilden analyseres ikke før den gjenopprettes.",
+        "loadFailedLink": "Vis status for AI-modeller",
+        "defaultBadge": "{models} (standard)",
+        "defaultPendingBadge": "Standardmodeller",
+        "noneBadge": "Ingen modell lastet inn"
       }
     },
     "security": {
@@ -5117,6 +5181,7 @@
       "birdweatherClientFailed": "Opprettelse av BirdWeather-klient mislyktes",
       "noWeatherProvider": "Ingen værleverandør valgt",
       "openWeatherKeyRequired": "OpenWeather API-nøkkel er obligatorisk",
+      "pirateWeatherKeyRequired": "Pirate Weather API-nøkkel er obligatorisk",
       "processorUnavailable": "Prosessor ikke tilgjengelig",
       "discoveryFailed": "Utløsing av Home Assistant-oppdagelse mislyktes"
     },

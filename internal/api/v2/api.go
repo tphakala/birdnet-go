@@ -48,6 +48,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -106,9 +107,9 @@ type Controller struct {
 	// (species info, rarity, the all-species picker, the dictionary, thumbnails,
 	// and genus/family/tree lookups). Besides the shared *apicore.Core it receives
 	// two facade-owned function dependencies: a read accessor over the shared
-	// scientific-to-common name map (loadCommonNameMap) and the media domain's
-	// species-image proxy handler (ServeSpeciesImageProxy), both still owned by
-	// package api until their domains are extracted.
+	// orchestrator-owned species-index snapshot (loadNameMaps) and the media
+	// domain's species-image proxy handler (ServeSpeciesImageProxy), both still
+	// owned by package api until their domains are extracted.
 	species *species.Handler
 
 	// models serves the /api/v2/models/* endpoints (listing enabled classifier
@@ -177,6 +178,14 @@ type Controller struct {
 	topologyReconfigureMu       sync.Mutex
 	topologyReconfigureTimer    *time.Timer
 	topologyReconfigureShutdown bool
+
+	// optimizeNotices holds the scheduler that keeps the model optimize bell
+	// notice in sync (the models handler), published once the handler is
+	// constructed and started. It is atomic because the model topology callback
+	// is wired by the WithModelManager option, before New constructs c.models,
+	// and can fire from the analyzer's goroutines while New is still running;
+	// reading the plain c.models field there would race.
+	optimizeNotices atomic.Pointer[optimizeNoticeHook]
 
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
@@ -268,14 +277,20 @@ type Controller struct {
 	// WithAuthService / WithNotificationService (see NewWithOptions).
 	appHandler *app.Handler
 
-	// Cached BirdNET name maps (facade-owned; see name_maps.go). They are shared
-	// infrastructure: the analytics, detections, and species domains read them via
-	// injected accessors, and internal/analysis drives them through
-	// UpdateCommonNameMap/SetNameResolver on *Controller.
-	nameMaps atomic.Value // stores *nameMaps; see internal/api/v2/name_maps.go
-	// nameResolver is the authoritative localized name source shared with the
-	// classifier orchestrator. Overrides label-derived names in the cached maps.
-	nameResolver atomic.Pointer[datastore.SpeciesNameResolver]
+	// names points at the BirdNET name index the facade reads through the
+	// name_maps.go accessors (the scientific<->common maps plus the authoritative
+	// resolver). The analytics, detections, and species domains read it via
+	// injected bound accessors. NewWithOptions seeds a facade-owned fallback
+	// service; WithSpeciesIndex replaces it with the orchestrator-owned shared
+	// service (ownsNames then false). The accessors treat a nil service (a
+	// bare-struct test) as an empty index.
+	names *speciesindex.Service
+
+	// ownsNames reports whether names is the facade's own fallback service (true)
+	// or the orchestrator-owned shared service injected via WithSpeciesIndex
+	// (false). Only a facade-owned service is seeded from labels in
+	// initInsightsRoutes; the shared service is rebuilt by the orchestrator.
+	ownsNames bool
 
 	// analytics serves the /api/v2/analytics/* species/time/confidence/sun/sources
 	// endpoints, the geographic /range/heatmap endpoint, the /insights/* +
@@ -362,6 +377,26 @@ func WithModelManager(mm *classifier.ModelManager) Option {
 		// audio sources. The method value binds c; c.MetricsStore and c.controlChan
 		// are read lazily at call time, so option ordering is irrelevant.
 		mm.SetTopologyChangedCallback(c.OnModelTopologyChanged)
+		// A model starting or stopping failing every analysis window changes the
+		// status snapshot (per-model health, the dashboard banner) but not the
+		// topology, so it only broadcasts; it must not reconfigure sources.
+		mm.SetInferenceHealthChangedCallback(c.BroadcastInferenceTopologyChanged)
+	}
+}
+
+// WithSpeciesIndex injects the orchestrator-owned species-name index, shared with
+// the datastore, so the facade reads the same snapshot the orchestrator rebuilds
+// from the union of loaded labels. When set, the facade does not own the service
+// and initInsightsRoutes does not seed it (the orchestrator is its only writer). A
+// nil service leaves the facade's own fallback in place. The domain handlers read
+// c.names at call time, so this may run after they were constructed.
+func WithSpeciesIndex(svc *speciesindex.Service) Option {
+	return func(c *Controller) {
+		if svc == nil {
+			return
+		}
+		c.names = svc
+		c.ownsNames = false
 	}
 }
 
@@ -421,6 +456,15 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		isGlobalOwner: settings == conf.GetSettings(),
 	}
 
+	// Initialize the facade-owned fallback species-name index before constructing
+	// any domain handler, since several capture the name-map accessors as bound
+	// methods. It stays empty until initInsightsRoutes seeds it from the current
+	// labels; WithSpeciesIndex may replace it with the orchestrator-owned shared
+	// service during the functional-options loop below (the accessors read c.names
+	// at call time, so the late swap is observed).
+	c.names = speciesindex.New(nil)
+	c.ownsNames = true
+
 	// Construct domain handlers around the shared core. They hold the same
 	// *apicore.Core pointer and register their routes in initRoutes.
 	c.weather = weather.New(c.Core)
@@ -473,12 +517,12 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// because species injects c.media.ServeSpeciesImageProxy (a method value on
 	// the media handler) for its thumbnail endpoint.
 	c.media = mediaapi.New(c.Core)
-	// The species handler delegates to two dependencies: loadCommonNameMap (the
-	// shared name-map read accessor, facade-owned in name_maps.go) and the media
-	// domain's species-image proxy handler
+	// The species handler delegates to two dependencies: loadNameMaps (the shared
+	// species-index snapshot read accessor, facade-owned in name_maps.go) and the
+	// media domain's species-image proxy handler
 	// (c.media.ServeSpeciesImageProxy). They are passed as bound method values; c
 	// is fully constructed here, so the method values are stable for its lifetime.
-	c.species = species.New(c.Core, c.loadCommonNameMap, c.media.ServeSpeciesImageProxy)
+	c.species = species.New(c.Core, c.loadNameMaps, c.media.ServeSpeciesImageProxy)
 	// The support handler needs only the shared core (settings, datastore, V2
 	// manager, and the error/log/goroutine helpers all promote from it).
 	c.support = support.New(c.Core)
@@ -566,6 +610,18 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// changes after this point, so capturing it here is behaviorally identical to
 	// a per-request read; every other models dependency promotes from c.Core.
 	c.models = models.New(c.Core, c.authService)
+	// The optimize notice goes to the injected notification service, like the
+	// other notification producers here (nil keeps the process-wide one).
+	c.models.SetNotificationService(c.notificationService)
+	// Keep the model optimize bell notice in sync: evaluate it once at startup
+	// (the analyzer scans the installed models before it builds the web server),
+	// then after topology changes, model installs and uninstalls, and changes to
+	// the location, ModelRegion or primary model path. Skipped when routes are
+	// not initialized (tests), like every other background activity here.
+	if c.ModelManager != nil && initializeRoutes {
+		c.optimizeNotices.Store(&optimizeNoticeHook{scheduler: c.models})
+		c.models.StartOptimizeNoticeSync()
+	}
 
 	// Log auth configuration status
 	log := GetLogger()
@@ -821,6 +877,11 @@ func (c *Controller) Shutdown() {
 		c.topologyReconfigureTimer = nil
 	}
 	c.topologyReconfigureMu.Unlock()
+
+	// Stop the pending model optimize notice evaluation, and ignore later ones.
+	if h := c.optimizeNotices.Load(); h != nil {
+		h.scheduler.StopOptimizeNoticeSync()
+	}
 
 	// Cancel context to stop all goroutines, then wait for them to finish.
 	c.Cancel()

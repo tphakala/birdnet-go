@@ -116,6 +116,27 @@ type Processor struct {
 	discoveryDebounceMu     sync.Mutex
 	defaultDiscoveryCleanup sync.Once // ensures stale "default" discovery cleanup runs at most once
 
+	// haDiscoveryMu serializes HA discovery publishing and retirement, so a
+	// publish that was already queued cannot interleave with (or undo) a retire.
+	haDiscoveryMu sync.Mutex
+	// haPublishedConfig is the discovery identity (prefix, base topic, node) this
+	// process last published under, or nil when nothing needs retiring. It holds
+	// no per-entity state: retirement recomputes the entities from the registry.
+	// Guarded by haDiscoveryMu.
+	haPublishedConfig *mqtt.DiscoveryConfig
+
+	// haPendingRemovals holds HA entity removals requested by user actions (a
+	// stream deleted or renamed in settings) until the next discovery publish
+	// or retirement performs them. haPendingMu guards it and is never held across
+	// network I/O, so the audio pipeline may queue while holding its own locks.
+	haPendingMu       sync.Mutex
+	haPendingRemovals []haPendingRemoval
+
+	// haLegacyStatusCleared is the pre-fix status topic ("<base>//status" for a
+	// base topic with a trailing slash) this process has already cleared, so it
+	// is cleared once per distinct base. Guarded by haDiscoveryMu.
+	haLegacyStatusCleared string
+
 	// BufferMgr provides access to capture buffers for audio clip extraction.
 	// Set once during pipeline initialization (audio_pipeline_service.go) and never replaced;
 	// no synchronization needed for concurrent reads.
@@ -167,7 +188,7 @@ type Processor struct {
 	// operators get a startup-time error for any broken path already
 	// configured. The map is then consulted from detection goroutines
 	// (read) and extended on-demand (write) when a species that was
-	// added or edited *after* startup first fires — that hot-reload
+	// added or edited *after* startup first fires: that hot-reload
 	// path is why we use sync.Map instead of a plain map + mutex: the
 	// Processor itself is never recreated on settings reload (mutation
 	// in place by ControlMonitor), and concurrent reads from detection
@@ -180,7 +201,7 @@ type Processor struct {
 	// (e.g. the operator fixed permissions or restored a missing file),
 	// the entry is deleted and the action becomes active immediately
 	// without waiting for a process restart. This satisfies the
-	// hot-reload requirement in CLAUDE.md while still suppressing the
+	// hot-reload requirement in AGENTS.md while still suppressing the
 	// per-detection Sentry spam between rechecks.
 	invalidCommandPaths sync.Map
 }
@@ -628,12 +649,12 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 }
 
 // Start launches the background goroutines that process detections.
-// It must be called AFTER BufferMgr and Registry are wired — otherwise
+// It must be called AFTER BufferMgr and Registry are wired: otherwise
 // detections arrive before the buffer manager is available and audio
 // clip export silently fails.
 func (p *Processor) Start() {
 	p.startOnce.Do(func() {
-		GetLogger().Info("Processor.Start() called — BufferMgr and Registry wired, launching detection goroutines",
+		GetLogger().Info("Processor.Start() called: BufferMgr and Registry wired, launching detection goroutines",
 			logger.Bool("buffer_mgr_set", p.BufferMgr != nil),
 			logger.Bool("registry_set", p.Registry() != nil),
 			logger.String("operation", "processor_start"))
@@ -982,11 +1003,13 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 	}
 
 	// Log placeholder taxonomy codes if a custom model is actually running. Read the
-	// RESOLVED primary path, not settings.BirdNET.ModelPath: after a stale-path
-	// recovery the configured value can name a file the instance is not running (or
-	// the built-in baseline is running while config still points at a custom path),
-	// so the raw setting would misclassify which model produced the code.
-	if p.Bn.PrimaryResolvedModelPath() != "" && settings.Debug && speciesCode != "" {
+	// RESOLVED path of the model that produced this detection, not
+	// settings.BirdNET.ModelPath: after a stale-path recovery the configured value can
+	// name a file the instance is not running (or the built-in baseline is running
+	// while config still points at a custom path), so the raw setting would
+	// misclassify which model produced the code. For a v2.4 install item.ModelID is
+	// RegistryIDBirdNETV24, so this is identical to the previous primary read.
+	if p.Bn.ResolvedModelPathForID(item.ModelID) != "" && settings.Debug && speciesCode != "" {
 		if len(speciesCode) == 8 && (speciesCode[:2] == "XX" || (speciesCode[0] >= 'A' && speciesCode[0] <= 'Z' && speciesCode[1] >= 'A' && speciesCode[1] <= 'Z')) {
 			GetLogger().Debug("using placeholder taxonomy code",
 				logger.String("taxonomy_code", speciesCode),
@@ -1006,21 +1029,20 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 }
 
 // shouldApplyRangeFilter returns true if the given model should have its
-// detections filtered by the geographic range filter.
-// BirdNET (any version), Perch, and unknown models are filtered. Perch returns
-// scientific-name labels, and the included-species set stores scientific names
-// for O(1) lookup, so the normal range list applies even when the active range
-// model is the embedded BirdNET geomodel rather than v3.
-// Bat/BSG: never filtered (independent species sets, no geomodel coverage).
+// detections filtered by the geographic range filter. The decision is a registry
+// capability, not a display-name check: BirdNET (any version) and Perch participate
+// (their label spaces are range-filter compatible), while Bat and BSG classify their
+// own label spaces and never participate. An unknown or custom model ID does NOT
+// participate: its label space is arbitrary, and unregistered IDs never reach a live
+// detection anyway (LoadModel rejects them), so this only pins the intended semantics.
+// Perch returns scientific-name labels, and the included-species set stores
+// scientific names for O(1) lookup, so the normal range list applies even when the
+// active range model is the embedded BirdNET geomodel rather than v3.
 func shouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
 	if settings == nil || !settings.BirdNET.LocationConfigured {
 		return false
 	}
-	mInfo := classifier.DetectionModelInfoForID(modelID)
-	if mInfo.Name == detection.DefaultModelName || mInfo.Name == classifier.DetectionNamePerch {
-		return true
-	}
-	return false
+	return classifier.ParticipatesInRangeFilter(modelID)
 }
 
 // nonFiniteConfidenceWarned guards the once-per-(model, source) warning for
@@ -1450,25 +1472,32 @@ func (p *Processor) resolveClipName(settings *conf.Settings, item *classifier.Re
 	}
 
 	clipName := p.generateClipName(settings, scientificName, confidence)
-	return p.applyBatFormatFallback(settings, clipName, item.ModelID, item.Source)
+	return p.applyExportFormatExtension(settings, clipName, item.ModelID, item.Source)
 }
 
-// applyBatFormatFallback overrides a clip name's extension to .wav when a bat model
-// at a high source sample rate is exported to a format (MP3/Opus/AAC) that cannot
-// carry rates above 48kHz, so the stored ClipName matches the file the exporter
-// actually writes. It is shared by the createDetection and extended-capture paths
-// so both persist the same fallback extension. An empty clip name is returned
-// unchanged.
-func (p *Processor) applyBatFormatFallback(settings *conf.Settings, clipName, modelID string, source datastore.AudioSource) string {
+// applyExportFormatExtension overrides a clip name's extension to match the
+// container the exporter will actually write, keeping the persisted ClipName in
+// lockstep with the on-disk file. buildClipPath derives the extension from
+// Export.Type; a bat/ultrasonic capture above the analysis rate is stored in the
+// dedicated Export.UltrasonicType instead (resolveExportFormat), so its extension
+// must be rewritten here. Shared by the createDetection and extended-capture paths
+// so both persist the same extension. An empty clip name is returned unchanged.
+func (p *Processor) applyExportFormatExtension(settings *conf.Settings, clipName, modelID string, source datastore.AudioSource) string {
 	if clipName == "" {
 		return clipName
 	}
 	mInfo := classifier.DetectionModelInfoForID(modelID)
 	sourceRate := p.resolveAudioSource(source).SampleRate
-	if needsBatFormatFallback(mInfo.Name, mInfo.Version, sourceRate, settings.Realtime.Audio.Export.Type) {
-		return replaceExtension(clipName, ".wav")
+	format := exportFormatForModel(mInfo.Name, mInfo.Version, sourceRate, &settings.Realtime.Audio.Export)
+	// GetFileExtension returns the extension WITHOUT a leading dot; replaceExtension
+	// expects the dot. Guard against an empty extension (only reachable with an
+	// unvalidated empty format) so buildClipPath's own extension is preserved rather
+	// than clobbered to a trailing dot (GitHub #2810/#2814).
+	ext := convert.GetFileExtension(format)
+	if ext == "" {
+		return clipName
 	}
-	return clipName
+	return replaceExtension(clipName, "."+ext)
 }
 
 // generateClipName generates a clip name for the given scientific name and confidence.
@@ -2006,7 +2035,7 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 					// the only branch where we know for sure that the
 					// user configured a working action and the path is
 					// temporarily broken. Unimplemented action types
-					// must not trip this flag — they are a separate
+					// must not trip this flag: they are a separate
 					// issue and should fall through to defaults.
 					brokenCommandPathSkipped = true
 					continue
@@ -2164,15 +2193,25 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 		if mqttClient != nil {
 			mqttRetryConfig := retryConfigFromSettings(settings.Realtime.MQTT.RetrySettings)
 
+			// Derive the narrow species-time capability from the datastore. Both
+			// backends (*datastore.DataStore and *v2only.Datastore) implement it;
+			// a nil or unsupported datastore (DB disabled) yields nil, so the
+			// MQTT payload carries null fields.
+			var speciesTimeSource speciesDetectionTimeSource
+			if src, ok := any(p.Ds).(speciesDetectionTimeSource); ok {
+				speciesTimeSource = src
+			}
+
 			mqttAction = &MqttAction{
-				Settings:       settings,
-				MqttClient:     mqttClient,
-				EventTracker:   p.GetEventTracker(),
-				DetectionCtx:   detectionCtx, // Share context from DatabaseAction
-				Result:         det.Result,   // Domain model (single source of truth)
-				BirdImageCache: p.BirdImageCache,
-				RetryConfig:    mqttRetryConfig,
-				CorrelationID:  det.CorrelationID,
+				Settings:          settings,
+				MqttClient:        mqttClient,
+				EventTracker:      p.GetEventTracker(),
+				DetectionCtx:      detectionCtx, // Share context from DatabaseAction
+				Result:            det.Result,   // Domain model (single source of truth)
+				BirdImageCache:    p.BirdImageCache,
+				RetryConfig:       mqttRetryConfig,
+				CorrelationID:     det.CorrelationID,
+				SpeciesTimeSource: speciesTimeSource,
 			}
 		}
 	}
@@ -2331,6 +2370,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 			ClipName:         det.Result.ClipName,
 			sourceSampleRate: det.Result.AudioSource.SampleRate,
 			modelName:        det.Result.Model.Name,
+			modelVersion:     det.Result.Model.Version,
 			species:          strings.ToLower(det.Result.Species.CommonName),
 			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 			PreRenderer:      p.preRenderer,
@@ -2650,11 +2690,11 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 		p.vadGate.close()
 	}
 
-	// Stop the job queue — use remaining context budget, not a hardcoded 30 seconds.
+	// Stop the job queue: use remaining context budget, not a hardcoded 30 seconds.
 	// Always send the stop signal even if the deadline has passed (remaining <= 0)
 	// so the queue's workers are notified and don't keep running after DB close.
 	// Enforce a minimum grace period so in-flight DB writes can complete before
-	// closeDataStore runs — a zero timeout would return immediately, risking
+	// closeDataStore runs: a zero timeout would return immediately, risking
 	// writes to a closed database connection.
 	// Check ctx.Err() first to handle cancellation without deadline (WithCancel).
 	queueStopTimeout := 30 * time.Second
@@ -2675,13 +2715,13 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	// reconnect loop armed, and Disconnect is what cancels that loop, so skipping
 	// it would leave the timer running past shutdown. Disconnect already handles
 	// the not-connected case, and for a client that never connected it does no
-	// blocking work at all — otherwise it is bounded by ShutdownDisconnectTimeout.
+	// blocking work at all: otherwise it is bounded by ShutdownDisconnectTimeout.
 	mqttClient := p.GetMQTTClient()
 	if mqttClient != nil {
 		mqttClient.Disconnect()
 	}
 
-	// Skip remaining cleanup if context is already expired — these are
+	// Skip remaining cleanup if context is already expired: these are
 	// nice-to-have disconnects, not critical for data integrity.
 	// Context expiration is expected, not an error condition for the caller.
 	if ctx.Err() != nil {

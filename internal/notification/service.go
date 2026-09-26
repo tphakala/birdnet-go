@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -22,14 +23,19 @@ type Service struct {
 	store         NotificationStore
 	subscribers   []*Subscriber
 	subscribersMu sync.RWMutex
-	rateLimiter   *RateLimiter
-	cleanupTicker *time.Ticker
-	ctx           context.Context
-	cancel        context.CancelFunc
-	wg            sync.WaitGroup
-	logger        logger.Logger
-	config        *ServiceConfig
-	telemetry     *NotificationTelemetry
+	// deletionSubs receive a DeletedEvent for every notification Delete removes,
+	// so live clients (the SSE notification stream) can drop it. They are kept
+	// apart from subscribers so the push dispatcher never sees deletions.
+	deletionSubs   []*deletionSubscriber
+	deletionSubsMu sync.Mutex
+	rateLimiter    *RateLimiter
+	cleanupTicker  *time.Ticker
+	ctx            context.Context
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
+	logger         logger.Logger
+	config         *ServiceConfig
+	telemetry      *NotificationTelemetry
 }
 
 // ServiceConfig holds the complete configuration for the notification service.
@@ -203,7 +209,7 @@ func (s *Service) List(filter *FilterOptions) ([]*Notification, error) {
 }
 
 // Count returns the number of notifications matching filter. Unlike List, no
-// result slice is allocated — use this for badge counts and similar callers.
+// result slice is allocated; use this for badge counts and similar callers.
 // filter.Limit and filter.Offset are ignored.
 func (s *Service) Count(filter *FilterOptions) (int, error) {
 	return s.store.Count(filter)
@@ -269,7 +275,11 @@ func (s *Service) MarkAsAcknowledged(id string) error {
 	return nil
 }
 
-// Delete removes a notification
+// Delete removes a notification and, when one was removed (or the pre-delete
+// lookup failed for a reason other than not-found, so absence is unproven), sends
+// a DeletedEvent to every SubscribeDeletions subscriber. A missing ID is not an
+// error: Delete returns nil and sends nothing, so callers can treat a
+// user-deleted notification as already gone.
 func (s *Service) Delete(id string) error {
 	if id == "" {
 		return errors.Newf("notification ID cannot be empty").
@@ -278,11 +288,102 @@ func (s *Service) Delete(id string) error {
 			Build()
 	}
 
+	// Look the notification up first: only a delete that removes something is
+	// broadcast (the store's Delete does not report a missing ID), and the SSE
+	// stream filters deletion events for guests by type, as it does creates. Two
+	// concurrent deletes of one ID may both broadcast; clients drop by ID, so a
+	// duplicate event is harmless.
+	existing, getErr := s.store.Get(id)
+	found := getErr == nil && existing != nil
+	// A lookup that failed for another reason cannot prove the ID is absent, so a
+	// successful delete is still broadcast, with an unknown type (which the SSE
+	// stream withholds from guests).
+	unknown := getErr != nil && !errors.Is(getErr, ErrNotificationNotFound)
+
 	err := s.store.Delete(id)
 	if err != nil && errors.Is(err, ErrNotificationNotFound) {
 		return nil
 	}
+	if err == nil && (found || unknown) {
+		ev := DeletedEvent{ID: id}
+		if found {
+			ev.Type = existing.Type
+			ev.Toast, _ = existing.Metadata[MetadataKeyIsToast].(bool)
+		}
+		s.broadcastDeletion(ev)
+	}
 	return err
+}
+
+// DeletedEvent reports a notification removed by Service.Delete.
+type DeletedEvent struct {
+	// ID is the deleted notification's ID.
+	ID string
+	// Type is the deleted notification's type, empty when it could not be read.
+	Type Type
+	// Toast is true for a toast notification (MetadataKeyIsToast), which the SSE
+	// stream never shows to guests, so it withholds the deletion too.
+	Toast bool
+}
+
+// deletionSubscriber is one SubscribeDeletions registration.
+type deletionSubscriber struct {
+	ch     chan DeletedEvent
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// SubscribeDeletions returns a channel that receives a DeletedEvent for every
+// notification Delete removes (a missing ID sends nothing), and a context that
+// is cancelled when the subscription ends. Sends never block: an event for a
+// full channel is dropped, as broadcast does for notifications. The channel is
+// owned by the service and never closed; call UnsubscribeDeletions when done.
+func (s *Service) SubscribeDeletions() (<-chan DeletedEvent, context.Context) {
+	s.deletionSubsMu.Lock()
+	defer s.deletionSubsMu.Unlock()
+
+	ctx, cancel := context.WithCancel(s.ctx)
+	sub := &deletionSubscriber{
+		ch:     make(chan DeletedEvent, DefaultChannelBufferSize),
+		ctx:    ctx,
+		cancel: cancel,
+	}
+	s.deletionSubs = append(s.deletionSubs, sub)
+	return sub.ch, ctx
+}
+
+// UnsubscribeDeletions ends a SubscribeDeletions registration.
+func (s *Service) UnsubscribeDeletions(ch <-chan DeletedEvent) {
+	s.deletionSubsMu.Lock()
+	defer s.deletionSubsMu.Unlock()
+
+	s.deletionSubs = slices.DeleteFunc(s.deletionSubs, func(sub *deletionSubscriber) bool {
+		if sub.ch != ch {
+			return false
+		}
+		sub.cancel()
+		return true
+	})
+}
+
+// broadcastDeletion sends ev to every live deletion subscriber without blocking
+// and drops cancelled ones.
+func (s *Service) broadcastDeletion(ev DeletedEvent) {
+	s.deletionSubsMu.Lock()
+	defer s.deletionSubsMu.Unlock()
+
+	s.deletionSubs = slices.DeleteFunc(s.deletionSubs, func(sub *deletionSubscriber) bool {
+		if sub.ctx.Err() != nil {
+			return true
+		}
+		select {
+		case sub.ch <- ev:
+		default:
+			s.logger.Debug("notification deletion channel full, skipping subscriber",
+				logger.String("notification_id", ev.ID))
+		}
+		return false
+	})
 }
 
 // Subscribe creates a channel to receive real-time notifications.
@@ -388,8 +489,7 @@ func (s *Service) CreateErrorNotification(err error) (*Notification, error) {
 	var titleParams map[string]any
 
 	// Check if it's an enhanced error
-	var enhancedErr *errors.EnhancedError
-	if errors.As(err, &enhancedErr) {
+	if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
 		component = enhancedErr.GetComponent()
 		category := enhancedErr.GetCategory()
 		message = enhancedErr.Error()
@@ -428,7 +528,7 @@ func (s *Service) CreateErrorNotification(err error) (*Notification, error) {
 		WithComponent(component)
 	if titleKey != "" {
 		notif.WithTitleKey(titleKey, titleParams)
-		// MessageKey intentionally left empty — raw error strings are diagnostic, not translatable
+		// MessageKey intentionally left empty; raw error strings are diagnostic, not translatable
 	}
 
 	if createErr := s.CreateWithMetadata(notif); createErr != nil {
@@ -620,6 +720,15 @@ func (s *Service) Stop() {
 	}
 	s.subscribers = nil
 	s.subscribersMu.Unlock()
+
+	// Deletion subscribers' contexts derive from s.ctx, so s.cancel ended them;
+	// drop the registrations too, as for the subscribers above.
+	s.deletionSubsMu.Lock()
+	for _, sub := range s.deletionSubs {
+		sub.cancel()
+	}
+	s.deletionSubs = nil
+	s.deletionSubsMu.Unlock()
 
 	s.logger.Info("notification service stopped",
 		logger.Int("subscribers_cancelled", subscriberCount))

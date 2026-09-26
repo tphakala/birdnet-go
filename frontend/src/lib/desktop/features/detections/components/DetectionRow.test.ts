@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import DetectionRow from './DetectionRow.svelte';
 import type { Detection } from '$lib/types/detection.types';
+import { downloadDetectionAudio } from '$lib/utils/audioDownload';
 
-// DetectionRow is presentational: opening the action menu and clicking an item
-// must invoke the callback the parent passed (the parent owns the actual
-// API/modal logic via useDetectionActions). These tests assert that wiring.
+// DetectionRow is presentational for mutation actions: opening the action menu
+// and clicking one must invoke the callback the parent passed. Audio download
+// is wired directly through the shared download helper.
 
 vi.mock('$lib/stores/navigation.svelte', () => ({
   navigation: {
@@ -13,6 +14,10 @@ vi.mock('$lib/stores/navigation.svelte', () => ({
     navigate: vi.fn(),
     handlePopState: vi.fn(),
   },
+}));
+
+vi.mock('$lib/utils/audioDownload', () => ({
+  downloadDetectionAudio: vi.fn(),
 }));
 
 function createMockDetection(overrides: Partial<Detection> = {}): Detection {
@@ -105,6 +110,25 @@ describe('DetectionRow action callbacks', () => {
     await openMenuAndClick(/^Incorrect$/);
 
     expect(onMarkFalsePositive).toHaveBeenCalledTimes(1);
+  });
+
+  it('downloads available audio from the action menu', async () => {
+    const detection = createMockDetection({ id: 700, clipName: 'clip_700.wav' });
+    render(DetectionRow, { props: { detection } });
+
+    await openMenuAndClick(/download/i);
+
+    expect(downloadDetectionAudio).toHaveBeenCalledExactlyOnceWith(detection);
+  });
+
+  it('omits the download action when the detection has no audio clip', async () => {
+    render(DetectionRow, {
+      props: { detection: createMockDetection({ id: 701, clipName: '' }) },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+
+    expect(screen.queryByRole('menuitem', { name: /download/i })).not.toBeInTheDocument();
   });
 });
 

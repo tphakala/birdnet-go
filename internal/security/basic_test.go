@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -22,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -743,7 +743,7 @@ func TestHandleTokenExchangeError(t *testing.T) {
 		},
 		{
 			name:           "generic error returns internal server error",
-			err:            errors.New("some error"),
+			err:            errors.NewStd("some error"),
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody:   "Unable to complete login at this time. Please try again.",
 		},

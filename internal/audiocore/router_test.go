@@ -296,7 +296,7 @@ func TestRouter_DispatchWithResampling(t *testing.T) {
 // TestRouter_ConcurrentDispatch verifies that concurrent dispatch from
 // multiple goroutines does not trigger data races (run with -race).
 // Uses testing/synctest so the drain assertion does not race the per-route
-// drainer goroutine on loaded CI runners (see Forgejo #453).
+// drainer goroutine on loaded CI runners.
 func TestRouter_ConcurrentDispatch(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		router := NewAudioRouter(GetLogger(), nil)
@@ -368,7 +368,7 @@ func TestDrainRoutePanicRecovery(t *testing.T) {
 	err := router.AddRoute("src1", panicConsumer, 48000, 0.0, nil)
 	require.NoError(t, err)
 
-	// Dispatch a frame — the consumer will panic on Write.
+	// Dispatch a frame: the consumer will panic on Write.
 	router.Dispatch(AudioFrame{
 		SourceID:   "src1",
 		Data:       make([]byte, 100),
@@ -381,7 +381,7 @@ func TestDrainRoutePanicRecovery(t *testing.T) {
 	// Wait for drainer to process the frame, recover, and exit.
 	time.Sleep(200 * time.Millisecond)
 
-	// The drainer exited on panic — the route's stopped channel is closed,
+	// The drainer exited on panic: the route's stopped channel is closed,
 	// and subsequent dispatches to its inbox are silently dropped.
 	// Verify the process didn't crash (panic was recovered).
 }
@@ -536,7 +536,7 @@ func TestRouter_GainClipping(t *testing.T) {
 	defer router.Close()
 
 	consumer := newMockConsumer("c1")
-	// +40 dB is 100x linear — will clip a signal near max.
+	// +40 dB is 100x linear: will clip a signal near max.
 	err := router.AddRoute("src-1", consumer, 48000, 40.0, nil)
 	require.NoError(t, err)
 
@@ -659,7 +659,7 @@ func TestRouter_ApplyProcessing_EQOnly(t *testing.T) {
 
 	consumer := newMockConsumer("c1")
 
-	// Build a HighPass at 8000 Hz — should strongly attenuate a 100 Hz tone.
+	// Build a HighPass at 8000 Hz: should strongly attenuate a 100 Hz tone.
 	chain := equalizer.NewFilterChain()
 	hp, err := equalizer.NewHighPass(48000, 8000, 0.707, 2)
 	require.NoError(t, err)
@@ -719,7 +719,7 @@ func TestRouter_ApplyProcessing_EQAndGain(t *testing.T) {
 
 	require.NoError(t, router.AddRoute("src-both", consumer, 48000, 6.0, chain))
 
-	// 100 Hz sine, well below the 15kHz cutoff — should pass through LowPass.
+	// 100 Hz sine, well below the 15kHz cutoff: should pass through LowPass.
 	const numSamples = 480
 	input := make([]byte, numSamples*2)
 	for i := range numSamples {

@@ -26,7 +26,7 @@
 -->
 <script lang="ts">
   import type { Component } from 'svelte';
-  import type { IconProps } from '@lucide/svelte';
+  import type { LucideProps } from '@lucide/svelte';
   import { Trash2, Search, Plus, ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
@@ -44,7 +44,7 @@
   interface Props {
     title: string;
     species: string[];
-    icon: Component<IconProps>;
+    icon: Component<LucideProps>;
     iconColorClass?: string;
     scientificNameMap?: Map<string, string>;
     scientificToCommonMap?: Map<string, string>;

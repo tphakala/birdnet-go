@@ -109,6 +109,14 @@
       "closeModal": "Luk dialogboks",
       "dismissAlert": "Afvis advarsel",
       "closeNotification": "Luk notifikation",
+      "toastRegion": {
+        "topLeft": "Notifikationer, øverst til venstre",
+        "topCenter": "Notifikationer, øverst i midten",
+        "topRight": "Notifikationer, øverst til højre",
+        "bottomLeft": "Notifikationer, nederst til venstre",
+        "bottomCenter": "Notifikationer, nederst i midten",
+        "bottomRight": "Notifikationer, nederst til højre"
+      },
       "toggleDropdown": "Skift rullemenu",
       "sortAscending": "Sortér stigende",
       "selectLanguage": "Vælg sprog",
@@ -130,7 +138,6 @@
       "selectToday": "Vælg i dag",
       "dateSelected": "Dato valgt: {date}",
       "calendarNavigation": "Brug piletaster til at navigere i kalenderen, Enter for at vælge, Escape for at lukke",
-      "downloadCsv": "Download artsliste som CSV",
       "visitEbirdLink": "Åbn eBird.org i en ny fane",
       "learnEbirdTaxonomyLink": "Åbn eBird Taxonomy i en ny fane",
       "resizeHandle": "Træk for at ændre størrelse",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Lydanalyse overbelastet",
-        "overloadMessage": "Dit system dropper {dropRate}% af lydprøverne for kilden ''{sourceName}'', fordi det ikke kan følge med analysen. Reducer BirdNET-overlapværdien i detektionsindstillingerne eller overvej at opgradere til en hurtigere CPU."
+        "overloadMessage": "Dit system dropper {dropRate}% af lydprøverne for kilden '{sourceName}', fordi det ikke kan følge med analysen. Reducer BirdNET-overlapværdien i detektionsindstillingerne eller overvej at opgradere til en hurtigere CPU."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime ikke tilgængelig",
@@ -474,6 +481,16 @@
         "notRegisteredTitle": "Ingen model analyserer {sourceName}",
         "notRegisteredMessage": "Ingen lyd når {models} på lydkilden \"{sourceName}\", så der produceres ingen detektioner. Åbn System > AI-modeller for at tjekke dens status for hver kilde, og bekræft, at lydkilden er forbundet og sender lyd."
       },
+      "acousticModels": {
+        "noneTitle": "Ingen akustisk model aktiveret",
+        "noneMessage": "Ingen akustisk model er indlæst, så lyd optages, men analyseres ikke. Aktiver en model i Indstillinger > Analyse, eller installer en fra modelgalleriet.",
+        "loadFailedTitle": "Akustisk model kunne ikke indlæses",
+        "loadFailedMessage": "En aktiveret akustisk model kunne ikke indlæses, så lyd optages, men analyseres ikke. Tjek modellen på siden System > AI-modeller."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# model har en bedre version til dette system} other {# modeller har bedre versioner til dette system}}",
+        "message": "En version, der passer bedre til systemets hardware eller placering, er tilgængelig for: {models}. Åbn Indstillinger > Analyse > Modeller, og vælg Optimer for at skifte."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuel værdi: {value}% (grænse: {threshold}%)",
@@ -493,6 +510,11 @@
           "diskFull": "Disk er fuld - frigør noget plads",
           "permissionDenied": "Adgang nægtet - kontrollér fil- eller tjenestetilladelser"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} fejler ved hver analyse",
+        "message": "{modelName} er indlæst, men de seneste {failures} analyser i træk fejlede på {runtime}: inferensen returnerede en fejl. Lyd optages, men denne model registrerer intet. Tjek modellen på siden System > AI-modeller.",
+        "nonFiniteMessage": "{modelName} er indlæst, men de seneste {failures} analyser i træk fejlede på {runtime}: modellen returnerede ugyldige scorer (NaN eller uendelige). Lyd optages, men denne model registrerer intet. Tjek modellen på siden System > AI-modeller."
       }
     },
     "loading": "Indlæser notifikationer..."
@@ -752,6 +774,16 @@
       "recentDetectionsFetch": "Kunne ikke hente seneste registreringer: {status}",
       "recentDetectionsLoad": "Kunne ikke indlæse seneste registreringer",
       "configFetch": "Kunne ikke hente instrumentpanelkonfiguration: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Ingen akustisk model aktiveret",
+      "noneMessage": "Lyd optages, men analyseres ikke. Aktivér en model i modelgalleriet for at begynde at detektere arter.",
+      "noneAction": "Åbn modelgalleri",
+      "loadFailedTitle": "Akustisk model kunne ikke indlæses",
+      "loadFailedMessage": "En aktiveret model kunne ikke indlæses, så der analyseres ingen lyd. Siden AI-modeller viser, hvilken model der fejlede og hvorfor.",
+      "loadFailedAction": "Vis status for AI-modeller",
+      "failingTitle": "{count, plural, one {En model fejler ved hver analyse} other {# modeller fejler ved hver analyse}}",
+      "failingMessage": "{count, plural, one {{models} er indlæst, men hver analyse fejler, så den registrerer intet.} other {{models} er indlæst, men hver analyse fejler, så de registrerer intet.}} Siden AI-modeller viser backend og fejlen."
     },
     "banner": {
       "title": "Titel",
@@ -1834,7 +1866,14 @@
       "fp16Help": "16-bit flydende kommatal. Hardware, der understøtter det, kan køre nogle modeller hurtigere og med mindre hukommelse.",
       "invocationsHelp": "Totalt antal lydsegmenter denne model har analyseret siden opstart.",
       "noModelsHint": "Ingen lydkilde konfigureret endnu?",
-      "noModelsHintLink": "Konfigurer lydkilder"
+      "noModelsHintLink": "Konfigurer lydkilder",
+      "modelFailing": "hver analyse fejler",
+      "lastSuccess": "Seneste succes",
+      "lastSuccessHelp": "Hvornår denne model sidst analyserede lyd uden fejl.",
+      "lastSuccessNever": "Ingen siden modellen blev indlæst",
+      "modelFailingHelp": "{reason} Prøv en anden version af denne model under Indstillinger > Analyse > Modeller, eller tjek den backend og præcision, der vises ovenfor.",
+      "modelFailingReasonNonFinite": "Alle de seneste analyser fejlede, fordi modellen returnerede ugyldige scorer (NaN eller uendelige), så den registrerer intet.",
+      "modelFailingReasonError": "Alle de seneste analyser fejlede, fordi inferensen returnerede en fejl, så modellen registrerer intet."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2354,7 +2393,7 @@
           "title": "Falsk positiv-filter",
           "description": "Reducer falske detektioner ved at kræve flere bekræftelser på tværs af overlappende lydsegmenter",
           "level": {
-            "label": "Filterniveau"
+            "label": "Styrke for falsk positiv-filter"
           },
           "detectionCount": "{count} bekræftelser krævet. {description}",
           "levels": {
@@ -3261,7 +3300,7 @@
             "label": "Enhedsnavn",
             "helpText": "Basisnavnet for enheder som de vises i Home Assistant. Hver lydkilde vil have sin egen enhed knyttet til denne hoved BirdNET-Go-enhed."
           },
-          "sensorsNote": "<strong>Sensorer oprettet:</strong> For hver lydkilde modtager Home Assistant: Seneste art, Konfidens, Videnskabeligt navn og Lydniveau (hvis aktiveret). Bridge-enheden inkluderer online/offline-tilgængelighedsstatus.",
+          "sensorsNote": "<strong>Sensorer oprettet:</strong> For hver lydkilde modtager Home Assistant: Seneste art, Konfidens, Videnskabeligt navn og Lydniveau (hvis aktiveret). Bridge-enheden inkluderer online/offline-tilgængelighedsstatus. Hver kildes detektionssensorer læser kildens eget MQTT-emne, &lt;base_topic&gt;/sources/&lt;source_id&gt;, og dens Lydniveau-sensor læser underemnet &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, så en registrering fra én kilde aldrig nulstiller en anden kildes sensorer.",
           "discovery": {
             "button": "Send Discovery",
             "success": "Discovery-beskeder sendt til Home Assistant",
@@ -3307,7 +3346,8 @@
             "none": "Ingen",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3328,6 +3368,16 @@
             "helpText": "Vælg enheder for temperatur og vindhastighed (m = metrisk, e = imperial, h = UK-hybrid)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API-nøgle",
+            "helpText": "Angiv din Pirate Weather API-nøgle. Påkrævet til vejrdata."
+          },
+          "endpoint": {
+            "label": "API-endpoint",
+            "helpText": "Tilsidesæt standard Pirate Weather API-endpointet om nødvendigt. Standard er https://api.pirateweather.net/forecast hvis feltet er tomt."
+          }
+        },
         "notes": {
           "none": "Ingen vejrdata hentes.",
           "yrno": {
@@ -3335,7 +3385,8 @@
             "freeService": "Yr er en gratis vejrdatatjeneste. For mere information, besøg <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Brug af OpenWeather kræver en API-nøgle. Tilmeld dig en gratis API-nøgle på <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Kræver en Weather Underground API-nøgle og et gyldigt PWS stations-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for detaljer."
+          "wunderground": "Kræver en Weather Underground API-nøgle og et gyldigt PWS stations-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for detaljer.",
+          "pirateweather": "Brug af Pirate Weather kræver en API-nøgle, tilmeld dig på <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API-nøgle",
@@ -3708,6 +3759,7 @@
         "dataOutputTitle": "Output af lydniveaudata",
         "dataOutputDescription": "Når aktiveret, publiceres lydniveaumålinger via:",
         "mqttTopic": "MQTT-emne:",
+        "mqttSourceTopic": "MQTT-emne pr. kilde (med Home Assistant discovery):",
         "sseEndpoint": "SSE-endepunkt:",
         "prometheusMetrics": "Prometheus-metrikker:"
       },
@@ -3769,6 +3821,8 @@
         "pathHelp": "Mappe, hvor lydklip gemmes. Relative stier er fra applikationsmappen. Eksempel: 'clips/' eller '/var/audio/birds/'",
         "typeLabel": "Lydformat",
         "typeHelp": "Lydformat for gemte klip. WAV og FLAC er tabsfri (bedste kvalitet, større filer). MP3, AAC og Opus er tabsgivende (mindre filer, let kvalitetstab).",
+        "ultrasonicTypeLabel": "Ultralydsformat",
+        "ultrasonicTypeHelp": "Tabsfri format (WAV eller FLAC), der kun bruges til flagermus- og ultralydsoptagelser over 48 kHz. Disse gemmes med deres fulde kilderate i stedet for formatet ovenfor, så ingen ultralyddetaljer går tabt.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Lydkomprimerings-bitrate for tabsgivende formater. Interval: {min}-{max} kbps. Højere værdier giver bedre kvalitet, men større filer.",
         "losslessBitrateValue": "Ikke relevant - Tabsfri",
@@ -3837,7 +3891,17 @@
       },
       "models": {
         "recommendBoth": "For bedste artsdækning anbefales det at køre både BirdNET og Perch sammen.",
-        "perchOnlyWarning": "Perch alene producerer færre detektioner. Sænk konfidenstærsklen til 0.50 for meningsfulde resultater, eller aktiver BirdNET ved siden af for bedste dækning."
+        "perchOnlyWarning": "Perch alene producerer færre detektioner. Sænk konfidenstærsklen til 0.50 for meningsfulde resultater, eller aktiver BirdNET ved siden af for bedste dækning.",
+        "loading": "Indlæser detektionsmodeller...",
+        "noneEnabledTitle": "Ingen detektionsmodel aktiveret.",
+        "noneEnabledHelp": "Du kan stadig gemme denne kilde. Dens lyd analyseres af standardmodellerne, så snart en er aktiveret.",
+        "noneEnabledLink": "Åbn modelgalleri",
+        "noneAvailable": "Ingen detektionsmodeller er aktiveret på denne server.",
+        "loadFailedWarning": "En detektionsmodel kunne ikke indlæses, så denne kilde analyseres ikke, før den kommer sig.",
+        "loadFailedLink": "Vis status for AI-modeller",
+        "defaultBadge": "{models} (standard)",
+        "defaultPendingBadge": "Standardmodeller",
+        "noneBadge": "Ingen model indlæst"
       }
     },
     "security": {
@@ -5117,6 +5181,7 @@
       "birdweatherClientFailed": "Kunne ikke oprette BirdWeather-klient",
       "noWeatherProvider": "Ingen vejrudbyder valgt",
       "openWeatherKeyRequired": "OpenWeather API-nøgle er påkrævet",
+      "pirateWeatherKeyRequired": "Pirate Weather API-nøgle er påkrævet",
       "processorUnavailable": "Processor ikke tilgængelig",
       "discoveryFailed": "Kunne ikke udløse Home Assistant-opdagelse"
     },

@@ -114,7 +114,8 @@ func TestHasNativeRangeFilter(t *testing.T) {
 		// The embedded MData range filter is a TFLite artifact, so v2.4 only has a
 		// native fallback when the TFLite backend is linked. Under the notflite tag
 		// hasNativeRangeFilter returns false, so the expectation tracks the backend
-		// rather than asserting true unconditionally (same notflite hygiene as #1553).
+		// rather than asserting true unconditionally, matching the notflite hygiene
+		// applied to the sibling range-filter dispatch tests.
 		{name: "BirdNET v2.4 has embedded TFLite range filter", modelID: "BirdNET_V2.4", want: tfliteBackendAvailable},
 		{name: "Perch v2 has no native range filter", modelID: RegistryIDPerchV2, want: false},
 		{name: "BirdNET v3.0 has no native range filter", modelID: RegistryIDBirdNETV3, want: false},
@@ -123,10 +124,9 @@ func TestHasNativeRangeFilter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			info, ok := ModelRegistry[tt.modelID]
+			_, ok := ModelRegistry[tt.modelID]
 			require.True(t, ok, "model %s must exist in registry", tt.modelID)
-			bn := &BirdNET{ModelInfo: info}
-			assert.Equal(t, tt.want, bn.hasNativeRangeFilter())
+			assert.Equal(t, tt.want, hasNativeRangeFilter(tt.modelID))
 		})
 	}
 
@@ -135,7 +135,6 @@ func TestHasNativeRangeFilter(t *testing.T) {
 	// unhealthy instead of silently filtering against mismatched labels.
 	t.Run("custom non-v2.4 TFLite model has no native range filter", func(t *testing.T) {
 		t.Parallel()
-		bn := &BirdNET{ModelInfo: ModelInfo{ID: "Custom_TFLite", Backend: BackendTFLite}}
-		assert.False(t, bn.hasNativeRangeFilter())
+		assert.False(t, hasNativeRangeFilter("Custom_TFLite"))
 	})
 }

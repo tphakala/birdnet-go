@@ -335,8 +335,7 @@ func handleDeletionErrorInLoop(filePath string, delErr error, errorCount *int, m
 
 	// Extract error category if it's an enhanced error
 	errorCategory := "unknown"
-	var enhancedErr *errors.EnhancedError
-	if errors.As(delErr, &enhancedErr) {
+	if enhancedErr, ok := errors.AsType[*errors.EnhancedError](delErr); ok {
 		errorCategory = enhancedErr.GetCategory()
 	}
 
@@ -367,9 +366,8 @@ func handleDeletionErrorInLoop(filePath string, delErr error, errorCount *int, m
 			Build()
 
 		// Extract category from enhanced error for logging
-		var enhancedLoopErr *errors.EnhancedError
 		categoryForLog := "unknown"
-		if errors.As(loopErr, &enhancedLoopErr) {
+		if enhancedLoopErr, ok := errors.AsType[*errors.EnhancedError](loopErr); ok {
 			categoryForLog = enhancedLoopErr.GetCategory()
 		}
 

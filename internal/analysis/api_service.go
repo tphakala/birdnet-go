@@ -19,9 +19,29 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
+
+// speciesIndexSetter is the optional interface a datastore implements to accept
+// the orchestrator-owned species-name index. It cannot live on datastore.Interface
+// because speciesindex imports datastore (that would close an import cycle), so the
+// analysis package asserts it here. The v2-only datastore implements it; the legacy
+// DataStore does not and keeps its own label-seeded maps.
+type speciesIndexSetter interface {
+	SetSpeciesIndex(svc *speciesindex.Service)
+}
+
+// installSpeciesIndex hands the datastore the orchestrator-owned species-name index
+// when it implements speciesIndexSetter. A datastore that does not (the legacy
+// DataStore) is left on its own label-seeded maps. Taking `any` keeps the optional
+// assertion the single point of coupling and makes the wiring unit-testable.
+func installSpeciesIndex(dataStore any, svc *speciesindex.Service) {
+	if setter, ok := dataStore.(speciesIndexSetter); ok {
+		setter.SetSpeciesIndex(svc)
+	}
+}
 
 // apiServerServiceName is the service name used for logging and diagnostics.
 const apiServerServiceName = "api-server"
@@ -117,6 +137,14 @@ func (s *APIServerService) Start(ctx context.Context) error {
 	dataStore := s.dbService.DataStore()
 	bn := s.bnAnalyzer.BirdNET()
 
+	// Install the orchestrator-owned species-name index on the datastore so its
+	// common-name resolution reads the same snapshot the orchestrator rebuilds from
+	// the union of loaded labels. This runs before processor.New (and thus before
+	// the audio sources and the first detection save), earlier than the old startup
+	// name-resolver wiring in NewControlMonitor. The legacy DataStore does not
+	// implement the setter and stays on its own maps.
+	installSpeciesIndex(dataStore, bn.SpeciesIndex())
+
 	// Update BirdNET model loaded metric.
 	UpdateBirdNETModelLoadedMetric(s.metrics.BirdNET, bn)
 
@@ -124,7 +152,7 @@ func (s *APIServerService) Start(ctx context.Context) error {
 	s.birdImageCache = initBirdImageCache(s.settings, dataStore, s.metrics)
 
 	// Create SunCalc for sunrise/sunset calculations.
-	s.sunCalc = suncalc.NewSunCalc(s.settings.BirdNET.Latitude, s.settings.BirdNET.Longitude)
+	s.sunCalc = newStationSunCalc(s.settings)
 
 	// Create processor.
 	s.proc = processor.New(s.settings, dataStore, bn, s.metrics, s.birdImageCache, GetLogger())
@@ -229,6 +257,13 @@ func (s *APIServerService) Start(ctx context.Context) error {
 
 	startSucceeded = true
 	return nil
+}
+
+// newStationSunCalc builds the sun calculator the API service shares with the processor, quiet
+// hours, the nighttime scheduler and the API. It follows the live station location, so all of
+// them pick up a location change without a restart.
+func newStationSunCalc(settings *conf.Settings) *suncalc.SunCalc {
+	return suncalc.NewSunCalcWithSource(conf.LiveLocation(settings))
 }
 
 // Stop gracefully shuts down the API server and owned subsystems.

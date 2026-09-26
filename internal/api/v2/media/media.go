@@ -60,6 +60,7 @@ const (
 	MimeTypeMP3  = "audio/mpeg"
 	MimeTypeM4A  = "audio/mp4"
 	MimeTypeOGG  = "audio/ogg"
+	MimeTypeAAC  = "audio/aac"
 )
 
 const (
@@ -157,6 +158,31 @@ func contentDispositionFilename(filename string) string {
 	}
 
 	return stem[:timestampEnd-1] + stem[timestampEnd:] + ext
+}
+
+// setAudioContentType sets the response Content-Type for a known audio file
+// extension (leading dot, lower-case). Unknown extensions are left for
+// ServeRelativeFile to sniff. Shared by the normal serve path and the
+// alternate-extension fallback so both label the response by the file actually
+// served, not by whatever extension the DB clip_name happened to record.
+func setAudioContentType(ctx echo.Context, ext string) {
+	switch ext {
+	case ".flac":
+		ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeFLAC)
+	case ".wav":
+		ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeWAV)
+	case ".mp3":
+		ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeMP3)
+	case ".m4a":
+		ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeM4A)
+	case ".ogg", ".opus":
+		// go-opus writes Ogg-Opus, so the Ogg container type applies to both.
+		ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeOGG)
+	case ".aac":
+		ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeAAC)
+	default:
+		// Let ServeRelativeFile handle the content type
+	}
 }
 
 // setAudioContentDisposition advertises a safe, user-facing filename while
@@ -307,7 +333,7 @@ const modelTypeBat = "bat"
 // The /media/* routes register on the passed v2 group g (== c.Group). The
 // ID-based routes register directly on c.Echo (the embedded core's Echo
 // instance), preserving the greedy GET /api/v2/audio/:id route documented in
-// internal/api/v2/CLAUDE.md: it is registered on the Echo instance (not the
+// internal/api/v2/AGENTS.md: it is registered on the Echo instance (not the
 // group) and catches all /api/v2/audio/* paths. Registering it here, at the
 // media slot, keeps it on c.Echo at the exact same point in initialization.
 func (c *Handler) RegisterRoutes(g *echo.Group) {
@@ -400,8 +426,7 @@ func (c *Handler) setPrivateAudioCacheControl(ctx echo.Context) {
 // It checks if the error is already an HTTPError from SecureFS and returns it directly,
 // or maps specific error types to appropriate HTTP status codes.
 func (c *Handler) translateSecureFSError(ctx echo.Context, err error, userMsg string) error {
-	var httpErr *echo.HTTPError
-	if errors.As(err, &httpErr) {
+	if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok {
 		// If it's already an HTTPError from SecureFS, just pass it through
 		ctx.Logger().Debugf("SecureFS httpErr=%d internal=%v msg=%v",
 			httpErr.Code, httpErr.Internal, httpErr.Message)
@@ -605,6 +630,44 @@ func isExportTempFor(name, base string) bool {
 	return audiotemp.IsTempFor(name, base)
 }
 
+// audioServeExtensions is the ordered set of containers an exported clip may be
+// written with, most-likely first so findAlternateAudioPath probes
+// deterministically: FLAC and WAV lead (the ultrasonic and default-lossless
+// formats), then the lossy containers. Also the accepted set for the serve
+// fallback.
+//
+//nolint:gochecknoglobals // immutable lookup table
+var audioServeExtensions = []string{".flac", ".wav", ".opus", ".m4a", ".mp3", ".ogg", ".aac"}
+
+// findAlternateAudioPath looks for a completed clip that shares relClipPath's base
+// name but carries a different known audio extension. The DB clip_name and the
+// file on disk are normally kept in lockstep by resolveExportFormat, but a rare
+// resample-failure strand (or a manual rename) can still leave the stored name
+// pointing at a container the file was not written in; serving the actual file
+// beats a 404. It probes the fixed candidate names directly (no directory
+// listing), so it is O(1) per extension and deterministic on the ordered set.
+// Temp files are handled separately (findEncodingTempPath) and the original,
+// already-missing extension is skipped.
+func (c *Handler) findAlternateAudioPath(relClipPath string) (string, bool) {
+	base := filepath.Base(relClipPath)
+	origExt := strings.ToLower(filepath.Ext(base))
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	if stem == "" {
+		return "", false
+	}
+	dir := filepath.Dir(relClipPath)
+	for _, ext := range audioServeExtensions {
+		if ext == origExt {
+			continue
+		}
+		candidate := filepath.Join(dir, stem+ext)
+		if info, err := c.SFS.StatRel(candidate); err == nil && !info.IsDir() {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
 // isAudioBeingEncoded reports whether a recent in-progress export temp file
 // exists for relClipPath. Callers that then wait for the clip should use
 // findEncodingTempPath directly so they can poll the temp's fixed name with
@@ -783,6 +846,29 @@ func (c *Handler) noteCaptureTimes(noteID string) (begin, end time.Time) {
 // created the temp file yet or already renamed it. Returns nil if the file was
 // successfully served, or the original/translated error otherwise.
 func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, originalErr error, detectionBeginTime, detectionEndTime time.Time, logFields ...logger.Field) error {
+	// A completed clip whose stored name drifted from the file on disk (a rare
+	// resample-failure strand, or a manual rename) is served from its actual path
+	// rather than 404'd. resolveExportFormat keeps the deterministic cases in
+	// lockstep; this is the safety net for the rest. The Content-Type and
+	// Content-Disposition the caller set from the stored extension are rewritten to
+	// match the file actually served; the 404 above did not commit the response, so
+	// these still take effect.
+	if altPath, ok := c.findAlternateAudioPath(relClipPath); ok {
+		setAudioContentType(ctx, strings.ToLower(filepath.Ext(altPath)))
+		setAudioContentDisposition(ctx, filepath.Base(altPath))
+		if serveErr := c.SFS.ServeRelativeFile(ctx, altPath); serveErr == nil {
+			c.LogInfoIfEnabled("Served audio clip from an alternate extension after clip_name mismatch", logFields...)
+			return nil
+		}
+		// A file StatRel just confirmed, failing to serve, is a race (deleted under
+		// us) or a permission error. Restore the headers for the originally
+		// requested clip before falling through, so a later serve of the original
+		// file in the recovery flow below is not mislabeled with the alternate's
+		// type or filename.
+		setAudioContentType(ctx, strings.ToLower(filepath.Ext(relClipPath)))
+		setAudioContentDisposition(ctx, filepath.Base(relClipPath))
+	}
+
 	if tempPath, encoding := c.findEncodingTempPath(relClipPath); encoding {
 		// Wait server-side for the file to appear instead of immediately
 		// returning 503, reducing unnecessary client round-trips. Pass the
@@ -883,8 +969,7 @@ func (c *Handler) ServeAudioClip(ctx echo.Context) error {
 		// Check if this is a 404 for a file that's still being encoded by FFmpeg.
 		// The detection DB record is committed before audio export completes, so the
 		// frontend may request the file before it exists on disk.
-		var httpErr *echo.HTTPError
-		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
+		if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok && httpErr.Code == http.StatusNotFound {
 			// Filename-based serving has no note ID to resolve capture times, so pass
 			// zero times (unknown -> no pending window, keep the grace wait, fail-safe).
 			err = c.handleAudio404WithWait(ctx, normalizedFilename, err, time.Time{}, time.Time{},
@@ -953,20 +1038,7 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 
 	// Set proper Content-Type for audio files BEFORE ServeRelativeFile.
 	// This ensures Safari recognizes the file as audio.
-	switch ext {
-	case ".flac":
-		ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeFLAC)
-	case ".wav":
-		ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeWAV)
-	case ".mp3":
-		ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeMP3)
-	case ".m4a":
-		ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeM4A)
-	case ".ogg":
-		ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeOGG)
-	default:
-		// Let ServeRelativeFile handle the content type
-	}
+	setAudioContentType(ctx, ext)
 
 	// Set Content-Disposition as inline to enable playback in browser.
 	// Use filename* for proper UTF-8 filename encoding.
@@ -981,8 +1053,7 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 	// Serve the file using SecureFS.
 	err = c.SFS.ServeRelativeFile(ctx, normalizedClipPath)
 	if err != nil {
-		var httpErr *echo.HTTPError
-		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
+		if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok && httpErr.Code == http.StatusNotFound {
 			// Capture times drive the pending-export and ghost decisions. They are
 			// looked up here on the 404 slow path only.
 			begin, end := c.noteCaptureTimes(noteID)
@@ -1666,8 +1737,7 @@ func (c *Handler) spectrogramHTTPError(ctx echo.Context, err error) error {
 		// non-reporting 503 path (not HandleError) so this expected "still encoding"
 		// backpressure does not spam the error log, Sentry, and the notification bell.
 		secs := spectrogramRetryAfterSecondsInt
-		var anr *AudioNotReadyError
-		if errors.As(err, &anr) && anr.RetryAfter > 0 {
+		if anr, ok := errors.AsType[*AudioNotReadyError](err); ok && anr.RetryAfter > 0 {
 			secs = int(math.Ceil(anr.RetryAfter.Seconds()))
 		}
 		return c.writeAudioNotReady(ctx, err, "Audio file is still being processed, please retry", secs)
@@ -2006,7 +2076,7 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 // between image serving and metadata/status queries.
 //
 // The raw parameter defaults to true to maintain compatibility with existing cached
-// spectrograms from the old HTMX API which generated raw spectrograms by default.
+// spectrograms from the legacy UI, which generated raw spectrograms by default.
 func (c *Handler) ServeSpectrogramByID(ctx echo.Context) error {
 	// Validate note ID and get clip path
 	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
@@ -2077,7 +2147,7 @@ func (c *Handler) ServeAudioByQueryID(ctx echo.Context) error {
 //     Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
 //
 // The raw parameter defaults to true to maintain compatibility with existing cached
-// spectrograms from the old HTMX API which generated raw spectrograms by default.
+// spectrograms from the legacy UI, which generated raw spectrograms by default.
 func (c *Handler) ServeSpectrogram(ctx echo.Context) error {
 	filename := ctx.Param("filename")
 

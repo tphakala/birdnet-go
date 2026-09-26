@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/update/manifest"
 )
 
@@ -27,7 +27,7 @@ const (
 // CLI treats it as a soft, non-fatal condition (nothing to publish) so a
 // transient empty-release state cannot fail an otherwise-successful release
 // pipeline.
-var errNoChannels = errors.New("no releases matched a known channel")
+var errNoChannels = errors.NewStd("no releases matched a known channel")
 
 // buildOptions configures manifest generation.
 type buildOptions struct {

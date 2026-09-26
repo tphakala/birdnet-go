@@ -3,7 +3,6 @@ package jobqueue
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"runtime"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // MockClock is a mock implementation of the Clock interface for testing
@@ -349,7 +349,7 @@ func TestRetryProcess(t *testing.T) {
 			// failCount is a small test constant, safe to convert to int32
 			if count <= int32(failCount) { //nolint:gosec // G115: test values small, safe conversion
 				// Return failure for the first N attempts
-				return errors.New("simulated failure")
+				return errors.NewStd("simulated failure")
 			}
 			// Signal that the job has succeeded and close the done channel
 			t.Logf("TestRetryProcess: Job succeeded on attempt %d", count)
@@ -451,7 +451,7 @@ func TestRetryExhaustion(t *testing.T) {
 		ExecuteFunc: func(data any) error {
 			count := attemptCount.Add(1)
 			t.Logf("TestRetryExhaustion: Attempt %d of %d", count, maxRetries+1)
-			return errors.New("simulated failure")
+			return errors.NewStd("simulated failure")
 		},
 	}
 
@@ -552,7 +552,7 @@ func TestRetryBackoff(t *testing.T) {
 			executionTimes <- time.Now()
 			count := attemptCount.Add(1)
 			t.Logf("TestRetryBackoff: Attempt %d of %d", count, maxRetries+1)
-			return errors.New("simulated failure")
+			return errors.NewStd("simulated failure")
 		},
 	}
 
@@ -686,7 +686,7 @@ func TestJobExpiration(t *testing.T) {
 	for i := range 2 {
 		action := &MockAction{
 			ExecuteFunc: func(data any) error {
-				return errors.New("simulated failure")
+				return errors.NewStd("simulated failure")
 			},
 		}
 		data := &TestData{ID: fmt.Sprintf("fail-%d", i)}
@@ -1154,7 +1154,7 @@ func TestStressTest(t *testing.T) {
 			action = &MockAction{
 				ExecuteFunc: func(data any) error {
 					if attemptCount.Add(1) == 1 {
-						return errors.New("simulated failure")
+						return errors.NewStd("simulated failure")
 					}
 					defer wg.Done()
 					completedJobs.Add(1)
@@ -1168,7 +1168,7 @@ func TestStressTest(t *testing.T) {
 				ExecuteFunc: func(data any) error {
 					count := attemptCount.Add(1)
 					if count <= 2 {
-						return errors.New("simulated failure")
+						return errors.NewStd("simulated failure")
 					}
 					defer wg.Done()
 					completedJobs.Add(1)
@@ -1190,7 +1190,7 @@ func TestStressTest(t *testing.T) {
 						defer wg.Done()
 						failedJobs.Add(1)
 					}
-					return errors.New("simulated failure")
+					return errors.NewStd("simulated failure")
 				},
 			}
 		}
@@ -1592,7 +1592,7 @@ func TestJobTypeStatistics(t *testing.T) {
 	failAction := &FailActionType{
 		Description: "Fail Action",
 		ExecuteFunc: func(data any) error {
-			return errors.New("simulated failure")
+			return errors.NewStd("simulated failure")
 		},
 	}
 
@@ -1605,7 +1605,7 @@ func TestJobTypeStatistics(t *testing.T) {
 			retryCounter++
 			// Fail on first attempt, succeed on retry
 			if retryCounter == 1 {
-				return errors.New("simulated failure for retry")
+				return errors.NewStd("simulated failure for retry")
 			}
 			return nil
 		},
@@ -1906,7 +1906,7 @@ func TestStatsToJSON(t *testing.T) {
 	failAction := &MockAction{
 		Description: "Fail Action",
 		ExecuteFunc: func(data any) error {
-			return errors.New("simulated failure for JSON test")
+			return errors.NewStd("simulated failure for JSON test")
 		},
 	}
 

@@ -30,10 +30,10 @@ assert.Equal(t, expected, got)
 
 Understanding when to use `assert` vs `require` is critical:
 
-| Function | Behavior | Use Case |
-|----------|----------|----------|
+| Function    | Behavior                          | Use Case                                           |
+| ----------- | --------------------------------- | -------------------------------------------------- |
 | `require.*` | Stops test immediately on failure | Setup, prerequisites, conditions that must succeed |
-| `assert.*` | Continues test on failure | Validations, checking multiple conditions |
+| `assert.*`  | Continues test on failure         | Validations, checking multiple conditions          |
 
 ### Examples
 
@@ -179,10 +179,8 @@ func TestParseConfig(t *testing.T) {
     }
 
     for _, tt := range tests {
-    for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             t.Parallel()
-            got, err := ParseConfig(tt.input)
             got, err := ParseConfig(tt.input)
 
             if tt.wantErr {
@@ -246,12 +244,12 @@ func TestConcurrent(t *testing.T) {
 
 GitHub Actions can be slower than local machines. Use appropriate timeouts:
 
-| Operation Type | Minimum Timeout |
-|----------------|-----------------|
-| Channel operations | 500ms |
-| HTTP requests | 1s |
-| Database operations | 2s |
-| Complex async flows | 5s |
+| Operation Type      | Minimum Timeout |
+| ------------------- | --------------- |
+| Channel operations  | 500ms           |
+| HTTP requests       | 1s              |
+| Database operations | 2s              |
+| Complex async flows | 5s              |
 
 ### Eventually Pattern
 
@@ -280,10 +278,13 @@ func TestChannelReceive(t *testing.T) {
     case event := <-ch:
         assert.Equal(t, "expected", event.Type)
     case <-time.After(500 * time.Millisecond):
-        t.Fatal("timeout waiting for event")
+        require.FailNow(t, "timeout waiting for event")
     }
 }
 ```
+
+For a plain signal channel (`chan struct{}`), use `testutil.WaitForChannel(t, ch,
+timeout, msg)` from `internal/testutil` instead of writing the `select` yourself.
 
 ## Cleanup and Resource Management
 
@@ -295,7 +296,7 @@ Use `t.Cleanup()` for automatic cleanup in reverse order:
 func TestWithResources(t *testing.T) {
     // Resources are cleaned up in reverse order
     db := setupDatabase(t)
-    t.Cleanup(func() { db.Close() })  // Cleaned up last
+    t.Cleanup(func() { assert.NoError(t, db.Close()) })  // Cleaned up last
 
     cache := setupCache(t)
     t.Cleanup(func() { cache.Clear() })  // Cleaned up second
@@ -307,19 +308,77 @@ func TestWithResources(t *testing.T) {
 
 ### Goroutine Leak Detection
 
-Use `go.uber.org/goleak` to detect goroutine leaks:
+Use `go.uber.org/goleak` to detect goroutine leaks. Prefer a package-wide check
+in `TestMain`:
 
 ```go
 func TestMain(m *testing.M) {
     goleak.VerifyTestMain(m)
 }
+```
 
-// Or per-test
+Start from an empty ignore list rather than copying one from another test, and
+never add a broad ignore that can hide real leaks (`sync.runtime_notifyListWait`
+hides any goroutine stuck in `sync.Cond.Wait`). Add an ignore only for a named goroutine
+you have seen in a failure and cannot stop, such as the go-cache janitor
+(`goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run")`),
+which has no Stop method and exits only when its cache is garbage collected,
+something goleak's retry cannot wait for. Do not ignore a goroutine you can
+stop: `database/sql.(*DB).connectionOpener`, for example, exits when the
+database is closed, so close it in `t.Cleanup` instead. goleak already filters
+the test runner's own goroutines, so never add `testing.(*T).Run` or
+`testing.(*T).Parallel` ignores.
+
+For a per-test check, snapshot the goroutines that already exist at the START of
+the test and register the check FIRST, via `t.Cleanup`, so it runs last (after the
+service's own cleanup). Use `testutil.VerifyNoLeaks(t)` from
+`internal/testutil/goleak.go`, which does exactly this:
+
+```go
 func TestNoLeaks(t *testing.T) {
-    defer goleak.VerifyNone(t)
+    testutil.VerifyNoLeaks(t) // first statement: snapshot now, check last
+
+    svc := startService(t)
+    t.Cleanup(svc.Stop) // registered later, so it runs before the leak check
     // ... test code
 }
 ```
+
+`testutil.VerifyNoLeaks(t)` is equivalent to
+`ignoreExisting := goleak.IgnoreCurrent()` followed by
+`t.Cleanup(func() { goleak.VerifyNone(t, ignoreExisting) })`. Calling `goleak.IgnoreCurrent()` inside the cleanup would snapshot at the end of
+the test and hide every leak it is meant to catch.
+
+A deferred check (`defer goleak.VerifyNone(t, goleak.IgnoreCurrent())`) only
+works as the first statement of the test, with every service stopped by a later
+`defer`. The `IgnoreCurrent()` argument is evaluated when the `defer` statement
+runs, so anything started before that line is in the snapshot and a real leak
+passes unnoticed. It also misreports services stopped via `t.Cleanup`, because
+defers run before cleanups. Prefer the `t.Cleanup` form above.
+
+Never combine a per-test leak check with `t.Parallel()`. goleak retries for only
+about half a second, so make `Stop()` wait for its goroutines to exit instead of
+relying on the retry.
+
+### Isolation and Parallelism
+
+- Use `t.Parallel()` only for tests that are truly independent. Never
+  parallelize a test that mutates global state (for example
+  `conftest.SetTestSettings()`), shares mutable data, or runs a per-test leak
+  check.
+- In parallel subtests, clone shared maps (`maps.Clone`) instead of aliasing
+  them.
+- Use local service instances rather than global singletons, and stop every
+  service you start.
+- Restore global state with `t.Cleanup()`, not `defer`.
+- Use `t.TempDir()` for scratch space and `t.ArtifactDir()` for output worth
+  keeping; never `os.MkdirTemp()`. `ArtifactDir` output is kept only when
+  `go test` runs with `-artifacts` (otherwise it is deleted like `t.TempDir()`),
+  and it is written under `-outputdir`, which defaults to the package directory
+  inside the repository. Pass `-outputdir` with an existing directory outside
+  the repository so the output cannot be committed.
+- Test containers (MySQL, Mosquitto, MediaMTX, ntfy, Pebble) live in
+  `internal/testutil/containers`.
 
 ## Mocking with testify/mock
 
@@ -332,15 +391,23 @@ func TestNoLeaks(t *testing.T) {
 
 ### Mock Generation with mockery
 
-Generate mocks automatically:
+Mocks are generated by mockery from `.mockery.yaml`, which lists the mocked
+packages and interfaces. Never hand-write or hand-edit a generated mock. Exported
+interfaces in `internal/datastore` are picked up automatically; to mock an interface in any
+other package, list it under that package's `interfaces:` in `.mockery.yaml`. Then
+regenerate every mock:
 
 ```bash
-# Install mockery
-go install github.com/vektra/mockery/v2@latest
-
-# Generate mock for interface
-mockery --name=MyInterface --dir=./internal/mypackage --output=./internal/mypackage/mocks
+go generate ./internal/datastore   # runs mockery over the whole .mockery.yaml
 ```
+
+Use mockery v2 (`.mockery.yaml` is in the v2 format), v2.53.7 or a later v2
+release: `go install github.com/vektra/mockery/v2@v2.53.7`. mockery is not a
+`go.mod` tool. Older v2 releases such as v2.53.6 were built against an older
+`golang.org/x/tools` and fail to load this module's packages on Go 1.27.
+Regenerating with a newer version rewrites the version line in every mock
+header; commit that with your change. See
+`internal/datastore/mocks/README.md` for mock usage patterns.
 
 ### Mock Usage
 
@@ -348,27 +415,35 @@ mockery --name=MyInterface --dir=./internal/mypackage --output=./internal/mypack
 func TestWithMock(t *testing.T) {
     mockRepo := mocks.NewMockRepository(t)
 
-    // Setup expectation
-    mockRepo.On("GetByID", "123").Return(&Entity{ID: "123"}, nil)
+    // Typed expectation; the constructor asserts it at test end
+    mockRepo.EXPECT().GetByID("123").Return(&Entity{ID: "123"}, nil).Once()
 
     svc := NewService(mockRepo)
     result, err := svc.Process("123")
 
     require.NoError(t, err)
     assert.Equal(t, "123", result.ID)
-
-    // Verify expectations
-    mockRepo.AssertExpectations(t)
 }
 ```
 
 ### Async Mock Expectations
 
-Use `.Maybe()` for expectations that may not be called (race conditions):
+Use `.Maybe()` only for incidental calls that may or may not happen:
 
 ```go
-mockRepo.On("Save", mock.Anything).Return(nil).Maybe()
+mockRepo.EXPECT().Save(mock.Anything).Return(nil).Maybe()
 ```
+
+When the asynchronous call is the behaviour under test, keep the expectation
+strict and wait for it, then stop the goroutine before the test returns; a
+`.Maybe()` there lets the test pass when the behaviour is gone. Two race-safe
+ways to wait:
+
+- Close a channel from `.Run(...)` (pair it with `.Once()`, since closing twice
+  panics) and wait with `testutil.WaitForChannel`.
+- Increment an `atomic` counter from `.Run(...)` and poll it with
+  `require.Eventually`. Never poll `mockX.Calls` directly: testify guards that
+  slice with a mutex, so reading it from the test is a data race under `-race`.
 
 ## Modern Go Features (1.22+)
 
@@ -407,9 +482,9 @@ More accurate benchmarks:
 
 ```go
 func BenchmarkProcess(b *testing.B) {
-    data := setupBenchmarkData()
+    data := setupBenchmarkData() // setup before b.Loop is excluded from timing
 
-    b.ResetTimer()
+    b.ReportAllocs()
     for b.Loop() {  // More accurate than range b.N
         process(data)
     }
@@ -418,13 +493,14 @@ func BenchmarkProcess(b *testing.B) {
 
 ### Go 1.25: testing/synctest
 
-Deterministic testing of concurrent code (experimental):
+Deterministic testing of concurrent code. The entry point is `synctest.Test`;
+there is no `synctest.Run`:
 
 ```go
 import "testing/synctest"
 
 func TestConcurrent(t *testing.T) {
-    synctest.Run(func() {
+    synctest.Test(t, func(t *testing.T) {
         var ready atomic.Bool
         go func() {
             time.Sleep(time.Second)

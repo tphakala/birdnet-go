@@ -16,6 +16,7 @@ Translation files are organized by language code:
 - `hu.json` - Hungarian
 - `it.json` - Italian
 - `lv.json` - Latvian
+- `nb.json` - Norwegian (Bokmål)
 - `nl.json` - Dutch
 - `pl.json` - Polish
 - `pt.json` - Portuguese
@@ -241,7 +242,12 @@ Always include translations for aria-labels and screen reader text:
 ### 5. Naming Conventions
 
 - Use lowercase with dots for nesting: `section.subsection.key`
-- Use camelCase for multi-word keys: `firstName`, not `first_name`
+- Use camelCase for multi-word keys: `firstName`, not `first_name`. The one
+  exception is a segment that mirrors a backend identifier (an alert event,
+  metric or operator, a status value, a check ID): it keeps that identifier's
+  spelling, even snake_case, except that dots in the identifier become
+  underscores (see `toKeySegment` in `src/lib/utils/alertSchema.ts`). Do not
+  "fix" those keys.
 - Be descriptive but concise: `settings.audio.device` not `s.a.d`
 
 ## Component Implementation
@@ -287,7 +293,14 @@ Always include translations for aria-labels and screen reader text:
 1. Create a new file with the language code (e.g., `it.json` for Italian)
 2. Copy the structure from `en.json`
 3. Translate all values while keeping the keys identical
-4. Add the language to the language selector component
+4. Add the language to `LOCALES` in `frontend/src/lib/i18n/config.ts`. The
+   language selector and the locale persistence E2E test read their lists
+   from it.
+5. Add the code to `defaultUILocales` in `internal/conf/locale.go`, the
+   backend's fallback list used when the embedded locale files cannot be
+   read (a Go test fails until it matches this directory)
+6. Add the code to the `for lang in ...` locale loops in
+   `.agents/skills/preflight/reference/patterns.md`
 
 ## Testing Translations
 

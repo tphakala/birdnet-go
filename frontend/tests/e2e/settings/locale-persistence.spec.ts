@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { test, expect, type Page } from '@playwright/test';
+import { LOCALES } from '../../../src/lib/i18n/config';
 
 /**
  * Locale Persistence E2E Tests
@@ -9,33 +11,49 @@ import { test, expect, type Page } from '@playwright/test';
  * - Restores the correct locale after page reload
  * - Displays translated text for every supported locale
  *
- * This test suite covers all 14 supported locales and catches the bug
- * where certain locales revert to English after reload.
+ * This test suite covers every supported locale (LOCALES in
+ * src/lib/i18n/config.ts) and catches the bug where certain locales revert
+ * to English after reload.
  */
 
-// All supported locales with their display names and a known translated string.
-// We use "common.settings" (the translation for "Settings" in the navigation)
-// because it differs across every locale and is always visible in the sidebar.
+/** Directory holding the translation files, resolved from this spec file. */
+const MESSAGES_DIR = new URL('../../../static/messages/', import.meta.url);
+
+/**
+ * Read the "common.settings" translation (the "Settings" navigation label)
+ * for a locale. It differs across every locale and is always visible in the
+ * sidebar.
+ */
+const readSettingsTranslation = (code: string): string => {
+  // The path is built from a LOCALES key, a fixed set of locale codes.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  const messages: unknown = JSON.parse(readFileSync(new URL(`${code}.json`, MESSAGES_DIR), 'utf8'));
+  const common =
+    typeof messages === 'object' && messages !== null && 'common' in messages
+      ? messages.common
+      : undefined;
+  const settings =
+    typeof common === 'object' && common !== null && 'settings' in common
+      ? common.settings
+      : undefined;
+  if (typeof settings !== 'string' || settings === '') {
+    throw new Error(`static/messages/${code}.json has no common.settings string`);
+  }
+  return settings;
+};
+
+// Every supported locale with its display name and a known translated string,
+// derived from the locale config and the translation files so a new locale is
+// covered automatically.
 const LOCALE_DATA: {
   code: string;
   name: string;
   settingsTranslation: string;
-}[] = [
-  { code: 'da', name: 'Dansk', settingsTranslation: 'Indstillinger' },
-  { code: 'en', name: 'English', settingsTranslation: 'Settings' },
-  { code: 'de', name: 'Deutsch', settingsTranslation: 'Einstellungen' },
-  { code: 'es', name: 'Espanol', settingsTranslation: 'Configuración' },
-  { code: 'fi', name: 'Suomi', settingsTranslation: 'Asetukset' },
-  { code: 'fr', name: 'Francais', settingsTranslation: 'Paramètres' },
-  { code: 'hu', name: 'Magyar', settingsTranslation: 'Beállítások' },
-  { code: 'it', name: 'Italiano', settingsTranslation: 'Impostazioni' },
-  { code: 'lv', name: 'Latviešu', settingsTranslation: 'Iestatījumi' },
-  { code: 'nl', name: 'Nederlands', settingsTranslation: 'Instellingen' },
-  { code: 'pl', name: 'Polski', settingsTranslation: 'Ustawienia' },
-  { code: 'pt', name: 'Portugues', settingsTranslation: 'Configurações' },
-  { code: 'sk', name: 'Slovenčina', settingsTranslation: 'Nastavenia' },
-  { code: 'sv', name: 'Svenska', settingsTranslation: 'Inställningar' },
-];
+}[] = Object.entries(LOCALES).map(([code, info]) => ({
+  code,
+  name: info.name,
+  settingsTranslation: readSettingsTranslation(code),
+}));
 
 /** Clear the locale from localStorage to start with a clean state. */
 const clearLocaleStorage = async (page: Page) => {

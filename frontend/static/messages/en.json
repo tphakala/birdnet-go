@@ -109,6 +109,14 @@
       "closeModal": "Close modal",
       "dismissAlert": "Dismiss alert",
       "closeNotification": "Close notification",
+      "toastRegion": {
+        "topLeft": "Notifications, top left",
+        "topCenter": "Notifications, top center",
+        "topRight": "Notifications, top right",
+        "bottomLeft": "Notifications, bottom left",
+        "bottomCenter": "Notifications, bottom center",
+        "bottomRight": "Notifications, bottom right"
+      },
       "toggleDropdown": "Toggle dropdown",
       "sortAscending": "Sort ascending",
       "selectLanguage": "Select language",
@@ -130,7 +138,6 @@
       "selectToday": "Select today",
       "dateSelected": "Date selected: {date}",
       "calendarNavigation": "Use arrow keys to navigate calendar, Enter to select, Escape to close",
-      "downloadCsv": "Download species list as CSV",
       "visitEbirdLink": "Open eBird.org in a new tab",
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in a new tab",
       "resizeHandle": "Drag to resize",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Audio Analysis Overloaded",
-        "overloadMessage": "Your system is dropping {dropRate}% of audio samples for source ''{sourceName}'' because it cannot keep up with analysis. Reduce the BirdNET overlap value in detection settings or consider upgrading to a faster CPU."
+        "overloadMessage": "Your system is dropping {dropRate}% of audio samples for source '{sourceName}' because it cannot keep up with analysis. Reduce the BirdNET overlap value in detection settings or consider upgrading to a faster CPU."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime Not Available",
@@ -474,6 +481,16 @@
         "notRegisteredTitle": "No model is analyzing {sourceName}",
         "notRegisteredMessage": "No audio is reaching {models} on audio source \"{sourceName}\", so no detections are produced. Open System > AI Models to check its per-source status, and confirm the audio source is connected and sending audio."
       },
+      "acousticModels": {
+        "noneTitle": "No acoustic model enabled",
+        "noneMessage": "No acoustic model is loaded, so audio is captured but not analyzed. Enable a model in Settings > Analysis, or install one from the model gallery.",
+        "loadFailedTitle": "Acoustic model failed to load",
+        "loadFailedMessage": "An enabled acoustic model failed to load, so audio is captured but not analyzed. Check the model on the System > AI Models page."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# model has a better build for this system} other {# models have better builds for this system}}",
+        "message": "A build better matched to this system's hardware or location is available for: {models}. Open Settings > Analysis > Models and choose Optimize to switch."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
@@ -493,6 +510,11 @@
           "diskFull": "Disk is full - free some space",
           "permissionDenied": "Permission denied - check file or service permissions"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} fails every analysis",
+        "message": "{modelName} is loaded, but its last {failures} analyses in a row failed on {runtime}: inference returned an error. Audio is captured but this model detects nothing. Check the model on the System > AI Models page.",
+        "nonFiniteMessage": "{modelName} is loaded, but its last {failures} analyses in a row failed on {runtime}: the model returned invalid (NaN or infinite) scores. Audio is captured but this model detects nothing. Check the model on the System > AI Models page."
       }
     },
     "loading": "Loading notifications..."
@@ -752,6 +774,16 @@
       "recentDetectionsFetch": "Failed to fetch recent detections: {status}",
       "recentDetectionsLoad": "Failed to load recent detections",
       "configFetch": "Failed to fetch dashboard config: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "No acoustic model enabled",
+      "noneMessage": "Audio is being captured but not analyzed. Enable a model in the gallery to start detecting species.",
+      "noneAction": "Open model gallery",
+      "loadFailedTitle": "Acoustic model failed to load",
+      "loadFailedMessage": "An enabled model could not be loaded, so no audio is being analyzed. The AI Models page shows which model failed and why.",
+      "loadFailedAction": "View AI Models status",
+      "failingTitle": "{count, plural, one {A model fails every analysis} other {# models fail every analysis}}",
+      "failingMessage": "{count, plural, one {{models} is loaded, but every analysis fails, so it detects nothing.} other {{models} are loaded, but every analysis fails, so they detect nothing.}} The AI Models page shows the backend and the error."
     },
     "banner": {
       "title": "Title",
@@ -1834,7 +1866,14 @@
       "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources"
+      "noModelsHintLink": "Configure audio sources",
+      "modelFailing": "every analysis fails",
+      "lastSuccess": "Last success",
+      "lastSuccessHelp": "When this model last analyzed audio without an error.",
+      "lastSuccessNever": "None since the model loaded",
+      "modelFailingHelp": "{reason} Try another build of this model in Settings > Analysis > Models, or check the backend and precision shown above.",
+      "modelFailingReasonNonFinite": "Every recent analysis failed because the model returned invalid (NaN or infinite) scores, so it detects nothing.",
+      "modelFailingReasonError": "Every recent analysis failed because inference returned an error, so it detects nothing."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2354,7 +2393,7 @@
           "title": "False Positive Filter",
           "description": "Reduce false detections by requiring multiple confirmations across overlapping audio segments",
           "level": {
-            "label": "Filter Level"
+            "label": "False Positive Filter Strength"
           },
           "detectionCount": "{count} confirmations required. {description}",
           "levels": {
@@ -3261,7 +3300,7 @@
             "label": "Device Name",
             "helpText": "The base name for devices as they appear in Home Assistant. Each audio source will have its own device linked to this main BirdNET-Go device."
           },
-          "sensorsNote": "<strong>Sensors Created:</strong> For each audio source, Home Assistant will receive: Last Species, Confidence, Scientific Name, and Sound Level (if enabled). The bridge device includes online/offline availability status.",
+          "sensorsNote": "<strong>Sensors Created:</strong> For each audio source, Home Assistant will receive: Last Species, Confidence, Scientific Name, and Sound Level (if enabled). The bridge device includes online/offline availability status. Each source's detection sensors read that source's own MQTT topic, &lt;base_topic&gt;/sources/&lt;source_id&gt;, and its Sound Level sensor reads the &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel subtopic, so a detection from one source never resets another source's sensors.",
           "discovery": {
             "button": "Send Discovery",
             "success": "Discovery messages sent to Home Assistant",
@@ -3307,7 +3346,8 @@
             "none": "None",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3328,6 +3368,16 @@
             "helpText": "Select units for temperature and wind speed (m = Metric, e = Imperial, h = UK Hybrid)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API Key",
+            "helpText": "Enter your Pirate Weather API key. Required for weather data."
+          },
+          "endpoint": {
+            "label": "API Endpoint",
+            "helpText": "Override the default Pirate Weather API endpoint if needed. Defaults to https://api.pirateweather.net/forecast if left empty."
+          }
+        },
         "notes": {
           "none": "No weather data will be retrieved.",
           "yrno": {
@@ -3335,7 +3385,8 @@
             "freeService": "Yr is a free weather data service. For more information, visit <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Use of OpenWeather requires an API key, sign up for a free API key at <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Requires a Weather Underground API key and a valid PWS station ID. See <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for details."
+          "wunderground": "Requires a Weather Underground API key and a valid PWS station ID. See <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for details.",
+          "pirateweather": "Use of Pirate Weather requires an API key, sign up at <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API Key",
@@ -3708,6 +3759,7 @@
         "dataOutputTitle": "Sound Level Data Output",
         "dataOutputDescription": "When enabled, sound level measurements are published via:",
         "mqttTopic": "MQTT topic:",
+        "mqttSourceTopic": "Per-source MQTT topic (with Home Assistant discovery):",
         "sseEndpoint": "SSE endpoint:",
         "prometheusMetrics": "Prometheus metrics:"
       },
@@ -3769,6 +3821,8 @@
         "pathHelp": "Directory where audio clips will be saved. Relative paths are from the application directory. Example: 'clips/' or '/var/audio/birds/'",
         "typeLabel": "Audio Format",
         "typeHelp": "Audio format for saved clips. WAV and FLAC are lossless (best quality, larger files). MP3, AAC, and Opus are lossy (smaller files, slight quality loss).",
+        "ultrasonicTypeLabel": "Ultrasonic Format",
+        "ultrasonicTypeHelp": "Lossless format (WAV or FLAC) used only for bat and ultrasonic captures above 48 kHz. These are stored at their full source rate instead of the format above, so no ultrasonic detail is lost.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files.",
         "losslessBitrateValue": "N/A - Lossless",
@@ -3837,7 +3891,17 @@
       },
       "models": {
         "recommendBoth": "Running both BirdNET and Perch together is recommended for best species detection coverage.",
-        "perchOnlyWarning": "Perch alone produces fewer detections. Lower the confidence threshold to 0.50 for meaningful results, or enable BirdNET alongside for best coverage."
+        "perchOnlyWarning": "Perch alone produces fewer detections. Lower the confidence threshold to 0.50 for meaningful results, or enable BirdNET alongside for best coverage.",
+        "loading": "Loading detection models...",
+        "noneEnabledTitle": "No detection model enabled.",
+        "noneEnabledHelp": "You can still save this source. Its audio is analyzed by the default models as soon as one is enabled.",
+        "noneEnabledLink": "Open model gallery",
+        "noneAvailable": "No detection models are enabled on this server.",
+        "loadFailedWarning": "A detection model failed to load, so this source is not being analyzed until it recovers.",
+        "loadFailedLink": "View AI Models status",
+        "defaultBadge": "{models} (default)",
+        "defaultPendingBadge": "Default models",
+        "noneBadge": "No model loaded"
       }
     },
     "security": {
@@ -5117,6 +5181,7 @@
       "birdweatherClientFailed": "Failed to create BirdWeather client",
       "noWeatherProvider": "No weather provider selected",
       "openWeatherKeyRequired": "OpenWeather API key is required",
+      "pirateWeatherKeyRequired": "Pirate Weather API key is required",
       "processorUnavailable": "Processor not available",
       "discoveryFailed": "Failed to trigger Home Assistant discovery"
     },

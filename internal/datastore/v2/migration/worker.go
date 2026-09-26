@@ -3,7 +3,6 @@ package migration
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -73,13 +73,13 @@ const catchUpMaxBatches = 10000
 const tailSyncInterval = 10 * time.Second
 
 // ErrMigrationPaused is returned when migration is paused by user.
-var ErrMigrationPaused = errors.New("migration paused")
+var ErrMigrationPaused = errors.NewStd("migration paused")
 
 // ErrMigrationCancelled is returned when migration is cancelled.
-var ErrMigrationCancelled = errors.New("migration cancelled")
+var ErrMigrationCancelled = errors.NewStd("migration cancelled")
 
 // ErrTooManyErrors is returned when too many consecutive errors occur.
-var ErrTooManyErrors = errors.New("too many consecutive errors")
+var ErrTooManyErrors = errors.NewStd("too many consecutive errors")
 
 // rateSample records a batch's timing for rate calculation.
 type rateSample struct {
@@ -169,31 +169,31 @@ type WorkerConfig struct {
 func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 	// Validate required dependencies
 	if cfg == nil {
-		return nil, errors.New("worker config is required")
+		return nil, errors.NewStd("worker config is required")
 	}
 	if cfg.Legacy == nil {
-		return nil, errors.New("legacy repository is required")
+		return nil, errors.NewStd("legacy repository is required")
 	}
 	if cfg.V2Detection == nil {
-		return nil, errors.New("v2 detection repository is required")
+		return nil, errors.NewStd("v2 detection repository is required")
 	}
 	if cfg.LabelRepo == nil {
-		return nil, errors.New("label repository is required")
+		return nil, errors.NewStd("label repository is required")
 	}
 	if cfg.ModelRepo == nil {
-		return nil, errors.New("model repository is required")
+		return nil, errors.NewStd("model repository is required")
 	}
 	if cfg.SourceRepo == nil {
-		return nil, errors.New("source repository is required")
+		return nil, errors.NewStd("source repository is required")
 	}
 	if cfg.StateManager == nil {
-		return nil, errors.New("state manager is required")
+		return nil, errors.NewStd("state manager is required")
 	}
 	if cfg.Logger == nil {
-		return nil, errors.New("logger is required")
+		return nil, errors.NewStd("logger is required")
 	}
 	if cfg.SpeciesLabelTypeID == 0 {
-		return nil, errors.New("species label type ID is required")
+		return nil, errors.NewStd("species label type ID is required")
 	}
 
 	batchSize := cfg.BatchSize
@@ -248,7 +248,7 @@ func (w *Worker) Start(ctx context.Context) error {
 	w.mu.Lock()
 	if w.running {
 		w.mu.Unlock()
-		return errors.New("worker already running")
+		return errors.NewStd("worker already running")
 	}
 	w.running = true
 	w.paused = false
@@ -614,7 +614,7 @@ func (w *Worker) completeValidation(_ context.Context) runAction {
 		}
 	}
 
-	// Continue running — next iteration will enter tail sync via COMPLETED case
+	// Continue running: next iteration will enter tail sync via COMPLETED case
 	return runActionContinue
 }
 
@@ -643,7 +643,7 @@ func (w *Worker) processDirtyIDs(ctx context.Context) (int64, error) {
 		if err != nil {
 			return totalCaught, err
 		}
-		// Stop if no progress was made — remaining IDs have persistent errors
+		// Stop if no progress was made: remaining IDs have persistent errors
 		if batchCaught == 0 {
 			break
 		}
@@ -688,8 +688,8 @@ func (w *Worker) processDirtyIDsBatch(ctx context.Context, dirtyIDs []uint) (int
 		}
 		if len(results) == 0 || results[0].ID != dirtyID {
 			// The legacy row for this dirty ID is gone, so the detection was deleted and any
-			// surviving v2 row is an orphan that would resurrect after v2 promotion (Forgejo
-			// #1581). Reconcile the v2 side and clear the marker via the same shared helper the
+			// surviving v2 row is an orphan that would resurrect after v2 promotion.
+			// Reconcile the v2 side and clear the marker via the same shared helper the
 			// runtime reconciler (DualWriteRepository.reconcileDirtyIDs) uses, so the two paths
 			// cannot drift. On any error other than not-found/locked, leave the id dirty for retry.
 			if recErr := repository.ReconcileDeletedGhost(ctx, w.v2Detection, w.stateManager, dirtyID); recErr != nil {
@@ -714,7 +714,7 @@ func (w *Worker) processDirtyIDsBatch(ctx context.Context, dirtyIDs []uint) (int
 			continue // Leave as dirty for next attempt
 		}
 
-		// Successfully migrated — remove from dirty set
+		// Successfully migrated: remove from dirty set
 		if removeErr := w.stateManager.RemoveDirtyID(dirtyID); removeErr != nil {
 			w.logger.Warn("failed to remove dirty ID after migration",
 				logger.Uint64("id", uint64(dirtyID)),
@@ -733,7 +733,7 @@ func (w *Worker) processDirtyIDsBatch(ctx context.Context, dirtyIDs []uint) (int
 func (w *Worker) runCatchUp(ctx context.Context) (int64, error) {
 	var totalCaught int64
 
-	// Phase 1: Process known dirty IDs first — these are the most likely cause
+	// Phase 1: Process known dirty IDs first, since these are the most likely cause
 	// of count mismatches and can be resolved without a full scan.
 	dirtyCaught, dirtyErr := w.processDirtyIDs(ctx)
 	if dirtyErr != nil {
@@ -875,7 +875,7 @@ func (w *Worker) handleCutoverState(ctx context.Context) runAction {
 		}
 	}
 
-	// Continue running — next iteration will enter tail sync via COMPLETED case
+	// Continue running: next iteration will enter tail sync via COMPLETED case
 	return runActionContinue
 }
 
@@ -920,7 +920,7 @@ func (w *Worker) runTailSync(ctx context.Context) runAction {
 			break
 		}
 		// If no records were synced in a non-empty batch, all records failed.
-		// Break to avoid a tight retry loop — failed records are tracked as
+		// Break to avoid a tight retry loop: failed records are tracked as
 		// dirty IDs and will be retried on the next tail sync cycle.
 		if synced == 0 {
 			w.logger.Warn("tail sync: all records in batch failed, backing off")

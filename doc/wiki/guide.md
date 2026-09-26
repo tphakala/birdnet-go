@@ -1682,12 +1682,18 @@ When MQTT is enabled, sound level data is published to the topic:
 <base_topic>/soundlevel
 ```
 
+When Home Assistant discovery is also enabled, each source's data is additionally published to its own topic, which the discovered Sound Level sensor reads:
+
+```
+<base_topic>/sources/<source_id>/soundlevel
+```
+
 The MQTT message uses a compact JSON format to minimize payload size:
 
 ```json
 {
   "ts": "2024-01-15T08:30:45Z",
-  "src": "USB Audio Device",
+  "src": "rtsp_65c31a0b",
   "nm": "Primary Microphone",
   "dur": 10,
   "b": {
@@ -1888,17 +1894,35 @@ The MQTT message uses a compact JSON format to minimize payload size:
   - `x`: Maximum dB level (1 decimal place)
   - `m`: Mean/average dB level (1 decimal place)
 
-Example Home Assistant configuration:
+Example Home Assistant configuration (single source). This reads the shared `birdnet/soundlevel` topic without a source filter, so on a multi-source install it mixes every source's readings into one sensor. Modern Home Assistant configures MQTT sensors under the `mqtt:` key; the older `sensor:` block with `platform: mqtt` was removed in Home Assistant 2022.9:
 
 ```yaml
-sensor:
-  - platform: mqtt
-    name: "Bird Station Sound Level 1kHz"
-    state_topic: "birdnet/soundlevel"
-    value_template: "{{ value_json.b['1.0_kHz'].m }}"
-    unit_of_measurement: "dB"
-    device_class: "sound_pressure"
-    state_class: "measurement"
+mqtt:
+  sensor:
+    - name: "Bird Station Sound Level 1kHz"
+      state_topic: "birdnet/soundlevel"
+      value_template: "{{ value_json.b['1.0_kHz'].m }}"
+      unit_of_measurement: "dB"
+      device_class: "sound_pressure"
+      state_class: "measurement"
+```
+
+For multiple sources, prefer Home Assistant discovery: when it is enabled, BirdNET-Go creates a per-source Sound Level sensor automatically, and each one reads its own topic (`<base_topic>/sources/<source_id>/soundlevel`), so no manual YAML is needed. For manual YAML without discovery, filter by source with a trigger-based template sensor that matches the payload's `src` field. Replace `rtsp_65c31a0b` with your source ID (as listed by `/api/v2/system/audio/sources`):
+
+```yaml
+template:
+  - trigger:
+      - platform: mqtt
+        topic: "birdnet/soundlevel"
+    condition:
+      - condition: template
+        value_template: "{{ trigger.payload_json.src == 'rtsp_65c31a0b' }}"
+    sensor:
+      - name: "Backyard Sound Level 1kHz"
+        state: "{{ trigger.payload_json.b['1.0_kHz'].m }}"
+        unit_of_measurement: "dB"
+        device_class: sound_pressure
+        state_class: measurement
 ```
 
 ##### SSE Streaming
@@ -2995,6 +3019,11 @@ The application offers several integration points:
 
 * MQTT support for IoT ecosystems.
   - The `retain` flag in MQTT settings is recommended for Home Assistant integration to ensure sensor states are preserved across restarts.
+  - With Home Assistant discovery enabled, each detection with a source ID is also published to a per-source topic, `<base_topic>/sources/<source_id>`, and each source's discovered sensors read their own topic. Here `<source_id>` is the source's internal ID (for example `rtsp_65c31a0b`, as listed by `/api/v2/system/audio/sources`), not its display name, with any character other than letters, digits, `_` and `-` replaced by `_`. A detection from one source therefore does not change another source's sensors. The shared `<base_topic>` still carries every detection, so a subscriber to `<base_topic>/#` receives each message twice (once on the shared topic and once on the per-source topic) while discovery is enabled; subscribe to `<base_topic>` or `<base_topic>/+` to avoid the duplicate. Brokers with topic ACLs must allow publishing to `<base_topic>/sources/#` (and allow Home Assistant to read it), otherwise the discovered sensors stay unknown.
+  - After upgrading, each source's discovered sensors read as unknown until that source's next detection (or next sound level reading, if sound level monitoring is on), because the new per-source topics have no retained message yet. They populate as soon as new data arrives.
+  - The MQTT delivered-message metrics count both publishes: while discovery is enabled, each detection with a source ID increments the counter twice, once for the shared topic and once for the per-source topic.
+  - Turning Home Assistant discovery off removes BirdNET-Go's entities from Home Assistant (if the broker is unreachable at that moment, on the next successful connection). Deleting a stream or audio source in settings removes its entities; disabling a stream keeps them, so they resume when it is enabled again. Renaming a source removes the entities under its old name and publishes them under the new one. A source that merely restarts (watchdog, quiet hours, a brief unplug) keeps its entities and retained state. Turning sound level monitoring off removes the Sound Level sensor.
+  - Changing the node name (main name) or the discovery prefix publishes the entities under the new identity but does not remove the old ones; delete the old BirdNET-Go device in Home Assistant.
 * Telemetry endpoint compatible with Prometheus.
 * BirdWeather API integration for community data sharing.
   - **About BirdWeather:** [BirdWeather.com](https://www.birdweather.com/) is a citizen science platform that collects bird vocalizations from stations around the world. It uses the BirdNET model (developed by Cornell Lab of Ornithology and Chemnitz University of Technology) for identification. Uploading data helps contribute to this global library.

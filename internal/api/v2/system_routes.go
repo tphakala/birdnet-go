@@ -101,13 +101,14 @@ const modelTopologyReconfigureDebounce = 2 * time.Second
 // the orchestrator at runtime, which happens when the user installs, reinstalls,
 // switches the variant of, or removes a model in the gallery.
 //
-// It does two things. It broadcasts over the metrics SSE stream so open clients
-// re-fetch the inference snapshot, and it asks the audio pipeline to reconcile
-// its per-source model registration.
+// It broadcasts over the metrics SSE stream so open clients re-fetch the
+// inference snapshot, it asks the audio pipeline to reconcile its per-source
+// model registration, and it re-evaluates the model optimize bell notice.
 //
-// The second half is the fix for GitHub issues #4201 and #4204. Loading a model
-// into the orchestrator does not attach it to anything: the audio router fans a
-// source out to the models registered for it, and that registration is computed
+// The audio-source reconfigure is the fix for GitHub issues #4201 and #4204.
+// Loading a model into the orchestrator does not attach it to anything: the
+// audio router fans a source out to the models registered for it, and that
+// registration is computed
 // only at startup and when settings change. So a model installed from the
 // gallery while the server ran would load, report itself as installed, and then
 // receive no audio at all until the user toggled the model assignment on the
@@ -122,6 +123,9 @@ func (c *Controller) OnModelTopologyChanged() {
 	}
 	c.BroadcastInferenceTopologyChanged()
 	c.scheduleAudioSourceReconfigure()
+	// An install, uninstall or variant swap can create or resolve a model
+	// optimize offer, so re-evaluate the bell notice.
+	c.scheduleOptimizeNoticeSync()
 }
 
 // scheduleAudioSourceReconfigure starts or resets the debounce timer that sends
@@ -163,7 +167,10 @@ func (c *Controller) scheduleAudioSourceReconfigure() {
 func (c *Controller) sendAudioSourceReconfigure() {
 	defer func() {
 		if r := recover(); r != nil {
-			c.LogWarnIfEnabled("Recovered from send on closed controlChan during audio source reconfigure",
+			// Use the system logger (c.log), not the access logger (c.LogWarnIfEnabled):
+			// this is a controller/shutdown warning, and c.log() is never nil, so the
+			// warning is not silently dropped on a controller whose APILogger is unset.
+			c.log().Warn("Recovered from send on closed controlChan during audio source reconfigure",
 				logger.Any("panic", r))
 		}
 	}()
