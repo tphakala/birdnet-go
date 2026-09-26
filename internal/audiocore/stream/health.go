@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"net"
@@ -146,14 +147,15 @@ func classifyError(err error, host string, port int) *audiocore.StreamErrorConte
 }
 
 // classifyInto fills ErrorType, HTTPStatus, and the user-facing text on ctx from
-// the concrete error. The order matters: the most specific typed errors are
-// tested before the broad sentinels.
+// the concrete error. The order matters: the first matching case wins, so a
+// cause is tested before any broader sentinel that wraps it. A TLS handshake
+// failure, for example, arrives wrapped in rtsp.ErrConnectionClosed and must be
+// recognized before the connection-closed case.
 func classifyInto(ctx *audiocore.StreamErrorContext, err error) {
 	respErr, isRespErr := errors.AsType[*rtsp.ResponseError](err)
 	_, isUnauthErr := errors.AsType[*rtsp.UnauthorizedError](err)
 	_, isRedirectErr := errors.AsType[*audiostream.RedirectError](err)
-	_, isCertErr := errors.AsType[*x509.CertificateInvalidError](err)
-	_, isAuthorityErr := errors.AsType[x509.UnknownAuthorityError](err)
+	isCertErr := isCertVerifyError(err)
 	netErr, isNetErr := errors.AsType[net.Error](err)
 	isNetTimeout := isNetErr && netErr.Timeout()
 
@@ -186,7 +188,7 @@ func classifyInto(ctx *audiocore.StreamErrorContext, err error) {
 	case errors.Is(err, rtsp.ErrRequestTimeout), isNetTimeout:
 		ctx.ErrorType = errTypeConnectionTimeout
 		ctx.UserFacingMsg = "The connection to the stream timed out."
-	case isCertErr, isAuthorityErr:
+	case isCertErr:
 		ctx.ErrorType = errTypeTLSVerifyFailed
 		ctx.UserFacingMsg = "The stream's TLS certificate could not be verified."
 	case errors.Is(err, rtsp.ErrServerTeardown), errors.Is(err, rtsp.ErrConnectionClosed):
@@ -198,6 +200,25 @@ func classifyInto(ctx *audiocore.StreamErrorContext, err error) {
 	default:
 		ctx.ErrorType = errTypeStreamError
 	}
+}
+
+// isCertVerifyError reports whether err is a server certificate verification
+// failure. crypto/tls wraps a failure of its built-in chain verification in
+// *tls.CertificateVerificationError; the x509 types cover a verification error
+// that reaches the chain without that wrapper. crypto/x509 returns those by
+// value, so they are matched as values, not pointers.
+func isCertVerifyError(err error) bool {
+	if _, ok := errors.AsType[*tls.CertificateVerificationError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[x509.CertificateInvalidError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[x509.HostnameError](err); ok {
+		return true
+	}
+	_, ok := errors.AsType[x509.UnknownAuthorityError](err)
+	return ok
 }
 
 // classifyConnClosed distinguishes a refused connection from a reset one by the

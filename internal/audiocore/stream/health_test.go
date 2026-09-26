@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"net"
@@ -77,6 +78,14 @@ func TestMapState(t *testing.T) {
 	}
 }
 
+// tlsHandshakeError builds a certificate verification failure the way the
+// rtsps dial surfaces it: crypto/tls wraps the x509 error (a value type) in
+// *tls.CertificateVerificationError, and the RTSP client wraps that in
+// rtsp.ErrConnectionClosed.
+func tlsHandshakeError(verifyErr error) error {
+	return fmt.Errorf("%w: %w", rtsp.ErrConnectionClosed, &tls.CertificateVerificationError{Err: verifyErr})
+}
+
 func TestClassifyError(t *testing.T) {
 	const host, port = "cam.local", 554
 
@@ -98,7 +107,12 @@ func TestClassifyError(t *testing.T) {
 		{name: "rtsp 404 response", err: fmt.Errorf("describe: %w", &rtsp.ResponseError{Code: 404, Reason: "Not Found"}), wantType: "rtsp_404", wantHTTP: 404},
 		{name: "redirect", err: fmt.Errorf("describe: %w", &audiostream.RedirectError{Location: "rtsp://other.host/s"}), wantType: errTypeRedirect},
 		{name: "request timeout", err: fmt.Errorf("dial: %w", rtsp.ErrRequestTimeout), wantType: errTypeConnectionTimeout},
-		{name: "tls verify failed", err: fmt.Errorf("tls: %w", x509.UnknownAuthorityError{}), wantType: errTypeTLSVerifyFailed},
+		{name: "tls unknown authority", err: fmt.Errorf("tls: %w", x509.UnknownAuthorityError{}), wantType: errTypeTLSVerifyFailed},
+		{name: "tls expired certificate", err: tlsHandshakeError(x509.CertificateInvalidError{Reason: x509.Expired}), wantType: errTypeTLSVerifyFailed},
+		{name: "tls hostname mismatch", err: tlsHandshakeError(x509.HostnameError{Host: host}), wantType: errTypeTLSVerifyFailed},
+		{name: "tls unknown authority from handshake", err: tlsHandshakeError(x509.UnknownAuthorityError{}), wantType: errTypeTLSVerifyFailed},
+		{name: "bare x509 invalid certificate", err: fmt.Errorf("verify: %w", x509.CertificateInvalidError{Reason: x509.Expired}), wantType: errTypeTLSVerifyFailed},
+		{name: "bare x509 hostname mismatch", err: fmt.Errorf("verify: %w", x509.HostnameError{Host: host}), wantType: errTypeTLSVerifyFailed},
 		{name: "invalid url", err: fmt.Errorf("dial: %w", rtsp.ErrInvalidURL), wantType: errTypeInvalidURL},
 		{name: "connection closed maps to reset", err: fmt.Errorf("wait: %w", rtsp.ErrConnectionClosed), wantType: errTypeConnectionReset},
 		{name: "server teardown maps to reset", err: fmt.Errorf("wait: %w", rtsp.ErrServerTeardown), wantType: errTypeConnectionReset},
