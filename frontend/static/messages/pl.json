@@ -674,6 +674,12 @@
         "species": "Gatunek",
         "detections": "Detekcje"
       },
+      "dayparts": {
+        "night": "Noc",
+        "morning": "Rano",
+        "afternoon": "Popołudnie",
+        "evening": "Wieczór"
+      },
       "daylight": {
         "label": "Światło dzienne",
         "sunrise": "Wschód słońca o {time}",
@@ -689,7 +695,9 @@
       "navigation": {
         "previousDay": "Poprzedni dzień",
         "nextDay": "Następny dzień",
-        "today": "Dzisiaj"
+        "today": "Dzisiaj",
+        "previousDaypart": "Wcześniejsza pora dnia",
+        "nextDaypart": "Późniejsza pora dnia"
       },
       "tooltips": {
         "viewHourly": "Wyświetl wszystkie detekcje dla {hour}:00",

@@ -9,7 +9,7 @@ Purpose:
 
 Features:
 - Progressive loading states (skeleton → spinner → loaded/error)
-- Responsive hourly/bi-hourly/six-hourly column grouping based on viewport
+- Responsive hourly/bi-hourly/six-hourly/single-daypart grouping based on viewport
 - Color-coded heatmap cells showing detection intensity
 - Daylight visualization row showing sunrise/sunset times
 - Species badges with colored initials (GitHub-style heatmap design)
@@ -42,13 +42,14 @@ Responsive Breakpoints:
 - Large (1200-1399px): All hourly columns visible
 - Medium (1024-1199px): All hourly columns visible
 - Tablet (768-1023px): Bi-hourly columns only
-- Mobile (480-767px): Bi-hourly columns only
-- Small (<480px): Six-hourly columns only
+- Mobile (480-767px): Four six-hour columns, sized to fit
+- Phone (<480px): A single six-hour daypart column, switchable via arrows
 -->
 
 <script lang="ts">
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
+  import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { getLocalDateString, getDateInTimezone } from '$lib/utils/date';
@@ -128,6 +129,18 @@ Responsive Breakpoints:
       MAX_WIDTH: 22, // rem - maximum column width (prevents excessive width)
     },
   } as const;
+
+  // Mobile daypart view: the day is split into four six-hour blocks so a phone can
+  // show one block of the heatmap at a time instead of scrolling a 900px-wide grid.
+  // The union mirrors the subset of TimeOfDayIcon's `timeOfDay` prop used here.
+  type TimeOfDayValue = 'night' | 'sunrise' | 'day' | 'sunset';
+  const DAYPART_HOURS = 6;
+  const DAYPARTS: { startHour: number; timeOfDay: TimeOfDayValue }[] = [
+    { startHour: 0, timeOfDay: 'night' },
+    { startHour: 6, timeOfDay: 'sunrise' },
+    { startHour: 12, timeOfDay: 'day' },
+    { startHour: 18, timeOfDay: 'sunset' },
+  ];
 
   interface SunTimes {
     sunrise: string; // ISO date string
@@ -710,6 +723,69 @@ Responsive Breakpoints:
   });
   const isToday = $derived(selectedDate === serverTodayDate);
 
+  // Current hour in the server's timezone so the mobile daypart lines up with the
+  // hour columns the server filled in; browser-local time drifts when the two
+  // differ, the same trap as the sunrise/sunset columns (#3005).
+  const currentServerHour = $derived.by(() => {
+    void nowTick;
+    const now = new Date();
+    if (!serverTimezone) return now.getHours();
+    try {
+      const hour = Number.parseInt(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: serverTimezone,
+          hour: '2-digit',
+          hour12: false,
+        }).format(now),
+        10
+      );
+      return Number.isNaN(hour) ? now.getHours() : hour % 24;
+    } catch (timezoneError) {
+      logger.error('Error resolving server hour', timezoneError, { serverTimezone });
+      return now.getHours();
+    }
+  });
+
+  // Today opens on the daypart covering the current hour, earlier dates on the last
+  // block of that day. The arrows override the default until the date changes.
+  let daypartOverride = $state<number | null>(null);
+  const activeDaypartIndex = $derived(
+    daypartOverride ??
+      (isToday ? Math.floor(currentServerHour / DAYPART_HOURS) : DAYPARTS.length - 1)
+  );
+  const activeDaypart = $derived(safeArrayAccess(DAYPARTS, activeDaypartIndex) ?? DAYPARTS[0]!);
+  const activeDaypartStart = $derived(activeDaypart.startHour);
+  const activeDaypartEnd = $derived(activeDaypart.startHour + DAYPART_HOURS);
+  const activeDaypartName = $derived.by(() => {
+    switch (activeDaypartIndex) {
+      case 0:
+        return t('dashboard.dailySummary.dayparts.night');
+      case 1:
+        return t('dashboard.dailySummary.dayparts.morning');
+      case 2:
+        return t('dashboard.dailySummary.dayparts.afternoon');
+      default:
+        return t('dashboard.dailySummary.dayparts.evening');
+    }
+  });
+  const activeDaypartStartLabel = $derived(String(activeDaypartStart).padStart(2, '0'));
+  const activeDaypartEndLabel = $derived(String(activeDaypartEnd).padStart(2, '0'));
+
+  // Reset to the default daypart whenever the user navigates to another day, so a
+  // choice made for one date does not silently carry over to the next.
+  $effect(() => {
+    void selectedDate;
+    untrack(() => {
+      daypartOverride = null;
+    });
+  });
+
+  function shiftDaypart(delta: number): void {
+    const next = activeDaypartIndex + delta;
+    if (next < 0 || next >= DAYPARTS.length) return;
+    daypartOverride = next;
+  }
+
   // Absence threshold for the infrequent novelty tier; undefined disables it so
   // the category never activates when species tracking (or its infrequent
   // sub-toggle) is turned off, matching the gating in NewSpeciesHighlightsCard.
@@ -810,6 +886,30 @@ Responsive Breakpoints:
   </div>
 {/snippet}
 
+{#snippet daypartCell(item: DailySpeciesSummary)}
+  {@const count = renderFunctions['six-hourly'](item, activeDaypartStart)}
+  {@const intensity = getHeatmapIntensity(count)}
+  <div class="daypart-grid grid">
+    <div
+      class="heatmap-cell h-8 rounded-sm heatmap-color-{intensity} flex items-center justify-center text-xs font-medium"
+    >
+      {#if count > 0}
+        <a
+          href={urlBuilders.speciesHour(item, activeDaypartStart, DAYPART_HOURS)}
+          class="w-full h-full flex items-center justify-center cursor-pointer hover:opacity-80"
+          title={t('dashboard.dailySummary.tooltips.sixHourlyDetections', {
+            count,
+            startHour: activeDaypartStartLabel,
+            endHour: activeDaypartEndLabel,
+          })}
+        >
+          <AnimatedCounter value={count} />
+        </a>
+      {/if}
+    </div>
+  </div>
+{/snippet}
+
 {#snippet sunIcon(sunType: 'sunrise' | 'sunset', sunTime: string | undefined, shouldShow: boolean)}
   {#if shouldShow && sunTime}
     {@const tIdx = sunTime.indexOf('T')}
@@ -886,15 +986,15 @@ Responsive Breakpoints:
     </div>
 
     <!-- Grid Content -->
-    <div class="p-6 pt-8">
+    <div class="summary-body p-6 pt-8">
       <div class="overflow-x-auto overflow-y-visible">
         <div
-          class="daily-summary-grid min-w-[900px]"
+          class="daily-summary-grid md:min-w-[900px]"
           style:--species-col-width={speciesColumnWidth}
         >
           <!-- Hourly weather visualization row (only shown if weather data exists) -->
           {#if hourlyWeather.length > 0}
-            <div class="flex mb-1">
+            <div class="flex mb-1 summary-meta-row">
               <!-- Empty label column to align with other rows -->
               <div class="species-label-col shrink-0"></div>
 
@@ -942,7 +1042,7 @@ Responsive Breakpoints:
           {/if}
 
           <!-- Daylight visualization row -->
-          <div class="flex mb-1">
+          <div class="flex mb-1 summary-meta-row">
             <div class="species-label-col shrink-0 flex items-center">
               <span
                 class="text-xs text-[var(--color-base-content)]/60 font-normal whitespace-nowrap"
@@ -1005,7 +1105,31 @@ Responsive Breakpoints:
 
           <!-- Hours header row -->
           <div class="flex mb-1">
-            <div class="species-label-col shrink-0"></div>
+            <div class="species-label-col shrink-0 flex items-center">
+              <!-- Phone only: the switcher itself is a 72px cell with no room for
+                   words, so the daypart's name, weather and hour range sit here in
+                   the label column instead of stacked under the icon. -->
+              <div class="daypart-summary items-center gap-1.5 text-xs">
+                <span class="font-medium text-[var(--color-base-content)]">{activeDaypartName}</span
+                >
+                {#if getHourlyWeatherEmoji(activeDaypartStart)}
+                  <span title={getHourlyWeatherTooltip(activeDaypartStart)}
+                    >{getHourlyWeatherEmoji(activeDaypartStart)}</span
+                  >
+                {/if}
+                <a
+                  href={urlBuilders.hourly(activeDaypartStart, DAYPART_HOURS)}
+                  class="whitespace-nowrap hover:text-[var(--color-primary)] cursor-pointer"
+                  style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
+                  title={t('dashboard.dailySummary.tooltips.viewSixHourly', {
+                    startHour: activeDaypartStartLabel,
+                    endHour: activeDaypartEndLabel,
+                  })}
+                >
+                  {activeDaypartStartLabel}–{activeDaypartEndLabel}
+                </a>
+              </div>
+            </div>
             <!-- Hourly headers (desktop) -->
             <div class="hourly-grid flex-1 grid text-xs">
               {#each Array(24) as _, hour (hour)}
@@ -1054,6 +1178,47 @@ Responsive Breakpoints:
                   {hour.toString().padStart(2, '0')}
                 </a>
               {/each}
+            </div>
+
+            <!-- Active daypart header with switcher (phone) -->
+            <div class="daypart-grid grid text-xs">
+              <div class="flex items-center">
+                <!-- The daylight tint rides along with the switcher: on a phone the
+                     separate weather and daylight rows are hidden, and a row each
+                     for one 72px cell was mostly empty space. -->
+                <div
+                  class="w-full rounded-sm daylight-cell daylight-{getDaylightClass(
+                    activeDaypartStart
+                  )} flex items-center justify-center gap-0.5 py-0.5"
+                >
+                  <button
+                    type="button"
+                    class="daypart-nav"
+                    onclick={() => shiftDaypart(-1)}
+                    disabled={activeDaypartIndex === 0}
+                    aria-label={t('dashboard.dailySummary.navigation.previousDaypart')}
+                  >
+                    <ChevronLeft class="size-3.5" />
+                  </button>
+                  <TimeOfDayIcon
+                    timeOfDay={activeDaypart.timeOfDay}
+                    size="sm"
+                    title={t('dashboard.dailySummary.tooltips.viewSixHourly', {
+                      startHour: activeDaypartStartLabel,
+                      endHour: activeDaypartEndLabel,
+                    })}
+                  />
+                  <button
+                    type="button"
+                    class="daypart-nav"
+                    onclick={() => shiftDaypart(1)}
+                    disabled={activeDaypartIndex === DAYPARTS.length - 1}
+                    aria-label={t('dashboard.dailySummary.navigation.nextDaypart')}
+                  >
+                    <ChevronRight class="size-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1213,6 +1378,9 @@ Responsive Breakpoints:
                     </div>
                   {/each}
                 </div>
+
+                <!-- Active daypart heatmap cell (phone) -->
+                {@render daypartCell(item)}
               </div>
             {/each}
           </div>
@@ -1259,6 +1427,7 @@ Responsive Breakpoints:
     --grid-cell-height: 1.25rem;
     --grid-cell-radius: 4px;
     --grid-gap: 4px; /* Gap between grid cells */
+    --daypart-col-width: 4.5rem; /* Width of the single six-hour column on phones */
 
     /* Species column width fallbacks (actual width is set dynamically via JS)
        These are fallbacks only - the dynamic width is set via style:--species-col-width */
@@ -1312,6 +1481,43 @@ Responsive Breakpoints:
     gap: var(--grid-gap);
   }
 
+  /* Single six-hour daypart shown on phones. Fixed narrow width so the species
+     names reclaim the space the other 23 hour columns used to take. */
+  .daypart-grid {
+    display: none;
+    flex: 0 0 var(--daypart-col-width);
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--grid-gap);
+  }
+
+  /* Arrows that step the daypart column through night / morning / afternoon /
+     evening. Padding is generous relative to the icon to keep the tap target
+     usable at this width. */
+  /* Only the phone layout has a label column free to hold this. */
+  .daypart-summary {
+    display: none;
+  }
+
+  .daypart-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+    border-radius: var(--grid-cell-radius);
+    color: color-mix(in srgb, var(--color-base-content) 50%, transparent);
+    transition: color 0.15s ease;
+  }
+
+  .daypart-nav:hover:not(:disabled) {
+    color: var(--color-primary);
+  }
+
+  .daypart-nav:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
   /* Heatmap cell base styles */
   .heatmap-cell {
     transition:
@@ -1362,29 +1568,13 @@ Responsive Breakpoints:
     .bi-hourly-grid {
       display: grid;
     }
-
-    .six-hourly-grid {
-      display: none;
-    }
   }
 
-  /* Mobile (<768px): show bi-hourly */
-  @media (max-width: 767px) {
-    .hourly-grid {
-      display: none;
-    }
-
-    .bi-hourly-grid {
-      display: grid;
-    }
-
-    .six-hourly-grid {
-      display: none;
-    }
-  }
-
-  /* Small mobile (<480px): show six-hourly */
-  @media (max-width: 479px) {
+  /* Large phone / small tablet (480-767px): all four six-hour columns, sized to
+     fit rather than pinned to 900px. The species column takes a share of the
+     width instead of its JS-measured pixel value, which at this size would eat
+     everything and squeeze the four columns down to a few pixels each. */
+  @media (min-width: 480px) and (max-width: 767px) {
     .hourly-grid,
     .bi-hourly-grid {
       display: none;
@@ -1392,6 +1582,46 @@ Responsive Breakpoints:
 
     .six-hourly-grid {
       display: grid;
+    }
+
+    .species-label-col {
+      width: 45%;
+      min-width: 7rem;
+      max-width: var(--species-col-max-width);
+    }
+  }
+
+  /* Phone (<480px): a single daypart column, stepped through with the arrows.
+     Four columns here would leave the species names unreadable. */
+  @media (max-width: 479px) {
+    .hourly-grid,
+    .bi-hourly-grid,
+    .six-hourly-grid {
+      display: none;
+    }
+
+    .daypart-grid {
+      display: grid;
+    }
+
+    .species-label-col {
+      width: auto;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    /* The weather and daylight rows each spent a full row on one 72px cell with
+       an empty label column beside it. Their content moved into the switcher. */
+    .summary-meta-row {
+      display: none;
+    }
+
+    .daypart-summary {
+      display: flex;
+    }
+
+    .summary-body {
+      padding: 0.75rem;
     }
   }
 

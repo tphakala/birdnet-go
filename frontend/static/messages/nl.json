@@ -674,6 +674,12 @@
         "species": "Soorten",
         "detections": "Aantal herkend"
       },
+      "dayparts": {
+        "night": "Nacht",
+        "morning": "Ochtend",
+        "afternoon": "Middag",
+        "evening": "Avond"
+      },
       "daylight": {
         "label": "Daglicht",
         "sunrise": "Zonsopgang om {time}",
@@ -689,7 +695,9 @@
       "navigation": {
         "previousDay": "Vorige dag",
         "nextDay": "Volgende dag",
-        "today": "Vandaag"
+        "today": "Vandaag",
+        "previousDaypart": "Eerder op de dag",
+        "nextDaypart": "Later op de dag"
       },
       "tooltips": {
         "viewHourly": "Bekijk alle herkenningen om {hour}:00",

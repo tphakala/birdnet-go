@@ -674,6 +674,12 @@
         "species": "Art",
         "detections": "Erkennungen"
       },
+      "dayparts": {
+        "night": "Nacht",
+        "morning": "Morgen",
+        "afternoon": "Nachmittag",
+        "evening": "Abend"
+      },
       "daylight": {
         "label": "Tageslicht",
         "sunrise": "Sonnenaufgang um {time}",
@@ -689,7 +695,9 @@
       "navigation": {
         "previousDay": "Vorheriger Tag",
         "nextDay": "Nächster Tag",
-        "today": "Heute"
+        "today": "Heute",
+        "previousDaypart": "Früherer Tagesabschnitt",
+        "nextDaypart": "Späterer Tagesabschnitt"
       },
       "tooltips": {
         "viewHourly": "Alle Erkennungen für {hour}:00 Uhr anzeigen",
