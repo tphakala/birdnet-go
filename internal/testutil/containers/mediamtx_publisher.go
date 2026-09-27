@@ -244,8 +244,8 @@ func (p *StreamPublisher) Stderr() string {
 }
 
 // ExitError reports whether the publisher has exited and, if so, its process
-// exit error. exited is false while the process is still running or was never
-// started, since the exit error is not known yet.
+// exit error. exited is false while the process is still running (its exit
+// error is not known yet) or when it was never started.
 func (p *StreamPublisher) ExitError() (exited bool, err error) {
 	if p.done == nil {
 		return false, nil

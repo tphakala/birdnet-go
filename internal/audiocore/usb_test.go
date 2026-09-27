@@ -118,8 +118,9 @@ func TestExtractBusPathFromDetail(t *testing.T) {
 		{"no at segment", "Loopback 1", ""},
 		{"at without comma", "thing at usb-0000:00:14.0-3", "usb-0000:00:14.0-3"},
 		{"name contains at", "Mic at Home at usb-0000:00:14.0-3, high speed", "usb-0000:00:14.0-3"},
-		{"at at start", " at usb-x, full speed", "usb-x"},
-		{"at at end", "thing at ", ""},
+		{"separator at start", " at usb-x, full speed", "usb-x"},
+		{"separator at end", "thing at ", ""},
+		{"no comma, trailing newline", "thing at usb-x\n", "usb-x"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -134,6 +134,8 @@ linters:
       # of errorf, var-declaration and context-keys-type) only report when
       # GOROOT is set. `task lint`, the pre-commit hook and CI all set it; a
       # bare `golangci-lint run` should be prefixed with GOROOT="$(go env GOROOT)".
+      # The result cache ignores GOROOT, so after a run without it, run
+      # `golangci-lint cache clean` before trusting a clean result.
       rules:
         - name: blank-imports
         - name: context-keys-type

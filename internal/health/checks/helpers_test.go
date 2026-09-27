@@ -433,7 +433,7 @@ func TestExtractMetricType(t *testing.T) {
 		prefix string
 		want   string
 	}{
-		{"production prefix", "audio.drops.", "drops"},
+		{"production prefix", observability.MetricPrefixAudioDrops, observability.MetricTypeAudioDrops},
 		{"splits on the last dot", "a.b.c.", "c"},
 		{"leading dot", ".drops", "drops"},
 		{"no dot", "nodot", "nodot"},

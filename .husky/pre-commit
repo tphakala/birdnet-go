@@ -17,7 +17,7 @@ if [ -n "$GO_FILES" ]; then
   echo "📝 Go files detected in commit, running golangci-lint..."
   
   # The golangci-lint version .golangci.yaml is written for; keep in sync with
-  # .github/workflows/golangci-lint.yml and GOLANGCI_LINT_VERSION in Taskfile.yml.
+  # GOLANGCI_LINT_VERSION in Taskfile.yml, which lists every copy.
   GOLANGCI_LINT_VERSION="2.14.0"
   GOLANGCI_LINT_INSTALL="curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b \$(go env GOPATH)/bin v$GOLANGCI_LINT_VERSION"
 
