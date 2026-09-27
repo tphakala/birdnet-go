@@ -126,7 +126,9 @@ linters:
       # should run is listed here. This is revive's default set minus the rules
       # the codebase does not yet satisfy (exported, package-comments,
       # var-naming, receiver-naming, context-as-argument, unexported-return)
-      # and unused-parameter, plus use-slices-concat (revive 1.17).
+      # and unused-parameter, plus use-slices-concat (revive 1.17, so this
+      # config needs golangci-lint v2.14.0 or newer; older versions stop with
+      # "cannot find rule: use-slices-concat").
       # revive re-typechecks files itself, and the golangci-lint release binary
       # is built with -trimpath, so the type-aware rules (time-naming and parts
       # of errorf, var-declaration and context-keys-type) only report when

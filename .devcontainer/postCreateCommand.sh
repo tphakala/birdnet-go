@@ -102,7 +102,8 @@ cd /workspaces/birdnet-go
 # Install Go development tools
 echo "Installing Go tools..."
 go install github.com/air-verse/air@latest
-# Pin to the v2 module path and the same version CI uses (.github/workflows/golangci-lint.yml, Taskfile.yml).
+# Pin to the v2 module path and the same version CI uses (.github/workflows/golangci-lint.yml,
+# GOLANGCI_LINT_VERSION in Taskfile.yml, .husky/pre-commit).
 # The legacy v1 path (github.com/golangci/golangci-lint/cmd/golangci-lint) installs golangci-lint v1,
 # which cannot read this project's v2 .golangci.yaml config.
 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0

@@ -46,6 +46,7 @@ jobs:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
+          # Keep in sync with GOLANGCI_LINT_VERSION in Taskfile.yml.
           version: v2.14.0
           # Show only new issues by default
           only-new-issues: false
