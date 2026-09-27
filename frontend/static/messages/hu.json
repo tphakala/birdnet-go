@@ -459,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Hang elemzés túlterhelve",
-        "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a ''{sourceName}'' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét az észlelési beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
+        "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a '{sourceName}' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét az észlelési beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
       },
       "ort": {
         "unavailableTitle": "Az ONNX Runtime nem elérhető",
@@ -1051,7 +1051,7 @@
       "loginRequired": "Kérjük, jelentkezzen be az észlelés megtekintéséhez.",
       "serverError": "Szerver hiba. Kérjük, próbálja újra később, vagy ha a probléma fennáll, forduljon a támogatáshoz.",
       "loadFailed": "Az észlelés betöltése sikertelen ({status} hiba). Próbálja frissíteni az oldalt.",
-      "noIdProvided": "Nincs megadvaz észlelés ID.",
+      "noIdProvided": "Nincs megadva észlelés ID.",
       "fetchFailed": "Az észlelések betöltése sikertelen"
     }
   },
@@ -3750,7 +3750,7 @@
         "prometheusMetrics": "Prometheus metrikák:"
       },
       "clipSettings": {
-        "title": "Klipek beállítások",
+        "title": "Klipbeállítások",
         "description": "Az azonosított madárhangok hang kliprögzítésének és feldolgozásának konfigurálása"
       },
       "clipRecording": {
