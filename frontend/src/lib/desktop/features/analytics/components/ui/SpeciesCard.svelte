@@ -3,7 +3,11 @@
   import { t, getLocale } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
-  import { getAllAboutBirdsUrl, getWikipediaUrl } from '$lib/utils/speciesLinks';
+  import {
+    getAllAboutBirdsUrl,
+    getWikipediaUrl,
+    hasSpeciesReferenceName,
+  } from '$lib/utils/speciesLinks';
   import { buildSpeciesSearchUrl } from '$lib/utils/detectionUrls';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
@@ -73,16 +77,18 @@
         </p>
       </a>
       <div class="flex shrink-0 items-center gap-1">
-        <a
-          href={getAllAboutBirdsUrl(species.common_name)}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn btn-ghost btn-sm btn-square"
-          aria-label={`${t('analytics.species.openAllAboutBirds')}: ${displayName}`}
-          title={t('analytics.species.openAllAboutBirds')}
-        >
-          <ExternalLink class="size-4" />
-        </a>
+        {#if hasSpeciesReferenceName(species.common_name)}
+          <a
+            href={getAllAboutBirdsUrl(species.common_name)}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-ghost btn-sm btn-square"
+            aria-label={`${t('analytics.species.openAllAboutBirds')}: ${displayName}`}
+            title={t('analytics.species.openAllAboutBirds')}
+          >
+            <ExternalLink class="size-4" />
+          </a>
+        {/if}
         <a
           href={wikipediaUrl}
           target="_blank"
