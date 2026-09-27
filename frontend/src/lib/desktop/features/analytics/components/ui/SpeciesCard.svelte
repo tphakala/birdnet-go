@@ -89,16 +89,18 @@
             <ExternalLink class="size-4" />
           </a>
         {/if}
-        <a
-          href={wikipediaUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn btn-ghost btn-sm btn-square"
-          aria-label={`${t('analytics.species.openWikipedia')}: ${displayName}`}
-          title={t('analytics.species.openWikipedia')}
-        >
-          <span class="text-xs font-serif font-bold">W</span>
-        </a>
+        {#if hasSpeciesReferenceName(displayName)}
+          <a
+            href={wikipediaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-ghost btn-sm btn-square"
+            aria-label={`${t('analytics.species.openWikipedia')}: ${displayName}`}
+            title={t('analytics.species.openWikipedia')}
+          >
+            <span class="text-xs font-serif font-bold">W</span>
+          </a>
+        {/if}
       </div>
     </div>
     <div class="text-sm space-y-1 mt-2">

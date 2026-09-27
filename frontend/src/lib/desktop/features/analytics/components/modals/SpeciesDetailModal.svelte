@@ -160,16 +160,18 @@
           {t('analytics.species.openAllAboutBirds')}
         </a>
       {/if}
-      <a
-        href={wikipediaUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        class="btn btn-outline btn-sm mt-2 w-full"
-        aria-label={`${t('analytics.species.openWikipedia')}: ${displayName}`}
-      >
-        <span class="text-xs font-serif font-bold">W</span>
-        {t('analytics.species.openWikipedia')}
-      </a>
+      {#if hasSpeciesReferenceName(displayName)}
+        <a
+          href={wikipediaUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn btn-outline btn-sm mt-2 w-full"
+          aria-label={`${t('analytics.species.openWikipedia')}: ${displayName}`}
+        >
+          <span class="text-xs font-serif font-bold">W</span>
+          {t('analytics.species.openWikipedia')}
+        </a>
+      {/if}
     {/if}
   {/snippet}
 
