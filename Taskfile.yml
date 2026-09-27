@@ -165,8 +165,10 @@ tasks:
           Linux_*) LIB_DIR="{{.SYSTEM_LIB_DIR}}";;
           *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
         esac
-        # Use noembed,skipfrontend tags to skip model and frontend embedding for faster linting
-        {{.CGO_FLAGS}} CGO_LDFLAGS="-L${LIB_DIR} -ltensorflowlite_c" \
+        # Use noembed,skipfrontend tags to skip model and frontend embedding for faster linting.
+        # GOROOT lets revive's type-aware rules find the standard library (see
+        # the revive settings in .golangci.yaml).
+        {{.CGO_FLAGS}} CGO_LDFLAGS="-L${LIB_DIR} -ltensorflowlite_c" GOROOT="$(go env GOROOT)" \
         golangci-lint run --build-tags=noembed,skipfrontend{{if .BASE_BUILD_TAGS}},{{.BASE_BUILD_TAGS}}{{end}} {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "-v" .CLI_ARGS}}'

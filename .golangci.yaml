@@ -125,6 +125,11 @@ linters:
       # the codebase does not yet satisfy (exported, package-comments,
       # var-naming, receiver-naming, context-as-argument, unexported-return)
       # and unused-parameter, plus use-slices-concat (revive 1.17).
+      # revive re-typechecks files itself, and the golangci-lint release binary
+      # is built with -trimpath, so the type-aware rules (time-naming and parts
+      # of errorf, var-declaration and context-keys-type) only report when
+      # GOROOT is set. `task lint`, the pre-commit hook and CI all set it; a
+      # bare `golangci-lint run` should be prefixed with GOROOT="$(go env GOROOT)".
       rules:
         - name: blank-imports
         - name: context-keys-type
