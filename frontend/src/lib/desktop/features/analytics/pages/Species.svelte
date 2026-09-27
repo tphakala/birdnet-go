@@ -722,16 +722,18 @@
                           <ExternalLink class="size-4" />
                         </a>
                       {/if}
-                      <a
-                        href={getWikipediaUrl(displayName, getLocale(), species.common_name)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="btn btn-ghost btn-sm btn-square"
-                        aria-label={`${t('analytics.species.openWikipedia')}: ${displayName}`}
-                        title={t('analytics.species.openWikipedia')}
-                      >
-                        <span class="text-xs font-serif font-bold">W</span>
-                      </a>
+                      {#if hasSpeciesReferenceName(displayName)}
+                        <a
+                          href={getWikipediaUrl(displayName, getLocale(), species.common_name)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="btn btn-ghost btn-sm btn-square"
+                          aria-label={`${t('analytics.species.openWikipedia')}: ${displayName}`}
+                          title={t('analytics.species.openWikipedia')}
+                        >
+                          <span class="text-xs font-serif font-bold">W</span>
+                        </a>
+                      {/if}
                     </div>
                   </td>
                   <td class="font-semibold">{species.count}</td>
