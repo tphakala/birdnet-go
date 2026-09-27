@@ -393,8 +393,8 @@ func formatLastEventSuffix(lastEvent, now time.Time) string {
 // extractMetricType extracts the metric type from a prefix like "audio.drops." -> "drops".
 func extractMetricType(prefix string) string {
 	trimmed := strings.TrimSuffix(prefix, ".")
-	if idx := strings.LastIndex(trimmed, "."); idx >= 0 {
-		return trimmed[idx+1:]
+	if _, after, found := strings.CutLast(trimmed, "."); found {
+		return after
 	}
 	return trimmed
 }

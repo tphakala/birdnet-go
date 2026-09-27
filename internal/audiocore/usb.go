@@ -194,11 +194,10 @@ func parseProcAsoundCards(content string) map[int]procCardEntry {
 // trailing bus-path segment.
 func extractBusPathFromDetail(line string) string {
 	const sep = " at "
-	idx := strings.LastIndex(line, sep)
-	if idx < 0 {
+	_, rest, found := strings.CutLast(line, sep)
+	if !found {
 		return ""
 	}
-	rest := line[idx+len(sep):]
 	if comma := strings.IndexByte(rest, ','); comma >= 0 {
 		rest = rest[:comma]
 	}

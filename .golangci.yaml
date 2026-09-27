@@ -31,6 +31,16 @@ linters:
         text: "SA4023"
         linters:
           - staticcheck
+      # gocritic 0.15.0 (golangci-lint v2.14.0) added sprintfQuotedString,
+      # which suggests %#q over "`%s`". %#q silently falls back to double
+      # quotes when the value cannot be backquoted, and double quotes denote a
+      # string literal (not an identifier) in MySQL, so the explicit backquotes
+      # are kept for SQL identifier quoting in the datastore packages and the
+      # MySQL test container.
+      - path: internal/(datastore/|testutil/containers/mysql\.go)
+        text: "sprintfQuotedString"
+        linters:
+          - gocritic
       # goconst v1.9.0+ started walking
       # composite-literal nodes (map keys, slice elements, struct-init values),
       # which surfaced hundreds of "make it a constant" nits for inline
