@@ -189,7 +189,8 @@ func parseProcAsoundCards(content string) map[int]procCardEntry {
 
 // extractBusPathFromDetail returns the bus path from a /proc/asound/cards detail
 // line such as "... at usb-0000:00:14.0-3, high speed" -> "usb-0000:00:14.0-3".
-// Returns "" when the line has no " at <path>," segment. It anchors on the LAST
+// Returns "" when the line has no " at " separator; the path runs to the next
+// comma or to the end of the line. It anchors on the LAST
 // " at " so a device name that itself contains " at " does not mis-split the
 // trailing bus-path segment.
 func extractBusPathFromDetail(line string) string {

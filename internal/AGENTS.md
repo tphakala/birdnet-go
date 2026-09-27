@@ -174,6 +174,7 @@ Enabled linters most likely to fire, and the usual fix:
 | gocritic              | Its `performance` tag is on: pass large structs by pointer (`hugeParam`), range by index over large values (`rangeValCopy`) |
 | modernize             | Use the modern idiom it suggests                                                                                            |
 | forbidigo             | Typed logger helpers for sensitive fields                                                                                   |
+| revive                | No `else` after a `return` (outdent it); `x++` over `x += 1`; comment blank imports; return the error last                  |
 
 Also enabled: staticcheck, revive, ineffassign, wastedassign,
 unconvert, misspell, predeclared, copyloopvar, durationcheck. `gosec` is

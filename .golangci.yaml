@@ -25,8 +25,8 @@ linters:
       # true" under -tags notflite. Those guards are real runtime checks in the
       # default tflite build; suppress the stub-only false positive. CI never
       # lints the notflite tag (it is a compile check only), so this only affects
-      # the notflite lint lane. NewTFLiteClassifier is in birdnet.go;
-      # NewTFLiteRangeFilter moved to range_filter_service.go in epic #1682 Phase 2b.
+      # the notflite lint lane. NewTFLiteClassifier is called from birdnet.go and
+      # NewTFLiteRangeFilter from range_filter_service.go.
       - path: internal/classifier/(birdnet|range_filter_service)\.go
         text: "SA4023"
         linters:
