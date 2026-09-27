@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3" // Registers the "sqlite3" database/sql driver.
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"

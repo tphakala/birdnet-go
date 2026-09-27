@@ -442,8 +442,9 @@ const v2SchemaResetMarker = ".v2_schema_reset"
 // self-healing is not possible.
 func initializeV2WithSelfHealing(manager datastoreV2.Manager, v2Path string, log logger.Logger) error {
 	// Attempt normal initialization.
-	if err := manager.Initialize(); err == nil {
-		// Success — clean up any stale marker from a previous recovery.
+	err := manager.Initialize()
+	if err == nil {
+		// Success: clean up any stale marker from a previous recovery.
 		markerPath := filepath.Join(filepath.Dir(v2Path), v2SchemaResetMarker)
 		if removeErr := os.Remove(markerPath); removeErr != nil && !os.IsNotExist(removeErr) {
 			log.Warn("failed to remove stale schema reset marker",
@@ -451,15 +452,15 @@ func initializeV2WithSelfHealing(manager datastoreV2.Manager, v2Path string, log
 				logger.String("marker", markerPath))
 		}
 		return nil
-	} else if !errors.Is(err, datastoreV2.ErrV2SchemaCorrupted) {
-		// Not a schema corruption error — return as-is.
-		return err
-	} else {
-		// Schema corrupted — attempt self-healing below.
-		log.Warn("v2 schema corruption detected, evaluating self-healing",
-			logger.Error(err),
-			logger.String("path", v2Path))
 	}
+	if !errors.Is(err, datastoreV2.ErrV2SchemaCorrupted) {
+		// Not a schema corruption error: return as-is.
+		return err
+	}
+	// Schema corrupted: attempt self-healing below.
+	log.Warn("v2 schema corruption detected, evaluating self-healing",
+		logger.Error(err),
+		logger.String("path", v2Path))
 
 	// Guard: if the marker already exists, a previous reset did not help.
 	markerPath := filepath.Join(filepath.Dir(v2Path), v2SchemaResetMarker)

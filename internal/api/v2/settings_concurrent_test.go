@@ -195,20 +195,19 @@ func runReadWriteScenario(t *testing.T, goroutineID int, controller *Controller,
 			errorsChan <- err
 		}
 		return err
-	} else {
-		// Read operation
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/dashboard", http.NoBody)
-		rec := httptest.NewRecorder()
-		ctx := e.NewContext(req, rec)
-		ctx.SetParamNames("section")
-		ctx.SetParamValues("dashboard")
-
-		err := controller.GetSectionSettings(ctx)
-		if err != nil {
-			errorsChan <- err
-		}
-		return err
 	}
+	// Read operation
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/dashboard", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("section")
+	ctx.SetParamValues("dashboard")
+
+	err := controller.GetSectionSettings(ctx)
+	if err != nil {
+		errorsChan <- err
+	}
+	return err
 }
 
 // runRapidSequentialScenario handles rapid sequential updates

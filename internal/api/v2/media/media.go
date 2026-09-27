@@ -3164,7 +3164,8 @@ func (c *Handler) checkAudioFileExists(relAudioPath string) error {
 	getSpectrogramLogger().Debug("Checking if audio file exists",
 		logger.String("relative_audio_path", relAudioPath))
 
-	if audioStat, err := c.SFS.StatRel(relAudioPath); err != nil {
+	audioStat, err := c.SFS.StatRel(relAudioPath)
+	if err != nil {
 		if os.IsNotExist(err) {
 			getSpectrogramLogger().Debug("Audio file does not exist",
 				logger.String("relative_audio_path", relAudioPath),
@@ -3175,12 +3176,11 @@ func (c *Handler) checkAudioFileExists(relAudioPath string) error {
 			logger.String("relative_audio_path", relAudioPath),
 			logger.Error(err))
 		return fmt.Errorf("error checking audio file '%s': %w", relAudioPath, err)
-	} else {
-		getSpectrogramLogger().Debug("Audio file exists",
-			logger.String("relative_audio_path", relAudioPath),
-			logger.Int64("size_bytes", audioStat.Size()),
-			logger.String("mod_time", audioStat.ModTime().Format(time.DateTime)))
 	}
+	getSpectrogramLogger().Debug("Audio file exists",
+		logger.String("relative_audio_path", relAudioPath),
+		logger.Int64("size_bytes", audioStat.Size()),
+		logger.String("mod_time", audioStat.ModTime().Format(time.DateTime)))
 	return nil
 }
 
