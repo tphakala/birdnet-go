@@ -3197,6 +3197,15 @@
       },
       "errors": {
         "speciesLoadFailed": "Error al cargar la lista de especies. Por favor, inténtalo de nuevo."
+      },
+      "firstDailyConsensus": {
+        "title": "Confirmación con dos modelos",
+        "description": "Reduce los registros erróneos de especies nuevas al descartar la primera detección del día de una especie, a menos que un segundo modelo también la detecte dentro de la misma ventana de detección. Una vez registrada la especie ese día, basta con un modelo. Solo se aplica cuando al menos dos modelos que analizan la fuente de audio pueden identificar la especie.",
+        "enable": "Exigir que dos modelos confirmen la primera detección del día de una especie",
+        "speciesListLabel": "Especies exentas",
+        "addSpeciesLabel": "Agregar especie exenta",
+        "addSpeciesHelp": "Las especies de esta lista siguen detectándose con un solo modelo, como de costumbre. Úsela para especies que solo uno de sus modelos oye de forma fiable.",
+        "disabledHelp": "Active la confirmación con dos modelos para editar las especies exentas."
       }
     },
     "integration": {

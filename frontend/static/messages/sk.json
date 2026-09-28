@@ -3197,6 +3197,15 @@
       },
       "errors": {
         "speciesLoadFailed": "Nepodarilo sa načítať zoznam druhov. Skúste to znova."
+      },
+      "firstDailyConsensus": {
+        "title": "Potvrdenie dvoma modelmi",
+        "description": "Obmedzuje chybné záznamy nových druhov tým, že zahodí prvú detekciu druhu v daný deň, pokiaľ ho v rámci toho istého detekčného okna nedeteguje aj druhý model. Keď je druh v daný deň zaznamenaný, stačí jeden model. Platí len vtedy, keď druh dokážu určiť aspoň dva modely analyzujúce daný zvukový zdroj.",
+        "enable": "Vyžadovať potvrdenie prvej detekcie druhu v daný deň dvoma modelmi",
+        "speciesListLabel": "Vyňaté druhy",
+        "addSpeciesLabel": "Pridať vyňatý druh",
+        "addSpeciesHelp": "Uvedené druhy sa naďalej detegujú jedným modelom ako obvykle. Použite zoznam pre druhy, ktoré spoľahlivo počuje len jeden z vašich modelov.",
+        "disabledHelp": "Na úpravu vyňatých druhov zapnite potvrdenie dvoma modelmi."
       }
     },
     "integration": {

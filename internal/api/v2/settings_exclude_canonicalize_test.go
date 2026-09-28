@@ -224,3 +224,22 @@ func TestUpdateSectionSettingsSkipsExcludeForUnrelatedSection(t *testing.T) {
 	assert.Equal(t, []string{testExcludeLocalizedName}, got,
 		"unrelated section save must leave the legacy exclude entry untouched")
 }
+
+// TestSettingsSaveCanonicalizesFirstDailyConsensusWhitelist verifies both save
+// paths store the first-daily consensus whitelist in the locale-independent form
+// the exclude list uses, so a later birdnet.locale change keeps the exemption.
+func TestSettingsSaveCanonicalizesFirstDailyConsensusWhitelist(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	installExcludeTestResolver(t, controller)
+	want := []string{testExcludeScientificName, "American Crow"}
+
+	patchSection(t, e, controller, SettingsSectionRealtime, map[string]any{
+		"firstDailyConsensus": map[string]any{"whitelist": []string{testExcludeLocalizedName, " American Crow "}},
+	})
+	assert.Equal(t, want, controller.Settings.Load().Realtime.FirstDailyConsensus.Whitelist, "PATCH realtime")
+
+	s := conf.CloneSettings(controller.Settings.Load())
+	s.Realtime.FirstDailyConsensus.Whitelist = []string{testExcludeLocalizedName, "American Crow"}
+	putFullSettings(t, e, controller, s)
+	assert.Equal(t, want, controller.Settings.Load().Realtime.FirstDailyConsensus.Whitelist, "PUT")
+}

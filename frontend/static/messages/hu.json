@@ -3197,6 +3197,15 @@
       },
       "errors": {
         "speciesLoadFailed": "A faj lista betöltése sikertelen. Próbálja újra."
+      },
+      "firstDailyConsensus": {
+        "title": "Megerősítés két modellel",
+        "description": "Csökkenti az új fajok téves bejegyzéseit azzal, hogy elveti egy faj első napi észlelését, kivéve, ha egy második modell is észleli ugyanabban az észlelési időablakban. Miután a fajt aznap rögzítették, egy modell is elegendő. Csak akkor érvényes, ha a hangforrást elemző modellek közül legalább kettő fel tudja ismerni a fajt.",
+        "enable": "Két modell erősítse meg egy faj első napi észlelését",
+        "speciesListLabel": "Kivételt képező fajok",
+        "addSpeciesLabel": "Kivételt képező faj hozzáadása",
+        "addSpeciesHelp": "Az itt felsorolt fajokat a szokásos módon egy modell is észlelheti. Olyan fajokhoz használja, amelyeket csak az egyik modellje hall megbízhatóan.",
+        "disabledHelp": "A kivételt képező fajok szerkesztéséhez kapcsolja be a két modelles megerősítést."
       }
     },
     "integration": {

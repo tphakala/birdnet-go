@@ -339,6 +339,10 @@ realtime:
     species:              # species, families, orders, or genera to filter during daylight
       - Strigiformes      # all owls (Strigidae + Tytonidae)
 
+  firstdailyconsensus:
+    enabled: false        # true to require two models to confirm a species' first detection of the day
+    whitelist: []         # species exempt from the rule (common or scientific names)
+
   telemetry:
     enabled: false         # true to enable Prometheus compatible telemetry endpoint
     listen: "0.0.0.0:8090" # IP address and port to listen on

@@ -3197,6 +3197,15 @@
       },
       "errors": {
         "speciesLoadFailed": "Impossibile caricare lista specie. Riprova."
+      },
+      "firstDailyConsensus": {
+        "title": "Conferma con due modelli",
+        "description": "Riduce le registrazioni errate di nuove specie scartando il primo rilevamento del giorno di una specie, a meno che anche un secondo modello non la rilevi nella stessa finestra di rilevamento. Una volta registrata la specie in quel giorno, basta un solo modello. Si applica solo quando almeno due modelli che analizzano la sorgente audio sono in grado di identificare la specie.",
+        "enable": "Richiedi che due modelli confermino il primo rilevamento del giorno di una specie",
+        "speciesListLabel": "Specie esentate",
+        "addSpeciesLabel": "Aggiungi specie esentata",
+        "addSpeciesHelp": "Le specie elencate qui continuano a essere rilevate da un solo modello, come di consueto. Usa questa lista per le specie che solo uno dei tuoi modelli sente in modo affidabile.",
+        "disabledHelp": "Attiva la conferma con due modelli per modificare le specie esentate."
       }
     },
     "integration": {
