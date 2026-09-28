@@ -13,6 +13,7 @@
   import BannerLocationMap from './BannerLocationMap.svelte';
   import WeatherSvgIcon from '$lib/desktop/components/ui/WeatherSvgIcon.svelte';
   import { birdnetSettings, dashboardSettings } from '$lib/stores/settings';
+  import { appState } from '$lib/stores/appState.svelte';
   import {
     getBasmiliusIconName,
     getMoonPhaseI18nKey,
@@ -37,9 +38,17 @@
   let { config, editMode = false, onUpdate }: Props = $props();
 
   let birdnet = $derived($birdnetSettings);
-  let latitude = $derived(birdnet?.latitude ?? 0);
-  let longitude = $derived(birdnet?.longitude ?? 0);
-  let hasLocation = $derived(birdnet?.locationConfigured ?? false);
+  // Guests never load the authenticated settings, so their birdnet store keeps the
+  // empty defaults: fall back to the coordinates the public app config carries
+  // when the banner map is enabled (#4344).
+  let location = $derived(
+    birdnet?.locationConfigured
+      ? { latitude: birdnet.latitude, longitude: birdnet.longitude }
+      : appState.stationLocation
+  );
+  let latitude = $derived(location?.latitude ?? 0);
+  let longitude = $derived(location?.longitude ?? 0);
+  let hasLocation = $derived(location !== null);
 
   let hasAnyContent = $derived(
     editMode ||
