@@ -173,6 +173,9 @@ type Processor struct {
 	// is cleared once per distinct base. Guarded by haDiscoveryMu.
 	haLegacyStatusCleared string
 
+	// firstDaily is the first-daily-detection consensus state (first_daily_consensus.go).
+	firstDaily firstDailyConsensus
+
 	// BufferMgr provides access to capture buffers for audio clip extraction.
 	// Set once during pipeline initialization (audio_pipeline_service.go) and never replaced;
 	// no synchronization needed for concurrent reads.
@@ -1882,6 +1885,10 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 		}
 	}
 
+	if p.lacksFirstDailyConsensus(item, settings) {
+		return true, reasonFirstDailyConsensus
+	}
+
 	if cons != nil && p.discardForModelConsensus(item, settings, cons) {
 		return true, reasonModelConsensus
 	}
@@ -2070,6 +2077,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 
 	// Built before pendingMutex is taken: it may wait on the orchestrator.
 	cons := p.prepareModelConsensus(settings)
+	p.prepareFirstDailyConsensus(now, settings)
 
 	var terminalNotifs []SSEPendingDetection
 	var broadcastSnapshot []SSEPendingDetection
@@ -2152,6 +2160,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 			logger.String("operation", "flush_detection"))
 
 		p.processApprovedDetection(&item, speciesName, settings)
+		p.noteFirstDailyApproval(&item)
 		delete(p.pendingDetections, mapKey)
 		flushedCount++
 
