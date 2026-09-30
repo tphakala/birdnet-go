@@ -289,8 +289,66 @@ func (t *SpeciesTracker) checkAndResetPeriods(currentTime time.Time) {
 			if t.speciesBySeason[newSeason] == nil {
 				t.speciesBySeason[newSeason] = make(map[string]time.Time)
 			}
+			t.advanceSeasonCarryoverLocked(currentTime)
+			// Clear status cache when the season changes, matching the yearly
+			// reset above: otherwise an already-cached status (up to cacheTTL
+			// stale) keeps reporting the old season and carry-over set.
+			t.statusCache = make(map[string]cachedSpeciesStatus)
 		}
 	}
+}
+
+// seasonStartDate returns the date-only start of the named season occurrence
+// that contains currentTime.
+func (t *SpeciesTracker) seasonStartDate(seasonName string, currentTime time.Time) (time.Time, bool) {
+	dates, exists := t.seasons[seasonName]
+	if !exists {
+		return time.Time{}, false
+	}
+	return trackerDateOnly(t.calculateSeasonStartDate(seasonName, dates, currentTime)), true
+}
+
+// seasonCarryoverLookbackStart returns the first day of the carry-over lookback
+// before seasonStart: a species detected on or after it, and before
+// seasonStart, was already present when the season began.
+func (t *SpeciesTracker) seasonCarryoverLookbackStart(seasonStart time.Time) time.Time {
+	return seasonStart.AddDate(0, 0, -t.seasonalWindowDays)
+}
+
+// advanceSeasonCarryoverLocked rebuilds the carry-over set from last-seen times
+// when a live season rollover moves forward into a season it does not yet
+// describe. At that moment each species' last-seen time still predates the new
+// season, because checkAndResetPeriods runs before a detection is recorded.
+// Moving back to an earlier season (a past date on the dashboard) keeps the
+// current set, since last-seen times no longer reflect that boundary.
+// Assumes lock is held.
+func (t *SpeciesTracker) advanceSeasonCarryoverLocked(currentTime time.Time) {
+	seasonStart, ok := t.seasonStartDate(t.currentSeason, currentTime)
+	if !ok || !seasonStart.After(t.seasonCarryoverStart) {
+		return
+	}
+
+	lookbackStart := t.seasonCarryoverLookbackStart(seasonStart)
+	carryover := make(map[string]struct{})
+	for scientificName, lastSeen := range t.speciesLastSeen {
+		if !dateOnlyBefore(lastSeen, lookbackStart) && dateOnlyBefore(lastSeen, seasonStart) {
+			carryover[scientificName] = struct{}{}
+		}
+	}
+	t.seasonCarryover = carryover
+	t.seasonCarryoverStart = seasonStart
+}
+
+// isSeasonCarryoverLocked reports whether the species was already present when
+// the given season began. It only answers for the season occurrence the
+// carry-over set describes; other seasons report false.
+// Assumes lock is held.
+func (t *SpeciesTracker) isSeasonCarryoverLocked(scientificName, seasonName string, currentTime time.Time) bool {
+	if _, carried := t.seasonCarryover[scientificName]; !carried {
+		return false
+	}
+	seasonStart, ok := t.seasonStartDate(seasonName, currentTime)
+	return ok && sameTrackerDate(seasonStart, t.seasonCarryoverStart)
 }
 
 // shouldResetYear determines if we should reset yearly tracking
