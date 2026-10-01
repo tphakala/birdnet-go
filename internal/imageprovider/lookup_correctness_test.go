@@ -563,3 +563,21 @@ func TestEnsureInitialized_AcquisitionIsCancellable(t *testing.T) {
 		t.Fatal("ensureInitialized blocked on the init slot after its context was cancelled")
 	}
 }
+
+// TestWaitForValidConfig_DoesNotRequireVersion verifies that LazyWikiMediaProvider
+// considers configuration valid even when settings.Version is empty (e.g. in dev builds).
+func TestWaitForValidConfig_DoesNotRequireVersion(t *testing.T) {
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+
+	testSettings := conftest.NewTestSettings().WithImageProvider("avicommons", "all").Build()
+	testSettings.Version = ""
+	conftest.SetTestSettings(testSettings)
+
+	lazy := NewLazyWikiMediaProvider()
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+
+	assert.True(t, lazy.waitForValidConfig(ctx, 500*time.Millisecond),
+		"waitForValidConfig must succeed when settings is non-nil even if settings.Version is empty")
+}
