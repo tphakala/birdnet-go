@@ -18,6 +18,7 @@ vars:
     sh: date -u +%Y-%m-%dT%H:%M:%SZ
   # Version string baked into the binary. See scripts/build-version.sh for the
   # rules (BUILD_VERSION pin, release tag on HEAD, else <date>-g<hash>-dev).
+  # The script always exits 0; the fallback only covers sh or the file missing.
   VERSION:
     sh: sh scripts/build-version.sh || echo unknown
   UNAME_S:

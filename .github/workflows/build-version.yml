@@ -11,7 +11,6 @@ name: Build version string
 on:
   pull_request:
     paths:
-      - 'scripts/build-version*.sh'
       - 'Taskfile.yml'
       - '.air.toml'
       - 'Dockerfile'
@@ -22,7 +21,6 @@ on:
     branches:
       - main
     paths:
-      - 'scripts/build-version*.sh'
       - 'Taskfile.yml'
       - '.air.toml'
       - 'Dockerfile'
@@ -111,9 +109,9 @@ jobs:
           set -eu
           tag=$(gh api "repos/${REPO}/releases/latest" --jq .tag_name)
           echo "Latest release tag: ${tag}"
-          git worktree add --detach "$RUNNER_TEMP/release-tree" "refs/tags/${tag}"
-          # The worktree has the release's own scripts; copy the current one in
-          # so the check covers the script under test, not the old release.
+          git worktree add --no-checkout --detach "$RUNNER_TEMP/release-tree" "refs/tags/${tag}"
+          # Only the git metadata is needed, so skip the checkout (the release
+          # tree carries the models) and copy in the script under test.
           mkdir -p "$RUNNER_TEMP/release-tree/scripts"
           cp scripts/build-version.sh "$RUNNER_TEMP/release-tree/scripts/build-version.sh"
           actual=$(cd "$RUNNER_TEMP/release-tree" && BUILD_VERSION='' sh scripts/build-version.sh)

@@ -48,14 +48,6 @@ is_non_release() {
     return 1
 }
 
-# is_nightly succeeds when the tag is a nightly tag.
-is_nightly() {
-    case $1 in
-    "${NIGHTLY_PREFIX}"*) return 0 ;;
-    esac
-    return 1
-}
-
 if [ -n "${BUILD_VERSION:-}" ]; then
     printf '%s\n' "$BUILD_VERSION"
     exit 0
@@ -68,32 +60,36 @@ esac
 CDPATH='' cd -- "$script_dir/.." 2>/dev/null || unknown
 
 command -v git >/dev/null 2>&1 || unknown
-[ "$(git rev-parse --is-inside-work-tree 2>/dev/null | tr -d '\r')" = true ] || unknown
-# A non-empty prefix means the source root is a subdirectory of some other repo.
-[ -z "$(git rev-parse --show-prefix 2>/dev/null | tr -d '\r')" ] || unknown
+# Prints "true" plus an empty prefix line only at the root of a work tree; a
+# non-empty prefix means the source root is a subdirectory of some other repo.
+[ "$(git rev-parse --is-inside-work-tree --show-prefix 2>/dev/null | tr -d '\r')" = true ] || unknown
 
 # Tag names never contain glob characters that matter, but disable globbing so
 # the unquoted expansion below cannot expand anything.
 set -f
 tags=$(git tag --points-at HEAD --sort=-version:refname --sort=-creatordate 2>/dev/null | tr -d '\r')
 
-# First pass: non-nightly tags. Second pass: nightly tags.
-for pass in release nightly; do
-    for tag in $tags; do
-        is_non_release "$tag" && continue
-        if is_nightly "$tag"; then
-            [ "$pass" = nightly ] || continue
-        else
-            [ "$pass" = release ] || continue
-        fi
-        printf '%s\n' "$tag"
-        exit 0
-    done
+# The first non-nightly release tag wins; a nightly tag only when there is none.
+nightly=
+for tag in $tags; do
+    is_non_release "$tag" && continue
+    case $tag in
+    "$NIGHTLY_PREFIX"*)
+        [ -n "$nightly" ] || nightly=$tag
+        continue
+        ;;
+    esac
+    printf '%s\n' "$tag"
+    exit 0
 done
+if [ -n "$nightly" ]; then
+    printf '%s\n' "$nightly"
+    exit 0
+fi
 
-# log.showSignature=true in a user's config makes git log print gpg lines on
-# stdout, so it is switched off for this call.
-commit_date=$(TZ=UTC0 git -c log.showSignature=false log -1 --date=format-local:%Y%m%d --format=%cd HEAD 2>/dev/null | tr -d '\r')
-short_hash=$(git rev-parse --short="$HASH_LENGTH" HEAD 2>/dev/null | tr -d '\r')
-[ -n "$commit_date" ] && [ -n "$short_hash" ] || unknown
-printf '%s-g%s-%s\n' "$commit_date" "$short_hash" "$DEV_SUFFIX"
+# One git log call gives both parts. log.showSignature=true in a user's config
+# makes git log print gpg lines on stdout, so it is switched off here.
+dev_base=$(TZ=UTC0 git -c log.showSignature=false log -1 --abbrev="$HASH_LENGTH" \
+    --date=format-local:%Y%m%d --format=%cd-g%h HEAD 2>/dev/null | tr -d '\r')
+[ -n "$dev_base" ] || unknown
+printf '%s-%s\n' "$dev_base" "$DEV_SUFFIX"
