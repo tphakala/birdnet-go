@@ -16,6 +16,8 @@ on:
       - '.air.toml'
       - 'Dockerfile'
       - '.github/workflows/**'
+      - '.github/actions/**'
+      - '**.sh'
   push:
     branches:
       - main
@@ -25,6 +27,8 @@ on:
       - '.air.toml'
       - 'Dockerfile'
       - '.github/workflows/**'
+      - '.github/actions/**'
+      - '**.sh'
   schedule:
     - cron: '17 4 * * *'
   release:
