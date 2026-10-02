@@ -58,15 +58,27 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
           # The version is always the ref name: on a release event that is the
           # release tag, and a manual dispatch must be started from a tag ref
           # so the binaries are versioned and attached to that release. A
           # dispatch from a branch would otherwise build branch code under an
           # old release version.
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${REF_TYPE}" != "tag" ]; then
-            echo "::error::workflow_dispatch must be run from a release tag ref, not ${REF_TYPE} '${REF_NAME}'"
-            exit 1
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ "${REF_TYPE}" != "tag" ]; then
+              echo "::error::workflow_dispatch must be run from a release tag ref, not ${REF_TYPE} '${REF_NAME}'"
+              exit 1
+            fi
+            # "manifest" carries the auto-update manifest, not a release
+            # (NON_RELEASE_TAGS in scripts/build-version.sh), and any other tag
+            # must already have a published (non-draft) GitHub release to attach
+            # the assets to.
+            if [ "${REF_NAME}" = "manifest" ] || [ "$(gh release view "${REF_NAME}" --repo "${REPO}" --json isDraft -q .isDraft 2>/dev/null)" != "false" ]; then
+              echo "::error::workflow_dispatch tag '${REF_NAME}' is not a published release"
+              exit 1
+            fi
           fi
           VERSION="${REF_NAME}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -143,13 +155,25 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
           # The tag is the version: on a release event it is the release tag
           # (a date-based 20260712 or a stable v1.2.3), and a manual dispatch
           # must be started from a tag ref, matching the build job.
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${REF_TYPE}" != "tag" ]; then
-            echo "::error::workflow_dispatch must be run from a release tag ref, not ${REF_TYPE} '${REF_NAME}'"
-            exit 1
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ "${REF_TYPE}" != "tag" ]; then
+              echo "::error::workflow_dispatch must be run from a release tag ref, not ${REF_TYPE} '${REF_NAME}'"
+              exit 1
+            fi
+            # "manifest" carries the auto-update manifest, not a release
+            # (NON_RELEASE_TAGS in scripts/build-version.sh), and any other tag
+            # must already have a published (non-draft) GitHub release to attach
+            # the assets to.
+            if [ "${REF_NAME}" = "manifest" ] || [ "$(gh release view "${REF_NAME}" --repo "${REPO}" --json isDraft -q .isDraft 2>/dev/null)" != "false" ]; then
+              echo "::error::workflow_dispatch tag '${REF_NAME}' is not a published release"
+              exit 1
+            fi
           fi
           VERSION="${REF_NAME}"
           echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
