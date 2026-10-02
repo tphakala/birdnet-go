@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -103,12 +104,20 @@ func (r *AuxiliaryMigrationResult) LogErrors(log logger.Logger) {
 }
 
 // HasErrors returns true if any migration step encountered errors fetching legacy data.
+//
+// Driven from sections() rather than a hand-written disjunction: species notes were
+// added to the result and to sections() but missed here, so a notes-only failure
+// reported success. Because the worker only calls LogErrors when this returns true,
+// that failure was not surfaced at the result level at all — and notes have no other
+// copy once Consolidate renames the legacy database away. Weather is checked
+// separately because it tracks daily and hourly counts and is not a section.
 func (r *AuxiliaryMigrationResult) HasErrors() bool {
-	return r.ImageCaches.Error != nil ||
-		r.Thresholds.Error != nil ||
-		r.ThresholdEvents.Error != nil ||
-		r.Notifications.Error != nil ||
-		r.Weather.Error != nil
+	for _, s := range r.sections() {
+		if s.err != nil {
+			return true
+		}
+	}
+	return r.Weather.Error != nil
 }
 
 // Summary returns a human-readable summary of the migration.
@@ -137,6 +146,12 @@ func (r *AuxiliaryMigrationResult) Summary() string {
 	fmt.Fprintf(&b, "  Notifications: %d/%d migrated", r.Notifications.Migrated, r.Notifications.Total)
 	if r.Notifications.Error != nil {
 		fmt.Fprintf(&b, " (fetch error: %v)", r.Notifications.Error)
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "  Species Notes: %d/%d migrated", r.SpeciesNotes.Migrated, r.SpeciesNotes.Total)
+	if r.SpeciesNotes.Error != nil {
+		fmt.Fprintf(&b, " (fetch error: %v)", r.SpeciesNotes.Error)
 	}
 	b.WriteString("\n")
 
@@ -580,7 +595,12 @@ func (m *AuxiliaryMigrator) migrateSpeciesNotes(ctx context.Context, result *Aux
 	// an explicit list would silently stop copying any column later added to
 	// SpeciesNote. TestMigrateSpeciesNotes_CopiesRowsPreservingIDsAndTimestamps pins
 	// both properties.
-	if err := m.v2DB.WithContext(ctx).
+	// OnConflict/DoNothing keeps the copy idempotent. Rows carry their legacy IDs and
+	// CreateInBatches is not wrapped in a transaction, so an interrupted run leaves the
+	// earlier batches committed; without this, a re-entry after a crash or a resumed
+	// migration would fail on duplicate primary keys and leave the remaining notes
+	// unmigrated.
+	if err := m.v2DB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).
 		CreateInBatches(legacyNotes, speciesNoteMigrationBatchSize).Error; err != nil {
 		m.logger.Warn("failed to write species notes to v2", logger.Error(err))
 		result.SpeciesNotes.Error = err
