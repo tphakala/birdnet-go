@@ -74,6 +74,7 @@ func TestSettings_MigrateDashboardLayout(t *testing.T) {
 				assert.True(t, elements[0].Enabled)
 				assert.Equal(t, "currently-hearing", elements[1].Type)
 				assert.True(t, elements[1].Enabled)
+				assert.Empty(t, elements[1].Width)
 				assert.Equal(t, "live-spectrogram", elements[2].Type)
 				assert.True(t, elements[2].Enabled)
 				assert.Equal(t, "detections-grid", elements[3].Type)

@@ -173,14 +173,17 @@ export function formatBytes(bytes: number, decimals: number = 2): string {
 /**
  * Format relative time (e.g., "2 hours ago", "in 3 days")
  */
-export function formatRelativeTime(date: Date | string | number | null | undefined): string {
+export function formatRelativeTime(
+  date: Date | string | number | null | undefined,
+  locale: string = 'en'
+): string {
   const d = toValidDate(date);
   if (!d) return '';
 
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - d.getTime()) / 1000);
 
-  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
 
   if (Math.abs(diffInSeconds) < 60) {
     return rtf.format(-diffInSeconds, 'second');

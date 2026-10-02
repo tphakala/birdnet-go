@@ -196,6 +196,9 @@ func (m *mockStore) GetAllNotes() ([]datastore.Note, error)                     
 func (m *mockStore) GetTopBirdsData(_ context.Context, date string, minConf float64, limit int) ([]datastore.Note, error) {
 	return []datastore.Note{}, nil
 }
+func (m *mockStore) GetRecentSpeciesData(_ context.Context, _, _ time.Time, _ float64, _ int) ([]datastore.RecentSpeciesData, error) {
+	return []datastore.RecentSpeciesData{}, nil
+}
 func (m *mockStore) GetBatchHourlyOccurrences(_ context.Context, startDate, endDate string, species []string, minConf float64) (map[string][24]int, error) {
 	return make(map[string][24]int), nil
 }

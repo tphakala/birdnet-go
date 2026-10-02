@@ -3,8 +3,7 @@ package conf
 const defaultDashboardSummaryLimit = 30
 
 // MigrateDashboardLayout migrates existing installations to the new dashboard layout format.
-// It creates a default layout with the three elements (daily-summary, currently-hearing,
-// detections-grid) in their original fixed order, and moves SummaryLimit into the daily-summary
+// It creates a default layout with the core dashboard elements and moves SummaryLimit into the daily-summary
 // element config.
 //
 // Returns true if migration occurred, false if skipped (already has layout elements).

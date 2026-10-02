@@ -48,6 +48,7 @@ var goldenRoutes = []string{
 	"GET /api/v2/analytics/species/detections/new",
 	"GET /api/v2/analytics/species/diversity",
 	"GET /api/v2/analytics/species/phenology",
+	"GET /api/v2/analytics/species/recent",
 	"GET /api/v2/analytics/species/summary",
 	"GET /api/v2/analytics/species/thumbnails",
 	"GET /api/v2/analytics/sun",
