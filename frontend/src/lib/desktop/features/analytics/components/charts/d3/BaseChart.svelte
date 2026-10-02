@@ -15,6 +15,9 @@
     className?: string;
     id?: string;
     ariaLabel?: string;
+    // 'group' keeps focusable marks inside the chart in the accessibility tree; the default
+    // 'img' role makes every child presentational.
+    containerRole?: 'img' | 'group';
     children?: Snippet<
       [
         {
@@ -37,6 +40,7 @@
     className = '',
     id,
     ariaLabel,
+    containerRole = 'img',
     children,
     onResize,
     responsive = true,
@@ -189,7 +193,7 @@
   style:width={responsive ? '100%' : `${width}px`}
   style:height={responsive ? '100%' : `${height}px`}
   style:min-height="200px"
-  role="img"
+  role={containerRole}
   aria-label={ariaLabel || 'Data visualization chart'}
 >
   <svg

@@ -151,6 +151,14 @@ describe('SpeciesPhenologyChart', () => {
     expect(container.querySelector('[aria-label="Species phenology"]')).toBeTruthy();
   });
 
+  it('uses a group container so the focusable bars stay in the accessibility tree', () => {
+    const { container } = render(SpeciesPhenologyChart, {
+      props: { data: sample, ariaLabel: 'Species phenology' },
+    });
+    const chart = container.querySelector('[aria-label="Species phenology"]');
+    expect(chart?.getAttribute('role')).toBe('group');
+  });
+
   it('renders a screen-reader summary when there is data', async () => {
     const { getByTestId } = render(SpeciesPhenologyChart, { props: { data: sample } });
     await Promise.resolve();
@@ -262,6 +270,42 @@ describe('SpeciesPhenologyChart', () => {
       window.dispatchEvent(new Event('scroll'));
       expect(showSpy).not.toHaveBeenCalled();
       expect(hideSpy).toHaveBeenCalled();
+    });
+
+    it('hides the bar tooltip when the focused bar scrolls out of the viewport sideways', async () => {
+      const { bars } = await renderBars();
+      const bar = swallowBar(bars);
+      bar.focus();
+      showSpy.mockClear();
+      vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue(
+        new DOMRect(window.innerWidth + 50, 10, 100, 20)
+      );
+      window.dispatchEvent(new Event('scroll'));
+      expect(showSpy).not.toHaveBeenCalled();
+      expect(hideSpy).toHaveBeenCalled();
+    });
+
+    it('keeps the focused bar tooltip when the mouse leaves another bar', async () => {
+      const { bars } = await renderBars();
+      const focused = swallowBar(bars);
+      focused.focus();
+      await fireEvent.mouseEnter(bars[0]);
+      showSpy.mockClear();
+      await fireEvent.mouseLeave(bars[0]);
+      expect(hideSpy).not.toHaveBeenCalled();
+      expect(showSpy.mock.lastCall?.[0]).toMatchObject({ title: 'Barn Swallow' });
+      expect(focused.style.opacity).toBe('1');
+      // The tooltip is anchored again, so a scroll keeps following the focused bar.
+      showSpy.mockClear();
+      window.dispatchEvent(new Event('scroll'));
+      expect(showSpy.mock.lastCall?.[0]).toMatchObject({ title: 'Barn Swallow' });
+    });
+
+    it('hides a hover tooltip on mouseleave when no bar has focus', async () => {
+      const { bars } = await renderBars();
+      await fireEvent.mouseEnter(bars[0]);
+      await fireEvent.mouseLeave(bars[0]);
+      expect(hideSpy).toHaveBeenCalledOnce();
     });
 
     it('does not reopen a tooltip dismissed with Escape when the page scrolls', async () => {

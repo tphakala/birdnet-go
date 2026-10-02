@@ -160,7 +160,12 @@
     const d = el ? barData.get(el) : undefined;
     if (el && d && el.isConnected) {
       const r = el.getBoundingClientRect();
-      if (r.bottom >= 0 && r.top <= window.innerHeight) {
+      if (
+        r.bottom >= 0 &&
+        r.top <= window.innerHeight &&
+        r.right >= 0 &&
+        r.left <= window.innerWidth
+      ) {
         showBarTooltipAtBar(el, d);
         return;
       }
@@ -296,7 +301,15 @@
       })
       .on('mouseleave', function () {
         select(this).style('opacity', BAR_IDLE_OPACITY);
-        hideTooltip();
+        // Hover is over, but a bar that still has focus keeps its focus tooltip.
+        const focused = document.activeElement;
+        const focusedData = focused ? barData.get(focused) : undefined;
+        if (focused && focusedData) {
+          select(focused).style('opacity', 1);
+          showBarTooltipAtBar(focused, focusedData);
+        } else {
+          hideTooltip();
+        }
       })
       .on('focus', function (_event: FocusEvent, d: PlottedRow) {
         select(this).style('opacity', 1);
@@ -347,6 +360,7 @@
     {height}
     margin={MARGIN}
     responsive={true}
+    containerRole="group"
     ariaLabel={ariaLabel ?? t('analytics.advanced.charts.phenology.ariaLabel')}
   >
     {#snippet children(context)}
