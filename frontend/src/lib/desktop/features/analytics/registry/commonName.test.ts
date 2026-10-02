@@ -13,6 +13,12 @@ describe('readCommonName', () => {
     );
   });
 
+  it('trims surrounding whitespace from the payload name', () => {
+    expect(readCommonName({ commonName: '  Eurasian Blackbird \n' }, 'Turdus merula')).toBe(
+      'Eurasian Blackbird'
+    );
+  });
+
   it.each([
     ['missing', {}],
     ['empty', { commonName: '' }],
