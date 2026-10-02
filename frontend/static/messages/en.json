@@ -2601,6 +2601,10 @@
               "label": "Max Number of Species on Daily Summary Table",
               "helpText": "Max number of species shown in the daily summary table (Value between 10 and 1000)"
             },
+            "showAudioLevel": {
+              "label": "Show Audio Level Indicator",
+              "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+            },
             "thumbnails": {
               "title": "Thumbnail Display",
               "summary": {
@@ -4841,7 +4845,12 @@
       },
       "appearance": {
         "title": "Appearance",
-        "description": "Customize the look and feel of your BirdNET-Go interface"
+        "description": "Customize the look and feel of your BirdNET-Go interface",
+        "showAudioLevel": {
+          "label": "Show Audio Level Indicator",
+          "description": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)",
+          "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+        }
       },
       "language": {
         "title": "Language & Regional",

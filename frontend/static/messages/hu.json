@@ -2601,6 +2601,10 @@
               "label": "Max fajok száma a napi összefoglaló táblázatban",
               "helpText": "A napi összefoglaló táblázatban megjelenített fajok maximális száma (10 és 1000 közötti érték)"
             },
+            "showAudioLevel": {
+              "label": "Show Audio Level Indicator",
+              "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+            },
             "thumbnails": {
               "title": "Miniatűr megjelenítés",
               "summary": {
@@ -4841,7 +4845,12 @@
       },
       "appearance": {
         "title": "Megjelenés",
-        "description": "A BirdNET-Go felület megjelenésének és hangulatának testreszabása"
+        "description": "A BirdNET-Go felület megjelenésének és hangulatának testreszabása",
+        "showAudioLevel": {
+          "label": "Show Audio Level Indicator",
+          "description": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)",
+          "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+        }
       },
       "language": {
         "title": "Nyelv és terület",

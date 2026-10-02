@@ -2601,6 +2601,10 @@
               "label": "Maks. antal arter i daglig oversigtstabel",
               "helpText": "Maks. antal arter vist i den daglige oversigtstabel (værdi mellem 10 og 1000)"
             },
+            "showAudioLevel": {
+              "label": "Show Audio Level Indicator",
+              "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+            },
             "thumbnails": {
               "title": "Miniaturebilleder",
               "summary": {
@@ -4841,7 +4845,12 @@
       },
       "appearance": {
         "title": "Udseende",
-        "description": "Tilpas udseendet af din BirdNET-Go-grænseflade"
+        "description": "Tilpas udseendet af din BirdNET-Go-grænseflade",
+        "showAudioLevel": {
+          "label": "Show Audio Level Indicator",
+          "description": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)",
+          "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+        }
       },
       "language": {
         "title": "Sprog og regional",

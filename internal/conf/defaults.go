@@ -184,6 +184,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.temperatureunit", "celsius") // Temperature display unit: "celsius" or "fahrenheit"
 	viper.SetDefault("realtime.dashboard.defaultaudiogain", 0.0)      // Default playback gain in dB (no boost)
 	viper.SetDefault("realtime.dashboard.livespectrogram", false)     // Auto-start live spectrogram on dashboard
+	viper.SetDefault("realtime.dashboard.showaudiolevel", true)
 
 	// Spectrogram pre-rendering configuration
 	viper.SetDefault("realtime.dashboard.spectrogram.enabled", false)                                // Opt-in for safety

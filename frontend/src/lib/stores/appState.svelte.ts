@@ -45,7 +45,7 @@ const FETCH_TIMEOUT_MS = 10000;
 /**
  * API response type from /api/v2/app/config endpoint
  */
-interface AppConfigResponse {
+export interface AppConfigResponse {
   csrfToken: string;
   security: {
     enabled: boolean;
@@ -70,6 +70,8 @@ interface AppConfigResponse {
   customColors?: { primary: string; accent: string };
   logoStyle?: string;
   liveSpectrogram?: boolean;
+  /** Whether the header audio level indicator is shown */
+  showAudioLevel?: boolean;
   /** Whether audio clip export is enabled; drives showing per-detection spectrogram/audio in the UI */
   audioExportEnabled?: boolean;
   layout?: {
@@ -91,6 +93,9 @@ interface AppConfigResponse {
   };
   projectLinks?: ProjectLinks;
 }
+
+/** Alias for AppConfigResponse matching configuration nomenclature */
+export type AppConfig = AppConfigResponse;
 
 /**
  * Project identity and routing links served by the backend (always present in
@@ -134,6 +139,8 @@ interface AppState {
   previousVersion: string | null;
   /** Whether live spectrogram is enabled */
   liveSpectrogram: boolean;
+  /** Whether the header audio level indicator is shown */
+  showAudioLevel: boolean;
   /** Whether audio clip export is enabled; when false, per-detection spectrogram/audio UI is hidden */
   audioExportEnabled: boolean;
   /** Dataset version for the per-locale species-name dictionary. Empty string when unknown. */
@@ -185,6 +192,7 @@ const DEFAULT_STATE: AppState = {
   newVersion: false,
   previousVersion: null,
   liveSpectrogram: false,
+  showAudioLevel: true,
   audioExportEnabled: true,
   speciesDictVersion: '',
   layout: null,
@@ -267,6 +275,13 @@ async function fetchConfig(): Promise<AppConfigResponse> {
 }
 
 /**
+ * Updates application state from loaded configuration.
+ */
+export function initializeFromConfig(config: AppConfig): void {
+  appState.showAudioLevel = config.showAudioLevel ?? true;
+}
+
+/**
  * Initializes the application by fetching configuration from the backend API.
  * Implements retry logic with exponential backoff.
  *
@@ -316,6 +331,7 @@ export async function initApp(): Promise<boolean> {
       appState.newVersion = config.newVersion ?? false;
       appState.previousVersion = config.previousVersion ?? null;
       appState.liveSpectrogram = config.liveSpectrogram ?? false;
+      initializeFromConfig(config);
       appState.audioExportEnabled = config.audioExportEnabled ?? true;
       appState.speciesDictVersion = config.speciesDictVersion ?? '';
       appState.layout = config.layout ?? null;

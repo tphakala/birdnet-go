@@ -2601,6 +2601,10 @@
               "label": "Numero Max Specie su Tabella Riepilogo Giornaliero",
               "helpText": "Numero max specie mostrate nella tabella riepilogo giornaliero (Valore tra 10 e 1000)"
             },
+            "showAudioLevel": {
+              "label": "Show Audio Level Indicator",
+              "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+            },
             "thumbnails": {
               "title": "Visualizzazione Miniature",
               "summary": {
@@ -4841,7 +4845,12 @@
       },
       "appearance": {
         "title": "Aspetto",
-        "description": "Personalizza l'aspetto della tua interfaccia BirdNET-Go"
+        "description": "Personalizza l'aspetto della tua interfaccia BirdNET-Go",
+        "showAudioLevel": {
+          "label": "Show Audio Level Indicator",
+          "description": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)",
+          "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+        }
       },
       "language": {
         "title": "Lingua e regionale",

@@ -912,6 +912,7 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 		"customColors":       true,
 		"logoStyle":          true,
 		"liveSpectrogram":    true,
+		"showAudioLevel":     true,
 		"audioExportEnabled": true,
 		"freshInstall":       true,
 		"newVersion":         true,
@@ -1439,6 +1440,59 @@ func TestGetAppConfig_LiveSpectrogramField(t *testing.T) {
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 
 			assert.Equal(t, tt.expected, response.LiveSpectrogram)
+		})
+	}
+}
+
+// TestGetAppConfig_ShowAudioLevelField verifies the showAudioLevel field
+// in the app config response reflects the dashboard setting and defaults to true.
+func TestGetAppConfig_ShowAudioLevelField(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	tests := []struct {
+		name     string
+		setting  *bool
+		expected bool
+	}{
+		{
+			name:     "default nil is true",
+			setting:  nil,
+			expected: true,
+		},
+		{
+			name:     "explicitly true",
+			setting:  &trueVal,
+			expected: true,
+		},
+		{
+			name:     "explicitly false",
+			setting:  &falseVal,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Not parallel: setupAppConfigTest publishes settings to the
+			// process-global snapshot that GetAppConfig reads via currentSettings.
+			e, controller := setupAppConfigTest(t, nil)
+
+			controller.Settings.Load().Realtime.Dashboard.ShowAudioLevel = tt.setting
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
+
+			err := controller.GetAppConfig(c)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var response AppConfigResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+			assert.Equal(t, tt.expected, response.ShowAudioLevel)
 		})
 	}
 }

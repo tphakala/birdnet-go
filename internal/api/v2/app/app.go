@@ -55,6 +55,7 @@ type AppConfigResponse struct {
 	CustomColors       *conf.CustomColors    `json:"customColors,omitempty"`    // custom scheme hex colors (when colorScheme is "custom")
 	LogoStyle          string                `json:"logoStyle,omitempty"`       // admin-configured logo style: "gradient" or "solid"
 	LiveSpectrogram    bool                  `json:"liveSpectrogram"`           // auto-start live spectrogram on dashboard
+	ShowAudioLevel     bool                  `json:"showAudioLevel"`            // whether to show the header audio level indicator
 	AudioExportEnabled bool                  `json:"audioExportEnabled"`        // whether audio clip export is enabled; drives showing per-detection spectrogram/audio in the UI
 	Layout             *conf.DashboardLayout `json:"layout,omitempty"`          // dashboard element layout for guest/pre-auth rendering
 	FreshInstall       bool                  `json:"freshInstall"`              // true when this is a brand-new installation
@@ -199,6 +200,11 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 		freshInstall, newVersion, previousVersion = false, false, ""
 	}
 
+	showAudioLevel := true
+	if settings.Realtime.Dashboard.ShowAudioLevel != nil {
+		showAudioLevel = *settings.Realtime.Dashboard.ShowAudioLevel
+	}
+
 	// Build response
 	response := AppConfigResponse{
 		CSRFToken: csrfToken,
@@ -221,6 +227,7 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 		CustomColors:       settings.Realtime.Dashboard.CustomColors,
 		LogoStyle:          settings.Realtime.Dashboard.LogoStyle,
 		LiveSpectrogram:    settings.Realtime.Dashboard.LiveSpectrogram,
+		ShowAudioLevel:     showAudioLevel,
 		AudioExportEnabled: settings.Realtime.Audio.Export.Enabled,
 		FreshInstall:       freshInstall,
 		NewVersion:         newVersion,
