@@ -674,6 +674,12 @@
         "species": "Espécie",
         "detections": "Detecções"
       },
+      "dayparts": {
+        "night": "Madrugada",
+        "morning": "Manhã",
+        "afternoon": "Tarde",
+        "evening": "Noite"
+      },
       "daylight": {
         "label": "Luz do dia",
         "sunrise": "Nascer do sol às {time}",
@@ -689,7 +695,9 @@
       "navigation": {
         "previousDay": "Dia anterior",
         "nextDay": "Próximo dia",
-        "today": "Hoje"
+        "today": "Hoje",
+        "previousDaypart": "Parte anterior do dia",
+        "nextDaypart": "Parte posterior do dia"
       },
       "tooltips": {
         "viewHourly": "Ver todas as detecções às {hour}:00",

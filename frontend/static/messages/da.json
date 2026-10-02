@@ -674,6 +674,12 @@
         "species": "Art",
         "detections": "Registreringer"
       },
+      "dayparts": {
+        "night": "Nat",
+        "morning": "Morgen",
+        "afternoon": "Eftermiddag",
+        "evening": "Aften"
+      },
       "daylight": {
         "label": "Dagslys",
         "sunrise": "Solopgang kl. {time}",
@@ -689,7 +695,9 @@
       "navigation": {
         "previousDay": "Forrige dag",
         "nextDay": "Næste dag",
-        "today": "I dag"
+        "today": "I dag",
+        "previousDaypart": "Tidligere på dagen",
+        "nextDaypart": "Senere på dagen"
       },
       "tooltips": {
         "viewHourly": "Vis alle registreringer for {hour}:00",
