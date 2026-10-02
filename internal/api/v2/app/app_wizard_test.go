@@ -400,12 +400,10 @@ func TestDetermineWizardState_OnboardingPending(t *testing.T) {
 			wantLastSeen:    "v0.8.0",
 		},
 		{
-			name:            "flag read error falls back to auto-seed",
-			pending:         true,
-			pendingReadErr:  true,
-			settings:        freshTemplateSettings,
-			wantPrevVersion: version,
-			wantLastSeen:    version,
+			name:           "flag read error returns safe defaults without auto-seeding",
+			pending:        true,
+			pendingReadErr: true,
+			settings:       freshTemplateSettings,
 		},
 		{
 			name:            "no flag with template config falls back to auto-seed",

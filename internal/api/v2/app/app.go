@@ -276,6 +276,8 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 //   - Dev builds (empty version or "Development Build"): both flags forced to false.
 //   - If last_seen_version is missing and onboarding_pending was recorded at startup:
 //     freshInstall = true, without auto-seeding.
+//   - If last_seen_version is missing and onboarding_pending cannot be read: both
+//     flags false, without auto-seeding, so a later request can still decide.
 //   - If last_seen_version is missing and isExistingInstall returns true: auto-seed and skip wizard.
 //   - If last_seen_version is missing and no install signals: freshInstall = true.
 //   - If last_seen_version differs from the current version: newVersion = true.
@@ -298,7 +300,14 @@ func (c *Handler) determineWizardState(ctx context.Context, settings *conf.Setti
 
 	// If last_seen_version has never been set, distinguish fresh from existing install
 	if lastSeenVersion == "" {
-		if c.onboardingPending(ctx) {
+		// A read error must not fall through to the auto-seed below: that would
+		// record a version and hide onboarding for good on a transient failure.
+		pending, err := c.appMetadataRepo.Get(ctx, appMetadataKeyOnboardingPending)
+		if err != nil {
+			c.LogWarnIfEnabled("Failed to read onboarding_pending from app_metadata", logger.Error(err))
+			return false, false, ""
+		}
+		if pending == onboardingPendingValue {
 			return true, false, ""
 		}
 		if c.isExistingInstall(ctx, settings) {
@@ -363,17 +372,6 @@ func (c *Handler) recordOnboardingState(ctx context.Context) {
 		return
 	}
 	c.LogInfoIfEnabled("Recorded pending onboarding for fresh install")
-}
-
-// onboardingPending reports whether onboarding_pending is recorded in app_metadata.
-// A read error is logged and reported as not pending.
-func (c *Handler) onboardingPending(ctx context.Context) bool {
-	value, err := c.appMetadataRepo.Get(ctx, appMetadataKeyOnboardingPending)
-	if err != nil {
-		c.LogWarnIfEnabled("Failed to read onboarding_pending from app_metadata", logger.Error(err))
-		return false
-	}
-	return value == onboardingPendingValue
 }
 
 // hasZeroDetections returns true if the V2 database contains no detections.
