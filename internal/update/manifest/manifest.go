@@ -66,7 +66,8 @@ type Manifest struct {
 // Channel describes the most recent release on a single distribution channel.
 type Channel struct {
 	// Version is the release version string, identical to the value baked into
-	// the binary at build time (e.g. "v0.6.4" or "nightly-20260622").
+	// the binary at build time (e.g. "20260823", or a historical "v0.6.4" or
+	// "nightly-20260622").
 	Version string `json:"version"`
 	// Tag is the underlying git tag of the release. Usually equal to Version,
 	// but can differ for nightlies whose tag was suffixed after a retry.
@@ -82,7 +83,7 @@ type Channel struct {
 	// MinUpgradeFrom, when set, names the lowest version that may upgrade
 	// directly to this release; older installs must first move to an
 	// intermediate version. Empty means no constraint. Sourced from a
-	// "<!-- manifest:min-upgrade-from=vX.Y.Z -->" marker in the release body.
+	// "<!-- manifest:min-upgrade-from=YYYYMMDD -->" marker in the release body.
 	MinUpgradeFrom string `json:"min_upgrade_from,omitempty"`
 	// ReleaseURL is the human-facing GitHub release page.
 	ReleaseURL string `json:"release_url"`
@@ -98,10 +99,10 @@ type Channel struct {
 // Docker holds container image references for a channel.
 type Docker struct {
 	// GHCR is the version-pinned GitHub Container Registry reference,
-	// e.g. "ghcr.io/tphakala/birdnet-go:v0.6.4".
+	// e.g. "ghcr.io/tphakala/birdnet-go:20260823".
 	GHCR string `json:"ghcr,omitempty"`
 	// DockerHub is the version-pinned Docker Hub reference,
-	// e.g. "tphakala/birdnet-go:v0.6.4".
+	// e.g. "tphakala/birdnet-go:20260823".
 	DockerHub string `json:"dockerhub,omitempty"`
 	// ChannelTag is the moving tag a user pulls to track this channel,
 	// e.g. "ghcr.io/tphakala/birdnet-go:latest" or ":nightly". This is the
@@ -126,17 +127,24 @@ type Asset struct {
 	SHA256 string `json:"sha256,omitempty"`
 }
 
+// dateTagLayout is the time.Parse layout of a date release tag (YYYYMMDD).
+const dateTagLayout = "20060102"
+
 var (
+	// dateTagRe matches date release tags (YYYYMMDD), the current release
+	// form. Both ends are anchored on purpose: dev builds carry versions such
+	// as "20261002-g<sha>-dev" (scripts/build-version.sh) and must never
+	// classify as a stable release.
+	dateTagRe   = regexp.MustCompile(`^20\d{6}$`)
 	stableTagRe = regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
 	// betaTagRe accepts any SemVer pre-release identifier beginning with
 	// alpha/beta/rc, with or without a separator and with multi-segment
 	// suffixes: v1.2.3-beta, v1.2.3-rc2, v1.2.3-beta.1, v1.2.3-rc.1.2.
 	betaTagRe = regexp.MustCompile(`^v\d+\.\d+\.\d+-(?:alpha|beta|rc)(?:[.-]?[0-9A-Za-z.-]+)?$`)
-	// nightlyTagRe matches nightly tags by prefix and is intentionally
-	// unanchored at the end: real nightly tags carry build-retry and
-	// git-describe suffixes (nightly-20260622-414, nightly-20251025-1-gec0f78e)
-	// that an end-anchored pattern would reject.
-	nightlyTagRe = regexp.MustCompile(`^nightly-\d{8}`)
+	// nightlyTagRe matches the historical nightly tags, including their
+	// build-retry and git-describe suffixes (nightly-20260622-414,
+	// nightly-20251025-1-gec0f78e), and rejects any other trailing text.
+	nightlyTagRe = regexp.MustCompile(`^nightly-\d{8}(?:-\d+(?:-g[0-9a-f]+)?)?$`)
 	// assetNameRe matches both the stable filename form
 	// "birdnet-go-linux-amd64-v0.6.4.tar.gz" and the nightly form
 	// "birdnet-go-linux-amd64.tar.gz" (no version suffix).
@@ -148,11 +156,25 @@ var (
 	criticalRe = regexp.MustCompile(`(?i)<!--\s*manifest:critical\s*-->`)
 )
 
-// ClassifyTag maps a git tag to its distribution channel. It returns false for
-// tags that belong to no channel (for example the "manifest" release's own tag),
-// which the generator skips.
+// isDateTag reports whether tag is a date release tag: exactly eight digits
+// starting with "20" that form a valid calendar date (YYYYMMDD).
+func isDateTag(tag string) bool {
+	if !dateTagRe.MatchString(tag) {
+		return false
+	}
+	_, err := time.Parse(dateTagLayout, tag)
+	return err == nil
+}
+
+// ClassifyTag maps a git tag to its distribution channel. Date tags (YYYYMMDD)
+// are the current release form and map to stable. The vX.Y.Z, vX.Y.Z-rc and
+// nightly-YYYYMMDD forms are historical and still classify so older releases
+// stay representable. It returns false for tags that belong to no channel, such
+// as the "manifest" release's own tag or a dev build version.
 func ClassifyTag(tag string) (channel string, ok bool) {
 	switch {
+	case isDateTag(tag):
+		return ChannelStable, true
 	case nightlyTagRe.MatchString(tag):
 		return ChannelNightly, true
 	case betaTagRe.MatchString(tag):
@@ -162,6 +184,20 @@ func ClassifyTag(tag string) (channel string, ok bool) {
 	default:
 		return "", false
 	}
+}
+
+// ReleaseChannels returns every channel a published release feeds, or nil when
+// its tag belongs to no channel. ClassifyTag gives a build's own channel; a
+// date release additionally feeds the legacy nightly channel, because the
+// :nightly image tag also moves to every date release (docker-build-push.yml).
+func ReleaseChannels(tag string) []string {
+	if isDateTag(tag) {
+		return []string{ChannelStable, ChannelNightly}
+	}
+	if channel, ok := ClassifyTag(tag); ok {
+		return []string{channel}
+	}
+	return nil
 }
 
 // ParseAssetName extracts the platform and architecture from a release tarball

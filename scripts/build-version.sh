@@ -18,9 +18,11 @@
 #      repository (a tarball unpacked below some unrelated checkout): unknown.
 #
 # Consumers that rely on this format: versionDatePattern in
-# internal/diagnostics/anomaly.go reads the leading YYYYMMDD, and the live
-# check in .github/workflows/build-version.yml rebuilds the dev form and the
-# manifest exclusion on its own. Update both when the format changes.
+# internal/diagnostics/anomaly.go reads the leading YYYYMMDD, ClassifyTag in
+# internal/update/manifest/manifest.go must keep the dev form out of every
+# release channel, and the live check in .github/workflows/build-version.yml
+# rebuilds the dev form and the manifest exclusion on its own. Update all three
+# when the format changes.
 
 set -u
 
