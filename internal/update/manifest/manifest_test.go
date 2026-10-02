@@ -41,6 +41,8 @@ func TestClassifyTag(t *testing.T) {
 		{name: "four-part version rejected", tag: "v1.2.3.4", wantChannel: "", wantOK: false},
 		{name: "nightly too short rejected", tag: "nightly-2026", wantChannel: "", wantOK: false},
 		{name: "uppercase nightly rejected", tag: "NIGHTLY-20260622", wantChannel: "", wantOK: false},
+		{name: "nightly with arbitrary suffix rejected", tag: "nightly-20260823garbage", wantChannel: "", wantOK: false},
+		{name: "nightly with non-numeric retry rejected", tag: "nightly-20260823-x", wantChannel: "", wantOK: false},
 		{name: "leading whitespace rejected", tag: " v0.6.4", wantChannel: "", wantOK: false},
 		{name: "trailing whitespace rejected", tag: "v0.6.4 ", wantChannel: "", wantOK: false},
 		{name: "empty ignored", tag: "", wantChannel: "", wantOK: false},

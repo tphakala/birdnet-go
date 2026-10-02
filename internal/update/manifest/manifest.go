@@ -141,11 +141,10 @@ var (
 	// alpha/beta/rc, with or without a separator and with multi-segment
 	// suffixes: v1.2.3-beta, v1.2.3-rc2, v1.2.3-beta.1, v1.2.3-rc.1.2.
 	betaTagRe = regexp.MustCompile(`^v\d+\.\d+\.\d+-(?:alpha|beta|rc)(?:[.-]?[0-9A-Za-z.-]+)?$`)
-	// nightlyTagRe matches nightly tags by prefix and is intentionally
-	// unanchored at the end: real nightly tags carry build-retry and
-	// git-describe suffixes (nightly-20260622-414, nightly-20251025-1-gec0f78e)
-	// that an end-anchored pattern would reject.
-	nightlyTagRe = regexp.MustCompile(`^nightly-\d{8}`)
+	// nightlyTagRe matches the historical nightly tags, including their
+	// build-retry and git-describe suffixes (nightly-20260622-414,
+	// nightly-20251025-1-gec0f78e), and rejects any other trailing text.
+	nightlyTagRe = regexp.MustCompile(`^nightly-\d{8}(?:-\d+(?:-g[0-9a-f]+)?)?$`)
 	// assetNameRe matches both the stable filename form
 	// "birdnet-go-linux-amd64-v0.6.4.tar.gz" and the nightly form
 	// "birdnet-go-linux-amd64.tar.gz" (no version suffix).
