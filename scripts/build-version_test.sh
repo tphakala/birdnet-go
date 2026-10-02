@@ -124,6 +124,12 @@ tag_at "$r" 20260823 "2026-08-23T00:00:00+00:00" annotated
 tag_at "$r" 20260702 "2026-07-02T00:00:00+00:00" annotated
 assert_eq "newest creator date" 20260823 "$(run_version "$r")"
 
+it "newest-created tag beats a higher version name"
+r=$(new_repo creatordate); commit "$r" "$D1"
+tag_at "$r" 20260901 "2026-09-01T00:00:00+00:00" annotated
+tag_at "$r" 20260801 "2026-10-01T00:00:00+00:00" annotated
+assert_eq "creation date outranks the version name" 20260801 "$(run_version "$r")"
+
 it "lightweight tie picks the highest version name"
 r=$(new_repo tie); commit "$r" "$D1"
 tag_at "$r" nightly-20260429-404 "$D1"; tag_at "$r" nightly-20260429-405 "$D1"
