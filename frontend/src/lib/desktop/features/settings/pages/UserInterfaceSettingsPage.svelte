@@ -155,6 +155,7 @@
       }),
       locale: $dashboardSettings?.locale ?? (getLocale() as string),
       spectrogram: $dashboardSettings?.spectrogram ?? DEFAULT_SPECTROGRAM_SETTINGS,
+      showAudioLevel: $dashboardSettings?.showAudioLevel ?? true,
     },
   });
 
@@ -173,11 +174,13 @@
         colorScheme: store.originalData.realtime?.dashboard?.colorScheme,
         customColors: store.originalData.realtime?.dashboard?.customColors,
         logoStyle: store.originalData.realtime?.dashboard?.logoStyle,
+        showAudioLevel: store.originalData.realtime?.dashboard?.showAudioLevel,
       },
       {
         colorScheme: store.formData.realtime?.dashboard?.colorScheme,
         customColors: store.formData.realtime?.dashboard?.customColors,
         logoStyle: store.formData.realtime?.dashboard?.logoStyle,
+        showAudioLevel: store.formData.realtime?.dashboard?.showAudioLevel,
       }
     )
   );
@@ -294,14 +297,26 @@
         colorScheme: store.originalData.realtime?.dashboard?.colorScheme,
         customColors: store.originalData.realtime?.dashboard?.customColors,
         logoStyle: store.originalData.realtime?.dashboard?.logoStyle,
+        showAudioLevel: store.originalData.realtime?.dashboard?.showAudioLevel,
       }}
       currentData={{
         colorScheme: store.formData.realtime?.dashboard?.colorScheme,
         customColors: store.formData.realtime?.dashboard?.customColors,
         logoStyle: store.formData.realtime?.dashboard?.logoStyle,
+        showAudioLevel: store.formData.realtime?.dashboard?.showAudioLevel,
       }}
     >
       <ColorSchemePicker disabled={store.isLoading || store.isSaving} />
+
+      <div class="border-t border-[var(--color-base-200)] pt-6 mt-6">
+        <Checkbox
+          checked={settings.dashboard.showAudioLevel}
+          label={t('settings.userInterface.appearance.showAudioLevel.label')}
+          helpText={t('settings.userInterface.appearance.showAudioLevel.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateDashboardSetting('showAudioLevel', value)}
+        />
+      </div>
     </SettingsSection>
   </div>
 {/snippet}

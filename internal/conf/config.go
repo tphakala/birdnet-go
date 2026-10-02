@@ -190,6 +190,7 @@ type Dashboard struct {
 	Layout           DashboardLayout      `yaml:"layout" json:"layout"`                                 // configurable dashboard element layout
 	DefaultAudioGain float64              `yaml:"defaultaudiogain" json:"defaultAudioGain"`             // Default playback gain in dB (0-24)
 	LiveSpectrogram  bool                 `yaml:"livespectrogram" json:"liveSpectrogram"`               // auto-start live spectrogram on dashboard
+	ShowAudioLevel   *bool                `yaml:"showaudiolevel,omitempty" json:"showAudioLevel,omitempty"` // show live audio level indicator in header (default true)
 }
 
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.
