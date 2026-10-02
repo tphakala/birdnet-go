@@ -3,8 +3,9 @@
 # Tests for scripts/build-version.sh.
 #
 # Each case builds a throwaway git repository with fixed dates, copies the
-# script into <repo>/scripts and runs it from / so the result cannot depend on
-# the caller's working directory or git configuration.
+# script into <repo>/scripts and runs it from /, so the result cannot depend on
+# the caller's working directory. The environment setup below keeps the
+# caller's git configuration and repository variables out of it.
 #
 # Run: scripts/build-version_test.sh   (exit 0 = all pass). Needs git.
 
@@ -126,7 +127,9 @@ assert_eq "release tag preferred over manifest" 20260823 "$(run_version "$r")"
 
 it "newest-created tag wins among several"
 r=$(new_repo several); commit "$r" "$D1"
-tag_at "$r" 20260801 "2026-08-01T00:00:00+00:00" annotated
+# The highest version name (20260901) is not the newest-created tag, so only the
+# creation-date sort picks 20260823.
+tag_at "$r" 20260901 "2026-08-01T00:00:00+00:00" annotated
 tag_at "$r" 20260823 "2026-08-23T00:00:00+00:00" annotated
 tag_at "$r" 20260702 "2026-07-02T00:00:00+00:00" annotated
 assert_eq "newest creator date" 20260823 "$(run_version "$r")"
