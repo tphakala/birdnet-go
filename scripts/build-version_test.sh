@@ -139,6 +139,13 @@ r=$(new_repo tie); commit "$r" "$D1"
 tag_at "$r" nightly-20260429-404 "$D1"; tag_at "$r" nightly-20260429-405 "$D1"
 assert_eq "highest version-aware name" nightly-20260429-405 "$(run_version "$r")"
 
+it "lightweight tie compares numbers by value, not by text"
+# Plain name order would put -99 above -100. Real nightly tags carry no
+# counter today; this pins the documented version-aware tie rule.
+r2=$(new_repo tiewidth); commit "$r2" "$D1"
+tag_at "$r2" nightly-20260429-99 "$D1"; tag_at "$r2" nightly-20260429-100 "$D1"
+assert_eq "version order across digit counts" nightly-20260429-100 "$(run_version "$r2")"
+
 it "release tag beats nightly tag on the same commit"
 tag_at "$r" 20260429 "$D1"
 assert_eq "date tag over nightly" 20260429 "$(run_version "$r")"
