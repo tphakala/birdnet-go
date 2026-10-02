@@ -117,15 +117,11 @@ func (c *Handler) RegisterAppRoutes(g *echo.Group) {
 	// that was previously injected server-side into the HTML template.
 	g.GET(AppConfigEndpoint, c.GetAppConfig)
 
-	// Wizard dismiss endpoint - public in the default configuration.
-	// Only writes last_seen_version to app_metadata (no data exposure, no privilege
-	// escalation), and is reachable pre-auth so the onboarding wizard can be
-	// dismissed before login. When Security.PrivateMode is enabled this route is
-	// gated like every other UI/API route: an unauthenticated user is shown the
-	// login form rather than the wizard, so dismissing it pre-auth serves no
-	// purpose and it is intentionally NOT on the privateModeAuth exempt allow-list
-	// (see isPrivateModeExempt).
-	g.POST(WizardDismissEndpoint, c.DismissWizard)
+	// Wizard dismiss endpoint: requires authentication when auth is configured,
+	// so an anonymous visitor cannot change wizard state. Without auth the
+	// middleware lets the request through. Not on the privateModeAuth exempt
+	// allow-list (see isPrivateModeExempt).
+	g.POST(WizardDismissEndpoint, c.DismissWizard, c.AuthMiddleware)
 }
 
 // GetAppConfig handles GET /api/v2/app/config

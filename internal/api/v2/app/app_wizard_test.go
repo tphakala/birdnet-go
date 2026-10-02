@@ -2,14 +2,17 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -25,9 +28,10 @@ import (
 
 // mockAppMetadataRepo implements repository.AppMetadataRepository for testing.
 type mockAppMetadataRepo struct {
-	store  map[string]string
-	getErr error // injected error for Get calls
-	setErr error // injected error for Set calls
+	store    map[string]string
+	getErr   error    // injected error for Get calls
+	setErr   error    // injected error for Set calls
+	setCalls []string // keys passed to Set, in call order
 }
 
 func newMockAppMetadataRepo() *mockAppMetadataRepo {
@@ -42,6 +46,7 @@ func (m *mockAppMetadataRepo) Get(_ context.Context, key string) (string, error)
 }
 
 func (m *mockAppMetadataRepo) Set(_ context.Context, key, value string) error {
+	m.setCalls = append(m.setCalls, key)
 	if m.setErr != nil {
 		return m.setErr
 	}
@@ -306,4 +311,90 @@ func TestDismissWizard_SetError(t *testing.T) {
 	err := c.DismissWizard(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// TestDismissWizardRoute_RequiresSameAccessAsWizardState pins the route wiring of
+// POST /api/v2/app/wizard/dismiss: it goes through the auth middleware, so a
+// request can dismiss the wizard if and only if GET /api/v2/app/config reports
+// accessAllowed for it. It is not parallel because setupAppConfigTestWithAuth
+// publishes the global settings snapshot and sets gothic.Store.
+func TestDismissWizardRoute_RequiresSameAccessAsWizardState(t *testing.T) {
+	const (
+		apiPrefix     = "/api/v2"
+		remoteAddr    = "203.0.113.10:1234"
+		testSubnet    = "203.0.113.0/24"
+		sessionSecret = "test-session-secret-32-chars-long"
+	)
+
+	basicAuth := conf.BasicAuth{
+		Enabled:        true,
+		Password:       "testpassword",
+		ClientID:       "test-client",
+		AuthCodeExp:    5 * time.Minute,
+		AccessTokenExp: 24 * time.Hour,
+	}
+
+	tests := []struct {
+		name     string
+		security *conf.Security
+		wantCode int
+	}{
+		{
+			name:     "no auth configured allows dismiss",
+			wantCode: http.StatusNoContent,
+		},
+		{
+			name: "auth configured without access is rejected",
+			security: &conf.Security{
+				SessionSecret: sessionSecret,
+				BasicAuth:     basicAuth,
+			},
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name: "auth configured with access dismisses",
+			security: &conf.Security{
+				SessionSecret:     sessionSecret,
+				BasicAuth:         basicAuth,
+				AllowSubnetBypass: conf.AllowSubnetBypass{Enabled: true, Subnet: testSubnet},
+			},
+			wantCode: http.StatusNoContent,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, h := setupAppConfigTestWithAuth(t, tt.security)
+			h.AuthMiddleware = auth.NewMiddleware(h.authService).Authenticate
+			h.RegisterAppRoutes(e.Group(apiPrefix))
+
+			repo := newMockAppMetadataRepo()
+			h.appMetadataRepo = repo
+
+			cfgReq := httptest.NewRequest(http.MethodGet, apiPrefix+AppConfigEndpoint, http.NoBody)
+			cfgReq.RemoteAddr = remoteAddr
+			cfgRec := httptest.NewRecorder()
+			e.ServeHTTP(cfgRec, cfgReq)
+			require.Equal(t, http.StatusOK, cfgRec.Code)
+			var cfg AppConfigResponse
+			require.NoError(t, json.Unmarshal(cfgRec.Body.Bytes(), &cfg))
+
+			// The config request may seed last_seen_version; only writes made by
+			// the dismiss request matter below.
+			repo.setCalls = nil
+
+			req := httptest.NewRequest(http.MethodPost, apiPrefix+WizardDismissEndpoint, http.NoBody)
+			req.RemoteAddr = remoteAddr
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+
+			assert.Equal(t, tt.wantCode, rec.Code)
+			assert.Equal(t, cfg.Security.AccessAllowed, rec.Code == http.StatusNoContent,
+				"dismiss must succeed exactly when config reports accessAllowed")
+
+			// A rejected request must not write.
+			assert.Equal(t, tt.wantCode == http.StatusNoContent, len(repo.setCalls) > 0,
+				"unexpected Set calls: %v", repo.setCalls)
+		})
+	}
 }
