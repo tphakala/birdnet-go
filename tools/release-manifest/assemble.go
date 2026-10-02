@@ -32,7 +32,7 @@ var errNoChannels = errors.NewStd("no releases matched a known channel")
 // errUnclassifiedReleases is returned when a published release has a tag that
 // matches no channel. It fails the run rather than warning so a mis-tagged
 // release cannot leave the manifest silently stale; the previously published
-// manifest stays in place until the tag is fixed or excluded.
+// manifest stays in place until the release is retagged, deleted or made a draft.
 var errUnclassifiedReleases = errors.NewStd("published releases match no channel")
 
 // manifestReleaseTag is the tag of the release that hosts manifest.json

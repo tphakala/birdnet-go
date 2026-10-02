@@ -54,11 +54,11 @@ from `channels`.
 
 A published, non-draft release whose tag matches no channel (other than the
 `manifest` release itself) fails the run: the generator exits non-zero and
-names the tags, and the previously published manifest stays in place. Fix or
-delete the mis-tagged release to unblock it.
+names the tags, and the previously published manifest stays in place. Retag,
+delete or return the mis-tagged release to draft to unblock it.
 
-Every channel carries the moving `channel_tag` and, for date and `vX.Y.Z`
-releases, version-pinned `ghcr`/`dockerhub` refs. A legacy `nightly-YYYYMMDD`
+Every channel carries the moving `channel_tag` and, for every tag form except
+legacy `nightly-YYYYMMDD`, version-pinned `ghcr`/`dockerhub` refs. A legacy `nightly-YYYYMMDD`
 release gets only the moving tag, because its image tag could drift from the
 GitHub release tag on a build retry.
 
