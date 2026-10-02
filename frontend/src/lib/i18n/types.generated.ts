@@ -418,6 +418,7 @@ export type TranslationKey =
   | 'notifications.content.alert.metricExceeded' // params: value, threshold
   | 'notifications.content.alert.detectionOccurred' // params: species_name, confidence
   | 'notifications.content.alert.errorOccurred' // params: error
+  | 'notifications.content.alert.errorWithSource' // params: source_name, error
   | 'notifications.content.alert.disconnected' // params: source_name
   | 'notifications.content.alert.error.authError'
   | 'notifications.content.alert.error.rateLimited'
@@ -4322,6 +4323,10 @@ export type TranslationParams = {
     confidence: string | number;
   };
   'notifications.content.alert.errorOccurred': { error: string | number };
+  'notifications.content.alert.errorWithSource': {
+    source_name: string | number;
+    error: string | number;
+  };
   'notifications.content.alert.disconnected': { source_name: string | number };
   'notifications.content.inferenceFailing.title': { modelName: string | number };
   'notifications.content.inferenceFailing.message': {

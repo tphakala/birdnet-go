@@ -314,7 +314,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 				logger.String("operation", "liveness_notify"),
 				logger.String("title", title))
 		}
-	})
+	}, p.livenessSourceName)
 	watchdogCallbacks := audiocore.LivenessCallbacks{
 		RestartSource: p.RestartSource,
 		Escalate: func(_ string) {
@@ -544,6 +544,25 @@ func (p *AudioPipelineService) restartAudioCapture() {
 	// Re-add sources, register consumers, and update buffer monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
 	p.setupAudioSources(audioLevelChan, operationRestart, fallbackSources)
+}
+
+// livenessSourceName resolves an audio source ID to the name shown in liveness
+// notifications, so users see "Backyard feeder" rather than "rtsp_832ca5de".
+// It is looked up per notification rather than cached, so a source renamed in
+// settings is labelled correctly without a restart.
+//
+// The fallback sanitizes the ID because legacy call paths can pass a raw
+// connection string, which may embed RTSP credentials that must never reach a
+// user-visible notification.
+func (p *AudioPipelineService) livenessSourceName(sourceID string) string {
+	if p.engine != nil {
+		if registry := p.engine.Registry(); registry != nil {
+			if src, ok := registry.Get(sourceID); ok && src.DisplayName != "" {
+				return src.DisplayName
+			}
+		}
+	}
+	return privacy.SanitizeRTSPUrl(sourceID)
 }
 
 // RestartSource tears down and reinitializes a single audio source.
