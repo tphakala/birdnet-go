@@ -28,15 +28,6 @@ const (
 // version acknowledged by the user through the wizard dismiss action.
 const appMetadataKeyLastSeenVersion = "last_seen_version"
 
-// Version strings that mark a build as a development build. They mirror the
-// output of scripts/build-version.sh: "<date>-g<hash>-dev" for untagged
-// commits and "unknown" when no git metadata is available.
-const (
-	devBuildVersionLabel  = "Development Build"
-	devBuildVersionSuffix = "-dev"
-	unknownBuildVersion   = "unknown"
-)
-
 // AppConfigResponse represents the application configuration returned to the frontend.
 // This replaces the server-side injected window.BIRDNET_CONFIG.
 type AppConfigResponse struct {
@@ -260,7 +251,7 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 // by comparing the current app version with the last_seen_version stored in app_metadata.
 //
 // Rules:
-//   - Dev builds (see isDevBuild): both flags forced to false.
+//   - Dev builds (empty version or "Development Build"): both flags forced to false.
 //   - If last_seen_version is missing and isExistingInstall returns true: auto-seed and skip wizard.
 //   - If last_seen_version is missing and no install signals: freshInstall = true.
 //   - If last_seen_version differs from the current version: newVersion = true.
@@ -370,13 +361,8 @@ func (c *Handler) hasNotes(ctx context.Context) bool {
 }
 
 // isDevBuild returns true for development/unversioned builds where wizard should be suppressed.
-// That covers an empty version, the "Development Build" label, "unknown", and any
-// version ending in "-dev" (the format scripts/build-version.sh gives untagged commits).
 func isDevBuild(version string) bool {
-	return version == "" ||
-		version == devBuildVersionLabel ||
-		version == unknownBuildVersion ||
-		strings.HasSuffix(version, devBuildVersionSuffix)
+	return version == "" || version == "Development Build"
 }
 
 // DismissWizard handles POST /api/v2/app/wizard/dismiss
