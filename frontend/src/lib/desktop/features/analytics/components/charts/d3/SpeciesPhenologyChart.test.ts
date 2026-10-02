@@ -233,11 +233,43 @@ describe('SpeciesPhenologyChart', () => {
       expect(hideSpy).not.toHaveBeenCalled();
     });
 
-    it('hides the bar tooltip when the page scrolls', async () => {
+    it('hides a hover tooltip when the page scrolls', async () => {
       const { bars } = await renderBars();
-      await fireEvent.focus(swallowBar(bars));
+      await fireEvent.mouseEnter(swallowBar(bars));
+      expect(showSpy).toHaveBeenCalledOnce();
       window.dispatchEvent(new Event('scroll'));
       expect(hideSpy).toHaveBeenCalled();
+    });
+
+    it('re-anchors the bar tooltip to the focused bar when the page scrolls', async () => {
+      const { bars } = await renderBars();
+      swallowBar(bars).focus();
+      showSpy.mockClear();
+      window.dispatchEvent(new Event('scroll'));
+      expect(showSpy).toHaveBeenCalledOnce();
+      expect(showSpy.mock.lastCall?.[0]).toMatchObject({ title: 'Barn Swallow' });
+      expect(hideSpy).not.toHaveBeenCalled();
+    });
+
+    it('hides the bar tooltip when the focused bar scrolls out of the viewport', async () => {
+      const { bars } = await renderBars();
+      const bar = swallowBar(bars);
+      bar.focus();
+      showSpy.mockClear();
+      vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, -500, 100, 20));
+      window.dispatchEvent(new Event('scroll'));
+      expect(showSpy).not.toHaveBeenCalled();
+      expect(hideSpy).toHaveBeenCalled();
+    });
+
+    it('does not reopen a tooltip dismissed with Escape when the page scrolls', async () => {
+      const { bars } = await renderBars();
+      const bar = swallowBar(bars);
+      bar.focus();
+      await fireEvent.keyDown(bar, { key: 'Escape' });
+      showSpy.mockClear();
+      window.dispatchEvent(new Event('scroll'));
+      expect(showSpy).not.toHaveBeenCalled();
     });
 
     it('shows the bar tooltip on tap (click) and focuses the bar', async () => {

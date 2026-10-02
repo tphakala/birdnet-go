@@ -58,6 +58,11 @@
 
   let tooltip: ChartTooltip | null = null;
   let chartContainer: HTMLDivElement | null = null;
+  // The bar a focus or tap tooltip is open for; every hide path clears it so a scroll never
+  // reopens a tooltip that was dismissed. Bar data is looked up here because d3 handlers get it
+  // per event, not on scroll.
+  let anchoredBar: globalThis.Element | null = null;
+  const barData = new WeakMap<globalThis.Element, PlottedRow>();
 
   // Add one calendar day in local time (DST-safe: setDate respects the timezone, unlike +86_400_000ms
   // which drifts by an hour across a DST boundary and misaligns the SVG rect).
@@ -127,7 +132,13 @@
   // Focus and tap have no pointer position, so anchor the tooltip to the bar's right edge.
   function showBarTooltipAtBar(el: globalThis.Element, d: PlottedRow): void {
     const r = el.getBoundingClientRect();
+    anchoredBar = el;
     showBarTooltip(d, r.right, r.top + r.height / 2);
+  }
+
+  function hideTooltip(): void {
+    anchoredBar = null;
+    tooltip?.hide();
   }
 
   function restoreBarOpacity(): void {
@@ -137,12 +148,28 @@
   }
 
   function dismissTooltip(): void {
-    tooltip?.hide();
+    hideTooltip();
     restoreBarOpacity();
   }
 
+  // The tooltip is fixed to the viewport. A focus that scrolls its bar into view fires a scroll
+  // event right after the tooltip opened, so a bar-anchored tooltip follows its bar while the bar
+  // is on screen; any other tooltip, or one whose bar left the viewport, is dismissed.
+  function onWindowScroll(): void {
+    const el = anchoredBar;
+    const d = el ? barData.get(el) : undefined;
+    if (el && d && el.isConnected) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom >= 0 && r.top <= window.innerHeight) {
+        showBarTooltipAtBar(el, d);
+        return;
+      }
+    }
+    dismissTooltip();
+  }
+
   // A tap elsewhere may not blur an SVG element on every touch browser, so hide on any pointerdown
-  // outside the bars. The tooltip is fixed to the viewport, so it must also hide when the page scrolls.
+  // outside the bars.
   function onDocumentPointerDown(event: Event): void {
     const target = event.target;
     if (
@@ -166,7 +193,7 @@
   function drawChart(context: NonNullable<typeof chartContext>): void {
     const { chartGroup, innerWidth, innerHeight, theme } = context;
     // A redraw removes the hovered bar, so its mouseleave would never fire; hide first.
-    tooltip?.hide();
+    hideTooltip();
     chartGroup.selectAll('*').remove();
     if (innerWidth <= 0 || innerHeight <= 0) return;
 
@@ -259,13 +286,17 @@
       .attr('tabindex', 0)
       .attr('role', 'img')
       .attr('aria-label', (d: PlottedRow) => barAriaLabel(d))
+      .each(function (d: PlottedRow) {
+        barData.set(this, d);
+      })
       .on('mouseenter', function (event: MouseEvent, d: PlottedRow) {
         select(this).style('opacity', 1);
+        anchoredBar = null;
         showBarTooltip(d, event.clientX, event.clientY);
       })
       .on('mouseleave', function () {
         select(this).style('opacity', BAR_IDLE_OPACITY);
-        tooltip?.hide();
+        hideTooltip();
       })
       .on('focus', function (_event: FocusEvent, d: PlottedRow) {
         select(this).style('opacity', 1);
@@ -273,7 +304,7 @@
       })
       .on('blur', function () {
         select(this).style('opacity', BAR_IDLE_OPACITY);
-        tooltip?.hide();
+        hideTooltip();
       })
       .on('click', function (_event: MouseEvent, d: PlottedRow) {
         // A tap on touch browsers may not focus an SVG element by itself.
@@ -300,12 +331,12 @@
       capture: true,
       passive: true,
     });
-    window.addEventListener('scroll', dismissTooltip, { capture: true, passive: true });
+    window.addEventListener('scroll', onWindowScroll, { capture: true, passive: true });
   });
 
   onDestroy(() => {
     document.removeEventListener('pointerdown', onDocumentPointerDown, { capture: true });
-    window.removeEventListener('scroll', dismissTooltip, { capture: true });
+    window.removeEventListener('scroll', onWindowScroll, { capture: true });
     tooltip?.destroy();
   });
 </script>
