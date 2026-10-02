@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, cleanup } from '@testing-library/svelte';
+import { render, cleanup, fireEvent } from '@testing-library/svelte';
 import SpeciesPhenologyChart from './SpeciesPhenologyChart.svelte';
+import { ChartTooltip } from './utils/interactions';
 import type { PhenologyData } from './utils/phenology';
 
 // The per-visitor dictionary knows only the swift, so the other species keep the payload name.
@@ -154,5 +155,99 @@ describe('SpeciesPhenologyChart', () => {
     const { getByTestId } = render(SpeciesPhenologyChart, { props: { data: sample } });
     await Promise.resolve();
     expect(getByTestId('phenology-summary')).toBeTruthy();
+  });
+
+  describe('bar details without a mouse', () => {
+    let showSpy: ReturnType<typeof vi.spyOn>;
+    let hideSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      showSpy = vi.spyOn(ChartTooltip.prototype, 'show').mockImplementation(() => {});
+      hideSpy = vi.spyOn(ChartTooltip.prototype, 'hide').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      showSpy.mockRestore();
+      hideSpy.mockRestore();
+    });
+
+    async function renderBars(): Promise<{ bars: SVGRectElement[] }> {
+      const { container } = render(SpeciesPhenologyChart, { props: { data: sample, width: 800 } });
+      await Promise.resolve();
+      const bars = Array.from(container.querySelectorAll<SVGRectElement>('.phenology-bars rect'));
+      hideSpy.mockClear(); // drawChart hides any stale tooltip before it draws
+      return { bars };
+    }
+
+    // The Barn Swallow bar: the test file's dictionary mock renders Apus apus as a Finnish name.
+    function swallowBar(bars: SVGRectElement[]): SVGRectElement {
+      const bar = bars[1];
+      expect(bar).toBeDefined();
+      return bar;
+    }
+
+    it('makes every residency bar keyboard focusable with a descriptive label', async () => {
+      const { bars } = await renderBars();
+      expect(bars).toHaveLength(3);
+      for (const bar of bars) {
+        expect(bar.getAttribute('tabindex')).toBe('0');
+        expect(bar.getAttribute('role')).toBe('img');
+      }
+      const label = swallowBar(bars).getAttribute('aria-label') ?? '';
+      expect(label).toContain('Barn Swallow');
+      expect(label).toContain('2026-03-05');
+      expect(label).toContain('2026-03-28');
+    });
+
+    it('shows the bar tooltip on keyboard focus', async () => {
+      const { bars } = await renderBars();
+      await fireEvent.focus(swallowBar(bars));
+      expect(showSpy).toHaveBeenCalledOnce();
+      const arg = showSpy.mock.calls[0][0] as { title: string; items: unknown[] };
+      expect(arg.title).toBe('Barn Swallow');
+      expect(arg.items).toHaveLength(4);
+    });
+
+    it('hides the bar tooltip on blur and on Escape', async () => {
+      const { bars } = await renderBars();
+      const bar = swallowBar(bars);
+      await fireEvent.focus(bar);
+      await fireEvent.blur(bar);
+      expect(hideSpy).toHaveBeenCalledTimes(1);
+      await fireEvent.focus(bar);
+      await fireEvent.keyDown(bar, { key: 'Escape' });
+      expect(hideSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('hides the bar tooltip on a pointerdown outside the bars', async () => {
+      const { bars } = await renderBars();
+      await fireEvent.focus(swallowBar(bars));
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      expect(hideSpy).toHaveBeenCalled();
+    });
+
+    it('keeps the bar tooltip on a pointerdown inside the bars', async () => {
+      const { bars } = await renderBars();
+      await fireEvent.focus(swallowBar(bars));
+      bars[0].dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      expect(hideSpy).not.toHaveBeenCalled();
+    });
+
+    it('hides the bar tooltip when the page scrolls', async () => {
+      const { bars } = await renderBars();
+      await fireEvent.focus(swallowBar(bars));
+      window.dispatchEvent(new Event('scroll'));
+      expect(hideSpy).toHaveBeenCalled();
+    });
+
+    it('shows the bar tooltip on tap (click) and focuses the bar', async () => {
+      const { bars } = await renderBars();
+      const bar = swallowBar(bars);
+      await fireEvent.click(bar);
+      // focus() fires the focus handler and the click handler shows again (same content, idempotent).
+      expect(showSpy).toHaveBeenCalled();
+      expect(showSpy.mock.lastCall?.[0]).toMatchObject({ title: 'Barn Swallow' });
+      expect(document.activeElement).toBe(bar);
+    });
   });
 });

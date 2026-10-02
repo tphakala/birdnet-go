@@ -23,7 +23,7 @@
     createDateAxisFormatter,
     pickDateRangeBucket,
   } from './utils/axes';
-  import { ChartTooltip } from './utils/interactions';
+  import { ChartTooltip, type TooltipData } from './utils/interactions';
   import { type ChartTheme } from './utils/theme';
   import { residencyDays, type PhenologyData, type PhenologyDatum } from './utils/phenology';
   import { t } from '$lib/i18n';
@@ -99,6 +99,62 @@
     });
   });
 
+  // The tooltip content for a bar: the same four label/value pairs for hover, focus and tap.
+  function barTooltipItems(d: PlottedRow): TooltipData['items'] {
+    return [
+      { label: t('analytics.advanced.charts.phenology.tooltipFirst'), value: d.firstSeen },
+      { label: t('analytics.advanced.charts.phenology.tooltipLast'), value: d.lastSeen },
+      {
+        label: t('analytics.advanced.charts.phenology.tooltipResidency'),
+        value: t('analytics.advanced.charts.phenology.residencyDays', {
+          days: residencyDays(d.firstSeen, d.lastSeen),
+        }),
+      },
+      { label: t('analytics.advanced.charts.phenology.tooltipCount'), value: String(d.count) },
+    ];
+  }
+
+  // Accessible name for a focused bar, composed from the tooltip's own label and value strings.
+  function barAriaLabel(d: PlottedRow): string {
+    const [first, last, residency, count] = barTooltipItems(d);
+    return `${d.commonName}: ${first.label} ${first.value}, ${last.label} ${last.value}, ${residency.label} ${residency.value}, ${count.label} ${count.value}`;
+  }
+
+  function showBarTooltip(d: PlottedRow, x: number, y: number): void {
+    tooltip?.show({ title: d.commonName, items: barTooltipItems(d), x, y });
+  }
+
+  // Focus and tap have no pointer position, so anchor the tooltip to the bar's right edge.
+  function showBarTooltipAtBar(el: globalThis.Element, d: PlottedRow): void {
+    const r = el.getBoundingClientRect();
+    showBarTooltip(d, r.right, r.top + r.height / 2);
+  }
+
+  function restoreBarOpacity(): void {
+    if (chartContainer) {
+      select(chartContainer).selectAll('.phenology-bars rect').style('opacity', BAR_IDLE_OPACITY);
+    }
+  }
+
+  function dismissTooltip(): void {
+    tooltip?.hide();
+    restoreBarOpacity();
+  }
+
+  // A tap elsewhere may not blur an SVG element on every touch browser, so hide on any pointerdown
+  // outside the bars. The tooltip is fixed to the viewport, so it must also hide when the page scrolls.
+  function onDocumentPointerDown(event: Event): void {
+    const target = event.target;
+    if (
+      target instanceof globalThis.Element &&
+      target.closest('.phenology-bars') &&
+      chartContainer?.contains(target)
+    ) {
+      return;
+    }
+    dismissTooltip();
+  }
+
   let chartContext = $state<{
     svg: import('d3-selection').Selection<SVGSVGElement, unknown, null, undefined>;
     chartGroup: import('d3-selection').Selection<globalThis.SVGGElement, unknown, null, undefined>;
@@ -163,9 +219,8 @@
     });
     const yAxisGroup = chartGroup.append('g').attr('class', 'y-axis').call(yAxis);
     styleAxis(yAxisGroup, theme.axis);
-    // The tick label is truncated past LABEL_MAX_CHARS, and the bar tooltip is hover-only (unreachable
-    // on the tablet target and to screen readers). Attach the full common name as a native <title> on
-    // each tick so the complete name is recoverable via touch long-press and assistive tech.
+    // The tick label is truncated past LABEL_MAX_CHARS. Attach the full common name as a native
+    // <title> on each tick so the complete name is recoverable via touch long-press and assistive tech.
     yAxisGroup
       .selectAll<globalThis.SVGGElement, string>('.tick')
       .append('title')
@@ -201,37 +256,33 @@
       .attr('rx', BAR_RADIUS)
       .style('fill', (d: PlottedRow) => colorScale(d.scientificName))
       .style('opacity', BAR_IDLE_OPACITY)
+      .attr('tabindex', 0)
+      .attr('role', 'img')
+      .attr('aria-label', (d: PlottedRow) => barAriaLabel(d))
       .on('mouseenter', function (event: MouseEvent, d: PlottedRow) {
         select(this).style('opacity', 1);
-        tooltip?.show({
-          title: d.commonName,
-          items: [
-            {
-              label: t('analytics.advanced.charts.phenology.tooltipFirst'),
-              value: d.firstSeen,
-            },
-            {
-              label: t('analytics.advanced.charts.phenology.tooltipLast'),
-              value: d.lastSeen,
-            },
-            {
-              label: t('analytics.advanced.charts.phenology.tooltipResidency'),
-              value: t('analytics.advanced.charts.phenology.residencyDays', {
-                days: residencyDays(d.firstSeen, d.lastSeen),
-              }),
-            },
-            {
-              label: t('analytics.advanced.charts.phenology.tooltipCount'),
-              value: String(d.count),
-            },
-          ],
-          x: event.clientX,
-          y: event.clientY,
-        });
+        showBarTooltip(d, event.clientX, event.clientY);
       })
       .on('mouseleave', function () {
         select(this).style('opacity', BAR_IDLE_OPACITY);
         tooltip?.hide();
+      })
+      .on('focus', function (_event: FocusEvent, d: PlottedRow) {
+        select(this).style('opacity', 1);
+        showBarTooltipAtBar(this, d);
+      })
+      .on('blur', function () {
+        select(this).style('opacity', BAR_IDLE_OPACITY);
+        tooltip?.hide();
+      })
+      .on('click', function (_event: MouseEvent, d: PlottedRow) {
+        // A tap on touch browsers may not focus an SVG element by itself.
+        this.focus();
+        select(this).style('opacity', 1);
+        showBarTooltipAtBar(this, d);
+      })
+      .on('keydown', function (event: KeyboardEvent) {
+        if (event.key === 'Escape') dismissTooltip();
       });
   }
 
@@ -245,9 +296,16 @@
     if (chartContainer) {
       tooltip = new ChartTooltip(chartContainer);
     }
+    document.addEventListener('pointerdown', onDocumentPointerDown, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener('scroll', dismissTooltip, { capture: true, passive: true });
   });
 
   onDestroy(() => {
+    document.removeEventListener('pointerdown', onDocumentPointerDown, { capture: true });
+    window.removeEventListener('scroll', dismissTooltip, { capture: true });
     tooltip?.destroy();
   });
 </script>
@@ -278,5 +336,12 @@
 
   :global(.phenology-bars rect) {
     transition: opacity 0.12s ease;
+  }
+
+  /* Stroke rather than outline: outline support on SVG elements is uneven. */
+  :global(.phenology-bars rect:focus-visible) {
+    outline: none;
+    stroke: var(--color-primary);
+    stroke-width: 2px;
   }
 </style>
