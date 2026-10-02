@@ -50,7 +50,10 @@
     onDelete,
   }: Props = $props();
 
-  const loader = createSpectrogramLoader({ size: 'md', raw: true });
+  const loader = createSpectrogramLoader({
+    size: () => get(dashboardSettings)?.spectrogram?.size ?? 'md',
+    raw: () => get(dashboardSettings)?.spectrogram?.raw ?? true,
+  });
 
   let cardElement = $state<HTMLElement | undefined>(undefined);
   let isVisible = $state(false);

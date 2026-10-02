@@ -596,4 +596,85 @@ describe('spectrogramLoader', () => {
       loader.destroy();
     });
   });
+
+  describe('dynamic configuration getters', () => {
+    it('evaluates getter functions for size and raw dynamically', async () => {
+      let currentSize = 'md';
+      let currentRaw = true;
+
+      mockFetch.mockResolvedValue(mockJsonResponse({ data: { status: 'exists' } }));
+
+      const loader = createSpectrogramLoader({
+        size: () => currentSize,
+        raw: () => currentRaw,
+      });
+
+      loader.start(42);
+      await flushAll();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/spectrogram/42/status?size=md&raw=true',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+      expect(loader.spectrogramUrl).toBe('/api/v2/spectrogram/42?size=md&raw=true');
+
+      // Change dynamic configuration
+      currentSize = 'lg';
+      currentRaw = false;
+
+      loader.start(99);
+      await flushAll();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/spectrogram/99/status?size=lg&raw=false',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+      expect(loader.spectrogramUrl).toBe('/api/v2/spectrogram/99?size=lg&raw=false');
+      loader.destroy();
+    });
+
+    it('falls back to default size and raw if getter returns undefined', async () => {
+      mockFetch.mockResolvedValue(mockJsonResponse({ data: { status: 'exists' } }));
+
+      const loader = createSpectrogramLoader({
+        size: () => undefined as unknown as string,
+        raw: () => undefined as unknown as boolean,
+      });
+
+      loader.start(42);
+      await flushAll();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/spectrogram/42/status?size=md&raw=true',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+      expect(loader.spectrogramUrl).toBe('/api/v2/spectrogram/42?size=md&raw=true');
+      loader.destroy();
+    });
+
+    it('evaluates getter functions dynamically in generation trigger', async () => {
+      const currentSize = 'sm';
+      const currentRaw = false;
+
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'not_started' } }));
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'queued' } }, 202));
+
+      const loader = createSpectrogramLoader({
+        size: () => currentSize,
+        raw: () => currentRaw,
+      });
+
+      loader.start(42);
+      await flushAll();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/spectrogram/42/generate?size=sm&raw=false',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'X-CSRF-Token': 'test-csrf-token' },
+        })
+      );
+      loader.destroy();
+    });
+  });
 });
