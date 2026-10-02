@@ -6,6 +6,7 @@ package app
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -1524,4 +1525,63 @@ func TestGetAppConfig_SpeciesDictVersion(t *testing.T) {
 	expectedVersion := speciesdict.Version()
 	assert.NotEmpty(t, response.SpeciesDictVersion, "speciesDictVersion must not be empty")
 	assert.Equal(t, expectedVersion, response.SpeciesDictVersion, "speciesDictVersion must match speciesdict.Version()")
+}
+
+// allowAllAuth is an auth.Service stub that reports every request as
+// authenticated. The embedded nil interface is never dereferenced because
+// GetAppConfig calls only IsAuthenticated.
+type allowAllAuth struct{ auth.Service }
+
+func (allowAllAuth) IsAuthenticated(echo.Context) bool { return true }
+
+// TestGetAppConfig_WizardStateRequiresAccess pins that wizard state is not
+// reported to a visitor without access.
+func TestGetAppConfig_WizardStateRequiresAccess(t *testing.T) {
+	authConfig := &conf.Security{
+		BasicAuth: conf.BasicAuth{Enabled: true, Password: "test"},
+	}
+	onboardingPending := map[string]string{appMetadataKeyOnboardingPending: onboardingPendingValue}
+	lastSeenOld := map[string]string{appMetadataKeyLastSeenVersion: "0.9.0"}
+
+	tests := []struct {
+		name            string
+		security        *conf.Security
+		authSvc         auth.Service
+		metadata        map[string]string
+		wantFresh       bool
+		wantNewVersion  bool
+		wantPrevVersion string
+	}{
+		{name: "visitor without access is not offered onboarding", security: authConfig, metadata: onboardingPending},
+		{name: "visitor with access is offered onboarding", security: authConfig, authSvc: allowAllAuth{}, metadata: onboardingPending, wantFresh: true},
+		{name: "visitor without access is not offered what's new", security: authConfig, metadata: lastSeenOld},
+		{name: "visitor with access is offered what's new", security: authConfig, authSvc: allowAllAuth{}, metadata: lastSeenOld, wantNewVersion: true, wantPrevVersion: "0.9.0"},
+		{name: "onboarding without auth configured is unchanged", metadata: onboardingPending, wantFresh: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, controller := setupAppConfigTest(t, tt.security)
+			controller.authService = tt.authSvc
+			repo := newMockAppMetadataRepo()
+			maps.Copy(repo.store, tt.metadata)
+			controller.appMetadataRepo = repo
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
+
+			require.NoError(t, controller.GetAppConfig(c))
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var response AppConfigResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+			// Precondition: each row grants or denies access as its name says.
+			require.Equal(t, tt.security == nil || tt.authSvc != nil, response.Security.AccessAllowed)
+			assert.Equal(t, tt.wantFresh, response.FreshInstall)
+			assert.Equal(t, tt.wantNewVersion, response.NewVersion)
+			assert.Equal(t, tt.wantPrevVersion, response.PreviousVersion)
+		})
+	}
 }
