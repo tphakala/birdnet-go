@@ -2,7 +2,7 @@ name: Build version string
 
 # Guards scripts/build-version.sh, the single source of the version string
 # baked into builds. It runs the script's unit tests, shellchecks it, fails when
-# another file derives a version with git itself, and (on the upstream
+# another build file or script calls git describe, and (on the upstream
 # repository only) checks the script against the real tags: HEAD must print the
 # expected form, and the latest published release tag, checked out in a
 # worktree, must print exactly that tag. The daily schedule and the release

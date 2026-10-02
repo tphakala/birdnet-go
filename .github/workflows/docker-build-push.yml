@@ -98,7 +98,8 @@ jobs:
           STRATEGY: ${{ inputs.tag-strategy }}
         run: |
           # Dev images get the same <date>-g<hash>-dev string as local builds
-          # instead of the full commit SHA that inputs.version carries. Image
+          # instead of the full commit SHA the dev caller passes as
+          # inputs.version (release callers pass the tag, used as is). Image
           # tags, OCI labels and job outputs keep inputs.version. An empty
           # BUILD_VERSION disables any pin inherited from the environment.
           if [ "${STRATEGY}" = "dev" ]; then

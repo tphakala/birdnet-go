@@ -65,7 +65,9 @@ commit() {
     GIT_AUTHOR_DATE="$date" GIT_COMMITTER_DATE="$date" git -C "$dir" commit -q -m "$msg"
 }
 
-# tag_at <dir> <tag> <iso-date> [annotated]: tag HEAD with a fixed tag date.
+# tag_at <dir> <tag> <iso-date> [annotated]: tag HEAD. The date sets the
+# tagger date of an annotated tag; a lightweight tag always carries the commit
+# date, so the argument only documents the intent there.
 tag_at() {
     local dir="$1" tag="$2" date="$3"
     if [ "${4:-}" = annotated ]; then

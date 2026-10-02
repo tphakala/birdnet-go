@@ -12,10 +12,15 @@
 #      the newest-created tag wins, ties go to the highest version-aware name.
 #   3. Any other build inside a git work tree root: <HEAD committer date in
 #      UTC as YYYYMMDD>-g<HASH_LENGTH-char hash>-dev (for example
-#      20261002-g5dc2ab881-dev). The commit date, not the build date, keeps
+#      20260927-g5dc2ab881-dev). The commit date, not the build date, keeps
 #      the string reproducible. Uncommitted changes add no suffix.
 #   4. No git, no git metadata, or a source tree nested inside another
 #      repository (a tarball unpacked below some unrelated checkout): unknown.
+#
+# Consumers that rely on this format: versionDatePattern in
+# internal/diagnostics/anomaly.go reads the leading YYYYMMDD, and the live
+# check in .github/workflows/build-version.yml rebuilds the dev form and the
+# manifest exclusion on its own. Update both when the format changes.
 
 set -u
 

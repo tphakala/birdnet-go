@@ -6,8 +6,9 @@ on:
     # build is what attaches the assets, so it never needs a body edit to run,
     # and listening on 'edited' meant any later change to the release (fixing
     # the notes, toggling latest) re-ran the entire multi-platform build. To
-    # rebuild on demand, use the workflow_dispatch entry below or re-run the
-    # failed run; do not re-add 'edited'.
+    # rebuild on demand, run the workflow_dispatch entry below from the release
+    # tag (a branch ref is refused) or re-run the failed run; do not re-add
+    # 'edited'.
     types: [created]
   workflow_dispatch:
 
