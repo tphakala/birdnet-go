@@ -22,12 +22,9 @@ export interface PhenologyDatum {
   count: number;
 }
 
-/** One residency row the chart renders; the endpoint already carries the common name. */
-export type PhenologyRow = PhenologyDatum;
-
 /** Chart input: the residency rows, in arrival order (server-sorted by first-seen). */
 export interface PhenologyData {
-  rows: PhenologyRow[];
+  rows: PhenologyDatum[];
 }
 
 /** Milliseconds in a calendar day; used only for an inclusive day-count diff of two local midnights. */

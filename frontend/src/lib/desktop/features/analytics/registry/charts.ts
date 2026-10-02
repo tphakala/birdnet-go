@@ -33,11 +33,7 @@ import type {
   AccumulationPoint,
 } from '../components/charts/d3/utils/accumulation';
 import SpeciesPhenologyChart from '../components/charts/d3/SpeciesPhenologyChart.svelte';
-import type {
-  PhenologyData,
-  PhenologyDatum,
-  PhenologyRow,
-} from '../components/charts/d3/utils/phenology';
+import type { PhenologyData, PhenologyDatum } from '../components/charts/d3/utils/phenology';
 import YearOverYearChart from '../components/charts/d3/YearOverYearChart.svelte';
 import { peakCumulative } from '../components/charts/d3/utils/yearOverYear';
 import type {
@@ -910,14 +906,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     fetch: fetchSpeciesDistribution,
     // Always a view of the user's species selection (empty selection shows the card's empty state, so
     // this only ever renders selected species).
-    mapProps: (data, _params) => ({
-      series: (data as SpeciesDistributionDatum[]).map(d => ({
-        scientificName: d.scientificName,
-        commonName: d.commonName,
-        density: d.density,
-        total: d.total,
-      })),
-    }),
+    mapProps: data => ({ series: data as SpeciesDistributionDatum[] }),
     size: 'full',
     supports: { species: true, source: false },
     // A ridgeline needs at least a couple of species to read as one; one lonely ridge is not useful.
@@ -936,14 +925,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     // Always a view of the user's species selection (empty selection shows the card's empty state, so
     // this only ever renders selected species). The fetch result is the raw row array, so the default
     // array-length count (the band count) drives the not-enough-data gate.
-    mapProps: (data, _params) => ({
-      series: (data as SuccessionDatum[]).map(d => ({
-        scientificName: d.scientificName,
-        commonName: d.commonName,
-        counts: d.counts,
-        total: d.total,
-      })),
-    }),
+    mapProps: data => ({ series: data as SuccessionDatum[] }),
     size: 'full',
     supports: { species: true, source: false },
     // A streamgraph needs at least a few bands to weave into a visible handover; one or two bands is
@@ -1106,7 +1088,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     // dead selector is shown. The fetch result is the raw row array, so the default array-length count
     // (the species count) drives the not-enough-data gate; a one-bar Gantt is not a comparison.
     mapProps: data => ({
-      data: { rows: data as PhenologyRow[] } as PhenologyData,
+      data: { rows: data as PhenologyDatum[] } satisfies PhenologyData,
     }),
     size: 'full',
     supports: { species: false, source: false },
@@ -1127,19 +1109,14 @@ export const CHART_REGISTRY: ChartDef[] = [
     // this chart's own i18n keys. The endpoint is always top-N by detection volume and never filters
     // by species, so supports.species is false: this is the only chart in the quality tab, so a
     // species selector there would be an inert control (the note states the chart shows the top N).
-    mapProps: (data, _params) => {
+    mapProps: data => {
       const rows = data as ConfidenceDistributionDatum[];
       // All species share the server's bin count; fall back to the requested default for an empty
       // result so the formatter's divisor is never zero.
       const firstLen = rows[0]?.density.length ?? 0;
       const binCount = firstLen > 0 ? firstLen : CONFIDENCE_DISTRIBUTION_BINS;
       return {
-        series: rows.map(d => ({
-          scientificName: d.scientificName,
-          commonName: d.commonName,
-          density: d.density,
-          total: d.total,
-        })),
+        series: rows,
         // Label bin index i by the confidence at its left edge (i / binCount) as a percentage, so a
         // 20-bin histogram reads 0% / 25% / 50% / 75% at step binCount/4.
         xTickFormat: (index: number) => `${Math.round((index / binCount) * 100)}%`,

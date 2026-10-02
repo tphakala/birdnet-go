@@ -3396,6 +3396,7 @@ func (ds *Datastore) selectTopSpeciesHourly(ctx context.Context, startDate, endD
 // It selects the top-N species and their per-hour counts via selectTopSpeciesHourly, then merges and
 // normalizes per species in Go (buildSpeciesHourlyDistribution) so each species' timing shape is
 // comparable regardless of raw volume. Powers the who-sings-when ridgeline.
+// Each row's CommonName is the server-locale name from resolveCommonName, passed to the builder.
 func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDate, endDate string, species []string, limit int) ([]datastore.SpeciesHourlyDistribution, error) {
 	top, hourlyByLabel, err := ds.selectTopSpeciesHourly(ctx, startDate, endDate, species, limit)
 	if err != nil {
@@ -3404,11 +3405,7 @@ func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDa
 	if len(top) == 0 {
 		return []datastore.SpeciesHourlyDistribution{}, nil
 	}
-	result := buildSpeciesHourlyDistribution(top, hourlyByLabel)
-	for i := range result {
-		result[i].CommonName = ds.resolveCommonName(result[i].ScientificName)
-	}
-	return result, nil
+	return buildSpeciesHourlyDistribution(top, hourlyByLabel, ds.resolveCommonName), nil
 }
 
 // GetAcousticSuccession returns the raw hour-of-day detection counts (false positives excluded) for
@@ -3417,6 +3414,7 @@ func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDa
 // same path as the ridgeline), then merges per species in Go (buildAcousticSuccession). Unlike the
 // ridgeline it does NOT normalize: the streamgraph stacks raw counts so band width is detection
 // volume. Powers the acoustic succession streamgraph.
+// Each row's CommonName is the server-locale name from resolveCommonName, passed to the builder.
 func (ds *Datastore) GetAcousticSuccession(ctx context.Context, startDate, endDate string, species []string, limit int) ([]datastore.SpeciesHourlyCounts, error) {
 	top, hourlyByLabel, err := ds.selectTopSpeciesHourly(ctx, startDate, endDate, species, limit)
 	if err != nil {
@@ -3425,11 +3423,7 @@ func (ds *Datastore) GetAcousticSuccession(ctx context.Context, startDate, endDa
 	if len(top) == 0 {
 		return []datastore.SpeciesHourlyCounts{}, nil
 	}
-	result := buildAcousticSuccession(top, hourlyByLabel)
-	for i := range result {
-		result[i].CommonName = ds.resolveCommonName(result[i].ScientificName)
-	}
-	return result, nil
+	return buildAcousticSuccession(top, hourlyByLabel, ds.resolveCommonName), nil
 }
 
 // GetDailyActivityOnset returns the per-day dawn-chorus onset relative to civil dawn over the
@@ -3475,6 +3469,7 @@ func (ds *Datastore) GetDailyActivityOnset(ctx context.Context, startDate, endDa
 // confidences in one batched query (GetBatchConfidences), then bins and normalizes them in a shared,
 // table-tested Go helper (buildSpeciesConfidenceHistogram). minConfidence is 0 so every detection is
 // counted, matching the who-sings-when ridgeline and the other species analytics endpoints.
+// Each row's CommonName is the server-locale name from resolveCommonName, passed to the builder.
 func (ds *Datastore) GetConfidenceHistogram(ctx context.Context, startDate, endDate, species string, bins, limit int) ([]datastore.SpeciesConfidenceHistogram, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
 	if err != nil {
@@ -3548,11 +3543,7 @@ func (ds *Datastore) GetConfidenceHistogram(ctx context.Context, startDate, endD
 			Build()
 	}
 
-	result := buildSpeciesConfidenceHistogram(speciesSet, confByLabel, bins, minCount)
-	for i := range result {
-		result[i].CommonName = ds.resolveCommonName(result[i].ScientificName)
-	}
-	return result, nil
+	return buildSpeciesConfidenceHistogram(speciesSet, confByLabel, bins, minCount, ds.resolveCommonName), nil
 }
 
 // GetSpeciesAccumulation returns the species accumulation curve over [startDate, endDate]: per
@@ -3671,6 +3662,7 @@ func (ds *Datastore) GetYearOverYear(ctx context.Context, date string) (datastor
 // plus the in-range count. It fetches the spans in one grouped query (GetSpeciesPhenologyInPeriod),
 // then formats the timestamps to station-local dates and orders the rows by arrival in a shared,
 // table-tested Go helper (buildSpeciesPhenology) using the station timezone.
+// Each row's CommonName is the server-locale name from resolveCommonName, passed to the builder.
 func (ds *Datastore) GetSpeciesPhenology(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SpeciesPhenologyPoint, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
 	if err != nil {
@@ -3686,11 +3678,7 @@ func (ds *Datastore) GetSpeciesPhenology(ctx context.Context, startDate, endDate
 			Build()
 	}
 
-	result := buildSpeciesPhenology(rows, ds.timezone)
-	for i := range result {
-		result[i].CommonName = ds.resolveCommonName(result[i].ScientificName)
-	}
-	return result, nil
+	return buildSpeciesPhenology(rows, ds.timezone, ds.resolveCommonName), nil
 }
 
 // civilDawnMinuteLookup returns a civilDawnMinuteLookup closure over the datastore's SunCalc and

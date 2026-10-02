@@ -24,7 +24,7 @@
   } from './utils/axes';
   import { ChartTooltip } from './utils/interactions';
   import { type ChartTheme } from './utils/theme';
-  import { residencyDays, type PhenologyData, type PhenologyRow } from './utils/phenology';
+  import { residencyDays, type PhenologyData, type PhenologyDatum } from './utils/phenology';
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -49,7 +49,7 @@
   const MIN_BAR_WIDTH = 3;
   const LABEL_MAX_CHARS = 20;
 
-  interface PlottedRow extends PhenologyRow {
+  interface PlottedRow extends PhenologyDatum {
     firstObj: Date;
     // Exclusive end: the day after lastSeen, so the bar covers the whole last calendar day.
     endObj: Date;
