@@ -5,6 +5,11 @@ vars:
   BINARY_NAME: birdnet-go
   TFLITE_VERSION: v2.17.1
   ONNXRUNTIME_VERSION: '1.25.1'
+  # golangci-lint version .golangci.yaml is written for; keep in sync with
+  # .github/workflows/golangci-lint.yml, .husky/pre-commit and
+  # .devcontainer/postCreateCommand.sh;
+  # .github/workflows/golangci-lint-version.yml fails when they differ.
+  GOLANGCI_LINT_VERSION: '2.14.0'
   LABELS_DIR: internal/classifier/data/labels
   AVICOMMONS_DATA_DIR: internal/imageprovider/data
   AVICOMMONS_JSON_FILE: latest.json
@@ -165,8 +170,17 @@ tasks:
           Linux_*) LIB_DIR="{{.SYSTEM_LIB_DIR}}";;
           *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
         esac
-        # Use noembed,skipfrontend tags to skip model and frontend embedding for faster linting
-        {{.CGO_FLAGS}} CGO_LDFLAGS="-L${LIB_DIR} -ltensorflowlite_c" \
+        # A different local golangci-lint can reject this config or report
+        # different issues than CI; warn, and let the lint result decide.
+        LOCAL_LINT_VERSION=$(golangci-lint version --short 2>/dev/null || true)
+        if command -v golangci-lint >/dev/null 2>&1 && [ "$LOCAL_LINT_VERSION" != "{{.GOLANGCI_LINT_VERSION}}" ]; then
+          echo "⚠️  golangci-lint ${LOCAL_LINT_VERSION:-(unknown version)} at $(command -v golangci-lint) is installed; this project uses {{.GOLANGCI_LINT_VERSION}}" >&2
+          echo "   Install it with: curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b \$(go env GOPATH)/bin v{{.GOLANGCI_LINT_VERSION}}" >&2
+        fi
+        # Use noembed,skipfrontend tags to skip model and frontend embedding for faster linting.
+        # GOROOT lets revive's type-aware rules find the standard library (see
+        # the revive settings in .golangci.yaml).
+        {{.CGO_FLAGS}} CGO_LDFLAGS="-L${LIB_DIR} -ltensorflowlite_c" GOROOT="$(go env GOROOT)" \
         golangci-lint run --build-tags=noembed,skipfrontend{{if .BASE_BUILD_TAGS}},{{.BASE_BUILD_TAGS}}{{end}} {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "-v" .CLI_ARGS}}'
@@ -620,13 +634,19 @@ tasks:
         if ! command -v golangci-lint >/dev/null 2>&1; then
           echo "📥 Installing golangci-lint..."
           # Add timeout for install script download and execution
-          if ! timeout 120 bash -c "curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b \$(go env GOPATH)/bin v2.13.2"; then
+          if ! timeout 120 bash -c "curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b \$(go env GOPATH)/bin v{{.GOLANGCI_LINT_VERSION}}"; then
             echo "❌ Failed to install golangci-lint"
             echo "   Check your internet connection and try again"
             exit 1
           fi
         else
-          echo "✅ golangci-lint already installed"
+          LOCAL_LINT_VERSION=$(golangci-lint version --short 2>/dev/null || true)
+          if [ "$LOCAL_LINT_VERSION" = "{{.GOLANGCI_LINT_VERSION}}" ]; then
+            echo "✅ golangci-lint {{.GOLANGCI_LINT_VERSION}} already installed"
+          else
+            echo "⚠️  golangci-lint ${LOCAL_LINT_VERSION:-(unknown version)} at $(command -v golangci-lint) is installed; this project uses {{.GOLANGCI_LINT_VERSION}}"
+            echo "   Install it with: curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b \$(go env GOPATH)/bin v{{.GOLANGCI_LINT_VERSION}}"
+          fi
         fi
 
         # Install air for hot reload (required for dev workflow)

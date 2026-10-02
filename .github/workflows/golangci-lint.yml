@@ -31,6 +31,14 @@ jobs:
       - name: Setup ONNX Runtime
         uses: ./.github/actions/setup-onnxruntime
 
+      # revive re-typechecks each file with the Go default importer. The
+      # golangci-lint release binary is built with -trimpath, so without GOROOT
+      # in the environment it cannot find the standard library, and the
+      # type-aware checks (time-naming, and parts of errorf, var-declaration
+      # and context-keys-type) silently report nothing.
+      - name: Export GOROOT for revive
+        run: echo "GOROOT=$(go env GOROOT)" >> "$GITHUB_ENV"
+
       - name: golangci-lint
         id: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
@@ -38,7 +46,8 @@ jobs:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v2.13.2
+          # Keep in sync with GOLANGCI_LINT_VERSION in Taskfile.yml, which lists every copy.
+          version: v2.14.0
           # Show only new issues by default
           only-new-issues: false
           # Additional args for better output (v2.5.0+ syntax). noembed,skipfrontend skip

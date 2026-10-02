@@ -2322,11 +2322,10 @@ func (c *BirdImageCache) tryFallbackProviders(ctx context.Context, scientificNam
 			foundImage = img
 			found = true
 			return false // Stop ranging, we found one
-		} else {
-			log.Debug("Fallback provider returned empty image", logger.String("provider", name))
-			// Continue ranging if this provider returned an empty image
-			return true
 		}
+		log.Debug("Fallback provider returned empty image", logger.String("provider", name))
+		// Continue ranging if this provider returned an empty image
+		return true
 	})
 
 	if found {

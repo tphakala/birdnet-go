@@ -159,23 +159,24 @@ Config: `.golangci.yaml` (golangci-lint v2 format).
 
 Enabled linters most likely to fire, and the usual fix:
 
-| Linter                | Fix                                                                                                                         |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| errorlint             | `errors.Is()` / `errors.AsType()`, never `==` on errors                                                                     |
-| errname               | Sentinel errors are named `ErrXxx`                                                                                          |
-| nilerr / nilnil       | Do not return a nil error with a failure, or `nil, nil`                                                                     |
-| bodyclose             | `defer resp.Body.Close()` after checking the error                                                                          |
-| gocognit / gocyclo    | Split functions (gocognit threshold is 50)                                                                                  |
-| dupl / goconst        | Extract duplicated code; reuse an existing constant                                                                         |
-| exhaustive            | Handle every enum case; a `default` case counts as exhaustive                                                               |
-| prealloc              | `make([]T, 0, n)` when the size is known                                                                                    |
-| testifylint / thelper | testify idioms; `t.Helper()` in helpers                                                                                     |
-| fatcontext / iface    | No contexts nested in loops/closures; no interface pollution                                                                |
-| gocritic              | Its `performance` tag is on: pass large structs by pointer (`hugeParam`), range by index over large values (`rangeValCopy`) |
-| modernize             | Use the modern idiom it suggests                                                                                            |
-| forbidigo             | Typed logger helpers for sensitive fields                                                                                   |
+| Linter                | Fix                                                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| errorlint             | `errors.Is()` / `errors.AsType()`, never `==` on errors                                                                                             |
+| errname               | Sentinel errors are named `ErrXxx`                                                                                                                  |
+| nilerr / nilnil       | Do not return a nil error with a failure, or `nil, nil`                                                                                             |
+| bodyclose             | `defer resp.Body.Close()` after checking the error                                                                                                  |
+| gocognit / gocyclo    | Split functions (gocognit threshold is 50)                                                                                                          |
+| dupl / goconst        | Extract duplicated code; reuse an existing constant                                                                                                 |
+| exhaustive            | Handle every enum case; a `default` case counts as exhaustive                                                                                       |
+| prealloc              | `make([]T, 0, n)` when the size is known                                                                                                            |
+| testifylint / thelper | testify idioms; `t.Helper()` in helpers                                                                                                             |
+| fatcontext / iface    | No contexts nested in loops/closures; no interface pollution                                                                                        |
+| gocritic              | Its `performance` tag is on: pass large structs by pointer (`hugeParam`), range by index over large values (`rangeValCopy`)                         |
+| modernize             | Use the modern idiom it suggests                                                                                                                    |
+| forbidigo             | Typed logger helpers for sensitive fields                                                                                                           |
+| revive                | No `else` after a `return` (outdent it); `x++` over `x += 1`; comment blank imports; return the error last; no unit suffix on `time.Duration` names |
 
-Also enabled: staticcheck, revive, ineffassign, wastedassign,
+Also enabled: staticcheck, ineffassign, wastedassign,
 unconvert, misspell, predeclared, copyloopvar, durationcheck. `gosec` is
 configured but currently disabled. gocritic's `commentFormatting` and
 `commentedOutCode` checks are disabled.

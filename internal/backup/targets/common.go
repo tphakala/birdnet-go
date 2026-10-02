@@ -127,15 +127,16 @@ func WithRetry(ctx context.Context, cfg RetryConfig, op func() error) error {
 		default:
 		}
 
-		if err := op(); err == nil {
+		err := op()
+		if err == nil {
 			return nil
-		} else if !IsTransientError(err) {
+		}
+		if !IsTransientError(err) {
 			return err
-		} else {
-			lastErr = err
-			if cfg.Debug && cfg.DebugLog != nil {
-				cfg.DebugLog("Retrying operation after error: %v (attempt %d/%d)", err, attempt+1, cfg.MaxRetries)
-			}
+		}
+		lastErr = err
+		if cfg.Debug && cfg.DebugLog != nil {
+			cfg.DebugLog("Retrying operation after error: %v (attempt %d/%d)", err, attempt+1, cfg.MaxRetries)
 		}
 
 		// Linear backoff: backoff * (attempt + 1) gives 1x, 2x, 3x delays

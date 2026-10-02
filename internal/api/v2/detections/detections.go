@@ -1831,9 +1831,8 @@ func (c *Handler) AddLock(noteID uint, locked bool) error {
 
 	if locked {
 		return c.DS.LockNote(noteIDStr)
-	} else {
-		return c.DS.UnlockNote(noteIDStr)
 	}
+	return c.DS.UnlockNote(noteIDStr)
 }
 
 // GetDetectionTimeOfDay calculates and returns the time of day for a detection

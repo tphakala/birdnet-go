@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3" // Registers the "sqlite3" database/sql driver.
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
@@ -96,7 +96,7 @@ func SetupIntegrationTest(t *testing.T) *TestContext {
 	// Create migration worker (uses auxiliary migrator)
 	ctx.createWorker(t)
 
-	// Register cleanup — stop worker before closing databases to prevent
+	// Register cleanup: stop worker before closing databases to prevent
 	// goroutine leaks from tail sync running after COMPLETED state.
 	t.Cleanup(func() {
 		if ctx.Worker != nil {

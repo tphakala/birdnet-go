@@ -12,6 +12,14 @@ superpowers/
 docs/plans/
 docs/specs/
 docs/superpowers/
+docs/research/
+docs/design/
+# Design specs and implementation plans are kept out of the repository.
+SPEC.md
+PLAN.md
+*-spec.md
+*-plan.md
+*-design.md
 db/
 cache/
 spectrograms/

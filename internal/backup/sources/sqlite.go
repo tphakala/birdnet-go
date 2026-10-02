@@ -361,13 +361,12 @@ func (s *SQLiteSource) validatePageCount(total, sourcePages int) (totalPages, re
 		// If total is 0 but we have pages in source, try using source page count
 		if sourcePages > 0 {
 			return sourcePages, sourcePages, nil
-		} else {
-			return 0, 0, errors.Newf("invalid page count").
-				Component("backup").
-				Category(errors.CategoryDatabase).
-				Context("operation", "validate_page_count").
-				Build()
 		}
+		return 0, 0, errors.Newf("invalid page count").
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "validate_page_count").
+			Build()
 	}
 
 	return total, total, nil

@@ -25,12 +25,24 @@ linters:
       # true" under -tags notflite. Those guards are real runtime checks in the
       # default tflite build; suppress the stub-only false positive. CI never
       # lints the notflite tag (it is a compile check only), so this only affects
-      # the notflite lint lane. NewTFLiteClassifier is in birdnet.go;
-      # NewTFLiteRangeFilter moved to range_filter_service.go in epic #1682 Phase 2b.
+      # the notflite lint lane. NewTFLiteClassifier is called from birdnet.go and
+      # NewTFLiteRangeFilter from range_filter_service.go.
       - path: internal/classifier/(birdnet|range_filter_service)\.go
         text: "SA4023"
         linters:
           - staticcheck
+      # go-critic 0.15.0 (golangci-lint v2.14.0) extended sprintfQuotedString
+      # with a pattern that suggests %#q over "`%s`". %#q silently falls back
+      # to double quotes when the value cannot be backquoted, and double quotes
+      # denote a string literal (not an identifier) in MySQL, so the explicit
+      # backquotes are kept for SQL identifier quoting in the datastore
+      # packages and the MySQL test container. The text match is the new
+      # pattern's message only, so the check's older "%s" -> %q pattern still
+      # applies to these paths.
+      - path: internal/(datastore/|testutil/containers/mysql\.go)
+        text: "use %#q instead of"
+        linters:
+          - gocritic
       # goconst v1.9.0+ started walking
       # composite-literal nodes (map keys, slice elements, struct-init values),
       # which surfaced hundreds of "make it a constant" nits for inline
@@ -110,9 +122,38 @@ linters:
         ruleguard:
           rules: "rules/*.go"
     revive:
+      # An explicit rules list replaces revive's defaults, so every rule that
+      # should run is listed here. This is revive's default set minus the rules
+      # the codebase does not yet satisfy (exported, package-comments,
+      # var-naming, receiver-naming, context-as-argument, unexported-return)
+      # and unused-parameter, plus use-slices-concat (revive 1.17, so this
+      # config needs golangci-lint v2.14.0 or newer; older versions stop with
+      # "cannot find rule: use-slices-concat").
+      # revive re-typechecks files itself, and the golangci-lint release binary
+      # is built with -trimpath, so the type-aware rules (time-naming and parts
+      # of errorf, var-declaration and context-keys-type) only report when
+      # GOROOT is set. `task lint`, the pre-commit hook and CI all set it; a
+      # bare `golangci-lint run` should be prefixed with GOROOT="$(go env GOROOT)".
+      # The result cache ignores GOROOT, so after a run without it, run
+      # `golangci-lint cache clean` before trusting a clean result.
       rules:
-        - name: unused-parameter
-          disabled: true
+        - name: blank-imports
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: range
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unreachable-code
+        - name: var-declaration
+        - name: use-slices-concat
     gosec:
       # Configure gosec for security scanning
       excludes:

@@ -144,13 +144,13 @@ func (t *RsyncTarget) withRetry(ctx context.Context, op func() error) error {
 		default:
 		}
 
-		if err := op(); err == nil {
+		err := op()
+		if err == nil {
 			return nil
-		} else {
-			lastErr = err
-			if !t.isTransientError(err) {
-				return err
-			}
+		}
+		lastErr = err
+		if !t.isTransientError(err) {
+			return err
 		}
 
 		if t.config.Debug {
