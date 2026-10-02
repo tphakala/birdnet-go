@@ -156,6 +156,9 @@ func (c *Handler) RegisterAppRoutes(g *echo.Group) {
 // 1. It provides data needed before authentication can occur
 // 2. The security.accessAllowed field tells the frontend if auth is needed
 // 3. CSRF token is needed for any subsequent authenticated requests
+//
+// freshInstall is true only for a request with access, so with auth configured
+// this endpoint does not report a fresh install to an unauthenticated visitor.
 func (c *Handler) GetAppConfig(ctx echo.Context) error {
 	// Prevent caching of this response (contains user-specific CSRF token)
 	ctx.Response().Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
@@ -200,6 +203,9 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 	// Determine wizard state (freshInstall, newVersion, previousVersion) from the
 	// same snapshot so the whole response is internally consistent.
 	freshInstall, newVersion, previousVersion := c.determineWizardState(ctx.Request().Context(), settings)
+	// Onboarding is for a visitor who can configure the install: with auth
+	// configured, a visitor without access is not told the install is fresh.
+	freshInstall = freshInstall && accessAllowed
 
 	// Build response
 	response := AppConfigResponse{
