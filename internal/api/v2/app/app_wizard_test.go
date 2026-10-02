@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"gorm.io/driver/sqlite"
@@ -553,6 +554,28 @@ func TestDismissWizard_ClearPendingFailure_StillSucceeds(t *testing.T) {
 
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 	assert.Equal(t, "v0.9.0", mockRepo.store[appMetadataKeyLastSeenVersion])
+}
+
+// TestNew_BindsDatabaseModeCheck pins that New wires the database-mode check to
+// the process-wide mode, without which no onboarding state is ever recorded.
+func TestNew_BindsDatabaseModeCheck(t *testing.T) {
+	// Not parallel: toggles the process-wide database mode.
+	wasEnhanced := datastoreV2.IsEnhancedDatabase()
+	t.Cleanup(func() {
+		if wasEnhanced {
+			datastoreV2.SetEnhancedDatabaseMode()
+		} else {
+			datastoreV2.ResetDatabaseMode()
+		}
+	})
+
+	c := New(&apicore.Core{}, nil, nil)
+	require.NotNil(t, c.isEnhancedDatabase)
+
+	datastoreV2.SetEnhancedDatabaseMode()
+	assert.True(t, c.isEnhancedDatabase(), "enhanced mode must be reported")
+	datastoreV2.ResetDatabaseMode()
+	assert.False(t, c.isEnhancedDatabase(), "legacy mode must be reported")
 }
 
 // TestRegisterAppRoutes_RecordsOnboardingState pins the startup wiring against
