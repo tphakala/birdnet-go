@@ -19,7 +19,7 @@ vars:
   # Version string baked into the binary. See scripts/build-version.sh for the
   # rules (BUILD_VERSION pin, release tag on HEAD, else <date>-g<hash>-dev).
   VERSION:
-    sh: sh scripts/build-version.sh
+    sh: sh scripts/build-version.sh || echo unknown
   UNAME_S:
     sh: uname -s
   UNAME_M:

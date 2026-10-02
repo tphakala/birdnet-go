@@ -63,9 +63,9 @@ esac
 CDPATH='' cd -- "$script_dir/.." 2>/dev/null || unknown
 
 command -v git >/dev/null 2>&1 || unknown
-[ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = true ] || unknown
+[ "$(git rev-parse --is-inside-work-tree 2>/dev/null | tr -d '\r')" = true ] || unknown
 # A non-empty prefix means the source root is a subdirectory of some other repo.
-[ -z "$(git rev-parse --show-prefix 2>/dev/null)" ] || unknown
+[ -z "$(git rev-parse --show-prefix 2>/dev/null | tr -d '\r')" ] || unknown
 
 # Tag names never contain glob characters that matter, but disable globbing so
 # the unquoted expansion below cannot expand anything.
@@ -86,7 +86,9 @@ for pass in release nightly; do
     done
 done
 
-commit_date=$(TZ=UTC0 git log -1 --date=format-local:%Y%m%d --format=%cd HEAD 2>/dev/null | tr -d '\r')
+# log.showSignature=true in a user's config makes git log print gpg lines on
+# stdout, so it is switched off for this call.
+commit_date=$(TZ=UTC0 git -c log.showSignature=false log -1 --date=format-local:%Y%m%d --format=%cd HEAD 2>/dev/null | tr -d '\r')
 short_hash=$(git rev-parse --short="$HASH_LENGTH" HEAD 2>/dev/null | tr -d '\r')
 [ -n "$commit_date" ] && [ -n "$short_hash" ] || unknown
 printf '%s-g%s-%s\n' "$commit_date" "$short_hash" "$DEV_SUFFIX"

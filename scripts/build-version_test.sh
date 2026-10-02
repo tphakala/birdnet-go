@@ -186,6 +186,31 @@ r=$(new_repo dirty); commit "$r" "$D1"
 clean=$(run_version "$r"); echo change >>"$r/file.txt"; echo new >"$r/untracked.txt"
 assert_eq "dirty tree same as clean" "$clean" "$(run_version "$r")"
 
+it "log.showSignature does not leak into the version"
+# A stub gpg signs the commit and, on verify, prints the kind of line real gpg
+# writes, which git log copies to stdout when log.showSignature is set.
+r=$(new_repo signed)
+cat >"$WORK/fakegpg" <<'EOF'
+#!/bin/sh
+for arg in "$@"; do
+    if [ "$arg" = --verify ]; then
+        echo "gpg: Signature made by fake key" >&2
+        echo "[GNUPG:] GOODSIG 0 fake"
+        exit 0
+    fi
+done
+cat >/dev/null
+echo "[GNUPG:] SIG_CREATED D 1 8 00 0 0" >&2
+printf -- '-----BEGIN PGP SIGNATURE-----\n\nZmFrZQ==\n-----END PGP SIGNATURE-----\n'
+EOF
+chmod +x "$WORK/fakegpg"
+git -C "$r" config gpg.program "$WORK/fakegpg"
+echo signed >"$r/file.txt"; git -C "$r" add -A
+GIT_AUTHOR_DATE="$D1" GIT_COMMITTER_DATE="$D1" git -C "$r" commit -q -S -m signed
+git -C "$r" config log.showSignature true
+out=$(run_version "$r"); st=$?
+assert_eq "signature lines dropped" "20260823-g$(short "$r")-dev" "$out"; check_shape "signed commit" "$out" "$st"
+
 echo
 echo "build-version tests: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]
