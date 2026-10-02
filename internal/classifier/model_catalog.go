@@ -174,13 +174,18 @@ var EmbeddedCatalog = []CatalogEntry{
 	// labelled a developer preview so users know it is not the GA build. The
 	// backend loader is fully functional and v3.0 can also be enabled via config
 	// (models.enabled + birdnetv3 model/label paths).
+	//
+	// License: the preview's TERMS_OF_USE grant CC BY-SA 4.0 including commercial
+	// use (section 2) but provide the build solely for research and evaluation
+	// (section 1). Until upstream resolves that conflict the preview is treated
+	// as non-commercial.
 	{
 		ID:            "birdnet-v3.0",
 		Name:          "BirdNET v3.0",
 		Description:   "Developer preview of the BirdNET v3.0 global wildlife classifier (11,560 species, birds and other fauna; scientific and common names). Not the GA build.",
 		Author:        "Cornell Lab of Ornithology & Chemnitz University of Technology",
 		License:       "CC-BY-SA-4.0",
-		CommercialUse: true,
+		CommercialUse: false,
 		Category:      CategoryWildlife,
 		Region:        "",
 		SpeciesCount:  11560,
@@ -264,6 +269,7 @@ var EmbeddedCatalog = []CatalogEntry{
 			},
 		}, birdnetV30RegionalVariants()),
 	},
+	// License source: the upstream Perch v2 model card (UpstreamURL).
 	{
 		ID:              "perch-v2",
 		Name:            "Google Perch v2",
@@ -335,6 +341,7 @@ var EmbeddedCatalog = []CatalogEntry{
 			},
 		}, perchV2RegionalVariants()),
 	},
+	// License source: the upstream BSG model terms (non-commercial use only).
 	{
 		ID:              "bsg-finland",
 		Name:            "BSG Finland v4.4",
@@ -379,6 +386,7 @@ var EmbeddedCatalog = []CatalogEntry{
 	// (there is no secondary loader for the primary), and Uninstall refuses the entry
 	// via the permanent-model guard, so only its variant may change. Labels are the
 	// embedded v2.4 set (data/labels/V2.4), so no labels file is downloaded.
+	// License source: the BirdNET-Analyzer model license.
 	{
 		ID:            "birdnet-v2.4",
 		Name:          "BirdNET v2.4",
@@ -453,12 +461,16 @@ var EmbeddedCatalog = []CatalogEntry{
 	},
 
 	// Geomodels (spatiotemporal species occurrence prediction)
+	//
+	// License: follows the shipped V3.0.2 release, whose MODEL_LICENSE.txt is
+	// CC BY-SA 4.0 and allows commercial use. Upstream releases from V3.0.4 are
+	// Apache-2.0, which also allows commercial use.
 	{
 		ID:              "birdnet-geomodel-v3",
 		Name:            "BirdNET Geomodel v3.0",
 		Description:     "Spatiotemporal species occurrence prediction for post-filtering acoustic detections. Predicts which species are likely at a given location and week of the year.",
 		Author:          "Stefan Kahl, Cornell Lab of Ornithology",
-		License:         "CC BY-SA 4.0",
+		License:         "CC-BY-SA-4.0",
 		CommercialUse:   true,
 		Category:        CategoryGeomodel,
 		Region:          "",
@@ -697,6 +709,8 @@ func batCatalogEntry(id, name, region string, speciesCount int, fileRegion strin
 	modelFile := "BattyBirdNET-" + fileRegion + "-256kHz" + quality + "_fp32.onnx"
 	labelsFile := "BattyBirdNET-" + fileRegion + "-256kHz" + quality + "_Labels.txt"
 
+	// License source: BattyBirdNET is built on BirdNET v2.4 embeddings and
+	// inherits the BirdNET model terms.
 	return CatalogEntry{
 		ID:              id,
 		Name:            name,

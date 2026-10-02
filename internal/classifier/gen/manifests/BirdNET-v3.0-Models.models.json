@@ -8,7 +8,7 @@
     "description": "Global wildlife classifier using the BirdNET v3.0 architecture (11,560 species, birds and other fauna; scientific and common names)",
     "author": "Cornell Lab of Ornithology & Chemnitz University of Technology",
     "license": "CC-BY-SA-4.0",
-    "commercial_use": true,
+    "commercial_use": false,
     "upstream_url": "https://github.com/birdnet-team/BirdNET-Analyzer",
     "species_count": 11560
   },

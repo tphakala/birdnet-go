@@ -16,7 +16,9 @@ import (
 // The CI drift gate (model-catalog-drift.yml) catches a stale generated file;
 // this fast unit test additionally catches a hand-edit of the generated file that
 // diverges from the manifest data (checksum, size, region, or model path), which
-// a byte-level regeneration on a developer's machine might otherwise mask.
+// a byte-level regeneration on a developer's machine might otherwise mask. It
+// also checks that the manifest's family license data agrees with the catalog
+// entry, so a manifest sync cannot silently diverge from the catalog.
 func TestRegionalVariants_MatchManifest(t *testing.T) {
 	t.Parallel()
 
@@ -71,6 +73,8 @@ func TestRegionalVariants_MatchManifest(t *testing.T) {
 			}
 
 			manifest := loadTestManifest(t, tc.manifestFile)
+			assert.Equalf(t, manifest.FamilyMeta.License, entry.License, "license of %s must match its manifest", tc.entryID)
+			assert.Equalf(t, manifest.FamilyMeta.CommercialUse, entry.CommercialUse, "commercial use of %s must match its manifest", tc.entryID)
 			regional := 0
 			for i := range manifest.Models {
 				e := &manifest.Models[i]
@@ -128,6 +132,10 @@ func TestRegionalVariants_MatchManifest(t *testing.T) {
 
 // testManifest mirrors only the manifest fields this test compares.
 type testManifest struct {
+	FamilyMeta struct {
+		License       string `json:"license"`
+		CommercialUse bool   `json:"commercial_use"`
+	} `json:"family_meta"`
 	Models []struct {
 		Path         string `json:"path"`
 		Variant      string `json:"variant"`

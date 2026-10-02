@@ -5,10 +5,13 @@ import (
 	"encoding/hex"
 	"maps"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // TestCatalog_EntriesSharingRegistryIDShareCategoryAndRoles pins the assumption the
@@ -497,7 +500,44 @@ func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
 	assert.Equal(t, RegistryIDBirdNETV3, entry.RegistryID)
 	assert.Equal(t, CategoryWildlife, entry.Category)
 	assert.False(t, entry.Hidden, "birdnet-v3.0 is visible in the gallery")
-	assert.True(t, entry.CommercialUse, "birdnet-v3.0 is CC-BY-SA-4.0, which permits commercial use")
+	assert.False(t, entry.CommercialUse, "the birdnet-v3.0 preview terms restrict it to research and evaluation")
+}
+
+// TestEmbeddedCatalog_LicenseFlags pins the License string and CommercialUse flag
+// of every embedded catalog entry, so a change to either is deliberate and
+// visible in review. A new entry without an expectation here fails the test.
+func TestEmbeddedCatalog_LicenseFlags(t *testing.T) {
+	t.Parallel()
+
+	type licenseExpectation struct {
+		license       string
+		commercialUse bool
+	}
+	const batEntryPrefix = "battybirdnet-"
+	byID := map[string]licenseExpectation{
+		conf.ModelIDBirdNETV3Catalog: {license: "CC-BY-SA-4.0", commercialUse: false},
+		conf.ModelIDPerchV2Catalog:   {license: "Apache-2.0", commercialUse: true},
+		conf.ModelIDBSGCatalog:       {license: "Non-commercial", commercialUse: false},
+		conf.ModelIDBirdNETCatalog:   {license: "CC-BY-NC-SA-4.0", commercialUse: false},
+		"birdnet-geomodel-v3":        {license: "CC-BY-SA-4.0", commercialUse: true},
+	}
+	batExpectation := licenseExpectation{license: "CC-BY-NC-SA-4.0", commercialUse: false}
+
+	for i := range EmbeddedCatalog {
+		entry := &EmbeddedCatalog[i]
+		t.Run(entry.ID, func(t *testing.T) {
+			t.Parallel()
+
+			assert.NotEmpty(t, entry.License, "every catalog entry must declare a license")
+			want, ok := byID[entry.ID]
+			if !ok && strings.HasPrefix(entry.ID, batEntryPrefix) {
+				want, ok = batExpectation, true
+			}
+			require.Truef(t, ok, "no license expectation for catalog entry %q", entry.ID)
+			assert.Equal(t, want.license, entry.License)
+			assert.Equal(t, want.commercialUse, entry.CommercialUse)
+		})
+	}
 }
 
 // TestEmbeddedCatalog_VariantRequirementsPopulated pins the per-variant MinRAMMB
