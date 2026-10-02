@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { CHART_REGISTRY } from './charts';
-import type { AnalyticsParams, ChartPropsContext } from './types';
+import { makeAnalyticsParams, makeChartCtx, stubFetchJson } from './__tests__/registryFixtures';
 import type { PhenologyData, PhenologyDatum } from '../components/charts/d3/utils/phenology';
 
 // Verifies the species-phenology registry entry: its placement/flags, the default (array-length)
@@ -15,26 +15,6 @@ if (!def) {
   throw new Error('species-phenology chart def is required');
 }
 const chartDef = def;
-
-function makeParams(): AnalyticsParams {
-  return {
-    range: 'month',
-    start: '2026-03-01',
-    end: '2026-03-31',
-    species: [],
-    source: '',
-    startDate: new Date('2026-03-01T00:00:00'),
-    endDate: new Date('2026-03-31T00:00:00'),
-  };
-}
-
-function makeCtx(names: Record<string, string>): ChartPropsContext {
-  return {
-    options: {},
-    onParamsChange: vi.fn(),
-    speciesNames: new Map(Object.entries(names)),
-  };
-}
 
 describe('species-phenology chart def', () => {
   beforeEach(() => {
@@ -77,15 +57,9 @@ describe('species-phenology chart def', () => {
         count: 'x',
       }, // non-finite count -> 0
     ];
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: () => Promise.resolve(payload),
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    const fetchMock = stubFetchJson(payload);
 
-    const result = (await chartDef.fetch(makeParams())) as PhenologyDatum[];
+    const result = (await chartDef.fetch(makeAnalyticsParams())) as PhenologyDatum[];
     expect(fetchMock).toHaveBeenCalledOnce();
     const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain('/api/v2/analytics/species/phenology');
@@ -113,16 +87,8 @@ describe('species-phenology chart def', () => {
   });
 
   it('throws when the payload is not an array', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: () => Promise.resolve({ not: 'an array' }),
-      })
-    );
-    await expect(chartDef.fetch(makeParams())).rejects.toThrow();
+    stubFetchJson({ not: 'an array' });
+    await expect(chartDef.fetch(makeAnalyticsParams())).rejects.toThrow();
   });
 
   it('uses the payload common name even when the hub species map is empty (#4459)', () => {
@@ -144,7 +110,7 @@ describe('species-phenology chart def', () => {
       },
     ];
     // A fresh load of the biodiversity tab never fetches the species summary, so the map is empty.
-    const props = chartDef.mapProps?.(raw, makeParams(), makeCtx({})) ?? {};
+    const props = chartDef.mapProps?.(raw, makeAnalyticsParams(), makeChartCtx({})) ?? {};
     const data = props.data as PhenologyData;
     expect(data.rows).toHaveLength(2);
     expect(data.rows[0].commonName).toBe('Common Swift');

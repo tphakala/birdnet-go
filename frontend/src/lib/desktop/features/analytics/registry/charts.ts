@@ -330,12 +330,11 @@ async function fetchHeatmap(params: AnalyticsParams, signal?: AbortSignal): Prom
  * Reads the server-resolved common name off a species payload row. Payloads that name server-chosen
  * species carry `commonName` so the chart never depends on the selector list's species map (which is
  * only loaded on tabs with a species filter). Returns the scientific name when the field is missing,
- * not a string, or blank.
+ * not a string, or blank; otherwise the name is returned trimmed.
  */
 export function readCommonName(item: { commonName?: unknown }, scientificName: string): string {
-  return typeof item.commonName === 'string' && item.commonName.trim() !== ''
-    ? item.commonName
-    : scientificName;
+  const name = typeof item.commonName === 'string' ? item.commonName.trim() : '';
+  return name !== '' ? name : scientificName;
 }
 
 // Top-N species the ridgeline requests; mirrors the chart's maxSpecies cap and the server default.

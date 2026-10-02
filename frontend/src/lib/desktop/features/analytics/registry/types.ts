@@ -90,7 +90,8 @@ export interface ChartPropsContext {
    * summary endpoint. It is fetched only on tabs with a species filter, so it can be
    * empty on a fresh load of any other tab. Prefer a `commonName` from the chart's
    * own payload; this map is only for payloads that carry no name, such as the
-   * batch endpoints keyed by species (time-of-day, daily trend). The per-visitor
+   * batch endpoints keyed by species (the time-of-day-species and daily-species-trend
+   * charts, the only readers of this map). The per-visitor
    * dictionary, when enabled, still wins via `localizeSpeciesName`.
    */
   speciesNames: Map<string, string>;

@@ -1,44 +1,20 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 
 import { CHART_REGISTRY, readCommonName } from './charts';
-import type { AnalyticsParams, ChartPropsContext } from './types';
+import { makeAnalyticsParams, makeChartCtx, stubFetchJson } from './__tests__/registryFixtures';
 
 // Regression tests for #4459: charts that show server-chosen species must take the common name from
 // their own payload, not from the hub's species map (empty on tabs without a species filter).
 
-function makeParams(): AnalyticsParams {
-  return {
-    range: 'month',
-    start: '2026-03-01',
-    end: '2026-03-31',
-    species: ['Turdus merula'],
-    source: '',
-    startDate: new Date('2026-03-01T00:00:00'),
-    endDate: new Date('2026-03-31T00:00:00'),
-  };
-}
-
-const emptyCtx: ChartPropsContext = {
-  options: {},
-  onParamsChange: vi.fn(),
-  speciesNames: new Map(),
-};
-
-function stubPayload(payload: unknown): void {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: () => Promise.resolve(payload),
-    })
-  );
-}
-
 describe('readCommonName', () => {
   it('returns a non-empty string common name', () => {
     expect(readCommonName({ commonName: 'Eurasian Blackbird' }, 'Turdus merula')).toBe(
+      'Eurasian Blackbird'
+    );
+  });
+
+  it('trims surrounding whitespace from the payload name', () => {
+    expect(readCommonName({ commonName: '  Eurasian Blackbird \n' }, 'Turdus merula')).toBe(
       'Eurasian Blackbird'
     );
   });
@@ -77,12 +53,14 @@ describe('server-chosen species charts read commonName from the payload', () => 
     const { fetch: fetchChart, mapProps } = def;
 
     it('parses commonName, falling back to the scientific name when missing or empty', async () => {
-      stubPayload([
+      stubFetchJson([
         { scientificName: 'Turdus merula', commonName: 'Eurasian Blackbird', ...row },
         { scientificName: 'Parus major', commonName: '', ...row },
         { scientificName: 'Apus apus', ...row },
       ]);
-      const result = (await fetchChart(makeParams())) as Array<{ commonName: string }>;
+      const result = (await fetchChart(
+        makeAnalyticsParams({ species: ['Turdus merula'] })
+      )) as Array<{ commonName: string }>;
       expect(result.map(r => r.commonName)).toEqual([
         'Eurasian Blackbird',
         'Parus major',
@@ -91,9 +69,28 @@ describe('server-chosen species charts read commonName from the payload', () => 
     });
 
     it('maps the payload name to the chart with an empty hub species map', async () => {
-      stubPayload([{ scientificName: 'Turdus merula', commonName: 'Eurasian Blackbird', ...row }]);
-      const result = await fetchChart(makeParams());
-      const props = mapProps(result, makeParams(), emptyCtx);
+      stubFetchJson([
+        { scientificName: 'Turdus merula', commonName: 'Eurasian Blackbird', ...row },
+      ]);
+      const result = await fetchChart(makeAnalyticsParams({ species: ['Turdus merula'] }));
+      const props = mapProps(
+        result,
+        makeAnalyticsParams({ species: ['Turdus merula'] }),
+        makeChartCtx()
+      );
+      const rows = (props.series ?? (props.data as { rows: unknown[] }).rows) as Array<{
+        commonName: string;
+      }>;
+      expect(rows[0].commonName).toBe('Eurasian Blackbird');
+    });
+
+    it('keeps the payload name when the species map has a conflicting name', async () => {
+      stubFetchJson([
+        { scientificName: 'Turdus merula', commonName: 'Eurasian Blackbird', ...row },
+      ]);
+      const params = makeAnalyticsParams({ species: ['Turdus merula'] });
+      const result = await fetchChart(params);
+      const props = mapProps(result, params, makeChartCtx({ 'Turdus merula': 'Map Blackbird' }));
       const rows = (props.series ?? (props.data as { rows: unknown[] }).rows) as Array<{
         commonName: string;
       }>;
