@@ -14,6 +14,7 @@
 
   import BaseChart from './BaseChart.svelte';
   import { parseLocalDateString } from '$lib/utils/date';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { createTimeScale, createBandScale, createSpeciesColorScale } from './utils/scales';
   import {
     createAxis,
@@ -71,14 +72,21 @@
     return name.length > LABEL_MAX_CHARS ? `${name.slice(0, LABEL_MAX_CHARS - 1)}…` : name;
   }
 
-  // Rows with valid parsed dates, preserving the server's arrival order.
+  // Rows with valid parsed dates, preserving the server's arrival order. The name is localized here,
+  // in a $derived, so the chart redraws when the per-visitor dictionary loads or the UI locale
+  // switches (same chain as the sibling charts: visitor dictionary, payload name, scientific name).
   const parsedRows = $derived.by<PlottedRow[]>(() => {
     const out: PlottedRow[] = [];
     for (const r of data.rows) {
       const first = parseLocalDateString(r.firstSeen);
       const last = parseLocalDateString(r.lastSeen);
       if (!first || !last || isNaN(first.getTime()) || isNaN(last.getTime())) continue;
-      out.push({ ...r, firstObj: first, endObj: nextDay(last) });
+      out.push({
+        ...r,
+        commonName: localizeSpeciesName(r.scientificName, r.commonName),
+        firstObj: first,
+        endObj: nextDay(last),
+      });
     }
     return out;
   });

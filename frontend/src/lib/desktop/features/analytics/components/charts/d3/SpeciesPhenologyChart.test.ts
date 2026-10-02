@@ -3,6 +3,13 @@ import { render, cleanup } from '@testing-library/svelte';
 import SpeciesPhenologyChart from './SpeciesPhenologyChart.svelte';
 import type { PhenologyData } from './utils/phenology';
 
+// The per-visitor dictionary knows only the swift, so the other species keep the payload name.
+vi.mock('$lib/stores/speciesDictionary.svelte', async importOriginal => ({
+  ...(await importOriginal<typeof import('$lib/stores/speciesDictionary.svelte')>()),
+  localizeScientific: (scientificName: string) =>
+    scientificName === 'Apus apus' ? 'Tervapääsky' : undefined,
+}));
+
 // jsdom has no layout engine; assert on element counts/attributes only.
 
 beforeEach(() => {
@@ -83,6 +90,16 @@ describe('SpeciesPhenologyChart', () => {
     );
     expect(titles).toContain('Black-crowned Night Heron');
     expect(titles).toContain('Yellow-rumped Warbler');
+  });
+
+  it('prefers the visitor-locale name over the payload name, like its sibling charts', async () => {
+    const { container } = render(SpeciesPhenologyChart, { props: { data: sample, width: 800 } });
+    await Promise.resolve();
+    const titles = Array.from(container.querySelectorAll('.y-axis .tick title')).map(
+      n => n.textContent
+    );
+    expect(titles).toEqual(expect.arrayContaining(['Tervapääsky', 'Barn Swallow', 'House Martin']));
+    expect(titles).not.toContain('Common Swift');
   });
 
   it('renders single-day species (collapsed x-domain) with a visible, non-NaN bar', async () => {
