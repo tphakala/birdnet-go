@@ -83,5 +83,18 @@ describe('server-chosen species charts read commonName from the payload', () => 
       }>;
       expect(rows[0].commonName).toBe('Eurasian Blackbird');
     });
+
+    it('keeps the payload name when the species map has a conflicting name', async () => {
+      stubFetchJson([
+        { scientificName: 'Turdus merula', commonName: 'Eurasian Blackbird', ...row },
+      ]);
+      const params = makeAnalyticsParams({ species: ['Turdus merula'] });
+      const result = await fetchChart(params);
+      const props = mapProps(result, params, makeChartCtx({ 'Turdus merula': 'Map Blackbird' }));
+      const rows = (props.series ?? (props.data as { rows: unknown[] }).rows) as Array<{
+        commonName: string;
+      }>;
+      expect(rows[0].commonName).toBe('Eurasian Blackbird');
+    });
   });
 });
