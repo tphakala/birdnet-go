@@ -1,53 +1,41 @@
 <script lang="ts">
-  import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
-  import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
+  import DetectionResultRow from '$lib/desktop/components/data/DetectionResultRow.svelte';
   import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
+  import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
+  import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import { getLocale, t } from '$lib/i18n';
-  import { dashboardSettings } from '$lib/stores/settings';
   import { toastActions } from '$lib/stores/toast';
   import { api, fetchWithCSRF } from '$lib/utils/api';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
-  import type { TemperatureUnit } from '$lib/utils/formatters';
-  import {
-    ArrowDownUp,
-    Check,
-    ChevronDown,
-    Eye,
-    FrownIcon,
-    Search,
-    SquarePen,
-    Volume2,
-    X,
-    XCircle,
-  } from '@lucide/svelte';
+  import { ArrowDownUp, ChevronDown, FrownIcon, Search, Volume2, XCircle } from '@lucide/svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import { untrack } from 'svelte';
-  import { dropdown } from '$lib/utils/transitions';
-  import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
+  import { onMount, untrack } from 'svelte';
+  import { isAuthenticated } from '$lib/utils/auth';
   import { loggers } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { useDetectionActions } from '$lib/desktop/features/detections/composables/useDetectionActions.svelte';
+  import {
+    hydrateExcludedSpecies,
+    isExcluded as isSpeciesExcluded,
+    setExcluded,
+  } from '$lib/stores/excludedSpecies.svelte';
+  import { downloadDetectionAudio } from '$lib/utils/audioDownload';
+  import type { Detection } from '$lib/types/detection.types';
   import {
     loadDictionary,
     searchScientificByCommon,
     PER_VISITOR_SPECIES_LOCALE_ENABLED,
   } from '$lib/stores/speciesDictionary.svelte';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import DetectionExpandedPanel from '$lib/desktop/components/data/DetectionExpandedPanel.svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
   const ENABLE_LOADING_SPINNERS = false;
-
-  // Map user's temperature preference to TemperatureUnit format
-  // Settings store uses 'celsius'/'fahrenheit', but formatters use 'metric'/'imperial'/'standard'
-  const temperatureUnits = $derived.by((): TemperatureUnit => {
-    const setting = $dashboardSettings?.temperatureUnit;
-    if (setting === 'fahrenheit') return 'imperial';
-    return 'metric'; // Default to metric (Celsius)
-  });
 
   // Type definitions
   interface DateRange {
@@ -84,44 +72,7 @@
   type TimeOfDayFilter = 'any' | 'day' | 'night' | 'sunrise' | 'sunset';
   type SortBy = 'date_desc' | 'date_asc' | 'species_asc' | 'confidence_desc';
 
-  let clipExtractionEnabled = $derived($isAuthenticated);
-  let canReview = $derived($hasReviewPermission);
-
   const logger = loggers.ui;
-
-  // Review state for inline quick-review dropdown
-  let reviewOpenForId = $state<string | null>(null);
-
-  /**
-   * Toggle the quick-review dropdown for a search result.
-   */
-  function toggleReviewMenu(resultId: string) {
-    reviewOpenForId = reviewOpenForId === resultId ? null : resultId;
-  }
-
-  /**
-   * Close the review dropdown.
-   */
-  function closeReviewMenu() {
-    reviewOpenForId = null;
-  }
-
-  // Close review dropdown when clicking outside
-  $effect(() => {
-    if (reviewOpenForId !== null) {
-      function handleClickOutside() {
-        closeReviewMenu();
-      }
-      // Use setTimeout to avoid the click that opened the menu from immediately closing it
-      const timeoutId = setTimeout(() => {
-        document.addEventListener('click', handleClickOutside);
-      }, 0);
-      return () => {
-        clearTimeout(timeoutId);
-        document.removeEventListener('click', handleClickOutside);
-      };
-    }
-  });
 
   /**
    * Submit a verification status change for a search result.
@@ -131,7 +82,6 @@
     resultId: string,
     status: 'correct' | 'false_positive'
   ): Promise<void> {
-    closeReviewMenu();
     try {
       await fetchWithCSRF(`/api/v2/detections/${resultId}/review`, {
         method: 'POST',
@@ -163,6 +113,51 @@
       logger.error('Error updating verification status:', error);
     }
   }
+
+  /**
+   * Adapt a search result to the Detection shape the shared ActionMenu and
+   * detection action handlers expect. /api/v2/search returns a flatter row than
+   * the detections API, so the fields the menu never reads are filled from the
+   * timestamp (date/time drive the audio download filename) or left empty.
+   */
+  function toDetection(result: SearchResult): Detection {
+    const [date = '', time = ''] = (result.timestamp ?? '').split(/[T ]/);
+    return {
+      id: Number(result.id),
+      date,
+      time: time.slice(0, 8),
+      timestamp: result.timestamp,
+      source: result.source ? { id: result.source, displayName: result.source } : null,
+      beginTime: '',
+      endTime: '',
+      speciesCode: '',
+      scientificName: result.scientificName,
+      commonName: result.commonName,
+      confidence: result.confidence,
+      modelType: result.modelType,
+      verified:
+        result.verified === 'correct' || result.verified === 'false_positive'
+          ? result.verified
+          : 'unverified',
+      locked: result.locked,
+      timeOfDay: result.timeOfDay,
+    };
+  }
+
+  // Per-detection action handlers (review/ignore/lock/delete), shared with the
+  // dashboard, detections list and analytics summary so this list's Actions
+  // column never diverges from the rest of the app. Verification stays on the
+  // local submitVerification(), which updates the row in place (and drops it
+  // when a verification filter is active) instead of re-running the search.
+  const detectionActions = useDetectionActions({
+    onRefresh: () => void submitSearch(currentPage),
+    isSpeciesExcluded,
+    onToggleExclusion: setExcluded,
+  });
+
+  onMount(() => {
+    void hydrateExcludedSpecies();
+  });
 
   // Component state
   let speciesSearchTerm = $state('');
@@ -389,6 +384,23 @@
 
   function isExpanded(recordId: string) {
     return expandedItems.has(recordId);
+  }
+
+  /**
+   * Navigate to the detection detail page.
+   */
+  function goToDetectionDetail(recordId: string) {
+    navigation.navigate(`/ui/detections/${recordId}`);
+  }
+
+  /**
+   * Handle a tap on a mobile result card: tapping anywhere on the card
+   * except an action button (review, play, view) opens the detection
+   * details, mirroring the dedicated "View" button for keyboard users.
+   */
+  function handleMobileCardClick(recordId: string, event: MouseEvent) {
+    if ((event.target as HTMLElement).closest('button')) return;
+    goToDetectionDetail(recordId);
   }
 
   // Memoized today value - only recalculates when component mounts or when day changes
@@ -845,7 +857,7 @@
       {#if formSubmitted && !isLoading && results.length > 0}
         <!-- Desktop/tablet table -->
         <div class="overflow-x-auto mt-4 hidden md:block" aria-labelledby="search-results-heading">
-          <table class="table w-full">
+          <table class="table table-hover w-full">
             <thead>
               <tr>
                 <th scope="col">{t('search.tableHeaders.dateTime')}</th>
@@ -861,295 +873,60 @@
               <!-- Loop through results -->
               {#each results as result, index (result.id)}
                 {@const displayName = localizeSpeciesName(result.scientificName, result.commonName)}
-                <!-- Main row -->
-                <tr
-                  class={index % 2 === 0
-                    ? 'bg-[var(--color-base-100)]'
-                    : 'bg-[var(--color-base-200)]'}
+                <DetectionResultRow
+                  detectionId={result.id}
+                  rowId="expanded-row-{result.id}"
+                  {index}
+                  timestamp={result.timestamp}
+                  timeOfDay={result.timeOfDay}
+                  scientificName={result.scientificName}
+                  {displayName}
+                  confidence={result.confidence}
+                  verified={result.verified}
+                  locked={result.locked}
+                  source={result.source ? { id: result.source, displayName: result.source } : null}
+                  expanded={isExpanded(result.id)}
+                  onToggleExpand={() => toggleExpand(result.id)}
+                  onViewDetails={() => goToDetectionDetail(result.id)}
                 >
-                  <td>{formatDate(result.timestamp)}</td>
-                  <td>
-                    <div class="flex items-center">
-                      <TimeOfDayIcon timeOfDay={result.timeOfDay as any} className="mr-1" />
-                      <span>{result.timeOfDay || t('search.detailsPanel.unknownSpecies')}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div class="flex items-center gap-2">
-                      <!-- Add bird image thumbnail -->
-                      <div
-                        class="w-12 h-9 rounded-md overflow-hidden bg-gray-100 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all focus:outline-hidden focus:ring-2 focus:ring-[var(--color-primary)]"
-                        onclick={() => toggleExpand(result.id)}
-                        onkeydown={e => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            toggleExpand(result.id);
-                          }
-                        }}
-                        aria-label={isExpanded(result.id)
-                          ? t('search.detailsPanel.collapseDetails', {
-                              species: displayName || t('search.detailsPanel.unknownSpecies'),
-                            })
-                          : t('search.detailsPanel.expandDetails', {
-                              species: displayName || t('search.detailsPanel.unknownSpecies'),
-                            })}
-                        aria-expanded={isExpanded(result.id)}
-                        role="button"
-                        tabindex="0"
-                      >
-                        <!-- PERFORMANCE OPTIMIZATION: Enhanced image loading attributes -->
-                        <!-- loading="lazy": Defer loading until image enters viewport -->
-                        <!-- decoding="async": Decode image off-main-thread to prevent UI blocking -->
-                        <!-- fetchpriority="low": Lower network priority for species thumbnails -->
-                        <img
-                          src={buildAppUrl(
-                            `/api/v2/media/species-image?name=${encodeURIComponent(result.scientificName)}`
-                          )}
-                          alt={displayName || t('search.detailsPanel.unknownSpecies')}
-                          class="w-full h-full object-cover"
-                          onload={e => {
-                            (e.currentTarget as HTMLImageElement).classList.remove('p-2');
-                          }}
-                          onerror={e => {
-                            (e.currentTarget as HTMLImageElement).classList.add('p-2');
-                            handleBirdImageError(e);
-                          }}
-                          loading="lazy"
-                          decoding="async"
-                          fetchpriority="low"
-                        />
-                      </div>
-                      <div>
-                        <div class="font-bold">
-                          {displayName || t('search.detailsPanel.unknownSpecies')}
-                        </div>
-                        <div class="text-xs opacity-50">{result.scientificName || ''}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div class="flex items-center">
-                      <div class="flex items-center gap-2 w-full">
-                        <div
-                          class="w-16 h-4 rounded-full overflow-hidden bg-[var(--color-base-200)]"
-                          role="progressbar"
-                          aria-valuenow={Math.round(result.confidence * 100)}
-                          aria-valuemin="0"
-                          aria-valuemax="100"
-                          aria-valuetext="{Math.round(result.confidence * 100)}%"
-                        >
-                          <div
-                            class="h-full {result.confidence >= 0.8
-                              ? 'bg-[var(--color-success)]'
-                              : result.confidence >= 0.4
-                                ? 'bg-[var(--color-warning)]'
-                                : 'bg-[var(--color-error)]'}"
-                            style:width="{result.confidence * 100}%"
-                          ></div>
-                        </div>
-                        <span class="ml-1 font-semibold"
-                          >{Math.round(result.confidence * 100)}%</span
-                        >
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <SourceBadge
-                      detection={{
-                        source: result.source
-                          ? { id: result.source, displayName: result.source }
-                          : null,
-                      }}
-                      variant="inline"
+                  {#snippet actions()}
+                    {@const detection = toDetection(result)}
+                    <ActionMenu
+                      {detection}
+                      isExcluded={isSpeciesExcluded(result.commonName)}
+                      onMarkCorrect={() => submitVerification(result.id, 'correct')}
+                      onMarkFalsePositive={() => submitVerification(result.id, 'false_positive')}
+                      onReview={() => detectionActions.handleReview(detection)}
+                      onToggleSpecies={() => detectionActions.handleToggleSpecies(detection)}
+                      onToggleLock={() => detectionActions.handleToggleLock(detection)}
+                      onDelete={() => detectionActions.handleDelete(detection)}
+                      onDownload={result.hasAudio
+                        ? () => downloadDetectionAudio(detection)
+                        : undefined}
                     />
-                  </td>
-                  <td>
-                    <div class="flex gap-1 flex-wrap">
-                      <div
-                        class="status-badge {result.verified === 'correct'
-                          ? 'correct'
-                          : result.verified === 'false_positive'
-                            ? 'false'
-                            : 'unverified'}"
-                      >
-                        {result.verified === 'correct'
-                          ? t('search.statusBadges.verified')
-                          : result.verified === 'false_positive'
-                            ? t('common.review.status.falsePositive')
-                            : t('search.statusBadges.unverified')}
-                      </div>
-                      <div class="status-badge {result.locked ? 'locked' : 'unverified'}">
-                        {result.locked
-                          ? t('search.statusBadges.locked')
-                          : t('search.statusBadges.unlocked')}
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div class="flex gap-1">
-                      {#if canReview}
-                        <div class="relative">
-                          <button
-                            class="btn btn-xs btn-square"
-                            onclick={e => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              toggleReviewMenu(result.id);
-                            }}
-                            aria-label={t('search.review.reviewDetection', {
-                              species: displayName || t('search.detailsPanel.unknownSpecies'),
-                            })}
-                            aria-haspopup="true"
-                            aria-expanded={reviewOpenForId === result.id}
-                          >
-                            <SquarePen class="size-4" />
-                          </button>
-                          {#if reviewOpenForId === result.id}
-                            <div
-                              class="review-dropdown"
-                              in:dropdown={{ y: -4, duration: 120 }}
-                              out:dropdown={{ y: -4, duration: 80 }}
-                            >
-                              <button
-                                class="review-dropdown-item correct"
-                                onclick={e => {
-                                  e.stopPropagation();
-                                  submitVerification(result.id, 'correct');
-                                }}
-                              >
-                                <Check class="size-4" />
-                                <span>{t('search.review.markCorrect')}</span>
-                              </button>
-                              <button
-                                class="review-dropdown-item false-positive"
-                                onclick={e => {
-                                  e.stopPropagation();
-                                  submitVerification(result.id, 'false_positive');
-                                }}
-                              >
-                                <X class="size-4" />
-                                <span>{t('search.review.markFalsePositive')}</span>
-                              </button>
-                            </div>
-                          {/if}
-                        </div>
-                      {/if}
-                      <button
-                        class="btn btn-xs btn-square"
-                        onclick={() => navigation.navigate(`/ui/detections/${result.id}`)}
-                        aria-label={t('search.detailsPanel.viewDetails', {
-                          species: displayName || t('search.detailsPanel.unknownSpecies'),
-                        })}
-                      >
-                        <Eye class="size-4" />
-                      </button>
-                      <button
-                        class="btn btn-xs btn-square expand-btn"
-                        onclick={e => {
-                          e.preventDefault();
-                          toggleExpand(result.id);
-                        }}
-                        data-id={result.id}
-                        aria-label={isExpanded(result.id)
-                          ? t('search.detailsPanel.collapseDetails', {
-                              species: displayName || t('search.detailsPanel.unknownSpecies'),
-                            })
-                          : t('search.detailsPanel.expandDetails', {
-                              species: displayName || t('search.detailsPanel.unknownSpecies'),
-                            })}
-                        aria-expanded={isExpanded(result.id)}
-                        aria-controls="expanded-row-{result.id}"
-                      >
-                        <span
-                          class="transition-transform duration-200"
-                          class:rotate-180={isExpanded(result.id)}
-                          aria-hidden="true"
-                        >
-                          <ChevronDown class="size-4" />
-                        </span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                  {/snippet}
+                </DetectionResultRow>
 
                 <!-- Expanded row -->
                 {#if isExpanded(result.id)}
                   <tr class="expanded-row" id="expanded-row-{result.id}">
                     <td colspan="7" class="p-0 border-t-0">
                       <div
-                        class="p-4 {index % 2 === 0
+                        class="expanded-panel p-4 text-left {index % 2 === 0
                           ? 'bg-[var(--color-base-100)]'
                           : 'bg-[var(--color-base-200)]'}"
                       >
-                        <!-- Expanded content -->
-                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                          <!-- Weather Information Container -->
-                          <div class="bg-[var(--color-base-200)] rounded-box p-4">
-                            <WeatherInfo detectionId={result.id} units={temperatureUnits} />
-                          </div>
-
-                          <!-- Bird Image Container (Middle Column) -->
-                          <div
-                            class="bg-[var(--color-base-200)] rounded-box p-4 flex flex-col justify-center items-center"
-                          >
-                            <div
-                              class="w-full aspect-[4/3] rounded-md overflow-hidden bg-gray-100 cursor-pointer hover:brightness-90 transition-all focus:outline-hidden focus:ring-2 focus:ring-[var(--color-primary)]"
-                              onclick={() => toggleExpand(result.id)}
-                              onkeydown={e => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
-                                  toggleExpand(result.id);
-                                }
-                              }}
-                              role="button"
-                              tabindex="0"
-                              aria-label={t('search.detailsPanel.collapseDetails', {
-                                species: displayName || t('search.detailsPanel.unknownSpecies'),
-                              })}
-                              aria-expanded={isExpanded(result.id)}
-                              aria-controls="expanded-row-{result.id}"
-                              title={t('search.detailsPanel.clickToCollapse')}
-                            >
-                              <img
-                                src={buildAppUrl(
-                                  `/api/v2/media/species-image?name=${encodeURIComponent(result.scientificName)}`
-                                )}
-                                alt={displayName || t('search.detailsPanel.unknownSpecies')}
-                                class="w-full h-full object-cover"
-                                onload={e => {
-                                  (e.currentTarget as HTMLImageElement).classList.remove('p-2');
-                                }}
-                                onerror={e => {
-                                  (e.currentTarget as HTMLImageElement).classList.add('p-2');
-                                  handleBirdImageError(e);
-                                }}
-                                loading="lazy"
-                                decoding="async"
-                                fetchpriority="low"
-                              />
-                            </div>
-                          </div>
-
-                          <!-- Audio Player (shown only when this detection has a clip) -->
-                          {#if result.hasAudio}
-                            <div class="bg-[var(--color-base-200)] rounded-box p-4">
-                              <h3 class="text-lg font-semibold mb-2">
-                                {t('search.detailsPanel.audioPlayer')}
-                              </h3>
-                              <AudioPlayer
-                                audioUrl={buildAppUrl(`/api/v2/audio/${result.id}`)}
-                                detectionId={result.id}
-                                width={400}
-                                height={200}
-                                showDownload={true}
-                                showSpectrogram={true}
-                                enableClipExtraction={clipExtractionEnabled}
-                                clipLabel={`${result.commonName}_${result.timestamp.replace(/[: ]/g, '-')}`}
-                                modelType={result.modelType}
-                              />
-                            </div>
-                          {/if}
-                        </div>
+                        <DetectionExpandedPanel
+                          detectionId={result.id}
+                          scientificName={result.scientificName}
+                          commonName={result.commonName}
+                          {displayName}
+                          hasAudio={result.hasAudio}
+                          timestamp={result.timestamp}
+                          modelType={result.modelType}
+                          rowId="expanded-row-{result.id}"
+                          onCollapse={() => toggleExpand(result.id)}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -1163,7 +940,28 @@
         <div class="md:hidden mt-4 space-y-2" aria-labelledby="search-results-heading">
           {#each results as result (result.id)}
             {@const displayName = localizeSpeciesName(result.scientificName, result.commonName)}
-            <section class="bg-[var(--color-base-100)] rounded-lg p-3">
+            {@const detection = toDetection(result)}
+            <!-- Tapping anywhere on the card except an action button opens the
+                 detection details; the "View" button remains a redundant, explicit
+                 keyboard-focusable equivalent. -->
+            <div
+              class="bg-[var(--color-base-100)] rounded-lg p-3 cursor-pointer active:bg-[var(--color-base-200)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]"
+              role="button"
+              tabindex="0"
+              aria-label={t('search.detailsPanel.viewDetails', {
+                species: displayName || t('search.detailsPanel.unknownSpecies'),
+              })}
+              onclick={e => handleMobileCardClick(result.id, e)}
+              onkeydown={e => {
+                if (
+                  (e.key === 'Enter' || e.key === ' ') &&
+                  !(e.target as HTMLElement).closest('button')
+                ) {
+                  e.preventDefault();
+                  goToDetectionDetail(result.id);
+                }
+              }}
+            >
               <div class="flex items-start gap-3">
                 <!-- Time of Day + Date/Time -->
                 <div class="w-16 shrink-0 text-sm opacity-80">
@@ -1247,53 +1045,19 @@
 
                   <!-- Actions -->
                   <div class="mt-2 flex items-center gap-2 flex-wrap">
-                    {#if canReview}
-                      <div class="relative">
-                        <button
-                          class="btn btn-outline btn-sm"
-                          onclick={e => {
-                            e.stopPropagation();
-                            toggleReviewMenu(result.id);
-                          }}
-                          aria-label={t('search.review.reviewDetection', {
-                            species: displayName || t('search.detailsPanel.unknownSpecies'),
-                          })}
-                          aria-haspopup="true"
-                          aria-expanded={reviewOpenForId === result.id}
-                        >
-                          <SquarePen class="size-4" />
-                          {t('search.review.review')}
-                        </button>
-                        {#if reviewOpenForId === result.id}
-                          <div
-                            class="review-dropdown"
-                            in:dropdown={{ y: -4, duration: 120 }}
-                            out:dropdown={{ y: -4, duration: 80 }}
-                          >
-                            <button
-                              class="review-dropdown-item correct"
-                              onclick={e => {
-                                e.stopPropagation();
-                                submitVerification(result.id, 'correct');
-                              }}
-                            >
-                              <Check class="size-4" />
-                              <span>{t('search.review.markCorrect')}</span>
-                            </button>
-                            <button
-                              class="review-dropdown-item false-positive"
-                              onclick={e => {
-                                e.stopPropagation();
-                                submitVerification(result.id, 'false_positive');
-                              }}
-                            >
-                              <X class="size-4" />
-                              <span>{t('search.review.markFalsePositive')}</span>
-                            </button>
-                          </div>
-                        {/if}
-                      </div>
-                    {/if}
+                    <ActionMenu
+                      {detection}
+                      isExcluded={isSpeciesExcluded(result.commonName)}
+                      onMarkCorrect={() => submitVerification(result.id, 'correct')}
+                      onMarkFalsePositive={() => submitVerification(result.id, 'false_positive')}
+                      onReview={() => detectionActions.handleReview(detection)}
+                      onToggleSpecies={() => detectionActions.handleToggleSpecies(detection)}
+                      onToggleLock={() => detectionActions.handleToggleLock(detection)}
+                      onDelete={() => detectionActions.handleDelete(detection)}
+                      onDownload={result.hasAudio
+                        ? () => downloadDetectionAudio(detection)
+                        : undefined}
+                    />
                     {#if result.hasAudio}
                       <button
                         class="btn btn-primary btn-sm"
@@ -1308,7 +1072,7 @@
                     {/if}
                     <button
                       class="btn btn-outline btn-sm"
-                      onclick={() => navigation.navigate(`/ui/detections/${result.id}`)}
+                      onclick={() => goToDetectionDetail(result.id)}
                       aria-label={t('search.detailsPanel.viewDetails', {
                         species: displayName || t('search.detailsPanel.unknownSpecies'),
                       })}
@@ -1318,7 +1082,7 @@
                   </div>
                 </div>
               </div>
-            </section>
+            </div>
           {/each}
 
           {#if showMobilePlayer}
@@ -1374,6 +1138,18 @@
   </div>
 </div>
 
+<!-- Per-detection confirmation (ignore/lock/delete from a result row or card) -->
+{#if detectionActions.selectedDetection}
+  <ConfirmModal
+    isOpen={detectionActions.showConfirmModal}
+    title={detectionActions.confirmModalConfig.title}
+    message={detectionActions.confirmModalConfig.message}
+    confirmLabel={detectionActions.confirmModalConfig.confirmLabel}
+    onClose={detectionActions.closeModal}
+    onConfirm={detectionActions.confirmModal}
+  />
+{/if}
+
 <style>
   .card-padding {
     padding: 1rem;
@@ -1400,49 +1176,6 @@
     cursor: help;
     font-size: 0.875rem;
     color: #6b7280;
-  }
-
-  .status-badge {
-    padding: 0.125rem 0.5rem;
-    border-radius: 0.375rem;
-    font-size: 0.75rem;
-    font-weight: 500;
-  }
-
-  .status-badge.correct {
-    background-color: #10b981;
-    color: white;
-  }
-
-  .status-badge.false {
-    background-color: #ef4444;
-    color: white;
-  }
-
-  .status-badge.unverified {
-    background-color: #6b7280;
-    color: white;
-  }
-
-  .status-badge.locked {
-    background-color: #f59e0b;
-    color: white;
-  }
-
-  .expanded-row td {
-    animation: slideDown 0.3s ease-out;
-  }
-
-  @keyframes slideDown {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
   }
 
   .search-form-grid {
@@ -1487,47 +1220,5 @@
     .search-date-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-  }
-
-  /* Review dropdown menu */
-  .review-dropdown {
-    position: absolute;
-    right: 0;
-    top: 100%;
-    margin-top: 0.25rem;
-    min-width: 12rem;
-    padding: 0.25rem;
-    background-color: var(--color-base-100);
-    border: 1px solid var(--color-base-300);
-    border-radius: 0.5rem;
-    box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
-    z-index: 50;
-  }
-
-  .review-dropdown-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    text-align: left;
-    color: var(--color-base-content);
-    transition: background-color 0.1s ease;
-  }
-
-  .review-dropdown-item:hover {
-    background-color: var(--color-base-200);
-  }
-
-  .review-dropdown-item.correct:hover {
-    background-color: color-mix(in srgb, var(--color-success) 15%, transparent);
-    color: var(--color-success);
-  }
-
-  .review-dropdown-item.false-positive:hover {
-    background-color: color-mix(in srgb, var(--color-error) 15%, transparent);
-    color: var(--color-error);
   }
 </style>
