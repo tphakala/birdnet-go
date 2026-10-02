@@ -1117,8 +1117,8 @@ func (c *GuideCache) shouldQuit() bool {
 func cacheKey(name, locale string) string { return name + "|" + locale }
 
 func splitCacheKey(key string) (name, locale string) {
-	if i := strings.LastIndex(key, "|"); i >= 0 {
-		return key[:i], key[i+1:]
+	if before, after, ok := strings.CutLast(key, "|"); ok {
+		return before, after
 	}
 	return key, defaultLocale
 }
