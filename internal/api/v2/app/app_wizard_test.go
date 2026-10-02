@@ -2,15 +2,18 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"maps"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -604,6 +607,92 @@ func TestRegisterAppRoutes_RecordsOnboardingState(t *testing.T) {
 			got, err := repo.Get(t.Context(), appMetadataKeyOnboardingPending)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantPending, got)
+		})
+	}
+}
+
+// TestDismissWizardRoute_RequiresSameAccessAsWizardState pins the route wiring of
+// POST /api/v2/app/wizard/dismiss: it goes through the auth middleware, so a
+// request can dismiss the wizard if and only if GET /api/v2/app/config reports
+// accessAllowed for it (the same condition under which the wizard is offered).
+// It is not parallel because setupAppConfigTestWithAuth publishes the global
+// settings snapshot and sets gothic.Store.
+func TestDismissWizardRoute_RequiresSameAccessAsWizardState(t *testing.T) {
+	const (
+		apiPrefix     = "/api/v2"
+		remoteAddr    = "203.0.113.10:1234"
+		testSubnet    = "203.0.113.0/24"
+		sessionSecret = "test-session-secret-32-chars-long"
+	)
+
+	basicAuth := conf.BasicAuth{
+		Enabled:        true,
+		Password:       "testpassword",
+		ClientID:       "test-client",
+		AuthCodeExp:    5 * time.Minute,
+		AccessTokenExp: 24 * time.Hour,
+	}
+
+	tests := []struct {
+		name     string
+		security *conf.Security
+		wantCode int
+	}{
+		{
+			name:     "no auth configured allows dismiss",
+			wantCode: http.StatusNoContent,
+		},
+		{
+			name: "auth configured without access is rejected",
+			security: &conf.Security{
+				SessionSecret: sessionSecret,
+				BasicAuth:     basicAuth,
+			},
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name: "auth configured with access dismisses",
+			security: &conf.Security{
+				SessionSecret:     sessionSecret,
+				BasicAuth:         basicAuth,
+				AllowSubnetBypass: conf.AllowSubnetBypass{Enabled: true, Subnet: testSubnet},
+			},
+			wantCode: http.StatusNoContent,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, h := setupAppConfigTestWithAuth(t, tt.security)
+			h.AuthMiddleware = auth.NewMiddleware(h.authService).Authenticate
+			h.RegisterAppRoutes(e.Group(apiPrefix))
+
+			repo := newMockAppMetadataRepo()
+			repo.store[appMetadataKeyOnboardingPending] = onboardingPendingValue
+			h.appMetadataRepo = repo
+
+			// Wizard state: the request is offered the wizard only with access.
+			cfgReq := httptest.NewRequest(http.MethodGet, apiPrefix+AppConfigEndpoint, http.NoBody)
+			cfgReq.RemoteAddr = remoteAddr
+			cfgRec := httptest.NewRecorder()
+			e.ServeHTTP(cfgRec, cfgReq)
+			require.Equal(t, http.StatusOK, cfgRec.Code)
+			var cfg AppConfigResponse
+			require.NoError(t, json.Unmarshal(cfgRec.Body.Bytes(), &cfg))
+
+			req := httptest.NewRequest(http.MethodPost, apiPrefix+WizardDismissEndpoint, http.NoBody)
+			req.RemoteAddr = remoteAddr
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+
+			assert.Equal(t, tt.wantCode, rec.Code)
+			assert.Equal(t, cfg.Security.AccessAllowed, rec.Code == http.StatusNoContent,
+				"dismiss must succeed exactly when config reports accessAllowed")
+
+			// The handler's writes are covered by the DismissWizard tests; here
+			// only whether it ran matters: a rejected request must not write.
+			assert.Equal(t, tt.wantCode == http.StatusNoContent, len(repo.setCalls) > 0,
+				"unexpected Set calls: %v", repo.setCalls)
 		})
 	}
 }
