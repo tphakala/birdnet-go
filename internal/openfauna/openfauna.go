@@ -740,6 +740,16 @@ func (m Meta) clone() Meta {
 // while a flood of distinct never-present names cannot grow the memo without limit.
 const metaCacheMaxEntries = 20000
 
+// metaNegCacheMaxEntries bounds the ABSENT share of metaCache separately from the
+// present share. The guide routes are reachable without auth and accept any
+// syntactically valid name, so a stream of distinct unknown names used to consume
+// the one shared cap. Because the memo is append-only (never evicted), once it
+// filled, real species that were not yet memoized stopped being memoized and every
+// later lookup re-scanned the embedded dataset for the process's lifetime. Capping
+// negatives well below the ~15k real species keeps that capacity reserved for them;
+// unknown names past the cap simply go unmemoized, which is the cheap case anyway.
+const metaNegCacheMaxEntries = 2000
+
 // metaCacheEntry is a memoized LookupMeta result. found distinguishes a cached
 // "present" entry from a cached "absent" one so negative lookups are memoized too.
 type metaCacheEntry struct {
@@ -752,8 +762,9 @@ var (
 	// (present or absent) for a scientific name never changes; caching it avoids the
 	// O(dataset) metadata scan on repeat lookups (e.g. the per-request external links
 	// built for a guide, and the guide provider's enrichment fetches).
-	metaCache      sync.Map     // normalized scientific name -> metaCacheEntry
-	metaCacheCount atomic.Int64 // approximate entry count guarding the soft cap
+	metaCache         sync.Map     // normalized scientific name -> metaCacheEntry
+	metaCacheCount    atomic.Int64 // present-entry count guarding the soft cap
+	metaNegCacheCount atomic.Int64 // absent-entry count guarding the negative cap
 )
 
 // storeMetaCache records a LookupMeta result under the soft cap. A new key is only
@@ -773,12 +784,18 @@ func storeMetaCache(key string, e *metaCacheEntry) {
 	if _, loaded := metaCache.Load(key); loaded {
 		return
 	}
-	if metaCacheCount.Add(1) > metaCacheMaxEntries {
-		metaCacheCount.Add(-1)
+	// Absent results are counted and capped separately so unknown names cannot
+	// crowd out real species; see metaNegCacheMaxEntries.
+	counter, limit := &metaCacheCount, int64(metaCacheMaxEntries)
+	if !e.found {
+		counter, limit = &metaNegCacheCount, int64(metaNegCacheMaxEntries)
+	}
+	if counter.Add(1) > limit {
+		counter.Add(-1)
 		return
 	}
 	if _, loaded := metaCache.LoadOrStore(key, *e); loaded {
-		metaCacheCount.Add(-1)
+		counter.Add(-1)
 	}
 }
 
@@ -904,6 +921,12 @@ func lookupMetaShared(scientific string) (Meta, bool) {
 // names cannot grow the memo without limit.
 const commonNameCacheMaxEntries = 60000
 
+// commonNameCacheMaxNegEntries bounds the "no translation" share of
+// commonNameCache, for the same reason metaNegCacheMaxEntries bounds metaCache's:
+// the key includes the locale, so unknown names multiply across locales and would
+// otherwise exhaust the shared cap and permanently de-memoize real lookups.
+const commonNameCacheMaxNegEntries = 5000
+
 // commonNameCacheEntry is a memoized LookupCommonName result. found distinguishes a
 // cached "resolved" entry from a cached "no translation" one so negative lookups are
 // memoized too.
@@ -918,8 +941,9 @@ var (
 	// dataset is immutable (append-only, no update/evict), so a (name, locale) result
 	// never changes. This avoids the full translations-dataset decompress+scan on the
 	// guide provider's per-name cache-miss/warm/refresh path.
-	commonNameCache      sync.Map     // "eff\x00norm" -> commonNameCacheEntry
-	commonNameCacheCount atomic.Int64 // approximate entry count guarding the soft cap
+	commonNameCache         sync.Map     // "eff\x00norm" -> commonNameCacheEntry
+	commonNameCacheCount    atomic.Int64 // resolved-entry count guarding the soft cap
+	commonNameNegCacheCount atomic.Int64 // unresolved-entry count guarding the negative cap
 )
 
 // storeCommonNameCache records a LookupCommonName result under the soft cap using the
@@ -930,12 +954,18 @@ func storeCommonNameCache(key string, e commonNameCacheEntry) {
 	if _, loaded := commonNameCache.Load(key); loaded {
 		return
 	}
-	if commonNameCacheCount.Add(1) > commonNameCacheMaxEntries {
-		commonNameCacheCount.Add(-1)
+	// "No translation" results are counted and capped separately; see
+	// commonNameCacheMaxNegEntries.
+	counter, limit := &commonNameCacheCount, int64(commonNameCacheMaxEntries)
+	if !e.found {
+		counter, limit = &commonNameNegCacheCount, int64(commonNameCacheMaxNegEntries)
+	}
+	if counter.Add(1) > limit {
+		counter.Add(-1)
 		return
 	}
 	if _, loaded := commonNameCache.LoadOrStore(key, e); loaded {
-		commonNameCacheCount.Add(-1)
+		counter.Add(-1)
 	}
 }
 

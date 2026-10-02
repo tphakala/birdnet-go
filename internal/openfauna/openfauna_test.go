@@ -554,12 +554,59 @@ func TestStoreCommonNameCache_CountMatchesEntriesUnderConcurrency(t *testing.T) 
 	}
 	wg.Wait()
 
-	// The counter must equal the actual number of live entries. Robust to entries other
-	// tests added (both counted the same way); an overcount would exceed the Range total.
+	// The two counters must together equal the actual number of live entries.
+	// Resolved and unresolved entries share the map but are counted against separate
+	// caps, so neither counter alone matches the Range total; their sum does.
+	// Robust to entries other tests added (all counted the same way); an overcount
+	// would exceed the Range total.
 	actual := 0
 	commonNameCache.Range(func(_, _ any) bool { actual++; return true })
-	assert.Equal(t, int64(actual), commonNameCacheCount.Load(),
-		"commonNameCacheCount must equal the live entry count (no over/undercount)")
+	assert.Equal(t, int64(actual), commonNameCacheCount.Load()+commonNameNegCacheCount.Load(),
+		"the resolved+unresolved counters must equal the live entry count (no over/undercount)")
+}
+
+// TestStoreMetaCache_NegativeEntriesCannotCrowdOutPresentOnes pins the separate
+// negative cap. The guide routes are reachable without auth and take any
+// syntactically valid name, and the memo is append-only, so before the split a
+// stream of unknown names could fill the single shared cap and permanently stop
+// real species from being memoized - every later lookup then re-scanned the
+// embedded dataset for the life of the process.
+//
+// Pushing well past metaNegCacheMaxEntries must stop admitting absent entries while
+// leaving the present-entry budget untouched. Not parallel: it asserts on the
+// package-global counters.
+func TestStoreMetaCache_NegativeEntriesCannotCrowdOutPresentOnes(t *testing.T) {
+	const flood = metaNegCacheMaxEntries + 500
+
+	presentBefore := metaCacheCount.Load()
+	negBefore := metaNegCacheCount.Load()
+
+	// The memo and its counters are package globals, and this test deliberately
+	// exhausts the negative cap. Registered before the flood so it also runs on
+	// failure; without it a later test that expects an absent name to memoize
+	// (TestPrimeCaches_MatchesPerNameLookups) fails depending on test order.
+	t.Cleanup(func() {
+		for i := range flood {
+			metaCache.Delete(fmt.Sprintf("negflood-%d", i))
+		}
+		metaCache.Delete("negflood-present-probe")
+		metaNegCacheCount.Store(negBefore)
+		metaCacheCount.Store(presentBefore)
+	})
+
+	for i := range flood {
+		storeMetaCache(fmt.Sprintf("negflood-%d", i), &metaCacheEntry{found: false})
+	}
+
+	assert.LessOrEqual(t, metaNegCacheCount.Load(), int64(metaNegCacheMaxEntries),
+		"absent entries must stay within their own cap")
+	assert.Equal(t, presentBefore, metaCacheCount.Load(),
+		"a flood of unknown names must not consume any of the present-entry budget")
+
+	// The present budget still admits a real species after the flood.
+	storeMetaCache("negflood-present-probe", &metaCacheEntry{found: true})
+	_, ok := metaCache.Load("negflood-present-probe")
+	assert.True(t, ok, "a present entry must still be memoizable after a negative flood")
 }
 
 func TestStoreMetaCache_CountMatchesEntriesUnderConcurrency(t *testing.T) {
@@ -580,13 +627,15 @@ func TestStoreMetaCache_CountMatchesEntriesUnderConcurrency(t *testing.T) {
 	}
 	wg.Wait()
 
-	// The counter must equal the actual number of live entries. Robust to entries
-	// other tests added (both are counted the same way); an overcount would make
-	// metaCacheCount exceed the Range total.
+	// The two counters must together equal the actual number of live entries.
+	// Present and absent entries share the map but are counted against separate caps,
+	// so neither counter alone matches the Range total; their sum does. Robust to
+	// entries other tests added (all counted the same way); an overcount would make
+	// the sum exceed the Range total.
 	actual := 0
 	metaCache.Range(func(_, _ any) bool { actual++; return true })
-	assert.Equal(t, int64(actual), metaCacheCount.Load(),
-		"metaCacheCount must equal the live entry count (no over/undercount)")
+	assert.Equal(t, int64(actual), metaCacheCount.Load()+metaNegCacheCount.Load(),
+		"the present+absent counters must equal the live entry count (no over/undercount)")
 }
 
 // TestDecodeMetadataRows_AllNamelessIsAnError pins that a structurally unusable
