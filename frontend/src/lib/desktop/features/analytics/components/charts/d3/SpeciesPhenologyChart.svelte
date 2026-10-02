@@ -63,6 +63,9 @@
   // per event, not on scroll.
   let anchoredBar: globalThis.Element | null = null;
   const barData = new WeakMap<globalThis.Element, PlottedRow>();
+  // Set by Escape or a tap outside so leaving a hovered bar does not reopen the focused bar's
+  // tooltip; the next focus or tap on a bar clears it.
+  let focusTooltipDismissed = false;
 
   // Add one calendar day in local time (DST-safe: setDate respects the timezone, unlike +86_400_000ms
   // which drifts by an hour across a DST boundary and misaligns the SVG rect).
@@ -184,6 +187,7 @@
     ) {
       return;
     }
+    focusTooltipDismissed = true;
     dismissTooltip();
   }
 
@@ -304,7 +308,7 @@
         // Hover is over, but a bar that still has focus keeps its focus tooltip.
         const focused = document.activeElement;
         const focusedData = focused ? barData.get(focused) : undefined;
-        if (focused && focusedData) {
+        if (focused && focusedData && !focusTooltipDismissed) {
           select(focused).style('opacity', 1);
           showBarTooltipAtBar(focused, focusedData);
         } else {
@@ -312,6 +316,7 @@
         }
       })
       .on('focus', function (_event: FocusEvent, d: PlottedRow) {
+        focusTooltipDismissed = false;
         select(this).style('opacity', 1);
         showBarTooltipAtBar(this, d);
       })
@@ -320,13 +325,17 @@
         hideTooltip();
       })
       .on('click', function (_event: MouseEvent, d: PlottedRow) {
+        focusTooltipDismissed = false;
         // A tap on touch browsers may not focus an SVG element by itself.
         this.focus();
         select(this).style('opacity', 1);
         showBarTooltipAtBar(this, d);
       })
       .on('keydown', function (event: KeyboardEvent) {
-        if (event.key === 'Escape') dismissTooltip();
+        if (event.key === 'Escape') {
+          focusTooltipDismissed = true;
+          dismissTooltip();
+        }
       });
   }
 

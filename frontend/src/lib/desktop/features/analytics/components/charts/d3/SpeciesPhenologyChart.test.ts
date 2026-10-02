@@ -301,6 +301,30 @@ describe('SpeciesPhenologyChart', () => {
       expect(showSpy.mock.lastCall?.[0]).toMatchObject({ title: 'Barn Swallow' });
     });
 
+    it('keeps an Escape-dismissed tooltip closed when the mouse leaves another bar', async () => {
+      const { bars } = await renderBars();
+      const focused = swallowBar(bars);
+      focused.focus();
+      await fireEvent.mouseEnter(bars[0]);
+      await fireEvent.keyDown(focused, { key: 'Escape' });
+      showSpy.mockClear();
+      await fireEvent.mouseLeave(bars[0]);
+      expect(showSpy).not.toHaveBeenCalled();
+      // A new tap reopens it.
+      await fireEvent.click(focused);
+      expect(showSpy.mock.lastCall?.[0]).toMatchObject({ title: 'Barn Swallow' });
+    });
+
+    it('keeps a tooltip dismissed by a tap outside closed when the mouse leaves another bar', async () => {
+      const { bars } = await renderBars();
+      swallowBar(bars).focus();
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      await fireEvent.mouseEnter(bars[0]);
+      showSpy.mockClear();
+      await fireEvent.mouseLeave(bars[0]);
+      expect(showSpy).not.toHaveBeenCalled();
+    });
+
     it('hides a hover tooltip on mouseleave when no bar has focus', async () => {
       const { bars } = await renderBars();
       await fireEvent.mouseEnter(bars[0]);
