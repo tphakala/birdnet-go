@@ -75,11 +75,14 @@ type ActivityHeatmapData struct {
 // with any detections in range, so each species' shape is comparable regardless of its raw
 // volume. Total is the species' detection count over the range (false positives excluded),
 // used to rank species by volume and shown in the tooltip. ScientificName is the stable key;
-// the localized common name is resolved client-side (the v2 label schema stores no common name).
+// CommonName is the display name, so the payload is self-describing.
 type SpeciesHourlyDistribution struct {
 	ScientificName string
-	Buckets        [24]float64
-	Total          int
+	// CommonName is the server-locale common name resolved via the datastore name resolver; it falls
+	// back to the scientific name when no mapping exists.
+	CommonName string
+	Buckets    [24]float64
+	Total      int
 }
 
 // DailyActivityOnset is one calendar day's dawn-chorus onset relative to civil dawn, behind the
@@ -104,12 +107,14 @@ type DailyActivityOnset struct {
 // detections that fall into each equal-width confidence bin over [0,1] (Bins sums to ~1.0), so the
 // distribution shape is comparable across species regardless of detection volume. Total is the
 // species' detection count over the range (false positives excluded), shown in the tooltip.
-// ScientificName is the stable key; the localized common name is resolved client-side (the v2 label
-// schema stores no common name), matching the sibling species charts.
+// ScientificName is the stable key; CommonName is the display name, so the payload is self-describing.
 type SpeciesConfidenceHistogram struct {
 	ScientificName string
-	Bins           []float64
-	Total          int
+	// CommonName is the server-locale common name resolved via the datastore name resolver; it falls
+	// back to the scientific name when no mapping exists.
+	CommonName string
+	Bins       []float64
+	Total      int
 }
 
 // SpeciesAccumulationPoint is one day on the species accumulation curve (the biodiversity collector's
@@ -166,12 +171,16 @@ type YearOverYearResult struct {
 // SpeciesPhenologyPoint is one species' residency span within the selected date range: its first and
 // last false-positive-excluded detection (as station-local YYYY-MM-DD dates) and the in-range
 // detection count. Species are the top-N by detection volume; the chart draws one residency bar per
-// species (a Gantt) to show arrival/departure timing.
+// species (a Gantt) to show arrival/departure timing. CommonName is the display name, so the payload
+// is self-describing.
 type SpeciesPhenologyPoint struct {
 	ScientificName string
-	FirstSeen      string
-	LastSeen       string
-	Count          int
+	// CommonName is the server-locale common name resolved via the datastore name resolver; it falls
+	// back to the scientific name when no mapping exists.
+	CommonName string
+	FirstSeen  string
+	LastSeen   string
+	Count      int
 }
 
 // SpeciesHourlyCounts is one species' raw hour-of-day detection counts, behind the acoustic
@@ -180,12 +189,14 @@ type SpeciesPhenologyPoint struct {
 // ridgeline's SpeciesHourlyDistribution (which normalizes each species to sum to 1.0 to compare
 // timing shape), the streamgraph stacks the raw counts so band width is detection volume; Total is
 // the sum of Counts, used to rank species by volume and shown in the tooltip. ScientificName is the
-// stable key; the localized common name is resolved client-side (the v2 label schema stores no
-// common name), matching the sibling species charts.
+// stable key; CommonName is the display name, so the payload is self-describing.
 type SpeciesHourlyCounts struct {
 	ScientificName string
-	Counts         [24]int
-	Total          int
+	// CommonName is the server-locale common name resolved via the datastore name resolver; it falls
+	// back to the scientific name when no mapping exists.
+	CommonName string
+	Counts     [24]int
+	Total      int
 }
 
 // NewSpeciesData represents a species detected for the first time within a period

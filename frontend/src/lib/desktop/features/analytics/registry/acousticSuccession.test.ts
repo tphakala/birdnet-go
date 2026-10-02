@@ -96,6 +96,7 @@ describe('acoustic-succession chart def', () => {
     const payload = [
       {
         scientificName: 'Turdus merula',
+        commonName: 'Eurasian Blackbird',
         counts: [...Array.from({ length: 6 }, () => 0), 30, ...Array.from({ length: 17 }, () => 0)],
         total: 30,
       },
@@ -128,6 +129,9 @@ describe('acoustic-succession chart def', () => {
       expect(row.counts.every(c => Number.isFinite(c) && c >= 0)).toBe(true);
     }
     expect(result[0].scientificName).toBe('Turdus merula');
+    expect(result[0].commonName).toBe('Eurasian Blackbird');
+    // No commonName in the payload -> falls back to the scientific name.
+    expect(result[1].commonName).toBe('Apus apus');
     expect(result[0].counts[6]).toBe(30);
     // Non-finite total coerces to 0; over-long counts are truncated to 24.
     const apus = result.find(r => r.scientificName === 'Apus apus');
@@ -153,28 +157,26 @@ describe('acoustic-succession chart def', () => {
     await expect(chartDef.fetch(makeParams())).rejects.toThrow();
   });
 
-  it('enriches the series with the resolved common name, falling back to the scientific name', () => {
+  it('uses the payload common name even when the hub species map is empty (#4459)', () => {
     expect(chartDef.mapProps).toBeDefined();
     const raw: SuccessionRow[] = [
       {
         scientificName: 'Turdus merula',
-        commonName: '',
+        commonName: 'Eurasian Blackbird',
         counts: Array.from({ length: 24 }, () => 1),
         total: 24,
       },
       {
         scientificName: 'Apus apus',
-        commonName: '',
+        commonName: 'Apus apus',
         counts: Array.from({ length: 24 }, () => 2),
         total: 48,
       },
     ];
-    const ctx = makeCtx({ 'Turdus merula': 'Eurasian Blackbird' });
-    const props = chartDef.mapProps?.(raw, makeParams(['Turdus merula']), ctx) ?? {};
+    const props = chartDef.mapProps?.(raw, makeParams(['Turdus merula']), makeCtx({})) ?? {};
     const series = props.series as SuccessionRow[];
     expect(series).toHaveLength(2);
     expect(series[0].commonName).toBe('Eurasian Blackbird');
-    // No mapping -> falls back to the scientific name.
     expect(series[1].commonName).toBe('Apus apus');
   });
 });

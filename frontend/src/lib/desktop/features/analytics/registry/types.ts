@@ -86,10 +86,12 @@ export interface ChartPropsContext {
   /** Request a change to the shared params (writes URL state in the hub). */
   onParamsChange: (_partial: Partial<AnalyticsParams>) => void;
   /**
-   * Scientific name -> server-provided common name, sourced from the species
-   * summary endpoint the hub already fetches. Lets charts label series without
-   * an extra request (the per-visitor dictionary, when enabled, still wins via
-   * `localizeSpeciesName`).
+   * Scientific name -> common name for the species selector list, from the species
+   * summary endpoint. Populated only on tabs with a species filter, so it can be
+   * empty on a fresh load of any other tab. Use it only for charts whose species
+   * come from the user's selection; a chart that shows server-chosen species must
+   * take `commonName` from its own payload instead. The per-visitor dictionary,
+   * when enabled, still wins via `localizeSpeciesName`.
    */
   speciesNames: Map<string, string>;
 }

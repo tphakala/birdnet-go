@@ -3404,7 +3404,11 @@ func (ds *Datastore) GetHourlyDistributionBySpecies(ctx context.Context, startDa
 	if len(top) == 0 {
 		return []datastore.SpeciesHourlyDistribution{}, nil
 	}
-	return buildSpeciesHourlyDistribution(top, hourlyByLabel), nil
+	result := buildSpeciesHourlyDistribution(top, hourlyByLabel)
+	for i := range result {
+		result[i].CommonName = ds.resolveCommonName(result[i].ScientificName)
+	}
+	return result, nil
 }
 
 // GetAcousticSuccession returns the raw hour-of-day detection counts (false positives excluded) for
@@ -3421,7 +3425,11 @@ func (ds *Datastore) GetAcousticSuccession(ctx context.Context, startDate, endDa
 	if len(top) == 0 {
 		return []datastore.SpeciesHourlyCounts{}, nil
 	}
-	return buildAcousticSuccession(top, hourlyByLabel), nil
+	result := buildAcousticSuccession(top, hourlyByLabel)
+	for i := range result {
+		result[i].CommonName = ds.resolveCommonName(result[i].ScientificName)
+	}
+	return result, nil
 }
 
 // GetDailyActivityOnset returns the per-day dawn-chorus onset relative to civil dawn over the
@@ -3540,7 +3548,11 @@ func (ds *Datastore) GetConfidenceHistogram(ctx context.Context, startDate, endD
 			Build()
 	}
 
-	return buildSpeciesConfidenceHistogram(speciesSet, confByLabel, bins, minCount), nil
+	result := buildSpeciesConfidenceHistogram(speciesSet, confByLabel, bins, minCount)
+	for i := range result {
+		result[i].CommonName = ds.resolveCommonName(result[i].ScientificName)
+	}
+	return result, nil
 }
 
 // GetSpeciesAccumulation returns the species accumulation curve over [startDate, endDate]: per
@@ -3674,7 +3686,11 @@ func (ds *Datastore) GetSpeciesPhenology(ctx context.Context, startDate, endDate
 			Build()
 	}
 
-	return buildSpeciesPhenology(rows, ds.timezone), nil
+	result := buildSpeciesPhenology(rows, ds.timezone)
+	for i := range result {
+		result[i].CommonName = ds.resolveCommonName(result[i].ScientificName)
+	}
+	return result, nil
 }
 
 // civilDawnMinuteLookup returns a civilDawnMinuteLookup closure over the datastore's SunCalc and
