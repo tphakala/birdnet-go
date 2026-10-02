@@ -6,7 +6,7 @@
  * bounds), so a backend change could be picked up by some of them and not others.
  * The Go originals live in `internal/conf/consts.go`
  * (`SpeciesGuideDefaultWarmTopN` / `SpeciesGuideMaxWarmTopN`) and
- * `internal/guideprovider/warm_top_n_sync_test.go` fails if the two sides drift.
+ * `internal/conf/species_guide_limits_sync_test.go` fails if the two sides drift.
  *
  * This module deliberately has no imports: it is pulled in by the settings store,
  * so anything it depended on would be initialised on that path too.
