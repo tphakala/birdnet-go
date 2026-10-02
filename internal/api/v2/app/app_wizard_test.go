@@ -463,6 +463,12 @@ func TestRecordOnboardingState(t *testing.T) {
 		{name: "existing last_seen_version does not record", seed: map[string]string{appMetadataKeyLastSeenVersion: "v0.8.0"}},
 		{name: "a detection row does not record", detections: 1},
 		{
+			name:        "restart with detections keeps an already recorded flag",
+			seed:        map[string]string{appMetadataKeyOnboardingPending: onboardingPendingValue},
+			detections:  1,
+			wantPending: true,
+		},
+		{
 			name:        "already pending stays pending",
 			seed:        map[string]string{appMetadataKeyOnboardingPending: onboardingPendingValue},
 			wantPending: true,
