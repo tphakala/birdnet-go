@@ -18,6 +18,11 @@ command -v git >/dev/null 2>&1 || { echo "FATAL: git not found" >&2; exit 2; }
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# Drop repository-locating variables (GIT_DIR, GIT_INDEX_FILE, GIT_WORK_TREE
+# and the rest) that a git hook or wrapper may export; otherwise the fixture
+# commands below would act on the caller's repository.
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars)
 # Isolate git from the user's and the system configuration.
 export GIT_CONFIG_GLOBAL=/dev/null
 export GIT_CONFIG_NOSYSTEM=1
@@ -147,13 +152,27 @@ it "any tag naming counts as a release"
 r=$(new_repo naming); commit "$r" "$D1"; tag_at "$r" rel-2027.01 "$D1"
 assert_eq "arbitrary tag" rel-2027.01 "$(run_version "$r")"
 
+# POSIX TZ strings need no tzdata, so these cases discriminate on any runner,
+# including a UTC one. XXX-3 is three hours east of UTC.
 it "committer date is converted to UTC"
 r=$(new_repo utc); commit "$r" "2026-09-28T01:30:00+03:00"
-assert_eq "previous UTC day" "20260927-g$(short "$r")-dev" "$(run_version "$r")"
+assert_eq "previous UTC day" "20260927-g$(short "$r")-dev" "$(run_version "$r" TZ=XXX-3)"
 
 it "result does not depend on TZ"
-assert_eq "TZ=Pacific/Kiritimati" "20260927-g$(short "$r")-dev" "$(run_version "$r" TZ=Pacific/Kiritimati)"
-assert_eq "TZ=America/Los_Angeles" "20260927-g$(short "$r")-dev" "$(run_version "$r" TZ=America/Los_Angeles)"
+# 11:00 UTC on the 27th is already the 28th at UTC+14 and still the 26th at UTC-12.
+r=$(new_repo tz); commit "$r" "2026-09-27T11:00:00+00:00"
+assert_eq "TZ=XXX-14" "20260927-g$(short "$r")-dev" "$(run_version "$r" TZ=XXX-14)"
+assert_eq "TZ=XXX+12" "20260927-g$(short "$r")-dev" "$(run_version "$r" TZ=XXX+12)"
+
+it "committer date is used, not author date"
+r=$(new_repo authordate); echo a >"$r/file.txt"; git -C "$r" add -A
+GIT_AUTHOR_DATE="2026-07-01T12:00:00+00:00" GIT_COMMITTER_DATE="$D1" git -C "$r" commit -q -m rebased
+assert_eq "committer date" "20260823-g$(short "$r")-dev" "$(run_version "$r")"
+
+it "repository without commits gives unknown"
+r=$(new_repo empty)
+out=$(run_version "$r"); st=$?
+assert_eq "unborn HEAD" unknown "$out"; check_shape "unborn HEAD" "$out" "$st"
 
 it "shallow clone without tags gives the dev form"
 r=$(new_repo shallowsrc); commit "$r" "$D1"; tag_at "$r" 20260823 "$D1"; commit "$r" "$D2"
@@ -173,8 +192,8 @@ assert_eq "no repo" unknown "$out"; check_shape "no repo" "$out" "$st"
 it "tree nested in another repository gives unknown"
 r=$(new_repo outer); commit "$r" "$D1"
 mkdir -p "$r/vendor/pkg/scripts"; cp "$SCRIPT" "$r/vendor/pkg/scripts/"
-out=$(cd / && sh "$r/vendor/pkg/scripts/build-version.sh")
-assert_eq "nested" unknown "$out"
+out=$(cd / && sh "$r/vendor/pkg/scripts/build-version.sh"); st=$?
+assert_eq "nested" unknown "$out"; check_shape "nested" "$out" "$st"
 
 it "missing git gives unknown"
 r=$(new_repo nogit); commit "$r" "$D1"
@@ -183,7 +202,9 @@ assert_eq "no git binary" unknown "$out"; check_shape "no git" "$out" "$st"
 
 it "uncommitted changes add no suffix"
 r=$(new_repo dirty); commit "$r" "$D1"
-clean=$(run_version "$r"); echo change >>"$r/file.txt"; echo new >"$r/untracked.txt"
+clean=$(run_version "$r")
+assert_eq "clean tree dev form" "20260823-g$(short "$r")-dev" "$clean"
+echo change >>"$r/file.txt"; echo new >"$r/untracked.txt"
 assert_eq "dirty tree same as clean" "$clean" "$(run_version "$r")"
 
 it "log.showSignature does not leak into the version"
