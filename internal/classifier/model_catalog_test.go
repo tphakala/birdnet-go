@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"maps"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -505,7 +504,8 @@ func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
 
 // TestEmbeddedCatalog_LicenseFlags pins the License string and CommercialUse flag
 // of every embedded catalog entry, so a change to either is deliberate and
-// visible in review. A new entry without an expectation here fails the test.
+// visible in review. Bat entries share one expectation; any other entry
+// without an expectation here fails the test.
 func TestEmbeddedCatalog_LicenseFlags(t *testing.T) {
 	t.Parallel()
 
@@ -513,7 +513,6 @@ func TestEmbeddedCatalog_LicenseFlags(t *testing.T) {
 		license       string
 		commercialUse bool
 	}
-	const batEntryPrefix = "battybirdnet-"
 	byID := map[string]licenseExpectation{
 		conf.ModelIDBirdNETV3Catalog: {license: "CC-BY-SA-4.0", commercialUse: false},
 		conf.ModelIDPerchV2Catalog:   {license: "Apache-2.0", commercialUse: true},
@@ -530,7 +529,7 @@ func TestEmbeddedCatalog_LicenseFlags(t *testing.T) {
 
 			assert.NotEmpty(t, entry.License, "every catalog entry must declare a license")
 			want, ok := byID[entry.ID]
-			if !ok && strings.HasPrefix(entry.ID, batEntryPrefix) {
+			if !ok && entry.Category == CategoryBat {
 				want, ok = batExpectation, true
 			}
 			require.Truef(t, ok, "no license expectation for catalog entry %q", entry.ID)
