@@ -369,10 +369,11 @@
     transition: opacity 0.12s ease;
   }
 
-  /* Stroke rather than outline: outline support on SVG elements is uneven. */
+  /* Stroke rather than outline: outline support on SVG elements is uneven. The text colour
+     contrasts with every bar fill in both themes; the primary colour vanishes on blue bars. */
   :global(.phenology-bars rect:focus-visible) {
     outline: none;
-    stroke: var(--color-primary);
+    stroke: var(--color-base-content);
     stroke-width: 2px;
   }
 </style>
