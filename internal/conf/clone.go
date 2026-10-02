@@ -65,6 +65,10 @@ func CloneSettings(src *Settings) *Settings {
 		c := *src.Realtime.Dashboard.CustomColors
 		dst.Realtime.Dashboard.CustomColors = &c
 	}
+	if src.Realtime.Dashboard.ShowAudioLevel != nil {
+		s := *src.Realtime.Dashboard.ShowAudioLevel
+		dst.Realtime.Dashboard.ShowAudioLevel = &s
+	}
 	dst.Realtime.Dashboard.Layout.Elements = cloneDashboardElements(src.Realtime.Dashboard.Layout.Elements)
 
 	// Realtime.DogBarkFilter.

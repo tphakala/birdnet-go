@@ -6,6 +6,7 @@ import {
   hasUnsavedChanges,
   resetIfMatchFallbackForTest,
   SECTION_STORE_PATHS,
+  createEmptySettings,
 } from './settings';
 import type {
   AudioSettings,
@@ -2184,5 +2185,36 @@ describe('Settings Store - save conflicts (If-Match)', () => {
     await settingsActions.saveSettings({ notify: false });
 
     expect(sentIfMatch()).toEqual([expected]);
+  });
+});
+
+describe('Settings Store - Dashboard showAudioLevel', () => {
+  it('defaults showAudioLevel to true in initial store state', () => {
+    const empty = createEmptySettings();
+    expect(empty.realtime?.dashboard?.showAudioLevel).toBe(true);
+  });
+
+  it('updates showAudioLevel via updateSection', () => {
+    settingsStore.set({
+      formData: createEmptySettings(),
+      originalData: createEmptySettings(),
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: false,
+    });
+    const currentDashboard = get(settingsStore).formData.realtime?.dashboard;
+    expect(currentDashboard).toBeDefined();
+    if (currentDashboard) {
+      settingsActions.updateSection('realtime', {
+        dashboard: {
+          ...currentDashboard,
+          showAudioLevel: false,
+        },
+      });
+    }
+    const store = get(settingsStore);
+    expect(store.formData.realtime?.dashboard?.showAudioLevel).toBe(false);
   });
 });

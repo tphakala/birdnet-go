@@ -263,6 +263,8 @@ func TestSettingsYAMLRoundTrip(t *testing.T) {
 	original.Realtime.Dashboard.Thumbnails.ImageProvider = "avicommons"
 	original.Realtime.Dashboard.SummaryLimit = 30
 	original.Realtime.Dashboard.TemperatureUnit = "fahrenheit"
+	showAudio := false
+	original.Realtime.Dashboard.ShowAudioLevel = &showAudio
 	// DynamicThreshold
 	original.Realtime.DynamicThreshold.ValidHours = 24
 	// RetrySettings (via Birdweather)
@@ -294,6 +296,8 @@ func TestSettingsYAMLRoundTrip(t *testing.T) {
 	assert.Equal(t, "avicommons", restored.Realtime.Dashboard.Thumbnails.ImageProvider)
 	assert.Equal(t, 30, restored.Realtime.Dashboard.SummaryLimit)
 	assert.Equal(t, "fahrenheit", restored.Realtime.Dashboard.TemperatureUnit)
+	require.NotNil(t, restored.Realtime.Dashboard.ShowAudioLevel)
+	assert.False(t, *restored.Realtime.Dashboard.ShowAudioLevel)
 	assert.Equal(t, 24, restored.Realtime.DynamicThreshold.ValidHours)
 	assert.Equal(t, 5, restored.Realtime.Birdweather.RetrySettings.MaxRetries)
 	assert.Equal(t, 30, restored.Realtime.Birdweather.RetrySettings.InitialDelay)
