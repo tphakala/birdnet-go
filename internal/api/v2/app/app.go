@@ -260,7 +260,7 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 // by comparing the current app version with the last_seen_version stored in app_metadata.
 //
 // Rules:
-//   - Dev builds (empty version or "Development Build"): both flags forced to false.
+//   - Dev builds (see isDevBuild): both flags forced to false.
 //   - If last_seen_version is missing and isExistingInstall returns true: auto-seed and skip wizard.
 //   - If last_seen_version is missing and no install signals: freshInstall = true.
 //   - If last_seen_version differs from the current version: newVersion = true.
