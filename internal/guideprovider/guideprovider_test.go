@@ -451,13 +451,17 @@ func TestGuideCache_AsyncRefreshIsDeduplicated(t *testing.T) {
 
 	const readers = 32
 	var wg sync.WaitGroup
+	// Failures are counted rather than asserted in the goroutine: testify is not
+	// goroutine-safe, so a failure raised there can be missed (TESTING.md).
+	var readFailures atomic.Int32
 	for range readers {
 		wg.Go(func() {
 			// Each stale memory hit returns immediately and fires a background
 			// refresh; whether it observes the stale or the just-refreshed value
 			// is timing-dependent, so only the dedup (calls==1 below) is asserted.
-			_, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
-			assert.NoError(t, err)
+			if _, err := c.Get(t.Context(), "Turdus merula", FetchOptions{}); err != nil {
+				readFailures.Add(1)
+			}
 		})
 	}
 
@@ -469,6 +473,7 @@ func TestGuideCache_AsyncRefreshIsDeduplicated(t *testing.T) {
 
 	close(prov.release)
 	wg.Wait()
+	assert.Zero(t, readFailures.Load(), "every stale read must succeed")
 }
 
 func TestGuideCache_GetAfterCloseStillReads(t *testing.T) {

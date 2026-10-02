@@ -3,16 +3,9 @@ package guideprovider
 import (
 	"os"
 	"testing"
-	"time"
 
 	"go.uber.org/goleak"
 )
-
-// testCleanupGracePeriod gives background goroutines a brief window to finish
-// unwinding after the last test's cache is closed. Close cancels the cache context
-// and waits on its wait group, but a goroutine that has just returned from Wait can
-// still be a few instructions from exiting when the gate runs.
-const testCleanupGracePeriod = 100 * time.Millisecond
 
 // TestMain runs a package-wide goroutine-leak gate after all tests complete.
 //
@@ -22,18 +15,18 @@ const testCleanupGracePeriod = 100 * time.Millisecond
 // suite deliberately exercises spawn-vs-Close races. Without the gate a cache that
 // stopped honoring Close would pass CI silently.
 //
-// The ignore list matches the analogous gates in internal/imageprovider and the
-// api/v2 domains.
+// The ignore list is empty on purpose. TESTING.md requires starting from empty and
+// adding only a named goroutine seen in a failure and impossible to stop. The gate
+// previously ignored runtime.gopark, which matches ANY parked goroutine - including
+// a refresh loop parked in select, the exact leak this gate exists to catch - plus
+// testing.(*T).Run, which TESTING.md forbids because goleak already filters the test
+// runner, and a lumberjack mill goroutine this package never starts (upstream #4424
+// removed the other dead lumberjack ignores). goleak.Find retries internally, so the
+// former sleep before it was redundant too.
 func TestMain(m *testing.M) {
 	testResult := m.Run()
 
-	time.Sleep(testCleanupGracePeriod)
-
-	if err := goleak.Find(
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-	); err != nil {
+	if err := goleak.Find(); err != nil {
 		//nolint:forbidigo // a leak report must reach the test output directly
 		println("goroutine leak detected after guideprovider tests:", err.Error())
 		os.Exit(1)
