@@ -1693,8 +1693,8 @@ func (c *Handler) GetAcousticSuccession(ctx echo.Context) error {
 
 // confidenceDistributionItem is one species' row in the confidence-distribution wire payload: its
 // scientific-name key, its normalized confidence bins (each the fraction of the species' detections
-// in that bin, summing to ~1.0), and the raw detection count. The server-locale common name rides along so the
-// payload is self-describing and the UI never has to look it up separately.
+// in that bin, summing to ~1.0), and the raw detection count. The server-locale common name rides
+// along so the payload is self-describing and the UI never has to look it up separately.
 type confidenceDistributionItem struct {
 	ScientificName string    `json:"scientificName"`
 	CommonName     string    `json:"commonName"`
