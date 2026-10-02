@@ -122,6 +122,12 @@ func TestIsDevBuild(t *testing.T) {
 		{name: "pre-release", version: "v1.0.0-rc.1", want: false},
 		{name: "development build lowercase", version: "development build", want: false},
 		{name: "whitespace only", version: "   ", want: false},
+		{name: "unknown literal", version: "unknown", want: true},
+		{name: "dev build string", version: "20261002-g5dc2ab881-dev", want: true},
+		{name: "dev suffix only", version: "-dev", want: true},
+		{name: "date release", version: "20260823", want: false},
+		{name: "dev in the middle", version: "20261002-dev-g5dc2ab881", want: false},
+		{name: "unknown with different case", version: "Unknown", want: false},
 	}
 
 	for _, tt := range tests {

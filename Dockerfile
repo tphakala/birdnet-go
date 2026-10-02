@@ -53,7 +53,9 @@ ARG LEGACY_SHA256_ZE_GPU=54d42056c627dd36eaaf3dcfad5d80fb90e9c0d65e4a4d5ab8b0e8e
 
 FROM --platform=$BUILDPLATFORM golang:1.27-trixie AS buildenv
 
-# Pass BUILD_VERSION through to the build stage
+# Pass BUILD_VERSION through to the build stage. .dockerignore excludes .git,
+# so the build cannot derive a version itself; for a local build pass
+# --build-arg BUILD_VERSION="$(sh scripts/build-version.sh)".
 ARG BUILD_VERSION
 ENV BUILD_VERSION=${BUILD_VERSION:-unknown}
 

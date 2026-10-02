@@ -40,7 +40,8 @@ var mountWatchedDests = []string{"/data", "/config"}
 
 // versionDatePattern extracts the YYYYMMDD component of a release or
 // nightly version string (formats observed in git tags: "20260716",
-// "nightly-20260615").
+// "nightly-20260615") or of a dev build string from scripts/build-version.sh
+// ("20261002-g5dc2ab881-dev"; the first run of eight digits is the commit date).
 var versionDatePattern = regexp.MustCompile(`(20\d{6})`)
 
 // compareVersionDates compares two version strings by their embedded
