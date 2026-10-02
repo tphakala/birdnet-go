@@ -350,11 +350,11 @@ interface SpeciesDistributionDatum {
 }
 
 /**
- * Who-sings-when ridgeline: per-species normalized 24-bucket hour-of-day distributions. With no
- * species selected it is the top-N by detection volume in range; with a selection it is those species
- * (still volume-ordered, capped at the limit), so Clear reverts to the top-N. Server-ranked and
- * server-normalized; this defensively coerces the array payload. Each row carries the server-resolved
- * common name, so it never depends on the hub's species map.
+ * Who-sings-when ridgeline: per-species normalized 24-bucket hour-of-day distributions for the
+ * selected species (volume-ordered, capped at the limit). With no selection it returns empty so the
+ * card shows its pick-species state. Server-ranked and server-normalized; this defensively coerces the
+ * array payload. Each row carries the server-resolved common name, so it never depends on the hub's
+ * species map.
  */
 async function fetchSpeciesDistribution(
   params: AnalyticsParams,
@@ -423,12 +423,11 @@ interface SuccessionDatum {
 }
 
 /**
- * Acoustic succession streamgraph: per-species raw 24-bucket hour-of-day detection counts. With no
- * species selected it is the top-N by detection volume in range (the diel acoustic handover among the
- * dominant species); with a selection it is those species (still volume-ordered, capped at the
- * limit), so Clear reverts to the top-N. The server ranks. Defensively coerces the array payload,
- * padding/truncating counts to 24 so the chart's hour axis stays well-defined even on a malformed
- * payload.
+ * Acoustic succession streamgraph: per-species raw 24-bucket hour-of-day detection counts for the
+ * selected species (volume-ordered, capped at the limit), showing the diel acoustic handover. With no
+ * selection it returns empty so the card shows its pick-species state. The server ranks. Defensively
+ * coerces the array payload, padding/truncating counts to 24 so the chart's hour axis stays
+ * well-defined even on a malformed payload. Each row carries the server-resolved common name.
  */
 async function fetchAcousticSuccession(
   params: AnalyticsParams,
@@ -650,8 +649,8 @@ interface ConfidenceDistributionDatum {
 
 /**
  * Confidence distribution per species: the top-N species by detection volume, each with a normalized
- * histogram of detection confidence scores (bins over 0..1). Like the who-sings-when ridgeline
- * (#1159) it always requests the top-N and does not honor the species filter, so the chart compares
+ * histogram of detection confidence scores (bins over 0..1). It always requests the top-N and does
+ * not honor the species filter, so the chart compares
  * several species' confidence shapes rather than collapsing to a single ridge; the server ranks and
  * normalizes. Defensively coerces the array payload, keeping the server's (variable) bin count.
  */

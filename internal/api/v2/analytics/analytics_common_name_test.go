@@ -54,9 +54,10 @@ func TestServerChosenSpeciesResponses_CarryCommonName(t *testing.T) {
 
 // TestPayloadsNamingSpeciesCarryCommonName is a drift guard. A wire struct that names a species by
 // scientific name must also carry its display name, otherwise the UI shows scientific names on any
-// view that did not also fetch the species summary (#4459). Every struct in this package's non-test
-// sources with a "scientificName" or "scientific_name" JSON field must have the matching
-// "commonName" or "common_name" field.
+// view that did not also fetch the species summary (#4459). Every named struct type in this
+// package's non-test sources with a "scientificName" or "scientific_name" JSON field must have the
+// matching "commonName" or "common_name" field. Anonymous struct literals and fields promoted from
+// embedded structs are not inspected.
 func TestPayloadsNamingSpeciesCarryCommonName(t *testing.T) {
 	t.Parallel()
 
