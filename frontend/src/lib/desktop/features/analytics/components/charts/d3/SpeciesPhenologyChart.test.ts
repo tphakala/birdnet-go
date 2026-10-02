@@ -215,8 +215,10 @@ describe('SpeciesPhenologyChart', () => {
       await fireEvent.blur(bar);
       expect(hideSpy).toHaveBeenCalledTimes(1);
       await fireEvent.focus(bar);
+      expect(bar.style.opacity).toBe('1');
       await fireEvent.keyDown(bar, { key: 'Escape' });
       expect(hideSpy).toHaveBeenCalledTimes(2);
+      expect(bar.style.opacity).toBe('0.85');
     });
 
     it('hides the bar tooltip on a pointerdown outside the bars', async () => {
@@ -270,6 +272,31 @@ describe('SpeciesPhenologyChart', () => {
       showSpy.mockClear();
       window.dispatchEvent(new Event('scroll'));
       expect(showSpy).not.toHaveBeenCalled();
+    });
+
+    it('restores the bar highlight on a pointerdown outside the bars', async () => {
+      const { bars } = await renderBars();
+      const bar = swallowBar(bars);
+      await fireEvent.focus(bar);
+      expect(bar.style.opacity).toBe('1');
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      expect(bar.style.opacity).toBe('0.85');
+    });
+
+    it('removes its document and window listeners on unmount', async () => {
+      const { container, unmount } = render(SpeciesPhenologyChart, {
+        props: { data: sample, width: 800 },
+      });
+      await Promise.resolve();
+      const bar = container.querySelectorAll<SVGRectElement>('.phenology-bars rect')[1];
+      bar.focus();
+      unmount();
+      showSpy.mockClear();
+      hideSpy.mockClear();
+      window.dispatchEvent(new Event('scroll'));
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      expect(showSpy).not.toHaveBeenCalled();
+      expect(hideSpy).not.toHaveBeenCalled();
     });
 
     it('shows the bar tooltip on tap (click) and focuses the bar', async () => {
