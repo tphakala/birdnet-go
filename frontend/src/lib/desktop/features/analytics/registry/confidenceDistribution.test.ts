@@ -44,8 +44,18 @@ function bins(peak: number): number[] {
 }
 
 const sample = [
-  { scientificName: 'Turdus merula', density: bins(16), total: 40 },
-  { scientificName: 'Erithacus rubecula', density: bins(10), total: 12 },
+  {
+    scientificName: 'Turdus merula',
+    commonName: 'Eurasian Blackbird',
+    density: bins(16),
+    total: 40,
+  },
+  {
+    scientificName: 'Erithacus rubecula',
+    commonName: 'Erithacus rubecula',
+    density: bins(10),
+    total: 12,
+  },
 ];
 
 describe('confidence-distribution chart def', () => {
@@ -59,8 +69,8 @@ describe('confidence-distribution chart def', () => {
     expect(def.minDataPoints).toBe(2);
   });
 
-  it('maps confidence data to ridgeline series, resolving common names from the hub map', () => {
-    const props = mapProps(sample, params, makeCtx([['Turdus merula', 'Eurasian Blackbird']]));
+  it('maps confidence data to ridgeline series using the payload common name, with an empty hub map (#4459)', () => {
+    const props = mapProps(sample, params, makeCtx());
     const series = props.series as Array<{
       scientificName: string;
       commonName: string;
@@ -70,7 +80,7 @@ describe('confidence-distribution chart def', () => {
     expect(series).toHaveLength(2);
     expect(series[0].scientificName).toBe('Turdus merula');
     expect(series[0].commonName).toBe('Eurasian Blackbird');
-    // No mapping entry -> falls back to the scientific name.
+    // The payload carried the scientific name as the fallback.
     expect(series[1].commonName).toBe('Erithacus rubecula');
     expect(series[0].density).toHaveLength(20);
     expect(series[0].total).toBe(40);

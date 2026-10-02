@@ -8,10 +8,12 @@
 
 import { parseLocalDateString } from '$lib/utils/date';
 
-/** Raw API row from the phenology endpoint, before common-name enrichment. */
+/** One row from the phenology endpoint. */
 export interface PhenologyDatum {
   /** Species scientific name (the stable key). */
   scientificName: string;
+  /** Server-locale common name from the payload (falls back to the scientific name). */
+  commonName: string;
   /** First in-range detection, station-local YYYY-MM-DD. */
   firstSeen: string;
   /** Last in-range detection, station-local YYYY-MM-DD. */
@@ -20,15 +22,9 @@ export interface PhenologyDatum {
   count: number;
 }
 
-/** One residency row the chart renders: a {@link PhenologyDatum} plus the resolved common name. */
-export interface PhenologyRow extends PhenologyDatum {
-  /** Localized common name, resolved client-side (falls back to the scientific name). */
-  commonName: string;
-}
-
 /** Chart input: the residency rows, in arrival order (server-sorted by first-seen). */
 export interface PhenologyData {
-  rows: PhenologyRow[];
+  rows: PhenologyDatum[];
 }
 
 /** Milliseconds in a calendar day; used only for an inclusive day-count diff of two local midnights. */
