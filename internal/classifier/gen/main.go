@@ -159,8 +159,12 @@ type labelChecksum struct {
 }
 
 const (
-	labelsSidecar     = "gen/manifests/labels-checksums.json"
-	outputFile        = "model_catalog_regional_gen.go"
+	labelsSidecar = "gen/manifests/labels-checksums.json"
+	outputFile    = "model_catalog_regional_gen.go"
+	// expectedRegions is hand-maintained on purpose: an upstream tile addition
+	// or removal must be acknowledged here at generate time, together with the
+	// golden tier snapshot in the region package. Do not derive it from the
+	// region table, which would make the count check vacuous.
 	expectedRegions   = 43
 	variantsPerRegion = 2 // each region ships two precision variants
 	regionalPerFam    = expectedRegions * variantsPerRegion

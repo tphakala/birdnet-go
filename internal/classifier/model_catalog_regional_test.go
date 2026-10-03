@@ -11,9 +11,26 @@ import (
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
 )
 
+// regionalPrecisionsPerTile is how many precision builds the generator emits for
+// each region slug.
+const regionalPrecisionsPerTile = 2
+
 // regionalTilesPerFamily is how many region-sliced variants the generator emits
-// per family: 43 region slugs, each with two precision builds.
-const regionalTilesPerFamily = 86
+// per family: every slug in the embedded region table, once per precision build.
+// Both families share one slug set (TestCrossFamilyGeometryIdentity), so the
+// BirdNET v3.0 table stands for both. The tile set itself is pinned by the
+// golden tier snapshot in the region package, not by a count here.
+var regionalTilesPerFamily = regionalPrecisionsPerTile * regionTileCount()
+
+// regionTileCount returns the number of slugs in the embedded BirdNET v3.0
+// region table, or 0 when the table is missing so every count assertion fails.
+func regionTileCount() int {
+	tbl, ok := region.TableForRepo("tphakala/BirdNET-v3.0-Models")
+	if !ok {
+		return 0
+	}
+	return len(tbl.Regions)
+}
 
 // allowedRegionalPrecisions is the set of normalized precisions a regional
 // variant may carry. "int8-arm" is normalized to "int8" at generation time so

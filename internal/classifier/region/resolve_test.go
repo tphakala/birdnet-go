@@ -69,8 +69,8 @@ func TestResolve(t *testing.T) {
 			wantTop: "andes", wantTier: TierRegional, ambiguous: true, runnerUp: "amazonia",
 		},
 		{
-			// The three tropical Africa tiles: a capital deep inside each one
-			// resolves to it, not to a neighbouring tile.
+			// The three tropical Africa tiles: a capital inside each one
+			// resolves to it.
 			name: "accra resolves to west-africa", lat: 5.6, lon: -0.19,
 			wantTop: "west-africa", wantTier: TierRegional,
 		},

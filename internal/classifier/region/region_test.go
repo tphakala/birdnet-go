@@ -8,9 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// expectedTileCount is the number of regional tiles each family publishes.
-const expectedTileCount = 43
-
 // TestTablesLoad confirms both embedded snapshots parse, validate, and describe
 // the two expected families.
 func TestTablesLoad(t *testing.T) {
@@ -24,7 +21,7 @@ func TestTablesLoad(t *testing.T) {
 		require.True(t, ok, "table for %s must be embedded", repo)
 		assert.Equal(t, snapshotSchema, tbl.Schema, "schema version")
 		assert.Equal(t, repo, tbl.Repo, "self-describing repo id")
-		assert.Len(t, tbl.Regions, expectedTileCount, "tile count for %s", repo)
+		assert.Len(t, tbl.Regions, len(goldenTiers), "tile count for %s matches the golden tier snapshot", repo)
 	}
 }
 
