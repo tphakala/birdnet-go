@@ -5,6 +5,7 @@ This guide covers common RTSP streaming issues and their solutions in BirdNET-Go
 ## Table of Contents
 
 - [Common RTSP Issues](#common-rtsp-issues)
+- [Using `.local` (mDNS) hostnames in containers](#using-local-mdns-hostnames-in-containers)
 - [Health Monitoring Configuration](#health-monitoring-configuration)
 - [Advanced FFmpeg Parameters](#advanced-ffmpeg-parameters)
 - [Camera-Specific Issues](#camera-specific-issues)
@@ -41,6 +42,38 @@ Network issues, authentication problems, or incompatible camera settings causing
 
 **Solution:**
 Check network connectivity, verify RTSP credentials, and adjust health monitoring thresholds.
+
+## Using `.local` (mDNS) hostnames in containers
+
+A camera or microphone addressed as `rtsp://cam.local/...` is resolved by multicast DNS, which a container cannot do itself. The image resolves `.local` names through the host's avahi-daemon, so two read-only host directories are mounted into the container:
+
+| Mount                                       | Purpose                                                                                                                                                                             |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-v /run/avahi-daemon:/run/avahi-daemon:ro` | Avahi's simple socket: `.local` name resolution (FFmpeg, MQTT, webhooks, native ingest).                                                                                            |
+| `-v /run/dbus:/run/dbus:ro`                 | The host's system D-Bus: DNS-SD service discovery (browsing `_rtsp._tcp` services and reading their TXT records) through Avahi's D-Bus API, which the simple socket does not offer. |
+
+Rules that apply to both:
+
+- Mount the **directory**, not the socket file. Restarting avahi-daemon or dbus creates a new socket inode that a file bind mount never follows.
+- Always `:ro`, and never add `:z` or `:Z`: they relabel the host's directory and can stop avahi-daemon or dbus from using it.
+- Without avahi-daemon on the host, `.local` names cannot be resolved in the container, even if the host does it through systemd-resolved (`MulticastDNS=yes`), because the container cannot reach resolved's stub. Install `avahi-daemon` (and set `MulticastDNS=no` in resolved to avoid two responders), or use the device's IP address or a router DNS name with a DHCP reservation. Names that unicast DNS already resolves keep working either way.
+
+How each deployment gets the mounts:
+
+- **Docker (`install.sh`):** added to the unit on install and update when the host socket exists (`/run/avahi-daemon/socket`, `/run/dbus/system_bus_socket`). Re-run the update after installing avahi.
+- **Docker compose and Portainer:** enabled by default in the compose files. Rootful Docker creates a missing directory (harmless); rootless Docker without avahi or D-Bus must remove the line, or the container will not start.
+- **Podman:** shipped commented out in the quadlet and compose files, because Podman refuses to start a container whose bind source is missing. `podman-install.sh` enables them when the sockets exist (re-run it if avahi is removed). D-Bus authenticates by uid, so under rootless Podman it only works with `UserNS=keep-id` (`userns_mode: keep-id` in compose). Without keep-id the client fails with `Failed to create client object: An unexpected D-Bus error occurred`; `podman-install.sh` therefore enables the D-Bus line only together with keep-id.
+- **Unraid:** the two advanced path settings in the template.
+
+Security trade-off of the D-Bus mount: the container can talk to any system bus service its uid is allowed to call by D-Bus policy and polkit, as an ordinary uid with no active session. That is more exposure than the Avahi socket alone. To opt out, remove the `/run/dbus` line; `.local` name resolution does not depend on it. SELinux-enforcing hosts (Fedora, RHEL) are expected to deny the container access to both sockets; the options are `SecurityLabelDisable=true` (drops SELinux separation for the container, at your own risk), a local policy module, or IP addresses.
+
+Check from the host:
+
+```bash
+docker exec birdnet-go getent hosts cam.local
+```
+
+If it prints nothing, the stream health view and the log show a DNS failure with a `.local` specific hint. Restart the container if the host's directory was recreated (for example after reinstalling avahi).
 
 ## Health Monitoring Configuration
 

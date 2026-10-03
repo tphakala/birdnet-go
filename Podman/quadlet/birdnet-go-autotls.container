@@ -8,6 +8,11 @@ Image=ghcr.io/tphakala/birdnet-go:nightly
 ContainerName=birdnet-go-autotls
 Volume=./config:/config
 Volume=./data:/data
+# Host mounts for .local names and DNS-SD discovery (opt-in): uncomment only when the host
+# has avahi and D-Bus; podman-install.sh does this. D-Bus needs UserNS=keep-id. Never :z or :Z.
+# See doc/wiki/rtsp-troubleshooting.md.
+#Volume=/run/avahi-daemon:/run/avahi-daemon:ro
+#Volume=/run/dbus:/run/dbus:ro
 Volume=./certs:/certs
 # AutoTLS binds the ACME HTTP-01 + HTTP->HTTPS redirect listener on 8080 and
 # HTTPS on 8443 inside the container, so map the privileged host ports to those

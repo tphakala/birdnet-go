@@ -236,6 +236,10 @@ environment:
 
 The health check requires the web interface to be accessible on port 8080. If you've changed the port in `config.yaml`, this is expected and can be ignored as long as the application works.
 
+### `.local` hostnames do not resolve
+
+The compose files mount the host's `/run/avahi-daemon` (name resolution) and `/run/dbus` (DNS-SD service discovery) read-only. Without them the container cannot resolve `.local` names. Check with `docker exec birdnet-go getent hosts cam.local`. Rootless Docker without avahi or D-Bus on the host must remove the matching volume line. Never add `:z` or `:Z`. Details, the D-Bus security trade-off and how to opt out: [RTSP troubleshooting](../doc/wiki/rtsp-troubleshooting.md#using-local-mdns-hostnames-in-containers).
+
 ### Viewing detailed startup logs
 
 The startup wrapper saves detailed logs to `/tmp/birdnet-startup.log` inside the container:
@@ -273,6 +277,8 @@ services:
       - ./config:/config
       - ./data:/data
       - /dev/snd:/dev/snd # For audio capture
+      - /run/avahi-daemon:/run/avahi-daemon:ro # Host Avahi, for .local hostnames
+      - /run/dbus:/run/dbus:ro # Host system D-Bus, for DNS-SD service discovery
 
     ports:
       - "8080:8080"

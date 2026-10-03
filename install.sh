@@ -5190,6 +5190,17 @@ generate_systemd_service_content() {
         thermal_volume_line="-v /sys/class/thermal:/sys/class/thermal"
     fi
 
+    # Host mDNS sockets, mounted read-only so the container's libnss-mdns can resolve
+    # .local names (Avahi socket) and DNS-SD discovery can use Avahi's D-Bus API (system
+    # bus). Each mount is the socket's directory, not the socket file: restarting the
+    # owning service creates a new socket inode that a file bind mount would never
+    # follow. Always :ro and never :z or :Z, which would relabel the host's directory.
+    # Gated per socket so a missing source never gets created as a root-owned directory,
+    # and re-detected on every regenerate. See doc/wiki/rtsp-troubleshooting.md.
+    local avahi_volume_line dbus_volume_line
+    avahi_volume_line=$(host_socket_mount /run/avahi-daemon/socket)
+    dbus_volume_line=$(host_socket_mount /run/dbus/system_bus_socket)
+
     # External media mount: host /mnt/birdnet-go/external -> container /external
     # Uses rslave propagation; read-write is the Docker default and not specified explicitly.
     # Enables hot-plug of USB/SD/fileshare media mounted under the host directory.
@@ -5266,6 +5277,8 @@ ${audio_env_line:+    ${audio_env_line} \\
 }    -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
 ${thermal_volume_line:+    ${thermal_volume_line} \\
+}${avahi_volume_line:+    ${avahi_volume_line} \\
+}${dbus_volume_line:+    ${dbus_volume_line} \\
 }    ${external_media_line} \\
     ${BIRDNET_GO_IMAGE}
 # Cleanup tasks on stop
@@ -5298,6 +5311,13 @@ _extract_bind_addr() {
 # It must be called before check_systemd_service / add_systemd_config on the
 # update and reconfigure paths. Sets globals WEB_PORT, BIND_TLS_PORTS, BIND_METRICS_PORT,
 # and CONFIGURED_TZ.
+#
+# The read-only Avahi and D-Bus mounts (-v /run/avahi-daemon:/run/avahi-daemon:ro and
+# -v /run/dbus:/run/dbus:ro) are deliberately not parsed or restored: they are
+# re-detected from host state (host_socket_mount) on every
+# regenerate. The first update after the mount was introduced therefore rewrites the unit
+# once to add it (same one-time exception as the 443:8443 mapping above); later updates
+# on an unchanged host are byte-identical again.
 
 # Read a systemd unit file, falling back to sudo when the file exists but is not readable
 # by the invoking user (root-owned mode 600 units, GitHub #3950 - a silent read failure
@@ -6537,6 +6557,18 @@ has_intel_gpu() {
         fi
     done
     return 1  # False - no Intel render node
+}
+
+# Print "-v DIR:DIR:ro" for the directory holding the given host socket, or nothing
+# when the socket does not exist. Gate on the socket (-S), not the directory, so a
+# leftover empty directory does not count. Always returns 0 (safe under set -e).
+host_socket_mount() {
+    local socket="$1" dir
+    dir=$(dirname "$socket")
+    if [ -S "$socket" ]; then
+        printf -- '-v %s:%s:ro' "$dir" "$dir"
+    fi
+    return 0
 }
 
 # Function to check if system is a Raspberry Pi
@@ -7832,6 +7864,11 @@ if check_mdns; then
     print_message "🐦 Also available at http://${HOSTNAME}.local:${WEB_PORT}" "$GREEN"
 else
     log_message "INFO" "mDNS not available"
+fi
+
+# Container mDNS mounts follow the same host state, so log them as part of the mDNS status
+if [ -z "$(host_socket_mount /run/avahi-daemon/socket)" ] || [ -z "$(host_socket_mount /run/dbus/system_bus_socket)" ]; then
+    log_message "INFO" "Host avahi or system D-Bus socket not found: .local stream URLs and DNS-SD discovery will not work inside the container until avahi-daemon is installed and the install/update is re-run"
 fi
 
 # Show service diagnostics
