@@ -73,7 +73,7 @@ Check from the host:
 docker exec birdnet-go getent hosts cam.local
 ```
 
-If it prints nothing, the stream health view and the log show a DNS failure with a `.local` specific hint. Restart the container if the host's directory was recreated (for example after reinstalling avahi).
+If it prints nothing, FFmpeg streams show a DNS failure with a `.local` specific hint in the stream health view and the log. Restart the container if the host's directory was recreated (for example after reinstalling avahi).
 
 ## Health Monitoring Configuration
 

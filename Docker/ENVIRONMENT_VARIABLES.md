@@ -238,7 +238,7 @@ The health check requires the web interface to be accessible on port 8080. If yo
 
 ### `.local` hostnames do not resolve
 
-The compose files mount the host's `/run/avahi-daemon` (name resolution) and `/run/dbus` (DNS-SD service discovery) read-only. Without them the container cannot resolve `.local` names. Check with `docker exec birdnet-go getent hosts cam.local`. Rootless Docker without avahi or D-Bus on the host must remove the matching volume line. Never add `:z` or `:Z`. Details, the D-Bus security trade-off and how to opt out: [RTSP troubleshooting](../doc/wiki/rtsp-troubleshooting.md#using-local-mdns-hostnames-in-containers).
+The compose files mount the host's `/run/avahi-daemon` (name resolution) and `/run/dbus` (DNS-SD service discovery) read-only. Without them the container resolves `.local` names only through unicast DNS (a router that serves them). Check with `docker exec birdnet-go getent hosts cam.local`. Rootless Docker without avahi or D-Bus on the host must remove the matching volume line. Never add `:z` or `:Z`. Details, the D-Bus security trade-off and how to opt out: [RTSP troubleshooting](../doc/wiki/rtsp-troubleshooting.md#using-local-mdns-hostnames-in-containers).
 
 ### Viewing detailed startup logs
 

@@ -1731,9 +1731,9 @@ enable_mdns_mounts() {
     if host_socket_present "$avahi_socket"; then
         enable_quadlet_volume "$quadlet" "$(dirname "$avahi_socket")"
         log_message "INFO" "Enabled host Avahi mount in Quadlet unit for .local hostname resolution"
-        print_message "🌐 .local (mDNS) hostnames enabled via the host's avahi-daemon" "$GREEN"
+        print_message "🌐 Host avahi-daemon mount enabled for .local (mDNS) hostnames" "$GREEN"
     else
-        log_message "INFO" "Host avahi-daemon socket not found; .local hostnames will not resolve in the container"
+        log_message "INFO" "Host avahi-daemon socket not found; the container resolves .local hostnames only through unicast DNS"
     fi
     if [ "$uid" != "0" ] && host_socket_present "$dbus_socket" && quadlet_has_keep_id "$quadlet"; then
         enable_quadlet_volume "$quadlet" "$(dirname "$dbus_socket")"

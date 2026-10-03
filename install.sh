@@ -7872,8 +7872,11 @@ else
 fi
 
 # Container mDNS mounts follow the same host state, so log them as part of the mDNS status
-if [ -z "$(host_socket_mount /run/avahi-daemon/socket)" ] || [ -z "$(host_socket_mount /run/dbus/system_bus_socket)" ]; then
-    log_message "INFO" "Host avahi or system D-Bus socket not found: .local stream URLs and DNS-SD discovery will not work inside the container until avahi-daemon is installed and the install/update is re-run"
+if [ -z "$(host_socket_mount /run/avahi-daemon/socket)" ]; then
+    log_message "INFO" "Host avahi-daemon socket not found: the container resolves .local stream URLs only through unicast DNS until avahi-daemon is installed and the install/update is re-run"
+fi
+if [ -z "$(host_socket_mount /run/dbus/system_bus_socket)" ]; then
+    log_message "INFO" "Host system D-Bus socket not found: DNS-SD service discovery will not work inside the container"
 fi
 
 # Show service diagnostics
