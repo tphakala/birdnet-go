@@ -746,8 +746,14 @@ const metaCacheMaxEntries = 20000
 // the one shared cap. Because the memo is append-only (never evicted), once it
 // filled, real species that were not yet memoized stopped being memoized and every
 // later lookup re-scanned the embedded dataset for the process's lifetime. Capping
-// negatives well below the ~15k real species keeps that capacity reserved for them;
-// unknown names past the cap simply go unmemoized, which is the cheap case anyway.
+// negatives well below the ~15k real species keeps that capacity reserved for them.
+//
+// Past the cap an unknown name goes unmemoized, which is NOT cheap: a miss pays the
+// full embedded-dataset scan, measured at ~25-30ms for LookupMeta and ~150-200ms for
+// LookupCommonName. The cap is a memory bound and a guard for the present-entry
+// budget, not a performance win. It does not make an adversarial case worse either:
+// a caller walking DISTINCT unknown names never repeats a key, so it pays that scan
+// on first sight whether or not the result would have been memoized.
 const metaNegCacheMaxEntries = 2000
 
 // metaCacheEntry is a memoized LookupMeta result. found distinguishes a cached
