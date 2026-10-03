@@ -46,6 +46,7 @@
     isNetworkDownloadError,
   } from '$lib/utils/modelsApi';
   import { invalidateModels } from '$lib/stores/models.svelte';
+  import type { RarityFilterSettings } from '$lib/stores/settings';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
@@ -53,6 +54,7 @@
   import ModelVariantPicker from '$lib/desktop/features/settings/components/ModelVariantPicker.svelte';
   import ModelRegionSelector from '$lib/desktop/features/settings/components/ModelRegionSelector.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
+  import RarityBandsEditor from '$lib/desktop/components/forms/RarityBandsEditor.svelte';
   import FalsePositiveFilterControl, {
     type FilterLevel,
   } from '$lib/desktop/components/forms/FalsePositiveFilterControl.svelte';
@@ -67,6 +69,8 @@
     settingsActions,
     birdnetSettings,
     dynamicThresholdSettings,
+    rarityFilterSettings,
+    DEFAULT_RARITY_BANDS,
     realtimeSettings,
     batSettings,
     perchSettings,
@@ -307,6 +311,12 @@
     }
   );
   let falsePositiveFilter = $derived($realtimeSettings?.falsePositiveFilter ?? { level: 0 });
+  let rarityFilter = $derived<RarityFilterSettings>({
+    enabled: $rarityFilterSettings?.enabled ?? false,
+    bands: Array.isArray($rarityFilterSettings?.bands)
+      ? $rarityFilterSettings.bands
+      : DEFAULT_RARITY_BANDS.map(band => ({ ...band })),
+  });
   let bat = $derived(
     $batSettings ?? {
       enabled: false,
@@ -953,6 +963,12 @@
   function updateDynamicThreshold(key: string, value: number | boolean) {
     settingsActions.updateSection('realtime', {
       dynamicThreshold: { ...dynamicThreshold, [key]: value },
+    });
+  }
+
+  function updateRarityFilter(patch: Partial<RarityFilterSettings>) {
+    settingsActions.updateSection('realtime', {
+      rarityFilter: { ...rarityFilter, ...patch },
     });
   }
 
@@ -1925,7 +1941,46 @@
       {/if}
     </SettingsSection>
 
-    <!-- 7. Advanced (collapsed by default) -->
+    <!-- 7. Rarity Filter -->
+    <SettingsSection
+      title={t('settings.main.sections.rarityFilter.title')}
+      description={t('settings.main.sections.rarityFilter.description')}
+      originalData={store.originalData.realtime?.rarityFilter}
+      currentData={store.formData.realtime?.rarityFilter}
+    >
+      <SettingsNote
+        ><span>{t('settings.main.sections.rarityFilter.birdOnlyNote')}</span></SettingsNote
+      >
+      {#if !birdnet?.locationConfigured}
+        <SettingsNote>
+          {#snippet icon()}<AlertTriangle class="size-4 text-[var(--color-warning)]" />{/snippet}
+          <span>{t('settings.main.sections.rarityFilter.locationRequiredNote')}</span>
+        </SettingsNote>
+      {/if}
+
+      <div class="mt-4">
+        <Checkbox
+          checked={rarityFilter.enabled}
+          label={t('settings.main.sections.rarityFilter.enable.label')}
+          helpText={t('settings.main.sections.rarityFilter.enable.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateRarityFilter({ enabled: value })}
+        />
+      </div>
+
+      {#if rarityFilter.enabled}
+        <div class="mt-4">
+          <RarityBandsEditor
+            id="rarity-filter-bands"
+            bands={rarityFilter.bands}
+            onUpdate={bands => updateRarityFilter({ bands })}
+            disabled={store.isLoading || store.isSaving}
+          />
+        </div>
+      {/if}
+    </SettingsSection>
+
+    <!-- 8. Advanced (collapsed by default) -->
     <SettingsSection
       title={t('analysis.advanced.title')}
       description={t('analysis.advanced.description')}

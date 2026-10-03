@@ -55,6 +55,11 @@ type Result struct {
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
 	// used by the datastore to classify non-bird sound classes correctly.
 	RawLabel string
+	// OccurrenceValid is true when Occurrence is a genuine range-filter prediction
+	// rather than the synthetic 0 fallback (no location configured, no range-filter
+	// backend loaded, or no score for the species). Consulted by the rarity filter so
+	// it never mistakes "no data" for "extremely rare" (#3935).
+	OccurrenceValid bool
 
 	// Review status (populated from DB relations when loaded)
 	Verified string

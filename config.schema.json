@@ -1864,6 +1864,39 @@
       "type": "object",
       "description": "RangeFilterSettings contains settings for the range filter"
     },
+    "RarityBand": {
+      "properties": {
+        "maxoccurrence": {
+          "type": "number",
+          "description": "band applies when occurrence \u003c this value, in (0, 1]"
+        },
+        "mindetections": {
+          "type": "integer",
+          "description": "minimum confirmations required in this band"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "RarityBand maps a species' occurrence-probability range to a minimum required detection count, so rarer species need more confirmations."
+    },
+    "RarityFilterSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable rarity-based confirmation filtering"
+        },
+        "bands": {
+          "items": {
+            "$ref": "#/$defs/RarityBand"
+          },
+          "type": "array",
+          "description": "occurrence bands; the tightest band a species falls under applies"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "RarityFilterSettings contains settings for rarity-based confirmation filtering."
+    },
     "RateLimitingConfig": {
       "properties": {
         "enabled": {
@@ -1905,6 +1938,10 @@
         "falsepositivefilter": {
           "$ref": "#/$defs/FalsePositiveFilterSettings",
           "description": "False positive filtering aggressivity settings"
+        },
+        "rarityfilter": {
+          "$ref": "#/$defs/RarityFilterSettings",
+          "description": "Rarity-based confirmation filtering settings"
         },
         "log": {
           "properties": {

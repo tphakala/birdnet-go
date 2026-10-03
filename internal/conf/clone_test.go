@@ -82,6 +82,7 @@ func newPopulatedSettings() *Settings {
 	}
 	s.Realtime.Audio.SoxAudioTypes = []string{"wav", "flac"}
 	s.Realtime.Audio.Equalizer.Filters = []EqualizerFilter{{Type: "HighPass", Frequency: 200}}
+	s.Realtime.RarityFilter.Bands = []RarityBand{{MaxOccurrence: 0.1, MinDetections: 3}}
 
 	s.Realtime.Dashboard.CustomColors = &CustomColors{Primary: "#2563eb"}
 	s.Realtime.Dashboard.Layout.Elements = []DashboardElement{
@@ -213,6 +214,7 @@ func mutateCloneEverywhere(dst *Settings) {
 	dst.Realtime.Audio.Sources[0].Equalizer.Filters[0].Type = mutated
 	dst.Realtime.Audio.SoxAudioTypes[0] = mutated
 	dst.Realtime.Audio.Equalizer.Filters[0].Type = mutated
+	dst.Realtime.RarityFilter.Bands[0].MinDetections = 0
 
 	dst.Realtime.Dashboard.CustomColors.Primary = mutated
 	dst.Realtime.Dashboard.Layout.Elements[0].Banner.Title = mutated
@@ -338,6 +340,8 @@ func assertSourceUnchanged(t *testing.T, src *Settings) {
 	assert.Equal(t, []string{"wav", "flac"}, src.Realtime.Audio.SoxAudioTypes)
 	require.Len(t, src.Realtime.Audio.Equalizer.Filters, 1)
 	assert.Equal(t, "HighPass", src.Realtime.Audio.Equalizer.Filters[0].Type)
+	require.Len(t, src.Realtime.RarityFilter.Bands, 1)
+	assert.Equal(t, 3, src.Realtime.RarityFilter.Bands[0].MinDetections)
 
 	require.NotNil(t, src.Realtime.Dashboard.CustomColors)
 	assert.Equal(t, "#2563eb", src.Realtime.Dashboard.CustomColors.Primary)

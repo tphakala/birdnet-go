@@ -243,6 +243,16 @@ realtime:
     min: 0.20             # dynamic threshold will not go lower than this
     validhours: 24        # number of hours to consider for dynamic confidence
 
+  rarityfilter:
+    enabled: false        # true to require more confirmations for species rare at your location
+    bands:                # occurrence bands; the tightest band a species falls under applies
+      - maxoccurrence: 0.10  # species with occurrence below 10%...
+        mindetections: 3     # ...need at least 3 confirming detections
+      - maxoccurrence: 0.90  # species with occurrence below 90%...
+        mindetections: 2     # ...need at least 2 confirming detections
+    # Species at or above the highest band keep the false positive filter's count.
+    # Requires a location and the range filter; bird models only.
+
   rtsp:
     streams: []           # Audio streams for analysis
     # Example stream configurations:

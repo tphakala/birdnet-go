@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Ohne Filterung wird jede Erkennung über dem Konfidenzschwellenwert sofort akzeptiert. Dies erzeugt typischerweise mehrere Fehlerkennungen pro Tag. Selbst eine niedrige Filterung verbessert die Ergebnisqualität erheblich."
         },
+        "rarityFilter": {
+          "title": "Seltenheitsfilter",
+          "description": "Für Arten, die an Ihrem Standort selten sind, mehr bestätigende Erkennungen verlangen",
+          "birdOnlyNote": "Der Seltenheitsfilter gilt nur für Vogel-Klassifikatoren. Er nutzt die Vorkommenswahrscheinlichkeit jeder Art aus dem Reichweitenfilter und erhöht die vom Falsch-Positiv-Filter verlangte Anzahl an Bestätigungen nur, senkt sie nie.",
+          "locationRequiredNote": "Es ist kein Standort konfiguriert. Der Seltenheitsfilter benötigt einen Standort und den Reichweitenfilter, um zu wissen, wie häufig eine Art ist, und bleibt daher wirkungslos, bis Sie einen festlegen.",
+          "enable": {
+            "label": "Seltenheitsfilter aktivieren",
+            "helpText": "Seltene Arten sind eher eine falsch erkannte häufige Art. Wenn aktiviert, benötigt eine Art, deren Vorkommenswahrscheinlichkeit unter einen der folgenden Bereiche fällt, mindestens so viele bestätigende Erkennungen, bevor sie akzeptiert wird. Jede Bestätigung ist ein Analysefenster, daher erfordern höhere Anzahlen eine höhere Überlappung."
+          }
+        },
         "rangeFilter": {
           "title": "Reichweitenfilter",
           "description": "Erkennungen auf wahrscheinliche Arten in Ihrer geografischen Region beschränken",
@@ -4973,6 +4983,23 @@
       "numberField": {
         "adjustedToMinimum": "Wert auf Minimum angepasst ({value})",
         "adjustedToMaximum": "Wert auf Maximum angepasst ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "Eine Art verwendet den Bereich mit der niedrigsten Vorkommensgrenze, unter die sie fällt; die Reihenfolge der Bereiche spielt daher keine Rolle. Arten auf oder über jeder Grenze benötigen keine zusätzlichen Bestätigungen.",
+        "emptyState": "Keine Bereiche konfiguriert. Fügen Sie mindestens einen Bereich hinzu; der aktivierte Seltenheitsfilter kann ohne Bereiche nicht gespeichert werden.",
+        "bandLabel": "Bereich {number}",
+        "maxOccurrence": {
+          "label": "Vorkommen unter",
+          "helpText": "Gilt für Arten, deren Vorkommenswahrscheinlichkeit an Ihrem Standort unter diesem Wert liegt (0 bis 1)."
+        },
+        "minDetections": {
+          "label": "Erforderliche Bestätigungen",
+          "helpText": "Anzahl bestätigender Erkennungen, bevor eine Erkennung dieser Arten akzeptiert wird."
+        },
+        "addBand": "Bereich hinzufügen",
+        "removeBand": "Bereich {number} entfernen",
+        "lastBandRequired": "Der aktivierte Seltenheitsfilter benötigt mindestens einen Bereich. Deaktivieren Sie den Filter, um alle Bereiche zu entfernen.",
+        "maxBandsReached": "Sie können höchstens {max} Bereiche konfigurieren. Entfernen Sie einen Bereich, um einen weiteren hinzuzufügen."
       },
       "rtsp": {
         "addNewStream": "Neuen RTSP-Stream hinzufügen",

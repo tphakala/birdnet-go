@@ -220,6 +220,15 @@ func setDefaultConfig() {
 	// Level 4 = Strict (RPi 4+ required), Level 5 = Maximum (RPi 4+ required)
 	viper.SetDefault("realtime.falsepositivefilter.level", 0)
 
+	// Rarity filter configuration: opt-in. Species below 10% occurrence need 3
+	// confirmations, below 90% need 2; species at or above 90% match no band and keep
+	// the false positive filter's count.
+	viper.SetDefault("realtime.rarityfilter.enabled", false)
+	viper.SetDefault("realtime.rarityfilter.bands", []map[string]any{
+		{"maxoccurrence": DefaultRarityRareMaxOccurrence, "mindetections": DefaultRarityRareMinDetections},
+		{"maxoccurrence": DefaultRarityUncommonMaxOccurrence, "mindetections": DefaultRarityUncommonMinDetections},
+	})
+
 	// Log configuration
 	viper.SetDefault("realtime.log.enabled", false)
 	viper.SetDefault("realtime.log.path", "birdnet.txt")

@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Senza filtraggio, qualsiasi rilevamento sopra la soglia di confidenza viene accettato immediatamente. Questo produce tipicamente diversi falsi positivi al giorno. Anche un filtraggio basso migliora significativamente la qualità dei risultati."
         },
+        "rarityFilter": {
+          "title": "Filtro Rarità",
+          "description": "Richiedi più rilevamenti di conferma per le specie rare nella tua posizione",
+          "birdOnlyNote": "Il filtro rarità si applica solo ai classificatori di uccelli. Usa la probabilità di presenza di ogni specie fornita dal filtro intervallo e aumenta soltanto il numero di conferme richiesto dal filtro falsi positivi, senza mai ridurlo.",
+          "locationRequiredNote": "Nessuna posizione configurata. Il filtro rarità ha bisogno di una posizione e del filtro intervallo per sapere quanto è comune una specie, quindi non ha effetto finché non ne imposti una.",
+          "enable": {
+            "label": "Attiva filtro rarità",
+            "helpText": "Una specie rara è più spesso una specie comune identificata in modo errato. Se attivo, una specie la cui probabilità di presenza rientra sotto una delle fasce seguenti richiede almeno quel numero di rilevamenti di conferma prima di essere accettata. Ogni conferma è una finestra di analisi, quindi valori più alti richiedono una sovrapposizione maggiore."
+          }
+        },
         "rangeFilter": {
           "title": "Filtro Intervallo",
           "description": "Limita il rilevamento alle specie probabili nella tua regione geografica",
@@ -4973,6 +4983,23 @@
       "numberField": {
         "adjustedToMinimum": "Valore aggiustato al minimo ({value})",
         "adjustedToMaximum": "Valore aggiustato al massimo ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "Una specie usa la fascia con il limite di presenza più basso sotto cui ricade, quindi l'ordine delle fasce non conta. Le specie pari o superiori a ogni limite non richiedono conferme aggiuntive.",
+        "emptyState": "Nessuna fascia configurata. Aggiungi almeno una fascia; il filtro rarità attivo non può essere salvato senza fasce.",
+        "bandLabel": "Fascia {number}",
+        "maxOccurrence": {
+          "label": "Presenza inferiore a",
+          "helpText": "Si applica alle specie la cui probabilità di presenza nella tua posizione è inferiore a questo valore (da 0 a 1)."
+        },
+        "minDetections": {
+          "label": "Conferme richieste",
+          "helpText": "Numero di rilevamenti di conferma necessari prima che un rilevamento di queste specie venga accettato."
+        },
+        "addBand": "Aggiungi fascia",
+        "removeBand": "Rimuovi fascia {number}",
+        "lastBandRequired": "Il filtro rarità attivo richiede almeno una fascia. Disattiva il filtro per rimuovere tutte le fasce.",
+        "maxBandsReached": "Puoi configurare al massimo {max} fasce. Rimuovi una fascia per aggiungerne un'altra."
       },
       "rtsp": {
         "addNewStream": "Aggiungi Nuovo Flusso RTSP",

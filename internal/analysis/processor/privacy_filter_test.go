@@ -87,7 +87,7 @@ func TestShouldDiscardDetection_PrivacyFilterBoundary(t *testing.T) {
 			}
 			item := newPrivacyFilterDetection(source, tt.birdTime)
 
-			discard, reason := p.shouldDiscardDetection(item, settings, 1)
+			discard, reason := p.shouldDiscardDetection(item, settings, minDetectionRequirement{count: 1})
 
 			assert.Equal(t, tt.wantDiscard, discard)
 			assert.Equal(t, tt.wantReason, reason)
@@ -136,7 +136,7 @@ func TestShouldDiscardDetection_RecordsTriggerMetric(t *testing.T) {
 			// The bird shares the human's chunk (equal timestamps), so it is discarded.
 			item := newPrivacyFilterDetection(source, humanTime)
 
-			discard, reason := p.shouldDiscardDetection(item, settings, 1)
+			discard, reason := p.shouldDiscardDetection(item, settings, minDetectionRequirement{count: 1})
 			require.True(t, discard, "a human voice at/after the bird must discard")
 			assert.Equal(t, "privacy filter", reason)
 
