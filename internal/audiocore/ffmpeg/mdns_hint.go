@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
@@ -28,11 +29,24 @@ type mdnsEnv struct {
 var detectEnv = detectMDNSEnv
 
 func detectMDNSEnv() mdnsEnv {
-	env := mdnsEnv{inContainer: sysinfo.IsContainer()}
-	if fi, err := os.Stat(avahiSocketPath); err == nil && fi.Mode()&os.ModeSocket != 0 {
-		env.avahiSocketPresent = true
+	envType, _ := sysinfo.GetEnvironment()
+	return mdnsEnv{
+		inContainer:        mdnsContainerEnv(envType),
+		avahiSocketPresent: isUnixSocket(avahiSocketPath),
 	}
-	return env
+}
+
+// mdnsContainerEnv reports whether envType is a Docker or Podman container, where
+// the host's Avahi daemon is reached through a bind mount. LXC and nspawn installs
+// run BirdNET-Go natively and resolve .local names like any other Linux host.
+func mdnsContainerEnv(envType string) bool {
+	return envType == sysinfo.EnvDocker || envType == sysinfo.EnvPodman
+}
+
+// isUnixSocket reports whether path exists and is a Unix socket.
+func isUnixSocket(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.Mode()&os.ModeSocket != 0
 }
 
 // isMDNSHost reports whether host is a .local (mDNS) name. The suffix match is
@@ -60,14 +74,27 @@ func mdnsTroubleshooting(host string, env mdnsEnv) []string {
 		}
 	case env.inContainer:
 		return []string{
-			fmt.Sprintf("The host's Avahi daemon is reachable but did not find '%s'", host),
+			fmt.Sprintf("The host's Avahi socket is mounted but the lookup of '%s' failed: the device was not found, or access to the socket was denied (for example by SELinux)", host),
 			"Check that the device is powered on and on the same network segment as the host",
 			fmt.Sprintf("On the host, run: avahi-resolve -n %s", host),
+			mdnsDocsHint,
 		}
 	default:
+		return nativeMDNSSteps(host, runtime.GOOS)
+	}
+}
+
+// nativeMDNSSteps returns the .local steps for a native install. The avahi-daemon,
+// libnss-mdns and getent steps apply only to Linux; other systems resolve .local
+// names themselves.
+func nativeMDNSSteps(host, goos string) []string {
+	if goos != "linux" {
 		return []string{
-			fmt.Sprintf("'%s' is a .local (mDNS) name: check that avahi-daemon is running and libnss-mdns is installed on this system", host),
-			fmt.Sprintf("Test resolution: getent hosts %s", host),
+			fmt.Sprintf("'%s' is a .local (mDNS) name: check that the device is powered on and on the same network as this computer", host),
 		}
+	}
+	return []string{
+		fmt.Sprintf("'%s' is a .local (mDNS) name: check that avahi-daemon is running and libnss-mdns is installed on this system", host),
+		fmt.Sprintf("Test resolution: getent hosts %s", host),
 	}
 }

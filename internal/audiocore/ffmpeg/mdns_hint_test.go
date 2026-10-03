@@ -1,6 +1,7 @@
 package ffmpeg
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -39,11 +40,17 @@ func TestMDNSTroubleshooting_ByEnvironment(t *testing.T) {
 	}{
 		{"container without socket", mdnsEnv{inContainer: true}, mount},
 		{"container with socket", mdnsEnv{inContainer: true, avahiSocketPresent: true}, "avahi-resolve -n cam.local"},
+		// The socket file existing does not prove the daemon is usable (SELinux can deny the connect).
+		{"container with socket names denied access", mdnsEnv{inContainer: true, avahiSocketPresent: true}, "access to the socket was denied"},
+		{"container with socket points to the docs", mdnsEnv{inContainer: true, avahiSocketPresent: true}, "RTSP troubleshooting wiki"},
 		{"native", mdnsEnv{}, "getent hosts cam.local"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			if tt.name == "native" && runtime.GOOS != "linux" {
+				t.Skip("native avahi and getent steps are Linux only")
+			}
 			joined := strings.Join(mdnsTroubleshooting("cam.local", tt.env), "\n")
 			assert.Contains(t, joined, tt.want)
 			assert.Equal(t, tt.name == "container without socket", strings.Contains(joined, mount), "mount text only without socket")
