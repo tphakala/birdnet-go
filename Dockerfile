@@ -201,6 +201,17 @@ ARG TARGETPLATFORM
 # Install ALSA library and SOX for audio processing, tini (a tiny init run as
 # PID 1, see the final-stage ENTRYPOINT note), and other system utilities for
 # debugging.
+#
+# libnss-mdns lets libc getaddrinfo (FFmpeg) and Go's cgo resolver resolve .local
+# names, but it does no multicast itself: it asks the HOST's avahi-daemon over
+# /run/avahi-daemon/socket, so the deployment must bind-mount the host's
+# /run/avahi-daemon read-only. --no-install-recommends keeps avahi-daemon (a
+# Recommends of libnss-mdns) out of the image. The hosts line is forced after the
+# install (the package postinst writes its own variant) to
+# "files mdns4_minimal dns": no [NOTFOUND=return], so a .local name Avahi does not
+# know still falls through to unicast DNS exactly as before. The grep fails the
+# build if the line is not what we expect (sed would silently no-op without a
+# hosts: line).
 RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     adduser \
     ca-certificates \
@@ -224,6 +235,9 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     bash-completion \
     gosu \
     tini \
+    libnss-mdns \
+    && sed -i -E 's/^hosts:[[:space:]].*$/hosts:          files mdns4_minimal dns/' /etc/nsswitch.conf \
+    && grep -Eqx 'hosts:[[:space:]]+files mdns4_minimal dns' /etc/nsswitch.conf \
     && rm -rf /var/lib/apt/lists/*
 
 # ONNX Runtime (used by all arches; arm64 relies on it exclusively). onnxruntime
