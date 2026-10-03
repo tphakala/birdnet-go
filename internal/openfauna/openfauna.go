@@ -767,19 +767,23 @@ var (
 	metaNegCacheCount atomic.Int64 // absent-entry count guarding the negative cap
 )
 
-// storeMetaCache records a LookupMeta result under the soft cap. A new key is only
-// added while under metaCacheMaxEntries: a slot is reserved up front and rolled back
-// on overflow or when a concurrent writer created the key first, so the memo stays
-// bounded and accurate under concurrent distinct-key lookups.
+// storeMetaCache records a LookupMeta result under the soft caps. Which cap applies
+// depends on the result: a present entry is admitted while under metaCacheMaxEntries,
+// an absent one while under metaNegCacheMaxEntries (see those constants). A slot is
+// reserved up front in the matching counter and rolled back on overflow or when a
+// concurrent writer created the key first, so the memo stays bounded and accurate
+// under concurrent distinct-key lookups.
 //
 // This lock-free reserve-then-LoadOrStore is exact WITHOUT a mutex because metaCache
 // is append-only: the immutable dataset means an entry is never updated in place or
 // deleted (unlike the guide cache, whose updates + invalidation/eviction race stores
 // and require a write lock). With only insert-if-absent, among N goroutines racing
 // the same new key exactly one wins the LoadOrStore and keeps its reservation (which
-// matches the one stored entry); every loser rolls back. So metaCacheCount always
-// equals the number of stored entries — a "winner also decrements" change would
-// UNDERcount. See TestStoreMetaCache_CountMatchesEntriesUnderConcurrency.
+// matches the one stored entry); every loser rolls back. Each store touches exactly
+// one of the two counters, so the invariant is on their SUM:
+// metaCacheCount + metaNegCacheCount always equals the number of stored entries, and
+// neither counter alone does. A "winner also decrements" change would UNDERcount.
+// See TestStoreMetaCache_CountMatchesEntriesUnderConcurrency, which asserts that sum.
 func storeMetaCache(key string, e *metaCacheEntry) {
 	if _, loaded := metaCache.Load(key); loaded {
 		return
