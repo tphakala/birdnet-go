@@ -240,7 +240,7 @@ func TestApplyRangeFilterConfigForUninstall_RepointsWhenOtherGeomodelInstalled(t
 
 	updated := &conf.Settings{}
 	updated.BirdNET.RangeFilter.Model = "v3"
-	updated.BirdNET.RangeFilter.ModelPath = "/models/shared/geomodel_v3.onnx"
+	updated.BirdNET.RangeFilter.ModelPath = filepath.Join(modelsDir, sharedDirName, "geomodel_v3.onnx")
 	updated.BirdNET.RangeFilter.PassUnmappedSpecies = true
 
 	mm.applyRangeFilterConfigForUninstall(updated, &removed)
@@ -319,12 +319,13 @@ func TestApplyRangeFilterConfigForUninstall_ClearsWhenSurvivorHasNoGeomodelVersi
 	setActiveCatalog(withEntries)
 	t.Cleanup(func() { setActiveCatalog(nil) })
 
-	mm := NewModelManager(t.TempDir(), nil, &conf.Settings{})
+	modelsDir := t.TempDir()
+	mm := NewModelManager(modelsDir, nil, &conf.Settings{})
 	mm.installed["geo-versionless"] = InstalledModel{CatalogID: "geo-versionless"}
 
 	updated := &conf.Settings{}
 	updated.BirdNET.RangeFilter.Model = "v3"
-	updated.BirdNET.RangeFilter.ModelPath = "/models/shared/geomodel_v3.onnx"
+	updated.BirdNET.RangeFilter.ModelPath = filepath.Join(modelsDir, sharedDirName, "geomodel_v3.onnx")
 	updated.BirdNET.RangeFilter.PassUnmappedSpecies = true
 
 	mm.applyRangeFilterConfigForUninstall(updated, &removed)
