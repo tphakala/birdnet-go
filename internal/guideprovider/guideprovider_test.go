@@ -165,10 +165,18 @@ func (p *closableProvider) Close() error {
 //
 // The window is narrow, so the two calls are released from a common gate over many
 // iterations; the package's goleak check catches a refresh loop that outlives Close.
+//
+// Detection is probabilistic, and the iteration count is tuned, not arbitrary:
+// measured against the pre-fix code under -race, 300 reproduced the race on every
+// run while 150 caught it 3 times in 4 and 60 only 2 in 3. Do not lower it without
+// re-measuring — a guard that misses the regression a quarter of the time is worse
+// than the seconds it saves.
 func TestGuideCache_StartCloseRace(t *testing.T) {
 	t.Parallel()
 
-	for range 300 {
+	const iterations = 300
+
+	for range iterations {
 		c := NewGuideCache(newFakeStore(), noopMetrics{})
 
 		gate := make(chan struct{})
@@ -807,7 +815,13 @@ func TestGuideCache_PreFetchWarmsThenIsReadable(t *testing.T) {
 
 	// Wait for the background fetches to land before the cleanup Close (which
 	// would otherwise cancel in-flight warms via shouldQuit).
-	require.Eventually(t, func() bool { return prov.callCount() >= 2 }, 2*time.Second, 5*time.Millisecond)
+	// The provider is an in-memory fake, so the only thing being waited on is the warm
+	// goroutine getting scheduled - there is no I/O that could legitimately be slow.
+	// Eventually returns as soon as the condition holds (polled every 5ms), so a
+	// generous ceiling costs a green run nothing and only sets how much CPU starvation
+	// is tolerated before the suite calls it a failure. 2s flaked under -race whenever
+	// the machine was busy with another build.
+	require.Eventually(t, func() bool { return prov.callCount() >= 2 }, 30*time.Second, 5*time.Millisecond)
 	assert.Positive(t, store.count(), "prefetched guides are persisted")
 }
 
@@ -826,7 +840,13 @@ func TestGuideCache_WarmForSpeciesUpdatesPopulationRatio(t *testing.T) {
 	c.WarmForSpecies([]string{"Turdus merula", "Corvus corone", "  "}) // blank is skipped
 	// Wait for the warm goroutine to fetch both; it then runs
 	// updateCachePopulationRatio before finishing (drained by the cleanup Close).
-	require.Eventually(t, func() bool { return prov.callCount() >= 2 }, 2*time.Second, 5*time.Millisecond)
+	// The provider is an in-memory fake, so the only thing being waited on is the warm
+	// goroutine getting scheduled - there is no I/O that could legitimately be slow.
+	// Eventually returns as soon as the condition holds (polled every 5ms), so a
+	// generous ceiling costs a green run nothing and only sets how much CPU starvation
+	// is tolerated before the suite calls it a failure. 2s flaked under -race whenever
+	// the machine was busy with another build.
+	require.Eventually(t, func() bool { return prov.callCount() >= 2 }, 30*time.Second, 5*time.Millisecond)
 }
 
 func TestGuideCache_WarmForSpeciesGuards(t *testing.T) {
