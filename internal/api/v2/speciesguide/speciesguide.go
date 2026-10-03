@@ -160,17 +160,8 @@ type Handler struct {
 	// invalidates it immediately.
 	guideRarityMu     sync.RWMutex
 	guideRarityExpiry time.Time
-	guideRarityScores map[string]float64
+	guideRarityView   *guideRarityData
 	guideRarityLocKey string
-
-	// geomodelCoverage* memoize the set of scientific names the primary geomodel can
-	// classify (lowercased), so the expectedness badge does not linear-scan the full
-	// label set on every guide request for a species absent from today's probable
-	// list. The label set is immutable for a loaded model, so the set is built once
-	// and keyed on the classifier pointer; a model reload (new pointer) rebuilds it.
-	geomodelCoverageMu  sync.RWMutex
-	geomodelCoverageBn  labelSource
-	geomodelCoverageSet map[string]struct{}
 }
 
 // New creates the species guide domain handler around the shared core.
@@ -1016,12 +1007,12 @@ func (c *Handler) guideExpectedness(scientificName string, settings *conf.Settin
 	if proc == nil || proc.Bn == nil {
 		return ""
 	}
-	scores := c.probableSpeciesScores(proc.Bn, guideRarityLocationKey(settings))
-	if scores == nil {
+	rarity := c.probableSpeciesScores(proc.Bn, guideRarityLocationKey(settings))
+	if rarity == nil {
 		return ""
 	}
-	key := strings.ToLower(detection.ExtractScientificName(scientificName))
-	if score, ok := scores[key]; ok {
+	key := guideSpeciesKey(scientificName)
+	if score, ok := rarity.scores[key]; ok {
 		return scoreToExpectedness(score)
 	}
 	// Not in today's probable list. If the geomodel covers the species at all, its
@@ -1029,7 +1020,7 @@ func (c *Handler) guideExpectedness(scientificName string, settings *conf.Settin
 	// zero score (which lands on "unexpected" — the bottom band). If the geomodel
 	// does not cover it there is no probability to reason about, so omit the badge
 	// rather than implying the species is unexpected here.
-	if c.speciesHasGeomodelCoverage(proc.Bn, scientificName) {
+	if _, covered := rarity.coverage[key]; covered {
 		return scoreToExpectedness(0)
 	}
 	return ""
@@ -1055,7 +1046,50 @@ func guideRarityLocationKey(settings *conf.Settings) string {
 // (double-checked locking + location-keyed invalidation) unit-testable without a
 // loaded geomodel; *classifier.Orchestrator satisfies it.
 type probableSpeciesPredictor interface {
-	GetProbableSpecies(date time.Time, week float32) ([]classifier.SpeciesScore, error)
+	GetRarityContext(date time.Time) (classifier.RarityContext, error)
+}
+
+// guideRarityData is the memoized rarity view: today's probable-species scores and
+// the vocabulary coverage is judged against. Both come from ONE RarityContext so
+// they always describe the same range-filter instance - the documented reason that
+// API exists, rather than reassembling them from calls that can observe different
+// models.
+type guideRarityData struct {
+	scores   map[string]float64
+	coverage map[string]struct{}
+}
+
+// guideSpeciesKey normalizes a label or scientific name to the memo's key form.
+func guideSpeciesKey(s string) string {
+	return strings.ToLower(detection.ExtractScientificName(s))
+}
+
+// guideCoverageSet returns the lowercased scientific names the ACTIVE range filter
+// can produce an occurrence probability for.
+//
+// This mirrors internal/api/v2/species.speciesHasGeomodelCoverage. The universal
+// geomodel publishes its own vocabulary (rc.Geomodel), but every other backend is
+// keyed to the classifier's own labels - including the TFLite MData filter that the
+// default BirdNET v2.4 install runs - so rc.ClassifierLabels is the correct
+// vocabulary there, not a degraded approximation. Reading only the geomodel would
+// leave the default install with no vocabulary at all and silently drop the badge.
+//
+// Coverage is a property of an ACTIVE filter: with none loaded the scores are
+// synthetic zeros, so report no coverage rather than granting it to every
+// classifier label and rendering everything "unexpected".
+func guideCoverageSet(rc *classifier.RarityContext) map[string]struct{} {
+	if !rc.FilterActive {
+		return nil
+	}
+	labels := rc.ClassifierLabels
+	if rc.Geomodel != nil && len(rc.Geomodel.Labels) > 0 {
+		labels = rc.Geomodel.Labels
+	}
+	set := make(map[string]struct{}, len(labels))
+	for _, label := range labels {
+		set[guideSpeciesKey(label)] = struct{}{}
+	}
+	return set
 }
 
 // probableSpeciesScores returns a cached map of normalized scientific name ->
@@ -1063,15 +1097,15 @@ type probableSpeciesPredictor interface {
 // caller's location key, from guideRarityLocationKey) differs from the one the
 // memo was built for. Returns nil when the prediction is unavailable (caller omits
 // expectedness).
-func (c *Handler) probableSpeciesScores(bn probableSpeciesPredictor, locKey string) map[string]float64 {
+func (c *Handler) probableSpeciesScores(bn probableSpeciesPredictor, locKey string) *guideRarityData {
 	// Fast path: while the memoized map is fresh AND was computed for the current
 	// location, a concurrent burst of guide requests shares it under a read lock
 	// without serializing on the rebuild.
 	c.guideRarityMu.RLock()
-	if c.guideRarityScores != nil && c.guideRarityLocKey == locKey && time.Now().Before(c.guideRarityExpiry) {
-		scores := c.guideRarityScores
+	if c.guideRarityView != nil && c.guideRarityLocKey == locKey && time.Now().Before(c.guideRarityExpiry) {
+		view := c.guideRarityView
 		c.guideRarityMu.RUnlock()
-		return scores
+		return view
 	}
 	c.guideRarityMu.RUnlock()
 
@@ -1081,8 +1115,8 @@ func (c *Handler) probableSpeciesScores(bn probableSpeciesPredictor, locKey stri
 	// Re-check under the write lock: another goroutine may have rebuilt the map
 	// while we waited for the lock, so only one geomodel prediction runs per
 	// (location, TTL) window.
-	if c.guideRarityScores != nil && c.guideRarityLocKey == locKey && time.Now().Before(c.guideRarityExpiry) {
-		return c.guideRarityScores
+	if c.guideRarityView != nil && c.guideRarityLocKey == locKey && time.Now().Before(c.guideRarityExpiry) {
+		return c.guideRarityView
 	}
 
 	// Anchor on local calendar noon rather than time.Now().Truncate(24h):
@@ -1091,19 +1125,20 @@ func (c *Handler) probableSpeciesScores(bn probableSpeciesPredictor, locKey stri
 	// day-of-year fed to the geomodel correct in every timezone.
 	now := time.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location())
-	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
+	rc, err := bn.GetRarityContext(today)
 	if err != nil {
 		return nil
 	}
 
-	scores := make(map[string]float64, len(speciesScores))
-	for _, ss := range speciesScores {
-		scores[strings.ToLower(detection.ExtractScientificName(ss.Label))] = ss.Score
+	scores := make(map[string]float64, len(rc.Scores))
+	for _, ss := range rc.Scores {
+		scores[guideSpeciesKey(ss.Label)] = ss.Score
 	}
-	c.guideRarityScores = scores
+	view := &guideRarityData{scores: scores, coverage: guideCoverageSet(&rc)}
+	c.guideRarityView = view
 	c.guideRarityLocKey = locKey
 	c.guideRarityExpiry = time.Now().Add(guideRarityTTL)
-	return scores
+	return view
 }
 
 // Rarity score thresholds for the guide expectedness badge. These mirror the
@@ -1115,74 +1150,6 @@ const (
 	rarityThresholdUncommon = 0.2
 	rarityThresholdRare     = 0.05
 )
-
-// labelSource is the minimal view of the geomodel that coverage detection needs: the
-// geomodel's classifiable label set. *classifier.Orchestrator satisfies it; tests
-// supply a fake so the memoization logic is exercisable without a loaded tflite model.
-//
-// This was Labels() (the primary model's label set) until #4357 de-privileged the
-// BirdNET v2.4 primary, removing that accessor. GeomodelLabels() is the faithful
-// replacement: the old comment already described the set as "the geomodel's
-// classifiable vocabulary", and reading the geomodel directly keeps
-// secondary-model-only species (bats) out of it, which is the whole point here.
-// AllLabels() would NOT work - it is the union including secondaries, so bats would
-// wrongly gain an "unexpected" rarity badge.
-type labelSource interface {
-	GeomodelLabels() []string
-}
-
-// speciesHasGeomodelCoverage reports whether the scientific name is in the
-// geomodel's classifiable vocabulary. Secondary-model-only
-// species (e.g. bats) are absent from it and so have no geomodel occurrence
-// probability to base a rarity on. It consults a memoized name set (see
-// geomodelCoverageNames) rather than re-scanning bn.GeomodelLabels() on every call.
-func (c *Handler) speciesHasGeomodelCoverage(bn labelSource, scientificName string) bool {
-	set := c.geomodelCoverageNames(bn)
-	_, ok := set[strings.ToLower(detection.ExtractScientificName(scientificName))]
-	return ok
-}
-
-// geomodelCoverageNames returns the lowercased set of scientific names the geomodel
-// can classify, building it once per loaded model. The label set is immutable
-// for a given classifier, so the result is memoized under geomodelCoverageMu and
-// keyed on the classifier pointer; a model reload swaps the pointer and rebuilds.
-// Lowercasing both sides (here and at lookup) is equivalent to the previous EqualFold
-// comparison for the ASCII-Latin scientific names in the label set and matches how
-// probableSpeciesScores keys its map.
-func (c *Handler) geomodelCoverageNames(bn labelSource) map[string]struct{} {
-	c.geomodelCoverageMu.RLock()
-	if c.geomodelCoverageBn == bn && c.geomodelCoverageSet != nil {
-		set := c.geomodelCoverageSet
-		c.geomodelCoverageMu.RUnlock()
-		return set
-	}
-	c.geomodelCoverageMu.RUnlock()
-
-	c.geomodelCoverageMu.Lock()
-	defer c.geomodelCoverageMu.Unlock()
-	// Re-check under the write lock: another goroutine may have built the set while
-	// we waited, so only one scan runs per loaded model.
-	if c.geomodelCoverageBn == bn && c.geomodelCoverageSet != nil {
-		return c.geomodelCoverageSet
-	}
-	labels := bn.GeomodelLabels()
-	set := make(map[string]struct{}, len(labels))
-	for _, label := range labels {
-		set[strings.ToLower(detection.ExtractScientificName(label))] = struct{}{}
-	}
-	// Do not memoize an empty set: an empty label slice means the model's vocabulary
-	// is not yet available, and caching it (keyed on this bn pointer) would pin an
-	// empty result for the model's lifetime. Return it uncached so a later call —
-	// once labels are populated — rebuilds. On the real path this is unreachable
-	// (expectedness only runs after a successful GetProbableSpecies, which implies a
-	// loaded label set), but the guard keeps the memo self-correcting regardless.
-	if len(set) == 0 {
-		return set
-	}
-	c.geomodelCoverageSet = set
-	c.geomodelCoverageBn = bn
-	return set
-}
 
 // scoreToExpectedness maps a geomodel occurrence score to an expectedness label.
 func scoreToExpectedness(score float64) string {

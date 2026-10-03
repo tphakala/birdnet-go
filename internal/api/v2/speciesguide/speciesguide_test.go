@@ -6,7 +6,6 @@ package speciesguide
 import (
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -71,19 +70,29 @@ func TestScoreToExpectedness(t *testing.T) {
 	}
 }
 
-// fakePredictor is a probableSpeciesPredictor that records how many times
-// GetProbableSpecies was actually invoked, so the memoization can be asserted.
+// fakePredictor supplies a RarityContext and records how many times it was actually
+// requested, so the memoization can be asserted. classifierLabels/geomodel stand in
+// for the two vocabularies a real range filter publishes; filterActive defaults via
+// newFakePredictor so existing tests keep an active filter.
 type fakePredictor struct {
-	mu     sync.Mutex
-	calls  int
-	scores []classifier.SpeciesScore
+	mu               sync.Mutex
+	calls            int
+	scores           []classifier.SpeciesScore
+	classifierLabels []string
+	geomodel         *classifier.LabelVocabulary
+	filterActive     bool
 }
 
-func (p *fakePredictor) GetProbableSpecies(_ time.Time, _ float32) ([]classifier.SpeciesScore, error) {
+func (p *fakePredictor) GetRarityContext(_ time.Time) (classifier.RarityContext, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls++
-	return p.scores, nil
+	return classifier.RarityContext{
+		Scores:           p.scores,
+		Geomodel:         p.geomodel,
+		ClassifierLabels: p.classifierLabels,
+		FilterActive:     p.filterActive,
+	}, nil
 }
 
 func (p *fakePredictor) callCount() int {
@@ -114,7 +123,7 @@ func TestProbableSpeciesScores_MemoizesUnderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			results[idx] = c.probableSpeciesScores(pred, guideRarityLocationKey(c.CurrentSettings()))
+			results[idx] = c.probableSpeciesScores(pred, guideRarityLocationKey(c.CurrentSettings())).scores
 		}(i)
 	}
 	wg.Wait()
@@ -430,90 +439,76 @@ func TestExpectednessAndEbirdCode_NoProcessor(t *testing.T) {
 	assert.Empty(t, c.ebirdSpeciesCode(sciEurasianBlackbird))
 }
 
-// --- geomodel coverage memoization (labelSource-injected, no tflite model) ---
-
-// BirdNET-style labels ("<scientific>_<common>") used to seed the fake label set.
+// Full classifier/geomodel labels ("Scientific_Common"), the form both vocabularies
+// publish; guideSpeciesKey extracts and lowercases the scientific half.
 const (
 	labelBlackbird = "Turdus merula_Eurasian Blackbird"
 	labelGreatTit  = "Parus major_Great Tit"
 )
 
-// fakeLabelSource is a labelSource returning a fixed label set so the geomodel-coverage
-// memoization is exercisable without a loaded classifier. calls counts GeomodelLabels()
-// invocations (atomic, since the double-checked build path may run concurrently) to
-// prove the label set is scanned once per model rather than on every lookup.
-type fakeLabelSource struct {
-	labels []string
-	calls  atomic.Int32
-}
+// --- coverage vocabulary (RarityContext-driven, no tflite model) ---
 
-func (f *fakeLabelSource) GeomodelLabels() []string {
-	f.calls.Add(1)
-	return f.labels
-}
+// Coverage is derived from the RarityContext the range filter publishes, so these
+// drive guideCoverageSet directly: it is the whole decision, and building it from a
+// context is exactly what the memo does.
 
-func TestGeomodelCoverage_MatchesAndMemoizes(t *testing.T) {
+// TestGuideCoverageSet_PrefersGeomodelVocabulary pins that the universal geomodel's
+// own vocabulary wins when that backend is loaded.
+func TestGuideCoverageSet_PrefersGeomodelVocabulary(t *testing.T) {
 	t.Parallel()
-	c := New(&apicore.Core{})
-	// Coverage keys off the scientific part of each label.
-	bn := &fakeLabelSource{labels: []string{labelBlackbird, labelGreatTit}}
-
-	// Present species match, case-insensitively; a secondary-model-only species (e.g. a
-	// bat, absent from the primary label set) is not covered.
-	assert.True(t, c.speciesHasGeomodelCoverage(bn, sciEurasianBlackbird))
-	assert.True(t, c.speciesHasGeomodelCoverage(bn, strings.ToUpper(sciEurasianBlackbird)))
-	assert.True(t, c.speciesHasGeomodelCoverage(bn, "Parus major"))
-	assert.False(t, c.speciesHasGeomodelCoverage(bn, "Barbastella barbastellus"))
-
-	// The label set is scanned exactly once and then served from the memo.
-	assert.Equal(t, int32(1), bn.calls.Load(), "Labels() must be scanned once and memoized")
-}
-
-func TestGeomodelCoverage_RebuildsOnModelSwap(t *testing.T) {
-	t.Parallel()
-	c := New(&apicore.Core{})
-	bn1 := &fakeLabelSource{labels: []string{labelBlackbird}}
-	assert.True(t, c.speciesHasGeomodelCoverage(bn1, sciEurasianBlackbird))
-	assert.False(t, c.speciesHasGeomodelCoverage(bn1, "Parus major"))
-
-	// A model reload swaps the classifier; the memo (keyed on the classifier identity)
-	// must rebuild against the new label set rather than serve the stale one.
-	bn2 := &fakeLabelSource{labels: []string{labelGreatTit}}
-	assert.False(t, c.speciesHasGeomodelCoverage(bn2, sciEurasianBlackbird),
-		"a species dropped by the new model must not persist from the old memo")
-	assert.True(t, c.speciesHasGeomodelCoverage(bn2, "Parus major"))
-	assert.Equal(t, int32(1), bn2.calls.Load(), "the new model's labels are scanned once")
-}
-
-func TestGeomodelCoverage_EmptyLabelsNotMemoized(t *testing.T) {
-	t.Parallel()
-	c := New(&apicore.Core{})
-	// An empty label slice means the model vocabulary is not yet loaded. It must NOT be
-	// memoized (that would pin an empty result for the model's lifetime); each call
-	// re-scans so the memo self-corrects once labels populate.
-	empty := &fakeLabelSource{labels: nil}
-	assert.False(t, c.speciesHasGeomodelCoverage(empty, sciEurasianBlackbird))
-	assert.False(t, c.speciesHasGeomodelCoverage(empty, sciEurasianBlackbird))
-	assert.Equal(t, int32(2), empty.calls.Load(), "an empty label set must not be cached; each call re-scans")
-}
-
-func TestGeomodelCoverage_ConcurrentBuildIsSafe(t *testing.T) {
-	t.Parallel()
-	c := New(&apicore.Core{})
-	bn := &fakeLabelSource{labels: []string{labelBlackbird, labelGreatTit}}
-
-	var wg sync.WaitGroup
-	for range 32 {
-		wg.Go(func() {
-			assert.True(t, c.speciesHasGeomodelCoverage(bn, sciEurasianBlackbird))
-		})
+	rc := classifier.RarityContext{
+		FilterActive:     true,
+		ClassifierLabels: []string{labelGreatTit},
+		Geomodel:         classifier.NewLabelVocabulary([]string{labelBlackbird}),
 	}
-	wg.Wait()
 
-	// The double-checked lock serializes builders, so a concurrent first-build stampede
-	// scans the labels a small bounded number of times (ideally once) and never panics
-	// or corrupts the memo — validated under -race.
-	got := bn.calls.Load()
-	assert.Positive(t, got)
-	assert.LessOrEqual(t, got, int32(32))
+	set := guideCoverageSet(&rc)
+	assert.Contains(t, set, guideSpeciesKey(sciEurasianBlackbird),
+		"the geomodel vocabulary is authoritative when present")
+	assert.NotContains(t, set, guideSpeciesKey("Parus major"),
+		"classifier labels must not be mixed in when a geomodel is loaded")
+}
+
+// TestGuideCoverageSet_FallsBackToClassifierLabels is the regression guard for the
+// default install. BirdNET v2.4 is rangeFilterCompatMDataV24, so the legacy backend
+// runs and RarityContext.Geomodel is nil. Reading only the geomodel vocabulary left
+// coverage empty there, which silently dropped the expectedness badge for every
+// species outside today's probable list on the most common configuration.
+func TestGuideCoverageSet_FallsBackToClassifierLabels(t *testing.T) {
+	t.Parallel()
+	rc := classifier.RarityContext{
+		FilterActive:     true,
+		ClassifierLabels: []string{labelBlackbird, labelGreatTit},
+	}
+
+	set := guideCoverageSet(&rc)
+	assert.Contains(t, set, guideSpeciesKey(sciEurasianBlackbird))
+	assert.Contains(t, set, guideSpeciesKey("Parus major"))
+	assert.NotContains(t, set, guideSpeciesKey("Barbastella barbastellus"),
+		"a species in neither vocabulary has no occurrence probability to report")
+}
+
+// TestGuideCoverageSet_InactiveFilterCoversNothing pins that an inactive filter
+// reports no coverage. Its scores are synthetic zeros, so granting coverage to every
+// classifier label would render every species "unexpected".
+func TestGuideCoverageSet_InactiveFilterCoversNothing(t *testing.T) {
+	t.Parallel()
+	rc := classifier.RarityContext{
+		FilterActive:     false,
+		ClassifierLabels: []string{labelBlackbird},
+		Geomodel:         classifier.NewLabelVocabulary([]string{labelBlackbird}),
+	}
+
+	assert.Empty(t, guideCoverageSet(&rc), "coverage is a property of an ACTIVE filter")
+}
+
+// TestGuideCoverageSet_IsCaseInsensitive keeps the key normalization that the
+// previous memo provided: lookups go through guideSpeciesKey on both sides.
+func TestGuideCoverageSet_IsCaseInsensitive(t *testing.T) {
+	t.Parallel()
+	rc := classifier.RarityContext{FilterActive: true, ClassifierLabels: []string{labelBlackbird}}
+
+	set := guideCoverageSet(&rc)
+	_, covered := set[guideSpeciesKey(strings.ToUpper(sciEurasianBlackbird))]
+	assert.True(t, covered, "coverage must match regardless of case")
 }
