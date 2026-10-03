@@ -4,7 +4,7 @@ package classifier
 
 import "slices"
 
-// birdnetV30RegionalVariants returns the 80 region-sliced variants of the birdnet-v3.0 model,
+// birdnetV30RegionalVariants returns the 86 region-sliced variants of the birdnet-v3.0 model,
 // generated from BirdNET-v3.0-Models.models.json.
 func birdnetV30RegionalVariants() []CatalogVariant {
 	return []CatalogVariant{
@@ -333,6 +333,42 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			}, geomodelFiles(), taxonomyFiles()),
 		},
 		{
+			ID:           "fp16@central-africa",
+			Region:       "central-africa",
+			Precision:    "fp16",
+			SpeciesCount: 1505,
+			Requirements: VariantRequirements{MinRAMMB: 400, Excludes: []string{"openvino-gpu-intel-gen12"}},
+			Backends: map[string]BackendSupport{
+				"cuda":            {Supported: true, Recommended: true},
+				"onnxruntime-cpu": {Supported: true},
+				"openvino-cpu":    {Supported: true},
+				"openvino-gpu":    {Supported: true, Recommended: true},
+				"tensorrt":        {Supported: true, Recommended: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/central-africa/birdnet-v3.0-preview3.1-central-africa-fp16-b1.onnx", LocalName: "birdnet_v3.0_central-africa_fp16.onnx", Role: RoleModel, SHA256: "6a8389564e0b861f581350df4668cee5874a9bf6f5a02f51c4baab3cbc6e6d3b", SizeBytes: 88097666},
+				{RemotePath: "regional/central-africa/birdnet-v3.0-preview3.1-central-africa-labels-b1.txt", LocalName: "birdnet_v3.0_central-africa_labels.txt", Role: RoleLabels, SHA256: "13fb3701a59e5b9fcde3aaf4fa9e48914643e14102ae273e942498e10409a76b", SizeBytes: 29833},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "fp32@central-africa",
+			Region:       "central-africa",
+			Precision:    "fp32",
+			SpeciesCount: 1505,
+			Requirements: VariantRequirements{MinRAMMB: 400},
+			Backends: map[string]BackendSupport{
+				"cuda":            {Supported: true, Recommended: true},
+				"onnxruntime-cpu": {Supported: true, Recommended: true},
+				"openvino-cpu":    {Supported: true, Recommended: true},
+				"openvino-gpu":    {Supported: true},
+				"tensorrt":        {Supported: true, Recommended: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/central-africa/birdnet-v3.0-preview3.1-central-africa-fp32-b1.onnx", LocalName: "birdnet_v3.0_central-africa_fp32.onnx", Role: RoleModel, SHA256: "50b0739ba41d9eb3a84b29812087dafc0ea4e1457e8845892fc9659d2cc66399", SizeBytes: 176042023},
+				{RemotePath: "regional/central-africa/birdnet-v3.0-preview3.1-central-africa-labels-b1.txt", LocalName: "birdnet_v3.0_central-africa_labels.txt", Role: RoleLabels, SHA256: "13fb3701a59e5b9fcde3aaf4fa9e48914643e14102ae273e942498e10409a76b", SizeBytes: 29833},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
 			ID:           "fp16@central-europe",
 			Region:       "central-europe",
 			Precision:    "fp16",
@@ -510,6 +546,42 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southwest/birdnet-v3.0-preview3.1-china-southwest-fp32-b1.onnx", LocalName: "birdnet_v3.0_china-southwest_fp32.onnx", Role: RoleModel, SHA256: "b8d3adffe207d7fe158e96d0686cc8893826346e5ab6b20401b4f14884014ab0", SizeBytes: 149923411},
 				{RemotePath: "regional/china-southwest/birdnet-v3.0-preview3.1-china-southwest-labels-b1.txt", LocalName: "birdnet_v3.0_china-southwest_labels.txt", Role: RoleLabels, SHA256: "96219a5a02b54ef5a0542aaec4a39afd586521f44ab887bfd7df97ae3fa1388f", SizeBytes: 32104},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "fp16@east-africa",
+			Region:       "east-africa",
+			Precision:    "fp16",
+			SpeciesCount: 1784,
+			Requirements: VariantRequirements{MinRAMMB: 450, Excludes: []string{"openvino-gpu-intel-gen12"}},
+			Backends: map[string]BackendSupport{
+				"cuda":            {Supported: true, Recommended: true},
+				"onnxruntime-cpu": {Supported: true},
+				"openvino-cpu":    {Supported: true},
+				"openvino-gpu":    {Supported: true, Recommended: true},
+				"tensorrt":        {Supported: true, Recommended: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/east-africa/birdnet-v3.0-preview3.1-east-africa-fp16-b1.onnx", LocalName: "birdnet_v3.0_east-africa_fp16.onnx", Role: RoleModel, SHA256: "4909eb67467907c7bea5f454e3c94d1161d521b465f90d6f8f2755857dff2da1", SizeBytes: 93385832},
+				{RemotePath: "regional/east-africa/birdnet-v3.0-preview3.1-east-africa-labels-b1.txt", LocalName: "birdnet_v3.0_east-africa_labels.txt", Role: RoleLabels, SHA256: "8f8c798043919c93e487c01057f807a00f40830f997a99edc74a7ab1df7e99f2", SizeBytes: 35080},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "fp32@east-africa",
+			Region:       "east-africa",
+			Precision:    "fp32",
+			SpeciesCount: 1784,
+			Requirements: VariantRequirements{MinRAMMB: 450},
+			Backends: map[string]BackendSupport{
+				"cuda":            {Supported: true, Recommended: true},
+				"onnxruntime-cpu": {Supported: true, Recommended: true},
+				"openvino-cpu":    {Supported: true, Recommended: true},
+				"openvino-gpu":    {Supported: true},
+				"tensorrt":        {Supported: true, Recommended: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/east-africa/birdnet-v3.0-preview3.1-east-africa-fp32-b1.onnx", LocalName: "birdnet_v3.0_east-africa_fp32.onnx", Role: RoleModel, SHA256: "91962150cf2fc8171fe282d106c070ba7ba118604e5a2b8e79059a18f1a0de18", SizeBytes: 186618355},
+				{RemotePath: "regional/east-africa/birdnet-v3.0-preview3.1-east-africa-labels-b1.txt", LocalName: "birdnet_v3.0_east-africa_labels.txt", Role: RoleLabels, SHA256: "8f8c798043919c93e487c01057f807a00f40830f997a99edc74a7ab1df7e99f2", SizeBytes: 35080},
 			}, geomodelFiles(), taxonomyFiles()),
 		},
 		{
@@ -1423,6 +1495,42 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			}, geomodelFiles(), taxonomyFiles()),
 		},
 		{
+			ID:           "fp16@west-africa",
+			Region:       "west-africa",
+			Precision:    "fp16",
+			SpeciesCount: 994,
+			Requirements: VariantRequirements{MinRAMMB: 400, Excludes: []string{"openvino-gpu-intel-gen12"}},
+			Backends: map[string]BackendSupport{
+				"cuda":            {Supported: true, Recommended: true},
+				"onnxruntime-cpu": {Supported: true},
+				"openvino-cpu":    {Supported: true},
+				"openvino-gpu":    {Supported: true, Recommended: true},
+				"tensorrt":        {Supported: true, Recommended: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/west-africa/birdnet-v3.0-preview3.1-west-africa-fp16-b1.onnx", LocalName: "birdnet_v3.0_west-africa_fp16.onnx", Role: RoleModel, SHA256: "7a6b6f2527bdd18815e962d5e3902a358664a752486c4d9703fb0345a98d9bea", SizeBytes: 78412172},
+				{RemotePath: "regional/west-africa/birdnet-v3.0-preview3.1-west-africa-labels-b1.txt", LocalName: "birdnet_v3.0_west-africa_labels.txt", Role: RoleLabels, SHA256: "95e843ebda0c7db8a382eadff9b001ede053dbf2f822160c7bbb05eff0320b59", SizeBytes: 19384},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "fp32@west-africa",
+			Region:       "west-africa",
+			Precision:    "fp32",
+			SpeciesCount: 994,
+			Requirements: VariantRequirements{MinRAMMB: 400},
+			Backends: map[string]BackendSupport{
+				"cuda":            {Supported: true, Recommended: true},
+				"onnxruntime-cpu": {Supported: true, Recommended: true},
+				"openvino-cpu":    {Supported: true, Recommended: true},
+				"openvino-gpu":    {Supported: true},
+				"tensorrt":        {Supported: true, Recommended: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/west-africa/birdnet-v3.0-preview3.1-west-africa-fp32-b1.onnx", LocalName: "birdnet_v3.0_west-africa_fp32.onnx", Role: RoleModel, SHA256: "e3facc454243ba6712ab3262d8ef845bc00c12137af3f08098827342ec6a8020", SizeBytes: 156671035},
+				{RemotePath: "regional/west-africa/birdnet-v3.0-preview3.1-west-africa-labels-b1.txt", LocalName: "birdnet_v3.0_west-africa_labels.txt", Role: RoleLabels, SHA256: "95e843ebda0c7db8a382eadff9b001ede053dbf2f822160c7bbb05eff0320b59", SizeBytes: 19384},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
 			ID:           "fp16@western-palearctic",
 			Region:       "western-palearctic",
 			Precision:    "fp16",
@@ -1461,7 +1569,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 	}
 }
 
-// perchV2RegionalVariants returns the 80 region-sliced variants of the perch-v2 model,
+// perchV2RegionalVariants returns the 86 region-sliced variants of the perch-v2 model,
 // generated from Perch-v2-Models.models.json.
 func perchV2RegionalVariants() []CatalogVariant {
 	return []CatalogVariant{
@@ -1754,6 +1862,38 @@ func perchV2RegionalVariants() []CatalogVariant {
 			}, geomodelFiles(), taxonomyFiles()),
 		},
 		{
+			ID:           "int8-arm@central-africa",
+			Region:       "central-africa",
+			Precision:    "int8",
+			SpeciesCount: 1883,
+			Requirements: VariantRequirements{Arch: []string{"aarch64"}, MinRAMMB: 250},
+			Backends: map[string]BackendSupport{
+				"onnxruntime-cpu": {Supported: true, Recommended: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/central-africa/perch_v2_central-africa_int8_arm.onnx", LocalName: "perch_v2_central-africa_int8_arm.onnx", Role: RoleModel, SHA256: "245984e3f3188293cd8efcd3896d886edcd62a7438e646801c5c957ec28ef7b8", SizeBytes: 52215214},
+				{RemotePath: "regional/central-africa/perch_v2_central-africa_labels.txt", LocalName: "perch_v2_central-africa_labels.txt", Role: RoleLabels, SHA256: "b4fa7748e0bb842e08ac31f6ef2998625182ebe4ecb19b2b4cc7945fd9eb6bb1", SizeBytes: 35791},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "no-dft-fp32@central-africa",
+			Region:       "central-africa",
+			Precision:    "fp32",
+			SpeciesCount: 1883,
+			Requirements: VariantRequirements{MinRAMMB: 300},
+			Backends: map[string]BackendSupport{
+				"cuda":            {Supported: true, Recommended: true},
+				"onnxruntime-cpu": {Supported: true},
+				"openvino-cpu":    {Supported: true, Recommended: true},
+				"openvino-gpu":    {Supported: true, Recommended: true},
+				"tensorrt":        {Supported: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/central-africa/perch_v2_central-africa_no_dft_fp32.onnx", LocalName: "perch_v2_central-africa_no_dft.onnx", Role: RoleModel, SHA256: "d9f29b5cef3b9b7e54b454feb34fe8a7a6be9b3c375cbe670b017c48b7ed622c", SizeBytes: 95643878},
+				{RemotePath: "regional/central-africa/perch_v2_central-africa_labels.txt", LocalName: "perch_v2_central-africa_labels.txt", Role: RoleLabels, SHA256: "b4fa7748e0bb842e08ac31f6ef2998625182ebe4ecb19b2b4cc7945fd9eb6bb1", SizeBytes: 35791},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
 			ID:           "int8-arm@central-europe",
 			Region:       "central-europe",
 			Precision:    "int8",
@@ -1911,6 +2051,38 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southwest/perch_v2_china-southwest_no_dft_fp32.onnx", LocalName: "perch_v2_china-southwest_no_dft.onnx", Role: RoleModel, SHA256: "11292464054e8c2b6b7d309a6518fe8c81f43b19f98e151b0ef3cbd21261ed0f", SizeBytes: 83985374},
 				{RemotePath: "regional/china-southwest/perch_v2_china-southwest_labels.txt", LocalName: "perch_v2_china-southwest_labels.txt", Role: RoleLabels, SHA256: "7adcce5853a92ba1bbe5ee05ffdb75bbad9d0d1604349beef19151e6731cc750", SizeBytes: 26299},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "int8-arm@east-africa",
+			Region:       "east-africa",
+			Precision:    "int8",
+			SpeciesCount: 2159,
+			Requirements: VariantRequirements{Arch: []string{"aarch64"}, MinRAMMB: 250},
+			Backends: map[string]BackendSupport{
+				"onnxruntime-cpu": {Supported: true, Recommended: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/east-africa/perch_v2_east-africa_int8_arm.onnx", LocalName: "perch_v2_east-africa_int8_arm.onnx", Role: RoleModel, SHA256: "4113d0a8c05368fd685b4c4dfbc6fa07a4cfbb979cdf43f5428bedcac3c03118", SizeBytes: 53916478},
+				{RemotePath: "regional/east-africa/perch_v2_east-africa_labels.txt", LocalName: "perch_v2_east-africa_labels.txt", Role: RoleLabels, SHA256: "536daf97a9945d7f8bff0c55c60d26c15c6001f01f0e448a0548156d074cd329", SizeBytes: 41028},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "no-dft-fp32@east-africa",
+			Region:       "east-africa",
+			Precision:    "fp32",
+			SpeciesCount: 2159,
+			Requirements: VariantRequirements{MinRAMMB: 300},
+			Backends: map[string]BackendSupport{
+				"cuda":            {Supported: true, Recommended: true},
+				"onnxruntime-cpu": {Supported: true},
+				"openvino-cpu":    {Supported: true, Recommended: true},
+				"openvino-gpu":    {Supported: true, Recommended: true},
+				"tensorrt":        {Supported: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/east-africa/perch_v2_east-africa_no_dft_fp32.onnx", LocalName: "perch_v2_east-africa_no_dft.onnx", Role: RoleModel, SHA256: "e652c100096db2bced141215edc253c633706993e4c3e027f40959e59f6b169e", SizeBytes: 102432374},
+				{RemotePath: "regional/east-africa/perch_v2_east-africa_labels.txt", LocalName: "perch_v2_east-africa_labels.txt", Role: RoleLabels, SHA256: "536daf97a9945d7f8bff0c55c60d26c15c6001f01f0e448a0548156d074cd329", SizeBytes: 41028},
 			}, geomodelFiles(), taxonomyFiles()),
 		},
 		{
@@ -2711,6 +2883,38 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/tibet/perch_v2_tibet_no_dft_fp32.onnx", LocalName: "perch_v2_tibet_no_dft.onnx", Role: RoleModel, SHA256: "d309474cdebccbd49c5d8c785e75058900060665e0ac624f9c7c67ab9ec3fb6e", SizeBytes: 83936182},
 				{RemotePath: "regional/tibet/perch_v2_tibet_labels.txt", LocalName: "perch_v2_tibet_labels.txt", Role: RoleLabels, SHA256: "41ab36a976dfea277181801d1329940201d777390a3269138cabe0fc6edb460b", SizeBytes: 26056},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "int8-arm@west-africa",
+			Region:       "west-africa",
+			Precision:    "int8",
+			SpeciesCount: 1309,
+			Requirements: VariantRequirements{Arch: []string{"aarch64"}, MinRAMMB: 250},
+			Backends: map[string]BackendSupport{
+				"onnxruntime-cpu": {Supported: true, Recommended: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/west-africa/perch_v2_west-africa_int8_arm.onnx", LocalName: "perch_v2_west-africa_int8_arm.onnx", Role: RoleModel, SHA256: "e88f50be2254a4f134d6cf8d896c1b4f47aecab27f7d89a2856c305735f62845", SizeBytes: 48677078},
+				{RemotePath: "regional/west-africa/perch_v2_west-africa_labels.txt", LocalName: "perch_v2_west-africa_labels.txt", Role: RoleLabels, SHA256: "18eef8b461ee60892b4581a3484c8505d486ca6d6240423d4fc0e27f510d07dd", SizeBytes: 24127},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "no-dft-fp32@west-africa",
+			Region:       "west-africa",
+			Precision:    "fp32",
+			SpeciesCount: 1309,
+			Requirements: VariantRequirements{MinRAMMB: 300},
+			Backends: map[string]BackendSupport{
+				"cuda":            {Supported: true, Recommended: true},
+				"onnxruntime-cpu": {Supported: true},
+				"openvino-cpu":    {Supported: true, Recommended: true},
+				"openvino-gpu":    {Supported: true, Recommended: true},
+				"tensorrt":        {Supported: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/west-africa/perch_v2_west-africa_no_dft_fp32.onnx", LocalName: "perch_v2_west-africa_no_dft.onnx", Role: RoleModel, SHA256: "4983b759cb77ce8a59d9fd6dcb853836195961a67b19bb09f23c4c9aa478a8ac", SizeBytes: 81525774},
+				{RemotePath: "regional/west-africa/perch_v2_west-africa_labels.txt", LocalName: "perch_v2_west-africa_labels.txt", Role: RoleLabels, SHA256: "18eef8b461ee60892b4581a3484c8505d486ca6d6240423d4fc0e27f510d07dd", SizeBytes: 24127},
 			}, geomodelFiles(), taxonomyFiles()),
 		},
 		{

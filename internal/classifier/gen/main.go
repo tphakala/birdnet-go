@@ -4,13 +4,14 @@
 // region tables (region/data/*.regions.json), and a labels-checksum sidecar
 // (gen/manifests/labels-checksums.json), then emits one Go file with two
 // functions, birdnetV30RegionalVariants and perchV2RegionalVariants, each
-// returning the 78 region-sliced CatalogVariant literals for its family.
+// returning the region-sliced CatalogVariant literals for its family
+// (expectedRegions slugs, variantsPerRegion precision builds each).
 //
-// The manifests carry sha256/size only for the .onnx model files (the upstream
-// make_manifest scripts hash .onnx only), so the per-region labels files get
-// their checksums from the sidecar. Run "go run ./gen -update-labels-checksums"
-// (the only networked mode) to refresh that sidecar from HuggingFace; normal
-// "go generate" is fully offline so the CI drift gate needs no network.
+// The generator takes the per-region labels checksums from the sidecar rather
+// than from the manifests (older manifests hashed only the .onnx model files).
+// Run "go run ./gen -update-labels-checksums" (the only networked mode) to
+// refresh that sidecar from HuggingFace; normal "go generate" is fully offline
+// so the CI drift gate needs no network.
 //
 // Determinism matters: the output is committed and guarded by a CI drift gate,
 // so the generator must produce byte-identical output for a given input. Entries
@@ -160,7 +161,7 @@ type labelChecksum struct {
 const (
 	labelsSidecar     = "gen/manifests/labels-checksums.json"
 	outputFile        = "model_catalog_regional_gen.go"
-	expectedRegions   = 40
+	expectedRegions   = 43
 	variantsPerRegion = 2 // each region ships two precision variants
 	regionalPerFam    = expectedRegions * variantsPerRegion
 )

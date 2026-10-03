@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "repo": "tphakala/BirdNET-v3.0-Models",
-  "updated": "2026-08-22",
+  "updated": "2026-09-03",
   "regions": {
     "nordic": {
       "name": "Nordic",
@@ -1214,6 +1214,135 @@
       },
       "classes": 110,
       "map": "regional/sao-tome-principe/coverage.svg"
+    },
+    "west-africa": {
+      "name": "West Africa",
+      "group": "africa",
+      "group_display": "Africa",
+      "realm": "afrotropic",
+      "tier": 50,
+      "bboxes": [
+        [
+          4.0,
+          17.0,
+          -18.0,
+          15.0
+        ]
+      ],
+      "centroid": [
+        10.5,
+        -1.5
+      ],
+      "countries": {
+        "core": [
+          "BF",
+          "BJ",
+          "CI",
+          "CM",
+          "GH",
+          "GM",
+          "GN",
+          "GW",
+          "LR",
+          "ML",
+          "NE",
+          "NG",
+          "SL",
+          "SN",
+          "TG"
+        ],
+        "partial": [
+          "MR"
+        ]
+      },
+      "classes": 994,
+      "map": "regional/west-africa/coverage.svg"
+    },
+    "central-africa": {
+      "name": "Central Africa",
+      "group": "africa",
+      "group_display": "Africa",
+      "realm": "afrotropic",
+      "tier": 50,
+      "bboxes": [
+        [
+          -17.0,
+          11.0,
+          8.0,
+          31.0
+        ]
+      ],
+      "centroid": [
+        -3.0,
+        19.5
+      ],
+      "countries": {
+        "core": [
+          "AO",
+          "BI",
+          "CD",
+          "CF",
+          "CG",
+          "CM",
+          "GA",
+          "GQ",
+          "RW",
+          "ZM"
+        ],
+        "partial": [
+          "NG",
+          "SS",
+          "TD"
+        ]
+      },
+      "classes": 1505,
+      "map": "regional/central-africa/coverage.svg"
+    },
+    "east-africa": {
+      "name": "East Africa",
+      "group": "africa",
+      "group_display": "Africa",
+      "realm": "afrotropic",
+      "tier": 50,
+      "bboxes": [
+        [
+          -17.0,
+          18.0,
+          28.0,
+          52.0
+        ]
+      ],
+      "centroid": [
+        0.5,
+        40.0
+      ],
+      "countries": {
+        "core": [
+          "BI",
+          "DJ",
+          "ER",
+          "ET",
+          "KE",
+          "KM",
+          "MW",
+          "MZ",
+          "RW",
+          "SO",
+          "SS",
+          "TZ",
+          "UG",
+          "YE"
+        ],
+        "partial": [
+          "CD",
+          "MG",
+          "SD",
+          "ZM",
+          "ZW"
+        ]
+      },
+      "classes": 1784,
+      "map": "regional/east-africa/coverage.svg"
     },
     "australia-east": {
       "name": "Australia (Southeast)",

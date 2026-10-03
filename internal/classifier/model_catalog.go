@@ -169,7 +169,7 @@ var EmbeddedCatalog = []CatalogEntry{
 	// integrity-checked like every other entry. Now visible in the gallery: the
 	// hardware recommender (internal/classifier/recommend) plus the per-variant
 	// MinRAMMB floors below keep the heavy global fp32 (557 MB) and fp16 (279 MB)
-	// builds off hosts that cannot run them. The two global variants plus the 39
+	// builds off hosts that cannot run them. The two global variants plus the
 	// regional tiles appended by birdnetV30RegionalVariants ship today. The entry stays
 	// labelled a developer preview so users know it is not the GA build. The
 	// backend loader is fully functional and v3.0 can also be enabled via config
