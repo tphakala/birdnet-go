@@ -2202,15 +2202,25 @@ func (mm *ModelManager) removeDownloading(catalogID string) {
 // the gallery, so install, startup promote and uninstall may rewrite it: an empty
 // path, or a geomodel file name of the active catalog in a "shared" directory under a
 // directory named like the models directory (the same layout test, and rationale, as
-// Orchestrator.isGalleryManagedPath). Any other path is a custom range filter those
-// paths leave untouched. Reads only the catalog snapshot, so it is safe under
-// settingsWriteMu and mm.mu.
+// Orchestrator.isGalleryManagedPath). Install, startup promote and uninstall leave
+// any other path untouched as a custom range filter. Reads only the catalog snapshot,
+// so it is safe under settingsWriteMu and mm.mu.
 func (mm *ModelManager) rangeFilterGalleryManaged(rf *conf.RangeFilterSettings) bool {
 	if rf.ModelPath == "" {
 		return true
 	}
 	dir := filepath.Dir(rf.ModelPath)
-	if filepath.Base(dir) != sharedDirName || filepath.Base(filepath.Dir(dir)) != filepath.Base(mm.modelsDir) {
+	if filepath.Base(dir) != sharedDirName {
+		return false
+	}
+	// Compare resolved names so a relative models directory such as "." still
+	// matches an absolute path under it.
+	parent, err := filepath.Abs(filepath.Dir(dir))
+	if err != nil {
+		return false
+	}
+	modelsDir, err := filepath.Abs(mm.modelsDir)
+	if err != nil || filepath.Base(parent) != filepath.Base(modelsDir) {
 		return false
 	}
 	return isCatalogGeomodelName(filepath.Base(rf.ModelPath))

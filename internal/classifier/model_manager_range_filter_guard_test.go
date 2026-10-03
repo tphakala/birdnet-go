@@ -1,10 +1,12 @@
 package classifier
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
@@ -121,6 +123,24 @@ func TestRangeFilterGalleryManaged(t *testing.T) {
 			assert.Equal(t, tt.want, mm.rangeFilterGalleryManaged(rf))
 		})
 	}
+}
+
+// TestRangeFilterGalleryManaged_RelativeModelsDir pins that a relative models directory
+// such as "." is compared by its resolved directory name, so an absolute gallery path
+// under it is still gallery-managed.
+func TestRangeFilterGalleryManaged_RelativeModelsDir(t *testing.T) {
+	// Not parallel: mutates the global active catalog and the working directory.
+	useGuardCatalog(t, guardGeomodelEntry("guard-geo", guardGeomodelName))
+	modelsDir := guardModelsDir(t)
+	require.NoError(t, os.MkdirAll(modelsDir, 0o750))
+	t.Chdir(modelsDir)
+
+	mm := NewModelManager(".", nil, &conf.Settings{})
+
+	absolute := &conf.RangeFilterSettings{ModelPath: guardSharedPath(modelsDir, guardGeomodelName)}
+	relative := &conf.RangeFilterSettings{ModelPath: guardSharedPath(".", guardGeomodelName)}
+	assert.True(t, mm.rangeFilterGalleryManaged(absolute), "an absolute gallery path under a relative models dir is managed")
+	assert.True(t, mm.rangeFilterGalleryManaged(relative), "the relative path the gallery writes is managed")
 }
 
 // TestRangeFilterGalleryManaged_FollowsCatalogNames pins that the managed names come
