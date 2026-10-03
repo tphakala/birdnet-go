@@ -595,12 +595,20 @@ func (m *AuxiliaryMigrator) migrateSpeciesNotes(ctx context.Context, result *Aux
 	// an explicit list would silently stop copying any column later added to
 	// SpeciesNote. TestMigrateSpeciesNotes_CopiesRowsPreservingIDsAndTimestamps pins
 	// both properties.
-	// OnConflict/DoNothing keeps the copy idempotent. Rows carry their legacy IDs and
-	// CreateInBatches is not wrapped in a transaction, so an interrupted run leaves the
-	// earlier batches committed; without this, a re-entry after a crash or a resumed
-	// migration would fail on duplicate primary keys and leave the remaining notes
-	// unmigrated.
-	if err := m.v2DB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).
+	// OnConflict keeps the copy idempotent: the rows carry their legacy IDs, so a
+	// re-entry after an interrupted run — a crash between this insert committing and
+	// the migration finishing, or a resumed migration — would otherwise fail on
+	// duplicate primary keys and leave the remaining notes unmigrated.
+	//
+	// UpdateAll rather than DoNothing, because the legacy database stays the source of
+	// truth until Consolidate renames it away and the v2 table is write-only until the
+	// post-consolidation restart (see above). A conflicting row must therefore be
+	// refreshed from legacy, not kept: DoNothing would silently preserve a stale copy
+	// of a note edited between the partial run and the retry, and would make the
+	// Migrated count below a claim rather than a fact. It is column-list-free for the
+	// same reason the insert is — an explicit list would silently stop copying any
+	// column later added to SpeciesNote.
+	if err := m.v2DB.WithContext(ctx).Clauses(clause.OnConflict{UpdateAll: true}).
 		CreateInBatches(legacyNotes, speciesNoteMigrationBatchSize).Error; err != nil {
 		m.logger.Warn("failed to write species notes to v2", logger.Error(err))
 		result.SpeciesNotes.Error = err

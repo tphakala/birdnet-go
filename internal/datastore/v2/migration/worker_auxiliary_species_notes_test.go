@@ -85,6 +85,59 @@ func TestMigrateSpeciesNotes_CopiesRowsPreservingIDsAndTimestamps(t *testing.T) 
 	}
 }
 
+// TestMigrateSpeciesNotes_RetryIsIdempotentAndRefreshesStaleRows pins the
+// crash-recovery contract. The copy preserves legacy IDs, so a re-entry after a run
+// that already committed some rows hits primary-key conflicts. Without a conflict
+// clause that run errors out and abandons the remaining notes; with DO NOTHING it
+// succeeds but silently keeps whatever v2 already held, so a note edited in legacy
+// (still the serving store until Consolidate renames it away) between the two runs
+// would be dropped while the result still reported full success.
+//
+// UPDATE-all gives the honest outcome: every legacy note is present in v2 afterwards,
+// matching legacy exactly, and Migrated is a measurement rather than an assertion.
+func TestMigrateSpeciesNotes_RetryIsIdempotentAndRefreshesStaleRows(t *testing.T) {
+	t.Parallel()
+
+	legacyDB := newMemoryDB(t)
+	v2DB := newMemoryDB(t)
+	require.NoError(t, legacyDB.AutoMigrate(&datastore.SpeciesNote{}))
+
+	when := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+	seeded := []datastore.SpeciesNote{
+		{ID: 1, ScientificName: "Parus major", Entry: "first", CreatedAt: when, UpdatedAt: when},
+		{ID: 2, ScientificName: "Turdus merula", Entry: "edited after the partial run", CreatedAt: when, UpdatedAt: when},
+		{ID: 3, ScientificName: "Erithacus rubecula", Entry: "third", CreatedAt: when, UpdatedAt: when},
+	}
+	require.NoError(t, legacyDB.Select("ID", "ScientificName", "Entry", "CreatedAt", "UpdatedAt").
+		Create(&seeded).Error)
+
+	// Stand in for a partial earlier run: id=2 is already in v2, holding the
+	// pre-edit text.
+	require.NoError(t, v2DB.AutoMigrate(&datastore.SpeciesNote{}))
+	require.NoError(t, v2DB.Select("ID", "ScientificName", "Entry", "CreatedAt", "UpdatedAt").
+		Create(&datastore.SpeciesNote{
+			ID: 2, ScientificName: "Turdus merula", Entry: "stale pre-edit copy",
+			CreatedAt: when, UpdatedAt: when,
+		}).Error)
+
+	result := &AuxiliaryMigrationResult{}
+	newSpeciesNotesMigrator(t, legacyDB, v2DB).migrateSpeciesNotes(t.Context(), result)
+
+	require.NoError(t, result.SpeciesNotes.Error, "a conflicting row must not fail the retry")
+	assert.False(t, result.HasErrors(), "a clean retry must not report errors")
+
+	var got []datastore.SpeciesNote
+	require.NoError(t, v2DB.Order("id ASC").Find(&got).Error)
+	require.Len(t, got, 3, "the retry must leave exactly the legacy set, with no duplicates")
+	assert.Equal(t, 3, result.SpeciesNotes.Migrated, "every legacy note is present afterwards")
+
+	for i := range seeded {
+		assert.Equal(t, seeded[i].ID, got[i].ID)
+		assert.Equal(t, seeded[i].Entry, got[i].Entry,
+			"the conflicting row must be refreshed from legacy, not left stale")
+	}
+}
+
 func TestMigrateSpeciesNotes_LegacyTableAbsentIsNotAnError(t *testing.T) {
 	t.Parallel()
 
