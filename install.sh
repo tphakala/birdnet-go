@@ -5200,6 +5200,11 @@ generate_systemd_service_content() {
     local avahi_volume_line dbus_volume_line
     avahi_volume_line=$(host_socket_mount /run/avahi-daemon/socket)
     dbus_volume_line=$(host_socket_mount /run/dbus/system_bus_socket)
+    # D-Bus authenticates by peer uid, and uid 0 on the system bus is host root (it can
+    # start host services and commands), so a root install never gets the bus.
+    if [ "$HOST_UID" = "0" ]; then
+        dbus_volume_line=""
+    fi
 
     # External media mount: host /mnt/birdnet-go/external -> container /external
     # Uses rslave propagation; read-write is the Docker default and not specified explicitly.

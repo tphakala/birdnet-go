@@ -72,7 +72,7 @@ If BirdNET-Go is not yet available in Community Applications:
 
 ### .local (mDNS) Hostnames
 
-The template maps the host's `/var/run/avahi-daemon` (name resolution) and `/var/run/dbus` (DNS-SD service discovery) read-only (advanced settings **Avahi socket (mDNS)** and **D-Bus (service discovery)**). This needs avahi-daemon on the host; the socket locations on Unraid are not verified. Do not add `:z` or `:Z`; remove the D-Bus path to opt out. See [RTSP troubleshooting](../doc/wiki/rtsp-troubleshooting.md#using-local-mdns-hostnames-in-containers).
+The template maps the host's `/var/run/avahi-daemon` (name resolution) and `/var/run/dbus` (DNS-SD service discovery) read-only (advanced settings **Avahi socket (mDNS)** and **D-Bus (service discovery)**). This needs avahi-daemon on the host; the socket locations on Unraid are not verified. Do not add `:z` or `:Z`; remove the D-Bus path to opt out, and always when User ID is 0 (uid 0 on the system bus is host root). See [RTSP troubleshooting](../doc/wiki/rtsp-troubleshooting.md#using-local-mdns-hostnames-in-containers).
 
 ### Audio Device Requirements
 

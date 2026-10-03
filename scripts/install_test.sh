@@ -151,6 +151,9 @@ host_socket_mount() {
         *" $1 "*) printf -- '-v %s:%s:ro' "$(dirname "$1")" "$(dirname "$1")" ;;
     esac
 }
+# generate_systemd_service_content derives the app uid from SUDO_UID, falling back to id -u.
+# Pin a non-root uid so the D-Bus mount assertions do not depend on who runs the suite.
+SUDO_UID=1000
 # No docker on the CI runner path we exercise; the container-TZ fallback degrades to empty.
 # The load_existing_service_config container-fallback test overrides this stub.
 safe_docker() { return 1; }
@@ -566,6 +569,14 @@ FAKE_SOCKETS="$AVAHI_SOCK $DBUS_SOCK"
 both_unit="${WORK}/sock-both.service"
 generate_systemd_service_content > "$both_unit"
 assert_eq "both sockets: both mounts present" "2" "$(grep -cE -- '-v /run/(avahi-daemon|dbus):' "$both_unit")"
+
+# uid 0 on the system bus is host root, so a root install keeps the Avahi mount but drops D-Bus.
+SUDO_UID=0
+root_unit="${WORK}/sock-root.service"
+generate_systemd_service_content > "$root_unit"
+SUDO_UID=1000
+assert_eq "root install: D-Bus mount stays off" "0" "$(grep -c -- '/run/dbus' "$root_unit")"
+assert_eq "root install: Avahi mount kept" "1" "$(grep -c -- '-v /run/avahi-daemon:/run/avahi-daemon:ro \\$' "$root_unit")"
 FAKE_SOCKETS=""   # restore the deterministic default for subsequent tests
 
 # ===========================================================================

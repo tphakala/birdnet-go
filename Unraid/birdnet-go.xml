@@ -27,6 +27,6 @@
   <Config Name="Timezone" Target="TZ" Default="America/New_York" Mode="" Description="Container timezone (e.g., America/New_York, Europe/London, Asia/Tokyo)" Type="Variable" Display="always" Required="true" Mask="false">America/New_York</Config>
   <Config Name="Avahi socket (mDNS)" Target="/run/avahi-daemon" Default="/var/run/avahi-daemon" Mode="ro" Description="Resolve .local hostnames (RTSP cameras) through the host avahi-daemon. See the RTSP troubleshooting wiki" Type="Path" Display="advanced" Required="false" Mask="false">/var/run/avahi-daemon</Config>
   <Config Name="D-Bus (service discovery)" Target="/run/dbus" Default="/var/run/dbus" Mode="ro" Description="DNS-SD service discovery over the host system D-Bus. Remove to opt out. See the RTSP troubleshooting wiki" Type="Path" Display="advanced" Required="false" Mask="false">/var/run/dbus</Config>
-  <Config Name="User ID" Target="BIRDNET_UID" Default="99" Mode="" Description="User ID for file permissions (99 = nobody user)" Type="Variable" Display="advanced" Required="true" Mask="false">99</Config>
+  <Config Name="User ID" Target="BIRDNET_UID" Default="99" Mode="" Description="User ID for file permissions (99 = nobody user). If set to 0, remove the D-Bus path: uid 0 on the system bus is host root" Type="Variable" Display="advanced" Required="true" Mask="false">99</Config>
   <Config Name="Group ID" Target="BIRDNET_GID" Default="100" Mode="" Description="Group ID for file permissions (100 = users group)" Type="Variable" Display="advanced" Required="true" Mask="false">100</Config>
 </Container> 

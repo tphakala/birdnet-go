@@ -1719,6 +1719,30 @@ enable_quadlet_volume() {
     sed -i "s|^#Volume=$2:$2:ro|Volume=$2:$2:ro|" "$1"
 }
 
+# mDNS host mounts for a quadlet: enable each read-only directory mount only when
+# its host socket exists (Podman refuses to start a container whose bind source is
+# missing). D-Bus additionally needs keep-id (EXTERNAL auth compares uids) and a
+# non-root uid (uid 0 on the system bus is host root), so call this after keep-id
+# may have been enabled. The template is re-copied on every run, so this is
+# re-detected on each install/update. Never :z or :Z.
+# Usage: enable_mdns_mounts <quadlet> <uid> <avahi socket> <dbus socket>
+enable_mdns_mounts() {
+    local quadlet="$1" uid="$2" avahi_socket="$3" dbus_socket="$4"
+    if host_socket_present "$avahi_socket"; then
+        enable_quadlet_volume "$quadlet" "$(dirname "$avahi_socket")"
+        log_message "INFO" "Enabled host Avahi mount in Quadlet unit for .local hostname resolution"
+        print_message "🌐 .local (mDNS) hostnames enabled via the host's avahi-daemon" "$GREEN"
+    else
+        log_message "INFO" "Host avahi-daemon socket not found; .local hostnames will not resolve in the container"
+    fi
+    if [ "$uid" != "0" ] && host_socket_present "$dbus_socket" && quadlet_has_keep_id "$quadlet"; then
+        enable_quadlet_volume "$quadlet" "$(dirname "$dbus_socket")"
+        log_message "INFO" "Enabled host D-Bus mount in Quadlet unit for DNS-SD service discovery"
+    else
+        log_message "INFO" "D-Bus mount not enabled (needs /run/dbus/system_bus_socket, keep-id and a non-root uid); DNS-SD service discovery will not work in the container"
+    fi
+}
+
 # Function to create Quadlet service files
 create_quadlet_service() {
     log_message "INFO" "Creating Quadlet service configuration"
@@ -1876,24 +1900,7 @@ EOF
         fi
     fi
     
-    # mDNS host mounts: enable each read-only directory mount only when its host
-    # socket exists (Podman refuses to start a container whose bind source is
-    # missing). D-Bus additionally needs keep-id (EXTERNAL auth compares uids), and
-    # this runs after keep-id may have been enabled above. The template is re-copied
-    # on every run, so this is re-detected on each install/update. Never :z or :Z.
-    if host_socket_present /run/avahi-daemon/socket; then
-        enable_quadlet_volume "$quadlet_target" /run/avahi-daemon
-        log_message "INFO" "Enabled host Avahi mount in Quadlet unit for .local hostname resolution"
-        print_message "🌐 .local (mDNS) hostnames enabled via the host's avahi-daemon" "$GREEN"
-    else
-        log_message "INFO" "Host avahi-daemon socket not found; .local hostnames will not resolve in the container"
-    fi
-    if host_socket_present /run/dbus/system_bus_socket && quadlet_has_keep_id "$quadlet_target"; then
-        enable_quadlet_volume "$quadlet_target" /run/dbus
-        log_message "INFO" "Enabled host D-Bus mount in Quadlet unit for DNS-SD service discovery"
-    else
-        log_message "INFO" "D-Bus mount not enabled (needs /run/dbus/system_bus_socket and keep-id); DNS-SD service discovery will not work in the container"
-    fi
+    enable_mdns_mounts "$quadlet_target" "$(id -u)" /run/avahi-daemon/socket /run/dbus/system_bus_socket
 
     # Reload systemd to recognize new Quadlet files
     systemctl --user daemon-reload
