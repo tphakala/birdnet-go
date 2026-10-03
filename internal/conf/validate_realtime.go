@@ -615,10 +615,12 @@ func validateRarityFilterSettings(settings *RarityFilterSettings) error {
 			Build()
 	}
 
+	// Messages name a band by its values, not its index: the bands were just sorted,
+	// so an index would not match the band's position in the user's list.
 	for i, band := range settings.Bands {
 		// NaN comparisons always return false, so NaN would bypass the range check.
 		if math.IsNaN(band.MaxOccurrence) || band.MaxOccurrence <= 0 || band.MaxOccurrence > 1 {
-			return errors.Newf("rarity filter band %d max occurrence must be greater than 0 and at most 1, got %g", i, band.MaxOccurrence).
+			return errors.Newf("rarity filter band max occurrence must be greater than 0 and at most 1, got %g", band.MaxOccurrence).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "rarity-filter-max-occurrence").
 				Context("band_index", i).
@@ -627,8 +629,8 @@ func validateRarityFilterSettings(settings *RarityFilterSettings) error {
 		}
 
 		if band.MinDetections < MinRarityBandDetections || band.MinDetections > MaxRarityBandDetections {
-			return errors.Newf("rarity filter band %d min detections must be between %d and %d, got %d",
-				i, MinRarityBandDetections, MaxRarityBandDetections, band.MinDetections).
+			return errors.Newf("rarity filter band with max occurrence %g: min detections must be between %d and %d, got %d",
+				band.MaxOccurrence, MinRarityBandDetections, MaxRarityBandDetections, band.MinDetections).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "rarity-filter-min-detections").
 				Context("band_index", i).

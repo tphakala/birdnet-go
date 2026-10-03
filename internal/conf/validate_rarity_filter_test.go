@@ -122,6 +122,22 @@ func TestValidateRarityFilterSettings_SortsBands(t *testing.T) {
 	}, settings.Bands)
 }
 
+func TestValidateRarityFilterSettings_NamesBandByValues(t *testing.T) {
+	t.Parallel()
+
+	// The invalid band is listed first but sorts second, so an index in the message
+	// would point at the wrong band.
+	settings := RarityFilterSettings{Enabled: true, Bands: []RarityBand{
+		{MaxOccurrence: 0.9, MinDetections: 0},
+		{MaxOccurrence: 0.1, MinDetections: 3},
+	}}
+
+	err := validateRarityFilterSettings(&settings)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "band with max occurrence 0.9")
+	assert.NotContains(t, err.Error(), "band 1")
+}
+
 // distinctBands returns n valid bands with distinct, ascending limits in (0, 1].
 func distinctBands(n int) []RarityBand {
 	bands := make([]RarityBand, 0, n)
