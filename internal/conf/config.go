@@ -821,6 +821,25 @@ func (f *FalsePositiveFilterSettings) Validate() error {
 	return nil
 }
 
+// RarityBand maps a species' occurrence-probability range to a minimum required
+// detection count, so rarer species need more confirmations.
+type RarityBand struct {
+	MaxOccurrence float64 `yaml:"maxoccurrence" json:"maxOccurrence"` // band applies when occurrence < this value, in (0, 1]
+	MinDetections int     `yaml:"mindetections" json:"minDetections"` // minimum confirmations required in this band
+}
+
+// RarityFilterSettings contains settings for rarity-based confirmation filtering.
+// Species with a low range-filter occurrence probability at the configured location
+// require more confirming detections before a detection is accepted. The bands only
+// raise the confirmation count the false positive filter already requires; a species
+// that matches no band keeps that count. Requires a location and an active range
+// filter, and applies to bird models only (the range filter has no occurrence data
+// for bat species).
+type RarityFilterSettings struct {
+	Enabled bool         `yaml:"enabled" json:"enabled"` // true to enable rarity-based confirmation filtering
+	Bands   []RarityBand `yaml:"bands" json:"bands"`     // occurrence bands; the tightest band a species falls under applies
+}
+
 // ExtendedCaptureSettings contains settings for extended capture mode.
 // Extended capture produces a single audio clip for long continuous calling sessions.
 type ExtendedCaptureSettings struct {
@@ -904,6 +923,7 @@ type RealtimeSettings struct {
 	Dashboard           Dashboard                   `yaml:"dashboard" json:"dashboard"`                     // Dashboard settings
 	DynamicThreshold    DynamicThresholdSettings    `yaml:"dynamicthreshold" json:"dynamicThreshold"`       // Dynamic threshold settings
 	FalsePositiveFilter FalsePositiveFilterSettings `yaml:"falsepositivefilter" json:"falsePositiveFilter"` // False positive filtering aggressivity settings
+	RarityFilter        RarityFilterSettings        `yaml:"rarityfilter" json:"rarityFilter"`               // Rarity-based confirmation filtering settings
 	Log                 struct {
 		Enabled bool   `yaml:"enabled" json:"enabled"` // true to enable OBS chat log
 		Path    string `yaml:"path" json:"path"`       // path to OBS chat log

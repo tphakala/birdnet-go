@@ -176,6 +176,9 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// -- FalsePositiveFilter --
 	"Realtime.FalsePositiveFilter": {categories: []hotReloadCategory{hotReloadFresh}},
 
+	// -- RarityFilter (read from the per-flush settings snapshot) --
+	"Realtime.RarityFilter": {categories: []hotReloadCategory{hotReloadFresh}},
+
 	// -- Log (OBS) --
 	"Realtime.Log": {categories: []hotReloadCategory{hotReloadFresh}},
 

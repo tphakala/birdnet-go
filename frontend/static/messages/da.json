@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Uden filtrering accepteres enhver registrering over konfidenstærsklen med det samme. Dette giver typisk flere falske positiver om dagen. Selv mild filtrering forbedrer resultatkvaliteten markant."
         },
+        "rarityFilter": {
+          "title": "Sjældenhedsfilter",
+          "description": "Kræv flere bekræftende detektioner for arter, der er sjældne på din placering",
+          "birdOnlyNote": "Sjældenhedsfilteret gælder kun for fugleklassifikatorer. Det bruger områdefilterets forekomstsandsynlighed for hver art og hæver kun det antal bekræftelser, som falsk positiv-filteret kræver, og sænker det aldrig.",
+          "locationRequiredNote": "Der er ikke konfigureret nogen placering. Sjældenhedsfilteret skal bruge en placering og områdefilteret for at vide, hvor almindelig en art er, så det har ingen effekt, før du angiver en.",
+          "enable": {
+            "label": "Aktivér sjældenhedsfilter",
+            "helpText": "Sjældne arter er oftere en fejlidentificeret almindelig art. Når filteret er aktiveret, skal en art, hvis forekomstsandsynlighed falder under et interval nedenfor, have mindst så mange bekræftende detektioner, før den accepteres. Hver bekræftelse er ét analysevindue, så højere antal kræver en højere overlapindstilling."
+          }
+        },
         "rangeFilter": {
           "title": "Områdefilter",
           "description": "Begræns detektion til arter, der er sandsynlige i dit geografiske område",
@@ -4973,6 +4983,23 @@
       "numberField": {
         "adjustedToMinimum": "Værdien blev justeret til minimum ({value})",
         "adjustedToMaximum": "Værdien blev justeret til maksimum ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "En art bruger intervallet med den laveste forekomstgrænse, den falder under, så intervallernes rækkefølge er ligegyldig. Arter på eller over alle grænser behøver ingen ekstra bekræftelser.",
+        "emptyState": "Ingen intervaller konfigureret. Tilføj mindst ét interval; sjældenhedsfilteret kan ikke gemmes aktiveret uden intervaller.",
+        "bandLabel": "Interval {number}",
+        "maxOccurrence": {
+          "label": "Forekomst under",
+          "helpText": "Gælder for arter, hvis forekomstsandsynlighed på din placering er under denne værdi (0 til 1)."
+        },
+        "minDetections": {
+          "label": "Påkrævede bekræftelser",
+          "helpText": "Antal bekræftende detektioner, der kræves, før en detektion af disse arter accepteres."
+        },
+        "addBand": "Tilføj interval",
+        "removeBand": "Fjern interval {number}",
+        "lastBandRequired": "Det aktiverede sjældenhedsfilter skal have mindst ét interval. Slå filteret fra for at fjerne alle intervaller.",
+        "maxBandsReached": "Du kan højst konfigurere {max} intervaller. Fjern et interval for at tilføje et nyt."
       },
       "rtsp": {
         "addNewStream": "Tilføj ny RTSP-strøm",

@@ -2404,6 +2404,16 @@
           },
           "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
         },
+        "rarityFilter": {
+          "title": "Rarity Filter",
+          "description": "Require more confirming detections for species that are rare at your location",
+          "birdOnlyNote": "The rarity filter applies to bird classifiers only. It uses the range filter's occurrence probability for each species, and only ever raises the number of confirmations the false positive filter requires.",
+          "locationRequiredNote": "No location is configured. The rarity filter needs a location and the range filter to know how common a species is, so it has no effect until you set one.",
+          "enable": {
+            "label": "Enable rarity filter",
+            "helpText": "Rare species are more likely to be a misidentified common species. When enabled, a species whose occurrence probability falls under a band below needs at least that many confirming detections before it is accepted. Each confirmation is one analysis window, so higher counts need a higher overlap setting."
+          }
+        },
         "rangeFilter": {
           "title": "Range Filter",
           "description": "Limit detection to species probable in your geographic region",
@@ -4973,6 +4983,23 @@
       "numberField": {
         "adjustedToMinimum": "Value was adjusted to minimum ({value})",
         "adjustedToMaximum": "Value was adjusted to maximum ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "A species uses the band with the lowest occurrence limit it falls under, so band order does not matter. Species at or above every limit need no extra confirmations.",
+        "emptyState": "No bands configured. Add at least one band; the rarity filter cannot be saved while enabled without bands.",
+        "bandLabel": "Band {number}",
+        "maxOccurrence": {
+          "label": "Occurrence below",
+          "helpText": "Applies to species whose occurrence probability at your location is below this value (0 to 1)."
+        },
+        "minDetections": {
+          "label": "Confirmations required",
+          "helpText": "Number of confirming detections needed before a detection of these species is accepted."
+        },
+        "addBand": "Add band",
+        "removeBand": "Remove band {number}",
+        "lastBandRequired": "The enabled rarity filter needs at least one band. Turn the filter off to remove every band.",
+        "maxBandsReached": "You can configure at most {max} bands. Remove a band to add another."
       },
       "rtsp": {
         "addNewStream": "Add New RTSP Stream",

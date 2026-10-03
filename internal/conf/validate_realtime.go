@@ -3,6 +3,7 @@
 package conf
 
 import (
+	"cmp"
 	"math"
 	"slices"
 	"strings"
@@ -15,6 +16,18 @@ import (
 const (
 	DefaultRealtimeInterval = 15    // Default detection interval in seconds
 	MaxRealtimeInterval     = 86400 // Maximum interval (24 hours)
+)
+
+// Rarity filter band limits
+const (
+	MinRarityBandDetections = 1  // Smallest confirmation count a rarity band may require
+	MaxRarityBandDetections = 10 // Largest confirmation count a rarity band may require
+	MaxRarityBands          = 10 // Largest number of bands the rarity filter may configure
+
+	DefaultRarityRareMaxOccurrence     = 0.10 // Default upper occurrence bound of the "rare" band
+	DefaultRarityRareMinDetections     = 3    // Default confirmations required for rare species
+	DefaultRarityUncommonMaxOccurrence = 0.90 // Default upper occurrence bound of the "uncommon" band
+	DefaultRarityUncommonMinDetections = 2    // Default confirmations required for uncommon species
 )
 
 // validateRealtimeSettings validates the Realtime-specific settings
@@ -79,6 +92,11 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 
 	// Validate dynamic threshold settings
 	if err := validateDynamicThresholdSettings(&settings.DynamicThreshold); err != nil {
+		return err
+	}
+
+	// Validate rarity filter settings
+	if err := validateRarityFilterSettings(&settings.RarityFilter); err != nil {
 		return err
 	}
 
@@ -565,5 +583,72 @@ func validateSpeciesConfigSettings(settings *SpeciesSettings) error {
 				Build()
 		}
 	}
+	return nil
+}
+
+// validateRarityFilterSettings validates the rarity filter bands and sorts them
+// ascending by MaxOccurrence, so the saved config and the settings UI list them in a
+// predictable order (the runtime lookup picks the tightest matching band and does not
+// depend on order). Bands are sorted even when the filter is disabled; range checks
+// apply only when enabled.
+func validateRarityFilterSettings(settings *RarityFilterSettings) error {
+	slices.SortStableFunc(settings.Bands, func(a, b RarityBand) int {
+		return cmp.Compare(a.MaxOccurrence, b.MaxOccurrence)
+	})
+
+	if !settings.Enabled {
+		return nil
+	}
+
+	if len(settings.Bands) == 0 {
+		return errors.Newf("rarity filter requires at least one band when enabled").
+			Category(errors.CategoryValidation).
+			Context("validation_type", "rarity-filter-bands").
+			Build()
+	}
+
+	if len(settings.Bands) > MaxRarityBands {
+		return errors.Newf("rarity filter allows at most %d bands, got %d", MaxRarityBands, len(settings.Bands)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "rarity-filter-band-count").
+			Context("band_count", len(settings.Bands)).
+			Build()
+	}
+
+	// Messages name a band by its values, not its index: the bands were just sorted,
+	// so an index would not match the band's position in the user's list.
+	for i, band := range settings.Bands {
+		// NaN comparisons always return false, so NaN would bypass the range check.
+		if math.IsNaN(band.MaxOccurrence) || band.MaxOccurrence <= 0 || band.MaxOccurrence > 1 {
+			return errors.Newf("rarity filter band max occurrence must be greater than 0 and at most 1, got %g", band.MaxOccurrence).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "rarity-filter-max-occurrence").
+				Context("band_index", i).
+				Context("max_occurrence", band.MaxOccurrence).
+				Build()
+		}
+
+		if band.MinDetections < MinRarityBandDetections || band.MinDetections > MaxRarityBandDetections {
+			return errors.Newf("rarity filter band with max occurrence %g: min detections must be between %d and %d, got %d",
+				band.MaxOccurrence, MinRarityBandDetections, MaxRarityBandDetections, band.MinDetections).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "rarity-filter-min-detections").
+				Context("band_index", i).
+				Context("min_detections", band.MinDetections).
+				Build()
+		}
+
+		// Bands are sorted above, so a duplicate limit sits next to its twin. Two bands
+		// with one limit would make the applied count depend on their order.
+		if i > 0 && band.MaxOccurrence == settings.Bands[i-1].MaxOccurrence {
+			return errors.Newf("rarity filter has two bands with max occurrence %g; each band needs a distinct limit", band.MaxOccurrence).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "rarity-filter-duplicate-max-occurrence").
+				Context("band_index", i).
+				Context("max_occurrence", band.MaxOccurrence).
+				Build()
+		}
+	}
+
 	return nil
 }

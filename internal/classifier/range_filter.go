@@ -23,13 +23,16 @@ const syntheticOverrideScore = 1.0
 
 // SpeciesScore holds a species label, its associated score, and override provenance.
 // Synthetic provenance distinguishes score-1.0 rows appended solely to admit user
-// overrides from native geomodel scores.
+// overrides from native geomodel scores. IsUnmappedBackfill marks the score-0 rows
+// PassUnmappedSpecies appends for classifier species the geomodel cannot score: they
+// pass the range filter, but their zero is not an occurrence probability.
 type SpeciesScore struct {
 	Score               float64
 	Label               string
 	HasCustomConfig     bool
 	IsManuallyIncluded  bool
 	IsSyntheticOverride bool
+	IsUnmappedBackfill  bool
 }
 
 // ByScore implements sort.Interface for []SpeciesScore based on the Score field.
@@ -538,7 +541,7 @@ func scoreProbableSpecies(debug debugFunc, excluder excludeMatcher, rawScores []
 			if geoIdx == -1 && i < len(labels) {
 				label := labels[i]
 				if !seen[label] && !excluder.matches(label) {
-					speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
+					speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label, IsUnmappedBackfill: true})
 					seen[label] = true
 					unmappedAdded++
 				}

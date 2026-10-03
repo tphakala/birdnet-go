@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Utan filtrering accepteras varje detektering över konfidenströskeln omedelbart. Detta ger vanligtvis flera falska positiva per dag. Även låg filtrering förbättrar resultatkvaliteten avsevärt."
         },
+        "rarityFilter": {
+          "title": "Sällsynthetsfilter",
+          "description": "Kräv fler bekräftande detektioner för arter som är sällsynta på din plats",
+          "birdOnlyNote": "Sällsynthetsfiltret gäller endast fågelklassificerare. Det använder områdesfiltrets förekomstsannolikhet för varje art och höjer bara det antal bekräftelser som falskpositivfiltret kräver, aldrig sänker det.",
+          "locationRequiredNote": "Ingen plats är konfigurerad. Sällsynthetsfiltret behöver en plats och områdesfiltret för att veta hur vanlig en art är, så det har ingen effekt förrän du anger en plats.",
+          "enable": {
+            "label": "Aktivera sällsynthetsfilter",
+            "helpText": "Sällsynta arter är oftare en felidentifierad vanlig art. När filtret är aktiverat behöver en art vars förekomstsannolikhet faller under ett intervall nedan minst så många bekräftande detektioner innan den godkänns. Varje bekräftelse är ett analysfönster, så högre antal kräver en högre överlappningsinställning."
+          }
+        },
         "rangeFilter": {
           "title": "Områdesfilter",
           "description": "Begränsa detektion till arter som är sannolika i ditt geografiska område",
@@ -4973,6 +4983,23 @@
       "numberField": {
         "adjustedToMinimum": "Värdet justerades till minimum ({value})",
         "adjustedToMaximum": "Värdet justerades till maximum ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "En art använder intervallet med den lägsta förekomstgränsen den faller under, så intervallens ordning spelar ingen roll. Arter på eller över alla gränser behöver inga extra bekräftelser.",
+        "emptyState": "Inga intervall konfigurerade. Lägg till minst ett intervall; sällsynthetsfiltret kan inte sparas aktiverat utan intervall.",
+        "bandLabel": "Intervall {number}",
+        "maxOccurrence": {
+          "label": "Förekomst under",
+          "helpText": "Gäller arter vars förekomstsannolikhet på din plats är under detta värde (0 till 1)."
+        },
+        "minDetections": {
+          "label": "Bekräftelser som krävs",
+          "helpText": "Antal bekräftande detektioner som behövs innan en detektion av dessa arter godkänns."
+        },
+        "addBand": "Lägg till intervall",
+        "removeBand": "Ta bort intervall {number}",
+        "lastBandRequired": "Det aktiverade sällsynthetsfiltret behöver minst ett intervall. Stäng av filtret för att ta bort alla intervall.",
+        "maxBandsReached": "Du kan konfigurera högst {max} intervall. Ta bort ett intervall för att lägga till ett nytt."
       },
       "rtsp": {
         "addNewStream": "Lägg till ny RTSP-ström",

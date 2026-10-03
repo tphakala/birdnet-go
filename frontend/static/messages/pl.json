@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Bez filtrowania każde wykrycie powyżej progu pewności jest natychmiast akceptowane. Zwykle powoduje to kilka fałszywych trafień dziennie. Nawet niskie filtrowanie znacznie poprawia jakość wyników."
         },
+        "rarityFilter": {
+          "title": "Filtr Rzadkości",
+          "description": "Wymagaj więcej potwierdzających wykryć dla gatunków rzadkich w Twojej lokalizacji",
+          "birdOnlyNote": "Filtr rzadkości dotyczy tylko klasyfikatorów ptaków. Korzysta z prawdopodobieństwa występowania każdego gatunku z filtra zasięgu i jedynie zwiększa liczbę potwierdzeń wymaganą przez filtr fałszywych pozytywów, nigdy jej nie zmniejsza.",
+          "locationRequiredNote": "Nie skonfigurowano lokalizacji. Filtr rzadkości potrzebuje lokalizacji i filtra zasięgu, aby wiedzieć, jak pospolity jest gatunek, więc nie działa, dopóki jej nie ustawisz.",
+          "enable": {
+            "label": "Włącz filtr rzadkości",
+            "helpText": "Rzadki gatunek częściej okazuje się błędnie rozpoznanym gatunkiem pospolitym. Po włączeniu gatunek, którego prawdopodobieństwo występowania mieści się poniżej jednego z poniższych przedziałów, potrzebuje co najmniej tylu potwierdzających wykryć, zanim zostanie zaakceptowany. Każde potwierdzenie to jedno okno analizy, więc wyższe wartości wymagają większego nakładania."
+          }
+        },
         "rangeFilter": {
           "title": "Filtr Zasięgu",
           "description": "Ogranicz detekcję do gatunków prawdopodobnych w Twoim regionie geograficznym",
@@ -4973,6 +4983,23 @@
       "numberField": {
         "adjustedToMinimum": "Wartość została dostosowana do minimum ({value})",
         "adjustedToMaximum": "Wartość została dostosowana do maksimum ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "Gatunek korzysta z przedziału o najniższym limicie występowania, poniżej którego się znajduje, więc kolejność przedziałów nie ma znaczenia. Gatunki na poziomie lub powyżej wszystkich limitów nie wymagają dodatkowych potwierdzeń.",
+        "emptyState": "Nie skonfigurowano przedziałów. Dodaj co najmniej jeden przedział; włączonego filtra rzadkości nie można zapisać bez przedziałów.",
+        "bandLabel": "Przedział {number}",
+        "maxOccurrence": {
+          "label": "Występowanie poniżej",
+          "helpText": "Dotyczy gatunków, których prawdopodobieństwo występowania w Twojej lokalizacji jest niższe niż ta wartość (od 0 do 1)."
+        },
+        "minDetections": {
+          "label": "Wymagane potwierdzenia",
+          "helpText": "Liczba potwierdzających wykryć potrzebnych, zanim wykrycie tych gatunków zostanie zaakceptowane."
+        },
+        "addBand": "Dodaj przedział",
+        "removeBand": "Usuń przedział {number}",
+        "lastBandRequired": "Włączony filtr rzadkości wymaga co najmniej jednego przedziału. Wyłącz filtr, aby usunąć wszystkie przedziały.",
+        "maxBandsReached": "Możesz skonfigurować maksymalnie {max} przedziałów. Usuń przedział, aby dodać nowy."
       },
       "rtsp": {
         "addNewStream": "Dodaj Nowy Strumień RTSP",

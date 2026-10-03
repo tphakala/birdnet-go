@@ -14,6 +14,7 @@
   - min/max: Define valid range; values outside are clamped
   - step: Increment/decrement step size
   - onUpdate: Called with the clamped value after validation
+  - inputId: Optional id for the input; set it when several fields share a label
 -->
 <script lang="ts">
   import FormField from './FormField.svelte';
@@ -33,6 +34,7 @@
     disabled?: boolean;
     error?: string;
     className?: string;
+    inputId?: string;
   }
 
   let {
@@ -48,6 +50,7 @@
     disabled = false,
     error,
     className = '',
+    inputId,
     ...rest
   }: Props = $props();
 
@@ -149,6 +152,7 @@
 <div class={className} {...rest}>
   <FormField
     type="number"
+    id={inputId}
     name={label
       .toLowerCase()
       .replace(/\s+/g, '-')

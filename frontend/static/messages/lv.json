@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Bez filtrēšanas jebkura noteikšana virs ticamības sliekšņa tiek pieņemta nekavējoties. Tas parasti rada vairākus viltus pozitīvos dienā. Pat zema filtrēšana ievērojami uzlabo rezultātu kvalitāti."
         },
+        "rarityFilter": {
+          "title": "Retuma filtrs",
+          "description": "Pieprasīt vairāk apstiprinošu noteikšanu sugām, kas jūsu atrašanās vietā ir retas",
+          "birdOnlyNote": "Retuma filtrs attiecas tikai uz putnu klasifikatoriem. Tas izmanto areāla filtra sastopamības varbūtību katrai sugai un tikai palielina viltus pozitīvo filtra pieprasīto apstiprinājumu skaitu, nekad to nesamazina.",
+          "locationRequiredNote": "Atrašanās vieta nav konfigurēta. Retuma filtram ir nepieciešama atrašanās vieta un areāla filtrs, lai zinātu, cik bieži sastopama ir suga, tāpēc tam nav ietekmes, kamēr neiestatāt atrašanās vietu.",
+          "enable": {
+            "label": "Iespējot retuma filtru",
+            "helpText": "Reta suga biežāk ir nepareizi noteikta bieži sastopama suga. Ja filtrs ir iespējots, sugai, kuras sastopamības varbūtība ir zem kāda no tālāk norādītajiem diapazoniem, pirms pieņemšanas nepieciešams vismaz tik daudz apstiprinošu noteikšanu. Katrs apstiprinājums ir viens analīzes logs, tāpēc lielākiem skaitļiem nepieciešams lielāks pārklāšanās iestatījums."
+          }
+        },
         "rangeFilter": {
           "title": "Areāla filtrs",
           "description": "Ierobežot noteikšanu līdz sugām, kas ir iespējamas jūsu ģeogrāfiskajā reģionā",
@@ -4973,6 +4983,23 @@
       "numberField": {
         "adjustedToMinimum": "Vērtība tika koriģēta uz minimumu ({value})",
         "adjustedToMaximum": "Vērtība tika koriģēta uz maksimumu ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "Suga izmanto diapazonu ar zemāko sastopamības robežu, zem kuras tā atrodas, tāpēc diapazonu secībai nav nozīmes. Sugām, kas ir uz visām robežām vai virs tām, papildu apstiprinājumi nav nepieciešami.",
+        "emptyState": "Nav konfigurēts neviens diapazons. Pievienojiet vismaz vienu diapazonu; iespējotu retuma filtru nevar saglabāt bez diapazoniem.",
+        "bandLabel": "Diapazons {number}",
+        "maxOccurrence": {
+          "label": "Sastopamība zem",
+          "helpText": "Attiecas uz sugām, kuru sastopamības varbūtība jūsu atrašanās vietā ir zemāka par šo vērtību (no 0 līdz 1)."
+        },
+        "minDetections": {
+          "label": "Nepieciešamie apstiprinājumi",
+          "helpText": "Apstiprinošo noteikšanu skaits, kas nepieciešams, pirms šo sugu noteikšana tiek pieņemta."
+        },
+        "addBand": "Pievienot diapazonu",
+        "removeBand": "Noņemt diapazonu {number}",
+        "lastBandRequired": "Iespējotajam retuma filtram nepieciešams vismaz viens diapazons. Lai noņemtu visus diapazonus, izslēdziet filtru.",
+        "maxBandsReached": "Varat konfigurēt ne vairāk kā {max} diapazonus. Noņemiet diapazonu, lai pievienotu jaunu."
       },
       "rtsp": {
         "addNewStream": "Pievienot jaunu RTSP straumi",

@@ -1157,16 +1157,24 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	return scores, nil
 }
 
-// GetSpeciesOccurrence returns the occurrence probability for a species at the current time.
-func (o *Orchestrator) GetSpeciesOccurrence(species string) float64 {
+// GetSpeciesOccurrence returns the occurrence probability for a species at the current
+// time, together with whether it is a genuine range-filter prediction (see
+// GetSpeciesOccurrenceAtTime).
+func (o *Orchestrator) GetSpeciesOccurrence(species string) (occurrence float64, valid bool) {
 	return o.GetSpeciesOccurrenceAtTime(species, time.Now())
 }
 
-// GetSpeciesOccurrenceAtTime returns the occurrence probability for a species at a specific time.
-func (o *Orchestrator) GetSpeciesOccurrenceAtTime(species string, detectionTime time.Time) float64 {
+// GetSpeciesOccurrenceAtTime returns the occurrence probability for a species at a
+// specific time, together with whether that probability is a genuine range-filter
+// prediction. valid is false (and occurrence is the synthetic 0) whenever no
+// range-filter backend is loaded, no location is configured, or the prediction has no
+// score for the species, so a caller never mistakes the fallback zero for a real
+// "extremely rare" score (mirrors the GetRarityContext.FilterActive distinction and the
+// #3935 fix it exists for).
+func (o *Orchestrator) GetSpeciesOccurrenceAtTime(species string, detectionTime time.Time) (occurrence float64, valid bool) {
 	rfs, ok := o.rangeFilterReady()
 	if !ok || rfs == nil {
-		return 0
+		return 0, false
 	}
 	return rfs.occurrenceAtTime(species, detectionTime, o.CurrentSettings())
 }

@@ -999,6 +999,22 @@ func TestScoreProbableSpecies_ReturnsUnmappedAddedCount(t *testing.T) {
 	assert.Equal(t, 2, unmappedAdded, "both unmapped classifier species must be counted")
 	assert.Len(t, scored, 4, "two scored geomodel species plus two unmapped backfills")
 
+	// The backfills pass the range filter but carry no occurrence probability, so the
+	// occurrence index must report them as not valid rather than as genuine zeros.
+	index := buildOccurrenceIndex(scored)
+	for _, label := range []string{"Ficedula hypoleuca_Pied Flycatcher", "Regulus regulus_Goldcrest"} {
+		indexed, found := lookupOccurrence(index, label)
+		require.True(t, found, "backfilled species must stay indexed (cache-hit path)")
+		occurrence, valid := indexedOccurrence(indexed)
+		assert.Zero(t, occurrence)
+		assert.False(t, valid, "unmapped backfill %s must not read as a genuine zero", label)
+	}
+	indexed, found := lookupOccurrence(index, "Turdus merula_Common Blackbird")
+	require.True(t, found)
+	occurrence, valid := indexedOccurrence(indexed)
+	assert.InDelta(t, 0.9, occurrence, 0.001)
+	assert.True(t, valid)
+
 	settings.BirdNET.RangeFilter.PassUnmappedSpecies = false
 	scored, unmappedAdded = scoreProbableSpecies(nil, excluder, rawScores, allGeoLabels, nil, settings.BirdNET.Labels, settings)
 	assert.Equal(t, 0, unmappedAdded, "no backfill when PassUnmappedSpecies is disabled")

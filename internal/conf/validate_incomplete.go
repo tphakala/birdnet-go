@@ -607,6 +607,14 @@ func (s *Settings) normalizeRealtimeFeatures() {
 			DefaultDynamicThresholdValidHours)
 	}
 
+	// An enabled rarity filter with no bands cannot raise any confirmation count, so
+	// it is switched off the way the runtime already treats it. Out-of-range band
+	// values are left for the validator, since those do change what is computed.
+	if rf := &s.Realtime.RarityFilter; rf.Enabled && len(rf.Bands) == 0 {
+		rf.Enabled = false
+		s.recordValidationWarning(warnComponentRealtime,
+			"rarity filter is enabled but has no bands; disabling it (add at least one band to use it)")
+	}
 }
 
 // normalizeSpeciesTracking applies the documented defaults to the species tracking
