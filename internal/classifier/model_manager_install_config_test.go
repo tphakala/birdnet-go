@@ -17,8 +17,6 @@ import (
 func TestApplyRangeFilterConfigForInstall_ClearsStaleOppositePath(t *testing.T) {
 	t.Parallel()
 	const (
-		staleModelPath  = "/stale/previous-model.onnx"
-		staleLabelsPath = "/stale/previous-labels.txt"
 		modelLocalName  = "geomodel-v3-model.onnx"
 		labelsLocalName = "geomodel-v3-labels.txt"
 	)
@@ -61,9 +59,10 @@ func TestApplyRangeFilterConfigForInstall_ClearsStaleOppositePath(t *testing.T) 
 
 			updated := conftest.GetTestSettings()
 			rf := updated.RangeFilterConfig()
-			// Simulate a full-tuple config left over from an earlier install.
-			rf.ModelPath = staleModelPath
-			rf.LabelsPath = staleLabelsPath
+			// Simulate a full-tuple config left over from an earlier install. The stale
+			// paths are the shipped catalog's gallery-managed shared files, so the
+			// custom range-filter guard lets the install rewrite them.
+			rf.ModelPath, rf.LabelsPath = sharedGeomodelExpectedPaths(modelsDir)
 
 			entry := &CatalogEntry{GeomodelVersion: geomodelRangeFilterVersion, Files: tt.files}
 			mm.applyRangeFilterConfigForInstall(updated, entry)

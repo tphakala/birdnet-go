@@ -741,7 +741,8 @@ func (mm *ModelManager) ensureGeomodelConfig(log logger.Logger, installedIDs []s
 
 // applyInstalledGeomodelConfig promotes the range filter config to match an
 // installed geomodel-capable model whose shared files are present on disk. It is
-// a no-op when the config already matches the expected paths and version.
+// a no-op when the config already matches the expected paths and version, and for
+// a custom range filter (see rangeFilterGalleryManaged).
 func (mm *ModelManager) applyInstalledGeomodelConfig(log logger.Logger, entry *CatalogEntry, catalogID string) {
 	// Build expected paths from catalog entry.
 	expectedModelPath := ""
@@ -762,6 +763,13 @@ func (mm *ModelManager) applyInstalledGeomodelConfig(log logger.Logger, entry *C
 	settingsWriteMu.Lock()
 	current := conf.GetSettings()
 	rf := current.RangeFilterConfig()
+	if !mm.rangeFilterGalleryManaged(rf) {
+		// A custom range filter is the user's choice; never replace it.
+		settingsWriteMu.Unlock()
+		log.Debug("Keeping custom range filter model path",
+			logger.String("catalog_id", catalogID))
+		return
+	}
 	if rf.Model == entry.GeomodelVersion &&
 		rf.ModelPath == expectedModelPath &&
 		rf.LabelsPath == expectedLabelsPath {
@@ -2185,10 +2193,44 @@ func (mm *ModelManager) removeDownloading(catalogID string) {
 	delete(mm.downloading, catalogID)
 }
 
+// rangeFilterGalleryManaged reports whether the range filter's model path belongs to
+// the gallery, so install, startup promote and uninstall may rewrite it: an empty
+// path, or a geomodel file name of the active catalog in a "shared" directory under a
+// directory named like the models directory (the same layout test, and rationale, as
+// Orchestrator.isGalleryManagedPath). Any other path is a custom range filter those
+// paths leave untouched. Reads only the catalog snapshot, so it is safe under
+// settingsWriteMu and mm.mu.
+func (mm *ModelManager) rangeFilterGalleryManaged(rf *conf.RangeFilterSettings) bool {
+	if rf.ModelPath == "" {
+		return true
+	}
+	dir := filepath.Dir(rf.ModelPath)
+	if filepath.Base(dir) != sharedDirName || filepath.Base(filepath.Dir(dir)) != filepath.Base(mm.modelsDir) {
+		return false
+	}
+	return isCatalogGeomodelName(filepath.Base(rf.ModelPath))
+}
+
+// isCatalogGeomodelName reports whether name is the LocalName of a geomodel-role
+// file in any entry or variant of the active catalog.
+func isCatalogGeomodelName(name string) bool {
+	isGeomodelFile := func(f CatalogFile) bool { return isGeomodelRole(f.Role) && f.LocalName == name }
+	catalog := ActiveCatalog()
+	for i := range catalog {
+		for _, files := range entryFileSets(&catalog[i]) {
+			if slices.ContainsFunc(files, isGeomodelFile) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // applyRangeFilterConfigForInstall points the range filter at entry's geomodel
 // companion files under {modelsDir}/shared when the entry carries them. It writes
 // into updated (a settings clone); the caller stores and saves. A no-op for an
-// entry without geomodel files. Both role paths are cleared before the entry's
+// entry without geomodel files and for a custom range filter (see
+// rangeFilterGalleryManaged). Both role paths are cleared before the entry's
 // files are written, so a half-tuple entry (only one geomodel role) leaves the
 // omitted role's path empty rather than at a stale earlier value.
 func (mm *ModelManager) applyRangeFilterConfigForInstall(updated *conf.Settings, entry *CatalogEntry) {
@@ -2196,6 +2238,9 @@ func (mm *ModelManager) applyRangeFilterConfigForInstall(updated *conf.Settings,
 		return
 	}
 	rf := updated.RangeFilterConfig()
+	if !mm.rangeFilterGalleryManaged(rf) {
+		return
+	}
 	rf.Model = entry.GeomodelVersion
 	// Clear both role paths before the loop so a half-tuple entry (only one geomodel
 	// role, reachable only via a hand-edited catalog) cannot leave the opposite path at
@@ -2217,13 +2262,13 @@ func (mm *ModelManager) applyRangeFilterConfigForInstall(updated *conf.Settings,
 // applyRangeFilterConfigForUninstall keeps the shared geomodel range-filter config
 // pointing at files that exist after an uninstall. When another installed entry still
 // carries a full geomodel tuple it re-points the config at that survivor's files (via
-// applyRangeFilterConfigForInstall); otherwise it clears the config. Because it re-points
-// at gallery-managed shared files, a hand-edited custom range-filter path is overwritten,
-// which is consistent with applyRangeFilterConfigForInstall on the install side. mm.installed
-// must no longer contain the uninstalled entry; caller holds mm.mu. It writes into updated
-// (a settings clone), and is a no-op for an entry without geomodel files.
+// applyRangeFilterConfigForInstall); otherwise it clears the config. A custom range
+// filter (see rangeFilterGalleryManaged) is neither re-pointed nor cleared, matching
+// applyRangeFilterConfigForInstall on the install side. mm.installed must no longer
+// contain the uninstalled entry; caller holds mm.mu. It writes into updated (a settings
+// clone), and is a no-op for an entry without geomodel files.
 func (mm *ModelManager) applyRangeFilterConfigForUninstall(updated *conf.Settings, entry *CatalogEntry) {
-	if !HasGeomodelFiles(entry) {
+	if !HasGeomodelFiles(entry) || !mm.rangeFilterGalleryManaged(updated.RangeFilterConfig()) {
 		return
 	}
 	// The geomodel range filter is a shared service, not a per-family setting:
