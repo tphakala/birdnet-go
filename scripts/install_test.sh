@@ -86,6 +86,7 @@ assert_nonzero() { # description rc
 # ---------------------------------------------------------------------------
 load_fn() {
     local fn="$1"
+    local src="${2:-$INSTALL_SH}"
     local body
     body="$(awk -v fn="$fn" '
         # Remember the delimiter of any here-doc opened on this line so its body
@@ -111,9 +112,9 @@ load_fn() {
         trim($0) ~ /^#/ { next }
         { d = heredoc_delim($0); if (d != "") { heredoc = d; next } }
         /^\}$/ { exit }
-    ' "$INSTALL_SH")"
+    ' "$src")"
     if [ -z "$body" ]; then
-        echo "FATAL: could not extract function '$fn' from install.sh" >&2
+        echo "FATAL: could not extract function '$fn' from $src" >&2
         exit 2
     fi
     # A runaway extraction (an opener we misread) yields a body that does not end
@@ -1451,6 +1452,23 @@ assert_eq "records: stopped_remote survives the rollback that restarted it" \
     "yes" "$(printf '%s' "$diag" | jq -r .stopped_remote_this_run)"
 unset -f ssh
 reset_migration_state
+
+# ===========================================================================
+# host_socket_mount (the real helper; the unit tests above use a stub): it prints a
+# read-only mount of the socket's directory only for an existing Unix socket.
+# ===========================================================================
+it "host_socket_mount against real paths"
+
+load_fn host_socket_mount   # replaces the stub; no later test generates a unit
+sock_dir="${WORK}/sockdir"
+mkdir -p "$sock_dir"
+python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "${sock_dir}/socket"
+assert_eq "real socket: read-only directory mount" "-v ${sock_dir}:${sock_dir}:ro" "$(host_socket_mount "${sock_dir}/socket")"
+: > "${sock_dir}/regular"
+assert_eq "regular file is not a socket: no mount" "" "$(host_socket_mount "${sock_dir}/regular")"
+assert_eq "missing path: no mount" "" "$(host_socket_mount "${sock_dir}/missing")"
+host_socket_mount "${sock_dir}/missing" >/dev/null
+assert_ok "missing path: returns 0 (safe under set -e)" $?
 
 # --- the noisy-shell probe is actually wired in ------------------------------
 # The function is unit-tested above; this pins that migrate_from_remote_host
