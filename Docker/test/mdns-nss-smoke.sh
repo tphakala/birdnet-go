@@ -96,7 +96,9 @@ printf '%s\n' "$probe_err" | grep -q 'Connection refused' || fail "ffprobe stder
 echo "==> 4. without the mount a .local lookup fails fast"
 start=$SECONDS
 rc=0
-docker run --rm --entrypoint timeout "$IMAGE" 5 getent hosts "$NAME" >/dev/null 2>&1 || rc=$?
+# --dns 127.0.0.1 points the unicast fallback at a closed local port, so the lookup
+# fails at once and the timing measures nss-mdns, not the CI runner's resolver.
+docker run --rm --dns 127.0.0.1 --entrypoint timeout "$IMAGE" 5 getent hosts "$NAME" >/dev/null 2>&1 || rc=$?
 elapsed=$((SECONDS - start))
 echo "    getent hosts $NAME: rc=$rc"
 [ "$rc" -ne 0 ] || fail "$NAME resolved without any Avahi mount"
