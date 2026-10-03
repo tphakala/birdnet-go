@@ -94,7 +94,13 @@ func (m *MockDatastore) GetNoteResults(string) ([]datastore.Results, error) {
 func (m *MockDatastore) SaveNoteComment(*datastore.NoteComment) error { return nil }
 func (m *MockDatastore) UpdateNoteComment(string, string) error       { return nil }
 func (m *MockDatastore) DeleteNoteComment(string) error               { return nil }
-func (m *MockDatastore) SaveDailyEvents(*datastore.DailyEvents) error { return nil }
+func (m *MockDatastore) GetSpeciesNotes(context.Context, string) ([]datastore.SpeciesNote, error) {
+	return nil, nil
+}
+func (m *MockDatastore) SaveSpeciesNote(context.Context, *datastore.SpeciesNote) error { return nil }
+func (m *MockDatastore) DeleteSpeciesNote(context.Context, string) error               { return nil }
+func (m *MockDatastore) UpdateSpeciesNote(context.Context, string, string) error       { return nil }
+func (m *MockDatastore) SaveDailyEvents(*datastore.DailyEvents) error                  { return nil }
 func (m *MockDatastore) GetDailyEvents(string) (datastore.DailyEvents, error) {
 	return datastore.DailyEvents{}, nil
 }
