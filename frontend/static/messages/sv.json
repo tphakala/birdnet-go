@@ -3197,6 +3197,15 @@
       },
       "errors": {
         "speciesLoadFailed": "Kunde inte ladda artlista. Försök igen."
+      },
+      "firstDailyConsensus": {
+        "title": "Bekräftelse med två modeller",
+        "description": "Minskar felaktiga registreringar av nya arter genom att förkasta dagens första detektion av en art, om inte även en andra modell detekterar den inom samma detektionsfönster. När arten har registrerats den dagen räcker en modell. Gäller bara när minst två modeller som analyserar ljudkällan kan identifiera arten.",
+        "enable": "Kräv att två modeller bekräftar dagens första detektion av en art",
+        "speciesListLabel": "Undantagna arter",
+        "addSpeciesLabel": "Lägg till undantagen art",
+        "addSpeciesHelp": "Arter i listan detekteras som vanligt av en modell. Använd listan för arter som bara en av dina modeller hör tillförlitligt.",
+        "disabledHelp": "Slå på bekräftelse med två modeller för att redigera de undantagna arterna."
       }
     },
     "integration": {

@@ -3197,6 +3197,15 @@
       },
       "errors": {
         "speciesLoadFailed": "Failed to load species list. Please try again."
+      },
+      "firstDailyConsensus": {
+        "title": "Two-Model Confirmation",
+        "description": "Reduces false new-species entries by discarding a species' first detection of the day unless a second model also detects it within the same detection window. Once the species is recorded that day, one model is enough. Applies only when at least two models analyzing the audio source can identify the species.",
+        "enable": "Require two models to confirm a species' first detection of the day",
+        "speciesListLabel": "Exempt Species",
+        "addSpeciesLabel": "Add Exempt Species",
+        "addSpeciesHelp": "Species listed here keep normal single-model detection. Use it for species that only one of your models reliably hears.",
+        "disabledHelp": "Turn on two-model confirmation to edit the exempt species."
       }
     },
     "integration": {

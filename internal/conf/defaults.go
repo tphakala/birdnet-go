@@ -308,6 +308,10 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.privacyfilter.vad.threshold", 0.35)
 	viper.SetDefault("realtime.privacyfilter.vad.modelpath", "")
 
+	// First daily detection consensus (opt-in)
+	viper.SetDefault("realtime.firstdailyconsensus.enabled", false)
+	viper.SetDefault("realtime.firstdailyconsensus.whitelist", []string{})
+
 	// Dog bark filter configuration
 	viper.SetDefault("realtime.dogbarkfilter.enabled", false)
 	viper.SetDefault("realtime.dogbarkfilter.debug", false)
