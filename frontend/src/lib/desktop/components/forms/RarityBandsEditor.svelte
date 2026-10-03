@@ -30,7 +30,8 @@
 
   // MAX_OCCURRENCE, MIN_DETECTIONS, MAX_DETECTIONS and MAX_BANDS mirror the backend
   // validation (internal/conf/validate_realtime.go). MIN_OCCURRENCE is stricter than
-  // the backend's "greater than 0", matching the input's step.
+  // the backend's "greater than 0", matching the input's step; see occurrenceMin for
+  // how a saved value below it is kept.
   const MIN_OCCURRENCE = 0.01;
   const MAX_OCCURRENCE = 1;
   const OCCURRENCE_STEP = 0.01;
@@ -64,6 +65,13 @@
   // The enabled filter needs at least one band (the backend rejects an empty list), so
   // the last band cannot be removed; disabling the filter is the way to drop it.
   const isLastBand = $derived(bands.length === 1);
+
+  // The input's lower bound for a band. A saved value the backend accepts (above 0)
+  // but below MIN_OCCURRENCE lowers the bound to itself, so focusing and leaving the
+  // field without an edit does not clamp it up to MIN_OCCURRENCE.
+  function occurrenceMin(maxOccurrence: number): number {
+    return maxOccurrence > 0 && maxOccurrence < MIN_OCCURRENCE ? maxOccurrence : MIN_OCCURRENCE;
+  }
 
   function updateBand(index: number, patch: Partial<RarityBand>) {
     onUpdate(bands.map((band, i) => (i === index ? { ...band, ...patch } : band)));
@@ -110,7 +118,7 @@
         helpText={t('components.forms.rarityBands.maxOccurrence.helpText')}
         inputId={`${row.key}-max-occurrence`}
         value={row.band.maxOccurrence}
-        min={MIN_OCCURRENCE}
+        min={occurrenceMin(row.band.maxOccurrence)}
         max={MAX_OCCURRENCE}
         step={OCCURRENCE_STEP}
         {disabled}

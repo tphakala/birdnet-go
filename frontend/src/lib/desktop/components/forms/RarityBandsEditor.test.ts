@@ -69,6 +69,31 @@ describe('RarityBandsEditor', () => {
     expect(onUpdate).toHaveBeenLastCalledWith([{ maxOccurrence: 0.1, minDetections: 5 }, bands[1]]);
   });
 
+  it('keeps a saved occurrence below the input step on focus and blur', async () => {
+    const { onUpdate } = renderEditor({ bands: [{ maxOccurrence: 0.005, minDetections: 3 }] });
+
+    const occurrenceInput = screen.getByLabelText(
+      'components.forms.rarityBands.maxOccurrence.label'
+    );
+    await fireEvent.focus(occurrenceInput);
+    await fireEvent.blur(occurrenceInput);
+
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(occurrenceInput).toHaveValue(0.005);
+  });
+
+  it('still raises an entered occurrence of 0 to the minimum', async () => {
+    const { onUpdate } = renderEditor({ bands: [bands[0]] });
+
+    const occurrenceInput = screen.getByLabelText(
+      'components.forms.rarityBands.maxOccurrence.label'
+    );
+    await fireEvent.input(occurrenceInput, { target: { value: '0' } });
+    await fireEvent.change(occurrenceInput, { target: { value: '0' } });
+
+    expect(onUpdate).toHaveBeenLastCalledWith([{ maxOccurrence: 0.01, minDetections: 3 }]);
+  });
+
   it('keeps the last band and says why', async () => {
     const { onUpdate } = renderEditor({ bands: [bands[0]] });
 
