@@ -39,9 +39,21 @@
         )
       : null
   );
+
+  // For the overlay variant (spectrogram cards): suppress when only one source
+  // is active, since every live detection shares the same origin and the label
+  // adds no value. Inline variant always shows — historical views may contain
+  // detections from sources that have since been disabled, and users need the
+  // label to identify the origin. Guests stay hidden: counts stay 0.
+  const MULTIPLE_SOURCES_THRESHOLD = 2;
+  let hasMultipleSources = $derived(
+    ($settingsStore?.formData?.realtime?.audio?.sources?.length ?? 0) +
+      ($settingsStore?.formData?.realtime?.rtsp?.streams?.filter(s => s.enabled).length ?? 0) >=
+      MULTIPLE_SOURCES_THRESHOLD
+  );
 </script>
 
-{#if sourceLabel}
+{#if sourceLabel && (variant !== 'overlay' || hasMultipleSources)}
   <div
     class={cn(variant === 'overlay' ? 'source-badge-overlay' : 'source-badge-inline', className)}
     title={sourceLabel}
