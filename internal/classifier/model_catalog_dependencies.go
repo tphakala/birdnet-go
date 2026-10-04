@@ -58,7 +58,10 @@ func dependencyFiles(dep *CatalogEntry, _ *InstalledModel) []CatalogFile {
 // EffectiveFiles returns every file installing the given variant of entry puts on
 // disk: the variant's own files followed by the files of each dependency, in
 // DependsOn order. An empty variantID selects the default variant. A dependency file
-// whose LocalName the variant already carries is skipped (the inline copy wins). Every
+// is skipped when the variant already carries a shared-role file with the same
+// LocalName (the inline copy wins; both land in models/shared, and catalog validation
+// rejects such a pair unless the two are the same file). A variant file outside
+// models/shared never shadows a dependency file. Every
 // variant is treated alike, including the embedded baseline: its own files (none) plus
 // its dependencies' files. ok is false exactly when the variant does not resolve. The result is a new slice the caller
 // may keep, but the files it holds are values, never pointers into the catalog.
@@ -70,7 +73,9 @@ func EffectiveFiles(entry *CatalogEntry, variantID string) (files []CatalogFile,
 	files = slices.Clone(own)
 	for _, dep := range dependencyEntries(entry) {
 		for _, f := range dependencyFiles(dep, nil) {
-			if !slices.ContainsFunc(files, func(have CatalogFile) bool { return have.LocalName == f.LocalName }) {
+			if !slices.ContainsFunc(files, func(have CatalogFile) bool {
+				return isSharedRole(have.Role) && have.LocalName == f.LocalName
+			}) {
 				files = append(files, f)
 			}
 		}

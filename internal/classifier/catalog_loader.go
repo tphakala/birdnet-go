@@ -21,6 +21,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -271,6 +272,47 @@ func validateEntryDependsOn(entry *CatalogEntry, byID map[string]*CatalogEntry) 
 		}
 		if len(dep.DependsOn) > 0 {
 			return catalogValidationError("catalog entry %q depends on %q, which has its own dependencies; only one level is supported", entry.ID, id)
+		}
+	}
+	return validateSharedNameCollisions(entry, byID)
+}
+
+// validateSharedNameCollisions rejects two different files that would land on the
+// same path in models/shared when entry is installed: a dependency file and a
+// shared-role file of any entry variant, or files of two dependencies, that share a
+// LocalName but differ in role or checksum. Equal files (same role, same non-empty
+// checksum) are allowed; EffectiveFiles keeps one copy. Without this check one file would silently shadow the other and a
+// later install could overwrite it with different bytes.
+func validateSharedNameCollisions(entry *CatalogEntry, byID map[string]*CatalogEntry) error {
+	type owner struct {
+		file CatalogFile
+		from string
+	}
+	sameFile := func(a, b *CatalogFile) bool {
+		return a.Role == b.Role && a.SHA256 != "" && strings.EqualFold(a.SHA256, b.SHA256)
+	}
+	// Dependency files first: two dependencies must agree on every shared name.
+	depFiles := make(map[string]owner)
+	for _, id := range entry.DependsOn {
+		dep := byID[id]
+		for i := range dep.Files {
+			f := dep.Files[i]
+			if prev, ok := depFiles[f.LocalName]; ok && !sameFile(&prev.file, &f) {
+				return catalogValidationError("catalog entry %q: dependencies %q and %q both install shared file %q with different contents", entry.ID, prev.from, id, f.LocalName)
+			}
+			depFiles[f.LocalName] = owner{file: f, from: id}
+		}
+	}
+	// Then every variant's own shared files against the dependency files.
+	for _, files := range entryFileSets(entry) {
+		for i := range files {
+			f := files[i]
+			if !isSharedRole(f.Role) {
+				continue
+			}
+			if prev, ok := depFiles[f.LocalName]; ok && !sameFile(&prev.file, &f) {
+				return catalogValidationError("catalog entry %q carries shared file %q that differs from the one dependency %q installs", entry.ID, f.LocalName, prev.from)
+			}
 		}
 	}
 	return nil

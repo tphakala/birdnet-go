@@ -47,6 +47,24 @@ func TestEffectiveFiles(t *testing.T) {
 		assert.Empty(t, byName[depIDA+"-model.onnx"].HuggingFaceRepo, "own files keep the entry-level repo rule")
 	})
 
+	t.Run("an own non-shared file never shadows a dependency file", func(t *testing.T) {
+		clash := a
+		clash.Files = []CatalogFile{
+			{RemotePath: "m.onnx", LocalName: "m.onnx", Role: RoleModel},
+			{RemotePath: "labels.csv", LocalName: depLocalTaxonomy, Role: RoleLabels},
+		}
+		files, ok := EffectiveFiles(&clash, "")
+		require.True(t, ok)
+		var roles []string
+		for _, f := range files {
+			if f.LocalName == depLocalTaxonomy {
+				roles = append(roles, f.Role)
+			}
+		}
+		assert.ElementsMatch(t, []string{RoleLabels, RoleTaxonomy}, roles,
+			"the labels file lives in the model directory and the taxonomy file in models/shared, so both are installed")
+	})
+
 	t.Run("an inline copy wins over the dependency file of the same name", func(t *testing.T) {
 		inline := a
 		inline.Files = slices.Clone(a.Files)

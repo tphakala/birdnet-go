@@ -543,6 +543,29 @@ func TestValidateCatalog_Dependencies(t *testing.T) {
 			c[2].Files = []CatalogFile{{RemotePath: "g.onnx", LocalName: "g.onnx", Role: RoleGeomodelModel}}
 			return c
 		}},
+		{name: "inline shared file equal to the dependency file", mutate: func(c []CatalogEntry) []CatalogEntry {
+			c[1].Files[0].SHA256 = "abc123"
+			c[0].Files = append(c[0].Files, c[1].Files[0])
+			return c
+		}},
+		{name: "inline shared file equal by name but without a checksum", want: "differs", mutate: func(c []CatalogEntry) []CatalogEntry {
+			c[0].Files = append(c[0].Files, c[1].Files[0])
+			return c
+		}},
+		{name: "inline shared file differing from the dependency file", want: "differs", mutate: func(c []CatalogEntry) []CatalogEntry {
+			other := c[1].Files[0]
+			other.SHA256 = "different"
+			c[0].Files = append(c[0].Files, other)
+			return c
+		}},
+		{name: "own non-shared file named like a dependency file", mutate: func(c []CatalogEntry) []CatalogEntry {
+			c[0].Files = append(c[0].Files, CatalogFile{RemotePath: "x", LocalName: "tax.csv", Role: RoleLabels})
+			return c
+		}},
+		{name: "two dependencies installing different files under one name", want: "different contents", mutate: func(c []CatalogEntry) []CatalogEntry {
+			c[2].Files = []CatalogFile{{RemotePath: "t", LocalName: "geo.onnx", Role: RoleTaxonomy}}
+			return c
+		}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

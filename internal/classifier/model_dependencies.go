@@ -210,15 +210,18 @@ func (mm *ModelManager) sharedFileInUseLocked(excludeID, localName string) bool 
 }
 
 // cleanupSharedFilesLocked deletes the shared files an uninstall of removed (as
-// removedVariant) leaves unused: every shared-role file of its effective files that
-// no other installed or actively downloading entry reaches. A recorded variant that no
-// longer resolves falls back to the default variant's files. Geomodel files are kept
-// when skipGeomodel is set (the range-filter reload failed, so a session may still
-// hold them). The caller holds mm.mu.
+// removedVariant) leaves unused: every shared-role file of the variant's OWN files
+// that no other installed or actively downloading entry reaches. Dependency files are
+// never deleted here: a dependency is its own catalog entry, removed by its own
+// uninstall or, for a component, by autoremoveComponentsLocked, so a dependent's
+// uninstall cannot delete a geomodel the range filter still uses. A recorded variant
+// that no longer resolves falls back to the default variant's files. Geomodel files
+// are kept when skipGeomodel is set (the range-filter reload failed, so a session may
+// still hold them). The caller holds mm.mu.
 func (mm *ModelManager) cleanupSharedFilesLocked(log logger.Logger, removed *CatalogEntry, removedVariant string, skipGeomodel bool) {
-	files, ok := EffectiveFiles(removed, removedVariant)
+	files, ok := variantFilesByID(removed, removedVariant)
 	if !ok {
-		files, _ = EffectiveFiles(removed, "")
+		files, _ = variantFilesByID(removed, "")
 	}
 	for _, f := range files {
 		if !isSharedRole(f.Role) || (skipGeomodel && isGeomodelRole(f.Role)) {

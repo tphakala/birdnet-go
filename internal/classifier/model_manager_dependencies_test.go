@@ -583,3 +583,34 @@ func TestUninstall_FailedDependentDownloadDoesNotRefuse(t *testing.T) {
 
 	assert.NoFileExists(t, h.shared(depLocalGeoModel))
 }
+
+func TestInstall_FailureKeepsRefetchedFileOfRecordedDependency(t *testing.T) {
+	h := newDepHarness(t)
+	require.NoError(t, h.install(depIDG, ""))
+	geo := h.shared(depLocalGeoModel)
+	require.NoError(t, os.WriteFile(geo, []byte("corrupt"), 0o644))
+	h.srv.Fail("t-taxonomy.csv")
+
+	require.Error(t, h.install(depIDA, ""))
+
+	assert.Equal(t, 2, h.srv.Hits("g-model.onnx"), "the corrupt geomodel file is refetched")
+	assert.FileExists(t, geo, "a failed install keeps a refetched file the installed geomodel still needs")
+	assert.Contains(t, installedSnapshot(h.mm), depIDG)
+	assert.NoFileExists(t, h.own(depIDA, depIDA+"-model.onnx"), "the failed install's own files are removed")
+}
+
+func TestUninstall_DependentNeverDeletesDependencyFiles(t *testing.T) {
+	h := newDepHarness(t)
+	require.NoError(t, h.install(depIDA, ""))
+	// The geomodel files are on disk but G has no record (as after a failed direct
+	// install raced a dependent): uninstalling A must still leave them alone.
+	h.mm.mu.Lock()
+	delete(h.mm.installed, depIDG)
+	h.mm.mu.Unlock()
+
+	require.NoError(t, h.mm.Uninstall(depIDA))
+
+	assert.FileExists(t, h.shared(depLocalGeoModel), "only the geomodel's own uninstall deletes its files")
+	assert.FileExists(t, h.shared(depLocalGeoLabels))
+	assert.NoFileExists(t, h.shared(depLocalTaxonomy), "the unused component is still autoremoved")
+}

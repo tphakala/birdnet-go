@@ -1831,10 +1831,11 @@ func (mm *ModelManager) preflightDiskSpace(entry *CatalogEntry, filesToDownload 
 // mm.downloading; the caller owns that lifecycle
 // so both the install path (downloadModelFiles) and the variant-replace path
 // (replaceVariant) can share the download while differing in how they activate
-// the result. The caller must have registered the entry in mm.downloading. On
-// failure it calls markFailed, and when cleanupOnFailure is true it removes the
-// files it downloaded this call (Install); when false, partial progress is kept
-// (Reinstall).
+// the result. The caller must have registered the entry in mm.downloading and must
+// not hold mm.mu. On failure it calls markFailed, and when cleanupOnFailure is true
+// it removes the files it downloaded this call (Install), except a shared file
+// another installed or actively downloading entry still reaches; when false,
+// partial progress is kept (Reinstall).
 func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState, cleanupOnFailure bool) (files []CatalogFile, modelPath, labelsPath, embeddingsPath string, err error) {
 	log := GetLogger()
 
@@ -1871,11 +1872,27 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 	}
 
 	// Track files we downloaded so we can clean up on failure.
-	var downloadedFiles []string
+	type downloadedFile struct {
+		path, localName string
+		shared          bool
+	}
+	var downloadedFiles []downloadedFile
 
+	// cleanup removes the files this call downloaded. A shared file that another
+	// installed or actively downloading entry still reaches is kept: a dependency
+	// recorded installed (or another install that adopted the file meanwhile) must
+	// not lose a file because this call failed after refetching it.
 	cleanup := func() {
-		for _, f := range downloadedFiles {
-			_ = os.Remove(f)
+		mm.mu.Lock()
+		defer mm.mu.Unlock()
+		for _, d := range downloadedFiles {
+			if d.shared && mm.sharedFileInUseLocked(entry.ID, d.localName) {
+				log.Debug("Keeping shared file after failed download; another model still needs it",
+					logger.String("catalog_id", entry.ID),
+					logger.String("file", d.localName))
+				continue
+			}
+			_ = os.Remove(d.path)
 		}
 	}
 
@@ -1998,7 +2015,7 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 		}
 
 		completedBytes += f.SizeBytes
-		downloadedFiles = append(downloadedFiles, destPath)
+		downloadedFiles = append(downloadedFiles, downloadedFile{path: destPath, localName: f.LocalName, shared: isSharedRole(f.Role)})
 
 		if f.Role == RoleModel {
 			modelPath = destPath
