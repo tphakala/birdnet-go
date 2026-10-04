@@ -501,3 +501,85 @@ func TestDependencyLifecycle_SecondInstallIsRefusedAndKeepsFiles(t *testing.T) {
 	}
 	h.assertDependencyInvariants(t, "second install")
 }
+
+func TestUninstall_RetentionFollowsTheInstalledVariant(t *testing.T) {
+	// V declares the taxonomy file inline in v1 only. Whether removing the last
+	// dependent of the taxonomy component deletes the file depends on which variant of
+	// V is installed.
+	variantEntry := func() CatalogEntry {
+		return CatalogEntry{
+			ID: "dep-variant", Name: "Variant model", Version: "1.0", Category: CategoryBird, HuggingFaceRepo: "t/v",
+			Variants: []CatalogVariant{
+				{ID: "v1", Default: true, Files: []CatalogFile{
+					depFile(RoleModel, "v1.onnx", "v1.onnx"),
+					depFile(RoleTaxonomy, "t-taxonomy.csv", depLocalTaxonomy),
+				}},
+				{ID: "v2", Files: []CatalogFile{depFile(RoleModel, "v2.onnx", "v2.onnx")}},
+			},
+		}
+	}
+	for _, tc := range []struct {
+		variant  string
+		wantFile bool
+	}{
+		{"v1", true},
+		{"v2", false},
+	} {
+		t.Run("installed variant "+tc.variant, func(t *testing.T) {
+			h := newDepHarness(t)
+			setActiveCatalog(append(dependencyTestCatalog(), variantEntry()))
+			require.NoError(t, h.install(depIDA, ""))
+			h.mm.mu.Lock()
+			h.mm.installed["dep-variant"] = InstalledModel{CatalogID: "dep-variant", VariantID: tc.variant}
+			h.mm.mu.Unlock()
+
+			require.NoError(t, h.mm.Uninstall(depIDA))
+
+			assert.NotContains(t, installedSnapshot(h.mm), depIDT, "the component record is dropped")
+			if tc.wantFile {
+				assert.FileExists(t, h.shared(depLocalTaxonomy), "the installed variant still names the file")
+			} else {
+				assert.NoFileExists(t, h.shared(depLocalTaxonomy), "the installed variant does not name the file")
+			}
+		})
+	}
+}
+
+func TestInstall_FailureKeepsDependencyFilesAlreadyOnDisk(t *testing.T) {
+	h := newDepHarness(t)
+	geo := h.writeShared(depLocalGeoModel, "g-model.onnx")
+	geoLabels := h.writeShared(depLocalGeoLabels, "g-labels.txt")
+	h.srv.Fail("t-taxonomy.csv")
+
+	require.Error(t, h.install(depIDA, ""))
+
+	assert.FileExists(t, geo, "a verified file that was already there is not this call's to delete")
+	assert.FileExists(t, geoLabels)
+	assert.NoFileExists(t, h.own(depIDA, depIDA+"-model.onnx"))
+	assert.Empty(t, installedSnapshot(h.mm))
+}
+
+func TestPrimarySwap_FailureFetchingDependencyChangesNothing(t *testing.T) {
+	h := newDepHarness(t)
+	h.srv.Fail("g-model.onnx")
+	rfBefore := *conf.GetSettings().RangeFilterConfig()
+
+	require.Error(t, h.install(depIDP, depVariantDFT))
+
+	assert.NoFileExists(t, h.own(depIDP, depLocalDFT), "the variant file is removed")
+	assert.NoFileExists(t, h.shared(depLocalGeoModel))
+	assert.NotContains(t, installedSnapshot(h.mm), depIDG)
+	assert.NotEqual(t, depVariantDFT, installedSnapshot(h.mm)[depIDP].VariantID)
+	assert.Empty(t, conf.GetSettings().BirdNET.ModelPath, "the model path is not switched")
+	assert.Equal(t, rfBefore, *conf.GetSettings().RangeFilterConfig(), "the range filter is not re-pointed")
+}
+
+func TestUninstall_FailedDependentDownloadDoesNotRefuse(t *testing.T) {
+	h := newDepHarness(t)
+	require.NoError(t, h.install(depIDG, ""))
+	h.setDownloading(depIDA, StatusFailed)
+
+	require.NoError(t, h.mm.Uninstall(depIDG), "a failed, retained download is not a dependent")
+
+	assert.NoFileExists(t, h.shared(depLocalGeoModel))
+}
