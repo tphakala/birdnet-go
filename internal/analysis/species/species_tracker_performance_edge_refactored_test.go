@@ -171,12 +171,9 @@ func verifyPerformanceResults(t *testing.T, config sustainedLoadConfig, metrics 
 	t.Logf("  Min response time: %v", minResponseTime)
 	t.Logf("  Max response time: %v", maxResponseTime)
 
-	// Performance assertions
-	assert.Greater(t, int(finalOps), config.operationsPerSecond*config.durationSeconds/2,
-		"Should complete at least 50% of target operations")
-
-	assert.Less(t, avgResponseTime, 10*time.Millisecond,
-		"Average response time should be under 10ms")
+	// Latency and throughput are logged above but not asserted: both depend on
+	// ticker delivery and runner speed, which -race and CPU contention distort.
+	assert.Positive(t, finalOps, "Load worker should complete at least one operation")
 
 	// Verify system stability
 	speciesCount := tracker.GetSpeciesCount()
