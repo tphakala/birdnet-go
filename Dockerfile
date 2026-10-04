@@ -471,21 +471,24 @@ LABEL usage.compose.podman="Use Podman/podman-compose.yml"
 # Uses /health endpoint and validates JSON status via jq to avoid false positives
 # from HTTP->HTTPS 308 redirects (curl -f treats 3xx as success).
 # Extended start-period for low-power devices (e.g., Raspberry Pi)
-# The HTTP probe uses BIRDNET_WEBSERVER_PORT when it holds a valid port (host
-# networking, where the app listens on that port directly), and 8080 otherwise,
-# matching the app, which ignores an invalid value. With a custom port, 8080 is
-# not probed: under host networking another service on the host could answer
-# there. Like the app, only leading and trailing whitespace is trimmed, and a
-# leading + is accepted (Go parses +18080 as 18080). When the
-# variable is unset or 8080 the probes are the original ones.
+# Default port (BIRDNET_WEBSERVER_PORT unset, 8080 or invalid, as the app ignores
+# an invalid value): the original probes, HTTP 8080 then HTTPS 8443 and 443.
+# Custom port (host networking, where the app listens on that port directly):
+# only the app's own ports are probed, HTTP on that port, then HTTPS on
+# BIRDNET_SECURITY_TLSPORT (default 8443). Under host networking another service
+# on the host could answer on 8080 or 443. Like the app, values are trimmed of
+# leading and trailing whitespace and may carry a leading + (Go parses +18080).
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD P="$(printf '%s' "${BIRDNET_WEBSERVER_PORT:-8080}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"; \
-        P="${P#+}"; case "$P" in ''|*[!0-9]*) P=8080 ;; esac; \
-        { [ "$P" -ge 1 ] && [ "$P" -le 65535 ]; } || P=8080; \
-        curl -fs --connect-timeout 2 --max-time 3 "http://localhost:${P}/health" | jq -e '.status == "healthy"' >/dev/null \
-        || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:8443/health | jq -e '.status == "healthy"' >/dev/null \
-        || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:443/health | jq -e '.status == "healthy"' >/dev/null \
-        || exit 1
+    CMD port() { v="$(printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"; v="${v#+}"; \
+            case "$v" in ''|*[!0-9]*) v="$2" ;; esac; \
+            { [ "$v" -ge 1 ] && [ "$v" -le 65535 ]; } 2>/dev/null || v="$2"; echo "$v"; }; \
+        ok() { curl -fsk --connect-timeout 2 --max-time 3 "$1" | jq -e '.status == "healthy"' >/dev/null; }; \
+        P="$(port "${BIRDNET_WEBSERVER_PORT:-}" 8080)"; \
+        if [ "$P" = 8080 ]; then \
+            ok http://localhost:8080/health || ok https://localhost:8443/health || ok https://localhost:443/health; \
+        else \
+            ok "http://localhost:${P}/health" || ok "https://localhost:$(port "${BIRDNET_SECURITY_TLSPORT:-}" 8443)/health"; \
+        fi || exit 1
 
 # Container startup execution chain:
 # 0. tini - A tiny init run as PID 1. This is defense-in-depth, not a bug fix:

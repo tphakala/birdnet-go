@@ -4,8 +4,9 @@
 #
 # Host-networking deployments (Docker/docker-compose.host.yml, the Unraid host
 # template) set the web port through BIRDNET_WEBSERVER_PORT instead of a port
-# mapping. The health check must then probe that port, and must not fall back
-# to 8080, where under host networking another service on the host could answer.
+# mapping. The health check must then probe that port (and the app's HTTPS
+# port), and must not fall back to 8080 or 443, where under host networking
+# another service on the host could answer. The 8080 case is checked here.
 # An invalid value is ignored by the app, so the check must fall back to 8080.
 #
 # The test runs the image's own HEALTHCHECK command (read with docker inspect)
