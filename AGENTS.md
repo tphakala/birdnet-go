@@ -8,6 +8,14 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound
 identification, aimed at hobby birders and home users. It is an open source
 project run for fun by volunteers, so avoidable rework and support load matter.
 
+External contributors (anyone other than the maintainer) must also review
+[`CONTRIBUTING.md`](CONTRIBUTING.md) before starting work, in particular
+"Submitting Changes": it covers branch naming, commit message format, the PR
+template, and what to expect for feature PRs, which should be discussed with
+the maintainer before any code is written. If you are an agent working for an
+external contributor, read it and tell them before building a feature that has
+not been discussed.
+
 ## Module Guides
 
 Guidance is split by area. Tools that support nested `AGENTS.md` files load the
