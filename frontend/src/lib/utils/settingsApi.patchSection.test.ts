@@ -2,6 +2,7 @@
  * Contract tests for PATCH /api/v2/settings/:section.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { SettingsSectionPayloads } from './settingsApi';
 
 // Unmock settingsApi so we can exercise the real patchSection() path
 vi.unmock('$lib/utils/settingsApi.js');
@@ -56,5 +57,19 @@ describe('settingsAPI.patchSection', () => {
     await expect(settingsAPI.patchSection('birdweather', { id: 'bad' })).rejects.toMatchObject({
       status: 400,
     });
+  });
+
+  it('section payload types leave out fields the server never lets the API change', () => {
+    const birdnet = (body: SettingsSectionPayloads['birdnet']) => body;
+    const audio = (body: SettingsSectionPayloads['audio']) => body;
+
+    // @ts-expect-error rangeFilter holds server-owned fields (model, species, lastUpdated)
+    birdnet({ rangeFilter: undefined });
+    // @ts-expect-error ffmpegPath is validated at startup and blocked on the API
+    audio({ ffmpegPath: '/usr/bin/ffmpeg' });
+    // @ts-expect-error soxPath is validated at startup and blocked on the API
+    audio({ soxPath: '/usr/bin/sox' });
+
+    expect(birdnet({ threshold: 0.8 })).toEqual({ threshold: 0.8 });
   });
 });

@@ -1558,8 +1558,9 @@ export const settingsActions = {
     const { notify = true } = options;
 
     // Let section saves finish first (success or failure, request and store
-    // merge) so the snapshot below carries what they patched.
-    if (inFlightSectionSaves.size > 0) {
+    // merge) so the snapshot below carries what they patched. Loop, because a
+    // section save can start while an earlier one is awaited.
+    while (inFlightSectionSaves.size > 0) {
       await Promise.allSettled([...inFlightSectionSaves]);
     }
 

@@ -1194,6 +1194,32 @@ describe('Settings Store - saveSection', () => {
     expect(lookup(body, ['birdnet', 'threshold'])).toBe(0.9);
   });
 
+  it('saveSettings also waits for a section save that starts while it is waiting', async () => {
+    const first = deferred<Record<string, never>>();
+    const second = deferred<Record<string, never>>();
+    vi.mocked(settingsAPI.patchSection)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+
+    const firstSave = settingsActions.saveSection('birdnet', { threshold: 0.9 });
+    const fullSave = settingsActions.saveSettings({ notify: false });
+    await Promise.resolve();
+    const secondSave = settingsActions.saveSection('sentry', { enabled: true });
+    first.resolve({});
+    await firstSave;
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settingsAPI.save).not.toHaveBeenCalled();
+
+    second.resolve({});
+    await Promise.all([secondSave, fullSave]);
+
+    expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+    const body = vi.mocked(settingsAPI.save).mock.calls[0]?.[0] as unknown as Snapshot;
+    expect(lookup(body, ['birdnet', 'threshold'])).toBe(0.9);
+    expect(lookup(body, ['sentry', 'enabled'])).toBe(true);
+  });
+
   it('saveSettings waits for the store merge, not only the request', async () => {
     const patch = deferred<Record<string, never>>();
     vi.mocked(settingsAPI.patchSection).mockReturnValueOnce(patch.promise);

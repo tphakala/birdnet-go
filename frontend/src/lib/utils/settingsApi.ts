@@ -52,6 +52,17 @@ export interface MQTTTLSCertificateUpload {
 const SETTINGS_ENDPOINT = '/api/v2/settings';
 
 /**
+ * Keys the backend never lets the API change (getBlockedFieldMap in
+ * internal/api/v2/settings.go): it reverts them and reports them in
+ * skippedFields. They are left out of the section payloads so a section save
+ * never sends one, and the store never records a value the server refused.
+ * rangeFilter is left out whole because it holds the blocked model, species
+ * and lastUpdated fields.
+ */
+type BirdNetServerOwnedKey = 'rangeFilter';
+type AudioServerOwnedKey = 'ffmpegPath' | 'soxPath';
+
+/**
  * Request bodies for the per-section settings update, keyed by the lowercase
  * backend section name. Partial is shallow, so a nested value is typed as a
  * complete object; the backend itself merges nested objects key by key and only
@@ -59,9 +70,9 @@ const SETTINGS_ENDPOINT = '/api/v2/settings';
  * backend accepts more sections than are listed here.
  */
 export interface SettingsSectionPayloads {
-  birdnet: Partial<BirdNetSettings>;
+  birdnet: Partial<Omit<BirdNetSettings, BirdNetServerOwnedKey>>;
   dashboard: Partial<Dashboard>;
-  audio: Partial<AudioSettings>;
+  audio: Partial<Omit<AudioSettings, AudioServerOwnedKey>>;
   rtsp: Partial<RTSPSettings>;
   privacyfilter: Partial<PrivacyFilterSettings>;
   birdweather: Partial<BirdWeatherSettings>;
