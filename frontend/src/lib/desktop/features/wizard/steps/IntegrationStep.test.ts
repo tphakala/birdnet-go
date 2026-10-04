@@ -21,27 +21,102 @@ import { flushAsync, renderStep } from './stepTestUtils';
 // The leave handler contract shared by every step is in stepContract.test.ts
 describe('IntegrationStep - leave handler', () => {
   beforeEach(() => {
-    vi.mocked(settingsActions.updateSection).mockClear();
-    vi.mocked(settingsActions.saveSettings).mockClear().mockResolvedValue(undefined);
+    vi.mocked(settingsActions.saveSection).mockClear().mockResolvedValue(undefined);
   });
 
-  it('the leave handler saves the edited values once', async () => {
+  const clickByName = (name: RegExp) => fireEvent.click(screen.getByRole('button', { name }));
+  const PRIVACY = /wizard\.steps\.integration\.privacyFilterLabel/;
+  const BIRDWEATHER = /wizard\.steps\.integration\.birdweatherLabel/;
+  const SENTRY = /wizard\.steps\.integration\.errorReportingLabel/;
+
+  async function changeAll() {
+    await clickByName(PRIVACY);
+    await clickByName(BIRDWEATHER);
+    const input = await screen.findByRole('textbox');
+    await fireEvent.input(input, { target: { value: 'abc123' } });
+    await clickByName(SENTRY);
+  }
+
+  it('the leave handler patches birdweather, privacyfilter and sentry in order', async () => {
     const { leave } = renderStep(IntegrationStep);
     await flushAsync();
-    await fireEvent.click(
-      screen.getByRole('button', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
+    await changeAll();
+
+    await leave();
+    await leave();
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls).toEqual([
+      ['birdweather', { enabled: true, id: 'abc123' }],
+      ['privacyfilter', { enabled: false }],
+      ['sentry', { enabled: true }],
+    ]);
+  });
+
+  it('the leave handler patches only the sections that changed', async () => {
+    const { leave } = renderStep(IntegrationStep);
+    await flushAsync();
+    await clickByName(SENTRY);
+
+    await leave();
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls).toEqual([
+      ['sentry', { enabled: true }],
+    ]);
+  });
+
+  it('sends no further sections once the step unmounted during a save', async () => {
+    let resolveSave: () => void = () => {};
+    vi.mocked(settingsActions.saveSection).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          resolveSave = resolve;
+        })
     );
+    const { leave, unmount } = renderStep(IntegrationStep);
+    await flushAsync();
+    await changeAll();
 
-    await leave();
-    await leave();
+    const pending = leave();
+    await flushAsync();
+    unmount();
+    resolveSave();
+    await pending;
 
-    expect(settingsActions.updateSection).toHaveBeenCalledTimes(2);
-    expect(settingsActions.updateSection).toHaveBeenCalledWith('realtime', {
-      privacyFilter: { enabled: true },
-      birdweather: { enabled: false, id: '' },
+    expect(vi.mocked(settingsActions.saveSection).mock.calls).toEqual([
+      ['birdweather', { enabled: true, id: 'abc123' }],
+    ]);
+  });
+
+  it('a failed birdweather save sends nothing else', async () => {
+    vi.mocked(settingsActions.saveSection).mockRejectedValueOnce(new Error('bad token'));
+    const { leave } = renderStep(IntegrationStep);
+    await flushAsync();
+    await changeAll();
+
+    await expect(leave()).rejects.toThrow('bad token');
+
+    expect(settingsActions.saveSection).toHaveBeenCalledTimes(1);
+    expect(settingsActions.saveSection).toHaveBeenCalledWith('birdweather', {
+      enabled: true,
+      id: 'abc123',
     });
-    expect(settingsActions.updateSection).toHaveBeenCalledWith('sentry', { enabled: true });
-    expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
-    expect(settingsActions.saveSettings).toHaveBeenCalledWith({ notify: false });
+  });
+
+  it('a retry after a failed privacyfilter save sends only privacyfilter and sentry', async () => {
+    vi.mocked(settingsActions.saveSection)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('privacy failed'));
+    const { leave } = renderStep(IntegrationStep);
+    await flushAsync();
+    await changeAll();
+
+    await expect(leave()).rejects.toThrow('privacy failed');
+    vi.mocked(settingsActions.saveSection).mockClear();
+    await leave();
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls).toEqual([
+      ['privacyfilter', { enabled: false }],
+      ['sentry', { enabled: true }],
+    ]);
   });
 });

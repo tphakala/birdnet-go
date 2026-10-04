@@ -6,7 +6,6 @@
   import { Scale, Target, Radio } from '@lucide/svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
-  import { useStepSave } from '../stepSave';
 
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
@@ -68,7 +67,8 @@
     dirty = true;
   }
 
-  const saveStep = useStepSave(() => registerLeaveHandler, commit);
+  // Next, Back and Done await the commit; it never runs on Skip or Leave setup.
+  onMount(() => registerLeaveHandler?.(commit));
 
   // Save the step's edits when the wizard leaves it with Next, Back or Done.
   // Only runs if the user made changes.
@@ -76,10 +76,7 @@
     if (!dirty) return;
     const preset = presets.find(p => p.id === selectedPreset);
     if (!preset) return;
-    settingsActions.updateSection('birdnet', {
-      threshold: preset.threshold,
-    });
-    await saveStep();
+    await settingsActions.saveSection('birdnet', { threshold: preset.threshold });
     dirty = false;
   }
 </script>

@@ -4,17 +4,21 @@
   import { api } from '$lib/utils/api';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { settingsActions, settingsStore, type RealtimeSettings } from '$lib/stores/settings';
+  import { settingsActions, settingsStore, StreamTypes } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { Mic, Video } from '@lucide/svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
   import { getLogger } from '$lib/utils/logger';
-  import { useStepSave } from '../stepSave';
 
   const logger = getLogger('AudioSourceStep');
 
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
+
+  // Name of the stream the wizard creates for an RTSP source
+  const WIZARD_STREAM_NAME = 'Stream 1';
+  // Transport for that stream
+  const WIZARD_STREAM_TRANSPORT = 'tcp';
 
   type SourceType = 'soundcard' | 'rtsp';
 
@@ -94,33 +98,33 @@
     }
   }
 
-  const saveStep = useStepSave(() => registerLeaveHandler, commit);
+  // Next, Back and Done await the commit; it never runs on Skip or Leave setup.
+  onMount(() => registerLeaveHandler?.(commit));
 
   // Save the step's edits when the wizard leaves it with Next, Back or Done.
   // Only runs if the user made changes and has valid data.
   async function commit(): Promise<void> {
     if (!dirty || skipped) return;
     if (sourceType === 'soundcard' && selectedDevice) {
-      settingsActions.updateSection('realtime', {
-        audio: { source: selectedDevice } as RealtimeSettings['audio'],
-      });
+      await settingsActions.saveSection('audio', { source: selectedDevice });
     } else if (sourceType === 'rtsp' && rtspUrl.trim()) {
-      settingsActions.updateSection('realtime', {
-        rtsp: {
-          streams: [
-            {
-              name: 'Stream 1',
-              url: rtspUrl.trim(),
-              type: 'rtsp' as const,
-              transport: 'tcp' as const,
-            },
-          ],
-        } as RealtimeSettings['rtsp'],
+      // The server replaces the streams array with exactly what is sent and does
+      // not fill defaults, so every field the stream needs, including enabled,
+      // is sent explicitly.
+      await settingsActions.saveSection('rtsp', {
+        streams: [
+          {
+            name: WIZARD_STREAM_NAME,
+            url: rtspUrl.trim(),
+            enabled: true,
+            type: StreamTypes.RTSP,
+            transport: WIZARD_STREAM_TRANSPORT,
+          },
+        ],
       });
     } else {
       return;
     }
-    await saveStep();
     dirty = false;
   }
 </script>

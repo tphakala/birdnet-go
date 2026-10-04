@@ -18,11 +18,10 @@ import { flushAsync, renderStep } from './stepTestUtils';
 // The leave handler contract shared by every step is in stepContract.test.ts
 describe('DetectionStep - leave handler', () => {
   beforeEach(() => {
-    vi.mocked(settingsActions.updateSection).mockClear();
-    vi.mocked(settingsActions.saveSettings).mockClear().mockResolvedValue(undefined);
+    vi.mocked(settingsActions.saveSection).mockClear().mockResolvedValue(undefined);
   });
 
-  it('the leave handler saves the edited values once', async () => {
+  it('the leave handler patches only birdnet threshold', async () => {
     const { leave } = renderStep(DetectionStep);
     await flushAsync();
     await fireEvent.click(
@@ -32,9 +31,7 @@ describe('DetectionStep - leave handler', () => {
     await leave();
     await leave();
 
-    expect(settingsActions.updateSection).toHaveBeenCalledTimes(1);
-    expect(settingsActions.updateSection).toHaveBeenCalledWith('birdnet', { threshold: 0.9 });
-    expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
-    expect(settingsActions.saveSettings).toHaveBeenCalledWith({ notify: false });
+    expect(settingsActions.saveSection).toHaveBeenCalledTimes(1);
+    expect(settingsActions.saveSection).toHaveBeenCalledWith('birdnet', { threshold: 0.9 });
   });
 });
