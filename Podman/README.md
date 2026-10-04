@@ -84,6 +84,12 @@ If you enable `keep-id` on an EXISTING install whose volumes were written under 
 podman unshare chown -R 0:0 ./config ./data
 ```
 
+## mDNS (.local hostnames) and service discovery
+
+The static quadlet and compose files ship `/run/avahi-daemon` (`.local` name resolution) and `/run/dbus` (DNS-SD service discovery) mounts commented out, because Podman refuses to start a container whose bind source is missing. `podman-install.sh` enables them when `/run/avahi-daemon/socket` and `/run/dbus/system_bus_socket` exist, re-detects on every run, and enables the D-Bus line only when the unit has `UserNS=keep-id`. If avahi is removed from the host, re-run the installer (or comment the lines) or the container will not start.
+
+For a manual deployment, uncomment the lines yourself. D-Bus authenticates by uid, so under rootless Podman it needs `UserNS=keep-id` (`userns_mode: keep-id` in compose), which is also opt-in in the shipped files. Never add `:z` or `:Z`. Purpose, security trade-off, SELinux notes and opt-out: [RTSP troubleshooting](../doc/wiki/rtsp-troubleshooting.md#using-local-mdns-hostnames-in-containers).
+
 ## Compatibility
 
 BirdNET-Go container images are built following the OCI (Open Container Initiative) standard, making them compatible with both Docker and Podman runtimes. The same image works with both tools - the `podman-*` prefixed tags are provided for easier discovery by Podman users.

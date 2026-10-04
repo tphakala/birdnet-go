@@ -38,6 +38,11 @@ services:
     volumes:
       - ./config:/config
       - ./data:/data
+      # Host mounts for .local names and DNS-SD discovery (opt-in): uncomment only when the
+      # host has avahi and D-Bus; podman-install.sh does this for quadlets. D-Bus needs keep-id.
+      # Never :z or :Z. See doc/wiki/rtsp-troubleshooting.md.
+      # - /run/avahi-daemon:/run/avahi-daemon:ro
+      # - /run/dbus:/run/dbus:ro
     # Mount HLS stream segment files directory as tmpfs (RAM disk). mode=1777 (a
     # sticky world-writable dir like /tmp) keeps it writable whatever UID the app
     # runs as, including under the rootless-audio opt-in below.

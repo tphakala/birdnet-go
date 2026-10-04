@@ -86,6 +86,7 @@ assert_nonzero() { # description rc
 # ---------------------------------------------------------------------------
 load_fn() {
     local fn="$1"
+    local src="${2:-$INSTALL_SH}"
     local body
     body="$(awk -v fn="$fn" '
         # Remember the delimiter of any here-doc opened on this line so its body
@@ -111,9 +112,9 @@ load_fn() {
         trim($0) ~ /^#/ { next }
         { d = heredoc_delim($0); if (d != "") { heredoc = d; next } }
         /^\}$/ { exit }
-    ' "$INSTALL_SH")"
+    ' "$src")"
     if [ -z "$body" ]; then
-        echo "FATAL: could not extract function '$fn' from install.sh" >&2
+        echo "FATAL: could not extract function '$fn' from $src" >&2
         exit 2
     fi
     # A runaway extraction (an opener we misread) yields a body that does not end
@@ -144,6 +145,16 @@ resolve_host_timezone() { printf '%s' "${1:-UTC}"; }
 check_directory_exists() { return 1; }
 is_raspberry_pi() { return 1; }
 has_intel_gpu() { return 1; }
+# Host socket detection: FAKE_SOCKETS lists the sockets that "exist" (space separated).
+FAKE_SOCKETS=""
+host_socket_mount() {
+    case " $FAKE_SOCKETS " in
+        *" $1 "*) printf -- '-v %s:%s:ro' "$(dirname "$1")" "$(dirname "$1")" ;;
+    esac
+}
+# generate_systemd_service_content derives the app uid from SUDO_UID, falling back to id -u.
+# Pin a non-root uid so the D-Bus mount assertions do not depend on who runs the suite.
+SUDO_UID=1000
 # No docker on the CI runner path we exercise; the container-TZ fallback degrades to empty.
 # The load_existing_service_config container-fallback test overrides this stub.
 safe_docker() { return 1; }
@@ -524,6 +535,84 @@ generate_systemd_service_content > "$gpu_unit"
 assert_eq "Intel GPU: unit maps /dev/dri exactly once" "1" "$(grep -c -- '--device /dev/dri' "$gpu_unit")"
 assert_eq "Intel GPU: web port still published" "1" "$(grep -c -- '-p 9000:8080' "$gpu_unit")"
 has_intel_gpu() { return 1; }   # restore the deterministic default for subsequent tests
+
+# ===========================================================================
+# generate_systemd_service_content: the read-only Avahi and system D-Bus directory
+# mounts (for .local resolution and DNS-SD discovery) are gated per socket on
+# host_socket_mount, independently of each other.
+# ===========================================================================
+it "generate_systemd_service_content host socket mounts"
+
+AVAHI_SOCK=/run/avahi-daemon/socket
+DBUS_SOCK=/run/dbus/system_bus_socket
+
+none_unit="${WORK}/sock-none.service"
+generate_systemd_service_content > "$none_unit"
+assert_eq "no sockets: unit omits /run/avahi-daemon" "0" "$(grep -c -- '/run/avahi-daemon' "$none_unit")"
+assert_eq "no sockets: unit omits /run/dbus" "0" "$(grep -c -- '/run/dbus' "$none_unit")"
+
+FAKE_SOCKETS="$AVAHI_SOCK"
+avahi_unit="${WORK}/sock-avahi.service"
+generate_systemd_service_content > "$avahi_unit"
+assert_eq "Avahi socket: exactly one read-only directory mount" "1" "$(grep -c -- '-v /run/avahi-daemon:/run/avahi-daemon:ro \\$' "$avahi_unit")"
+assert_eq "Avahi socket only: D-Bus mount stays off" "0" "$(grep -c -- '/run/dbus' "$avahi_unit")"
+assert_eq "Avahi socket: no :z or :Z relabel" "0" "$(grep -cE -- ':[zZ]( |$)' "$avahi_unit")"
+assert_eq "Avahi socket: web port still published" "1" "$(grep -c -- '-p 9000:8080' "$avahi_unit")"
+
+FAKE_SOCKETS="$DBUS_SOCK"
+dbus_unit="${WORK}/sock-dbus.service"
+generate_systemd_service_content > "$dbus_unit"
+assert_eq "D-Bus socket: exactly one read-only directory mount" "1" "$(grep -c -- '-v /run/dbus:/run/dbus:ro \\$' "$dbus_unit")"
+assert_eq "D-Bus socket only: Avahi mount stays off" "0" "$(grep -c -- '/run/avahi-daemon' "$dbus_unit")"
+assert_eq "D-Bus socket: no :z or :Z relabel" "0" "$(grep -cE -- ':[zZ]( |$)' "$dbus_unit")"
+
+FAKE_SOCKETS="$AVAHI_SOCK $DBUS_SOCK"
+both_unit="${WORK}/sock-both.service"
+generate_systemd_service_content > "$both_unit"
+assert_eq "both sockets: both mounts present" "2" "$(grep -cE -- '-v /run/(avahi-daemon|dbus):' "$both_unit")"
+
+# uid 0 on the system bus is host root, so a root install keeps the Avahi mount but drops D-Bus.
+SUDO_UID=0
+root_unit="${WORK}/sock-root.service"
+generate_systemd_service_content > "$root_unit"
+SUDO_UID=1000
+assert_eq "root install: D-Bus mount stays off" "0" "$(grep -c -- '/run/dbus' "$root_unit")"
+assert_eq "root install: Avahi mount kept" "1" "$(grep -c -- '-v /run/avahi-daemon:/run/avahi-daemon:ro \\$' "$root_unit")"
+FAKE_SOCKETS=""   # restore the deterministic default for subsequent tests
+
+# ===========================================================================
+# The socket mounts are a pure function of host state: they coexist with settings
+# restored from an existing unit, and an unchanged update regenerates a
+# byte-identical unit.
+# ===========================================================================
+it "Socket mounts track host state across regenerates"
+
+legacy_unit="${WORK}/legacy-avahi.service"
+cat > "$legacy_unit" <<'EOF'
+[Service]
+ExecStart=/usr/bin/docker run --rm \
+    --name birdnet-go \
+    -p 9100:8080 \
+    --env TZ="Europe/Helsinki" \
+    -v /home/pi/birdnet-go-app/config:/config \
+    ghcr.io/tphakala/birdnet-go:nightly
+EOF
+WEB_PORT=""; WEB_PORT_BIND_ADDR=""; BIND_TLS_PORTS="false"; TLS_BIND_ADDR=""
+BIND_METRICS_PORT="false"; METRICS_BIND_ADDR=""; CONFIGURED_TZ=""
+load_existing_service_config "$legacy_unit"
+
+FAKE_SOCKETS=""
+generate_systemd_service_content > "${WORK}/regen-base.service"
+FAKE_SOCKETS="$AVAHI_SOCK $DBUS_SOCK"
+generate_systemd_service_content > "${WORK}/regen-A.service"
+generate_systemd_service_content > "${WORK}/regen-B.service"
+FAKE_SOCKETS=""   # restore the deterministic default
+
+assert_eq "regen: restored port kept alongside the mounts" "1" "$(grep -c -- '-p 9100:8080' "${WORK}/regen-A.service")"
+assert_eq "regen: restored TZ kept alongside the mounts" "1" "$(grep -c -- 'TZ="Europe/Helsinki"' "${WORK}/regen-A.service")"
+assert_eq "regen: the mounts add exactly two lines over the no-socket unit" "2" "$(diff "${WORK}/regen-base.service" "${WORK}/regen-A.service" | grep -c '^>' || true)"
+assert_eq "regen: the mounts remove no line from the no-socket unit" "0" "$(diff "${WORK}/regen-base.service" "${WORK}/regen-A.service" | grep -c '^<' || true)"
+rc=0; cmp -s "${WORK}/regen-A.service" "${WORK}/regen-B.service" || rc=$?; assert_ok "regen: same host state gives a byte-identical unit" "$rc"
 
 # ===========================================================================
 # apply_tls_settings (full slate; mode switch must clear stale host)
@@ -1363,6 +1452,23 @@ assert_eq "records: stopped_remote survives the rollback that restarted it" \
     "yes" "$(printf '%s' "$diag" | jq -r .stopped_remote_this_run)"
 unset -f ssh
 reset_migration_state
+
+# ===========================================================================
+# host_socket_mount (the real helper; the unit tests above use a stub): it prints a
+# read-only mount of the socket's directory only for an existing Unix socket.
+# ===========================================================================
+it "host_socket_mount against real paths"
+
+load_fn host_socket_mount   # replaces the stub; no later test generates a unit
+sock_dir="${WORK}/sockdir"
+mkdir -p "$sock_dir"
+python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "${sock_dir}/socket"
+assert_eq "real socket: read-only directory mount" "-v ${sock_dir}:${sock_dir}:ro" "$(host_socket_mount "${sock_dir}/socket")"
+: > "${sock_dir}/regular"
+assert_eq "regular file is not a socket: no mount" "" "$(host_socket_mount "${sock_dir}/regular")"
+assert_eq "missing path: no mount" "" "$(host_socket_mount "${sock_dir}/missing")"
+host_socket_mount "${sock_dir}/missing" >/dev/null
+assert_ok "missing path: returns 0 (safe under set -e)" $?
 
 # --- the noisy-shell probe is actually wired in ------------------------------
 # The function is unit-tested above; this pins that migrate_from_remote_host

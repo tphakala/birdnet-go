@@ -76,6 +76,11 @@ jobs:
       - name: tini PID 1 + reaping smoke test
         run: Docker/test/tini-pid1-smoke.sh birdnet-go:test
 
+      # .local names must resolve through the host's Avahi socket (libnss-mdns +
+      # forced nsswitch line); a fake Avahi on the runner stands in for the host.
+      - name: mDNS (.local) resolution smoke test
+        run: Docker/test/mdns-nss-smoke.sh birdnet-go:test
+
   arbitrary-uid-start-arm64:
     name: arm64 container startup
     # Native arm64 runner (free for public repos): the only PR-time job that
@@ -119,3 +124,6 @@ jobs:
       # tini must be PID 1 (baked into the image) and reap orphaned grandchildren.
       - name: tini PID 1 + reaping smoke test (arm64)
         run: Docker/test/tini-pid1-smoke.sh birdnet-go:test-arm64
+
+      - name: mDNS (.local) resolution smoke test (arm64)
+        run: Docker/test/mdns-nss-smoke.sh birdnet-go:test-arm64
