@@ -1352,6 +1352,8 @@ describe('Settings Store - restart status refresh after a save', () => {
       try {
         api().mockRejectedValueOnce(new Error('boom'));
         await expect(save()).rejects.toThrow('boom');
+        await vi.dynamicImportSettled();
+        expect(refresh).not.toHaveBeenCalled();
 
         await save();
 
