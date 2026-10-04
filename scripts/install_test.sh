@@ -1729,6 +1729,7 @@ assert_eq "uid 0: D-Bus mount off" "0" "$(dbus_count)"
 assert_eq "uid 0: Avahi mount present" "1" "$(avahi_count)"
 
 # 3. Rerun of 1 after the D-Bus socket disappears: line back to commented, keep-id kept.
+cp "${WORK}/run1.container" "$unit"
 FAKE_UID=1000; FAKE_SOCKETS=""
 run_create_quadlet "$REPO_ROOT" ""
 assert_eq "socket gone on rerun: D-Bus mount off again" "0" "$(dbus_count)"
@@ -1737,6 +1738,7 @@ assert_eq "socket gone on rerun: keep-id still on" "1" "$(grep -c '^UserNS=keep-
 assert_eq "socket gone on rerun: Avahi mount still present" "1" "$(avahi_count)"
 
 # 4. Rerun of 1 unchanged: byte-identical.
+cp "${WORK}/run1.container" "$unit"
 FAKE_SOCKETS="$BOTH_SOCKS"
 run_create_quadlet "$REPO_ROOT" ""
 rc=0; cmp -s "$unit" "${WORK}/run1.container" || rc=$?
