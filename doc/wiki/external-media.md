@@ -33,7 +33,7 @@ upgrading regenerates the service unit and picks up these steps.
 
 ### Docker Compose installations
 
-The external media volume is commented out in `docker-compose.yml` by default.
+The external media volume is commented out in `docker-compose.yml` (and the same block in `docker-compose.host.yml`) by default.
 `docker compose up` works without any host setup. To enable it, perform the
 one-time host setup below, then uncomment the bind block in `docker-compose.yml`.
 

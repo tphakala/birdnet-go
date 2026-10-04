@@ -114,6 +114,63 @@
         }
       ],
       "note": "<p>This template enables automatic HTTPS via Let's Encrypt. Your domain must point to this server and ports 80/443 must be accessible from the internet.</p><p><strong>Required:</strong> Set your domain name in the <code>BIRDNET_HOST</code> variable.</p><h4>Configuration</h4><ul><li><strong>User ID / Group ID</strong>: Linux UID/GID that will own config files, audio clips, and the database. Must match your host user for correct file permissions. Run <code>id -u</code> and <code>id -g</code> on the host to find your values.</li><li><strong>Timezone</strong>: Affects timestamps in detections and logs. Use IANA format (e.g. <code>Europe/Helsinki</code>, <code>America/New_York</code>).</li><li><strong>Locale</strong>: Language for bird species names (e.g. <code>fi</code>, <code>de</code>, <code>sv</code>, <code>en-us</code>). Leave empty for English.</li><li><strong>Latitude / Longitude</strong>: Your location coordinates for species range filtering. Only species expected in your area will be shown.</li></ul><h4>.local hostnames</h4><p>The stack mounts the host's <code>/run/avahi-daemon</code> and <code>/run/dbus</code> read-only for <code>.local</code> name resolution and DNS-SD discovery. On rootless Docker without avahi or D-Bus, remove those volume lines. When User ID is 0, remove the /run/dbus line: uid 0 on the system bus is host root. See the RTSP troubleshooting wiki.</p><h4>Audio Input</h4><p>For local microphone capture, the host device <code>/dev/snd</code> must be accessible to the container. For RTSP camera streams, configure the stream URL in the web UI after first launch.</p><h4>Important</h4><p>Enable <strong>\"Pull the image\"</strong> when deploying to ensure you get the latest nightly build. Otherwise Docker may use a cached older version.</p><p>See <a href=\"https://github.com/tphakala/birdnet-go\" target=\"_blank\">GitHub</a> for full documentation.</p>"
+    },
+    {
+      "type": 3,
+      "title": "BirdNET-Go (host network, recommended)",
+      "description": "BirdNET-Go with host networking, recommended for new Linux installs. Multicast (mDNS) reaches the app directly. Existing bridge stacks are unchanged.",
+      "categories": ["Nature", "Audio", "AI"],
+      "platform": "linux",
+      "logo": "https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/BirdNET-Go-logo.webp",
+      "repository": {
+        "url": "https://github.com/tphakala/birdnet-go",
+        "stackfile": "Docker/docker-compose.host.yml"
+      },
+      "env": [
+        {
+          "name": "TZ",
+          "label": "Timezone",
+          "description": "Container timezone (IANA format, e.g. America/New_York, Europe/Helsinki)",
+          "default": "UTC"
+        },
+        {
+          "name": "BIRDNET_UID",
+          "label": "User ID",
+          "description": "Linux user ID that owns config, audio clips, and database files. Must match host user for correct file permissions. Run 'id -u' on host to find yours.",
+          "default": "1000"
+        },
+        {
+          "name": "BIRDNET_GID",
+          "label": "Group ID",
+          "description": "Linux group ID that owns config, audio clips, and database files. Must match host user for correct file permissions. Run 'id -g' on host to find yours.",
+          "default": "1000"
+        },
+        {
+          "name": "WEB_PORT",
+          "label": "Web UI Port",
+          "description": "Port the web interface listens on (host networking: 1024 or higher)",
+          "default": "8080"
+        },
+        {
+          "name": "BIRDNET_LOCALE",
+          "label": "Locale",
+          "description": "Language for species names (e.g. en-us, fi, de, sv)",
+          "default": ""
+        },
+        {
+          "name": "BIRDNET_LATITUDE",
+          "label": "Latitude",
+          "description": "Your location latitude (-90.0 to 90.0) for species range filtering",
+          "default": ""
+        },
+        {
+          "name": "BIRDNET_LONGITUDE",
+          "label": "Longitude",
+          "description": "Your location longitude (-180.0 to 180.0) for species range filtering",
+          "default": ""
+        }
+      ],
+      "note": "<p>After deployment, access the web UI at <code>http://your-host:&lt;Web UI Port&gt;</code> (default 8080).</p><p>This stack uses the host network stack: rootful Docker, or rootless Docker Engine 29.5 or later. Open the web port in the host firewall (ufw, firewalld). It is not for AutoTLS; use the AutoTLS template for that. If you enable Prometheus telemetry, set its listen address to <code>127.0.0.1:8090</code> or a LAN IP in the settings, because host networking binds it on every interface.</p><h4>Configuration</h4><ul><li><strong>User ID / Group ID</strong>: Linux UID/GID that will own config files, audio clips, and the database. Must match your host user for correct file permissions. Run <code>id -u</code> and <code>id -g</code> on the host to find your values.</li><li><strong>Timezone</strong>: Affects timestamps in detections and logs. Use IANA format (e.g. <code>Europe/Helsinki</code>, <code>America/New_York</code>).</li><li><strong>Locale</strong>: Language for bird species names (e.g. <code>fi</code>, <code>de</code>, <code>sv</code>, <code>en-us</code>). Leave empty for English.</li><li><strong>Latitude / Longitude</strong>: Your location coordinates for species range filtering. Only species expected in your area will be shown.</li></ul><h4>.local hostnames</h4><p>The stack mounts the host's <code>/run/avahi-daemon</code> read-only for <code>.local</code> name resolution. On rootless Docker without avahi, remove that volume line. See the RTSP troubleshooting wiki.</p><h4>Audio Input</h4><p>For local microphone capture, the host device <code>/dev/snd</code> must be accessible to the container. For RTSP camera streams, configure the stream URL in the web UI after first launch.</p><h4>Important</h4><p>Enable <strong>\"Pull the image\"</strong> when deploying to ensure you get the latest nightly build. Otherwise Docker may use a cached older version.</p><p>See <a href=\"https://github.com/tphakala/birdnet-go\" target=\"_blank\">GitHub</a> for full documentation.</p>"
     }
   ]
 }

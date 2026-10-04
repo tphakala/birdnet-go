@@ -471,8 +471,16 @@ LABEL usage.compose.podman="Use Podman/podman-compose.yml"
 # Uses /health endpoint and validates JSON status via jq to avoid false positives
 # from HTTP->HTTPS 308 redirects (curl -f treats 3xx as success).
 # Extended start-period for low-power devices (e.g., Raspberry Pi)
+# The first probe follows BIRDNET_WEBSERVER_PORT (host networking, where the app
+# listens on that port directly). When it is unset or 8080 that probe is skipped
+# and the original probes below run unchanged.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -fs --connect-timeout 2 --max-time 3 http://localhost:8080/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:8443/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:443/health | jq -e '.status == "healthy"' >/dev/null || exit 1
+    CMD P="$(printf '%s' "${BIRDNET_WEBSERVER_PORT:-8080}" | tr -d '[:space:]')"; \
+        { [ "$P" != "8080" ] && curl -fs --connect-timeout 2 --max-time 3 "http://localhost:${P}/health" | jq -e '.status == "healthy"' >/dev/null; } \
+        || curl -fs --connect-timeout 2 --max-time 3 http://localhost:8080/health | jq -e '.status == "healthy"' >/dev/null \
+        || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:8443/health | jq -e '.status == "healthy"' >/dev/null \
+        || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:443/health | jq -e '.status == "healthy"' >/dev/null \
+        || exit 1
 
 # Container startup execution chain:
 # 0. tini - A tiny init run as PID 1. This is defense-in-depth, not a bug fix:

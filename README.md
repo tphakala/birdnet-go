@@ -67,6 +67,8 @@ curl -fsSL https://github.com/tphakala/birdnet-go/raw/main/install.sh -o install
 bash ./install.sh
 ```
 
+Docker Compose, Portainer and Unraid users should start from the host-network configurations described in the [installation guide](https://github.com/tphakala/birdnet-go/wiki/installation); the bridge configurations remain supported. The Unraid host template is untested on real Unraid (see `Unraid/README.md`).
+
 Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binaries for Linux, Windows, and macOS ship with each [release](https://github.com/tphakala/birdnet-go/releases). See the [installation guide](https://github.com/tphakala/birdnet-go/wiki/installation), [hardware recommendations](https://github.com/tphakala/birdnet-go/wiki/hardware), and [security guide](https://github.com/tphakala/birdnet-go/wiki/security) for details.
 
 ## Web Dashboard

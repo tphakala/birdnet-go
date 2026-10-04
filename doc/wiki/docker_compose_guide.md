@@ -11,6 +11,19 @@ BirdNET-Go Docker images are available from two registries:
 
 Both registries contain identical images and can be used interchangeably. The examples below use GitHub Container Registry, but you can substitute `tphakala/birdnet-go` if you prefer Docker Hub.
 
+## Choosing a Network Mode
+
+Two Compose files are provided:
+
+- **Host networking, recommended for new Linux installs** ([`docker-compose.host.yml`](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.host.yml)). The container shares the host network stack, so multicast (mDNS/DNS-SD) reaches the app directly. There is no port mapping: the app listens on `WEB_PORT` itself.
+- **Bridge networking** ([`docker-compose.yml`](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml)). Remains supported. Existing setups are not changed and keep working as they are.
+
+Notes:
+
+- Host networking needs rootful Docker, or rootless Docker Engine 29.5 or later. Earlier rootless versions isolate host networking inside RootlessKit, so ports are not reachable from the host.
+- AutoTLS stays on [`docker-compose.autotls.yml`](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.autotls.yml). It needs ports 80 and 443, which the non-root app cannot bind in host mode.
+- `install.sh` sets up bridge networking. That is unchanged.
+
 ## Prerequisites
 
 - Docker and Docker Compose installed on your system
@@ -27,7 +40,7 @@ Both registries contain identical images and can be used interchangeably. The ex
    ```
 
 2. **Create the docker-compose.yml file:**
-   Create a file named `docker-compose.yml` in this directory and copy the content from the [premade docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml) file in the repository, or the example below.
+   Create a file named `docker-compose.yml` in this directory and copy the content from the [premade docker-compose.host.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.host.yml) file in the repository (host networking, recommended). The bridge alternative is the [premade docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml).
 
 3. **Create config and data directories:**
 
@@ -115,10 +128,38 @@ Key benefits of using Cloudflare Tunnel:
 
 ### Port Configuration
 
-By default, the web interface is accessible on port 8080. You can change this by:
+By default, the web interface is accessible on port 8080.
+
+With the host networking file, `WEB_PORT` sets the port the app itself listens on (through `BIRDNET_WEBSERVER_PORT`). Use 1024 or higher, because the app runs as a non-root user. It overrides `webserver.port` in `config.yaml`, and the value is written to `config.yaml` when you save settings in the web interface.
+
+With the bridge file, you can change the port by:
 
 - Setting the `WEB_PORT` environment variable in your `.env` file
 - Or directly editing the port mapping in the `docker-compose.yml` file
+
+### Host Networking Notes
+
+- **Host firewall:** Docker no longer inserts firewall rules for a published port, so ufw or firewalld now apply. Open `WEB_PORT` (for example `sudo ufw allow 8080/tcp`).
+- **Prometheus telemetry:** if you enable it, it listens on every host interface on port 8090 (in bridge mode it stayed inside the container, because the Compose file does not publish it). Set its listen address to `127.0.0.1:8090` or a LAN IP in Settings.
+- **No localhost-only web interface:** the web interface always listens on all interfaces in host mode. To limit it to localhost, use the bridge file with a `127.0.0.1:` port mapping.
+- **Reverse proxy:** a proxy on the same host reaches the app on `localhost:<WEB_PORT>` and should send `X-Forwarded-For`.
+- **Subnet bypass and IPv6:** with subnet bypass enabled, IPv6 clients are now seen by their real address. If you rely on bypass for IPv6 clients, add your IPv6 prefix to the subnet list.
+- **Sound card:** on a host without one (RTSP streams only), remove the `/dev/snd` line from the Compose file, or `docker compose up` fails.
+- **Cloudflare Tunnel:** the cloudflared service must also use `network_mode: host`, and the tunnel's service URL is `http://localhost:<WEB_PORT>`.
+
+### Switching an Existing Install (Optional)
+
+You do not need to switch. Bridge networking keeps working. If you want host networking for an existing Compose or Portainer stack:
+
+1. If Prometheus telemetry is enabled, set its listen address to `127.0.0.1:8090` or a LAN IP first (see above).
+2. In the same directory, replace `docker-compose.yml` with `docker-compose.host.yml` (or point Portainer at `Docker/docker-compose.host.yml`). Keep your `.env`, `config` and `data`.
+3. Run `docker compose up -d`. Compose recreates the one service and keeps your data.
+4. Open `WEB_PORT` in the host firewall.
+5. If you copied a `/run/dbus` line into your own file, remove it. Host networking does not use it.
+
+To go back, replace the file again. If `WEB_PORT` was not 8080, first set `webserver.port: 8080` in `config/config.yaml`: the custom port is saved there when you save settings, and in bridge mode the container maps host port `WEB_PORT` to container port 8080, so the web interface is unreachable until the setting is reset.
+
+Users who installed with `install.sh` keep using it: its systemd unit removes and recreates a container named `birdnet-go` on every start, which would replace a Compose container.
 
 ### User Permissions
 
@@ -169,7 +210,7 @@ Once running, you can access the BirdNET-Go web interface at:
 ## Troubleshooting
 
 - **Audio device issues:** Make sure your user has permission to access `/dev/snd` (usually by being in the `audio` group)
-- **Port conflicts:** If port 8080 is already in use, change the port mapping in your docker-compose file
+- **Port conflicts:** If port 8080 is already in use, change `WEB_PORT` (host networking) or the port mapping in your docker-compose file (bridge)
 - **Permission errors:** Set the correct UID/GID for your user with the environment variables
 
 ## Securing BirdNET-Go for Internet Access

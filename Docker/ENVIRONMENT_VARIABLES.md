@@ -127,6 +127,30 @@ timedatectl list-timezones
 
 ---
 
+### `BIRDNET_WEBSERVER_PORT`
+
+**Purpose:** Set the port the web interface listens on.
+
+**Default:** `8080` (the `webserver.port` setting)
+
+**Usage:**
+
+```yaml
+environment:
+  - BIRDNET_WEBSERVER_PORT=8080
+```
+
+**Description:**
+
+- Used by `Docker/docker-compose.host.yml` (host networking), where there is no port mapping and the app listens on this port directly. The Compose file sets it from `WEB_PORT`
+- Use 1024 or higher: the app runs as a non-root user
+- Takes precedence over `webserver.port` in `config.yaml`
+- The value is written to `config.yaml` when settings are saved in the web interface. Going back to a bridge networking file with a custom port therefore needs `webserver.port: 8080` restored in `config.yaml`
+- An invalid value (not a number from 1 to 65535) is ignored with a warning in the log, and the configured or default port is used
+- The container health check follows this port (see below)
+
+---
+
 ### `BIRDNET_MODELPATH`
 
 **Purpose:** Override the default BirdNET model file path.
@@ -160,13 +184,14 @@ The container includes a built-in health check that monitors the application's w
 - **Start period:** 120 seconds (extended for Raspberry Pi compatibility)
 - **Retries:** 3 failed checks before marking unhealthy
 
-**Check command:**
+**Check command:** the `/health` endpoint must answer with JSON status `healthy`. The probes run in this order, and the first success wins:
 
-```bash
-curl -f http://localhost:8080/ || exit 1
-```
+1. `http://localhost:$BIRDNET_WEBSERVER_PORT/health` (skipped when the variable is unset or 8080)
+2. `http://localhost:8080/health`
+3. `https://localhost:8443/health`
+4. `https://localhost:443/health`
 
-**Note:** The health check assumes the application runs on port 8080 (the default). If you've changed the port in `config.yaml`, the health check will fail, but the application will still work.
+**Note:** The port follows `BIRDNET_WEBSERVER_PORT`. If you changed the port only in `config.yaml` (not through that variable) to something other than 8080, 8443 or 443, the health check fails, but the application still works.
 
 **View health status:**
 
@@ -235,11 +260,11 @@ environment:
 
 ### Health check failing
 
-The health check requires the web interface to be accessible on port 8080. If you've changed the port in `config.yaml`, this is expected and can be ignored as long as the application works.
+The health check probes the port in `BIRDNET_WEBSERVER_PORT`, then 8080, 8443 and 443. If you changed the port only in `config.yaml` to another value, this is expected and can be ignored as long as the application works. Set `BIRDNET_WEBSERVER_PORT` to make the health check follow the port.
 
 ### `.local` hostnames do not resolve
 
-The compose files mount the host's `/run/avahi-daemon` (name resolution) and `/run/dbus` (DNS-SD service discovery) read-only. Without them the container resolves `.local` names only through unicast DNS (a router that serves them). Check with `docker exec birdnet-go getent hosts cam.local`. Rootless Docker without avahi or D-Bus on the host must remove the matching volume line. If the app runs as uid 0 (`BIRDNET_UID=0`), remove the `/run/dbus` line: uid 0 on the system bus is host root. Never add `:z` or `:Z`. Details, the D-Bus security trade-off and how to opt out: [RTSP troubleshooting](../doc/wiki/rtsp-troubleshooting.md#using-local-mdns-hostnames-in-containers).
+The bridge compose files mount the host's `/run/avahi-daemon` (name resolution) and `/run/dbus` (DNS-SD service discovery) read-only. The host networking file (`docker-compose.host.yml`) mounts only `/run/avahi-daemon`. Without them the container resolves `.local` names only through unicast DNS (a router that serves them). Check with `docker exec birdnet-go getent hosts cam.local`. Rootless Docker without avahi or D-Bus on the host must remove the matching volume line. If the app runs as uid 0 (`BIRDNET_UID=0`), remove the `/run/dbus` line: uid 0 on the system bus is host root. Never add `:z` or `:Z`. Details, the D-Bus security trade-off and how to opt out: [RTSP troubleshooting](../doc/wiki/rtsp-troubleshooting.md#using-local-mdns-hostnames-in-containers).
 
 ### Viewing detailed startup logs
 

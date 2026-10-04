@@ -1,0 +1,136 @@
+# BirdNET-Go with host networking (recommended for new Linux installs).
+#
+# The container shares the host network stack, so multicast (mDNS/DNS-SD) reaches
+# the app directly. Docker no longer publishes ports: the app listens on WEB_PORT
+# itself, and the host firewall (ufw, firewalld) applies to that port.
+#
+# Requirements: rootful Docker, or rootless Docker Engine 29.5 or later (earlier
+# rootless versions isolate host networking inside RootlessKit).
+#
+# Not for AutoTLS: Let's Encrypt needs ports 80 and 443, which the non-root app
+# cannot bind. Use docker-compose.autotls.yml, or put a reverse proxy on the host.
+#
+# Telemetry: if you enable Prometheus telemetry, it binds 0.0.0.0:8090 on every
+# host interface (in bridge mode it stayed inside the container). Set its listen
+# address to 127.0.0.1:8090 or a LAN IP in Settings before switching.
+#
+# Switching from docker-compose.yml (bridge) and back: see
+# doc/wiki/docker_compose_guide.md (Switching an existing install).
+services:
+  birdnet-go:
+    # :nightly tracks main, :latest is the latest stable release.
+    # Pin a release tag (for example :v1.2.3) to control when updates happen.
+    image: ghcr.io/tphakala/birdnet-go:nightly
+    container_name: birdnet-go
+    restart: unless-stopped
+    # Host networking: no ports: section, published ports are ignored in this mode.
+    network_mode: host
+    stop_grace_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+    # Rotate container logs. This names the json-file driver, so it overrides a
+    # different default log driver configured in the Docker daemon.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      - TZ=${TZ:-UTC}
+      - BIRDNET_UID=${BIRDNET_UID:-1000}
+      - BIRDNET_GID=${BIRDNET_GID:-1000}
+      # Port the app listens on (host networking, no port mapping). Use 1024 or
+      # higher: the app runs as a non-root user. Overrides webserver.port in
+      # config.yaml, and is written to config.yaml when settings are saved.
+      - BIRDNET_WEBSERVER_PORT=${WEB_PORT:-8080}
+      # - SKIP_CHOWN=true                            # Skip ownership changes at startup (for NFS mounts)
+      # - SKIP_DEVICE_PERMS=true                     # Skip /dev/snd and /dev/dri permission fixups
+      # Optional: uncomment to configure via environment variables
+      # BirdNET Configuration
+      # - BIRDNET_LOCALE=en-us                      # Locale code (2-10 chars, e.g., "en" or "en-us")
+      # - BIRDNET_LATITUDE=60.192059                # Valid range: -90.0 to 90.0
+      # - BIRDNET_LONGITUDE=24.945831               # Valid range: -180.0 to 180.0
+      # - BIRDNET_SENSITIVITY=1.0                   # Valid range: 0.1 to 1.5 (higher = more sensitive)
+      # - BIRDNET_THRESHOLD=0.8                     # Valid range: 0.0 to 1.0 (confidence threshold)
+      # - BIRDNET_OVERLAP=1.5                       # Valid range: 0.0 to 2.9 seconds (audio chunk overlap)
+      # - BIRDNET_THREADS=0                         # 0 = auto (use all CPUs), or specify number of threads
+      # - BIRDNET_DEBUG=false                       # Enable debug logging (true/false)
+      # - BIRDNET_USEXNNPACK=true                   # Use XNNPACK acceleration (true/false)
+      # Model Paths (for external models - must be mounted from host)
+      # Note: External model files must be mounted into the container, e.g.:
+      #   volumes:
+      #     - ./models/custom.tflite:/models/custom.tflite
+      # Then reference the container path:
+      # - BIRDNET_MODELPATH=/models/custom.tflite   # Path to custom model file inside container
+      # - BIRDNET_LABELPATH=/models/labels.txt      # Path to custom labels file inside container
+      # Range Filter Configuration
+      # - BIRDNET_RANGEFILTER_MODEL=latest          # Model version: "latest" or "legacy"
+      # - BIRDNET_RANGEFILTER_THRESHOLD=0.01        # Valid range: 0.0 to 1.0 (range filter threshold)
+      # - BIRDNET_RANGEFILTER_MODELPATH=/models/rangefilter.tflite # Path to custom range filter model
+      # - BIRDNET_RANGEFILTER_DEBUG=false           # Enable range filter debug logging (true/false)
+    volumes:
+      - ./config:/config
+      - ./data:/data
+      # Host mount for .local names (read-only, never :z or :Z).
+      # Rootful Docker creates a missing directory (harmless). Rootless Docker
+      # without avahi cannot create it: remove this line.
+      # There is no /run/dbus line: host networking does not need it.
+      # See doc/wiki/rtsp-troubleshooting.md (Using .local (mDNS) hostnames in containers).
+      - /run/avahi-daemon:/run/avahi-daemon:ro
+      # External media (USB / SD / fileshare) for Import and Backup. Optional, opt-in.
+      # One-time host setup before uncommenting:
+      #   sudo mkdir -p /mnt/birdnet-go/external
+      #   sudo mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external
+      #   sudo mount --make-rshared /mnt/birdnet-go/external
+      #   sudo chown -h "${BIRDNET_UID:-1000}:${BIRDNET_GID:-1000}" /mnt/birdnet-go/external
+      #   (match BIRDNET_UID:BIRDNET_GID from this file if you override them; default 1000)
+      # Note: the commands above are NOT persistent across reboots. See the external
+      # media wiki page for a persistent systemd unit that runs them on every boot.
+      # Then mount media under /mnt/birdnet-go/external/<label> on the host.
+      # - type: bind
+      #   source: /mnt/birdnet-go/external
+      #   target: /external
+      #   bind:
+      #     propagation: rslave
+    # Mount HLS stream segment files directory as tmpfs (RAM disk)
+    tmpfs:
+      - /config/hls:exec,size=50M,uid=${BIRDNET_UID:-1000},gid=${BIRDNET_GID:-1000},mode=0755
+    # For ALSA audio input (sound card).
+    # On a host without a sound card (RTSP streams only), remove /dev/snd or
+    # `docker compose up` fails.
+    devices:
+      - /dev/snd:/dev/snd
+      # For Intel iGPU OpenVINO acceleration (amd64 hosts with an Intel GPU),
+      # uncomment the next line to pass the render device into the container.
+      # Leave it commented on hosts without /dev/dri or `docker compose up` fails.
+      # - /dev/dri:/dev/dri
+    # Keep this. It makes host.docker.internal, and with it the app's local-subnet
+    # check (subnet authentication bypass), resolve to the Docker bridge gateway as
+    # in docker-compose.yml. Without it the check falls back to the LAN default
+    # gateway and the whole LAN /24 would count as local.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Optional: Add Cloudflared for secure internet access through Cloudflare Tunnel
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: birdnet-cloudflared
+  #   restart: unless-stopped
+  #   # BirdNET-Go is on the host network, so the tunnel must be too. In the
+  #   # tunnel's public hostname settings use the service URL
+  #   # http://localhost:<WEB_PORT>, not http://birdnet-go:8080 (a bridge
+  #   # network container cannot reach a host-network service by name).
+  #   network_mode: host
+  #   # Two options for running cloudflared:
+  #   # 1. Using a tunnel token (recommended for most users)
+  #   command: tunnel run
+  #   environment:
+  #     - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+  #   # 2. Alternative: Using config file (uncomment these and comment the above)
+  #   # command: tunnel --config /etc/cloudflared/config.yml run
+  #   # volumes:
+  #   #   - ./cloudflared:/etc/cloudflared
+  #   depends_on:
+  #     - birdnet-go
