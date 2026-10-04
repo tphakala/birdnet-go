@@ -78,7 +78,7 @@ The installation script includes several features:
 
 For users who prefer Docker Compose for container management, BirdNET-Go can also be set up using this approach. Docker Compose offers more flexibility and makes it easier to manage container configurations.
 
-A [premade docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml) file (bridge networking) is available in the repository, and a [docker-compose.host.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.host.yml) file for host networking, which is recommended for new installs. The bridge file includes:
+Two premade files are available in the repository: [docker-compose.host.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.host.yml) (host networking, recommended for new installs) and [docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml) (bridge networking, remains supported). See [Choosing a Network Mode](docker_compose_guide.md#choosing-a-network-mode). Both files include:
 
 - The BirdNET-Go container configuration with the latest nightly image
 - Environment variables for customization (timezone, user permissions, etc.)
@@ -556,6 +556,7 @@ sudo journalctl -fu birdnet-go
    - Verify the service is running: `sudo systemctl status birdnet-go`
    - Check that port 8080 (or your configured port) is not blocked by a firewall
    - Confirm the port binding in the Docker container: `docker ps | grep birdnet-go`
+   - With host networking (Compose, Portainer or `docker run --network host`), `docker ps` shows no port mapping: the app listens on `WEB_PORT` (`BIRDNET_WEBSERVER_PORT`) directly, and the host firewall applies to it. See [Host Networking Notes](docker_compose_guide.md#host-networking-notes)
 
 3. **Container exits immediately after starting**:
    - Check logs for errors: `sudo journalctl -u birdnet-go -n 100`

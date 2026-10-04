@@ -24,7 +24,9 @@ BirdNET-Go is a real-time bird species identification system that uses deep lear
 
 ## Installation via Unraid Community Applications
 
-### Method 1: Through Community Applications (Recommended)
+Both methods below install the bridge networking template, which remains supported. For new installs, the [host networking template](#host-networking-template-recommended-for-new-installs) is recommended (best effort, untested on real Unraid).
+
+### Method 1: Through Community Applications
 
 1. **Install Community Applications Plugin** (if not already installed):
    - Go to **Apps** tab in Unraid WebGUI
@@ -108,12 +110,12 @@ You do not need to switch. If you want to:
 
 ### Required Settings
 
-| Setting              | Default                               | Description                                |
-| -------------------- | ------------------------------------- | ------------------------------------------ |
-| **WebUI Port**       | `8080`                                | Port for accessing the web interface       |
-| **Config Directory** | `/mnt/user/appdata/birdnet-go/config` | Configuration files storage                |
-| **Data Directory**   | `/mnt/user/appdata/birdnet-go/data`   | Database and audio clips storage           |
-| **Timezone**         | `America/New_York`                    | Container timezone for accurate timestamps |
+| Setting              | Default                               | Description                                                                                       |
+| -------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **WebUI Port**       | `8080`                                | Port for accessing the web interface (host template: the port the app listens on, 1024 or higher) |
+| **Config Directory** | `/mnt/user/appdata/birdnet-go/config` | Configuration files storage                                                                       |
+| **Data Directory**   | `/mnt/user/appdata/birdnet-go/data`   | Database and audio clips storage                                                                  |
+| **Timezone**         | `America/New_York`                    | Container timezone for accurate timestamps                                                        |
 
 ### Advanced Settings
 
@@ -133,7 +135,7 @@ The host networking template maps only `/var/run/avahi-daemon` (advanced setting
 BirdNET-Go requires access to audio input devices. The template automatically includes:
 
 - `--device /dev/snd` - Access to all sound devices. On a server without a sound card (RTSP streams only), remove it (bridge template: from **Extra Parameters**; host template: clear the sound device entry), or the container does not start.
-- `--add-host="host.docker.internal:host-gateway"` - Network access for RTSP streams
+- `--add-host="host.docker.internal:host-gateway"` - Keeps the local-network check for subnet authentication bypass on the Docker bridge network; keep it in both templates (see [Subnet bypass](../Docker/ENVIRONMENT_VARIABLES.md#subnet-bypass-does-not-skip-login-for-lan-clients))
 
 ## Audio Configuration
 
@@ -142,7 +144,7 @@ BirdNET-Go requires access to audio input devices. The template automatically in
 1. **Connect your audio device** to your Unraid server
 2. **Start the container** - BirdNET-Go will auto-detect available devices
 3. **Configure audio source**:
-   - Open the web interface at `http://your-unraid-ip:8080`
+   - Open the web interface at `http://your-unraid-ip:8080` (or your WebUI Port)
    - Go to **Settings** → **Audio Capture**
    - Select your preferred audio device
    - Click **Save**
@@ -231,7 +233,7 @@ Configure security in the web interface under **Settings** → **Security**.
 
 **Web interface not accessible:**
 
-- Verify port 8080 is not in use by another service
+- Verify the WebUI Port (default 8080) is not in use by another service. With the host networking template, also check that the server firewall, if you use one, allows that port
 - Check container logs for startup errors
 - Ensure firewall/network settings allow access
 

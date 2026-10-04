@@ -315,6 +315,8 @@ services:
       - /dev/snd:/dev/snd # Audio device access
 ```
 
+This example uses bridge networking. For new Linux installs, host networking is recommended: start from [`docker-compose.host.yml`](docker-compose.host.yml), or in this example replace the `ports:` section with `network_mode: host`, set `BIRDNET_WEBSERVER_PORT` for the port (1024 or higher), and remove the `/run/dbus` line. Keep `extra_hosts: host.docker.internal:host-gateway` in either mode (see [Subnet bypass does not skip login for LAN clients](#subnet-bypass-does-not-skip-login-for-lan-clients)). See [Choosing a Network Mode](../doc/wiki/docker_compose_guide.md#choosing-a-network-mode).
+
 ---
 
 ## See Also

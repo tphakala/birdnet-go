@@ -12,7 +12,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 ## Installation Methods
 
 - [Docker Installation (Linux)](installation.md#recommended-method-installsh-linux) - Using the automated `install.sh` script
-- [Docker Compose Installation](docker_compose_guide.md) - Setting up BirdNET-Go with Docker Compose
+- [Docker Compose Installation](docker_compose_guide.md) - Setting up BirdNET-Go with Docker Compose or Portainer (host networking recommended for new installs)
 - [Manual Docker Installation](installation.md#manual-docker-installation-advanced-linux-only) - Advanced Docker setup
 - [Manual Binary Installation](installation.md#manual-binary-installation-all-platforms) - Windows, macOS, and Linux binary installation
 

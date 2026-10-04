@@ -23,6 +23,7 @@ Notes:
 - Host networking needs rootful Docker, or rootless Docker Engine 29.5 or later. Earlier rootless versions isolate host networking inside RootlessKit, so ports are not reachable from the host.
 - AutoTLS stays on [`docker-compose.autotls.yml`](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.autotls.yml). It needs ports 80 and 443, which the non-root app cannot bind in host mode.
 - `install.sh` sets up bridge networking. That is unchanged.
+- The same choice applies to Portainer (see [Using Portainer](#using-portainer)), to plain `docker run` (see [Manual Docker Installation](installation.md#manual-docker-installation-advanced-linux-only)) and to Unraid (see the [Unraid README](https://github.com/tphakala/birdnet-go/blob/main/Unraid/README.md)). There is no host networking variant of the Podman files yet.
 
 ## Prerequisites
 
@@ -60,9 +61,21 @@ Notes:
    ```
 
 5. **Start BirdNET-Go:**
+
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
+
+   With host networking, open `WEB_PORT` in the host firewall (see [Host Networking Notes](#host-networking-notes)).
+
+### Using Portainer
+
+Portainer can deploy the same Compose files as a stack:
+
+- **App template:** set Portainer's App Templates URL (in its settings) to `https://raw.githubusercontent.com/tphakala/birdnet-go/main/Docker/portainer-template.json` and choose **BirdNET-Go (host network, recommended)**. The **BirdNET-Go** template uses bridge networking and remains supported; **BirdNET-Go (AutoTLS)** is for AutoTLS.
+- **Stack from the repository:** use `https://github.com/tphakala/birdnet-go` as the repository and `Docker/docker-compose.host.yml` as the Compose path (or `Docker/docker-compose.yml` for bridge networking).
+
+The [Host Networking Notes](#host-networking-notes) apply to Portainer stacks too, and an existing bridge stack can be switched as described in [Switching an Existing Install](#switching-an-existing-install-optional).
 
 ## Configuration Options
 
@@ -117,11 +130,13 @@ Key benefits of using Cloudflare Tunnel:
 
 3. **Configure Docker Compose:**
    - In your `.env` file, add: `CLOUDFLARE_TUNNEL_TOKEN=your-tunnel-token`
-   - Uncomment the cloudflared service in docker-compose.yml
+   - Uncomment the cloudflared service in your Compose file
+   - In the tunnel's public hostname settings, use the service URL `http://localhost:<WEB_PORT>` with the host networking file (its cloudflared service already uses `network_mode: host`), or `http://birdnet-go:8080` with the bridge file
 
 4. **Start the services:**
+
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 > **IMPORTANT**: When exposing BirdNET-Go to the internet, always enable authentication to prevent unauthorized access. See the [Cloudflare Tunnel Guide](cloudflare_tunnel_guide.md#enabling-authentication) for details on security implications and configuration.
