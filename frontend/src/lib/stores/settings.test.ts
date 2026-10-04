@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { settingsStore, settingsActions } from './settings';
+import { settingsStore, settingsActions, hasUnsavedChanges } from './settings';
 import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
@@ -10,6 +10,7 @@ vi.mock('$lib/utils/settingsApi.js', () => ({
   settingsAPI: {
     load: vi.fn(),
     save: vi.fn().mockResolvedValue(undefined),
+    patchSection: vi.fn().mockResolvedValue({}),
   },
 }));
 
@@ -962,5 +963,395 @@ describe('Settings Store - saveSettings refuses before settings load', () => {
     await expect(settingsActions.saveSettings({ notify: false })).rejects.toThrow('boom');
 
     expect(toastActions.error).not.toHaveBeenCalled();
+  });
+});
+
+describe('Settings Store - saveSection', () => {
+  /** A server response with distinct values in every section the wizard patches. */
+  const serverSettings = () =>
+    ({
+      main: { name: 'TestNode' },
+      birdnet: {
+        modelPath: '',
+        labelPath: '',
+        sensitivity: 1.0,
+        threshold: 0.8,
+        overlap: 0.0,
+        locale: 'en',
+        threads: 4,
+        latitude: 0,
+        longitude: 0,
+        locationConfigured: false,
+        rangeFilter: {
+          threshold: 0.03,
+          passUnmappedSpecies: false,
+          speciesCount: null,
+          species: [],
+        },
+      },
+      realtime: {
+        dashboard: { summaryLimit: 100, locale: 'en' },
+        audio: {
+          source: 'old-device',
+          sources: [{ name: 'Card', device: 'hw:0' }],
+          equalizer: {
+            enabled: true,
+            filters: [{ type: 'HighPass', frequency: 200, q: 0.7, passes: 1 }],
+          },
+          export: { enabled: true, type: 'wav' },
+        },
+        rtsp: {
+          streams: [{ name: 'Old', url: 'rtsp://old', enabled: true, type: 'rtsp' }],
+          health: { healthyDataThreshold: 60 },
+          ffmpegParameters: ['-x'],
+        },
+        privacyFilter: { enabled: false, confidence: 0.7, debug: true, vad: { enabled: true } },
+        birdweather: { enabled: false, id: '', threshold: 0.9, debug: true },
+      },
+      sentry: { enabled: false },
+    }) as unknown as SettingsFormData;
+
+  type Snapshot = Record<string, unknown>;
+  const lookup = (root: unknown, path: string[]): unknown => {
+    let current: unknown = root;
+    for (const segment of path) {
+      if (current === null || typeof current !== 'object') return undefined;
+      const record = current as Record<string, unknown>;
+      // eslint-disable-next-line security/detect-object-injection -- test helper with fixed paths
+      current = Object.hasOwn(record, segment) ? record[segment] : undefined;
+    }
+    return current;
+  };
+
+  const deferred = <T>() => {
+    let resolve!: (value: T) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+
+  const loadFresh = async () => {
+    settingsStore.set({
+      formData: { main: { name: '' } } as unknown as SettingsFormData,
+      originalData: { main: { name: '' } } as unknown as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: false,
+    });
+    vi.mocked(settingsAPI.load).mockResolvedValue(serverSettings());
+    await settingsActions.loadSettings();
+  };
+
+  beforeEach(async () => {
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    vi.mocked(settingsAPI.patchSection).mockReset().mockResolvedValue({});
+    const { toastActions } = await import('./toast.js');
+    vi.mocked(toastActions.success).mockClear();
+    vi.mocked(toastActions.error).mockClear();
+    const { getLocale, setLocale, isValidLocale } = await import('$lib/i18n/index.js');
+    vi.mocked(getLocale).mockReturnValue('en');
+    vi.mocked(isValidLocale).mockReturnValue(true);
+    vi.mocked(setLocale).mockReset();
+    await loadFresh();
+  });
+
+  it('refuses before settings load and sends nothing', async () => {
+    settingsStore.update(state => ({ ...state, dataLoaded: false }));
+
+    await expect(settingsActions.saveSection('birdnet', { threshold: 0.9 })).rejects.toThrow(
+      'settings.errors.loadFailed'
+    );
+
+    expect(settingsAPI.patchSection).not.toHaveBeenCalled();
+  });
+
+  it('patches the backend section with exactly the given partial', async () => {
+    await settingsActions.saveSection('birdnet', { threshold: 0.9 });
+
+    expect(settingsAPI.patchSection).toHaveBeenCalledTimes(1);
+    expect(settingsAPI.patchSection).toHaveBeenCalledWith('birdnet', { threshold: 0.9 });
+    expect(settingsAPI.save).not.toHaveBeenCalled();
+  });
+
+  it('takes the patched value where the key had no pending edit', async () => {
+    await settingsActions.saveSection('birdnet', { threshold: 0.9 });
+
+    const state = get(settingsStore);
+    expect(state.originalData.birdnet.threshold).toBe(0.9);
+    expect(state.formData.birdnet.threshold).toBe(0.9);
+  });
+
+  it('keeps a pending edit to the same key and shows it as unsaved', async () => {
+    settingsActions.updateSection('birdnet', { threshold: 0.5 });
+
+    await settingsActions.saveSection('birdnet', { threshold: 0.9 });
+
+    const state = get(settingsStore);
+    expect(state.originalData.birdnet.threshold).toBe(0.9);
+    expect(state.formData.birdnet.threshold).toBe(0.5);
+    expect(get(hasUnsavedChanges)).toBe(true);
+  });
+
+  it('applies a nested section partial to both formData and originalData', async () => {
+    await settingsActions.saveSection('privacyfilter', { enabled: true });
+    await settingsActions.saveSection('audio', { source: 'new-device' });
+
+    for (const copy of [get(settingsStore).formData, get(settingsStore).originalData]) {
+      const privacy = lookup(copy, ['realtime', 'privacyFilter']) as Record<string, unknown>;
+      expect(privacy.enabled).toBe(true);
+      expect(privacy.confidence).toBe(0.7);
+      expect(privacy.debug).toBe(true);
+      expect(privacy.vad).toMatchObject({ enabled: true });
+      const audio = lookup(copy, ['realtime', 'audio']) as Record<string, unknown>;
+      expect(audio.source).toBe('new-device');
+      expect(audio.sources).toEqual([{ name: 'Card', device: 'hw:0' }]);
+      expect(lookup(audio, ['equalizer', 'enabled'])).toBe(true);
+      expect(lookup(audio, ['export', 'type'])).toBe('wav');
+    }
+  });
+
+  it('replaces arrays like the server', async () => {
+    const streams = [
+      {
+        name: 'Stream 1',
+        url: 'rtsp://new',
+        enabled: true,
+        type: 'rtsp' as const,
+        transport: 'tcp' as const,
+      },
+    ];
+
+    await settingsActions.saveSection('rtsp', { streams });
+
+    for (const copy of [get(settingsStore).formData, get(settingsStore).originalData]) {
+      expect(lookup(copy, ['realtime', 'rtsp', 'streams'])).toEqual(streams);
+      expect(lookup(copy, ['realtime', 'rtsp', 'health'])).toEqual({ healthyDataThreshold: 60 });
+      expect(lookup(copy, ['realtime', 'rtsp', 'ffmpegParameters'])).toEqual(['-x']);
+    }
+  });
+
+  it('leaves hasUnsavedChanges false after a save with no pending edits', async () => {
+    expect(get(hasUnsavedChanges)).toBe(false);
+
+    await settingsActions.saveSection('birdweather', { enabled: true, id: 'abc' });
+    await settingsActions.saveSection('dashboard', { locale: 'de' });
+
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it('keeps pending unrelated edits unsaved', async () => {
+    settingsActions.updateSection('main', { name: 'Edited' });
+
+    await settingsActions.saveSection('birdnet', { threshold: 0.9 });
+
+    expect(get(settingsStore).formData.main.name).toBe('Edited');
+    expect(get(hasUnsavedChanges)).toBe(true);
+  });
+
+  it('leaves both store copies untouched and rethrows when the PATCH fails', async () => {
+    const before = JSON.stringify(get(settingsStore));
+    vi.mocked(settingsAPI.patchSection).mockRejectedValueOnce(new Error('boom'));
+
+    await expect(settingsActions.saveSection('birdnet', { threshold: 0.9 })).rejects.toThrow(
+      'boom'
+    );
+
+    expect(JSON.stringify(get(settingsStore))).toBe(before);
+  });
+
+  it('a later saveSettings sends the patched values', async () => {
+    await settingsActions.saveSection('birdnet', { threshold: 0.9 });
+    await settingsActions.saveSection('privacyfilter', { enabled: true });
+
+    await settingsActions.saveSettings({ notify: false });
+
+    const body = vi.mocked(settingsAPI.save).mock.calls[0]?.[0] as unknown as Snapshot;
+    expect(lookup(body, ['birdnet', 'threshold'])).toBe(0.9);
+    expect(lookup(body, ['realtime', 'privacyFilter', 'enabled'])).toBe(true);
+    expect(lookup(body, ['realtime', 'privacyFilter', 'confidence'])).toBe(0.7);
+  });
+
+  it('saveSettings waits for an in-flight saveSection before snapshotting', async () => {
+    const patch = deferred<Record<string, never>>();
+    vi.mocked(settingsAPI.patchSection).mockReturnValueOnce(patch.promise);
+
+    const sectionSave = settingsActions.saveSection('birdnet', { threshold: 0.9 });
+    const fullSave = settingsActions.saveSettings({ notify: false });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settingsAPI.save).not.toHaveBeenCalled();
+
+    patch.resolve({});
+    await Promise.all([sectionSave, fullSave]);
+
+    expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+    const body = vi.mocked(settingsAPI.save).mock.calls[0]?.[0] as unknown as Snapshot;
+    expect(lookup(body, ['birdnet', 'threshold'])).toBe(0.9);
+  });
+
+  it('saveSettings waits for the store merge, not only the request', async () => {
+    const patch = deferred<Record<string, never>>();
+    vi.mocked(settingsAPI.patchSection).mockReturnValueOnce(patch.promise);
+
+    const sectionSave = settingsActions.saveSection('birdnet', { threshold: 0.9 });
+    patch.resolve({});
+    const fullSave = settingsActions.saveSettings({ notify: false });
+    await Promise.all([sectionSave, fullSave]);
+
+    const body = vi.mocked(settingsAPI.save).mock.calls[0]?.[0] as unknown as Snapshot;
+    expect(lookup(body, ['birdnet', 'threshold'])).toBe(0.9);
+  });
+
+  it('saveSettings still runs after an in-flight saveSection fails', async () => {
+    const patch = deferred<Record<string, never>>();
+    vi.mocked(settingsAPI.patchSection).mockReturnValueOnce(patch.promise);
+
+    const sectionSave = settingsActions.saveSection('birdnet', { threshold: 0.9 });
+    const sectionResult = sectionSave.catch((err: unknown) => err);
+    const fullSave = settingsActions.saveSettings({ notify: false });
+    patch.reject(new Error('boom'));
+
+    await expect(sectionResult).resolves.toBeInstanceOf(Error);
+    await fullSave;
+
+    expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+    const body = vi.mocked(settingsAPI.save).mock.calls[0]?.[0] as unknown as Snapshot;
+    expect(lookup(body, ['birdnet', 'threshold'])).toBe(0.8);
+  });
+
+  it('applies a changed dashboard locale to the UI', async () => {
+    const { setLocale } = await import('$lib/i18n/index.js');
+
+    await settingsActions.saveSection('dashboard', { locale: 'de' });
+
+    expect(setLocale).toHaveBeenCalledTimes(1);
+    expect(setLocale).toHaveBeenCalledWith('de');
+  });
+
+  it('does not touch the UI locale when the dashboard locale is unchanged', async () => {
+    const { setLocale } = await import('$lib/i18n/index.js');
+
+    await settingsActions.saveSection('dashboard', { locale: 'en' });
+
+    expect(setLocale).not.toHaveBeenCalled();
+  });
+
+  it('does not show a toast', async () => {
+    const { toastActions } = await import('./toast.js');
+
+    await settingsActions.saveSection('birdnet', { threshold: 0.9 });
+    vi.mocked(settingsAPI.patchSection).mockRejectedValueOnce(new Error('boom'));
+    await expect(settingsActions.saveSection('birdnet', { threshold: 0.7 })).rejects.toThrow();
+
+    expect(toastActions.success).not.toHaveBeenCalled();
+    expect(toastActions.error).not.toHaveBeenCalled();
+    expect(get(settingsStore).isSaving).toBe(false);
+  });
+
+  describe('transition table', () => {
+    interface Step {
+      section: 'birdnet' | 'dashboard' | 'privacyfilter' | 'birdweather' | 'sentry' | 'audio';
+      partial: Record<string, unknown>;
+      outcome: 'ok' | 'fail';
+    }
+
+    /** Store path of the section, used to read leaf keys back. */
+    const sectionPath: Record<Step['section'], string[]> = {
+      birdnet: ['birdnet'],
+      dashboard: ['realtime', 'dashboard'],
+      privacyfilter: ['realtime', 'privacyFilter'],
+      birdweather: ['realtime', 'birdweather'],
+      sentry: ['sentry'],
+      audio: ['realtime', 'audio'],
+    };
+
+    const sequences: Array<{ name: string; steps: Step[] }> = [
+      {
+        name: 'all sections succeed once',
+        steps: [
+          { section: 'birdnet', partial: { latitude: 10, longitude: 20 }, outcome: 'ok' },
+          { section: 'dashboard', partial: { locale: 'fi' }, outcome: 'ok' },
+          { section: 'privacyfilter', partial: { enabled: true }, outcome: 'ok' },
+          { section: 'sentry', partial: { enabled: true }, outcome: 'ok' },
+        ],
+      },
+      {
+        name: 'a failure between successes',
+        steps: [
+          { section: 'birdweather', partial: { enabled: true, id: 'x' }, outcome: 'fail' },
+          { section: 'privacyfilter', partial: { enabled: true }, outcome: 'ok' },
+          { section: 'sentry', partial: { enabled: true }, outcome: 'fail' },
+          { section: 'audio', partial: { source: 'dev-2' }, outcome: 'ok' },
+        ],
+      },
+      {
+        name: 'the same section twice with different values',
+        steps: [
+          { section: 'birdnet', partial: { threshold: 0.6 }, outcome: 'ok' },
+          { section: 'birdnet', partial: { threshold: 0.9 }, outcome: 'ok' },
+        ],
+      },
+      {
+        name: 'a repeat of a successful save and a failed repeat with a new value',
+        steps: [
+          { section: 'privacyfilter', partial: { enabled: true }, outcome: 'ok' },
+          { section: 'privacyfilter', partial: { enabled: true }, outcome: 'ok' },
+          { section: 'privacyfilter', partial: { enabled: false }, outcome: 'fail' },
+        ],
+      },
+      {
+        name: 'only failures',
+        steps: [
+          { section: 'birdnet', partial: { threshold: 0.6 }, outcome: 'fail' },
+          { section: 'birdnet', partial: { threshold: 0.6 }, outcome: 'fail' },
+        ],
+      },
+    ];
+
+    it.each(sequences)('$name', async ({ steps }) => {
+      const loaded = JSON.parse(JSON.stringify(get(settingsStore).originalData)) as Snapshot;
+      const expected = new Map<string, unknown>();
+      const touched = new Set<string>();
+      const results: string[] = [];
+
+      for (const step of steps) {
+        if (step.outcome === 'fail') {
+          vi.mocked(settingsAPI.patchSection).mockRejectedValueOnce(new Error('rejected'));
+        } else {
+          vi.mocked(settingsAPI.patchSection).mockResolvedValueOnce({});
+        }
+        const error = await settingsActions
+          .saveSection(step.section, step.partial)
+          .then(() => null)
+          .catch((err: unknown) => err);
+        results.push(error instanceof Error ? error.message : 'ok');
+        for (const [key, value] of Object.entries(step.partial)) {
+          const path = [...sectionPath[step.section], key].join('.');
+          touched.add(path);
+          if (step.outcome === 'ok') expected.set(path, value);
+        }
+      }
+
+      expect(results).toEqual(steps.map(step => (step.outcome === 'ok' ? 'ok' : 'rejected')));
+      const state = get(settingsStore);
+      expect(JSON.stringify(state.formData)).toBe(JSON.stringify(state.originalData));
+      for (const copy of [state.formData, state.originalData]) {
+        for (const path of touched) {
+          const segments = path.split('.');
+          const want = expected.has(path) ? expected.get(path) : lookup(loaded, segments);
+          expect({ path, value: lookup(copy, segments) }).toEqual({ path, value: want });
+        }
+        // Keys no partial named still hold the loaded value.
+        expect(lookup(copy, ['main', 'name'])).toBe('TestNode');
+        expect(lookup(copy, ['realtime', 'privacyFilter', 'confidence'])).toBe(0.7);
+        expect(lookup(copy, ['realtime', 'birdweather', 'threshold'])).toBe(0.9);
+      }
+      expect(get(hasUnsavedChanges)).toBe(false);
+    });
   });
 });

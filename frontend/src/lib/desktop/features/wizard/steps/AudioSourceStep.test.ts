@@ -36,12 +36,10 @@ async function edit() {
 // The leave handler contract shared by every step is in stepContract.test.ts
 describe('AudioSourceStep - leave handler', () => {
   beforeEach(() => {
-    vi.mocked(settingsActions.updateSection).mockClear();
-    vi.mocked(settingsActions.saveSettings).mockClear().mockResolvedValue(undefined);
-    vi.mocked(settingsActions.resetAllSettings).mockClear();
+    vi.mocked(settingsActions.saveSection).mockClear().mockResolvedValue(undefined);
   });
 
-  it('the leave handler saves the edited values once', async () => {
+  it('stream choice patches rtsp with one enabled stream', async () => {
     const { leave } = renderStep(AudioSourceStep);
     await flushAsync();
     await edit();
@@ -49,17 +47,13 @@ describe('AudioSourceStep - leave handler', () => {
     await leave();
     await leave();
 
-    expect(settingsActions.updateSection).toHaveBeenCalledTimes(1);
-    expect(settingsActions.updateSection).toHaveBeenCalledWith('realtime', {
-      rtsp: {
-        streams: [{ name: 'Stream 1', url: RTSP_URL, type: 'rtsp', transport: 'tcp' }],
-      },
+    expect(settingsActions.saveSection).toHaveBeenCalledTimes(1);
+    expect(settingsActions.saveSection).toHaveBeenCalledWith('rtsp', {
+      streams: [{ name: 'Stream 1', url: RTSP_URL, enabled: true, type: 'rtsp', transport: 'tcp' }],
     });
-    expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
-    expect(settingsActions.saveSettings).toHaveBeenCalledWith({ notify: false });
   });
 
-  it('configure later saves nothing', async () => {
+  it('configure later sends nothing', async () => {
     const { leave } = renderStep(AudioSourceStep);
     await flushAsync();
     await fireEvent.click(
@@ -71,11 +65,10 @@ describe('AudioSourceStep - leave handler', () => {
 
     await leave();
 
-    expect(settingsActions.updateSection).not.toHaveBeenCalled();
-    expect(settingsActions.saveSettings).not.toHaveBeenCalled();
+    expect(settingsActions.saveSection).not.toHaveBeenCalled();
   });
 
-  it('the leave handler saves the selected sound card device', async () => {
+  it('sound card choice patches audio with only the legacy source', async () => {
     vi.mocked(api.get).mockResolvedValueOnce([{ name: 'USB Mic', index: 1, id: 'hw:1,0' }]);
     settingsStore.update(state => {
       const realtime = state.formData.realtime as unknown as { audio: { source: string } };
@@ -90,11 +83,8 @@ describe('AudioSourceStep - leave handler', () => {
 
     await leave();
 
-    expect(settingsActions.updateSection).toHaveBeenCalledTimes(1);
-    expect(settingsActions.updateSection).toHaveBeenCalledWith('realtime', {
-      audio: { source: 'hw:1,0' },
-    });
-    expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
+    expect(settingsActions.saveSection).toHaveBeenCalledTimes(1);
+    expect(settingsActions.saveSection).toHaveBeenCalledWith('audio', { source: 'hw:1,0' });
 
     settingsStore.update(state => {
       (state.formData.realtime as unknown as { audio: { source: string } }).audio.source = '';

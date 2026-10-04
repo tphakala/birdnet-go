@@ -45,9 +45,11 @@ import type {
 } from '$lib/desktop/features/settings/pages/audioExportFormat';
 import { t } from '$lib/i18n';
 import { getLogger } from '$lib/utils/logger';
-import { safeGet, safeSpread } from '$lib/utils/security';
+import { isPlainObject, safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
+import type { SettingsSectionName, SettingsSectionPayloads } from '$lib/utils/settingsApi.js';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
+import { mergeSettingsPatch, mergeSettingsPatchKeepingEdits } from '$lib/utils/settingsMerge';
 import { DEFAULT_REGION_MODE } from '$lib/utils/variantSelection';
 import { weatherDefaults } from '$lib/utils/weatherDefaults';
 import { derived, get, writable } from 'svelte/store';
@@ -1305,6 +1307,65 @@ export const extendedCaptureSettings = derived(
   $store => $store.formData.realtime?.extendedCapture
 );
 
+/**
+ * Where each backend section handled by settingsActions.saveSection lives in
+ * the store: a top-level key, or a key of the realtime object.
+ */
+const SECTION_STORE_PATHS = {
+  birdnet: ['birdnet'],
+  sentry: ['sentry'],
+  dashboard: ['realtime', 'dashboard'],
+  audio: ['realtime', 'audio'],
+  rtsp: ['realtime', 'rtsp'],
+  privacyfilter: ['realtime', 'privacyFilter'],
+  birdweather: ['realtime', 'birdweather'],
+} as const satisfies Record<
+  SettingsSectionName,
+  readonly [keyof SettingsFormData] | readonly ['realtime', keyof RealtimeSettings]
+>;
+
+/**
+ * Section saves whose request or store merge has not finished. saveSettings
+ * waits for them so its snapshot of formData never predates a merge.
+ */
+const inFlightSectionSaves = new Set<Promise<void>>();
+
+/** Returns value when it is a plain object, otherwise undefined. */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return isPlainObject(value) ? value : undefined;
+}
+
+/**
+ * Applies a section partial to both copies of the settings: a plain merge into
+ * originalData and a merge into formData that keeps pending edits. Both results
+ * go through the same coercion as updateSection. Inputs are not mutated.
+ */
+function applySectionPatch(
+  state: GlobalSettingsState,
+  section: SettingsSectionName,
+  partial: Record<string, unknown>
+): Pick<GlobalSettingsState, 'formData' | 'originalData'> {
+  const path: readonly [keyof SettingsFormData] | readonly ['realtime', keyof RealtimeSettings] =
+    // eslint-disable-next-line security/detect-object-injection -- section is a key of SECTION_STORE_PATHS by type
+    SECTION_STORE_PATHS[section];
+  const topKey = path[0];
+  const wrapped: Record<string, unknown> = path.length === 2 ? { [path[1]]: partial } : partial;
+
+  const savedSection = asRecord(safeGet(state.originalData, topKey));
+  const formSection = asRecord(safeGet(state.formData, topKey));
+
+  const mergedOriginal = coerceSettings(topKey, mergeSettingsPatch(savedSection, wrapped));
+  const mergedForm = coerceSettings(
+    topKey,
+    mergeSettingsPatchKeepingEdits(formSection, savedSection, wrapped)
+  );
+
+  return {
+    originalData: { ...state.originalData, [topKey]: mergedOriginal },
+    formData: { ...state.formData, [topKey]: mergedForm },
+  };
+}
+
 // Settings actions
 export const settingsActions = {
   async loadSettings() {
@@ -1368,6 +1429,62 @@ export const settingsActions = {
   },
 
   /**
+   * Persists one backend section with PATCH /api/v2/settings/:section and, only
+   * after the server accepted it, merges the same partial into the store at that
+   * section's path: a plain merge into originalData, and into formData a merge
+   * that keeps any pending edit to a key the partial also sets, so unrelated and
+   * conflicting unsaved edits survive and unsaved-changes tracking is unchanged.
+   * Objects merge key by key and arrays replace, as on the server. A failed
+   * request throws and leaves the store untouched. Shows no toast and does not
+   * touch isSaving or error: the caller owns busy and error UI. Refuses before
+   * settings have loaded, like saveSettings. A concurrent saveSettings waits for
+   * this save to finish before it snapshots formData.
+   */
+  async saveSection<S extends SettingsSectionName>(
+    section: S,
+    partial: SettingsSectionPayloads[S]
+  ): Promise<void> {
+    if (!get(settingsStore).dataLoaded) {
+      logger.warn('Refusing to save a settings section before settings have been loaded');
+      throw new Error(t('settings.errors.loadFailed'));
+    }
+
+    const op = (async () => {
+      const response = await settingsAPI.patchSection(section, partial);
+      const skipped = response?.skippedFields;
+      if (skipped && skipped.length > 0) {
+        logger.warn('Settings section save skipped fields:', section, skipped.join(', '));
+      }
+
+      const patch = asRecord(partial) ?? {};
+      const origLocale = get(settingsStore).originalData.realtime?.dashboard?.locale;
+      settingsStore.update(state => ({ ...state, ...applySectionPatch(state, section, patch) }));
+
+      // Same side effects as saveSettings. Not awaited, see saveSettings.
+      void import('$lib/stores/restart.svelte')
+        .then(({ fetchRestartStatus }) => fetchRestartStatus())
+        .catch(e => {
+          logger.error('Failed to refresh restart status after settings section save:', e);
+        });
+
+      const newLocale = section === 'dashboard' ? patch.locale : undefined;
+      if (typeof newLocale === 'string' && newLocale && newLocale !== origLocale) {
+        const { isValidLocale, setLocale } = await import('$lib/i18n/index.js');
+        if (isValidLocale(newLocale)) {
+          setLocale(newLocale);
+        }
+      }
+    })();
+
+    inFlightSectionSaves.add(op);
+    try {
+      await op;
+    } finally {
+      inFlightSectionSaves.delete(op);
+    }
+  },
+
+  /**
    * Sync the TLS mode after a certificate operation (upload, generate, delete)
    * that the backend has ALREADY persisted to disk. Only tlsMode and autoTls are
    * updated, and they are updated in BOTH formData and originalData so the change
@@ -1412,6 +1529,12 @@ export const settingsActions = {
    */
   async saveSettings(options: SaveSettingsOptions = {}) {
     const { notify = true } = options;
+
+    // Let section saves finish first (success or failure, request and store
+    // merge) so the snapshot below carries what they patched.
+    if (inFlightSectionSaves.size > 0) {
+      await Promise.allSettled([...inFlightSectionSaves]);
+    }
 
     try {
       const currentState = get(settingsStore);

@@ -63,6 +63,14 @@ can produce an incomplete object when the section has not loaded yet.
 `section` is typed as `keyof SettingsFormData`, so a wrong section name is a
 type error; do not cast around it.
 
+For flows that save outside the Settings form (the onboarding wizard),
+`settingsActions.saveSection(section, partial)` persists one backend section
+with `PATCH /api/v2/settings/:section` and, only after the server accepts it,
+deep-merges `partial` into both `formData` and `originalData`. Objects merge key
+by key and arrays replace, as on the server, so `partial` only needs the keys it
+changes; a failed request leaves the store untouched. It shows no toast and does
+not touch `isSaving`, so the caller owns busy and error UI.
+
 ## Form Controls
 
 Settings controls (in `$lib/desktop/components/forms/`) are used as controlled

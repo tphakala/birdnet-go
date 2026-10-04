@@ -6,7 +6,7 @@
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import LocationPickerMap from '../components/LocationPickerMap.svelte';
-  import { settingsActions, settingsStore, type Dashboard } from '$lib/stores/settings';
+  import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { MapPin } from '@lucide/svelte';
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
@@ -46,7 +46,7 @@
   //      true in the leave handler, so the runtime/browser-detected locale
   //      gets persisted to the backend on first save, no user interaction
   //      required. A save before the settings load finished is refused by
-  //      the settings store (saveSettings throws until dataLoaded), so the
+  //      the settings store (saveSection throws until dataLoaded), so the
   //      baseline can never be written over unloaded data.
   let initialUILocale = $state<string | undefined>(
     get(settingsStore).formData?.realtime?.dashboard?.locale
@@ -137,7 +137,7 @@
     }
   });
 
-  const saveStep = useStepSave(() => registerLeaveHandler, commit);
+  useStepSave(() => registerLeaveHandler, commit);
 
   // Save the step's edits when the wizard leaves it with Next, Back or Done.
   // Only runs if the user made changes (or the UI locale needs healing).
@@ -145,42 +145,34 @@
     const uiLocaleChanged = getLocale() !== initialUILocale;
     if (!dirty && !uiLocaleChanged) return;
 
-    if (dirty) {
-      settingsActions.updateSection('birdnet', {
-        latitude,
-        longitude,
-        locale: speciesLocale,
-      });
-    }
-
-    if (uiLocaleChanged) {
-      const store = get(settingsStore);
-      const currentDashboard = store?.formData?.realtime?.dashboard;
-      // Only update when we have an existing Dashboard snapshot to merge
-      // into. settingsActions.updateSection does a shallow merge at the
-      // realtime level, so writing a locale-only stub here would wipe the
-      // rest of the dashboard. In practice createEmptySettings() always
-      // populates this object; the guard is defensive against future
-      // refactors.
-      if (currentDashboard) {
-        const mergedDashboard: Dashboard = { ...currentDashboard, locale: getLocale() };
-        settingsActions.updateSection('realtime', {
-          dashboard: mergedDashboard,
+    // Each part saves on its own and is marked saved as soon as it succeeds, so
+    // a retry after a failure sends only the part that did not go through.
+    const save = (async () => {
+      if (dirty) {
+        await settingsActions.saveSection('birdnet', {
+          latitude,
+          longitude,
+          locale: speciesLocale,
+          // Mirrors the server, which sets locationConfigured when either
+          // coordinate is non-zero, so the store matches config.yaml.
+          ...(latitude !== 0 || longitude !== 0 ? { locationConfigured: true } : {}),
         });
+        dirty = false;
       }
-    }
 
-    const save = saveStep();
+      if (uiLocaleChanged) {
+        const savedLocale = getLocale();
+        await settingsActions.saveSection('dashboard', { locale: savedLocale });
+        initialUILocale = savedLocale;
+        uiLocaleAtLastSave = savedLocale;
+      }
+    })();
     pendingSave = save;
     try {
       await save;
     } finally {
       pendingSave = null;
     }
-
-    dirty = false;
-    initialUILocale = getLocale();
-    uiLocaleAtLastSave = getLocale();
   }
 </script>
 

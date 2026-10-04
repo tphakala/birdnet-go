@@ -429,6 +429,7 @@ vi.mock('$lib/utils/settingsApi.js', () => {
     settingsAPI: {
       load: vi.fn().mockResolvedValue(defaultSettings),
       save: vi.fn().mockResolvedValue({ success: true }),
+      patchSection: vi.fn().mockResolvedValue({}),
       test: {
         birdweather: vi.fn().mockResolvedValue({ success: true, message: 'Test successful' }),
         mqtt: vi.fn().mockResolvedValue({ success: true, message: 'Test successful' }),

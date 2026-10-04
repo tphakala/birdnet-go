@@ -2,7 +2,7 @@
   import { onMount, untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { settingsActions, settingsStore, type RealtimeSettings } from '$lib/stores/settings';
+  import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { ShieldCheck, Cloud, HeartHandshake } from '@lucide/svelte';
   import type { WizardStepProps } from '../types';
@@ -15,6 +15,16 @@
   let birdweatherId = $state('');
   let sentryEnabled = $state(false);
   let dirty = $state(false);
+
+  // What each section last held on the server (as far as this step knows): the
+  // values read on mount, then the values of each successful save. The commit
+  // sends only sections that differ, so a retry after a partial failure repeats
+  // only the sections that did not succeed.
+  let saved = {
+    birdweather: { enabled: false, id: '' },
+    privacyfilter: { enabled: true },
+    sentry: { enabled: false },
+  };
 
   let isValid = $derived(!birdweatherEnabled || birdweatherId.trim() !== '');
 
@@ -38,6 +48,11 @@
     if (sentry) {
       sentryEnabled = sentry.enabled ?? false;
     }
+    saved = {
+      birdweather: { enabled: birdweatherEnabled, id: birdweatherId },
+      privacyfilter: { enabled: privacyEnabled },
+      sentry: { enabled: sentryEnabled },
+    };
   });
 
   function togglePrivacy() {
@@ -59,23 +74,33 @@
     dirty = true;
   }
 
-  const saveStep = useStepSave(() => registerLeaveHandler, commit);
+  useStepSave(() => registerLeaveHandler, commit);
 
   // Save the step's edits when the wizard leaves it with Next, Back or Done.
-  // Only runs if the user made changes.
+  // Only runs if the user made changes. Each changed section is its own request,
+  // BirdWeather first because its token is the value most likely to be rejected,
+  // so a failure there writes nothing.
   async function commit(): Promise<void> {
     if (!dirty) return;
-    settingsActions.updateSection('realtime', {
-      privacyFilter: { enabled: privacyEnabled } as RealtimeSettings['privacyFilter'],
-      birdweather: {
-        enabled: birdweatherEnabled,
-        id: birdweatherId,
-      } as RealtimeSettings['birdweather'],
-    });
-    settingsActions.updateSection('sentry', {
-      enabled: sentryEnabled,
-    });
-    await saveStep();
+
+    const birdweather = { enabled: birdweatherEnabled, id: birdweatherId };
+    if (JSON.stringify(birdweather) !== JSON.stringify(saved.birdweather)) {
+      await settingsActions.saveSection('birdweather', birdweather);
+      saved.birdweather = birdweather;
+    }
+
+    const privacyfilter = { enabled: privacyEnabled };
+    if (JSON.stringify(privacyfilter) !== JSON.stringify(saved.privacyfilter)) {
+      await settingsActions.saveSection('privacyfilter', privacyfilter);
+      saved.privacyfilter = privacyfilter;
+    }
+
+    const sentry = { enabled: sentryEnabled };
+    if (JSON.stringify(sentry) !== JSON.stringify(saved.sentry)) {
+      await settingsActions.saveSection('sentry', sentry);
+      saved.sentry = sentry;
+    }
+
     dirty = false;
   }
 </script>

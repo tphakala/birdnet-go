@@ -37,19 +37,14 @@ export async function flushAsync(): Promise<void> {
   await Promise.resolve();
 }
 
-interface SettingsMockOptions {
-  /** Merge updateSection calls into the store's formData. Defaults to false. */
-  applyUpdates?: boolean;
-}
-
 /**
  * Builds a `$lib/stores/settings` mock for step tests: a writable store seeded
- * with formData, and spied updateSection, saveSettings and resetAllSettings.
- * Use it from a vi.mock factory through a dynamic import, since vi.mock is
- * hoisted above static imports.
+ * with formData, and spied saveSection, resetAllSettings, plus updateSection and
+ * saveSettings so tests can assert the wizard never calls them. Use it from a
+ * vi.mock factory through a dynamic import, since vi.mock is hoisted above
+ * static imports.
  */
-export function createSettingsMock(formData: unknown, options: SettingsMockOptions = {}) {
-  const { applyUpdates = false } = options;
+export function createSettingsMock(formData: unknown) {
   const clone = () => JSON.parse(JSON.stringify(formData)) as SettingsFormData;
   const settingsStore = writable({
     isLoading: false,
@@ -60,19 +55,12 @@ export function createSettingsMock(formData: unknown, options: SettingsMockOptio
     originalData: clone(),
     formData: clone(),
   });
-  const updateSection = vi.fn((section: string, data: Record<string, unknown>) => {
-    if (!applyUpdates) return;
-    settingsStore.update(state => {
-      const sections = state.formData as unknown as Record<string, Record<string, unknown>>;
-      // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled section keys
-      sections[section] = { ...(sections[section] ?? {}), ...data };
-      return state;
-    });
-  });
   return {
     settingsStore,
+    StreamTypes: { RTSP: 'rtsp' },
     settingsActions: {
-      updateSection,
+      saveSection: vi.fn().mockResolvedValue(undefined),
+      updateSection: vi.fn(),
       saveSettings: vi.fn().mockResolvedValue(undefined),
       resetAllSettings: vi.fn(),
     },

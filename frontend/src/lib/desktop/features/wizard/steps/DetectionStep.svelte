@@ -68,7 +68,7 @@
     dirty = true;
   }
 
-  const saveStep = useStepSave(() => registerLeaveHandler, commit);
+  useStepSave(() => registerLeaveHandler, commit);
 
   // Save the step's edits when the wizard leaves it with Next, Back or Done.
   // Only runs if the user made changes.
@@ -76,10 +76,7 @@
     if (!dirty) return;
     const preset = presets.find(p => p.id === selectedPreset);
     if (!preset) return;
-    settingsActions.updateSection('birdnet', {
-      threshold: preset.threshold,
-    });
-    await saveStep();
+    await settingsActions.saveSection('birdnet', { threshold: preset.threshold });
     dirty = false;
   }
 </script>
