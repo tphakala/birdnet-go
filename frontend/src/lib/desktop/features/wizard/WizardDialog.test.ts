@@ -64,6 +64,11 @@ async function waitForPrimaryEnabled() {
   await waitFor(() => expect(isBlocked(primaryButton())).toBe(false));
 }
 
+// The box that holds the step content; the fixture step renders a checkbox in it
+const contentBox = () => screen.getByRole('checkbox').closest<HTMLElement>('[tabindex="-1"]');
+// Svelte sets inert as a property, which jsdom does not reflect to the attribute
+const isContentInert = () => contentBox()?.inert === true;
+
 function describedText(el: HTMLElement): string {
   const id = el.getAttribute('aria-describedby');
   if (!id) return '';
@@ -205,6 +210,44 @@ describe('WizardDialog', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('');
   });
 
+  it('makes the step content inert while saving and interactive again after the save', async () => {
+    const save = deferred();
+    stepControl.leave = vi.fn(() => save.promise);
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    expect(isContentInert()).toBe(false);
+
+    await user.click(primaryButton());
+
+    await waitFor(() => expect(isContentInert()).toBe(true));
+    expect(contentBox()).toHaveAttribute('aria-busy', 'true');
+
+    save.resolve();
+
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
+    await waitForPrimaryEnabled();
+    expect(isContentInert()).toBe(false);
+    expect(contentBox()).not.toHaveAttribute('aria-busy');
+  });
+
+  it('makes the step content interactive again after a failed save', async () => {
+    const save = deferred();
+    stepControl.leave = vi.fn(() => save.promise);
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await waitFor(() => expect(isContentInert()).toBe(true));
+
+    save.reject(new Error('save failed'));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.saveFailed')
+    );
+    expect(heading()).toHaveTextContent('test.step1');
+    expect(isContentInert()).toBe(false);
+    expect(contentBox()).not.toHaveAttribute('aria-busy');
+  });
+
   it('Back waits for the save and is aria-disabled while saving', async () => {
     renderWizard(componentSteps(3));
     await waitForPrimaryEnabled();
@@ -235,6 +278,8 @@ describe('WizardDialog', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.stepLoadFailed');
     expect(isBlocked(primaryButton())).toBe(true);
     expect(describedText(primaryButton())).toBe('wizard.errors.stepLoadFailed');
+    expect(primaryButton().getAttribute('aria-describedby')).toBe(screen.getByRole('alert').id);
+    expect(screen.getAllByText('wizard.errors.stepLoadFailed')).toHaveLength(1);
 
     loaders[1] = loadStep;
     await user.click(retry);
@@ -291,7 +336,7 @@ describe('WizardDialog', () => {
     load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
   });
 
-  it('Skip closes at once while a save is pending and saves nothing', async () => {
+  it('Skip closes at once without calling the leave handler again and ignores the pending save', async () => {
     const save = deferred();
     stepControl.leave = vi.fn(() => save.promise);
     renderWizard(componentSteps(3));
@@ -374,10 +419,29 @@ describe('WizardDialog', () => {
 
       await user.click(screen.getByRole('button', { name: 'wizard.leaveConfirm.leave' }));
 
-      expect(wizardState.isActive).toBe(false);
+      await waitFor(() => expect(wizardState.isActive).toBe(false));
       expect(stepControl.leave).not.toHaveBeenCalled();
       expect(api.post).toHaveBeenCalledTimes(1);
       await waitFor(() => expect(confirmation()).not.toBeInTheDocument());
+    });
+
+    it('Leave setup returns focus to the element focused before the wizard opened', async () => {
+      const opener = document.createElement('button');
+      opener.textContent = 'opener';
+      document.body.appendChild(opener);
+      opener.focus();
+      try {
+        renderWizard(componentSteps(3));
+        await waitForPrimaryEnabled();
+        await user.click(closeButton());
+
+        await user.click(screen.getByRole('button', { name: 'wizard.leaveConfirm.leave' }));
+
+        await waitFor(() => expect(wizardState.isActive).toBe(false));
+        await waitFor(() => expect(opener).toHaveFocus());
+      } finally {
+        opener.remove();
+      }
     });
 
     it('X and Escape open the confirmation while a save is running', async () => {

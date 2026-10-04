@@ -15,6 +15,7 @@
   const logger = loggers.ui;
 
   const NEXT_REASON_ID = generateId('wizard-next-reason');
+  const ALERT_ID = generateId('wizard-alert');
   const LEAVE_TITLE_ID = generateId('wizard-leave-title');
   const LEAVE_DESC_ID = generateId('wizard-leave-desc');
 
@@ -27,6 +28,10 @@
   let loadedComponent = $state<Component<WizardStepProps> | null>(null);
   // Index of the step the rendered component was loaded for
   let loadedIndex = $state(-1);
+  // True only while the step's chunk is being imported. stepStatus stays 'loading'
+  // a little longer: through the tick() after the component mounts, so the step
+  // can report its validity before it is marked ready. The spinner must give way
+  // to the component during that tick, so it cannot key off stepStatus.
   let isLoadingStep = $state(false);
   let retryNonce = $state(0);
   let leaveConfirmOpen = $state(false);
@@ -106,16 +111,21 @@
     }
   }
 
-  function confirmLeave() {
+  // Close the confirmation first and let it restore focus into the wizard, then
+  // close the wizard, so the wizard's own focus restore runs last and focus goes
+  // back to where it was before the wizard opened.
+  async function confirmLeave() {
     leaveConfirmOpen = false;
-    wizardState.skip();
+    await tick();
+    if (wizardState.isActive) wizardState.skip();
   }
 
-  // Why Next is blocked, by priority; empty when it is not blocked
+  // Why Next is blocked, by priority; empty when it is not blocked. A failed load
+  // is already explained by the alert, so the footer stays empty for it.
   let nextReason = $derived.by(() => {
     if (wizardState.canAdvance) return '';
     if (wizardState.isSaving) return t('wizard.status.saving');
-    if (wizardState.stepStatus === 'failed') return t('wizard.errors.stepLoadFailed');
+    if (wizardState.stepStatus === 'failed') return '';
     if (wizardState.stepStatus === 'loading') return t('wizard.status.loadingStep');
     return t('wizard.reasons.completeStep');
   });
@@ -124,6 +134,15 @@
     if (wizardState.stepError) return t(wizardState.stepError);
     if (wizardState.stepStatus === 'failed') return t('wizard.errors.stepLoadFailed');
     return '';
+  });
+
+  // The element that explains why Next is blocked: the footer reason, or the
+  // alert when the step failed to load
+  let nextDescribedBy = $derived.by(() => {
+    if (wizardState.canAdvance) return undefined;
+    if (nextReason) return NEXT_REASON_ID;
+    if (alertText) return ALERT_ID;
+    return undefined;
   });
 
   // Resolve step title: use i18n key if available, fall back to plain string
@@ -161,15 +180,16 @@
     <div
       bind:this={contentRef}
       tabindex="-1"
+      inert={wizardState.isSaving}
+      aria-busy={wizardState.isSaving ? 'true' : undefined}
       class="h-[33rem] rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)]/30 px-4 py-3 focus:outline-none"
     >
       {#if isLoadingStep}
-        <div class="flex h-full items-center justify-center" role="status">
-          <span
-            class="inline-block size-6 animate-spin rounded-full border-2 border-[var(--color-base-300)] border-t-[var(--color-primary)]"
-          ></span>
-          <span class="sr-only">{t('common.loading')}</span>
-        </div>
+        <LoadingSpinner
+          size="md"
+          label={t('common.loading')}
+          class="flex h-full items-center justify-center"
+        />
       {:else if wizardState.stepStatus === 'failed'}
         <div class="flex h-full items-center justify-center">
           <button type="button" class={SECONDARY_BUTTON_CLASS} onclick={retryLoad}>
@@ -187,7 +207,9 @@
         />
       {/if}
     </div>
-    <p role="alert" class="mt-2 min-h-5 text-sm text-[var(--color-error)]">{alertText}</p>
+    <p id={ALERT_ID} role="alert" class="mt-2 min-h-5 text-sm text-[var(--color-error)]">
+      {alertText}
+    </p>
     <span role="status" class="sr-only"
       >{wizardState.isSaving ? t('wizard.status.saving') : ''}</span
     >
@@ -229,7 +251,7 @@
             class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--color-primary)] bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary-hover)] aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
             onclick={() => (wizardState.isLastStep ? wizardState.complete() : wizardState.next())}
             aria-disabled={!wizardState.canAdvance ? 'true' : undefined}
-            aria-describedby={!wizardState.canAdvance ? NEXT_REASON_ID : undefined}
+            aria-describedby={nextDescribedBy}
           >
             {#if wizardState.isSaving}
               <LoadingSpinner
@@ -262,7 +284,6 @@
     aria-describedby={LEAVE_DESC_ID}
     confirmLabel={t('wizard.leaveConfirm.leave')}
     cancelLabel={t('wizard.leaveConfirm.stay')}
-    confirmVariant="primary"
     onClose={() => (leaveConfirmOpen = false)}
     onConfirm={confirmLeave}
   >
