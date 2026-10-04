@@ -173,6 +173,8 @@ func TestWizardSectionPatchesLeaveOtherSectionsByteIdentical(t *testing.T) {
 			patchSection(t, c.Echo, c, tc.section, tc.body)
 
 			got := c.Settings.Load()
+			// The YAML comparison is the real guard (no omitempty, so zero values
+			// show); the direct checks below only give clearer failures.
 			assert.Equal(t, settingsYAML(t, want), settingsYAML(t, got))
 			require.Len(t, got.Realtime.Audio.Equalizer.Filters, 1)
 			assert.InDelta(t, 0.0, got.Realtime.Audio.Equalizer.Filters[0].Width, 0)

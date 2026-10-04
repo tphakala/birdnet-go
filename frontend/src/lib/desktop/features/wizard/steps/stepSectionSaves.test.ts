@@ -31,43 +31,23 @@ import LocationLanguageStep from './LocationLanguageStep.svelte';
 import { hasUnsavedChanges, settingsActions, settingsStore } from '$lib/stores/settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { flushAsync, renderStep } from './stepTestUtils';
+import {
+  lookup,
+  serverSettings as sharedServerSettings,
+} from '../../../../../test/settings-helpers';
 
-/** A server response with every section the wizard patches, and nested values it must not lose. */
-const serverSettings = () =>
-  ({
-    main: { name: 'TestNode' },
-    birdnet: {
-      threshold: 0.8,
-      latitude: 40,
-      longitude: -74,
-      locale: 'en',
-      locationConfigured: false,
-      rangeFilter: { threshold: 0.03, passUnmappedSpecies: false, speciesCount: null, species: [] },
-    },
+/** The shared server fixture, with the location and privacy filter state these steps start from. */
+const serverSettings = (): SettingsFormData => {
+  const settings = sharedServerSettings();
+  return {
+    ...settings,
+    birdnet: { ...settings.birdnet, latitude: 40, longitude: -74 },
     realtime: {
-      dashboard: { summaryLimit: 100, locale: 'en' },
-      audio: {
-        source: '',
-        sources: [{ name: 'Card', device: 'hw:0' }],
-        equalizer: { enabled: true, filters: [] },
-      },
-      rtsp: { streams: [], health: { healthyDataThreshold: 60 }, ffmpegParameters: ['-x'] },
-      privacyFilter: { enabled: true, confidence: 0.7, debug: true },
-      birdweather: { enabled: false, id: '', threshold: 0.9 },
+      ...settings.realtime,
+      privacyFilter: { ...settings.realtime?.privacyFilter, enabled: true },
     },
-    sentry: { enabled: false },
-  }) as unknown as SettingsFormData;
-
-function lookup(root: unknown, path: string[]): unknown {
-  let current: unknown = root;
-  for (const segment of path) {
-    if (current === null || typeof current !== 'object') return undefined;
-    const record = current as Record<string, unknown>;
-    // eslint-disable-next-line security/detect-object-injection -- test helper with fixed paths
-    current = Object.hasOwn(record, segment) ? record[segment] : undefined;
-  }
-  return current;
-}
+  } as SettingsFormData;
+};
 
 const patchCalls = () => vi.mocked(settingsAPI.patchSection).mock.calls;
 
