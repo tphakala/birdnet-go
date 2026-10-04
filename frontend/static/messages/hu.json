@@ -5545,6 +5545,7 @@
         "catalogLoadFailed": "Nem sikerült betölteni a modellkatalógust",
         "installFailed": "Nem sikerült elindítani a modell telepítését",
         "removeFailed": "Nem sikerült eltávolítani a modellt",
+        "removeHasDependents": "{name} szükséges a következő modellekhez: {models}. Először távolítsa el ezeket a modelleket.",
         "actionFailed": "Probléma történt a következővel: {name}",
         "downloadSourceHint": "Ha a huggingface.co blokkolva van vagy lassú a hálózatán, állítson be egy tükörszervert az alábbi Letöltési forrás szakaszban.",
         "goToDownloadSource": "Ugrás a Letöltési forráshoz",

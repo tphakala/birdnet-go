@@ -5545,6 +5545,7 @@
         "catalogLoadFailed": "Falha ao carregar o catálogo de modelos",
         "installFailed": "Falha ao iniciar a instalação do modelo",
         "removeFailed": "Falha ao remover o modelo",
+        "removeHasDependents": "{name} é necessário para {models}. Remova primeiro esses modelos.",
         "actionFailed": "Ocorreu um problema com {name}",
         "downloadSourceHint": "Se o huggingface.co estiver bloqueado ou lento em sua rede, defina um espelho na seção Origem de download abaixo.",
         "goToDownloadSource": "Ir para Origem de download",

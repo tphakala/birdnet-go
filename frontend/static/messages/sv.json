@@ -5545,6 +5545,7 @@
         "catalogLoadFailed": "Kunde inte ladda modellkatalogen",
         "installFailed": "Kunde inte starta modellinstallation",
         "removeFailed": "Kunde inte ta bort modell",
+        "removeHasDependents": "{name} används av {models}. Ta bort de modellerna först.",
         "actionFailed": "Det uppstod ett problem med {name}",
         "downloadSourceHint": "Om huggingface.co är blockerat eller långsamt på ditt nätverk kan du ange en spegelsajt i avsnittet Nedladdningskälla nedan.",
         "goToDownloadSource": "Gå till Nedladdningskälla",

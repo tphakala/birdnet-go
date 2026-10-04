@@ -87,6 +87,7 @@ import { settingsStore } from '$lib/stores/settings';
 import { toastActions } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
 import { navigation } from '$lib/stores/navigation.svelte';
+import { ApiError } from '$lib/utils/api';
 
 beforeEach(() => {
   // Use jsdom's real Location so pushState updates the URL used by nested tabs.
@@ -365,6 +366,48 @@ describe('AnalysisSettingsPage model gallery in-flight guard and region refetch'
     // cannot prove the model name is interpolated. Assert on the t() call itself
     // that the {name} param is passed through, closing that gap (#1566).
     expect(t).toHaveBeenCalledWith('analysis.gallery.removeSuccess', { name: 'Installed Model' });
+  });
+
+  it('shows the dependents reason instead of the retry hint when a remove is refused', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'geo', name: 'Geomodel', installed: true })],
+    });
+    const reason = 'Geomodel is needed by BirdNET v3.0. Remove those models first.';
+    vi.mocked(modelsApi.uninstallModel).mockRejectedValue(
+      new ApiError(reason, 409, new Response(null, { status: 409 }))
+    );
+
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.remove.*Geomodel/ })
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'analysis.gallery.remove' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(reason);
+    expect(alert).not.toHaveTextContent('analysis.gallery.errors.removeRetryHint');
+    expect(alert).not.toHaveTextContent('analysis.gallery.errors.details');
+  });
+
+  it('keeps the retry hint and details for any other remove failure', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
+    });
+    vi.mocked(modelsApi.uninstallModel).mockRejectedValue(
+      new ApiError('disk error', 500, new Response(null, { status: 500 }))
+    );
+
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.remove.*Installed Model/ })
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'analysis.gallery.remove' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('analysis.gallery.errors.removeRetryHint');
+    expect(alert).toHaveTextContent('analysis.gallery.errors.details');
   });
 });
 
