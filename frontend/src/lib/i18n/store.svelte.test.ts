@@ -228,3 +228,29 @@ describe('i18n store - blocked storage', () => {
     expect(store.getLocale()).toBe('fi');
   });
 });
+
+describe('i18n store - document language', () => {
+  afterEach(() => {
+    localStorage.removeItem('birdnet-locale');
+    document.documentElement.lang = 'en';
+    vi.resetModules();
+  });
+
+  it('sets the html lang attribute when the locale changes', () => {
+    setLocale('de');
+    expect(document.documentElement.lang).toBe('de');
+
+    setLocale('fi');
+    expect(document.documentElement.lang).toBe('fi');
+  });
+
+  it('sets the html lang attribute from the initial locale on load', async () => {
+    localStorage.setItem('birdnet-locale', 'sv');
+    vi.resetModules();
+
+    const store = await import('./store.svelte');
+
+    expect(store.getLocale()).toBe('sv');
+    expect(document.documentElement.lang).toBe('sv');
+  });
+});

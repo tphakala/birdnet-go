@@ -46,6 +46,18 @@ function getInitialLocale(): Locale {
   return detectBrowserLocale();
 }
 
+/**
+ * Marks the page with the UI language, so screen readers pronounce the text
+ * correctly and the browser hyphenates and spellchecks in that language.
+ * index.html's inline script sets the initial value before the app loads; this
+ * keeps it in step with the store: once at module load and on every setLocale.
+ */
+function applyDocumentLanguage(locale: Locale): void {
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = locale;
+  }
+}
+
 // State management with Svelte 5 runes
 let currentLocale = $state<Locale>(getInitialLocale());
 let messages = $state<Record<string, string>>({});
@@ -96,11 +108,13 @@ export function getLocale(): Locale {
 }
 
 /**
- * Set the current locale and load corresponding messages
+ * Set the current locale, mark the page with it (html lang) and load the
+ * corresponding messages
  * @param locale - The locale code to set
  */
 export function setLocale(locale: Locale): void {
   currentLocale = locale;
+  applyDocumentLanguage(locale);
   loadMessages(locale);
 
   // Persist locale to localStorage
@@ -323,6 +337,7 @@ export function t(key: string, params?: Record<string, unknown>): string {
 if (typeof window !== 'undefined') {
   // Load messages immediately and synchronously if possible
   const locale = getLocale();
+  applyDocumentLanguage(locale);
   cleanupOldCaches();
   loading = true;
 
