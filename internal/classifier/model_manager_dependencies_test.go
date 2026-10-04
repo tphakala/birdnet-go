@@ -375,7 +375,13 @@ func TestUninstall_RangeFilterReloadFailureKeepsGeomodelFiles(t *testing.T) {
 
 // depStep is one move in the lifecycle transition table.
 type depStep struct {
-	op string // install, uninstall, swapDFT, swapBuiltin, rescan
+	// op is one of install, uninstall, swapDFT, swapBuiltin, rescan, installFail (an
+	// install of id whose first attempt fails on its labels file), holdInstall and
+	// holdUninstall (take the operation slot for id), release (free the held slot),
+	// expireFailed (drop id's retained failed state, as its retention timer does),
+	// and busyInstall, busyUninstall, busySwapDFT (expect an
+	// *OperationInProgressError that changes nothing).
+	op string
 	id string
 }
 
@@ -429,6 +435,17 @@ func TestDependencyLifecycle_Transitions(t *testing.T) {
 		"install A, uninstall G refused, uninstall A, uninstall G": {
 			{"install", depIDA}, {"uninstall", depIDG}, {"uninstall", depIDA}, {"uninstall", depIDG},
 		},
+		"hold install A, busy uninstall G, busy install B, release, install A, uninstall G refused": {
+			{"holdInstall", depIDA}, {"busyUninstall", depIDG}, {"busyInstall", depIDB}, {"release", ""},
+			{"install", depIDA}, {"uninstall", depIDG},
+		},
+		"hold uninstall G, busy install A, busy swap P, release, install A, swap P to DFT": {
+			{"holdUninstall", depIDG}, {"busyInstall", depIDA}, {"busySwapDFT", ""}, {"release", ""},
+			{"install", depIDA}, {"swapDFT", ""},
+		},
+		"install G failing on its labels, install A records G, uninstall G refused": {
+			{"installFail", depIDG}, {"install", depIDA}, {"expireFailed", depIDG}, {"uninstall", depIDG},
+		},
 	}
 	for name, steps := range sequences {
 		for _, rescanBeforeUninstall := range []bool{false, true} {
@@ -438,11 +455,44 @@ func TestDependencyLifecycle_Transitions(t *testing.T) {
 			}
 			t.Run(label, func(t *testing.T) {
 				h := newDepHarness(t)
+				var held *OperationLease
 				for i, s := range steps {
 					if s.op == "uninstall" && rescanBeforeUninstall {
 						h.rescan()
 					}
 					switch s.op {
+					case "holdInstall", "holdUninstall":
+						op := OperationInstall
+						if s.op == "holdUninstall" {
+							op = OperationUninstall
+						}
+						var err error
+						held, err = h.mm.BeginOperation(op, s.id)
+						require.NoError(t, err, "step %d", i)
+					case "release":
+						held.Release()
+						held = nil
+					case "busyInstall", "busyUninstall", "busySwapDFT":
+						before := installedSnapshot(h.mm)
+						var err error
+						switch s.op {
+						case "busyInstall":
+							e := h.entry(s.id)
+							err = h.mm.Install(t.Context(), &e, "", h.srv.URL, nil)
+						case "busyUninstall":
+							err = h.mm.Uninstall(s.id)
+						default:
+							err = h.install(depIDP, depVariantDFT)
+						}
+						_, busy := errors.AsType[*OperationInProgressError](err)
+						require.True(t, busy, "step %d %s: want *OperationInProgressError, got %v", i, s.op, err)
+						requireSameRecords(t, before, installedSnapshot(h.mm), "a busy refusal changes nothing")
+					case "expireFailed":
+						h.mm.removeDownloading(s.id) // the failedStateRetention timer firing
+					case "installFail":
+						h.srv.Fail("g-labels.txt")
+						require.Error(t, h.install(s.id, ""), "step %d", i)
+						h.srv.Unfail("g-labels.txt")
 					case "install":
 						require.NoError(t, h.install(s.id, ""), "step %d %s %s", i, s.op, s.id)
 					case "swapDFT":
@@ -461,6 +511,9 @@ func TestDependencyLifecycle_Transitions(t *testing.T) {
 						}
 					}
 					h.assertDependencyInvariants(t, label)
+					if held == nil {
+						requireSlotFree(t, h.mm, label+": no operation may keep the slot")
+					}
 				}
 			})
 		}

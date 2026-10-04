@@ -19,7 +19,7 @@ vi.mock('$lib/stores/appState.svelte', () => ({
   refreshCsrfToken: vi.fn().mockResolvedValue(false),
 }));
 
-import { getCsrfToken, fetchWithCSRF, api, resetRedirectGuard } from './api';
+import { getCsrfToken, fetchWithCSRF, api, resetRedirectGuard, ApiError } from './api';
 
 describe('API utilities', () => {
   beforeEach(() => {
@@ -206,6 +206,38 @@ describe('API utilities', () => {
           'Could not connect to the stream. Check that the URL is correct and the stream is accessible',
         status: 502,
       });
+    });
+
+    it('exposes the error_key on ApiError', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        statusText: 'Conflict',
+        headers: new Headers(),
+        json: () =>
+          Promise.resolve({
+            error_key: 'analysis.gallery.errors.operationInProgress',
+            error_params: { name: 'Geomodel' },
+            message: 'another model operation is in progress',
+          }),
+      });
+
+      await expect(fetchWithCSRF('/api/test')).rejects.toMatchObject({
+        status: 409,
+        errorKey: 'analysis.gallery.errors.operationInProgress',
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        statusText: 'Conflict',
+        headers: new Headers(),
+        json: () => Promise.resolve({ message: 'conflict' }),
+      });
+
+      const err = await fetchWithCSRF('/api/test').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).errorKey).toBeUndefined();
     });
 
     it('returns null for empty responses', async () => {

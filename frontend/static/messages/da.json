@@ -5546,6 +5546,7 @@
         "installFailed": "Kunne ikke starte modelinstallation",
         "removeFailed": "Kunne ikke fjerne model",
         "removeHasDependents": "{name} bruges af {models}. Fjern disse modeller først.",
+        "operationInProgress": "En installation, geninstallation eller fjernelse af en model er allerede i gang ({name}). Prøv igen, når den er færdig.",
         "actionFailed": "Der opstod et problem med {name}",
         "downloadSourceHint": "Hvis huggingface.co er blokeret eller langsomt på dit netværk, kan du indstille en spejlserver i sektionen Downloadkilde nedenfor.",
         "goToDownloadSource": "Gå til Downloadkilde",

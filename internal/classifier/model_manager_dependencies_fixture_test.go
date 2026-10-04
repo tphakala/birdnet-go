@@ -44,6 +44,13 @@ type depServer struct {
 	mu      sync.Mutex
 	hits    map[string]int
 	missing map[string]bool
+	holds   map[string]*depHold
+}
+
+// depHold parks the first request for a path until release is called.
+type depHold struct {
+	reached chan struct{}
+	release chan bool // true answers 404, false serves the payload
 }
 
 // depPayload is the content the test server returns for a remote path.
@@ -51,13 +58,24 @@ func depPayload(remote string) []byte { return []byte("payload:" + remote) }
 
 func newDepServer(t *testing.T) *depServer {
 	t.Helper()
-	d := &depServer{hits: map[string]int{}, missing: map[string]bool{}}
+	d := &depServer{hits: map[string]int{}, missing: map[string]bool{}, holds: map[string]*depHold{}}
 	d.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		remote := r.URL.Path[1:]
 		d.mu.Lock()
 		d.hits[remote]++
 		gone := d.missing[remote]
+		hold := d.holds[remote]
+		delete(d.holds, remote)
 		d.mu.Unlock()
+		if hold != nil {
+			close(hold.reached)
+			select {
+			case fail := <-hold.release:
+				gone = gone || fail
+			case <-r.Context().Done():
+				return
+			}
+		}
 		if gone {
 			http.NotFound(w, r)
 			return
@@ -73,6 +91,25 @@ func (d *depServer) Hits(remote string) int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.hits[remote]
+}
+
+// Hold parks the first request for remote: reached is closed when it arrives, and
+// it stays blocked until release is called or the request context ends.
+// release(true) answers that request 404, release(false) serves the payload. Later
+// requests for remote are served normally.
+func (d *depServer) Hold(remote string) (reached <-chan struct{}, release func(fail bool)) {
+	h := &depHold{reached: make(chan struct{}), release: make(chan bool, 1)}
+	d.mu.Lock()
+	d.holds[remote] = h
+	d.mu.Unlock()
+	return h.reached, func(fail bool) { h.release <- fail }
+}
+
+// Unfail makes remote answer normally again after Fail.
+func (d *depServer) Unfail(remote string) {
+	d.mu.Lock()
+	delete(d.missing, remote)
+	d.mu.Unlock()
 }
 
 // Fail makes remote answer 404 from now on.

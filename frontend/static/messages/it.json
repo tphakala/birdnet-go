@@ -5546,6 +5546,7 @@
         "installFailed": "Impossibile avviare l'installazione del modello",
         "removeFailed": "Impossibile rimuovere il modello",
         "removeHasDependents": "{name} è richiesto da {models}. Rimuovi prima questi modelli.",
+        "operationInProgress": "È già in corso un'installazione, reinstallazione o rimozione di un modello ({name}). Riprova al termine.",
         "actionFailed": "Si è verificato un problema con {name}",
         "downloadSourceHint": "Se huggingface.co è bloccato o lento sulla tua rete, imposta un mirror nella sezione Sorgente di download sottostante.",
         "goToDownloadSource": "Vai a Sorgente di download",

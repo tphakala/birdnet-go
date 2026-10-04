@@ -58,7 +58,9 @@ func (mm *ModelManager) dependentsError(entry *CatalogEntry) error {
 // dependentsLocked lists the models that need catalogID: installed entries (other
 // including a record on the embedded baseline variant) and entries with an actively
 // downloading state whose DependsOn names it. A failed, retained
-// download state does not count. The result is sorted by catalog ID. The caller
+// download state does not count. The result is sorted by catalog ID. In production
+// Uninstall holds the operation slot when it asks, so no other entry has an active
+// download state and the active branch only serves direct callers. The caller
 // holds mm.mu.
 func (mm *ModelManager) dependentsLocked(catalogID string) []CatalogRef {
 	found := make(map[string]CatalogRef)
@@ -123,7 +125,9 @@ func sharedOnlyRecord(entry *CatalogEntry, sharedDir string) (InstalledModel, bo
 // recordDependenciesLocked records each dependency of entry that an install of
 // install just made present on disk. A dependency already installed, or with its
 // own download in progress (it records itself), is left alone, and one whose files
-// are not all present is not recorded. The caller holds mm.mu.
+// are not all present is not recorded. With the operation slot an install runs
+// alone, so a dependency has an active direct install only when something bypasses
+// the slot; the skip is a backstop. The caller holds mm.mu.
 func (mm *ModelManager) recordDependenciesLocked(entry *CatalogEntry) {
 	sharedDir := filepath.Join(mm.modelsDir, sharedDirName)
 	for _, dep := range dependencyEntries(entry) {
@@ -186,7 +190,9 @@ func (mm *ModelManager) usesSharedFileLocked(entry *CatalogEntry, variantIDs []s
 // sharedFileInUseLocked reports whether any entry other than excludeID still reaches
 // the shared file localName: an installed record through the files of its installed
 // variant, or an actively downloading entry through the union of all its variants. It
-// is the single retention predicate for shared files. The caller holds mm.mu.
+// is the single retention predicate for shared files. In production Uninstall holds
+// the operation slot, so no other entry is actively downloading then; the active
+// branch stays for direct callers. The caller holds mm.mu.
 func (mm *ModelManager) sharedFileInUseLocked(excludeID, localName string) bool {
 	for id := range mm.installed {
 		if id == excludeID {

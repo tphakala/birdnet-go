@@ -88,6 +88,12 @@ type ModelManager struct {
 	installed   map[string]InstalledModel
 	downloading map[string]*DownloadState
 
+	// activeOp is the single model operation slot: the lease of the install, swap,
+	// reinstall or uninstall in flight, or nil. Guarded by mu. It is in-memory only
+	// and never taken by ScanInstalled, so a restart always starts with a free slot
+	// and startup is never refused.
+	activeOp *OperationLease
+
 	// freeSpaceFn reports the bytes available on the filesystem holding a given
 	// path. It is a field so tests can force the insufficient-space branch of the
 	// install preflight without exhausting a real disk. NewModelManager wires it
@@ -231,7 +237,8 @@ func (mm *ModelManager) notifyTopologyChanged() {
 // ScanInstalled scans modelsDir for subdirectories matching catalog IDs. For
 // each matching subdirectory, it checks whether the ONNX model file (the
 // CatalogFile with Role "model") exists on disk. If found, the model is
-// recorded as installed.
+// recorded as installed. It never takes the operation slot, so startup is never
+// refused, and it keeps in-flight entries as described below.
 func (mm *ModelManager) ScanInstalled() {
 	log := GetLogger()
 
@@ -1021,6 +1028,10 @@ func (mm *ModelManager) reloadRangeFilter() error {
 // disk. Shared files (embeddings, geomodel, taxonomy) are deleted per file, and only
 // when no other installed or actively downloading model reaches that file; a hidden
 // Component dependency that nothing needs any more is removed with its last dependent.
+// It holds the operation slot for its whole body and returns an
+// *OperationInProgressError, changing nothing, while another model operation runs.
+// Uninstall holds mm.mu throughout, so a request that arrives during an uninstall
+// waits on the lock and then proceeds; it is not queued and is not refused.
 func (mm *ModelManager) Uninstall(catalogID string) error {
 	log := GetLogger()
 
@@ -1056,6 +1067,15 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
+
+	// Take the operation slot before any other decision, so every request made while
+	// another operation runs gets the same refusal. Registered after the unlock
+	// defer, so the release runs first, under the lock.
+	if err := mm.busyErrorLocked(catalogID); err != nil {
+		return err
+	}
+	lease := mm.acquireLocked(OperationUninstall, catalogID)
+	defer mm.releaseLocked(lease)
 
 	im, installed := mm.installed[catalogID]
 	if !installed {
@@ -1211,8 +1231,20 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 // rejected before any download starts. The baseURL parameter overrides the
 // HuggingFace URL for testing; pass an empty string to use the default
 // HuggingFace URL constructed from the entry's repo. Progress is reported via the
-// channel if non-nil.
+// channel if non-nil. It holds the operation slot for the whole install and
+// returns an *OperationInProgressError, changing nothing, while another model
+// operation runs.
 func (mm *ModelManager) Install(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState) error {
+	lease, err := mm.BeginOperation(OperationInstall, entry.ID)
+	if err != nil {
+		return err
+	}
+	defer lease.Release()
+	return mm.install(ctx, entry, variantID, baseURL, progress)
+}
+
+// install is Install's body, run under the caller's operation slot.
+func (mm *ModelManager) install(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState) error {
 	// Reject an unknown variant selection before taking any lock or registering a
 	// download, so a bad selection cannot leave a lingering in-progress state.
 	if _, ok := variantFilesByID(entry, variantID); !ok {
@@ -1264,8 +1296,20 @@ func (mm *ModelManager) Install(ctx context.Context, entry *CatalogEntry, varian
 // Reinstall re-downloads missing or corrupt files for an already-installed model.
 // Files that pass SHA256 validation are skipped. The baseURL parameter overrides
 // the HuggingFace URL for testing; pass an empty string to use the default.
-// Progress is reported via the channel if non-nil.
+// Progress is reported via the channel if non-nil. It holds the operation slot for
+// the whole reinstall and returns an *OperationInProgressError, changing nothing,
+// while another model operation runs.
 func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
+	lease, err := mm.BeginOperation(OperationReinstall, entry.ID)
+	if err != nil {
+		return err
+	}
+	defer lease.Release()
+	return mm.reinstall(ctx, entry, baseURL, progress)
+}
+
+// reinstall is Reinstall's body, run under the caller's operation slot.
+func (mm *ModelManager) reinstall(ctx context.Context, entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
 	// Check that the model IS installed (opposite of Install's guard).
 	mm.mu.Lock()
 	im, ok := mm.installed[entry.ID]
@@ -1355,8 +1399,21 @@ func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, base
 // (which refuses while a download is in progress) cannot race between the check
 // and the act. An empty variantID selects the entry's default variant; an unknown
 // variant id is rejected. Re-selecting the already-installed variant is a no-op.
-// The baseURL parameter overrides the HuggingFace URL for testing.
+// The baseURL parameter overrides the HuggingFace URL for testing. It holds the
+// operation slot for the whole call, the same-variant no-op included, and returns
+// an *OperationInProgressError, changing nothing, while another model operation
+// runs.
 func (mm *ModelManager) InstallOrReplace(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState) error {
+	lease, err := mm.BeginOperation(OperationInstall, entry.ID)
+	if err != nil {
+		return err
+	}
+	defer lease.Release()
+	return mm.installOrReplace(ctx, entry, variantID, baseURL, progress)
+}
+
+// installOrReplace is InstallOrReplace's body, run under the caller's operation slot.
+func (mm *ModelManager) installOrReplace(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState) error {
 	// Reject an unknown variant selection before any lock or state change.
 	if _, ok := variantFilesByID(entry, variantID); !ok {
 		return errors.Newf("unknown variant %q for model %s", variantID, entry.ID).
@@ -1417,11 +1474,11 @@ func (mm *ModelManager) InstallOrReplace(ctx context.Context, entry *CatalogEntr
 		return nil
 	}
 	if !installed {
-		// Fresh install: delegate to Install, which registers the download and owns
-		// its failure cleanup. There is no installed entry for a concurrent Uninstall
-		// to race, so releasing the lock before Install re-acquires it is safe.
+		// Fresh install: delegate to install, which registers the download and owns
+		// its failure cleanup. The caller's operation slot is already held, so this
+		// calls the unexported body rather than Install, which would refuse itself.
 		mm.mu.Unlock()
-		return mm.Install(ctx, entry, variantID, baseURL, progress)
+		return mm.install(ctx, entry, variantID, baseURL, progress)
 	}
 	// Variant switch: register the switch atomically with the installed-state
 	// decision, so a concurrent Uninstall (which refuses while downloading) cannot
