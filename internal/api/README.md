@@ -647,9 +647,9 @@ The API includes comprehensive endpoints for managing application settings:
    - This prevents race conditions when multiple clients update settings simultaneously
 
 3. **Dynamic Field Updates**:
-   - Settings updates use reflection to safely update only allowed fields
+   - Settings updates use reflection to merge the request into the settings structure
    - Updates can be applied at any nesting level in the settings structure
-   - The allowed fields map defines which settings can be modified via the API
+   - A block-list (`getBlockedFieldMap` in `internal/api/v2/settings.go`) names the fields that must not be set through the API. Every field it does not name is writable, so a new settings field is client-settable by default and must be added to the block-list if it is runtime-only or security-sensitive
 
 4. **Asynchronous Reconfigurations**:
    - When important settings change, reconfigurations are triggered asynchronously
