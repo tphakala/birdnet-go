@@ -49,14 +49,11 @@ func TestMDNSTroubleshooting_ByEnvironment(t *testing.T) {
 		// The socket file existing does not prove the daemon is usable (SELinux can deny the connect).
 		{"container with socket names denied access", mdnsEnv{inContainer: true, avahiSocketPresent: true}, "access to the socket was denied"},
 		{"container with socket points to the docs", mdnsEnv{inContainer: true, avahiSocketPresent: true}, "RTSP troubleshooting wiki"},
-		{"native", mdnsEnv{}, "getent hosts cam.local"},
+		{"native", mdnsEnv{goos: goosLinux}, "getent hosts cam.local"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if tt.name == "native" && runtime.GOOS != "linux" {
-				t.Skip("native avahi and getent steps are Linux only")
-			}
 			joined := strings.Join(mdnsTroubleshooting("cam.local", tt.env), "\n")
 			assert.Contains(t, joined, tt.want)
 			assert.Equal(t, tt.name == "container without socket", strings.Contains(joined, mount), "mount text only without socket")
@@ -111,4 +108,70 @@ func TestNativeMDNSSteps(t *testing.T) {
 		assert.NotContains(t, other, "avahi-daemon", goos)
 		assert.NotContains(t, other, "getent", goos)
 	}
+}
+
+func TestMDNSTroubleshooting_NativeUsesEnvGOOS(t *testing.T) {
+	t.Parallel()
+	linux := strings.Join(mdnsTroubleshooting("cam.local", mdnsEnv{goos: goosLinux}), "\n")
+	assert.Contains(t, linux, "getent hosts cam.local")
+
+	for _, goos := range []string{"windows", "darwin"} {
+		other := strings.Join(mdnsTroubleshooting("cam.local", mdnsEnv{goos: goos}), "\n")
+		assert.Contains(t, other, "same network", goos)
+		assert.NotContains(t, other, "getent", goos)
+		assert.NotContains(t, other, "avahi-daemon", goos)
+	}
+}
+
+func TestNewMDNSEnv(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	sockPath := filepath.Join(dir, "s")
+	ln, err := net.Listen("unix", sockPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	missing := filepath.Join(dir, "missing")
+
+	// EnvContainerGen pins current behaviour only: a generic container is
+	// treated as native, and whether it should get mount advice is undecided.
+	envTypes := []struct {
+		name        string
+		envType     string
+		inContainer bool
+	}{
+		{"docker", sysinfo.EnvDocker, true},
+		{"podman", sysinfo.EnvPodman, true},
+		{"lxc", sysinfo.EnvLXC, false},
+		{"nspawn", sysinfo.EnvNspawn, false},
+		{"generic container", sysinfo.EnvContainerGen, false},
+		{"empty", "", false},
+	}
+	sockets := []struct {
+		name    string
+		path    string
+		present bool
+	}{
+		{"socket", sockPath, true},
+		{"no socket", missing, false},
+	}
+	for _, et := range envTypes {
+		for _, sk := range sockets {
+			for _, goos := range []string{goosLinux, "windows"} {
+				name := et.name + "/" + sk.name + "/" + goos
+				t.Run(name, func(t *testing.T) {
+					t.Parallel()
+					want := mdnsEnv{inContainer: et.inContainer, avahiSocketPresent: sk.present, goos: goos}
+					assert.Equal(t, want, newMDNSEnv(et.envType, goos, sk.path))
+				})
+			}
+		}
+	}
+}
+
+func TestDetectMDNSEnv_UsesRuntimeGOOS(t *testing.T) {
+	t.Parallel()
+	env := detectMDNSEnv()
+	envType, _ := sysinfo.GetEnvironment()
+	assert.Equal(t, runtime.GOOS, env.goos)
+	assert.Equal(t, mdnsContainerEnv(envType), env.inContainer)
 }
