@@ -80,6 +80,10 @@ assert_nonzero() { # description rc
     fi
 }
 
+make_unix_socket() { # path ; creates a bound unix socket file at path
+    python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$1"
+}
+
 # ---------------------------------------------------------------------------
 # Extract a single top-level function (name() { ... } closing at column 0) from
 # install.sh and define it in this shell. install.sh formats every top-level
@@ -131,10 +135,14 @@ load_fn() {
     # at the function close. Without this it still eval's -- sometimes cleanly,
     # redefining a dozen other functions -- and the suite goes green while testing
     # something else entirely.
-    # A one-line body is the opener itself, ending in "}".
-    local last
+    # The body must end at a column-0 "}", or be a single line (a one-line
+    # function) that ends in "}".
+    local last one_liner=false
     last="$(printf '%s' "$body" | tail -n 1)"
-    if [ "$last" != "}" ] && { [ "$(printf '%s\n' "$body" | wc -l)" -ne 1 ] || [[ "$last" != *"}" ]]; }; then
+    if [ "$body" = "$last" ] && [[ "$last" == *"}" ]]; then
+        one_liner=true
+    fi
+    if [ "$last" != "}" ] && [ "$one_liner" = false ]; then
         echo "FATAL: extraction of '$fn' did not end at a column-0 '}'; check load_fn's here-doc tracking" >&2
         exit 2
     fi
@@ -1481,7 +1489,7 @@ it "host_socket_mount against real paths"
 load_fn host_socket_mount   # replaces the stub; no later test generates a unit
 sock_dir="${WORK}/sockdir"
 mkdir -p "$sock_dir"
-python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "${sock_dir}/socket"
+make_unix_socket "${sock_dir}/socket"
 assert_eq "real socket: read-only directory mount" "-v ${sock_dir}:${sock_dir}:ro" "$(host_socket_mount "${sock_dir}/socket")"
 : > "${sock_dir}/regular"
 assert_eq "regular file is not a socket: no mount" "" "$(host_socket_mount "${sock_dir}/regular")"
@@ -1529,7 +1537,7 @@ it "host_socket_present against real paths"
 
 psock_dir="${WORK}/psock"
 mkdir -p "$psock_dir"
-python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "${psock_dir}/socket"
+make_unix_socket "${psock_dir}/socket"
 # shellcheck disable=SC2218  # the real function is eval-loaded above; the stub below comes later
 host_socket_present "${psock_dir}/socket"; assert_ok "real socket is present" $?
 : > "${psock_dir}/regular"
@@ -1638,7 +1646,7 @@ src2="${fake_rt}/unit-b-mdns/avahi-daemon"
 
 run_pre unit-a; assert_ok "no socket: snippet succeeds" $?
 is_empty_dir "$src1"; assert_ok "no socket: source is an empty directory" $?
-python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "${fake_avahi}/socket"
+make_unix_socket "${fake_avahi}/socket"
 run_pre unit-a; assert_ok "socket appears: snippet succeeds" $?
 assert_eq "socket appears: source is a symlink to the host directory" "$fake_avahi" "$(readlink "$src1")"
 run_pre unit-a; assert_ok "rerun with socket: snippet succeeds" $?

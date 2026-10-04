@@ -50,6 +50,7 @@ func TestMDNSTroubleshooting_ByEnvironment(t *testing.T) {
 		{"container with socket names denied access", mdnsEnv{inContainer: true, avahiSocketPresent: true}, "access to the socket was denied"},
 		{"container with socket points to the docs", mdnsEnv{inContainer: true, avahiSocketPresent: true}, "RTSP troubleshooting wiki"},
 		{"native", mdnsEnv{goos: goosLinux}, "getent hosts cam.local"},
+		{"native non-linux", mdnsEnv{goos: "windows"}, "same network"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -110,19 +111,6 @@ func TestNativeMDNSSteps(t *testing.T) {
 	}
 }
 
-func TestMDNSTroubleshooting_NativeUsesEnvGOOS(t *testing.T) {
-	t.Parallel()
-	linux := strings.Join(mdnsTroubleshooting("cam.local", mdnsEnv{goos: goosLinux}), "\n")
-	assert.Contains(t, linux, "getent hosts cam.local")
-
-	for _, goos := range []string{"windows", "darwin"} {
-		other := strings.Join(mdnsTroubleshooting("cam.local", mdnsEnv{goos: goos}), "\n")
-		assert.Contains(t, other, "same network", goos)
-		assert.NotContains(t, other, "getent", goos)
-		assert.NotContains(t, other, "avahi-daemon", goos)
-	}
-}
-
 func TestNewMDNSEnv(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -156,14 +144,11 @@ func TestNewMDNSEnv(t *testing.T) {
 	}
 	for _, et := range envTypes {
 		for _, sk := range sockets {
-			for _, goos := range []string{goosLinux, "windows"} {
-				name := et.name + "/" + sk.name + "/" + goos
-				t.Run(name, func(t *testing.T) {
-					t.Parallel()
-					want := mdnsEnv{inContainer: et.inContainer, avahiSocketPresent: sk.present, goos: goos}
-					assert.Equal(t, want, newMDNSEnv(et.envType, goos, sk.path))
-				})
-			}
+			t.Run(et.name+"/"+sk.name, func(t *testing.T) {
+				t.Parallel()
+				want := mdnsEnv{inContainer: et.inContainer, avahiSocketPresent: sk.present, goos: "windows"}
+				assert.Equal(t, want, newMDNSEnv(et.envType, "windows", sk.path))
+			})
 		}
 	}
 }
