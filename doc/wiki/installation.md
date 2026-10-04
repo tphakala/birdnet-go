@@ -5,7 +5,7 @@ This document provides instructions for installing BirdNET-Go.
 There are four main ways to install BirdNET-Go:
 
 1.  **Using `install.sh` (Recommended for Linux):** This script automates the setup of BirdNET-Go within a Docker container, including dependencies, configuration prompts, performance optimization, and systemd service creation. This is the easiest and recommended method for supported Linux distributions (Debian 11+, Ubuntu 20.04+, Raspberry Pi OS Bullseye+).
-2.  **Using Docker Compose (Linux only):** Set up BirdNET-Go using Docker Compose for a more flexible containerized approach. This offers better configurability and easier management than manual Docker installation. See the [Docker Compose Guide](docker_compose_guide.md) for detailed instructions.
+2.  **Using Docker Compose (Linux only):** Set up BirdNET-Go using Docker Compose for a more flexible containerized approach. This offers better configurability and easier management than manual Docker installation. See the [Docker Compose Guide](docker_compose_guide.md) for detailed instructions. Host networking (`docker-compose.host.yml`) is recommended for new installs; bridge networking (`docker-compose.yml`) remains supported.
 3.  **Manual Docker Installation (Advanced, Linux only):** Manually run the BirdNET-Go Docker container. This offers more control but requires managing the container lifecycle yourself.
 4.  **Manual Binary Installation (All platforms):** Download pre-compiled binaries. This is currently the only supported method for Windows and macOS users. This approach avoids Docker; the release archive bundles the machine learning libraries (TensorFlow Lite C and ONNX Runtime), and you only install FFmpeg and SoX separately if you need the features that use them (see [Manual Binary Installation](#manual-binary-installation-all-platforms)). You manage the application process yourself.
 
@@ -157,7 +157,12 @@ For runtime problems after a successful install (no sound, web UI unreachable, c
 
 For a more flexible containerized approach than the manual Docker installation, you can use Docker Compose which offers better configurability and easier management.
 
-A [premade docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml) file is available in the repository. This file includes:
+Two premade files are available in the repository:
+
+- [docker-compose.host.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.host.yml): host networking, recommended for new installs. Multicast (mDNS) reaches the app directly. Needs rootful Docker, or rootless Docker Engine 29.5 or later.
+- [docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml): bridge networking. Remains supported, and existing setups are not changed.
+
+`install.sh` currently sets up bridge networking; that is unchanged. Both Compose files include:
 
 - The BirdNET-Go container configuration with the latest nightly image
 - Environment variables for customization (timezone, user permissions, etc.)
@@ -171,6 +176,26 @@ Please refer to the [Docker Compose Guide](docker_compose_guide.md) for detailed
 ## Manual Docker Installation (Advanced, Linux only)
 
 This method requires Docker to be installed on your system. See the [official Docker installation guide](https://docs.docker.com/engine/install/).
+
+**Recommended for new installs: host networking.** There is no `-p` option; the app listens on the port set by `BIRDNET_WEBSERVER_PORT` (1024 or higher). Open that port in the host firewall. The Avahi mount lets the container resolve `.local` names. On a host without a sound card (RTSP streams only), leave out `--device /dev/snd`: Docker refuses to start a container whose device does not exist.
+
+```bash
+docker run -ti --rm \
+  --name birdnet-go \
+  --network host \
+  --env BIRDNET_WEBSERVER_PORT=<host_port> \
+  --env TZ="<TZ identifier>" \
+  --env BIRDNET_UID=$(id -u) \
+  --env BIRDNET_GID=$(id -g) \
+  --device /dev/snd \
+  --add-host="host.docker.internal:host-gateway" \
+  -v /run/avahi-daemon:/run/avahi-daemon:ro \
+  -v </path/on/host/to/config>:/config \
+  -v </path/on/host/to/data>:/data \
+  ghcr.io/tphakala/birdnet-go:nightly
+```
+
+The bridge networking commands below remain supported.
 
 ```bash
 docker run -ti --rm \\
@@ -206,11 +231,12 @@ docker run -ti --rm \\
 
 | Parameter                                                              | Function                                                                                                                                                                                       | Example Value                |
 | :--------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------- |
+| `--network host`                                                       | Host networking variant only: shares the host network stack. Replaces `-p`; set `--env BIRDNET_WEBSERVER_PORT=<host_port>` instead.                                                            | `--network host`             |
 | `-p <host_port>:8080`                                                  | Maps a port on your host machine to the container's web server port (8080).                                                                                                                    | `-p 8080:8080`               |
 | `--env TZ="<TZ identifier>"`                                           | Sets the timezone inside the container. See [Wikipedia list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List).                                                               | `TZ="Europe/Berlin"`         |
 | `--env BIRDNET_UID=$(id -u)`                                           | Runs the container process with your host user's ID for correct file permissions.                                                                                                              | _Keep as is_                 |
 | `--env BIRDNET_GID=$(id -g)`                                           | Runs the container process with your host user's group ID.                                                                                                                                     | _Keep as is_                 |
-| `--device /dev/snd`                                                    | Mounts host audio devices into the container. Required for sound card input.                                                                                                                   | _Keep as is_                 |
+| `--device /dev/snd`                                                    | Mounts host audio devices into the container. Required for sound card input. Leave it out on a host without a sound card (RTSP streams only), or the container does not start.                 | _Keep as is_                 |
 | `--add-host="host.docker.internal:host-gateway"`                       | Allows the container to potentially reach services running on the host machine itself.                                                                                                         | _Keep as is_                 |
 | `-v </path/on/host/to/config>:/config`                                 | Mounts a directory from your host for persistent configuration. BirdNET-Go will read/write `config.yaml` here.                                                                                 | `-v $HOME/bn-config:/config` |
 | `-v </path/on/host/to/data>:/data`                                     | Mounts a directory from your host for persistent data (database, audio clips, logs).                                                                                                           | `-v $HOME/bn-data:/data`     |

@@ -471,8 +471,28 @@ LABEL usage.compose.podman="Use Podman/podman-compose.yml"
 # Uses /health endpoint and validates JSON status via jq to avoid false positives
 # from HTTP->HTTPS 308 redirects (curl -f treats 3xx as success).
 # Extended start-period for low-power devices (e.g., Raspberry Pi)
+# Default port (BIRDNET_WEBSERVER_PORT unset, 8080 or invalid, as the app ignores
+# an invalid value): the original probes, HTTP 8080 then HTTPS 8443 and 443.
+# Custom port (host networking, where the app listens on that port directly):
+# only the app's own ports are probed, HTTP on that port, then HTTPS on
+# BIRDNET_SECURITY_TLSPORT (default 8443; when it equals the HTTP port the app
+# moves TLS to 8443, or 8444 if the HTTP port is 8443, as resolveTLSPort in
+# internal/api/config.go does). Under host networking another service
+# on the host could answer on 8080 or 443. Like the app, values are trimmed of
+# leading and trailing whitespace and may carry a leading + (Go parses +18080).
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -fs --connect-timeout 2 --max-time 3 http://localhost:8080/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:8443/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:443/health | jq -e '.status == "healthy"' >/dev/null || exit 1
+    CMD port() { v="$(printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"; v="${v#+}"; \
+            case "$v" in ''|*[!0-9]*) v="$2" ;; esac; \
+            { [ "$v" -ge 1 ] && [ "$v" -le 65535 ]; } 2>/dev/null || v="$2"; echo "$v"; }; \
+        ok() { curl -fsk --connect-timeout 2 --max-time 3 "$1" | jq -e '.status == "healthy"' >/dev/null; }; \
+        P="$(port "${BIRDNET_WEBSERVER_PORT:-}" 8080)"; \
+        if [ "$P" = 8080 ]; then \
+            ok http://localhost:8080/health || ok https://localhost:8443/health || ok https://localhost:443/health; \
+        else \
+            T="$(port "${BIRDNET_SECURITY_TLSPORT:-}" 8443)"; \
+            if [ "$T" = "$P" ]; then if [ "$P" = 8443 ]; then T=8444; else T=8443; fi; fi; \
+            ok "http://localhost:${P}/health" || ok "https://localhost:${T}/health"; \
+        fi || exit 1
 
 # Container startup execution chain:
 # 0. tini - A tiny init run as PID 1. This is defense-in-depth, not a bug fix:

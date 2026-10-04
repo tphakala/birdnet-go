@@ -81,6 +81,11 @@ jobs:
       - name: mDNS (.local) resolution smoke test
         run: Docker/test/mdns-nss-smoke.sh birdnet-go:test
 
+      # The image HEALTHCHECK must probe BIRDNET_WEBSERVER_PORT (host networking
+      # sets the port this way) without falling back to 8080 for a custom port.
+      - name: Health check port smoke test
+        run: Docker/test/healthcheck-port-smoke.sh birdnet-go:test
+
   arbitrary-uid-start-arm64:
     name: arm64 container startup
     # Native arm64 runner (free for public repos): the only PR-time job that

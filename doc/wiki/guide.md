@@ -78,7 +78,7 @@ The installation script includes several features:
 
 For users who prefer Docker Compose for container management, BirdNET-Go can also be set up using this approach. Docker Compose offers more flexibility and makes it easier to manage container configurations.
 
-A [premade docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml) file is available in the repository. This file includes:
+A [premade docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml) file (bridge networking) is available in the repository, and a [docker-compose.host.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.host.yml) file for host networking, which is recommended for new installs. The bridge file includes:
 
 - The BirdNET-Go container configuration with the latest nightly image
 - Environment variables for customization (timezone, user permissions, etc.)
