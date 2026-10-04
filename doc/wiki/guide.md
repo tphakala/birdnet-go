@@ -2233,7 +2233,7 @@ This produces Discord messages with:
 - Green color bar (color code `3066993` = green; use `15158332` for red, `3447003` for blue)
 - Species name, confidence, and location as inline fields
 
-> **Note**: The `bg_*` metadata fields (bird image URL, confidence, location, etc.) are populated for detection notifications. See [template variables](#available-template-fields) below for the full list.
+> **Note**: The `bg_*` metadata fields (bird image URL, confidence, location, etc.) are populated for detection notifications. See the detection metadata fields in the [Webhook section](#2-webhook-custom-http) below for the full list.
 
 **Troubleshooting Discord**
 
