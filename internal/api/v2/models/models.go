@@ -136,7 +136,7 @@ type CatalogEntryResponse struct {
 	// TotalSizeBytes is the download size of the default variant: its own files plus the
 	// files of its dependencies.
 	TotalSizeBytes int64 `json:"totalSizeBytes"`
-	// HasGeomodel reports whether any selectable variant brings a geomodel, inline or
+	// HasGeomodel reports whether the default variant brings a geomodel, inline or
 	// through a dependency.
 	HasGeomodel bool `json:"hasGeomodel"`
 	// DependsOn lists the catalog IDs installed together with this model. It may name
@@ -345,7 +345,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			Compatible:           compatible,
 			IncompatibleReason:   incompatibleReason,
 			TotalSizeBytes:       totalSize,
-			HasGeomodel:          classifier.EntryProvidesGeomodel(entry),
+			HasGeomodel:          classifier.ProvidesGeomodel(entry, ""),
 			DependsOn:            entry.DependsOn,
 			Permanent:            classifier.IsPermanentEntry(entry),
 			InstalledVariantID:   installedVariantID,
@@ -394,7 +394,6 @@ func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, insta
 			continue
 		}
 
-		// A BuiltIn variant downloads nothing, so EffectiveFiles yields no files for it.
 		variantFiles, _ := classifier.EffectiveFiles(entry, v.ID)
 		sizeBytes := sumFileSizes(variantFiles)
 

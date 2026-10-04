@@ -1451,18 +1451,18 @@ func (mm *ModelManager) InstallOrReplace(ctx context.Context, entry *CatalogEntr
 func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry, old *InstalledModel, newVariantID, baseURL string, progress chan<- DownloadState) error {
 	log := GetLogger()
 
-	// 1. Acquire the new variant's files unless the target is the embedded BuiltIn
-	//    baseline (only the permanent BirdNET v2.4 entry has one; every other family's
-	//    variants are downloaded). The BuiltIn baseline is embedded, so there is nothing
-	//    to fetch and no per-model directory to create. A downloaded target's files
-	//    coexist with the old on disk (a family's variants use distinct model LocalNames),
-	//    and the old variant keeps serving during the download.
+	// 1. Acquire the new variant's files: its own plus its dependencies' (EffectiveFiles).
+	//    The embedded BuiltIn baseline (only the permanent BirdNET v2.4 entry has one)
+	//    owns no files, so nothing is fetched for it unless it declares dependencies, and
+	//    its model and labels paths stay empty (the embedded model is loaded). A downloaded
+	//    target's files coexist with the old on disk (a family's variants use distinct
+	//    model LocalNames), and the old variant keeps serving during the download.
 	targetIsBuiltIn := false
 	if v := resolveVariant(entry, newVariantID); v != nil {
 		targetIsBuiltIn = v.BuiltIn
 	}
 	var modelPath, labelsPath, embeddingsPath string
-	if !targetIsBuiltIn {
+	if effective, _ := EffectiveFiles(entry, newVariantID); len(effective) > 0 {
 		_, mp, lp, ep, err := mm.downloadVariantFiles(ctx, entry, newVariantID, baseURL, progress, true)
 		if err != nil {
 			// downloadVariantFiles already marked the state failed; retain it briefly
@@ -1472,7 +1472,9 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 			})
 			return err
 		}
-		modelPath, labelsPath, embeddingsPath = mp, lp, ep
+		if !targetIsBuiltIn {
+			modelPath, labelsPath, embeddingsPath = mp, lp, ep
+		}
 	}
 
 	// 2. Swap the install record to the new variant. entry.ID stays in mm.downloading
@@ -1487,7 +1489,7 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 		InstalledAt: time.Now(),
 		Version:     entry.Version,
 	}
-	mm.recordDependenciesLocked(entry, newVariantID)
+	mm.recordDependenciesLocked(entry)
 	mm.mu.Unlock()
 
 	// 3. Persist the new variant's paths BEFORE activating, so the family builder resolves
@@ -1500,7 +1502,7 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 	//    (a custom one is kept), and re-appends the Models.Enabled alias. A downloaded
 	//    variant's geomodel dependency also re-points the range filter, for the permanent
 	//    entry too.
-	mm.persistVariantConfig(entry, newVariantID, modelPath, labelsPath, embeddingsPath)
+	mm.persistVariantConfig(entry, modelPath, labelsPath, embeddingsPath)
 
 	// 4. Activate the new variant.
 	if mm.orchestrator != nil && entry.RegistryID != "" && mm.orchestrator.IsModelLoaded(entry.RegistryID) {
@@ -1515,8 +1517,7 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 		// dependency) had its gallery-managed range filter re-pointed in step 3 (a custom one
 		// is kept); reload it, exactly as hotLoadAfterInstall does after an install. The v2.4
 		// anchor reloads its own range filter inside reloadEntry; that is separate from the
-		// geomodel reload here, which only runs for a downloaded target that supplies one (a
-		// BuiltIn target never does).
+		// geomodel reload here, which only runs for a target that supplies a geomodel.
 		if ProvidesGeomodel(entry, newVariantID) {
 			if rfErr := mm.reloadRangeFilter(); rfErr != nil {
 				log.Warn("Failed to hot-reload range filter after geomodel variant swap",
@@ -1593,7 +1594,7 @@ func (mm *ModelManager) rollbackVariant(log logger.Logger, entry *CatalogEntry, 
 	// Re-persist the old variant's config, per family (step 3 wrote the new one; the
 	// permanent v2.4 entry writes only its model field and clears it for the embedded
 	// baseline). Companion files are identical across a family's variants.
-	mm.persistVariantConfig(entry, old.VariantID, old.ModelPath, old.LabelsPath, mm.variantEmbeddingsPath(entry, old.VariantID))
+	mm.persistVariantConfig(entry, old.ModelPath, old.LabelsPath, mm.variantEmbeddingsPath(entry, old.VariantID))
 
 	// The not-loaded path activated the new variant fresh, so the old one must be reloaded;
 	// the gapless path never stopped serving and must not reload. A failed reload here means
@@ -1656,20 +1657,18 @@ func (mm *ModelManager) rollbackVariant(log logger.Logger, entry *CatalogEntry, 
 // custom LabelPath and its label set is embedded; every other family writes
 // model/labels/embeddings, re-points a gallery-managed geomodel range-filter config (a
 // custom one is kept), and re-appends the Models.Enabled alias. A downloaded variant's
-// geomodel dependency re-points the range filter in both branches (the permanent entry
-// only when the variant is a downloaded one, so a swap to the embedded baseline leaves
-// the range filter alone). Shared by the swap and both rollback paths so config is
+// geomodel dependency re-points the range filter in both branches. Shared by the swap and both rollback paths so config is
 // persisted and restored identically.
-func (mm *ModelManager) persistVariantConfig(entry *CatalogEntry, variantID, modelPath, labelsPath, embeddingsPath string) {
+func (mm *ModelManager) persistVariantConfig(entry *CatalogEntry, modelPath, labelsPath, embeddingsPath string) {
 	if IsPermanentEntry(entry) {
 		var rangeFilter *CatalogEntry
-		if dep, ok := geomodelDependency(entry, variantID); ok && modelPath != "" {
+		if dep, ok := geomodelDependency(entry); ok {
 			rangeFilter = dep
 		}
 		mm.applyConfigForVariantSwap(RegistryIDBirdNETV24, modelPath, rangeFilter)
 		return
 	}
-	mm.applyConfigForInstall(entry, variantID, modelPath, labelsPath, embeddingsPath)
+	mm.applyConfigForInstall(entry, modelPath, labelsPath, embeddingsPath)
 }
 
 // variantEmbeddingsPath returns the shared embeddings companion path for the given
@@ -2059,11 +2058,11 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 		InstalledAt: time.Now(),
 		Version:     entry.Version,
 	}
-	mm.recordDependenciesLocked(entry, recordedVariant)
+	mm.recordDependenciesLocked(entry)
 	delete(mm.downloading, entry.ID)
 	mm.mu.Unlock()
 
-	mm.applyConfigForInstall(entry, recordedVariant, modelPath, labelsPath, embeddingsPath)
+	mm.applyConfigForInstall(entry, modelPath, labelsPath, embeddingsPath)
 
 	// A failed hot-load is not an install failure: the files are on disk and load on the next
 	// restart, so report the install complete and only warn about the deferred load.
@@ -2312,13 +2311,12 @@ func (mm *ModelManager) survivingGeomodelEntry() (CatalogEntry, bool) {
 }
 
 // applyConfigForInstall updates settings to reflect a newly installed model.
-// variantID is the installed variant, used to find a geomodel dependency.
 // Only fields with non-empty paths are set. The caller must hold no locks
 // other than settingsWriteMu (acquired internally).
 // Uses clone-mutate-publish so the shared settings snapshot is never mutated
 // in place. Settings are persisted to disk via conf.SaveSettings so changes
 // survive restarts and are visible to concurrent readers through conf.Setting().
-func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, variantID, modelPath, labelsPath, embeddingsPath string) {
+func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, labelsPath, embeddingsPath string) {
 	if mm.settings == nil {
 		return
 	}
@@ -2354,7 +2352,7 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, variantID, mo
 	// its geomodel dependency, if the installed variant has one.
 	mm.applyRangeFilterConfigForInstall(updated, entry)
 	if !hasGeomodelTuple(entry) {
-		if dep, ok := geomodelDependency(entry, variantID); ok {
+		if dep, ok := geomodelDependency(entry); ok {
 			mm.applyRangeFilterConfigForInstall(updated, dep)
 		}
 	}

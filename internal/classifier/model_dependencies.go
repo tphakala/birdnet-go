@@ -56,8 +56,8 @@ func (mm *ModelManager) dependentsError(entry *CatalogEntry) error {
 }
 
 // dependentsLocked lists the models that need catalogID: installed entries (other
-// than a BuiltIn baseline record, which installed no dependencies) and entries with
-// an actively downloading state whose DependsOn names it. A failed, retained
+// including a record on the embedded baseline variant) and entries with an actively
+// downloading state whose DependsOn names it. A failed, retained
 // download state does not count. The result is sorted by catalog ID. The caller
 // holds mm.mu.
 func (mm *ModelManager) dependentsLocked(catalogID string) []CatalogRef {
@@ -68,8 +68,7 @@ func (mm *ModelManager) dependentsLocked(catalogID string) []CatalogRef {
 		}
 	}
 	for id := range mm.installed {
-		im := mm.installed[id]
-		if entry, ok := GetCatalogEntry(id); ok && !isBuiltInRecord(&entry, &im) {
+		if entry, ok := GetCatalogEntry(id); ok {
 			add(id, &entry)
 		}
 	}
@@ -122,14 +121,10 @@ func sharedOnlyRecord(entry *CatalogEntry, sharedDir string) (InstalledModel, bo
 }
 
 // recordDependenciesLocked records each dependency of entry that an install of
-// variantID just made present on disk. A dependency already installed, or with its
+// install just made present on disk. A dependency already installed, or with its
 // own download in progress (it records itself), is left alone, and one whose files
-// are not all present is not recorded. A BuiltIn variant installs no dependencies.
-// The caller holds mm.mu.
-func (mm *ModelManager) recordDependenciesLocked(entry *CatalogEntry, variantID string) {
-	if variantIsBuiltIn(entry, variantID) {
-		return
-	}
+// are not all present is not recorded. The caller holds mm.mu.
+func (mm *ModelManager) recordDependenciesLocked(entry *CatalogEntry) {
 	sharedDir := filepath.Join(mm.modelsDir, sharedDirName)
 	for _, dep := range dependencyEntries(entry) {
 		if _, ok := mm.installed[dep.ID]; ok {
@@ -165,10 +160,8 @@ func hasSharedFile(files []CatalogFile, localName string) bool {
 // usesSharedFileLocked reports whether entry, installed (or downloading) as any of
 // variantIDs, reaches the shared file localName: through its own files, or through a
 // dependency's files. A variant that does not resolve counts with every file set of
-// the entry, erring toward keeping the file. Dependencies count unless every given
-// variant is the BuiltIn baseline. The caller holds mm.mu.
+// the entry, erring toward keeping the file. The caller holds mm.mu.
 func (mm *ModelManager) usesSharedFileLocked(entry *CatalogEntry, variantIDs []string, localName string) bool {
-	allBuiltIn := true
 	for _, vid := range variantIDs {
 		sets := entryFileSets(entry)
 		if files, ok := variantFilesByID(entry, vid); ok {
@@ -177,10 +170,6 @@ func (mm *ModelManager) usesSharedFileLocked(entry *CatalogEntry, variantIDs []s
 		if slices.ContainsFunc(sets, func(files []CatalogFile) bool { return hasSharedFile(files, localName) }) {
 			return true
 		}
-		allBuiltIn = allBuiltIn && variantIsBuiltIn(entry, vid)
-	}
-	if allBuiltIn {
-		return false
 	}
 	for _, dep := range dependencyEntries(entry) {
 		var rec *InstalledModel

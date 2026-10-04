@@ -92,8 +92,7 @@ type CatalogEntry struct {
 	// this field does not shift catalogChecksum or force a schema-version bump.
 	Variants []CatalogVariant `json:"variants,omitempty"`
 	// DependsOn lists the catalog IDs of entries whose files are installed together
-	// with this one, for every variant except a BuiltIn one (the embedded baseline
-	// downloads nothing). A dependency is a flat, shared-only entry that declares no
+	// with this one, for every variant (the embedded baseline included). A dependency is a flat, shared-only entry that declares no
 	// dependencies of its own (depth one; catalog validation enforces it). The
 	// dependency's files are resolved through EffectiveFiles, so one install fetches
 	// them, the gallery sizes them, and an uninstall of the dependency is refused while

@@ -66,11 +66,11 @@ func TestEffectiveFiles(t *testing.T) {
 		assert.Len(t, files, 5)
 	})
 
-	t.Run("a built-in variant gets no dependency files", func(t *testing.T) {
+	t.Run("the built-in variant gets its dependency files like any variant", func(t *testing.T) {
 		for _, id := range []string{"", depVariantBuiltin} {
 			files, ok := EffectiveFiles(&p, id)
 			require.True(t, ok, "variant %q", id)
-			assert.Empty(t, files, "variant %q", id)
+			assert.Equal(t, []string{depLocalGeoModel, depLocalGeoLabels}, localNames(files), "variant %q", id)
 		}
 	})
 
@@ -128,8 +128,8 @@ func TestProvidesGeomodel(t *testing.T) {
 		{depIDA, "", true},
 		{depIDG, "", true},
 		{depIDT, "", false},
-		{depIDP, "", false},
-		{depIDP, depVariantBuiltin, false},
+		{depIDP, "", true},
+		{depIDP, depVariantBuiltin, true},
 		{depIDP, depVariantDFT, true},
 		{depIDP, "nope", false},
 	}
@@ -140,17 +140,6 @@ func TestProvidesGeomodel(t *testing.T) {
 	assert.False(t, ProvidesGeomodel(nil, ""))
 }
 
-func TestEntryProvidesGeomodel(t *testing.T) {
-	setActiveCatalog(dependencyTestCatalog())
-	t.Cleanup(func() { setActiveCatalog(nil) })
-
-	for id, want := range map[string]bool{depIDA: true, depIDG: true, depIDT: false, depIDP: true} {
-		e, _ := GetCatalogEntry(id)
-		assert.Equal(t, want, EntryProvidesGeomodel(&e), id)
-	}
-	assert.False(t, EntryProvidesGeomodel(nil))
-}
-
 func TestGeomodelDependency(t *testing.T) {
 	setActiveCatalog(dependencyTestCatalog())
 	t.Cleanup(func() { setActiveCatalog(nil) })
@@ -159,19 +148,15 @@ func TestGeomodelDependency(t *testing.T) {
 	p, _ := GetCatalogEntry(depIDP)
 	tax, _ := GetCatalogEntry(depIDT)
 
-	dep, ok := geomodelDependency(&a, "")
+	dep, ok := geomodelDependency(&a)
 	require.True(t, ok)
 	assert.Equal(t, depIDG, dep.ID)
 
-	_, ok = geomodelDependency(&p, depVariantBuiltin)
-	assert.False(t, ok, "the built-in baseline installs no dependency")
-	_, ok = geomodelDependency(&p, "")
-	assert.False(t, ok, "the default variant of the permanent entry is the baseline")
-	dep, ok = geomodelDependency(&p, depVariantDFT)
+	dep, ok = geomodelDependency(&p)
 	require.True(t, ok)
 	assert.Equal(t, depIDG, dep.ID)
 
-	_, ok = geomodelDependency(&tax, "")
+	_, ok = geomodelDependency(&tax)
 	assert.False(t, ok)
 }
 
@@ -184,17 +169,6 @@ func TestDependencyEntries_SkipsUnknownSelfAndDuplicates(t *testing.T) {
 	require.Len(t, deps, 2)
 	assert.Equal(t, depIDT, deps[0].ID)
 	assert.Equal(t, depIDG, deps[1].ID)
-}
-
-func TestIsBuiltInRecord(t *testing.T) {
-	setActiveCatalog(dependencyTestCatalog())
-	t.Cleanup(func() { setActiveCatalog(nil) })
-
-	p, _ := GetCatalogEntry(depIDP)
-	a, _ := GetCatalogEntry(depIDA)
-	assert.True(t, isBuiltInRecord(&p, &InstalledModel{VariantID: depVariantBuiltin}))
-	assert.False(t, isBuiltInRecord(&p, &InstalledModel{VariantID: depVariantDFT}))
-	assert.False(t, isBuiltInRecord(&a, &InstalledModel{}), "a flat entry has no built-in variant")
 }
 
 // TestEffectiveFiles_EmbeddedCatalogEqualsVariantFiles pins that the dependency
@@ -219,6 +193,6 @@ func TestEffectiveFiles_EmbeddedCatalogEqualsVariantFiles(t *testing.T) {
 		}
 	}
 	for _, e := range ActiveCatalog() {
-		assert.Equal(t, HasGeomodelFiles(&e), EntryProvidesGeomodel(&e), "%s", e.ID)
+		assert.Equal(t, HasGeomodelFiles(&e), ProvidesGeomodel(&e, ""), "%s", e.ID)
 	}
 }

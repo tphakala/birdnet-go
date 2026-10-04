@@ -146,9 +146,12 @@ func TestUninstallModel_DependentsReturns409WithErrorKey(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, body.Code)
 	assert.Equal(t, removeHasDependentsKey, body.ErrorKey)
 	assert.Equal(t, "Geomodel", body.ErrorParams.Name)
-	assert.Equal(t, "Dependent A", body.ErrorParams.Models)
-	require.Len(t, body.ErrorParams.Dependents, 1)
+	// The permanent entry is always reported installed on its baseline variant, which
+	// depends on the geomodel like any other variant.
+	assert.Equal(t, "Dependent A, Primary", body.ErrorParams.Models)
+	require.Len(t, body.ErrorParams.Dependents, 2)
 	assert.Equal(t, apiDepA, body.ErrorParams.Dependents[0].ID)
+	assert.Equal(t, apiDepP, body.ErrorParams.Dependents[1].ID)
 	assert.True(t, mm.IsInstalled(apiDepG), "a refused uninstall keeps the model")
 	assert.FileExists(t, filepath.Join(modelsDir, "shared", "geo.onnx"))
 }
@@ -168,10 +171,10 @@ func TestGetModelCatalog_DependencySizesAndFields(t *testing.T) {
 
 	p := findEntry(catalog, apiDepP)
 	require.NotNil(t, p)
-	assert.True(t, p.HasGeomodel, "a downloaded variant brings the geomodel though the default is the baseline")
+	assert.True(t, p.HasGeomodel, "the default variant brings the geomodel through the dependency")
 	builtin := findVariant(p, "builtin")
 	require.NotNil(t, builtin)
-	assert.Zero(t, builtin.SizeBytes, "the baseline downloads nothing")
+	assert.Equal(t, int64(apiSizeGeo+apiSizeGeoLbl), builtin.SizeBytes, "the baseline counts only its dependency files")
 	dft := findVariant(p, "fp32-dfttrunc")
 	require.NotNil(t, dft)
 	assert.Equal(t, int64(apiSizeDFT+apiSizeGeo+apiSizeGeoLbl), dft.SizeBytes)

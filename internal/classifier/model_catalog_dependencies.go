@@ -4,7 +4,7 @@ import "slices"
 
 // This file resolves catalog dependencies (CatalogEntry.DependsOn). A dependency is
 // a flat, shared-only entry (a geomodel, a taxonomy file) whose files are installed
-// together with every non-BuiltIn variant of the entry that names it. Everything
+// together with every variant of the entry that names it. Everything
 // here is a pure function of the active catalog, so a dependency's identity depends
 // only on catalog IDs and never on version strings or file names.
 //
@@ -55,19 +55,12 @@ func dependencyFiles(dep *CatalogEntry, _ *InstalledModel) []CatalogFile {
 	return files
 }
 
-// variantIsBuiltIn reports whether variantID resolves to the entry's BuiltIn
-// baseline. A flat entry has no variants, so it is never built in.
-func variantIsBuiltIn(entry *CatalogEntry, variantID string) bool {
-	v := resolveVariant(entry, variantID)
-	return v != nil && v.BuiltIn
-}
-
 // EffectiveFiles returns every file installing the given variant of entry puts on
 // disk: the variant's own files followed by the files of each dependency, in
 // DependsOn order. An empty variantID selects the default variant. A dependency file
-// whose LocalName the variant already carries is skipped (the inline copy wins). A
-// BuiltIn variant downloads nothing, so it gets no dependency files. ok is false
-// exactly when the variant does not resolve. The result is a new slice the caller
+// whose LocalName the variant already carries is skipped (the inline copy wins). Every
+// variant is treated alike, including the embedded baseline: its own files (none) plus
+// its dependencies' files. ok is false exactly when the variant does not resolve. The result is a new slice the caller
 // may keep, but the files it holds are values, never pointers into the catalog.
 func EffectiveFiles(entry *CatalogEntry, variantID string) (files []CatalogFile, ok bool) {
 	own, ok := variantFilesByID(entry, variantID)
@@ -75,9 +68,6 @@ func EffectiveFiles(entry *CatalogEntry, variantID string) (files []CatalogFile,
 		return nil, false
 	}
 	files = slices.Clone(own)
-	if variantIsBuiltIn(entry, variantID) {
-		return files, true
-	}
 	for _, dep := range dependencyEntries(entry) {
 		for _, f := range dependencyFiles(dep, nil) {
 			if !slices.ContainsFunc(files, func(have CatalogFile) bool { return have.LocalName == f.LocalName }) {
@@ -98,28 +88,11 @@ func ProvidesGeomodel(entry *CatalogEntry, variantID string) bool {
 	return ok && slices.ContainsFunc(files, func(f CatalogFile) bool { return isGeomodelRole(f.Role) })
 }
 
-// EntryProvidesGeomodel reports whether any selectable variant of entry (or the flat
-// entry itself) provides a geomodel. It differs from ProvidesGeomodel(entry, "")
-// for an entry whose default variant is a file-less BuiltIn baseline but whose other
-// variants bring a geomodel dependency.
-func EntryProvidesGeomodel(entry *CatalogEntry) bool {
-	if entry == nil {
-		return false
-	}
-	if len(entry.Variants) == 0 {
-		return ProvidesGeomodel(entry, "")
-	}
-	return slices.ContainsFunc(entry.Variants, func(v CatalogVariant) bool {
-		return ProvidesGeomodel(entry, v.ID)
-	})
-}
-
 // geomodelDependency returns the dependency that supplies the range-filter geomodel
 // for the given variant of entry: the first dependency carrying a complete geomodel
-// tuple and a geomodel version. It reports false for a BuiltIn variant (nothing is
-// installed for it) and when no dependency qualifies.
-func geomodelDependency(entry *CatalogEntry, variantID string) (*CatalogEntry, bool) {
-	if entry == nil || variantIsBuiltIn(entry, variantID) {
+// tuple and a geomodel version. It reports false when no dependency qualifies.
+func geomodelDependency(entry *CatalogEntry) (*CatalogEntry, bool) {
+	if entry == nil {
 		return nil, false
 	}
 	for _, dep := range dependencyEntries(entry) {
@@ -128,12 +101,4 @@ func geomodelDependency(entry *CatalogEntry, variantID string) (*CatalogEntry, b
 		}
 	}
 	return nil, false
-}
-
-// isBuiltInRecord reports whether the install record im is the BuiltIn baseline of
-// entry. A baseline record owns no files and installed no dependencies, so it is
-// never a dependent.
-func isBuiltInRecord(entry *CatalogEntry, im *InstalledModel) bool {
-	b := builtInVariant(entry)
-	return b != nil && im.VariantID == b.ID
 }

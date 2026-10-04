@@ -164,20 +164,28 @@ func TestPrimarySwap_ToDFTKeepsCustomRangeFilter(t *testing.T) {
 	assert.Contains(t, installedSnapshot(h.mm), depIDG, "the dependency is still recorded")
 }
 
-func TestPrimarySwap_ToBuiltinLeavesDependencyAndRangeFilter(t *testing.T) {
+func TestPrimarySwap_ToBuiltinInstallsAndRecordsMissingDependency(t *testing.T) {
 	h := newDepHarness(t)
 	require.NoError(t, h.install(depIDP, depVariantDFT))
-	rfBefore := *conf.GetSettings().RangeFilterConfig()
-	h.reloads = 0
+	// The geomodel disappears out of band: the baseline, like any variant, brings it back.
+	require.NoError(t, os.Remove(h.shared(depLocalGeoModel)))
+	require.NoError(t, os.Remove(h.shared(depLocalGeoLabels)))
+	h.mm.mu.Lock()
+	delete(h.mm.installed, depIDG)
+	h.mm.mu.Unlock()
 	hitsBefore := h.srv.Hits("g-model.onnx")
 
 	require.NoError(t, h.install(depIDP, depVariantBuiltin))
 
-	assert.Equal(t, hitsBefore, h.srv.Hits("g-model.onnx"), "no download for the baseline")
-	assert.Equal(t, rfBefore, *conf.GetSettings().RangeFilterConfig(), "the range filter config is untouched")
-	assert.Zero(t, h.reloads, "the baseline brings no geomodel, so no reload")
+	assert.Equal(t, hitsBefore+1, h.srv.Hits("g-model.onnx"), "the missing geomodel is fetched again")
 	assert.FileExists(t, h.shared(depLocalGeoModel))
-	assert.Contains(t, installedSnapshot(h.mm), depIDG)
+	got := installedSnapshot(h.mm)
+	assert.Contains(t, got, depIDG)
+	assert.Equal(t, depVariantBuiltin, got[depIDP].VariantID)
+	assert.Empty(t, got[depIDP].ModelPath, "the baseline keeps an empty model path")
+	assert.Empty(t, conf.GetSettings().BirdNET.ModelPath, "the embedded model stays selected")
+	assert.Equal(t, h.shared(depLocalGeoModel), conf.GetSettings().RangeFilterConfig().ModelPath)
+	assert.NoFileExists(t, h.own(depIDP, depLocalDFT), "the superseded DFT file is removed")
 }
 
 func TestReplaceVariant_LoadedSecondaryWithDependencyReloadsRangeFilter(t *testing.T) {
@@ -264,19 +272,15 @@ func TestUninstall_RefusesWhileDependentInstalled(t *testing.T) {
 	assert.Zero(t, h.reloads)
 }
 
-func TestUninstall_BuiltinRecordIsNotADependent(t *testing.T) {
+func TestUninstall_BuiltinRecordIsADependent(t *testing.T) {
 	h := newDepHarness(t)
 	require.NoError(t, h.install(depIDG, ""))
 	h.mm.mu.Lock()
 	h.mm.installed[depIDP] = InstalledModel{CatalogID: depIDP, VariantID: depVariantBuiltin}
 	h.mm.mu.Unlock()
-	require.Equal(t, depGeomodelVer, conf.GetSettings().RangeFilterConfig().Model)
 
-	require.NoError(t, h.mm.Uninstall(depIDG))
-
-	assert.NoFileExists(t, h.shared(depLocalGeoModel))
-	assert.NoFileExists(t, h.shared(depLocalGeoLabels))
-	assert.Empty(t, conf.GetSettings().RangeFilterConfig().ModelPath, "the gallery-managed range filter is cleared")
+	requireDependents(t, h.mm.Uninstall(depIDG), depIDG, depIDP)
+	assert.FileExists(t, h.shared(depLocalGeoModel))
 }
 
 func TestUninstall_DFTRecordIsADependent(t *testing.T) {
@@ -376,11 +380,11 @@ type depStep struct {
 }
 
 // expectRefusal is the oracle for Uninstall(catalogID): refused exactly when an
-// installed non-builtin entry, or an active download, depends on it.
+// installed entry depends on it.
 func (h *depHarness) expectRefusal(catalogID string) bool {
-	for id, rec := range installedSnapshot(h.mm) {
+	for id := range installedSnapshot(h.mm) {
 		e, ok := GetCatalogEntry(id)
-		if !ok || id == catalogID || isBuiltInRecord(&e, &rec) {
+		if !ok || id == catalogID {
 			continue
 		}
 		if slices.Contains(e.DependsOn, catalogID) {
@@ -390,7 +394,7 @@ func (h *depHarness) expectRefusal(catalogID string) bool {
 	return false
 }
 
-// assertDependencyInvariants checks, after every step: every installed non-builtin
+// assertDependencyInvariants checks, after every step: every installed
 // dependent has all its effective files on disk, an installed component has its
 // file, and a fresh scan reproduces mm.installed.
 func (h *depHarness) assertDependencyInvariants(t *testing.T, step string) {
@@ -398,9 +402,6 @@ func (h *depHarness) assertDependencyInvariants(t *testing.T, step string) {
 	got := installedSnapshot(h.mm)
 	for id, rec := range got {
 		e := h.entry(id)
-		if isBuiltInRecord(&e, &rec) {
-			continue
-		}
 		files, ok := EffectiveFiles(&e, rec.VariantID)
 		require.True(t, ok, "%s: %s variant resolves", step, id)
 		for _, f := range files {
@@ -422,7 +423,7 @@ func TestDependencyLifecycle_Transitions(t *testing.T) {
 		"install B, install A, uninstall B, rescan, uninstall A": {
 			{"install", depIDB}, {"install", depIDA}, {"uninstall", depIDB}, {"rescan", ""}, {"uninstall", depIDA},
 		},
-		"swap P to DFT, uninstall G refused, swap P to builtin, uninstall G": {
+		"swap P to DFT, uninstall G refused, swap P to builtin, uninstall G refused": {
 			{"swapDFT", ""}, {"uninstall", depIDG}, {"swapBuiltin", ""}, {"uninstall", depIDG},
 		},
 		"install A, uninstall G refused, uninstall A, uninstall G": {
@@ -466,14 +467,11 @@ func TestDependencyLifecycle_Transitions(t *testing.T) {
 	}
 }
 
-// dependentsOracle lists the installed non-builtin dependents of catalogID, sorted.
+// dependentsOracle lists the installed dependents of catalogID, sorted.
 func dependentsOracle(h *depHarness, catalogID string) []string {
 	var out []string
-	for id, rec := range installedSnapshot(h.mm) {
+	for id := range installedSnapshot(h.mm) {
 		e := h.entry(id)
-		if isBuiltInRecord(&e, &rec) {
-			continue
-		}
 		if slices.Contains(e.DependsOn, catalogID) {
 			out = append(out, id)
 		}
