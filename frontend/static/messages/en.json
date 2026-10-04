@@ -5232,12 +5232,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Reload page"
+    },
     "skip": "Skip",
     "back": "Back",
     "next": "Next",
     "done": "Done",
     "progress": "Step {current} of {total}",
     "progressLabel": "Wizard progress",
+    "status": {
+      "saving": "Saving...",
+      "loadingStep": "Loading step..."
+    },
+    "errors": {
+      "saveFailed": "Could not save this step. Check the connection and try again, or skip setup and change this later in Settings.",
+      "stepLoadFailed": "This step could not be loaded. Press Retry, or reload the page.",
+      "stepLoadFailedReload": "This step still could not be loaded. Reload the page to try again; choices saved on earlier steps are kept."
+    },
+    "reasons": {
+      "completeStep": "Complete this step to continue."
+    },
+    "leaveConfirm": {
+      "title": "Leave setup?",
+      "message": "Setup will not open again. Choices saved on earlier steps are kept; changes on this step are not saved. You can change everything later in Settings.",
+      "stay": "Keep setting up",
+      "leave": "Leave setup"
+    },
     "whatsNew": {
       "title": "What's New in {version}"
     },

@@ -5232,12 +5232,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Odśwież stronę"
+    },
     "skip": "Pomiń",
     "back": "Wstecz",
     "next": "Dalej",
     "done": "Gotowe",
     "progress": "Krok {current} z {total}",
     "progressLabel": "Postęp kreatora",
+    "status": {
+      "saving": "Zapisywanie...",
+      "loadingStep": "Ładowanie kroku..."
+    },
+    "errors": {
+      "saveFailed": "Nie udało się zapisać tego kroku. Sprawdź połączenie i spróbuj ponownie albo pomiń konfigurację i zmień to później w Ustawieniach.",
+      "stepLoadFailed": "Nie udało się załadować tego kroku. Naciśnij Ponów próbę lub odśwież stronę.",
+      "stepLoadFailedReload": "Nadal nie udało się załadować tego kroku. Odśwież stronę, aby spróbować ponownie; wybory zapisane w poprzednich krokach zostają zachowane."
+    },
+    "reasons": {
+      "completeStep": "Ukończ ten krok, aby kontynuować."
+    },
+    "leaveConfirm": {
+      "title": "Opuścić konfigurację?",
+      "message": "Konfiguracja nie otworzy się ponownie. Wybory zapisane w poprzednich krokach zostają zachowane; zmiany w tym kroku nie zostaną zapisane. Wszystko możesz zmienić później w Ustawieniach.",
+      "stay": "Kontynuuj konfigurację",
+      "leave": "Opuść konfigurację"
+    },
     "whatsNew": {
       "title": "Co nowego w {version}"
     },

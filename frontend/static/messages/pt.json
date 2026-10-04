@@ -5232,12 +5232,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Recarregar página"
+    },
     "skip": "Ignorar",
     "back": "Voltar",
     "next": "Seguinte",
     "done": "Concluído",
     "progress": "Passo {current} de {total}",
     "progressLabel": "Progresso do assistente",
+    "status": {
+      "saving": "A guardar...",
+      "loadingStep": "A carregar passo..."
+    },
+    "errors": {
+      "saveFailed": "Não foi possível guardar este passo. Verifique a ligação e tente novamente, ou ignore a configuração e altere isto mais tarde nas Definições.",
+      "stepLoadFailed": "Não foi possível carregar este passo. Prima Tentar novamente ou recarregue a página.",
+      "stepLoadFailedReload": "Ainda não foi possível carregar este passo. Recarregue a página para tentar novamente; as escolhas guardadas em passos anteriores são mantidas."
+    },
+    "reasons": {
+      "completeStep": "Conclua este passo para continuar."
+    },
+    "leaveConfirm": {
+      "title": "Sair da configuração?",
+      "message": "A configuração não será aberta novamente. As escolhas guardadas em passos anteriores são mantidas; as alterações neste passo não são guardadas. Pode alterar tudo mais tarde nas Definições.",
+      "stay": "Continuar a configurar",
+      "leave": "Sair da configuração"
+    },
     "whatsNew": {
       "title": "Novidades na {version}"
     },

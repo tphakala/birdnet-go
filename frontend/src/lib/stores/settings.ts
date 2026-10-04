@@ -904,6 +904,12 @@ export interface GlobalSettingsState {
   dataLoaded: boolean;
 }
 
+/** Options for {@link settingsActions.saveSettings}. */
+export interface SaveSettingsOptions {
+  /** Show the success and failure toasts. Defaults to true. */
+  notify?: boolean;
+}
+
 // API response types
 export interface APIResponse<T> {
   success: boolean;
@@ -1398,10 +1404,22 @@ export const settingsActions = {
     }));
   },
 
-  async saveSettings() {
-    settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
+  /**
+   * Saves the whole formData to the backend. Refuses (throws before any network
+   * call) while no settings load has succeeded, because formData would then hold
+   * empty defaults that the backend deep-merges over the real configuration.
+   * Pass `{ notify: false }` to suppress the success and failure toasts.
+   */
+  async saveSettings(options: SaveSettingsOptions = {}) {
+    const { notify = true } = options;
+
     try {
       const currentState = get(settingsStore);
+      if (!currentState.dataLoaded) {
+        logger.warn('Refusing to save settings before they have been loaded');
+        throw new Error(t('settings.errors.loadFailed'));
+      }
+      settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
 
       // Apply coercion to all sections before saving
       const coercedFormData = { ...currentState.formData };
@@ -1429,16 +1447,15 @@ export const settingsActions = {
 
       await settingsAPI.save(coercedFormData);
 
-      // Refresh restart-required status from backend after save.
-      // Isolated try-catch: failure here must not mask a successful settings save.
-      try {
-        const { fetchRestartStatus } = await import('$lib/stores/restart.svelte');
-        await fetchRestartStatus();
-      } catch (e) {
-        // Non-critical: restart status refresh failed, but settings were saved.
-        // The banner may show stale state until next page load.
-        logger.error('Failed to refresh restart status after settings save:', e);
-      }
+      // Refresh restart-required status from backend after save. Not awaited:
+      // the RestartBanner reacts to the store whenever it lands, and a failure
+      // here must not mask or delay a successful settings save. The banner may
+      // show stale state until the next page load if it fails.
+      void import('$lib/stores/restart.svelte')
+        .then(({ fetchRestartStatus }) => fetchRestartStatus())
+        .catch(e => {
+          logger.error('Failed to refresh restart status after settings save:', e);
+        });
 
       // Apply UI locale only when the user actually changed it in this save
       // session. Read newLocale from coercedFormData (the value we actually
@@ -1467,8 +1484,9 @@ export const settingsActions = {
         isSaving: false,
       }));
 
-      // Show success toast
-      toastActions.success(t('notifications.content.settings.savedSuccessfully'));
+      if (notify) {
+        toastActions.success(t('notifications.content.settings.savedSuccessfully'));
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t('settings.errors.saveFailed');
       settingsStore.update(state => ({
@@ -1477,8 +1495,9 @@ export const settingsActions = {
         error: errorMessage,
       }));
 
-      // Show error toast
-      toastActions.error(t('notifications.content.settings.saveFailed'));
+      if (notify) {
+        toastActions.error(t('notifications.content.settings.saveFailed'));
+      }
 
       throw error;
     }

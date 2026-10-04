@@ -4,13 +4,11 @@
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import { settingsActions, settingsStore, type RealtimeSettings } from '$lib/stores/settings';
   import { get } from 'svelte/store';
-  import { getLogger } from '$lib/utils/logger';
   import { ShieldCheck, Cloud, HeartHandshake } from '@lucide/svelte';
   import type { WizardStepProps } from '../types';
+  import { useStepSave } from '../stepSave';
 
-  const logger = getLogger('IntegrationStep');
-
-  let { onValidChange }: WizardStepProps = $props();
+  let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
   let privacyEnabled = $state(true);
   let birdweatherEnabled = $state(false);
@@ -61,25 +59,25 @@
     dirty = true;
   }
 
-  // Save on unmount — only if user made changes
-  $effect(() => {
-    return () => {
-      if (!dirty) return;
-      settingsActions.updateSection('realtime', {
-        privacyFilter: { enabled: privacyEnabled } as RealtimeSettings['privacyFilter'],
-        birdweather: {
-          enabled: birdweatherEnabled,
-          id: birdweatherId,
-        } as RealtimeSettings['birdweather'],
-      });
-      settingsActions.updateSection('sentry', {
-        enabled: sentryEnabled,
-      });
-      settingsActions.saveSettings().catch(err => {
-        logger.error('Failed to save integration settings', err);
-      });
-    };
-  });
+  const saveStep = useStepSave(() => registerLeaveHandler, commit);
+
+  // Save the step's edits when the wizard leaves it with Next, Back or Done.
+  // Only runs if the user made changes.
+  async function commit(): Promise<void> {
+    if (!dirty) return;
+    settingsActions.updateSection('realtime', {
+      privacyFilter: { enabled: privacyEnabled } as RealtimeSettings['privacyFilter'],
+      birdweather: {
+        enabled: birdweatherEnabled,
+        id: birdweatherId,
+      } as RealtimeSettings['birdweather'],
+    });
+    settingsActions.updateSection('sentry', {
+      enabled: sentryEnabled,
+    });
+    await saveStep();
+    dirty = false;
+  }
 </script>
 
 <div class="space-y-3">

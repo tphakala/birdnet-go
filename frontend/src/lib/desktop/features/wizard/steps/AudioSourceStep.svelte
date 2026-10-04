@@ -10,10 +10,11 @@
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
   import { getLogger } from '$lib/utils/logger';
+  import { useStepSave } from '../stepSave';
 
   const logger = getLogger('AudioSourceStep');
 
-  let { onValidChange }: WizardStepProps = $props();
+  let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
   type SourceType = 'soundcard' | 'rtsp';
 
@@ -93,38 +94,35 @@
     }
   }
 
-  // Save on unmount — only if user made changes and has valid data
-  $effect(() => {
-    return () => {
-      if (!dirty || skipped) return;
-      let hasUpdate = false;
-      if (sourceType === 'soundcard' && selectedDevice) {
-        settingsActions.updateSection('realtime', {
-          audio: { source: selectedDevice } as RealtimeSettings['audio'],
-        });
-        hasUpdate = true;
-      } else if (sourceType === 'rtsp' && rtspUrl.trim()) {
-        settingsActions.updateSection('realtime', {
-          rtsp: {
-            streams: [
-              {
-                name: 'Stream 1',
-                url: rtspUrl.trim(),
-                type: 'rtsp' as const,
-                transport: 'tcp' as const,
-              },
-            ],
-          } as RealtimeSettings['rtsp'],
-        });
-        hasUpdate = true;
-      }
-      if (hasUpdate) {
-        settingsActions.saveSettings().catch(err => {
-          logger.error('Failed to save audio source settings', err);
-        });
-      }
-    };
-  });
+  const saveStep = useStepSave(() => registerLeaveHandler, commit);
+
+  // Save the step's edits when the wizard leaves it with Next, Back or Done.
+  // Only runs if the user made changes and has valid data.
+  async function commit(): Promise<void> {
+    if (!dirty || skipped) return;
+    if (sourceType === 'soundcard' && selectedDevice) {
+      settingsActions.updateSection('realtime', {
+        audio: { source: selectedDevice } as RealtimeSettings['audio'],
+      });
+    } else if (sourceType === 'rtsp' && rtspUrl.trim()) {
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          streams: [
+            {
+              name: 'Stream 1',
+              url: rtspUrl.trim(),
+              type: 'rtsp' as const,
+              transport: 'tcp' as const,
+            },
+          ],
+        } as RealtimeSettings['rtsp'],
+      });
+    } else {
+      return;
+    }
+    await saveStep();
+    dirty = false;
+  }
 </script>
 
 <div class="space-y-5">

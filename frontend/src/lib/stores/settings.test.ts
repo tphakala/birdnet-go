@@ -289,7 +289,7 @@ describe('Settings Store - Model/Label Path Null Conversion', () => {
       isSaving: false,
       activeSection: 'main',
       error: null,
-      dataLoaded: false,
+      dataLoaded: true,
     });
   });
 
@@ -516,7 +516,7 @@ describe('Settings Store - UI Locale Preservation (#2756/#2760)', () => {
       isSaving: false,
       activeSection: 'main',
       error: null,
-      dataLoaded: false,
+      dataLoaded: true,
     });
   };
 
@@ -887,5 +887,80 @@ describe('Settings Store - HuggingFace endpoint', () => {
         { huggingFaceEndpoint: store.formData.birdnet.huggingFaceEndpoint ?? '' }
       )
     ).toBe(true);
+  });
+});
+
+describe('Settings Store - saveSettings refuses before settings load', () => {
+  const seed = (dataLoaded: boolean) => {
+    const snapshot = { main: { name: 'TestNode' }, birdnet: {} } as unknown as SettingsFormData;
+    settingsStore.set({
+      formData: JSON.parse(JSON.stringify(snapshot)) as SettingsFormData,
+      originalData: JSON.parse(JSON.stringify(snapshot)) as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded,
+    });
+  };
+
+  beforeEach(async () => {
+    vi.mocked(settingsAPI.save).mockClear();
+    const { toastActions } = await import('./toast.js');
+    vi.mocked(toastActions.success).mockClear();
+    vi.mocked(toastActions.error).mockClear();
+  });
+
+  it('rejects without calling the API while dataLoaded is false', async () => {
+    seed(false);
+
+    await expect(settingsActions.saveSettings()).rejects.toThrow('settings.errors.loadFailed');
+
+    expect(settingsAPI.save).not.toHaveBeenCalled();
+    const state = get(settingsStore);
+    expect(state.error).toBe('settings.errors.loadFailed');
+    expect(state.isSaving).toBe(false);
+  });
+
+  it('shows the failure toast on refusal by default and none with notify false', async () => {
+    const { toastActions } = await import('./toast.js');
+    seed(false);
+
+    await expect(settingsActions.saveSettings()).rejects.toThrow();
+    expect(toastActions.error).toHaveBeenCalledTimes(1);
+
+    vi.mocked(toastActions.error).mockClear();
+    await expect(settingsActions.saveSettings({ notify: false })).rejects.toThrow();
+    expect(toastActions.error).not.toHaveBeenCalled();
+  });
+
+  it('saves normally once dataLoaded is true', async () => {
+    seed(true);
+
+    await settingsActions.saveSettings();
+
+    expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+    expect(get(settingsStore).error).toBeNull();
+  });
+
+  it('notify false suppresses the success toast and default keeps it', async () => {
+    const { toastActions } = await import('./toast.js');
+    seed(true);
+
+    await settingsActions.saveSettings({ notify: false });
+    expect(toastActions.success).not.toHaveBeenCalled();
+
+    await settingsActions.saveSettings();
+    expect(toastActions.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('notify false suppresses the failure toast when the API rejects', async () => {
+    const { toastActions } = await import('./toast.js');
+    seed(true);
+    vi.mocked(settingsAPI.save).mockRejectedValueOnce(new Error('boom'));
+
+    await expect(settingsActions.saveSettings({ notify: false })).rejects.toThrow('boom');
+
+    expect(toastActions.error).not.toHaveBeenCalled();
   });
 });

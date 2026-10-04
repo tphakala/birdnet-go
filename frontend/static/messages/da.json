@@ -5232,12 +5232,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Genindlæs siden"
+    },
     "skip": "Spring over",
     "back": "Tilbage",
     "next": "Næste",
     "done": "Færdig",
     "progress": "Trin {current} af {total}",
     "progressLabel": "Guideforløb",
+    "status": {
+      "saving": "Gemmer...",
+      "loadingStep": "Indlæser trin..."
+    },
+    "errors": {
+      "saveFailed": "Dette trin kunne ikke gemmes. Kontroller forbindelsen og prøv igen, eller spring opsætningen over og ændr det senere i Indstillinger.",
+      "stepLoadFailed": "Dette trin kunne ikke indlæses. Tryk på Prøv igen, eller genindlæs siden.",
+      "stepLoadFailedReload": "Dette trin kunne stadig ikke indlæses. Genindlæs siden for at prøve igen; valg gemt i tidligere trin bevares."
+    },
+    "reasons": {
+      "completeStep": "Fuldfør dette trin for at fortsætte."
+    },
+    "leaveConfirm": {
+      "title": "Forlad opsætningen?",
+      "message": "Opsætningen åbner ikke igen. Valg gemt i tidligere trin bevares; ændringer i dette trin gemmes ikke. Du kan ændre alt senere i Indstillinger.",
+      "stay": "Fortsæt opsætningen",
+      "leave": "Forlad opsætningen"
+    },
     "whatsNew": {
       "title": "Nyheder i {version}"
     },
