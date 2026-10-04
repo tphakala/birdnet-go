@@ -47,10 +47,11 @@ function getInitialLocale(): Locale {
 }
 
 /**
- * Marks the page with the UI language, so screen readers pronounce the text
- * correctly and the browser hyphenates and spellchecks in that language.
- * index.html's inline script sets the initial value before the app loads; this
- * keeps it in step with the store: once at module load and on every setLocale.
+ * Marks the page with the language of the messages it shows, so screen readers
+ * pronounce the text correctly and the browser hyphenates and spellchecks in
+ * that language. index.html's inline script sets the initial value before the
+ * app loads; this keeps it in step with the store: at module load and whenever
+ * loadMessages puts a locale's messages (or the English fallback) on screen.
  */
 function applyDocumentLanguage(locale: Locale): void {
   if (typeof document !== 'undefined') {
@@ -61,6 +62,9 @@ function applyDocumentLanguage(locale: Locale): void {
 // State management with Svelte 5 runes
 let currentLocale = $state<Locale>(getInitialLocale());
 let messages = $state<Record<string, string>>({});
+// Locale of the messages currently shown, which lags currentLocale while a
+// switch is loading and stays on the old one when the switch fails.
+let messagesLocale: Locale = currentLocale;
 let loading = $state(false);
 // Keep previous messages while loading new ones
 let previousMessages = $state<Record<string, string>>({});
@@ -108,13 +112,12 @@ export function getLocale(): Locale {
 }
 
 /**
- * Set the current locale, mark the page with it (html lang) and load the
- * corresponding messages
+ * Set the current locale and load the corresponding messages; the page's html
+ * lang follows once they are shown
  * @param locale - The locale code to set
  */
 export function setLocale(locale: Locale): void {
   currentLocale = locale;
-  applyDocumentLanguage(locale);
   loadMessages(locale);
 
   // Persist locale to localStorage
@@ -159,6 +162,8 @@ async function loadMessages(locale: Locale): Promise<void> {
     }
 
     messages = data;
+    messagesLocale = locale;
+    applyDocumentLanguage(locale);
     // Clear previous messages after successful load
     previousMessages = {};
     // Mark initial load as complete and resolve the promise
@@ -194,6 +199,8 @@ async function loadMessages(locale: Locale): Promise<void> {
           }
 
           messages = fallbackData;
+          messagesLocale = DEFAULT_LOCALE;
+          applyDocumentLanguage(DEFAULT_LOCALE);
           // Clear previous messages after successful fallback load
           previousMessages = {};
           // Mark initial load as complete and resolve the promise
@@ -217,6 +224,9 @@ async function loadMessages(locale: Locale): Promise<void> {
       messages = previousMessages;
       previousMessages = {};
     }
+    // The page still shows the messages it had (or the English critical
+    // fallbacks when none ever loaded); keep html lang on that language.
+    applyDocumentLanguage(Object.keys(messages).length > 0 ? messagesLocale : DEFAULT_LOCALE);
 
     // Mark initial load as complete even on failure to prevent waitForTranslations() from hanging
     // Components will use critical fallbacks for essential UI strings
