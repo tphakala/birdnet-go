@@ -18,6 +18,7 @@
   const LEAVE_DESC_ID = generateId('wizard-leave-desc');
 
   let modalRef = $state<Modal>();
+  let contentRef = $state<HTMLDivElement>();
   let loadedComponent = $state<Component<WizardStepProps> | null>(null);
   // Index of the step the rendered component was loaded for
   let loadedIndex = $state(-1);
@@ -83,6 +84,13 @@
   $effect(() => {
     if (!wizardState.isActive) leaveConfirmOpen = false;
   });
+
+  // The Retry button leaves the DOM while the import re-runs; park focus on the
+  // content box so keyboard focus stays inside the dialog.
+  function retryLoad() {
+    contentRef?.focus();
+    retryNonce++;
+  }
 
   function handleNext() {
     if (!wizardState.canAdvance) return;
@@ -157,7 +165,9 @@
 
   {#snippet children()}
     <div
-      class="h-[33rem] rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)]/30 px-4 py-3"
+      bind:this={contentRef}
+      tabindex="-1"
+      class="h-[33rem] rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)]/30 px-4 py-3 focus:outline-none"
     >
       {#if isLoadingStep}
         <div class="flex h-full items-center justify-center" role="status">
@@ -171,7 +181,7 @@
           <button
             type="button"
             class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--border-200)] bg-transparent px-4 py-2 text-sm font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--hover-overlay)]"
-            onclick={() => retryNonce++}
+            onclick={retryLoad}
           >
             <RotateCw class="size-4" />
             {t('common.retry')}

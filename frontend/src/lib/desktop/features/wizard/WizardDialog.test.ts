@@ -259,6 +259,23 @@ describe('WizardDialog', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('');
   });
 
+  it('Retry keeps keyboard focus inside the dialog', async () => {
+    renderWizard(componentSteps(3));
+    loaders[1] = () => Promise.reject(new Error('chunk failed'));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    const retry = await screen.findByRole('button', { name: /common\.retry/ });
+    const load = deferred<StepModule>();
+    loaders[1] = () => load.promise;
+
+    await user.click(retry);
+
+    expect(retry).not.toBeInTheDocument();
+    expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull();
+    load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+    await waitForPrimaryEnabled();
+  });
+
   it('Back still works after a step chunk failed to load', async () => {
     renderWizard(componentSteps(3));
     loaders[1] = () => Promise.reject(new Error('chunk failed'));
