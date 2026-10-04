@@ -364,7 +364,7 @@ describe('API utilities', () => {
         headers: new Headers(),
       });
 
-      // The call should NOT reject — it should hang.
+      // The call should NOT reject; it should hang.
       let threw = false;
       const raceResult = await Promise.race([
         fetchWithCSRF('/api/test').catch(() => {
