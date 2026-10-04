@@ -1,5 +1,6 @@
 import { api } from '$lib/utils/api';
 import { loggers } from '$lib/utils/logger';
+import type { TranslationKey } from '$lib/i18n';
 import type {
   StepLeaveHandler,
   StepStatus,
@@ -23,7 +24,7 @@ let isStepValid = $state<boolean>(false);
 let stepStatus = $state<StepStatus>('loading');
 let isSaving = $state<boolean>(false);
 // i18n key of the error to show for the current step, or null
-let stepError = $state<string | null>(null);
+let stepError = $state<TranslationKey | null>(null);
 let previousVersion = $state<string | null>(null);
 let currentVersion = $state<string | null>(null);
 
@@ -44,7 +45,7 @@ let leaveHandler: StepLeaveHandler | null = null;
 // belongs to an earlier session can be recognised and dropped.
 let session = 0;
 
-const SAVE_FAILED_KEY = 'wizard.errors.saveFailed';
+const SAVE_FAILED_KEY: TranslationKey = 'wizard.errors.saveFailed';
 
 function resetStepFlags(): void {
   isStepValid = false;
