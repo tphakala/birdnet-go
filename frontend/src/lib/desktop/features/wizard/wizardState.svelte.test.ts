@@ -479,7 +479,7 @@ describe('wizardState - state machine', () => {
       expect(api.post).toHaveBeenCalledWith('/api/v2/app/wizard/dismiss');
     });
 
-    it('never calls the leave handler and closes at once while a save is pending', async () => {
+    it('skip closes at once, does not call the leave handler again and ignores the pending save', async () => {
       launchSteps(3);
       const d = deferred();
       const handler = vi.fn(() => d.promise);

@@ -38,8 +38,6 @@ export async function flushAsync(): Promise<void> {
 }
 
 interface SettingsMockOptions {
-  /** Value of the store's dataLoaded flag. Defaults to true. */
-  dataLoaded?: boolean;
   /** Merge updateSection calls into the store's formData. Defaults to false. */
   applyUpdates?: boolean;
 }
@@ -51,13 +49,13 @@ interface SettingsMockOptions {
  * hoisted above static imports.
  */
 export function createSettingsMock(formData: unknown, options: SettingsMockOptions = {}) {
-  const { dataLoaded = true, applyUpdates = false } = options;
+  const { applyUpdates = false } = options;
   const clone = () => JSON.parse(JSON.stringify(formData)) as SettingsFormData;
   const settingsStore = writable({
     isLoading: false,
     isSaving: false,
     error: null,
-    dataLoaded,
+    dataLoaded: true,
     activeSection: 'main',
     originalData: clone(),
     formData: clone(),

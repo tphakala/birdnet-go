@@ -167,11 +167,12 @@ describe.each(stepCases)('$name leave handler contract', ({ component, edit }) =
     await edit(container);
 
     await expect(leave()).rejects.toThrow('save failed');
+    const firstLeaveCalls = vi.mocked(settingsActions.updateSection).mock.calls.length;
     await leave();
 
     expect(settingsActions.saveSettings).toHaveBeenCalledTimes(2);
+    expect(firstLeaveCalls).toBeGreaterThan(0);
     const calls = vi.mocked(settingsActions.updateSection).mock.calls;
-    expect(calls.length).toBeGreaterThanOrEqual(2);
-    expect(calls.slice(0, calls.length / 2)).toEqual(calls.slice(calls.length / 2));
+    expect(calls.slice(firstLeaveCalls)).toEqual(calls.slice(0, firstLeaveCalls));
   });
 });

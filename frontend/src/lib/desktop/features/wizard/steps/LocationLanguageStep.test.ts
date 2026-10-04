@@ -58,7 +58,7 @@ vi.mock('$lib/stores/settings', async () => {
         },
       },
     },
-    { dataLoaded: false, applyUpdates: true }
+    { applyUpdates: true }
   );
 });
 
@@ -78,7 +78,7 @@ describe('LocationLanguageStep - UI locale persistence in the leave handler', ()
       isLoading: false,
       isSaving: false,
       error: null,
-      dataLoaded: false,
+      dataLoaded: true,
       activeSection: 'main',
       originalData: {
         birdnet: {
