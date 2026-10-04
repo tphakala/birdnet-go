@@ -1599,18 +1599,24 @@ tpl_path() {
     esac
 }
 
+# service_pre FILE -> the ExecStartPre= lines inside the [Service] section only (systemd
+# ignores the key in any other section).
+service_pre() {
+    awk '/^\[/ { in_service = ($0 == "[Service]") } in_service && /^ExecStartPre=/' "$1"
+}
+
 it "Podman templates carry the Avahi indirection"
 
 for t in $TEMPLATE_NAMES; do
     tp="$(tpl_path "$t")"
     assert_eq "$t: Avahi volume line present and uncommented" "1" "$(grep -cxF -- "$PODMAN_AVAHI_VOLUME" "$tp")"
     assert_eq "$t: no direct /run/avahi-daemon volume" "0" "$(grep -cE -- '^#?Volume=/run/avahi-daemon' "$tp")"
-    assert_eq "$t: ExecStartPre present once" "1" "$(grep -c '^ExecStartPre=' "$tp")"
+    assert_eq "$t: ExecStartPre present once" "1" "$(service_pre "$tp" | grep -c .)"
     assert_eq "$t: D-Bus volume ships commented" "1" "$(grep -cxF -- "#${PODMAN_DBUS_VOLUME}" "$tp")"
 done
-prestd="$(grep '^ExecStartPre=' "$(tpl_path standard)")"
-assert_eq "autotls carries the identical ExecStartPre" "$prestd" "$(grep '^ExecStartPre=' "$(tpl_path autotls)")"
-assert_eq "heredoc carries the identical ExecStartPre" "$prestd" "$(grep '^ExecStartPre=' "$(tpl_path heredoc)")"
+prestd="$(service_pre "$(tpl_path standard)")"
+assert_eq "autotls carries the identical ExecStartPre" "$prestd" "$(service_pre "$(tpl_path autotls)")"
+assert_eq "heredoc carries the identical ExecStartPre" "$prestd" "$(service_pre "$(tpl_path heredoc)")"
 
 it "ExecStartPre snippet transitions"
 
@@ -1741,7 +1747,7 @@ fresh_quadlet_dir; printf '[Container]\nUserNS=keep-id\n' > "$unit"
 run_create_quadlet "$nopodman_dir" ""
 assert_eq "heredoc fallback: D-Bus mount on" "1" "$(dbus_count)"
 assert_eq "heredoc fallback: Avahi mount present" "1" "$(avahi_count)"
-assert_eq "heredoc fallback: ExecStartPre present" "1" "$(grep -c '^ExecStartPre=' "$unit")"
+assert_eq "heredoc fallback: ExecStartPre present" "1" "$(service_pre "$unit" | grep -c .)"
 
 # 7. No prior unit, keep-id off, uid 1000, both sockets: Avahi indirection only, D-Bus off.
 fresh_quadlet_dir
