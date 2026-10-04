@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { WizardStep } from './types';
 import { deferred, type Deferred } from './wizardTestUtils';
 
@@ -16,7 +16,7 @@ vi.mock('./wizardRegistry', () => ({
 
 // Import after mocks are set up
 const { api } = await import('$lib/utils/api');
-const { wizardState } = await import('./wizardState.svelte');
+const { wizardState, STEP_MOVE_GUARD_MS } = await import('./wizardState.svelte');
 const { getStepsForFlow } = await import('./wizardRegistry');
 
 // Test fixtures
@@ -29,9 +29,12 @@ function createTestSteps(count: number): WizardStep[] {
   }));
 }
 
+// Marks the current step ready and lets the guard after a step move run out, as
+// a user reading the step before the next click would.
 function readyStep(valid = true): void {
   wizardState.setStepValid(valid);
   wizardState.setStepStatus('ready', wizardState.currentStepIndex);
+  vi.advanceTimersByTime(STEP_MOVE_GUARD_MS);
 }
 
 // Lets chained promise continuations run.
@@ -46,10 +49,15 @@ function launchSteps(count: number): void {
 
 describe('wizardState - state machine', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     vi.clearAllMocks();
     localStorage.clear();
     wizardState._resetForTesting();
     vi.mocked(getStepsForFlow).mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('initial state', () => {
@@ -360,6 +368,7 @@ describe('wizardState - state machine', () => {
       expect(wizardState.currentStepIndex).toBe(1);
 
       wizardState.setStepStatus('ready', 1);
+      vi.advanceTimersByTime(STEP_MOVE_GUARD_MS);
       await wizardState.back();
 
       expect(wizardState.currentStepIndex).toBe(0);
@@ -418,6 +427,7 @@ describe('wizardState - state machine', () => {
       await wizardState.next();
 
       wizardState.setStepStatus('failed', 1);
+      vi.advanceTimersByTime(STEP_MOVE_GUARD_MS);
 
       expect(wizardState.canAdvance).toBe(false);
       expect(wizardState.canGoBack).toBe(true);
@@ -663,6 +673,168 @@ describe('wizardState - state machine', () => {
       expect(wizardState.isActive).toBe(true);
       expect(wizardState.stepError).toBe('wizard.errors.saveFailed');
       expect(api.post).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('step move guard', () => {
+    // A cached step chunk settles about this long after the click that moved to it
+    const SETTLE_MS = 27;
+
+    // Lets the step reached by a move load, then waits `ms` from the first click
+    async function settleAndWait(ms: number): Promise<void> {
+      await flush();
+      vi.advanceTimersByTime(SETTLE_MS);
+      wizardState.setStepValid(true);
+      wizardState.setStepStatus('ready', wizardState.currentStepIndex);
+      vi.advanceTimersByTime(ms - SETTLE_MS);
+    }
+
+    it.each([60, 200])(
+      'a second Next click %i ms after the first moves only one step',
+      async gap => {
+        launchSteps(4);
+        readyStep();
+
+        const first = wizardState.next();
+        await settleAndWait(gap);
+        await wizardState.next();
+        await first;
+
+        expect(wizardState.currentStepIndex).toBe(1);
+      }
+    );
+
+    it('Next clicks 0, 60 and 200 ms apart move one step', async () => {
+      launchSteps(4);
+      readyStep();
+
+      const first = wizardState.next();
+      const atZero = wizardState.next();
+      await settleAndWait(60);
+      await wizardState.next();
+      vi.advanceTimersByTime(140);
+      await wizardState.next();
+      await Promise.all([first, atZero]);
+
+      expect(wizardState.currentStepIndex).toBe(1);
+    });
+
+    it('a Next click after the guard interval moves again', async () => {
+      launchSteps(4);
+      readyStep();
+
+      await wizardState.next();
+      await settleAndWait(SETTLE_MS);
+      vi.advanceTimersByTime(STEP_MOVE_GUARD_MS - 1);
+      await wizardState.next();
+      expect(wizardState.currentStepIndex).toBe(1);
+
+      vi.advanceTimersByTime(1);
+      await wizardState.next();
+
+      expect(wizardState.currentStepIndex).toBe(2);
+    });
+
+    it('counts the interval from when the step settled, not from the click', async () => {
+      launchSteps(4);
+      readyStep();
+
+      await wizardState.next();
+      vi.advanceTimersByTime(STEP_MOVE_GUARD_MS * 2); // the step is still loading
+      wizardState.setStepValid(true);
+      wizardState.setStepStatus('ready', 1);
+      await wizardState.next();
+
+      expect(wizardState.currentStepIndex).toBe(1);
+    });
+
+    it('a double click on Back moves one step', async () => {
+      launchSteps(4);
+      readyStep();
+      await wizardState.next();
+      readyStep();
+      await wizardState.next();
+      readyStep();
+
+      const first = wizardState.back();
+      await settleAndWait(120);
+      await wizardState.back();
+      await first;
+
+      expect(wizardState.currentStepIndex).toBe(1);
+      vi.advanceTimersByTime(STEP_MOVE_GUARD_MS);
+      await wizardState.back();
+      expect(wizardState.currentStepIndex).toBe(0);
+    });
+
+    it('applies after a move to a step that failed to load', async () => {
+      launchSteps(4);
+      readyStep();
+      await wizardState.next();
+      readyStep();
+
+      const first = wizardState.next();
+      await flush();
+      wizardState.setStepStatus('failed', 2);
+      vi.advanceTimersByTime(100);
+      await wizardState.back();
+      await first;
+
+      expect(wizardState.currentStepIndex).toBe(2);
+    });
+
+    it('a double click that lands on the last step does not finish', async () => {
+      launchSteps(2);
+      readyStep();
+
+      const first = wizardState.next();
+      await settleAndWait(150);
+      await wizardState.complete();
+      await first;
+
+      expect(wizardState.isActive).toBe(true);
+      expect(wizardState.currentStepIndex).toBe(1);
+      expect(api.post).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(STEP_MOVE_GUARD_MS);
+      await wizardState.complete();
+      expect(wizardState.isActive).toBe(false);
+    });
+
+    it('does not delay the first step after launch', async () => {
+      launchSteps(3);
+      wizardState.setStepValid(true);
+      wizardState.setStepStatus('ready', 0);
+
+      await wizardState.next();
+
+      expect(wizardState.currentStepIndex).toBe(1);
+    });
+
+    it('does not block Skip right after a step move', async () => {
+      launchSteps(3);
+      readyStep();
+      await wizardState.next();
+      await settleAndWait(SETTLE_MS);
+
+      wizardState.skip();
+
+      expect(wizardState.isActive).toBe(false);
+    });
+
+    it('a relaunch starts without the guard of the previous session', async () => {
+      launchSteps(3);
+      readyStep();
+      await wizardState.next();
+      await settleAndWait(SETTLE_MS);
+      wizardState.skip();
+
+      launchSteps(3);
+      wizardState.setStepValid(true);
+      wizardState.setStepStatus('ready', 0);
+      await wizardState.next();
+
+      expect(wizardState.currentStepIndex).toBe(1);
     });
   });
 

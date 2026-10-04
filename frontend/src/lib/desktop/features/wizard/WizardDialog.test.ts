@@ -23,7 +23,7 @@ vi.mock('./wizardRegistry', () => ({
 
 const { api } = await import('$lib/utils/api');
 const { getStepsForFlow } = await import('./wizardRegistry');
-const { wizardState } = await import('./wizardState.svelte');
+const { wizardState, STEP_MOVE_GUARD_MS } = await import('./wizardState.svelte');
 const { stepControl } = await import('./wizardTestStepControl');
 const { default: WizardDialog } = await import('./WizardDialog.svelte');
 const { default: WizardTestStep } = await import('./WizardTestStep.test.svelte');
@@ -62,6 +62,13 @@ const isBlocked = (el: HTMLElement) => el.getAttribute('aria-disabled') === 'tru
 
 async function waitForPrimaryEnabled() {
   await waitFor(() => expect(isBlocked(primaryButton())).toBe(false));
+}
+
+// After a step move, Next, Back and Done ignore clicks for a short interval so
+// the second click of a double click cannot move again; a deliberate click
+// comes later, which this stands in for.
+function waitOutStepMoveGuard(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, STEP_MOVE_GUARD_MS));
 }
 
 // The box that holds the step content; the fixture step renders a checkbox in it
@@ -165,6 +172,7 @@ describe('WizardDialog', () => {
 
     load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
     await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
     await user.click(primaryButton());
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step3'));
@@ -254,6 +262,7 @@ describe('WizardDialog', () => {
     await user.click(primaryButton());
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
     await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
     const save = deferred();
     stepControl.leave = vi.fn(() => save.promise);
 
@@ -312,6 +321,7 @@ describe('WizardDialog', () => {
     await waitForPrimaryEnabled();
     await user.click(primaryButton());
     await screen.findByRole('button', { name: /common\.retry/ });
+    await waitOutStepMoveGuard();
 
     await user.click(backButton());
 
@@ -324,16 +334,36 @@ describe('WizardDialog', () => {
     await user.click(primaryButton());
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
     await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
     await user.click(primaryButton());
     await waitFor(() => expect(heading()).toHaveTextContent('test.step3'));
     const load = deferred<StepModule>();
     loaders[1] = () => load.promise; // step 2 stays loading after the first Back
     await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
 
     await user.dblClick(backButton());
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
     load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+  });
+
+  it('a click right after the next step is ready does not move again', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+
+    await user.click(primaryButton());
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+
+    expect(heading()).toHaveTextContent('test.step2');
+    expect(stepControl.leave).toHaveBeenCalledTimes(1);
+
+    await waitOutStepMoveGuard();
+    await user.click(primaryButton());
+
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step3'));
   });
 
   it('Skip closes at once without calling the leave handler again and ignores the pending save', async () => {

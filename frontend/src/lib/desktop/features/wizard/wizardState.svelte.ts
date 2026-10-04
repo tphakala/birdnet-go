@@ -47,12 +47,50 @@ let session = 0;
 
 const SAVE_FAILED_KEY: TranslationKey = 'wizard.errors.saveFailed';
 
+/**
+ * How long Next, Back and Done ignore clicks after a step move, counted from
+ * when the new step settled (loaded or failed to load). A cached step chunk is
+ * ready about 30 ms after the click that moved to it, so without this the second
+ * click of a double click (typically 60 to 300 ms after the first, and at most
+ * the 400 to 500 ms desktop double click interval) lands on the new step and
+ * moves again. 400 ms covers a normal double click and is shorter than anyone
+ * needs to read a new step before pressing Next on purpose.
+ */
+export const STEP_MOVE_GUARD_MS = 400;
+
+// Set by a step move, so the guard starts once that step settles
+let guardOnSettle = false;
+// Pending while the guard after a step move is running
+let stepMoveGuardTimer: ReturnType<typeof setTimeout> | undefined;
+
+function clearStepMoveGuard(): void {
+  guardOnSettle = false;
+  if (stepMoveGuardTimer !== undefined) {
+    clearTimeout(stepMoveGuardTimer);
+    stepMoveGuardTimer = undefined;
+  }
+}
+
+function startStepMoveGuard(): void {
+  clearStepMoveGuard();
+  stepMoveGuardTimer = setTimeout(() => {
+    stepMoveGuardTimer = undefined;
+  }, STEP_MOVE_GUARD_MS);
+}
+
+// True while a click on Next, Back or Done could be the second click of a double
+// click that already moved the wizard.
+function isStepMoveGuarded(): boolean {
+  return guardOnSettle || stepMoveGuardTimer !== undefined;
+}
+
 function resetStepFlags(): void {
   isStepValid = false;
   stepStatus = 'loading';
   isSaving = false;
   stepError = null;
   leaveHandler = null;
+  clearStepMoveGuard();
 }
 
 async function dismiss(): Promise<void> {
@@ -134,10 +172,12 @@ function registerLeaveHandler(handler: StepLeaveHandler): () => void {
 
 // Called by the dialog: 'loading' while the step's component loads, 'ready' once
 // it is mounted and has had the chance to report its validity, 'failed' when it
-// could not be loaded.
+// could not be loaded. When a step reached by a move settles (ready or failed),
+// the step move guard starts.
 function setStepStatus(next: StepStatus, index: number): void {
   if (isActive && index === currentStepIndex) {
     stepStatus = next;
+    if (next !== 'loading' && guardOnSettle) startStepMoveGuard();
   }
 }
 
@@ -175,15 +215,16 @@ async function runLeave(move: () => void): Promise<void> {
 function moveBy(delta: number): void {
   currentStepIndex += delta;
   resetStepFlags();
+  guardOnSettle = true;
 }
 
 async function next(): Promise<void> {
-  if (!canAdvance || isLastStep) return;
+  if (!canAdvance || isLastStep || isStepMoveGuarded()) return;
   await runLeave(() => moveBy(1));
 }
 
 async function back(): Promise<void> {
-  if (!canGoBack) return;
+  if (!canGoBack || isStepMoveGuarded()) return;
   // An invalid step has nothing safe to save; its edits are discarded.
   if (isStepValid) {
     await runLeave(() => moveBy(-1));
@@ -198,7 +239,7 @@ function skip(): void {
 }
 
 async function complete(): Promise<void> {
-  if (!canAdvance || !isLastStep) return;
+  if (!canAdvance || !isLastStep || isStepMoveGuarded()) return;
   await runLeave(() => {
     void dismiss();
     resetState();
