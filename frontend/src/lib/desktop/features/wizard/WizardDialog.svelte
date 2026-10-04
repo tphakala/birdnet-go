@@ -60,6 +60,8 @@
           loadedComponent = null;
           isLoadingStep = false;
           loadFailed = true;
+          // The step is not valid, so Next stays blocked, but Back must work
+          wizardState.markStepReady(index);
         }
       );
     } else {
@@ -88,7 +90,7 @@
   }
 
   function handleBack() {
-    if (wizardState.isSaving) return;
+    if (!wizardState.canGoBack) return;
     void wizardState.back();
   }
 
@@ -215,8 +217,8 @@
               type="button"
               class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--border-200)] bg-transparent px-4 py-2 text-sm font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--hover-overlay)] aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
               onclick={handleBack}
-              aria-disabled={wizardState.isSaving ? 'true' : undefined}
-              aria-describedby={wizardState.isSaving ? NEXT_REASON_ID : undefined}
+              aria-disabled={!wizardState.canGoBack ? 'true' : undefined}
+              aria-describedby={!wizardState.canGoBack ? NEXT_REASON_ID : undefined}
             >
               <ChevronLeft class="size-4" />
               {t('wizard.back')}

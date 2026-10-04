@@ -215,6 +215,16 @@ describe('wizardState — state machine', () => {
       expect(wizardState.currentStepIndex).toBe(1);
     });
 
+    it('does nothing for a valid step that is not yet marked ready', async () => {
+      launchSteps(2);
+      wizardState.setStepValid(true); // reported valid, mount not confirmed
+
+      expect(wizardState.canAdvance).toBe(false);
+      await wizardState.next();
+
+      expect(wizardState.currentStepIndex).toBe(0);
+    });
+
     it('awaits the leave handler before advancing', async () => {
       launchSteps(3);
       const d = deferred();
@@ -284,6 +294,7 @@ describe('wizardState — state machine', () => {
       launchSteps(3);
       readyStep();
       await wizardState.next();
+      readyStep();
 
       await wizardState.back();
 
@@ -336,6 +347,26 @@ describe('wizardState — state machine', () => {
       await wizardState.back();
 
       expect(handler).not.toHaveBeenCalled();
+      expect(wizardState.currentStepIndex).toBe(0);
+    });
+
+    it('refuses while the step is not ready, so a double click moves one step', async () => {
+      launchSteps(4);
+      readyStep();
+      await wizardState.next();
+      readyStep();
+      await wizardState.next(); // index 2, step reported invalid below
+      readyStep(false);
+
+      const first = wizardState.back();
+      const second = wizardState.back(); // the previous step has not loaded yet
+      await Promise.all([first, second]);
+
+      expect(wizardState.currentStepIndex).toBe(1);
+
+      wizardState.markStepReady(1);
+      await wizardState.back();
+
       expect(wizardState.currentStepIndex).toBe(0);
     });
 
@@ -593,6 +624,17 @@ describe('wizardState — state machine', () => {
       expect(wizardState.isActive).toBe(true);
 
       wizardState.setStepValid(false);
+      await wizardState.complete();
+
+      expect(wizardState.isActive).toBe(true);
+      expect(api.post).not.toHaveBeenCalled();
+    });
+
+    it('refuses a valid last step that is not yet marked ready', async () => {
+      const { api } = await import('$lib/utils/api');
+      launchSteps(1);
+      wizardState.setStepValid(true);
+
       await wizardState.complete();
 
       expect(wizardState.isActive).toBe(true);

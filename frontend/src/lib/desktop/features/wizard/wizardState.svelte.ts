@@ -33,6 +33,9 @@ const isFirstStep = $derived(currentStepIndex === 0);
 const isLastStep = $derived(currentStepIndex === totalSteps - 1);
 const isActive = $derived(status === 'active');
 const canAdvance = $derived(isActive && !isSaving && isStepReady && isStepValid);
+// Back needs a mounted step too, so a double click cannot skip over a step that
+// has not loaded yet; a step whose chunk failed is marked ready by the dialog.
+const canGoBack = $derived(isActive && !isSaving && !isFirstStep && isStepReady);
 
 // The leave handler of the mounted step, awaited by next(), back() and complete().
 let leaveHandler: StepLeaveHandler | null = null;
@@ -184,10 +187,10 @@ async function next(): Promise<void> {
 }
 
 async function back(): Promise<void> {
-  if (!isActive || isSaving || isFirstStep) return;
+  if (!canGoBack) return;
   const startSession = session;
   const startIndex = currentStepIndex;
-  // An invalid or never-loaded step has nothing safe to save; its edits are discarded.
+  // An invalid step has nothing safe to save; its edits are discarded.
   if (isStepReady && isStepValid) {
     if (!(await runLeave())) return;
     if (startSession !== session || startIndex !== currentStepIndex) return;
@@ -248,6 +251,9 @@ export const wizardState = {
   },
   get canAdvance() {
     return canAdvance;
+  },
+  get canGoBack() {
+    return canGoBack;
   },
   get previousVersion() {
     return previousVersion;

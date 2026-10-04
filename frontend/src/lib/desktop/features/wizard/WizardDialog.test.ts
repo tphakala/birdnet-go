@@ -259,6 +259,36 @@ describe('WizardDialog', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('');
   });
 
+  it('Back still works after a step chunk failed to load', async () => {
+    renderWizard(componentSteps(3));
+    loaders[1] = () => Promise.reject(new Error('chunk failed'));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await screen.findByRole('button', { name: /common\.retry/ });
+
+    await user.click(backButton());
+
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step1'));
+  });
+
+  it('a double click on Back while the previous step loads moves one step', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step3'));
+    const load = deferred<StepModule>();
+    loaders[1] = () => load.promise; // step 2 stays loading after the first Back
+    await waitForPrimaryEnabled();
+
+    await user.dblClick(backButton());
+
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
+    load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+  });
+
   it('Skip closes at once while a save is pending and saves nothing', async () => {
     const save = deferred();
     stepControl.leave = vi.fn(() => save.promise);
