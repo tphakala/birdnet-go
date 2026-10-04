@@ -614,3 +614,23 @@ func TestUninstall_DependentNeverDeletesDependencyFiles(t *testing.T) {
 	assert.FileExists(t, h.shared(depLocalGeoLabels))
 	assert.NoFileExists(t, h.shared(depLocalTaxonomy), "the unused component is still autoremoved")
 }
+
+func TestPrimarySwap_FailureKeepsRefetchedFileTheCurrentVariantUses(t *testing.T) {
+	h := newDepHarness(t)
+	require.NoError(t, h.install(depIDP, depVariantDFT))
+	// Only P's own record reaches the geomodel files (G unrecorded), so the check
+	// against other entries alone would let the failed swap delete them.
+	h.mm.mu.Lock()
+	delete(h.mm.installed, depIDG)
+	h.mm.mu.Unlock()
+	geo := h.shared(depLocalGeoModel)
+	require.NoError(t, os.WriteFile(geo, []byte("corrupt"), 0o644))
+	require.NoError(t, os.WriteFile(h.shared(depLocalGeoLabels), []byte("corrupt"), 0o644))
+	h.srv.Fail("g-labels.txt")
+
+	require.Error(t, h.install(depIDP, depVariantBuiltin))
+
+	assert.Equal(t, 2, h.srv.Hits("g-model.onnx"), "the corrupt geomodel file is refetched")
+	assert.FileExists(t, geo, "a failed swap keeps a refetched file the still-installed variant uses")
+	assert.Equal(t, depVariantDFT, installedSnapshot(h.mm)[depIDP].VariantID, "the previous variant stays installed")
+}

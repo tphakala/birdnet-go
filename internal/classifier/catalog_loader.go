@@ -229,7 +229,9 @@ func catalogValidationError(format string, args ...any) error {
 // shared-only entry that declares no dependencies of its own (depth one). A Component
 // must be Hidden, shared-only, have no registry id, no dependencies and no geomodel
 // file (its autoremove never touches range-filter config, so a geomodel file could be
-// deleted while the config still points at it).
+// deleted while the config still points at it). Finally, shared-role files must agree
+// across the whole catalog (validateSharedNamesAcrossCatalog), since they all land in
+// models/shared.
 func validateCatalogDependencies(entries []CatalogEntry) error {
 	byID := make(map[string]*CatalogEntry, len(entries))
 	for i := range entries {
@@ -242,6 +244,45 @@ func validateCatalogDependencies(entries []CatalogEntry) error {
 		}
 		if entry.Component {
 			if err := validateComponent(entry); err != nil {
+				return err
+			}
+		}
+	}
+	return validateSharedNamesAcrossCatalog(entries)
+}
+
+// validateSharedNamesAcrossCatalog rejects two shared-role files anywhere in the
+// catalog (any entry, any variant) that share a LocalName but differ in role or
+// checksum. Every shared file lands in models/shared/<LocalName>, so entries that
+// can be installed together must agree on what each shared name holds; otherwise one
+// install would overwrite another's file. Files without a checksum compare equal
+// to each other, which keeps hand-written catalogs that omit checksums loadable.
+func validateSharedNamesAcrossCatalog(entries []CatalogEntry) error {
+	type owner struct {
+		file CatalogFile
+		from string
+	}
+	seen := make(map[string]owner)
+	check := func(from string, files []CatalogFile) error {
+		for i := range files {
+			f := files[i]
+			if !isSharedRole(f.Role) {
+				continue
+			}
+			prev, ok := seen[f.LocalName]
+			if !ok {
+				seen[f.LocalName] = owner{file: f, from: from}
+				continue
+			}
+			if prev.file.Role != f.Role || !strings.EqualFold(prev.file.SHA256, f.SHA256) {
+				return catalogValidationError("catalog entries %q and %q both declare shared file %q with different contents", prev.from, from, f.LocalName)
+			}
+		}
+		return nil
+	}
+	for i := range entries {
+		for _, files := range entryFileSets(&entries[i]) {
+			if err := check(entries[i].ID, files); err != nil {
 				return err
 			}
 		}

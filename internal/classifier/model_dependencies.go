@@ -209,6 +209,14 @@ func (mm *ModelManager) sharedFileInUseLocked(excludeID, localName string) bool 
 	return false
 }
 
+// installedRecordUsesSharedFileLocked reports whether entry's own install record,
+// when it has one, reaches the shared file localName through its installed variant.
+// The caller holds mm.mu.
+func (mm *ModelManager) installedRecordUsesSharedFileLocked(entry *CatalogEntry, localName string) bool {
+	im, ok := mm.installed[entry.ID]
+	return ok && mm.usesSharedFileLocked(entry, []string{im.VariantID}, localName)
+}
+
 // cleanupSharedFilesLocked deletes the shared files an uninstall of removed (as
 // removedVariant) leaves unused: every shared-role file of the variant's OWN files
 // that no other installed or actively downloading entry reaches. Dependency files are

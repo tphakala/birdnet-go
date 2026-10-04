@@ -1821,6 +1821,34 @@ func (mm *ModelManager) preflightDiskSpace(entry *CatalogEntry, filesToDownload 
 		Build()
 }
 
+// downloadedFile is one file a downloadVariantFiles call wrote, kept so a failed
+// call can remove what it downloaded.
+type downloadedFile struct {
+	path, localName string
+	shared          bool
+}
+
+// removeFailedDownloadFiles removes the files a failed download of entry wrote. A
+// shared file that another installed or actively downloading entry still reaches is
+// kept: a dependency recorded installed (or another install that adopted the file
+// meanwhile) must not lose a file because this call failed after refetching it. So
+// is a shared file the entry's own current install still reaches, since a failed
+// variant swap leaves the previous variant installed. It takes mm.mu, so the caller
+// must not hold it.
+func (mm *ModelManager) removeFailedDownloadFiles(log logger.Logger, entry *CatalogEntry, files []downloadedFile) {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	for _, d := range files {
+		if d.shared && (mm.sharedFileInUseLocked(entry.ID, d.localName) || mm.installedRecordUsesSharedFileLocked(entry, d.localName)) {
+			log.Debug("Keeping shared file after failed download; an installed or downloading model still needs it",
+				logger.String("catalog_id", entry.ID),
+				logger.String("file", d.localName))
+			continue
+		}
+		_ = os.Remove(d.path)
+	}
+}
+
 // downloadVariantFiles downloads and verifies the files for the selected variant
 // of entry into the models directory, reporting progress and returning the
 // resolved model, labels, and embeddings paths. variantID selects the variant
@@ -1833,8 +1861,9 @@ func (mm *ModelManager) preflightDiskSpace(entry *CatalogEntry, filesToDownload 
 // (replaceVariant) can share the download while differing in how they activate
 // the result. The caller must have registered the entry in mm.downloading and must
 // not hold mm.mu. On failure it calls markFailed, and when cleanupOnFailure is true
-// it removes the files it downloaded this call (Install), except a shared file
-// another installed or actively downloading entry still reaches; when false,
+// it removes the files it downloaded this call (Install, variant swap) through
+// removeFailedDownloadFiles, which keeps a shared file another installed or actively
+// downloading entry, or the entry's own current install, still reaches; when false,
 // partial progress is kept (Reinstall).
 func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState, cleanupOnFailure bool) (files []CatalogFile, modelPath, labelsPath, embeddingsPath string, err error) {
 	log := GetLogger()
@@ -1872,29 +1901,9 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 	}
 
 	// Track files we downloaded so we can clean up on failure.
-	type downloadedFile struct {
-		path, localName string
-		shared          bool
-	}
 	var downloadedFiles []downloadedFile
 
-	// cleanup removes the files this call downloaded. A shared file that another
-	// installed or actively downloading entry still reaches is kept: a dependency
-	// recorded installed (or another install that adopted the file meanwhile) must
-	// not lose a file because this call failed after refetching it.
-	cleanup := func() {
-		mm.mu.Lock()
-		defer mm.mu.Unlock()
-		for _, d := range downloadedFiles {
-			if d.shared && mm.sharedFileInUseLocked(entry.ID, d.localName) {
-				log.Debug("Keeping shared file after failed download; another model still needs it",
-					logger.String("catalog_id", entry.ID),
-					logger.String("file", d.localName))
-				continue
-			}
-			_ = os.Remove(d.path)
-		}
-	}
+	cleanup := func() { mm.removeFailedDownloadFiles(log, entry, downloadedFiles) }
 
 	// fileDestPath returns the local destination for a catalog file.
 	// Shared files (embeddings, geomodel, taxonomy) are stored in a common directory.

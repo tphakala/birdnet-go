@@ -562,6 +562,12 @@ func TestValidateCatalog_Dependencies(t *testing.T) {
 			c[0].Files = append(c[0].Files, CatalogFile{RemotePath: "x", LocalName: "tax.csv", Role: RoleLabels})
 			return c
 		}},
+		{name: "dependencies of different entries installing different files under one name", want: "different contents", mutate: func(c []CatalogEntry) []CatalogEntry {
+			return append(c,
+				CatalogEntry{ID: "top2", DependsOn: []string{"geo2"}, Files: []CatalogFile{{RemotePath: "m2.onnx", LocalName: "m2.onnx", Role: RoleModel}}},
+				CatalogEntry{ID: "geo2", Files: []CatalogFile{{RemotePath: "g2", LocalName: "geo.onnx", Role: RoleGeomodelModel, SHA256: "other"}}},
+			)
+		}},
 		{name: "two dependencies installing different files under one name", want: "different contents", mutate: func(c []CatalogEntry) []CatalogEntry {
 			c[2].Files = []CatalogFile{{RemotePath: "t", LocalName: "geo.onnx", Role: RoleTaxonomy}}
 			return c
