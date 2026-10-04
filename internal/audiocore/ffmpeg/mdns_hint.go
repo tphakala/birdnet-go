@@ -18,21 +18,41 @@ const avahiSocketPath = "/run/avahi-daemon/socket"
 // mdnsDocsHint points at the deployment-agnostic documentation.
 const mdnsDocsHint = "See the 'Using .local (mDNS) hostnames in containers' section of the RTSP troubleshooting wiki page"
 
+// goosLinux is the runtime.GOOS value for Linux, the only system with the
+// avahi-daemon, libnss-mdns and getent steps.
+const goosLinux = "linux"
+
 // mdnsEnv holds the environment facts that decide which .local hint applies.
 type mdnsEnv struct {
 	inContainer        bool
 	avahiSocketPresent bool
+	goos               string // runtime.GOOS of the running process
 }
 
 // detectEnv probes the environment for the mDNS hint. It is a variable so tests
 // can substitute a fixed environment.
 var detectEnv = detectMDNSEnv
 
-func detectMDNSEnv() mdnsEnv {
+// environmentType returns the sysinfo environment type. It is a variable so
+// tests can substitute a container runtime.
+var environmentType = func() string {
 	envType, _ := sysinfo.GetEnvironment()
+	return envType
+}
+
+// detectMDNSEnv probes the running system for the mDNS hint.
+func detectMDNSEnv() mdnsEnv {
+	return newMDNSEnv(environmentType(), runtime.GOOS, avahiSocketPath)
+}
+
+// newMDNSEnv builds an mdnsEnv from probe results: the sysinfo environment type,
+// the operating system name and the path of the Avahi socket to look for. It
+// takes them as arguments so tests can cover every combination.
+func newMDNSEnv(envType, goos, avahiSocket string) mdnsEnv {
 	return mdnsEnv{
 		inContainer:        mdnsContainerEnv(envType),
-		avahiSocketPresent: isUnixSocket(avahiSocketPath),
+		avahiSocketPresent: isUnixSocket(avahiSocket),
+		goos:               goos,
 	}
 }
 
@@ -67,8 +87,8 @@ func mdnsTroubleshooting(host string, env mdnsEnv) []string {
 	case env.inContainer && !env.avahiSocketPresent:
 		return []string{
 			fmt.Sprintf("'%s' is a .local (mDNS) name and the container cannot reach the host's Avahi daemon", host),
-			"Mount the host's Avahi directory read-only: -v /run/avahi-daemon:/run/avahi-daemon:ro (never :z or :Z)",
-			"If the mount is already configured, restart the container: the host directory may have been recreated",
+			"Mount the host's Avahi directory read-only, unless the deployment already does (the Podman quadlets do): -v /run/avahi-daemon:/run/avahi-daemon:ro (never :z or :Z)",
+			"If the mount is already configured, restart the container: the host directory may have been recreated. Under a Podman quadlet, restart its systemd unit instead (for the unit podman-install.sh installs: systemctl --user restart birdnet-go), because a container restart does not rerun the check that links the Avahi directory",
 			"Without avahi-daemon on the host, use the device's IP address or a router DNS name instead",
 			mdnsDocsHint,
 		}
@@ -80,7 +100,7 @@ func mdnsTroubleshooting(host string, env mdnsEnv) []string {
 			mdnsDocsHint,
 		}
 	default:
-		return nativeMDNSSteps(host, runtime.GOOS)
+		return nativeMDNSSteps(host, env.goos)
 	}
 }
 
@@ -88,7 +108,7 @@ func mdnsTroubleshooting(host string, env mdnsEnv) []string {
 // libnss-mdns and getent steps apply only to Linux; other systems resolve .local
 // names themselves.
 func nativeMDNSSteps(host, goos string) []string {
-	if goos != "linux" {
+	if goos != goosLinux {
 		return []string{
 			fmt.Sprintf("'%s' is a .local (mDNS) name: check that the device is powered on and on the same network as this computer", host),
 		}

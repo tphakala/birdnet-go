@@ -1719,21 +1719,22 @@ enable_quadlet_volume() {
     sed -i "s|^#Volume=$2:$2:ro|Volume=$2:$2:ro|" "$1"
 }
 
-# mDNS host mounts for a quadlet: enable each read-only directory mount only when
-# its host socket exists (Podman refuses to start a container whose bind source is
-# missing). D-Bus additionally needs keep-id (EXTERNAL auth compares uids) and a
-# non-root uid (uid 0 on the system bus is host root), so call this after keep-id
-# may have been enabled. The template is re-copied on every run, so this is
-# re-detected on each install/update. Never :z or :Z.
+# mDNS host mounts for a quadlet. The Avahi mount is always present in the unit: its
+# per-unit source is linked to /run/avahi-daemon (or left as an empty directory) by the
+# unit's ExecStartPre at every start, so Podman never meets a missing bind source and
+# nothing is toggled here. The D-Bus mount is enabled only when its host socket exists
+# (Podman refuses to start a container whose bind source is missing), keep-id is on
+# (EXTERNAL auth compares uids) and the uid is non-root (uid 0 on the system bus is host
+# root), so call this after keep-id may have been enabled. The template is re-copied on
+# every run, so the D-Bus decision is re-detected on each install/update. Never :z or :Z.
 # Usage: enable_mdns_mounts <quadlet> <uid> <avahi socket> <dbus socket>
 enable_mdns_mounts() {
     local quadlet="$1" uid="$2" avahi_socket="$3" dbus_socket="$4"
     if host_socket_present "$avahi_socket"; then
-        enable_quadlet_volume "$quadlet" "$(dirname "$avahi_socket")"
-        log_message "INFO" "Enabled host Avahi mount in Quadlet unit for .local hostname resolution"
-        print_message "🌐 Host avahi-daemon mount enabled for .local (mDNS) hostnames" "$GREEN"
+        log_message "INFO" "Host avahi-daemon socket found; the unit links it into the container at each start"
+        print_message "🌐 Host avahi-daemon mount active for .local (mDNS) hostnames" "$GREEN"
     else
-        log_message "INFO" "Host avahi-daemon socket not found; the container resolves .local hostnames only through unicast DNS"
+        log_message "INFO" "Host avahi-daemon socket not found; the container resolves .local hostnames only through unicast DNS until avahi-daemon is installed and the unit restarted"
     fi
     if [ "$uid" != "0" ] && host_socket_present "$dbus_socket" && quadlet_has_keep_id "$quadlet"; then
         enable_quadlet_volume "$quadlet" "$(dirname "$dbus_socket")"
@@ -1837,9 +1838,11 @@ Image=${BIRDNET_GO_IMAGE}
 ContainerName=birdnet-go
 Volume=./config:/config
 Volume=./data:/data
-# mDNS and DNS-SD host mounts, enabled by podman-install.sh when the host sockets
-# exist (see doc/wiki/rtsp-troubleshooting.md). Never add :z or :Z.
-#Volume=/run/avahi-daemon:/run/avahi-daemon:ro
+# Host mounts for .local names and DNS-SD discovery (see doc/wiki/rtsp-troubleshooting.md).
+# The Avahi source is a per-unit path that ExecStartPre links to /run/avahi-daemon when
+# avahi runs on the host, or leaves as an empty directory, so the unit starts either way.
+# The D-Bus mount needs keep-id and a non-root uid. Never add :z or :Z.
+Volume=%t/%N-mdns/avahi-daemon:/run/avahi-daemon:ro
 #Volume=/run/dbus:/run/dbus:ro
 PublishPort=${WEB_PORT}:8080
 Environment=TZ=${CONFIGURED_TZ:-UTC}
@@ -1855,6 +1858,7 @@ Tmpfs=/config/hls:exec,size=50M,mode=1777
 
 [Service]
 Restart=always
+ExecStartPre=/bin/sh -c 'mkdir -p %t/%N-mdns && rm -rf %t/%N-mdns/avahi-daemon && if [ -S /run/avahi-daemon/socket ]; then ln -sfn /run/avahi-daemon %t/%N-mdns/avahi-daemon; else mkdir %t/%N-mdns/avahi-daemon; fi'
 TimeoutStartSec=900
 
 [Install]

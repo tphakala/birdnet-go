@@ -8,10 +8,13 @@ Image=ghcr.io/tphakala/birdnet-go:nightly
 ContainerName=birdnet-go
 Volume=./config:/config
 Volume=./data:/data
-# Host mounts for .local names and DNS-SD discovery (opt-in): uncomment only when the host
-# has avahi and D-Bus; podman-install.sh does this. D-Bus needs UserNS=keep-id. Never :z or :Z.
+# Host mounts for .local names and DNS-SD discovery. The Avahi source is a per-unit path that
+# ExecStartPre links to /run/avahi-daemon when avahi runs on the host, or leaves as an empty
+# directory when it does not, so the unit starts either way. The D-Bus mount is opt-in:
+# uncomment it only when the host has D-Bus; podman-install.sh does this. D-Bus needs
+# UserNS=keep-id and a non-root uid (uid 0 on the system bus is host root). Never :z or :Z.
 # See doc/wiki/rtsp-troubleshooting.md.
-#Volume=/run/avahi-daemon:/run/avahi-daemon:ro
+Volume=%t/%N-mdns/avahi-daemon:/run/avahi-daemon:ro
 #Volume=/run/dbus:/run/dbus:ro
 PublishPort=8080:8080
 Environment=TZ=UTC
@@ -30,6 +33,7 @@ Tmpfs=/config/hls:exec,size=50M,mode=1777
 
 [Service]
 Restart=always
+ExecStartPre=/bin/sh -c 'mkdir -p %t/%N-mdns && rm -rf %t/%N-mdns/avahi-daemon && if [ -S /run/avahi-daemon/socket ]; then ln -sfn /run/avahi-daemon %t/%N-mdns/avahi-daemon; else mkdir %t/%N-mdns/avahi-daemon; fi'
 TimeoutStartSec=900
 
 [Install]

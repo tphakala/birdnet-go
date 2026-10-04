@@ -60,9 +60,9 @@ Rules that apply to both:
 
 How each deployment gets the mounts:
 
-- **Docker (`install.sh`):** added to the unit on install and update when the host socket exists (`/run/avahi-daemon/socket`, `/run/dbus/system_bus_socket`). Re-run the update after installing avahi.
+- **Docker (`install.sh`):** the Avahi mount is added to the unit on install and update when `/run/avahi-daemon/socket` exists; the D-Bus mount when `/run/dbus/system_bus_socket` exists and the app is not uid 0. Re-run the update after installing avahi.
 - **Docker compose and Portainer:** enabled by default in the compose files. Rootful Docker creates a missing directory (harmless); rootless Docker without avahi or D-Bus must remove the line, or the container will not start.
-- **Podman:** shipped commented out in the quadlet and compose files, because Podman refuses to start a container whose bind source is missing. `podman-install.sh` enables them when the sockets exist (re-run it if avahi is removed). D-Bus authenticates by uid, so under rootless Podman it only works with `UserNS=keep-id` (`userns_mode: keep-id` in compose). Without keep-id the client fails with `Failed to create client object: An unexpected D-Bus error occurred`; `podman-install.sh` therefore enables the D-Bus line only together with keep-id.
+- **Podman:** the quadlet files mount Avahi through a per-unit path that an `ExecStartPre` links to `/run/avahi-daemon` when its socket exists and points at an empty directory otherwise, so the unit starts even if avahi is later removed (restart the unit, not just the container, after installing avahi or when the unit started before avahi created its socket at boot; for the unit `podman-install.sh` installs: `systemctl --user restart birdnet-go`). The D-Bus mount is shipped commented out in the quadlet files, and both mounts are commented out in the compose files, because Podman refuses to start a container whose bind source is missing. `podman-install.sh` enables the D-Bus line when its socket exists. D-Bus authenticates by uid, so under rootless Podman it only works with `UserNS=keep-id` (`userns_mode: keep-id` in compose). Without keep-id the client fails with `Failed to create client object: An unexpected D-Bus error occurred`; `podman-install.sh` therefore enables the D-Bus line only together with keep-id and a non-root uid.
 - **Unraid:** the two advanced path settings in the template.
 
 Security trade-off of the D-Bus mount: the container can talk to any system bus service its uid is allowed to call by D-Bus policy and polkit, as a uid with no active session. That is more exposure than the Avahi socket alone. When the app runs as uid 0 (`install.sh --force-root`, `BIRDNET_UID=0`), D-Bus sees host root, which can start host services and commands, so `install.sh` and `podman-install.sh` leave the D-Bus mount out for root and compose users running as uid 0 must remove the line. To opt out, remove the `/run/dbus` line; `.local` name resolution does not depend on it. SELinux-enforcing hosts (Fedora, RHEL) are expected to deny the container access to both sockets; the options are `SecurityLabelDisable=true` (drops SELinux separation for the container, at your own risk), a local policy module, or IP addresses.
@@ -73,7 +73,7 @@ Check from the host:
 docker exec birdnet-go getent hosts cam.local
 ```
 
-If it prints nothing, FFmpeg streams show a DNS failure with a `.local` specific hint in the stream health view and the log. Restart the container if the host's directory was recreated (for example after reinstalling avahi).
+If it prints nothing, FFmpeg streams show a DNS failure with a `.local` specific hint in the stream health view and the log. Restart the container if the host's directory was recreated (for example after reinstalling avahi); under Podman quadlets restart the unit instead.
 
 ## Health Monitoring Configuration
 
