@@ -447,8 +447,8 @@ func TestCheckAndResetPeriods_CriticalReliability(t *testing.T) {
 	}
 }
 
-// TestGetBatchSpeciesStatus_CriticalReliability tests batch operations performance and correctness
-// CRITICAL: Batch operations are used for UI updates and must be efficient
+// TestGetBatchSpeciesStatus_CriticalReliability tests batch operations for correctness and thread safety
+// CRITICAL: Batch operations are used for UI updates and must return a status for every requested species
 //
 //nolint:gocognit // Table-driven test for batch status operations
 func TestGetBatchSpeciesStatus_CriticalReliability(t *testing.T) {
@@ -531,7 +531,7 @@ func TestGetBatchSpeciesStatus_CriticalReliability(t *testing.T) {
 			"large_batch",
 			generateLargeSpeciesList(100),
 			100,
-			"Large batch should be handled efficiently",
+			"Large batch should return a status for every species",
 		},
 	}
 
