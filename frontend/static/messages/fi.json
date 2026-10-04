@@ -5232,6 +5232,9 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Lataa sivu uudelleen"
+    },
     "skip": "Ohita",
     "back": "Takaisin",
     "next": "Seuraava",
@@ -5244,7 +5247,8 @@
     },
     "errors": {
       "saveFailed": "Tämän vaiheen tallennus epäonnistui. Tarkista yhteys ja yritä uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
-      "stepLoadFailed": "Tämän vaiheen lataus epäonnistui. Paina Yritä uudelleen tai lataa sivu uudelleen."
+      "stepLoadFailed": "Tämän vaiheen lataus epäonnistui. Paina Yritä uudelleen tai lataa sivu uudelleen.",
+      "stepLoadFailedReload": "Tämän vaiheen lataus epäonnistui edelleen. Lataa sivu uudelleen ja yritä uudestaan; aiemmissa vaiheissa tallennetut valinnat säilyvät."
     },
     "reasons": {
       "completeStep": "Suorita tämä vaihe loppuun jatkaaksesi."

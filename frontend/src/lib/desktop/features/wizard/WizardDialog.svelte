@@ -5,7 +5,7 @@
   import WizardContentRenderer from './WizardContentRenderer.svelte';
   import { wizardState } from './wizardState.svelte';
   import { t } from '$lib/i18n';
-  import { ChevronLeft, ChevronRight, Check, RotateCw } from '@lucide/svelte';
+  import { ChevronLeft, ChevronRight, Check, RefreshCw, RotateCw } from '@lucide/svelte';
   import { tick, untrack } from 'svelte';
   import type { Component } from 'svelte';
   import type { WizardStepProps } from './types';
@@ -19,7 +19,7 @@
   const LEAVE_TITLE_ID = generateId('wizard-leave-title');
   const LEAVE_DESC_ID = generateId('wizard-leave-desc');
 
-  // Shared by the Back and Retry buttons
+  // Shared by the Back, Retry and Reload page buttons
   const SECONDARY_BUTTON_CLASS =
     'inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--border-200)] bg-transparent px-4 py-2 text-sm font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--hover-overlay)]';
 
@@ -34,8 +34,15 @@
   // to the component during that tick, so it cannot key off stepStatus.
   let isLoadingStep = $state(false);
   let retryNonce = $state(0);
+  // Index of the step whose chunk was retried, or -1. Chromium caches a failed
+  // dynamic import for the life of the page, so when the retried import fails
+  // too, only a page reload can fetch the chunk again.
+  let retriedIndex = $state(-1);
+  let reloadButtonRef = $state<HTMLButtonElement>();
   let leaveConfirmOpen = $state(false);
   let importGeneration = 0;
+  // retryNonce as of the last import, to tell a Retry from a step change
+  let lastRetryNonce = 0;
 
   // Load component when step changes (for ComponentStep types).
   // The generation counter prevents stale imports from overwriting
@@ -45,8 +52,11 @@
   $effect(() => {
     const step = wizardState.currentStep;
     const index = wizardState.currentStepIndex;
-    void retryNonce; // Retry re-runs the import
+    const isRetry = retryNonce !== lastRetryNonce; // Retry re-runs the import
+    lastRetryNonce = retryNonce;
     const gen = ++importGeneration;
+    // A step change (or a relaunch) offers Retry again
+    if (!isRetry) retriedIndex = -1;
     if (step?.type === 'component') {
       // A step move already starts as 'loading'; this also covers Retry
       untrack(() => wizardState.setStepStatus('loading', index));
@@ -65,13 +75,18 @@
           wizardState.setStepStatus('ready', index);
           modalRef?.refreshFocusTrap();
         },
-        err => {
+        async err => {
           if (gen !== importGeneration) return;
           logger.error('Wizard step failed to load', err);
           loadedComponent = null;
           isLoadingStep = false;
           // Next stays blocked, but Back still works on a failed step
           wizardState.setStepStatus('failed', index);
+          // Retry parked focus on the content box; hand it to Reload page
+          if (retriedIndex === index && document.activeElement === contentRef) {
+            await tick();
+            if (gen === importGeneration) reloadButtonRef?.focus();
+          }
         }
       );
     } else {
@@ -98,7 +113,18 @@
   // content box so keyboard focus stays inside the dialog.
   function retryLoad() {
     contentRef?.focus();
+    retriedIndex = wizardState.currentStepIndex;
     retryNonce++;
+  }
+
+  // Retry has already failed once on this step, so only a reload can help. The
+  // wizard opens again after the reload, and earlier steps are already saved.
+  let retryExhausted = $derived(
+    wizardState.stepStatus === 'failed' && retriedIndex === wizardState.currentStepIndex
+  );
+
+  function reloadPage() {
+    window.location.reload();
   }
 
   // Escape and X ask before closing the onboarding, since leaving dismisses it
@@ -132,6 +158,7 @@
 
   let alertText = $derived.by(() => {
     if (wizardState.stepError) return t(wizardState.stepError);
+    if (retryExhausted) return t('wizard.errors.stepLoadFailedReload');
     if (wizardState.stepStatus === 'failed') return t('wizard.errors.stepLoadFailed');
     return '';
   });
@@ -192,10 +219,22 @@
         />
       {:else if wizardState.stepStatus === 'failed'}
         <div class="flex h-full items-center justify-center">
-          <button type="button" class={SECONDARY_BUTTON_CLASS} onclick={retryLoad}>
-            <RotateCw class="size-4" />
-            {t('common.retry')}
-          </button>
+          {#if retryExhausted}
+            <button
+              bind:this={reloadButtonRef}
+              type="button"
+              class={SECONDARY_BUTTON_CLASS}
+              onclick={reloadPage}
+            >
+              <RefreshCw class="size-4" />
+              {t('wizard.actions.reloadPage')}
+            </button>
+          {:else}
+            <button type="button" class={SECONDARY_BUTTON_CLASS} onclick={retryLoad}>
+              <RotateCw class="size-4" />
+              {t('common.retry')}
+            </button>
+          {/if}
         </div>
       {:else if wizardState.currentStep?.type === 'content'}
         <WizardContentRenderer step={wizardState.currentStep} />

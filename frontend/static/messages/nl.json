@@ -5232,6 +5232,9 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Pagina opnieuw laden"
+    },
     "skip": "Overslaan",
     "back": "Terug",
     "next": "Volgende",
@@ -5244,7 +5247,8 @@
     },
     "errors": {
       "saveFailed": "Deze stap kon niet worden opgeslagen. Controleer de verbinding en probeer het opnieuw, of sla de installatie over en wijzig dit later in Instellingen.",
-      "stepLoadFailed": "Deze stap kon niet worden geladen. Druk op Opnieuw proberen of laad de pagina opnieuw."
+      "stepLoadFailed": "Deze stap kon niet worden geladen. Druk op Opnieuw proberen of laad de pagina opnieuw.",
+      "stepLoadFailedReload": "Deze stap kon nog steeds niet worden geladen. Laad de pagina opnieuw om het nogmaals te proberen; keuzes die in eerdere stappen zijn opgeslagen blijven behouden."
     },
     "reasons": {
       "completeStep": "Voltooi deze stap om verder te gaan."

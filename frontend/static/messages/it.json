@@ -5232,6 +5232,9 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Ricarica la pagina"
+    },
     "skip": "Salta",
     "back": "Indietro",
     "next": "Avanti",
@@ -5244,7 +5247,8 @@
     },
     "errors": {
       "saveFailed": "Impossibile salvare questo passaggio. Controlla la connessione e riprova, oppure salta la configurazione e modificalo più tardi nelle Impostazioni.",
-      "stepLoadFailed": "Impossibile caricare questo passaggio. Premi Riprova o ricarica la pagina."
+      "stepLoadFailed": "Impossibile caricare questo passaggio. Premi Riprova o ricarica la pagina.",
+      "stepLoadFailedReload": "Ancora impossibile caricare questo passaggio. Ricarica la pagina per riprovare; le scelte salvate nei passaggi precedenti vengono mantenute."
     },
     "reasons": {
       "completeStep": "Completa questo passaggio per continuare."

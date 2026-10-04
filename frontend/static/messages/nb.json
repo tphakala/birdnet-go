@@ -5232,6 +5232,9 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Last siden på nytt"
+    },
     "skip": "Hopp over",
     "back": "Tilbake",
     "next": "Neste",
@@ -5244,7 +5247,8 @@
     },
     "errors": {
       "saveFailed": "Dette trinnet kunne ikke lagres. Sjekk tilkoblingen og prøv igjen, eller hopp over oppsettet og endre det senere i Innstillinger.",
-      "stepLoadFailed": "Dette trinnet kunne ikke lastes. Trykk på Prøv igjen, eller last siden på nytt."
+      "stepLoadFailed": "Dette trinnet kunne ikke lastes. Trykk på Prøv igjen, eller last siden på nytt.",
+      "stepLoadFailedReload": "Dette trinnet kunne fortsatt ikke lastes. Last siden på nytt for å prøve igjen; valg som er lagret i tidligere trinn beholdes."
     },
     "reasons": {
       "completeStep": "Fullfør dette trinnet for å fortsette."

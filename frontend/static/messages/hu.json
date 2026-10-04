@@ -5232,6 +5232,9 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Oldal újratöltése"
+    },
     "skip": "Kihagyás",
     "back": "Vissza",
     "next": "Tovább",
@@ -5244,7 +5247,8 @@
     },
     "errors": {
       "saveFailed": "Ezt a lépést nem sikerült menteni. Ellenőrizze a kapcsolatot, és próbálja újra, vagy hagyja ki a beállítást, és módosítsa később a Beállításokban.",
-      "stepLoadFailed": "Ezt a lépést nem sikerült betölteni. Nyomja meg az Újra gombot, vagy töltse újra az oldalt."
+      "stepLoadFailed": "Ezt a lépést nem sikerült betölteni. Nyomja meg az Újra gombot, vagy töltse újra az oldalt.",
+      "stepLoadFailedReload": "Ezt a lépést továbbra sem sikerült betölteni. Töltse újra az oldalt az újrapróbálkozáshoz; a korábbi lépésekben mentett választások megmaradnak."
     },
     "reasons": {
       "completeStep": "A folytatáshoz fejezze be ezt a lépést."

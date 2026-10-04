@@ -298,6 +298,47 @@ describe('WizardDialog', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('');
   });
 
+  it('offers Reload page instead of Retry when the retried chunk fails again', async () => {
+    renderWizard(componentSteps(3));
+    loaders[1] = () => Promise.reject(new Error('chunk failed'));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    const retry = await screen.findByRole('button', { name: /common\.retry/ });
+
+    await user.click(retry);
+
+    const reload = await screen.findByRole('button', { name: 'wizard.actions.reloadPage' });
+    expect(screen.queryByRole('button', { name: /common\.retry/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.stepLoadFailedReload');
+    expect(isBlocked(primaryButton())).toBe(true);
+    expect(describedText(primaryButton())).toBe('wizard.errors.stepLoadFailedReload');
+    await waitFor(() => expect(reload).toHaveFocus());
+
+    await user.click(reload);
+
+    expect(window.location.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers Retry again on the next session after Reload page was shown', async () => {
+    renderWizard(componentSteps(3));
+    loaders[1] = () => Promise.reject(new Error('chunk failed'));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await user.click(await screen.findByRole('button', { name: /common\.retry/ }));
+    await screen.findByRole('button', { name: 'wizard.actions.reloadPage' });
+
+    wizardState.skip();
+    wizardState.launch('onboarding', { currentVersion: 'v1' });
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+
+    await screen.findByRole('button', { name: /common\.retry/ });
+    expect(
+      screen.queryByRole('button', { name: 'wizard.actions.reloadPage' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.stepLoadFailed');
+  });
+
   it('Retry keeps keyboard focus inside the dialog', async () => {
     renderWizard(componentSteps(3));
     loaders[1] = () => Promise.reject(new Error('chunk failed'));

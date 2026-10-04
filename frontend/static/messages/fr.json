@@ -5232,6 +5232,9 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Recharger la page"
+    },
     "skip": "Passer",
     "back": "Retour",
     "next": "Suivant",
@@ -5244,7 +5247,8 @@
     },
     "errors": {
       "saveFailed": "Impossible d'enregistrer cette étape. Vérifiez la connexion et réessayez, ou passez la configuration et modifiez cela plus tard dans les Paramètres.",
-      "stepLoadFailed": "Impossible de charger cette étape. Appuyez sur Réessayer ou rechargez la page."
+      "stepLoadFailed": "Impossible de charger cette étape. Appuyez sur Réessayer ou rechargez la page.",
+      "stepLoadFailedReload": "Cette étape ne peut toujours pas être chargée. Rechargez la page pour réessayer ; les choix enregistrés aux étapes précédentes sont conservés."
     },
     "reasons": {
       "completeStep": "Terminez cette étape pour continuer."

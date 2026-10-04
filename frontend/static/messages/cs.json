@@ -5232,6 +5232,9 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Obnovit stránku"
+    },
     "skip": "Přeskočit",
     "back": "Zpět",
     "next": "Další",
@@ -5244,7 +5247,8 @@
     },
     "errors": {
       "saveFailed": "Tento krok se nepodařilo uložit. Zkontrolujte připojení a zkuste to znovu, nebo přeskočte nastavení a změňte to později v Nastavení.",
-      "stepLoadFailed": "Tento krok se nepodařilo načíst. Stiskněte Zkusit znovu, nebo obnovte stránku."
+      "stepLoadFailed": "Tento krok se nepodařilo načíst. Stiskněte Zkusit znovu, nebo obnovte stránku.",
+      "stepLoadFailedReload": "Tento krok se stále nepodařilo načíst. Obnovte stránku a zkuste to znovu; volby uložené v předchozích krocích zůstanou zachovány."
     },
     "reasons": {
       "completeStep": "Pro pokračování dokončete tento krok."

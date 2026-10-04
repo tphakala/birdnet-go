@@ -5232,6 +5232,9 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Reload page"
+    },
     "skip": "Skip",
     "back": "Back",
     "next": "Next",
@@ -5244,7 +5247,8 @@
     },
     "errors": {
       "saveFailed": "Could not save this step. Check the connection and try again, or skip setup and change this later in Settings.",
-      "stepLoadFailed": "This step could not be loaded. Press Retry, or reload the page."
+      "stepLoadFailed": "This step could not be loaded. Press Retry, or reload the page.",
+      "stepLoadFailedReload": "This step still could not be loaded. Reload the page to try again; choices saved on earlier steps are kept."
     },
     "reasons": {
       "completeStep": "Complete this step to continue."
