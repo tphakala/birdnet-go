@@ -5243,7 +5243,7 @@
       "loadingStep": "Chargement de l'étape..."
     },
     "errors": {
-      "saveFailed": "Impossible d'enregistrer cette étape. Vérifiez la connexion et appuyez de nouveau sur Suivant, ou passez la configuration et modifiez cela plus tard dans les Paramètres.",
+      "saveFailed": "Impossible d'enregistrer cette étape. Vérifiez la connexion et réessayez, ou passez la configuration et modifiez cela plus tard dans les Paramètres.",
       "stepLoadFailed": "Impossible de charger cette étape. Appuyez sur Réessayer ou rechargez la page."
     },
     "reasons": {

@@ -5243,7 +5243,7 @@
       "loadingStep": "Läser in steg..."
     },
     "errors": {
-      "saveFailed": "Det här steget kunde inte sparas. Kontrollera anslutningen och tryck på Nästa igen, eller hoppa över konfigurationen och ändra det senare i Inställningar.",
+      "saveFailed": "Det här steget kunde inte sparas. Kontrollera anslutningen och försök igen, eller hoppa över konfigurationen och ändra det senare i Inställningar.",
       "stepLoadFailed": "Det här steget kunde inte läsas in. Tryck på Försök igen eller ladda om sidan."
     },
     "reasons": {

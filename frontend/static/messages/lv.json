@@ -5243,7 +5243,7 @@
       "loadingStep": "Ielādē soli..."
     },
     "errors": {
-      "saveFailed": "Šo soli neizdevās saglabāt. Pārbaudiet savienojumu un vēlreiz nospiediet Tālāk vai izlaidiet iestatīšanu un mainiet to vēlāk Iestatījumos.",
+      "saveFailed": "Šo soli neizdevās saglabāt. Pārbaudiet savienojumu un mēģiniet vēlreiz vai izlaidiet iestatīšanu un mainiet to vēlāk Iestatījumos.",
       "stepLoadFailed": "Šo soli neizdevās ielādēt. Nospiediet Mēģināt vēlreiz vai pārlādējiet lapu."
     },
     "reasons": {

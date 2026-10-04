@@ -5243,7 +5243,7 @@
       "loadingStep": "Loading step..."
     },
     "errors": {
-      "saveFailed": "Could not save this step. Check the connection and press Next again, or skip setup and change this later in Settings.",
+      "saveFailed": "Could not save this step. Check the connection and try again, or skip setup and change this later in Settings.",
       "stepLoadFailed": "This step could not be loaded. Press Retry, or reload the page."
     },
     "reasons": {

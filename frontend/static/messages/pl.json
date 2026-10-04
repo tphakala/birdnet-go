@@ -5243,7 +5243,7 @@
       "loadingStep": "Ładowanie kroku..."
     },
     "errors": {
-      "saveFailed": "Nie udało się zapisać tego kroku. Sprawdź połączenie i naciśnij Dalej ponownie albo pomiń konfigurację i zmień to później w Ustawieniach.",
+      "saveFailed": "Nie udało się zapisać tego kroku. Sprawdź połączenie i spróbuj ponownie albo pomiń konfigurację i zmień to później w Ustawieniach.",
       "stepLoadFailed": "Nie udało się załadować tego kroku. Naciśnij Ponów próbę lub odśwież stronę."
     },
     "reasons": {

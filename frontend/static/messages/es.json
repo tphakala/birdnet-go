@@ -5243,15 +5243,15 @@
       "loadingStep": "Cargando paso..."
     },
     "errors": {
-      "saveFailed": "No se pudo guardar este paso. Compruebe la conexión y pulse Siguiente de nuevo, u omita la configuración y cámbielo más tarde en Ajustes.",
-      "stepLoadFailed": "No se pudo cargar este paso. Pulse Reintentar o recargue la página."
+      "saveFailed": "No se pudo guardar este paso. Comprueba la conexión e inténtalo de nuevo, u omite la configuración y cámbialo más tarde en Ajustes.",
+      "stepLoadFailed": "No se pudo cargar este paso. Pulsa Reintentar o recarga la página."
     },
     "reasons": {
-      "completeStep": "Complete este paso para continuar."
+      "completeStep": "Completa este paso para continuar."
     },
     "leaveConfirm": {
       "title": "¿Salir de la configuración?",
-      "message": "La configuración no se volverá a abrir. Las opciones guardadas en pasos anteriores se conservan; los cambios de este paso no se guardan. Puede cambiarlo todo más tarde en Ajustes.",
+      "message": "La configuración no se volverá a abrir. Las opciones guardadas en pasos anteriores se conservan; los cambios de este paso no se guardan. Puedes cambiarlo todo más tarde en Ajustes.",
       "stay": "Seguir configurando",
       "leave": "Salir de la configuración"
     },

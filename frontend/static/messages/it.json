@@ -5243,7 +5243,7 @@
       "loadingStep": "Caricamento del passaggio..."
     },
     "errors": {
-      "saveFailed": "Impossibile salvare questo passaggio. Controlla la connessione e premi di nuovo Avanti, oppure salta la configurazione e modificalo più tardi nelle Impostazioni.",
+      "saveFailed": "Impossibile salvare questo passaggio. Controlla la connessione e riprova, oppure salta la configurazione e modificalo più tardi nelle Impostazioni.",
       "stepLoadFailed": "Impossibile caricare questo passaggio. Premi Riprova o ricarica la pagina."
     },
     "reasons": {

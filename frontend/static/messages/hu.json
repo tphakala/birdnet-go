@@ -5243,7 +5243,7 @@
       "loadingStep": "Lépés betöltése..."
     },
     "errors": {
-      "saveFailed": "Ezt a lépést nem sikerült menteni. Ellenőrizze a kapcsolatot, és nyomja meg újra a Tovább gombot, vagy hagyja ki a beállítást, és módosítsa később a Beállításokban.",
+      "saveFailed": "Ezt a lépést nem sikerült menteni. Ellenőrizze a kapcsolatot, és próbálja újra, vagy hagyja ki a beállítást, és módosítsa később a Beállításokban.",
       "stepLoadFailed": "Ezt a lépést nem sikerült betölteni. Nyomja meg az Újra gombot, vagy töltse újra az oldalt."
     },
     "reasons": {

@@ -5243,7 +5243,7 @@
       "loadingStep": "A carregar passo..."
     },
     "errors": {
-      "saveFailed": "Não foi possível guardar este passo. Verifique a ligação e prima Seguinte novamente, ou ignore a configuração e altere isto mais tarde nas Definições.",
+      "saveFailed": "Não foi possível guardar este passo. Verifique a ligação e tente novamente, ou ignore a configuração e altere isto mais tarde nas Definições.",
       "stepLoadFailed": "Não foi possível carregar este passo. Prima Tentar novamente ou recarregue a página."
     },
     "reasons": {

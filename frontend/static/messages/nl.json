@@ -5243,7 +5243,7 @@
       "loadingStep": "Stap laden..."
     },
     "errors": {
-      "saveFailed": "Deze stap kon niet worden opgeslagen. Controleer de verbinding en druk opnieuw op Volgende, of sla de installatie over en wijzig dit later in Instellingen.",
+      "saveFailed": "Deze stap kon niet worden opgeslagen. Controleer de verbinding en probeer het opnieuw, of sla de installatie over en wijzig dit later in Instellingen.",
       "stepLoadFailed": "Deze stap kon niet worden geladen. Druk op Opnieuw proberen of laad de pagina opnieuw."
     },
     "reasons": {

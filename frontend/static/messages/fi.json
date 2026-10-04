@@ -5243,7 +5243,7 @@
       "loadingStep": "Ladataan vaihetta..."
     },
     "errors": {
-      "saveFailed": "Tämän vaiheen tallennus epäonnistui. Tarkista yhteys ja paina Seuraava uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
+      "saveFailed": "Tämän vaiheen tallennus epäonnistui. Tarkista yhteys ja yritä uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
       "stepLoadFailed": "Tämän vaiheen lataus epäonnistui. Paina Yritä uudelleen tai lataa sivu uudelleen."
     },
     "reasons": {

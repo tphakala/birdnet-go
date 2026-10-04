@@ -5243,7 +5243,7 @@
       "loadingStep": "Načítání kroku..."
     },
     "errors": {
-      "saveFailed": "Tento krok se nepodařilo uložit. Zkontrolujte připojení a znovu stiskněte Další, nebo přeskočte nastavení a změňte to později v Nastavení.",
+      "saveFailed": "Tento krok se nepodařilo uložit. Zkontrolujte připojení a zkuste to znovu, nebo přeskočte nastavení a změňte to později v Nastavení.",
       "stepLoadFailed": "Tento krok se nepodařilo načíst. Stiskněte Zkusit znovu, nebo obnovte stránku."
     },
     "reasons": {

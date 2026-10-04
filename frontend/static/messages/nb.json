@@ -5243,7 +5243,7 @@
       "loadingStep": "Laster trinn..."
     },
     "errors": {
-      "saveFailed": "Dette trinnet kunne ikke lagres. Sjekk tilkoblingen og trykk på Neste igjen, eller hopp over oppsettet og endre det senere i Innstillinger.",
+      "saveFailed": "Dette trinnet kunne ikke lagres. Sjekk tilkoblingen og prøv igjen, eller hopp over oppsettet og endre det senere i Innstillinger.",
       "stepLoadFailed": "Dette trinnet kunne ikke lastes. Trykk på Prøv igjen, eller last siden på nytt."
     },
     "reasons": {

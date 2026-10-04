@@ -5243,7 +5243,7 @@
       "loadingStep": "Indlæser trin..."
     },
     "errors": {
-      "saveFailed": "Dette trin kunne ikke gemmes. Kontroller forbindelsen og tryk på Næste igen, eller spring opsætningen over og ændr det senere i Indstillinger.",
+      "saveFailed": "Dette trin kunne ikke gemmes. Kontroller forbindelsen og prøv igen, eller spring opsætningen over og ændr det senere i Indstillinger.",
       "stepLoadFailed": "Dette trin kunne ikke indlæses. Tryk på Prøv igen, eller genindlæs siden."
     },
     "reasons": {
