@@ -428,7 +428,7 @@ type Storage struct {
 // NewStorage accepts injected logger
 func NewStorage(cfg *Config, log logger.Logger) (*Storage, error) {
     if log == nil {
-        return nil, errors.New("logger is required")
+        return nil, errors.NewStd("logger is required")
     }
 
     log.Info("Initializing storage",
@@ -1118,7 +1118,7 @@ func (h *Handler) Process(ctx context.Context, data *Data) error {
 ```go
 func NewHandler(logger logger.Logger) (*Handler, error) {
     if logger == nil {
-        return nil, errors.New("logger is required")
+        return nil, errors.NewStd("logger is required")
     }
     return &Handler{logger: logger}, nil
 }

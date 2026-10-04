@@ -778,7 +778,7 @@ When working with the API code, be mindful of these important considerations:
 
   // CORRECT
   if strings.Contains(userInput, "..") || strings.Contains(userInput, "/") {
-      return errors.New("invalid filename")
+      return errors.NewStd("invalid filename")
   }
   file := filepath.Join("/some/dir", filepath.Base(userInput))
   ```

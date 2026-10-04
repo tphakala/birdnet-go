@@ -147,7 +147,7 @@ The notification system integrates seamlessly with the enhanced error handler:
 
 ```go
 // In error handling code
-err := errors.New("database connection failed").
+err := errors.Newf("database connection failed").
     Component("database").
     Category(errors.CategoryDatabase).
     Build()
@@ -228,7 +228,7 @@ When errors are created through the enhanced error system, they automatically fl
 
 ```go
 // This error...
-err := errors.New("API rate limit exceeded").
+err := errors.Newf("API rate limit exceeded").
     Component("birdweather").
     Category(errors.CategoryRateLimit).
     Build()
@@ -309,21 +309,21 @@ notification:
 
 ### Available Template Variables
 
-| Variable                  | Description                | Example                                           |
-| ------------------------- | -------------------------- | ------------------------------------------------- |
-| `{{.CommonName}}`         | Bird common name           | "American Robin"                                  |
-| `{{.ScientificName}}`     | Scientific name            | "Turdus migratorius"                              |
-| `{{.Confidence}}`         | Confidence as float (0-1)  | 0.92                                              |
-| `{{.ConfidencePercent}}`  | Confidence as percentage   | "92"                                              |
-| `{{.DetectionTime}}`      | Time of detection          | "15:04:05" or "3:04:05 PM"                        |
-| `{{.DetectionDate}}`      | Date of detection          | "2025-10-05"                                      |
-| `{{.Latitude}}`           | GPS latitude               | 45.123456                                         |
-| `{{.Longitude}}`          | GPS longitude              | -122.987654                                       |
-| `{{.Location}}`           | Formatted coordinates      | "45.123456, -122.987654"                          |
-| `{{.DetectionURL}}`       | Link to detection details  | `http://host:port/ui/detections/123`              |
-| `{{.ImageURL}}`           | Link to species image      | `http://host:port/api/v2/media/species-image?...` |
-| `{{.DaysSinceFirstSeen}}` | Days since first detection | 0 for new species                                 |
-| `{{.DaysSinceLastSeen}}`  | Days since previous detection before a return | 0 for first-ever/same-day       |
+| Variable                  | Description                                   | Example                                           |
+| ------------------------- | --------------------------------------------- | ------------------------------------------------- |
+| `{{.CommonName}}`         | Bird common name                              | "American Robin"                                  |
+| `{{.ScientificName}}`     | Scientific name                               | "Turdus migratorius"                              |
+| `{{.Confidence}}`         | Confidence as float (0-1)                     | 0.92                                              |
+| `{{.ConfidencePercent}}`  | Confidence as percentage                      | "92"                                              |
+| `{{.DetectionTime}}`      | Time of detection                             | "15:04:05" or "3:04:05 PM"                        |
+| `{{.DetectionDate}}`      | Date of detection                             | "2025-10-05"                                      |
+| `{{.Latitude}}`           | GPS latitude                                  | 45.123456                                         |
+| `{{.Longitude}}`          | GPS longitude                                 | -122.987654                                       |
+| `{{.Location}}`           | Formatted coordinates                         | "45.123456, -122.987654"                          |
+| `{{.DetectionURL}}`       | Link to detection details                     | `http://host:port/ui/detections/123`              |
+| `{{.ImageURL}}`           | Link to species image                         | `http://host:port/api/v2/media/species-image?...` |
+| `{{.DaysSinceFirstSeen}}` | Days since first detection                    | 0 for new species                                 |
+| `{{.DaysSinceLastSeen}}`  | Days since previous detection before a return | 0 for first-ever/same-day                         |
 
 ### Template Examples
 

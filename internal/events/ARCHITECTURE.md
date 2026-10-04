@@ -233,7 +233,7 @@ sequenceDiagram
     participant Telemetry
     participant Notification
 
-    Code->>Error: errors.New("API failed")
+    Code->>Error: errors.Newf("API failed")
     Error->>Error: .Component("api")
     Error->>Error: .Category(Network)
     Error->>Error: .Build()

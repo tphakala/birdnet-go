@@ -169,7 +169,7 @@ Events are typically published through the error package integration:
 
 ```go
 // The error package handles this internally
-err := errors.New("something went wrong").
+err := errors.Newf("something went wrong").
     Component("database").
     Category(errors.CategoryDatabase).
     Build()
