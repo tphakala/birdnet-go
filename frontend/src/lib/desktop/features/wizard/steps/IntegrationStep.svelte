@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import { settingsActions, settingsStore } from '$lib/stores/settings';
@@ -83,11 +83,20 @@
   // Next, Back and Done await the commit; it never runs on Skip or Leave setup.
   onMount(() => registerLeaveHandler?.(commit));
 
+  // Set when the step unmounts, so a commit still in flight sends no further sections.
+  let left = false;
+  onDestroy(() => {
+    left = true;
+  });
+
   // Save the step's edits when the wizard leaves it with Next, Back or Done.
-  // Each changed section is its own request, in SECTIONS order.
+  // Each changed section is its own request, in SECTIONS order. If Skip closes
+  // the wizard while one section is saving, that request completes but the
+  // remaining sections are not sent.
   async function commit(): Promise<void> {
     const next = currentPayloads();
     for (const section of SECTIONS) {
+      if (left) return;
       // eslint-disable-next-line security/detect-object-injection -- section is a member of SECTIONS
       const body = next[section];
       const json = JSON.stringify(body);

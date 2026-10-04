@@ -1372,7 +1372,8 @@ function applySectionPatch(
  * a save. Refreshes restart-required status without awaiting it: the
  * RestartBanner reacts to the store whenever it lands, and a failure here must
  * not mask or delay a successful save (the banner may show stale state until
- * the next page load). Applies the UI locale only when the saved locale differs
+ * the next page load). Applies the UI locale, logging rather than throwing on
+ * failure for the same reason, only when the saved locale differs
  * from the one previously saved, so a locale chosen via the sidebar
  * LanguageSelector (which updates localStorage but not the backend) is not
  * clobbered by whatever stale value the backend still holds.
@@ -1388,10 +1389,15 @@ async function afterSettingsPersisted(
     });
 
   if (newLocale && newLocale !== origLocale) {
-    // Dynamically import i18n functions to avoid circular dependencies
-    const { isValidLocale, setLocale } = await import('$lib/i18n/index.js');
-    if (isValidLocale(newLocale)) {
-      setLocale(newLocale);
+    try {
+      // Dynamically import i18n functions to avoid circular dependencies
+      const { isValidLocale, setLocale } = await import('$lib/i18n/index.js');
+      if (isValidLocale(newLocale)) {
+        setLocale(newLocale);
+      }
+    } catch (e) {
+      // The save already succeeded; a failed locale switch must not report it as failed.
+      logger.error('Failed to apply the UI locale after settings save:', e);
     }
   }
 }

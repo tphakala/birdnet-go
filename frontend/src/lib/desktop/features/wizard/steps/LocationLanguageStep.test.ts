@@ -120,7 +120,7 @@ describe('LocationLanguageStep - UI locale persistence in the leave handler', ()
   });
 
   /** The saveSection calls so far as [section, payload] pairs. */
-  const sectionCalls = () => vi.mocked(settingsActions.saveSection).mock.calls as unknown[][];
+  const sectionCalls = () => vi.mocked(settingsActions.saveSection).mock.calls;
 
   /** Types a new latitude into the first number input (marks the step dirty). */
   async function editLatitude(container: HTMLElement, value: string) {
@@ -298,6 +298,30 @@ describe('LocationLanguageStep - UI locale persistence in the leave handler', ()
     await flushAsync();
 
     expect(currentLocale).toBe('hu');
+  });
+
+  it('sends no dashboard save once the step unmounted during the birdnet save, and restores the UI language', async () => {
+    let resolveSave: () => void = () => {};
+    vi.mocked(settingsActions.saveSection).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          resolveSave = resolve;
+        })
+    );
+    const { leave, unmount, container } = renderStep(LocationLanguageStep);
+    await flushAsync();
+    await editLatitude(container, '41.5');
+    setLocale('hu');
+
+    const pending = leave();
+    await flushAsync();
+    unmount();
+    resolveSave();
+    await pending;
+    await flushAsync();
+
+    expect(sectionCalls().map(([section]) => section)).toEqual(['birdnet']);
+    expect(currentLocale).toBe('en');
   });
 
   it('restores the UI language when the step unmounts while its save then fails', async () => {

@@ -64,6 +64,29 @@ describe('IntegrationStep - leave handler', () => {
     ]);
   });
 
+  it('sends no further sections once the step unmounted during a save', async () => {
+    let resolveSave: () => void = () => {};
+    vi.mocked(settingsActions.saveSection).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          resolveSave = resolve;
+        })
+    );
+    const { leave, unmount } = renderStep(IntegrationStep);
+    await flushAsync();
+    await changeAll();
+
+    const pending = leave();
+    await flushAsync();
+    unmount();
+    resolveSave();
+    await pending;
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls).toEqual([
+      ['birdweather', { enabled: true, id: 'abc123' }],
+    ]);
+  });
+
   it('a failed birdweather save sends nothing else', async () => {
     vi.mocked(settingsActions.saveSection).mockRejectedValueOnce(new Error('bad token'));
     const { leave } = renderStep(IntegrationStep);

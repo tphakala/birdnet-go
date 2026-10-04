@@ -69,7 +69,7 @@ function lookup(root: unknown, path: string[]): unknown {
   return current;
 }
 
-const patchCalls = () => vi.mocked(settingsAPI.patchSection).mock.calls as unknown[][];
+const patchCalls = () => vi.mocked(settingsAPI.patchSection).mock.calls;
 
 describe('wizard steps save with section PATCH requests', () => {
   beforeEach(async () => {

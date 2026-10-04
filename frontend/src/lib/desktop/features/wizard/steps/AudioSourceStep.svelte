@@ -17,6 +17,8 @@
 
   // Name of the stream the wizard creates for an RTSP source
   const WIZARD_STREAM_NAME = 'Stream 1';
+  // Transport for that stream
+  const WIZARD_STREAM_TRANSPORT = 'tcp';
 
   type SourceType = 'soundcard' | 'rtsp';
 
@@ -106,8 +108,9 @@
     if (sourceType === 'soundcard' && selectedDevice) {
       await settingsActions.saveSection('audio', { source: selectedDevice });
     } else if (sourceType === 'rtsp' && rtspUrl.trim()) {
-      // The PATCH replaces the streams array without frontend coercion, so every
-      // field the stream needs, including enabled, is sent explicitly.
+      // The server replaces the streams array with exactly what is sent and does
+      // not fill defaults, so every field the stream needs, including enabled,
+      // is sent explicitly.
       await settingsActions.saveSection('rtsp', {
         streams: [
           {
@@ -115,7 +118,7 @@
             url: rtspUrl.trim(),
             enabled: true,
             type: StreamTypes.RTSP,
-            transport: 'tcp',
+            transport: WIZARD_STREAM_TRANSPORT,
           },
         ],
       });

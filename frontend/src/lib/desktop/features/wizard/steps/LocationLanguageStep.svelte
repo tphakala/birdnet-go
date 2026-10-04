@@ -120,17 +120,19 @@
   // The UI language applies, and is cached in localStorage, as soon as it is
   // picked. When the wizard leaves this step without saving it (Skip, Leave
   // setup, Back on an invalid step), restore the language from the last save.
-  // If a save is still in flight, wait for it: a successful save keeps the new
-  // language so the UI matches the backend, a failed one restores the old one.
+  // If a save is still in flight, wait for it to settle first: a saved language
+  // stays so the UI matches the backend, otherwise the old one comes back.
   let uiLocaleAtLastSave = getLocale();
   let pendingSave: Promise<void> | null = null;
+  // Set when the step unmounts, so a commit still in flight sends no further parts.
+  let left = false;
   onDestroy(() => {
-    const previous = uiLocaleAtLastSave;
+    left = true;
     const restore = () => {
-      if (getLocale() !== previous) setLocale(previous);
+      if (getLocale() !== uiLocaleAtLastSave) setLocale(uiLocaleAtLastSave);
     };
     if (pendingSave) {
-      pendingSave.then(() => {}, restore);
+      pendingSave.then(restore, restore);
     } else {
       restore();
     }
@@ -140,7 +142,9 @@
   onMount(() => registerLeaveHandler?.(commit));
 
   // Save the step's edits when the wizard leaves it with Next, Back or Done.
-  // Only runs if the user made changes (or the UI locale needs healing).
+  // Only runs if the user made changes (or the UI locale needs healing). If Skip
+  // closes the wizard while one part is saving, that request completes but the
+  // next part is not sent.
   async function commit(): Promise<void> {
     const uiLocaleChanged = getLocale() !== initialUILocale;
     if (!dirty && !uiLocaleChanged) return;
@@ -160,7 +164,7 @@
         dirty = false;
       }
 
-      if (uiLocaleChanged) {
+      if (uiLocaleChanged && !left) {
         const savedLocale = getLocale();
         await settingsActions.saveSection('dashboard', { locale: savedLocale });
         initialUILocale = savedLocale;

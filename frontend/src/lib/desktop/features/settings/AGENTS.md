@@ -71,7 +71,11 @@ edit to a patched key is kept and still counts as unsaved. Objects merge key by
 key and arrays replace, as on the server, so `partial` carries only the keys it
 changes, with each nested value typed as a complete object and each array sent
 whole; a failed request leaves the store untouched. It shows no toast and does
-not touch `isSaving`, so the caller owns busy and error UI.
+not touch `isSaving`, so the caller owns busy and error UI. Like `saveSettings`
+it refreshes the restart status and applies a changed dashboard locale to the
+UI. `section` is the lowercase backend section name from
+`SettingsSectionPayloads` (for example `privacyfilter`, `rtsp`), not a store
+key such as `realtime` or `privacyFilter`.
 
 ## Form Controls
 
