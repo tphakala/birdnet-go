@@ -121,9 +121,20 @@
   // The UI language applies, and is cached in localStorage, as soon as it is
   // picked. When the wizard leaves this step without saving it (Skip, Leave
   // setup, Back on an invalid step), restore the language from the last save.
+  // If a save is still in flight, wait for it: a successful save keeps the new
+  // language so the UI matches the backend, a failed one restores the old one.
   let uiLocaleAtLastSave = getLocale();
+  let pendingSave: Promise<void> | null = null;
   onDestroy(() => {
-    if (getLocale() !== uiLocaleAtLastSave) setLocale(uiLocaleAtLastSave);
+    const previous = uiLocaleAtLastSave;
+    const restore = () => {
+      if (getLocale() !== previous) setLocale(previous);
+    };
+    if (pendingSave) {
+      pendingSave.then(() => {}, restore);
+    } else {
+      restore();
+    }
   });
 
   const saveStep = useStepSave(() => registerLeaveHandler, commit);
@@ -159,7 +170,13 @@
       }
     }
 
-    await saveStep();
+    const save = saveStep();
+    pendingSave = save;
+    try {
+      await save;
+    } finally {
+      pendingSave = null;
+    }
 
     dirty = false;
     initialUILocale = getLocale();

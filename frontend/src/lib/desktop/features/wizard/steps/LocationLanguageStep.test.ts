@@ -277,4 +277,49 @@ describe('LocationLanguageStep - UI locale persistence in the leave handler', ()
 
     expect(currentLocale).toBe('hu');
   });
+
+  it('keeps the UI language when the step unmounts while its save then succeeds', async () => {
+    let resolveSave: () => void = () => {};
+    vi.mocked(settingsActions.saveSettings).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          resolveSave = resolve;
+        })
+    );
+    const { leave, unmount } = renderStep(LocationLanguageStep);
+    await flushAsync();
+
+    setLocale('hu');
+    const pending = leave();
+    await flushAsync();
+    unmount();
+    expect(currentLocale).toBe('hu');
+    resolveSave();
+    await pending;
+    await flushAsync();
+
+    expect(currentLocale).toBe('hu');
+  });
+
+  it('restores the UI language when the step unmounts while its save then fails', async () => {
+    let rejectSave: (err: Error) => void = () => {};
+    vi.mocked(settingsActions.saveSettings).mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectSave = reject;
+        })
+    );
+    const { leave, unmount } = renderStep(LocationLanguageStep);
+    await flushAsync();
+
+    setLocale('hu');
+    const pending = leave();
+    await flushAsync();
+    unmount();
+    rejectSave(new Error('save failed'));
+    await expect(pending).rejects.toThrow('save failed');
+    await flushAsync();
+
+    expect(currentLocale).toBe('en');
+  });
 });
