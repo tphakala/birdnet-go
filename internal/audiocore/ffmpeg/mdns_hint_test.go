@@ -58,6 +58,9 @@ func TestMDNSTroubleshooting_ByEnvironment(t *testing.T) {
 			joined := strings.Join(mdnsTroubleshooting("cam.local", tt.env), "\n")
 			assert.Contains(t, joined, tt.want)
 			assert.Equal(t, tt.name == "container without socket", strings.Contains(joined, mount), "mount text only without socket")
+			// Under a Podman quadlet only a unit restart reruns the pre-start check
+			// that re-links the Avahi directory; a container restart does not.
+			assert.Equal(t, tt.name == "container without socket", strings.Contains(joined, "systemctl --user restart birdnet-go"), "unit restart only without socket")
 		})
 	}
 }

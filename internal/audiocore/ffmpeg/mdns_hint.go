@@ -81,8 +81,8 @@ func mdnsTroubleshooting(host string, env mdnsEnv) []string {
 	case env.inContainer && !env.avahiSocketPresent:
 		return []string{
 			fmt.Sprintf("'%s' is a .local (mDNS) name and the container cannot reach the host's Avahi daemon", host),
-			"Mount the host's Avahi directory read-only: -v /run/avahi-daemon:/run/avahi-daemon:ro (never :z or :Z)",
-			"If the mount is already configured, restart the container: the host directory may have been recreated",
+			"Mount the host's Avahi directory read-only, unless the deployment already does (the Podman quadlets do): -v /run/avahi-daemon:/run/avahi-daemon:ro (never :z or :Z)",
+			"If the mount is already configured, restart the container: the host directory may have been recreated. Under a Podman quadlet, restart its systemd unit instead (for the unit podman-install.sh installs: systemctl --user restart birdnet-go), because a container restart does not rerun the check that links the Avahi directory",
 			"Without avahi-daemon on the host, use the device's IP address or a router DNS name instead",
 			mdnsDocsHint,
 		}
