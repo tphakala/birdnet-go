@@ -173,6 +173,10 @@ func TestWizardSectionPatchesLeaveOtherSectionsByteIdentical(t *testing.T) {
 			patchSection(t, c.Echo, c, tc.section, tc.body)
 
 			got := c.Settings.Load()
+			// The YAML comparison is the real guard: the fields below have no
+			// omitempty tag, so a changed zero value already shows up in it. The
+			// direct checks only give a clearer failure for the values a
+			// full-form save is known to rewrite.
 			assert.Equal(t, settingsYAML(t, want), settingsYAML(t, got))
 			require.Len(t, got.Realtime.Audio.Equalizer.Filters, 1)
 			assert.InDelta(t, 0.0, got.Realtime.Audio.Equalizer.Filters[0].Width, 0)

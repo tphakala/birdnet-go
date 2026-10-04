@@ -4,7 +4,7 @@ import { renderTyped, screen, waitFor } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import type { WizardStep, WizardStepProps } from './types';
-import { deferred } from './wizardTestUtils';
+import { deferred } from '../../../../test/settings-helpers';
 
 vi.mock('$lib/utils/api', () => ({
   api: {

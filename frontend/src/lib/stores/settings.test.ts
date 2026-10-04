@@ -4,6 +4,7 @@ import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS 
 import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+import { deferred, lookup, serverSettings } from '../../test/settings-helpers';
 
 // Mock the settings API
 vi.mock('$lib/utils/settingsApi.js', () => ({
@@ -964,75 +965,27 @@ describe('Settings Store - saveSettings refuses before settings load', () => {
 
     expect(toastActions.error).not.toHaveBeenCalled();
   });
+
+  it('refreshes the restart status after a successful save and not after a failed one', async () => {
+    const restart = await import('$lib/stores/restart.svelte');
+    const refresh = vi.spyOn(restart, 'fetchRestartStatus').mockResolvedValue(undefined);
+    try {
+      seed(true);
+      vi.mocked(settingsAPI.save).mockRejectedValueOnce(new Error('boom'));
+      await expect(settingsActions.saveSettings({ notify: false })).rejects.toThrow('boom');
+
+      await settingsActions.saveSettings({ notify: false });
+
+      await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
+      expect(refresh).toHaveBeenCalledTimes(1);
+    } finally {
+      refresh.mockRestore();
+    }
+  });
 });
 
 describe('Settings Store - saveSection', () => {
-  /** A server response with distinct values in every section the wizard patches. */
-  const serverSettings = () =>
-    ({
-      main: { name: 'TestNode' },
-      birdnet: {
-        modelPath: '',
-        labelPath: '',
-        sensitivity: 1.0,
-        threshold: 0.8,
-        overlap: 0.0,
-        locale: 'en',
-        threads: 4,
-        latitude: 0,
-        longitude: 0,
-        locationConfigured: false,
-        rangeFilter: {
-          threshold: 0.03,
-          passUnmappedSpecies: false,
-          speciesCount: null,
-          species: [],
-        },
-      },
-      realtime: {
-        dashboard: { summaryLimit: 100, locale: 'en' },
-        audio: {
-          source: 'old-device',
-          sources: [{ name: 'Card', device: 'hw:0' }],
-          equalizer: {
-            enabled: true,
-            filters: [{ type: 'HighPass', frequency: 200, q: 0.7, passes: 1 }],
-          },
-          export: { enabled: true, type: 'wav' },
-        },
-        rtsp: {
-          streams: [{ name: 'Old', url: 'rtsp://old', enabled: true, type: 'rtsp' }],
-          health: { healthyDataThreshold: 60 },
-          ffmpegParameters: ['-x'],
-        },
-        privacyFilter: { enabled: false, confidence: 0.7, debug: true, vad: { enabled: true } },
-        birdweather: { enabled: false, id: '', threshold: 0.9, debug: true },
-      },
-      sentry: { enabled: false },
-    }) as unknown as SettingsFormData;
-
   type Snapshot = Record<string, unknown>;
-  const lookup = (root: unknown, path: string[]): unknown => {
-    let current: unknown = root;
-    for (const segment of path) {
-      if (current === null || typeof current !== 'object') return undefined;
-      const record = current as Record<string, unknown>;
-      // eslint-disable-next-line security/detect-object-injection -- test helper with fixed paths
-      current = Object.hasOwn(record, segment) ? record[segment] : undefined;
-    }
-    return current;
-  };
-
-  const deferred = <T>() => {
-    let resolve!: (value: T) => void;
-    let reject!: (reason: unknown) => void;
-    const promise = new Promise<T>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-    return { promise, resolve, reject };
-  };
-
   const loadFresh = async () => {
     settingsStore.set({
       formData: { main: { name: '' } } as unknown as SettingsFormData,
