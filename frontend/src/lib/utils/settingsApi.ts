@@ -53,9 +53,9 @@ const SETTINGS_ENDPOINT = '/api/v2/settings';
 
 /**
  * Request bodies for the per-section settings update, keyed by the lowercase
- * backend section name. Partial is shallow on purpose: the backend merges
- * objects key by key but replaces arrays, so a nested value in a payload must
- * be a complete object. Extend this when another caller needs a section; the
+ * backend section name. Partial is shallow, so a nested value is typed as a
+ * complete object; the backend itself merges nested objects key by key and only
+ * replaces arrays. Extend this when another caller needs a section; the
  * backend accepts more sections than are listed here.
  */
 export interface SettingsSectionPayloads {
