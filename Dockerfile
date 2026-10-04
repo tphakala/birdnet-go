@@ -475,7 +475,9 @@ LABEL usage.compose.podman="Use Podman/podman-compose.yml"
 # an invalid value): the original probes, HTTP 8080 then HTTPS 8443 and 443.
 # Custom port (host networking, where the app listens on that port directly):
 # only the app's own ports are probed, HTTP on that port, then HTTPS on
-# BIRDNET_SECURITY_TLSPORT (default 8443). Under host networking another service
+# BIRDNET_SECURITY_TLSPORT (default 8443; when it equals the HTTP port the app
+# moves TLS to 8443, or 8444 if the HTTP port is 8443, as resolveTLSPort in
+# internal/api/config.go does). Under host networking another service
 # on the host could answer on 8080 or 443. Like the app, values are trimmed of
 # leading and trailing whitespace and may carry a leading + (Go parses +18080).
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
@@ -487,7 +489,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
         if [ "$P" = 8080 ]; then \
             ok http://localhost:8080/health || ok https://localhost:8443/health || ok https://localhost:443/health; \
         else \
-            ok "http://localhost:${P}/health" || ok "https://localhost:$(port "${BIRDNET_SECURITY_TLSPORT:-}" 8443)/health"; \
+            T="$(port "${BIRDNET_SECURITY_TLSPORT:-}" 8443)"; \
+            if [ "$T" = "$P" ]; then if [ "$P" = 8443 ]; then T=8444; else T=8443; fi; fi; \
+            ok "http://localhost:${P}/health" || ok "https://localhost:${T}/health"; \
         fi || exit 1
 
 # Container startup execution chain:
