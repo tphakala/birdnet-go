@@ -86,6 +86,7 @@ wait_healthy "$default_cid" "default port"
 expect "unset variable probes 8080" pass "$default_cid"
 expect "invalid value falls back to 8080" pass "$default_cid" -e BIRDNET_WEBSERVER_PORT=abc
 expect "out-of-range value falls back to 8080" pass "$default_cid" -e BIRDNET_WEBSERVER_PORT=70000
+expect "inner space is invalid, falls back to 8080" pass "$default_cid" -e "BIRDNET_WEBSERVER_PORT=18 080"
 expect "custom port is not answered by 8080" fail "$default_cid" -e "BIRDNET_WEBSERVER_PORT=$UNUSED_PORT"
 
 echo "==> Custom port: app on $CUSTOM_PORT via BIRDNET_WEBSERVER_PORT"
