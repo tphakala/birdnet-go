@@ -1059,7 +1059,9 @@ func (c *Handler) UninstallModel(ctx echo.Context) error {
 }
 
 // StreamInstallProgress streams model download progress as Server-Sent Events.
-// The stream closes automatically when the download completes or fails.
+// The stream closes automatically when the download completes or fails. Completion
+// is reported only once the entry's operation has released the manager's operation
+// slot, so a client that starts the next operation on it is not refused with 409.
 func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -1112,6 +1114,12 @@ func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 				// No active download. Check if the model is already installed,
 				// which means the download completed before we connected.
 				if c.ModelManager.IsInstalled(catalogID) {
+					if c.ModelManager.OperationRunningFor(catalogID) {
+						// Installed, but the operation still runs (the post-install
+						// hot-load, or a reinstall not yet registered): wait for it.
+						time.Sleep(apicore.SSEEventLoopSleep)
+						continue
+					}
 					completeState := classifier.DownloadState{
 						CatalogID: catalogID,
 						Status:    classifier.StatusComplete,
@@ -1142,6 +1150,12 @@ func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 
 			// Reset counter when we have valid state.
 			noStateCount = 0
+
+			// Hold back completion until the operation releases its slot (see above).
+			if state.Status == classifier.StatusComplete && c.ModelManager.OperationRunningFor(catalogID) {
+				time.Sleep(apicore.SSEEventLoopSleep)
+				continue
+			}
 
 			// Send current progress.
 			if err := writeSSEEvent(ctx, "progress", state); err != nil {

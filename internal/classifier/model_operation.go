@@ -174,3 +174,12 @@ func (l *OperationLease) Reinstall(ctx context.Context, entry *CatalogEntry, bas
 	}
 	return l.mm.reinstall(ctx, entry, baseURL, progress)
 }
+
+// OperationRunningFor reports whether the operation slot is held by an operation on
+// catalogID. An install records the entry before its hot-load ends, so a progress
+// reader uses this to report completion only once the slot is free again.
+func (mm *ModelManager) OperationRunningFor(catalogID string) bool {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+	return mm.activeOp != nil && mm.activeOp.catalogID == catalogID
+}

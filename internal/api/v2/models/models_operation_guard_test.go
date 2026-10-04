@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +24,9 @@ import (
 
 // guardWait bounds how long a guard test waits for a held download request.
 const guardWait = 10 * time.Second
+
+// streamHoldWait is how long a stream test watches for an early complete event.
+const streamHoldWait = 300 * time.Millisecond
 
 // guardVariantDFT is the DFT variant id of the synthetic primary entry.
 const guardVariantDFT = "fp32-dfttrunc"
@@ -219,4 +223,36 @@ func TestInstallModel_HoldsSlotUntilBackgroundInstallEnds(t *testing.T) {
 	lease, err := mm.BeginOperation(classifier.OperationInstall, apiDepA)
 	require.NoError(t, err, "the slot is released after the background install fails")
 	lease.Release()
+}
+
+// streamProgress runs StreamInstallProgress for id until it returns or ctx ends.
+func streamProgress(t *testing.T, h *Handler, ctx context.Context, id string) string {
+	t.Helper()
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/v2/models/install/"+id+"/progress", http.NoBody)
+	rec := httptest.NewRecorder()
+	ectx := echo.New().NewContext(req, rec)
+	ectx.SetParamNames("id")
+	ectx.SetParamValues(id)
+	require.NoError(t, h.StreamInstallProgress(ectx))
+	return rec.Body.String()
+}
+
+func TestStreamInstallProgress_CompleteWaitsForOperationSlot(t *testing.T) {
+	useCatalog(t, guardCatalog())
+	mm, _ := guardInstalledManager(t)
+	h := dependencyHandler(t, mm)
+	lease, err := mm.BeginOperation(classifier.OperationReinstall, apiDepA)
+	require.NoError(t, err)
+	t.Cleanup(lease.Release)
+
+	// The entry is installed but its operation still runs (the post-install hot-load,
+	// or a reinstall that has not registered its download yet): no complete event.
+	ctx, cancel := context.WithTimeout(t.Context(), streamHoldWait)
+	defer cancel()
+	body := streamProgress(t, h, ctx, apiDepA)
+	assert.NotContains(t, body, string(classifier.StatusComplete), "complete is sent while the operation holds the slot")
+
+	lease.Release()
+	body = streamProgress(t, h, t.Context(), apiDepA)
+	assert.Contains(t, body, string(classifier.StatusComplete), "complete is sent once the slot is released")
 }

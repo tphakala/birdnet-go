@@ -370,3 +370,17 @@ func TestOperationGuard_ScanInstalledNotBlockedBySlot(t *testing.T) {
 	assert.Contains(t, installedSnapshot(h.mm), depIDT, "the scan recorded disk state while the slot was held")
 	requireSlotFree(t, h.newManager(), "a fresh manager starts with a free slot")
 }
+
+func TestOperationGuard_OperationRunningFor(t *testing.T) {
+	t.Parallel()
+	mm := NewModelManager(t.TempDir(), nil, nil)
+	assert.False(t, mm.OperationRunningFor("a"), "a free slot runs nothing")
+
+	lease, err := mm.BeginOperation(OperationInstall, "a")
+	require.NoError(t, err)
+	assert.True(t, mm.OperationRunningFor("a"))
+	assert.False(t, mm.OperationRunningFor("b"), "the slot is held for another entry")
+
+	lease.Release()
+	assert.False(t, mm.OperationRunningFor("a"), "a released slot runs nothing")
+}
