@@ -116,8 +116,8 @@ func TestLoadSeasonCarryoverFromDatabase_PreservesOnEmptyResult(t *testing.T) {
 	t.Parallel()
 
 	ds := &carryoverHistoryDatastore{
-		detectionDates: []datastore.SpeciesDetectionDate{
-			{ScientificName: carryoverResident, Date: "2026-09-21"},
+		firstDetections: []datastore.NewSpeciesData{
+			{ScientificName: carryoverResident, FirstSeenDate: "2026-09-21"},
 		},
 	}
 	tracker := newCarryoverTracker(t, ds)
@@ -129,19 +129,47 @@ func TestLoadSeasonCarryoverFromDatabase_PreservesOnEmptyResult(t *testing.T) {
 
 	// A later sync for the same season boundary returns no rows (e.g. a
 	// transient read); the existing carry-over set must survive it.
-	ds.detectionDates = nil
+	ds.firstDetections = nil
 	require.NoError(t, tracker.loadSeasonCarryoverFromDatabase(t.Context(), now))
 
 	_, stillSeen := tracker.seasonCarryover[carryoverResident]
 	assert.True(t, stillSeen, "an empty re-read for the same season boundary must not wipe existing carry-over data")
 }
 
+func TestLoadSeasonCarryoverFromDatabase_ReplacesOnNewSeasonBoundary(t *testing.T) {
+	t.Parallel()
+
+	ds := &carryoverHistoryDatastore{
+		firstDetections: []datastore.NewSpeciesData{
+			{ScientificName: carryoverResident, FirstSeenDate: "2026-09-21"},
+		},
+	}
+	tracker := newCarryoverTracker(t, ds)
+	require.NoError(t, tracker.loadSeasonCarryoverFromDatabase(t.Context(), carryoverDate(time.September, 29)))
+	require.Contains(t, tracker.seasonCarryover, carryoverResident)
+
+	// Winter begins December 21; the lookback for it holds only the migrant.
+	ds.firstDetections = []datastore.NewSpeciesData{
+		{ScientificName: carryoverMigrant, FirstSeenDate: "2026-12-20"},
+	}
+	require.NoError(t, tracker.loadSeasonCarryoverFromDatabase(t.Context(), carryoverDate(time.December, 28)))
+	assert.Equal(t, "2026-12-14", ds.gotStartDate, "lookback starts one window before winter")
+	assert.Contains(t, tracker.seasonCarryover, carryoverMigrant)
+	assert.NotContains(t, tracker.seasonCarryover, carryoverResident, "a new season boundary replaces the previous set")
+
+	// An empty result for a boundary not yet recorded is a genuine empty set,
+	// not a transient read to preserve over.
+	ds.firstDetections = nil
+	require.NoError(t, tracker.loadSeasonCarryoverFromDatabase(t.Context(), time.Date(carryoverYear+1, time.March, 25, carryoverHour, 0, 0, 0, time.UTC)))
+	assert.Empty(t, tracker.seasonCarryover, "an empty lookback for a new season clears the previous set")
+}
+
 func TestLoadSeasonCarryoverFromDatabase(t *testing.T) {
 	t.Parallel()
 
 	ds := &carryoverHistoryDatastore{
-		detectionDates: []datastore.SpeciesDetectionDate{
-			{ScientificName: carryoverResident, Date: "2026-09-21"},
+		firstDetections: []datastore.NewSpeciesData{
+			{ScientificName: carryoverResident, FirstSeenDate: "2026-09-21"},
 		},
 	}
 	tracker := newCarryoverTracker(t, ds)
@@ -158,14 +186,15 @@ func TestLoadSeasonCarryoverFromDatabase(t *testing.T) {
 	assert.True(t, tracker.GetSpeciesStatus(carryoverMigrant, now).IsNewThisSeason)
 }
 
-// carryoverHistoryDatastore records the period requested for detection dates.
+// carryoverHistoryDatastore records the period requested for first detections.
 type carryoverHistoryDatastore struct {
 	noveltyHistoryDatastore
-	gotStartDate string
-	gotEndDate   string
+	firstDetections []datastore.NewSpeciesData
+	gotStartDate    string
+	gotEndDate      string
 }
 
-func (d *carryoverHistoryDatastore) GetSpeciesDetectionDatesInPeriod(_ context.Context, startDate, endDate string, _, _ int) ([]datastore.SpeciesDetectionDate, error) {
+func (d *carryoverHistoryDatastore) GetSpeciesFirstDetectionInPeriod(_ context.Context, startDate, endDate string, _, _ int) ([]datastore.NewSpeciesData, error) {
 	d.gotStartDate, d.gotEndDate = startDate, endDate
-	return d.detectionDates, nil
+	return d.firstDetections, nil
 }

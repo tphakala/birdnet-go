@@ -525,12 +525,10 @@ func (t *SpeciesTracker) loadSeasonalDataFromDatabase(ctx context.Context, now t
 
 // loadSeasonCarryoverFromDatabase records the species detected within the
 // seasonal window before the current season began, so they are not reported
-// as new this season after a restart.
+// as new this season after a restart. It needs only the set of species, so it
+// queries one row per species rather than one per species per day, which a
+// wide seasonal window on a busy station could truncate at the query limit.
 func (t *SpeciesTracker) loadSeasonCarryoverFromDatabase(ctx context.Context, now time.Time) error {
-	history, ok := t.ds.(speciesDetectionHistoryDatastore)
-	if !ok {
-		return nil
-	}
 	seasonStart, ok := t.seasonStartDate(t.getCurrentSeason(now), now)
 	if !ok {
 		return nil
@@ -538,9 +536,9 @@ func (t *SpeciesTracker) loadSeasonCarryoverFromDatabase(ctx context.Context, no
 
 	startDate := t.seasonCarryoverLookbackStart(seasonStart).Format(time.DateOnly)
 	endDate := seasonStart.AddDate(0, 0, -1).Format(time.DateOnly)
-	detections, err := history.GetSpeciesDetectionDatesInPeriod(ctx, startDate, endDate, defaultDBQueryLimit, 0)
+	detections, err := t.ds.GetSpeciesFirstDetectionInPeriod(ctx, startDate, endDate, defaultDBQueryLimit, 0)
 	if err != nil {
-		return errors.Newf("failed to load season carry-over detection dates from database: %w", err).
+		return errors.Newf("failed to load season carry-over species from database: %w", err).
 			Component("new-species-tracker").
 			Category(errors.CategoryDatabase).
 			Context("operation", "load_season_carryover").
