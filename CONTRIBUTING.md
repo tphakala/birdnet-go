@@ -491,30 +491,11 @@ refactor(analysis): optimize detection pipeline
 
 **PR Title:** `type(scope): Brief description`
 
-**PR Template:**
+**PR Description:** GitHub fills the description from the [PR template](.github/pull_request_template.md) when you open a pull request. Follow it: keep every section, fill each one in, and go through every checkbox. Do not replace it with your own format or delete sections, and do not leave the template's placeholder comments as the only content. If a section does not apply, say so in a sentence (for example "No related issue" under Related issue, with the problem explained in Description).
 
-```markdown
-## Summary
+Pull requests that do not follow the template are sent back to the author before they are reviewed.
 
-Brief description of changes.
-
-## Changes
-
-- Change 1
-- Change 2
-
-## Testing
-
-- [ ] Go tests pass (`task test`)
-- [ ] Frontend tests pass (`task frontend-test`)
-- [ ] Linting passes
-- [ ] Manual testing completed
-- [ ] Preflight quality gate passed (AI-assisted PRs)
-
-## Related Issues
-
-Fixes #123
-```
+If you use an AI tool to write the description, check that it used the template; some tools write their own format by default.
 
 **Review Process:**
 

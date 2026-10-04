@@ -136,8 +136,11 @@ These checks cover only the default build tags and your own OS:
 When creating a pull request, you MUST:
 
 1. Verify the PR addresses exactly ONE feature, fix, or refactor
-2. Include a single `- [x] Preflight passed` checkbox in the description. Do
-   not add a preflight report: no findings, no fix list, no review details
+2. Write the description from `.github/pull_request_template.md`: keep every
+   section, fill each one in, and do not substitute your own format. Add a
+   single `- [x] Preflight passed` checkbox under Checklist. Do not add a
+   preflight report: no findings, no fix list, no review details. Leave the
+   checkboxes that are the human author's own declarations for them to tick
 3. Verify all linters pass (`task lint`, `npm run check:all`)
 4. Verify all tests pass (`task test`, `npm test`)
 5. Confirm the diff contains ONLY changes relevant to the stated goal
