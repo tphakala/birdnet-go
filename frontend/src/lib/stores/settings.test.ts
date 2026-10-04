@@ -1078,6 +1078,22 @@ describe('Settings Store - saveSection', () => {
     expect(settingsAPI.save).not.toHaveBeenCalled();
   });
 
+  it('never records a server-owned key handed to it inside a full section object', async () => {
+    const current = get(settingsStore).formData.birdnet;
+    const birdnet: BirdNetSettings = {
+      ...current,
+      threshold: 0.9,
+      rangeFilter: { ...current.rangeFilter, species: ['Turdus merula'] },
+    };
+
+    await settingsActions.saveSection('birdnet', birdnet);
+
+    const saved = get(settingsStore).originalData.birdnet;
+    expect(saved.threshold).toBe(0.9);
+    expect(saved.rangeFilter.species).toEqual([]);
+    expect(get(settingsStore).formData.birdnet.rangeFilter.species).toEqual([]);
+  });
+
   it('takes the patched value where the key had no pending edit', async () => {
     await settingsActions.saveSection('birdnet', { threshold: 0.9 });
 

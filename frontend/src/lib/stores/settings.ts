@@ -48,6 +48,7 @@ import { getLogger } from '$lib/utils/logger';
 import { isPlainObject, safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import type { SettingsSectionName, SettingsSectionPayloads } from '$lib/utils/settingsApi.js';
+import { withoutServerOwnedKeys } from '$lib/utils/settingsSections';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
 import { mergeSettingsPatch, mergeSettingsPatchKeepingEdits } from '$lib/utils/settingsMerge';
 import { DEFAULT_REGION_MODE } from '$lib/utils/variantSelection';
@@ -1492,7 +1493,7 @@ export const settingsActions = {
         logger.warn('Settings section save skipped fields:', section, skipped.join(', '));
       }
 
-      const patch = asRecord(partial) ?? {};
+      const patch = withoutServerOwnedKeys(section, partial);
       const origLocale = get(settingsStore).originalData.realtime?.dashboard?.locale;
       settingsStore.update(state => ({ ...state, ...applySectionPatch(state, section, patch) }));
 

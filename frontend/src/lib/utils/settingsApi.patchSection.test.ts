@@ -50,6 +50,18 @@ describe('settingsAPI.patchSection', () => {
     expect(new Headers(init.headers).get('X-CSRF-Token')).toBe('test-csrf-token');
   });
 
+  it('patchSection never sends keys the server owns, even inside a section object', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, { skippedFields: null }));
+    const { settingsAPI } = await import('./settingsApi.js');
+    // A variable, not a literal: structural typing lets the extra keys through.
+    const audio = { source: 'hw:1,0', ffmpegPath: '/opt/ffmpeg', soxPath: '/opt/sox' };
+
+    await settingsAPI.patchSection('audio', audio);
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ source: 'hw:1,0' });
+  });
+
   it('patchSection rejects on a 400 response', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse(400, { error: 'invalid birdweather id' }));
     const { settingsAPI } = await import('./settingsApi.js');

@@ -1,4 +1,9 @@
 import { api } from './api.js';
+import {
+  withoutServerOwnedKeys,
+  type AudioServerOwnedKey,
+  type BirdNetServerOwnedKey,
+} from './settingsSections';
 import type {
   SettingsFormData,
   TestResult,
@@ -52,22 +57,12 @@ export interface MQTTTLSCertificateUpload {
 const SETTINGS_ENDPOINT = '/api/v2/settings';
 
 /**
- * Keys the backend never lets the API change (getBlockedFieldMap in
- * internal/api/v2/settings.go): it reverts them and reports them in
- * skippedFields. They are left out of the section payloads so a section save
- * never sends one, and the store never records a value the server refused.
- * rangeFilter is left out whole because it holds the blocked model, species
- * and lastUpdated fields.
- */
-type BirdNetServerOwnedKey = 'rangeFilter';
-type AudioServerOwnedKey = 'ffmpegPath' | 'soxPath';
-
-/**
  * Request bodies for the per-section settings update, keyed by the lowercase
  * backend section name. Partial is shallow, so a nested value is typed as a
  * complete object; the backend itself merges nested objects key by key and only
  * replaces arrays. Extend this when another caller needs a section; the
- * backend accepts more sections than are listed here.
+ * backend accepts more sections than are listed here. Keys the server owns
+ * are left out (see settingsSections.ts).
  */
 export interface SettingsSectionPayloads {
   birdnet: Partial<Omit<BirdNetSettings, BirdNetServerOwnedKey>>;
@@ -109,13 +104,17 @@ export const settingsAPI = {
   /**
    * Save a single backend section with PATCH /api/v2/settings/:section. The
    * backend merges the body into the stored section, so keys the body omits keep
-   * their saved values and no other section is touched.
+   * their saved values and no other section is touched. Keys the server owns
+   * are dropped before sending.
    */
   patchSection: <S extends SettingsSectionName>(
     section: S,
     body: SettingsSectionPayloads[S]
   ): Promise<SettingsSectionPatchResponse | null> => {
-    return api.patch<SettingsSectionPatchResponse | null>(`${SETTINGS_ENDPOINT}/${section}`, body);
+    return api.patch<SettingsSectionPatchResponse | null>(
+      `${SETTINGS_ENDPOINT}/${section}`,
+      withoutServerOwnedKeys(section, body)
+    );
   },
 
   /**
