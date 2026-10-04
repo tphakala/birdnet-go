@@ -13,7 +13,7 @@ OpenVINO is an optional inference backend that can run BirdNET-Go's neural netwo
 
 **You can skip this if:** you are on a Raspberry Pi 4 or older ARM board (no native f16, OpenVINO is slower there), on Windows or macOS (the OpenVINO backend is Linux-only), or you are happy with ONNX Runtime performance.
 
-**Docker / container installs:** The published Linux images bundle the OpenVINO runtime libraries. amd64 images also bundle the Intel GPU compute runtime (NEO/OpenCL driver), so iGPU offload works as soon as you pass the device through. See [Enabling OpenVINO in Docker](#enabling-openvino-in-docker).
+**Docker / container installs:** The published Linux images bundle the OpenVINO runtime libraries. amd64 images also bundle the Intel GPU compute runtime (NEO/OpenCL driver), including Intel's legacy driver track for older Gen8, Gen9 and Gen11 iGPUs (for example Coffee Lake UHD 630), so iGPU offload works as soon as you pass the device through. See [Enabling OpenVINO in Docker](#enabling-openvino-in-docker).
 
 **Release tarballs / native binaries:** The Linux binaries are built with the OpenVINO backend compiled in, **but the OpenVINO runtime libraries are not included in the tarball** (only `libonnxruntime.so` and `libtensorflowlite_c.so` are). You install the OpenVINO runtime yourself. For iGPU offload you also install the Intel GPU driver on the host. See [Enabling OpenVINO on Native / Binary Installs](#enabling-openvino-on-native--binary-installs).
 
@@ -52,7 +52,7 @@ In practice:
 
 ## Enabling OpenVINO in Docker
 
-The Linux images already contain the OpenVINO runtime. For iGPU offload you only need to pass the render device through and set the config; the amd64 image ships the Intel GPU driver and the entrypoint grants the runtime user access to the device automatically.
+The Linux images already contain the OpenVINO runtime. For iGPU offload you only need to pass the render device through and set the config; the amd64 image ships the Intel GPU driver (current and legacy tracks, covering older Gen8, Gen9 and Gen11 iGPUs as well as newer ones) and the entrypoint grants the runtime user access to the device automatically.
 
 > **Image version:** the bundled Intel GPU driver landed recently, so use a current image (`nightly`, or a stable release from after the feature shipped) for iGPU offload. OpenVINO CPU acceleration works on older images too.
 
@@ -156,7 +156,7 @@ Option A - distribution package (simplest, may be older):
 sudo apt-get install -y intel-opencl-icd
 ```
 
-Option B - Intel's NEO release packages (newer, matches the Docker image). Download the `intel-opencl-icd`, `intel-igc-core-2`, `intel-igc-opencl-2`, `libigdgmm12`, and `libze-intel-gpu1` `.deb` packages from the [Intel compute-runtime releases](https://github.com/intel/compute-runtime/releases) and the [intel-graphics-compiler releases](https://github.com/intel/intel-graphics-compiler/releases), then `sudo dpkg -i *.deb`. The exact versions BirdNET-Go's amd64 image ships are pinned in the project `Dockerfile` (`NEO_VERSION`, `IGC_VERSION`, `GMMLIB_VERSION`).
+Option B - Intel's NEO release packages (newer, matches the Docker image). Current releases no longer support Gen8, Gen9 and Gen11 iGPUs; for those, use Intel's legacy package track described in [LEGACY_PLATFORMS.md](https://github.com/intel/compute-runtime/blob/master/LEGACY_PLATFORMS.md). Download the `intel-opencl-icd`, `intel-igc-core-2`, `intel-igc-opencl-2`, `libigdgmm12`, and `libze-intel-gpu1` `.deb` packages from the [Intel compute-runtime releases](https://github.com/intel/compute-runtime/releases) and the [intel-graphics-compiler releases](https://github.com/intel/intel-graphics-compiler/releases), then `sudo dpkg -i *.deb`. The exact versions BirdNET-Go's amd64 image ships are pinned in the project `Dockerfile` (`NEO_VERSION`, `IGC_VERSION`, `GMMLIB_VERSION`).
 
 Then give the BirdNET-Go user access to the render device:
 
