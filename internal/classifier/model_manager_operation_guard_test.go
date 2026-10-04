@@ -296,7 +296,9 @@ func TestOperationGuard_ReleaseIsIdempotentAndOwnerOnly(t *testing.T) {
 	// A stale lease reaching releaseLocked directly (not through the Once) must not
 	// free the slot a newer lease holds.
 	h.mm.mu.Lock()
+	h.mm.opMu.Lock()
 	h.mm.releaseLocked(l1)
+	h.mm.opMu.Unlock()
 	h.mm.mu.Unlock()
 	_, err = h.mm.BeginOperation(OperationInstall, depIDA)
 	requireBusy(t, err, depIDA, OperationReinstall, depIDB)
@@ -383,4 +385,31 @@ func TestOperationGuard_OperationRunningFor(t *testing.T) {
 
 	lease.Release()
 	assert.False(t, mm.OperationRunningFor("a"), "a released slot runs nothing")
+}
+
+func TestOperationGuard_RefusesWhileManagerLockHeld(t *testing.T) {
+	t.Parallel()
+	mm := NewModelManager(t.TempDir(), nil, nil)
+	lease, err := mm.BeginOperation(OperationUninstall, "a")
+	require.NoError(t, err)
+	t.Cleanup(lease.Release)
+
+	// Uninstall holds mm.mu for its whole body. A request made meanwhile must be
+	// refused at once, not wait on the lock and run after the uninstall.
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	done := make(chan error, 1)
+	go func() {
+		_, err := mm.BeginOperation(OperationInstall, "b")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		var busy *OperationInProgressError
+		require.ErrorAs(t, err, &busy)
+		assert.Equal(t, OperationUninstall, busy.Operation)
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "BeginOperation blocked on the manager lock instead of refusing")
+	}
+	assert.True(t, mm.OperationRunningFor("a"), "the slot stays readable while the manager lock is held")
 }

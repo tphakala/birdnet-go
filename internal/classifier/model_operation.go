@@ -68,7 +68,9 @@ type OperationLease struct {
 // BeginOperation reserves the manager's single operation slot for op on catalogID,
 // or returns an *OperationInProgressError, changing nothing, while another
 // operation holds it. The caller must Release the lease on every exit path. The
-// install and reinstall lease methods run the operation under the lease.
+// install and reinstall lease methods run the operation under the lease. It takes
+// only the slot's own mutex, never mm.mu, so it answers at once even while an
+// uninstall holds mm.mu.
 func (mm *ModelManager) BeginOperation(op ModelOperation, catalogID string) (*OperationLease, error) {
 	if catalogID == "" || !op.valid() {
 		return nil, errors.Newf("invalid model operation %q for catalog ID %q", string(op), catalogID).
@@ -77,8 +79,8 @@ func (mm *ModelManager) BeginOperation(op ModelOperation, catalogID string) (*Op
 			Context("catalog_id", catalogID).
 			Build()
 	}
-	mm.mu.Lock()
-	defer mm.mu.Unlock()
+	mm.opMu.Lock()
+	defer mm.opMu.Unlock()
 	if err := mm.busyErrorLocked(catalogID); err != nil {
 		return nil, err
 	}
@@ -86,7 +88,7 @@ func (mm *ModelManager) BeginOperation(op ModelOperation, catalogID string) (*Op
 }
 
 // busyErrorLocked returns nil when the operation slot is free, else the refusal for
-// a call targeting catalogID. The caller must hold mm.mu.
+// a call targeting catalogID. The caller must hold mm.opMu.
 func (mm *ModelManager) busyErrorLocked(catalogID string) error {
 	l := mm.activeOp
 	if l == nil {
@@ -99,8 +101,8 @@ func (mm *ModelManager) busyErrorLocked(catalogID string) error {
 	}
 }
 
-// acquireLocked takes the free operation slot. The caller must hold mm.mu and have
-// checked busyErrorLocked.
+// acquireLocked takes the free operation slot. The caller must hold mm.opMu and
+// have checked busyErrorLocked.
 func (mm *ModelManager) acquireLocked(op ModelOperation, catalogID string) *OperationLease {
 	name := catalogID
 	if entry, ok := GetCatalogEntry(catalogID); ok && entry.Name != "" {
@@ -114,7 +116,7 @@ func (mm *ModelManager) acquireLocked(op ModelOperation, catalogID string) *Oper
 // releaseLocked frees the slot when l still owns it. If the lease's entry is still
 // in an active download state, the operation ended without settling it (a recovered
 // panic), so the state is marked failed and removed after failedStateRetention like
-// every other failure path. The caller must hold mm.mu.
+// every other failure path. The caller must hold mm.mu and mm.opMu, in that order.
 func (mm *ModelManager) releaseLocked(l *OperationLease) {
 	if mm.activeOp != l {
 		return
@@ -136,15 +138,17 @@ func (l *OperationLease) Release() {
 	l.once.Do(func() {
 		l.mm.mu.Lock()
 		defer l.mm.mu.Unlock()
+		l.mm.opMu.Lock()
+		defer l.mm.opMu.Unlock()
 		l.mm.releaseLocked(l)
 	})
 }
 
 // check verifies that l is still the held lease and was begun for op and entry.
 func (l *OperationLease) check(op ModelOperation, entry *CatalogEntry) error {
-	l.mm.mu.RLock()
+	l.mm.opMu.Lock()
 	held := l.mm.activeOp == l
-	l.mm.mu.RUnlock()
+	l.mm.opMu.Unlock()
 	if !held || l.op != op || entry.ID != l.catalogID {
 		return errors.Newf("operation lease for %s %s cannot run %s of %s", string(l.op), l.catalogID, string(op), entry.ID).
 			Component(operationComponent).
@@ -177,9 +181,10 @@ func (l *OperationLease) Reinstall(ctx context.Context, entry *CatalogEntry, bas
 
 // OperationRunningFor reports whether the operation slot is held by an operation on
 // catalogID. An install records the entry before its hot-load ends, so a progress
-// reader uses this to report completion only once the slot is free again.
+// reader uses this to report completion only once the slot is free again. Like
+// BeginOperation it never waits on mm.mu.
 func (mm *ModelManager) OperationRunningFor(catalogID string) bool {
-	mm.mu.RLock()
-	defer mm.mu.RUnlock()
+	mm.opMu.Lock()
+	defer mm.opMu.Unlock()
 	return mm.activeOp != nil && mm.activeOp.catalogID == catalogID
 }

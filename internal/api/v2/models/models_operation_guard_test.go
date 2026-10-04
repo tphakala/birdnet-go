@@ -256,3 +256,27 @@ func TestStreamInstallProgress_CompleteWaitsForOperationSlot(t *testing.T) {
 	body = streamProgress(t, h, t.Context(), apiDepA)
 	assert.Contains(t, body, string(classifier.StatusComplete), "complete is sent once the slot is released")
 }
+
+func TestReinstallModel_ReservesSlotBeforeInstalledCheck(t *testing.T) {
+	useCatalog(t, guardCatalog())
+	mm := classifier.NewModelManager(t.TempDir(), nil, nil)
+	h := dependencyHandler(t, mm)
+	holdSlot(t, mm)
+
+	// The installed check runs under the slot, so an uninstall cannot complete
+	// between it and the 202: a busy slot answers first.
+	rec := guardRequest(t, h.ReinstallModel, http.MethodPost, apiDepA, "")
+	requireOperationInProgress(t, rec, apiDepG, "Geomodel", "uninstall")
+}
+
+func TestReinstallModel_ReleasesSlotOnValidationFailure(t *testing.T) {
+	useCatalog(t, guardCatalog())
+	mm := classifier.NewModelManager(t.TempDir(), nil, nil)
+	h := dependencyHandler(t, mm)
+
+	rec := guardRequest(t, h.ReinstallModel, http.MethodPost, apiDepA, "")
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	lease, err := mm.BeginOperation(classifier.OperationInstall, apiDepA)
+	require.NoError(t, err, "a refused reinstall frees the slot")
+	lease.Release()
+}

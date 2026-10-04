@@ -961,6 +961,20 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
 	}
 
+	// Reserve the operation slot synchronously (see InstallModel), before the
+	// installed check, so an uninstall cannot complete between the check and the
+	// 202. A validation failure below releases it; the goroutine owns it after.
+	lease, err := c.ModelManager.BeginOperation(classifier.OperationReinstall, catalogID)
+	if err != nil {
+		return c.beginOperationError(ctx, err)
+	}
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			lease.Release()
+		}
+	}()
+
 	if !c.ModelManager.IsInstalled(catalogID) {
 		return c.HandleError(ctx, nil, "model "+catalogID+" is not installed", http.StatusBadRequest)
 	}
@@ -975,13 +989,8 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 		}
 	}
 
-	// Reserve the operation slot synchronously (see InstallModel).
-	lease, err := c.ModelManager.BeginOperation(classifier.OperationReinstall, catalogID)
-	if err != nil {
-		return c.beginOperationError(ctx, err)
-	}
-
-	// Start async reinstall in a background goroutine.
+	// Start async reinstall in a background goroutine, which now owns the lease.
+	handedOff = true
 	progressChan := make(chan classifier.DownloadState, 16)
 	c.Go(func() {
 		defer lease.Release()

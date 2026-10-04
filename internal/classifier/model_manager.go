@@ -88,8 +88,12 @@ type ModelManager struct {
 	installed   map[string]InstalledModel
 	downloading map[string]*DownloadState
 
+	// opMu guards activeOp. It is separate from mu so the slot stays readable while
+	// an operation (Uninstall) holds mu, and a request made meanwhile is refused at
+	// once instead of waiting on mu. Lock order: mu before opMu when both are held.
+	opMu sync.Mutex
 	// activeOp is the single model operation slot: the lease of the install, swap,
-	// reinstall or uninstall in flight, or nil. Guarded by mu. It is in-memory only
+	// reinstall or uninstall in flight, or nil. Guarded by opMu. It is in-memory only
 	// and never taken by ScanInstalled, so a restart always starts with a free slot
 	// and startup is never refused.
 	activeOp *OperationLease
@@ -1029,9 +1033,8 @@ func (mm *ModelManager) reloadRangeFilter() error {
 // when no other installed or actively downloading model reaches that file; a hidden
 // Component dependency that nothing needs any more is removed with its last dependent.
 // It holds the operation slot for its whole body and returns an
-// *OperationInProgressError, changing nothing, while another model operation runs.
-// Uninstall holds mm.mu throughout, so a request that arrives during an uninstall
-// waits on the lock and then proceeds; it is not queued and is not refused.
+// *OperationInProgressError, changing nothing, while another model operation runs,
+// and any other operation requested during an uninstall is refused the same way.
 func (mm *ModelManager) Uninstall(catalogID string) error {
 	log := GetLogger()
 
@@ -1058,6 +1061,14 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	// topologyChanged is set when a model is unloaded below. The deferred notify
 	// is registered BEFORE the unlock defer so it runs AFTER the lock is released
 	// (deferred calls run LIFO), keeping notifyTopologyChanged outside the lock.
+	// Take the operation slot before any state decision. The release is registered
+	// before the unlock defer, so it runs after mm.mu is released (Release takes mu).
+	lease, err := mm.BeginOperation(OperationUninstall, catalogID)
+	if err != nil {
+		return err
+	}
+	defer lease.Release()
+
 	topologyChanged := false
 	defer func() {
 		if topologyChanged {
@@ -1067,15 +1078,6 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
-
-	// Take the operation slot before any other decision, so every request made while
-	// another operation runs gets the same refusal. Registered after the unlock
-	// defer, so the release runs first, under the lock.
-	if err := mm.busyErrorLocked(catalogID); err != nil {
-		return err
-	}
-	lease := mm.acquireLocked(OperationUninstall, catalogID)
-	defer mm.releaseLocked(lease)
 
 	im, installed := mm.installed[catalogID]
 	if !installed {
