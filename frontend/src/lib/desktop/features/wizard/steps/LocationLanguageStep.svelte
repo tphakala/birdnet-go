@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
-  import { t, getLocale } from '$lib/i18n';
+  import { onDestroy, onMount, untrack } from 'svelte';
+  import { t, getLocale, setLocale } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import LanguageSelector from '$lib/desktop/components/ui/LanguageSelector.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
@@ -118,6 +118,14 @@
     );
   }
 
+  // The UI language applies, and is cached in localStorage, as soon as it is
+  // picked. When the wizard leaves this step without saving it (Skip, Leave
+  // setup, Back on an invalid step), restore the language from the last save.
+  let uiLocaleAtLastSave = getLocale();
+  onDestroy(() => {
+    if (getLocale() !== uiLocaleAtLastSave) setLocale(uiLocaleAtLastSave);
+  });
+
   const saveStep = useStepSave(() => registerLeaveHandler, commit);
 
   // Save the step's edits when the wizard leaves it with Next, Back or Done.
@@ -155,6 +163,7 @@
 
     dirty = false;
     initialUILocale = getLocale();
+    uiLocaleAtLastSave = getLocale();
   }
 </script>
 

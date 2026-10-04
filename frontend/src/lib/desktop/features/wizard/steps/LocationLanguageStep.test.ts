@@ -256,4 +256,25 @@ describe('LocationLanguageStep - UI locale persistence in the leave handler', ()
     expect(realtimePayload.dashboard.locale).toBe('hu');
     expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
   });
+
+  it('restores the UI language when the step is left without saving', async () => {
+    const { unmount } = renderStep(LocationLanguageStep);
+    await flushAsync();
+
+    setLocale('hu');
+    unmount();
+
+    expect(currentLocale).toBe('en');
+  });
+
+  it('keeps the UI language after it was saved', async () => {
+    const { leave, unmount } = renderStep(LocationLanguageStep);
+    await flushAsync();
+
+    setLocale('hu');
+    await leave();
+    unmount();
+
+    expect(currentLocale).toBe('hu');
+  });
 });
