@@ -5545,6 +5545,7 @@
         "catalogLoadFailed": "Nepodařilo se načíst katalog modelů",
         "installFailed": "Nepodařilo se spustit instalaci modelu",
         "removeFailed": "Nepodařilo se odstranit model",
+        "removeHasDependents": "{name} je vyžadován modely {models}. Nejprve tyto modely odeberte.",
         "actionFailed": "Došlo k problému s {name}",
         "downloadSourceHint": "Pokud je huggingface.co ve vaší síti blokováno nebo pomalé, nastavte zrcadlový server v sekci Zdroj stahování níže.",
         "goToDownloadSource": "Přejít na Zdroj stahování",

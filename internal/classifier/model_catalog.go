@@ -91,6 +91,20 @@ type CatalogEntry struct {
 	// on-disk JSON of existing single-variant entries byte-identical, so adding
 	// this field does not shift catalogChecksum or force a schema-version bump.
 	Variants []CatalogVariant `json:"variants,omitempty"`
+	// DependsOn lists the catalog IDs of entries whose files are installed together
+	// with this one, for every variant except a BuiltIn one (the embedded baseline
+	// downloads nothing). A dependency is a flat, shared-only entry that declares no
+	// dependencies of its own (depth one; catalog validation enforces it). The
+	// dependency's files are resolved through EffectiveFiles, so one install fetches
+	// them, the gallery sizes them, and an uninstall of the dependency is refused while
+	// this entry is installed or downloading. omitempty keeps the on-disk JSON of every
+	// entry without dependencies byte-identical, so adding this field does not shift
+	// catalogChecksum or force a schema-version bump.
+	DependsOn []string `json:"depends_on,omitempty"`
+	// Component marks a hidden support entry (for example a taxonomy file) that is never
+	// a classifier. It is removed automatically when an uninstall leaves nothing
+	// installed or actively downloading that depends on it. omitempty as above.
+	Component bool `json:"component,omitempty"`
 }
 
 // CatalogVariant describes one hardware or regional variant of a model: a
@@ -149,7 +163,7 @@ type Benchmark struct {
 type CatalogFile struct {
 	RemotePath      string `json:"remote_path"`       // path within the HuggingFace repo
 	LocalName       string `json:"local_name"`        // filename to use on disk
-	Role            string `json:"role"`              // file role: "model", "labels", "embeddings", "geomodel_model", "geomodel_labels", or "data"
+	Role            string `json:"role"`              // file role: "model", "labels", "embeddings", "geomodel_model", "geomodel_labels", "taxonomy", or "data"
 	SHA256          string `json:"sha256"`            // hex-encoded SHA-256 checksum
 	SizeBytes       int64  `json:"size_bytes"`        // file size in bytes
 	HuggingFaceRepo string `json:"hugging_face_repo"` // override entry-level HuggingFace repo for this file (empty = use entry repo)

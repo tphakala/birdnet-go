@@ -133,8 +133,15 @@ type CatalogEntryResponse struct {
 	// this passive listing; it is returned in full when the user attempts to
 	// install the model.
 	IncompatibleReason string `json:"incompatibleReason,omitempty"`
-	TotalSizeBytes     int64  `json:"totalSizeBytes"`
-	HasGeomodel        bool   `json:"hasGeomodel"`
+	// TotalSizeBytes is the download size of the default variant: its own files plus the
+	// files of its dependencies.
+	TotalSizeBytes int64 `json:"totalSizeBytes"`
+	// HasGeomodel reports whether any selectable variant brings a geomodel, inline or
+	// through a dependency.
+	HasGeomodel bool `json:"hasGeomodel"`
+	// DependsOn lists the catalog IDs installed together with this model. It may name
+	// hidden components that the catalog response does not list. Omitted when empty.
+	DependsOn []string `json:"dependsOn,omitempty"`
 	// Permanent marks the built-in BirdNET v2.4 classifier: always installed, never
 	// uninstallable, only its variant may be swapped. The gallery renders a built-in
 	// badge instead of Remove/Reinstall for it.
@@ -265,6 +272,11 @@ func (c *Handler) ListModels(ctx echo.Context) error {
 // variant vocabulary.
 const incompatibleReasonONNXUnavailable = "backend.onnx_unavailable"
 
+// removeHasDependentsKey is the i18n key of the 409 returned when an uninstall is
+// refused because other installed models need the model. The frontend interpolates
+// error_params.name and error_params.models into it.
+const removeHasDependentsKey = "analysis.gallery.errors.removeHasDependents"
+
 // GetModelCatalog returns the embedded model catalog enriched with install
 // status and compatibility information.
 func (c *Handler) GetModelCatalog(ctx echo.Context) error {
@@ -292,11 +304,10 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	for i := range visible {
 		entry := &visible[i]
 
-		// Compute total size from all files.
-		var totalSize int64
-		for _, f := range entry.Files {
-			totalSize += f.SizeBytes
-		}
+		// Compute the default variant's total size from all files it installs,
+		// including its dependencies' files.
+		defaultFiles, _ := classifier.EffectiveFiles(entry, "")
+		totalSize := sumFileSizes(defaultFiles)
 
 		// Check install status via ModelManager, capturing which variant is on disk.
 		installed := false
@@ -334,7 +345,8 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			Compatible:           compatible,
 			IncompatibleReason:   incompatibleReason,
 			TotalSizeBytes:       totalSize,
-			HasGeomodel:          classifier.HasGeomodelFiles(entry),
+			HasGeomodel:          classifier.EntryProvidesGeomodel(entry),
+			DependsOn:            entry.DependsOn,
 			Permanent:            classifier.IsPermanentEntry(entry),
 			InstalledVariantID:   installedVariantID,
 			RecommendedVariantID: recommendedVariant[entry.ID],
@@ -382,10 +394,9 @@ func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, insta
 			continue
 		}
 
-		var sizeBytes int64
-		for _, f := range v.Files {
-			sizeBytes += f.SizeBytes
-		}
+		// A BuiltIn variant downloads nothing, so EffectiveFiles yields no files for it.
+		variantFiles, _ := classifier.EffectiveFiles(entry, v.ID)
+		sizeBytes := sumFileSizes(variantFiles)
 
 		// Headline latency: the smallest positive measured latency across this
 		// variant's benchmarks, or 0 when none were measured.
@@ -952,7 +963,17 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 	})
 }
 
-// UninstallModel removes a downloaded model from disk.
+// sumFileSizes returns the total size in bytes of files.
+func sumFileSizes(files []classifier.CatalogFile) int64 {
+	var total int64
+	for _, f := range files {
+		total += f.SizeBytes
+	}
+	return total
+}
+
+// UninstallModel removes a downloaded model from disk. It answers 409 with the
+// removeHasDependentsKey i18n key when other installed models still need it.
 func (c *Handler) UninstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -964,6 +985,14 @@ func (c *Handler) UninstallModel(ctx echo.Context) error {
 	}
 
 	if err := c.ModelManager.Uninstall(catalogID); err != nil {
+		if de, ok := errors.AsType[*classifier.DependentsError](err); ok {
+			return c.HandleErrorWithKey(ctx, err, "model is required by installed models", http.StatusConflict,
+				removeHasDependentsKey, map[string]any{
+					"name":       de.Name,
+					"models":     de.DependentNames(),
+					"dependents": de.Dependents,
+				})
+		}
 		return c.HandleError(ctx, err, "failed to uninstall model", http.StatusInternalServerError)
 	}
 	// Uninstalling a model that was not loaded fires no topology event, but it

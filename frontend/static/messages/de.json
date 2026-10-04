@@ -5545,6 +5545,7 @@
         "catalogLoadFailed": "Modellkatalog konnte nicht geladen werden",
         "installFailed": "Modellinstallation konnte nicht gestartet werden",
         "removeFailed": "Modell konnte nicht entfernt werden",
+        "removeHasDependents": "{name} wird von {models} benötigt. Entfernen Sie zuerst diese Modelle.",
         "actionFailed": "Es gab ein Problem mit {name}",
         "downloadSourceHint": "Wenn huggingface.co in Ihrem Netzwerk blockiert oder langsam ist, richten Sie im Abschnitt Download-Quelle unten einen Spiegelserver ein.",
         "goToDownloadSource": "Zur Download-Quelle",

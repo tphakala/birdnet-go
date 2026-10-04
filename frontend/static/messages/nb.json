@@ -5545,6 +5545,7 @@
         "catalogLoadFailed": "Innlasting av modellkatalog mislyktes",
         "installFailed": "Oppstart av modellinstallasjon mislyktes",
         "removeFailed": "Fjerning av modell mislyktes",
+        "removeHasDependents": "{name} brukes av {models}. Fjern disse modellene først.",
         "actionFailed": "Det oppsto et problem med {name}",
         "downloadSourceHint": "Hvis huggingface.co er blokkert eller tregt på nettverket ditt, kan du angi en speilserver i seksjonen Nedlastingskilde nedenfor.",
         "goToDownloadSource": "Gå til Nedlastingskilde",

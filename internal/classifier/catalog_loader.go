@@ -180,8 +180,9 @@ func seedCatalog(log logger.Logger, path, embeddedChecksum string) error {
 
 // validateCatalog checks that a loaded catalog is well-formed: it has at least
 // one entry, every entry has a unique non-empty id, every entry declares files
-// (directly or through variants), and every file declares the fields needed to
-// download it (remote_path, local_name, role).
+// (directly or through variants), every file declares the fields needed to
+// download it (remote_path, local_name, role), and the dependency graph is sound
+// (see validateCatalogDependencies).
 func validateCatalog(entries []CatalogEntry) error {
 	if len(entries) == 0 {
 		return errors.Newf("model catalog has no entries").
@@ -208,6 +209,86 @@ func validateCatalog(entries []CatalogEntry) error {
 		if err := validateCatalogEntryFiles(entry); err != nil {
 			return err
 		}
+	}
+	return validateCatalogDependencies(entries)
+}
+
+// catalogValidationError builds the validation error validateCatalogDependencies
+// returns.
+func catalogValidationError(format string, args ...any) error {
+	return errors.Newf(format, args...).
+		Component("classifier.catalog_loader").
+		Category(errors.CategoryValidation).
+		Build()
+}
+
+// validateCatalogDependencies checks DependsOn and Component across entries, using
+// only the entries being validated (never the active catalog). Every dependency
+// ID must exist, differ from the entry and appear once; the target must be a flat,
+// shared-only entry that declares no dependencies of its own (depth one). A Component
+// must be Hidden, shared-only, have no registry id, no dependencies and no geomodel
+// file (its autoremove never touches range-filter config, so a geomodel file could be
+// deleted while the config still points at it).
+func validateCatalogDependencies(entries []CatalogEntry) error {
+	byID := make(map[string]*CatalogEntry, len(entries))
+	for i := range entries {
+		byID[entries[i].ID] = &entries[i]
+	}
+	for i := range entries {
+		entry := &entries[i]
+		if err := validateEntryDependsOn(entry, byID); err != nil {
+			return err
+		}
+		if entry.Component {
+			if err := validateComponent(entry); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// validateEntryDependsOn validates the DependsOn list of one entry against byID.
+func validateEntryDependsOn(entry *CatalogEntry, byID map[string]*CatalogEntry) error {
+	seen := make(map[string]struct{}, len(entry.DependsOn))
+	for _, id := range entry.DependsOn {
+		if id == entry.ID {
+			return catalogValidationError("catalog entry %q depends on itself", entry.ID)
+		}
+		if _, dup := seen[id]; dup {
+			return catalogValidationError("catalog entry %q lists dependency %q more than once", entry.ID, id)
+		}
+		seen[id] = struct{}{}
+		dep, ok := byID[id]
+		if !ok {
+			return catalogValidationError("catalog entry %q depends on unknown entry %q", entry.ID, id)
+		}
+		if len(dep.Variants) > 0 {
+			return catalogValidationError("catalog entry %q depends on %q, which declares variants; a dependency must be flat", entry.ID, id)
+		}
+		if !IsSharedOnly(dep) {
+			return catalogValidationError("catalog entry %q depends on %q, which is not shared-only; a dependency may only hold shared files", entry.ID, id)
+		}
+		if len(dep.DependsOn) > 0 {
+			return catalogValidationError("catalog entry %q depends on %q, which has its own dependencies; only one level is supported", entry.ID, id)
+		}
+	}
+	return nil
+}
+
+// validateComponent validates the extra rules for a Component entry.
+func validateComponent(entry *CatalogEntry) error {
+	switch {
+	case !entry.Hidden:
+		return catalogValidationError("component %q must be hidden", entry.ID)
+	case !IsSharedOnly(entry):
+		return catalogValidationError("component %q must be shared-only", entry.ID)
+	case entry.RegistryID != "":
+		return catalogValidationError("component %q must have an empty registry id", entry.ID)
+	case len(entry.DependsOn) > 0:
+		return catalogValidationError("component %q must not declare dependencies", entry.ID)
+	case HasGeomodelFiles(entry):
+		return catalogValidationError("component %q must not carry geomodel files", entry.ID)
 	}
 	return nil
 }

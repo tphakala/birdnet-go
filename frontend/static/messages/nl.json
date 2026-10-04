@@ -5545,6 +5545,7 @@
         "catalogLoadFailed": "Kan modelcatalogus niet laden",
         "installFailed": "Kan modelinstallatie niet starten",
         "removeFailed": "Kan model niet verwijderen",
+        "removeHasDependents": "{name} is nodig voor {models}. Verwijder eerst die modellen.",
         "actionFailed": "Er is een probleem opgetreden met {name}",
         "downloadSourceHint": "Als huggingface.co geblokkeerd of traag is op uw netwerk, stel dan een spiegelserver in bij de sectie Downloadbron hieronder.",
         "goToDownloadSource": "Ga naar Downloadbron",

@@ -5545,6 +5545,7 @@
         "catalogLoadFailed": "Neizdevās ielādēt modeļu katalogu",
         "installFailed": "Neizdevās sākt modeļa instalēšanu",
         "removeFailed": "Neizdevās noņemt modeli",
+        "removeHasDependents": "{name} ir nepieciešams modeļiem {models}. Vispirms noņemiet šos modeļus.",
         "actionFailed": "Radās problēma ar {name}",
         "downloadSourceHint": "Ja jūsu tīklā huggingface.co ir bloķēts vai lēns, iestatiet spoguļvietni zemāk esošajā sadaļā Lejupielādes avots.",
         "goToDownloadSource": "Doties uz Lejupielādes avots",

@@ -4063,6 +4063,7 @@ export type TranslationKey =
   | 'analysis.gallery.errors.catalogLoadFailed'
   | 'analysis.gallery.errors.installFailed'
   | 'analysis.gallery.errors.removeFailed'
+  | 'analysis.gallery.errors.removeHasDependents' // params: name, models
   | 'analysis.gallery.errors.actionFailed' // params: name
   | 'analysis.gallery.errors.downloadSourceHint'
   | 'analysis.gallery.errors.goToDownloadSource'
@@ -4690,6 +4691,7 @@ export type TranslationParams = {
   'analysis.gallery.reasons.hardwareExcluded': { token: string | number };
   'analysis.gallery.species': { count: string | number };
   'analysis.gallery.removeDialog.title': { name: string | number };
+  'analysis.gallery.errors.removeHasDependents': { name: string | number; models: string | number };
   'analysis.gallery.errors.actionFailed': { name: string | number };
   'analysis.gallery.preview.buildLabel': { version: string | number; build: string | number };
   'analysis.gallery.preview.dialogNotice': { build: string | number };
