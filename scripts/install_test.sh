@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Unit tests for the configuration helper functions in install.sh.
+# Unit tests for the configuration helper functions in install.sh, and for the
+# mDNS mount helpers and Quadlet generation in podman-install.sh.
 #
 # install.sh edits a 2-space-indent YAML config and parses/regenerates a systemd unit with
 # sed/awk. Those helpers have no other coverage, and several were converted to re-run-safe
@@ -8,7 +9,7 @@
 # corrupts a real user config. This harness extracts the pure helpers from install.sh (the
 # script has no source guard, so it cannot be sourced wholesale) and exercises them against
 # the real config template, asserting both the intended change and that sibling keys are left
-# untouched.
+# untouched. podman-install.sh is handled the same way, for its Quadlet mount logic.
 #
 # Run: scripts/install_test.sh   (exit 0 = all pass). Needs awk/sed, plus jq for the
 # migration-diagnostics tests, which assert the telemetry payload is valid JSON.
@@ -25,10 +26,15 @@ set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_SH="${REPO_ROOT}/install.sh"
+PODMAN_INSTALL_SH="${REPO_ROOT}/podman-install.sh"
 CONFIG_TEMPLATE="${REPO_ROOT}/internal/conf/config.yaml"
 
 if [ ! -f "$INSTALL_SH" ]; then
     echo "FATAL: install.sh not found at $INSTALL_SH" >&2
+    exit 2
+fi
+if [ ! -f "$PODMAN_INSTALL_SH" ]; then
+    echo "FATAL: podman-install.sh not found at $PODMAN_INSTALL_SH" >&2
     exit 2
 fi
 if [ ! -f "$CONFIG_TEMPLATE" ]; then
@@ -78,7 +84,8 @@ assert_nonzero() { # description rc
 # Extract a single top-level function (name() { ... } closing at column 0) from
 # install.sh and define it in this shell. install.sh formats every top-level
 # function close as a bare "}" at column 0; inner braces are indented, so the
-# first "^}$" after the header is the function's own close.
+# first "^}$" after the header is the function's own close. A one-line function
+# (podman-install.sh has some) is its own opener and closes on that same line.
 #
 # Here-docs are tracked and skipped: the diagnostics collectors emit JSON whose
 # closing "}" sits at column 0 inside a here-doc body, which would otherwise be
@@ -104,7 +111,10 @@ load_fn() {
         }
         function trim(s) { sub(/^[ \t]+/, "", s); return s }
 
-        $0 ~ "^"fn"\\(\\) \\{" { printing = 1 }
+        $0 ~ "^"fn"\\(\\) \\{" {
+            printing = 1
+            if ($0 ~ /\}[ \t]*$/) { print; exit }
+        }
         !printing { next }
         { print }
         heredoc != "" { if (trim($0) == heredoc) heredoc = ""; next }
@@ -121,8 +131,17 @@ load_fn() {
     # at the function close. Without this it still eval's -- sometimes cleanly,
     # redefining a dozen other functions -- and the suite goes green while testing
     # something else entirely.
-    if [ "$(printf '%s' "$body" | tail -n 1)" != "}" ]; then
+    # A one-line body is the opener itself, ending in "}".
+    local last
+    last="$(printf '%s' "$body" | tail -n 1)"
+    if [ "$last" != "}" ] && { [ "$(printf '%s\n' "$body" | wc -l)" -ne 1 ] || [[ "$last" != *"}" ]]; }; then
         echo "FATAL: extraction of '$fn' did not end at a column-0 '}'; check load_fn's here-doc tracking" >&2
+        exit 2
+    fi
+    # Exactly one column-0 function opener: more means the extraction ran on into
+    # the next function (the one-line trap this guards against).
+    if [ "$(printf '%s\n' "$body" | grep -cE '^[A-Za-z_][A-Za-z_0-9]*\(\) \{')" -ne 1 ]; then
+        echo "FATAL: extraction of '$fn' contains more than one function; check load_fn's opener handling" >&2
         exit 2
     fi
     if ! eval "$body"; then
@@ -1480,10 +1499,256 @@ backup_line="$(grep -n 'MIGRATE_BACKUP="\${dest_dir}' "$INSTALL_SH" | cut -d: -f
 stop_line="$(grep -n "ControlPath=\"\$MIGRATE_SSH_SOCKET\".*systemctl stop birdnet-go.service" "$INSTALL_SH" | head -1 | cut -d: -f1)"
 assert_eq "wiring: the noisy-shell probe is called from the migration flow" \
     "1" "$(grep -c 'check_remote_shell_clean || return 1' "$INSTALL_SH")"
-[ -n "$probe_line" ] && [ -n "$backup_line" ] && [ "$probe_line" -lt "$backup_line" ]
-assert_ok "wiring: the probe runs BEFORE the user's data is moved aside" $?
-[ -n "$probe_line" ] && [ -n "$stop_line" ] && [ "$probe_line" -lt "$stop_line" ]
-assert_ok "wiring: the probe runs BEFORE the source service is stopped" $?
+rc=1; if [ -n "$probe_line" ] && [ -n "$backup_line" ] && [ "$probe_line" -lt "$backup_line" ]; then rc=0; fi
+assert_ok "wiring: the probe runs BEFORE the user's data is moved aside" "$rc"
+rc=1; if [ -n "$probe_line" ] && [ -n "$stop_line" ] && [ "$probe_line" -lt "$stop_line" ]; then rc=0; fi
+assert_ok "wiring: the probe runs BEFORE the source service is stopped" "$rc"
+
+# ===========================================================================
+# podman-install.sh: mDNS mounts in the Quadlet unit. The Avahi mount is constant
+# in the unit (its source is made valid at every start by ExecStartPre); the D-Bus
+# mount is toggled by enable_mdns_mounts from the host socket, keep-id and the uid.
+# The functions are loaded from podman-install.sh, which cannot be sourced either.
+# ===========================================================================
+it "load_fn extracts a one-line function alone"
+
+# Not yet defined: the extraction below must not drag in its neighbours.
+unset -f quadlet_has_keep_id enable_quadlet_volume 2>/dev/null
+load_fn host_socket_present "$PODMAN_INSTALL_SH"
+declare -F host_socket_present >/dev/null; assert_ok "host_socket_present is defined" $?
+rc=0; declare -F quadlet_has_keep_id >/dev/null || rc=$?
+assert_nonzero "quadlet_has_keep_id is not defined by loading host_socket_present" "$rc"
+rc=0; declare -F enable_quadlet_volume >/dev/null || rc=$?
+assert_nonzero "enable_quadlet_volume is not defined by loading host_socket_present" "$rc"
+
+for fn in quadlet_has_keep_id enable_quadlet_volume enable_mdns_mounts create_quadlet_service; do
+    load_fn "$fn" "$PODMAN_INSTALL_SH"
+done
+
+it "host_socket_present against real paths"
+
+psock_dir="${WORK}/psock"
+mkdir -p "$psock_dir"
+python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "${psock_dir}/socket"
+# shellcheck disable=SC2218  # the real function is eval-loaded above; the stub below comes later
+host_socket_present "${psock_dir}/socket"; assert_ok "real socket is present" $?
+: > "${psock_dir}/regular"
+rc=0; host_socket_present "${psock_dir}/regular" || rc=$?; assert_nonzero "regular file is not a socket" "$rc"
+rc=0; host_socket_present "${psock_dir}/missing" || rc=$?; assert_nonzero "missing path is not a socket" "$rc"
+
+# From here on, sockets "exist" per FAKE_SOCKETS, as for host_socket_mount above.
+host_socket_present() {
+    case " $FAKE_SOCKETS " in
+        *" $1 "*) return 0 ;;
+    esac
+    return 1
+}
+
+it "quadlet_has_keep_id"
+
+kq="${WORK}/keepid.container"
+rc=0; quadlet_has_keep_id "${WORK}/no-such.container" || rc=$?; assert_nonzero "missing file: false" "$rc"
+printf '[Container]\n#UserNS=keep-id\n' > "$kq"
+rc=0; quadlet_has_keep_id "$kq" || rc=$?; assert_nonzero "commented keep-id: false" "$rc"
+printf '[Container]\nUserNS=keep-id\n' > "$kq"
+quadlet_has_keep_id "$kq"; assert_ok "uncommented keep-id: true" $?
+
+# --- templates ---------------------------------------------------------------
+PODMAN_AVAHI_VOLUME='Volume=%t/%N-mdns/avahi-daemon:/run/avahi-daemon:ro'
+PODMAN_DBUS_VOLUME='Volume=/run/dbus:/run/dbus:ro'
+PODMAN_KEEPID_SED='s|^#UserNS=keep-id|UserNS=keep-id|; s|^#GroupAdd=keep-groups|GroupAdd=keep-groups|'
+
+# Stubs for create_quadlet_service's side effects. FAKE_UID drives "id -u".
+FAKE_UID=1000
+id() {
+    if [ "${1:-}" = "-u" ]; then printf '%s\n' "$FAKE_UID"; else command id "$@"; fi
+}
+check_directory() { mkdir -p "$1"; }
+systemctl() { :; }
+sudo() { :; }
+QUADLET_DIR="${WORK}/quadlet"
+BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:nightly"
+WEB_PORT=8080
+CONFIGURED_TZ=""
+INSTALL_HAD_CONFIG=true
+
+# run_create_quadlet CWD CONFIG_FILE -> runs the real create_quadlet_service in a subshell
+# whose cwd decides whether the shipped template or the heredoc fallback is used.
+run_create_quadlet() {
+    (
+        cd "$1" || exit 1
+        CONFIG_FILE="$2"
+        quadlet_source=""
+        mkdir -p "$QUADLET_DIR"
+        create_quadlet_service
+    ) >/dev/null
+}
+
+# The heredoc fallback with no mount toggles applied: no prior unit, uid 1000, no sockets.
+nopodman_dir="${WORK}/no-podman-dir"
+mkdir -p "$nopodman_dir"
+rm -rf "$QUADLET_DIR"; FAKE_SOCKETS=""; FAKE_UID=1000
+run_create_quadlet "$nopodman_dir" ""
+cp "$QUADLET_DIR/birdnet-go.container" "${WORK}/tpl-heredoc.container"
+TEMPLATE_NAMES="standard autotls heredoc"
+tpl_path() {
+    case "$1" in
+        standard) printf '%s' "${REPO_ROOT}/Podman/quadlet/birdnet-go.container" ;;
+        autotls) printf '%s' "${REPO_ROOT}/Podman/quadlet/birdnet-go-autotls.container" ;;
+        heredoc) printf '%s' "${WORK}/tpl-heredoc.container" ;;
+    esac
+}
+
+it "Podman templates carry the Avahi indirection"
+
+for t in $TEMPLATE_NAMES; do
+    tp="$(tpl_path "$t")"
+    assert_eq "$t: Avahi volume line present and uncommented" "1" "$(grep -cxF -- "$PODMAN_AVAHI_VOLUME" "$tp")"
+    assert_eq "$t: no direct /run/avahi-daemon volume" "0" "$(grep -cE -- '^#?Volume=/run/avahi-daemon' "$tp")"
+    assert_eq "$t: ExecStartPre present once" "1" "$(grep -c '^ExecStartPre=' "$tp")"
+    assert_eq "$t: D-Bus volume ships commented" "1" "$(grep -cxF -- "#${PODMAN_DBUS_VOLUME}" "$tp")"
+done
+prestd="$(grep '^ExecStartPre=' "$(tpl_path standard)")"
+assert_eq "autotls carries the identical ExecStartPre" "$prestd" "$(grep '^ExecStartPre=' "$(tpl_path autotls)")"
+assert_eq "heredoc carries the identical ExecStartPre" "$prestd" "$(grep '^ExecStartPre=' "$(tpl_path heredoc)")"
+
+it "ExecStartPre snippet transitions"
+
+# Run the shipped snippet with %t, %N and the host avahi directory pointed into $WORK.
+fake_avahi="${WORK}/host-run/avahi-daemon"
+fake_rt="${WORK}/rt"
+mkdir -p "$fake_avahi" "$fake_rt"
+: > "${fake_avahi}/keepme"
+run_pre() { # unit name
+    local cmd="${prestd#ExecStartPre=}"
+    cmd="${cmd//%t/$fake_rt}"
+    cmd="${cmd//%N/$1}"
+    cmd="${cmd//\/run\/avahi-daemon/$fake_avahi}"
+    eval "$cmd"
+}
+is_empty_dir() { [ -d "$1" ] && [ ! -L "$1" ] && [ -z "$(ls -A "$1")" ]; }
+src1="${fake_rt}/unit-a-mdns/avahi-daemon"
+src2="${fake_rt}/unit-b-mdns/avahi-daemon"
+
+run_pre unit-a; assert_ok "no socket: snippet succeeds" $?
+is_empty_dir "$src1"; assert_ok "no socket: source is an empty directory" $?
+python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "${fake_avahi}/socket"
+run_pre unit-a; assert_ok "socket appears: snippet succeeds" $?
+assert_eq "socket appears: source is a symlink to the host directory" "$fake_avahi" "$(readlink "$src1")"
+run_pre unit-a; assert_ok "rerun with socket: snippet succeeds" $?
+assert_eq "rerun with socket: still a symlink to the host directory" "$fake_avahi" "$(readlink "$src1")"
+assert_eq "rerun with socket: no link created inside the host directory" "keepme socket" "$(ls -A "$fake_avahi" | sort | tr '\n' ' ' | sed 's/ $//')"
+run_pre unit-b; assert_ok "second unit name: snippet succeeds" $?
+assert_eq "second unit name: independent symlink" "$fake_avahi" "$(readlink "$src2")"
+rm -f "${fake_avahi}/socket"
+run_pre unit-a; assert_ok "socket disappears: snippet succeeds" $?
+is_empty_dir "$src1"; assert_ok "socket disappears: source is an empty directory again" $?
+assert_eq "socket disappears: host directory content untouched" "1" "$([ -e "${fake_avahi}/keepme" ] && echo 1 || echo 0)"
+assert_eq "socket disappears: other unit's source untouched" "$fake_avahi" "$(readlink "$src2")"
+assert_eq "socket disappears: nothing left beside the source" "avahi-daemon" "$(ls -A "${fake_rt}/unit-a-mdns")"
+
+it "enable_mdns_mounts matrix"
+
+for t in $TEMPLATE_NAMES; do
+    for socks in "none" "avahi" "dbus" "both"; do
+        FAKE_SOCKETS=""
+        case "$socks" in
+            avahi|both) FAKE_SOCKETS="$FAKE_SOCKETS /run/avahi-daemon/socket" ;;
+        esac
+        case "$socks" in
+            dbus|both) FAKE_SOCKETS="$FAKE_SOCKETS /run/dbus/system_bus_socket" ;;
+        esac
+        for keepid in off on; do
+            for uid in 0 1000; do
+                label="$t sockets=$socks keep-id=$keepid uid=$uid"
+                before="${WORK}/m-before.container"; after="${WORK}/m-after.container"
+                cp "$(tpl_path "$t")" "$before"
+                [ "$keepid" = on ] && sed -i "$PODMAN_KEEPID_SED" "$before"
+                cp "$before" "$after"
+                enable_mdns_mounts "$after" "$uid" /run/avahi-daemon/socket /run/dbus/system_bus_socket
+
+                want_dbus=0
+                if [ "$socks" = dbus ] || [ "$socks" = both ]; then
+                    if [ "$keepid" = on ] && [ "$uid" != 0 ]; then want_dbus=1; fi
+                fi
+                assert_eq "[$label] Avahi volume unchanged and present" "1" "$(grep -cxF -- "$PODMAN_AVAHI_VOLUME" "$after")"
+                assert_eq "[$label] D-Bus volume enabled count" "$want_dbus" "$(grep -cxF -- "$PODMAN_DBUS_VOLUME" "$after")"
+                assert_eq "[$label] D-Bus commented count" "$((1 - want_dbus))" "$(grep -cxF -- "#${PODMAN_DBUS_VOLUME}" "$after")"
+                assert_eq "[$label] lines added over input" "$want_dbus" "$(diff "$before" "$after" | grep -c '^>' || true)"
+                assert_eq "[$label] lines removed from input" "$want_dbus" "$(diff "$before" "$after" | grep -c '^<' || true)"
+                assert_eq "[$label] no :z or :Z relabel" "0" "$(grep -E -- '^#?Volume=' "$after" | grep -cE -- '[:,][zZ]($|[:,])')"
+
+                again="${WORK}/m-again.container"
+                cp "$after" "$again"
+                enable_mdns_mounts "$again" "$uid" /run/avahi-daemon/socket /run/dbus/system_bus_socket
+                rc=0; cmp -s "$after" "$again" || rc=$?
+                assert_ok "[$label] second run is byte-identical" "$rc"
+            done
+        done
+    done
+done
+FAKE_SOCKETS=""
+
+it "create_quadlet_service wiring and reruns"
+
+BOTH_SOCKS="/run/avahi-daemon/socket /run/dbus/system_bus_socket"
+fresh_quadlet_dir() { rm -rf "$QUADLET_DIR"; mkdir -p "$QUADLET_DIR"; }
+unit="$QUADLET_DIR/birdnet-go.container"
+dbus_count() { grep -cxF -- "$PODMAN_DBUS_VOLUME" "$unit"; }
+avahi_count() { grep -cxF -- "$PODMAN_AVAHI_VOLUME" "$unit"; }
+
+# 1. A prior unit with keep-id, uid 1000, both sockets: D-Bus on (the call runs after the
+#    keep-id carry-over, reads the uid from id -u and passes the production socket paths).
+fresh_quadlet_dir; printf '[Container]\nUserNS=keep-id\n' > "$unit"
+FAKE_UID=1000; FAKE_SOCKETS="$BOTH_SOCKS"
+run_create_quadlet "$REPO_ROOT" ""
+assert_eq "standard, keep-id, uid 1000, both sockets: D-Bus mount on" "1" "$(dbus_count)"
+assert_eq "standard, keep-id, uid 1000, both sockets: Avahi mount present" "1" "$(avahi_count)"
+assert_eq "standard, keep-id, uid 1000, both sockets: keep-id carried over" "1" "$(grep -c '^UserNS=keep-id' "$unit")"
+cp "$unit" "${WORK}/run1.container"
+
+# 2. Same with uid 0: no D-Bus.
+fresh_quadlet_dir; printf '[Container]\nUserNS=keep-id\n' > "$unit"
+FAKE_UID=0
+run_create_quadlet "$REPO_ROOT" ""
+assert_eq "uid 0: D-Bus mount off" "0" "$(dbus_count)"
+assert_eq "uid 0: Avahi mount present" "1" "$(avahi_count)"
+
+# 3. Rerun of 1 after the D-Bus socket disappears: line back to commented, keep-id kept.
+FAKE_UID=1000; FAKE_SOCKETS=""
+run_create_quadlet "$REPO_ROOT" ""
+assert_eq "socket gone on rerun: D-Bus mount off again" "0" "$(dbus_count)"
+assert_eq "socket gone on rerun: D-Bus line back to commented" "1" "$(grep -cxF -- "#${PODMAN_DBUS_VOLUME}" "$unit")"
+assert_eq "socket gone on rerun: keep-id still on" "1" "$(grep -c '^UserNS=keep-id' "$unit")"
+assert_eq "socket gone on rerun: Avahi mount still present" "1" "$(avahi_count)"
+
+# 4. Rerun of 1 unchanged: byte-identical.
+FAKE_SOCKETS="$BOTH_SOCKS"
+run_create_quadlet "$REPO_ROOT" ""
+rc=0; cmp -s "$unit" "${WORK}/run1.container" || rc=$?
+assert_ok "unchanged rerun gives a byte-identical unit" "$rc"
+
+# 5. AutoTLS config picks the autotls template, with the same mount results.
+fresh_quadlet_dir; printf '[Container]\nUserNS=keep-id\n' > "$unit"
+printf 'security:\n  autotls: true\n' > "${WORK}/autotls-config.yaml"
+run_create_quadlet "$REPO_ROOT" "${WORK}/autotls-config.yaml"
+assert_eq "autotls config: autotls container name" "1" "$(grep -c '^ContainerName=birdnet-go-autotls$' "$unit")"
+assert_eq "autotls config: D-Bus mount on" "1" "$(dbus_count)"
+assert_eq "autotls config: Avahi mount present" "1" "$(avahi_count)"
+
+# 6. cwd without Podman/: the heredoc fallback, same expectations as 1.
+fresh_quadlet_dir; printf '[Container]\nUserNS=keep-id\n' > "$unit"
+run_create_quadlet "$nopodman_dir" ""
+assert_eq "heredoc fallback: D-Bus mount on" "1" "$(dbus_count)"
+assert_eq "heredoc fallback: Avahi mount present" "1" "$(avahi_count)"
+assert_eq "heredoc fallback: ExecStartPre present" "1" "$(grep -c '^ExecStartPre=' "$unit")"
+
+# 7. No prior unit, keep-id off, uid 1000, both sockets: Avahi indirection only, D-Bus off.
+fresh_quadlet_dir
+run_create_quadlet "$REPO_ROOT" ""
+assert_eq "fresh unit without keep-id: D-Bus mount off" "0" "$(dbus_count)"
+assert_eq "fresh unit without keep-id: Avahi mount present" "1" "$(avahi_count)"
+FAKE_SOCKETS=""; FAKE_UID=1000
 
 # ===========================================================================
 # Result
