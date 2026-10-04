@@ -61,7 +61,7 @@ If BirdNET-Go is not yet available in Community Applications:
 ### What changes
 
 - The container uses the host network stack, so there is no port mapping. The app listens on the **WebUI Port** setting (variable `BIRDNET_WEBSERVER_PORT`, default 8080). Use 1024 or higher: the app runs as a non-root user.
-- The template uses the container name `birdnet-go` (the name the Community Applications template uses) and the default appdata paths (`/mnt/user/appdata/birdnet-go/config` and `/data`), so it can take over the data of an existing container. Docker container names are case-sensitive: a container created from this repository's bridge template (`birdnet-go.xml`) is named `BirdNET-Go`, so it is a separate container and must be stopped and removed first (below).
+- The template uses the container name `birdnet-go` (the name the Community Applications template uses) and the default appdata paths (`/mnt/user/appdata/birdnet-go/config` and `/mnt/user/appdata/birdnet-go/data`), so it can take over the data of an existing container. Docker container names are case-sensitive: a container created from this repository's bridge template (`birdnet-go.xml`) is named `BirdNET-Go`, so it is a separate container and must be stopped and removed first (below).
 - The D-Bus path is not part of this template. Host networking does not need it.
 - It also sets `--security-opt no-new-privileges=true`, `--cap-drop NET_RAW` and `--stop-timeout 20`, and keeps `--add-host="host.docker.internal:host-gateway"`. Keep that last one: it keeps the app's local-subnet check (subnet authentication bypass) the same as in bridge mode.
 - The web interface listens on all interfaces. It cannot be limited to localhost in host mode.
