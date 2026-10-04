@@ -177,7 +177,7 @@ Please refer to the [Docker Compose Guide](docker_compose_guide.md) for detailed
 
 This method requires Docker to be installed on your system. See the [official Docker installation guide](https://docs.docker.com/engine/install/).
 
-**Recommended for new installs: host networking.** There is no `-p` option; the app listens on the port set by `BIRDNET_WEBSERVER_PORT` (1024 or higher). Open that port in the host firewall. The Avahi mount lets the container resolve `.local` names.
+**Recommended for new installs: host networking.** There is no `-p` option; the app listens on the port set by `BIRDNET_WEBSERVER_PORT` (1024 or higher). Open that port in the host firewall. The Avahi mount lets the container resolve `.local` names. On a host without a sound card (RTSP streams only), leave out `--device /dev/snd`: Docker refuses to start a container whose device does not exist.
 
 ```bash
 docker run -ti --rm \
