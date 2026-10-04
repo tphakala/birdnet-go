@@ -471,13 +471,16 @@ LABEL usage.compose.podman="Use Podman/podman-compose.yml"
 # Uses /health endpoint and validates JSON status via jq to avoid false positives
 # from HTTP->HTTPS 308 redirects (curl -f treats 3xx as success).
 # Extended start-period for low-power devices (e.g., Raspberry Pi)
-# The first probe follows BIRDNET_WEBSERVER_PORT (host networking, where the app
-# listens on that port directly). When it is unset or 8080 that probe is skipped
-# and the original probes below run unchanged.
+# The HTTP probe uses BIRDNET_WEBSERVER_PORT when it holds a valid port (host
+# networking, where the app listens on that port directly), and 8080 otherwise,
+# matching the app, which ignores an invalid value. With a custom port, 8080 is
+# not probed: under host networking another service on the host could answer
+# there. When the variable is unset or 8080 the probes are the original ones.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD P="$(printf '%s' "${BIRDNET_WEBSERVER_PORT:-8080}" | tr -d '[:space:]')"; \
-        { [ "$P" != "8080" ] && curl -fs --connect-timeout 2 --max-time 3 "http://localhost:${P}/health" | jq -e '.status == "healthy"' >/dev/null; } \
-        || curl -fs --connect-timeout 2 --max-time 3 http://localhost:8080/health | jq -e '.status == "healthy"' >/dev/null \
+        case "$P" in ''|*[!0-9]*) P=8080 ;; esac; \
+        { [ "$P" -ge 1 ] && [ "$P" -le 65535 ]; } || P=8080; \
+        curl -fs --connect-timeout 2 --max-time 3 "http://localhost:${P}/health" | jq -e '.status == "healthy"' >/dev/null \
         || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:8443/health | jq -e '.status == "healthy"' >/dev/null \
         || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:443/health | jq -e '.status == "healthy"' >/dev/null \
         || exit 1

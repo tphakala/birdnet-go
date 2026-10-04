@@ -186,10 +186,9 @@ The container includes a built-in health check that monitors the application's w
 
 **Check command:** the `/health` endpoint must answer with JSON status `healthy`. The probes run in this order, and the first success wins:
 
-1. `http://localhost:$BIRDNET_WEBSERVER_PORT/health` (skipped when the variable is unset or 8080)
-2. `http://localhost:8080/health`
-3. `https://localhost:8443/health`
-4. `https://localhost:443/health`
+1. `http://localhost:<port>/health`, where `<port>` is `BIRDNET_WEBSERVER_PORT` when it holds a valid port (1 to 65535) and 8080 otherwise. With a custom port, 8080 is not probed, so under host networking another service on the host cannot answer for the app.
+2. `https://localhost:8443/health`
+3. `https://localhost:443/health`
 
 **Note:** The port follows `BIRDNET_WEBSERVER_PORT`. If you changed the port only in `config.yaml` (not through that variable) to something other than 8080, 8443 or 443, the health check fails, but the application still works.
 
