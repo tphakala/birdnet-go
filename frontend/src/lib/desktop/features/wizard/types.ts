@@ -20,8 +20,24 @@ export interface ContentStep {
 
 export type WizardStep = ComponentStep | ContentStep;
 
+/**
+ * Saves a step's pending edits. Rejects when the save fails; the wizard then
+ * stays on the step and shows an error.
+ */
+export type StepLeaveHandler = () => Promise<void>;
+
 export interface WizardStepProps {
+  /**
+   * Reports whether the step is valid. A step must call it at mount and on every
+   * validity change; until it does, Next stays disabled.
+   */
   onValidChange?: (valid: boolean) => void;
+  /**
+   * Registers the step's leave handler, which Next, Back and Done await before
+   * navigating. Register once at mount; the returned function unregisters the
+   * handler and must run when the step is destroyed.
+   */
+  registerLeaveHandler?: (handler: StepLeaveHandler) => () => void;
 }
 
 export interface WizardLaunchOptions {

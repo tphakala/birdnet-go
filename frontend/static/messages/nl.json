@@ -5238,6 +5238,23 @@
     "done": "Gereed",
     "progress": "Stap {current} van {total}",
     "progressLabel": "Wizard-voortgang",
+    "status": {
+      "saving": "Opslaan...",
+      "loadingStep": "Stap laden..."
+    },
+    "errors": {
+      "saveFailed": "Deze stap kon niet worden opgeslagen. Controleer de verbinding en druk opnieuw op Volgende, of sla de installatie over en wijzig dit later in Instellingen.",
+      "stepLoadFailed": "Deze stap kon niet worden geladen. Druk op Opnieuw proberen of laad de pagina opnieuw."
+    },
+    "reasons": {
+      "completeStep": "Voltooi deze stap om verder te gaan."
+    },
+    "leaveConfirm": {
+      "title": "Installatie verlaten?",
+      "message": "De installatie wordt niet opnieuw geopend. Keuzes die in eerdere stappen zijn opgeslagen blijven behouden; wijzigingen in deze stap worden niet opgeslagen. Je kunt later alles wijzigen in Instellingen.",
+      "stay": "Doorgaan met installatie",
+      "leave": "Installatie verlaten"
+    },
     "whatsNew": {
       "title": "Nieuw in {version}"
     },

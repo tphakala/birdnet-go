@@ -35,6 +35,10 @@
     wizardState,
     WIZARD_DISMISSED_VERSION_KEY,
   } from './lib/desktop/features/wizard/wizardState.svelte';
+  import {
+    resolveWizardLaunch,
+    type SettingsLoadState,
+  } from './lib/desktop/features/wizard/wizardLaunch';
 
   const logger = getLogger('app');
 
@@ -112,6 +116,9 @@
 
   // App initialization state
   let appInitialized = $derived(appState.initialized);
+
+  // Outcome of the settings load started at app init; gates the onboarding wizard
+  let settingsLoad = $state<SettingsLoadState>('pending');
   let appLoading = $derived(appState.loading);
   let appError = $derived(appState.error);
 
@@ -632,10 +639,19 @@
     // Load settings at app startup so they are available on any page the user navigates to
     // first (e.g. System → Terminal) without requiring a visit to the Settings page.
     // Skip when authentication is required but not yet provided to avoid 401 console errors.
+    // The onboarding wizard saves settings, so it launches only once this load resolved.
     if (!securityEnabled || accessAllowed) {
-      settingsActions.loadSettings().catch(err => {
-        logger.error('Failed to load settings on app init', err);
-      });
+      settingsActions
+        .loadSettings()
+        .then(() => {
+          settingsLoad = 'loaded';
+        })
+        .catch(err => {
+          settingsLoad = 'failed';
+          logger.error('Failed to load settings on app init', err);
+        });
+    } else {
+      settingsLoad = 'skipped';
     }
 
     // Initial routing is handled by the reactive $effect below when appInitialized becomes true
@@ -657,30 +673,38 @@
     handleRouting(currentPath);
   });
 
-  // Wizard trigger: launch after first route loads
+  // Wizard trigger: launch after first route loads. Onboarding also waits for the
+  // App's settings load (see resolveWizardLaunch), so the effect re-runs when
+  // settingsLoad changes.
   let wizardChecked = $state(false);
   $effect(() => {
     if (!appInitialized || loadingComponent || wizardChecked) return;
-    wizardChecked = true;
 
     // Check localStorage dismissal before any wizard flow. This covers the case
     // where the server-side dismiss failed (e.g. 401 when not authenticated) but
     // the client-side fallback persisted the dismissal.
+    let dismissedVersion: string | null = null;
     try {
-      const dismissedVersion = localStorage.getItem(WIZARD_DISMISSED_VERSION_KEY);
-      if (dismissedVersion === appState.version) return;
+      dismissedVersion = localStorage.getItem(WIZARD_DISMISSED_VERSION_KEY);
     } catch {
       // localStorage unavailable (private browsing, etc.)
     }
 
-    if (appState.freshInstall) {
+    const decision = resolveWizardLaunch({
+      dismissedVersion,
+      version: appState.version,
+      freshInstall: appState.freshInstall,
+      newVersion: appState.newVersion,
+      settingsLoad,
+    });
+    if (decision === 'wait') return;
+    wizardChecked = true;
+
+    if (decision === 'onboarding') {
       wizardState.launch('onboarding', {
         currentVersion: appState.version,
       });
-      return;
-    }
-
-    if (appState.newVersion) {
+    } else if (decision === 'whats-new') {
       wizardState.launch('whats-new', {
         previousVersion: appState.previousVersion ?? undefined,
         currentVersion: appState.version,

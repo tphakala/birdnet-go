@@ -5238,6 +5238,23 @@
     "done": "Gatavs",
     "progress": "Solis {current} no {total}",
     "progressLabel": "Vedņa progress",
+    "status": {
+      "saving": "Saglabā...",
+      "loadingStep": "Ielādē soli..."
+    },
+    "errors": {
+      "saveFailed": "Šo soli neizdevās saglabāt. Pārbaudiet savienojumu un vēlreiz nospiediet Tālāk vai izlaidiet iestatīšanu un mainiet to vēlāk Iestatījumos.",
+      "stepLoadFailed": "Šo soli neizdevās ielādēt. Nospiediet Mēģināt vēlreiz vai pārlādējiet lapu."
+    },
+    "reasons": {
+      "completeStep": "Lai turpinātu, pabeidziet šo soli."
+    },
+    "leaveConfirm": {
+      "title": "Pamest iestatīšanu?",
+      "message": "Iestatīšana vairs netiks atvērta. Iepriekšējos soļos saglabātās izvēles tiek paturētas; šī soļa izmaiņas netiek saglabātas. Visu varat mainīt vēlāk Iestatījumos.",
+      "stay": "Turpināt iestatīšanu",
+      "leave": "Pamest iestatīšanu"
+    },
     "whatsNew": {
       "title": "Jaunumi versijā {version}"
     },

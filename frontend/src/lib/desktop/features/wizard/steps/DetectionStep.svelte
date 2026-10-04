@@ -3,14 +3,12 @@
   import { t } from '$lib/i18n';
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
-  import { getLogger } from '$lib/utils/logger';
   import { Scale, Target, Radio } from '@lucide/svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
+  import { saveStepSettings } from '../stepSave';
 
-  const logger = getLogger('DetectionStep');
-
-  let { onValidChange }: WizardStepProps = $props();
+  let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
   interface Preset {
     id: string;
@@ -70,19 +68,32 @@
     dirty = true;
   }
 
-  // Save on unmount — only if user made changes
-  $effect(() => {
-    return () => {
-      if (!dirty) return;
-      const preset = presets.find(p => p.id === selectedPreset);
-      if (preset) {
+  // Save the step's edits when the wizard leaves it with Next, Back or Done.
+  // Only runs if the user made changes.
+  async function commit(): Promise<void> {
+    if (!dirty) return;
+    const preset = presets.find(p => p.id === selectedPreset);
+    if (!preset) return;
+    await saveStepSettings(
+      () => {
         settingsActions.updateSection('birdnet', {
           threshold: preset.threshold,
         });
-        settingsActions.saveSettings().catch(err => {
-          logger.error('Failed to save detection settings', err);
-        });
-      }
+      },
+      () => mounted
+    );
+    dirty = false;
+  }
+
+  // Register the save with the wizard: Next, Back and Done await it, so it runs
+  // only on those actions and never when the step unmounts (Skip, Leave setup).
+  let mounted = false;
+  onMount(() => {
+    mounted = true;
+    const unregister = registerLeaveHandler?.(commit);
+    return () => {
+      mounted = false;
+      unregister?.();
     };
   });
 </script>

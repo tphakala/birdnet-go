@@ -5238,6 +5238,23 @@
     "done": "Kész",
     "progress": "{current}. lépés / {total}",
     "progressLabel": "Varázsló előrehaladása",
+    "status": {
+      "saving": "Mentés...",
+      "loadingStep": "Lépés betöltése..."
+    },
+    "errors": {
+      "saveFailed": "Ezt a lépést nem sikerült menteni. Ellenőrizze a kapcsolatot, és nyomja meg újra a Tovább gombot, vagy hagyja ki a beállítást, és módosítsa később a Beállításokban.",
+      "stepLoadFailed": "Ezt a lépést nem sikerült betölteni. Nyomja meg az Újra gombot, vagy töltse újra az oldalt."
+    },
+    "reasons": {
+      "completeStep": "A folytatáshoz fejezze be ezt a lépést."
+    },
+    "leaveConfirm": {
+      "title": "Kilép a beállításból?",
+      "message": "A beállítás nem nyílik meg újra. A korábbi lépésekben mentett választások megmaradnak; az ebben a lépésben végzett módosítások nem kerülnek mentésre. Mindent módosíthat később a Beállításokban.",
+      "stay": "Beállítás folytatása",
+      "leave": "Kilépés a beállításból"
+    },
     "whatsNew": {
       "title": "Újdonságok a {version} verzióban"
     },

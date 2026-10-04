@@ -1,5 +1,12 @@
 import { api } from '$lib/utils/api';
-import type { WizardFlow, WizardLaunchOptions, WizardStatus, WizardStep } from './types';
+import { loggers } from '$lib/utils/logger';
+import type {
+  StepLeaveHandler,
+  WizardFlow,
+  WizardLaunchOptions,
+  WizardStatus,
+  WizardStep,
+} from './types';
 import { getStepsForFlow } from './wizardRegistry';
 
 export const WIZARD_DISMISSED_VERSION_KEY = 'birdnet-wizard-dismissed-version';
@@ -9,7 +16,13 @@ let status = $state<WizardStatus>('idle');
 let flow = $state<WizardFlow | null>(null);
 let currentStepIndex = $state(0);
 let steps = $state<WizardStep[]>([]);
-let isStepValid = $state(true);
+// Fail closed: a step is not valid until it reports so, and not ready until the
+// dialog has mounted it.
+let isStepValid = $state<boolean>(false);
+let isStepReady = $state<boolean>(false);
+let isSaving = $state<boolean>(false);
+// i18n key of the error to show for the current step, or null
+let stepError = $state<string | null>(null);
 let previousVersion = $state<string | null>(null);
 let currentVersion = $state<string | null>(null);
 
@@ -19,6 +32,23 @@ const currentStep = $derived(steps[currentStepIndex] ?? null);
 const isFirstStep = $derived(currentStepIndex === 0);
 const isLastStep = $derived(currentStepIndex === totalSteps - 1);
 const isActive = $derived(status === 'active');
+const canAdvance = $derived(isActive && !isSaving && isStepReady && isStepValid);
+
+// The leave handler of the mounted step, awaited by next(), back() and complete().
+let leaveHandler: StepLeaveHandler | null = null;
+// Incremented whenever the wizard closes or relaunches, so an async result that
+// belongs to an earlier session can be recognised and dropped.
+let session = 0;
+
+const SAVE_FAILED_KEY = 'wizard.errors.saveFailed';
+
+function resetStepFlags(): void {
+  isStepValid = false;
+  isStepReady = false;
+  isSaving = false;
+  stepError = null;
+  leaveHandler = null;
+}
 
 async function dismiss(): Promise<void> {
   // Optimistic localStorage update
@@ -45,9 +75,10 @@ function resetState(): void {
   flow = null;
   currentStepIndex = 0;
   steps = [];
-  isStepValid = true;
   previousVersion = null;
   currentVersion = null;
+  session++;
+  resetStepFlags();
 }
 
 // Dismiss without changing wizard state. Used when launch() didn't activate
@@ -75,9 +106,10 @@ function _resetForTesting(): void {
   flow = null;
   currentStepIndex = 0;
   steps = [];
-  isStepValid = true;
   previousVersion = null;
   currentVersion = null;
+  session++;
+  resetStepFlags();
 }
 
 function launch(wizardFlow: WizardFlow, options?: WizardLaunchOptions): void {
@@ -88,34 +120,91 @@ function launch(wizardFlow: WizardFlow, options?: WizardLaunchOptions): void {
   steps = resolvedSteps;
   currentStepIndex = 0;
   status = 'active';
-  isStepValid = true;
   previousVersion = options?.previousVersion ?? null;
   currentVersion = options?.currentVersion ?? null;
+  session++;
+  resetStepFlags();
 }
 
-function next(): void {
-  if (isStepValid && !isLastStep) {
-    currentStepIndex++;
-    isStepValid = true;
+function registerLeaveHandler(handler: StepLeaveHandler): () => void {
+  leaveHandler = handler;
+  return () => {
+    if (leaveHandler === handler) leaveHandler = null;
+  };
+}
+
+// Called by the dialog once the step's component is mounted and has had the
+// chance to report its validity.
+function markStepReady(index: number): void {
+  if (isActive && index === currentStepIndex) {
+    isStepReady = true;
   }
 }
 
-function back(): void {
-  if (!isFirstStep) {
-    currentStepIndex--;
+function setStepValid(valid: boolean, index: number = currentStepIndex): void {
+  if (isActive && index === currentStepIndex) {
+    isStepValid = valid;
   }
 }
 
-function setStepValid(valid: boolean): void {
-  isStepValid = valid;
+// Runs the current step's leave handler. isSaving is set before the first await
+// so a second click in the same tick is refused. Returns true when navigation may
+// proceed; isSaving then stays true and the caller clears it in the same
+// synchronous block that moves the step. A result that belongs to another session
+// or step never touches state.
+async function runLeave(): Promise<boolean> {
+  const startSession = session;
+  const startIndex = currentStepIndex;
+  isSaving = true;
+  stepError = null;
+  const isStale = () => startSession !== session || startIndex !== currentStepIndex;
+  try {
+    await leaveHandler?.();
+  } catch (err) {
+    loggers.ui.error('Wizard step save failed', err);
+    if (!isStale()) {
+      stepError = SAVE_FAILED_KEY;
+      isSaving = false;
+    }
+    return false;
+  }
+  if (isStale()) return false;
+  leaveHandler = null;
+  return true;
+}
+
+async function next(): Promise<void> {
+  if (!canAdvance || isLastStep) return;
+  const startSession = session;
+  const startIndex = currentStepIndex;
+  if (!(await runLeave())) return;
+  if (startSession !== session || startIndex !== currentStepIndex) return;
+  currentStepIndex++;
+  resetStepFlags();
+}
+
+async function back(): Promise<void> {
+  if (!isActive || isSaving || isFirstStep) return;
+  const startSession = session;
+  const startIndex = currentStepIndex;
+  // An invalid or never-loaded step has nothing safe to save; its edits are discarded.
+  if (isStepReady && isStepValid) {
+    if (!(await runLeave())) return;
+    if (startSession !== session || startIndex !== currentStepIndex) return;
+  }
+  currentStepIndex--;
+  resetStepFlags();
 }
 
 function skip(): void {
+  leaveHandler = null;
   void dismiss();
   resetState();
 }
 
-function complete(): void {
+async function complete(): Promise<void> {
+  if (!canAdvance || !isLastStep) return;
+  if (!(await runLeave())) return;
   void dismiss();
   resetState();
 }
@@ -148,6 +237,18 @@ export const wizardState = {
   get isStepValid() {
     return isStepValid;
   },
+  get isStepReady() {
+    return isStepReady;
+  },
+  get isSaving() {
+    return isSaving;
+  },
+  get stepError() {
+    return stepError;
+  },
+  get canAdvance() {
+    return canAdvance;
+  },
   get previousVersion() {
     return previousVersion;
   },
@@ -155,6 +256,8 @@ export const wizardState = {
   next,
   back,
   setStepValid,
+  markStepReady,
+  registerLeaveHandler,
   skip,
   complete,
   dismissOnly,

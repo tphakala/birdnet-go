@@ -12,12 +12,13 @@
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
+  import { saveStepSettings } from '../stepSave';
   import { getLogger } from '$lib/utils/logger';
   import { toastActions } from '$lib/stores/toast';
 
   const logger = getLogger('LocationLanguageStep');
 
-  let { onValidChange }: WizardStepProps = $props();
+  let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
   let latitude = $state(0);
   let longitude = $state(0);
@@ -32,20 +33,21 @@
   // Baseline the UI locale against the PERSISTED backend value (not the
   // runtime locale). This has three effects:
   //   1) If the user picks a different UI language in the wizard, the
-  //      unmount handler detects the change and writes it to the backend.
+  //      leave handler detects the change and writes it to the backend.
   //   2) If runtime/localStorage has already drifted from the backend
   //      before the wizard opens (e.g. a previous wizard run set
-  //      localStorage but failed to persist to config.yaml), unmounting
-  //      still writes the runtime value so the drift is healed rather
-  //      than silently preserved.
+  //      localStorage but failed to persist to config.yaml), the leave
+  //      handler still writes the runtime value so the drift is healed
+  //      rather than silently preserved.
   //   3) On a fresh install the backend's Dashboard.Locale field is an
   //      empty string (Go zero value), which the API serializes as
   //      `undefined` thanks to the `omitempty` JSON tag. Leaving the
   //      baseline as `undefined` makes `getLocale() !== initialUILocale`
-  //      true on unmount, so the runtime/browser-detected locale gets
-  //      persisted to the backend on first save — no user interaction
-  //      required. The rapid-unmount-before-load risk is mitigated by
-  //      the `isLoading` guard in the unmount effect below.
+  //      true in the leave handler, so the runtime/browser-detected locale
+  //      gets persisted to the backend on first save, no user interaction
+  //      required. A save before the settings load finished is refused by
+  //      the settings store (saveSettings throws until dataLoaded), so the
+  //      baseline can never be written over unloaded data.
   let initialUILocale = $state<string | undefined>(
     get(settingsStore).formData?.realtime?.dashboard?.locale
   );
@@ -116,46 +118,55 @@
     );
   }
 
-  // Save on unmount — only if user made changes
-  $effect(() => {
-    return () => {
-      // Skip if settings are still loading: the baseline might not yet
-      // reflect the backend's real value, so any "change" we detect could
-      // be spurious and would clobber whatever the fetch is about to
-      // deliver.
-      if (get(settingsStore).isLoading) return;
+  // Save the step's edits when the wizard leaves it with Next, Back or Done.
+  // Only runs if the user made changes (or the UI locale needs healing).
+  async function commit(): Promise<void> {
+    const uiLocaleChanged = getLocale() !== initialUILocale;
+    if (!dirty && !uiLocaleChanged) return;
 
-      const uiLocaleChanged = getLocale() !== initialUILocale;
-      if (!dirty && !uiLocaleChanged) return;
-
-      if (dirty) {
-        settingsActions.updateSection('birdnet', {
-          latitude,
-          longitude,
-          locale: speciesLocale,
-        });
-      }
-
-      if (uiLocaleChanged) {
-        const store = get(settingsStore);
-        const currentDashboard = store?.formData?.realtime?.dashboard;
-        // Only update when we have an existing Dashboard snapshot to merge
-        // into. settingsActions.updateSection does a shallow merge at the
-        // realtime level, so writing a locale-only stub here would wipe the
-        // rest of the dashboard. In practice createEmptySettings() always
-        // populates this object; the guard is defensive against future
-        // refactors.
-        if (currentDashboard) {
-          const mergedDashboard: Dashboard = { ...currentDashboard, locale: getLocale() };
-          settingsActions.updateSection('realtime', {
-            dashboard: mergedDashboard,
+    await saveStepSettings(
+      () => {
+        if (dirty) {
+          settingsActions.updateSection('birdnet', {
+            latitude,
+            longitude,
+            locale: speciesLocale,
           });
         }
-      }
 
-      settingsActions.saveSettings().catch(err => {
-        logger.error('Failed to save location/language settings', err);
-      });
+        if (uiLocaleChanged) {
+          const store = get(settingsStore);
+          const currentDashboard = store?.formData?.realtime?.dashboard;
+          // Only update when we have an existing Dashboard snapshot to merge
+          // into. settingsActions.updateSection does a shallow merge at the
+          // realtime level, so writing a locale-only stub here would wipe the
+          // rest of the dashboard. In practice createEmptySettings() always
+          // populates this object; the guard is defensive against future
+          // refactors.
+          if (currentDashboard) {
+            const mergedDashboard: Dashboard = { ...currentDashboard, locale: getLocale() };
+            settingsActions.updateSection('realtime', {
+              dashboard: mergedDashboard,
+            });
+          }
+        }
+      },
+      () => mounted
+    );
+
+    dirty = false;
+    initialUILocale = getLocale();
+  }
+
+  // Register the save with the wizard: Next, Back and Done await it, so it runs
+  // only on those actions and never when the step unmounts (Skip, Leave setup).
+  let mounted = false;
+  onMount(() => {
+    mounted = true;
+    const unregister = registerLeaveHandler?.(commit);
+    return () => {
+      mounted = false;
+      unregister?.();
     };
   });
 </script>

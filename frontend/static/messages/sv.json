@@ -5238,6 +5238,23 @@
     "done": "Klar",
     "progress": "Steg {current} av {total}",
     "progressLabel": "Guideförlopp",
+    "status": {
+      "saving": "Sparar...",
+      "loadingStep": "Läser in steg..."
+    },
+    "errors": {
+      "saveFailed": "Det här steget kunde inte sparas. Kontrollera anslutningen och tryck på Nästa igen, eller hoppa över konfigurationen och ändra det senare i Inställningar.",
+      "stepLoadFailed": "Det här steget kunde inte läsas in. Tryck på Försök igen eller ladda om sidan."
+    },
+    "reasons": {
+      "completeStep": "Slutför det här steget för att fortsätta."
+    },
+    "leaveConfirm": {
+      "title": "Lämna konfigurationen?",
+      "message": "Konfigurationen öppnas inte igen. Val som sparats i tidigare steg behålls; ändringar i det här steget sparas inte. Du kan ändra allt senare i Inställningar.",
+      "stay": "Fortsätt konfigurera",
+      "leave": "Lämna konfigurationen"
+    },
     "whatsNew": {
       "title": "Nyheter i {version}"
     },

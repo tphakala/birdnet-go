@@ -5238,6 +5238,23 @@
     "done": "Ferdig",
     "progress": "Steg {current} av {total}",
     "progressLabel": "Veiviserfremdrift",
+    "status": {
+      "saving": "Lagrer...",
+      "loadingStep": "Laster trinn..."
+    },
+    "errors": {
+      "saveFailed": "Dette trinnet kunne ikke lagres. Sjekk tilkoblingen og trykk på Neste igjen, eller hopp over oppsettet og endre det senere i Innstillinger.",
+      "stepLoadFailed": "Dette trinnet kunne ikke lastes. Trykk på Prøv igjen, eller last siden på nytt."
+    },
+    "reasons": {
+      "completeStep": "Fullfør dette trinnet for å fortsette."
+    },
+    "leaveConfirm": {
+      "title": "Forlate oppsettet?",
+      "message": "Oppsettet åpnes ikke igjen. Valg som er lagret i tidligere trinn beholdes; endringer i dette trinnet lagres ikke. Du kan endre alt senere i Innstillinger.",
+      "stay": "Fortsett oppsettet",
+      "leave": "Forlat oppsettet"
+    },
     "whatsNew": {
       "title": "Nyheter i {version}"
     },

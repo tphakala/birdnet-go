@@ -4,13 +4,11 @@
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import { settingsActions, settingsStore, type RealtimeSettings } from '$lib/stores/settings';
   import { get } from 'svelte/store';
-  import { getLogger } from '$lib/utils/logger';
   import { ShieldCheck, Cloud, HeartHandshake } from '@lucide/svelte';
   import type { WizardStepProps } from '../types';
+  import { saveStepSettings } from '../stepSave';
 
-  const logger = getLogger('IntegrationStep');
-
-  let { onValidChange }: WizardStepProps = $props();
+  let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
   let privacyEnabled = $state(true);
   let birdweatherEnabled = $state(false);
@@ -61,23 +59,37 @@
     dirty = true;
   }
 
-  // Save on unmount — only if user made changes
-  $effect(() => {
+  // Save the step's edits when the wizard leaves it with Next, Back or Done.
+  // Only runs if the user made changes.
+  async function commit(): Promise<void> {
+    if (!dirty) return;
+    await saveStepSettings(
+      () => {
+        settingsActions.updateSection('realtime', {
+          privacyFilter: { enabled: privacyEnabled } as RealtimeSettings['privacyFilter'],
+          birdweather: {
+            enabled: birdweatherEnabled,
+            id: birdweatherId,
+          } as RealtimeSettings['birdweather'],
+        });
+        settingsActions.updateSection('sentry', {
+          enabled: sentryEnabled,
+        });
+      },
+      () => mounted
+    );
+    dirty = false;
+  }
+
+  // Register the save with the wizard: Next, Back and Done await it, so it runs
+  // only on those actions and never when the step unmounts (Skip, Leave setup).
+  let mounted = false;
+  onMount(() => {
+    mounted = true;
+    const unregister = registerLeaveHandler?.(commit);
     return () => {
-      if (!dirty) return;
-      settingsActions.updateSection('realtime', {
-        privacyFilter: { enabled: privacyEnabled } as RealtimeSettings['privacyFilter'],
-        birdweather: {
-          enabled: birdweatherEnabled,
-          id: birdweatherId,
-        } as RealtimeSettings['birdweather'],
-      });
-      settingsActions.updateSection('sentry', {
-        enabled: sentryEnabled,
-      });
-      settingsActions.saveSettings().catch(err => {
-        logger.error('Failed to save integration settings', err);
-      });
+      mounted = false;
+      unregister?.();
     };
   });
 </script>

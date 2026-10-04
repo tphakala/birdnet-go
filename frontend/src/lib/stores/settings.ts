@@ -904,6 +904,12 @@ export interface GlobalSettingsState {
   dataLoaded: boolean;
 }
 
+/** Options for {@link settingsActions.saveSettings}. */
+export interface SaveSettingsOptions {
+  /** Show the success and failure toasts. Defaults to true. */
+  notify?: boolean;
+}
+
 // API response types
 export interface APIResponse<T> {
   success: boolean;
@@ -1398,7 +1404,25 @@ export const settingsActions = {
     }));
   },
 
-  async saveSettings() {
+  /**
+   * Saves the whole formData to the backend. Refuses (throws before any network
+   * call) while no settings load has succeeded, because formData would then hold
+   * empty defaults that the backend deep-merges over the real configuration.
+   * Pass `{ notify: false }` to suppress the success and failure toasts.
+   */
+  async saveSettings(options: SaveSettingsOptions = {}) {
+    const { notify = true } = options;
+
+    if (!get(settingsStore).dataLoaded) {
+      const message = t('settings.errors.loadFailed');
+      logger.warn('Refusing to save settings before they have been loaded');
+      settingsStore.update(state => ({ ...state, error: message }));
+      if (notify) {
+        toastActions.error(t('notifications.content.settings.saveFailed'));
+      }
+      throw new Error(message);
+    }
+
     settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
     try {
       const currentState = get(settingsStore);
@@ -1467,8 +1491,9 @@ export const settingsActions = {
         isSaving: false,
       }));
 
-      // Show success toast
-      toastActions.success(t('notifications.content.settings.savedSuccessfully'));
+      if (notify) {
+        toastActions.success(t('notifications.content.settings.savedSuccessfully'));
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t('settings.errors.saveFailed');
       settingsStore.update(state => ({
@@ -1477,8 +1502,9 @@ export const settingsActions = {
         error: errorMessage,
       }));
 
-      // Show error toast
-      toastActions.error(t('notifications.content.settings.saveFailed'));
+      if (notify) {
+        toastActions.error(t('notifications.content.settings.saveFailed'));
+      }
 
       throw error;
     }

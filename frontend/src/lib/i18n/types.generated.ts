@@ -3836,6 +3836,15 @@ export type TranslationKey =
   | 'wizard.done'
   | 'wizard.progress' // params: current, total
   | 'wizard.progressLabel'
+  | 'wizard.status.saving'
+  | 'wizard.status.loadingStep'
+  | 'wizard.errors.saveFailed'
+  | 'wizard.errors.stepLoadFailed'
+  | 'wizard.reasons.completeStep'
+  | 'wizard.leaveConfirm.title'
+  | 'wizard.leaveConfirm.message'
+  | 'wizard.leaveConfirm.stay'
+  | 'wizard.leaveConfirm.leave'
   | 'wizard.whatsNew.title' // params: version
   | 'wizard.steps.welcome.title'
   | 'wizard.steps.welcome.heading'

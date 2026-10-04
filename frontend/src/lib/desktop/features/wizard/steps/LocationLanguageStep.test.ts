@@ -85,6 +85,7 @@ vi.mock('$lib/stores/settings', async () => {
       });
     }),
     saveSettings: vi.fn().mockResolvedValue(undefined),
+    resetAllSettings: vi.fn(),
   };
 
   return {
@@ -96,6 +97,27 @@ vi.mock('$lib/stores/settings', async () => {
 import LocationLanguageStep from './LocationLanguageStep.svelte';
 import { settingsActions, settingsStore } from '$lib/stores/settings';
 import { setLocale } from '$lib/i18n';
+import type { StepLeaveHandler } from '../types';
+
+// Renders the step with a registerLeaveHandler spy and exposes the captured handler.
+function renderStep() {
+  let handler: StepLeaveHandler | undefined;
+  const unregister = vi.fn();
+  const registerLeaveHandler = vi.fn((h: StepLeaveHandler) => {
+    handler = h;
+    return unregister;
+  });
+  const result = render(LocationLanguageStep, { props: { registerLeaveHandler } });
+  return {
+    ...result,
+    registerLeaveHandler,
+    unregister,
+    leave: () => {
+      if (!handler) throw new Error('leave handler was not registered');
+      return handler();
+    },
+  };
+}
 
 // Helper to flush pending microtasks (e.g. onMount continuations).
 // Double Promise.resolve() processes both the immediate microtask and
@@ -108,7 +130,7 @@ async function flushAsync() {
   await Promise.resolve();
 }
 
-describe('LocationLanguageStep - UI locale persistence on unmount', () => {
+describe('LocationLanguageStep - UI locale persistence in the leave handler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     currentLocale = 'en';
@@ -162,14 +184,13 @@ describe('LocationLanguageStep - UI locale persistence on unmount', () => {
   });
 
   it('persists UI locale to realtime.dashboard when only the UI locale changed (dirty=false)', async () => {
-    const { unmount } = render(LocationLanguageStep, { props: {} });
+    const { leave } = renderStep();
     await flushAsync();
 
     // Simulate LanguageSelector invoking setLocale
     setLocale('hu');
 
-    unmount();
-    await flushAsync();
+    await leave();
 
     // realtime update must be dispatched even though no other field is dirty
     const realtimeCall = (
@@ -197,14 +218,13 @@ describe('LocationLanguageStep - UI locale persistence on unmount', () => {
     // config.yaml). The backend still shows "en" (the default).
     currentLocale = 'hu';
 
-    const { unmount } = render(LocationLanguageStep, { props: {} });
+    const { leave } = renderStep();
     await flushAsync();
 
     // User does NOT interact with the wizard — no setLocale, no field edits.
-    unmount();
-    await flushAsync();
+    await leave();
 
-    // The unmount handler must still fire the realtime update so the backend
+    // The leave handler must still fire the realtime update so the backend
     // is healed to match the runtime choice.
     const realtimeCall = (
       settingsActions.updateSection as unknown as ReturnType<typeof vi.fn>
@@ -231,14 +251,13 @@ describe('LocationLanguageStep - UI locale persistence on unmount', () => {
       return state;
     });
 
-    const { unmount } = render(LocationLanguageStep, { props: {} });
+    const { leave } = renderStep();
     await flushAsync();
 
     // User does not interact.
-    unmount();
-    await flushAsync();
+    await leave();
 
-    // Unmount must still persist the runtime locale so the backend is
+    // The leave handler must still persist the runtime locale so the backend is
     // initialized to match what the user is seeing.
     const realtimeCall = (
       settingsActions.updateSection as unknown as ReturnType<typeof vi.fn>
@@ -251,11 +270,43 @@ describe('LocationLanguageStep - UI locale persistence on unmount', () => {
     expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('does NOT save when settings are still loading (avoids clobbering in-flight fetch)', async () => {
+  it('rejects from the leave handler when the save rejects', async () => {
     currentLocale = 'hu';
-    settingsStore.update(state => ({ ...state, isLoading: true }));
+    const failure = new Error('save failed');
+    vi.mocked(settingsActions.saveSettings).mockRejectedValueOnce(failure);
 
-    const { unmount } = render(LocationLanguageStep, { props: {} });
+    const { leave } = renderStep();
+    await flushAsync();
+
+    await expect(leave()).rejects.toBe(failure);
+    expect(settingsActions.resetAllSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves without toasts', async () => {
+    currentLocale = 'hu';
+    const { leave } = renderStep();
+    await flushAsync();
+
+    await leave();
+
+    expect(settingsActions.saveSettings).toHaveBeenCalledWith({ notify: false });
+  });
+
+  it('registers a leave handler on mount and unregisters on destroy', async () => {
+    const { registerLeaveHandler, unregister, unmount } = renderStep();
+    await flushAsync();
+
+    expect(registerLeaveHandler).toHaveBeenCalledTimes(1);
+    expect(unregister).not.toHaveBeenCalled();
+
+    unmount();
+
+    expect(unregister).toHaveBeenCalledTimes(1);
+  });
+
+  it('unmounting never saves', async () => {
+    currentLocale = 'hu';
+    const { unmount } = renderStep();
     await flushAsync();
 
     unmount();
@@ -265,13 +316,37 @@ describe('LocationLanguageStep - UI locale persistence on unmount', () => {
     expect(settingsActions.saveSettings).not.toHaveBeenCalled();
   });
 
+  it('a second leave call after a successful save does nothing', async () => {
+    currentLocale = 'hu';
+    const { leave } = renderStep();
+    await flushAsync();
+
+    await leave();
+    await leave();
+
+    expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not save after the step unmounted when the handler runs late', async () => {
+    currentLocale = 'hu';
+    const failure = new Error('late failure');
+    vi.mocked(settingsActions.saveSettings).mockRejectedValueOnce(failure);
+    const { leave, unmount } = renderStep();
+    await flushAsync();
+
+    const pending = leave();
+    unmount();
+
+    await expect(pending).rejects.toBe(failure);
+    expect(settingsActions.resetAllSettings).not.toHaveBeenCalled();
+  });
+
   it('does NOT save when UI locale is unchanged and dirty is false', async () => {
-    const { unmount } = render(LocationLanguageStep, { props: {} });
+    const { leave } = renderStep();
     await flushAsync();
 
     // No changes made whatsoever
-    unmount();
-    await flushAsync();
+    await leave();
 
     const realtimeCall = (
       settingsActions.updateSection as unknown as ReturnType<typeof vi.fn>
@@ -281,7 +356,7 @@ describe('LocationLanguageStep - UI locale persistence on unmount', () => {
   });
 
   it('dispatches both realtime and birdnet updates with a single save when both change', async () => {
-    const { unmount, container } = render(LocationLanguageStep, { props: {} });
+    const { leave, container } = renderStep();
     await flushAsync();
 
     // Change the latitude via the underlying NumberField input (triggers dirty=true)
@@ -294,8 +369,7 @@ describe('LocationLanguageStep - UI locale persistence on unmount', () => {
     // Change the UI locale via the mocked i18n store
     setLocale('hu');
 
-    unmount();
-    await flushAsync();
+    await leave();
 
     const updateCalls = (settingsActions.updateSection as unknown as ReturnType<typeof vi.fn>).mock
       .calls;

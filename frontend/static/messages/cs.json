@@ -5238,6 +5238,23 @@
     "done": "Hotovo",
     "progress": "Krok {current} z {total}",
     "progressLabel": "Průběh průvodce",
+    "status": {
+      "saving": "Ukládání...",
+      "loadingStep": "Načítání kroku..."
+    },
+    "errors": {
+      "saveFailed": "Tento krok se nepodařilo uložit. Zkontrolujte připojení a znovu stiskněte Další, nebo přeskočte nastavení a změňte to později v Nastavení.",
+      "stepLoadFailed": "Tento krok se nepodařilo načíst. Stiskněte Zkusit znovu, nebo obnovte stránku."
+    },
+    "reasons": {
+      "completeStep": "Pro pokračování dokončete tento krok."
+    },
+    "leaveConfirm": {
+      "title": "Opustit nastavení?",
+      "message": "Nastavení se znovu neotevře. Volby uložené v předchozích krocích zůstanou zachovány; změny v tomto kroku se neuloží. Vše můžete později změnit v Nastavení.",
+      "stay": "Pokračovat v nastavení",
+      "leave": "Opustit nastavení"
+    },
     "whatsNew": {
       "title": "Co je nového ve verzi {version}"
     },

@@ -5238,6 +5238,23 @@
     "done": "Valmis",
     "progress": "Vaihe {current}/{total}",
     "progressLabel": "Ohjatun toiminnon eteneminen",
+    "status": {
+      "saving": "Tallennetaan...",
+      "loadingStep": "Ladataan vaihetta..."
+    },
+    "errors": {
+      "saveFailed": "Tämän vaiheen tallennus epäonnistui. Tarkista yhteys ja paina Seuraava uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
+      "stepLoadFailed": "Tämän vaiheen lataus epäonnistui. Paina Yritä uudelleen tai lataa sivu uudelleen."
+    },
+    "reasons": {
+      "completeStep": "Suorita tämä vaihe loppuun jatkaaksesi."
+    },
+    "leaveConfirm": {
+      "title": "Poistutaanko käyttöönotosta?",
+      "message": "Käyttöönotto ei avaudu uudelleen. Aiemmissa vaiheissa tallennetut valinnat säilyvät; tämän vaiheen muutoksia ei tallenneta. Voit muuttaa kaiken myöhemmin Asetuksissa.",
+      "stay": "Jatka käyttöönottoa",
+      "leave": "Poistu käyttöönotosta"
+    },
     "whatsNew": {
       "title": "Uutta versiossa {version}"
     },

@@ -5238,6 +5238,23 @@
     "done": "Terminé",
     "progress": "Étape {current} sur {total}",
     "progressLabel": "Progression de l'assistant",
+    "status": {
+      "saving": "Enregistrement...",
+      "loadingStep": "Chargement de l'étape..."
+    },
+    "errors": {
+      "saveFailed": "Impossible d'enregistrer cette étape. Vérifiez la connexion et appuyez de nouveau sur Suivant, ou passez la configuration et modifiez cela plus tard dans les Paramètres.",
+      "stepLoadFailed": "Impossible de charger cette étape. Appuyez sur Réessayer ou rechargez la page."
+    },
+    "reasons": {
+      "completeStep": "Terminez cette étape pour continuer."
+    },
+    "leaveConfirm": {
+      "title": "Quitter la configuration ?",
+      "message": "La configuration ne s'ouvrira plus. Les choix enregistrés aux étapes précédentes sont conservés ; les modifications de cette étape ne sont pas enregistrées. Vous pourrez tout modifier plus tard dans les Paramètres.",
+      "stay": "Continuer la configuration",
+      "leave": "Quitter la configuration"
+    },
     "whatsNew": {
       "title": "Nouveautés de la {version}"
     },
