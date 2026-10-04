@@ -21,7 +21,9 @@ import { getLocalDateString } from './date';
 describe('Date Persistence Utilities', () => {
   const mockDate = '2024-01-15';
   const futureDate = '2099-12-31';
-  const currentDate = getLocalDateString();
+  // Pinned instant for the fake clock, local noon so no timezone shifts the day.
+  const pinnedNow = new Date(2024, 5, 15, 12, 0, 0);
+  let currentDate: string;
 
   // Mock window.location and localStorage
   let originalLocation: Location;
@@ -29,6 +31,11 @@ describe('Date Persistence Utilities', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Pin the clock so the fallback date cannot change between setup and
+    // assertion (a real-clock run could straddle local midnight).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(pinnedNow);
+    currentDate = getLocalDateString();
     // Save originals
     originalLocation = window.location;
     originalLocalStorage = window.localStorage;
@@ -68,6 +75,7 @@ describe('Date Persistence Utilities', () => {
       configurable: true,
     });
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   describe('getDateFromURL', () => {
