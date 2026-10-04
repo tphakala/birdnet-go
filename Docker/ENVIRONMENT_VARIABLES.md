@@ -266,6 +266,10 @@ The health check probes the port in `BIRDNET_WEBSERVER_PORT`, then 8080, 8443 an
 
 The bridge compose files mount the host's `/run/avahi-daemon` (name resolution) and `/run/dbus` (DNS-SD service discovery) read-only. The host networking file (`docker-compose.host.yml`) mounts only `/run/avahi-daemon`. Without them the container resolves `.local` names only through unicast DNS (a router that serves them). Check with `docker exec birdnet-go getent hosts cam.local`. Rootless Docker without avahi or D-Bus on the host must remove the matching volume line. If the app runs as uid 0 (`BIRDNET_UID=0`), remove the `/run/dbus` line: uid 0 on the system bus is host root. Never add `:z` or `:Z`. Details, the D-Bus security trade-off and how to opt out: [RTSP troubleshooting](../doc/wiki/rtsp-troubleshooting.md#using-local-mdns-hostnames-in-containers).
 
+### Subnet bypass does not skip login for LAN clients
+
+In a container (bridge or host networking), subnet bypass applies only to the ranges listed in `security.allowsubnetbypass.subnet`. The automatic local-network check compares the client with the Docker bridge network (resolved from `host.docker.internal`), not with your LAN, so add your LAN range (for example `192.168.1.0/24`) to that list. Keep the `extra_hosts: host.docker.internal:host-gateway` line in the Compose files: without it, under host networking, the automatic check falls back to the LAN default gateway and every device on that /24 skips login.
+
 ### Viewing detailed startup logs
 
 The startup wrapper saves detailed logs to `/tmp/birdnet-startup.log` inside the container:

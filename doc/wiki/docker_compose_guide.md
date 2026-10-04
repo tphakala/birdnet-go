@@ -280,6 +280,8 @@ security:
     subnet: "192.168.1.0/24,10.0.0.0/8" # Your local network CIDR ranges
 ```
 
+In a container (bridge or host networking), subnet bypass applies only to the ranges listed in `subnet`. The automatic local-network check compares the client with the Docker bridge network (from `host.docker.internal`), not with your LAN, so list your LAN range (for example `192.168.1.0/24`) there. Keep the `extra_hosts: host.docker.internal:host-gateway` line in the Compose file: without it, under host networking, the automatic check falls back to your LAN gateway and every device on that /24 skips login.
+
 ### Using TLS
 
 For additional security, consider enabling TLS:
