@@ -1,13 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('$lib/stores/settings', () => ({
-  settingsActions: {
-    saveSettings: vi.fn(),
-    resetAllSettings: vi.fn(),
-  },
-}));
+vi.mock('$lib/stores/settings', async () => {
+  const { writable } = await import('svelte/store');
+  return {
+    settingsStore: writable({ formData: { birdnet: { threshold: 0.8 } } }),
+    settingsActions: {
+      saveSettings: vi.fn(),
+      resetAllSettings: vi.fn(),
+    },
+  };
+});
 
-const { settingsActions } = await import('$lib/stores/settings');
+const { settingsActions, settingsStore } = await import('$lib/stores/settings');
 const { saveStepSettings } = await import('./stepSave');
 
 describe('saveStepSettings', () => {
@@ -31,9 +35,24 @@ describe('saveStepSettings', () => {
     expect(settingsActions.resetAllSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('does not revert after the step unmounted but still rethrows', async () => {
+  it('reverts after the step is gone while the store still holds what was submitted', async () => {
     const failure = new Error('late failure');
     vi.mocked(settingsActions.saveSettings).mockRejectedValue(failure);
+
+    await expect(saveStepSettings(() => false)).rejects.toBe(failure);
+
+    expect(settingsActions.resetAllSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps later store edits when the save fails after the step is gone', async () => {
+    const failure = new Error('late failure');
+    vi.mocked(settingsActions.saveSettings).mockImplementation(async () => {
+      settingsStore.update(state => ({
+        ...state,
+        formData: { ...state.formData, birdnet: { ...state.formData.birdnet, threshold: 0.5 } },
+      }));
+      throw failure;
+    });
 
     await expect(saveStepSettings(() => false)).rejects.toBe(failure);
 

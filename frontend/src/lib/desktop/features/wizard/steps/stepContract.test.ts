@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/svelte';
 import type { Component } from 'svelte';
+import { get } from 'svelte/store';
 import type { WizardStepProps } from '../types';
 
 vi.mock('$lib/i18n', () => ({
@@ -40,7 +41,7 @@ import AudioSourceStep from './AudioSourceStep.svelte';
 import DetectionStep from './DetectionStep.svelte';
 import IntegrationStep from './IntegrationStep.svelte';
 import LocationLanguageStep from './LocationLanguageStep.svelte';
-import { settingsActions } from '$lib/stores/settings';
+import { settingsActions, settingsStore } from '$lib/stores/settings';
 import { flushAsync, renderStep } from './stepTestUtils';
 
 interface StepCase {
@@ -146,7 +147,7 @@ describe.each(stepCases)('$name leave handler contract', ({ component, edit }) =
     expect(settingsActions.resetAllSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('does not revert the store when the save fails after the step unmounted', async () => {
+  it('reverts the store when the save fails after the step unmounted', async () => {
     const failure = new Error('late failure');
     vi.mocked(settingsActions.saveSettings).mockRejectedValueOnce(failure);
     const { leave, unmount, container } = renderStep(component);
@@ -157,7 +158,32 @@ describe.each(stepCases)('$name leave handler contract', ({ component, edit }) =
     unmount();
 
     await expect(pending).rejects.toBe(failure);
+    expect(settingsActions.resetAllSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps later store edits when the save fails after the step unmounted', async () => {
+    const failure = new Error('late failure');
+    let rejectSave: (err: Error) => void = () => {};
+    vi.mocked(settingsActions.saveSettings).mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectSave = reject;
+        })
+    );
+    const { leave, unmount, container } = renderStep(component);
+    await flushAsync();
+    await edit(container);
+
+    const pending = leave();
+    await flushAsync();
+    unmount();
+    const before = JSON.parse(JSON.stringify(get(settingsStore)));
+    settingsStore.set({ ...before, formData: { ...before.formData, edited: true } });
+    rejectSave(failure);
+
+    await expect(pending).rejects.toBe(failure);
     expect(settingsActions.resetAllSettings).not.toHaveBeenCalled();
+    settingsStore.set(before);
   });
 
   it('keeps the edits after a failed save so the next leave call retries them', async () => {
