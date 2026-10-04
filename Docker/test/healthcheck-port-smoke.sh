@@ -95,6 +95,7 @@ cids+=("$custom_cid")
 wait_healthy "$custom_cid" "custom port"
 expect "custom port probed" pass "$custom_cid"
 expect "surrounding spaces are trimmed" pass "$custom_cid" -e "BIRDNET_WEBSERVER_PORT= $CUSTOM_PORT "
+expect "leading + is accepted like the app" pass "$custom_cid" -e "BIRDNET_WEBSERVER_PORT=+$CUSTOM_PORT"
 
 if [ "$fails" -ne 0 ]; then
     echo "FAIL: $fails health check case(s) failed"

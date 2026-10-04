@@ -475,11 +475,12 @@ LABEL usage.compose.podman="Use Podman/podman-compose.yml"
 # networking, where the app listens on that port directly), and 8080 otherwise,
 # matching the app, which ignores an invalid value. With a custom port, 8080 is
 # not probed: under host networking another service on the host could answer
-# there. Like the app, only leading and trailing whitespace is trimmed. When the
+# there. Like the app, only leading and trailing whitespace is trimmed, and a
+# leading + is accepted (Go parses +18080 as 18080). When the
 # variable is unset or 8080 the probes are the original ones.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD P="$(printf '%s' "${BIRDNET_WEBSERVER_PORT:-8080}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"; \
-        case "$P" in ''|*[!0-9]*) P=8080 ;; esac; \
+        P="${P#+}"; case "$P" in ''|*[!0-9]*) P=8080 ;; esac; \
         { [ "$P" -ge 1 ] && [ "$P" -le 65535 ]; } || P=8080; \
         curl -fs --connect-timeout 2 --max-time 3 "http://localhost:${P}/health" | jq -e '.status == "healthy"' >/dev/null \
         || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:8443/health | jq -e '.status == "healthy"' >/dev/null \
