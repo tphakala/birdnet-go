@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { WizardStep } from './types';
-import { deferred, type Deferred } from '../../../../test/settings-helpers';
+import { deferred, type Deferred } from '../../../../test/async-helpers';
 
 // Mock the API module before importing wizardState
 vi.mock('$lib/utils/api', () => ({

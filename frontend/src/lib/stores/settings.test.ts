@@ -4,7 +4,8 @@ import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS 
 import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-import { deferred, lookup, serverSettings } from '../../test/settings-helpers';
+import { deferred } from '../../test/async-helpers';
+import { lookup, serverSettings } from '../../test/settings-helpers';
 
 // Mock the settings API
 vi.mock('$lib/utils/settingsApi.js', () => ({
@@ -965,23 +966,6 @@ describe('Settings Store - saveSettings refuses before settings load', () => {
 
     expect(toastActions.error).not.toHaveBeenCalled();
   });
-
-  it('refreshes the restart status after a successful save and not after a failed one', async () => {
-    const restart = await import('$lib/stores/restart.svelte');
-    const refresh = vi.spyOn(restart, 'fetchRestartStatus').mockResolvedValue(undefined);
-    try {
-      seed(true);
-      vi.mocked(settingsAPI.save).mockRejectedValueOnce(new Error('boom'));
-      await expect(settingsActions.saveSettings({ notify: false })).rejects.toThrow('boom');
-
-      await settingsActions.saveSettings({ notify: false });
-
-      await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
-      expect(refresh).toHaveBeenCalledTimes(1);
-    } finally {
-      refresh.mockRestore();
-    }
-  });
 });
 
 describe('Settings Store - saveSection', () => {
@@ -1236,24 +1220,6 @@ describe('Settings Store - saveSection', () => {
     expect(setLocale).not.toHaveBeenCalled();
   });
 
-  it('refreshes the restart status after a successful save and not after a failed one', async () => {
-    const restart = await import('$lib/stores/restart.svelte');
-    const refresh = vi.spyOn(restart, 'fetchRestartStatus').mockResolvedValue(undefined);
-    try {
-      vi.mocked(settingsAPI.patchSection).mockRejectedValueOnce(new Error('boom'));
-      await expect(settingsActions.saveSection('birdnet', { threshold: 0.7 })).rejects.toThrow(
-        'boom'
-      );
-
-      await settingsActions.saveSection('birdnet', { threshold: 0.9 });
-
-      await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
-      expect(refresh).toHaveBeenCalledTimes(1);
-    } finally {
-      refresh.mockRestore();
-    }
-  });
-
   it('does not show a toast', async () => {
     const { toastActions } = await import('./toast.js');
 
@@ -1357,4 +1323,43 @@ describe('Settings Store - saveSection', () => {
       expect(get(hasUnsavedChanges)).toBe(false);
     });
   });
+});
+
+describe('Settings Store - restart status refresh after a save', () => {
+  beforeEach(async () => {
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    vi.mocked(settingsAPI.patchSection).mockReset().mockResolvedValue({});
+    vi.mocked(settingsAPI.load).mockResolvedValue(serverSettings());
+    await settingsActions.loadSettings();
+  });
+
+  it.each([
+    {
+      path: 'saveSettings',
+      api: () => vi.mocked(settingsAPI.save),
+      save: () => settingsActions.saveSettings({ notify: false }),
+    },
+    {
+      path: 'saveSection',
+      api: () => vi.mocked(settingsAPI.patchSection),
+      save: () => settingsActions.saveSection('birdnet', { threshold: 0.9 }),
+    },
+  ])(
+    '$path refreshes after a successful save and not after a failed one',
+    async ({ api, save }) => {
+      const restart = await import('$lib/stores/restart.svelte');
+      const refresh = vi.spyOn(restart, 'fetchRestartStatus').mockResolvedValue(undefined);
+      try {
+        api().mockRejectedValueOnce(new Error('boom'));
+        await expect(save()).rejects.toThrow('boom');
+
+        await save();
+
+        await vi.dynamicImportSettled();
+        expect(refresh).toHaveBeenCalledTimes(1);
+      } finally {
+        refresh.mockRestore();
+      }
+    }
+  );
 });
