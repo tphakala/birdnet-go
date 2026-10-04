@@ -1284,7 +1284,6 @@ func TestV2OnlyDatastore_ImplementsInterface(t *testing.T) {
 
 // === Data gap regression tests ===
 // These tests verify bugs identified in the v2only datastore audit (2026-02-21).
-// See docs/plans/2026-02-21-v2only-datastore-data-gaps.md for full findings.
 
 // saveTestNote is a helper that saves a note and returns its ID.
 func saveTestNote(t *testing.T, ds *Datastore, date, timeStr, species string, confidence float64) {
