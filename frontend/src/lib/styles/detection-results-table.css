@@ -1,0 +1,67 @@
+/*
+ * Detection results table
+ *
+ * Shared styling for the expandable detection lists: Search's results table and
+ * the analytics Summary page's recent detections table. These rules sit on
+ * markup the host pages own (table rows and the colspan cell), so they live in a
+ * global stylesheet rather than a component's scoped styles - keeping them here
+ * is what stops the two lists from drifting apart visually.
+ *
+ * The expanded row's contents are a component: see
+ * $lib/desktop/components/data/DetectionExpandedPanel.svelte
+ */
+
+.status-badge {
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-badge.correct {
+  background-color: #10b981;
+  color: white;
+}
+
+.status-badge.false {
+  background-color: #ef4444;
+  color: white;
+}
+
+.status-badge.unverified {
+  background-color: #6b7280;
+  color: white;
+}
+
+.status-badge.locked {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.expanded-row td {
+  animation: detection-row-slide-down 0.3s ease-out;
+}
+
+/* The expanded panel lives in a colspan cell, which still takes part in the
+   auto table-layout column sizing: its intrinsic width would be spread over
+   all seven columns and squeeze Date & Time / Status until the collapsed rows
+   reflow (dates and badges wrapping onto a second line) the moment a row is
+   expanded. Zero width keeps the panel out of that calculation, the
+   percentage min-width - which is ignored while intrinsic widths are measured
+   - still stretches it across the full row once the columns are settled. */
+.expanded-panel {
+  width: 0;
+  min-width: 100%;
+}
+
+@keyframes detection-row-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

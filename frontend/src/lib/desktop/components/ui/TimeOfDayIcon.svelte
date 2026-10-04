@@ -1,10 +1,11 @@
 <script lang="ts">
+  import type { TimeOfDayValue } from '$lib/types/detection.types';
   import { cn } from '$lib/utils/cn';
   import { safeGet } from '$lib/utils/security';
   import { Clock } from '@lucide/svelte';
   import { parseLocalDateString } from '$lib/utils/date';
 
-  type TimeOfDay = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
+  type TimeOfDay = TimeOfDayValue;
   type IconSize = 'sm' | 'md' | 'lg' | 'xl';
 
   interface Props {

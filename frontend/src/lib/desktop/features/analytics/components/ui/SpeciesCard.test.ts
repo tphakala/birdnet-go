@@ -4,11 +4,15 @@ import SpeciesCard from './SpeciesCard.svelte';
 
 // Mock the i18n module (mirrors SpeciesCardMobile.test.ts).
 vi.mock('$lib/i18n', () => ({
+  getLocale: vi.fn(() => 'en'),
   t: vi.fn((key: string) => {
     const translations: Record<string, string> = {
       'analytics.species.card.detections': 'Detections',
       'analytics.species.card.confidence': 'Confidence',
       'analytics.species.card.first': 'First',
+      'analytics.species.openAllAboutBirds': 'View this species on All About Birds',
+      'analytics.species.openWikipedia': 'View this species on Wikipedia',
+      'analytics.species.viewDetections': 'View all detections of {species}',
     };
     // eslint-disable-next-line security/detect-object-injection -- Test mock with controlled translation data
     return translations[key] ?? key;
@@ -45,6 +49,34 @@ describe('SpeciesCard', () => {
     const img = container.querySelector('img');
     expect(img).not.toBeNull();
     expect(img).toHaveAttribute('src', '/api/v2/media/image/Passer%20domesticus');
+  });
+
+  it('renders localized reference links for the species', () => {
+    const { container } = render(SpeciesCard, { props: { species: mockSpecies } });
+
+    // Reference-site links open in a new tab; the two detections-list links
+    // (image + name/scientific-name) are same-tab SPA navigation and are
+    // covered by the test below.
+    const links = Array.from(container.querySelectorAll('a[target="_blank"]'));
+    expect(links.map(link => link.getAttribute('href'))).toEqual([
+      'https://www.allaboutbirds.org/guide/House_Sparrow/id',
+      'https://en.wikipedia.org/wiki/House_Sparrow',
+    ]);
+  });
+
+  it('links the thumbnail and name/scientific-name to the species detection list', () => {
+    const { container } = render(SpeciesCard, { props: { species: mockSpecies } });
+
+    const detectionLinks = Array.from(container.querySelectorAll('a')).filter(
+      link => link.getAttribute('target') !== '_blank'
+    );
+    expect(detectionLinks).toHaveLength(2);
+    for (const link of detectionLinks) {
+      const href = link.getAttribute('href') ?? '';
+      expect(href).toContain('/ui/detections?');
+      expect(href).toContain('queryType=search');
+      expect(href).toContain('species=Passer+domesticus');
+    }
   });
 
   it('swaps to the bird placeholder on load error', async () => {
