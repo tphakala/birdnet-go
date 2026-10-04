@@ -3,6 +3,9 @@ import type { Component } from 'svelte';
 export type WizardFlow = 'onboarding' | 'whats-new';
 export type WizardStatus = 'idle' | 'active' | 'completed';
 
+/** Load status of the current step, set by the dialog. */
+export type StepStatus = 'loading' | 'ready' | 'failed';
+
 export interface ComponentStep {
   id: string;
   type: 'component';

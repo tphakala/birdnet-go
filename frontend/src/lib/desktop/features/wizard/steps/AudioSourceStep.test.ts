@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, fireEvent, screen } from '@testing-library/svelte';
-import type { SettingsFormData } from '$lib/stores/settings';
+import { fireEvent, screen } from '@testing-library/svelte';
 
 vi.mock('$lib/i18n', () => ({
   t: vi.fn((key: string) => key),
@@ -15,57 +14,14 @@ vi.mock('$lib/utils/api', () => ({
 }));
 
 vi.mock('$lib/stores/settings', async () => {
-  const { writable } = await vi.importActual<typeof import('svelte/store')>('svelte/store');
-  const formData = {
-    realtime: { audio: { source: '' }, rtsp: { streams: [] } },
-  } as unknown as SettingsFormData;
-  const settingsStore = writable({
-    isLoading: false,
-    isSaving: false,
-    error: null,
-    dataLoaded: true,
-    activeSection: 'main',
-    originalData: formData,
-    formData,
-  });
-  return {
-    settingsStore,
-    settingsActions: {
-      updateSection: vi.fn(),
-      saveSettings: vi.fn().mockResolvedValue(undefined),
-      resetAllSettings: vi.fn(),
-    },
-  };
+  const { createSettingsMock } = await import('./stepTestUtils');
+  return createSettingsMock({ realtime: { audio: { source: '' }, rtsp: { streams: [] } } });
 });
 
 import AudioSourceStep from './AudioSourceStep.svelte';
 import { settingsActions, settingsStore } from '$lib/stores/settings';
 import { api } from '$lib/utils/api';
-import type { StepLeaveHandler } from '../types';
-
-function renderStep() {
-  let handler: StepLeaveHandler | undefined;
-  const unregister = vi.fn();
-  const registerLeaveHandler = vi.fn((h: StepLeaveHandler) => {
-    handler = h;
-    return unregister;
-  });
-  const result = render(AudioSourceStep, { props: { registerLeaveHandler } });
-  return {
-    ...result,
-    registerLeaveHandler,
-    unregister,
-    leave: () => {
-      if (!handler) throw new Error('leave handler was not registered');
-      return handler();
-    },
-  };
-}
-
-async function flushAsync() {
-  await Promise.resolve();
-  await Promise.resolve();
-}
+import { flushAsync, renderStep } from './stepTestUtils';
 
 const RTSP_URL = 'rtsp://camera.example/stream';
 
@@ -77,6 +33,7 @@ async function edit() {
   await fireEvent.input(input, { target: { value: RTSP_URL } });
 }
 
+// The leave handler contract shared by every step is in stepContract.test.ts
 describe('AudioSourceStep - leave handler', () => {
   beforeEach(() => {
     vi.mocked(settingsActions.updateSection).mockClear();
@@ -84,53 +41,8 @@ describe('AudioSourceStep - leave handler', () => {
     vi.mocked(settingsActions.resetAllSettings).mockClear();
   });
 
-  it('registers a leave handler on mount and unregisters on destroy', async () => {
-    const { registerLeaveHandler, unregister, unmount } = renderStep();
-    await flushAsync();
-
-    expect(registerLeaveHandler).toHaveBeenCalledTimes(1);
-    expect(unregister).not.toHaveBeenCalled();
-
-    unmount();
-
-    expect(unregister).toHaveBeenCalledTimes(1);
-  });
-
-  it('unmounting never saves', async () => {
-    const { unmount } = renderStep();
-    await flushAsync();
-    await edit();
-
-    unmount();
-    await flushAsync();
-
-    expect(settingsActions.updateSection).not.toHaveBeenCalled();
-    expect(settingsActions.saveSettings).not.toHaveBeenCalled();
-  });
-
-  it('the leave handler does nothing without edits', async () => {
-    const { leave } = renderStep();
-    await flushAsync();
-
-    await leave();
-
-    expect(settingsActions.updateSection).not.toHaveBeenCalled();
-    expect(settingsActions.saveSettings).not.toHaveBeenCalled();
-  });
-
-  it('the leave handler rejects when the save rejects', async () => {
-    const failure = new Error('save failed');
-    vi.mocked(settingsActions.saveSettings).mockRejectedValueOnce(failure);
-    const { leave } = renderStep();
-    await flushAsync();
-    await edit();
-
-    await expect(leave()).rejects.toBe(failure);
-    expect(settingsActions.resetAllSettings).toHaveBeenCalledTimes(1);
-  });
-
   it('the leave handler saves the edited values once', async () => {
-    const { leave } = renderStep();
+    const { leave } = renderStep(AudioSourceStep);
     await flushAsync();
     await edit();
 
@@ -148,7 +60,7 @@ describe('AudioSourceStep - leave handler', () => {
   });
 
   it('configure later saves nothing', async () => {
-    const { leave } = renderStep();
+    const { leave } = renderStep(AudioSourceStep);
     await flushAsync();
     await fireEvent.click(
       screen.getByRole('radio', { name: /wizard\.steps\.audioSource\.rtspStream/ })
@@ -163,35 +75,6 @@ describe('AudioSourceStep - leave handler', () => {
     expect(settingsActions.saveSettings).not.toHaveBeenCalled();
   });
 
-  it('does not revert the store when the save fails after the step unmounted', async () => {
-    const failure = new Error('late failure');
-    vi.mocked(settingsActions.saveSettings).mockRejectedValueOnce(failure);
-    const { leave, unmount } = renderStep();
-    await flushAsync();
-    await edit();
-
-    const pending = leave();
-    unmount();
-
-    await expect(pending).rejects.toBe(failure);
-    expect(settingsActions.resetAllSettings).not.toHaveBeenCalled();
-  });
-
-  it('keeps the edits after a failed save so the next leave call retries them', async () => {
-    vi.mocked(settingsActions.saveSettings).mockRejectedValueOnce(new Error('save failed'));
-    const { leave } = renderStep();
-    await flushAsync();
-    await edit();
-
-    await expect(leave()).rejects.toThrow('save failed');
-    await leave();
-
-    expect(settingsActions.saveSettings).toHaveBeenCalledTimes(2);
-    const calls = vi.mocked(settingsActions.updateSection).mock.calls;
-    expect(calls.length).toBeGreaterThanOrEqual(2);
-    expect(calls.slice(0, calls.length / 2)).toEqual(calls.slice(calls.length / 2));
-  });
-
   it('the leave handler saves the selected sound card device', async () => {
     vi.mocked(api.get).mockResolvedValueOnce([{ name: 'USB Mic', index: 1, id: 'hw:1,0' }]);
     settingsStore.update(state => {
@@ -199,7 +82,7 @@ describe('AudioSourceStep - leave handler', () => {
       realtime.audio.source = 'hw:1,0';
       return state;
     });
-    const { leave } = renderStep();
+    const { leave } = renderStep(AudioSourceStep);
     await flushAsync();
     await fireEvent.click(
       screen.getByRole('radio', { name: /wizard\.steps\.audioSource\.soundcard/ })

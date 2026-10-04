@@ -6,7 +6,7 @@
   import { get } from 'svelte/store';
   import { ShieldCheck, Cloud, HeartHandshake } from '@lucide/svelte';
   import type { WizardStepProps } from '../types';
-  import { saveStepSettings } from '../stepSave';
+  import { useStepSave } from '../stepSave';
 
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
@@ -59,39 +59,25 @@
     dirty = true;
   }
 
+  const saveStep = useStepSave(() => registerLeaveHandler, commit);
+
   // Save the step's edits when the wizard leaves it with Next, Back or Done.
   // Only runs if the user made changes.
   async function commit(): Promise<void> {
     if (!dirty) return;
-    await saveStepSettings(
-      () => {
-        settingsActions.updateSection('realtime', {
-          privacyFilter: { enabled: privacyEnabled } as RealtimeSettings['privacyFilter'],
-          birdweather: {
-            enabled: birdweatherEnabled,
-            id: birdweatherId,
-          } as RealtimeSettings['birdweather'],
-        });
-        settingsActions.updateSection('sentry', {
-          enabled: sentryEnabled,
-        });
-      },
-      () => mounted
-    );
+    settingsActions.updateSection('realtime', {
+      privacyFilter: { enabled: privacyEnabled } as RealtimeSettings['privacyFilter'],
+      birdweather: {
+        enabled: birdweatherEnabled,
+        id: birdweatherId,
+      } as RealtimeSettings['birdweather'],
+    });
+    settingsActions.updateSection('sentry', {
+      enabled: sentryEnabled,
+    });
+    await saveStep();
     dirty = false;
   }
-
-  // Register the save with the wizard: Next, Back and Done await it, so it runs
-  // only on those actions and never when the step unmounts (Skip, Leave setup).
-  let mounted = false;
-  onMount(() => {
-    mounted = true;
-    const unregister = registerLeaveHandler?.(commit);
-    return () => {
-      mounted = false;
-      unregister?.();
-    };
-  });
 </script>
 
 <div class="space-y-3">

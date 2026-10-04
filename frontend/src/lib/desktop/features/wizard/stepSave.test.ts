@@ -16,16 +16,9 @@ describe('saveStepSettings', () => {
     vi.mocked(settingsActions.resetAllSettings).mockReset();
   });
 
-  it('applies the edits then saves without toasts', async () => {
-    const order: string[] = [];
-    const apply = vi.fn(() => order.push('apply'));
-    vi.mocked(settingsActions.saveSettings).mockImplementation(async () => {
-      order.push('save');
-    });
+  it('saves without toasts', async () => {
+    await saveStepSettings(() => true);
 
-    await saveStepSettings(apply, () => true);
-
-    expect(order).toEqual(['apply', 'save']);
     expect(settingsActions.saveSettings).toHaveBeenCalledWith({ notify: false });
   });
 
@@ -33,12 +26,7 @@ describe('saveStepSettings', () => {
     const failure = new Error('save failed');
     vi.mocked(settingsActions.saveSettings).mockRejectedValue(failure);
 
-    await expect(
-      saveStepSettings(
-        () => {},
-        () => true
-      )
-    ).rejects.toBe(failure);
+    await expect(saveStepSettings(() => true)).rejects.toBe(failure);
 
     expect(settingsActions.resetAllSettings).toHaveBeenCalledTimes(1);
   });
@@ -47,21 +35,13 @@ describe('saveStepSettings', () => {
     const failure = new Error('late failure');
     vi.mocked(settingsActions.saveSettings).mockRejectedValue(failure);
 
-    await expect(
-      saveStepSettings(
-        () => {},
-        () => false
-      )
-    ).rejects.toBe(failure);
+    await expect(saveStepSettings(() => false)).rejects.toBe(failure);
 
     expect(settingsActions.resetAllSettings).not.toHaveBeenCalled();
   });
 
   it('does not revert on success', async () => {
-    await saveStepSettings(
-      () => {},
-      () => true
-    );
+    await saveStepSettings(() => true);
 
     expect(settingsActions.resetAllSettings).not.toHaveBeenCalled();
   });

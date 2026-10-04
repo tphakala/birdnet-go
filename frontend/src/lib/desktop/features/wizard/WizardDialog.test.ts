@@ -4,6 +4,7 @@ import { renderTyped, screen, waitFor } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import type { WizardStep, WizardStepProps } from './types';
+import { deferred } from './wizardTestUtils';
 
 vi.mock('$lib/utils/api', () => ({
   api: {
@@ -28,22 +29,6 @@ const { default: WizardDialog } = await import('./WizardDialog.svelte');
 const { default: WizardTestStep } = await import('./WizardTestStep.test.svelte');
 
 type StepModule = { default: Component<WizardStepProps> };
-
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (err: Error) => void;
-}
-
-function deferred<T = void>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (err: Error) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
 
 const loadStep = (): Promise<StepModule> =>
   Promise.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });

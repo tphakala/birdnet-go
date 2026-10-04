@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { WizardStep } from './types';
+import { deferred, type Deferred } from './wizardTestUtils';
 
 // Mock the API module before importing wizardState
 vi.mock('$lib/utils/api', () => ({
@@ -14,6 +15,7 @@ vi.mock('./wizardRegistry', () => ({
 }));
 
 // Import after mocks are set up
+const { api } = await import('$lib/utils/api');
 const { wizardState } = await import('./wizardState.svelte');
 const { getStepsForFlow } = await import('./wizardRegistry');
 
@@ -29,23 +31,7 @@ function createTestSteps(count: number): WizardStep[] {
 
 function readyStep(valid = true): void {
   wizardState.setStepValid(valid);
-  wizardState.markStepReady(wizardState.currentStepIndex);
-}
-
-interface Deferred {
-  promise: Promise<void>;
-  resolve: () => void;
-  reject: (err: Error) => void;
-}
-
-function deferred(): Deferred {
-  let resolve!: () => void;
-  let reject!: (err: Error) => void;
-  const promise = new Promise<void>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
+  wizardState.setStepStatus('ready', wizardState.currentStepIndex);
 }
 
 // Lets chained promise continuations run.
@@ -125,7 +111,7 @@ describe('wizardState - state machine', () => {
       wizardState.launch('onboarding');
 
       expect(wizardState.isStepValid).toBe(false);
-      expect(wizardState.isStepReady).toBe(false);
+      expect(wizardState.stepStatus).toBe('loading');
       expect(wizardState.canAdvance).toBe(false);
       expect(wizardState.isSaving).toBe(false);
       expect(wizardState.stepError).toBeNull();
@@ -196,33 +182,42 @@ describe('wizardState - state machine', () => {
       await wizardState.next();
 
       expect(wizardState.isStepValid).toBe(false);
-      expect(wizardState.isStepReady).toBe(false);
+      expect(wizardState.stepStatus).toBe('loading');
       expect(wizardState.isSaving).toBe(false);
     });
 
-    it('does nothing until the step is ready and valid', async () => {
+    it.each([
+      ['not loaded and not valid', () => {}],
+      ['ready but never reported valid', () => wizardState.setStepStatus('ready', 0)],
+      ['ready and reported invalid', () => readyStep(false)],
+      ['valid but not yet marked ready', () => wizardState.setStepValid(true)],
+      [
+        'valid but failed to load',
+        () => {
+          wizardState.setStepValid(true);
+          wizardState.setStepStatus('failed', 0);
+        },
+      ],
+    ])('refuses a step that is %s', async (_name, arrange) => {
       launchSteps(3);
-
-      await wizardState.next();
-      expect(wizardState.currentStepIndex).toBe(0);
-
-      wizardState.markStepReady(0); // ready but never reported valid
-      await wizardState.next();
-      expect(wizardState.currentStepIndex).toBe(0);
-
-      wizardState.setStepValid(true);
-      await wizardState.next();
-      expect(wizardState.currentStepIndex).toBe(1);
-    });
-
-    it('does nothing for a valid step that is not yet marked ready', async () => {
-      launchSteps(2);
-      wizardState.setStepValid(true); // reported valid, mount not confirmed
+      arrange();
 
       expect(wizardState.canAdvance).toBe(false);
       await wizardState.next();
 
       expect(wizardState.currentStepIndex).toBe(0);
+    });
+
+    it('advances once the refused step becomes ready and valid', async () => {
+      launchSteps(3);
+      wizardState.setStepStatus('ready', 0);
+      await wizardState.next();
+      expect(wizardState.currentStepIndex).toBe(0);
+
+      wizardState.setStepValid(true);
+      await wizardState.next();
+
+      expect(wizardState.currentStepIndex).toBe(1);
     });
 
     it('awaits the leave handler before advancing', async () => {
@@ -300,7 +295,7 @@ describe('wizardState - state machine', () => {
 
       expect(wizardState.currentStepIndex).toBe(0);
       expect(wizardState.isFirstStep).toBe(true);
-      expect(wizardState.isStepReady).toBe(false);
+      expect(wizardState.stepStatus).toBe('loading');
       expect(wizardState.isStepValid).toBe(false);
     });
 
@@ -364,7 +359,7 @@ describe('wizardState - state machine', () => {
 
       expect(wizardState.currentStepIndex).toBe(1);
 
-      wizardState.markStepReady(1);
+      wizardState.setStepStatus('ready', 1);
       await wizardState.back();
 
       expect(wizardState.currentStepIndex).toBe(0);
@@ -385,16 +380,6 @@ describe('wizardState - state machine', () => {
   });
 
   describe('setStepValid()', () => {
-    it('prevents next() when set to false', async () => {
-      launchSteps(3);
-      readyStep(false);
-
-      await wizardState.next();
-
-      expect(wizardState.currentStepIndex).toBe(0);
-      expect(wizardState.isStepValid).toBe(false);
-    });
-
     it('allows next() when set back to true', async () => {
       launchSteps(3);
       readyStep(false);
@@ -416,15 +401,28 @@ describe('wizardState - state machine', () => {
     });
   });
 
-  describe('markStepReady()', () => {
+  describe('setStepStatus()', () => {
     it('ignores a stale index', async () => {
       launchSteps(3);
       readyStep();
       await wizardState.next();
 
-      wizardState.markStepReady(0);
+      wizardState.setStepStatus('ready', 0);
 
-      expect(wizardState.isStepReady).toBe(false);
+      expect(wizardState.stepStatus).toBe('loading');
+    });
+
+    it('a step that failed to load blocks Next but allows Back', async () => {
+      launchSteps(3);
+      readyStep();
+      await wizardState.next();
+
+      wizardState.setStepStatus('failed', 1);
+
+      expect(wizardState.canAdvance).toBe(false);
+      expect(wizardState.canGoBack).toBe(true);
+      await wizardState.back();
+      expect(wizardState.currentStepIndex).toBe(0);
     });
   });
 
@@ -472,7 +470,6 @@ describe('wizardState - state machine', () => {
     });
 
     it('calls dismiss API', async () => {
-      const { api } = await import('$lib/utils/api');
       const steps = createTestSteps(1);
       vi.mocked(getStepsForFlow).mockReturnValue(steps);
       wizardState.launch('whats-new', { currentVersion: 'v2.0' });
@@ -483,7 +480,6 @@ describe('wizardState - state machine', () => {
     });
 
     it('never calls the leave handler and closes at once while a save is pending', async () => {
-      const { api } = await import('$lib/utils/api');
       launchSteps(3);
       const d = deferred();
       const handler = vi.fn(() => d.promise);
@@ -539,7 +535,7 @@ describe('wizardState - state machine', () => {
       await nav;
 
       expect(wizardState.currentStepIndex).toBe(0);
-      expect(wizardState.isStepReady).toBe(false);
+      expect(wizardState.stepStatus).toBe('loading');
       expect(wizardState.isSaving).toBe(false);
       expect(wizardState.isActive).toBe(true);
     });
@@ -554,7 +550,7 @@ describe('wizardState - state machine', () => {
       const sample = () => {
         if (
           wizardState.currentStepIndex === 0 &&
-          wizardState.isStepReady &&
+          wizardState.stepStatus === 'ready' &&
           wizardState.isStepValid &&
           !wizardState.isSaving
         ) {
@@ -590,7 +586,6 @@ describe('wizardState - state machine', () => {
     });
 
     it('calls dismiss API', async () => {
-      const { api } = await import('$lib/utils/api');
       const steps = createTestSteps(1);
       vi.mocked(getStepsForFlow).mockReturnValue(steps);
       wizardState.launch('onboarding', { currentVersion: 'v3.0' });
@@ -612,39 +607,27 @@ describe('wizardState - state machine', () => {
       expect(localStorage.getItem('birdnet-wizard-dismissed-version')).toBe('v2.5');
     });
 
-    it('refuses when the last step is not ready or not valid', async () => {
-      const { api } = await import('$lib/utils/api');
-      launchSteps(1);
-
-      await wizardState.complete();
-      expect(wizardState.isActive).toBe(true);
-
-      wizardState.markStepReady(0); // ready but not reported valid
-      await wizardState.complete();
-      expect(wizardState.isActive).toBe(true);
-
-      wizardState.setStepValid(false);
-      await wizardState.complete();
-
-      expect(wizardState.isActive).toBe(true);
-      expect(api.post).not.toHaveBeenCalled();
-    });
-
-    it('refuses a valid last step that is not yet marked ready', async () => {
-      const { api } = await import('$lib/utils/api');
-      launchSteps(1);
-      wizardState.setStepValid(true);
-
-      await wizardState.complete();
-
-      expect(wizardState.isActive).toBe(true);
-      expect(api.post).not.toHaveBeenCalled();
-    });
-
-    it('refuses when the wizard is not on the last step', async () => {
-      const { api } = await import('$lib/utils/api');
-      launchSteps(2);
-      readyStep();
+    it.each([
+      ['the last step is not loaded', 1, () => {}],
+      [
+        'the last step is ready but never reported valid',
+        1,
+        () => wizardState.setStepStatus('ready', 0),
+      ],
+      ['the last step is ready and reported invalid', 1, () => readyStep(false)],
+      ['the last step is valid but not yet marked ready', 1, () => wizardState.setStepValid(true)],
+      [
+        'the last step failed to load',
+        1,
+        () => {
+          wizardState.setStepValid(true);
+          wizardState.setStepStatus('failed', 0);
+        },
+      ],
+      ['the wizard is not on the last step', 2, () => readyStep()],
+    ] as const)('refuses when %s', async (_name, count, arrange) => {
+      launchSteps(count);
+      arrange();
 
       await wizardState.complete();
 
@@ -653,7 +636,6 @@ describe('wizardState - state machine', () => {
     });
 
     it('awaits the leave handler and then dismisses', async () => {
-      const { api } = await import('$lib/utils/api');
       launchSteps(1);
       const d = deferred();
       wizardState.registerLeaveHandler(() => d.promise);
@@ -672,7 +654,6 @@ describe('wizardState - state machine', () => {
     });
 
     it('stays open and keeps the error when the leave handler rejects', async () => {
-      const { api } = await import('$lib/utils/api');
       launchSteps(1);
       wizardState.registerLeaveHandler(() => Promise.reject(new Error('nope')));
       readyStep();
@@ -712,7 +693,6 @@ describe('wizardState - state machine', () => {
     it.each(sequences.map(seq => [seq.join(' > '), seq] as const))(
       'keeps invariants for %s',
       async (_name, sequence) => {
-        const { api } = await import('$lib/utils/api');
         const total = 3;
         launchSteps(total);
         const pending: Array<{ d: Deferred; generation: number; settled: boolean }> = [];

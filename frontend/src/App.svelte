@@ -679,6 +679,7 @@
   let wizardChecked = $state(false);
   $effect(() => {
     if (!appInitialized || loadingComponent || wizardChecked) return;
+    if (appState.freshInstall && settingsLoad === 'pending') return;
 
     // Check localStorage dismissal before any wizard flow. This covers the case
     // where the server-side dismiss failed (e.g. 401 when not authenticated) but

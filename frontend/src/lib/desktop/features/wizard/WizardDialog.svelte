@@ -1,5 +1,6 @@
 <script lang="ts">
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
+  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import WizardProgressBar from './WizardProgressBar.svelte';
   import WizardContentRenderer from './WizardContentRenderer.svelte';
   import { wizardState } from './wizardState.svelte';
@@ -17,13 +18,16 @@
   const LEAVE_TITLE_ID = generateId('wizard-leave-title');
   const LEAVE_DESC_ID = generateId('wizard-leave-desc');
 
+  // Shared by the Back and Retry buttons
+  const SECONDARY_BUTTON_CLASS =
+    'inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--border-200)] bg-transparent px-4 py-2 text-sm font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--hover-overlay)]';
+
   let modalRef = $state<Modal>();
   let contentRef = $state<HTMLDivElement>();
   let loadedComponent = $state<Component<WizardStepProps> | null>(null);
   // Index of the step the rendered component was loaded for
   let loadedIndex = $state(-1);
   let isLoadingStep = $state(false);
-  let loadFailed = $state(false);
   let retryNonce = $state(0);
   let leaveConfirmOpen = $state(false);
   let importGeneration = 0;
@@ -38,8 +42,9 @@
     const index = wizardState.currentStepIndex;
     void retryNonce; // Retry re-runs the import
     const gen = ++importGeneration;
-    loadFailed = false;
     if (step?.type === 'component') {
+      // A step move already starts as 'loading'; this also covers Retry
+      untrack(() => wizardState.setStepStatus('loading', index));
       isLoadingStep = true;
       loadedComponent = null;
       step.component().then(
@@ -52,7 +57,7 @@
           // lands before the step is marked ready.
           await tick();
           if (gen !== importGeneration) return;
-          wizardState.markStepReady(index);
+          wizardState.setStepStatus('ready', index);
           modalRef?.refreshFocusTrap();
         },
         err => {
@@ -60,9 +65,8 @@
           logger.error('Wizard step failed to load', err);
           loadedComponent = null;
           isLoadingStep = false;
-          loadFailed = true;
-          // The step is not valid, so Next stays blocked, but Back must work
-          wizardState.markStepReady(index);
+          // Next stays blocked, but Back still works on a failed step
+          wizardState.setStepStatus('failed', index);
         }
       );
     } else {
@@ -72,7 +76,7 @@
         // Content steps have no validation
         untrack(() => {
           wizardState.setStepValid(true, index);
-          wizardState.markStepReady(index);
+          wizardState.setStepStatus('ready', index);
         });
       }
       // Refresh focus trap for ContentStep transitions too
@@ -90,16 +94,6 @@
   function retryLoad() {
     contentRef?.focus();
     retryNonce++;
-  }
-
-  function handleNext() {
-    if (!wizardState.canAdvance) return;
-    void (wizardState.isLastStep ? wizardState.complete() : wizardState.next());
-  }
-
-  function handleBack() {
-    if (!wizardState.canGoBack) return;
-    void wizardState.back();
   }
 
   // Escape and X ask before closing the onboarding, since leaving dismisses it
@@ -121,14 +115,14 @@
   let nextReason = $derived.by(() => {
     if (wizardState.canAdvance) return '';
     if (wizardState.isSaving) return t('wizard.status.saving');
-    if (loadFailed) return t('wizard.errors.stepLoadFailed');
-    if (!wizardState.isStepReady) return t('wizard.status.loadingStep');
+    if (wizardState.stepStatus === 'failed') return t('wizard.errors.stepLoadFailed');
+    if (wizardState.stepStatus === 'loading') return t('wizard.status.loadingStep');
     return t('wizard.reasons.completeStep');
   });
 
   let alertText = $derived.by(() => {
     if (wizardState.stepError) return t(wizardState.stepError);
-    if (loadFailed) return t('wizard.errors.stepLoadFailed');
+    if (wizardState.stepStatus === 'failed') return t('wizard.errors.stepLoadFailed');
     return '';
   });
 
@@ -176,13 +170,9 @@
           ></span>
           <span class="sr-only">{t('common.loading')}</span>
         </div>
-      {:else if loadFailed}
+      {:else if wizardState.stepStatus === 'failed'}
         <div class="flex h-full items-center justify-center">
-          <button
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--border-200)] bg-transparent px-4 py-2 text-sm font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--hover-overlay)]"
-            onclick={retryLoad}
-          >
+          <button type="button" class={SECONDARY_BUTTON_CLASS} onclick={retryLoad}>
             <RotateCw class="size-4" />
             {t('common.retry')}
           </button>
@@ -225,8 +215,8 @@
           {#if !wizardState.isFirstStep}
             <button
               type="button"
-              class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--border-200)] bg-transparent px-4 py-2 text-sm font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--hover-overlay)] aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-              onclick={handleBack}
+              class="{SECONDARY_BUTTON_CLASS} aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+              onclick={() => wizardState.back()}
               aria-disabled={!wizardState.canGoBack ? 'true' : undefined}
               aria-describedby={!wizardState.canGoBack ? NEXT_REASON_ID : undefined}
             >
@@ -237,15 +227,16 @@
           <button
             type="button"
             class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--color-primary)] bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary-hover)] aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-            onclick={handleNext}
+            onclick={() => (wizardState.isLastStep ? wizardState.complete() : wizardState.next())}
             aria-disabled={!wizardState.canAdvance ? 'true' : undefined}
             aria-describedby={!wizardState.canAdvance ? NEXT_REASON_ID : undefined}
           >
             {#if wizardState.isSaving}
-              <span
-                class="inline-block size-4 animate-spin rounded-full border-2 border-[var(--color-primary-content)]/40 border-t-[var(--color-primary-content)]"
+              <LoadingSpinner
+                size="sm"
+                color="text-[var(--color-primary-content)]"
                 aria-hidden="true"
-              ></span>
+              />
               {t('wizard.status.saving')}
             {:else if wizardState.isLastStep}
               <Check class="size-4" />

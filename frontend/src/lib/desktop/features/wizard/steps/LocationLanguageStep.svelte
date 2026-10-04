@@ -12,7 +12,7 @@
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
-  import { saveStepSettings } from '../stepSave';
+  import { useStepSave } from '../stepSave';
   import { getLogger } from '$lib/utils/logger';
   import { toastActions } from '$lib/stores/toast';
 
@@ -118,57 +118,44 @@
     );
   }
 
+  const saveStep = useStepSave(() => registerLeaveHandler, commit);
+
   // Save the step's edits when the wizard leaves it with Next, Back or Done.
   // Only runs if the user made changes (or the UI locale needs healing).
   async function commit(): Promise<void> {
     const uiLocaleChanged = getLocale() !== initialUILocale;
     if (!dirty && !uiLocaleChanged) return;
 
-    await saveStepSettings(
-      () => {
-        if (dirty) {
-          settingsActions.updateSection('birdnet', {
-            latitude,
-            longitude,
-            locale: speciesLocale,
-          });
-        }
+    if (dirty) {
+      settingsActions.updateSection('birdnet', {
+        latitude,
+        longitude,
+        locale: speciesLocale,
+      });
+    }
 
-        if (uiLocaleChanged) {
-          const store = get(settingsStore);
-          const currentDashboard = store?.formData?.realtime?.dashboard;
-          // Only update when we have an existing Dashboard snapshot to merge
-          // into. settingsActions.updateSection does a shallow merge at the
-          // realtime level, so writing a locale-only stub here would wipe the
-          // rest of the dashboard. In practice createEmptySettings() always
-          // populates this object; the guard is defensive against future
-          // refactors.
-          if (currentDashboard) {
-            const mergedDashboard: Dashboard = { ...currentDashboard, locale: getLocale() };
-            settingsActions.updateSection('realtime', {
-              dashboard: mergedDashboard,
-            });
-          }
-        }
-      },
-      () => mounted
-    );
+    if (uiLocaleChanged) {
+      const store = get(settingsStore);
+      const currentDashboard = store?.formData?.realtime?.dashboard;
+      // Only update when we have an existing Dashboard snapshot to merge
+      // into. settingsActions.updateSection does a shallow merge at the
+      // realtime level, so writing a locale-only stub here would wipe the
+      // rest of the dashboard. In practice createEmptySettings() always
+      // populates this object; the guard is defensive against future
+      // refactors.
+      if (currentDashboard) {
+        const mergedDashboard: Dashboard = { ...currentDashboard, locale: getLocale() };
+        settingsActions.updateSection('realtime', {
+          dashboard: mergedDashboard,
+        });
+      }
+    }
+
+    await saveStep();
 
     dirty = false;
     initialUILocale = getLocale();
   }
-
-  // Register the save with the wizard: Next, Back and Done await it, so it runs
-  // only on those actions and never when the step unmounts (Skip, Leave setup).
-  let mounted = false;
-  onMount(() => {
-    mounted = true;
-    const unregister = registerLeaveHandler?.(commit);
-    return () => {
-      mounted = false;
-      unregister?.();
-    };
-  });
 </script>
 
 <div class="space-y-5">

@@ -2,6 +2,7 @@ import { api } from '$lib/utils/api';
 import { loggers } from '$lib/utils/logger';
 import type {
   StepLeaveHandler,
+  StepStatus,
   WizardFlow,
   WizardLaunchOptions,
   WizardStatus,
@@ -19,7 +20,7 @@ let steps = $state<WizardStep[]>([]);
 // Fail closed: a step is not valid until it reports so, and not ready until the
 // dialog has mounted it.
 let isStepValid = $state<boolean>(false);
-let isStepReady = $state<boolean>(false);
+let stepStatus = $state<StepStatus>('loading');
 let isSaving = $state<boolean>(false);
 // i18n key of the error to show for the current step, or null
 let stepError = $state<string | null>(null);
@@ -32,10 +33,10 @@ const currentStep = $derived(steps[currentStepIndex] ?? null);
 const isFirstStep = $derived(currentStepIndex === 0);
 const isLastStep = $derived(currentStepIndex === totalSteps - 1);
 const isActive = $derived(status === 'active');
-const canAdvance = $derived(isActive && !isSaving && isStepReady && isStepValid);
-// Back needs a mounted step too, so a double click cannot skip over a step that
-// has not loaded yet; a step whose chunk failed is marked ready by the dialog.
-const canGoBack = $derived(isActive && !isSaving && !isFirstStep && isStepReady);
+const canAdvance = $derived(isActive && !isSaving && stepStatus === 'ready' && isStepValid);
+// Back needs a settled step too, so a double click cannot skip over a step that
+// has not loaded yet; a step whose chunk failed to load can still go back.
+const canGoBack = $derived(isActive && !isSaving && !isFirstStep && stepStatus !== 'loading');
 
 // The leave handler of the mounted step, awaited by next(), back() and complete().
 let leaveHandler: StepLeaveHandler | null = null;
@@ -47,7 +48,7 @@ const SAVE_FAILED_KEY = 'wizard.errors.saveFailed';
 
 function resetStepFlags(): void {
   isStepValid = false;
-  isStepReady = false;
+  stepStatus = 'loading';
   isSaving = false;
   stepError = null;
   leaveHandler = null;
@@ -105,14 +106,8 @@ async function dismissOnly(version?: string): Promise<void> {
 }
 
 function _resetForTesting(): void {
+  resetState();
   status = 'idle';
-  flow = null;
-  currentStepIndex = 0;
-  steps = [];
-  previousVersion = null;
-  currentVersion = null;
-  session++;
-  resetStepFlags();
 }
 
 function launch(wizardFlow: WizardFlow, options?: WizardLaunchOptions): void {
@@ -136,11 +131,12 @@ function registerLeaveHandler(handler: StepLeaveHandler): () => void {
   };
 }
 
-// Called by the dialog once the step's component is mounted and has had the
-// chance to report its validity.
-function markStepReady(index: number): void {
+// Called by the dialog: 'loading' while the step's component loads, 'ready' once
+// it is mounted and has had the chance to report its validity, 'failed' when it
+// could not be loaded.
+function setStepStatus(next: StepStatus, index: number): void {
   if (isActive && index === currentStepIndex) {
-    isStepReady = true;
+    stepStatus = next;
   }
 }
 
@@ -150,12 +146,12 @@ function setStepValid(valid: boolean, index: number = currentStepIndex): void {
   }
 }
 
-// Runs the current step's leave handler. isSaving is set before the first await
-// so a second click in the same tick is refused. Returns true when navigation may
-// proceed; isSaving then stays true and the caller clears it in the same
-// synchronous block that moves the step. A result that belongs to another session
-// or step never touches state.
-async function runLeave(): Promise<boolean> {
+// Runs the current step's leave handler, then move() if the wizard is still on
+// the same session and step. isSaving is set before the first await so a second
+// click in the same tick is refused; it stays true until move() runs, and move()
+// clears it in the same synchronous block that moves the step. A result that
+// belongs to another session or step never touches state.
+async function runLeave(move: () => void): Promise<void> {
   const startSession = session;
   const startIndex = currentStepIndex;
   isSaving = true;
@@ -169,47 +165,43 @@ async function runLeave(): Promise<boolean> {
       stepError = SAVE_FAILED_KEY;
       isSaving = false;
     }
-    return false;
+    return;
   }
-  if (isStale()) return false;
-  leaveHandler = null;
-  return true;
+  if (isStale()) return;
+  move();
+}
+
+function moveBy(delta: number): void {
+  currentStepIndex += delta;
+  resetStepFlags();
 }
 
 async function next(): Promise<void> {
   if (!canAdvance || isLastStep) return;
-  const startSession = session;
-  const startIndex = currentStepIndex;
-  if (!(await runLeave())) return;
-  if (startSession !== session || startIndex !== currentStepIndex) return;
-  currentStepIndex++;
-  resetStepFlags();
+  await runLeave(() => moveBy(1));
 }
 
 async function back(): Promise<void> {
   if (!canGoBack) return;
-  const startSession = session;
-  const startIndex = currentStepIndex;
   // An invalid step has nothing safe to save; its edits are discarded.
-  if (isStepReady && isStepValid) {
-    if (!(await runLeave())) return;
-    if (startSession !== session || startIndex !== currentStepIndex) return;
+  if (isStepValid) {
+    await runLeave(() => moveBy(-1));
+  } else {
+    moveBy(-1);
   }
-  currentStepIndex--;
-  resetStepFlags();
 }
 
 function skip(): void {
-  leaveHandler = null;
   void dismiss();
   resetState();
 }
 
 async function complete(): Promise<void> {
   if (!canAdvance || !isLastStep) return;
-  if (!(await runLeave())) return;
-  void dismiss();
-  resetState();
+  await runLeave(() => {
+    void dismiss();
+    resetState();
+  });
 }
 
 export const wizardState = {
@@ -240,8 +232,8 @@ export const wizardState = {
   get isStepValid() {
     return isStepValid;
   },
-  get isStepReady() {
-    return isStepReady;
+  get stepStatus() {
+    return stepStatus;
   },
   get isSaving() {
     return isSaving;
@@ -262,7 +254,7 @@ export const wizardState = {
   next,
   back,
   setStepValid,
-  markStepReady,
+  setStepStatus,
   registerLeaveHandler,
   skip,
   complete,

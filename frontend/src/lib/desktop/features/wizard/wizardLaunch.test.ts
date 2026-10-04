@@ -57,14 +57,4 @@ describe('resolveWizardLaunch', () => {
   it.each(loadStates)('neither fresh nor new resolves to none (%s)', settingsLoad => {
     expect(decide({ settingsLoad })).toBe('none');
   });
-
-  it('pending then loaded yields wait then onboarding', () => {
-    expect(decide({ freshInstall: true, settingsLoad: 'pending' })).toBe('wait');
-    expect(decide({ freshInstall: true, settingsLoad: 'loaded' })).toBe('onboarding');
-  });
-
-  it('pending then failed yields wait then none', () => {
-    expect(decide({ freshInstall: true, settingsLoad: 'pending' })).toBe('wait');
-    expect(decide({ freshInstall: true, settingsLoad: 'failed' })).toBe('none');
-  });
 });
