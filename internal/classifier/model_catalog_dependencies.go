@@ -89,8 +89,9 @@ func ProvidesGeomodel(entry *CatalogEntry, variantID string) bool {
 }
 
 // geomodelDependency returns the dependency that supplies the range-filter geomodel
-// for the given variant of entry: the first dependency carrying a complete geomodel
-// tuple and a geomodel version. It reports false when no dependency qualifies.
+// for entry (DependsOn is entry-level, so every variant shares it): the first
+// dependency carrying a complete geomodel tuple and a geomodel version. It reports
+// false when no dependency qualifies.
 func geomodelDependency(entry *CatalogEntry) (*CatalogEntry, bool) {
 	if entry == nil {
 		return nil, false
