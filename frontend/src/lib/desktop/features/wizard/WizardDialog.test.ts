@@ -82,6 +82,13 @@ function describedText(el: HTMLElement): string {
   return document.getElementById(id)?.textContent ?? '';
 }
 
+// Elements showing `text` on screen, leaving out screen reader only regions
+const visibleWithText = (text: string) =>
+  screen.queryAllByText(text).filter(el => !el.closest('.sr-only'));
+
+// The footer reason: the paragraph in the row that holds the Next button
+const footerReason = () => primaryButton().closest('div.w-full')?.querySelector('p') ?? null;
+
 describe('WizardDialog', () => {
   let user: ReturnType<typeof userEvent.setup>;
 
@@ -110,6 +117,28 @@ describe('WizardDialog', () => {
     expect(isBlocked(primaryButton())).toBe(true);
   });
 
+  it('takes no space for the alert or the reason while there is nothing to say', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('');
+    expect(alert).toHaveClass('sr-only');
+    expect(footerReason()).toHaveTextContent('');
+    expect(primaryButton()).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('shows the reason in the same row as the buttons', async () => {
+    stepControl.validQueue = [false];
+    renderWizard(componentSteps(3));
+
+    await waitFor(() => expect(describedText(primaryButton())).toBe('wizard.reasons.completeStep'));
+
+    const reasonId = primaryButton().getAttribute('aria-describedby') ?? '';
+    expect(footerReason()?.id).toBe(reasonId);
+    expect(footerReason()).toHaveTextContent('wizard.reasons.completeStep');
+  });
+
   it('treats content steps as ready and valid at once', async () => {
     renderWizard([
       { id: 'c1', type: 'content', title: 'First', content: 'one' },
@@ -131,7 +160,13 @@ describe('WizardDialog', () => {
 
     await waitFor(() => expect(primaryButton()).toHaveTextContent('wizard.status.saving'));
     expect(isBlocked(primaryButton())).toBe(true);
-    expect(describedText(primaryButton())).toBe('wizard.status.saving');
+    // Saving shows once, on the button; the footer reason does not repeat it
+    expect(visibleWithText('wizard.status.saving')).toEqual([primaryButton()]);
+    expect(footerReason()).toHaveTextContent('');
+    // Screen readers still hear it from the saving status region
+    expect(
+      screen.getAllByRole('status').some(el => el.textContent === 'wizard.status.saving')
+    ).toBe(true);
     expect(heading()).toHaveTextContent('test.step1');
 
     save.resolve();
@@ -269,6 +304,7 @@ describe('WizardDialog', () => {
     await user.click(backButton());
 
     await waitFor(() => expect(isBlocked(backButton())).toBe(true));
+    expect(describedText(backButton())).toBe('wizard.status.saving');
     expect(heading()).toHaveTextContent('test.step2');
 
     save.resolve();
@@ -285,6 +321,7 @@ describe('WizardDialog', () => {
 
     const retry = await screen.findByRole('button', { name: /common\.retry/ });
     expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.stepLoadFailed');
+    expect(screen.getByRole('alert')).not.toHaveClass('sr-only');
     expect(isBlocked(primaryButton())).toBe(true);
     expect(describedText(primaryButton())).toBe('wizard.errors.stepLoadFailed');
     expect(primaryButton().getAttribute('aria-describedby')).toBe(screen.getByRole('alert').id);

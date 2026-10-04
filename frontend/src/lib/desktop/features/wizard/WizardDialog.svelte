@@ -16,6 +16,7 @@
 
   const NEXT_REASON_ID = generateId('wizard-next-reason');
   const ALERT_ID = generateId('wizard-alert');
+  const SAVING_STATUS_ID = generateId('wizard-saving-status');
   const LEAVE_TITLE_ID = generateId('wizard-leave-title');
   const LEAVE_DESC_ID = generateId('wizard-leave-desc');
 
@@ -146,11 +147,12 @@
     if (wizardState.isActive) wizardState.skip();
   }
 
-  // Why Next is blocked, by priority; empty when it is not blocked. A failed load
-  // is already explained by the alert, so the footer stays empty for it.
+  // Why Next is blocked, by priority; empty when it is not blocked. While saving,
+  // Next itself reads Saving, and a failed load is explained by the alert, so the
+  // footer stays empty for both.
   let nextReason = $derived.by(() => {
     if (wizardState.canAdvance) return '';
-    if (wizardState.isSaving) return t('wizard.status.saving');
+    if (wizardState.isSaving) return '';
     if (wizardState.stepStatus === 'failed') return '';
     if (wizardState.stepStatus === 'loading') return t('wizard.status.loadingStep');
     return t('wizard.reasons.completeStep');
@@ -164,11 +166,20 @@
   });
 
   // The element that explains why Next is blocked: the footer reason, or the
-  // alert when the step failed to load
+  // alert when the step failed to load. While saving, Next's own label says so.
   let nextDescribedBy = $derived.by(() => {
     if (wizardState.canAdvance) return undefined;
     if (nextReason) return NEXT_REASON_ID;
     if (alertText) return ALERT_ID;
+    return undefined;
+  });
+
+  // Back is blocked while saving (explained by the saving status) or while the
+  // step loads (explained by the footer reason)
+  let backDescribedBy = $derived.by(() => {
+    if (wizardState.canGoBack) return undefined;
+    if (wizardState.isSaving) return SAVING_STATUS_ID;
+    if (nextReason) return NEXT_REASON_ID;
     return undefined;
   });
 
@@ -246,68 +257,74 @@
         />
       {/if}
     </div>
-    <p id={ALERT_ID} role="alert" class="mt-2 min-h-5 text-sm text-[var(--color-error)]">
+    <!-- The alert stays in the DOM as a live region but takes no space while it is
+         empty, so the dialog is no taller than it needs to be -->
+    <p
+      id={ALERT_ID}
+      role="alert"
+      class={alertText ? 'mt-2 text-sm text-[var(--color-error)]' : 'sr-only'}
+    >
       {alertText}
     </p>
-    <span role="status" class="sr-only"
+    <span id={SAVING_STATUS_ID} role="status" class="sr-only"
       >{wizardState.isSaving ? t('wizard.status.saving') : ''}</span
     >
   {/snippet}
 
   {#snippet footer()}
-    <div class="flex w-full flex-col gap-2">
-      {#if nextReason}
-        <p
-          id={NEXT_REASON_ID}
-          class="text-right text-sm text-[var(--color-base-content)] opacity-70"
-        >
-          {nextReason}
-        </p>
-      {/if}
-      <div class="flex w-full items-center justify-between">
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] px-3 py-1.5 text-sm font-medium text-[var(--color-base-content)] opacity-70 transition-colors hover:bg-[var(--hover-overlay)] hover:opacity-100"
-          onclick={() => wizardState.skip()}
-        >
-          {t('wizard.skip')}
-        </button>
-        <div class="flex items-center gap-2">
-          {#if !wizardState.isFirstStep}
-            <button
-              type="button"
-              class="{SECONDARY_BUTTON_CLASS} aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-              onclick={() => wizardState.back()}
-              aria-disabled={!wizardState.canGoBack ? 'true' : undefined}
-              aria-describedby={!wizardState.canGoBack ? NEXT_REASON_ID : undefined}
-            >
-              <ChevronLeft class="size-4" />
-              {t('wizard.back')}
-            </button>
-          {/if}
+    <!-- One row whatever the state, so the footer height never changes: the reason
+         sits beside the buttons and clamps to two lines (still shorter than a
+         button) instead of adding a row -->
+    <div class="flex w-full items-center gap-3">
+      <button
+        type="button"
+        class="inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius-field)] px-3 py-1.5 text-sm font-medium text-[var(--color-base-content)] opacity-70 transition-colors hover:bg-[var(--hover-overlay)] hover:opacity-100"
+        onclick={() => wizardState.skip()}
+      >
+        {t('wizard.skip')}
+      </button>
+      <p
+        id={NEXT_REASON_ID}
+        class="line-clamp-2 min-w-0 flex-1 text-right text-sm leading-tight text-[var(--color-base-content)] opacity-70"
+        title={nextReason || undefined}
+      >
+        {nextReason}
+      </p>
+      <div class="flex shrink-0 items-center gap-2">
+        {#if !wizardState.isFirstStep}
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--color-primary)] bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary-hover)] aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-            onclick={() => (wizardState.isLastStep ? wizardState.complete() : wizardState.next())}
-            aria-disabled={!wizardState.canAdvance ? 'true' : undefined}
-            aria-describedby={nextDescribedBy}
+            class="{SECONDARY_BUTTON_CLASS} aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+            onclick={() => wizardState.back()}
+            aria-disabled={!wizardState.canGoBack ? 'true' : undefined}
+            aria-describedby={backDescribedBy}
           >
-            {#if wizardState.isSaving}
-              <LoadingSpinner
-                size="sm"
-                color="text-[var(--color-primary-content)]"
-                aria-hidden="true"
-              />
-              {t('wizard.status.saving')}
-            {:else if wizardState.isLastStep}
-              <Check class="size-4" />
-              {t('wizard.done')}
-            {:else}
-              {t('wizard.next')}
-              <ChevronRight class="size-4" />
-            {/if}
+            <ChevronLeft class="size-4" />
+            {t('wizard.back')}
           </button>
-        </div>
+        {/if}
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--color-primary)] bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary-hover)] aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+          onclick={() => (wizardState.isLastStep ? wizardState.complete() : wizardState.next())}
+          aria-disabled={!wizardState.canAdvance ? 'true' : undefined}
+          aria-describedby={nextDescribedBy}
+        >
+          {#if wizardState.isSaving}
+            <LoadingSpinner
+              size="sm"
+              color="text-[var(--color-primary-content)]"
+              aria-hidden="true"
+            />
+            {t('wizard.status.saving')}
+          {:else if wizardState.isLastStep}
+            <Check class="size-4" />
+            {t('wizard.done')}
+          {:else}
+            {t('wizard.next')}
+            <ChevronRight class="size-4" />
+          {/if}
+        </button>
       </div>
     </div>
   {/snippet}
