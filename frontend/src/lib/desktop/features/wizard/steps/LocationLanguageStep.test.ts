@@ -221,7 +221,7 @@ describe('LocationLanguageStep - UI locale persistence in the leave handler', ()
     const { leave } = renderStep();
     await flushAsync();
 
-    // User does NOT interact with the wizard — no setLocale, no field edits.
+    // User does NOT interact with the wizard - no setLocale, no field edits.
     await leave();
 
     // The leave handler must still fire the realtime update so the backend

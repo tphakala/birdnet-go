@@ -58,7 +58,7 @@ function launchSteps(count: number): void {
   wizardState.launch('onboarding');
 }
 
-describe('wizardState — state machine', () => {
+describe('wizardState - state machine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
