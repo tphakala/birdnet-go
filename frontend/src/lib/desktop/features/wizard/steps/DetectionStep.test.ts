@@ -128,4 +128,33 @@ describe('DetectionStep - leave handler', () => {
     expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
     expect(settingsActions.saveSettings).toHaveBeenCalledWith({ notify: false });
   });
+
+  it('does not revert the store when the save fails after the step unmounted', async () => {
+    const failure = new Error('late failure');
+    vi.mocked(settingsActions.saveSettings).mockRejectedValueOnce(failure);
+    const { leave, unmount } = renderStep();
+    await flushAsync();
+    await edit();
+
+    const pending = leave();
+    unmount();
+
+    await expect(pending).rejects.toBe(failure);
+    expect(settingsActions.resetAllSettings).not.toHaveBeenCalled();
+  });
+
+  it('keeps the edits after a failed save so the next leave call retries them', async () => {
+    vi.mocked(settingsActions.saveSettings).mockRejectedValueOnce(new Error('save failed'));
+    const { leave } = renderStep();
+    await flushAsync();
+    await edit();
+
+    await expect(leave()).rejects.toThrow('save failed');
+    await leave();
+
+    expect(settingsActions.saveSettings).toHaveBeenCalledTimes(2);
+    const calls = vi.mocked(settingsActions.updateSection).mock.calls;
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+    expect(calls.slice(0, calls.length / 2)).toEqual(calls.slice(calls.length / 2));
+  });
 });

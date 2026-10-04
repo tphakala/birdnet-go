@@ -382,4 +382,22 @@ describe('LocationLanguageStep - UI locale persistence in the leave handler', ()
     expect(realtimePayload.dashboard.locale).toBe('hu');
     expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps the dirty edits after a failed save so the next leave call retries them', async () => {
+    vi.mocked(settingsActions.saveSettings).mockRejectedValueOnce(new Error('save failed'));
+    const { leave, container } = renderStep();
+    await flushAsync();
+    const latitudeInput = container.querySelectorAll('input[type="number"]')[0] as HTMLInputElement;
+    await fireEvent.input(latitudeInput, { target: { value: '41.5' } });
+    await fireEvent.change(latitudeInput, { target: { value: '41.5' } });
+
+    await expect(leave()).rejects.toThrow('save failed');
+    await leave();
+
+    const birdnetCalls = vi
+      .mocked(settingsActions.updateSection)
+      .mock.calls.filter(([section]) => section === 'birdnet');
+    expect(birdnetCalls).toHaveLength(2);
+    expect(settingsActions.saveSettings).toHaveBeenCalledTimes(2);
+  });
 });
