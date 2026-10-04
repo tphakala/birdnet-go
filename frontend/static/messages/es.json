@@ -5546,6 +5546,7 @@
         "installFailed": "No se pudo iniciar la instalación del modelo",
         "removeFailed": "No se pudo eliminar el modelo",
         "removeHasDependents": "{name} es necesario para {models}. Elimine primero esos modelos.",
+        "operationInProgress": "Ya hay una instalación, reinstalación o eliminación de modelo en curso ({name}). Inténtalo de nuevo cuando termine.",
         "actionFailed": "Hubo un problema con {name}",
         "downloadSourceHint": "Si huggingface.co está bloqueado o es lento en su red, configure un servidor espejo en la sección Origen de descarga a continuación.",
         "goToDownloadSource": "Ir a Origen de descarga",

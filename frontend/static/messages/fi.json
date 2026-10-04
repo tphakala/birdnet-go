@@ -5546,6 +5546,7 @@
         "installFailed": "Mallin asennuksen käynnistäminen epäonnistui",
         "removeFailed": "Mallin poistaminen epäonnistui",
         "removeHasDependents": "Seuraavat mallit tarvitsevat mallia {name}: {models}. Poista ne ensin.",
+        "operationInProgress": "Mallin asennus, uudelleenasennus tai poisto on jo käynnissä ({name}). Yritä uudelleen, kun se on valmis.",
         "actionFailed": "Kohteen {name} kanssa ilmeni ongelma",
         "downloadSourceHint": "Jos huggingface.co on estetty tai hidas verkossasi, aseta peilipalvelin alla olevaan Latauslähde-osioon.",
         "goToDownloadSource": "Siirry Latauslähteeseen",

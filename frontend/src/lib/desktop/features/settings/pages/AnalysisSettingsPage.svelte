@@ -44,6 +44,7 @@
     uninstallModel,
     subscribeInstallProgress,
     isNetworkDownloadError,
+    MODEL_OPERATION_IN_PROGRESS_KEY,
   } from '$lib/utils/modelsApi';
   import { invalidateModels } from '$lib/stores/models.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -180,7 +181,7 @@
     message: string; // raw backend/SSE/ApiError text, kept inspectable
     variantId?: string; // reused when retrying an install
     network: boolean; // download could not reach the model host
-    blocked: boolean; // remove refused because installed models still need this one
+    blocked: boolean; // the server refused the action and sent a translated reason (models still need it, or another model operation is running)
   }
   let installError = $state<GalleryActionError | null>(null);
 
@@ -1287,9 +1288,23 @@
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
-      installError = reportActionError(modelId, modelName, 'install', message, variantId);
+      installError = reportActionError(
+        modelId,
+        modelName,
+        'install',
+        message,
+        variantId,
+        isOperationInProgress(e)
+      );
       installingId = null;
     }
+  }
+
+  // True when the server refused an install or reinstall because another model
+  // operation holds its single operation slot. Classified by error_key, not status:
+  // install also answers 409 without a key (ONNX unavailable, incompatible hardware).
+  function isOperationInProgress(e: unknown): boolean {
+    return e instanceof ApiError && e.errorKey === MODEL_OPERATION_IN_PROGRESS_KEY;
   }
 
   // Build a GalleryActionError, classifying whether a mirror endpoint could help.
@@ -1342,9 +1357,9 @@
       toastActions.success(t('analysis.gallery.removeSuccess', { name: modelName }));
     } catch (e) {
       const message = e instanceof Error ? e.message : t('analysis.gallery.errors.removeFailed');
-      // A 409 means installed models still depend on this one. Retrying cannot
-      // succeed, so the banner shows the server's translated reason instead of
-      // the retry hint.
+      // A 409 means installed models still depend on this one, or another model
+      // operation is running. Both carry a translated reason, so the banner shows it
+      // instead of the retry hint.
       const blocked = e instanceof ApiError && e.status === HTTP_STATUS_CONFLICT;
       // A remove failure never involves a download, so it is never network-shaped.
       installError = reportActionError(modelId, modelName, 'remove', message, undefined, blocked);
@@ -1404,7 +1419,14 @@
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
-      installError = reportActionError(modelId, modelName, 'reinstall', message);
+      installError = reportActionError(
+        modelId,
+        modelName,
+        'reinstall',
+        message,
+        undefined,
+        isOperationInProgress(e)
+      );
       reinstallingId = null;
     }
   }
@@ -2019,7 +2041,8 @@
                   {t('analysis.gallery.errors.downloadSourceHint')}
                 </p>
               {:else if installError.blocked}
-                <!-- A remove refused because other models need this one: the
+                <!-- An action the server refused with a translated reason (a remove
+                     that other models need, or another model operation running): the
                      server's translated reason is the whole story, so show it in
                      place of the retry hint and skip the raw-details disclosure. -->
                 <p class="mt-1 text-[var(--color-base-content)]/80">

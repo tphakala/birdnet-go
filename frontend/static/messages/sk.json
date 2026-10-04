@@ -5546,6 +5546,7 @@
         "installFailed": "Nepodarilo sa spustiť inštaláciu modelu",
         "removeFailed": "Nepodarilo sa odstrániť model",
         "removeHasDependents": "{name} je vyžadovaný modelmi {models}. Najprv tieto modely odstráňte.",
+        "operationInProgress": "Už prebieha inštalácia, preinštalovanie alebo odstránenie modelu ({name}). Skúste to znova po jej dokončení.",
         "actionFailed": "Vyskytol sa problém s {name}",
         "downloadSourceHint": "Ak je huggingface.co vo vašej sieti zablokované alebo pomalé, nastavte zrkadlový server v sekcii Zdroj sťahovania nižšie.",
         "goToDownloadSource": "Prejsť na Zdroj sťahovania",
