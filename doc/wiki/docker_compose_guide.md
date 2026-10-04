@@ -76,7 +76,7 @@ The default configuration maps `/dev/snd` to use your local sound card for audio
 
 If you prefer to use an RTSP stream instead of a sound card:
 
-1. You don't need to modify the docker-compose.yml file
+1. You don't need to modify the Compose file, except on a host without a sound card: remove the `/dev/snd` line there, or `docker compose up` fails
 2. After the container is running, edit the config file at `./config/config.yaml`
 3. Comment out the sound card source and uncomment the RTSP section
 4. Add your RTSP URL(s)

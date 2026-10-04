@@ -259,7 +259,7 @@ environment:
 
 ### Health check failing
 
-The health check probes the port in `BIRDNET_WEBSERVER_PORT`, then 8080, 8443 and 443. If you changed the port only in `config.yaml` to another value, this is expected and can be ignored as long as the application works. Set `BIRDNET_WEBSERVER_PORT` to make the health check follow the port.
+The health check probes the port in `BIRDNET_WEBSERVER_PORT` (8080 when it is unset or invalid), then 8443 and 443. If you changed the port only in `config.yaml` to another value, this is expected and can be ignored as long as the application works. Set `BIRDNET_WEBSERVER_PORT` to make the health check follow the port.
 
 ### `.local` hostnames do not resolve
 

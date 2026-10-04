@@ -132,7 +132,7 @@ The host networking template maps only `/var/run/avahi-daemon` (advanced setting
 
 BirdNET-Go requires access to audio input devices. The template automatically includes:
 
-- `--device /dev/snd` - Access to all sound devices
+- `--device /dev/snd` - Access to all sound devices. On a server without a sound card (RTSP streams only), remove it (bridge template: from **Extra Parameters**; host template: clear the sound device entry), or the container does not start.
 - `--add-host="host.docker.internal:host-gateway"` - Network access for RTSP streams
 
 ## Audio Configuration
