@@ -1,10 +1,7 @@
 package api
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -152,21 +149,6 @@ func newWizardController(t *testing.T) *Controller {
 	return c
 }
 
-// patchWizardSection sends PATCH /api/v2/settings/:section through the handler.
-func patchWizardSection(t *testing.T, c *Controller, section string, body map[string]any) *httptest.ResponseRecorder {
-	t.Helper()
-	payload, err := json.Marshal(body)
-	require.NoError(t, err)
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+section, bytes.NewReader(payload))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := c.Echo.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues(section)
-	require.NoError(t, c.UpdateSectionSettings(ctx))
-	return rec
-}
-
 // settingsYAML marshals settings the way SaveYAMLConfig writes config.yaml.
 func settingsYAML(t *testing.T, s *conf.Settings) string {
 	t.Helper()
@@ -188,8 +170,7 @@ func TestWizardSectionPatchesLeaveOtherSectionsByteIdentical(t *testing.T) {
 			want := conf.CloneSettings(c.Settings.Load())
 			tc.expect(want)
 
-			rec := patchWizardSection(t, c, tc.section, tc.body)
-			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			patchSection(t, c.Echo, c, tc.section, tc.body)
 
 			got := c.Settings.Load()
 			assert.Equal(t, settingsYAML(t, want), settingsYAML(t, got))
@@ -211,8 +192,7 @@ func TestWizardSectionPatchSequenceIsIdempotent(t *testing.T) {
 	c := newWizardController(t)
 	runAll := func() {
 		for _, tc := range wizardPatches() {
-			rec := patchWizardSection(t, c, tc.section, tc.body)
-			require.Equal(t, http.StatusOK, rec.Code, "%s: %s", tc.name, rec.Body.String())
+			patchSection(t, c.Echo, c, tc.section, tc.body)
 		}
 	}
 
@@ -231,7 +211,7 @@ func TestWizardInvalidBirdWeatherPatchChangesNothing(t *testing.T) {
 	c := newWizardController(t)
 	before := settingsYAML(t, c.Settings.Load())
 
-	rec := patchWizardSection(t, c, "birdweather", map[string]any{"enabled": true, "id": "bad"})
+	rec := sendSectionPatch(t, c.Echo, c, "birdweather", map[string]any{"enabled": true, "id": "bad"})
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 	assert.Equal(t, before, settingsYAML(t, c.Settings.Load()))

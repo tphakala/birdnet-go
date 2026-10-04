@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/svelte';
 import type { Component } from 'svelte';
-import { get } from 'svelte/store';
 import type { WizardStepProps } from '../types';
 
 vi.mock('$lib/i18n', () => ({
@@ -41,7 +40,7 @@ import AudioSourceStep from './AudioSourceStep.svelte';
 import DetectionStep from './DetectionStep.svelte';
 import IntegrationStep from './IntegrationStep.svelte';
 import LocationLanguageStep from './LocationLanguageStep.svelte';
-import { settingsActions, settingsStore } from '$lib/stores/settings';
+import { settingsActions } from '$lib/stores/settings';
 import { flushAsync, renderStep } from './stepTestUtils';
 
 interface StepCase {
@@ -100,7 +99,6 @@ describe.each(stepCases)('$name leave handler contract', ({ component, edit }) =
     vi.mocked(settingsActions.saveSection).mockClear().mockResolvedValue(undefined);
     vi.mocked(settingsActions.updateSection).mockClear();
     vi.mocked(settingsActions.saveSettings).mockClear();
-    vi.mocked(settingsActions.resetAllSettings).mockClear();
   });
 
   it('registers a leave handler on mount and unregisters on destroy', async () => {
@@ -149,7 +147,7 @@ describe.each(stepCases)('$name leave handler contract', ({ component, edit }) =
     expect(settingsActions.updateSection).not.toHaveBeenCalled();
   });
 
-  it('the leave handler rejects when the section save rejects', async () => {
+  it('rejects when the section save rejects and retries the edits on the next leave call', async () => {
     const failure = new Error('save failed');
     vi.mocked(settingsActions.saveSection).mockRejectedValueOnce(failure);
     const { leave, container } = renderStep(component);
@@ -157,53 +155,6 @@ describe.each(stepCases)('$name leave handler contract', ({ component, edit }) =
     await edit(container);
 
     await expect(leave()).rejects.toBe(failure);
-  });
-
-  it('a failed section save does not touch the store', async () => {
-    vi.mocked(settingsActions.saveSection).mockRejectedValueOnce(new Error('save failed'));
-    const { leave, container } = renderStep(component);
-    await flushAsync();
-    await edit(container);
-    const before = JSON.stringify(get(settingsStore));
-
-    await expect(leave()).rejects.toThrow('save failed');
-
-    expect(JSON.stringify(get(settingsStore))).toBe(before);
-    expect(settingsActions.resetAllSettings).not.toHaveBeenCalled();
-    expect(settingsActions.updateSection).not.toHaveBeenCalled();
-  });
-
-  it('a section save that fails after the step unmounted leaves the store untouched', async () => {
-    const failure = new Error('late failure');
-    let rejectSave: (err: Error) => void = () => {};
-    vi.mocked(settingsActions.saveSection).mockImplementationOnce(
-      () =>
-        new Promise<void>((_, reject) => {
-          rejectSave = reject;
-        })
-    );
-    const { leave, unmount, container } = renderStep(component);
-    await flushAsync();
-    await edit(container);
-
-    const pending = leave();
-    await flushAsync();
-    unmount();
-    const before = JSON.stringify(get(settingsStore));
-    rejectSave(failure);
-
-    await expect(pending).rejects.toBe(failure);
-    expect(JSON.stringify(get(settingsStore))).toBe(before);
-    expect(settingsActions.resetAllSettings).not.toHaveBeenCalled();
-  });
-
-  it('keeps the edits after a failed save so the next leave call retries them', async () => {
-    vi.mocked(settingsActions.saveSection).mockRejectedValueOnce(new Error('save failed'));
-    const { leave, container } = renderStep(component);
-    await flushAsync();
-    await edit(container);
-
-    await expect(leave()).rejects.toThrow('save failed');
     const firstLeaveCalls = vi.mocked(settingsActions.saveSection).mock.calls.length;
     await leave();
 

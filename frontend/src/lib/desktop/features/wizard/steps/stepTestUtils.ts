@@ -39,8 +39,7 @@ export async function flushAsync(): Promise<void> {
 
 /**
  * Builds a `$lib/stores/settings` mock for step tests: a writable store seeded
- * with formData, and spied saveSection, resetAllSettings, plus updateSection and
- * saveSettings so tests can assert the wizard never calls them. Use it from a
+ * with formData, a spied saveSection, plus updateSection and saveSettings so tests can assert the wizard never calls them. Use it from a
  * vi.mock factory through a dynamic import, since vi.mock is hoisted above
  * static imports.
  */
@@ -62,7 +61,6 @@ export function createSettingsMock(formData: unknown) {
       saveSection: vi.fn().mockResolvedValue(undefined),
       updateSection: vi.fn(),
       saveSettings: vi.fn().mockResolvedValue(undefined),
-      resetAllSettings: vi.fn(),
     },
   };
 }

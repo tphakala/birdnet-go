@@ -42,30 +42,18 @@ function ownValue(obj: PlainRecord, key: string): unknown {
 
 /**
  * Deep-merges patch into target and returns the result. Neither input is
- * mutated. An undefined target is treated as an empty object.
+ * mutated. An undefined target is treated as an empty object. This is the
+ * three-way merge below with no pending edits (form equals base).
  */
 export function mergeSettingsPatch(
   target: PlainRecord | undefined,
   patch: PlainRecord
 ): PlainRecord {
-  const result = cloneRecord(target ?? {});
-  for (const key of Object.keys(patch)) {
-    if (UNSAFE_KEYS.has(key)) continue;
-    // eslint-disable-next-line security/detect-object-injection -- key comes from Object.keys of the patch
-    const value = patch[key];
-    if (value === undefined) continue;
-    const current = ownValue(result, key);
-    // eslint-disable-next-line security/detect-object-injection -- key is not an unsafe key
-    result[key] =
-      isPlainObject(value) && isPlainObject(current)
-        ? mergeSettingsPatch(current, value)
-        : cloneValue(value);
-  }
-  return result;
+  return mergeSettingsPatchKeepingEdits(target, target, patch);
 }
 
 /**
- * Three-way variant of mergeSettingsPatch for the working copy of the settings.
+ * Three-way merge for the working copy of the settings.
  * A leaf takes the patch value only when form still equals base there (no
  * pending edit); otherwise the form value is kept, so a save that resolves late
  * never overwrites something the user typed in the meantime. Objects present in

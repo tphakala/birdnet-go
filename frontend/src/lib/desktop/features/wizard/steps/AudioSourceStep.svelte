@@ -10,7 +10,6 @@
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
   import { getLogger } from '$lib/utils/logger';
-  import { useStepSave } from '../stepSave';
 
   const logger = getLogger('AudioSourceStep');
 
@@ -97,7 +96,8 @@
     }
   }
 
-  useStepSave(() => registerLeaveHandler, commit);
+  // Next, Back and Done await the commit; it never runs on Skip or Leave setup.
+  onMount(() => registerLeaveHandler?.(commit));
 
   // Save the step's edits when the wizard leaves it with Next, Back or Done.
   // Only runs if the user made changes and has valid data.

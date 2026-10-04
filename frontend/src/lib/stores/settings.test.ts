@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { settingsStore, settingsActions, hasUnsavedChanges } from './settings';
+import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS } from './settings';
 import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
@@ -1278,16 +1278,6 @@ describe('Settings Store - saveSection', () => {
       outcome: 'ok' | 'fail';
     }
 
-    /** Store path of the section, used to read leaf keys back. */
-    const sectionPath: Record<Step['section'], string[]> = {
-      birdnet: ['birdnet'],
-      dashboard: ['realtime', 'dashboard'],
-      privacyfilter: ['realtime', 'privacyFilter'],
-      birdweather: ['realtime', 'birdweather'],
-      sentry: ['sentry'],
-      audio: ['realtime', 'audio'],
-    };
-
     const sequences: Array<{ name: string; steps: Step[] }> = [
       {
         name: 'all sections succeed once',
@@ -1349,7 +1339,7 @@ describe('Settings Store - saveSection', () => {
           .catch((err: unknown) => err);
         results.push(error instanceof Error ? error.message : 'ok');
         for (const [key, value] of Object.entries(step.partial)) {
-          const path = [...sectionPath[step.section], key].join('.');
+          const path = [...SECTION_STORE_PATHS[step.section], key].join('.');
           touched.add(path);
           if (step.outcome === 'ok') expected.set(path, value);
         }

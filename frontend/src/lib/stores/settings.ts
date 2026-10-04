@@ -1307,11 +1307,15 @@ export const extendedCaptureSettings = derived(
   $store => $store.formData.realtime?.extendedCapture
 );
 
+/** A top-level store key, or a key of the realtime object. */
+type SectionStorePath =
+  readonly [keyof SettingsFormData] | readonly ['realtime', keyof RealtimeSettings];
+
 /**
  * Where each backend section handled by settingsActions.saveSection lives in
  * the store: a top-level key, or a key of the realtime object.
  */
-const SECTION_STORE_PATHS = {
+export const SECTION_STORE_PATHS = {
   birdnet: ['birdnet'],
   sentry: ['sentry'],
   dashboard: ['realtime', 'dashboard'],
@@ -1319,10 +1323,7 @@ const SECTION_STORE_PATHS = {
   rtsp: ['realtime', 'rtsp'],
   privacyfilter: ['realtime', 'privacyFilter'],
   birdweather: ['realtime', 'birdweather'],
-} as const satisfies Record<
-  SettingsSectionName,
-  readonly [keyof SettingsFormData] | readonly ['realtime', keyof RealtimeSettings]
->;
+} as const satisfies Record<SettingsSectionName, SectionStorePath>;
 
 /**
  * Section saves whose request or store merge has not finished. saveSettings
@@ -1345,7 +1346,7 @@ function applySectionPatch(
   section: SettingsSectionName,
   partial: Record<string, unknown>
 ): Pick<GlobalSettingsState, 'formData' | 'originalData'> {
-  const path: readonly [keyof SettingsFormData] | readonly ['realtime', keyof RealtimeSettings] =
+  const path: SectionStorePath =
     // eslint-disable-next-line security/detect-object-injection -- section is a key of SECTION_STORE_PATHS by type
     SECTION_STORE_PATHS[section];
   const topKey = path[0];
@@ -1364,6 +1365,35 @@ function applySectionPatch(
     originalData: { ...state.originalData, [topKey]: mergedOriginal },
     formData: { ...state.formData, [topKey]: mergedForm },
   };
+}
+
+/**
+ * Side effects shared by saveSettings and saveSection once the server accepted
+ * a save. Refreshes restart-required status without awaiting it: the
+ * RestartBanner reacts to the store whenever it lands, and a failure here must
+ * not mask or delay a successful save (the banner may show stale state until
+ * the next page load). Applies the UI locale only when the saved locale differs
+ * from the one previously saved, so a locale chosen via the sidebar
+ * LanguageSelector (which updates localStorage but not the backend) is not
+ * clobbered by whatever stale value the backend still holds.
+ */
+async function afterSettingsPersisted(
+  newLocale: string | undefined,
+  origLocale: string | undefined
+): Promise<void> {
+  void import('$lib/stores/restart.svelte')
+    .then(({ fetchRestartStatus }) => fetchRestartStatus())
+    .catch(e => {
+      logger.error('Failed to refresh restart status after settings save:', e);
+    });
+
+  if (newLocale && newLocale !== origLocale) {
+    // Dynamically import i18n functions to avoid circular dependencies
+    const { isValidLocale, setLocale } = await import('$lib/i18n/index.js');
+    if (isValidLocale(newLocale)) {
+      setLocale(newLocale);
+    }
+  }
 }
 
 // Settings actions
@@ -1460,20 +1490,11 @@ export const settingsActions = {
       const origLocale = get(settingsStore).originalData.realtime?.dashboard?.locale;
       settingsStore.update(state => ({ ...state, ...applySectionPatch(state, section, patch) }));
 
-      // Same side effects as saveSettings. Not awaited, see saveSettings.
-      void import('$lib/stores/restart.svelte')
-        .then(({ fetchRestartStatus }) => fetchRestartStatus())
-        .catch(e => {
-          logger.error('Failed to refresh restart status after settings section save:', e);
-        });
-
       const newLocale = section === 'dashboard' ? patch.locale : undefined;
-      if (typeof newLocale === 'string' && newLocale && newLocale !== origLocale) {
-        const { isValidLocale, setLocale } = await import('$lib/i18n/index.js');
-        if (isValidLocale(newLocale)) {
-          setLocale(newLocale);
-        }
-      }
+      await afterSettingsPersisted(
+        typeof newLocale === 'string' ? newLocale : undefined,
+        origLocale
+      );
     })();
 
     inFlightSectionSaves.add(op);
@@ -1570,32 +1591,13 @@ export const settingsActions = {
 
       await settingsAPI.save(coercedFormData);
 
-      // Refresh restart-required status from backend after save. Not awaited:
-      // the RestartBanner reacts to the store whenever it lands, and a failure
-      // here must not mask or delay a successful settings save. The banner may
-      // show stale state until the next page load if it fails.
-      void import('$lib/stores/restart.svelte')
-        .then(({ fetchRestartStatus }) => fetchRestartStatus())
-        .catch(e => {
-          logger.error('Failed to refresh restart status after settings save:', e);
-        });
-
-      // Apply UI locale only when the user actually changed it in this save
-      // session. Read newLocale from coercedFormData (the value we actually
-      // persisted) and compare to originalData (the snapshot loaded from
-      // the backend). This avoids clobbering a locale chosen via the sidebar
-      // LanguageSelector (which updates localStorage but not the backend)
-      // with whatever stale value the backend still holds, and matches the
-      // coercedFormData-based comparison used by the TLS check below.
-      const newLocale = coercedFormData.realtime?.dashboard?.locale;
-      const origLocale = currentState.originalData.realtime?.dashboard?.locale;
-      if (newLocale && newLocale !== origLocale) {
-        // Dynamically import i18n functions to avoid circular dependencies
-        const { isValidLocale, setLocale } = await import('$lib/i18n/index.js');
-        if (isValidLocale(newLocale)) {
-          setLocale(newLocale);
-        }
-      }
+      // Read newLocale from coercedFormData (the value we actually persisted)
+      // and compare to originalData (the snapshot loaded from the backend),
+      // matching the coercedFormData-based comparison used by the TLS check below.
+      await afterSettingsPersisted(
+        coercedFormData.realtime?.dashboard?.locale,
+        currentState.originalData.realtime?.dashboard?.locale
+      );
 
       // Update originalData to match the saved formData (no reload needed).
       // Restart-required state is owned by the backend (refreshed via
