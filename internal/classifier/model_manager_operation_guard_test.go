@@ -249,6 +249,37 @@ func TestOperationGuard_ReleaseAfterPanicFreesSlotAndFailsActiveState(t *testing
 	assert.NoError(t, h.mm.Uninstall(depIDG), "a ghost active state must not count as a dependent")
 }
 
+func TestOperationGuard_PanicInsideEntryPointFreesSlotAndFailsState(t *testing.T) {
+	cases := map[string]func(h *depHarness, e *CatalogEntry) error{
+		"Install": func(h *depHarness, e *CatalogEntry) error {
+			return h.mm.Install(t.Context(), e, "", h.srv.URL, nil)
+		},
+		"InstallOrReplace": func(h *depHarness, e *CatalogEntry) error {
+			return h.mm.InstallOrReplace(t.Context(), e, "", h.srv.URL, nil)
+		},
+		"lease InstallOrReplace": func(h *depHarness, e *CatalogEntry) error {
+			lease, err := h.mm.BeginOperation(OperationInstall, e.ID)
+			require.NoError(t, err)
+			return lease.InstallOrReplace(t.Context(), e, "", h.srv.URL, nil)
+		},
+	}
+	for name, call := range cases {
+		t.Run(name, func(t *testing.T) {
+			h := newDepHarness(t)
+			a := h.entry(depIDA)
+			h.mm.freeSpaceFn = func(string) (uint64, error) { panic("boom") }
+
+			assert.Panics(t, func() { _ = call(h, &a) })
+
+			requireSlotFree(t, h.mm, "a panic inside "+name+" must not keep the slot")
+			state := h.mm.GetDownloadState(depIDA)
+			require.NotNil(t, state)
+			assert.Equal(t, StatusFailed, state.Status)
+			assert.Equal(t, operationEndedUnexpectedlyMsg, state.Error)
+		})
+	}
+}
+
 func TestOperationGuard_ReleaseIsIdempotentAndOwnerOnly(t *testing.T) {
 	h := newDepHarness(t)
 	l1, err := h.mm.BeginOperation(OperationInstall, depIDA)
@@ -259,6 +290,14 @@ func TestOperationGuard_ReleaseIsIdempotentAndOwnerOnly(t *testing.T) {
 
 	l1.Release()
 
+	_, err = h.mm.BeginOperation(OperationInstall, depIDA)
+	requireBusy(t, err, depIDA, OperationReinstall, depIDB)
+
+	// A stale lease reaching releaseLocked directly (not through the Once) must not
+	// free the slot a newer lease holds.
+	h.mm.mu.Lock()
+	h.mm.releaseLocked(l1)
+	h.mm.mu.Unlock()
 	_, err = h.mm.BeginOperation(OperationInstall, depIDA)
 	requireBusy(t, err, depIDA, OperationReinstall, depIDB)
 	l2.Release()
