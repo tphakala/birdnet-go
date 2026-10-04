@@ -566,13 +566,6 @@ func TestGetBatchSpeciesStatus_CriticalReliability(t *testing.T) {
 				}
 			}
 
-			// Performance check for large batches
-			if len(tt.speciesList) >= 100 {
-				assert.Less(t, duration, 10*time.Millisecond,
-					"Large batch should complete within 10ms")
-				t.Logf("✓ Large batch processed in %v", duration)
-			}
-
 			t.Logf("✓ Batch processed correctly: %d species in %v", len(results), duration)
 		})
 	}

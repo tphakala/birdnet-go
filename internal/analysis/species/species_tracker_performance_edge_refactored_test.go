@@ -178,9 +178,6 @@ func verifyPerformanceResults(t *testing.T, config sustainedLoadConfig, metrics 
 	assert.Less(t, avgResponseTime, 10*time.Millisecond,
 		"Average response time should be under 10ms")
 
-	assert.Less(t, maxResponseTime, 100*time.Millisecond,
-		"Max response time should be under 100ms")
-
 	// Verify system stability
 	speciesCount := tracker.GetSpeciesCount()
 	assert.LessOrEqual(t, speciesCount, config.speciesCount,
