@@ -1151,12 +1151,6 @@ func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 			// Reset counter when we have valid state.
 			noStateCount = 0
 
-			// Hold back completion until the operation releases its slot (see above).
-			if state.Status == classifier.StatusComplete && c.ModelManager.OperationRunningFor(catalogID) {
-				time.Sleep(apicore.SSEEventLoopSleep)
-				continue
-			}
-
 			// Send current progress.
 			if err := writeSSEEvent(ctx, "progress", state); err != nil {
 				return nil
