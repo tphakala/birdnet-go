@@ -33,10 +33,16 @@ type mdnsEnv struct {
 // can substitute a fixed environment.
 var detectEnv = detectMDNSEnv
 
+// environmentType returns the sysinfo environment type. It is a variable so
+// tests can substitute a container runtime.
+var environmentType = func() string {
+	envType, _ := sysinfo.GetEnvironment()
+	return envType
+}
+
 // detectMDNSEnv probes the running system for the mDNS hint.
 func detectMDNSEnv() mdnsEnv {
-	envType, _ := sysinfo.GetEnvironment()
-	return newMDNSEnv(envType, runtime.GOOS, avahiSocketPath)
+	return newMDNSEnv(environmentType(), runtime.GOOS, avahiSocketPath)
 }
 
 // newMDNSEnv builds an mdnsEnv from probe results: the sysinfo environment type,

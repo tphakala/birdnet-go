@@ -156,10 +156,23 @@ func TestNewMDNSEnv(t *testing.T) {
 	}
 }
 
-func TestDetectMDNSEnv_UsesRuntimeGOOS(t *testing.T) {
-	t.Parallel()
-	env := detectMDNSEnv()
-	envType, _ := sysinfo.GetEnvironment()
-	assert.Equal(t, runtime.GOOS, env.goos)
-	assert.Equal(t, mdnsContainerEnv(envType), env.inContainer)
+// TestDetectMDNSEnv_UsesProbes swaps the package-level environmentType, so it
+// must not run in parallel.
+func TestDetectMDNSEnv_UsesProbes(t *testing.T) {
+	orig := environmentType
+	t.Cleanup(func() { environmentType = orig })
+
+	for _, tc := range []struct {
+		envType     string
+		inContainer bool
+	}{
+		{sysinfo.EnvDocker, true},
+		{sysinfo.EnvPodman, true},
+		{sysinfo.EnvLXC, false},
+	} {
+		environmentType = func() string { return tc.envType }
+		env := detectMDNSEnv()
+		assert.Equal(t, tc.inContainer, env.inContainer, tc.envType)
+		assert.Equal(t, runtime.GOOS, env.goos, tc.envType)
+	}
 }
