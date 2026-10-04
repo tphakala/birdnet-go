@@ -568,6 +568,9 @@ func TestValidateCatalog_Dependencies(t *testing.T) {
 				CatalogEntry{ID: "geo2", Files: []CatalogFile{{RemotePath: "g2", LocalName: "geo.onnx", Role: RoleGeomodelModel, SHA256: "other"}}},
 			)
 		}},
+		{name: "checksum-less shared file repeated by another entry", want: "different contents", mutate: func(c []CatalogEntry) []CatalogEntry {
+			return append(c, CatalogEntry{ID: "geo2", Files: []CatalogFile{{RemotePath: "g2", LocalName: "geo.onnx", Role: RoleGeomodelModel}}})
+		}},
 		{name: "two dependencies installing different files under one name", want: "different contents", mutate: func(c []CatalogEntry) []CatalogEntry {
 			c[2].Files = []CatalogFile{{RemotePath: "t", LocalName: "geo.onnx", Role: RoleTaxonomy}}
 			return c

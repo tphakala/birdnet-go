@@ -255,8 +255,9 @@ func validateCatalogDependencies(entries []CatalogEntry) error {
 // catalog (any entry, any variant) that share a LocalName but differ in role or
 // checksum. Every shared file lands in models/shared/<LocalName>, so entries that
 // can be installed together must agree on what each shared name holds; otherwise one
-// install would overwrite another's file. Files without a checksum compare equal
-// to each other, which keeps hand-written catalogs that omit checksums loadable.
+// install would overwrite another's file. A repeated shared name needs a non-empty
+// checksum on both files, because the installer can only tell two files apart by
+// checksum; a shared file that appears once may still omit it.
 func validateSharedNamesAcrossCatalog(entries []CatalogEntry) error {
 	type owner struct {
 		file CatalogFile
@@ -274,7 +275,7 @@ func validateSharedNamesAcrossCatalog(entries []CatalogEntry) error {
 				seen[f.LocalName] = owner{file: f, from: from}
 				continue
 			}
-			if prev.file.Role != f.Role || !strings.EqualFold(prev.file.SHA256, f.SHA256) {
+			if prev.file.Role != f.Role || prev.file.SHA256 == "" || !strings.EqualFold(prev.file.SHA256, f.SHA256) {
 				return catalogValidationError("catalog entries %q and %q both declare shared file %q with different contents", prev.from, from, f.LocalName)
 			}
 		}
