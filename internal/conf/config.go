@@ -688,9 +688,9 @@ func (s *StreamConfig) IsEnabled() bool {
 // RTSPSettings contains settings for audio streaming (supports multiple protocols).
 // Note: Struct name kept for backward compatibility with existing code.
 type RTSPSettings struct {
-	Streams          []StreamConfig     `yaml:"streams" json:"streams" mapstructure:"streams"`                            // Stream configurations
-	URLs             []string           `yaml:"urls,omitempty" json:"urls,omitempty" mapstructure:"urls"`                 // Legacy: accepts old format, migrated on load
-	Transport        string             `yaml:"transport,omitempty" json:"transport,omitempty" mapstructure:"transport"`  // Legacy: global default, migrated on load
+	Streams          []StreamConfig     `yaml:"streams" json:"streams" mapstructure:"streams"`                            // Streams to analyze. Each entry has name (required, unique), url (required), enabled, type (rtsp, http, hls, rtmp or udp), transport (tcp or udp, RTSP and RTMP only; empty uses the global transport), mediaMode (auto, audio-only or full-stream, RTSP only; default full-stream), channelMode (downmix, left or right; default downmix) and gain (dB)
+	URLs             []string           `yaml:"urls,omitempty" json:"urls,omitempty" mapstructure:"urls"`                 // Legacy: a urls list in an older config is converted to streams on startup and saved; not read once streams has entries
+	Transport        string             `yaml:"transport,omitempty" json:"transport,omitempty" mapstructure:"transport"`  // Global default transport (tcp or udp): read as the engine-wide default and copied into streams that set none; kept after the urls migration
 	Health           RTSPHealthSettings `yaml:"health" json:"health" mapstructure:"health"`                               // Health monitoring settings
 	FFmpegParameters []string           `yaml:"ffmpegParameters" json:"ffmpegParameters" mapstructure:"ffmpegParameters"` // Custom FFmpeg parameters
 }

@@ -276,10 +276,13 @@ realtime:
     remember: 60 # How long to remember barks for filtering (in seconds)
     species: ["Eurasian Eagle-Owl", "Hooded Crow"] # Species prone to dog bark confusion
 
-  # RTSP streaming settings
+  # RTSP and other network audio streams
   rtsp:
-    transport: "tcp" # RTSP Transport Protocol: tcp or udp
-    urls: [] # RTSP stream URLs
+    # Each entry needs a name, a url and a type (rtsp, http, hls, rtmp or udp). Optional
+    # fields: enabled, transport (tcp or udp), mediaMode, channelMode and gain.
+    # A legacy `urls` list in an older config is converted to streams on startup.
+    streams: []
+    transport: "tcp" # Default transport (tcp or udp) for RTSP and RTMP streams that do not set their own
 
   # MQTT integration
   mqtt:

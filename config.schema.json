@@ -1804,18 +1804,18 @@
             "$ref": "#/$defs/StreamConfig"
           },
           "type": "array",
-          "description": "Stream configurations"
+          "description": "Streams to analyze. Each entry has name (required, unique), url (required), enabled, type (rtsp, http, hls, rtmp or udp), transport (tcp or udp, RTSP and RTMP only; empty uses the global transport), mediaMode (auto, audio-only or full-stream, RTSP only; default full-stream), channelMode (downmix, left or right; default downmix) and gain (dB)"
         },
         "urls": {
           "items": {
             "type": "string"
           },
           "type": "array",
-          "description": "Legacy: accepts old format, migrated on load"
+          "description": "Legacy: a urls list in an older config is converted to streams on startup and saved; not read once streams has entries"
         },
         "transport": {
           "type": "string",
-          "description": "Legacy: global default, migrated on load"
+          "description": "Global default transport (tcp or udp): read as the engine-wide default and copied into streams that set none; kept after the urls migration"
         },
         "health": {
           "$ref": "#/$defs/RTSPHealthSettings",
