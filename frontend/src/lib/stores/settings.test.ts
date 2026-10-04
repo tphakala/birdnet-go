@@ -1241,6 +1241,24 @@ describe('Settings Store - saveSection', () => {
     expect(setLocale).not.toHaveBeenCalled();
   });
 
+  it('refreshes the restart status after a successful save and not after a failed one', async () => {
+    const restart = await import('$lib/stores/restart.svelte');
+    const refresh = vi.spyOn(restart, 'fetchRestartStatus').mockResolvedValue(undefined);
+    try {
+      vi.mocked(settingsAPI.patchSection).mockRejectedValueOnce(new Error('boom'));
+      await expect(settingsActions.saveSection('birdnet', { threshold: 0.7 })).rejects.toThrow(
+        'boom'
+      );
+
+      await settingsActions.saveSection('birdnet', { threshold: 0.9 });
+
+      await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
+      expect(refresh).toHaveBeenCalledTimes(1);
+    } finally {
+      refresh.mockRestore();
+    }
+  });
+
   it('does not show a toast', async () => {
     const { toastActions } = await import('./toast.js');
 
