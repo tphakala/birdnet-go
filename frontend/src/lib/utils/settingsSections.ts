@@ -8,14 +8,17 @@
  */
 import { isPlainObject } from './security';
 
+const BIRDNET_SERVER_OWNED_KEYS = ['rangeFilter'] as const;
+const AUDIO_SERVER_OWNED_KEYS = ['ffmpegPath', 'soxPath'] as const;
+
 /** Server-owned keys of the birdnet section payload. */
-export type BirdNetServerOwnedKey = 'rangeFilter';
+export type BirdNetServerOwnedKey = (typeof BIRDNET_SERVER_OWNED_KEYS)[number];
 /** Server-owned keys of the audio section payload. */
-export type AudioServerOwnedKey = 'ffmpegPath' | 'soxPath';
+export type AudioServerOwnedKey = (typeof AUDIO_SERVER_OWNED_KEYS)[number];
 
 const SERVER_OWNED_KEYS: Readonly<Record<string, readonly string[]>> = {
-  birdnet: ['rangeFilter'] satisfies readonly BirdNetServerOwnedKey[],
-  audio: ['ffmpegPath', 'soxPath'] satisfies readonly AudioServerOwnedKey[],
+  birdnet: BIRDNET_SERVER_OWNED_KEYS,
+  audio: AUDIO_SERVER_OWNED_KEYS,
 };
 
 /**
