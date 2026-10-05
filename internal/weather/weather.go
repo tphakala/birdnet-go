@@ -62,7 +62,8 @@ func GetTempestExtras() (*TempestExtras, bool) {
 	if svc == nil {
 		return nil, false
 	}
-	extrasProvider, ok := svc.provider.(TempestExtrasProvider)
+	active, _ := svc.activeProvider()
+	extrasProvider, ok := active.(TempestExtrasProvider)
 	if !ok {
 		return nil, false
 	}
@@ -80,9 +81,10 @@ func WaitForTempestObservation(ctx context.Context, settings *conf.Settings, wai
 	if svc == nil {
 		return nil, fmt.Errorf("weather service is not running")
 	}
-	provider, ok := svc.provider.(*TempestProvider)
+	active, _ := svc.activeProvider()
+	provider, ok := active.(*TempestProvider)
 	if !ok {
-		return nil, fmt.Errorf("active weather provider is not Tempest")
+		return nil, ErrTempestNotActive
 	}
 
 	timer := time.NewTimer(waitFor)
@@ -135,6 +137,10 @@ type Provider interface {
 	// backoff instead of blocking until the request finishes.
 	FetchWeather(ctx context.Context, settings *conf.Settings) (*WeatherData, error)
 }
+
+// ErrTempestNotActive is returned when a Tempest-only operation runs while
+// another provider is active (e.g. settings were changed but not yet saved).
+var ErrTempestNotActive = fmt.Errorf("active weather provider is not Tempest")
 
 // Lifecycler is an optional capability for providers that receive data via a
 // background process rather than an on-demand HTTP call (e.g. TempestProvider's
@@ -266,6 +272,9 @@ type Service struct {
 	providerMu   sync.RWMutex
 	provider     Provider
 	providerName string
+	// providerCancel stops the active Lifecycler provider's background work
+	// (e.g. Tempest's UDP listener). Guarded by providerMu.
+	providerCancel context.CancelFunc
 	// weatherClient is the single SSRF-guarded HTTP client shared across every
 	// provider implementation for the service's lifetime, including across a
 	// hot-reload provider switch.
@@ -326,6 +335,33 @@ func (s *Service) getStartCtx() context.Context {
 	s.startCtxMu.RLock()
 	defer s.startCtxMu.RUnlock()
 	return s.startCtx
+}
+
+// startProviderLifecycle starts provider (if it is a Lifecycler) under its own
+// child of parent, so it can be stopped independently when swapped out.
+func (s *Service) startProviderLifecycle(parent context.Context, provider Provider) {
+	lc, ok := provider.(Lifecycler)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithCancel(parent)
+	s.providerMu.Lock()
+	if s.providerCancel != nil {
+		s.providerCancel()
+	}
+	s.providerCancel = cancel
+	s.providerMu.Unlock()
+	lc.Start(ctx)
+}
+
+// stopProviderLifecycle cancels the active provider's background work, if any.
+func (s *Service) stopProviderLifecycle() {
+	s.providerMu.Lock()
+	defer s.providerMu.Unlock()
+	if s.providerCancel != nil {
+		s.providerCancel()
+		s.providerCancel = nil
+	}
 }
 
 // setProvider atomically replaces the active provider implementation and name.
@@ -621,7 +657,8 @@ func (s *Service) saveWeatherData(data *WeatherData) error {
 		WeatherIcon:       data.Icon,
 	}
 
-	if extrasProvider, ok := s.provider.(TempestExtrasProvider); ok {
+	activeProvider, _ := s.activeProvider()
+	if extrasProvider, ok := activeProvider.(TempestExtrasProvider); ok {
 		if extras, available := extrasProvider.LatestTempestExtras(); available {
 			extraJSON, err := extras.SelectedJSON(s.currentSettings().Realtime.Weather.Tempest.ExtraFields)
 			if err != nil {
@@ -738,9 +775,8 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 	// Providers that receive data in the background (e.g. Tempest's local UDP
 	// listener) get started here, tied to the same ctx as every fetch cycle
 	// below, so they stop automatically when polling stops.
-	if lc, ok := s.provider.(Lifecycler); ok {
-		lc.Start(ctx)
-	}
+	startProvider, _ := s.activeProvider()
+	s.startProviderLifecycle(ctx, startProvider)
 
 	// Delay initial fetch to reduce startup DB contention with other services
 	if s.startupDelay > 0 {
@@ -870,6 +906,9 @@ func (s *Service) reconcileConfig(settings *conf.Settings) {
 			getLogger().Info("Weather provider changed, switching provider implementation",
 				logger.String("previous_provider", previousProviderName),
 				logger.String("new_provider", newProviderName))
+			// Stop the outgoing provider's listener so its socket is released
+			// before the replacement (or a later switch back) binds it.
+			s.stopProviderLifecycle()
 			s.setProvider(newProvider, newProviderName)
 			previousProviderName = newProviderName
 
@@ -880,11 +919,11 @@ func (s *Service) reconcileConfig(settings *conf.Settings) {
 			// polling hasn't started yet (getStartCtx returns nil): the eventual
 			// StartPolling call will pick up this already-swapped provider via
 			// its own one-time check.
-			if lc, ok := newProvider.(Lifecycler); ok {
+			if _, ok := newProvider.(Lifecycler); ok {
 				if startCtx := s.getStartCtx(); startCtx != nil {
 					getLogger().Info("Starting newly switched-in background weather provider",
 						logger.String("provider", newProviderName))
-					lc.Start(startCtx)
+					s.startProviderLifecycle(startCtx, newProvider)
 				}
 			}
 		}

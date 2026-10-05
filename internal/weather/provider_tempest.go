@@ -291,7 +291,7 @@ func tempestPrecipTypeAndIcon(code int, amount float64) (precipType string, icon
 func (p *TempestProvider) LatestTempestExtras() (*TempestExtras, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	if p.extras == nil {
+	if p.extras == nil || time.Since(p.receivedAt) > tempestStaleAfter {
 		return nil, false
 	}
 	extras := *p.extras

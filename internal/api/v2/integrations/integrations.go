@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
@@ -951,6 +952,9 @@ func (c *Handler) testTempestDataFetch(ctx context.Context, settings *conf.Setti
 	}
 
 	data, err := weather.WaitForTempestObservation(ctx, settings, waitFor)
+	if errors.Is(err, weather.ErrTempestNotActive) {
+		return "", fmt.Errorf("the active weather provider is not Tempest: save the weather settings first, then rerun this test")
+	}
 	if err != nil {
 		return "", fmt.Errorf("no Tempest broadcast received by the running listener within %s (Tempest broadcasts roughly every 60s, so this does not necessarily indicate a problem - verify the container's networking mode and retry): %w",
 			waitFor.Round(time.Second), err)

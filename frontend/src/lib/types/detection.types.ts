@@ -160,15 +160,15 @@ export interface LatestWeatherResponse {
     icon_name: string;
   };
   // Only present when Tempest is the active weather provider and has
-  // received at least one live UDP broadcast; this data isn't persisted
-  // (see internal/weather.TempestExtras), so it can be absent even when
-  // hourly/daily data is available.
+  // received a recent UDP broadcast. Fields the user did not opt into
+  // persisting (conf.TempestExtraFields) are omitted by the backend.
   tempest_extras?: {
-    illuminance: number; // lux
-    uv_index: number;
-    solar_radiation: number; // W/m^2
-    lightning_distance: number; // km
-    lightning_count: number;
+    illuminance?: number; // lux
+    uv_index?: number;
+    solar_radiation?: number; // W/m^2
+    lightning_distance?: number; // km
+    lightning_count?: number;
+    wind_lull?: number; // m/s
   };
   timestamp: string;
 }

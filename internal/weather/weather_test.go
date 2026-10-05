@@ -286,7 +286,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 			s.Realtime.Weather.Tempest.ExtraFields.UVIndex = true
 		})
 		service := &Service{
-			provider: &TempestProvider{extras: &TempestExtras{
+			provider: &TempestProvider{receivedAt: time.Now(), extras: &TempestExtras{
 				Illuminance:    1234,
 				UVIndex:        4.2,
 				SolarRadiation: 567,

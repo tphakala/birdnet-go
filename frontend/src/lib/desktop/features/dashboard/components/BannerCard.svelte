@@ -267,12 +267,14 @@
       {/if}
       {#if weatherData.tempest_extras}
         {@const extras = weatherData.tempest_extras}
-        {@render sep()}
-        <div class="flex items-center gap-1.5" title={t('detections.weather.labels.uvIndex')}>
-          <Sun class="size-4 text-amber-500" />
-          <span>{t('detections.weather.labels.uvIndex')} {extras.uv_index.toFixed(1)}</span>
-        </div>
-        {#if extras.lightning_count > 0}
+        {#if extras.uv_index != null}
+          {@render sep()}
+          <div class="flex items-center gap-1.5" title={t('detections.weather.labels.uvIndex')}>
+            <Sun class="size-4 text-amber-500" />
+            <span>{t('detections.weather.labels.uvIndex')} {extras.uv_index.toFixed(1)}</span>
+          </div>
+        {/if}
+        {#if extras.lightning_count != null && extras.lightning_count > 0}
           {@render sep()}
           <div
             class="flex items-center gap-1.5"
@@ -281,7 +283,7 @@
             <Zap class="size-4 text-yellow-400" />
             <span
               >{t('detections.weather.labels.lightningCount', { count: extras.lightning_count })}
-              ({extras.lightning_distance.toFixed(1)} km)</span
+              {#if extras.lightning_distance != null}({extras.lightning_distance.toFixed(1)} km){/if}</span
             >
           </div>
         {/if}

@@ -138,10 +138,44 @@ func TestTempestProvider_LatestTempestExtras(t *testing.T) {
 	assert.False(t, ok, "no extras should be reported before any observation arrives")
 
 	provider.extras = &TempestExtras{Illuminance: 1234, UVIndex: 4}
+	provider.receivedAt = time.Now()
 	extras, ok := provider.LatestTempestExtras()
 	require.True(t, ok)
 	assert.InDelta(t, 1234, extras.Illuminance, 0.001)
 	assert.InDelta(t, 4, extras.UVIndex, 0.001)
+
+	provider.receivedAt = time.Now().Add(-tempestStaleAfter - time.Minute)
+	_, ok = provider.LatestTempestExtras()
+	assert.False(t, ok, "extras older than tempestStaleAfter must not be served as current")
+}
+
+// TestService_StopProviderLifecycleReleasesPort guards against a swapped-out
+// Tempest provider keeping its UDP port bound, which would break switching back.
+func TestService_StopProviderLifecycleReleasesPort(t *testing.T) {
+	probe, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	require.NoError(t, err)
+	addr := probe.LocalAddr().String()
+	require.NoError(t, probe.Close())
+
+	svc := &Service{}
+	svc.startProviderLifecycle(t.Context(), &TempestProvider{listenAddress: addr})
+	svc.stopProviderLifecycle()
+
+	require.Eventually(t, func() bool {
+		conn, listenErr := net.ListenUDP("udp", mustResolveUDP(t, addr))
+		if listenErr != nil {
+			return false
+		}
+		_ = conn.Close()
+		return true
+	}, 2*time.Second, 20*time.Millisecond, "port must be released after the provider is stopped")
+}
+
+func mustResolveUDP(t *testing.T, addr string) *net.UDPAddr {
+	t.Helper()
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	require.NoError(t, err)
+	return udpAddr
 }
 
 // TestTempestProvider_StartAndReadLoop exercises the real UDP listener
