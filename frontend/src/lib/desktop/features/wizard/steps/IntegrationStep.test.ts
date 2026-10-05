@@ -15,7 +15,7 @@ vi.mock('$lib/stores/settings', async () => {
 });
 
 import IntegrationStep from './IntegrationStep.svelte';
-import { settingsActions, settingsStore, type SettingsFormData } from '$lib/stores/settings';
+import { settingsActions, settingsStore } from '$lib/stores/settings';
 import { ApiError } from '$lib/utils/api';
 import { get } from 'svelte/store';
 import { flushAsync, renderStep } from './stepTestUtils';
@@ -170,9 +170,16 @@ describe('IntegrationStep - BirdWeather token', () => {
         ...state.formData,
         realtime: {
           ...state.formData.realtime,
-          birdweather: { ...state.formData.realtime?.birdweather, ...birdweather },
+          birdweather: {
+            latitude: 0,
+            longitude: 0,
+            locationAccuracy: 0,
+            threshold: 0,
+            debug: false,
+            ...birdweather,
+          },
         },
-      } as SettingsFormData,
+      },
     }));
   }
 
@@ -196,7 +203,7 @@ describe('IntegrationStep - BirdWeather token', () => {
     expect(lastReport(onValidChange)).toEqual([true, undefined]);
   });
 
-  it('turning BirdWeather on with no token blocks Next with the enter-token reason and shows no field error', async () => {
+  it('turning BirdWeather on with no token blocks Next with the enter-token reason and shows the field error only after the field is left', async () => {
     const onValidChange = vi.fn();
     renderStep(IntegrationStep, { onValidChange });
     await flushAsync();
@@ -206,6 +213,11 @@ describe('IntegrationStep - BirdWeather token', () => {
     expect(lastReport(onValidChange)).toEqual([false, ENTER_TOKEN]);
     expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
     expect(alertText()).toBe('');
+
+    await leaveField();
+
+    expect(screen.getByRole('textbox')).toHaveAttribute('aria-invalid', 'true');
+    expect(alertText()).toBe(ENTER_TOKEN);
   });
 
   it('a malformed token blocks Next at once but shows the field error only after the field is left', async () => {
@@ -308,9 +320,9 @@ describe('IntegrationStep - BirdWeather token', () => {
     renderStep(IntegrationStep, { onValidChange });
     await flushAsync();
 
-    for (const [[kind, value], valid, reason] of sequence) {
-      if (kind === 'toggle') await toggleBirdweather();
-      else if (kind === 'type') await typeToken(value as string);
+    for (const [action, valid, reason] of sequence) {
+      if (action[0] === 'toggle') await toggleBirdweather();
+      else if (action[0] === 'type') await typeToken(action[1]);
       else await leaveField();
 
       expect(lastReport(onValidChange)).toEqual([valid, reason]);

@@ -68,9 +68,7 @@
   // Set when the user leaves the token field and on open for a saved token; cleared
   // by every edit. Display only: Next's reason does not depend on it.
   let tokenLeft = $state(initial.birdweatherId.trim() !== '');
-  let showTokenError = $derived(
-    tokenLeft && blockedReason === 'wizard.steps.integration.reasons.tokenFormat'
-  );
+  let showTokenError = $derived(tokenLeft && blockedReason !== undefined);
 
   function onTokenInput() {
     tokenLeft = false;
@@ -217,7 +215,7 @@
       <!-- Always rendered with two lines reserved: the alert is announced when it fills,
            and showing it does not move the controls below -->
       <p id={TOKEN_ERROR_ID} role="alert" class="mt-1 min-h-10 text-sm text-[var(--text-error)]">
-        {showTokenError ? t('wizard.steps.integration.reasons.tokenFormat') : ''}
+        {showTokenError && blockedReason ? t(blockedReason) : ''}
       </p>
     </div>
   {/if}
