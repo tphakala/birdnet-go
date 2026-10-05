@@ -237,7 +237,7 @@ describe('DetectionDetail spectrogram-only detection', () => {
     });
 
     expect(container.querySelector('img.spectrogram-img')?.getAttribute('src')).toContain(
-      '/api/v2/spectrogram/1240?size=lg'
+      '/api/v2/spectrogram/1240?size=lg&raw=false'
     );
     expect(container.querySelector('a.meta-download')).toBeNull();
     expect(container.querySelector('#media-heading')).not.toBeNull();

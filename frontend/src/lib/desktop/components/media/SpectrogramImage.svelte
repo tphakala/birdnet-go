@@ -9,8 +9,8 @@
   Props:
   - detectionId: Unique ID for the detection
   - size: Spectrogram size - md/lg/xl
-  - raw: Add raw=true to the request; match the sibling player's value so the same
-    cached file is requested (AudioPlayer omits the parameter when its raw prop is false)
+  - raw: Request the raw render (true) or the render with axes and legend (false). Always
+    sent explicitly, because the server treats an omitted raw parameter as true
   - className: Extra classes for the image container
   - alt: Alternative text for the image (default: a generic spectrogram label)
   - cover: Fill the container and crop the image to it, anchored at the bottom, instead
@@ -38,9 +38,7 @@
   let failedUrl = $state<string | null>(null);
 
   const spectrogramUrl = $derived(
-    buildAppUrl(
-      `/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${size}${raw ? '&raw=true' : ''}`
-    )
+    buildAppUrl(`/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${size}&raw=${raw}`)
   );
   const failed = $derived(failedUrl === spectrogramUrl);
 </script>

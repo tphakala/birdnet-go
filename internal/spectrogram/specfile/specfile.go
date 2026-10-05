@@ -106,8 +106,6 @@ type Found struct {
 	Name string
 	// Render is the parsed name.
 	Render Render
-	// Mode is the entry's file mode, so a caller can refuse symlinks.
-	Mode fs.FileMode
 }
 
 // Matching returns the non-directory entries of a directory listing that are
@@ -124,9 +122,12 @@ func Matching(entries []fs.DirEntry, clipBase string) []fs.DirEntry {
 	return out
 }
 
-// Renders returns the non-empty renders of the clip with base name clipBase in a
-// directory listing. An empty file is not a kept render: an interrupted render
-// leaves one and the API refuses to serve it. indeterminate is true when a
+// Renders returns the non-empty regular-file renders of the clip with base name
+// clipBase in a directory listing. An empty file is not a kept render: an
+// interrupted render leaves one and the API refuses to serve it. A symlink or other
+// non-regular entry is not a render either, since a render is always written as a
+// regular file and the server does not follow links out of the clips directory.
+// indeterminate is true when a
 // matching entry could not be inspected, so a caller that must not act on a
 // guess can leave the clip alone.
 func Renders(entries []fs.DirEntry, clipBase string) (found []Found, indeterminate bool) {
@@ -136,11 +137,11 @@ func Renders(entries []fs.DirEntry, clipBase string) (found []Found, indetermina
 			indeterminate = true
 			continue
 		}
-		if info.Size() == 0 {
+		if !info.Mode().IsRegular() || info.Size() == 0 {
 			continue
 		}
 		render, _ := ParseRender(entry.Name(), clipBase)
-		found = append(found, Found{Name: entry.Name(), Render: render, Mode: info.Mode()})
+		found = append(found, Found{Name: entry.Name(), Render: render})
 	}
 	return found, indeterminate
 }

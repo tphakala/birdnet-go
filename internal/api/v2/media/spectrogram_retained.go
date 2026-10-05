@@ -111,7 +111,7 @@ func (c *Handler) serveRetainedSpectrogram(ctx echo.Context, noteID string, noCl
 		msgRetainedSpectrogramMissing, http.StatusNotFound)
 }
 
-// serveExistingRender serves a non-empty spectrogram render of the clip at
+// serveExistingRender serves a non-empty regular-file spectrogram render of the clip at
 // relClipPath (the clip's SecureFS-relative audio path, which need not exist). It
 // prefers the exact file the request parameters name and otherwise picks the
 // nearest render of the same clip. served is false, with no response written, when
@@ -119,7 +119,7 @@ func (c *Handler) serveRetainedSpectrogram(ctx echo.Context, noteID string, noCl
 func (c *Handler) serveExistingRender(ctx echo.Context, noteID, relClipPath string, params spectrogramParameters, freqSuffix string) (served bool, err error) {
 	_, _, _, exact := buildSpectrogramPaths(relClipPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
 	target := exact
-	if info, statErr := c.SFS.StatRel(exact); statErr != nil || info.Size() == 0 {
+	if info, statErr := c.SFS.StatRel(exact); statErr != nil || !info.Mode().IsRegular() || info.Size() == 0 {
 		target = c.nearestRender(relClipPath, params)
 		if target == "" {
 			return false, nil
@@ -177,7 +177,6 @@ func (c *Handler) nearestRender(relClipPath string, params spectrogramParameters
 	clipBase := strings.TrimSuffix(filepath.Base(relClipPath), filepath.Ext(relClipPath))
 
 	found, _ := specfile.Renders(entries, clipBase)
-	found = slices.DeleteFunc(found, func(f specfile.Found) bool { return !f.Mode.IsRegular() })
 	if len(found) == 0 {
 		return ""
 	}

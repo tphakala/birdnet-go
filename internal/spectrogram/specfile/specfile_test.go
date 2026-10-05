@@ -76,6 +76,7 @@ func TestParseRender(t *testing.T) {
 type fakeEntry struct {
 	name    string
 	dir     bool
+	link    bool
 	size    int64
 	infoErr error
 }
@@ -83,8 +84,11 @@ type fakeEntry struct {
 func (f fakeEntry) Name() string { return f.name }
 func (f fakeEntry) IsDir() bool  { return f.dir }
 func (f fakeEntry) Type() fs.FileMode {
-	if f.dir {
+	switch {
+	case f.dir:
 		return fs.ModeDir
+	case f.link:
+		return fs.ModeSymlink
 	}
 	return 0
 }
@@ -138,6 +142,19 @@ func TestRenders_ReturnsNonEmptyRendersAndReportsInfoErrors(t *testing.T) {
 		require.Len(t, got, 1)
 		assert.Equal(t, "b_514px.png", got[0].Name)
 		assert.Equal(t, Render{Width: 514, Raw: true}, got[0].Render)
+		assert.False(t, indeterminate)
+	})
+
+	t.Run("symlinks and directories are not renders", func(t *testing.T) {
+		t.Parallel()
+		entries := []fs.DirEntry{
+			fakeEntry{name: "b_514px.png", link: true, size: 12},
+			fakeEntry{name: "b_1026px.png", dir: true, size: 4096},
+			fakeEntry{name: "b_2050px.png", size: 5},
+		}
+		got, indeterminate := Renders(entries, "b")
+		require.Len(t, got, 1)
+		assert.Equal(t, "b_2050px.png", got[0].Name)
 		assert.False(t, indeterminate)
 	})
 

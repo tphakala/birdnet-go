@@ -37,7 +37,7 @@ describe('ReviewModal media section', () => {
 
     const img = document.querySelector('img.spectrogram-img');
     expect(img).not.toBeNull();
-    expect(img?.getAttribute('src')).toContain('/api/v2/spectrogram/321?size=lg');
+    expect(img?.getAttribute('src')).toContain('/api/v2/spectrogram/321?size=lg&raw=false');
     expect(screen.queryByRole('button', { name: /play/i })).toBeNull();
     expect(document.querySelector('a[download]')).toBeNull();
   });

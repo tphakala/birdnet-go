@@ -323,7 +323,8 @@ func TestReleaseDeletedClipPaths_ClearErrorDoesNotPanicOrRetain(t *testing.T) {
 	t.Parallel()
 
 	baseDir := t.TempDir()
-	// The directory of the deleted clip does not exist: a read error counts as "no render".
+	// The directory of the deleted clip does not exist: a missing directory counts as "no render"
+	// (only fs.ErrNotExist is absent; other read errors are indeterminate).
 	deleted := []string{filepath.Join(baseDir, "missing", "a.wav")}
 	db := &failingClearDB{}
 
@@ -393,4 +394,47 @@ func TestRetentionPolicies_ReadKeepSpectrogramsFromSettings(t *testing.T) {
 			}, db.cleared[0])
 		})
 	}
+}
+
+// symlinkRender creates baseDir/rel as a symlink to a real non-empty file elsewhere.
+func symlinkRender(t *testing.T, baseDir, rel string) {
+	t.Helper()
+	target := writeFileIn(t, t.TempDir(), "target.png", "png")
+	link := filepath.Join(baseDir, filepath.FromSlash(rel))
+	require.NoError(t, os.MkdirAll(filepath.Dir(link), 0o750))
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+}
+
+func TestReleaseDeletedClipPaths_SymlinkNamedLikeARenderIsNeverRetained(t *testing.T) {
+	t.Parallel()
+
+	baseDir := t.TempDir()
+	symlinkRender(t, baseDir, "2026/01/a_514px.png")
+	deleted := []string{filepath.Join(baseDir, "2026", "01", "a.wav")}
+	db := &MockDB{}
+
+	releaseDeletedClipPaths(db, deleted, baseDir, "age", true)
+
+	assert.Empty(t, db.retained, "a symlink is not a kept render")
+	assert.Equal(t, [][]string{{"2026/01/a.wav"}}, db.cleared)
+}
+
+func TestReconcileClipOrphansPass_SymlinkNamedLikeARenderIsNotRelinked(t *testing.T) {
+	withNoChunkPause(t)
+
+	baseDir := t.TempDir()
+	writeClip(t, baseDir, "2026/01/present.wav")
+	symlinkRender(t, baseDir, "2026/01/a_514px.png")
+	store := &fakeReconcileStore{refs: []ClipReference{
+		{ID: 1, ClipName: "2026/01/present.wav", CompletionTime: time.Now().Add(testOld)},
+		{ID: 2, ClipName: "2026/01/a.wav", CompletionTime: time.Now().Add(testOld)},
+	}}
+
+	result := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir)
+
+	assert.Equal(t, int64(0), result.Retained)
+	assert.Empty(t, store.retained)
+	assert.Equal(t, []string{"2026/01/a.wav"}, store.cleared)
 }

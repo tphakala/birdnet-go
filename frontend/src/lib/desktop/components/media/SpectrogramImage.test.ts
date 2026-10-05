@@ -16,7 +16,7 @@ describe('SpectrogramImage', () => {
 
   it.each([
     ['md', true, '/api/v2/spectrogram/42?size=md&raw=true'],
-    ['lg', false, '/api/v2/spectrogram/42?size=lg'],
+    ['lg', false, '/api/v2/spectrogram/42?size=lg&raw=false'],
     ['xl', true, '/api/v2/spectrogram/42?size=xl&raw=true'],
   ] as const)('requests the %s size with raw=%s', (size, raw, expectedPath) => {
     imageTest.render({ detectionId: '42', size, raw });

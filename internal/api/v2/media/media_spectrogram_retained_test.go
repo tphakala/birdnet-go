@@ -251,25 +251,31 @@ func TestServeSpectrogramByID_DetectionNotFoundUnchanged(t *testing.T) {
 
 func TestGenerateSpectrogramByID_NoClipUnchanged(t *testing.T) {
 	for _, legacy := range []bool{false, true} {
-		h, e, _ := newRetainedTestHandler(t, conf.SpectrogramModeAuto)
-		ds := mocks.NewMockInterface(t)
+		name := "v2 ErrNoClipPath"
 		if legacy {
-			ds.EXPECT().GetNoteClipPath(retainedNoteID).Return("", nil)
-		} else {
-			ds.EXPECT().GetNoteClipPath(retainedNoteID).Return("", repository.ErrNoClipPath)
+			name = "legacy empty clip path"
 		}
-		h.DS = ds
+		t.Run(name, func(t *testing.T) {
+			h, e, _ := newRetainedTestHandler(t, conf.SpectrogramModeAuto)
+			ds := mocks.NewMockInterface(t)
+			if legacy {
+				ds.EXPECT().GetNoteClipPath(retainedNoteID).Return("", nil)
+			} else {
+				ds.EXPECT().GetNoteClipPath(retainedNoteID).Return("", repository.ErrNoClipPath)
+			}
+			h.DS = ds
 
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/spectrogram/"+retainedNoteID+"/generate", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetParamNames("id")
-		c.SetParamValues(retainedNoteID)
-		_ = h.GenerateSpectrogramByID(c)
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/spectrogram/"+retainedNoteID+"/generate", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("id")
+			c.SetParamValues(retainedNoteID)
+			_ = h.GenerateSpectrogramByID(c)
 
-		assert.Equal(t, http.StatusNotFound, rec.Code)
-		assert.Contains(t, rec.Body.String(), "No audio clip available for this note")
-		assert.NotContains(t, rec.Body.String(), msgRetainedSpectrogramMissing)
+			assert.Equal(t, http.StatusNotFound, rec.Code)
+			assert.Contains(t, rec.Body.String(), "No audio clip available for this note")
+			assert.NotContains(t, rec.Body.String(), msgRetainedSpectrogramMissing)
+		})
 	}
 }
 
@@ -433,4 +439,16 @@ func TestServeSpectrogramByID_UserRequestedModeWithAudioKeepsGenerateEnvelope(t 
 	data, ok := body["data"].(map[string]any)
 	require.True(t, ok, "the not-generated response carries the mode")
 	assert.Equal(t, conf.SpectrogramModeUserRequested, data["mode"])
+}
+
+func TestServeSpectrogramByID_SpectrogramOnly_ExactNameDirectoryFallsThroughToNearestRender(t *testing.T) {
+	h, e, root := newRetainedTestHandler(t, conf.SpectrogramModeAuto)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "2026", "01", "a_514px.png"), 0o750))
+	writeRetainedFile(t, root, "2026/01/a_1026px.png", "raw 1026")
+	h.DS = noClipDS(t, retainedClipName, false)
+
+	rec := serveSpectrogram(t, h, e, "?size=md&raw=true")
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, "raw 1026", rec.Body.String())
 }
