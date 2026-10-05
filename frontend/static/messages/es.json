@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Menos falsos positivos, puede omitir algunas aves",
         "highSensitivity": "Alta sensibilidad",
         "highSensitivityDesc": "Más detecciones, más falsos positivos",
+        "descriptionStored": "Elige qué tan estricta debe ser la identificación de aves. Actual: {threshold}, sin coincidencia.",
         "threshold": "Umbral de confianza",
         "fpFilterNote": "Una vez que tu sistema esté funcionando y comprobado, puedes activar el filtro de falsos positivos en Configuración para reducir aún más las detecciones incorrectas."
       },

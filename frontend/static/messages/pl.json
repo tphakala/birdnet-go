@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Mniej fałszywych detekcji, może pominąć niektóre ptaki",
         "highSensitivity": "Wysoka czułość",
         "highSensitivityDesc": "Więcej detekcji, więcej fałszywych wyników",
+        "descriptionStored": "Wybierz, jak rygorystyczna powinna być identyfikacja ptaków. Obecnie: {threshold}, brak presetu.",
         "threshold": "Próg pewności",
         "fpFilterNote": "Gdy system będzie działał i sprawdzony, możesz włączyć filtr fałszywych wyników w Ustawieniach, aby jeszcze bardziej ograniczyć błędne detekcje."
       },

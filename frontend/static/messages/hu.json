@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Kevesebb hamis pozitív, néhány madarat nem találhat meg",
         "highSensitivity": "Magas érzékenység",
         "highSensitivityDesc": "Több detektálás, több hamis pozitív",
+        "descriptionStored": "Válassza ki, mennyire szigorú legyen a madár azonosítás. Jelenlegi: {threshold}, nincs egyezés.",
         "threshold": "Megbízhatósági küszöbérték",
         "fpFilterNote": "Miután a rendszere működik és bevált, engedélyezheti a hamis pozitív szűrőt a Beállításokban a hibás detektálások további csökkentéséhez."
       },

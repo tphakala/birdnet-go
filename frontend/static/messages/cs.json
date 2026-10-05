@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Méně falešně pozitivních, ale může některé ptáky minout",
         "highSensitivity": "Vysoká citlivost",
         "highSensitivityDesc": "Více detekcí, ale i více falešně pozitivních",
+        "descriptionStored": "Vyberte, jak přísná má identifikace ptáků být. Aktuálně: {threshold}, žádná předvolba.",
         "threshold": "Práh spolehlivosti",
         "fpFilterNote": "Až bude váš systém běžet a osvědčí se, můžete v Nastavení povolit filtr falešně pozitivních detekcí pro další snížení nesprávných detekcí."
       },

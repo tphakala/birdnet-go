@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Fewer false positives, may miss some birds",
         "highSensitivity": "High Sensitivity",
         "highSensitivityDesc": "More detections, more false positives",
+        "descriptionStored": "Choose how strict the bird identification should be. Current: {threshold}, matches no preset.",
         "threshold": "Confidence threshold",
         "fpFilterNote": "Once your system is running and proven, you can enable the false positive filter in Settings to further reduce incorrect detections."
       },

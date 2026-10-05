@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Weniger Fehlerkennungen, kann einige Vögel verpassen",
         "highSensitivity": "Hohe Empfindlichkeit",
         "highSensitivityDesc": "Mehr Erkennungen, mehr Fehlerkennungen",
+        "descriptionStored": "Wählen Sie, wie streng die Vogelidentifizierung sein soll. Aktuell: {threshold}, passt zu keiner Voreinstellung.",
         "threshold": "Konfidenzschwelle",
         "fpFilterNote": "Sobald Ihr System läuft und sich bewährt hat, können Sie den Falsch-Positiv-Filter in den Einstellungen aktivieren, um fehlerhafte Erkennungen weiter zu reduzieren."
       },

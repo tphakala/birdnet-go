@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Færre falske positiver, kan overse nogle fugle",
         "highSensitivity": "Høj følsomhed",
         "highSensitivityDesc": "Flere detekteringer, flere falske positiver",
+        "descriptionStored": "Vælg hvor streng fugleidentifikationen skal være. Nuværende: {threshold}, ingen forudindstilling.",
         "threshold": "Konfidensgrænse",
         "fpFilterNote": "Når dit system kører og er afprøvet, kan du aktivere filteret for falske positiver under Indstillinger for yderligere at reducere forkerte detekteringer."
       },

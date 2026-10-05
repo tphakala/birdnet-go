@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Meno falsi positivi, potrebbe non rilevare alcuni uccelli",
         "highSensitivity": "Alta sensibilità",
         "highSensitivityDesc": "Più rilevamenti, più falsi positivi",
+        "descriptionStored": "Scegli quanto deve essere rigorosa l'identificazione degli uccelli. Attuale: {threshold}, nessun preset.",
         "threshold": "Soglia di confidenza",
         "fpFilterNote": "Una volta che il tuo sistema è funzionante e collaudato, puoi abilitare il filtro dei falsi positivi nelle Impostazioni per ridurre ulteriormente i rilevamenti errati."
       },

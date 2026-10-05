@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Mazāk kļūdaini pozitīvu, var palaist garām dažus putnus",
         "highSensitivity": "Augsts jutīgums",
         "highSensitivityDesc": "Vairāk noteikšanu, vairāk kļūdaini pozitīvu",
+        "descriptionStored": "Izvēlieties, cik stingrai jābūt putnu identificēšanai. Pašlaik: {threshold}, nav sakritības.",
         "threshold": "Ticamības slieksnis",
         "fpFilterNote": "Kad sistēma darbojas un ir pierādījusi sevi, varat ieslēgt kļūdaini pozitīvo filtru iestatījumos, lai vēl vairāk samazinātu nepareizas noteikšanas."
       },

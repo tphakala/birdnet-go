@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Vähemmän vääriä havaintoja, saattaa ohittaa joitakin lintuja",
         "highSensitivity": "Korkea herkkyys",
         "highSensitivityDesc": "Enemmän havaintoja, enemmän vääriä positiivisia",
+        "descriptionStored": "Valitse, kuinka tarkka lintutunnistuksen tulee olla. Nykyinen: {threshold}, ei esiasetusta.",
         "threshold": "Luottamuskynnys",
         "fpFilterNote": "Kun järjestelmäsi on toiminnassa ja todettu toimivaksi, voit ottaa väärien positiivisten suodattimen käyttöön Asetuksissa vähentääksesi virheellisiä havaintoja entisestään."
       },
