@@ -395,9 +395,10 @@
         aria-invalid={showUrlError ? 'true' : undefined}
         oninput={onUrlInput}
       />
-      <!-- Always rendered and always one line tall: the alert is announced when it
-           fills, and showing it never moves the controls below -->
-      <p id={URL_ERROR_ID} role="alert" class="mt-1 min-h-5 text-sm text-[var(--color-error)]">
+      <!-- Always rendered with two lines reserved (the message wraps to two in the dialog;
+           a longer one would still grow the line): the alert is announced when it fills,
+           and showing it does not move the controls below -->
+      <p id={URL_ERROR_ID} role="alert" class="mt-1 min-h-10 text-sm text-[var(--color-error)]">
         {showUrlError ? t('wizard.steps.audioSource.reasons.urlScheme') : ''}
       </p>
       {#if initial.savedDevice !== ''}

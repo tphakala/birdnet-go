@@ -627,7 +627,7 @@ describe('AudioSourceStep - URL error timing', () => {
     await leaveUrl();
 
     expect(urlAlert().className).toBe(before);
-    expect(before).toContain('min-h-5');
+    expect(before).toContain('min-h-10');
   });
 });
 
