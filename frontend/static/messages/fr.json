@@ -5342,12 +5342,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Recharger la page"
+    },
     "skip": "Passer",
     "back": "Retour",
     "next": "Suivant",
     "done": "Terminé",
     "progress": "Étape {current} sur {total}",
     "progressLabel": "Progression de l'assistant",
+    "status": {
+      "saving": "Enregistrement...",
+      "loadingStep": "Chargement de l'étape..."
+    },
+    "errors": {
+      "saveFailed": "Impossible d'enregistrer cette étape. Vérifiez la connexion et réessayez, ou passez la configuration et modifiez cela plus tard dans les Paramètres.",
+      "stepLoadFailed": "Impossible de charger cette étape. Appuyez sur Réessayer ou rechargez la page.",
+      "stepLoadFailedReload": "Cette étape ne peut toujours pas être chargée. Rechargez la page pour réessayer ; les choix enregistrés aux étapes précédentes sont conservés."
+    },
+    "reasons": {
+      "completeStep": "Terminez cette étape pour continuer."
+    },
+    "leaveConfirm": {
+      "title": "Quitter la configuration ?",
+      "message": "La configuration ne s'ouvrira plus. Les choix enregistrés aux étapes précédentes sont conservés ; les modifications de cette étape ne sont pas enregistrées. Vous pourrez tout modifier plus tard dans les Paramètres.",
+      "stay": "Continuer la configuration",
+      "leave": "Quitter la configuration"
+    },
     "whatsNew": {
       "title": "Nouveautés de la {version}"
     },
@@ -5655,6 +5676,8 @@
         "catalogLoadFailed": "Impossible de charger le catalogue de modèles",
         "installFailed": "Impossible de démarrer l'installation du modèle",
         "removeFailed": "Impossible de supprimer le modèle",
+        "removeHasDependents": "{name} est requis par {models}. Supprimez d'abord ces modèles.",
+        "operationInProgress": "Une installation, réinstallation ou suppression de modèle est déjà en cours ({name}). Réessayez lorsqu'elle sera terminée.",
         "actionFailed": "Un problème est survenu avec {name}",
         "downloadSourceHint": "Si huggingface.co est bloqué ou lent sur votre réseau, définissez un miroir dans la section Source de téléchargement ci-dessous.",
         "goToDownloadSource": "Aller à la source de téléchargement",

@@ -5342,12 +5342,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Oldal újratöltése"
+    },
     "skip": "Kihagyás",
     "back": "Vissza",
     "next": "Tovább",
     "done": "Kész",
     "progress": "{current}. lépés / {total}",
     "progressLabel": "Varázsló előrehaladása",
+    "status": {
+      "saving": "Mentés...",
+      "loadingStep": "Lépés betöltése..."
+    },
+    "errors": {
+      "saveFailed": "Ezt a lépést nem sikerült menteni. Ellenőrizze a kapcsolatot, és próbálja újra, vagy hagyja ki a beállítást, és módosítsa később a Beállításokban.",
+      "stepLoadFailed": "Ezt a lépést nem sikerült betölteni. Nyomja meg az Újra gombot, vagy töltse újra az oldalt.",
+      "stepLoadFailedReload": "Ezt a lépést továbbra sem sikerült betölteni. Töltse újra az oldalt az újrapróbálkozáshoz; a korábbi lépésekben mentett választások megmaradnak."
+    },
+    "reasons": {
+      "completeStep": "A folytatáshoz fejezze be ezt a lépést."
+    },
+    "leaveConfirm": {
+      "title": "Kilép a beállításból?",
+      "message": "A beállítás nem nyílik meg újra. A korábbi lépésekben mentett választások megmaradnak; az ebben a lépésben végzett módosítások nem kerülnek mentésre. Mindent módosíthat később a Beállításokban.",
+      "stay": "Beállítás folytatása",
+      "leave": "Kilépés a beállításból"
+    },
     "whatsNew": {
       "title": "Újdonságok a {version} verzióban"
     },
@@ -5655,6 +5676,8 @@
         "catalogLoadFailed": "Nem sikerült betölteni a modellkatalógust",
         "installFailed": "Nem sikerült elindítani a modell telepítését",
         "removeFailed": "Nem sikerült eltávolítani a modellt",
+        "removeHasDependents": "{name} szükséges a következő modellekhez: {models}. Először távolítsa el ezeket a modelleket.",
+        "operationInProgress": "Már folyamatban van egy modell telepítése, újratelepítése vagy eltávolítása ({name}). Próbáld újra, ha befejeződött.",
         "actionFailed": "Probléma történt a következővel: {name}",
         "downloadSourceHint": "Ha a huggingface.co blokkolva van vagy lassú a hálózatán, állítson be egy tükörszervert az alábbi Letöltési forrás szakaszban.",
         "goToDownloadSource": "Ugrás a Letöltési forráshoz",

@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/middleware"
@@ -27,6 +28,20 @@ const (
 // appMetadataKeyLastSeenVersion is the app_metadata key that tracks the last application
 // version acknowledged by the user through the wizard dismiss action.
 const appMetadataKeyLastSeenVersion = "last_seen_version"
+
+// appMetadataKeyOnboardingPending is the app_metadata key recorded at startup when
+// the install has never been onboarded and its database holds no detections. It
+// keeps the onboarding wizard pending until it is dismissed, independent of the
+// config, which on a fresh install already contains an audio source (the default
+// template) and possibly coordinates (written by install.sh).
+const appMetadataKeyOnboardingPending = "onboarding_pending"
+
+// onboardingPendingValue is the value of appMetadataKeyOnboardingPending while
+// onboarding is pending. Any other value, including empty, means not pending.
+const onboardingPendingValue = "true"
+
+// onboardingSeedTimeout bounds the startup database work in recordOnboardingState.
+const onboardingSeedTimeout = 5 * time.Second
 
 // AppConfigResponse represents the application configuration returned to the frontend.
 // This replaces the server-side injected window.BIRDNET_CONFIG.
@@ -96,7 +111,8 @@ type AuthConfigDTO struct {
 
 // RegisterAppRoutes registers application-level API endpoints on the provided v2
 // API group, preserving the exact route order and middleware the monolithic
-// initAppRoutes used.
+// initAppRoutes used. When a V2Manager is wired it also builds the app-metadata
+// repository and records the startup onboarding state (recordOnboardingState).
 func (c *Handler) RegisterAppRoutes(g *echo.Group) {
 	// Initialize app metadata repository from V2Manager if available
 	if c.V2Manager != nil {
@@ -110,6 +126,11 @@ func (c *Handler) RegisterAppRoutes(g *echo.Group) {
 			useV2Prefix,
 			c.V2Manager.IsMySQL(),
 		)
+
+		// Record onboarding state at startup rather than on the first UI visit:
+		// the default source starts capturing immediately, so detections can exist
+		// before anyone opens the UI, and the persisted flag survives restarts.
+		c.recordOnboardingState(context.Background())
 	}
 
 	// App config endpoint - publicly accessible (no auth required)
@@ -117,15 +138,11 @@ func (c *Handler) RegisterAppRoutes(g *echo.Group) {
 	// that was previously injected server-side into the HTML template.
 	g.GET(AppConfigEndpoint, c.GetAppConfig)
 
-	// Wizard dismiss endpoint - public in the default configuration.
-	// Only writes last_seen_version to app_metadata (no data exposure, no privilege
-	// escalation), and is reachable pre-auth so the onboarding wizard can be
-	// dismissed before login. When Security.PrivateMode is enabled this route is
-	// gated like every other UI/API route: an unauthenticated user is shown the
-	// login form rather than the wizard, so dismissing it pre-auth serves no
-	// purpose and it is intentionally NOT on the privateModeAuth exempt allow-list
-	// (see isPrivateModeExempt).
-	g.POST(WizardDismissEndpoint, c.DismissWizard)
+	// Wizard dismiss endpoint (requires authentication when auth is configured,
+	// matching GetAppConfig, which reports wizard state only to a request with
+	// access; without auth a fresh install is onboarded without logging in).
+	// Not on the privateModeAuth exempt allow-list (see isPrivateModeExempt).
+	g.POST(WizardDismissEndpoint, c.DismissWizard, c.AuthMiddleware)
 }
 
 // GetAppConfig handles GET /api/v2/app/config
@@ -134,6 +151,10 @@ func (c *Handler) RegisterAppRoutes(g *echo.Group) {
 // 1. It provides data needed before authentication can occur
 // 2. The security.accessAllowed field tells the frontend if auth is needed
 // 3. CSRF token is needed for any subsequent authenticated requests
+//
+// Wizard state (freshInstall, newVersion, previousVersion) is reported only to a
+// request with access, so with auth configured an unauthenticated visitor is not
+// offered a wizard.
 func (c *Handler) GetAppConfig(ctx echo.Context) error {
 	// Prevent caching of this response (contains user-specific CSRF token)
 	ctx.Response().Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
@@ -178,6 +199,9 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 	// Determine wizard state (freshInstall, newVersion, previousVersion) from the
 	// same snapshot so the whole response is internally consistent.
 	freshInstall, newVersion, previousVersion := c.determineWizardState(ctx.Request().Context(), settings)
+	if !accessAllowed {
+		freshInstall, newVersion, previousVersion = false, false, ""
+	}
 
 	// Build response
 	response := AppConfigResponse{
@@ -252,6 +276,10 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 //
 // Rules:
 //   - Dev builds (empty version or "Development Build"): both flags forced to false.
+//   - If last_seen_version is missing and onboarding_pending was recorded at startup:
+//     freshInstall = true, without auto-seeding.
+//   - If last_seen_version is missing and onboarding_pending cannot be read: both
+//     flags false, without auto-seeding, so a later request can still decide.
 //   - If last_seen_version is missing and isExistingInstall returns true: auto-seed and skip wizard.
 //   - If last_seen_version is missing and no install signals: freshInstall = true.
 //   - If last_seen_version differs from the current version: newVersion = true.
@@ -274,6 +302,16 @@ func (c *Handler) determineWizardState(ctx context.Context, settings *conf.Setti
 
 	// If last_seen_version has never been set, distinguish fresh from existing install
 	if lastSeenVersion == "" {
+		// A read error must not fall through to the auto-seed below: that would
+		// record a version and hide onboarding for good on a transient failure.
+		pending, err := c.appMetadataRepo.Get(ctx, appMetadataKeyOnboardingPending)
+		if err != nil {
+			c.LogWarnIfEnabled("Failed to read onboarding_pending from app_metadata", logger.Error(err))
+			return false, false, ""
+		}
+		if pending == onboardingPendingValue {
+			return true, false, ""
+		}
 		if c.isExistingInstall(ctx, settings) {
 			// Auto-seed: existing install predates wizard tracking.
 			// Intentional write inside GET handler (idempotent upsert, fires once per install).
@@ -292,6 +330,50 @@ func (c *Handler) determineWizardState(ctx context.Context, settings *conf.Setti
 
 	// Version matches; no wizard needed
 	return false, false, lastSeenVersion
+}
+
+// recordOnboardingState records onboarding_pending in app_metadata when the install
+// has never been onboarded (no last_seen_version) and its database holds no
+// detections. It runs once at startup so the decision does not depend on the
+// config, which is never empty on a fresh install, nor on detections that
+// accumulate before the first UI visit.
+//
+// It only records in enhanced database mode. In legacy mode the v2 database is
+// the migration target and is empty while the user's data lives in the legacy
+// database, so an empty v2 database proves nothing. Notes are not checked: the
+// v2 schema has no notes table. Every failure leaves the flag unset, which falls
+// back to the config-based isExistingInstall check.
+func (c *Handler) recordOnboardingState(ctx context.Context) {
+	if c.appMetadataRepo == nil || c.V2Manager == nil {
+		return
+	}
+	if c.isEnhancedDatabase == nil || !c.isEnhancedDatabase() {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, onboardingSeedTimeout)
+	defer cancel()
+
+	lastSeenVersion, err := c.appMetadataRepo.Get(ctx, appMetadataKeyLastSeenVersion)
+	if err != nil {
+		c.LogWarnIfEnabled("Failed to read last_seen_version for onboarding state", logger.Error(err))
+		return
+	}
+	if lastSeenVersion != "" {
+		return
+	}
+
+	if !c.hasZeroDetections(ctx) {
+		return
+	}
+
+	// Set is an idempotent upsert, so a flag left by an earlier start is
+	// simply rewritten.
+	if err := c.appMetadataRepo.Set(ctx, appMetadataKeyOnboardingPending, onboardingPendingValue); err != nil {
+		c.LogWarnIfEnabled("Failed to record pending onboarding", logger.Error(err))
+		return
+	}
+	c.LogInfoIfEnabled("Recorded pending onboarding for fresh install")
 }
 
 // hasZeroDetections returns true if the V2 database contains no detections.
@@ -367,7 +449,9 @@ func isDevBuild(version string) bool {
 
 // DismissWizard handles POST /api/v2/app/wizard/dismiss
 // Updates the last_seen_version in app_metadata to the current application version,
-// preventing the wizard from showing again until the next upgrade.
+// preventing the wizard from showing again until the next upgrade, then clears
+// onboarding_pending. The clear is best effort: once last_seen_version is set the
+// flag is never consulted.
 func (c *Handler) DismissWizard(ctx echo.Context) error {
 	if c.appMetadataRepo == nil {
 		return c.HandleError(ctx, nil, "App metadata not available", http.StatusServiceUnavailable)
@@ -379,6 +463,9 @@ func (c *Handler) DismissWizard(ctx echo.Context) error {
 	}
 	if err := c.appMetadataRepo.Set(ctx.Request().Context(), appMetadataKeyLastSeenVersion, settings.Version); err != nil {
 		return c.HandleError(ctx, err, "Failed to dismiss wizard", http.StatusInternalServerError)
+	}
+	if err := c.appMetadataRepo.Set(ctx.Request().Context(), appMetadataKeyOnboardingPending, ""); err != nil {
+		c.LogWarnIfEnabled("Failed to clear onboarding_pending", logger.Error(err))
 	}
 
 	return ctx.NoContent(http.StatusNoContent)

@@ -124,39 +124,122 @@ describe('analyticsControls', () => {
     });
   });
 
-  // Fix K: maybeAutoSelectSpecies coverage (previously in Analytics.test.ts, now deleted).
-  // fetchAvailableSpecies calls maybeAutoSelectSpecies after a successful fetch.
-  describe('maybeAutoSelectSpecies via ensureSpecies()', () => {
+  // Species auto-select is decoupled from the list fetch: ensureSpecies() only loads the list, and
+  // a holder registered through enableAutoSelect() (a species-filtered tab) triggers the single
+  // top-species replace write per fetched list.
+  describe('species auto-select via enableAutoSelect()', () => {
     const speciesData = [
       { scientific_name: 'Turdus merula', common_name: 'Common Blackbird', count: 10 },
       { scientific_name: 'Parus major', common_name: 'Great Tit', count: 7 },
       { scientific_name: 'Erithacus rubecula', common_name: 'European Robin', count: 3 },
     ];
 
-    function stubFetch(): void {
-      vi.stubGlobal(
-        'fetch',
-        vi.fn().mockResolvedValue({
-          ok: true,
-          json: (): Promise<typeof speciesData> => Promise.resolve(speciesData),
-        })
-      );
+    function stubFetch(rows: unknown[] = speciesData): ReturnType<typeof vi.fn> {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<unknown[]> => Promise.resolve(rows),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      return fetchMock;
     }
+
+    // fetchAvailableSpecies awaits fetch() then .json() - drain both ticks via setTimeout so
+    // all queued microtasks complete before the assertion.
+    const drain = (): Promise<void> => new Promise<void>(resolve => setTimeout(resolve, 0));
 
     afterEach(() => {
       vi.unstubAllGlobals();
     });
 
-    it('auto-selects the top species with a replace write when no species are in params', async () => {
-      setLocation('');
+    it('ensureSpecies alone never writes the URL', async () => {
       const c = createAnalyticsControls();
       stubFetch();
       c.ensureSpecies();
-      // fetchAvailableSpecies awaits fetch() then .json() - drain both ticks via setTimeout so
-      // all queued microtasks complete before the assertion.
-      await new Promise<void>(resolve => setTimeout(resolve, 0));
+      await drain();
+      expect(c.availableSpecies).toHaveLength(3);
+      expect(navState.last).toBeNull();
+    });
+
+    it('auto-selects the top species with a replace write when a holder is active and the list lands', async () => {
+      const c = createAnalyticsControls();
+      stubFetch();
+      const release = c.enableAutoSelect();
+      c.ensureSpecies();
+      await drain();
       expect(navState.last?.mode).toBe('replace');
       expect(navState.last?.url).toContain('species=');
+      expect(c.params.species).toEqual(['Turdus merula', 'Parus major', 'Erithacus rubecula']);
+      release();
+    });
+
+    it('enableAutoSelect after the list landed selects immediately', async () => {
+      const c = createAnalyticsControls();
+      stubFetch();
+      c.ensureSpecies();
+      await drain();
+      expect(navState.last).toBeNull();
+      const release = c.enableAutoSelect();
+      expect(navState.last?.mode).toBe('replace');
+      expect(c.params.species).toHaveLength(3);
+      release();
+    });
+
+    it('auto-selects once per fetched list', async () => {
+      const c = createAnalyticsControls();
+      stubFetch();
+      const release1 = c.enableAutoSelect();
+      c.ensureSpecies();
+      await drain();
+      expect(c.params.species).toHaveLength(3);
+
+      // User clears the selection, then another tab takes a holder: no second write.
+      c.applyParams({ species: [] }, 'push');
+      navState.last = null;
+      const release2 = c.enableAutoSelect();
+      expect(navState.last).toBeNull();
+      expect(c.params.species).toEqual([]);
+      release1();
+      release2();
+    });
+
+    it('skips auto-select while the loaded list belongs to a stale range', async () => {
+      const c = createAnalyticsControls();
+      stubFetch();
+      c.ensureSpecies();
+      await drain();
+      // Range change without a refetch: the loaded list no longer matches the params.
+      c.applyParams({ range: 'year' }, 'push');
+      navState.last = null;
+      const release = c.enableAutoSelect();
+      expect(navState.last).toBeNull();
+      expect(c.params.species).toEqual([]);
+      release();
+    });
+
+    it('does not write when the holder was released before the list landed', async () => {
+      const c = createAnalyticsControls();
+      stubFetch();
+      const release = c.enableAutoSelect();
+      c.ensureSpecies();
+      release();
+      await drain();
+      expect(c.availableSpecies).toHaveLength(3);
+      expect(navState.last).toBeNull();
+    });
+
+    it('auto-selects again after a range change with an empty selection', async () => {
+      const c = createAnalyticsControls();
+      stubFetch();
+      const release = c.enableAutoSelect();
+      c.ensureSpecies();
+      await drain();
+      c.applyParams({ species: [] }, 'push');
+      c.applyParams({ range: 'year' }, 'push');
+      c.ensureSpecies();
+      await drain();
+      expect(navState.last?.mode).toBe('replace');
+      expect(c.params.species).toHaveLength(3);
+      release();
     });
 
     it('does not auto-select when species are already present in params', async () => {
@@ -164,10 +247,42 @@ describe('analyticsControls', () => {
       setLocation('?species=A');
       const c = createAnalyticsControls();
       stubFetch();
+      const release = c.enableAutoSelect();
       c.ensureSpecies();
-      await new Promise<void>(resolve => setTimeout(resolve, 0));
+      await drain();
       // No replace write should have occurred - navState.last stays null.
       expect(navState.last).toBeNull();
+      release();
+    });
+
+    it("does not write species into another tab's URL when the list lands after a tab switch", async () => {
+      navState.currentPath = '/ui/analytics/trends';
+      const c = createAnalyticsControls();
+      stubFetch();
+      const release = c.enableAutoSelect();
+      c.ensureSpecies();
+      // The user leaves the species tab before the summary returns: the shell releases its holder.
+      navState.currentPath = '/ui/analytics/biodiversity';
+      release();
+      await drain();
+      expect(c.availableSpecies).toHaveLength(3);
+      expect(navState.last).toBeNull();
+      expect(c.params.species).toEqual([]);
+    });
+
+    it('the release function is idempotent', async () => {
+      const c = createAnalyticsControls();
+      stubFetch();
+      const releaseA = c.enableAutoSelect();
+      const releaseB = c.enableAutoSelect();
+      // A second call of the same release must not drop holder B's registration.
+      releaseA();
+      releaseA();
+      c.ensureSpecies();
+      await drain();
+      expect(navState.last?.mode).toBe('replace');
+      expect(c.params.species).toHaveLength(3);
+      releaseB();
     });
   });
 });

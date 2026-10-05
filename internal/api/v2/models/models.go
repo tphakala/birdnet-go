@@ -133,8 +133,15 @@ type CatalogEntryResponse struct {
 	// this passive listing; it is returned in full when the user attempts to
 	// install the model.
 	IncompatibleReason string `json:"incompatibleReason,omitempty"`
-	TotalSizeBytes     int64  `json:"totalSizeBytes"`
-	HasGeomodel        bool   `json:"hasGeomodel"`
+	// TotalSizeBytes is the download size of the default variant: its own files plus the
+	// files of its dependencies.
+	TotalSizeBytes int64 `json:"totalSizeBytes"`
+	// HasGeomodel reports whether the default variant brings a geomodel, inline or
+	// through a dependency.
+	HasGeomodel bool `json:"hasGeomodel"`
+	// DependsOn lists the catalog IDs installed together with this model. It may name
+	// hidden components that the catalog response does not list. Omitted when empty.
+	DependsOn []string `json:"dependsOn,omitempty"`
 	// Permanent marks the built-in BirdNET v2.4 classifier: always installed, never
 	// uninstallable, only its variant may be swapped. The gallery renders a built-in
 	// badge instead of Remove/Reinstall for it.
@@ -265,6 +272,40 @@ func (c *Handler) ListModels(ctx echo.Context) error {
 // variant vocabulary.
 const incompatibleReasonONNXUnavailable = "backend.onnx_unavailable"
 
+// removeHasDependentsKey is the i18n key of the 409 returned when an uninstall is
+// refused because other installed models need the model. The frontend interpolates
+// error_params.name and error_params.models into it.
+const removeHasDependentsKey = "analysis.gallery.errors.removeHasDependents"
+
+// operationInProgressKey is the i18n key of the 409 returned when an install,
+// reinstall or uninstall is refused because another model operation holds the
+// manager's operation slot. The frontend interpolates error_params.name (the model
+// whose operation is running); error_params.operation and error_params.running
+// ({id, name}) identify it.
+const operationInProgressKey = "analysis.gallery.errors.operationInProgress"
+
+// operationInProgressMsg is the message of the operation-in-progress 409.
+const operationInProgressMsg = "another model operation is in progress"
+
+// operationInProgressResponse answers the 409 for a refused model operation.
+func (c *Handler) operationInProgressResponse(ctx echo.Context, err error, busy *classifier.OperationInProgressError) error {
+	return c.HandleErrorWithKey(ctx, err, operationInProgressMsg, http.StatusConflict,
+		operationInProgressKey, map[string]any{
+			"name":      busy.Running.Name,
+			"operation": string(busy.Operation),
+			"running":   busy.Running,
+		})
+}
+
+// beginOperationError maps a BeginOperation failure: a busy slot is the 409, anything
+// else is a server error.
+func (c *Handler) beginOperationError(ctx echo.Context, err error) error {
+	if busy, ok := errors.AsType[*classifier.OperationInProgressError](err); ok {
+		return c.operationInProgressResponse(ctx, err, busy)
+	}
+	return c.HandleError(ctx, err, "failed to start model operation", http.StatusInternalServerError)
+}
+
 // GetModelCatalog returns the embedded model catalog enriched with install
 // status and compatibility information.
 func (c *Handler) GetModelCatalog(ctx echo.Context) error {
@@ -292,11 +333,10 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	for i := range visible {
 		entry := &visible[i]
 
-		// Compute total size from all files.
-		var totalSize int64
-		for _, f := range entry.Files {
-			totalSize += f.SizeBytes
-		}
+		// Compute the default variant's total size from all files it installs,
+		// including its dependencies' files.
+		defaultFiles, _ := classifier.EffectiveFiles(entry, "")
+		totalSize := sumFileSizes(defaultFiles)
 
 		// Check install status via ModelManager, capturing which variant is on disk.
 		installed := false
@@ -334,7 +374,8 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			Compatible:           compatible,
 			IncompatibleReason:   incompatibleReason,
 			TotalSizeBytes:       totalSize,
-			HasGeomodel:          classifier.HasGeomodelFiles(entry),
+			HasGeomodel:          classifier.ProvidesGeomodel(entry, ""),
+			DependsOn:            entry.DependsOn,
 			Permanent:            classifier.IsPermanentEntry(entry),
 			InstalledVariantID:   installedVariantID,
 			RecommendedVariantID: recommendedVariant[entry.ID],
@@ -382,10 +423,8 @@ func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, insta
 			continue
 		}
 
-		var sizeBytes int64
-		for _, f := range v.Files {
-			sizeBytes += f.SizeBytes
-		}
+		variantFiles, _ := classifier.EffectiveFiles(entry, v.ID)
+		sizeBytes := sumFileSizes(variantFiles)
 
 		// Headline latency: the smallest positive measured latency across this
 		// variant's benchmarks, or 0 when none were measured.
@@ -758,6 +797,9 @@ func (c *Handler) GetInstalledModels(ctx echo.Context) error {
 
 // InstallModel starts an asynchronous model download and installation.
 // It returns 202 Accepted immediately while the download runs in the background.
+// It reserves the manager's operation slot before answering, so a request made
+// while another model operation runs gets a synchronous 409 with
+// operationInProgressKey instead of a 202 for work that never starts.
 func (c *Handler) InstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -841,9 +883,18 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 			logger.String("operation", "model_install_incompatible_override"))
 	}
 
+	// Reserve the operation slot synchronously, so a refusal reaches the client as a
+	// 409. The lease is handed to the goroutine below, which releases it; nothing
+	// between here and c.Go can return.
+	lease, err := c.ModelManager.BeginOperation(classifier.OperationInstall, catalogID)
+	if err != nil {
+		return c.beginOperationError(ctx, err)
+	}
+
 	// Start async install in a background goroutine.
 	progressChan := make(chan classifier.DownloadState, 16)
 	c.Go(func() {
+		defer lease.Release()
 		// Re-evaluate the optimize notice whatever the outcome, panic included: an
 		// install whose hot-load fails still records the install without a
 		// topology event, and a failed swap may roll back to a different installed
@@ -857,7 +908,7 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 				)
 			}
 		}()
-		if err := c.ModelManager.InstallOrReplace(c.Context(), &entry, req.VariantID, "", progressChan); err != nil {
+		if err := lease.InstallOrReplace(c.Context(), &entry, req.VariantID, "", progressChan); err != nil {
 			c.LogErrorIfEnabled("Model install failed",
 				logger.String("catalog_id", catalogID),
 				logger.String("variant_id", req.VariantID),
@@ -879,7 +930,9 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 
 // ReinstallModel re-downloads missing or corrupt files for an installed model.
 // Files that pass SHA256 validation are skipped. It returns 202 Accepted
-// immediately while the re-download runs in the background.
+// immediately while the re-download runs in the background. Like InstallModel it
+// answers a synchronous 409 with operationInProgressKey while another model
+// operation runs.
 func (c *Handler) ReinstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -908,6 +961,20 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
 	}
 
+	// Reserve the operation slot synchronously (see InstallModel), before the
+	// installed check, so an uninstall cannot complete between the check and the
+	// 202. A validation failure below releases it; the goroutine owns it after.
+	lease, err := c.ModelManager.BeginOperation(classifier.OperationReinstall, catalogID)
+	if err != nil {
+		return c.beginOperationError(ctx, err)
+	}
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			lease.Release()
+		}
+	}()
+
 	if !c.ModelManager.IsInstalled(catalogID) {
 		return c.HandleError(ctx, nil, "model "+catalogID+" is not installed", http.StatusBadRequest)
 	}
@@ -922,9 +989,11 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 		}
 	}
 
-	// Start async reinstall in a background goroutine.
+	// Start async reinstall in a background goroutine, which now owns the lease.
+	handedOff = true
 	progressChan := make(chan classifier.DownloadState, 16)
 	c.Go(func() {
+		defer lease.Release()
 		defer c.ScheduleOptimizeNoticeSync() // see InstallModel
 		defer func() {
 			if r := recover(); r != nil {
@@ -934,7 +1003,7 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 				)
 			}
 		}()
-		if err := c.ModelManager.Reinstall(c.Context(), &entry, "", progressChan); err != nil {
+		if err := lease.Reinstall(c.Context(), &entry, "", progressChan); err != nil {
 			c.LogErrorIfEnabled("Model reinstall failed",
 				logger.String("catalog_id", catalogID),
 				logger.Error(err),
@@ -952,7 +1021,18 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 	})
 }
 
-// UninstallModel removes a downloaded model from disk.
+// sumFileSizes returns the total size in bytes of files.
+func sumFileSizes(files []classifier.CatalogFile) int64 {
+	var total int64
+	for _, f := range files {
+		total += f.SizeBytes
+	}
+	return total
+}
+
+// UninstallModel removes a downloaded model from disk. It answers 409 with the
+// removeHasDependentsKey i18n key when other installed models still need it, and
+// with operationInProgressKey while another model operation runs.
 func (c *Handler) UninstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -964,6 +1044,17 @@ func (c *Handler) UninstallModel(ctx echo.Context) error {
 	}
 
 	if err := c.ModelManager.Uninstall(catalogID); err != nil {
+		if busy, ok := errors.AsType[*classifier.OperationInProgressError](err); ok {
+			return c.operationInProgressResponse(ctx, err, busy)
+		}
+		if de, ok := errors.AsType[*classifier.DependentsError](err); ok {
+			return c.HandleErrorWithKey(ctx, err, "model is required by installed models", http.StatusConflict,
+				removeHasDependentsKey, map[string]any{
+					"name":       de.Name,
+					"models":     de.DependentNames(),
+					"dependents": de.Dependents,
+				})
+		}
 		return c.HandleError(ctx, err, "failed to uninstall model", http.StatusInternalServerError)
 	}
 	// Uninstalling a model that was not loaded fires no topology event, but it
@@ -977,7 +1068,9 @@ func (c *Handler) UninstallModel(ctx echo.Context) error {
 }
 
 // StreamInstallProgress streams model download progress as Server-Sent Events.
-// The stream closes automatically when the download completes or fails.
+// The stream closes automatically when the download completes or fails. Completion
+// is reported only once the entry's operation has released the manager's operation
+// slot, so a client that starts the next operation on it is not refused with 409.
 func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -1030,6 +1123,12 @@ func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 				// No active download. Check if the model is already installed,
 				// which means the download completed before we connected.
 				if c.ModelManager.IsInstalled(catalogID) {
+					if c.ModelManager.OperationRunningFor(catalogID) {
+						// Installed, but the operation still runs (the post-install
+						// hot-load, or a reinstall not yet registered): wait for it.
+						time.Sleep(apicore.SSEEventLoopSleep)
+						continue
+					}
 					completeState := classifier.DownloadState{
 						CatalogID: catalogID,
 						Status:    classifier.StatusComplete,

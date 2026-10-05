@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup } from '@testing-library/svelte';
 
 import { CHART_REGISTRY } from './charts';
-import type { AnalyticsParams, ChartPropsContext } from './types';
+import type { AnalyticsParams } from './types';
+import { makeChartCtx } from './__tests__/registryFixtures';
 import SpeciesRidgeline from '../components/charts/d3/SpeciesRidgeline.svelte';
 import type { RidgelineSeries } from '../components/charts/d3/utils/ridgeline';
 
@@ -27,14 +28,6 @@ if (!def?.mapProps) {
 }
 const mapProps = def.mapProps;
 
-function makeCtx(names: [string, string][] = []): ChartPropsContext {
-  return {
-    options: {},
-    onParamsChange: vi.fn(),
-    speciesNames: new Map(names),
-  };
-}
-
 // mapProps for this chart ignores params (always top-N); an empty object is enough.
 const params = {} as AnalyticsParams;
 
@@ -44,8 +37,18 @@ function bins(peak: number): number[] {
 }
 
 const sample = [
-  { scientificName: 'Turdus merula', density: bins(16), total: 40 },
-  { scientificName: 'Erithacus rubecula', density: bins(10), total: 12 },
+  {
+    scientificName: 'Turdus merula',
+    commonName: 'Eurasian Blackbird',
+    density: bins(16),
+    total: 40,
+  },
+  {
+    scientificName: 'Erithacus rubecula',
+    commonName: 'Erithacus rubecula',
+    density: bins(10),
+    total: 12,
+  },
 ];
 
 describe('confidence-distribution chart def', () => {
@@ -59,8 +62,8 @@ describe('confidence-distribution chart def', () => {
     expect(def.minDataPoints).toBe(2);
   });
 
-  it('maps confidence data to ridgeline series, resolving common names from the hub map', () => {
-    const props = mapProps(sample, params, makeCtx([['Turdus merula', 'Eurasian Blackbird']]));
+  it('maps confidence data to ridgeline series using the payload common name, with an empty hub map (#4459)', () => {
+    const props = mapProps(sample, params, makeChartCtx());
     const series = props.series as Array<{
       scientificName: string;
       commonName: string;
@@ -70,14 +73,14 @@ describe('confidence-distribution chart def', () => {
     expect(series).toHaveLength(2);
     expect(series[0].scientificName).toBe('Turdus merula');
     expect(series[0].commonName).toBe('Eurasian Blackbird');
-    // No mapping entry -> falls back to the scientific name.
+    // The payload carried the scientific name as the fallback.
     expect(series[1].commonName).toBe('Erithacus rubecula');
     expect(series[0].density).toHaveLength(20);
     expect(series[0].total).toBe(40);
   });
 
   it('labels confidence bins as left-edge percentages (0/25/50/75% for 20 bins)', () => {
-    const props = mapProps(sample, params, makeCtx());
+    const props = mapProps(sample, params, makeChartCtx());
     const fmt = props.xTickFormat as (_i: number) => string;
     expect(fmt(0)).toBe('0%');
     expect(fmt(5)).toBe('25%');
@@ -87,7 +90,7 @@ describe('confidence-distribution chart def', () => {
   });
 
   it('keeps the formatter divisor safe on an empty result (bin-count fallback)', () => {
-    const props = mapProps([], params, makeCtx());
+    const props = mapProps([], params, makeChartCtx());
     expect(props.series).toHaveLength(0);
     const fmt = props.xTickFormat as (_i: number) => string;
     // Falls back to the default 20 bins, so 5/20 = 25% rather than a divide-by-zero.
@@ -95,7 +98,7 @@ describe('confidence-distribution chart def', () => {
   });
 
   it('wires this chart-specific i18n keys into the shared component', () => {
-    const props = mapProps(sample, params, makeCtx());
+    const props = mapProps(sample, params, makeChartCtx());
     expect(props.ariaLabelKey).toBe('analytics.advanced.charts.confidence.ariaLabel');
     expect(props.axisLabelKey).toBe('analytics.advanced.charts.confidence.axisLabel');
     expect(props.summaryKey).toBe('analytics.advanced.charts.confidence.summary');
@@ -105,7 +108,7 @@ describe('confidence-distribution chart def', () => {
   });
 
   it('renders one ridge per species through the shared component, with an a11y summary', async () => {
-    const series = mapProps(sample, params, makeCtx()).series as RidgelineSeries[];
+    const series = mapProps(sample, params, makeChartCtx()).series as RidgelineSeries[];
     const { container } = render(SpeciesRidgeline, { props: { series, width: 800 } });
     await Promise.resolve();
     expect(container.querySelectorAll('path.ridge-area')).toHaveLength(2);
@@ -113,7 +116,7 @@ describe('confidence-distribution chart def', () => {
   });
 
   it('renders without throwing for an empty (sparse) result', () => {
-    const series = mapProps([], params, makeCtx()).series as RidgelineSeries[];
+    const series = mapProps([], params, makeChartCtx()).series as RidgelineSeries[];
     expect(() => render(SpeciesRidgeline, { props: { series } })).not.toThrow();
   });
 });

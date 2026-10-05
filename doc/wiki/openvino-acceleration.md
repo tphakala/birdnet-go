@@ -79,6 +79,8 @@ birdnet:
      ghcr.io/tphakala/birdnet-go:nightly
    ```
 
+   This example uses bridge networking. With host networking (recommended for new installs), replace `-p 8080:8080` with `--network host` and set the port with `--env BIRDNET_WEBSERVER_PORT=<port>`; see [Manual Docker Installation](installation.md#manual-docker-installation-advanced-linux-only). The device options are the same in both modes.
+
    Docker Compose:
 
    ```yaml
@@ -90,6 +92,8 @@ birdnet:
          - /dev/dri/renderD128
        # ... your other settings
    ```
+
+   Both premade Compose files (`docker-compose.host.yml` and `docker-compose.yml`) already contain a commented-out `/dev/dri:/dev/dri` line under `devices:`; uncomment it there.
 
    If you have more than one render node, pass the specific one for your Intel GPU (usually `renderD128`). Passing the whole `/dev/dri` directory also works.
 
@@ -182,6 +186,8 @@ Start BirdNET-Go and [verify](#verifying-openvino-is-active).
 Do not assume it worked; confirm it. There are four independent ways.
 
 ### 1. The inference status API
+
+Replace `8080` with your web port if you changed it (for example `WEB_PORT` with host networking).
 
 ```bash
 curl -s http://localhost:8080/api/v2/system/inference | jq '.backends.openvino, (.models[] | {name, backend, device})'

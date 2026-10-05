@@ -45,9 +45,12 @@ import type {
 } from '$lib/desktop/features/settings/pages/audioExportFormat';
 import { t } from '$lib/i18n';
 import { getLogger } from '$lib/utils/logger';
-import { safeGet, safeSpread } from '$lib/utils/security';
+import { isPlainObject, safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
+import type { SettingsSectionName, SettingsSectionPayloads } from '$lib/utils/settingsApi.js';
+import { withoutServerOwnedKeys } from '$lib/utils/settingsSections';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
+import { mergeSettingsPatch, mergeSettingsPatchKeepingEdits } from '$lib/utils/settingsMerge';
 import { SPECIES_GUIDE_DEFAULT_WARM_TOP_N } from '$lib/utils/speciesGuideLimits';
 import { DEFAULT_REGION_MODE } from '$lib/utils/variantSelection';
 import { weatherDefaults } from '$lib/utils/weatherDefaults';
@@ -922,6 +925,12 @@ export interface GlobalSettingsState {
   dataLoaded: boolean;
 }
 
+/** Options for {@link settingsActions.saveSettings}. */
+export interface SaveSettingsOptions {
+  /** Show the success and failure toasts. Defaults to true. */
+  notify?: boolean;
+}
+
 // API response types
 export interface APIResponse<T> {
   success: boolean;
@@ -1349,6 +1358,101 @@ export const extendedCaptureSettings = derived(
   $store => $store.formData.realtime?.extendedCapture
 );
 
+/** A top-level store key, or a key of the realtime object. */
+type SectionStorePath =
+  readonly [keyof SettingsFormData] | readonly ['realtime', keyof RealtimeSettings];
+
+/**
+ * Where each backend section handled by settingsActions.saveSection lives in
+ * the store: a top-level key, or a key of the realtime object.
+ */
+export const SECTION_STORE_PATHS = {
+  birdnet: ['birdnet'],
+  sentry: ['sentry'],
+  dashboard: ['realtime', 'dashboard'],
+  audio: ['realtime', 'audio'],
+  rtsp: ['realtime', 'rtsp'],
+  privacyfilter: ['realtime', 'privacyFilter'],
+  birdweather: ['realtime', 'birdweather'],
+} as const satisfies Record<SettingsSectionName, SectionStorePath>;
+
+/**
+ * Section saves whose request or store merge has not finished. saveSettings
+ * waits for them so its snapshot of formData never predates a merge.
+ */
+const inFlightSectionSaves = new Set<Promise<void>>();
+
+/** Returns value when it is a plain object, otherwise undefined. */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return isPlainObject(value) ? value : undefined;
+}
+
+/**
+ * Applies a section partial to both copies of the settings: a plain merge into
+ * originalData and a merge into formData that keeps pending edits. Both results
+ * go through the same coercion as updateSection. Inputs are not mutated.
+ */
+function applySectionPatch(
+  state: GlobalSettingsState,
+  section: SettingsSectionName,
+  partial: Record<string, unknown>
+): Pick<GlobalSettingsState, 'formData' | 'originalData'> {
+  const path: SectionStorePath =
+    // eslint-disable-next-line security/detect-object-injection -- section is a key of SECTION_STORE_PATHS by type
+    SECTION_STORE_PATHS[section];
+  const topKey = path[0];
+  const wrapped: Record<string, unknown> = path.length === 2 ? { [path[1]]: partial } : partial;
+
+  const savedSection = asRecord(safeGet(state.originalData, topKey));
+  const formSection = asRecord(safeGet(state.formData, topKey));
+
+  const mergedOriginal = coerceSettings(topKey, mergeSettingsPatch(savedSection, wrapped));
+  const mergedForm = coerceSettings(
+    topKey,
+    mergeSettingsPatchKeepingEdits(formSection, savedSection, wrapped)
+  );
+
+  return {
+    originalData: { ...state.originalData, [topKey]: mergedOriginal },
+    formData: { ...state.formData, [topKey]: mergedForm },
+  };
+}
+
+/**
+ * Side effects shared by saveSettings and saveSection once the server accepted
+ * a save. Refreshes restart-required status without awaiting it: the
+ * RestartBanner reacts to the store whenever it lands, and a failure here must
+ * not mask or delay a successful save (the banner may show stale state until
+ * the next page load). Applies the UI locale, logging rather than throwing on
+ * failure for the same reason, only when the saved locale differs
+ * from the one previously saved, so a locale chosen via the sidebar
+ * LanguageSelector (which updates localStorage but not the backend) is not
+ * clobbered by whatever stale value the backend still holds.
+ */
+async function afterSettingsPersisted(
+  newLocale: string | undefined,
+  origLocale: string | undefined
+): Promise<void> {
+  void import('$lib/stores/restart.svelte')
+    .then(({ fetchRestartStatus }) => fetchRestartStatus())
+    .catch(e => {
+      logger.error('Failed to refresh restart status after settings save:', e);
+    });
+
+  if (newLocale && newLocale !== origLocale) {
+    try {
+      // Dynamically import i18n functions to avoid circular dependencies
+      const { isValidLocale, setLocale } = await import('$lib/i18n/index.js');
+      if (isValidLocale(newLocale)) {
+        setLocale(newLocale);
+      }
+    } catch (e) {
+      // The save already succeeded; a failed locale switch must not report it as failed.
+      logger.error('Failed to apply the UI locale after settings save:', e);
+    }
+  }
+}
+
 // Settings actions
 export const settingsActions = {
   async loadSettings() {
@@ -1412,6 +1516,53 @@ export const settingsActions = {
   },
 
   /**
+   * Persists one backend section with PATCH /api/v2/settings/:section and, only
+   * after the server accepted it, merges the same partial into the store at that
+   * section's path: a plain merge into originalData, and into formData a merge
+   * that keeps any pending edit to a key the partial also sets, so unrelated and
+   * conflicting unsaved edits survive and unsaved-changes tracking is unchanged.
+   * Objects merge key by key and arrays replace, as on the server. A failed
+   * request throws and leaves the store untouched. Shows no toast and does not
+   * touch isSaving or error: the caller owns busy and error UI. Refuses before
+   * settings have loaded, like saveSettings. A concurrent saveSettings waits for
+   * this save to finish before it snapshots formData.
+   */
+  async saveSection<S extends SettingsSectionName>(
+    section: S,
+    partial: SettingsSectionPayloads[S]
+  ): Promise<void> {
+    if (!get(settingsStore).dataLoaded) {
+      logger.warn('Refusing to save a settings section before settings have been loaded');
+      throw new Error(t('settings.errors.loadFailed'));
+    }
+
+    const op = (async () => {
+      const response = await settingsAPI.patchSection(section, partial);
+      const skipped = response?.skippedFields;
+      if (skipped && skipped.length > 0) {
+        logger.warn('Settings section save skipped fields:', section, skipped.join(', '));
+      }
+
+      const patch = withoutServerOwnedKeys(section, partial);
+      const origLocale = get(settingsStore).originalData.realtime?.dashboard?.locale;
+      settingsStore.update(state => ({ ...state, ...applySectionPatch(state, section, patch) }));
+
+      const newLocale = section === 'dashboard' ? patch.locale : undefined;
+      await afterSettingsPersisted(
+        typeof newLocale === 'string' ? newLocale : undefined,
+        origLocale
+      );
+    })();
+
+    inFlightSectionSaves.add(op);
+    try {
+      await op;
+    } finally {
+      inFlightSectionSaves.delete(op);
+    }
+  },
+
+  /**
    * Sync the TLS mode after a certificate operation (upload, generate, delete)
    * that the backend has ALREADY persisted to disk. Only tlsMode and autoTls are
    * updated, and they are updated in BOTH formData and originalData so the change
@@ -1448,10 +1599,29 @@ export const settingsActions = {
     }));
   },
 
-  async saveSettings() {
-    settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
+  /**
+   * Saves the whole formData to the backend. Refuses (throws before any network
+   * call) while no settings load has succeeded, because formData would then hold
+   * empty defaults that the backend deep-merges over the real configuration.
+   * Pass `{ notify: false }` to suppress the success and failure toasts.
+   */
+  async saveSettings(options: SaveSettingsOptions = {}) {
+    const { notify = true } = options;
+
+    // Let section saves finish first (success or failure, request and store
+    // merge) so the snapshot below carries what they patched. Loop, because a
+    // section save can start while an earlier one is awaited.
+    while (inFlightSectionSaves.size > 0) {
+      await Promise.allSettled([...inFlightSectionSaves]);
+    }
+
     try {
       const currentState = get(settingsStore);
+      if (!currentState.dataLoaded) {
+        logger.warn('Refusing to save settings before they have been loaded');
+        throw new Error(t('settings.errors.loadFailed'));
+      }
+      settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
 
       // Apply coercion to all sections before saving
       const coercedFormData = { ...currentState.formData };
@@ -1479,33 +1649,13 @@ export const settingsActions = {
 
       await settingsAPI.save(coercedFormData);
 
-      // Refresh restart-required status from backend after save.
-      // Isolated try-catch: failure here must not mask a successful settings save.
-      try {
-        const { fetchRestartStatus } = await import('$lib/stores/restart.svelte');
-        await fetchRestartStatus();
-      } catch (e) {
-        // Non-critical: restart status refresh failed, but settings were saved.
-        // The banner may show stale state until next page load.
-        logger.error('Failed to refresh restart status after settings save:', e);
-      }
-
-      // Apply UI locale only when the user actually changed it in this save
-      // session. Read newLocale from coercedFormData (the value we actually
-      // persisted) and compare to originalData (the snapshot loaded from
-      // the backend). This avoids clobbering a locale chosen via the sidebar
-      // LanguageSelector (which updates localStorage but not the backend)
-      // with whatever stale value the backend still holds, and matches the
-      // coercedFormData-based comparison used by the TLS check below.
-      const newLocale = coercedFormData.realtime?.dashboard?.locale;
-      const origLocale = currentState.originalData.realtime?.dashboard?.locale;
-      if (newLocale && newLocale !== origLocale) {
-        // Dynamically import i18n functions to avoid circular dependencies
-        const { isValidLocale, setLocale } = await import('$lib/i18n/index.js');
-        if (isValidLocale(newLocale)) {
-          setLocale(newLocale);
-        }
-      }
+      // Read newLocale from coercedFormData (the value we actually persisted)
+      // and compare to originalData (the snapshot loaded from the backend),
+      // matching the coercedFormData-based comparison used by the TLS check below.
+      await afterSettingsPersisted(
+        coercedFormData.realtime?.dashboard?.locale,
+        currentState.originalData.realtime?.dashboard?.locale
+      );
 
       // Update originalData to match the saved formData (no reload needed).
       // Restart-required state is owned by the backend (refreshed via
@@ -1517,8 +1667,9 @@ export const settingsActions = {
         isSaving: false,
       }));
 
-      // Show success toast
-      toastActions.success(t('notifications.content.settings.savedSuccessfully'));
+      if (notify) {
+        toastActions.success(t('notifications.content.settings.savedSuccessfully'));
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t('settings.errors.saveFailed');
       settingsStore.update(state => ({
@@ -1527,8 +1678,9 @@ export const settingsActions = {
         error: errorMessage,
       }));
 
-      // Show error toast
-      toastActions.error(t('notifications.content.settings.saveFailed'));
+      if (notify) {
+        toastActions.error(t('notifications.content.settings.saveFailed'));
+      }
 
       throw error;
     }

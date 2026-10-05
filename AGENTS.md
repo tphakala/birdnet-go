@@ -8,6 +8,14 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound
 identification, aimed at hobby birders and home users. It is an open source
 project run for fun by volunteers, so avoidable rework and support load matter.
 
+External contributors (anyone other than the maintainer) must also review
+[`CONTRIBUTING.md`](CONTRIBUTING.md) before starting work, in particular
+"Submitting Changes": it covers branch naming, commit message format, the PR
+template, and what to expect for feature PRs, which should be discussed with
+the maintainer before any code is written. If you are an agent working for an
+external contributor, read it and tell them before building a feature that has
+not been discussed.
+
 ## Module Guides
 
 Guidance is split by area. Tools that support nested `AGENTS.md` files load the
@@ -136,8 +144,11 @@ These checks cover only the default build tags and your own OS:
 When creating a pull request, you MUST:
 
 1. Verify the PR addresses exactly ONE feature, fix, or refactor
-2. Include a single `- [x] Preflight passed` checkbox in the description. Do
-   not add a preflight report: no findings, no fix list, no review details
+2. Write the description from `.github/pull_request_template.md`: keep every
+   section, fill each one in, and do not substitute your own format. Add a
+   single `- [x] Preflight passed` checkbox under Checklist. Do not add a
+   preflight report: no findings, no fix list, no review details. Leave the
+   checkboxes that are the human author's own declarations for them to tick
 3. Verify all linters pass (`task lint`, `npm run check:all`)
 4. Verify all tests pass (`task test`, `npm test`)
 5. Confirm the diff contains ONLY changes relevant to the stated goal

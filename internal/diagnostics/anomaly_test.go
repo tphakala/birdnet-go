@@ -148,6 +148,10 @@ func TestCompareVersionDates(t *testing.T) {
 		{"dev build incomparable", "dev", "20260716", 0},
 		{"empty incomparable", "", "20260716", 0},
 		{"both non-date", "dev", "unknown", 0},
+		{"dev build same date as release", "20260823-g5dc2ab881-dev", "20260823", 0},
+		{"dev build newer than release", "20260927-g5dc2ab881-dev", "20260823", 1},
+		{"release newer than dev build", "20260823", "20260716-g5dc2ab881-dev", 1},
+		{"hash digits do not confuse the date", "20260927-g20991231a-dev", "20260928", -1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

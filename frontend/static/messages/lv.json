@@ -5342,12 +5342,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Pārlādēt lapu"
+    },
     "skip": "Izlaist",
     "back": "Atpakaļ",
     "next": "Tālāk",
     "done": "Gatavs",
     "progress": "Solis {current} no {total}",
     "progressLabel": "Vedņa progress",
+    "status": {
+      "saving": "Saglabā...",
+      "loadingStep": "Ielādē soli..."
+    },
+    "errors": {
+      "saveFailed": "Šo soli neizdevās saglabāt. Pārbaudiet savienojumu un mēģiniet vēlreiz vai izlaidiet iestatīšanu un mainiet to vēlāk Iestatījumos.",
+      "stepLoadFailed": "Šo soli neizdevās ielādēt. Nospiediet Mēģināt vēlreiz vai pārlādējiet lapu.",
+      "stepLoadFailedReload": "Šo soli joprojām neizdevās ielādēt. Pārlādējiet lapu, lai mēģinātu vēlreiz; iepriekšējos soļos saglabātās izvēles tiek paturētas."
+    },
+    "reasons": {
+      "completeStep": "Lai turpinātu, pabeidziet šo soli."
+    },
+    "leaveConfirm": {
+      "title": "Pamest iestatīšanu?",
+      "message": "Iestatīšana vairs netiks atvērta. Iepriekšējos soļos saglabātās izvēles tiek paturētas; šī soļa izmaiņas netiek saglabātas. Visu varat mainīt vēlāk Iestatījumos.",
+      "stay": "Turpināt iestatīšanu",
+      "leave": "Pamest iestatīšanu"
+    },
     "whatsNew": {
       "title": "Jaunumi versijā {version}"
     },
@@ -5655,6 +5676,8 @@
         "catalogLoadFailed": "Neizdevās ielādēt modeļu katalogu",
         "installFailed": "Neizdevās sākt modeļa instalēšanu",
         "removeFailed": "Neizdevās noņemt modeli",
+        "removeHasDependents": "{name} ir nepieciešams modeļiem {models}. Vispirms noņemiet šos modeļus.",
+        "operationInProgress": "Jau notiek modeļa instalēšana, pārinstalēšana vai noņemšana ({name}). Mēģiniet vēlreiz, kad tā būs pabeigta.",
         "actionFailed": "Radās problēma ar {name}",
         "downloadSourceHint": "Ja jūsu tīklā huggingface.co ir bloķēts vai lēns, iestatiet spoguļvietni zemāk esošajā sadaļā Lejupielādes avots.",
         "goToDownloadSource": "Doties uz Lejupielādes avots",

@@ -90,6 +90,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Compute app version
+        id: app-version
+        env:
+          # Inputs via env, not inline ${{ }}, so a crafted version cannot inject shell.
+          VERSION: ${{ inputs.version }}
+          STRATEGY: ${{ inputs.tag-strategy }}
+        run: |
+          # Dev images get the same <date>-g<hash>-dev string as local builds
+          # instead of the full commit SHA the dev caller passes as
+          # inputs.version (release callers pass the tag, used as is). Image
+          # tags, OCI labels and job outputs keep inputs.version. An empty
+          # BUILD_VERSION disables any pin inherited from the environment.
+          if [ "${STRATEGY}" = "dev" ]; then
+            APP_VERSION=$(BUILD_VERSION='' sh scripts/build-version.sh)
+          else
+            APP_VERSION="${VERSION}"
+          fi
+          echo "version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Baking app version: ${APP_VERSION}"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
@@ -256,7 +276,7 @@ jobs:
           # cannot fail this (GHCR-authoritative) build.
           platforms: ${{ join(fromJson(inputs.platforms), ',') }}
           build-args: |
-            BUILD_VERSION=${{ inputs.version }}
+            BUILD_VERSION=${{ steps.app-version.outputs.version }}
             SENTRY_DSN=${{ secrets.SENTRY_DSN }}
             BUILDKIT_INLINE_CACHE=1
             BASE_IMAGE=${{ needs.base.outputs.base-ref }}

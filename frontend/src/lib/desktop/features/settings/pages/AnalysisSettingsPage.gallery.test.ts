@@ -83,10 +83,12 @@ vi.mock('$lib/utils/api', async () => {
 
 import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import * as modelsApi from '$lib/utils/modelsApi';
+import { MODEL_OPERATION_IN_PROGRESS_KEY } from '$lib/utils/modelsApi';
 import { settingsStore } from '$lib/stores/settings';
 import { toastActions } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
 import { navigation } from '$lib/stores/navigation.svelte';
+import { ApiError } from '$lib/utils/api';
 
 beforeEach(() => {
   // Use jsdom's real Location so pushState updates the URL used by nested tabs.
@@ -218,6 +220,65 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
     await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledTimes(2));
     expect(modelsApi.installModel).toHaveBeenLastCalledWith('test-bird', undefined);
     expect(vi.mocked(modelsApi.fetchCatalog).mock.calls.length).toBe(catalogCallsBeforeRetry);
+  });
+
+  async function startTestBirdInstall(): Promise<void> {
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+  }
+
+  it('shows the in-progress reason and keeps Retry when an install is refused because another operation runs', async () => {
+    const reason = 'A model install is already in progress (Geomodel). Try again when it finishes.';
+    const refusal = new ApiError(reason, 409, new Response(null, { status: 409 }));
+    refusal.errorKey = MODEL_OPERATION_IN_PROGRESS_KEY;
+    vi.mocked(modelsApi.installModel).mockRejectedValue(refusal);
+
+    await startTestBirdInstall();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(reason);
+    expect(alert).not.toHaveTextContent('analysis.gallery.errors.details');
+    expect(screen.getByRole('button', { name: /analysis\.gallery\.retry/ })).toBeInTheDocument();
+    expect(modelsApi.subscribeInstallProgress).not.toHaveBeenCalled();
+
+    await fireEvent.click(screen.getByRole('button', { name: /analysis\.gallery\.retry/ }));
+    await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledTimes(2));
+  });
+
+  it('keeps the details disclosure for an install 409 without the in-progress key', async () => {
+    vi.mocked(modelsApi.installModel).mockRejectedValue(
+      new ApiError('conflict', 409, new Response(null, { status: 409 }))
+    );
+
+    await startTestBirdInstall();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('analysis.gallery.errors.details');
+  });
+
+  it('shows the in-progress reason when a reinstall is refused', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
+    });
+    const reason = 'A model install is already in progress (Geomodel). Try again when it finishes.';
+    const refusal = new ApiError(reason, 409, new Response(null, { status: 409 }));
+    refusal.errorKey = MODEL_OPERATION_IN_PROGRESS_KEY;
+    vi.mocked(modelsApi.reinstallModel).mockRejectedValue(refusal);
+
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.reinstall.*Installed Model/ })
+    );
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(reason);
+    expect(alert).not.toHaveTextContent('analysis.gallery.errors.details');
+    expect(screen.getByRole('button', { name: /analysis\.gallery\.retry/ })).toBeInTheDocument();
   });
 });
 
@@ -365,6 +426,48 @@ describe('AnalysisSettingsPage model gallery in-flight guard and region refetch'
     // cannot prove the model name is interpolated. Assert on the t() call itself
     // that the {name} param is passed through, closing that gap (#1566).
     expect(t).toHaveBeenCalledWith('analysis.gallery.removeSuccess', { name: 'Installed Model' });
+  });
+
+  it('shows the dependents reason instead of the retry hint when a remove is refused', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'geo', name: 'Geomodel', installed: true })],
+    });
+    const reason = 'Geomodel is needed by BirdNET v3.0. Remove those models first.';
+    vi.mocked(modelsApi.uninstallModel).mockRejectedValue(
+      new ApiError(reason, 409, new Response(null, { status: 409 }))
+    );
+
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.remove.*Geomodel/ })
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'analysis.gallery.remove' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(reason);
+    expect(alert).not.toHaveTextContent('analysis.gallery.errors.removeRetryHint');
+    expect(alert).not.toHaveTextContent('analysis.gallery.errors.details');
+  });
+
+  it('keeps the retry hint and details for any other remove failure', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
+    });
+    vi.mocked(modelsApi.uninstallModel).mockRejectedValue(
+      new ApiError('disk error', 500, new Response(null, { status: 500 }))
+    );
+
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.remove.*Installed Model/ })
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'analysis.gallery.remove' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('analysis.gallery.errors.removeRetryHint');
+    expect(alert).toHaveTextContent('analysis.gallery.errors.details');
   });
 });
 

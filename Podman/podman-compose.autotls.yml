@@ -25,6 +25,12 @@ services:
     volumes:
       - ./config:/config
       - ./data:/data
+      # Host mounts for .local names and DNS-SD discovery (opt-in): uncomment only when the
+      # host has avahi and D-Bus (the quadlets handle Avahi themselves). D-Bus needs keep-id
+      # and a non-root uid (uid 0 on the system bus is host root). Never :z or :Z.
+      # See doc/wiki/rtsp-troubleshooting.md.
+      # - /run/avahi-daemon:/run/avahi-daemon:ro
+      # - /run/dbus:/run/dbus:ro
       - ./certs:/certs # For Let's Encrypt certificates
     # Mount HLS stream segment files directory as tmpfs (RAM disk). mode=1777 (a
     # sticky world-writable dir like /tmp) keeps it writable whatever UID the app

@@ -5342,12 +5342,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Lataa sivu uudelleen"
+    },
     "skip": "Ohita",
     "back": "Takaisin",
     "next": "Seuraava",
     "done": "Valmis",
     "progress": "Vaihe {current}/{total}",
     "progressLabel": "Ohjatun toiminnon eteneminen",
+    "status": {
+      "saving": "Tallennetaan...",
+      "loadingStep": "Ladataan vaihetta..."
+    },
+    "errors": {
+      "saveFailed": "Tämän vaiheen tallennus epäonnistui. Tarkista yhteys ja yritä uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
+      "stepLoadFailed": "Tämän vaiheen lataus epäonnistui. Paina Yritä uudelleen tai lataa sivu uudelleen.",
+      "stepLoadFailedReload": "Tämän vaiheen lataus epäonnistui edelleen. Lataa sivu uudelleen ja yritä uudestaan; aiemmissa vaiheissa tallennetut valinnat säilyvät."
+    },
+    "reasons": {
+      "completeStep": "Suorita tämä vaihe loppuun jatkaaksesi."
+    },
+    "leaveConfirm": {
+      "title": "Poistutaanko käyttöönotosta?",
+      "message": "Käyttöönotto ei avaudu uudelleen. Aiemmissa vaiheissa tallennetut valinnat säilyvät; tämän vaiheen muutoksia ei tallenneta. Voit muuttaa kaiken myöhemmin Asetuksissa.",
+      "stay": "Jatka käyttöönottoa",
+      "leave": "Poistu käyttöönotosta"
+    },
     "whatsNew": {
       "title": "Uutta versiossa {version}"
     },
@@ -5655,6 +5676,8 @@
         "catalogLoadFailed": "Malliluettelon lataaminen epäonnistui",
         "installFailed": "Mallin asennuksen käynnistäminen epäonnistui",
         "removeFailed": "Mallin poistaminen epäonnistui",
+        "removeHasDependents": "Seuraavat mallit tarvitsevat mallia {name}: {models}. Poista ne ensin.",
+        "operationInProgress": "Mallin asennus, uudelleenasennus tai poisto on jo käynnissä ({name}). Yritä uudelleen, kun se on valmis.",
         "actionFailed": "Kohteen {name} kanssa ilmeni ongelma",
         "downloadSourceHint": "Jos huggingface.co on estetty tai hidas verkossasi, aseta peilipalvelin alla olevaan Latauslähde-osioon.",
         "goToDownloadSource": "Siirry Latauslähteeseen",

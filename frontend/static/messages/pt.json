@@ -5342,12 +5342,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Recarregar página"
+    },
     "skip": "Ignorar",
     "back": "Voltar",
     "next": "Seguinte",
     "done": "Concluído",
     "progress": "Passo {current} de {total}",
     "progressLabel": "Progresso do assistente",
+    "status": {
+      "saving": "A guardar...",
+      "loadingStep": "A carregar passo..."
+    },
+    "errors": {
+      "saveFailed": "Não foi possível guardar este passo. Verifique a ligação e tente novamente, ou ignore a configuração e altere isto mais tarde nas Definições.",
+      "stepLoadFailed": "Não foi possível carregar este passo. Prima Tentar novamente ou recarregue a página.",
+      "stepLoadFailedReload": "Ainda não foi possível carregar este passo. Recarregue a página para tentar novamente; as escolhas guardadas em passos anteriores são mantidas."
+    },
+    "reasons": {
+      "completeStep": "Conclua este passo para continuar."
+    },
+    "leaveConfirm": {
+      "title": "Sair da configuração?",
+      "message": "A configuração não será aberta novamente. As escolhas guardadas em passos anteriores são mantidas; as alterações neste passo não são guardadas. Pode alterar tudo mais tarde nas Definições.",
+      "stay": "Continuar a configurar",
+      "leave": "Sair da configuração"
+    },
     "whatsNew": {
       "title": "Novidades na {version}"
     },
@@ -5655,6 +5676,8 @@
         "catalogLoadFailed": "Falha ao carregar o catálogo de modelos",
         "installFailed": "Falha ao iniciar a instalação do modelo",
         "removeFailed": "Falha ao remover o modelo",
+        "removeHasDependents": "{name} é necessário para {models}. Remova primeiro esses modelos.",
+        "operationInProgress": "Já está em curso uma instalação, reinstalação ou remoção de modelo ({name}). Tente novamente quando terminar.",
         "actionFailed": "Ocorreu um problema com {name}",
         "downloadSourceHint": "Se o huggingface.co estiver bloqueado ou lento em sua rede, defina um espelho na seção Origem de download abaixo.",
         "goToDownloadSource": "Ir para Origem de download",

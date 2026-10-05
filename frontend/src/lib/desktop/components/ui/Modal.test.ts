@@ -372,4 +372,107 @@ describe('Modal', () => {
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(dialog).toHaveAttribute('aria-labelledby', 'modal-title');
   });
+
+  describe('initial focus', () => {
+    // jsdom cannot compute the open transition, so these tests stand in for it:
+    // while `focusBlocked` is set, focus() does nothing, as it does in a browser
+    // while the dialog is still hidden by its visibility transition.
+    let focusBlocked = false;
+    const realFocus = HTMLElement.prototype.focus;
+
+    beforeEach(() => {
+      focusBlocked = false;
+      vi.useFakeTimers({
+        toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame'],
+      });
+      vi.spyOn(HTMLElement.prototype, 'focus').mockImplementation(function (
+        this: HTMLElement,
+        options?: FocusOptions
+      ) {
+        if (!focusBlocked) realFocus.call(this, options);
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    const closeButton = () => screen.getByRole('button', { name: 'Close modal' });
+
+    async function openWithTransition() {
+      const view = modalTest.render({ props: { isOpen: false, title: 'Focus Modal' } });
+      focusBlocked = true;
+      await view.rerender({ isOpen: true });
+      // The first attempt runs after the open render and fails while hidden
+      vi.advanceTimersByTime(0);
+      expect(closeButton()).not.toHaveFocus();
+      return view;
+    }
+
+    it('focuses the first focusable element of a modal created open', () => {
+      modalTest.render({ props: { isOpen: true, title: 'Focus Modal' } });
+
+      vi.advanceTimersByTime(0);
+
+      expect(closeButton()).toHaveFocus();
+    });
+
+    it('focuses the dialog when its open transition ends', async () => {
+      await openWithTransition();
+
+      focusBlocked = false;
+      screen.getByRole('dialog').dispatchEvent(new Event('transitionend'));
+
+      expect(closeButton()).toHaveFocus();
+    });
+
+    it('retries on animation frames until the dialog can take focus', async () => {
+      await openWithTransition();
+      vi.advanceTimersToNextFrame();
+      vi.advanceTimersToNextFrame();
+      expect(closeButton()).not.toHaveFocus();
+
+      focusBlocked = false;
+      vi.advanceTimersToNextFrame();
+
+      expect(closeButton()).toHaveFocus();
+    });
+
+    it('stops retrying after the bounded wait', async () => {
+      await openWithTransition();
+
+      vi.advanceTimersByTime(2000);
+      focusBlocked = false;
+      vi.advanceTimersToNextFrame();
+      screen.getByRole('dialog').dispatchEvent(new Event('transitionend'));
+
+      expect(closeButton()).not.toHaveFocus();
+    });
+
+    it('stops retrying when the modal closes before it could take focus', async () => {
+      const view = await openWithTransition();
+
+      await view.rerender({ isOpen: false });
+      focusBlocked = false;
+      vi.advanceTimersToNextFrame();
+      screen.getByRole('dialog', { hidden: true }).dispatchEvent(new Event('transitionend'));
+
+      expect(closeButton()).not.toHaveFocus();
+    });
+
+    it('leaves focus alone once it is inside the dialog', async () => {
+      modalTest.render({ props: { isOpen: true, type: 'confirm', title: 'Focus Modal' } });
+      vi.advanceTimersByTime(0);
+      const cancel = screen.getByRole('button', { name: 'Cancel' });
+      const confirm = screen.getByRole('button', { name: 'Confirm' });
+      expect(cancel).toHaveFocus();
+
+      confirm.focus();
+      vi.advanceTimersToNextFrame();
+      screen.getByRole('dialog').dispatchEvent(new Event('transitionend'));
+
+      expect(confirm).toHaveFocus();
+    });
+  });
 });

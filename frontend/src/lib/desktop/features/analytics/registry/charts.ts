@@ -33,11 +33,7 @@ import type {
   AccumulationPoint,
 } from '../components/charts/d3/utils/accumulation';
 import SpeciesPhenologyChart from '../components/charts/d3/SpeciesPhenologyChart.svelte';
-import type {
-  PhenologyData,
-  PhenologyDatum,
-  PhenologyRow,
-} from '../components/charts/d3/utils/phenology';
+import type { PhenologyData, PhenologyDatum } from '../components/charts/d3/utils/phenology';
 import YearOverYearChart from '../components/charts/d3/YearOverYearChart.svelte';
 import { peakCumulative } from '../components/charts/d3/utils/yearOverYear';
 import type {
@@ -330,22 +326,34 @@ async function fetchHeatmap(params: AnalyticsParams, signal?: AbortSignal): Prom
   };
 }
 
+/**
+ * Reads the server-resolved common name off a species payload row. Payloads that name server-chosen
+ * species carry `commonName` so the chart never depends on the selector list's species map (which is
+ * only loaded on tabs with a species filter). Returns the scientific name when the field is missing,
+ * not a string, or blank; otherwise the name is returned trimmed.
+ */
+export function readCommonName(item: { commonName?: unknown }, scientificName: string): string {
+  const name = typeof item.commonName === 'string' ? item.commonName.trim() : '';
+  return name !== '' ? name : scientificName;
+}
+
 // Top-N species the ridgeline requests; mirrors the chart's maxSpecies cap and the server default.
 const SPECIES_RIDGELINE_LIMIT = 5;
 const SPECIES_DISTRIBUTION_BUCKETS = 24;
 
 interface SpeciesDistributionDatum {
   scientificName: string;
+  commonName: string;
   density: number[];
   total: number;
 }
 
 /**
- * Who-sings-when ridgeline: per-species normalized 24-bucket hour-of-day distributions. With no
- * species selected it is the top-N by detection volume in range; with a selection it is those species
- * (still volume-ordered, capped at the limit), so Clear reverts to the top-N. Server-ranked and
- * server-normalized; this defensively coerces the array payload. Common names are resolved later
- * (registry mapProps) from the hub's species map.
+ * Who-sings-when ridgeline: per-species normalized 24-bucket hour-of-day distributions for the
+ * selected species (volume-ordered, capped at the limit). With no selection it returns empty so the
+ * card shows its pick-species state. Server-ranked and server-normalized; this defensively coerces the
+ * array payload. Each row carries the server-resolved common name, so it never depends on the hub's
+ * species map.
  */
 async function fetchSpeciesDistribution(
   params: AnalyticsParams,
@@ -378,7 +386,12 @@ async function fetchSpeciesDistribution(
   return data
     .map(raw => {
       if (!raw || typeof raw !== 'object') return null;
-      const item = raw as { scientificName?: unknown; buckets?: unknown; total?: unknown };
+      const item = raw as {
+        scientificName?: unknown;
+        commonName?: unknown;
+        buckets?: unknown;
+        total?: unknown;
+      };
       const scientificName = typeof item.scientificName === 'string' ? item.scientificName : '';
       if (!scientificName) return null;
       // Coerce every bucket to a finite number; pad/truncate defensively to 24 so the chart's
@@ -391,7 +404,7 @@ async function fetchSpeciesDistribution(
         density.push(typeof b === 'number' && Number.isFinite(b) ? b : 0);
       }
       const total = typeof item.total === 'number' && Number.isFinite(item.total) ? item.total : 0;
-      return { scientificName, density, total };
+      return { scientificName, commonName: readCommonName(item, scientificName), density, total };
     })
     .filter((d): d is SpeciesDistributionDatum => d !== null);
 }
@@ -403,17 +416,17 @@ const SUCCESSION_BUCKETS = 24;
 
 interface SuccessionDatum {
   scientificName: string;
+  commonName: string;
   counts: number[];
   total: number;
 }
 
 /**
- * Acoustic succession streamgraph: per-species raw 24-bucket hour-of-day detection counts. With no
- * species selected it is the top-N by detection volume in range (the diel acoustic handover among the
- * dominant species); with a selection it is those species (still volume-ordered, capped at the
- * limit), so Clear reverts to the top-N. The server ranks. Defensively coerces the array payload,
- * padding/truncating counts to 24 so the chart's hour axis stays well-defined even on a malformed
- * payload.
+ * Acoustic succession streamgraph: per-species raw 24-bucket hour-of-day detection counts for the
+ * selected species (volume-ordered, capped at the limit), showing the diel acoustic handover. With no
+ * selection it returns empty so the card shows its pick-species state. The server ranks. Defensively
+ * coerces the array payload, padding/truncating counts to 24 so the chart's hour axis stays
+ * well-defined even on a malformed payload. Each row carries the server-resolved common name.
  */
 async function fetchAcousticSuccession(
   params: AnalyticsParams,
@@ -445,7 +458,12 @@ async function fetchAcousticSuccession(
   return data
     .map(raw => {
       if (!raw || typeof raw !== 'object') return null;
-      const item = raw as { scientificName?: unknown; counts?: unknown; total?: unknown };
+      const item = raw as {
+        scientificName?: unknown;
+        commonName?: unknown;
+        counts?: unknown;
+        total?: unknown;
+      };
       const scientificName = typeof item.scientificName === 'string' ? item.scientificName : '';
       if (!scientificName) return null;
       // Coerce every count to a finite, non-negative number; pad/truncate to 24 so the hour axis
@@ -458,7 +476,7 @@ async function fetchAcousticSuccession(
         counts.push(typeof c === 'number' && Number.isFinite(c) ? Math.max(0, c) : 0);
       }
       const total = typeof item.total === 'number' && Number.isFinite(item.total) ? item.total : 0;
-      return { scientificName, counts, total };
+      return { scientificName, commonName: readCommonName(item, scientificName), counts, total };
     })
     .filter((d): d is SuccessionDatum => d !== null);
 }
@@ -623,14 +641,15 @@ const MAX_CONFIDENCE_BINS = 50;
 
 interface ConfidenceDistributionDatum {
   scientificName: string;
+  commonName: string;
   density: number[];
   total: number;
 }
 
 /**
  * Confidence distribution per species: the top-N species by detection volume, each with a normalized
- * histogram of detection confidence scores (bins over 0..1). Like the who-sings-when ridgeline
- * (#1159) it always requests the top-N and does not honor the species filter, so the chart compares
+ * histogram of detection confidence scores (bins over 0..1). It always requests the top-N and does
+ * not honor the species filter, so the chart compares
  * several species' confidence shapes rather than collapsing to a single ridge; the server ranks and
  * normalizes. Defensively coerces the array payload, keeping the server's (variable) bin count.
  */
@@ -658,7 +677,12 @@ async function fetchConfidenceDistribution(
   return data
     .map(raw => {
       if (!raw || typeof raw !== 'object') return null;
-      const item = raw as { scientificName?: unknown; bins?: unknown; total?: unknown };
+      const item = raw as {
+        scientificName?: unknown;
+        commonName?: unknown;
+        bins?: unknown;
+        total?: unknown;
+      };
       const scientificName = typeof item.scientificName === 'string' ? item.scientificName : '';
       if (!scientificName) return null;
       // Coerce every bin to a finite number; keep the server's bin count (variable, unlike the
@@ -669,7 +693,7 @@ async function fetchConfidenceDistribution(
         .slice(0, MAX_CONFIDENCE_BINS)
         .map(b => (typeof b === 'number' && Number.isFinite(b) ? b : 0));
       const total = typeof item.total === 'number' && Number.isFinite(item.total) ? item.total : 0;
-      return { scientificName, density, total };
+      return { scientificName, commonName: readCommonName(item, scientificName), density, total };
     })
     .filter((d): d is ConfidenceDistributionDatum => d !== null);
 }
@@ -796,6 +820,7 @@ const SPECIES_PHENOLOGY_LIMIT = 12;
 
 interface PhenologyResponseItem {
   scientificName?: unknown;
+  commonName?: unknown;
   firstSeen?: unknown;
   lastSeen?: unknown;
   count?: unknown;
@@ -805,7 +830,7 @@ interface PhenologyResponseItem {
  * Arrival/departure phenology: the top-N species by detection volume in range, each with its first
  * and last in-range detection date (station-local YYYY-MM-DD) and detection count. Server-ranked and
  * server-sorted by arrival; this defensively coerces the array payload, dropping rows missing either
- * date. Common names are resolved later (registry mapProps) from the hub's species map.
+ * date. Each row carries the server-resolved common name, so it never depends on the hub's species map.
  */
 async function fetchSpeciesPhenology(
   params: AnalyticsParams,
@@ -837,7 +862,13 @@ async function fetchSpeciesPhenology(
       // A residency bar needs both endpoints; a row missing either date is unrenderable, so drop it.
       if (!scientificName || !firstSeen || !lastSeen) return null;
       const count = typeof item.count === 'number' && Number.isFinite(item.count) ? item.count : 0;
-      return { scientificName, firstSeen, lastSeen, count };
+      return {
+        scientificName,
+        commonName: readCommonName(item, scientificName),
+        firstSeen,
+        lastSeen,
+        count,
+      };
     })
     .filter((d): d is PhenologyDatum => d !== null);
 }
@@ -873,14 +904,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     fetch: fetchSpeciesDistribution,
     // Always a view of the user's species selection (empty selection shows the card's empty state, so
     // this only ever renders selected species).
-    mapProps: (data, _params, ctx) => ({
-      series: (data as SpeciesDistributionDatum[]).map(d => ({
-        scientificName: d.scientificName,
-        commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
-        density: d.density,
-        total: d.total,
-      })),
-    }),
+    mapProps: data => ({ series: data as SpeciesDistributionDatum[] }),
     size: 'full',
     supports: { species: true, source: false },
     // A ridgeline needs at least a couple of species to read as one; one lonely ridge is not useful.
@@ -899,14 +923,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     // Always a view of the user's species selection (empty selection shows the card's empty state, so
     // this only ever renders selected species). The fetch result is the raw row array, so the default
     // array-length count (the band count) drives the not-enough-data gate.
-    mapProps: (data, _params, ctx) => ({
-      series: (data as SuccessionDatum[]).map(d => ({
-        scientificName: d.scientificName,
-        commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
-        counts: d.counts,
-        total: d.total,
-      })),
-    }),
+    mapProps: data => ({ series: data as SuccessionDatum[] }),
     size: 'full',
     supports: { species: true, source: false },
     // A streamgraph needs at least a few bands to weave into a visible handover; one or two bands is
@@ -1068,13 +1085,8 @@ export const CHART_REGISTRY: ChartDef[] = [
     // false; the biodiversity tab's siblings (diversity, accumulation) are also species:false, so no
     // dead selector is shown. The fetch result is the raw row array, so the default array-length count
     // (the species count) drives the not-enough-data gate; a one-bar Gantt is not a comparison.
-    mapProps: (data, _params, ctx) => ({
-      data: {
-        rows: (data as PhenologyDatum[]).map((d): PhenologyRow => ({
-          ...d,
-          commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
-        })),
-      } as PhenologyData,
+    mapProps: data => ({
+      data: { rows: data as PhenologyDatum[] } satisfies PhenologyData,
     }),
     size: 'full',
     supports: { species: false, source: false },
@@ -1095,19 +1107,14 @@ export const CHART_REGISTRY: ChartDef[] = [
     // this chart's own i18n keys. The endpoint is always top-N by detection volume and never filters
     // by species, so supports.species is false: this is the only chart in the quality tab, so a
     // species selector there would be an inert control (the note states the chart shows the top N).
-    mapProps: (data, _params, ctx) => {
+    mapProps: data => {
       const rows = data as ConfidenceDistributionDatum[];
       // All species share the server's bin count; fall back to the requested default for an empty
       // result so the formatter's divisor is never zero.
       const firstLen = rows[0]?.density.length ?? 0;
       const binCount = firstLen > 0 ? firstLen : CONFIDENCE_DISTRIBUTION_BINS;
       return {
-        series: rows.map(d => ({
-          scientificName: d.scientificName,
-          commonName: ctx.speciesNames.get(d.scientificName) ?? d.scientificName,
-          density: d.density,
-          total: d.total,
-        })),
+        series: rows,
         // Label bin index i by the confidence at its left edge (i / binCount) as a percentage, so a
         // 20-bin histogram reads 0% / 25% / 50% / 75% at step binCount/4.
         xTickFormat: (index: number) => `${Math.round((index / binCount) * 100)}%`,

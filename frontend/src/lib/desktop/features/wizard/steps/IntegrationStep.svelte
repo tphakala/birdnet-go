@@ -1,22 +1,43 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { settingsActions, settingsStore, type RealtimeSettings } from '$lib/stores/settings';
+  import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
-  import { getLogger } from '$lib/utils/logger';
   import { ShieldCheck, Cloud, HeartHandshake } from '@lucide/svelte';
   import type { WizardStepProps } from '../types';
+  import type { SettingsSectionPayloads } from '$lib/utils/settingsApi';
 
-  const logger = getLogger('IntegrationStep');
-
-  let { onValidChange }: WizardStepProps = $props();
+  let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
   let privacyEnabled = $state(true);
   let birdweatherEnabled = $state(false);
   let birdweatherId = $state('');
   let sentryEnabled = $state(false);
-  let dirty = $state(false);
+
+  /** Sections this step saves, in save order: BirdWeather first because its
+   * token is the value most likely to be rejected, so a failure there writes
+   * nothing. */
+  const SECTIONS = ['birdweather', 'privacyfilter', 'sentry'] as const;
+  type IntegrationSection = (typeof SECTIONS)[number];
+
+  function currentPayloads(): { [S in IntegrationSection]: SettingsSectionPayloads[S] } {
+    return {
+      birdweather: { enabled: birdweatherEnabled, id: birdweatherId },
+      privacyfilter: { enabled: privacyEnabled },
+      sentry: { enabled: sentryEnabled },
+    };
+  }
+
+  // JSON of what each section last held on the server (as far as this step
+  // knows): the values read on mount, then the values of each successful save.
+  // The commit sends only sections that differ, so a retry after a partial
+  // failure repeats only the sections that did not succeed.
+  let savedJson: Record<IntegrationSection, string> = {
+    birdweather: '',
+    privacyfilter: '',
+    sentry: '',
+  };
 
   let isValid = $derived(!birdweatherEnabled || birdweatherId.trim() !== '');
 
@@ -40,46 +61,52 @@
     if (sentry) {
       sentryEnabled = sentry.enabled ?? false;
     }
+    const loaded = currentPayloads();
+    for (const section of SECTIONS) {
+      // eslint-disable-next-line security/detect-object-injection -- section is a member of SECTIONS
+      savedJson[section] = JSON.stringify(loaded[section]);
+    }
   });
 
   function togglePrivacy() {
     privacyEnabled = !privacyEnabled;
-    dirty = true;
   }
 
   function toggleBirdweather() {
     birdweatherEnabled = !birdweatherEnabled;
-    dirty = true;
   }
 
   function toggleSentry() {
     sentryEnabled = !sentryEnabled;
-    dirty = true;
   }
 
-  function markDirty() {
-    dirty = true;
-  }
+  // Next, Back and Done await the commit; it never runs on Skip or Leave setup.
+  onMount(() => registerLeaveHandler?.(commit));
 
-  // Save on unmount — only if user made changes
-  $effect(() => {
-    return () => {
-      if (!dirty) return;
-      settingsActions.updateSection('realtime', {
-        privacyFilter: { enabled: privacyEnabled } as RealtimeSettings['privacyFilter'],
-        birdweather: {
-          enabled: birdweatherEnabled,
-          id: birdweatherId,
-        } as RealtimeSettings['birdweather'],
-      });
-      settingsActions.updateSection('sentry', {
-        enabled: sentryEnabled,
-      });
-      settingsActions.saveSettings().catch(err => {
-        logger.error('Failed to save integration settings', err);
-      });
-    };
+  // Set when the step unmounts, so a commit still in flight sends no further sections.
+  let left = false;
+  onDestroy(() => {
+    left = true;
   });
+
+  // Save the step's edits when the wizard leaves it with Next, Back or Done.
+  // Each changed section is its own request, in SECTIONS order. If Skip closes
+  // the wizard while one section is saving, that request completes but the
+  // remaining sections are not sent.
+  async function commit(): Promise<void> {
+    const next = currentPayloads();
+    for (const section of SECTIONS) {
+      if (left) return;
+      // eslint-disable-next-line security/detect-object-injection -- section is a member of SECTIONS
+      const body = next[section];
+      const json = JSON.stringify(body);
+      // eslint-disable-next-line security/detect-object-injection -- section is a member of SECTIONS
+      if (json === savedJson[section]) continue;
+      await settingsActions.saveSection(section, body);
+      // eslint-disable-next-line security/detect-object-injection -- section is a member of SECTIONS
+      savedJson[section] = json;
+    }
+  }
 </script>
 
 <div class="space-y-3">
@@ -163,7 +190,6 @@
           id="birdweather-id"
           bind:value={birdweatherId}
           placeholder={t('wizard.steps.integration.birdweatherIdPlaceholder')}
-          oninput={markDirty}
         />
       </div>
     </div>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import type { Snippet } from 'svelte';
+  import { untrack, type Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
   import { X } from '@lucide/svelte';
   import { t } from '$lib/i18n';
@@ -11,6 +11,12 @@
   // CSS selector for focusable elements used in focus management
   const FOCUSABLE_SELECTOR =
     'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+  // How long initial focus keeps retrying while the dialog cannot take focus yet.
+  // The open transition hides the dialog (visibility) for its first frame, and
+  // focus() on a hidden element does nothing; 200 ms is the transition, the rest
+  // is headroom for slow devices.
+  const INITIAL_FOCUS_MAX_WAIT_MS = 1000;
 
   type ModalSize =
     'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | '6xl' | '7xl' | 'full';
@@ -59,6 +65,7 @@
 
   let isConfirming = $state(false);
   let modalElement = $state<HTMLDivElement>();
+  let dialogElement = $state<HTMLDivElement>();
   let previousActiveElement: HTMLElement | null = null;
   let focusGeneration = $state(0);
 
@@ -184,6 +191,53 @@
     }
   }
 
+  function isFocusInside(): boolean {
+    return !!dialogElement && dialogElement.contains(document.activeElement);
+  }
+
+  /**
+   * Moves focus into the dialog once it can take focus. A dialog that opens
+   * with its transition is still hidden when this first runs, so focus() does
+   * nothing; it is retried on each animation frame and when the transition
+   * ends, until focus is inside the dialog or the bounded wait runs out. A
+   * dialog created already open takes focus on the first attempt. Returns a
+   * cleanup function that stops any pending retry.
+   */
+  function scheduleInitialFocus(): () => void {
+    let frame: number | undefined;
+    let done = false;
+    // Read without tracking: the open effect must not depend on the element
+    const root = untrack(() => dialogElement);
+
+    const stop = () => {
+      done = true;
+      clearTimeout(firstAttempt);
+      clearTimeout(deadline);
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      root?.removeEventListener('transitionend', attempt);
+    };
+
+    function attempt() {
+      if (done) return;
+      if (!isFocusInside()) setInitialFocus();
+      if (isFocusInside()) {
+        stop();
+        return;
+      }
+      if (frame === undefined) {
+        frame = window.requestAnimationFrame(() => {
+          frame = undefined;
+          attempt();
+        });
+      }
+    }
+
+    root?.addEventListener('transitionend', attempt);
+    const firstAttempt = setTimeout(attempt, 0);
+    const deadline = setTimeout(stop, INITIAL_FOCUS_MAX_WAIT_MS);
+    return stop;
+  }
+
   function restoreFocus() {
     if (previousActiveElement && 'focus' in previousActiveElement) {
       (previousActiveElement as HTMLElement).focus();
@@ -194,11 +248,12 @@
     if (isOpen) {
       previousActiveElement = document.activeElement as HTMLElement;
 
-      setTimeout(() => setInitialFocus(), 0);
+      const stopInitialFocus = scheduleInitialFocus();
 
       document.addEventListener('keydown', handleKeydown);
 
       return () => {
+        stopInitialFocus();
         document.removeEventListener('keydown', handleKeydown);
         restoreFocus();
       };
@@ -207,6 +262,7 @@
 </script>
 
 <div
+  bind:this={dialogElement}
   class={cn(
     'fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 opacity-0 invisible transition-[opacity,visibility] duration-200 ease-out',
     {

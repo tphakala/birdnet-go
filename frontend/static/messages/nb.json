@@ -5342,12 +5342,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Last siden på nytt"
+    },
     "skip": "Hopp over",
     "back": "Tilbake",
     "next": "Neste",
     "done": "Ferdig",
     "progress": "Steg {current} av {total}",
     "progressLabel": "Veiviserfremdrift",
+    "status": {
+      "saving": "Lagrer...",
+      "loadingStep": "Laster trinn..."
+    },
+    "errors": {
+      "saveFailed": "Dette trinnet kunne ikke lagres. Sjekk tilkoblingen og prøv igjen, eller hopp over oppsettet og endre det senere i Innstillinger.",
+      "stepLoadFailed": "Dette trinnet kunne ikke lastes. Trykk på Prøv igjen, eller last siden på nytt.",
+      "stepLoadFailedReload": "Dette trinnet kunne fortsatt ikke lastes. Last siden på nytt for å prøve igjen; valg som er lagret i tidligere trinn beholdes."
+    },
+    "reasons": {
+      "completeStep": "Fullfør dette trinnet for å fortsette."
+    },
+    "leaveConfirm": {
+      "title": "Forlate oppsettet?",
+      "message": "Oppsettet åpnes ikke igjen. Valg som er lagret i tidligere trinn beholdes; endringer i dette trinnet lagres ikke. Du kan endre alt senere i Innstillinger.",
+      "stay": "Fortsett oppsettet",
+      "leave": "Forlat oppsettet"
+    },
     "whatsNew": {
       "title": "Nyheter i {version}"
     },
@@ -5655,6 +5676,8 @@
         "catalogLoadFailed": "Innlasting av modellkatalog mislyktes",
         "installFailed": "Oppstart av modellinstallasjon mislyktes",
         "removeFailed": "Fjerning av modell mislyktes",
+        "removeHasDependents": "{name} brukes av {models}. Fjern disse modellene først.",
+        "operationInProgress": "En installasjon, reinstallasjon eller fjerning av en modell pågår allerede ({name}). Prøv igjen når den er ferdig.",
         "actionFailed": "Det oppsto et problem med {name}",
         "downloadSourceHint": "Hvis huggingface.co er blokkert eller tregt på nettverket ditt, kan du angi en speilserver i seksjonen Nedlastingskilde nedenfor.",
         "goToDownloadSource": "Gå til Nedlastingskilde",

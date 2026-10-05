@@ -5342,12 +5342,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Ladda om sidan"
+    },
     "skip": "Hoppa över",
     "back": "Tillbaka",
     "next": "Nästa",
     "done": "Klar",
     "progress": "Steg {current} av {total}",
     "progressLabel": "Guideförlopp",
+    "status": {
+      "saving": "Sparar...",
+      "loadingStep": "Läser in steg..."
+    },
+    "errors": {
+      "saveFailed": "Det här steget kunde inte sparas. Kontrollera anslutningen och försök igen, eller hoppa över konfigurationen och ändra det senare i Inställningar.",
+      "stepLoadFailed": "Det här steget kunde inte läsas in. Tryck på Försök igen eller ladda om sidan.",
+      "stepLoadFailedReload": "Det här steget kunde fortfarande inte läsas in. Ladda om sidan för att försöka igen; val som sparats i tidigare steg behålls."
+    },
+    "reasons": {
+      "completeStep": "Slutför det här steget för att fortsätta."
+    },
+    "leaveConfirm": {
+      "title": "Lämna konfigurationen?",
+      "message": "Konfigurationen öppnas inte igen. Val som sparats i tidigare steg behålls; ändringar i det här steget sparas inte. Du kan ändra allt senare i Inställningar.",
+      "stay": "Fortsätt konfigurera",
+      "leave": "Lämna konfigurationen"
+    },
     "whatsNew": {
       "title": "Nyheter i {version}"
     },
@@ -5655,6 +5676,8 @@
         "catalogLoadFailed": "Kunde inte ladda modellkatalogen",
         "installFailed": "Kunde inte starta modellinstallation",
         "removeFailed": "Kunde inte ta bort modell",
+        "removeHasDependents": "{name} används av {models}. Ta bort de modellerna först.",
+        "operationInProgress": "En installation, ominstallation eller borttagning av en modell pågår redan ({name}). Försök igen när den är klar.",
         "actionFailed": "Det uppstod ett problem med {name}",
         "downloadSourceHint": "Om huggingface.co är blockerat eller långsamt på ditt nätverk kan du ange en spegelsajt i avsnittet Nedladdningskälla nedan.",
         "goToDownloadSource": "Gå till Nedladdningskälla",

@@ -5342,12 +5342,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Ricarica la pagina"
+    },
     "skip": "Salta",
     "back": "Indietro",
     "next": "Avanti",
     "done": "Fine",
     "progress": "Passo {current} di {total}",
     "progressLabel": "Avanzamento procedura guidata",
+    "status": {
+      "saving": "Salvataggio...",
+      "loadingStep": "Caricamento del passaggio..."
+    },
+    "errors": {
+      "saveFailed": "Impossibile salvare questo passaggio. Controlla la connessione e riprova, oppure salta la configurazione e modificalo più tardi nelle Impostazioni.",
+      "stepLoadFailed": "Impossibile caricare questo passaggio. Premi Riprova o ricarica la pagina.",
+      "stepLoadFailedReload": "Ancora impossibile caricare questo passaggio. Ricarica la pagina per riprovare; le scelte salvate nei passaggi precedenti vengono mantenute."
+    },
+    "reasons": {
+      "completeStep": "Completa questo passaggio per continuare."
+    },
+    "leaveConfirm": {
+      "title": "Uscire dalla configurazione?",
+      "message": "La configurazione non verrà riaperta. Le scelte salvate nei passaggi precedenti vengono mantenute; le modifiche di questo passaggio non vengono salvate. Potrai cambiare tutto più tardi nelle Impostazioni.",
+      "stay": "Continua la configurazione",
+      "leave": "Esci dalla configurazione"
+    },
     "whatsNew": {
       "title": "Novità nella {version}"
     },
@@ -5655,6 +5676,8 @@
         "catalogLoadFailed": "Impossibile caricare il catalogo dei modelli",
         "installFailed": "Impossibile avviare l'installazione del modello",
         "removeFailed": "Impossibile rimuovere il modello",
+        "removeHasDependents": "{name} è richiesto da {models}. Rimuovi prima questi modelli.",
+        "operationInProgress": "È già in corso un'installazione, reinstallazione o rimozione di un modello ({name}). Riprova al termine.",
         "actionFailed": "Si è verificato un problema con {name}",
         "downloadSourceHint": "Se huggingface.co è bloccato o lento sulla tua rete, imposta un mirror nella sezione Sorgente di download sottostante.",
         "goToDownloadSource": "Vai a Sorgente di download",

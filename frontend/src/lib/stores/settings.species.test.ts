@@ -130,6 +130,11 @@ describe('Species Settings Store', () => {
   });
 
   describe('Save Operation', () => {
+    beforeEach(() => {
+      // saveSettings refuses until a load has succeeded
+      settingsStore.update(state => ({ ...state, dataLoaded: true }));
+    });
+
     it('should send zero values to API when saving', async () => {
       const mockSave = vi.mocked(settingsAPI.save);
       mockSave.mockResolvedValueOnce({ success: true });

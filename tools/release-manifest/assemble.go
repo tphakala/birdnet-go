@@ -29,6 +29,16 @@ const (
 // pipeline.
 var errNoChannels = errors.NewStd("no releases matched a known channel")
 
+// errUnclassifiedReleases is returned when a published release has a tag that
+// matches no channel. It fails the run rather than warning so a mis-tagged
+// release cannot leave the manifest silently stale; the previously published
+// manifest stays in place until the release is retagged, deleted or made a draft.
+var errUnclassifiedReleases = errors.NewStd("published releases match no channel")
+
+// manifestReleaseTag is the tag of the release that hosts manifest.json
+// itself. It is not a build and belongs to no channel.
+const manifestReleaseTag = "manifest"
+
 // buildOptions configures manifest generation.
 type buildOptions struct {
 	Repo           string    // owner/repo
@@ -48,14 +58,17 @@ func buildManifest(ctx context.Context, src releaseSource, opts *buildOptions) (
 		return nil, nil, fmt.Errorf("list releases: %w", err)
 	}
 
-	// Surface version-like releases that matched no channel, so a mis-tagged
-	// release does not vanish from the manifest with zero diagnostics.
-	warnings := unclassifiedWarnings(releases)
-
-	latest := latestPerChannel(releases)
-	if len(latest) == 0 {
-		return nil, warnings, fmt.Errorf("%w in %s", errNoChannels, opts.Repo)
+	latest, unclassified := latestPerChannel(releases)
+	// Refuse to publish while any release matches no channel, so a mis-tagged
+	// release cannot vanish from the manifest unnoticed.
+	if len(unclassified) > 0 {
+		return nil, nil, fmt.Errorf("%w: %s", errUnclassifiedReleases, strings.Join(unclassified, ", "))
 	}
+	if len(latest) == 0 {
+		return nil, nil, fmt.Errorf("%w in %s", errNoChannels, opts.Repo)
+	}
+
+	var warnings []string
 
 	m := &manifest.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
@@ -79,48 +92,32 @@ func buildManifest(ctx context.Context, src releaseSource, opts *buildOptions) (
 }
 
 // latestPerChannel selects, for each channel, the published release with the
-// most recent publication time. Drafts and releases belonging to no channel
-// (e.g. the "manifest" release itself) are ignored.
-func latestPerChannel(releases []ghRelease) map[string]ghRelease {
-	latest := make(map[string]ghRelease)
-	for _, r := range releases {
-		if r.Draft {
-			continue
-		}
-		channel, ok := manifest.ClassifyTag(r.TagName)
-		if !ok {
-			continue
-		}
-		// Deterministic selection: newest by publish time, and on an exact
-		// timestamp tie prefer the lexicographically greater tag so the result
-		// does not depend on the API's (undocumented) tie ordering.
-		cur, exists := latest[channel]
-		if !exists || r.PublishedAt.After(cur.PublishedAt) ||
-			(r.PublishedAt.Equal(cur.PublishedAt) && r.TagName > cur.TagName) {
-			latest[channel] = r
-		}
-	}
-	return latest
-}
-
-// unclassifiedWarnings reports non-draft releases whose tag looks like a version
-// (starts with "v" or "nightly-") but matched no channel, e.g. a beta tagged
-// with an unsupported pre-release form.
-func unclassifiedWarnings(releases []ghRelease) []string {
-	var warnings []string
+// most recent publication time; on an exact timestamp tie the
+// lexicographically greater tag wins, so the result does not depend on the
+// API's (undocumented) tie ordering. Drafts and the manifest release are
+// skipped. It also returns the tags of the other releases that feed no
+// channel.
+func latestPerChannel(releases []ghRelease) (latest map[string]ghRelease, unclassified []string) {
+	latest = make(map[string]ghRelease)
 	for i := range releases {
-		r := releases[i]
-		if r.Draft {
+		r := &releases[i]
+		if r.Draft || r.TagName == manifestReleaseTag {
 			continue
 		}
-		if _, ok := manifest.ClassifyTag(r.TagName); ok {
+		channels := manifest.ReleaseChannels(r.TagName)
+		if channels == nil {
+			unclassified = append(unclassified, r.TagName)
 			continue
 		}
-		if strings.HasPrefix(r.TagName, "v") || strings.HasPrefix(r.TagName, "nightly-") {
-			warnings = append(warnings, fmt.Sprintf("release %q matched no channel and was skipped", r.TagName))
+		for _, channel := range channels {
+			cur, exists := latest[channel]
+			if !exists || r.PublishedAt.After(cur.PublishedAt) ||
+				(r.PublishedAt.Equal(cur.PublishedAt) && r.TagName > cur.TagName) {
+				latest[channel] = *r
+			}
 		}
 	}
-	return warnings
+	return latest, unclassified
 }
 
 // buildChannel converts a single GitHub release into a manifest Channel.
@@ -192,12 +189,13 @@ func dockerRefs(opts *buildOptions, channelName, version string) *manifest.Docke
 	if opts.GHCRImage == "" && opts.DockerHubImage == "" {
 		return nil
 	}
-	// The nightly dated image tag is derived from the build version, which can
-	// drift from the GitHub release tag on a retry (the release tag gains a
-	// "-<run_number>" suffix the image never gets). Only advertise a
-	// version-pinned ref for channels whose release tag is guaranteed to match
-	// the pushed image tag; nightly installs track the moving channel tag.
-	pinned := channelName != manifest.ChannelNightly
+	// A legacy nightly-YYYYMMDD image tag was derived from the build version,
+	// which can drift from the GitHub release tag on a retry (the release tag
+	// gains a "-<run_number>" suffix the image never gets). Only advertise a
+	// version-pinned ref for tag forms whose release tag is guaranteed to match
+	// the pushed image tag; legacy nightly installs track the moving tag.
+	tagChannel, _ := manifest.ClassifyTag(version)
+	pinned := tagChannel != manifest.ChannelNightly
 	d := &manifest.Docker{}
 	if opts.GHCRImage != "" {
 		d.ChannelTag = opts.GHCRImage + ":" + channelMovingTag(channelName)

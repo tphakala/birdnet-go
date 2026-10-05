@@ -74,6 +74,8 @@ export interface CatalogEntry {
   installedVariantId?: string;
   /** The variant the gallery preselects for this host, absent when not eligible. */
   recommendedVariantId?: string;
+  /** Catalog IDs installed with this model; absent when it has none. May name hidden components the catalog does not list. */
+  dependsOn?: string[];
 }
 
 /** Response wrapper for the catalog endpoint. */

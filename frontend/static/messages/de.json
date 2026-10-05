@@ -5342,12 +5342,33 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Seite neu laden"
+    },
     "skip": "Überspringen",
     "back": "Zurück",
     "next": "Weiter",
     "done": "Fertig",
     "progress": "Schritt {current} von {total}",
     "progressLabel": "Assistent-Fortschritt",
+    "status": {
+      "saving": "Wird gespeichert...",
+      "loadingStep": "Schritt wird geladen..."
+    },
+    "errors": {
+      "saveFailed": "Dieser Schritt konnte nicht gespeichert werden. Prüfen Sie die Verbindung und versuchen Sie es erneut, oder überspringen Sie die Einrichtung und ändern Sie dies später in den Einstellungen.",
+      "stepLoadFailed": "Dieser Schritt konnte nicht geladen werden. Klicken Sie auf Erneut versuchen oder laden Sie die Seite neu.",
+      "stepLoadFailedReload": "Dieser Schritt konnte weiterhin nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen; in früheren Schritten gespeicherte Auswahlen bleiben erhalten."
+    },
+    "reasons": {
+      "completeStep": "Schließen Sie diesen Schritt ab, um fortzufahren."
+    },
+    "leaveConfirm": {
+      "title": "Einrichtung verlassen?",
+      "message": "Die Einrichtung wird nicht erneut geöffnet. In früheren Schritten gespeicherte Auswahlen bleiben erhalten; Änderungen in diesem Schritt werden nicht gespeichert. Sie können später alles in den Einstellungen ändern.",
+      "stay": "Einrichtung fortsetzen",
+      "leave": "Einrichtung verlassen"
+    },
     "whatsNew": {
       "title": "Neuigkeiten in {version}"
     },
@@ -5655,6 +5676,8 @@
         "catalogLoadFailed": "Modellkatalog konnte nicht geladen werden",
         "installFailed": "Modellinstallation konnte nicht gestartet werden",
         "removeFailed": "Modell konnte nicht entfernt werden",
+        "removeHasDependents": "{name} wird von {models} benötigt. Entfernen Sie zuerst diese Modelle.",
+        "operationInProgress": "Eine Modellinstallation, Neuinstallation oder Entfernung läuft bereits ({name}). Versuchen Sie es erneut, wenn sie abgeschlossen ist.",
         "actionFailed": "Es gab ein Problem mit {name}",
         "downloadSourceHint": "Wenn huggingface.co in Ihrem Netzwerk blockiert oder langsam ist, richten Sie im Abschnitt Download-Quelle unten einen Spiegelserver ein.",
         "goToDownloadSource": "Zur Download-Quelle",

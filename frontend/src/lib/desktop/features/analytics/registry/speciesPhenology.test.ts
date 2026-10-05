@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { CHART_REGISTRY } from './charts';
-import type { AnalyticsParams, ChartPropsContext } from './types';
+import { makeAnalyticsParams, makeChartCtx, stubFetchJson } from './__tests__/registryFixtures';
 import type { PhenologyData, PhenologyDatum } from '../components/charts/d3/utils/phenology';
 
 // Verifies the species-phenology registry entry: its placement/flags, the default (array-length)
@@ -15,26 +15,6 @@ if (!def) {
   throw new Error('species-phenology chart def is required');
 }
 const chartDef = def;
-
-function makeParams(): AnalyticsParams {
-  return {
-    range: 'month',
-    start: '2026-03-01',
-    end: '2026-03-31',
-    species: [],
-    source: '',
-    startDate: new Date('2026-03-01T00:00:00'),
-    endDate: new Date('2026-03-31T00:00:00'),
-  };
-}
-
-function makeCtx(names: Record<string, string>): ChartPropsContext {
-  return {
-    options: {},
-    onParamsChange: vi.fn(),
-    speciesNames: new Map(Object.entries(names)),
-  };
-}
 
 describe('species-phenology chart def', () => {
   beforeEach(() => {
@@ -60,7 +40,13 @@ describe('species-phenology chart def', () => {
 
   it('fetches and coerces the array payload, dropping rows missing a name or either date', async () => {
     const payload = [
-      { scientificName: 'Apus apus', firstSeen: '2026-03-01', lastSeen: '2026-03-20', count: 40 },
+      {
+        scientificName: 'Apus apus',
+        commonName: 'Common Swift',
+        firstSeen: '2026-03-01',
+        lastSeen: '2026-03-20',
+        count: 40,
+      },
       null,
       { scientificName: 'X', firstSeen: '2026-03-01' }, // missing lastSeen -> dropped
       { firstSeen: '2026-03-01', lastSeen: '2026-03-02', count: 1 }, // missing name -> dropped
@@ -71,15 +57,9 @@ describe('species-phenology chart def', () => {
         count: 'x',
       }, // non-finite count -> 0
     ];
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: () => Promise.resolve(payload),
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    const fetchMock = stubFetchJson(payload);
 
-    const result = (await chartDef.fetch(makeParams())) as PhenologyDatum[];
+    const result = (await chartDef.fetch(makeAnalyticsParams())) as PhenologyDatum[];
     expect(fetchMock).toHaveBeenCalledOnce();
     const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain('/api/v2/analytics/species/phenology');
@@ -90,13 +70,16 @@ describe('species-phenology chart def', () => {
     expect(result).toHaveLength(2);
     expect(result[0]).toEqual({
       scientificName: 'Apus apus',
+      commonName: 'Common Swift',
       firstSeen: '2026-03-01',
       lastSeen: '2026-03-20',
       count: 40,
     });
     // Non-finite count coerces to 0 rather than leaking NaN into the chart.
+    // No commonName in the payload -> falls back to the scientific name.
     expect(result[1]).toEqual({
       scientificName: 'Hirundo rustica',
+      commonName: 'Hirundo rustica',
       firstSeen: '2026-03-05',
       lastSeen: '2026-03-28',
       count: 0,
@@ -104,35 +87,33 @@ describe('species-phenology chart def', () => {
   });
 
   it('throws when the payload is not an array', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: () => Promise.resolve({ not: 'an array' }),
-      })
-    );
-    await expect(chartDef.fetch(makeParams())).rejects.toThrow();
+    stubFetchJson({ not: 'an array' });
+    await expect(chartDef.fetch(makeAnalyticsParams())).rejects.toThrow();
   });
 
-  it('enriches rows with the resolved common name, falling back to the scientific name', () => {
+  it('uses the payload common name even when the hub species map is empty (#4459)', () => {
     expect(chartDef.mapProps).toBeDefined();
     const raw: PhenologyDatum[] = [
-      { scientificName: 'Apus apus', firstSeen: '2026-03-01', lastSeen: '2026-03-20', count: 40 },
+      {
+        scientificName: 'Apus apus',
+        commonName: 'Common Swift',
+        firstSeen: '2026-03-01',
+        lastSeen: '2026-03-20',
+        count: 40,
+      },
       {
         scientificName: 'Hirundo rustica',
+        commonName: 'Hirundo rustica',
         firstSeen: '2026-03-05',
         lastSeen: '2026-03-28',
         count: 25,
       },
     ];
-    const ctx = makeCtx({ 'Apus apus': 'Common Swift' });
-    const props = chartDef.mapProps?.(raw, makeParams(), ctx) ?? {};
+    // A fresh load of the biodiversity tab never fetches the species summary, so the map is empty.
+    const props = chartDef.mapProps?.(raw, makeAnalyticsParams(), makeChartCtx({})) ?? {};
     const data = props.data as PhenologyData;
     expect(data.rows).toHaveLength(2);
     expect(data.rows[0].commonName).toBe('Common Swift');
-    // No mapping -> falls back to the scientific name.
     expect(data.rows[1].commonName).toBe('Hirundo rustica');
   });
 });

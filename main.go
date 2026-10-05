@@ -46,7 +46,8 @@ func splitValidationWarning(warning string) (component, message string) {
 // buildTime is the time when the binary was built.
 var buildDate string
 
-// version holds the Git version tag
+// version holds the build version from scripts/build-version.sh (a release
+// tag, <date>-g<hash>-dev, or unknown), injected with -ldflags.
 var version string
 
 //go:embed internal/imageprovider/data/latest.json

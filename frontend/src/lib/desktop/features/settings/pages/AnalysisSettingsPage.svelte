@@ -44,6 +44,7 @@
     uninstallModel,
     subscribeInstallProgress,
     isNetworkDownloadError,
+    MODEL_OPERATION_IN_PROGRESS_KEY,
   } from '$lib/utils/modelsApi';
   import { invalidateModels } from '$lib/stores/models.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -170,6 +171,9 @@
   // so switching tabs cannot strand it. Carries enough to offer a real Retry and,
   // for a download-reachability failure, a pointer to the Download Source setting.
   type GalleryActionKind = 'install' | 'reinstall' | 'remove';
+  // HTTP status the models API returns when a remove is refused because
+  // installed models still depend on the target.
+  const HTTP_STATUS_CONFLICT = 409;
   interface GalleryActionError {
     modelId: string;
     modelName: string;
@@ -177,6 +181,7 @@
     message: string; // raw backend/SSE/ApiError text, kept inspectable
     variantId?: string; // reused when retrying an install
     network: boolean; // download could not reach the model host
+    blocked: boolean; // the server refused the action and sent a translated reason (models still need it, or another model operation is running)
   }
   let installError = $state<GalleryActionError | null>(null);
 
@@ -1283,9 +1288,23 @@
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
-      installError = reportActionError(modelId, modelName, 'install', message, variantId);
+      installError = reportActionError(
+        modelId,
+        modelName,
+        'install',
+        message,
+        variantId,
+        isOperationInProgress(e)
+      );
       installingId = null;
     }
+  }
+
+  // True when the server refused an install or reinstall because another model
+  // operation holds its single operation slot. Classified by error_key, not status:
+  // install also answers 409 without a key (ONNX unavailable, incompatible hardware).
+  function isOperationInProgress(e: unknown): boolean {
+    return e instanceof ApiError && e.errorKey === MODEL_OPERATION_IN_PROGRESS_KEY;
   }
 
   // Build a GalleryActionError, classifying whether a mirror endpoint could help.
@@ -1294,7 +1313,8 @@
     modelName: string,
     kind: GalleryActionKind,
     message: string,
-    variantId?: string
+    variantId?: string,
+    blocked = false
   ): GalleryActionError {
     return {
       modelId,
@@ -1306,6 +1326,7 @@
       // enforce that structurally rather than trusting the delete error's text not
       // to contain a download-error substring.
       network: kind !== 'remove' && isNetworkDownloadError(message),
+      blocked,
     };
   }
 
@@ -1336,8 +1357,12 @@
       toastActions.success(t('analysis.gallery.removeSuccess', { name: modelName }));
     } catch (e) {
       const message = e instanceof Error ? e.message : t('analysis.gallery.errors.removeFailed');
+      // A 409 means installed models still depend on this one, or another model
+      // operation is running. Both carry a translated reason, so the banner shows it
+      // instead of the retry hint.
+      const blocked = e instanceof ApiError && e.status === HTTP_STATUS_CONFLICT;
       // A remove failure never involves a download, so it is never network-shaped.
-      installError = reportActionError(modelId, modelName, 'remove', message);
+      installError = reportActionError(modelId, modelName, 'remove', message, undefined, blocked);
     } finally {
       deletingId = null;
     }
@@ -1394,7 +1419,14 @@
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
-      installError = reportActionError(modelId, modelName, 'reinstall', message);
+      installError = reportActionError(
+        modelId,
+        modelName,
+        'reinstall',
+        message,
+        undefined,
+        isOperationInProgress(e)
+      );
       reinstallingId = null;
     }
   }
@@ -2008,6 +2040,14 @@
                 <p class="mt-1 text-[var(--color-base-content)]/80">
                   {t('analysis.gallery.errors.downloadSourceHint')}
                 </p>
+              {:else if installError.blocked}
+                <!-- An action the server refused with a translated reason (a remove
+                     that other models need, or another model operation running): the
+                     server's translated reason is the whole story, so show it in
+                     place of the retry hint and skip the raw-details disclosure. -->
+                <p class="mt-1 text-[var(--color-base-content)]/80">
+                  {installError.message}
+                </p>
               {:else if installError.kind === 'remove'}
                 <!-- A remove failure has no in-banner Retry (removes are not
                      re-run from here); point the user back to the card's own
@@ -2019,16 +2059,18 @@
               <!-- Raw backend/SSE/ApiError text is often long and technical; lead
                    with the plain-English title (and hint where classifiable) and
                    keep the raw message one disclosure click away. -->
-              <details class="mt-1">
-                <summary
-                  class="cursor-pointer text-[var(--color-base-content)]/70 hover:text-[var(--color-base-content)]"
-                >
-                  {t('analysis.gallery.errors.details')}
-                </summary>
-                <p class="mt-1 break-words text-[var(--color-base-content)]/80">
-                  {installError.message}
-                </p>
-              </details>
+              {#if !installError.blocked}
+                <details class="mt-1">
+                  <summary
+                    class="cursor-pointer text-[var(--color-base-content)]/70 hover:text-[var(--color-base-content)]"
+                  >
+                    {t('analysis.gallery.errors.details')}
+                  </summary>
+                  <p class="mt-1 break-words text-[var(--color-base-content)]/80">
+                    {installError.message}
+                  </p>
+                </details>
+              {/if}
             </div>
             <button
               type="button"
