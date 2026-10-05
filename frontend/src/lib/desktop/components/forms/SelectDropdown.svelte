@@ -359,11 +359,10 @@
         break;
 
       case 'Enter': {
+        // Always consumed, so Enter in the search box never submits a surrounding form
+        event.preventDefault();
         const highlighted = safeArrayAccess(filteredOptions, highlightedIndex);
-        if (highlightedIndex >= 0 && highlighted) {
-          event.preventDefault();
-          selectOption(highlighted);
-        }
+        if (highlightedIndex >= 0 && highlighted) selectOption(highlighted);
         break;
       }
     }
@@ -585,7 +584,8 @@
               aria-label={t('components.forms.select.searchOptions')}
               role="searchbox"
               aria-controls="{fieldId}-listbox"
-              aria-activedescendant={highlightedIndex >= 0
+              aria-activedescendant={highlightedIndex >= 0 &&
+              highlightedIndex < filteredOptions.length
                 ? `${fieldId}-option-${highlightedIndex}`
                 : undefined}
             />

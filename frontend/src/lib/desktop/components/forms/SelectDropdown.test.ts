@@ -595,6 +595,20 @@ describe('SelectDropdown Accessibility', () => {
     expect(search).toHaveAttribute('aria-activedescendant', options[0].id);
   });
 
+  it('drops aria-activedescendant when the options shrink below the highlighted index', async () => {
+    const user = userEvent.setup();
+    const { rerender } = selectTest.render({ props: { options: fruit, searchable: true } });
+    await user.click(screen.getAllByRole('button')[0]);
+    const search = await screen.findByRole('searchbox');
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+    expect(search).toHaveAttribute('aria-activedescendant');
+
+    await rerender({ options: fruit.slice(0, 1), searchable: true });
+
+    expect(search).not.toHaveAttribute('aria-activedescendant');
+  });
+
   it('sets no aria-activedescendant when ArrowDown is pressed with no matching options', async () => {
     const { user, search } = await openSearchable();
 
@@ -605,10 +619,12 @@ describe('SelectDropdown Accessibility', () => {
   });
 
   it('does nothing on Enter in the search box when no option is highlighted', async () => {
-    const { user, onChange } = await openSearchable();
+    const { onChange } = await openSearchable();
 
-    await user.keyboard('{Enter}');
+    // fireEvent returns false when the event was cancelled, which is what stops a form submit
+    const notCancelled = await fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
 
+    expect(notCancelled).toBe(false);
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByRole('listbox')).toBeInTheDocument();
   });
