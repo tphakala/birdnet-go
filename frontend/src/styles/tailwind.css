@@ -601,6 +601,19 @@
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-warning) 12%, transparent);
   }
 
+  /* Keep the state border on hover: the base hover rule is more specific than a plain state class */
+  .input-error:hover:not(:disabled, :focus) {
+    border-color: var(--color-error);
+  }
+
+  .input-success:hover:not(:disabled, :focus) {
+    border-color: var(--color-success);
+  }
+
+  .input-warning:hover:not(:disabled, :focus) {
+    border-color: var(--color-warning);
+  }
+
   /* ----------------------------------------
      SELECT
      ---------------------------------------- */
@@ -653,6 +666,14 @@
   }
 
   .select-success {
+    border-color: var(--color-success);
+  }
+
+  .select-error:hover:not(:disabled, :focus) {
+    border-color: var(--color-error);
+  }
+
+  .select-success:hover:not(:disabled, :focus) {
     border-color: var(--color-success);
   }
 
@@ -720,6 +741,14 @@
   }
 
   .textarea-success {
+    border-color: var(--color-success);
+  }
+
+  .textarea-error:hover:not(:disabled, :focus) {
+    border-color: var(--color-error);
+  }
+
+  .textarea-success:hover:not(:disabled, :focus) {
     border-color: var(--color-success);
   }
 
