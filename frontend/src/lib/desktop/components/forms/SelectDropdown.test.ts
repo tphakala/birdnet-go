@@ -586,6 +586,15 @@ describe('SelectDropdown Accessibility', () => {
     expect(document.activeElement).toBe(screen.getByRole('button'));
   });
 
+  it('moves the highlight up with ArrowUp in the search box', async () => {
+    const { user, search } = await openSearchable();
+
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowUp}');
+
+    const options = screen.getAllByRole('option');
+    expect(search).toHaveAttribute('aria-activedescendant', options[0].id);
+  });
+
   it('sets no aria-activedescendant when ArrowDown is pressed with no matching options', async () => {
     const { user, search } = await openSearchable();
 

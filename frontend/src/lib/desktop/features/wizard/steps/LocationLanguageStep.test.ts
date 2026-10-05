@@ -60,6 +60,7 @@ vi.mock('$lib/stores/settings', async () => {
 });
 
 import LocationLanguageStep from './LocationLanguageStep.svelte';
+import LanguageSelector from '$lib/desktop/components/ui/LanguageSelector.svelte';
 import { settingsActions, settingsStore } from '$lib/stores/settings';
 import { setLocale } from '$lib/i18n';
 import { flushAsync, renderStep } from './stepTestUtils';
@@ -378,5 +379,15 @@ describe('LocationLanguageStep Accessibility', () => {
     expect(trigger).toHaveAccessibleDescription(
       'wizard.steps.locationLanguage.speciesLanguageHelp'
     );
+  });
+
+  it('describes the UI language selector with its help text', () => {
+    vi.mocked(LanguageSelector).mockClear();
+    const { container } = renderStep(LocationLanguageStep);
+
+    const help = container.querySelector('p[id^="wizard-ui-language-help"]');
+    expect(help).toHaveTextContent('wizard.steps.locationLanguage.uiLanguageHelp');
+    const props = vi.mocked(LanguageSelector).mock.calls[0]?.[1];
+    expect(props).toMatchObject({ 'aria-describedby': help?.id });
   });
 });

@@ -742,4 +742,17 @@ describe('WizardDialog Accessibility', () => {
 
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
   });
+
+  it('colours the footer alert with the error text token', async () => {
+    stepControl.leave = vi.fn(() => Promise.reject(new Error('save failed')));
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+
+    await user.click(primaryButton());
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.saveFailed')
+    );
+    expect(screen.getByRole('alert')).toHaveClass('text-[var(--text-error)]');
+  });
 });

@@ -35,3 +35,13 @@ describe('DetectionStep - leave handler', () => {
     expect(settingsActions.saveSection).toHaveBeenCalledWith('birdnet', { threshold: 0.9 });
   });
 });
+
+describe('DetectionStep Accessibility', () => {
+  it('does not colour the Recommended badge text with the primary colour', () => {
+    renderStep(DetectionStep);
+
+    const badge = screen.getByText('wizard.steps.detection.balancedRecommended');
+    expect(badge).toHaveClass('text-[var(--color-base-content)]');
+    expect(badge).not.toHaveClass('text-[var(--color-primary)]');
+  });
+});

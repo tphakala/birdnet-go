@@ -872,4 +872,17 @@ describe('AudioSourceStep Accessibility', () => {
 
     expect(await screen.findByRole('listbox', { name: `${KEY}.deviceLabel` })).toBeInTheDocument();
   });
+
+  it('colours the device failure and URL error texts with the error text token', async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error('boom'));
+    renderStep(AudioSourceStep);
+    await flushAsync();
+
+    const failure = await screen.findByText(`${KEY}.devicesLoadFailed`);
+    expect(failure).toHaveClass('text-[var(--text-error)]');
+
+    await chooseStream('http://x');
+    await leaveUrl();
+    expect(urlAlert()).toHaveClass('text-[var(--text-error)]');
+  });
 });
