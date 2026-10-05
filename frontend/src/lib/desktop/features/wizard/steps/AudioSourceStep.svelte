@@ -104,14 +104,10 @@
     if (rtspUrl.trim() === '') return 'wizard.steps.audioSource.reasons.enterUrl';
     return isRtspUrl(rtspUrl) ? undefined : 'wizard.steps.audioSource.reasons.urlScheme';
   });
-  let urlMalformed = $derived(
-    sourceType === 'rtsp' && incompleteReason === 'wizard.steps.audioSource.reasons.urlScheme'
-  );
-  // Set when the user leaves the field holding a malformed URL, and on open for a
-  // saved malformed URL; cleared once the value is valid or empty. Display only:
-  // Next's reason does not depend on it.
-  let urlLeftMalformed = $state(isMalformedRtspUrl(initial.primaryStreamUrl ?? ''));
-  let showUrlError = $derived(urlMalformed && urlLeftMalformed);
+  // Set when the user leaves the URL field and on open for a saved URL; cleared by
+  // every edit. Display only: Next's reason does not depend on it.
+  let urlLeft = $state(initial.primaryStreamUrl !== null);
+  let showUrlError = $derived(urlLeft && sourceType === 'rtsp' && isMalformedRtspUrl(rtspUrl));
   // Primitives, so the effect below runs only when one of them changes
   let valid = $derived(skipped || incompleteReason === undefined);
   let reason = $derived(skipped ? undefined : incompleteReason);
@@ -186,17 +182,11 @@
 
   function onUrlInput() {
     markEdited();
-    if (!isMalformedRtspUrl(rtspUrl)) urlLeftMalformed = false;
+    urlLeft = false;
   }
 
-  function onUrlFieldLeft(event: FocusEvent) {
-    if (
-      event.target instanceof HTMLInputElement &&
-      event.target.id === URL_FIELD_ID &&
-      isMalformedRtspUrl(rtspUrl)
-    ) {
-      urlLeftMalformed = true;
-    }
+  function onUrlBlur() {
+    urlLeft = true;
   }
 
   function setSourceType(type: AudioSourceType) {
@@ -377,7 +367,7 @@
   {/if}
 
   {#if sourceType === 'rtsp'}
-    <div onfocusout={onUrlFieldLeft}>
+    <div>
       <label
         for={URL_FIELD_ID}
         class="mb-1 block text-sm font-medium text-[var(--color-base-content)]"
@@ -394,6 +384,7 @@
         aria-describedby={showUrlError ? URL_ERROR_ID : undefined}
         aria-invalid={showUrlError ? 'true' : undefined}
         oninput={onUrlInput}
+        onblur={onUrlBlur}
       />
       <!-- Always rendered with two lines reserved (the message wraps to two in the dialog;
            a longer one would still grow the line): the alert is announced when it fills,

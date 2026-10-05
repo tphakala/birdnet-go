@@ -26,6 +26,8 @@
     'aria-invalid'?: HTMLInputAttributes['aria-invalid'];
     onchange?: (_value: string) => void;
     oninput?: (_value: string) => void;
+    /** Called when the input loses focus, with the current value. */
+    onblur?: (_value: string) => void;
   }
 
   let {
@@ -49,6 +51,7 @@
     'aria-invalid': ariaInvalid,
     onchange,
     oninput,
+    onblur,
     ...rest
   }: Props = $props();
 
@@ -80,6 +83,7 @@
 
   function handleBlur() {
     touched = true;
+    onblur?.(value);
   }
 
   function handleInvalid() {

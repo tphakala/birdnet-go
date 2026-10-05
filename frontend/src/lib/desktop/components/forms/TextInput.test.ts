@@ -78,6 +78,18 @@ describe('TextInput', () => {
     expect(oninput).toHaveBeenCalledWith('typing');
   });
 
+  it('calls onblur with the current value when the input loses focus', async () => {
+    const onblur = vi.fn();
+
+    render(TextInput, { props: { value: 'abc', onblur } });
+
+    const input = screen.getByRole('textbox');
+    await fireEvent.blur(input);
+
+    expect(onblur).toHaveBeenCalledTimes(1);
+    expect(onblur).toHaveBeenCalledWith('abc');
+  });
+
   it('supports different input types', () => {
     render(TextInput, {
       props: {

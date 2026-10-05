@@ -47,10 +47,20 @@ function seed(audio: Record<string, unknown>, streams: unknown[] = []) {
 
 const radio = (name: RegExp) => screen.getByRole('radio', { name });
 
+const urlInput = () => screen.getByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
+const urlAlert = () => screen.getByRole('alert');
+
+async function typeUrl(value: string) {
+  await fireEvent.input(urlInput(), { target: { value } });
+}
+async function leaveUrl() {
+  await fireEvent.blur(urlInput());
+}
+
 async function chooseStream(url = RTSP_URL) {
   await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
-  const input = await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
-  await fireEvent.input(input, { target: { value: url } });
+  await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
+  await typeUrl(url);
 }
 
 // The dropdown trigger has no accessible name of its own in these tests
@@ -264,9 +274,7 @@ describe('AudioSourceStep - leave handler', () => {
     await chooseStream();
     const button = screen.getByRole('button', { name: `${KEY}.setUpLater` });
     await fireEvent.click(button);
-    await fireEvent.input(screen.getByPlaceholderText(`${KEY}.rtspUrlPlaceholder`), {
-      target: { value: OTHER_URL },
-    });
+    await typeUrl(OTHER_URL);
     expect(button).toHaveAttribute('aria-pressed', 'false');
 
     await leave();
@@ -285,9 +293,7 @@ describe('AudioSourceStep - leave handler', () => {
     await chooseStream();
     await expect(leave()).rejects.toThrow('save audio failed');
 
-    await fireEvent.input(screen.getByPlaceholderText(`${KEY}.rtspUrlPlaceholder`), {
-      target: { value: OTHER_URL },
-    });
+    await typeUrl(OTHER_URL);
     await leave();
 
     const calls = vi.mocked(settingsActions.saveSection).mock.calls;
@@ -351,6 +357,12 @@ describe('AudioSourceStep - leave handler', () => {
   });
 });
 
+async function clickRetry() {
+  const retry = await screen.findByRole('button', { name: 'common.retry' });
+  retry.focus();
+  await fireEvent.click(retry);
+}
+
 describe('AudioSourceStep - device loading', () => {
   beforeEach(() => {
     vi.mocked(settingsActions.saveSection).mockClear().mockResolvedValue(undefined);
@@ -375,7 +387,7 @@ describe('AudioSourceStep - device loading', () => {
     renderStep(AudioSourceStep);
     await flushAsync();
 
-    await fireEvent.click(await screen.findByRole('button', { name: 'common.retry' }));
+    await clickRetry();
 
     expect(await deviceTrigger()).toBeVisible();
     expect(api.get).toHaveBeenCalledTimes(2);
@@ -494,34 +506,18 @@ describe('AudioSourceStep - device state reasons', () => {
   });
 });
 
-const urlInput = () => screen.getByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
-const urlAlert = () => screen.getByRole('alert');
-
-// The leave listener is focusout; fireEvent.blur would not reach it
-async function typeUrl(value: string) {
-  await fireEvent.input(urlInput(), { target: { value } });
-}
-async function leaveUrl() {
-  await fireEvent.focusOut(urlInput());
-}
-
 // What the URL field exposes: the alert text, aria-invalid and what aria-describedby points at
-function urlErrorState() {
+function expectUrlError(shown: boolean) {
   const alert = urlAlert();
   const input = urlInput();
-  return {
-    text: alert.textContent.trim(),
-    invalid: input.getAttribute('aria-invalid'),
-    describedBy: input.getAttribute('aria-describedby'),
-    alertId: alert.id,
-  };
-}
-
-function expectedUrlError(shown: boolean) {
-  const { alertId } = urlErrorState();
-  return shown
-    ? { text: `${KEY}.reasons.urlScheme`, invalid: 'true', describedBy: alertId, alertId }
-    : { text: '', invalid: null, describedBy: null, alertId };
+  expect(alert.textContent.trim()).toBe(shown ? `${KEY}.reasons.urlScheme` : '');
+  if (shown) {
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAttribute('aria-describedby', alert.id);
+  } else {
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(input).not.toHaveAttribute('aria-describedby');
+  }
 }
 
 describe('AudioSourceStep - URL error timing', () => {
@@ -530,7 +526,7 @@ describe('AudioSourceStep - URL error timing', () => {
     resetStore();
   });
 
-  it('keeps the URL error hidden while typing while Next still names the scheme', async () => {
+  it('keeps the URL error hidden while typing, then shows it once the field is left, while Next still names the scheme', async () => {
     const onValidChange = vi.fn();
     renderTyped(AudioSourceStep, { props: { onValidChange } });
     await flushAsync();
@@ -539,75 +535,51 @@ describe('AudioSourceStep - URL error timing', () => {
     await waitFor(() =>
       expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.urlScheme`)
     );
-    expect(urlErrorState()).toEqual(expectedUrlError(false));
+    expectUrlError(false);
+
+    await leaveUrl();
+    expectUrlError(true);
+    expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.urlScheme`);
   });
 
-  it('shows the URL error with aria-invalid once the field is left with a malformed URL', async () => {
+  it('hides the error while the field is corrected and shows it again on a new mistake', async () => {
     renderStep(AudioSourceStep);
     await flushAsync();
     await chooseStream('http://x');
     await leaveUrl();
+    expectUrlError(true);
 
-    expect(urlErrorState()).toEqual(expectedUrlError(true));
+    await typeUrl(RTSP_URL);
+    expectUrlError(false);
+    await leaveUrl();
+    expectUrlError(false);
+
+    await typeUrl('rtsp://');
+    expectUrlError(false);
+    await leaveUrl();
+    expectUrlError(true);
+
+    await typeUrl('');
+    await typeUrl('h');
+    expectUrlError(false);
+    await leaveUrl();
+    expectUrlError(true);
+    expect(urlInput()).toHaveValue('h');
   });
 
-  type Step = { type: string } | 'leave' | 'soundcard' | 'stream';
-  it.each<{ name: string; steps: Array<[Step, boolean]> }>([
-    {
-      name: 'a corrected URL then a new mistake',
-      steps: [
-        [{ type: 'http://x' }, false],
-        ['leave', true],
-        [{ type: RTSP_URL }, false],
-        [{ type: 'rtsp:/' }, false],
-        ['leave', true],
-      ],
-    },
-    {
-      name: 'clearing the field then typing again',
-      steps: [
-        [{ type: 'http://x' }, false],
-        ['leave', true],
-        [{ type: '' }, false],
-        [{ type: 'h' }, false],
-        ['leave', true],
-      ],
-    },
-    {
-      name: 'a valid URL that later becomes malformed',
-      steps: [
-        [{ type: RTSP_URL }, false],
-        ['leave', false],
-        [{ type: 'rtsp://' }, false],
-        ['leave', true],
-      ],
-    },
-    {
-      name: 'switching source type away and back',
-      steps: [
-        [{ type: 'http://x' }, false],
-        ['leave', true],
-        ['soundcard', false],
-        ['stream', true],
-      ],
-    },
-  ])('error visibility follows $name', async ({ steps }) => {
+  it('keeps the error when switching source type away and back', async () => {
     renderStep(AudioSourceStep);
     await flushAsync();
-    await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
-    await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
+    await chooseStream('http://x');
+    await leaveUrl();
+    expectUrlError(true);
 
-    for (const [step, shown] of steps) {
-      if (step === 'leave') await leaveUrl();
-      else if (step === 'soundcard') {
-        await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
-        await deviceTrigger();
-        continue;
-      } else if (step === 'stream') {
-        await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
-      } else await typeUrl(step.type);
-      expect(urlErrorState()).toEqual(expectedUrlError(shown));
-    }
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
+    await deviceTrigger();
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
+
+    expectUrlError(true);
+    expect(urlInput()).toHaveValue('http://x');
   });
 
   it('shows the URL error on open for a saved malformed stream URL', async () => {
@@ -615,8 +587,8 @@ describe('AudioSourceStep - URL error timing', () => {
     renderStep(AudioSourceStep);
     await flushAsync();
 
-    await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
-    expect(urlErrorState()).toEqual(expectedUrlError(true));
+    expect(await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`)).toHaveValue('rtsp://');
+    expectUrlError(true);
   });
 
   it('reserves the URL error line so showing it moves nothing', async () => {
@@ -637,37 +609,30 @@ describe('AudioSourceStep - focus', () => {
     resetStore();
   });
 
-  async function clickRetry() {
-    const retry = await screen.findByRole('button', { name: 'common.retry' });
-    retry.focus();
-    await fireEvent.click(retry);
-  }
-
-  it('moves focus to the device dropdown after a successful Retry', async () => {
-    vi.mocked(api.get).mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce([USB]);
-    renderStep(AudioSourceStep);
-    await flushAsync();
-    await clickRetry();
-
-    await waitFor(() =>
-      expect(document.activeElement).toBe(document.getElementById('wizard-audio-device'))
-    );
-  });
-
   it.each([
-    { name: 'empty', next: () => vi.mocked(api.get).mockResolvedValueOnce([]) },
-    { name: 'failed', next: () => vi.mocked(api.get).mockRejectedValueOnce(new Error('again')) },
-  ])('moves focus back to Retry when the reloaded list is $name', async ({ next }) => {
+    {
+      name: 'the device dropdown after a successful reload',
+      next: () => vi.mocked(api.get).mockResolvedValueOnce([USB]),
+      target: () => document.getElementById('wizard-audio-device'),
+    },
+    {
+      name: 'Retry when the reloaded list is empty',
+      next: () => vi.mocked(api.get).mockResolvedValueOnce([]),
+      target: () => screen.getByRole('button', { name: 'common.retry' }),
+    },
+    {
+      name: 'Retry when the reload failed',
+      next: () => vi.mocked(api.get).mockRejectedValueOnce(new Error('again')),
+      target: () => screen.getByRole('button', { name: 'common.retry' }),
+    },
+  ])('Retry moves focus to $name', async ({ next, target }) => {
     vi.mocked(api.get).mockRejectedValueOnce(new Error('boom'));
     next();
     renderStep(AudioSourceStep);
     await flushAsync();
     await clickRetry();
 
-    await waitFor(() => {
-      const retry = screen.getByRole('button', { name: 'common.retry' });
-      expect(document.activeElement).toBe(retry);
-    });
+    await waitFor(() => expect(document.activeElement).toBe(target()));
   });
 
   it('keeps focus inside the step while Retry reloads the list', async () => {
@@ -757,7 +722,7 @@ describe('AudioSourceStep Accessibility', () => {
       prepare: () => {},
       ready: async () => {
         await chooseStream('http://x');
-        await fireEvent.focusOut(urlInput());
+        await leaveUrl();
         expect(urlAlert()).toHaveTextContent(`${KEY}.reasons.urlScheme`);
       },
     },
