@@ -84,10 +84,11 @@ describe('TextInput', () => {
     render(TextInput, { props: { value: 'abc', onblur } });
 
     const input = screen.getByRole('textbox');
+    await fireEvent.input(input, { target: { value: 'typed' } });
     await fireEvent.blur(input);
 
     expect(onblur).toHaveBeenCalledTimes(1);
-    expect(onblur).toHaveBeenCalledWith('abc');
+    expect(onblur).toHaveBeenCalledWith('typed');
   });
 
   it('supports different input types', () => {

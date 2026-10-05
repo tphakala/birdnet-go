@@ -560,6 +560,8 @@ describe('AudioSourceStep - URL error timing', () => {
     expectUrlError(true);
 
     await typeUrl('');
+    await leaveUrl();
+    expectUrlError(false);
     await typeUrl('h');
     expectUrlError(false);
     await leaveUrl();
