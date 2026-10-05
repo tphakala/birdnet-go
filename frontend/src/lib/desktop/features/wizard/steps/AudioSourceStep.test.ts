@@ -224,6 +224,59 @@ describe('AudioSourceStep - leave handler', () => {
     expect(settingsActions.saveSection).not.toHaveBeenCalled();
   });
 
+  it('set up later after an edit discards the edit and sends nothing', async () => {
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream();
+    await fireEvent.click(screen.getByRole('button', { name: `${KEY}.setUpLater` }));
+
+    await leave();
+
+    expect(settingsActions.saveSection).not.toHaveBeenCalled();
+  });
+
+  it('an edit after set up later clears it and saves the edit', async () => {
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream();
+    const button = screen.getByRole('button', { name: `${KEY}.setUpLater` });
+    await fireEvent.click(button);
+    await fireEvent.input(screen.getByPlaceholderText(`${KEY}.rtspUrlPlaceholder`), {
+      target: { value: OTHER_URL },
+    });
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+
+    await leave();
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls.map(c => c[0])).toEqual([
+      'rtsp',
+      'audio',
+    ]);
+  });
+
+  it('retry after a failed audio write edits the saved stream with the corrected URL', async () => {
+    saveLikeStore(['audio']);
+    seed({ sources: [TEMPLATE_SOURCE], source: '' });
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream();
+    await expect(leave()).rejects.toThrow('save audio failed');
+
+    await fireEvent.input(screen.getByPlaceholderText(`${KEY}.rtspUrlPlaceholder`), {
+      target: { value: OTHER_URL },
+    });
+    await leave();
+
+    const calls = vi.mocked(settingsActions.saveSection).mock.calls;
+    expect(calls.map(c => c[0])).toEqual(['rtsp', 'audio', 'rtsp', 'audio']);
+    expect(calls[2][1]).toEqual({
+      streams: [
+        { name: 'Stream 1', url: OTHER_URL, enabled: true, type: 'rtsp', transport: 'tcp' },
+      ],
+    });
+    expect(calls[3][1]).toEqual({ sources: [], source: '' });
+  });
+
   it('preselects the saved device by its stable id and writes nothing', async () => {
     seed({ sources: [{ ...TEMPLATE_SOURCE, device: 'usb-path:bus-1' }], source: '' });
     vi.mocked(api.get).mockResolvedValue([USB]);
@@ -277,19 +330,50 @@ describe('AudioSourceStep - device loading', () => {
   });
 
   it('a stale device load result is ignored', async () => {
-    const first = deferred<unknown[]>();
-    vi.mocked(api.get).mockReturnValueOnce(first.promise).mockResolvedValueOnce([]);
+    const older = deferred<unknown[]>();
+    const newer = deferred<unknown[]>();
+    vi.mocked(api.get)
+      .mockRejectedValueOnce(new Error('first load failed'))
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
     renderStep(AudioSourceStep);
     await flushAsync();
-    // The first load fails, which shows Retry; the retry resolves with no devices
-    first.reject(new Error('late'));
+    // Two clicks before Svelte re-renders start two overlapping loads
+    const retry = await screen.findByRole('button', { name: 'common.retry' });
+    retry.click();
+    retry.click();
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(3));
+
+    newer.resolve([USB]);
     await flushAsync();
-    await fireEvent.click(await screen.findByRole('button', { name: 'common.retry' }));
-    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+    older.reject(new Error('late failure'));
     await flushAsync();
 
+    expect(document.getElementById('wizard-audio-device')).not.toBeNull();
     expect(screen.queryAllByText(`${KEY}.devicesLoadFailed`)).toHaveLength(0);
-    expect(screen.getAllByText(`${KEY}.noDevicesFound`)).not.toHaveLength(0);
+  });
+
+  it('a stale device list that arrives late does not replace the newer one', async () => {
+    const older = deferred<unknown[]>();
+    const newer = deferred<unknown[]>();
+    vi.mocked(api.get)
+      .mockRejectedValueOnce(new Error('first load failed'))
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    const retry = await screen.findByRole('button', { name: 'common.retry' });
+    retry.click();
+    retry.click();
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(3));
+
+    newer.resolve([USB]);
+    await flushAsync();
+    older.resolve([]);
+    await flushAsync();
+
+    expect(document.getElementById('wizard-audio-device')).not.toBeNull();
+    expect(screen.queryAllByText(`${KEY}.noDevicesFound`)).toHaveLength(0);
   });
 });
 
@@ -320,6 +404,43 @@ describe('AudioSourceStep - Next reason', () => {
 
     await chooseStream(RTSP_URL);
     await waitFor(() => expect(onValidChange).toHaveBeenLastCalledWith(true, undefined));
+  });
+});
+
+describe('AudioSourceStep - device state reasons', () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset().mockResolvedValue([]);
+    resetStore();
+  });
+
+  it('reports the loading reason while devices load', async () => {
+    const pending = deferred<unknown[]>();
+    vi.mocked(api.get).mockReturnValueOnce(pending.promise);
+    const onValidChange = vi.fn();
+    renderTyped(AudioSourceStep, { props: { onValidChange } });
+    await flushAsync();
+
+    expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.deviceLoading`);
+    pending.resolve([]);
+  });
+
+  it('reports the failed reason when listing devices failed', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('boom'));
+    const onValidChange = vi.fn();
+    renderTyped(AudioSourceStep, { props: { onValidChange } });
+
+    await waitFor(() =>
+      expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.devicesFailed`)
+    );
+  });
+
+  it('reports the no devices reason for an empty list', async () => {
+    const onValidChange = vi.fn();
+    renderTyped(AudioSourceStep, { props: { onValidChange } });
+
+    await waitFor(() =>
+      expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.noDevices`)
+    );
   });
 });
 

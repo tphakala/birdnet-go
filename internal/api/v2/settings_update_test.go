@@ -449,6 +449,8 @@ func TestAudioSourcesSectionPatch(t *testing.T) {
 				devices = append(devices, src.Device)
 			}
 			assert.Equal(t, tt.wantDevices, devices)
+			// The migration moves a legacy source into sources, so Source is empty in every case
+			assert.Empty(t, audio.Source)
 			// Export settings are untouched by a sources-only patch
 			assert.True(t, audio.Export.Enabled)
 			assert.Equal(t, "clips", audio.Export.Path)
