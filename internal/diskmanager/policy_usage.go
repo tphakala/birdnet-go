@@ -144,8 +144,8 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		loopParams, baseDir, // Pass the struct pointer and baseDir
 		quit)
 
-	// Clear clip_name references in the database for deleted files
-	clearDeletedClipPaths(db, deletedNames, baseDir, "usage")
+	// Release clip_name references in the database for deleted files
+	releaseDeletedClipPaths(db, deletedNames, baseDir, "usage", keepSpectrograms)
 
 	// --- Calculate Final Usage & Return ---
 	finalUsagePercent := getFinalUsagePercent(baseDir, lastKnownGoodUsagePercent)

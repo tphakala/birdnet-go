@@ -3,6 +3,7 @@ package diskmanager
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/formatutil"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"github.com/tphakala/birdnet-go/internal/spectrogram/specfile"
 )
 
 // deletionThrottleDelay is the delay between file deletions to prevent I/O overload
@@ -396,11 +398,19 @@ func categorizeFilePath(path string) string {
 	return "simple-filename"
 }
 
-// clearDeletedClipPaths removes stale clip_name references from the database
-// for files that were deleted from disk by the retention policy.
-// deletedPaths contains absolute file paths; baseDir is the audio export root
-// used to compute relative paths matching the clip_name format in the database.
-func clearDeletedClipPaths(db Interface, deletedPaths []string, baseDir, policy string) {
+// releaseDeletedClipPaths updates the database references of audio clips the
+// retention policy deleted from disk. deletedPaths contains absolute file paths;
+// baseDir is the audio export root used to compute relative paths matching the
+// clip_name format in the database.
+//
+// A non-empty clip_name means "the audio exists", so a deleted clip's clip_name is
+// cleared. When keepSpectrograms is on and a spectrogram render of the clip survived
+// on disk, the clip name is moved into spectrogram_clip_name instead, so the kept
+// image stays reachable. When it cannot be told whether a render survived (the
+// directory or an entry could not be read), or the move fails, the row is left
+// untouched: a cleared row is never visited by the reconcile pass again, while an
+// untouched one is re-linked or cleared by it on its next run.
+func releaseDeletedClipPaths(db Interface, deletedPaths []string, baseDir, policy string, keepSpectrograms bool) {
 	if len(deletedPaths) == 0 {
 		return
 	}
@@ -408,7 +418,9 @@ func clearDeletedClipPaths(db Interface, deletedPaths []string, baseDir, policy 
 	log := GetLogger()
 
 	// Convert absolute file paths to relative clip names matching database format
-	clipNames := make([]string, 0, len(deletedPaths))
+	var retain, drop []string
+	uncertain := 0
+	dirCache := make(map[string][]os.DirEntry)
 	for _, absPath := range deletedPaths {
 		relPath, err := filepath.Rel(baseDir, absPath)
 		if err != nil {
@@ -418,27 +430,90 @@ func clearDeletedClipPaths(db Interface, deletedPaths []string, baseDir, policy 
 				logger.Error(err))
 			continue
 		}
-		clipNames = append(clipNames, filepath.ToSlash(relPath))
+		clipName := filepath.ToSlash(relPath)
+		state := renderAbsent
+		if keepSpectrograms {
+			state = hasKeptSpectrogram(absPath, dirCache)
+		}
+		switch state {
+		case renderPresent:
+			retain = append(retain, clipName)
+		case renderIndeterminate:
+			uncertain++ // neither retain nor clear: the reconcile pass decides
+		case renderAbsent:
+			drop = append(drop, clipName)
+		}
 	}
 
-	if len(clipNames) == 0 {
-		return
+	var retained int64
+	if len(retain) > 0 {
+		var err error
+		retained, err = db.RetainNoteSpectrogramsByClipNames(retain)
+		if err != nil {
+			// The rows keep clip_name, so the reconcile pass re-links the renders or
+			// clears the rows on its next run.
+			log.Warn("Failed to retain spectrogram references for deleted files, leaving them for the reconcile pass",
+				logger.String("policy", policy),
+				logger.Int("deleted_files", len(retain)),
+				logger.Error(err))
+			retained = 0
+		}
 	}
 
-	cleared, err := db.ClearNoteClipPathsByNames(clipNames)
-	if err != nil {
-		log.Warn("Failed to clear clip paths for deleted files",
+	var cleared int64
+	if len(drop) > 0 {
+		var err error
+		cleared, err = db.ClearNoteClipPathsByNames(drop)
+		if err != nil {
+			log.Warn("Failed to clear clip paths for deleted files",
+				logger.String("policy", policy),
+				logger.Int("deleted_files", len(drop)),
+				logger.Error(err))
+			cleared = 0
+		}
+	}
+
+	if uncertain > 0 {
+		log.Warn("Could not tell whether a spectrogram render survived, leaving references for the reconcile pass",
 			logger.String("policy", policy),
-			logger.Int("deleted_files", len(clipNames)),
-			logger.Error(err))
-		return
+			logger.Int("deleted_files", uncertain))
 	}
 
-	if cleared > 0 {
-		log.Info("Cleared stale clip path references",
+	if cleared > 0 || retained > 0 {
+		log.Info("Updated clip path references for deleted files",
 			logger.String("policy", policy),
+			logger.Int64("records_retained", retained),
 			logger.Int64("records_cleared", cleared),
-			logger.Int("files_deleted", len(clipNames)))
+			logger.Int("files_deleted", len(deletedPaths)))
+	}
+}
+
+// hasKeptSpectrogram reports whether a non-empty spectrogram render of the deleted
+// audio file audioPath is still on disk: renderPresent, renderAbsent, or
+// renderIndeterminate when the directory could not be listed or a matching entry
+// could not be inspected and no other render was found. dirCache holds one
+// directory listing per directory for the duration of a run. A missing directory
+// has no render; any other listing failure is indeterminate and is not cached.
+func hasKeptSpectrogram(audioPath string, dirCache map[string][]os.DirEntry) renderState {
+	dir := filepath.Dir(audioPath)
+	entries, seen := dirCache[dir]
+	if !seen {
+		read, err := os.ReadDir(dir)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return renderIndeterminate
+		}
+		entries = read
+		dirCache[dir] = entries
+	}
+	clipBase := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
+	found, indeterminate := specfile.Renders(entries, clipBase)
+	switch {
+	case len(found) > 0:
+		return renderPresent
+	case indeterminate:
+		return renderIndeterminate
+	default:
+		return renderAbsent
 	}
 }
 

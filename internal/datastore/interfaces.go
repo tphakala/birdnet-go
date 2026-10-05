@@ -116,6 +116,7 @@ type Interface interface {
 	SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note, int64, error)
 	GetNoteClipPath(noteID string) (string, error)
 	GetNoteModelType(noteID string) (string, error)
+	GetNoteKeptSpectrogram(noteID string) (clipName, modelType string, err error)
 	DeleteNoteClipPath(noteID string) error
 	GetNoteReview(noteID string) (*NoteReview, error)
 	SaveNoteReview(review *NoteReview) error
@@ -181,6 +182,7 @@ type Interface interface {
 	GetAllImageCaches(providerName string) ([]ImageCache, error)
 	GetLockedNotesClipPaths() ([]string, error)
 	ClearNoteClipPathsByNames(clipNames []string) (int64, error)
+	RetainNoteSpectrogramsByClipNames(clipNames []string) (int64, error)
 	GetNoteClipReferences(afterID uint, limit int) ([]diskmanager.ClipReference, error)
 	CountHourlyDetections(date, hour string, duration int) (int64, error)
 	// Analytics methods
@@ -628,6 +630,13 @@ func (ds *DataStore) GetNoteClipPath(noteID string) (string, error) {
 // The legacy schema does not track model types, so this always returns "bird".
 func (ds *DataStore) GetNoteModelType(_ string) (string, error) {
 	return "bird", nil
+}
+
+// GetNoteKeptSpectrogram returns the clip name of a spectrogram kept after retention
+// removed the detection's audio, and the model type. The legacy schema does not
+// persist the link, so the clip name is always empty and the model type is "bird".
+func (ds *DataStore) GetNoteKeptSpectrogram(_ string) (clipName, modelType string, err error) {
+	return "", "bird", nil
 }
 
 // DeleteNoteClipPath deletes the field representing the path to the audio clip associated with a note.
@@ -2001,6 +2010,14 @@ func (ds *DataStore) GetLockedNotesClipPaths() ([]string, error) {
 	}
 
 	return clipPaths, nil
+}
+
+// RetainNoteSpectrogramsByClipNames is called when retention deleted the audio of the named
+// clips but a spectrogram render was kept. The legacy notes table has no column for the
+// spectrogram link, so this clears clip_name exactly like ClearNoteClipPathsByNames and the
+// kept render stays unlinked. Only the v2 store persists the link.
+func (ds *DataStore) RetainNoteSpectrogramsByClipNames(clipNames []string) (int64, error) {
+	return ds.ClearNoteClipPathsByNames(clipNames)
 }
 
 // ClearNoteClipPathsByNames clears the clip_name field for notes matching the given filenames.

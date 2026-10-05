@@ -174,8 +174,8 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		minClipsPerSpecies, maxDeletions, keepSpectrograms,
 		quit, retentionCutoffUnix)
 
-	// Clear clip_name references in the database for deleted files
-	clearDeletedClipPaths(db, deletedNames, baseDir, "age")
+	// Release clip_name references in the database for deleted files
+	releaseDeletedClipPaths(db, deletedNames, baseDir, "age", keepSpectrograms)
 
 	// Get final disk utilization
 	diskUsage, diskErr := GetDiskUsage(baseDir)

@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
+  import SpectrogramImage from '$lib/desktop/components/media/SpectrogramImage.svelte';
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import WeatherDetails from '$lib/desktop/components/data/WeatherDetails.svelte';
   import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
@@ -220,6 +221,16 @@
                 enableClipExtraction={clipExtractionEnabled}
                 clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
                 modelType={detection.modelType}
+              />
+            </div>
+          {:else if detection.spectrogramOnly}
+            <!-- Retention removed the audio but kept the image: no player, no download. -->
+            <div class="relative bg-[var(--color-base-200)] rounded-lg p-4">
+              <SpectrogramImage
+                detectionId={detection.id.toString()}
+                size="lg"
+                raw={false}
+                className="w-full mx-auto"
               />
             </div>
           {/if}

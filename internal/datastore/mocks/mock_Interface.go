@@ -3293,6 +3293,69 @@ func (_c *MockInterface_GetNoteComments_Call) RunAndReturn(run func(string) ([]d
 	return _c
 }
 
+// GetNoteKeptSpectrogram provides a mock function with given fields: noteID
+func (_m *MockInterface) GetNoteKeptSpectrogram(noteID string) (string, string, error) {
+	ret := _m.Called(noteID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetNoteKeptSpectrogram")
+	}
+
+	var r0 string
+	var r1 string
+	var r2 error
+	if rf, ok := ret.Get(0).(func(string) (string, string, error)); ok {
+		return rf(noteID)
+	}
+	if rf, ok := ret.Get(0).(func(string) string); ok {
+		r0 = rf(noteID)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(string) string); ok {
+		r1 = rf(noteID)
+	} else {
+		r1 = ret.Get(1).(string)
+	}
+
+	if rf, ok := ret.Get(2).(func(string) error); ok {
+		r2 = rf(noteID)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MockInterface_GetNoteKeptSpectrogram_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetNoteKeptSpectrogram'
+type MockInterface_GetNoteKeptSpectrogram_Call struct {
+	*mock.Call
+}
+
+// GetNoteKeptSpectrogram is a helper method to define mock.On call
+//   - noteID string
+func (_e *MockInterface_Expecter) GetNoteKeptSpectrogram(noteID interface{}) *MockInterface_GetNoteKeptSpectrogram_Call {
+	return &MockInterface_GetNoteKeptSpectrogram_Call{Call: _e.mock.On("GetNoteKeptSpectrogram", noteID)}
+}
+
+func (_c *MockInterface_GetNoteKeptSpectrogram_Call) Run(run func(noteID string)) *MockInterface_GetNoteKeptSpectrogram_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetNoteKeptSpectrogram_Call) Return(clipName string, modelType string, err error) *MockInterface_GetNoteKeptSpectrogram_Call {
+	_c.Call.Return(clipName, modelType, err)
+	return _c
+}
+
+func (_c *MockInterface_GetNoteKeptSpectrogram_Call) RunAndReturn(run func(string) (string, string, error)) *MockInterface_GetNoteKeptSpectrogram_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetNoteLock provides a mock function with given fields: noteID
 func (_m *MockInterface) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
 	ret := _m.Called(noteID)
@@ -4658,6 +4721,62 @@ func (_c *MockInterface_PruneAppEvents_Call) Return(_a0 int64, _a1 error) *MockI
 }
 
 func (_c *MockInterface_PruneAppEvents_Call) RunAndReturn(run func(context.Context, int) (int64, error)) *MockInterface_PruneAppEvents_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RetainNoteSpectrogramsByClipNames provides a mock function with given fields: clipNames
+func (_m *MockInterface) RetainNoteSpectrogramsByClipNames(clipNames []string) (int64, error) {
+	ret := _m.Called(clipNames)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RetainNoteSpectrogramsByClipNames")
+	}
+
+	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func([]string) (int64, error)); ok {
+		return rf(clipNames)
+	}
+	if rf, ok := ret.Get(0).(func([]string) int64); ok {
+		r0 = rf(clipNames)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	if rf, ok := ret.Get(1).(func([]string) error); ok {
+		r1 = rf(clipNames)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_RetainNoteSpectrogramsByClipNames_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RetainNoteSpectrogramsByClipNames'
+type MockInterface_RetainNoteSpectrogramsByClipNames_Call struct {
+	*mock.Call
+}
+
+// RetainNoteSpectrogramsByClipNames is a helper method to define mock.On call
+//   - clipNames []string
+func (_e *MockInterface_Expecter) RetainNoteSpectrogramsByClipNames(clipNames interface{}) *MockInterface_RetainNoteSpectrogramsByClipNames_Call {
+	return &MockInterface_RetainNoteSpectrogramsByClipNames_Call{Call: _e.mock.On("RetainNoteSpectrogramsByClipNames", clipNames)}
+}
+
+func (_c *MockInterface_RetainNoteSpectrogramsByClipNames_Call) Run(run func(clipNames []string)) *MockInterface_RetainNoteSpectrogramsByClipNames_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].([]string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_RetainNoteSpectrogramsByClipNames_Call) Return(_a0 int64, _a1 error) *MockInterface_RetainNoteSpectrogramsByClipNames_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_RetainNoteSpectrogramsByClipNames_Call) RunAndReturn(run func([]string) (int64, error)) *MockInterface_RetainNoteSpectrogramsByClipNames_Call {
 	_c.Call.Return(run)
 	return _c
 }

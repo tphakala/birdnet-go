@@ -1812,7 +1812,11 @@ func (c *Handler) parseSpectrogramParameters(ctx echo.Context) spectrogramParame
 }
 
 // validateNoteIDAndGetClipPath validates the note ID parameter and retrieves the clip path.
-// Returns the noteID and clipPath, or an error if validation fails.
+// Returns the noteID and clipPath, or an error if validation fails. A failure writes its
+// error response itself, except for a note that exists but has no audio clip (the
+// repository's ErrNoClipPath, or an empty clip path): that returns an error matching
+// errNoClipForNote without writing a response, so the caller can still serve a kept
+// spectrogram or write the 404 with writeNoClip404.
 func (c *Handler) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, clipPath string, err error) {
 	// Defense in depth: initMediaRoutes already skips registering the ID-based media
 	// handlers when the datastore is disabled, but guard the c.DS dereference below
@@ -1844,6 +1848,12 @@ func (c *Handler) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, clipPa
 
 	clipPath, err = c.DS.GetNoteClipPath(noteID)
 	if err != nil {
+		if errors.Is(err, repository.ErrNoClipPath) {
+			// The note exists but has no audio. Not an error response yet: the
+			// caller decides, since a kept spectrogram may still be served.
+			err = &noClipForNoteError{cause: err}
+			return
+		}
 		c.LogErrorIfEnabled("Failed to get clip path from database",
 			logger.String("note_id", noteID),
 			logger.Error(err),
@@ -1858,12 +1868,7 @@ func (c *Handler) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, clipPa
 	}
 
 	if clipPath == "" {
-		c.LogWarnIfEnabled("Empty clip path for note",
-			logger.String("note_id", noteID),
-			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()))
-		err = fmt.Errorf("no audio file found for note %s", noteID)
-		_ = c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
+		err = &noClipForNoteError{cause: fmt.Errorf("no audio file found for note %s", noteID)}
 		return
 	}
 
@@ -1872,11 +1877,12 @@ func (c *Handler) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, clipPa
 
 // handleUserRequestedMode handles spectrogram serving in user-requested mode.
 // Returns true if the request was handled (either success or error response sent).
+// When the exact spectrogram is missing and the audio file is gone too, it serves an
+// existing render of the clip (serveExistingRender) instead of the "not generated"
+// response, since generating from missing audio cannot succeed.
 func (c *Handler) handleUserRequestedMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string) (bool, error) {
 	// Normalize and validate the audio path
-	clipsPrefix := c.CurrentSettings().Realtime.Audio.Export.Path
-	normalizedPath := apicore.NormalizeClipPath(clipPath, clipsPrefix)
-	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
+	relAudioPath, err := c.resolveClipRel(clipPath)
 
 	if err == nil {
 		// Build spectrogram path
@@ -1891,15 +1897,19 @@ func (c *Handler) handleUserRequestedMode(ctx echo.Context, noteID, clipPath str
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("ip", ctx.RealIP()))
 
-			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("%s, max-age=%d, immutable", c.mediaCacheVisibility(), SpectrogramCacheSeconds))
-			err = c.SFS.ServeRelativeFile(ctx, relSpectrogramPath)
-			if err != nil {
-				if !ctx.Response().Committed {
-					ctx.Response().Header().Del("Cache-Control")
-				}
-				return true, c.translateSecureFSError(ctx, err, "Failed to serve spectrogram image")
+			if serveErr := c.serveSpectrogramFile(ctx, relSpectrogramPath); serveErr != nil {
+				return true, c.translateSecureFSError(ctx, serveErr, msgServeSpectrogramFailed)
 			}
 			return true, nil
+		}
+
+		// The audio is gone (retention or an external delete not yet reflected in
+		// the database): serve an existing render of this clip rather than offering
+		// to generate one from audio that no longer exists.
+		if _, audioErr := c.SFS.StatRel(relAudioPath); errors.Is(audioErr, os.ErrNotExist) {
+			if served, serveErr := c.serveExistingRender(ctx, noteID, relAudioPath, params, freqSuffix); served {
+				return true, serveErr
+			}
 		}
 	}
 
@@ -1979,6 +1989,13 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 				time.Now().Before(win.ReadyAt.Add(pendingExportGraceMargin)) {
 				return c.handleAudioPending(ctx, win.ReadyAt, logFields...)
 			}
+			// Retention may have removed the audio between its file deletion and its
+			// database update; serve a kept render of this clip when there is one.
+			if relClipPath, relErr := c.resolveClipRel(clipPath); relErr == nil {
+				if served, serveErr := c.serveExistingRender(ctx, noteID, relClipPath, params, freqSuffix); served {
+					return serveErr
+				}
+			}
 			c.LogWarnIfEnabled("Spectrogram generation skipped: source audio clip not available", logFields...)
 		default:
 			// Unexpected failures (sox/ffmpeg broken, unreadable clip, etc.)
@@ -1994,20 +2011,12 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()))
 
-	// Set cache headers before serving - spectrograms are deterministic (same clip + params = same image)
-	// and never change once generated. This allows browsers to serve from disk cache on reload,
-	// avoiding HTTP/1.1 connection exhaustion when loading many detection cards simultaneously.
-	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("%s, max-age=%d, immutable", c.mediaCacheVisibility(), SpectrogramCacheSeconds))
-
-	// Serve the generated spectrogram using SecureFS
+	// Serve the generated spectrogram using SecureFS with long-lived cache headers
 	serveStart := time.Now()
-	err = c.SFS.ServeRelativeFile(ctx, spectrogramPath)
+	err = c.serveSpectrogramFile(ctx, spectrogramPath)
 	serveDuration := time.Since(serveStart)
 
 	if err != nil {
-		if !ctx.Response().Committed {
-			ctx.Response().Header().Del("Cache-Control")
-		}
 		c.LogErrorIfEnabled("Failed to serve spectrogram file",
 			logger.String("note_id", noteID),
 			logger.String("spectrogram_path", spectrogramPath),
@@ -2015,7 +2024,7 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 			logger.Int64("serve_duration_ms", serveDuration.Milliseconds()),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()))
-		return c.translateSecureFSError(ctx, err, "Failed to serve spectrogram image")
+		return c.translateSecureFSError(ctx, err, msgServeSpectrogramFailed)
 	}
 
 	c.LogDebugIfEnabled("Spectrogram served successfully",
@@ -2077,10 +2086,19 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 //
 // The raw parameter defaults to true to maintain compatibility with existing cached
 // spectrograms from the legacy UI, which generated raw spectrograms by default.
+//
+// Detections whose audio was removed by retention but whose spectrogram was kept have no
+// clip path; for those, and for a clip whose audio file is gone before the database caught
+// up, an existing render of the clip is served (see serveRetainedSpectrogram) and nothing
+// is generated.
 func (c *Handler) ServeSpectrogramByID(ctx echo.Context) error {
 	// Validate note ID and get clip path
 	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
 	if err != nil {
+		if errors.Is(err, errNoClipForNote) {
+			// Retention may have removed the audio but kept a spectrogram render.
+			return c.serveRetainedSpectrogram(ctx, noteID, err)
+		}
 		return err // Error already handled and logged
 	}
 
@@ -2187,13 +2205,8 @@ func (c *Handler) ServeSpectrogram(ctx echo.Context) error {
 	}
 
 	// Serve the generated spectrogram using SecureFS with cache headers
-	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("%s, max-age=%d, immutable", c.mediaCacheVisibility(), SpectrogramCacheSeconds))
-	err = c.SFS.ServeRelativeFile(ctx, spectrogramPath)
-	if err != nil {
-		if !ctx.Response().Committed {
-			ctx.Response().Header().Del("Cache-Control")
-		}
-		return c.translateSecureFSError(ctx, err, "Failed to serve spectrogram image")
+	if err = c.serveSpectrogramFile(ctx, spectrogramPath); err != nil {
+		return c.translateSecureFSError(ctx, err, msgServeSpectrogramFailed)
 	}
 	return nil
 }
@@ -2439,6 +2452,9 @@ func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 	// Validate note ID and get clip path using shared helper
 	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
 	if err != nil {
+		if errors.Is(err, errNoClipForNote) {
+			return c.writeNoClip404(ctx, noteID, err)
+		}
 		return err // Error already handled and logged
 	}
 

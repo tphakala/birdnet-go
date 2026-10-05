@@ -95,7 +95,7 @@ func (c *Handler) BatchDeleteDetections(ctx echo.Context) error {
 			continue
 		}
 
-		clipName := note.ClipName
+		mediaName := note.MediaName()
 		if err := c.DS.Delete(idStr); err != nil {
 			c.LogWarnIfEnabled("Batch delete: failed to delete detection",
 				logger.String("id", idStr),
@@ -105,8 +105,8 @@ func (c *Handler) BatchDeleteDetections(ctx echo.Context) error {
 		}
 
 		processed++
-		if clipName != "" {
-			c.removeDetectionFiles(clipName)
+		if mediaName != "" {
+			c.removeDetectionFiles(mediaName)
 		}
 	}
 

@@ -2,6 +2,7 @@
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
+  import SpectrogramImage from '$lib/desktop/components/media/SpectrogramImage.svelte';
   import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
@@ -70,6 +71,7 @@
     verified: string;
     locked: boolean;
     hasAudio: boolean;
+    spectrogramOnly?: boolean; // audio removed by retention, spectrogram image kept
     source?: string;
     modelType?: string;
   }
@@ -1150,6 +1152,11 @@
                                 clipLabel={`${result.commonName}_${result.timestamp.replace(/[: ]/g, '-')}`}
                                 modelType={result.modelType}
                               />
+                            </div>
+                          {:else if result.spectrogramOnly}
+                            <!-- Retention removed the audio but kept the image: no player. -->
+                            <div class="bg-[var(--color-base-200)] rounded-box p-4">
+                              <SpectrogramImage detectionId={result.id} size="md" raw={false} />
                             </div>
                           {/if}
                         </div>

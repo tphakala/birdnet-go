@@ -1649,6 +1649,8 @@ func (w *Worker) updateExistingRecords(ctx context.Context, records []*detection
 		}
 		if det.ClipName != nil {
 			updates["clip_name"] = *det.ClipName
+			// Keep clip_name and spectrogram_clip_name mutually exclusive.
+			updates["spectrogram_clip_name"] = nil
 		}
 
 		if updateErr := w.v2Detection.Update(ctx, r.ID, updates); updateErr != nil {
@@ -1699,6 +1701,8 @@ func (w *Worker) migrateRecord(ctx context.Context, result *detection.Result) er
 		}
 		if det.ClipName != nil {
 			updates["clip_name"] = *det.ClipName
+			// Keep clip_name and spectrogram_clip_name mutually exclusive.
+			updates["spectrogram_clip_name"] = nil
 		}
 		return w.v2Detection.Update(ctx, result.ID, updates)
 	}

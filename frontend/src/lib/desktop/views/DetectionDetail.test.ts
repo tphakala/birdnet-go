@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { waitFor, cleanup } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../test/render-helpers';
 import DetectionDetail from './DetectionDetail.svelte';
+import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
 import type { Detection } from '$lib/types/detection.types';
 
 // Heavy / context-dependent children are not relevant to the fetch-race logic.
@@ -163,6 +164,90 @@ describe('DetectionDetail audio download', () => {
     // Keep the attribute valueless so the response's Content-Disposition header
     // supplies the canonical filename and extension.
     expect(downloadLink).toHaveAttribute('download', '');
+  });
+
+  it('labels the media region as an audio recording when the detection has a clip', async () => {
+    const detection = makeDetection({
+      id: 1241,
+      scientificName: 'Phalaenoptilus nuttallii',
+      commonName: 'Common Poorwill',
+      clipName: 'phalaenoptilus_nuttallii_88p_20260720T051601Z.m4a',
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/v2/detections/1241')) {
+          return Promise.resolve(jsonResponse(detection));
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    const { container } = detailTest.render({ detectionId: '1241' });
+
+    await waitFor(() => {
+      expect(container.querySelector('section[aria-labelledby="media-heading"]')).not.toBeNull();
+    });
+
+    expect(
+      container
+        .querySelector('section[aria-labelledby="media-heading"] [role="region"]')
+        ?.getAttribute('aria-label')
+    ).toBe('detections.detail.aria.audioRecordingFor');
+    // Positive control: the automocked player records its render, so the negative assertion in the
+    // spectrogram-only test can fail.
+    expect(vi.mocked(AudioPlayer)).toHaveBeenCalled();
+  });
+});
+
+describe('DetectionDetail spectrogram-only detection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('shows the kept spectrogram image without a player or download link', async () => {
+    const detection = makeDetection({
+      id: 1240,
+      scientificName: 'Phalaenoptilus nuttallii',
+      commonName: 'Common Poorwill',
+      clipName: '',
+      spectrogramOnly: true,
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/v2/detections/1240')) {
+          return Promise.resolve(jsonResponse(detection));
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    const { container } = detailTest.render({ detectionId: '1240' });
+
+    await waitFor(() => {
+      expect(container.querySelector('img.spectrogram-img')).not.toBeNull();
+    });
+
+    expect(container.querySelector('img.spectrogram-img')?.getAttribute('src')).toContain(
+      '/api/v2/spectrogram/1240?size=lg'
+    );
+    expect(container.querySelector('a.meta-download')).toBeNull();
+    expect(container.querySelector('#media-heading')).not.toBeNull();
+    // The region names the image, not an audio recording that no longer exists.
+    expect(
+      container
+        .querySelector('section[aria-labelledby="media-heading"] [role="region"]')
+        ?.getAttribute('aria-label')
+    ).toBe('components.audio.spectrogramForSpecies');
+    expect(vi.mocked(AudioPlayer)).not.toHaveBeenCalled();
   });
 });
 
