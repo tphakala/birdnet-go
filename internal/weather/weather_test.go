@@ -300,8 +300,8 @@ func TestService_SaveWeatherData(t *testing.T) {
 		}).Return(nil).Once()
 		mockDB.On("SaveHourlyWeather", mock.Anything).Run(func(args mock.Arguments) {
 			hw := args.Get(0).(*datastore.HourlyWeather)
-			assert.NotNil(t, hw.TempestExtrasJSON)
-			assert.JSONEq(t, `{"illuminance":1234,"uv_index":4.2}`, *hw.TempestExtrasJSON)
+			assert.NotNil(t, hw.WeatherExtrasJSON)
+			assert.JSONEq(t, `{"illuminance":1234,"uv_index":4.2}`, *hw.WeatherExtrasJSON)
 		}).Return(nil).Once()
 
 		require.NoError(t, service.saveWeatherData(createTestWeatherData(t)))

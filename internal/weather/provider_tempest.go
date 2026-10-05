@@ -81,7 +81,7 @@ type TempestExtras struct {
 	WindLull          float64 // m/s, lowest 3s wind sample in the report interval
 }
 
-// tempestExtrasJSON is the on-disk shape for HourlyWeather.TempestExtrasJSON.
+// tempestExtrasJSON is the on-disk shape for HourlyWeather.WeatherExtrasJSON.
 // Fields use `omitempty` so a field the user didn't check for persistence is
 // simply absent from the JSON rather than serialized as a misleading zero.
 type tempestExtrasJSON struct {
@@ -94,7 +94,7 @@ type tempestExtrasJSON struct {
 }
 
 // SelectedJSON marshals only the fields enabled in conf.TempestExtraFields
-// (see the Tempest settings UI checkboxes) into HourlyWeather.TempestExtrasJSON's
+// (see the Tempest settings UI checkboxes) into HourlyWeather.WeatherExtrasJSON's
 // string form. Returns nil when nothing is selected, so callers can skip
 // persisting an empty/meaningless JSON object.
 func (e *TempestExtras) SelectedJSON(fields conf.TempestExtraFields) (*string, error) {

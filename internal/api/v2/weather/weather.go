@@ -122,7 +122,7 @@ type moonResponse struct {
 // opted into persisting (see conf.TempestExtraFields). Fields the user hasn't
 // checked are simply absent (nil) rather than a misleading zero. The JSON
 // shape matches weather.TempestExtras's on-disk encoding exactly, so a
-// persisted HourlyWeather.TempestExtrasJSON value unmarshals directly into
+// persisted HourlyWeather.WeatherExtrasJSON value unmarshals directly into
 // this struct with no extra translation step.
 type tempestExtrasResponse struct {
 	Illuminance       *float64 `json:"illuminance,omitempty"`        // lux
@@ -513,9 +513,9 @@ func (c *Handler) buildHourlyWeatherResponse(hw *datastore.HourlyWeather) hourly
 		WeatherIcon:       hw.WeatherIcon,
 	}
 
-	if hw.TempestExtrasJSON != nil {
+	if hw.WeatherExtrasJSON != nil {
 		var extras tempestExtrasResponse
-		if err := json.Unmarshal([]byte(*hw.TempestExtrasJSON), &extras); err != nil {
+		if err := json.Unmarshal([]byte(*hw.WeatherExtrasJSON), &extras); err != nil {
 			// Corrupted extras must not fail the rest of the hourly response;
 			// log and omit TempestExtras instead of returning an error.
 			c.LogWarnIfEnabled("Failed to parse persisted Tempest extras", logger.Error(err))

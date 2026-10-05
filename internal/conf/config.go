@@ -531,7 +531,7 @@ type TempestSettings struct {
 
 	// ExtraFields selects which Tempest sensor readings beyond the shared
 	// WeatherData fields get persisted alongside each hourly weather record
-	// (see HourlyWeather.TempestExtrasJSON). All false by default: this data
+	// (see HourlyWeather.WeatherExtrasJSON). All false by default: this data
 	// is Tempest-specific and has no equivalent in the other providers, so it
 	// is opt-in per field rather than always stored.
 	ExtraFields TempestExtraFields `yaml:"extrafields" json:"extraFields"`

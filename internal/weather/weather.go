@@ -627,7 +627,7 @@ func (s *Service) saveWeatherData(data *WeatherData) error {
 			if err != nil {
 				return err
 			}
-			hourlyWeather.TempestExtrasJSON = extraJSON
+			hourlyWeather.WeatherExtrasJSON = extraJSON
 		}
 	}
 

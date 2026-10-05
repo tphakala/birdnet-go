@@ -2660,7 +2660,7 @@
         },
         "extrafields": {
           "$ref": "#/$defs/TempestExtraFields",
-          "description": "ExtraFields selects which Tempest sensor readings beyond the shared\nWeatherData fields get persisted alongside each hourly weather record\n(see HourlyWeather.TempestExtrasJSON). All false by default: this data\nis Tempest-specific and has no equivalent in the other providers, so it\nis opt-in per field rather than always stored."
+          "description": "ExtraFields selects which provider-specific sensor readings beyond the shared\nWeatherData fields get persisted alongside each hourly weather record\n(see HourlyWeather.WeatherExtrasJSON). All false by default: this data\nis provider-specific and has no equivalent across all providers, so it\nis opt-in per field rather than always stored."
         }
       },
       "additionalProperties": false,
