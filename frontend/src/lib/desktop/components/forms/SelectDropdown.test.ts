@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   createComponentTestFactory,
   screen,
@@ -652,57 +652,52 @@ describe('SelectDropdown Accessibility', () => {
     expect(escapes.seen).toEqual([]);
   });
 
+  const addedButtons: HTMLButtonElement[] = [];
+
+  afterEach(() => {
+    addedButtons.splice(0).forEach(button => button.remove());
+  });
+
+  /** Appends a plain button to the document body; removed after each test. */
+  function addButton(text: string): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.textContent = text;
+    document.body.append(button);
+    addedButtons.push(button);
+    return button;
+  }
+
   /** Renders the dropdown between two plain buttons so Tab has somewhere to land. */
   function renderBetweenButtons(props: Record<string, unknown>) {
-    const before = document.createElement('button');
-    before.textContent = 'Before';
-    const after = document.createElement('button');
-    after.textContent = 'After';
-    document.body.append(before);
-    const result = selectTest.render({ props: { options: fruit, ...props } });
-    document.body.append(after);
-    return {
-      before,
-      after,
-      cleanup: () => {
-        before.remove();
-        after.remove();
-        result.unmount();
-      },
-    };
+    const before = addButton('Before');
+    selectTest.render({ props: { options: fruit, ...props } });
+    const after = addButton('After');
+    return { before, after };
   }
 
   it('Tab in the search box closes the list and moves focus on from the trigger', async () => {
     const user = userEvent.setup();
-    const { after, cleanup } = renderBetweenButtons({ searchable: true });
-    try {
-      await user.click(screen.getByRole('button', { name: /select/i }));
-      await waitFor(() => expect(screen.getByRole('searchbox')).toHaveFocus());
+    const { after } = renderBetweenButtons({ searchable: true });
+    await user.click(screen.getByRole('button', { name: /select/i }));
+    await waitFor(() => expect(screen.getByRole('searchbox')).toHaveFocus());
 
-      await user.keyboard('{Tab}');
+    await user.keyboard('{Tab}');
 
-      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
-      expect(document.activeElement).toBe(after);
-    } finally {
-      cleanup();
-    }
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(after);
   });
 
   it('Shift+Tab from a focused option closes the list and moves focus on from the trigger', async () => {
     const user = userEvent.setup();
-    const { before, cleanup } = renderBetweenButtons({ multiple: true });
-    try {
-      await user.click(screen.getByRole('button', { name: /select/i }));
-      const option = (await screen.findAllByRole('option'))[0];
-      option.focus();
+    const { before } = renderBetweenButtons({ multiple: true });
+    await user.click(screen.getByRole('button', { name: /select/i }));
+    const option = (await screen.findAllByRole('option'))[0];
+    option.focus();
 
-      await user.keyboard('{Shift>}{Tab}{/Shift}');
+    await user.keyboard('{Shift>}{Tab}{/Shift}');
 
-      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
-      expect(document.activeElement).toBe(before);
-    } finally {
-      cleanup();
-    }
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(before);
   });
 
   it('returns focus to the trigger after an option is clicked', async () => {
@@ -732,20 +727,15 @@ describe('SelectDropdown Accessibility', () => {
   it('does not move focus on an outside click', async () => {
     const user = userEvent.setup();
     selectTest.render({ props: { options: fruit } });
-    const outside = document.createElement('button');
-    outside.textContent = 'Outside';
-    document.body.appendChild(outside);
-    try {
-      await user.click(screen.getByRole('button', { name: /select/i }));
-      await screen.findByRole('listbox');
+    const outside = addButton('Outside');
 
-      await user.click(outside);
+    await user.click(screen.getByRole('button', { name: /select/i }));
+    await screen.findByRole('listbox');
 
-      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
-      expect(document.activeElement).toBe(outside);
-    } finally {
-      outside.remove();
-    }
+    await user.click(outside);
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(outside);
   });
 
   it('names the open listbox from the label associated with the trigger', async () => {

@@ -6,12 +6,7 @@
   import { dropdown } from '$lib/utils/transitions';
   import { portal } from '$lib/utils/portal';
   import { computeAnchorPosition, type AnchorPosition } from '$lib/utils/anchorPosition';
-  import {
-    safeGet,
-    safeArrayAccess,
-    safeArraySpread,
-    safeElementAccess,
-  } from '$lib/utils/security';
+  import { safeGet, safeArrayAccess, safeArraySpread } from '$lib/utils/security';
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -427,10 +422,9 @@
   function scrollToHighlighted() {
     if (highlightedIndex < 0 || !dropdownElement) return;
 
-    const options = dropdownElement.querySelectorAll('[role="option"]');
-    const highlighted = safeElementAccess<HTMLElement>(options, highlightedIndex, HTMLElement);
+    const highlighted = document.getElementById(`${fieldId}-option-${highlightedIndex}`);
 
-    if (highlighted) {
+    if (highlighted instanceof HTMLElement) {
       highlighted.scrollIntoView({ block: 'nearest' });
     }
   }

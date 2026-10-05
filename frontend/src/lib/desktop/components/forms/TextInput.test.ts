@@ -404,14 +404,11 @@ describe('TextInput aria-invalid', () => {
 });
 
 describe('TextInput Accessibility error styling', () => {
-  it('shows error styling when aria-invalid is true without a native validity failure', () => {
-    render(TextInput, { props: { value: '', 'aria-invalid': 'true' } });
-
-    expect(screen.getByRole('textbox')).toHaveClass('input-error');
-  });
-
-  it('shows error styling when aria-invalid is the boolean true', () => {
-    render(TextInput, { props: { value: '', 'aria-invalid': true } });
+  it.each<[string, 'true' | true]>([
+    ['the string true', 'true'],
+    ['the boolean true', true],
+  ])('shows error styling when aria-invalid is %s', (_label, ariaInvalid) => {
+    render(TextInput, { props: { value: '', 'aria-invalid': ariaInvalid } });
 
     expect(screen.getByRole('textbox')).toHaveClass('input-error');
   });
