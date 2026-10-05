@@ -43,8 +43,8 @@ export interface InitialAudioChoice {
 
 /**
  * Whether a URL is acceptable for an RTSP stream: trimmed, an rtsp or rtsps
- * scheme (any case), at least one character after it and no whitespace. Stricter
- * than the backend, which checks only the prefix, so a bare "rtsp://" is refused.
+ * scheme (any case), a host and no whitespace. Stricter than the backend, which
+ * checks only the prefix, so "rtsp://" and "rtsp:///path" are refused.
  */
 export function isRtspUrl(url: string): boolean {
   const trimmed = url.trim();
@@ -52,7 +52,12 @@ export function isRtspUrl(url: string): boolean {
   const prefix = RTSP_URL_PREFIXES.find(p => lower.startsWith(p));
   if (prefix === undefined) return false;
   const rest = trimmed.slice(prefix.length);
-  return rest.length > 0 && !/\s/.test(rest);
+  if (rest.length === 0 || /\s/.test(rest)) return false;
+  try {
+    return new URL(trimmed).hostname !== '';
+  } catch {
+    return false;
+  }
 }
 
 function sourcesOf(audio: AudioSettings | undefined): AudioSourceConfig[] {

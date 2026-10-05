@@ -210,7 +210,8 @@
       if (!isRtspUrl(url)) return;
       const payloads = streamPayloads(realtime?.audio, realtime?.rtsp, url, primaryStreamUrl);
       await send('rtsp', payloads.rtsp);
-      if (payloads.rtsp !== null) streamOwnedByStep = true;
+      // A no-op payload means the stream was already enabled; the step still answers for it
+      streamOwnedByStep = true;
       primaryStreamUrl = url;
       await send('audio', payloads.audio);
     }

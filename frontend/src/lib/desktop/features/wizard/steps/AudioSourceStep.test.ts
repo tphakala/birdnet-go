@@ -99,6 +99,7 @@ describe('AudioSourceStep - leave handler', () => {
   });
 
   it('sound card choice patches audio sources with the stable device id and clears the legacy source', async () => {
+    seed({ sources: [TEMPLATE_SOURCE], source: 'hw:1,0' });
     vi.mocked(api.get).mockResolvedValue([USB]);
     const { leave } = renderStep(AudioSourceStep);
     await flushAsync();
@@ -208,6 +209,28 @@ describe('AudioSourceStep - leave handler', () => {
         { name: 'Stream 1', url: RTSP_URL, enabled: false, type: 'rtsp', transport: 'tcp' },
       ],
     });
+  });
+
+  it('sound card chosen after picking a stream that was already enabled turns that stream off', async () => {
+    saveLikeStore();
+    seed({ sources: [TEMPLATE_SOURCE], source: '' }, [
+      { name: 'Cam', url: RTSP_URL, enabled: true, type: 'rtsp' },
+    ]);
+    vi.mocked(api.get).mockResolvedValue([USB]);
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream();
+    await leave();
+
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
+    await chooseUsbDevice();
+    await leave();
+
+    const calls = vi.mocked(settingsActions.saveSection).mock.calls;
+    expect(calls[calls.length - 1]).toEqual([
+      'rtsp',
+      { streams: [{ name: 'Cam', url: RTSP_URL, enabled: false, type: 'rtsp' }] },
+    ]);
   });
 
   it('set up later is a visible button and sends nothing', async () => {

@@ -42,6 +42,9 @@ describe('isRtspUrl', () => {
     ['  RTSPS://host/stream  ', true],
     ['rtsp://', false],
     ['rtsp://ho st', false],
+    ['rtsp:///stream', false],
+    ['rtsp://user:pass@host:554/stream', true],
+    ['rtsp://[::1]:554/stream', true],
     ['http://host/stream', false],
     ['', false],
   ])('%j gives %s', (url, expected) => {
