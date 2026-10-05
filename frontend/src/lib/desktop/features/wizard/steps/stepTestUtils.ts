@@ -7,16 +7,20 @@ import type { StepLeaveHandler, WizardStepProps } from '../types';
 
 /**
  * Renders a wizard step with a registerLeaveHandler spy and exposes the handler
- * it registered as leave().
+ * it registered as leave(). Extra props, such as an onValidChange spy, are merged
+ * into the step's props.
  */
-export function renderStep(StepComponent: Component<WizardStepProps>) {
+export function renderStep(
+  StepComponent: Component<WizardStepProps>,
+  props?: Omit<WizardStepProps, 'registerLeaveHandler'>
+) {
   let handler: StepLeaveHandler | undefined;
   const unregister = vi.fn();
   const registerLeaveHandler = vi.fn((h: StepLeaveHandler) => {
     handler = h;
     return unregister;
   });
-  const result = renderTyped(StepComponent, { props: { registerLeaveHandler } });
+  const result = renderTyped(StepComponent, { props: { ...props, registerLeaveHandler } });
   return {
     ...result,
     registerLeaveHandler,

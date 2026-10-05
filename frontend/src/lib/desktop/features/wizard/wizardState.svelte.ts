@@ -1,4 +1,4 @@
-import { api } from '$lib/utils/api';
+import { api, ApiError } from '$lib/utils/api';
 import { loggers } from '$lib/utils/logger';
 import type { TranslationKey } from '$lib/i18n';
 import type {
@@ -48,6 +48,22 @@ let leaveHandler: StepLeaveHandler | null = null;
 let session = 0;
 
 const SAVE_FAILED_KEY: TranslationKey = 'wizard.errors.saveFailed';
+const SAVE_REJECTED_KEY: TranslationKey = 'wizard.errors.saveRejected';
+const HTTP_STATUS_BAD_REQUEST = 400;
+const HTTP_STATUS_UNPROCESSABLE = 422;
+
+/**
+ * The error message key for a failed step save: "not accepted" when the server
+ * answered 400 or 422, so the user is not told to check the connection after a
+ * validation refusal; the connection message for everything else.
+ */
+function saveErrorKey(err: unknown): TranslationKey {
+  const refused =
+    err instanceof ApiError &&
+    !err.isNetworkError &&
+    (err.status === HTTP_STATUS_BAD_REQUEST || err.status === HTTP_STATUS_UNPROCESSABLE);
+  return refused ? SAVE_REJECTED_KEY : SAVE_FAILED_KEY;
+}
 
 /**
  * How long Next, Back and Done ignore clicks after a step move, counted from
@@ -211,7 +227,7 @@ async function runLeave(move: () => void): Promise<void> {
   } catch (err) {
     loggers.ui.error('Wizard step save failed', err);
     if (!isStale()) {
-      stepError = SAVE_FAILED_KEY;
+      stepError = saveErrorKey(err);
       isSaving = false;
     }
     return;

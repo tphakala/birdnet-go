@@ -5247,6 +5247,7 @@
     },
     "errors": {
       "saveFailed": "No se pudo guardar este paso. Comprueba la conexión e inténtalo de nuevo, u omite la configuración y cámbialo más tarde en Ajustes.",
+      "saveRejected": "Los ajustes de este paso no se aceptaron. Comprueba los valores e inténtalo de nuevo, u omite la configuración y cámbialo más tarde en Ajustes.",
       "stepLoadFailed": "No se pudo cargar este paso. Pulsa Reintentar o recarga la página.",
       "stepLoadFailedReload": "Este paso sigue sin poder cargarse. Recarga la página para volver a intentarlo; las opciones guardadas en pasos anteriores se conservan."
     },
@@ -5336,10 +5337,12 @@
         "privacyFilterHelp": "Filtra las detecciones cuando se detectan voces humanas cerca del micrófono",
         "birdweatherLabel": "Compartir detecciones con BirdWeather",
         "birdweatherHelp": "Contribuye tus detecciones de aves a la red comunitaria de BirdWeather",
-        "birdweatherIdLabel": "ID de estación de BirdWeather",
-        "birdweatherIdPlaceholder": "Ingresa tu ID de estación de BirdWeather",
         "errorReportingLabel": "Enviar reportes de error anónimos",
-        "errorReportingHelp": "Ayuda a mejorar BirdNET-Go enviando reportes de error anónimos cuando algo sale mal"
+        "errorReportingHelp": "Ayuda a mejorar BirdNET-Go enviando reportes de error anónimos cuando algo sale mal",
+        "reasons": {
+          "enterToken": "Introduce tu token de BirdWeather o desactiva el uso compartido con BirdWeather.",
+          "tokenFormat": "Un token de BirdWeather tiene 24 letras y dígitos."
+        }
       },
       "responsibleUse": {
         "title": "Uso responsable de BirdNET-Go",

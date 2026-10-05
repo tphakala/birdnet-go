@@ -5247,6 +5247,7 @@
     },
     "errors": {
       "saveFailed": "Tämän vaiheen tallennus epäonnistui. Tarkista yhteys ja yritä uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
+      "saveRejected": "Tämän vaiheen asetuksia ei hyväksytty. Tarkista arvot ja yritä uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
       "stepLoadFailed": "Tämän vaiheen lataus epäonnistui. Paina Yritä uudelleen tai lataa sivu uudelleen.",
       "stepLoadFailedReload": "Tämän vaiheen lataus epäonnistui edelleen. Lataa sivu uudelleen ja yritä uudestaan; aiemmissa vaiheissa tallennetut valinnat säilyvät."
     },
@@ -5336,10 +5337,12 @@
         "privacyFilterHelp": "Suodattaa havainnot, kun mikrofonin lähellä havaitaan ihmisen puhetta",
         "birdweatherLabel": "Jaa havainnot BirdWeatheriin",
         "birdweatherHelp": "Osallistu lintuhavainnoillasi BirdWeather-yhteisöverkkoon",
-        "birdweatherIdLabel": "BirdWeather-aseman ID",
-        "birdweatherIdPlaceholder": "Syötä BirdWeather-asemasi ID",
         "errorReportingLabel": "Lähetä nimettömiä virheilmoituksia",
-        "errorReportingHelp": "Auta parantamaan BirdNET-Go:ta lähettämällä nimettömiä virheilmoituksia ongelmatilanteissa"
+        "errorReportingHelp": "Auta parantamaan BirdNET-Go:ta lähettämällä nimettömiä virheilmoituksia ongelmatilanteissa",
+        "reasons": {
+          "enterToken": "Anna BirdWeather-tunnuksesi tai poista jakaminen BirdWeatherin kanssa käytöstä.",
+          "tokenFormat": "BirdWeather-tunnuksessa on 24 kirjainta ja numeroa."
+        }
       },
       "responsibleUse": {
         "title": "BirdNET-Go:n vastuullinen käyttö",

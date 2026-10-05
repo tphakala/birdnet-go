@@ -5247,6 +5247,7 @@
     },
     "errors": {
       "saveFailed": "Ezt a lépést nem sikerült menteni. Ellenőrizze a kapcsolatot, és próbálja újra, vagy hagyja ki a beállítást, és módosítsa később a Beállításokban.",
+      "saveRejected": "A lépés beállításait nem fogadta el a rendszer. Ellenőrizze az értékeket, és próbálja újra, vagy hagyja ki a beállítást, és módosítsa később a Beállításokban.",
       "stepLoadFailed": "Ezt a lépést nem sikerült betölteni. Nyomja meg az Újra gombot, vagy töltse újra az oldalt.",
       "stepLoadFailedReload": "Ezt a lépést továbbra sem sikerült betölteni. Töltse újra az oldalt az újrapróbálkozáshoz; a korábbi lépésekben mentett választások megmaradnak."
     },
@@ -5336,10 +5337,12 @@
         "privacyFilterHelp": "Kiszűri a detektálásokat, amikor emberi hangok észlelhetők a mikrofon közelében",
         "birdweatherLabel": "Detektálások megosztása a BirdWeather-rel",
         "birdweatherHelp": " Ossza meg madár detektálásait a BirdWeather közösségi hálózattal",
-        "birdweatherIdLabel": "BirdWeather állomás ID",
-        "birdweatherIdPlaceholder": "Adja meg a BirdWeather állomás ID-jét",
         "errorReportingLabel": "Névtelen hiba jelentések küldése",
-        "errorReportingHelp": "Segítsen fejleszteni a BirdNET-Go-t névtelen hiba jelentések küldésével, amikor valami hibásan működik"
+        "errorReportingHelp": "Segítsen fejleszteni a BirdNET-Go-t névtelen hiba jelentések küldésével, amikor valami hibásan működik",
+        "reasons": {
+          "enterToken": "Adja meg a BirdWeather-tokent, vagy kapcsolja ki a megosztást a BirdWeatherrel.",
+          "tokenFormat": "A BirdWeather-token 24 betűből és számjegyből áll."
+        }
       },
       "responsibleUse": {
         "title": "A BirdNET-Go felelős használata",

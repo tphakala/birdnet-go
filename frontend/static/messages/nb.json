@@ -5247,6 +5247,7 @@
     },
     "errors": {
       "saveFailed": "Dette trinnet kunne ikke lagres. Sjekk tilkoblingen og prøv igjen, eller hopp over oppsettet og endre det senere i Innstillinger.",
+      "saveRejected": "Innstillingene i dette trinnet ble ikke godtatt. Sjekk verdiene og prøv igjen, eller hopp over oppsettet og endre det senere i Innstillinger.",
       "stepLoadFailed": "Dette trinnet kunne ikke lastes. Trykk på Prøv igjen, eller last siden på nytt.",
       "stepLoadFailedReload": "Dette trinnet kunne fortsatt ikke lastes. Last siden på nytt for å prøve igjen; valg som er lagret i tidligere trinn beholdes."
     },
@@ -5336,10 +5337,12 @@
         "privacyFilterHelp": "Filtrerer ut registreringer når menneskestemmer oppdages nær mikrofonen",
         "birdweatherLabel": "Del registreringer med BirdWeather",
         "birdweatherHelp": "Bidra med fugleregistreringene dine til BirdWeather-fellesskapsnettet",
-        "birdweatherIdLabel": "BirdWeather-stasjon-ID",
-        "birdweatherIdPlaceholder": "Skriv inn din BirdWeather-stasjon-ID",
         "errorReportingLabel": "Send anonyme feilrapporter",
-        "errorReportingHelp": "Hjelp med å forbedre BirdNET-Go ved å sende anonyme feilrapporter når noe går galt"
+        "errorReportingHelp": "Hjelp med å forbedre BirdNET-Go ved å sende anonyme feilrapporter når noe går galt",
+        "reasons": {
+          "enterToken": "Skriv inn BirdWeather-tokenet ditt, eller slå av deling med BirdWeather.",
+          "tokenFormat": "Et BirdWeather-token har 24 bokstaver og sifre."
+        }
       },
       "responsibleUse": {
         "title": "Ansvarlig bruk av BirdNET-Go",

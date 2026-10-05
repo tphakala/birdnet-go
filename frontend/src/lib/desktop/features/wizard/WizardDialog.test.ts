@@ -7,7 +7,8 @@ import type { TranslationKey } from '$lib/i18n';
 import type { WizardStep, WizardStepProps } from './types';
 import { deferred } from '../../../../test/async-helpers';
 
-vi.mock('$lib/utils/api', () => ({
+vi.mock('$lib/utils/api', async importOriginal => ({
+  ...(await importOriginal<typeof import('$lib/utils/api')>()),
   api: {
     post: vi.fn().mockResolvedValue({}),
   },
@@ -22,7 +23,7 @@ vi.mock('./wizardRegistry', () => ({
   getStepsForFlow: vi.fn(() => []),
 }));
 
-const { api } = await import('$lib/utils/api');
+const { api, ApiError } = await import('$lib/utils/api');
 const { getStepsForFlow } = await import('./wizardRegistry');
 const { wizardState, STEP_MOVE_GUARD_MS } = await import('./wizardState.svelte');
 const { stepControl } = await import('./wizardTestStepControl');
@@ -264,6 +265,21 @@ describe('WizardDialog', () => {
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
     expect(screen.getByRole('alert')).toHaveTextContent('');
+  });
+
+  it('a save the server refuses as invalid shows the rejected message in the alert', async () => {
+    stepControl.leave = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new ApiError('refused', 400, new Response(null, { status: 400 })));
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+
+    await user.click(primaryButton());
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.saveRejected')
+    );
+    expect(heading()).toHaveTextContent('test.step1');
   });
 
   it('makes the step content inert while saving and interactive again after the save', async () => {
