@@ -67,6 +67,25 @@ async function chooseUsbDevice() {
   await fireEvent.click(await screen.findByRole('option', { name: /USB Mic/ }));
 }
 
+// Applies a saved section to the stored settings the way the real store does
+// (objects merge, arrays replace), and rejects the sections named in failOn once each.
+function saveLikeStore(failOn: Array<'audio' | 'rtsp'> = []) {
+  const pending = [...failOn];
+  vi.mocked(settingsActions.saveSection).mockImplementation(async (section, partial) => {
+    const failIndex = pending.indexOf(section as 'audio' | 'rtsp');
+    if (failIndex >= 0) {
+      pending.splice(failIndex, 1);
+      throw new Error(`save ${section} failed`);
+    }
+    settingsStore.update(state => {
+      const realtime = state.originalData.realtime as unknown as Record<string, object>;
+      // eslint-disable-next-line security/detect-object-injection -- section is 'audio' or 'rtsp' in these tests
+      realtime[section] = { ...realtime[section], ...partial };
+      return state;
+    });
+  });
+}
+
 function resetStore() {
   seed({ sources: [TEMPLATE_SOURCE], source: '' });
 }
@@ -168,6 +187,27 @@ describe('AudioSourceStep - leave handler', () => {
     await leave();
 
     expect(vi.mocked(settingsActions.saveSection).mock.calls.map(c => c[0])).toEqual(['audio']);
+  });
+
+  it('sound card chosen after a stream save whose audio write failed turns that stream off', async () => {
+    saveLikeStore(['audio']);
+    vi.mocked(api.get).mockResolvedValue([USB]);
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream();
+    await expect(leave()).rejects.toThrow('save audio failed');
+
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
+    await chooseUsbDevice();
+    await leave();
+
+    const calls = vi.mocked(settingsActions.saveSection).mock.calls;
+    expect(calls.map(c => c[0])).toEqual(['rtsp', 'audio', 'audio', 'rtsp']);
+    expect(calls[3][1]).toEqual({
+      streams: [
+        { name: 'Stream 1', url: RTSP_URL, enabled: false, type: 'rtsp', transport: 'tcp' },
+      ],
+    });
   });
 
   it('set up later is a visible button and sends nothing', async () => {

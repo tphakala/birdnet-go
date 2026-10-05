@@ -117,7 +117,8 @@ export function firstFreeStreamName(streams: StreamConfig[]): string {
  * Payloads for choosing a sound card. `audio` always carries `source: ''` when
  * it can leave `sources` unchanged or empty, because the backend recreates a
  * sound card from a non-empty legacy `source` whenever `sources` is empty.
- * `openedInStreamMode` says the step opened on the stream option, in which case
+ * `openedInStreamMode` says the step opened on the stream option or has saved a
+ * stream itself, in which case
  * the stream it showed (`primaryStreamUrl`) is turned off, not deleted.
  * Either payload is null when the stored settings already match the choice.
  */

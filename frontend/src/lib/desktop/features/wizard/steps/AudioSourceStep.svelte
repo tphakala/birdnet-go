@@ -42,9 +42,10 @@
   }
 
   const initial = initialAudioChoice(storedRealtime()?.audio, storedRealtime()?.rtsp);
-  // The step opens on the stream option only when no sound card is configured; a
-  // sound card choice then turns the stream it showed off
-  const openedInStreamMode = initial.sourceType === 'rtsp';
+  // True when the step shows a stream that no sound card accompanies: it opened on
+  // the stream option (only when no sound card is configured), or it has saved a
+  // stream itself. A sound card choice then turns that stream off.
+  let openedInStreamMode = $state(initial.sourceType === 'rtsp');
   const hadSoundCards = initial.savedDevice !== '';
   const savedDevice = initial.savedDevice;
   // URL of the stream this step edits; follows every successful stream save so a
@@ -210,6 +211,7 @@
       if (!isRtspUrl(url)) return;
       const payloads = streamPayloads(realtime?.audio, realtime?.rtsp, url, primaryStreamUrl);
       await send('rtsp', payloads.rtsp);
+      if (payloads.rtsp !== null) openedInStreamMode = true;
       primaryStreamUrl = url;
       await send('audio', payloads.audio);
     }
