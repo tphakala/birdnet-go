@@ -1,7 +1,9 @@
 // clip_reconcile.go - reconciles persisted clip_name references against the audio
 // files actually on disk, clearing references to files that no longer exist
 // (ghosts from failed exports, or from detections created while export was off).
-// It never deletes files; it only clears the DB reference so clip_name stays a
+// When a spectrogram render of the missing clip survives, the reference is moved
+// to the spectrogram clip name instead, so the image stays reachable.
+// It never deletes files; it only updates the DB reference so clip_name stays a
 // truthful per-detection signal.
 package diskmanager
 
@@ -15,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/spectrogram/specfile"
 )
 
 // ClipRecencyWindow is the age below which a detection's audio clip is treated as
@@ -73,12 +76,18 @@ type ReconcileStore interface {
 	// exactly matches one of the given DB-format values. Returns the number of
 	// rows updated. It never touches files on disk.
 	ClearNoteClipPathsByNames(clipNames []string) (int64, error)
+	// RetainNoteSpectrogramsByClipNames moves clip_name into the spectrogram clip
+	// name for the notes whose clip_name exactly matches one of the given
+	// DB-format values, so a surviving spectrogram render stays reachable. Returns
+	// the number of rows updated. It never touches files on disk.
+	RetainNoteSpectrogramsByClipNames(clipNames []string) (int64, error)
 }
 
 // ReconcileResult summarizes one reconcile pass for logging.
 type ReconcileResult struct {
 	Scanned           int    // clip references read across all chunks
 	Cleared           int64  // rows whose clip_name was cleared
+	Retained          int64  // rows whose clip_name moved to the spectrogram clip name
 	Aborted           bool   // true when the pass stopped early (guard tripped, error, or shutdown)
 	AbortReason       string // human-readable reason when Aborted is true
 	ShutdownRequested bool   // true when the pass stopped because quitChan closed (not a data guard)
@@ -95,7 +104,9 @@ const (
 )
 
 // ReconcileClipOrphansPass walks all clip references in keyset-paginated chunks and
-// clears those whose audio file is confirmed missing. It never deletes files.
+// clears those whose audio file is confirmed missing, or, when a spectrogram render
+// of the clip survives, re-links the render by moving the name to the spectrogram
+// clip name. It never deletes files.
 //
 // Safety guards (fail-safe = leave the stale reference rather than risk data loss):
 //
@@ -185,6 +196,22 @@ func ReconcileClipOrphansPass(quitChan <-chan struct{}, store ReconcileStore, ba
 			return result
 		}
 
+		if len(chunk.retained) > 0 {
+			retained, retainErr := store.RetainNoteSpectrogramsByClipNames(chunk.retained)
+			if retainErr != nil {
+				// Fail safe: leave the rows untouched, the next pass retries.
+				log.Warn("clip reconcile: failed to re-link surviving spectrograms",
+					logger.Error(retainErr),
+					logger.Int("retained", len(chunk.retained)),
+					logger.String("operation", "clip_reconcile_retain"))
+			} else {
+				result.Retained += retained
+				log.Info("clip reconcile: re-linked surviving spectrograms",
+					logger.Int64("retained", retained),
+					logger.String("operation", "clip_reconcile_retain"))
+			}
+		}
+
 		if len(chunk.orphans) > 0 {
 			cleared, clearErr := store.ClearNoteClipPathsByNames(chunk.orphans)
 			if clearErr != nil {
@@ -213,6 +240,7 @@ func ReconcileClipOrphansPass(quitChan <-chan struct{}, store ReconcileStore, ba
 // chunkResult accumulates the on-disk evaluation of one chunk of clip references.
 type chunkResult struct {
 	orphans       []string // DB-format clip_name values confirmed orphaned
+	retained      []string // orphaned DB-format clip_name values whose spectrogram render survives
 	positiveCount int      // rows with a present file or an active encode (storage attached)
 }
 
@@ -221,6 +249,9 @@ type chunkResult struct {
 // an unknown completion time, and rows whose lookup is indeterminate (unreadable
 // directory, escaping symlink, transient I/O error) are skipped entirely (neither
 // cleared nor counted as evidence), so an ambiguous state never causes clearing.
+// A missing clip whose directory still holds a non-empty spectrogram render of it is
+// returned in retained instead of orphans, and counts as evidence that storage is
+// attached.
 func evaluateClipChunk(root *os.Root, refs []ClipReference, now time.Time) chunkResult {
 	var res chunkResult
 	// Per-chunk cache of directory listings so a chunk of missing files sharing a
@@ -237,17 +268,55 @@ func evaluateClipChunk(root *os.Root, refs []ClipReference, now time.Time) chunk
 			continue // recent -> may still be encoding
 		}
 
-		switch clipFileStateAt(root, filepath.FromSlash(ref.ClipName), dirCache, now) {
+		rel := filepath.FromSlash(ref.ClipName)
+		switch clipFileStateAt(root, rel, dirCache, now) {
 		case clipPresent, clipEncoding:
 			res.positiveCount++
 		case clipOrphan:
-			res.orphans = append(res.orphans, ref.ClipName)
+			switch renderStateAt(rel, dirCache) {
+			case renderPresent:
+				// A render on disk is also evidence that storage is attached.
+				res.retained = append(res.retained, ref.ClipName)
+				res.positiveCount++
+			case renderIndeterminate:
+				// Leave the reference untouched.
+			case renderAbsent:
+				res.orphans = append(res.orphans, ref.ClipName)
+			}
 		case clipIndeterminate:
 			// Ambiguous (permission/IO error, or a name that escapes the export
 			// root) -> leave the reference untouched, never counted or cleared.
 		}
 	}
 	return res
+}
+
+// renderState is whether a spectrogram render of an orphaned clip survives.
+type renderState int
+
+const (
+	renderAbsent        renderState = iota // no non-empty render of the clip on disk
+	renderPresent                          // a non-empty render exists
+	renderIndeterminate                    // a render entry could not be inspected
+)
+
+// renderStateAt looks for a non-empty spectrogram render of the clip whose
+// OS-native relative path is rel in the cached listing of its directory, which
+// hasFreshEncodingTemp populated while classifying the clip as an orphan. The
+// clip base is taken without its audio extension, as renders are named after it.
+// A render entry that cannot be inspected makes the answer indeterminate only when
+// no other non-empty render of the clip was found.
+func renderStateAt(rel string, dirCache map[string][]os.DirEntry) renderState {
+	clipBase := strings.TrimSuffix(filepath.Base(rel), filepath.Ext(rel))
+	found, indeterminate := specfile.Renders(dirCache[filepath.Dir(rel)], clipBase)
+	switch {
+	case len(found) > 0:
+		return renderPresent
+	case indeterminate:
+		return renderIndeterminate
+	default:
+		return renderAbsent
+	}
 }
 
 // clipFileStateAt reports the on-disk state of a single clip whose OS-native

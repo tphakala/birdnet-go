@@ -24,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/spectrogram/specfile"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -142,18 +143,20 @@ type CommentResponse struct {
 
 // DetectionResponse represents a detection in the API response
 type DetectionResponse struct {
-	ID                 uint              `json:"id"`
-	Date               string            `json:"date"`
-	Time               string            `json:"time"`
-	Timestamp          string            `json:"timestamp,omitempty"` // ISO8601/RFC3339 with timezone
-	Source             *SourceInfo       `json:"source,omitempty"`
-	BeginTime          string            `json:"beginTime"`
-	EndTime            string            `json:"endTime"`
-	SpeciesCode        string            `json:"speciesCode"`
-	ScientificName     string            `json:"scientificName"`
-	CommonName         string            `json:"commonName"`
-	Confidence         float64           `json:"confidence"`
-	ClipName           string            `json:"clipName,omitempty"`  // Audio clip filename (basename only, no path); empty when no clip exists
+	ID             uint        `json:"id"`
+	Date           string      `json:"date"`
+	Time           string      `json:"time"`
+	Timestamp      string      `json:"timestamp,omitempty"` // ISO8601/RFC3339 with timezone
+	Source         *SourceInfo `json:"source,omitempty"`
+	BeginTime      string      `json:"beginTime"`
+	EndTime        string      `json:"endTime"`
+	SpeciesCode    string      `json:"speciesCode"`
+	ScientificName string      `json:"scientificName"`
+	CommonName     string      `json:"commonName"`
+	Confidence     float64     `json:"confidence"`
+	ClipName       string      `json:"clipName,omitempty"` // Audio clip filename (basename only, no path); empty when no clip exists
+	// SpectrogramOnly is true when the audio clip was removed by retention but a spectrogram image was kept; the frontend shows the image without playback
+	SpectrogramOnly    bool              `json:"spectrogramOnly,omitempty"`
 	ModelType          string            `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 	Verified           string            `json:"verified"`
 	Locked             bool              `json:"locked"`
@@ -707,8 +710,10 @@ func (c *Handler) noteToDetectionResponse(note *datastore.Note, includeWeather b
 		// (apicore.SafeBaseName): only the filename is exposed, never the on-disk
 		// directory layout, and an empty clip name stays empty (no clip exists).
 		ClipName: apicore.SafeBaseName(note.ClipName),
-		Locked:   note.Locked,
-		Unlikely: note.Unlikely,
+		// SpectrogramOnly never exposes the kept clip name, only that an image exists.
+		SpectrogramOnly: note.IsSpectrogramOnly(),
+		Locked:          note.Locked,
+		Unlikely:        note.Unlikely,
 	}
 
 	// populate source info if available
@@ -1282,8 +1287,10 @@ func (c *Handler) DeleteDetection(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "Detection is locked", http.StatusForbidden)
 	}
 
-	// Capture the clip name before deleting the DB record
-	clipName := note.ClipName
+	// Capture the media name before deleting the DB record. A detection whose audio
+	// was removed by retention keeps its spectrogram renders under the spectrogram
+	// clip name, so those renders are cleaned up with it.
+	mediaName := note.MediaName()
 
 	err = c.DS.Delete(idStr)
 	if err != nil {
@@ -1295,24 +1302,17 @@ func (c *Handler) DeleteDetection(ctx echo.Context) error {
 
 	// Best-effort removal of associated clip and spectrogram files.
 	// Failures are logged but do not affect the API response.
-	if clipName != "" {
-		c.removeDetectionFiles(clipName)
+	if mediaName != "" {
+		c.removeDetectionFiles(mediaName)
 	}
 
 	return ctx.NoContent(http.StatusNoContent)
 }
 
-// spectrogramWidths lists all valid spectrogram widths used for file naming.
-// These correspond to the size constants: sm=258, md=514, lg=1026, xl=2050.
-var spectrogramWidths = []int{
-	apicore.SpectrogramSizeSm,
-	apicore.SpectrogramSizeMd,
-	apicore.SpectrogramSizeLg,
-	apicore.SpectrogramSizeXl,
-}
-
 // removeDetectionFiles removes the audio clip and all associated spectrogram
-// files from disk. Deletions are best-effort: files that are already missing
+// files from disk. clipName may be the clip name of a detection whose audio was
+// already removed by retention (its kept renders are then all that is left).
+// Deletions are best-effort: files that are already missing
 // are silently ignored, and other errors are logged as warnings without
 // affecting the caller.
 func (c *Handler) removeDetectionFiles(clipName string) {
@@ -1353,12 +1353,11 @@ func (c *Handler) removeDetectionFiles(clipName string) {
 	// Remove all associated spectrogram files. buildSpectrogramPaths names them
 	// <basename>_<width>px<suffix>.png, where <suffix> encodes the visual style,
 	// dynamic range, frequency profile (e.g. "-bat-v2") and legend/raw variant - and a
-	// single clip can accumulate several of these as those settings change over time.
-	// Rather than enumerate every combination (and miss renders from styles no longer
-	// configured), scan the directory and remove any PNG whose name matches this
-	// clip's "<basename>_<width>px" prefix followed by ".png" or a "-"-prefixed
-	// suffix. The separator anchor after the width prevents matching a different clip
-	// whose basename merely shares this prefix.
+	// single clip can accumulate several of these as those settings change over time;
+	// the prerenderer writes <basename>.png. Rather than enumerate every combination
+	// (and miss renders from styles no longer configured), scan the directory and
+	// remove every file specfile.Matching accepts for this clip. Its anchors
+	// prevent matching a different clip whose basename merely shares this prefix.
 	ext := filepath.Ext(normalized)
 	baseFilename := strings.TrimSuffix(filepath.Base(normalized), ext)
 	clipDir := filepath.Dir(absClipPath)
@@ -1370,10 +1369,7 @@ func (c *Handler) removeDetectionFiles(clipName string) {
 			logger.String("dir", clipDir),
 			logger.Error(readErr))
 	}
-	for _, entry := range entries {
-		if entry.IsDir() || !isSpectrogramFileFor(entry.Name(), baseFilename) {
-			continue
-		}
+	for _, entry := range specfile.Matching(entries, baseFilename) {
 		path := filepath.Join(clipDir, entry.Name())
 		if err := c.SFS.Remove(path); err == nil {
 			removed++
@@ -1389,24 +1385,6 @@ func (c *Handler) removeDetectionFiles(clipName string) {
 			logger.Int("count", removed),
 			logger.String("clip_name", clipName))
 	}
-}
-
-// isSpectrogramFileFor reports whether pngName is a spectrogram render of the clip
-// with the given base filename. It matches "<baseFilename>_<width>px" followed by
-// either ".png" or a "-"-prefixed suffix (style, dynamic-range, frequency-profile
-// and legend tokens), for any known render width. The "."/"-" anchor after the
-// width avoids matching a different clip whose base name merely shares this prefix.
-func isSpectrogramFileFor(pngName, baseFilename string) bool {
-	if !strings.HasSuffix(pngName, ".png") {
-		return false
-	}
-	for _, width := range spectrogramWidths {
-		prefix := fmt.Sprintf("%s_%dpx", baseFilename, width)
-		if pngName == prefix+".png" || strings.HasPrefix(pngName, prefix+"-") {
-			return true
-		}
-	}
-	return false
 }
 
 // invalidateDetectionCache clears the detection cache to ensure fresh data

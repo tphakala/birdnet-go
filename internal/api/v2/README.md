@@ -205,6 +205,19 @@ should honor `Retry-After` and retry; the clip appears once the capture complete
 by retention). These pending 503s are intentionally not logged as errors and are not
 reported to telemetry, since they are expected, self-resolving backpressure.
 
+**Spectrogram after retention (`GET /spectrogram/:id`).** When the retention policy
+deletes a detection's audio and the "keep spectrograms" setting is on, the detection
+keeps its spectrogram images. For such a detection (no audio clip, a kept image) the
+endpoint serves an existing render of the clip, preferring the exact size and `raw`
+variant requested and otherwise the nearest render of the same clip, and never
+generates one. It answers `404` when no image was kept. The same applies when the
+audio file is gone but the database has not caught up yet. `POST
+/spectrogram/:id/generate`, `GET /spectrogram/:id/status` and `GET /audio/:id` are
+unchanged and keep answering `404` for detections without audio. Detection and search
+responses carry `spectrogramOnly: true` for these detections (the field is omitted
+otherwise); `clipName` / `hasAudio` stay empty / false, so clients show the image but no
+player or download.
+
 ### Notifications (`notifications/notifications.go`)
 
 | Method | Route                              | Handler                            | Auth | Description                                                                                                                                                                                    |

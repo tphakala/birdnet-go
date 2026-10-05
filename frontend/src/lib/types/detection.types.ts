@@ -29,6 +29,7 @@ export interface Detection {
   unlikely?: boolean;
   comments?: Comment[];
   clipName?: string;
+  spectrogramOnly?: boolean; // audio removed by retention, spectrogram image kept
   weather?: Weather;
   timeOfDay?: string;
   // Species tracking metadata

@@ -384,6 +384,8 @@ func (dw *DualWriteRepository) Save(ctx context.Context, result *detection.Resul
 
 // syncToV2 performs the core v2 save/upsert logic and returns an error on failure.
 // This is the inner logic used by both the async save path and the reconciliation loop.
+// When it copies a legacy clip_name onto an existing v2 row it also clears
+// spectrogram_clip_name, so the two stay mutually exclusive.
 func (dw *DualWriteRepository) syncToV2(ctx context.Context, result *detection.Result, additionalResults []detection.AdditionalResult) error {
 	// Convert domain model to v2 entity
 	det, err := dw.convertToV2Detection(ctx, result)
@@ -410,6 +412,8 @@ func (dw *DualWriteRepository) syncToV2(ctx context.Context, result *detection.R
 		}
 		if det.ClipName != nil {
 			updates["clip_name"] = *det.ClipName
+			// Keep clip_name and spectrogram_clip_name mutually exclusive.
+			updates["spectrogram_clip_name"] = nil
 		}
 		if err := dw.v2.Update(ctx, det.ID, updates); err != nil {
 			// ErrDetectionLocked is acceptable - record is protected

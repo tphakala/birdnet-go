@@ -19,8 +19,11 @@ import (
 type fakeReconcileStore struct {
 	refs     []ClipReference // ordered by ID ascending
 	cleared  []string        // clip_names passed to ClearNoteClipPathsByNames
+	retained []string        // clip_names passed to RetainNoteSpectrogramsByClipNames
 	getErr   error
 	clearErr error
+	// retainErr makes RetainNoteSpectrogramsByClipNames fail.
+	retainErr error
 }
 
 func (f *fakeReconcileStore) GetNoteClipReferences(afterID uint, limit int) ([]ClipReference, error) {
@@ -45,6 +48,26 @@ func (f *fakeReconcileStore) ClearNoteClipPathsByNames(clipNames []string) (int6
 		return 0, f.clearErr
 	}
 	f.cleared = append(f.cleared, clipNames...)
+	return int64(len(clipNames)), nil
+}
+
+func (f *fakeReconcileStore) RetainNoteSpectrogramsByClipNames(clipNames []string) (int64, error) {
+	if f.retainErr != nil {
+		return 0, f.retainErr
+	}
+	f.retained = append(f.retained, clipNames...)
+	// Like the real store, moved rows leave the clip_name listing.
+	moved := make(map[string]bool, len(clipNames))
+	for _, n := range clipNames {
+		moved[n] = true
+	}
+	kept := f.refs[:0:0]
+	for _, r := range f.refs {
+		if !moved[r.ClipName] {
+			kept = append(kept, r)
+		}
+	}
+	f.refs = kept
 	return int64(len(clipNames)), nil
 }
 

@@ -114,6 +114,9 @@ func (m *mockCorruptStore) GetAllImageCaches(providerName string) ([]datastore.I
 }
 
 func (m *mockCorruptStore) GetNoteModelType(_ string) (string, error) { return "bird", nil }
+func (m *mockCorruptStore) GetNoteKeptSpectrogram(_ string) (clipName, modelType string, err error) {
+	return "", "bird", nil
+}
 
 // TestImageCacheDisablesReadsOnCorruption verifies that once GetImageCache
 // reports SQLite corruption, the cache stops issuing further reads or writes

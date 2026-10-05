@@ -57,9 +57,12 @@ type Note struct {
 	Threshold         float64
 	Sensitivity       float64
 	ClipName          string
-	ProcessingTime    time.Duration
-	Unlikely          bool    `gorm:"default:false"`                 // Tagged by ultrasonic validation filter
-	Occurrence        float64 `gorm:"-" json:"occurrence,omitempty"` // Runtime only, occurrence probability (0-1) based on location/time
+	// SpectrogramClipName is the clip name of a spectrogram render that outlived the audio
+	// (v2 store only); runtime-only on Note, never serialized.
+	SpectrogramClipName string `gorm:"-" json:"-"`
+	ProcessingTime      time.Duration
+	Unlikely            bool    `gorm:"default:false"`                 // Tagged by ultrasonic validation filter
+	Occurrence          float64 `gorm:"-" json:"occurrence,omitempty"` // Runtime only, occurrence probability (0-1) based on location/time
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
 	// not persisted. Used at Save time to classify non-bird sound classes correctly.
 	RawLabel string        `gorm:"-"`
@@ -184,6 +187,27 @@ type ImageCacheQuery struct {
 	ProviderName   string
 }
 
+// MediaName returns the clip name that identifies the detection's media files: the
+// audio clip when it exists, otherwise the clip a kept spectrogram belongs to.
+func (n *Note) MediaName() string {
+	if n.ClipName != "" {
+		return n.ClipName
+	}
+	return n.SpectrogramClipName
+}
+
+// IsSpectrogramOnly reports whether retention removed the detection's audio but a
+// spectrogram image was kept.
+func (n *Note) IsSpectrogramOnly() bool {
+	return IsSpectrogramOnly(n.ClipName, n.SpectrogramClipName)
+}
+
+// IsSpectrogramOnly reports whether a detection with the given audio clip name and
+// kept spectrogram clip name has no audio but has a kept spectrogram.
+func IsSpectrogramOnly(clipName, spectrogramClipName string) bool {
+	return clipName == "" && spectrogramClipName != ""
+}
+
 // DetectionRecord represents a bird detection record for search results
 type DetectionRecord struct {
 	ID             string    `json:"id"`
@@ -199,10 +223,12 @@ type DetectionRecord struct {
 	Locked         bool      `json:"locked,omitempty"`
 	Unlikely       bool      `json:"unlikely,omitempty"`
 	HasAudio       bool      `json:"hasAudio,omitempty"`
-	Device         string    `json:"device,omitempty"`
-	Source         string    `json:"source,omitempty"`
-	TimeOfDay      string    `json:"timeOfDay,omitempty"`
-	ModelType      string    `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
+	// SpectrogramOnly is true when retention removed the audio but a spectrogram image was kept.
+	SpectrogramOnly bool   `json:"spectrogramOnly,omitempty"`
+	Device          string `json:"device,omitempty"`
+	Source          string `json:"source,omitempty"`
+	TimeOfDay       string `json:"timeOfDay,omitempty"`
+	ModelType       string `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 }
 
 // DynamicThreshold represents a persisted dynamic threshold for a species

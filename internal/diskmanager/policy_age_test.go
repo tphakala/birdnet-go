@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,8 +16,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// MockDB is a mock implementation of the database interface for testing
-type MockDB struct{}
+// MockDB is a mock implementation of the database interface for testing.
+// It records the names passed to the clear and retain methods.
+type MockDB struct {
+	mu        sync.Mutex
+	cleared   [][]string // one entry per ClearNoteClipPathsByNames call
+	retained  [][]string // one entry per RetainNoteSpectrogramsByClipNames call
+	retainErr error      // returned by RetainNoteSpectrogramsByClipNames
+}
 
 // GetDeletionInfo is a mock implementation that always returns no entries
 func (m *MockDB) GetDeletionInfo() ([]string, error) {
@@ -33,8 +41,22 @@ func (m *MockDB) GetLockedNotesClipPaths() ([]string, error) {
 }
 
 // ClearNoteClipPathsByNames is a mock implementation that does nothing
-func (m *MockDB) ClearNoteClipPathsByNames(_ []string) (int64, error) {
-	return 0, nil
+func (m *MockDB) ClearNoteClipPathsByNames(clipNames []string) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cleared = append(m.cleared, slices.Clone(clipNames))
+	return int64(len(clipNames)), nil
+}
+
+// RetainNoteSpectrogramsByClipNames records the names and returns retainErr.
+func (m *MockDB) RetainNoteSpectrogramsByClipNames(clipNames []string) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.retained = append(m.retained, slices.Clone(clipNames))
+	if m.retainErr != nil {
+		return 0, m.retainErr
+	}
+	return int64(len(clipNames)), nil
 }
 
 // TestAgeBasedCleanupFileTypeEligibility tests if the file type check works correctly

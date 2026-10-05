@@ -75,6 +75,9 @@ type FileInfo struct {
 type Interface interface {
 	GetLockedNotesClipPaths() ([]string, error)
 	ClearNoteClipPathsByNames(clipNames []string) (int64, error)
+	// RetainNoteSpectrogramsByClipNames clears clip_name like ClearNoteClipPathsByNames
+	// and records the name as the clip a kept spectrogram render belongs to.
+	RetainNoteSpectrogramsByClipNames(clipNames []string) (int64, error)
 }
 
 // LoadPolicy loads the cleanup policies from a CSV file
