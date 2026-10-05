@@ -29,6 +29,7 @@
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
   const AUDIO_DEVICES_ENDPOINT = '/api/v2/system/audio/devices';
+  const URL_HELP_ID = generateId('wizard-rtsp-url-help');
   const URL_ERROR_ID = generateId('wizard-rtsp-url-error');
   const DEVICE_FIELD_ID = 'wizard-audio-device';
   const URL_FIELD_ID = 'wizard-rtsp-url';
@@ -374,14 +375,14 @@
       >
         {t('wizard.steps.audioSource.rtspUrlLabel')}
       </label>
-      <p class="mb-2 text-sm text-[var(--color-base-content)] opacity-80">
+      <p id={URL_HELP_ID} class="mb-2 text-sm text-[var(--color-base-content)] opacity-80">
         {t('wizard.steps.audioSource.rtspUrlHelp')}
       </p>
       <TextInput
         id={URL_FIELD_ID}
         bind:value={rtspUrl}
         placeholder={t('wizard.steps.audioSource.rtspUrlPlaceholder')}
-        aria-describedby={showUrlError ? URL_ERROR_ID : undefined}
+        aria-describedby={showUrlError ? `${URL_HELP_ID} ${URL_ERROR_ID}` : URL_HELP_ID}
         aria-invalid={showUrlError ? 'true' : undefined}
         oninput={onUrlInput}
         onblur={onUrlBlur}

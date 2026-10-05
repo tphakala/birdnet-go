@@ -506,17 +506,18 @@ describe('AudioSourceStep - device state reasons', () => {
   });
 });
 
-// What the URL field exposes: the alert text, aria-invalid and what aria-describedby points at
+// What the URL field exposes: the alert text, aria-invalid and what aria-describedby points at (the help text, plus the alert while it shows)
 function expectUrlError(shown: boolean) {
   const alert = urlAlert();
   const input = urlInput();
+  const help = screen.getByText(`${KEY}.rtspUrlHelp`);
   expect(alert.textContent.trim()).toBe(shown ? `${KEY}.reasons.urlScheme` : '');
+  // The help text is always linked; the error is added while it shows
+  expect(input).toHaveAttribute('aria-describedby', shown ? `${help.id} ${alert.id}` : help.id);
   if (shown) {
     expect(input).toHaveAttribute('aria-invalid', 'true');
-    expect(input).toHaveAttribute('aria-describedby', alert.id);
   } else {
     expect(input).not.toHaveAttribute('aria-invalid');
-    expect(input).not.toHaveAttribute('aria-describedby');
   }
 }
 
