@@ -17,6 +17,10 @@ noted. Frontend test rules are in the Testing section below (the root
 
 ## Critical Rules
 
+- **Desktop and tablet only; mobile is out of scope (maintainer decision).** Never
+  optimize, fix, screenshot-test or file issues for phone viewports, and never
+  add phone-specific layouts or workarounds. UI test passes cover desktop and
+  iPad sizes only. See the root `AGENTS.md`.
 - **NEVER use `any`.** Type it, or use `unknown` plus a type guard. Tests are the
   only exception (see Testing below).
 - **NEVER use type or non-null assertions to silence the compiler**
