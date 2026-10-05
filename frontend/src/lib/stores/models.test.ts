@@ -250,6 +250,48 @@ describe('models store subscribed from an effect', () => {
     expect(modelsLoading()).toBe(false);
   });
 
+  it('ignores a response that arrives after its request was aborted and the store restarted', async () => {
+    const stale = deferredGet();
+    const first = renderTyped(ModelsSubscriber);
+    first.unmount();
+
+    deferredGet();
+    const second = renderTyped(ModelsSubscriber);
+    expect(apiGet).toHaveBeenCalledTimes(2);
+
+    stale.resolve([PERCH]);
+    await settle();
+
+    // The aborted response must not mark the list loaded or free the newer request.
+    expect(modelsLoaded()).toBe(false);
+    expect(second.getByTestId('loading').textContent).toBe('true');
+    expect(second.getByTestId('count').textContent).toBe('0');
+
+    // A further subscriber still sees the newer request in flight.
+    renderTyped(ModelsSubscriber);
+    expect(apiGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a rejection that arrives after its request was aborted and the store restarted', async () => {
+    const stale = deferredGet();
+    const first = renderTyped(ModelsSubscriber);
+    first.unmount();
+
+    deferredGet();
+    const second = renderTyped(ModelsSubscriber);
+    expect(apiGet).toHaveBeenCalledTimes(2);
+
+    stale.reject(new DOMException('The operation was aborted.', 'AbortError'));
+    await settle();
+
+    // The aborted request must not flip the newer request to the error fallback.
+    expect(modelsLoading()).toBe(true);
+    expect(second.getByTestId('count').textContent).toBe('0');
+
+    renderTyped(ModelsSubscriber);
+    expect(apiGet).toHaveBeenCalledTimes(2);
+  });
+
   type Step = 'mount' | 'resolve' | 'reject' | 'invalidate' | { unmount: number };
 
   it.each<{ name: string; steps: Step[]; requests: number; firstAborted: boolean }>([
