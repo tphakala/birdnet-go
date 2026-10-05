@@ -337,7 +337,11 @@
       highlightedIndex = highlightedIndex === -1 ? 0 : Math.min(highlightedIndex + 1, lastIndex);
     } else {
       // ArrowUp from nothing wraps to the last option; at the first option it stays there
-      highlightedIndex = highlightedIndex === -1 ? lastIndex : Math.max(highlightedIndex - 1, 0);
+      // A highlight left beyond a shrunken list counts as being below the last option
+      highlightedIndex =
+        highlightedIndex === -1 || highlightedIndex > lastIndex
+          ? lastIndex
+          : Math.max(highlightedIndex - 1, 0);
     }
     scrollToHighlighted();
   }

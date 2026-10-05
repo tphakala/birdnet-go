@@ -654,9 +654,13 @@ describe('SelectDropdown Accessibility', () => {
     await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
     expect(search).toHaveAttribute('aria-activedescendant');
 
-    await rerender({ options: fruit.slice(0, 1), searchable: true });
+    await rerender({ options: fruit.slice(0, 2), searchable: true });
 
     expect(search).not.toHaveAttribute('aria-activedescendant');
+
+    // ArrowUp from beyond the list lands on the last remaining option, not the one above it
+    await user.keyboard('{ArrowUp}');
+    expect(search).toHaveAttribute('aria-activedescendant', screen.getAllByRole('option')[1].id);
   });
 
   it('sets no aria-activedescendant when ArrowDown is pressed with no matching options', async () => {
