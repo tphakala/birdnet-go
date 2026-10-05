@@ -429,4 +429,98 @@ describe('IntegrationStep - BirdWeather token', () => {
     await flushAsync();
     expect(invalidSpy.mock.calls.map(call => call[0])).not.toContain(true);
   });
+  describe('with BirdWeather off', () => {
+    const PRIVACY = /wizard\.steps\.integration\.privacyFilterLabel/;
+    const savedCalls = () => vi.mocked(settingsActions.saveSection).mock.calls;
+
+    it('BirdWeather off with a malformed token sends nothing', async () => {
+      seed({ enabled: false, id: '' });
+      const { leave } = renderStep(IntegrationStep);
+      await flushAsync();
+      await toggleBirdweather();
+      await typeToken('abc');
+      await toggleBirdweather();
+
+      await leave();
+
+      expect(settingsActions.saveSection).not.toHaveBeenCalled();
+    });
+
+    it('BirdWeather off with a malformed token keeps the stored token', async () => {
+      seed({ enabled: false, id: VALID_TOKEN });
+      const { leave } = renderStep(IntegrationStep);
+      await flushAsync();
+      await toggleBirdweather();
+      await typeToken('abc');
+      await toggleBirdweather();
+      await fireEvent.click(screen.getByRole('button', { name: PRIVACY }));
+
+      await leave();
+
+      expect(savedCalls()).toEqual([['privacyfilter', { enabled: false }]]);
+    });
+
+    it('BirdWeather off with a well-formed new token saves it', async () => {
+      seed({ enabled: false, id: '' });
+      const { leave } = renderStep(IntegrationStep);
+      await flushAsync();
+      await toggleBirdweather();
+      await typeToken(VALID_TOKEN);
+      await toggleBirdweather();
+
+      await leave();
+
+      expect(savedCalls()).toEqual([['birdweather', { enabled: false, id: VALID_TOKEN }]]);
+    });
+
+    it('BirdWeather off with an emptied token saves the empty token', async () => {
+      seed({ enabled: false, id: VALID_TOKEN });
+      const { leave } = renderStep(IntegrationStep);
+      await flushAsync();
+      await toggleBirdweather();
+      await typeToken('');
+      await toggleBirdweather();
+
+      await leave();
+
+      expect(savedCalls()).toEqual([['birdweather', { enabled: false, id: '' }]]);
+    });
+
+    it('a malformed token typed after a successful save is not sent either', async () => {
+      seed({ enabled: false, id: '' });
+      const { leave } = renderStep(IntegrationStep);
+      await flushAsync();
+      await toggleBirdweather();
+      await typeToken(VALID_TOKEN);
+      await toggleBirdweather();
+      await leave();
+      vi.mocked(settingsActions.saveSection).mockClear();
+
+      await toggleBirdweather();
+      await typeToken('abc');
+      await toggleBirdweather();
+      await leave();
+
+      expect(settingsActions.saveSection).not.toHaveBeenCalled();
+    });
+
+    it('turning BirdWeather on again keeps the typed token and blocks Next, and Back sends no BirdWeather', async () => {
+      seed({ enabled: false, id: '' });
+      const onValidChange = vi.fn();
+      const { leave } = renderStep(IntegrationStep, { onValidChange });
+      await flushAsync();
+      await toggleBirdweather();
+      await typeToken('abc');
+      await toggleBirdweather();
+      await leave();
+      expect(settingsActions.saveSection).not.toHaveBeenCalled();
+
+      await toggleBirdweather();
+      expect(screen.getByRole('textbox')).toHaveValue('abc');
+      expect(lastReport(onValidChange)).toEqual([false, TOKEN_FORMAT]);
+      await leave();
+
+      expect(settingsActions.saveSection).not.toHaveBeenCalled();
+    });
+  });
 });

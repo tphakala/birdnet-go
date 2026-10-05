@@ -35,11 +35,18 @@
   const SECTIONS = ['birdweather', 'privacyfilter', 'sentry'] as const;
   type IntegrationSection = (typeof SECTIONS)[number];
 
+  // The token last known to be on the server (trimmed). While BirdWeather is off
+  // a malformed token is not sent: it stays in the field, and the server keeps
+  // this one.
+  let savedTokenId = (store?.formData?.realtime?.birdweather?.id ?? '').trim();
+
   // The token is sent trimmed: the server does not trim it, so this is the string
   // the validation below accepts.
   function currentPayloads(): { [S in IntegrationSection]: SettingsSectionPayloads[S] } {
+    const typedId = birdweatherId.trim();
+    const keepSavedId = !birdweatherEnabled && typedId !== '' && !isBirdweatherToken(typedId);
     return {
-      birdweather: { enabled: birdweatherEnabled, id: birdweatherId.trim() },
+      birdweather: { enabled: birdweatherEnabled, id: keepSavedId ? savedTokenId : typedId },
       privacyfilter: { enabled: privacyEnabled },
       sentry: { enabled: sentryEnabled },
     };
@@ -125,6 +132,7 @@
       await settingsActions.saveSection(section, body);
       // eslint-disable-next-line security/detect-object-injection -- section is a member of SECTIONS
       savedJson[section] = json;
+      if (section === 'birdweather') savedTokenId = next.birdweather.id ?? '';
     }
   }
 </script>
