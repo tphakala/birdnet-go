@@ -3210,7 +3210,11 @@
         "enable": "Schakel BirdWeather Uploads in",
         "token": {
           "label": "BirdWeather-token",
-          "helpText": "Jouw unieke BirdWeather token."
+          "helpText": "Jouw unieke BirdWeather token.",
+          "errors": {
+            "required": "Voer je BirdWeather-token in of zet BirdWeather uit.",
+            "format": "Een BirdWeather-token bestaat uit 24 letters en cijfers."
+          }
         },
         "threshold": {
           "label": "Upload Drempelwaarde",

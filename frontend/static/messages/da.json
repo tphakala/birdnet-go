@@ -3210,7 +3210,11 @@
         "enable": "Aktivér BirdWeather-uploads",
         "token": {
           "label": "BirdWeather-token",
-          "helpText": "Dit unikke BirdWeather-token."
+          "helpText": "Dit unikke BirdWeather-token.",
+          "errors": {
+            "required": "Indtast dit BirdWeather-token, eller slå BirdWeather fra.",
+            "format": "Et BirdWeather-token består af 24 bogstaver og cifre."
+          }
         },
         "threshold": {
           "label": "Uploadtærskel",

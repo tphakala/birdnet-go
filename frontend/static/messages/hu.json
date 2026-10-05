@@ -3210,7 +3210,11 @@
         "enable": "BirdWeather feltöltések engedélyezése",
         "token": {
           "label": "BirdWeather token",
-          "helpText": "Az Ön egyedi BirdWeather token-je."
+          "helpText": "Az Ön egyedi BirdWeather token-je.",
+          "errors": {
+            "required": "Adja meg a BirdWeather-tokent, vagy kapcsolja ki a BirdWeathert.",
+            "format": "A BirdWeather-token 24 betűből és számjegyből áll."
+          }
         },
         "threshold": {
           "label": "Feltöltési küszöbérték",

@@ -3210,7 +3210,11 @@
         "enable": "Ota käyttöön BirdWeather-lähetykset",
         "token": {
           "label": "BirdWeather-tunnus",
-          "helpText": "Yksilöllinen BirdWeather-tunnuksesi."
+          "helpText": "Yksilöllinen BirdWeather-tunnuksesi.",
+          "errors": {
+            "required": "Anna BirdWeather-tunnuksesi tai poista BirdWeather käytöstä.",
+            "format": "BirdWeather-tunnuksessa on 24 kirjainta ja numeroa."
+          }
         },
         "threshold": {
           "label": "Lähetyskynnys",

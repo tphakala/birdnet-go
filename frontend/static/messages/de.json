@@ -3210,7 +3210,11 @@
         "enable": "BirdWeather-Uploads aktivieren",
         "token": {
           "label": "BirdWeather-Token",
-          "helpText": "Ihr einzigartiges BirdWeather-Token."
+          "helpText": "Ihr einzigartiges BirdWeather-Token.",
+          "errors": {
+            "required": "Geben Sie Ihr Token ein oder schalten Sie BirdWeather aus.",
+            "format": "Ein BirdWeather-Token besteht aus 24 Buchstaben und Ziffern."
+          }
         },
         "threshold": {
           "label": "Upload-Schwellenwert",

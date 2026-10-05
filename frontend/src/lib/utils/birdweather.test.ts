@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isBirdweatherToken } from './birdweather';
+import { birdweatherTokenProblem, isBirdweatherToken } from './birdweather';
 
 const TOKEN = 'aB3dEf6hIj9lMn2pQr5tUv8x';
 
@@ -20,5 +20,25 @@ describe('isBirdweatherToken', () => {
     ['the value from the report', 'TESTID123', false],
   ])('%s', (_name, value, valid) => {
     expect(isBirdweatherToken(value)).toBe(valid);
+  });
+});
+
+describe('birdweatherTokenProblem', () => {
+  it.each([
+    ['off with an empty token', false, '', null],
+    ['off with a malformed token', false, 'abc', null],
+    ['off with a well-formed token', false, TOKEN, null],
+    ['off with a missing token', false, undefined, null],
+    ['on with an empty token', true, '', 'required'],
+    ['on with a missing token', true, undefined, 'required'],
+    ['on with a null token', true, null, 'required'],
+    ['on with spaces only', true, '   ', 'required'],
+    ['on with 23 characters', true, TOKEN.slice(1), 'format'],
+    ['on with 25 characters', true, `${TOKEN}a`, 'format'],
+    ['on with a non-ASCII letter', true, `${TOKEN.slice(1)}ä`, 'format'],
+    ['on with 24 characters', true, TOKEN, null],
+    ['on with a padded 24 character token', true, `  ${TOKEN} `, 'format'],
+  ] as const)('%s', (_name, enabled, token, expected) => {
+    expect(birdweatherTokenProblem(enabled, token)).toBe(expected);
   });
 });

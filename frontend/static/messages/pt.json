@@ -3210,7 +3210,11 @@
         "enable": "Ativar uploads para BirdWeather",
         "token": {
           "label": "Token do BirdWeather",
-          "helpText": "Seu token exclusivo do BirdWeather."
+          "helpText": "Seu token exclusivo do BirdWeather.",
+          "errors": {
+            "required": "Introduza o token do BirdWeather ou desative o BirdWeather.",
+            "format": "Um token do BirdWeather tem 24 letras e dígitos."
+          }
         },
         "threshold": {
           "label": "Limiar de upload",

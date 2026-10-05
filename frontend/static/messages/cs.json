@@ -3210,7 +3210,11 @@
         "enable": "Povolit nahrávání do BirdWeather",
         "token": {
           "label": "Token BirdWeather",
-          "helpText": "Váš jedinečný token BirdWeather."
+          "helpText": "Váš jedinečný token BirdWeather.",
+          "errors": {
+            "required": "Zadejte token BirdWeather, nebo BirdWeather vypněte.",
+            "format": "Token BirdWeather má 24 písmen a číslic."
+          }
         },
         "threshold": {
           "label": "Práh nahrávání",

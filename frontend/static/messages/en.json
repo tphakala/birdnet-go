@@ -3210,7 +3210,11 @@
         "enable": "Enable BirdWeather Uploads",
         "token": {
           "label": "BirdWeather token",
-          "helpText": "Your unique BirdWeather token."
+          "helpText": "Your unique BirdWeather token.",
+          "errors": {
+            "required": "Enter your BirdWeather token, or turn BirdWeather off.",
+            "format": "A BirdWeather token is 24 letters and digits."
+          }
         },
         "threshold": {
           "label": "Upload Threshold",

@@ -3210,7 +3210,11 @@
         "enable": "Habilitar cargas a BirdWeather",
         "token": {
           "label": "Token de BirdWeather",
-          "helpText": "Tu token único de BirdWeather."
+          "helpText": "Tu token único de BirdWeather.",
+          "errors": {
+            "required": "Introduce tu token de BirdWeather o desactiva BirdWeather.",
+            "format": "Un token de BirdWeather tiene 24 letras y dígitos."
+          }
         },
         "threshold": {
           "label": "Umbral de carga",

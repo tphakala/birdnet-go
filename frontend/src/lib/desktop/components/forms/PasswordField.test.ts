@@ -322,4 +322,144 @@ describe('PasswordField', () => {
 
     document.body.removeChild(container);
   });
+
+  describe('validation attributes', () => {
+    it('marks the input invalid and links the error text', () => {
+      render(PasswordField, {
+        props: { label: 'Token', value: 'abc', onUpdate: vi.fn(), error: 'Token is wrong' },
+      });
+
+      const input = screen.getByLabelText('Token');
+      const message = screen.getByText('Token is wrong');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(message.id).not.toBe('');
+      expect(input.getAttribute('aria-describedby')?.split(' ')).toContain(message.id);
+      expect(message).toHaveClass('text-[var(--text-error)]');
+    });
+
+    it('passes aria-describedby and aria-invalid to the input, not the wrapper', () => {
+      const { container } = render(PasswordField, {
+        props: {
+          label: 'Token',
+          value: '',
+          onUpdate: vi.fn(),
+          'aria-describedby': 'outside-hint',
+          'aria-invalid': 'true',
+        },
+      });
+
+      const input = screen.getByLabelText('Token');
+      expect(input).toHaveAttribute('aria-describedby', 'outside-hint');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      const wrapper = container.querySelector('.form-control');
+      expect(wrapper).not.toHaveAttribute('aria-describedby');
+      expect(wrapper).not.toHaveAttribute('aria-invalid');
+    });
+
+    it('joins a passed aria-describedby with the error id', () => {
+      render(PasswordField, {
+        props: {
+          label: 'Token',
+          value: '',
+          onUpdate: vi.fn(),
+          error: 'Token is wrong',
+          'aria-describedby': 'outside-hint',
+        },
+      });
+
+      const ids = screen.getByLabelText('Token').getAttribute('aria-describedby')?.split(' ');
+      expect(ids).toContain('outside-hint');
+      expect(ids).toContain(screen.getByText('Token is wrong').id);
+    });
+
+    it('renders the error outside .label-text-alt so its opacity does not lower the contrast', () => {
+      render(PasswordField, {
+        props: { label: 'Token', value: 'abc', onUpdate: vi.fn(), error: 'Token is wrong' },
+      });
+
+      const message = screen.getByText('Token is wrong');
+      expect(message.closest('.label-text-alt')).toBeNull();
+      expect(message.classList.contains('label-text-alt')).toBe(false);
+    });
+
+    it('cancels the flex gap while the alert region is empty and spaces the error normally', async () => {
+      const { rerender } = render(PasswordField, {
+        props: { label: 'Token', value: '', onUpdate: vi.fn() },
+      });
+      const region = screen.getByRole('alert');
+      expect(region).toHaveClass('-mt-1');
+      expect(region).not.toHaveClass('py-1');
+
+      await rerender({ label: 'Token', value: '', onUpdate: vi.fn(), error: 'Token is wrong' });
+
+      expect(region).not.toHaveClass('-mt-1');
+      expect(region).toHaveClass('py-1');
+    });
+
+    it('keeps one alert region whose text changes when the error appears', async () => {
+      const { rerender } = render(PasswordField, {
+        props: { label: 'Token', value: '', onUpdate: vi.fn() },
+      });
+      const region = screen.getByRole('alert');
+      expect(region.textContent.trim()).toBe('');
+      expect(region).not.toHaveAttribute('aria-live');
+
+      await rerender({ label: 'Token', value: '', onUpdate: vi.fn(), error: 'Token is wrong' });
+
+      expect(screen.getByRole('alert')).toBe(region);
+      expect(region).toHaveTextContent('Token is wrong');
+    });
+
+    it('links the input to the alert region only while an error is shown', async () => {
+      const { rerender } = render(PasswordField, {
+        props: { label: 'Token', value: '', onUpdate: vi.fn() },
+      });
+      expect(screen.getByLabelText('Token')).not.toHaveAttribute('aria-describedby');
+
+      await rerender({ label: 'Token', value: '', onUpdate: vi.fn(), error: 'Token is wrong' });
+
+      expect(screen.getByLabelText('Token').getAttribute('aria-describedby')).toBe(
+        screen.getByRole('alert').id
+      );
+    });
+
+    it('calls onblur with the value', async () => {
+      const onblur = vi.fn();
+      render(PasswordField, {
+        props: { label: 'Token', value: 'abc', onUpdate: vi.fn(), onblur },
+      });
+
+      await fireEvent.blur(screen.getByLabelText('Token'));
+
+      expect(onblur).toHaveBeenCalledWith('abc');
+    });
+
+    it('shows the error border when aria-invalid is set', () => {
+      render(PasswordField, {
+        props: { label: 'Token', value: '', onUpdate: vi.fn(), 'aria-invalid': 'true' },
+      });
+
+      expect(screen.getByLabelText('Token')).toHaveClass('input-error');
+    });
+
+    it.each([[false], ['false']] as const)(
+      'shows no error border when aria-invalid is %s',
+      ariaInvalid => {
+        render(PasswordField, {
+          props: { label: 'Token', value: '', onUpdate: vi.fn(), 'aria-invalid': ariaInvalid },
+        });
+
+        expect(screen.getByLabelText('Token')).not.toHaveClass('input-error');
+      }
+    );
+
+    it('sets no validation attributes without an error', () => {
+      render(PasswordField, { props: { label: 'Token', value: '', onUpdate: vi.fn() } });
+
+      const input = screen.getByLabelText('Token');
+      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(input).not.toHaveAttribute('aria-describedby');
+      expect(input).not.toHaveClass('input-error');
+    });
+  });
 });

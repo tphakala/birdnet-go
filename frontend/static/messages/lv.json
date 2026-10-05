@@ -3210,7 +3210,11 @@
         "enable": "Iespējot BirdWeather augšupielādes",
         "token": {
           "label": "BirdWeather tokens",
-          "helpText": "Jūsu unikālais BirdWeather tokens."
+          "helpText": "Jūsu unikālais BirdWeather tokens.",
+          "errors": {
+            "required": "Ievadiet savu BirdWeather tokenu vai izslēdziet BirdWeather.",
+            "format": "BirdWeather tokens sastāv no 24 burtiem un cipariem."
+          }
         },
         "threshold": {
           "label": "Augšupielādes slieksnis",

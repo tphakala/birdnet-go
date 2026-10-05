@@ -3210,7 +3210,11 @@
         "enable": "Włącz Przesyłanie do BirdWeather",
         "token": {
           "label": "Token BirdWeather",
-          "helpText": "Twój unikalny token BirdWeather."
+          "helpText": "Twój unikalny token BirdWeather.",
+          "errors": {
+            "required": "Wpisz token BirdWeather albo wyłącz BirdWeather.",
+            "format": "Token BirdWeather składa się z 24 liter i cyfr."
+          }
         },
         "threshold": {
           "label": "Próg Przesyłania",
