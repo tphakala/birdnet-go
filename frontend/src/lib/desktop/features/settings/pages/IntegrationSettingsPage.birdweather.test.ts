@@ -11,28 +11,26 @@ const BIRDWEATHER_TOKEN_ERROR_KEY = 'birdweather-token-invalid';
 const REQUIRED_MESSAGE = 'settings.integration.birdweather.token.errors.required';
 const FORMAT_MESSAGE = 'settings.integration.birdweather.token.errors.format';
 
-// Deliberately partial form data: the page reads only realtime.birdweather in these tests.
-function formDataWith(birdweather: { enabled: boolean; id: string }): SettingsFormData {
-  return {
-    realtime: {
-      birdweather: {
-        ...birdweather,
-        latitude: 0,
-        longitude: 0,
-        locationAccuracy: 1000,
-        threshold: 0.7,
-        debug: false,
-      },
-    },
-  } as unknown as SettingsFormData;
-}
-
+// Override only realtime.birdweather on the store's own typed defaults, so the rest of
+// the form data keeps the shape the page expects.
 function seedStore(birdweather: { enabled: boolean; id: string }) {
-  settingsStore.update(state => ({
-    ...state,
-    formData: formDataWith(birdweather),
-    originalData: formDataWith(birdweather),
-  }));
+  settingsStore.update(state => {
+    const formData: SettingsFormData = {
+      ...state.formData,
+      realtime: {
+        ...state.formData.realtime,
+        birdweather: {
+          latitude: 0,
+          longitude: 0,
+          locationAccuracy: 1000,
+          threshold: 0.7,
+          debug: false,
+          ...birdweather,
+        },
+      },
+    };
+    return { ...state, formData, originalData: formData };
+  });
 }
 
 function tokenInput(): HTMLInputElement {

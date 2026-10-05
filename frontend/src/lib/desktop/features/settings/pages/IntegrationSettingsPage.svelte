@@ -357,7 +357,7 @@
   }
 
   function updateBirdWeatherId(id: string) {
-    // The server does not trim the token, so a paste with a trailing space or newline is stored clean.
+    // The server does not trim the token, so it is trimmed here and a paste with a trailing space or newline is saved clean.
     settingsActions.updateSection('realtime', {
       birdweather: { ...settings.birdweather, id: id.trim() },
     });
