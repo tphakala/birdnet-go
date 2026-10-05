@@ -277,6 +277,45 @@ describe('AudioSourceStep - leave handler', () => {
     expect(calls[3][1]).toEqual({ sources: [], source: '' });
   });
 
+  it('sends no second section once the step is unmounted during the first save', async () => {
+    const firstSave = deferred();
+    vi.mocked(settingsActions.saveSection).mockImplementation(section =>
+      section === 'rtsp' ? firstSave.promise : Promise.resolve()
+    );
+    const { leave, unmount } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream();
+
+    const leaving = leave();
+    await flushAsync();
+    unmount();
+    firstSave.resolve();
+    await leaving;
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls.map(c => c[0])).toEqual(['rtsp']);
+  });
+
+  it('retry after a failed second section re-sends only that section when nothing was edited', async () => {
+    // The store keeps nothing, so the first section is rebuilt identically on the retry
+    vi.mocked(settingsActions.saveSection).mockImplementation(async section => {
+      if (vi.mocked(settingsActions.saveSection).mock.calls.length === 2 && section === 'audio') {
+        throw new Error('save audio failed');
+      }
+    });
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream();
+    await expect(leave()).rejects.toThrow('save audio failed');
+
+    await leave();
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls.map(c => c[0])).toEqual([
+      'rtsp',
+      'audio',
+      'audio',
+    ]);
+  });
+
   it('preselects the saved device by its stable id and writes nothing', async () => {
     seed({ sources: [{ ...TEMPLATE_SOURCE, device: 'usb-path:bus-1' }], source: '' });
     vi.mocked(api.get).mockResolvedValue([USB]);

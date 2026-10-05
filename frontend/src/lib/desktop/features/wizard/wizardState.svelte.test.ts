@@ -419,13 +419,17 @@ describe('wizardState - state machine', () => {
       expect(wizardState.stepBlockedReason).toBeNull();
     });
 
-    it('clears the reason on a step move', async () => {
+    it('drops the reason of an invalid step when Back moves to the previous step', async () => {
       launchSteps(3);
       readyStep();
-      wizardState.setStepValid(false, 0, 'wizard.reasons.completeStep');
-      wizardState.setStepValid(true);
       await wizardState.next();
+      readyStep();
+      wizardState.setStepValid(false, 1, 'wizard.reasons.completeStep');
+      expect(wizardState.stepBlockedReason).toBe('wizard.reasons.completeStep');
 
+      await wizardState.back();
+
+      expect(wizardState.currentStepIndex).toBe(0);
       expect(wizardState.stepBlockedReason).toBeNull();
     });
 
