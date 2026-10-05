@@ -5314,7 +5314,7 @@
           "devicesFailed": "De audioapparaten konden niet worden opgesomd. Probeer opnieuw, gebruik een stream, of stel audio later in.",
           "noDevices": "Geen audioapparaat gevonden. Gebruik een stream, of stel audio later in.",
           "enterUrl": "Voer de stream-URL in, of stel audio later in.",
-          "urlScheme": "De stream-URL moet beginnen met rtsp:// of rtsps://."
+          "urlScheme": "Voer een volledige stream-URL in die begint met rtsp:// of rtsps:// en geen spaties bevat."
         }
       },
       "detection": {

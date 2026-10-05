@@ -5314,7 +5314,7 @@
           "devicesFailed": "Audio devices could not be listed. Retry, use a stream, or set up audio later.",
           "noDevices": "No audio device found. Use a stream, or set up audio later.",
           "enterUrl": "Enter the stream URL, or set up audio later.",
-          "urlScheme": "The stream URL must start with rtsp:// or rtsps://."
+          "urlScheme": "Enter a complete stream URL that starts with rtsp:// or rtsps:// and has no spaces."
         }
       },
       "detection": {

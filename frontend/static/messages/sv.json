@@ -5314,7 +5314,7 @@
           "devicesFailed": "Ljudenheterna kunde inte listas. Försök igen, använd en ström eller konfigurera ljud senare.",
           "noDevices": "Ingen ljudenhet hittades. Använd en ström eller konfigurera ljud senare.",
           "enterUrl": "Ange ström-URL:en eller konfigurera ljud senare.",
-          "urlScheme": "Ström-URL:en måste börja med rtsp:// eller rtsps://."
+          "urlScheme": "Ange en komplett ström-URL som börjar med rtsp:// eller rtsps:// och inte innehåller blanksteg."
         }
       },
       "detection": {

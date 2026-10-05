@@ -5314,7 +5314,7 @@
           "devicesFailed": "Äänilaitteita ei voitu listata. Yritä uudelleen, käytä lähetystä tai määritä ääni myöhemmin.",
           "noDevices": "Äänilaitetta ei löytynyt. Käytä lähetystä tai määritä ääni myöhemmin.",
           "enterUrl": "Anna lähetyksen URL tai määritä ääni myöhemmin.",
-          "urlScheme": "Lähetyksen URL-osoitteen on alettava merkkijonolla rtsp:// tai rtsps://."
+          "urlScheme": "Anna täydellinen lähetyksen URL-osoite, joka alkaa merkkijonolla rtsp:// tai rtsps:// eikä sisällä välilyöntejä."
         }
       },
       "detection": {

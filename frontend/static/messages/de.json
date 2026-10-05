@@ -5314,7 +5314,7 @@
           "devicesFailed": "Die Audiogeräte konnten nicht aufgelistet werden. Wiederholen Sie den Versuch, verwenden Sie einen Stream oder richten Sie Audio später ein.",
           "noDevices": "Kein Audiogerät gefunden. Verwenden Sie einen Stream oder richten Sie Audio später ein.",
           "enterUrl": "Geben Sie die Stream-URL ein oder richten Sie Audio später ein.",
-          "urlScheme": "Die Stream-URL muss mit rtsp:// oder rtsps:// beginnen."
+          "urlScheme": "Geben Sie eine vollständige Stream-URL ein, die mit rtsp:// oder rtsps:// beginnt und keine Leerzeichen enthält."
         }
       },
       "detection": {

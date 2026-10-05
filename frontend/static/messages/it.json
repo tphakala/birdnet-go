@@ -5314,7 +5314,7 @@
           "devicesFailed": "Impossibile elencare i dispositivi audio. Riprova, usa uno stream oppure configura l'audio più tardi.",
           "noDevices": "Nessun dispositivo audio trovato. Usa uno stream oppure configura l'audio più tardi.",
           "enterUrl": "Inserisci l'URL dello stream oppure configura l'audio più tardi.",
-          "urlScheme": "L'URL dello stream deve iniziare con rtsp:// o rtsps://."
+          "urlScheme": "Inserisci un URL dello stream completo che inizi con rtsp:// o rtsps:// e non contenga spazi."
         }
       },
       "detection": {

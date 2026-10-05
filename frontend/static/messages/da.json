@@ -5314,7 +5314,7 @@
           "devicesFailed": "Lydenhederne kunne ikke vises. Prøv igen, brug en stream, eller konfigurér lyd senere.",
           "noDevices": "Ingen lydenhed fundet. Brug en stream, eller konfigurér lyd senere.",
           "enterUrl": "Indtast stream-URL'en, eller konfigurér lyd senere.",
-          "urlScheme": "Stream-URL'en skal starte med rtsp:// eller rtsps://."
+          "urlScheme": "Angiv en komplet stream-URL, der starter med rtsp:// eller rtsps:// og ikke indeholder mellemrum."
         }
       },
       "detection": {

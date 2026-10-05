@@ -5314,7 +5314,7 @@
           "devicesFailed": "A hangeszközöket nem sikerült listázni. Próbálja újra, használjon streamet, vagy állítsa be a hangot később.",
           "noDevices": "Nem található hangeszköz. Használjon streamet, vagy állítsa be a hangot később.",
           "enterUrl": "Adja meg a stream URL-jét, vagy állítsa be a hangot később.",
-          "urlScheme": "A stream URL-jének rtsp:// vagy rtsps:// előtaggal kell kezdődnie."
+          "urlScheme": "Adjon meg egy teljes stream URL-t, amely rtsp:// vagy rtsps:// előtaggal kezdődik, és nem tartalmaz szóközt."
         }
       },
       "detection": {

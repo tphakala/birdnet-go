@@ -5314,7 +5314,7 @@
           "devicesFailed": "Nie udało się wyświetlić listy urządzeń audio. Spróbuj ponownie, użyj strumienia lub skonfiguruj dźwięk później.",
           "noDevices": "Nie znaleziono urządzenia audio. Użyj strumienia lub skonfiguruj dźwięk później.",
           "enterUrl": "Wpisz adres URL strumienia lub skonfiguruj dźwięk później.",
-          "urlScheme": "Adres URL strumienia musi zaczynać się od rtsp:// lub rtsps://."
+          "urlScheme": "Podaj pełny adres URL strumienia, który zaczyna się od rtsp:// lub rtsps:// i nie zawiera spacji."
         }
       },
       "detection": {

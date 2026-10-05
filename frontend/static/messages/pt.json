@@ -5314,7 +5314,7 @@
           "devicesFailed": "Não foi possível listar os dispositivos de áudio. Tente novamente, use um fluxo ou configure o áudio mais tarde.",
           "noDevices": "Nenhum dispositivo de áudio encontrado. Use um fluxo ou configure o áudio mais tarde.",
           "enterUrl": "Introduza o URL do fluxo ou configure o áudio mais tarde.",
-          "urlScheme": "O URL do fluxo tem de começar por rtsp:// ou rtsps://."
+          "urlScheme": "Introduza um URL do fluxo completo que comece por rtsp:// ou rtsps:// e não tenha espaços."
         }
       },
       "detection": {

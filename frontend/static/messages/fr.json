@@ -5314,7 +5314,7 @@
           "devicesFailed": "Les périphériques audio n'ont pas pu être listés. Réessayez, utilisez un flux ou configurez l'audio plus tard.",
           "noDevices": "Aucun périphérique audio trouvé. Utilisez un flux ou configurez l'audio plus tard.",
           "enterUrl": "Saisissez l'URL du flux ou configurez l'audio plus tard.",
-          "urlScheme": "L'URL du flux doit commencer par rtsp:// ou rtsps://."
+          "urlScheme": "Saisissez une URL de flux complète qui commence par rtsp:// ou rtsps:// et ne contient pas d'espaces."
         }
       },
       "detection": {

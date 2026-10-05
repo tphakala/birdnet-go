@@ -5314,7 +5314,7 @@
           "devicesFailed": "Audio ierīces neizdevās uzskaitīt. Mēģiniet vēlreiz, izmantojiet straumi vai konfigurējiet audio vēlāk.",
           "noDevices": "Nav atrasta neviena audio ierīce. Izmantojiet straumi vai konfigurējiet audio vēlāk.",
           "enterUrl": "Ievadiet straumes URL vai konfigurējiet audio vēlāk.",
-          "urlScheme": "Straumes URL jāsākas ar rtsp:// vai rtsps://."
+          "urlScheme": "Ievadiet pilnu straumes URL, kas sākas ar rtsp:// vai rtsps:// un nesatur atstarpes."
         }
       },
       "detection": {

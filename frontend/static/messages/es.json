@@ -5314,7 +5314,7 @@
           "devicesFailed": "No se pudieron listar los dispositivos de audio. Reintenta, usa una transmisión o configura el audio más tarde.",
           "noDevices": "No se encontró ningún dispositivo de audio. Usa una transmisión o configura el audio más tarde.",
           "enterUrl": "Introduce la URL de la transmisión o configura el audio más tarde.",
-          "urlScheme": "La URL de la transmisión debe empezar por rtsp:// o rtsps://."
+          "urlScheme": "Introduce una URL de transmisión completa que empiece por rtsp:// o rtsps:// y no contenga espacios."
         }
       },
       "detection": {

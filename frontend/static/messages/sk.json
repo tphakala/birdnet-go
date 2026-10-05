@@ -5314,7 +5314,7 @@
           "devicesFailed": "Zvukové zariadenia sa nepodarilo vypísať. Skúste to znova, použite stream alebo nastavte zvuk neskôr.",
           "noDevices": "Nebolo nájdené žiadne zvukové zariadenie. Použite stream alebo nastavte zvuk neskôr.",
           "enterUrl": "Zadajte URL streamu alebo nastavte zvuk neskôr.",
-          "urlScheme": "URL streamu musí začínať rtsp:// alebo rtsps://."
+          "urlScheme": "Zadajte úplnú URL streamu, ktorá začína rtsp:// alebo rtsps:// a neobsahuje medzery."
         }
       },
       "detection": {
