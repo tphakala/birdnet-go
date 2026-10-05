@@ -57,6 +57,17 @@ export function createSettingsMock(formData: unknown) {
   return {
     settingsStore,
     StreamTypes: { RTSP: 'rtsp' },
+    // Same shape as the real constant, which audioSourceChoice.ts imports
+    defaultQuietHoursConfig: {
+      enabled: false,
+      mode: 'fixed',
+      startTime: '22:00',
+      endTime: '06:00',
+      startEvent: 'sunset',
+      startOffset: 0,
+      endEvent: 'sunrise',
+      endOffset: 0,
+    },
     settingsActions: {
       saveSection: vi.fn().mockResolvedValue(undefined),
       updateSection: vi.fn(),

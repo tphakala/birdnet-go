@@ -1,4 +1,5 @@
 import type { Component } from 'svelte';
+import type { TranslationKey } from '$lib/i18n';
 
 export type WizardFlow = 'onboarding' | 'whats-new';
 export type WizardStatus = 'idle' | 'active' | 'completed';
@@ -32,9 +33,11 @@ export type StepLeaveHandler = () => Promise<void>;
 export interface WizardStepProps {
   /**
    * Reports whether the step is valid. A step must call it at mount and on every
-   * validity change; until it does, Next stays disabled.
+   * validity change; until it does, Next stays disabled. `reason` is the i18n key
+   * of why the step is not valid yet; it is shown beside Next and linked by
+   * aria-describedby, and ignored when `valid` is true.
    */
-  onValidChange?: (valid: boolean) => void;
+  onValidChange?: (valid: boolean, reason?: TranslationKey) => void;
   /**
    * Registers the step's leave handler, which Next, Back and Done await before
    * navigating. Register once at mount; the returned function unregisters the

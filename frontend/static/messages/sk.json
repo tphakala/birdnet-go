@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Zadajte URL vášho RTSP audio streamu",
         "additionalSourcesHint": "Ďalšie zdroje zvuku môžete pridať neskôr v Nastaveniach.",
-        "configureLater": "Preskočiť - nastaviť neskôr"
+        "devicesLoadFailed": "Zvukové zariadenia v tomto systéme sa nepodarilo vypísať.",
+        "useStreamInstead": "Namiesto toho použiť RTSP stream",
+        "setUpLater": "Nastaviť zvuk neskôr",
+        "setUpLaterChosen": "Zvuk sa teraz nenastaví. Zvukovú kartu alebo stream môžete pridať neskôr v Nastaveniach.",
+        "streamReplacesSoundCards": "Zvukové karty prestanú zachytávať, keď použijete stream. Môžete ich znova pridať v Nastaveniach.",
+        "soundCardReplacesStream": "Stream zobrazený pri možnosti streamu sa vypne, keď použijete zvukovú kartu. Môžete ho znova zapnúť v Nastaveniach.",
+        "reasons": {
+          "chooseDevice": "Vyberte zvukové zariadenie alebo nastavte zvuk neskôr.",
+          "devicesFailed": "Zvukové zariadenia sa nepodarilo vypísať. Skúste to znova, použite stream alebo nastavte zvuk neskôr.",
+          "noDevices": "Nebolo nájdené žiadne zvukové zariadenie. Použite stream alebo nastavte zvuk neskôr.",
+          "enterUrl": "Zadajte URL streamu alebo nastavte zvuk neskôr.",
+          "urlScheme": "URL streamu musí začínať rtsp:// alebo rtsps://."
+        }
       },
       "detection": {
         "title": "Prah detekcie",

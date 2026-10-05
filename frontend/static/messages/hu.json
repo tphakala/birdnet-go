@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Adja meg az RTSP audio stream URL-jét",
         "additionalSourcesHint": "Később további hang forrásokat adhat hozzá a Beállításokban.",
-        "configureLater": "Kihagyás - beállítás később"
+        "devicesLoadFailed": "Nem sikerült listázni a rendszer hangeszközeit.",
+        "useStreamInstead": "RTSP stream használata helyette",
+        "setUpLater": "Hang beállítása később",
+        "setUpLaterChosen": "A hang most nem lesz beállítva. Hangkártyát vagy streamet később adhat hozzá a Beállításokban.",
+        "streamReplacesSoundCards": "A hangkártyák nem rögzítenek tovább, ha streamet használ. A Beállításokban újra hozzáadhatja őket.",
+        "soundCardReplacesStream": "A stream opciónál látható stream kikapcsol, ha hangkártyát használ. A Beállításokban újra bekapcsolhatja.",
+        "reasons": {
+          "chooseDevice": "Válasszon hangeszközt, vagy állítsa be a hangot később.",
+          "devicesFailed": "A hangeszközöket nem sikerült listázni. Próbálja újra, használjon streamet, vagy állítsa be a hangot később.",
+          "noDevices": "Nem található hangeszköz. Használjon streamet, vagy állítsa be a hangot később.",
+          "enterUrl": "Adja meg a stream URL-jét, vagy állítsa be a hangot később.",
+          "urlScheme": "A stream URL-jének rtsp:// vagy rtsps:// előtaggal kell kezdődnie."
+        }
       },
       "detection": {
         "title": "Detektálási küszöbérték",

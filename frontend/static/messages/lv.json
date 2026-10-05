@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Ievadiet RTSP audio straumes URL",
         "additionalSourcesHint": "Papildu audio avotus varēsiet pievienot vēlāk iestatījumos.",
-        "configureLater": "Izlaist - konfigurēt vēlāk"
+        "devicesLoadFailed": "Neizdevās uzskaitīt šīs sistēmas audio ierīces.",
+        "useStreamInstead": "Tā vietā izmantot RTSP straumi",
+        "setUpLater": "Konfigurēt audio vēlāk",
+        "setUpLaterChosen": "Audio tagad netiks konfigurēts. Skaņas karti vai straumi varat pievienot vēlāk iestatījumos.",
+        "streamReplacesSoundCards": "Skaņas kartes pārstāj ierakstīt, kad izmantojat straumi. Tās varat pievienot atkal iestatījumos.",
+        "soundCardReplacesStream": "Straume, kas redzama straumes opcijā, tiek izslēgta, kad izmantojat skaņas karti. To varat ieslēgt atkal iestatījumos.",
+        "reasons": {
+          "chooseDevice": "Izvēlieties audio ierīci vai konfigurējiet audio vēlāk.",
+          "devicesFailed": "Audio ierīces neizdevās uzskaitīt. Mēģiniet vēlreiz, izmantojiet straumi vai konfigurējiet audio vēlāk.",
+          "noDevices": "Nav atrasta neviena audio ierīce. Izmantojiet straumi vai konfigurējiet audio vēlāk.",
+          "enterUrl": "Ievadiet straumes URL vai konfigurējiet audio vēlāk.",
+          "urlScheme": "Straumes URL jāsākas ar rtsp:// vai rtsps://."
+        }
       },
       "detection": {
         "title": "Noteikšanas slieksnis",

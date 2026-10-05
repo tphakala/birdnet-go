@@ -6,10 +6,11 @@
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
   let valid = $state(stepControl.validQueue.shift() ?? true);
+  const reason = stepControl.reasonQueue.shift();
 
   $effect(() => {
     const current = valid;
-    untrack(() => onValidChange?.(current));
+    untrack(() => onValidChange?.(current, reason));
   });
 
   onMount(() => registerLeaveHandler?.(() => stepControl.leave()));

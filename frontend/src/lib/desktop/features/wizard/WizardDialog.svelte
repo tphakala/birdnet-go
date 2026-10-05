@@ -155,7 +155,7 @@
     if (wizardState.isSaving) return '';
     if (wizardState.stepStatus === 'failed') return '';
     if (wizardState.stepStatus === 'loading') return t('wizard.status.loadingStep');
-    return t('wizard.reasons.completeStep');
+    return t(wizardState.stepBlockedReason ?? 'wizard.reasons.completeStep');
   });
 
   let alertText = $derived.by(() => {
@@ -252,7 +252,7 @@
       {:else if loadedComponent}
         {@const StepComponent = loadedComponent}
         <StepComponent
-          onValidChange={valid => wizardState.setStepValid(valid, loadedIndex)}
+          onValidChange={(valid, reason) => wizardState.setStepValid(valid, loadedIndex, reason)}
           registerLeaveHandler={wizardState.registerLeaveHandler}
         />
       {/if}

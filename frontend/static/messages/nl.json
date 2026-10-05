@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Voer de URL van je RTSP-audiostream in",
         "additionalSourcesHint": "Je kunt later meer audiobronnen toevoegen in Instellingen.",
-        "configureLater": "Overslaan - later configureren"
+        "devicesLoadFailed": "De audioapparaten van dit systeem konden niet worden opgesomd.",
+        "useStreamInstead": "Gebruik in plaats daarvan een RTSP-stream",
+        "setUpLater": "Audio later instellen",
+        "setUpLaterChosen": "Audio wordt nu niet ingesteld. Voeg later in Instellingen een geluidskaart of stream toe.",
+        "streamReplacesSoundCards": "Geluidskaarten nemen niet meer op wanneer je een stream gebruikt. Je kunt ze opnieuw toevoegen in Instellingen.",
+        "soundCardReplacesStream": "De stream die bij de streamoptie wordt getoond, wordt uitgeschakeld wanneer je een geluidskaart gebruikt. Je kunt hem opnieuw inschakelen in Instellingen.",
+        "reasons": {
+          "chooseDevice": "Kies een audioapparaat, of stel audio later in.",
+          "devicesFailed": "De audioapparaten konden niet worden opgesomd. Probeer opnieuw, gebruik een stream, of stel audio later in.",
+          "noDevices": "Geen audioapparaat gevonden. Gebruik een stream, of stel audio later in.",
+          "enterUrl": "Voer de stream-URL in, of stel audio later in.",
+          "urlScheme": "De stream-URL moet beginnen met rtsp:// of rtsps://."
+        }
       },
       "detection": {
         "title": "Detectiedrempel",

@@ -103,7 +103,7 @@ describe('wizard steps save with section PATCH requests', () => {
     }
   });
 
-  it('AudioSourceStep patches rtsp with one enabled stream and keeps health', async () => {
+  it('AudioSourceStep stream choice keeps existing streams and clears sound cards', async () => {
     const { leave } = renderStep(AudioSourceStep);
     await flushAsync();
     await fireEvent.click(
@@ -119,22 +119,22 @@ describe('wizard steps save with section PATCH requests', () => {
         'rtsp',
         {
           streams: [
-            {
-              name: 'Stream 1',
-              url: 'rtsp://camera.example/stream',
-              enabled: true,
-              type: 'rtsp',
-              transport: 'tcp',
-            },
+            { name: 'Old', url: 'rtsp://camera.example/stream', enabled: true, type: 'rtsp' },
           ],
         },
       ],
+      ['audio', { sources: [], source: '' }],
     ]);
     expect(settingsAPI.save).not.toHaveBeenCalled();
     expect(get(hasUnsavedChanges)).toBe(false);
-    const { formData } = get(settingsStore);
-    expect(formData.realtime?.rtsp?.health).toEqual({ healthyDataThreshold: 60 });
-    expect(formData.realtime?.audio?.sources).toEqual([{ name: 'Card', device: 'hw:0' }]);
+    for (const copy of [get(settingsStore).formData, get(settingsStore).originalData]) {
+      expect(copy.realtime?.rtsp?.health).toEqual({ healthyDataThreshold: 60 });
+      expect(copy.realtime?.audio?.sources).toEqual([]);
+      expect(copy.realtime?.audio?.source).toBe('');
+      expect(copy.realtime?.rtsp?.streams).toEqual([
+        { name: 'Old', url: 'rtsp://camera.example/stream', enabled: true, type: 'rtsp' },
+      ]);
+    }
   });
 
   it('LocationLanguageStep patches birdnet with the location and keeps the range filter', async () => {

@@ -1,12 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fireEvent, screen } from '@testing-library/svelte';
+import { fireEvent, screen, waitFor } from '@testing-library/svelte';
+import { expectNoA11yViolations } from '$lib/utils/axe-utils';
+import { deferred } from '../../../../../test/async-helpers';
 
 vi.mock('$lib/i18n', () => ({
   t: vi.fn((key: string) => key),
   getLocale: vi.fn(() => 'en'),
 }));
 
-vi.mock('$lib/utils/api', () => ({
+vi.mock('$lib/utils/api', async importOriginal => ({
+  ...(await importOriginal<typeof import('$lib/utils/api')>()),
   api: {
     get: vi.fn().mockResolvedValue([]),
     post: vi.fn(),
@@ -20,75 +23,291 @@ vi.mock('$lib/stores/settings', async () => {
 
 import AudioSourceStep from './AudioSourceStep.svelte';
 import { settingsActions, settingsStore } from '$lib/stores/settings';
-import { api } from '$lib/utils/api';
+import type { SettingsFormData } from '$lib/stores/settings';
+import { api, ApiError } from '$lib/utils/api';
 import { flushAsync, renderStep } from './stepTestUtils';
+import { renderTyped } from '../../../../../test/render-helpers';
 
 const RTSP_URL = 'rtsp://camera.example/stream';
+const OTHER_URL = 'rtsp://camera.example/other';
+const USB = { name: 'USB Mic', index: 1, id: 'hw:1,0', stableId: 'usb-path:bus-1' };
+const KEY = 'wizard.steps.audioSource';
 
-async function edit() {
-  await fireEvent.click(
-    screen.getByRole('radio', { name: /wizard\.steps\.audioSource\.rtspStream/ })
-  );
-  const input = await screen.findByPlaceholderText('wizard.steps.audioSource.rtspUrlPlaceholder');
-  await fireEvent.input(input, { target: { value: RTSP_URL } });
+const TEMPLATE_SOURCE = { name: 'Sound Card 1', device: 'sysdefault', gain: 0, models: [] };
+
+// The step reads what the server holds, so seed both copies
+function seed(audio: Record<string, unknown>, streams: unknown[] = []) {
+  const realtime = { audio, rtsp: { streams } };
+  settingsStore.update(state => ({
+    ...state,
+    originalData: { realtime } as unknown as SettingsFormData,
+    formData: { realtime } as unknown as SettingsFormData,
+  }));
+}
+
+const radio = (name: RegExp) => screen.getByRole('radio', { name });
+
+async function chooseStream(url = RTSP_URL) {
+  await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
+  const input = await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
+  await fireEvent.input(input, { target: { value: url } });
+}
+
+// The dropdown trigger has no accessible name of its own in these tests
+async function deviceTrigger(): Promise<HTMLElement> {
+  return waitFor(() => {
+    const el = document.getElementById('wizard-audio-device');
+    if (!el) throw new Error('device dropdown not rendered');
+    return el;
+  });
+}
+
+async function chooseUsbDevice() {
+  await fireEvent.click(await deviceTrigger());
+  await fireEvent.click(await screen.findByRole('option', { name: /USB Mic/ }));
+}
+
+function resetStore() {
+  seed({ sources: [TEMPLATE_SOURCE], source: '' });
 }
 
 // The leave handler contract shared by every step is in stepContract.test.ts
 describe('AudioSourceStep - leave handler', () => {
   beforeEach(() => {
     vi.mocked(settingsActions.saveSection).mockClear().mockResolvedValue(undefined);
+    vi.mocked(api.get).mockReset().mockResolvedValue([]);
+    resetStore();
   });
 
-  it('stream choice patches rtsp with one enabled stream', async () => {
+  it('sound card choice patches audio sources with the stable device id and clears the legacy source', async () => {
+    vi.mocked(api.get).mockResolvedValue([USB]);
     const { leave } = renderStep(AudioSourceStep);
     await flushAsync();
-    await edit();
+    await chooseUsbDevice();
 
     await leave();
     await leave();
 
     expect(settingsActions.saveSection).toHaveBeenCalledTimes(1);
-    expect(settingsActions.saveSection).toHaveBeenCalledWith('rtsp', {
-      streams: [{ name: 'Stream 1', url: RTSP_URL, enabled: true, type: 'rtsp', transport: 'tcp' }],
+    expect(settingsActions.saveSection).toHaveBeenCalledWith('audio', {
+      sources: [{ ...TEMPLATE_SOURCE, device: 'usb-path:bus-1' }],
+      source: '',
     });
   });
 
-  it('configure later sends nothing', async () => {
+  it('stream choice keeps other streams and clears sound cards', async () => {
+    seed({ sources: [TEMPLATE_SOURCE], source: '' }, [
+      { name: 'Hls', url: 'http://h/x.m3u8', enabled: true, type: 'hls' },
+    ]);
     const { leave } = renderStep(AudioSourceStep);
     await flushAsync();
-    await fireEvent.click(
-      screen.getByRole('radio', { name: /wizard\.steps\.audioSource\.rtspStream/ })
-    );
-    await fireEvent.click(
-      await screen.findByRole('button', { name: 'wizard.steps.audioSource.configureLater' })
-    );
+    await chooseStream();
+
+    await leave();
+    await leave();
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls).toEqual([
+      [
+        'rtsp',
+        {
+          streams: [
+            { name: 'Hls', url: 'http://h/x.m3u8', enabled: true, type: 'hls' },
+            { name: 'Stream 1', url: RTSP_URL, enabled: true, type: 'rtsp', transport: 'tcp' },
+          ],
+        },
+      ],
+      ['audio', { sources: [], source: '' }],
+    ]);
+  });
+
+  it('sound card chosen after the step opened on a stream turns only that stream off', async () => {
+    seed({ sources: [], source: '' }, [
+      { name: 'Yard', url: RTSP_URL, enabled: true, type: 'rtsp' },
+      { name: 'Cam', url: OTHER_URL, enabled: true, type: 'rtsp' },
+    ]);
+    vi.mocked(api.get).mockResolvedValue([USB]);
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
+    await chooseUsbDevice();
+    expect(screen.getByText(`${KEY}.soundCardReplacesStream`)).toBeInTheDocument();
+
+    await leave();
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls).toEqual([
+      [
+        'audio',
+        {
+          sources: [
+            expect.objectContaining({ name: 'Sound Card 1', device: 'usb-path:bus-1', gain: 0 }),
+          ],
+          source: '',
+        },
+      ],
+      [
+        'rtsp',
+        {
+          streams: [
+            { name: 'Yard', url: RTSP_URL, enabled: false, type: 'rtsp' },
+            { name: 'Cam', url: OTHER_URL, enabled: true, type: 'rtsp' },
+          ],
+        },
+      ],
+    ]);
+  });
+
+  it('sound card chosen when sources exist leaves streams alone', async () => {
+    seed({ sources: [TEMPLATE_SOURCE], source: '' }, [
+      { name: 'Cam', url: RTSP_URL, enabled: true, type: 'rtsp' },
+    ]);
+    vi.mocked(api.get).mockResolvedValue([USB]);
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseUsbDevice();
+
+    await leave();
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls.map(c => c[0])).toEqual(['audio']);
+  });
+
+  it('set up later is a visible button and sends nothing', async () => {
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    const button = screen.getByRole('button', { name: `${KEY}.setUpLater` });
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+    await fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(`${KEY}.setUpLaterChosen`)).toBeInTheDocument();
 
     await leave();
 
     expect(settingsActions.saveSection).not.toHaveBeenCalled();
   });
 
-  it('sound card choice patches audio with only the legacy source', async () => {
-    vi.mocked(api.get).mockResolvedValueOnce([{ name: 'USB Mic', index: 1, id: 'hw:1,0' }]);
-    settingsStore.update(state => {
-      const realtime = state.formData.realtime as unknown as { audio: { source: string } };
-      realtime.audio.source = 'hw:1,0';
-      return state;
-    });
+  it('preselects the saved device by its stable id and writes nothing', async () => {
+    seed({ sources: [{ ...TEMPLATE_SOURCE, device: 'usb-path:bus-1' }], source: '' });
+    vi.mocked(api.get).mockResolvedValue([USB]);
     const { leave } = renderStep(AudioSourceStep);
     await flushAsync();
-    await fireEvent.click(
-      screen.getByRole('radio', { name: /wizard\.steps\.audioSource\.soundcard/ })
+
+    expect(await deviceTrigger()).toHaveTextContent('USB Mic');
+    await leave();
+    expect(settingsActions.saveSection).not.toHaveBeenCalled();
+  });
+});
+
+describe('AudioSourceStep - device loading', () => {
+  beforeEach(() => {
+    vi.mocked(settingsActions.saveSection).mockClear().mockResolvedValue(undefined);
+    vi.mocked(api.get).mockReset().mockResolvedValue([]);
+    resetStore();
+  });
+
+  it('device listing failure shows an error with Retry and keeps the sound card option', async () => {
+    const response = new Response(null, { status: 500 });
+    vi.mocked(api.get).mockRejectedValueOnce(new ApiError('Server error', 500, response));
+    renderStep(AudioSourceStep);
+    await flushAsync();
+
+    expect(await screen.findAllByText(`${KEY}.devicesLoadFailed`)).not.toHaveLength(0);
+    expect(screen.getByText('Server error')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'common.retry' })).toBeInTheDocument();
+    expect(radio(/wizard\.steps\.audioSource\.soundcard/)).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('Retry reloads the device list', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce([USB]);
+    renderStep(AudioSourceStep);
+    await flushAsync();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'common.retry' }));
+
+    expect(await deviceTrigger()).toBeVisible();
+    expect(api.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('no devices shows Retry and the stream option without switching to the stream', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+
+    expect(await screen.findAllByText(`${KEY}.noDevicesFound`)).not.toHaveLength(0);
+    expect(radio(/wizard\.steps\.audioSource\.soundcard/)).toHaveAttribute('aria-checked', 'true');
+    await fireEvent.click(screen.getByRole('button', { name: `${KEY}.useStreamInstead` }));
+    expect(radio(/wizard\.steps\.audioSource\.rtspStream/)).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('a stale device load result is ignored', async () => {
+    const first = deferred<unknown[]>();
+    vi.mocked(api.get).mockReturnValueOnce(first.promise).mockResolvedValueOnce([]);
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    // The first load fails, which shows Retry; the retry resolves with no devices
+    first.reject(new Error('late'));
+    await flushAsync();
+    await fireEvent.click(await screen.findByRole('button', { name: 'common.retry' }));
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+    await flushAsync();
+
+    expect(screen.queryAllByText(`${KEY}.devicesLoadFailed`)).toHaveLength(0);
+    expect(screen.getAllByText(`${KEY}.noDevicesFound`)).not.toHaveLength(0);
+  });
+});
+
+describe('AudioSourceStep - Next reason', () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset().mockResolvedValue([USB]);
+    resetStore();
+  });
+
+  it('names the missing choice', async () => {
+    const onValidChange = vi.fn();
+    renderTyped(AudioSourceStep, { props: { onValidChange } });
+    await flushAsync();
+    await waitFor(() =>
+      expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.chooseDevice`)
     );
 
-    await leave();
+    await chooseStream('');
+    await waitFor(() =>
+      expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.enterUrl`)
+    );
 
-    expect(settingsActions.saveSection).toHaveBeenCalledTimes(1);
-    expect(settingsActions.saveSection).toHaveBeenCalledWith('audio', { source: 'hw:1,0' });
+    await chooseStream('http://x');
+    await waitFor(() =>
+      expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.urlScheme`)
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(`${KEY}.reasons.urlScheme`);
 
-    settingsStore.update(state => {
-      (state.formData.realtime as unknown as { audio: { source: string } }).audio.source = '';
-      return state;
-    });
+    await chooseStream(RTSP_URL);
+    await waitFor(() => expect(onValidChange).toHaveBeenLastCalledWith(true, undefined));
+  });
+});
+
+describe('AudioSourceStep Accessibility', () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset().mockResolvedValue([USB]);
+    resetStore();
+  });
+
+  it('has no violations with devices listed', async () => {
+    const { container } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await deviceTrigger();
+    await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
+  });
+
+  it('has no violations when listing devices failed', async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error('boom'));
+    const { container } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await screen.findByRole('button', { name: 'common.retry' });
+    await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
+  });
+
+  it('has no violations in the stream state', async () => {
+    const { container } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream('http://x');
+    await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
   });
 });
