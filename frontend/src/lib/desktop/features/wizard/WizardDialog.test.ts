@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Component } from 'svelte';
-import { renderTyped, screen, waitFor } from '../../../../test/render-helpers';
+import { renderTyped, screen, waitFor, fireEvent } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import type { TranslationKey } from '$lib/i18n';
@@ -667,6 +667,23 @@ describe('WizardDialog Accessibility', () => {
     await user.keyboard('{Enter}');
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step1'));
+    await waitFor(() => expect(document.activeElement).toBe(primaryButton()));
+  });
+
+  it('moves focus to Next when Back is clicked while focus was on body', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await screen.findByRole('dialog', { name: 'test.step2' });
+    await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
+    // A click on a button that takes no focus (Safari) leaves focus on body
+    primaryButton().blur();
+    expect(document.activeElement).toBe(document.body);
+
+    await fireEvent.click(backButton());
+
+    await screen.findByRole('dialog', { name: 'test.step1' });
     await waitFor(() => expect(document.activeElement).toBe(primaryButton()));
   });
 
