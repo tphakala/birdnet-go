@@ -302,6 +302,8 @@
     } else {
       value = option.value;
       onChange?.(option.value);
+      // A click that took no focus (Safari) leaves it on <body>; keep it inside the dialog
+      if (document.activeElement === document.body) buttonElement?.focus();
       closeDropdown();
     }
   }

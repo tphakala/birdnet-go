@@ -707,6 +707,19 @@ describe('SelectDropdown Accessibility', () => {
     expect(document.activeElement).toBe(screen.getByRole('button'));
   });
 
+  it('returns focus to the trigger when focus was on body at selection time', async () => {
+    const { onChange, search } = await openSearchable();
+    search.blur();
+    expect(document.activeElement).toBe(document.body);
+
+    // A click on a button that takes no focus (Safari) does not move focus to the option
+    await fireEvent.click(screen.getAllByRole('option')[0]);
+
+    expect(onChange).toHaveBeenCalledWith('apple');
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(screen.getByRole('button'));
+  });
+
   it('does not move focus on an outside click', async () => {
     const user = userEvent.setup();
     selectTest.render({ props: { options: fruit } });
