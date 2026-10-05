@@ -3,7 +3,8 @@ import type { WizardStep } from './types';
 import { deferred, type Deferred } from '../../../../test/async-helpers';
 
 // Mock the API module before importing wizardState
-vi.mock('$lib/utils/api', () => ({
+vi.mock('$lib/utils/api', async importOriginal => ({
+  ...(await importOriginal<typeof import('$lib/utils/api')>()),
   api: {
     post: vi.fn().mockResolvedValue({}),
   },
@@ -15,7 +16,7 @@ vi.mock('./wizardRegistry', () => ({
 }));
 
 // Import after mocks are set up
-const { api } = await import('$lib/utils/api');
+const { api, ApiError } = await import('$lib/utils/api');
 const { wizardState, STEP_MOVE_GUARD_MS } = await import('./wizardState.svelte');
 const { getStepsForFlow } = await import('./wizardRegistry');
 
@@ -287,6 +288,62 @@ describe('wizardState - state machine', () => {
       await wizardState.next(); // retry calls the handler again
 
       expect(handler).toHaveBeenCalledTimes(2);
+      expect(wizardState.currentStepIndex).toBe(1);
+      expect(wizardState.stepError).toBeNull();
+    });
+
+    it.each([400, 422])(
+      'a save the server refuses as invalid (%i) shows the rejected message',
+      async status => {
+        launchSteps(3);
+        const handler = vi
+          .fn<() => Promise<void>>()
+          .mockRejectedValueOnce(new ApiError('refused', status, new Response(null, { status })));
+        wizardState.registerLeaveHandler(handler);
+        readyStep();
+
+        await wizardState.next();
+
+        expect(wizardState.stepError).toBe('wizard.errors.saveRejected');
+        expect(wizardState.currentStepIndex).toBe(0);
+        expect(wizardState.canAdvance).toBe(true);
+      }
+    );
+
+    it.each([
+      ['a plain error', () => new Error('boom')],
+      ['a 500 response', () => new ApiError('boom', 500, new Response(null, { status: 500 }))],
+      ['a 403 response', () => new ApiError('boom', 403, new Response(null, { status: 403 }))],
+      ['a network failure', () => new ApiError('offline', 0, new Response(null), true)],
+    ])('%s keeps the connection message', async (_name, makeError) => {
+      launchSteps(3);
+      wizardState.registerLeaveHandler(
+        vi.fn<() => Promise<void>>().mockRejectedValueOnce(makeError())
+      );
+      readyStep();
+
+      await wizardState.next();
+
+      expect(wizardState.stepError).toBe('wizard.errors.saveFailed');
+    });
+
+    it('a rejected save followed by a network failure shows the connection message', async () => {
+      launchSteps(3);
+      const handler = vi
+        .fn<() => Promise<void>>()
+        .mockRejectedValueOnce(new ApiError('refused', 400, new Response(null, { status: 400 })))
+        .mockRejectedValueOnce(new ApiError('offline', 0, new Response(null), true))
+        .mockResolvedValueOnce(undefined);
+      wizardState.registerLeaveHandler(handler);
+      readyStep();
+
+      await wizardState.next();
+      expect(wizardState.stepError).toBe('wizard.errors.saveRejected');
+
+      await wizardState.next();
+      expect(wizardState.stepError).toBe('wizard.errors.saveFailed');
+
+      await wizardState.next();
       expect(wizardState.currentStepIndex).toBe(1);
       expect(wizardState.stepError).toBeNull();
     });

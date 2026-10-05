@@ -5247,6 +5247,7 @@
     },
     "errors": {
       "saveFailed": "Dette trin kunne ikke gemmes. Kontroller forbindelsen og prøv igen, eller spring opsætningen over og ændr det senere i Indstillinger.",
+      "saveRejected": "Indstillingerne i dette trin blev ikke accepteret. Kontroller værdierne og prøv igen, eller spring opsætningen over og ændr det senere i Indstillinger.",
       "stepLoadFailed": "Dette trin kunne ikke indlæses. Tryk på Prøv igen, eller genindlæs siden.",
       "stepLoadFailedReload": "Dette trin kunne stadig ikke indlæses. Genindlæs siden for at prøve igen; valg gemt i tidligere trin bevares."
     },
@@ -5336,10 +5337,12 @@
         "privacyFilterHelp": "Filtrerer detekteringer fra, når menneskestemmer registreres nær mikrofonen",
         "birdweatherLabel": "Del detekteringer med BirdWeather",
         "birdweatherHelp": "Bidrag med dine fugledetekteringer til BirdWeather-fællesskabsnetværket",
-        "birdweatherIdLabel": "BirdWeather stations-ID",
-        "birdweatherIdPlaceholder": "Indtast dit BirdWeather stations-ID",
         "errorReportingLabel": "Send anonyme fejlrapporter",
-        "errorReportingHelp": "Hjælp med at forbedre BirdNET-Go ved at sende anonyme fejlrapporter, når noget går galt"
+        "errorReportingHelp": "Hjælp med at forbedre BirdNET-Go ved at sende anonyme fejlrapporter, når noget går galt",
+        "reasons": {
+          "enterToken": "Indtast dit BirdWeather-token, eller slå deling med BirdWeather fra.",
+          "tokenFormat": "Et BirdWeather-token består af 24 bogstaver og cifre."
+        }
       },
       "responsibleUse": {
         "title": "Ansvarlig brug af BirdNET-Go",

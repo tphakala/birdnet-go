@@ -5247,6 +5247,7 @@
     },
     "errors": {
       "saveFailed": "Šo soli neizdevās saglabāt. Pārbaudiet savienojumu un mēģiniet vēlreiz vai izlaidiet iestatīšanu un mainiet to vēlāk Iestatījumos.",
+      "saveRejected": "Šī soļa iestatījumi netika pieņemti. Pārbaudiet vērtības un mēģiniet vēlreiz vai izlaidiet iestatīšanu un mainiet to vēlāk Iestatījumos.",
       "stepLoadFailed": "Šo soli neizdevās ielādēt. Nospiediet Mēģināt vēlreiz vai pārlādējiet lapu.",
       "stepLoadFailedReload": "Šo soli joprojām neizdevās ielādēt. Pārlādējiet lapu, lai mēģinātu vēlreiz; iepriekšējos soļos saglabātās izvēles tiek paturētas."
     },
@@ -5336,10 +5337,12 @@
         "privacyFilterHelp": "Filtrē noteikšanas, kad pie mikrofona tiek noteiktas cilvēku balsis",
         "birdweatherLabel": "Dalīties ar noteikšanām BirdWeather",
         "birdweatherHelp": "Sniedziet savu putnu noteikšanu ieguldījumu BirdWeather kopienas tīklā",
-        "birdweatherIdLabel": "BirdWeather stacijas ID",
-        "birdweatherIdPlaceholder": "Ievadiet savu BirdWeather stacijas ID",
         "errorReportingLabel": "Sūtīt anonīmus kļūdu ziņojumus",
-        "errorReportingHelp": "Palīdziet uzlabot BirdNET-Go, sūtot anonīmus kļūdu ziņojumus, kad kaut kas noiet greizi"
+        "errorReportingHelp": "Palīdziet uzlabot BirdNET-Go, sūtot anonīmus kļūdu ziņojumus, kad kaut kas noiet greizi",
+        "reasons": {
+          "enterToken": "Ievadiet savu BirdWeather tokenu vai izslēdziet kopīgošanu ar BirdWeather.",
+          "tokenFormat": "BirdWeather tokens sastāv no 24 burtiem un cipariem."
+        }
       },
       "responsibleUse": {
         "title": "BirdNET-Go atbildīga lietošana",

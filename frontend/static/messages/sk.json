@@ -5247,6 +5247,7 @@
     },
     "errors": {
       "saveFailed": "Tento krok sa nepodarilo uložiť. Skontrolujte pripojenie a skúste to znova, alebo preskočte nastavenie a zmeňte to neskôr v Nastaveniach.",
+      "saveRejected": "Nastavenia v tomto kroku neboli prijaté. Skontrolujte hodnoty a skúste to znova, alebo preskočte nastavenie a zmeňte to neskôr v Nastaveniach.",
       "stepLoadFailed": "Tento krok sa nepodarilo načítať. Stlačte Skúsiť znova alebo obnovte stránku.",
       "stepLoadFailedReload": "Tento krok sa stále nepodarilo načítať. Obnovte stránku a skúste to znova; voľby uložené v predchádzajúcich krokoch zostanú zachované."
     },
@@ -5336,10 +5337,12 @@
         "privacyFilterHelp": "Odfiltruje detekcie, keď sú pri mikrofóne detegované ľudské hlasy",
         "birdweatherLabel": "Zdieľať detekcie s BirdWeather",
         "birdweatherHelp": "Prispievajte svojimi detekciami vtákov do komunitnej siete BirdWeather",
-        "birdweatherIdLabel": "ID stanice BirdWeather",
-        "birdweatherIdPlaceholder": "Zadajte ID vašej stanice BirdWeather",
         "errorReportingLabel": "Odosielať anonymné hlásenia o chybách",
-        "errorReportingHelp": "Pomôžte zlepšiť BirdNET-Go odosielaním anonymných hlásení o chybách, keď niečo zlyhá"
+        "errorReportingHelp": "Pomôžte zlepšiť BirdNET-Go odosielaním anonymných hlásení o chybách, keď niečo zlyhá",
+        "reasons": {
+          "enterToken": "Zadajte token BirdWeather alebo vypnite zdieľanie s BirdWeather.",
+          "tokenFormat": "Token BirdWeather má 24 písmen a číslic."
+        }
       },
       "responsibleUse": {
         "title": "Zodpovedné používanie BirdNET-Go",

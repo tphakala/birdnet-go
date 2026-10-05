@@ -1,19 +1,33 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from 'svelte';
-  import { t } from '$lib/i18n';
+  import { t, type TranslationKey } from '$lib/i18n';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { ShieldCheck, Cloud, HeartHandshake } from '@lucide/svelte';
   import type { WizardStepProps } from '../types';
   import type { SettingsSectionPayloads } from '$lib/utils/settingsApi';
+  import { generateId } from '$lib/utils/uuid';
+  import { isBirdweatherToken } from '$lib/utils/birdweather';
 
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
-  let privacyEnabled = $state(true);
-  let birdweatherEnabled = $state(false);
-  let birdweatherId = $state('');
-  let sentryEnabled = $state(false);
+  const TOKEN_FIELD_ID = generateId('wizard-birdweather-token');
+  const TOKEN_ERROR_ID = generateId('wizard-birdweather-token-error');
+
+  // Read synchronously so the first validity report already reflects the saved settings
+  const store = get(settingsStore);
+  const initial = {
+    privacyEnabled: store?.formData?.realtime?.privacyFilter?.enabled ?? true,
+    birdweatherEnabled: store?.formData?.realtime?.birdweather?.enabled ?? false,
+    birdweatherId: store?.formData?.realtime?.birdweather?.id ?? '',
+    sentryEnabled: store?.formData?.sentry?.enabled ?? false,
+  };
+
+  let privacyEnabled = $state(initial.privacyEnabled);
+  let birdweatherEnabled = $state(initial.birdweatherEnabled);
+  let birdweatherId = $state(initial.birdweatherId);
+  let sentryEnabled = $state(initial.sentryEnabled);
 
   /** Sections this step saves, in save order: BirdWeather first because its
    * token is the value most likely to be rejected, so a failure there writes
@@ -21,51 +35,54 @@
   const SECTIONS = ['birdweather', 'privacyfilter', 'sentry'] as const;
   type IntegrationSection = (typeof SECTIONS)[number];
 
+  // The token is sent trimmed: the server does not trim it, so this is the string
+  // the validation below accepts.
   function currentPayloads(): { [S in IntegrationSection]: SettingsSectionPayloads[S] } {
     return {
-      birdweather: { enabled: birdweatherEnabled, id: birdweatherId },
+      birdweather: { enabled: birdweatherEnabled, id: birdweatherId.trim() },
       privacyfilter: { enabled: privacyEnabled },
       sentry: { enabled: sentryEnabled },
     };
   }
 
   // JSON of what each section last held on the server (as far as this step
-  // knows): the values read on mount, then the values of each successful save.
+  // knows): the values read on open, then the values of each successful save.
   // The commit sends only sections that differ, so a retry after a partial
   // failure repeats only the sections that did not succeed.
+  const loaded = currentPayloads();
   let savedJson: Record<IntegrationSection, string> = {
-    birdweather: '',
-    privacyfilter: '',
-    sentry: '',
+    birdweather: JSON.stringify(loaded.birdweather),
+    privacyfilter: JSON.stringify(loaded.privacyfilter),
+    sentry: JSON.stringify(loaded.sentry),
   };
 
-  let isValid = $derived(!birdweatherEnabled || birdweatherId.trim() !== '');
+  let blockedReason = $derived.by((): TranslationKey | undefined => {
+    if (!birdweatherEnabled) return undefined;
+    if (birdweatherId.trim() === '') return 'wizard.steps.integration.reasons.enterToken';
+    return isBirdweatherToken(birdweatherId)
+      ? undefined
+      : 'wizard.steps.integration.reasons.tokenFormat';
+  });
+  let isValid = $derived(blockedReason === undefined);
+
+  // Set when the user leaves the token field and on open for a saved token; cleared
+  // by every edit. Display only: Next's reason does not depend on it.
+  let tokenLeft = $state(initial.birdweatherId.trim() !== '');
+  let showTokenError = $derived(tokenLeft && blockedReason !== undefined);
+
+  function onTokenInput() {
+    tokenLeft = false;
+  }
+
+  function onTokenBlur() {
+    tokenLeft = true;
+  }
 
   $effect(() => {
+    // Primitives, so the effect runs only when one of them changes
     const valid = isValid;
-    untrack(() => onValidChange?.(valid));
-  });
-
-  onMount(() => {
-    // Load current settings
-    const store = get(settingsStore);
-    const realtime = store?.formData?.realtime;
-    if (realtime?.privacyFilter) {
-      privacyEnabled = realtime.privacyFilter.enabled ?? true;
-    }
-    if (realtime?.birdweather) {
-      birdweatherEnabled = realtime.birdweather.enabled ?? false;
-      birdweatherId = realtime.birdweather.id ?? '';
-    }
-    const sentry = store?.formData?.sentry;
-    if (sentry) {
-      sentryEnabled = sentry.enabled ?? false;
-    }
-    const loaded = currentPayloads();
-    for (const section of SECTIONS) {
-      // eslint-disable-next-line security/detect-object-injection -- section is a member of SECTIONS
-      savedJson[section] = JSON.stringify(loaded[section]);
-    }
+    const why = blockedReason;
+    untrack(() => onValidChange?.(valid, why));
   });
 
   function togglePrivacy() {
@@ -178,20 +195,28 @@
   {#if birdweatherEnabled}
     <div class="ml-12 mt-[-0.25rem]">
       <label
-        for="birdweather-id"
+        for={TOKEN_FIELD_ID}
         class="mb-1 block text-sm text-[var(--color-base-content)] opacity-80"
       >
-        {t('wizard.steps.integration.birdweatherIdLabel')}
+        {t('settings.integration.birdweather.token.label')}
       </label>
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div onclick={(e: MouseEvent) => e.stopPropagation()}>
         <TextInput
-          id="birdweather-id"
+          id={TOKEN_FIELD_ID}
           bind:value={birdweatherId}
-          placeholder={t('wizard.steps.integration.birdweatherIdPlaceholder')}
+          aria-invalid={showTokenError ? 'true' : undefined}
+          aria-describedby={showTokenError ? TOKEN_ERROR_ID : undefined}
+          oninput={onTokenInput}
+          onblur={onTokenBlur}
         />
       </div>
+      <!-- Always rendered with two lines reserved: the alert is announced when it fills,
+           and showing it does not move the controls below -->
+      <p id={TOKEN_ERROR_ID} role="alert" class="mt-1 min-h-10 text-sm text-[var(--text-error)]">
+        {showTokenError && blockedReason ? t(blockedReason) : ''}
+      </p>
     </div>
   {/if}
 
