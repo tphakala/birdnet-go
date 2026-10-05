@@ -324,6 +324,8 @@
 
   // Move the highlighted option down (1) or up (-1), clamped to the list
   function moveHighlight(delta: 1 | -1) {
+    // Nothing rendered to highlight, and aria-activedescendant must not name a missing option
+    if (filteredOptions.length === 0) return;
     if (delta === 1) {
       highlightedIndex =
         highlightedIndex === -1 ? 0 : Math.min(highlightedIndex + 1, filteredOptions.length - 1);

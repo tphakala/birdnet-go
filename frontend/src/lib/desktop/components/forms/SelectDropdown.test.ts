@@ -586,6 +586,15 @@ describe('SelectDropdown Accessibility', () => {
     expect(document.activeElement).toBe(screen.getByRole('button'));
   });
 
+  it('sets no aria-activedescendant when ArrowDown is pressed with no matching options', async () => {
+    const { user, search } = await openSearchable();
+
+    await user.keyboard('zzz');
+    await user.keyboard('{ArrowDown}');
+
+    expect(search).not.toHaveAttribute('aria-activedescendant');
+  });
+
   it('does nothing on Enter in the search box when no option is highlighted', async () => {
     const { user, onChange } = await openSearchable();
 
