@@ -402,3 +402,23 @@ describe('TextInput aria-invalid', () => {
     expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
   });
 });
+
+describe('TextInput Accessibility error styling', () => {
+  it.each<[string, 'true' | true]>([
+    ['the string true', 'true'],
+    ['the boolean true', true],
+  ])('shows error styling when aria-invalid is %s', (_label, ariaInvalid) => {
+    render(TextInput, { props: { value: '', 'aria-invalid': ariaInvalid } });
+
+    expect(screen.getByRole('textbox')).toHaveClass('input-error');
+  });
+
+  it('shows no error styling when aria-invalid is unset or false', () => {
+    const unset = render(TextInput, { props: { value: '' } });
+    expect(screen.getByRole('textbox')).not.toHaveClass('input-error');
+    unset.unmount();
+
+    render(TextInput, { props: { value: '', 'aria-invalid': 'false' } });
+    expect(screen.getByRole('textbox')).not.toHaveClass('input-error');
+  });
+});

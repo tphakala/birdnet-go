@@ -3,6 +3,9 @@
  * Tests color combinations from the actual Tailwind v4 theme (src/styles/tailwind.css)
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 // WCAG 2.1 Level AA contrast ratios
 const WCAG_AA_NORMAL = 4.5; // Normal text
@@ -297,4 +300,47 @@ describe('Color Contrast Tests', () => {
       });
     });
   });
+});
+
+describe('Accessibility: error text token', () => {
+  const css = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'styles', 'tailwind.css'),
+    'utf8'
+  );
+
+  /** Body of the first block whose selector line starts with `selector`. */
+  function blockBody(selector: string): string {
+    const start = css.indexOf(`${selector} {`);
+    expect(start, `block "${selector}" exists`).toBeGreaterThanOrEqual(0);
+    const end = css.indexOf('\n}', start);
+    return css.slice(start, end);
+  }
+
+  function readVar(body: string, name: string): string {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- name is one of the fixed custom property names above
+    const match = new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`).exec(body);
+    expect(match, `${name} is defined as a hex colour`).not.toBeNull();
+    return match?.[1] ?? '';
+  }
+
+  const themes = [
+    { name: 'light', base: blockBody('@theme'), text: blockBody(":root,\n[data-theme='light']") },
+    {
+      name: 'dark',
+      base: blockBody("[data-theme='dark']"),
+      text: blockBody("[data-theme='dark']"),
+    },
+  ];
+
+  for (const theme of themes) {
+    for (const surface of ['--color-base-100', '--color-base-200', '--color-base-300']) {
+      it(`--text-error passes AA on ${surface} in the ${theme.name} theme`, () => {
+        const ratio = getContrastRatio(
+          readVar(theme.text, '--text-error'),
+          readVar(theme.base, surface)
+        );
+        expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      });
+    }
+  }
 });

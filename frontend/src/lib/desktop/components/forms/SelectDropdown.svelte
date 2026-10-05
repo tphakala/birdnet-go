@@ -6,12 +6,7 @@
   import { dropdown } from '$lib/utils/transitions';
   import { portal } from '$lib/utils/portal';
   import { computeAnchorPosition, type AnchorPosition } from '$lib/utils/anchorPosition';
-  import {
-    safeGet,
-    safeArrayAccess,
-    safeArraySpread,
-    safeElementAccess,
-  } from '$lib/utils/security';
+  import { safeGet, safeArrayAccess, safeArraySpread } from '$lib/utils/security';
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -27,6 +22,8 @@
     id?: string;
     label?: string;
     helpText?: string;
+    /** Space-separated ids of extra elements that describe the trigger (in addition to helpText) */
+    'aria-describedby'?: string;
     className?: string;
     dropdownClassName?: string;
     maxHeight?: number;
@@ -63,6 +60,7 @@
     id,
     label,
     helpText,
+    'aria-describedby': ariaDescribedBy,
     className = '',
     dropdownClassName = '',
     maxHeight = 300,
@@ -108,6 +106,16 @@
   let portalTarget = $derived.by(
     () => (buttonElement?.closest('[role="dialog"]') as HTMLElement | null) ?? document.body
   );
+
+  // Trigger description: the help text (when shown) followed by any caller-provided ids
+  let triggerDescribedBy = $derived(
+    [helpText ? `${fieldId}-help` : undefined, ariaDescribedBy].filter(Boolean).join(' ') ||
+      undefined
+  );
+
+  // Accessible name for the open listbox when the `label` prop is not used: the text of
+  // the labels associated with the trigger, read when the list opens.
+  let externalLabelText = $state('');
 
   // Size classes for trigger (padding + font size)
   const sizeClasses = {
@@ -206,6 +214,10 @@
     );
   });
 
+  // Options in the order they are rendered: grouped when groupBy is on, so keyboard
+  // navigation, ids and aria-activedescendant agree with what is on screen
+  let renderedOptions = $derived(groupBy ? Object.values(groupedOptions).flat() : filteredOptions);
+
   let canAddMore = $derived(
     !maxSelections ||
       !multiple ||
@@ -246,6 +258,10 @@
     isOpen = !isOpen;
 
     if (isOpen) {
+      externalLabelText = Array.from(buttonElement?.labels ?? [])
+        .map(associated => associated.textContent?.trim() ?? '')
+        .filter(Boolean)
+        .join(' ');
       updateDropdownPosition();
       if (searchable) {
         setTimeout(() => inputElement?.focus(), 0);
@@ -254,6 +270,10 @@
   }
 
   function closeDropdown() {
+    // The popover is removed on close; keep focus from falling to <body> when it was inside
+    if (dropdownElement?.contains(document.activeElement)) {
+      buttonElement?.focus();
+    }
     isOpen = false;
     searchQuery = '';
     highlightedIndex = -1;
@@ -278,9 +298,16 @@
 
       value = newValues;
       onChange?.(newValues);
+      // The popover stays open, so a click that took no focus (Safari) must not leave focus on
+      // <body>, outside the dialog's focus trap. The search box is where typing continues.
+      if (document.activeElement === document.body) {
+        (searchable ? inputElement : buttonElement)?.focus();
+      }
     } else {
       value = option.value;
       onChange?.(option.value);
+      // A click that took no focus (Safari) leaves it on <body>; keep it inside the dialog
+      if (document.activeElement === document.body) buttonElement?.focus();
       closeDropdown();
     }
   }
@@ -301,8 +328,62 @@
     highlightedIndex = -1;
   }
 
+  // Move the highlighted option down (1) or up (-1), clamped to the list
+  function moveHighlight(delta: 1 | -1) {
+    // Nothing rendered to highlight, and aria-activedescendant must not name a missing option
+    const lastIndex = renderedOptions.length - 1;
+    if (lastIndex < 0) return;
+    if (delta === 1) {
+      highlightedIndex = highlightedIndex === -1 ? 0 : Math.min(highlightedIndex + 1, lastIndex);
+    } else {
+      // ArrowUp from nothing wraps to the last option; at the first option it stays there
+      // A highlight left beyond a shrunken list counts as being below the last option
+      highlightedIndex =
+        highlightedIndex === -1 || highlightedIndex > lastIndex
+          ? lastIndex
+          : Math.max(highlightedIndex - 1, 0);
+    }
+    scrollToHighlighted();
+  }
+
+  // Keys from anywhere inside the popover (search box or a focused option). Escape must not
+  // reach the document, where a surrounding Modal would treat it as its own close request.
+  function handlePopoverKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeDropdown();
+    } else if (event.key === 'Tab') {
+      // No preventDefault: focus moves to the trigger and the browser's Tab continues from there
+      closeDropdown();
+    }
+  }
+
+  // Navigation keys for the search box only; Space and other keys keep typing text
+  function handleSearchKeyDown(event: KeyboardEvent) {
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        moveHighlight(1);
+        break;
+
+      case 'ArrowUp':
+        event.preventDefault();
+        moveHighlight(-1);
+        break;
+
+      case 'Enter': {
+        // Always consumed, so Enter in the search box never submits a surrounding form
+        event.preventDefault();
+        const highlighted = safeArrayAccess(renderedOptions, highlightedIndex);
+        if (highlightedIndex >= 0 && highlighted) selectOption(highlighted);
+        break;
+      }
+    }
+  }
+
   function handleKeyDown(event: KeyboardEvent) {
-    const allOptions = filteredOptions;
+    const allOptions = renderedOptions;
 
     switch (event.key) {
       case 'Escape':
@@ -332,17 +413,14 @@
         if (!isOpen) {
           toggleDropdown();
         } else {
-          highlightedIndex =
-            highlightedIndex === -1 ? 0 : Math.min(highlightedIndex + 1, allOptions.length - 1);
-          scrollToHighlighted();
+          moveHighlight(1);
         }
         break;
 
       case 'ArrowUp':
         event.preventDefault();
         if (isOpen) {
-          highlightedIndex = Math.max(highlightedIndex - 1, -1);
-          scrollToHighlighted();
+          moveHighlight(-1);
         }
         break;
 
@@ -357,10 +435,9 @@
   function scrollToHighlighted() {
     if (highlightedIndex < 0 || !dropdownElement) return;
 
-    const options = dropdownElement.querySelectorAll('[role="option"]');
-    const highlighted = safeElementAccess<HTMLElement>(options, highlightedIndex, HTMLElement);
+    const highlighted = document.getElementById(`${fieldId}-option-${highlightedIndex}`);
 
-    if (highlighted) {
+    if (highlighted instanceof HTMLElement) {
       highlighted.scrollIntoView({ block: 'nearest' });
     }
   }
@@ -388,6 +465,16 @@
     if (event.target instanceof Node && dropdownElement?.contains(event.target)) return;
     updateDropdownPosition();
   }
+
+  // Native listener on the popover root rather than a Svelte `onkeydown`: Svelte delegates
+  // keydown to the document, where stopPropagation could no longer keep Escape from other
+  // document-level listeners (a surrounding Modal).
+  $effect(() => {
+    const popover = dropdownElement;
+    if (!popover) return;
+    popover.addEventListener('keydown', handlePopoverKeyDown);
+    return () => popover.removeEventListener('keydown', handlePopoverKeyDown);
+  });
 
   $effect(() => {
     if (isOpen) {
@@ -430,7 +517,7 @@
       aria-haspopup="listbox"
       aria-expanded={isOpen}
       aria-labelledby={label ? `${fieldId}-label` : undefined}
-      aria-describedby={helpText ? `${fieldId}-help` : undefined}
+      aria-describedby={triggerDescribedBy}
     >
       <span class="flex items-center gap-2 truncate min-w-0">
         {#if renderSelected && selectedOptions.length > 0}
@@ -502,6 +589,7 @@
               type="text"
               bind:value={searchQuery}
               oninput={handleSearch}
+              onkeydown={handleSearchKeyDown}
               placeholder={t('common.ui.search')}
               class={cn(
                 'block w-full py-2 px-3 text-sm leading-5 bg-[var(--color-base-100)] text-[var(--color-base-content)] border border-[var(--border-100)] rounded-[var(--radius-field)] transition-all placeholder:text-[var(--color-base-content)] placeholder:opacity-50 hover:border-[var(--border-200)]',
@@ -510,6 +598,10 @@
               aria-label={t('components.forms.select.searchOptions')}
               role="searchbox"
               aria-controls="{fieldId}-listbox"
+              aria-activedescendant={highlightedIndex >= 0 &&
+              highlightedIndex < renderedOptions.length
+                ? `${fieldId}-option-${highlightedIndex}`
+                : undefined}
             />
           </div>
         {/if}
@@ -521,14 +613,16 @@
           aria-multiselectable={multiple}
           id="{fieldId}-listbox"
           aria-labelledby={label ? `${fieldId}-label` : undefined}
+          aria-label={label ? undefined : externalLabelText || undefined}
         >
           {#if filteredOptions.length === 0}
             <div class="p-4 text-center text-[var(--color-base-content)] opacity-60">
               {t('components.forms.select.noOptions')}
             </div>
           {:else}
-            {@const flatOptions = filteredOptions}
-            {@const optionIndexMap = new Map(flatOptions.map((option, index) => [option, index]))}
+            {@const optionIndexMap = new Map(
+              renderedOptions.map((option, index) => [option, index])
+            )}
             {#each Object.entries(groupedOptions) as [group, options] (group)}
               {#if group && groupBy}
                 <div
@@ -542,6 +636,7 @@
                 {@const flatIndex = optionIndexMap.get(option) ?? -1}
                 <button
                   type="button"
+                  id="{fieldId}-option-{flatIndex}"
                   class={cn(
                     'w-full text-left hover:bg-[var(--color-base-200)] focus:bg-[var(--color-base-200)] focus:outline-hidden flex items-center gap-2 rounded',
                     safeGet(menuSizeClasses, menuSize, ''),

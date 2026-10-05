@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   createComponentTestFactory,
   screen,
@@ -8,6 +8,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import SelectDropdown from './SelectDropdown.svelte';
 import type { SelectOption } from './SelectDropdown.types';
+import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 
 // Mock scrollIntoView which is not available in jsdom
 beforeEach(() => {
@@ -537,5 +538,356 @@ describe('SelectDropdown', () => {
     });
 
     expect(screen.getByText('Choose your favorite fruit')).toBeInTheDocument();
+  });
+});
+
+describe('SelectDropdown Accessibility', () => {
+  const selectTest = createComponentTestFactory(SelectDropdown);
+
+  const fruit: SelectOption[] = [
+    { value: 'apple', label: 'Apple' },
+    { value: 'banana', label: 'Banana' },
+    { value: 'cherry', label: 'Cherry' },
+  ];
+
+  async function openSearchable(props: Record<string, unknown> = {}) {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    selectTest.render({ props: { options: fruit, searchable: true, onChange, ...props } });
+    await user.click(screen.getAllByRole('button')[0]);
+    const search = await screen.findByRole('searchbox');
+    await waitFor(() => expect(search).toHaveFocus());
+    return { user, onChange, search };
+  }
+
+  /** Records Escape keydowns that reach the document, like Modal's listener. */
+  function trackDocumentEscape() {
+    const seen: string[] = [];
+    const listener = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') seen.push(event.key);
+    };
+    document.addEventListener('keydown', listener);
+    return { seen, stop: () => document.removeEventListener('keydown', listener) };
+  }
+
+  it('moves the highlight with arrow keys in the search box and selects with Enter', async () => {
+    const { user, onChange, search } = await openSearchable();
+
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+
+    const options = screen.getAllByRole('option');
+    expect(options[1].id).not.toBe('');
+    expect(search).toHaveAttribute('aria-activedescendant', options[1].id);
+
+    await user.keyboard('{Enter}');
+
+    expect(onChange).toHaveBeenCalledWith('banana');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByRole('button'));
+  });
+
+  it('moves the highlight up with ArrowUp in the search box', async () => {
+    const { user, search } = await openSearchable();
+
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowUp}');
+
+    const options = screen.getAllByRole('option');
+    expect(search).toHaveAttribute('aria-activedescendant', options[0].id);
+  });
+
+  it('highlights the last option when ArrowUp is pressed with nothing highlighted', async () => {
+    const { user, search } = await openSearchable();
+
+    await user.keyboard('{ArrowUp}');
+
+    const options = screen.getAllByRole('option');
+    expect(search).toHaveAttribute('aria-activedescendant', options[options.length - 1].id);
+  });
+
+  it('keeps the first option highlighted when ArrowUp is pressed on it', async () => {
+    const { user, search } = await openSearchable();
+
+    await user.keyboard('{ArrowDown}{ArrowUp}{ArrowUp}');
+
+    const options = screen.getAllByRole('option');
+    expect(search).toHaveAttribute('aria-activedescendant', options[0].id);
+  });
+
+  describe('with interleaved groups', () => {
+    const interleaved: SelectOption[] = [
+      { value: 'a1', label: 'A1', group: 'A' },
+      { value: 'b1', label: 'B1', group: 'B' },
+      { value: 'a2', label: 'A2', group: 'A' },
+    ];
+
+    it('walks the options in the order they are rendered', async () => {
+      const { user, search } = await openSearchable({ options: interleaved, groupBy: true });
+      const rendered = screen.getAllByRole('option');
+      expect(rendered.map(o => o.textContent.trim())).toEqual(['A1', 'A2', 'B1']);
+      rendered.forEach((option, index) =>
+        expect(option.id.endsWith(`-option-${index}`)).toBe(true)
+      );
+
+      for (const [index, label] of ['A1', 'A2', 'B1'].entries()) {
+        await user.keyboard('{ArrowDown}');
+        const active = document.getElementById(search.getAttribute('aria-activedescendant') ?? '');
+        expect(active?.textContent.trim()).toBe(label);
+        expect(active).toBe(rendered[index]);
+      }
+    });
+
+    it('selects the option that is highlighted on screen with Enter', async () => {
+      const { user, onChange } = await openSearchable({ options: interleaved, groupBy: true });
+
+      await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+
+      expect(onChange).toHaveBeenCalledWith('a2');
+    });
+  });
+
+  it('drops aria-activedescendant when the options shrink below the highlighted index', async () => {
+    const user = userEvent.setup();
+    const { rerender } = selectTest.render({ props: { options: fruit, searchable: true } });
+    await user.click(screen.getAllByRole('button')[0]);
+    const search = await screen.findByRole('searchbox');
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+    expect(search).toHaveAttribute('aria-activedescendant');
+
+    await rerender({ options: fruit.slice(0, 2), searchable: true });
+
+    expect(search).not.toHaveAttribute('aria-activedescendant');
+
+    // ArrowUp from beyond the list lands on the last remaining option, not the one above it
+    await user.keyboard('{ArrowUp}');
+    expect(search).toHaveAttribute('aria-activedescendant', screen.getAllByRole('option')[1].id);
+  });
+
+  it('sets no aria-activedescendant when ArrowDown is pressed with no matching options', async () => {
+    const { user, search } = await openSearchable();
+
+    await user.keyboard('zzz');
+    await user.keyboard('{ArrowDown}');
+
+    expect(search).not.toHaveAttribute('aria-activedescendant');
+  });
+
+  it('does nothing on Enter in the search box when no option is highlighted', async () => {
+    const { onChange } = await openSearchable();
+
+    // fireEvent returns false when the event was cancelled, which is what stops a form submit
+    const notCancelled = await fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
+
+    expect(notCancelled).toBe(false);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
+  it('typing a space in the search box types a space instead of selecting', async () => {
+    const { user, onChange, search } = await openSearchable();
+
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('a b');
+
+    expect(search).toHaveValue('a b');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
+  it('Escape in the search box closes only the list and does not reach the document', async () => {
+    const { user } = await openSearchable();
+    const escapes = trackDocumentEscape();
+
+    await user.keyboard('{Escape}');
+    escapes.stop();
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(screen.getByRole('button'));
+    expect(escapes.seen).toEqual([]);
+  });
+
+  it('Escape on a focused option closes only the list and does not reach the document', async () => {
+    const user = userEvent.setup();
+    selectTest.render({ props: { options: fruit, multiple: true } });
+    await user.click(screen.getByRole('button'));
+    const option = (await screen.findAllByRole('option'))[0];
+    option.focus();
+    const escapes = trackDocumentEscape();
+
+    await user.keyboard('{Escape}');
+    escapes.stop();
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(screen.getByRole('button'));
+    expect(escapes.seen).toEqual([]);
+  });
+
+  const addedButtons: HTMLButtonElement[] = [];
+
+  afterEach(() => {
+    addedButtons.splice(0).forEach(button => button.remove());
+  });
+
+  /** Appends a plain button to the document body; removed after each test. */
+  function addButton(text: string): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.textContent = text;
+    document.body.append(button);
+    addedButtons.push(button);
+    return button;
+  }
+
+  /** Renders the dropdown between two plain buttons so Tab has somewhere to land. */
+  function renderBetweenButtons(props: Record<string, unknown>) {
+    const before = addButton('Before');
+    selectTest.render({ props: { options: fruit, ...props } });
+    const after = addButton('After');
+    return { before, after };
+  }
+
+  it('Tab in the search box closes the list and moves focus on from the trigger', async () => {
+    const user = userEvent.setup();
+    const { after } = renderBetweenButtons({ searchable: true });
+    await user.click(screen.getByRole('button', { name: /select/i }));
+    await waitFor(() => expect(screen.getByRole('searchbox')).toHaveFocus());
+
+    await user.keyboard('{Tab}');
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(after);
+  });
+
+  it('Shift+Tab from a focused option closes the list and moves focus on from the trigger', async () => {
+    const user = userEvent.setup();
+    const { before } = renderBetweenButtons({ multiple: true });
+    await user.click(screen.getByRole('button', { name: /select/i }));
+    const option = (await screen.findAllByRole('option'))[0];
+    option.focus();
+
+    await user.keyboard('{Shift>}{Tab}{/Shift}');
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(before);
+  });
+
+  it('returns focus to the trigger after an option is clicked', async () => {
+    const { user } = await openSearchable();
+
+    const option = screen.getAllByRole('option')[0];
+    option.focus();
+    await user.click(option);
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(screen.getByRole('button'));
+  });
+
+  it('returns focus to the trigger when focus was on body at selection time', async () => {
+    const { onChange, search } = await openSearchable();
+    search.blur();
+    expect(document.activeElement).toBe(document.body);
+
+    // A click on a button that takes no focus (Safari) does not move focus to the option
+    await fireEvent.click(screen.getAllByRole('option')[0]);
+
+    expect(onChange).toHaveBeenCalledWith('apple');
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(screen.getByRole('button'));
+  });
+
+  it('keeps focus in the search box when a multiple-select option is clicked without taking focus', async () => {
+    const { onChange, search } = await openSearchable({ multiple: true });
+    search.blur();
+    expect(document.activeElement).toBe(document.body);
+
+    await fireEvent.click(screen.getAllByRole('option')[0]);
+
+    expect(onChange).toHaveBeenCalledWith(['apple']);
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    expect(document.activeElement).toBe(search);
+  });
+
+  it('keeps focus on the trigger when a multiple-select option without search is clicked without taking focus', async () => {
+    const user = userEvent.setup();
+    selectTest.render({ props: { options: fruit, multiple: true } });
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+    await screen.findByRole('listbox');
+    trigger.blur();
+    expect(document.activeElement).toBe(document.body);
+
+    await fireEvent.click(screen.getAllByRole('option')[0]);
+
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('does not move focus on an outside click', async () => {
+    const user = userEvent.setup();
+    selectTest.render({ props: { options: fruit } });
+    const outside = addButton('Outside');
+
+    await user.click(screen.getByRole('button', { name: /select/i }));
+    await screen.findByRole('listbox');
+
+    await user.click(outside);
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(outside);
+  });
+
+  it('names the open listbox from the label associated with the trigger', async () => {
+    const user = userEvent.setup();
+    const { container } = selectTest.render({ props: { options: fruit, id: 'device-field' } });
+    const externalLabel = document.createElement('label');
+    externalLabel.htmlFor = 'device-field';
+    externalLabel.textContent = 'Audio Device';
+    container.prepend(externalLabel);
+
+    await user.click(screen.getByRole('button'));
+
+    expect(await screen.findByRole('listbox', { name: 'Audio Device' })).toBeInTheDocument();
+  });
+
+  it('keeps the label prop as the listbox name and adds no aria-label without any label', async () => {
+    const user = userEvent.setup();
+    const labelled = selectTest.render({ props: { options: fruit, label: 'Fruit' } });
+    await user.click(screen.getByRole('button'));
+    const named = await screen.findByRole('listbox', { name: 'Fruit' });
+    expect(named).toHaveAttribute('aria-labelledby');
+    expect(named).not.toHaveAttribute('aria-label');
+    labelled.unmount();
+
+    selectTest.render({ props: { options: fruit } });
+    await user.click(screen.getByRole('button'));
+    const unnamed = await screen.findByRole('listbox');
+    expect(unnamed).not.toHaveAttribute('aria-label');
+  });
+
+  it('links help text and the aria-describedby prop together on the trigger', () => {
+    const both = selectTest.render({
+      props: { options: fruit, id: 'both', helpText: 'Help', 'aria-describedby': 'extra-note' },
+    });
+    expect(screen.getByRole('button').getAttribute('aria-describedby')).toBe(
+      'both-help extra-note'
+    );
+    both.unmount();
+
+    const only = selectTest.render({
+      props: { options: fruit, id: 'only', 'aria-describedby': 'extra-note' },
+    });
+    expect(screen.getByRole('button').getAttribute('aria-describedby')).toBe('extra-note');
+    only.unmount();
+
+    selectTest.render({ props: { options: fruit, id: 'none' } });
+    expect(screen.getByRole('button')).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('has no violations with the searchable list open and an option highlighted', async () => {
+    const { user, search } = await openSearchable({ label: 'Fruit' });
+    await user.keyboard('{ArrowDown}');
+    expect(search).toHaveAttribute('aria-activedescendant');
+
+    // The landmark rule is about whole pages, not an isolated component
+    await expectNoA11yViolations(document.body, { rules: { region: { enabled: false } } });
   });
 });

@@ -111,7 +111,7 @@
             </span>
             {#if preset.recommended}
               <span
-                class="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-primary)]"
+                class="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-base-content)]"
               >
                 {t('wizard.steps.detection.balancedRecommended')}
               </span>

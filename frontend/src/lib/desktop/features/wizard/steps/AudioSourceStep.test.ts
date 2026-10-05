@@ -49,6 +49,17 @@ const radio = (name: RegExp) => screen.getByRole('radio', { name });
 
 const urlInput = () => screen.getByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
 const urlAlert = () => screen.getByRole('alert');
+// The device state region is the focusable one; the set up later region is sr-only
+const deviceStatus = () => {
+  const region = screen.getAllByRole('status').find(el => el.getAttribute('tabindex') === '-1');
+  if (!region) throw new Error('device status region not rendered');
+  return region;
+};
+const setUpLaterStatus = () => {
+  const region = screen.getAllByRole('status').find(el => el.classList.contains('sr-only'));
+  if (!region) throw new Error('set up later status region not rendered');
+  return region;
+};
 
 async function typeUrl(value: string) {
   await fireEvent.input(urlInput(), { target: { value } });
@@ -250,7 +261,7 @@ describe('AudioSourceStep - leave handler', () => {
     expect(button).toHaveAttribute('aria-pressed', 'false');
     await fireEvent.click(button);
     expect(button).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText(`${KEY}.setUpLaterChosen`)).toBeInTheDocument();
+    expect(screen.getAllByText(`${KEY}.setUpLaterChosen`)).toHaveLength(2);
 
     await leave();
 
@@ -512,8 +523,11 @@ function expectUrlError(shown: boolean) {
   const input = urlInput();
   const help = screen.getByText(`${KEY}.rtspUrlHelp`);
   expect(alert.textContent.trim()).toBe(shown ? `${KEY}.reasons.urlScheme` : '');
-  // The help text is always linked; the error is added while it shows
-  expect(input).toHaveAttribute('aria-describedby', shown ? `${help.id} ${alert.id}` : help.id);
+  // The help text is always linked; the error is added while it shows, then the note
+  // that sound cards stop (present when the seed has a saved sound card)
+  const note = screen.queryByText(`${KEY}.streamReplacesSoundCards`);
+  const expected = [help.id, shown ? alert.id : '', note?.id ?? ''].filter(Boolean).join(' ');
+  expect(input).toHaveAttribute('aria-describedby', expected);
   if (shown) {
     expect(input).toHaveAttribute('aria-invalid', 'true');
   } else {
@@ -648,7 +662,7 @@ describe('AudioSourceStep - focus', () => {
     await clickRetry();
 
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
-    expect(document.activeElement).toBe(screen.getByRole('status'));
+    expect(document.activeElement).toBe(deviceStatus());
     expect(document.activeElement).not.toBe(document.body);
   });
 
@@ -714,6 +728,24 @@ describe('AudioSourceStep Accessibility', () => {
       },
     },
     {
+      name: 'while devices load',
+      prepare: () => {
+        vi.mocked(api.get).mockReturnValue(new Promise(() => {}));
+      },
+      ready: async () => {
+        await screen.findByText(`${KEY}.deviceLoading`);
+      },
+    },
+    {
+      name: 'with no devices',
+      prepare: () => {
+        vi.mocked(api.get).mockResolvedValue([]);
+      },
+      ready: async () => {
+        await screen.findByText(`${KEY}.noDevicesFound`);
+      },
+    },
+    {
       name: 'in the stream state',
       prepare: () => {},
       ready: async () => {
@@ -735,5 +767,122 @@ describe('AudioSourceStep Accessibility', () => {
     await flushAsync();
     await ready();
     await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
+  });
+
+  it.each([
+    {
+      name: 'while devices load',
+      prepare: () => {
+        vi.mocked(api.get).mockReturnValue(new Promise(() => {}));
+      },
+      labelled: false,
+    },
+    {
+      name: 'when listing devices failed',
+      prepare: () => {
+        vi.mocked(api.get).mockRejectedValue(new Error('boom'));
+      },
+      labelled: false,
+    },
+    {
+      name: 'with no devices',
+      prepare: () => {
+        vi.mocked(api.get).mockResolvedValue([]);
+      },
+      labelled: false,
+    },
+    { name: 'with devices listed', prepare: () => {}, labelled: true },
+  ])('every label points at a rendered control $name', async ({ prepare, labelled }) => {
+    prepare();
+    const { container } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await flushAsync();
+
+    const labels = container.querySelectorAll('label[for]');
+    expect(labels.length).toBe(labelled ? 1 : 0);
+    for (const label of labels) {
+      const target = label.getAttribute('for') ?? '';
+      expect(document.getElementById(target), `label for "${target}"`).not.toBeNull();
+    }
+  });
+
+  it('announces set up later in a status region that stays rendered', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    const region = setUpLaterStatus();
+    expect(region).toHaveTextContent('');
+
+    await fireEvent.click(screen.getByRole('button', { name: `${KEY}.setUpLater` }));
+    expect(setUpLaterStatus()).toBe(region);
+    expect(region).toHaveTextContent(`${KEY}.setUpLaterChosen`);
+
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
+    await typeUrl(RTSP_URL);
+    expect(setUpLaterStatus()).toBe(region);
+    expect(region).toHaveTextContent('');
+  });
+
+  it('describes the device dropdown with the note that the stream is turned off', async () => {
+    seed({ sources: [], source: '' }, [
+      { name: 'Yard', url: RTSP_URL, enabled: true, type: 'rtsp' },
+    ]);
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
+    await chooseUsbDevice();
+
+    expect(await deviceTrigger()).toHaveAccessibleDescription(`${KEY}.soundCardReplacesStream`);
+  });
+
+  it('describes the URL input with the note that sound cards stop', async () => {
+    seed({ sources: [{ ...TEMPLATE_SOURCE, device: 'usb-path:bus-1' }], source: '' });
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream();
+
+    expect(urlInput()).toHaveAccessibleDescription(
+      `${KEY}.rtspUrlHelp ${KEY}.streamReplacesSoundCards`
+    );
+
+    await typeUrl('http://x');
+    await leaveUrl();
+
+    expect(urlInput()).toHaveAccessibleDescription(
+      `${KEY}.rtspUrlHelp ${KEY}.reasons.urlScheme ${KEY}.streamReplacesSoundCards`
+    );
+  });
+
+  it('marks the URL input with the error border only while the error shows', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream('http://x');
+    expect(urlInput()).not.toHaveClass('input-error');
+
+    await leaveUrl();
+    expect(urlInput()).toHaveClass('input-error');
+
+    await typeUrl(RTSP_URL);
+    expect(urlInput()).not.toHaveClass('input-error');
+  });
+
+  it('names the open device listbox with the field label', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await fireEvent.click(await deviceTrigger());
+
+    expect(await screen.findByRole('listbox', { name: `${KEY}.deviceLabel` })).toBeInTheDocument();
+  });
+
+  it('colours the device failure and URL error texts with the error text token', async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error('boom'));
+    renderStep(AudioSourceStep);
+    await flushAsync();
+
+    const failure = await screen.findByText(`${KEY}.devicesLoadFailed`);
+    expect(failure).toHaveClass('text-[var(--text-error)]');
+
+    await chooseStream('http://x');
+    await leaveUrl();
+    expect(urlAlert()).toHaveClass('text-[var(--text-error)]');
   });
 });

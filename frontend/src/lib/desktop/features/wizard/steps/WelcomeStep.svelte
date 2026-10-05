@@ -20,9 +20,9 @@
   </div>
 
   <div class="space-y-2">
-    <h2 class="text-2xl font-bold text-[var(--color-base-content)]">
+    <h4 class="text-2xl font-bold text-[var(--color-base-content)]">
       {t('wizard.steps.welcome.heading')}
-    </h2>
+    </h4>
 
     <p class="text-sm leading-relaxed text-[var(--color-base-content)] opacity-80">
       {t('wizard.steps.welcome.description')}

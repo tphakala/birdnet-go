@@ -31,6 +31,8 @@
   const AUDIO_DEVICES_ENDPOINT = '/api/v2/system/audio/devices';
   const URL_HELP_ID = generateId('wizard-rtsp-url-help');
   const URL_ERROR_ID = generateId('wizard-rtsp-url-error');
+  const SOUND_CARD_NOTE_ID = generateId('wizard-sound-card-note');
+  const STREAM_NOTE_ID = generateId('wizard-stream-note');
   const DEVICE_FIELD_ID = 'wizard-audio-device';
   const URL_FIELD_ID = 'wizard-rtsp-url';
 
@@ -109,6 +111,17 @@
   // every edit. Display only: Next's reason does not depend on it.
   let urlLeft = $state(initial.primaryStreamUrl !== null);
   let showUrlError = $derived(urlLeft && sourceType === 'rtsp' && isMalformedRtspUrl(rtspUrl));
+  // The URL input is described by its help, the error while it shows, and the note
+  // that sound cards stop once a stream is chosen over a saved sound card
+  let urlDescribedBy = $derived(
+    [
+      URL_HELP_ID,
+      showUrlError ? URL_ERROR_ID : undefined,
+      initial.savedDevice !== '' ? STREAM_NOTE_ID : undefined,
+    ]
+      .filter(Boolean)
+      .join(' ')
+  );
   // Primitives, so the effect below runs only when one of them changes
   let valid = $derived(skipped || incompleteReason === undefined);
   let reason = $derived(skipped ? undefined : incompleteReason);
@@ -308,8 +321,9 @@
 
   {#if sourceType === 'soundcard'}
     <div>
+      <!-- The dropdown (the label's control) is absent while devices load, fail or are empty -->
       <label
-        for={DEVICE_FIELD_ID}
+        for={deviceNotice === null ? DEVICE_FIELD_ID : undefined}
         class="mb-1 block text-sm font-medium text-[var(--color-base-content)]"
       >
         {t('wizard.steps.audioSource.deviceLabel')}
@@ -323,7 +337,7 @@
         {:else if deviceNotice !== null}
           <SettingsNote className="mt-0">
             {#if deviceNotice === 'failed'}
-              <p class="text-[var(--color-error)]">{t(DEVICE_NOTICES.failed.text)}</p>
+              <p class="text-[var(--text-error)]">{t(DEVICE_NOTICES.failed.text)}</p>
               {#if deviceError}
                 <p class="mt-1 opacity-80">{deviceError}</p>
               {/if}
@@ -356,11 +370,12 @@
           options={deviceOptions}
           value={selectedDevice}
           searchable={true}
+          aria-describedby={streamOwnedByStep ? SOUND_CARD_NOTE_ID : undefined}
           onChange={setDevice}
         />
         {#if streamOwnedByStep}
           <SettingsNote className="mt-3">
-            <p>{t('wizard.steps.audioSource.soundCardReplacesStream')}</p>
+            <p id={SOUND_CARD_NOTE_ID}>{t('wizard.steps.audioSource.soundCardReplacesStream')}</p>
           </SettingsNote>
         {/if}
       {/if}
@@ -382,7 +397,7 @@
         id={URL_FIELD_ID}
         bind:value={rtspUrl}
         placeholder={t('wizard.steps.audioSource.rtspUrlPlaceholder')}
-        aria-describedby={showUrlError ? `${URL_HELP_ID} ${URL_ERROR_ID}` : URL_HELP_ID}
+        aria-describedby={urlDescribedBy}
         aria-invalid={showUrlError ? 'true' : undefined}
         oninput={onUrlInput}
         onblur={onUrlBlur}
@@ -390,12 +405,12 @@
       <!-- Always rendered with two lines reserved (the message wraps to two in the dialog;
            a longer one would still grow the line): the alert is announced when it fills,
            and showing it does not move the controls below -->
-      <p id={URL_ERROR_ID} role="alert" class="mt-1 min-h-10 text-sm text-[var(--color-error)]">
+      <p id={URL_ERROR_ID} role="alert" class="mt-1 min-h-10 text-sm text-[var(--text-error)]">
         {showUrlError ? t('wizard.steps.audioSource.reasons.urlScheme') : ''}
       </p>
       {#if initial.savedDevice !== ''}
         <SettingsNote className="mt-3">
-          <p>{t('wizard.steps.audioSource.streamReplacesSoundCards')}</p>
+          <p id={STREAM_NOTE_ID}>{t('wizard.steps.audioSource.streamReplacesSoundCards')}</p>
         </SettingsNote>
       {/if}
     </div>
@@ -409,6 +424,11 @@
         {t('wizard.steps.audioSource.additionalSourcesHint')}
       {/if}
     </p>
+    <!-- Always rendered so the confirmation is announced when it fills; the visible text above
+         is not a live region, so nothing is read twice -->
+    <span role="status" class="sr-only">
+      {skipped ? t('wizard.steps.audioSource.setUpLaterChosen') : ''}
+    </span>
     <button
       type="button"
       class="{SECONDARY_BUTTON_CLASS} shrink-0 {skipped ? 'border-[var(--color-primary)]' : ''}"

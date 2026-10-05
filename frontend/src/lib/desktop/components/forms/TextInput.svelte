@@ -68,6 +68,9 @@
     return inputElement.validity.valid;
   });
 
+  // Callers that validate in JS mark the field with aria-invalid; show the error border too
+  let isMarkedInvalid = $derived(ariaInvalid === true || ariaInvalid === 'true');
+
   function handleChange(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
     value = target.value;
@@ -139,7 +142,11 @@
     {maxlength}
     aria-describedby={ariaDescribedBy}
     aria-invalid={ariaInvalid}
-    class={cn('input  w-full', safeGet(sizeClasses, size, ''), !isValid && 'input-error')}
+    class={cn(
+      'input  w-full',
+      safeGet(sizeClasses, size, ''),
+      (!isValid || isMarkedInvalid) && 'input-error'
+    )}
     onchange={handleChange}
     oninput={handleInput}
     onblur={handleBlur}

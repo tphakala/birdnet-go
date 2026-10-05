@@ -14,8 +14,12 @@
   import type { WizardStepProps } from '../types';
   import { getLogger } from '$lib/utils/logger';
   import { toastActions } from '$lib/stores/toast';
+  import { generateId } from '$lib/utils/uuid';
 
   const logger = getLogger('LocationLanguageStep');
+
+  const UI_LANGUAGE_HELP_ID = generateId('wizard-ui-language-help');
+  const SPECIES_LANGUAGE_HELP_ID = generateId('wizard-species-language-help');
 
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
@@ -188,20 +192,24 @@
     >
       {t('wizard.steps.locationLanguage.uiLanguageLabel')}
     </label>
-    <p class="mb-2 text-sm text-[var(--color-base-content)] opacity-80">
+    <p id={UI_LANGUAGE_HELP_ID} class="mb-2 text-sm text-[var(--color-base-content)] opacity-80">
       {t('wizard.steps.locationLanguage.uiLanguageHelp')}
     </p>
-    <LanguageSelector id="wizard-ui-language" />
+    <LanguageSelector id="wizard-ui-language" aria-describedby={UI_LANGUAGE_HELP_ID} />
   </div>
 
   <div>
+    <!-- The dropdown (the label's control) is absent while the locales load -->
     <label
-      for="wizard-species-locale"
+      for={localesLoading ? undefined : 'wizard-species-locale'}
       class="mb-1 block text-sm font-medium text-[var(--color-base-content)]"
     >
       {t('wizard.steps.locationLanguage.speciesLanguageLabel')}
     </label>
-    <p class="mb-2 text-sm text-[var(--color-base-content)] opacity-80">
+    <p
+      id={SPECIES_LANGUAGE_HELP_ID}
+      class="mb-2 text-sm text-[var(--color-base-content)] opacity-80"
+    >
       {t('wizard.steps.locationLanguage.speciesLanguageHelp')}
     </p>
     {#if localesLoading}
@@ -226,6 +234,7 @@
         options={localeOptions}
         value={speciesLocale}
         searchable={true}
+        aria-describedby={SPECIES_LANGUAGE_HELP_ID}
         onChange={value => {
           if (typeof value === 'string') {
             speciesLocale = value;
