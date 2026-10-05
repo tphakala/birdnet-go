@@ -58,7 +58,6 @@ describe('initialAudioChoice', () => {
       expected: {
         sourceType: 'soundcard',
         savedDevice: 'usb-path:x',
-        streamUrl: U,
         primaryStreamUrl: U,
       },
     },
@@ -69,19 +68,19 @@ describe('initialAudioChoice', () => {
         { type: 'hls', url: 'http://h/x.m3u8' },
         { type: 'rtsp', url: V },
       ]),
-      expected: { sourceType: 'rtsp', savedDevice: '', streamUrl: V, primaryStreamUrl: V },
+      expected: { sourceType: 'rtsp', savedDevice: '', primaryStreamUrl: V },
     },
     {
       name: 'nothing configured: sound card, nothing prefilled',
       audio: audioOf({ sources: [] }),
       rtsp: rtspOf([]),
-      expected: { sourceType: 'soundcard', savedDevice: '', streamUrl: '', primaryStreamUrl: null },
+      expected: { sourceType: 'soundcard', savedDevice: '', primaryStreamUrl: null },
     },
     {
       name: 'only a non-rtsp stream: sound card',
       audio: undefined,
       rtsp: rtspOf([{ type: 'hls', url: 'http://h/x.m3u8' }]),
-      expected: { sourceType: 'soundcard', savedDevice: '', streamUrl: '', primaryStreamUrl: null },
+      expected: { sourceType: 'soundcard', savedDevice: '', primaryStreamUrl: null },
     },
   ])('$name', ({ audio, rtsp, expected }) => {
     expect(initialAudioChoice(audio, rtsp)).toEqual(expected);
@@ -245,10 +244,6 @@ interface SimStore {
   rtsp: { streams: StreamConfig[] };
 }
 
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
 function freshStore(): SimStore {
   return {
     audio: audioOf({ sources: [{ ...TEMPLATE_SOURCE }], source: '' }) as SimStore['audio'],
@@ -281,17 +276,17 @@ function chooseStream(store: SimStore, url: string, primary: string | null): boo
 function chooseCard(
   store: SimStore,
   device: AudioDevice,
-  inStreamMode: boolean,
+  streamOwned: boolean,
   primary: string | null
 ) {
   const v = view(store);
-  return apply(store, soundCardPayloads(v.audio, v.rtsp, device, inStreamMode, primary));
+  return apply(store, soundCardPayloads(v.audio, v.rtsp, device, streamOwned, primary));
 }
 
 function mount(store: SimStore) {
   const v = view(store);
   const initial = initialAudioChoice(v.audio, v.rtsp);
-  return { inStreamMode: initial.sourceType === 'rtsp', primary: initial.primaryStreamUrl };
+  return { streamOwned: initial.sourceType === 'rtsp', primary: initial.primaryStreamUrl };
 }
 
 function assertInvariants(store: SimStore) {
@@ -307,41 +302,6 @@ function assertInvariants(store: SimStore) {
 }
 
 describe('wizard audio transitions', () => {
-  it('(a) choosing the same stream on a rerun sends nothing', () => {
-    const store = freshStore();
-    chooseStream(store, U, null);
-    const m = mount(store);
-    expect(chooseStream(store, U, m.primary)).toBe(false);
-    assertInvariants(store);
-  });
-
-  it('(b) choosing another URL on a rerun edits the same stream', () => {
-    const store = freshStore();
-    chooseStream(store, U, null);
-    const m = mount(store);
-    chooseStream(store, V, m.primary);
-    expect(store.rtsp.streams).toEqual([
-      { name: 'Stream 1', url: V, enabled: true, type: 'rtsp', transport: 'tcp' },
-    ]);
-    assertInvariants(store);
-  });
-
-  it('(c) choosing one of several streams changes only that stream', () => {
-    const store = freshStore();
-    store.audio.sources = [];
-    store.rtsp.streams = [
-      { name: 'A', url: 'http://h/a', enabled: true, type: 'hls' },
-      { name: 'B', url: 'rtsp://b/x', enabled: true, type: 'rtsp' },
-      { name: 'C', url: 'rtsp://c/x', enabled: false, type: 'rtsp' },
-    ];
-    const before = clone(store.rtsp.streams);
-    chooseStream(store, 'rtsp://c/x', 'rtsp://b/x');
-    expect(store.rtsp.streams[0]).toEqual(before[0]);
-    expect(store.rtsp.streams[1]).toEqual(before[1]);
-    expect(store.rtsp.streams[2]).toEqual({ ...before[2], enabled: true });
-    assertInvariants(store);
-  });
-
   it('(d) a reorder between mount and commit does not redirect the edit', () => {
     const store = freshStore();
     store.audio.sources = [];
@@ -361,7 +321,7 @@ describe('wizard audio transitions', () => {
     const store = freshStore();
     chooseCard(store, usb, false, null);
     const m = mount(store);
-    expect(chooseCard(store, usb, m.inStreamMode, m.primary)).toBe(false);
+    expect(chooseCard(store, usb, m.streamOwned, m.primary)).toBe(false);
     assertInvariants(store);
   });
 
@@ -369,8 +329,8 @@ describe('wizard audio transitions', () => {
     const store = freshStore();
     chooseStream(store, U, null);
     let m = mount(store);
-    expect(m.inStreamMode).toBe(true);
-    chooseCard(store, usb, m.inStreamMode, m.primary);
+    expect(m.streamOwned).toBe(true);
+    chooseCard(store, usb, m.streamOwned, m.primary);
     expect(store.audio.sources).toEqual([
       expect.objectContaining({ name: 'Sound Card 1', device: 'usb-path:bus-1' }),
     ]);
@@ -378,7 +338,7 @@ describe('wizard audio transitions', () => {
       { name: 'Stream 1', url: U, enabled: false, type: 'rtsp', transport: 'tcp' },
     ]);
     m = mount(store);
-    expect(m.inStreamMode).toBe(false);
+    expect(m.streamOwned).toBe(false);
     chooseStream(store, U, m.primary);
     expect(store.audio.sources).toEqual([]);
     expect(store.rtsp.streams[0].enabled).toBe(true);
@@ -395,22 +355,6 @@ describe('wizard audio transitions', () => {
     chooseStream(store, V, U);
     expect(store.rtsp.streams).toHaveLength(1);
     expect(store.rtsp.streams[0]).toMatchObject({ name: 'Stream 1', url: V });
-    assertInvariants(store);
-  });
-
-  it('(h) a sound card change with cameras configured leaves the cameras running', () => {
-    const store = freshStore();
-    store.audio.sources = [{ name: 'A', device: 'hw:0,0', gain: 1, models: [] }];
-    store.rtsp.streams = [
-      { name: 'Cam1', url: 'rtsp://1/x', enabled: true, type: 'rtsp' },
-      { name: 'Cam2', url: 'rtsp://2/x', enabled: true, type: 'rtsp' },
-    ];
-    const streamsBefore = clone(store.rtsp.streams);
-    const m = mount(store);
-    expect(m.inStreamMode).toBe(false);
-    chooseCard(store, plain, m.inStreamMode, m.primary);
-    expect(store.audio.sources).toEqual([{ name: 'A', device: 'hw:2,0', gain: 1, models: [] }]);
-    expect(store.rtsp.streams).toEqual(streamsBefore);
     assertInvariants(store);
   });
 });

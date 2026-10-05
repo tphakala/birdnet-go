@@ -22,11 +22,11 @@ import { deviceMatches, deviceValue, type AudioDevice } from '$lib/utils/audioDe
 /** Name of the sound card entry the wizard creates (the install template's name). */
 export const WIZARD_SOUND_CARD_NAME = 'Sound Card 1';
 /** Base of the names of streams the wizard creates: "Stream 1", "Stream 2", ... */
-export const WIZARD_STREAM_NAME_BASE = 'Stream';
+const WIZARD_STREAM_NAME_BASE = 'Stream';
 /** Transport of the streams the wizard creates. */
-export const WIZARD_STREAM_TRANSPORT = 'tcp';
+const WIZARD_STREAM_TRANSPORT = 'tcp';
 /** URL prefixes the backend accepts for an RTSP stream (validateURLScheme in validate_audio.go). */
-export const RTSP_URL_PREFIXES = ['rtsp://', 'rtsps://'];
+const RTSP_URL_PREFIXES = ['rtsp://', 'rtsps://'];
 
 export type AudioSourceType = 'soundcard' | 'rtsp';
 export type AudioPayload = SettingsSectionPayloads['audio'];
@@ -37,9 +37,7 @@ export interface InitialAudioChoice {
   sourceType: AudioSourceType;
   /** Device string of the first configured sound card, or empty. */
   savedDevice: string;
-  /** URL of the first rtsp-type stream, or empty. */
-  streamUrl: string;
-  /** Same stream's URL, or null when there is none. */
+  /** URL of the first rtsp-type stream, or null when there is none. */
   primaryStreamUrl: string | null;
 }
 
@@ -65,6 +63,11 @@ function streamsOf(rtsp: RTSPSettings | undefined): StreamConfig[] {
   return Array.isArray(rtsp?.streams) ? rtsp.streams : [];
 }
 
+/** Copy of the list with the entry at `index` merged with `patch`; the list itself is untouched. */
+function replaceAt<T extends object>(list: T[], index: number, patch: Partial<T>): T[] {
+  return list.map((item, i) => (i === index ? { ...item, ...patch } : item));
+}
+
 function hasLegacySource(audio: AudioSettings | undefined): boolean {
   return typeof audio?.source === 'string' && audio.source.trim() !== '';
 }
@@ -85,17 +88,11 @@ export function initialAudioChoice(
 ): InitialAudioChoice {
   const sources = sourcesOf(audio);
   const primary = firstRtspStream(streamsOf(rtsp));
-  const streamUrl = primary?.url ?? '';
   const primaryStreamUrl = primary?.url ?? null;
   if (sources.length > 0) {
-    return { sourceType: 'soundcard', savedDevice: sources[0].device, streamUrl, primaryStreamUrl };
+    return { sourceType: 'soundcard', savedDevice: sources[0].device, primaryStreamUrl };
   }
-  return {
-    sourceType: primary ? 'rtsp' : 'soundcard',
-    savedDevice: '',
-    streamUrl,
-    primaryStreamUrl,
-  };
+  return { sourceType: primary ? 'rtsp' : 'soundcard', savedDevice: '', primaryStreamUrl };
 }
 
 /** The listed device that a saved device string refers to, by stable or legacy id. */
@@ -113,73 +110,71 @@ export function firstFreeStreamName(streams: StreamConfig[]): string {
   }
 }
 
+/** The `audio` payload for choosing `device`, or null when the stored sources already match. */
+function soundCardAudioPayload(
+  audio: AudioSettings | undefined,
+  device: AudioDevice
+): AudioPayload | null {
+  const sources = sourcesOf(audio);
+  const value = deviceValue(device);
+  const matchIndex = sources.findIndex(s => deviceMatches(device, s.device));
+
+  if (matchIndex >= 0) {
+    // Already configured. A legacy id is upgraded to the stable token in place;
+    // the entry's position is kept so per-source identity is not disturbed.
+    // eslint-disable-next-line security/detect-object-injection -- matchIndex comes from findIndex on sources
+    if (sources[matchIndex].device !== value) {
+      return { sources: replaceAt(sources, matchIndex, { device: value }), source: '' };
+    }
+    return hasLegacySource(audio) ? { source: '' } : null;
+  }
+  if (sources.length > 0) {
+    // A sample rate chosen for the previous device may not suit this one
+    const first: AudioSourceConfig = { ...sources[0], device: value };
+    delete first.sampleRate;
+    return { sources: [first, ...sources.slice(1)], source: '' };
+  }
+  return {
+    sources: [
+      {
+        name: WIZARD_SOUND_CARD_NAME,
+        device: value,
+        gain: 0,
+        models: [],
+        quietHours: { ...defaultQuietHoursConfig },
+      },
+    ],
+    source: '',
+  };
+}
+
 /**
  * Payloads for choosing a sound card. `audio` always carries `source: ''` when
  * it can leave `sources` unchanged or empty, because the backend recreates a
  * sound card from a non-empty legacy `source` whenever `sources` is empty.
- * `openedInStreamMode` says the step opened on the stream option or has saved a
- * stream itself, in which case
- * the stream it showed (`primaryStreamUrl`) is turned off, not deleted.
+ * `streamOwnedByStep` says the step opened on the stream option or has saved a
+ * stream itself, in which case the stream it showed (`primaryStreamUrl`) is
+ * turned off, not deleted.
  * Either payload is null when the stored settings already match the choice.
  */
 export function soundCardPayloads(
   audio: AudioSettings | undefined,
   rtsp: RTSPSettings | undefined,
   device: AudioDevice,
-  openedInStreamMode: boolean,
+  streamOwnedByStep: boolean,
   primaryStreamUrl: string | null
 ): { audio: AudioPayload | null; rtsp: RtspPayload | null } {
-  const sources = sourcesOf(audio);
-  const value = deviceValue(device);
-  const matchIndex = sources.findIndex(s => deviceMatches(device, s.device));
-
-  let audioPayload: AudioPayload | null;
-  if (matchIndex >= 0) {
-    // Already configured. A legacy id is upgraded to the stable token in place;
-    // the entry's position is kept so per-source identity is not disturbed.
-    // eslint-disable-next-line security/detect-object-injection -- matchIndex comes from findIndex on sources
-    const entry = sources[matchIndex];
-    if (entry.device !== value) {
-      audioPayload = {
-        sources: sources.map((s, i) => (i === matchIndex ? { ...s, device: value } : s)),
-        source: '',
-      };
-    } else {
-      audioPayload = hasLegacySource(audio) ? { source: '' } : null;
-    }
-  } else if (sources.length > 0) {
-    // A sample rate chosen for the previous device may not suit this one
-    const first: AudioSourceConfig = { ...sources[0], device: value };
-    delete first.sampleRate;
-    audioPayload = { sources: [first, ...sources.slice(1)], source: '' };
-  } else {
-    audioPayload = {
-      sources: [
-        {
-          name: WIZARD_SOUND_CARD_NAME,
-          device: value,
-          gain: 0,
-          models: [],
-          quietHours: { ...defaultQuietHoursConfig },
-        },
-      ],
-      source: '',
-    };
-  }
-
   let rtspPayload: RtspPayload | null = null;
-  if (openedInStreamMode && primaryStreamUrl !== null) {
+  if (streamOwnedByStep && primaryStreamUrl !== null) {
     const streams = streamsOf(rtsp);
     const index = streams.findIndex(s => s.url === primaryStreamUrl);
     // eslint-disable-next-line security/detect-object-injection -- index comes from findIndex on streams
     if (index >= 0 && streams[index].enabled) {
-      rtspPayload = {
-        streams: streams.map((s, i) => (i === index ? { ...s, enabled: false } : s)),
-      };
+      rtspPayload = { streams: replaceAt(streams, index, { enabled: false }) };
     }
   }
 
-  return { audio: audioPayload, rtsp: rtspPayload };
+  return { audio: soundCardAudioPayload(audio, device), rtsp: rtspPayload };
 }
 
 /**
@@ -205,11 +200,9 @@ export function streamPayloads(
     // eslint-disable-next-line security/detect-object-injection -- sameIndex comes from findIndex on streams
     rtspPayload = streams[sameIndex].enabled
       ? null
-      : { streams: streams.map((s, i) => (i === sameIndex ? { ...s, enabled: true } : s)) };
+      : { streams: replaceAt(streams, sameIndex, { enabled: true }) };
   } else if (primaryIndex >= 0) {
-    rtspPayload = {
-      streams: streams.map((s, i) => (i === primaryIndex ? { ...s, url, enabled: true } : s)),
-    };
+    rtspPayload = { streams: replaceAt(streams, primaryIndex, { url, enabled: true }) };
   } else {
     rtspPayload = {
       streams: [

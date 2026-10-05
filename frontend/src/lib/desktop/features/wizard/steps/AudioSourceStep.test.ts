@@ -329,7 +329,20 @@ describe('AudioSourceStep - device loading', () => {
     expect(radio(/wizard\.steps\.audioSource\.rtspStream/)).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('a stale device load result is ignored', async () => {
+  it.each([
+    {
+      name: 'a stale device load failure is ignored',
+      late: (older: { resolve: (v: unknown[]) => void; reject: (e: Error) => void }) =>
+        older.reject(new Error('late failure')),
+      stale: 'devicesLoadFailed',
+    },
+    {
+      name: 'a stale device list that arrives late does not replace the newer one',
+      late: (older: { resolve: (v: unknown[]) => void; reject: (e: Error) => void }) =>
+        older.resolve([]),
+      stale: 'noDevicesFound',
+    },
+  ])('$name', async ({ late, stale }) => {
     const older = deferred<unknown[]>();
     const newer = deferred<unknown[]>();
     vi.mocked(api.get)
@@ -346,34 +359,11 @@ describe('AudioSourceStep - device loading', () => {
 
     newer.resolve([USB]);
     await flushAsync();
-    older.reject(new Error('late failure'));
+    late(older);
     await flushAsync();
 
     expect(document.getElementById('wizard-audio-device')).not.toBeNull();
-    expect(screen.queryAllByText(`${KEY}.devicesLoadFailed`)).toHaveLength(0);
-  });
-
-  it('a stale device list that arrives late does not replace the newer one', async () => {
-    const older = deferred<unknown[]>();
-    const newer = deferred<unknown[]>();
-    vi.mocked(api.get)
-      .mockRejectedValueOnce(new Error('first load failed'))
-      .mockReturnValueOnce(older.promise)
-      .mockReturnValueOnce(newer.promise);
-    renderStep(AudioSourceStep);
-    await flushAsync();
-    const retry = await screen.findByRole('button', { name: 'common.retry' });
-    retry.click();
-    retry.click();
-    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(3));
-
-    newer.resolve([USB]);
-    await flushAsync();
-    older.resolve([]);
-    await flushAsync();
-
-    expect(document.getElementById('wizard-audio-device')).not.toBeNull();
-    expect(screen.queryAllByText(`${KEY}.noDevicesFound`)).toHaveLength(0);
+    expect(screen.queryAllByText(`${KEY}.${stale}`)).toHaveLength(0);
   });
 });
 
@@ -413,34 +403,28 @@ describe('AudioSourceStep - device state reasons', () => {
     resetStore();
   });
 
-  it('reports the loading reason while devices load', async () => {
-    const pending = deferred<unknown[]>();
-    vi.mocked(api.get).mockReturnValueOnce(pending.promise);
-    const onValidChange = vi.fn();
-    renderTyped(AudioSourceStep, { props: { onValidChange } });
-    await flushAsync();
-
-    expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.deviceLoading`);
-    pending.resolve([]);
-  });
-
-  it('reports the failed reason when listing devices failed', async () => {
-    vi.mocked(api.get).mockRejectedValueOnce(new Error('boom'));
-    const onValidChange = vi.fn();
-    renderTyped(AudioSourceStep, { props: { onValidChange } });
-
-    await waitFor(() =>
-      expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.devicesFailed`)
-    );
-  });
-
-  it('reports the no devices reason for an empty list', async () => {
+  it.each([
+    {
+      name: 'loading while devices load',
+      setup: () => {
+        vi.mocked(api.get).mockReturnValueOnce(deferred<unknown[]>().promise);
+      },
+      reason: `${KEY}.deviceLoading`,
+    },
+    {
+      name: 'failed when listing devices failed',
+      setup: () => {
+        vi.mocked(api.get).mockRejectedValueOnce(new Error('boom'));
+      },
+      reason: `${KEY}.reasons.devicesFailed`,
+    },
+    { name: 'no devices for an empty list', setup: () => {}, reason: `${KEY}.reasons.noDevices` },
+  ])('reports $name', async ({ setup, reason }) => {
+    setup();
     const onValidChange = vi.fn();
     renderTyped(AudioSourceStep, { props: { onValidChange } });
 
-    await waitFor(() =>
-      expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.noDevices`)
-    );
+    await waitFor(() => expect(onValidChange).toHaveBeenLastCalledWith(false, reason));
   });
 });
 
@@ -450,25 +434,35 @@ describe('AudioSourceStep Accessibility', () => {
     resetStore();
   });
 
-  it('has no violations with devices listed', async () => {
+  it.each([
+    {
+      name: 'with devices listed',
+      prepare: () => {},
+      ready: async () => {
+        await deviceTrigger();
+      },
+    },
+    {
+      name: 'when listing devices failed',
+      prepare: () => {
+        vi.mocked(api.get).mockRejectedValue(new Error('boom'));
+      },
+      ready: async () => {
+        await screen.findByRole('button', { name: 'common.retry' });
+      },
+    },
+    {
+      name: 'in the stream state',
+      prepare: () => {},
+      ready: async () => {
+        await chooseStream('http://x');
+      },
+    },
+  ])('has no violations $name', async ({ prepare, ready }) => {
+    prepare();
     const { container } = renderStep(AudioSourceStep);
     await flushAsync();
-    await deviceTrigger();
-    await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
-  });
-
-  it('has no violations when listing devices failed', async () => {
-    vi.mocked(api.get).mockRejectedValue(new Error('boom'));
-    const { container } = renderStep(AudioSourceStep);
-    await flushAsync();
-    await screen.findByRole('button', { name: 'common.retry' });
-    await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
-  });
-
-  it('has no violations in the stream state', async () => {
-    const { container } = renderStep(AudioSourceStep);
-    await flushAsync();
-    await chooseStream('http://x');
+    await ready();
     await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
   });
 });
