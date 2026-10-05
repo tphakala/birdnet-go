@@ -48,6 +48,10 @@ interface StepCase {
   component: Component<WizardStepProps>;
   /** Makes an edit the step's leave handler must save. */
   edit: (container: HTMLElement) => Promise<void>;
+  /** Makes an edit whose section is invalid. Optional: only steps that can be invalid. */
+  invalidEdit?: (container: HTMLElement) => Promise<void>;
+  /** Sections the leave handler must not send after invalidEdit. */
+  invalidSections?: string[];
 }
 
 const stepCases: StepCase[] = [
@@ -63,6 +67,16 @@ const stepCases: StepCase[] = [
       );
       await fireEvent.input(input, { target: { value: 'rtsp://camera.example/stream' } });
     },
+    invalidEdit: async () => {
+      await fireEvent.click(
+        screen.getByRole('radio', { name: /wizard\.steps\.audioSource\.rtspStream/ })
+      );
+      const input = await screen.findByPlaceholderText(
+        'wizard.steps.audioSource.rtspUrlPlaceholder'
+      );
+      await fireEvent.input(input, { target: { value: 'camera.example/stream' } });
+    },
+    invalidSections: ['audio', 'rtsp'],
   },
   {
     name: 'DetectionStep',
@@ -81,6 +95,13 @@ const stepCases: StepCase[] = [
         screen.getByRole('button', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
       );
     },
+    invalidEdit: async () => {
+      await fireEvent.click(
+        screen.getByRole('button', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
+      );
+      await fireEvent.input(await screen.findByRole('textbox'), { target: { value: 'abc' } });
+    },
+    invalidSections: ['birdweather'],
   },
   {
     name: 'LocationLanguageStep',
@@ -162,5 +183,31 @@ describe.each(stepCases)('$name leave handler contract', ({ component, edit }) =
     expect(firstLeaveCalls).toBe(1);
     // The retry starts with the section that failed, with the same payload.
     expect(calls.slice(firstLeaveCalls, firstLeaveCalls + 1)).toEqual(calls.slice(0, 1));
+  });
+});
+
+// Steps that can be invalid: Back runs their leave handler too, so it must skip the invalid part
+describe.each(
+  stepCases.flatMap(({ name, component, invalidEdit, invalidSections }) =>
+    invalidEdit === undefined || invalidSections === undefined
+      ? []
+      : [{ name, component, invalidEdit, invalidSections }]
+  )
+)('$name leave handler with an invalid edit', ({ component, invalidEdit, invalidSections }) => {
+  beforeEach(() => {
+    vi.mocked(settingsActions.saveSection).mockClear().mockResolvedValue(undefined);
+  });
+
+  it('the leave handler never sends a section that is invalid', async () => {
+    const { leave, container } = renderStep(component);
+    await flushAsync();
+    await invalidEdit(container);
+
+    await leave();
+
+    const sent = vi.mocked(settingsActions.saveSection).mock.calls.map(([section]) => section);
+    for (const section of invalidSections) {
+      expect(sent).not.toContain(section);
+    }
   });
 });

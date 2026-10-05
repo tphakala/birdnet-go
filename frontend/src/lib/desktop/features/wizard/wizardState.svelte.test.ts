@@ -396,7 +396,7 @@ describe('wizardState - state machine', () => {
       expect(wizardState.isSaving).toBe(false);
     });
 
-    it('skips the leave handler when the step is invalid', async () => {
+    it('runs the leave handler when going back from an invalid step', async () => {
       launchSteps(3);
       readyStep();
       await wizardState.next();
@@ -406,8 +406,22 @@ describe('wizardState - state machine', () => {
 
       await wizardState.back();
 
-      expect(handler).not.toHaveBeenCalled();
+      expect(handler).toHaveBeenCalledTimes(1);
       expect(wizardState.currentStepIndex).toBe(0);
+    });
+
+    it('stays on an invalid step when its Back save fails', async () => {
+      launchSteps(3);
+      readyStep();
+      await wizardState.next();
+      wizardState.registerLeaveHandler(() => Promise.reject(new Error('nope')));
+      readyStep(false);
+
+      await wizardState.back();
+
+      expect(wizardState.currentStepIndex).toBe(1);
+      expect(wizardState.stepError).toBe('wizard.errors.saveFailed');
+      expect(wizardState.isSaving).toBe(false);
     });
 
     it('refuses while the step is not ready, so a double click moves one step', async () => {
@@ -949,6 +963,8 @@ describe('wizardState - state machine', () => {
       ['ready', 'next', 'reject', 'next', 'resolve'],
       ['ready', 'next', 'resolve', 'back', 'ready', 'back', 'resolve'],
       ['ready', 'notValid', 'next', 'back'],
+      ['ready', 'next', 'resolve', 'ready', 'notValid', 'back', 'reject', 'back', 'resolve'],
+      ['ready', 'next', 'resolve', 'ready', 'notValid', 'back', 'resolve'],
       ['ready', 'next', 'relaunch', 'resolve', 'ready', 'next', 'resolve'],
       ['next', 'complete', 'back', 'skip', 'complete'],
     ];

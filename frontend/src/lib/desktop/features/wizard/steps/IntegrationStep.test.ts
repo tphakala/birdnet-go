@@ -131,6 +131,55 @@ describe('IntegrationStep - leave handler', () => {
     ]);
   });
 
+  describe('with a malformed token while BirdWeather is on', () => {
+    async function enterMalformedToken() {
+      await clickByName(PRIVACY);
+      await clickByName(SENTRY);
+      await clickByName(BIRDWEATHER);
+      await fireEvent.input(await screen.findByRole('textbox'), { target: { value: 'abc' } });
+    }
+
+    it('Back with a malformed token saves privacy and error reporting and not BirdWeather', async () => {
+      const { leave } = renderStep(IntegrationStep);
+      await flushAsync();
+      await enterMalformedToken();
+
+      await leave();
+
+      expect(vi.mocked(settingsActions.saveSection).mock.calls).toEqual([
+        ['privacyfilter', { enabled: false }],
+        ['sentry', { enabled: true }],
+      ]);
+    });
+
+    it('a later Next after fixing the token sends only BirdWeather', async () => {
+      const { leave } = renderStep(IntegrationStep);
+      await flushAsync();
+      await enterMalformedToken();
+      await leave();
+      vi.mocked(settingsActions.saveSection).mockClear();
+
+      await fireEvent.input(screen.getByRole('textbox'), { target: { value: VALID_TOKEN } });
+      await leave();
+
+      expect(vi.mocked(settingsActions.saveSection).mock.calls).toEqual([
+        ['birdweather', { enabled: true, id: VALID_TOKEN }],
+      ]);
+    });
+
+    it('a second leave with the token still malformed sends nothing', async () => {
+      const { leave } = renderStep(IntegrationStep);
+      await flushAsync();
+      await enterMalformedToken();
+      await leave();
+      vi.mocked(settingsActions.saveSection).mockClear();
+
+      await leave();
+
+      expect(settingsActions.saveSection).not.toHaveBeenCalled();
+    });
+  });
+
   it('a retry after a failed privacyfilter save sends only privacyfilter and sentry', async () => {
     vi.mocked(settingsActions.saveSection)
       .mockResolvedValueOnce(undefined)
