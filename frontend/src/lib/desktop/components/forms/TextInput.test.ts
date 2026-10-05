@@ -373,3 +373,19 @@ describe('TextInput', () => {
     expect(container).toHaveAttribute('id', 'custom-test-id');
   });
 });
+
+describe('TextInput aria-invalid', () => {
+  it('forwards aria-invalid to the native input, not the wrapper', () => {
+    render(TextInput, { props: { value: '', 'aria-invalid': 'true' } });
+
+    const input = screen.getByRole('textbox');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input.parentElement).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('renders no aria-invalid when the prop is not set', () => {
+    render(TextInput, { props: { value: '' } });
+
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
+  });
+});

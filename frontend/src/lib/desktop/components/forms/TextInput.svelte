@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import { safeGet } from '$lib/utils/security';
+  import type { HTMLInputAttributes } from 'svelte/elements';
 
   interface Props {
     value: string;
@@ -21,6 +22,8 @@
     validationMessage?: string;
     /** Links the input to an external description element for screen readers. */
     'aria-describedby'?: string;
+    /** Marks the native input invalid for assistive technology; omitted when unset. */
+    'aria-invalid'?: HTMLInputAttributes['aria-invalid'];
     onchange?: (_value: string) => void;
     oninput?: (_value: string) => void;
   }
@@ -43,6 +46,7 @@
     size = 'sm',
     validationMessage,
     'aria-describedby': ariaDescribedBy,
+    'aria-invalid': ariaInvalid,
     onchange,
     oninput,
     ...rest
@@ -130,6 +134,7 @@
     {minlength}
     {maxlength}
     aria-describedby={ariaDescribedBy}
+    aria-invalid={ariaInvalid}
     class={cn('input  w-full', safeGet(sizeClasses, size, ''), !isValid && 'input-error')}
     onchange={handleChange}
     oninput={handleInput}
