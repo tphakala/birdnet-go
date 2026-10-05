@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Wprowadź URL twojego strumienia audio RTSP",
         "additionalSourcesHint": "Możesz dodać więcej źródeł audio później w Ustawieniach.",
-        "configureLater": "Pomiń - skonfiguruj później"
+        "devicesLoadFailed": "Nie udało się wyświetlić listy urządzeń audio w tym systemie.",
+        "useStreamInstead": "Użyj zamiast tego strumienia RTSP",
+        "setUpLater": "Skonfiguruj dźwięk później",
+        "setUpLaterChosen": "Dźwięk nie zostanie teraz skonfigurowany. Kartę dźwiękową lub strumień możesz dodać później w Ustawieniach.",
+        "streamReplacesSoundCards": "Karty dźwiękowe przestają nagrywać, gdy używasz strumienia. Możesz dodać je ponownie w Ustawieniach.",
+        "soundCardReplacesStream": "Strumień widoczny przy opcji strumienia zostanie wyłączony, gdy użyjesz karty dźwiękowej. Możesz włączyć go ponownie w Ustawieniach.",
+        "reasons": {
+          "chooseDevice": "Wybierz urządzenie audio lub skonfiguruj dźwięk później.",
+          "devicesFailed": "Nie udało się wyświetlić listy urządzeń audio. Spróbuj ponownie, użyj strumienia lub skonfiguruj dźwięk później.",
+          "noDevices": "Nie znaleziono urządzenia audio. Użyj strumienia lub skonfiguruj dźwięk później.",
+          "enterUrl": "Wpisz adres URL strumienia lub skonfiguruj dźwięk później.",
+          "urlScheme": "Podaj pełny adres URL strumienia, który zaczyna się od rtsp:// lub rtsps:// i nie zawiera spacji."
+        }
       },
       "detection": {
         "title": "Próg detekcji",

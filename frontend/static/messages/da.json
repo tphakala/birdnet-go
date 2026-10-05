@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Indtast URL'en til din RTSP-lydstream",
         "additionalSourcesHint": "Du kan tilføje flere lydkilder senere under Indstillinger.",
-        "configureLater": "Spring over - konfigurér senere"
+        "devicesLoadFailed": "Lydenhederne på dette system kunne ikke vises.",
+        "useStreamInstead": "Brug en RTSP-stream i stedet",
+        "setUpLater": "Konfigurér lyd senere",
+        "setUpLaterChosen": "Lyd bliver ikke konfigureret nu. Tilføj et lydkort eller en stream senere i Indstillinger.",
+        "streamReplacesSoundCards": "Lydkort holder op med at optage, når du bruger en stream. Du kan tilføje dem igen i Indstillinger.",
+        "soundCardReplacesStream": "Streamen, der vises ved stream-valget, slås fra, når du bruger et lydkort. Du kan slå den til igen i Indstillinger.",
+        "reasons": {
+          "chooseDevice": "Vælg en lydenhed, eller konfigurér lyd senere.",
+          "devicesFailed": "Lydenhederne kunne ikke vises. Prøv igen, brug en stream, eller konfigurér lyd senere.",
+          "noDevices": "Ingen lydenhed fundet. Brug en stream, eller konfigurér lyd senere.",
+          "enterUrl": "Indtast stream-URL'en, eller konfigurér lyd senere.",
+          "urlScheme": "Angiv en komplet stream-URL, der starter med rtsp:// eller rtsps:// og ikke indeholder mellemrum."
+        }
       },
       "detection": {
         "title": "Detekteringsgrænse",

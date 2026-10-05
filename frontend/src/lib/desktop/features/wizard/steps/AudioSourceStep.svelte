@@ -1,129 +1,219 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
-  import { t } from '$lib/i18n';
-  import { api } from '$lib/utils/api';
+  import { onDestroy, onMount, untrack } from 'svelte';
+  import { t, type TranslationKey } from '$lib/i18n';
+  import { api, ApiError } from '$lib/utils/api';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { settingsActions, settingsStore, StreamTypes } from '$lib/stores/settings';
+  import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { Mic, Video } from '@lucide/svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
+  import { SECONDARY_BUTTON_CLASS } from '../styles';
   import { getLogger } from '$lib/utils/logger';
+  import type { SettingsSectionPayloads } from '$lib/utils/settingsApi';
+  import { generateId } from '$lib/utils/uuid';
+  import { deviceLabel, deviceValue, type AudioDevice } from '$lib/utils/audioDevices';
+  import {
+    findDevice,
+    initialAudioChoice,
+    isRtspUrl,
+    soundCardPayloads,
+    streamPayloads,
+    type AudioSourceType,
+  } from './audioSourceChoice';
 
   const logger = getLogger('AudioSourceStep');
 
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
-  // Name of the stream the wizard creates for an RTSP source
-  const WIZARD_STREAM_NAME = 'Stream 1';
-  // Transport for that stream
-  const WIZARD_STREAM_TRANSPORT = 'tcp';
+  const AUDIO_DEVICES_ENDPOINT = '/api/v2/system/audio/devices';
+  const URL_ERROR_ID = generateId('wizard-rtsp-url-error');
 
-  type SourceType = 'soundcard' | 'rtsp';
+  type DeviceState = 'loading' | 'ready' | 'failed';
 
-  let sourceType = $state<SourceType>('soundcard');
+  // What the server holds, not the form copy: arrays are sent back whole, so the
+  // payloads must start from the stored arrays.
+  function storedRealtime() {
+    return get(settingsStore).originalData?.realtime;
+  }
+
+  const stored = storedRealtime();
+  const initial = initialAudioChoice(stored?.audio, stored?.rtsp);
+  // True when the step owns a stream that a later sound card choice must turn
+  // off: it opened on the stream option (only when no sound card is configured)
+  // or it has saved a stream itself.
+  let streamOwnedByStep = $state(initial.sourceType === 'rtsp');
+  // URL of the stream this step edits; follows every successful stream save so a
+  // retry or a corrected URL edits the same entry instead of appending another
+  let primaryStreamUrl: string | null = initial.primaryStreamUrl;
+
+  let sourceType = $state<AudioSourceType>(initial.sourceType);
+  // Persisted value (deviceValue) of the chosen device
   let selectedDevice = $state('');
-  let rtspUrl = $state('');
-  let devices = $state<Array<{ value: string; label: string }>>([]);
-  let devicesLoading = $state(true);
+  let rtspUrl = $state(initial.primaryStreamUrl ?? '');
+  let devices = $state<AudioDevice[]>([]);
+  let deviceState = $state<DeviceState>('loading');
+  let deviceError = $state('');
   let dirty = $state(false);
-
   let skipped = $state(false);
 
-  let isValid = $derived(
-    skipped ||
-      (sourceType === 'soundcard'
-        ? selectedDevice !== '' && devices.some(d => d.value === selectedDevice)
-        : rtspUrl.trim() !== '')
+  // Only the newest device load may set state
+  let loadSequence = 0;
+
+  let deviceOptions = $derived(
+    devices.map(d => ({ value: deviceValue(d), label: deviceLabel(d, devices) }))
   );
+  // The listed device the user has chosen, if any
+  let selectedEntry = $derived(devices.find(d => deviceValue(d) === selectedDevice));
+
+  // What the sound card option shows instead of the dropdown, and why Next waits
+  const DEVICE_NOTICES = {
+    loading: {
+      text: 'wizard.steps.audioSource.deviceLoading',
+      reason: 'wizard.steps.audioSource.deviceLoading',
+    },
+    failed: {
+      text: 'wizard.steps.audioSource.devicesLoadFailed',
+      reason: 'wizard.steps.audioSource.reasons.devicesFailed',
+    },
+    empty: {
+      text: 'wizard.steps.audioSource.noDevicesFound',
+      reason: 'wizard.steps.audioSource.reasons.noDevices',
+    },
+  } as const satisfies Record<string, { text: TranslationKey; reason: TranslationKey }>;
+
+  let deviceNotice = $derived.by((): keyof typeof DEVICE_NOTICES | null => {
+    if (deviceState === 'loading') return 'loading';
+    if (deviceState === 'failed') return 'failed';
+    return devices.length === 0 ? 'empty' : null;
+  });
+
+  // Why the chosen source is incomplete, ignoring Set up later
+  let incompleteReason = $derived.by((): TranslationKey | undefined => {
+    if (sourceType === 'soundcard') {
+      // eslint-disable-next-line security/detect-object-injection -- deviceNotice is one of the DEVICE_NOTICES keys
+      if (deviceNotice !== null) return DEVICE_NOTICES[deviceNotice].reason;
+      return selectedEntry === undefined
+        ? 'wizard.steps.audioSource.reasons.chooseDevice'
+        : undefined;
+    }
+    if (rtspUrl.trim() === '') return 'wizard.steps.audioSource.reasons.enterUrl';
+    return isRtspUrl(rtspUrl) ? undefined : 'wizard.steps.audioSource.reasons.urlScheme';
+  });
+  let urlError = $derived(
+    sourceType === 'rtsp' && incompleteReason === 'wizard.steps.audioSource.reasons.urlScheme'
+  );
+  // Primitives, so the effect below runs only when one of them changes
+  let valid = $derived(skipped || incompleteReason === undefined);
+  let reason = $derived(skipped ? undefined : incompleteReason);
 
   $effect(() => {
-    // Read isValid (tracked), but untrack the callback to avoid re-run if parent recreates it
-    const valid = isValid;
-    untrack(() => onValidChange?.(valid));
+    // Read validity (tracked), but untrack the callback to avoid re-run if parent recreates it
+    const isValid = valid;
+    const why = reason;
+    untrack(() => onValidChange?.(isValid, why));
   });
+
+  async function loadDevices(): Promise<void> {
+    const sequence = ++loadSequence;
+    deviceState = 'loading';
+    deviceError = '';
+    try {
+      const data = await api.get<AudioDevice[]>(AUDIO_DEVICES_ENDPOINT);
+      if (sequence !== loadSequence) return;
+      devices = Array.isArray(data) ? data : [];
+      deviceState = 'ready';
+      if (selectedEntry === undefined) {
+        const saved = findDevice(devices, initial.savedDevice);
+        selectedDevice = saved ? deviceValue(saved) : '';
+      }
+    } catch (err) {
+      if (sequence !== loadSequence) return;
+      logger.error('Failed to load audio devices', err);
+      devices = [];
+      deviceError = err instanceof ApiError ? err.message : '';
+      deviceState = 'failed';
+    }
+  }
 
   onMount(() => {
-    // Load current settings
-    const store = get(settingsStore);
-    const currentSource = store?.formData?.realtime?.audio?.source;
-    if (currentSource) {
-      selectedDevice = currentSource;
-    }
-    const currentStreams = store?.formData?.realtime?.rtsp?.streams;
-    if (currentStreams && currentStreams.length > 0) {
-      rtspUrl = currentStreams[0].url ?? '';
-      if (!currentSource && rtspUrl) {
-        sourceType = 'rtsp';
-      }
-    }
-
-    // Fetch audio devices
-    api
-      .get<Array<{ name: string; index: number; id: string }>>('/api/v2/system/audio/devices')
-      .then(data => {
-        // Use index as unique key to avoid duplicate name issues with ALSA sub-devices
-        devices = (data ?? []).map(d => ({
-          value: d.id,
-          label: d.index >= 0 ? `${d.name} (#${d.index})` : d.name,
-        }));
-        if (devices.length === 0 && !selectedDevice) {
-          sourceType = 'rtsp';
-        }
-      })
-      .catch(err => {
-        logger.error('Failed to load audio devices', err);
-        devices = [];
-        if (!selectedDevice) {
-          sourceType = 'rtsp';
-        }
-      })
-      .finally(() => {
-        devicesLoading = false;
-      });
+    void loadDevices();
   });
 
-  function setSourceType(type: SourceType) {
-    sourceType = type;
+  // Last payload sent per section, so a repeated commit resends nothing. Cleared
+  // by every edit, since a later choice can legitimately repeat an earlier payload.
+  let lastSent: Partial<Record<'audio' | 'rtsp', string>> = {};
+
+  function markEdited() {
     skipped = false;
     dirty = true;
+    lastSent = {};
+  }
+
+  function setSourceType(type: AudioSourceType) {
+    sourceType = type;
+    markEdited();
   }
 
   function setDevice(value: string | string[]) {
     if (typeof value === 'string') {
       selectedDevice = value;
-      skipped = false;
-      dirty = true;
+      markEdited();
     }
   }
 
   // Next, Back and Done await the commit; it never runs on Skip or Leave setup.
   onMount(() => registerLeaveHandler?.(commit));
 
+  // Set when the step unmounts, so a commit still in flight sends no further sections.
+  let left = false;
+  onDestroy(() => {
+    left = true;
+  });
+
+  async function send<S extends 'audio' | 'rtsp'>(
+    section: S,
+    body: SettingsSectionPayloads[S] | null
+  ): Promise<void> {
+    if (body === null || left) return;
+    const json = JSON.stringify(body);
+    // eslint-disable-next-line security/detect-object-injection -- section is 'audio' or 'rtsp'
+    if (lastSent[section] === json) return;
+    await settingsActions.saveSection(section, body);
+    // eslint-disable-next-line security/detect-object-injection -- section is 'audio' or 'rtsp'
+    lastSent[section] = json;
+  }
+
   // Save the step's edits when the wizard leaves it with Next, Back or Done.
-  // Only runs if the user made changes and has valid data.
+  // Only runs if the user made changes and has valid data. The payloads are built
+  // from the stored settings at this moment, so a retry resends only what still
+  // differs. Each choice writes the new source first and removes the old one
+  // last, so a failure in between never leaves the station without a source.
   async function commit(): Promise<void> {
     if (!dirty || skipped) return;
-    if (sourceType === 'soundcard' && selectedDevice) {
-      await settingsActions.saveSection('audio', { source: selectedDevice });
-    } else if (sourceType === 'rtsp' && rtspUrl.trim()) {
-      // The server replaces the streams array with exactly what is sent and does
-      // not fill defaults, so every field the stream needs, including enabled,
-      // is sent explicitly.
-      await settingsActions.saveSection('rtsp', {
-        streams: [
-          {
-            name: WIZARD_STREAM_NAME,
-            url: rtspUrl.trim(),
-            enabled: true,
-            type: StreamTypes.RTSP,
-            transport: WIZARD_STREAM_TRANSPORT,
-          },
-        ],
-      });
+    const realtime = storedRealtime();
+    if (sourceType === 'soundcard') {
+      const device = selectedEntry;
+      if (device === undefined) return;
+      const payloads = soundCardPayloads(
+        realtime?.audio,
+        realtime?.rtsp,
+        device,
+        streamOwnedByStep,
+        primaryStreamUrl
+      );
+      await send('audio', payloads.audio);
+      await send('rtsp', payloads.rtsp);
     } else {
-      return;
+      const url = rtspUrl.trim();
+      if (!isRtspUrl(url)) return;
+      const payloads = streamPayloads(realtime?.audio, realtime?.rtsp, url, primaryStreamUrl);
+      await send('rtsp', payloads.rtsp);
+      // A no-op payload means the stream was already enabled; the step still answers for it
+      streamOwnedByStep = true;
+      primaryStreamUrl = url;
+      await send('audio', payloads.audio);
     }
     dirty = false;
   }
@@ -185,22 +275,54 @@
       >
         {t('wizard.steps.audioSource.deviceLabel')}
       </label>
-      {#if devicesLoading}
-        <p role="status" class="text-sm text-[var(--color-base-content)] opacity-80">
-          {t('wizard.steps.audioSource.deviceLoading')}
-        </p>
-      {:else if devices.length === 0}
-        <SettingsNote className="mt-0">
-          <p>{t('wizard.steps.audioSource.noDevicesFound')}</p>
-        </SettingsNote>
-      {:else}
+      <!-- Always rendered so a change of device state is announced -->
+      <div role="status">
+        {#if deviceNotice === 'loading'}
+          <p class="text-sm text-[var(--color-base-content)] opacity-80">
+            {t(DEVICE_NOTICES.loading.text)}
+          </p>
+        {:else if deviceNotice !== null}
+          <SettingsNote className="mt-0">
+            {#if deviceNotice === 'failed'}
+              <p class="text-[var(--color-error)]">{t(DEVICE_NOTICES.failed.text)}</p>
+              {#if deviceError}
+                <p class="mt-1 opacity-80">{deviceError}</p>
+              {/if}
+            {:else}
+              <p>{t(DEVICE_NOTICES.empty.text)}</p>
+            {/if}
+            <div class="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                class={SECONDARY_BUTTON_CLASS}
+                onclick={() => void loadDevices()}
+              >
+                {t('common.retry')}
+              </button>
+              <button
+                type="button"
+                class={SECONDARY_BUTTON_CLASS}
+                onclick={() => setSourceType('rtsp')}
+              >
+                {t('wizard.steps.audioSource.useStreamInstead')}
+              </button>
+            </div>
+          </SettingsNote>
+        {/if}
+      </div>
+      {#if deviceNotice === null}
         <SelectDropdown
           id="wizard-audio-device"
-          options={devices}
+          options={deviceOptions}
           value={selectedDevice}
           searchable={true}
           onChange={setDevice}
         />
+        {#if streamOwnedByStep}
+          <SettingsNote className="mt-3">
+            <p>{t('wizard.steps.audioSource.soundCardReplacesStream')}</p>
+          </SettingsNote>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -220,28 +342,40 @@
         id="wizard-rtsp-url"
         bind:value={rtspUrl}
         placeholder={t('wizard.steps.audioSource.rtspUrlPlaceholder')}
-        oninput={() => {
-          skipped = false;
-          dirty = true;
-        }}
+        aria-describedby={urlError ? URL_ERROR_ID : undefined}
+        oninput={markEdited}
       />
+      <!-- Always rendered so the error is announced when it appears -->
+      <p
+        id={URL_ERROR_ID}
+        role="alert"
+        class={urlError ? 'mt-1 text-sm text-[var(--color-error)]' : 'sr-only'}
+      >
+        {urlError ? t('wizard.steps.audioSource.reasons.urlScheme') : ''}
+      </p>
+      {#if initial.savedDevice !== ''}
+        <SettingsNote className="mt-3">
+          <p>{t('wizard.steps.audioSource.streamReplacesSoundCards')}</p>
+        </SettingsNote>
+      {/if}
     </div>
   {/if}
 
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between gap-3">
     <p class="text-sm text-[var(--color-base-content)] opacity-80">
-      {t('wizard.steps.audioSource.additionalSourcesHint')}
+      {#if skipped}
+        {t('wizard.steps.audioSource.setUpLaterChosen')}
+      {:else}
+        {t('wizard.steps.audioSource.additionalSourcesHint')}
+      {/if}
     </p>
-    {#if !isValid || skipped}
-      <button
-        type="button"
-        class="shrink-0 text-sm text-[var(--color-base-content)] opacity-60 transition-opacity hover:opacity-100"
-        onclick={() => {
-          skipped = true;
-        }}
-      >
-        {t('wizard.steps.audioSource.configureLater')}
-      </button>
-    {/if}
+    <button
+      type="button"
+      class="{SECONDARY_BUTTON_CLASS} shrink-0 {skipped ? 'border-[var(--color-primary)]' : ''}"
+      aria-pressed={skipped}
+      onclick={() => (skipped = true)}
+    >
+      {t('wizard.steps.audioSource.setUpLater')}
+    </button>
   </div>
 </div>

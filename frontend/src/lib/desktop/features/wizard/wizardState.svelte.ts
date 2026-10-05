@@ -25,6 +25,8 @@ let stepStatus = $state<StepStatus>('loading');
 let isSaving = $state<boolean>(false);
 // i18n key of the error to show for the current step, or null
 let stepError = $state<TranslationKey | null>(null);
+// i18n key of why the current step is not valid, as reported by the step, or null
+let stepBlockedReason = $state<TranslationKey | null>(null);
 let previousVersion = $state<string | null>(null);
 let currentVersion = $state<string | null>(null);
 
@@ -89,6 +91,7 @@ function resetStepFlags(): void {
   stepStatus = 'loading';
   isSaving = false;
   stepError = null;
+  stepBlockedReason = null;
   leaveHandler = null;
   clearStepMoveGuard();
 }
@@ -181,9 +184,14 @@ function setStepStatus(next: StepStatus, index: number): void {
   }
 }
 
-function setStepValid(valid: boolean, index: number = currentStepIndex): void {
+function setStepValid(
+  valid: boolean,
+  index: number = currentStepIndex,
+  reason?: TranslationKey
+): void {
   if (isActive && index === currentStepIndex) {
     isStepValid = valid;
+    stepBlockedReason = valid ? null : (reason ?? null);
   }
 }
 
@@ -273,6 +281,9 @@ export const wizardState = {
   },
   get isStepValid() {
     return isStepValid;
+  },
+  get stepBlockedReason() {
+    return stepBlockedReason;
   },
   get stepStatus() {
     return stepStatus;

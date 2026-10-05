@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Inserisci l'URL del tuo stream audio RTSP",
         "additionalSourcesHint": "Puoi aggiungere altre sorgenti audio successivamente nelle Impostazioni.",
-        "configureLater": "Salta - configura più tardi"
+        "devicesLoadFailed": "Impossibile elencare i dispositivi audio di questo sistema.",
+        "useStreamInstead": "Usa invece uno stream RTSP",
+        "setUpLater": "Configura l'audio più tardi",
+        "setUpLaterChosen": "L'audio non verrà configurato ora. Aggiungi una scheda audio o uno stream più tardi nelle Impostazioni.",
+        "streamReplacesSoundCards": "Le schede audio smettono di acquisire quando usi uno stream. Puoi aggiungerle di nuovo nelle Impostazioni.",
+        "soundCardReplacesStream": "Lo stream mostrato nell'opzione stream viene disattivato quando usi una scheda audio. Puoi riattivarlo nelle Impostazioni.",
+        "reasons": {
+          "chooseDevice": "Scegli un dispositivo audio oppure configura l'audio più tardi.",
+          "devicesFailed": "Impossibile elencare i dispositivi audio. Riprova, usa uno stream oppure configura l'audio più tardi.",
+          "noDevices": "Nessun dispositivo audio trovato. Usa uno stream oppure configura l'audio più tardi.",
+          "enterUrl": "Inserisci l'URL dello stream oppure configura l'audio più tardi.",
+          "urlScheme": "Inserisci un URL dello stream completo che inizi con rtsp:// o rtsps:// e non contenga spazi."
+        }
       },
       "detection": {
         "title": "Soglia di rilevamento",

@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://bruker:passord@vert:port/strøm",
         "rtspUrlHelp": "Skriv inn URL-en til din RTSP-lydstrøm",
         "additionalSourcesHint": "Du kan legge til flere lydkilder senere i Innstillinger.",
-        "configureLater": "Hopp over - konfigurer senere"
+        "devicesLoadFailed": "Kunne ikke liste lydenhetene på dette systemet.",
+        "useStreamInstead": "Bruk en RTSP-strøm i stedet",
+        "setUpLater": "Konfigurer lyd senere",
+        "setUpLaterChosen": "Lyd blir ikke konfigurert nå. Legg til et lydkort eller en strøm senere i Innstillinger.",
+        "streamReplacesSoundCards": "Lydkort slutter å ta opp når du bruker en strøm. Du kan legge dem til igjen i Innstillinger.",
+        "soundCardReplacesStream": "Strømmen som vises under strømvalget, slås av når du bruker et lydkort. Du kan slå den på igjen i Innstillinger.",
+        "reasons": {
+          "chooseDevice": "Velg en lydenhet, eller konfigurer lyd senere.",
+          "devicesFailed": "Lydenhetene kunne ikke listes. Prøv igjen, bruk en strøm, eller konfigurer lyd senere.",
+          "noDevices": "Ingen lydenhet funnet. Bruk en strøm, eller konfigurer lyd senere.",
+          "enterUrl": "Skriv inn strøm-URL-en, eller konfigurer lyd senere.",
+          "urlScheme": "Skriv inn en komplett strøm-URL som starter med rtsp:// eller rtsps:// og ikke har mellomrom."
+        }
       },
       "detection": {
         "title": "Deteksjonsterskel",

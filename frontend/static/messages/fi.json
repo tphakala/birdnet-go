@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://kayttaja:salasana@host:port/stream",
         "rtspUrlHelp": "Syötä RTSP-äänilähetyksesi URL",
         "additionalSourcesHint": "Voit lisätä äänilähteitä myöhemmin Asetuksissa.",
-        "configureLater": "Ohita - määritä myöhemmin"
+        "devicesLoadFailed": "Tämän järjestelmän äänilaitteita ei voitu listata.",
+        "useStreamInstead": "Käytä RTSP-lähetystä sen sijaan",
+        "setUpLater": "Määritä ääni myöhemmin",
+        "setUpLaterChosen": "Ääntä ei määritetä nyt. Lisää äänikortti tai lähetys myöhemmin Asetuksissa.",
+        "streamReplacesSoundCards": "Äänikortit lakkaavat tallentamasta, kun käytät lähetystä. Voit lisätä ne uudelleen Asetuksissa.",
+        "soundCardReplacesStream": "Lähetysvaihtoehdossa näkyvä lähetys kytketään pois, kun käytät äänikorttia. Voit kytkeä sen takaisin päälle Asetuksissa.",
+        "reasons": {
+          "chooseDevice": "Valitse äänilaite tai määritä ääni myöhemmin.",
+          "devicesFailed": "Äänilaitteita ei voitu listata. Yritä uudelleen, käytä lähetystä tai määritä ääni myöhemmin.",
+          "noDevices": "Äänilaitetta ei löytynyt. Käytä lähetystä tai määritä ääni myöhemmin.",
+          "enterUrl": "Anna lähetyksen URL tai määritä ääni myöhemmin.",
+          "urlScheme": "Anna täydellinen lähetyksen URL-osoite, joka alkaa merkkijonolla rtsp:// tai rtsps:// eikä sisällä välilyöntejä."
+        }
       },
       "detection": {
         "title": "Tunnistuskynnys",

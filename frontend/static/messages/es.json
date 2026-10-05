@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Ingresa la URL de tu transmisión de audio RTSP",
         "additionalSourcesHint": "Puedes agregar más fuentes de audio después en Configuración.",
-        "configureLater": "Omitir - configurar más tarde"
+        "devicesLoadFailed": "No se pudieron listar los dispositivos de audio de este sistema.",
+        "useStreamInstead": "Usar una transmisión RTSP en su lugar",
+        "setUpLater": "Configurar el audio más tarde",
+        "setUpLaterChosen": "El audio no se configurará ahora. Añade una tarjeta de sonido o una transmisión más tarde en Ajustes.",
+        "streamReplacesSoundCards": "Las tarjetas de sonido dejan de capturar cuando usas una transmisión. Puedes añadirlas de nuevo en Ajustes.",
+        "soundCardReplacesStream": "La transmisión que se muestra en la opción de transmisión se desactiva cuando usas una tarjeta de sonido. Puedes activarla de nuevo en Ajustes.",
+        "reasons": {
+          "chooseDevice": "Elige un dispositivo de audio o configura el audio más tarde.",
+          "devicesFailed": "No se pudieron listar los dispositivos de audio. Reintenta, usa una transmisión o configura el audio más tarde.",
+          "noDevices": "No se encontró ningún dispositivo de audio. Usa una transmisión o configura el audio más tarde.",
+          "enterUrl": "Introduce la URL de la transmisión o configura el audio más tarde.",
+          "urlScheme": "Introduce una URL de transmisión completa que empiece por rtsp:// o rtsps:// y no contenga espacios."
+        }
       },
       "detection": {
         "title": "Umbral de detección",

@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Geben Sie die URL Ihres RTSP-Audiostreams ein",
         "additionalSourcesHint": "Sie können später in den Einstellungen weitere Audioquellen hinzufügen.",
-        "configureLater": "Überspringen - später konfigurieren"
+        "devicesLoadFailed": "Die Audiogeräte dieses Systems konnten nicht aufgelistet werden.",
+        "useStreamInstead": "Stattdessen einen RTSP-Stream verwenden",
+        "setUpLater": "Audio später einrichten",
+        "setUpLaterChosen": "Audio wird jetzt nicht eingerichtet. Fügen Sie später in den Einstellungen eine Soundkarte oder einen Stream hinzu.",
+        "streamReplacesSoundCards": "Soundkarten nehmen nicht mehr auf, wenn Sie einen Stream verwenden. Sie können sie in den Einstellungen wieder hinzufügen.",
+        "soundCardReplacesStream": "Der bei der Stream-Option angezeigte Stream wird ausgeschaltet, wenn Sie eine Soundkarte verwenden. Sie können ihn in den Einstellungen wieder einschalten.",
+        "reasons": {
+          "chooseDevice": "Wählen Sie ein Audiogerät oder richten Sie Audio später ein.",
+          "devicesFailed": "Die Audiogeräte konnten nicht aufgelistet werden. Wiederholen Sie den Versuch, verwenden Sie einen Stream oder richten Sie Audio später ein.",
+          "noDevices": "Kein Audiogerät gefunden. Verwenden Sie einen Stream oder richten Sie Audio später ein.",
+          "enterUrl": "Geben Sie die Stream-URL ein oder richten Sie Audio später ein.",
+          "urlScheme": "Geben Sie eine vollständige Stream-URL ein, die mit rtsp:// oder rtsps:// beginnt und keine Leerzeichen enthält."
+        }
       },
       "detection": {
         "title": "Erkennungsschwelle",

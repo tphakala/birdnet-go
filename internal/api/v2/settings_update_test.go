@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -391,6 +392,71 @@ func TestAudioExportPartialUpdate(t *testing.T) {
 	assert.True(t, settings.Realtime.Audio.Export.Enabled)          // Preserved
 	assert.Equal(t, "clips", settings.Realtime.Audio.Export.Path)   // Preserved
 	assert.Equal(t, "192k", settings.Realtime.Audio.Export.Bitrate) // Preserved
+}
+
+// TestAudioSourcesSectionPatch pins the server side of the onboarding wizard's
+// audio payloads: sources are replaced as a whole array, and an emptied sources
+// array only stays empty when the legacy source is cleared in the same request.
+func TestAudioSourcesSectionPatch(t *testing.T) {
+	const staleLegacySource = "hw:9,0"
+
+	tests := []struct {
+		name        string
+		body        string
+		wantDevices []string
+	}{
+		{
+			name:        "sources replaced and legacy source cleared",
+			body:        `{"sources":[{"name":"Sound Card 1","device":"usb-path:test","gain":0,"quietHours":{"enabled":false,"mode":"fixed","startTime":"22:00","endTime":"06:00","startEvent":"sunset","startOffset":0,"endEvent":"sunrise","endOffset":0}}],"source":""}`,
+			wantDevices: []string{"usb-path:test"},
+		},
+		{
+			name:        "emptied sources stay empty when legacy source is cleared",
+			body:        `{"sources":[],"source":""}`,
+			wantDevices: []string{},
+		},
+		{
+			// The frontend must send source: "" with an emptied sources array,
+			// otherwise the migration recreates a sound card from the stale value.
+			name:        "emptied sources without clearing legacy source resurrect it",
+			body:        `{"sources":[]}`,
+			wantDevices: []string{staleLegacySource},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initialSettings := getTestSettings(t)
+			initialSettings.Realtime.Audio.Source = staleLegacySource
+
+			e := echo.New()
+			controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
+			controller.Settings.Store(initialSettings)
+
+			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/audio", strings.NewReader(tt.body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			ctx.SetParamNames("section")
+			ctx.SetParamValues("audio")
+
+			require.NoError(t, controller.UpdateSectionSettings(ctx))
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			audio := controller.Settings.Load().Realtime.Audio
+			devices := make([]string, 0, len(audio.Sources))
+			for _, src := range audio.Sources {
+				devices = append(devices, src.Device)
+			}
+			assert.Equal(t, tt.wantDevices, devices)
+			// The migration moves a legacy source into sources, so Source is empty in every case
+			assert.Empty(t, audio.Source)
+			// Export settings are untouched by a sources-only patch
+			assert.True(t, audio.Export.Enabled)
+			assert.Equal(t, "clips", audio.Export.Path)
+			assert.Equal(t, "192k", audio.Export.Bitrate)
+		})
+	}
 }
 
 // TestSpeciesConfigUpdate verifies complex nested species config updates

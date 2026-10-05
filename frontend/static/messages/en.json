@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
         "additionalSourcesHint": "You can add more audio sources later in Settings.",
-        "configureLater": "Skip - configure later"
+        "devicesLoadFailed": "Could not list the audio devices on this system.",
+        "useStreamInstead": "Use an RTSP stream instead",
+        "setUpLater": "Set up audio later",
+        "setUpLaterChosen": "Audio will not be set up now. Add a sound card or stream later in Settings.",
+        "streamReplacesSoundCards": "Sound cards stop capturing when you use a stream. You can add them again in Settings.",
+        "soundCardReplacesStream": "The stream shown on the stream option is turned off when you use a sound card. You can turn it on again in Settings.",
+        "reasons": {
+          "chooseDevice": "Choose an audio device, or set up audio later.",
+          "devicesFailed": "Audio devices could not be listed. Retry, use a stream, or set up audio later.",
+          "noDevices": "No audio device found. Use a stream, or set up audio later.",
+          "enterUrl": "Enter the stream URL, or set up audio later.",
+          "urlScheme": "Enter a complete stream URL that starts with rtsp:// or rtsps:// and has no spaces."
+        }
       },
       "detection": {
         "title": "Detection Threshold",

@@ -3,6 +3,7 @@ import type { Component } from 'svelte';
 import { renderTyped, screen, waitFor } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
+import type { TranslationKey } from '$lib/i18n';
 import type { WizardStep, WizardStepProps } from './types';
 import { deferred } from '../../../../test/async-helpers';
 
@@ -115,6 +116,14 @@ describe('WizardDialog', () => {
     await waitFor(() => expect(describedText(primaryButton())).toBe('wizard.reasons.completeStep'));
 
     expect(isBlocked(primaryButton())).toBe(true);
+  });
+
+  it('shows the reason the step reports instead of the generic one', async () => {
+    stepControl.validQueue = [false];
+    stepControl.reasonQueue = ['wizard.reasons.stepSpecific' as TranslationKey];
+    renderWizard(componentSteps(3));
+
+    await waitFor(() => expect(describedText(primaryButton())).toBe('wizard.reasons.stepSpecific'));
   });
 
   it('takes no space for the alert or the reason while there is nothing to say', async () => {

@@ -408,6 +408,40 @@ describe('wizardState - state machine', () => {
 
       expect(wizardState.isStepValid).toBe(false);
     });
+
+    it('exposes the reason of an invalid report and clears it when valid', () => {
+      launchSteps(3);
+
+      wizardState.setStepValid(false, 0, 'wizard.reasons.completeStep');
+      expect(wizardState.stepBlockedReason).toBe('wizard.reasons.completeStep');
+
+      wizardState.setStepValid(true);
+      expect(wizardState.stepBlockedReason).toBeNull();
+    });
+
+    it('drops the reason of an invalid step when Back moves to the previous step', async () => {
+      launchSteps(3);
+      readyStep();
+      await wizardState.next();
+      readyStep();
+      wizardState.setStepValid(false, 1, 'wizard.reasons.completeStep');
+      expect(wizardState.stepBlockedReason).toBe('wizard.reasons.completeStep');
+
+      await wizardState.back();
+
+      expect(wizardState.currentStepIndex).toBe(0);
+      expect(wizardState.stepBlockedReason).toBeNull();
+    });
+
+    it('ignores a reason reported for another step', async () => {
+      launchSteps(3);
+      readyStep();
+      await wizardState.next();
+
+      wizardState.setStepValid(false, 0, 'wizard.reasons.completeStep');
+
+      expect(wizardState.stepBlockedReason).toBeNull();
+    });
   });
 
   describe('setStepStatus()', () => {

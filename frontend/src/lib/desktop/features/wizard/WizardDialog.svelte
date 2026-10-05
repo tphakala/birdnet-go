@@ -11,6 +11,7 @@
   import type { WizardStepProps } from './types';
   import { generateId } from '$lib/utils/uuid';
   import { loggers } from '$lib/utils/logger';
+  import { SECONDARY_BUTTON_CLASS } from './styles';
 
   const logger = loggers.ui;
 
@@ -19,10 +20,6 @@
   const SAVING_STATUS_ID = generateId('wizard-saving-status');
   const LEAVE_TITLE_ID = generateId('wizard-leave-title');
   const LEAVE_DESC_ID = generateId('wizard-leave-desc');
-
-  // Shared by the Back, Retry and Reload page buttons
-  const SECONDARY_BUTTON_CLASS =
-    'inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--border-200)] bg-transparent px-4 py-2 text-sm font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--hover-overlay)]';
 
   let modalRef = $state<Modal>();
   let contentRef = $state<HTMLDivElement>();
@@ -155,7 +152,7 @@
     if (wizardState.isSaving) return '';
     if (wizardState.stepStatus === 'failed') return '';
     if (wizardState.stepStatus === 'loading') return t('wizard.status.loadingStep');
-    return t('wizard.reasons.completeStep');
+    return t(wizardState.stepBlockedReason ?? 'wizard.reasons.completeStep');
   });
 
   let alertText = $derived.by(() => {
@@ -252,7 +249,7 @@
       {:else if loadedComponent}
         {@const StepComponent = loadedComponent}
         <StepComponent
-          onValidChange={valid => wizardState.setStepValid(valid, loadedIndex)}
+          onValidChange={(valid, reason) => wizardState.setStepValid(valid, loadedIndex, reason)}
           registerLeaveHandler={wizardState.registerLeaveHandler}
         />
       {/if}

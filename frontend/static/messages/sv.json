@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Ange URL:en till din RTSP-ljudström",
         "additionalSourcesHint": "Du kan lägga till fler ljudkällor senare under Inställningar.",
-        "configureLater": "Hoppa över - konfigurera senare"
+        "devicesLoadFailed": "Det gick inte att lista ljudenheterna på det här systemet.",
+        "useStreamInstead": "Använd en RTSP-ström i stället",
+        "setUpLater": "Konfigurera ljud senare",
+        "setUpLaterChosen": "Ljud konfigureras inte nu. Lägg till ett ljudkort eller en ström senare i Inställningar.",
+        "streamReplacesSoundCards": "Ljudkort slutar spela in när du använder en ström. Du kan lägga till dem igen i Inställningar.",
+        "soundCardReplacesStream": "Strömmen som visas vid strömalternativet stängs av när du använder ett ljudkort. Du kan slå på den igen i Inställningar.",
+        "reasons": {
+          "chooseDevice": "Välj en ljudenhet eller konfigurera ljud senare.",
+          "devicesFailed": "Ljudenheterna kunde inte listas. Försök igen, använd en ström eller konfigurera ljud senare.",
+          "noDevices": "Ingen ljudenhet hittades. Använd en ström eller konfigurera ljud senare.",
+          "enterUrl": "Ange ström-URL:en eller konfigurera ljud senare.",
+          "urlScheme": "Ange en komplett ström-URL som börjar med rtsp:// eller rtsps:// och inte innehåller blanksteg."
+        }
       },
       "detection": {
         "title": "Detekteringströskel",

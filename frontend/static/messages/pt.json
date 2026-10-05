@@ -5303,7 +5303,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Introduza o URL da sua transmissão de áudio RTSP",
         "additionalSourcesHint": "Pode adicionar mais fontes de áudio posteriormente nas Definições.",
-        "configureLater": "Ignorar - configurar mais tarde"
+        "devicesLoadFailed": "Não foi possível listar os dispositivos de áudio deste sistema.",
+        "useStreamInstead": "Usar antes um fluxo RTSP",
+        "setUpLater": "Configurar o áudio mais tarde",
+        "setUpLaterChosen": "O áudio não será configurado agora. Adicione uma placa de som ou um fluxo mais tarde nas Definições.",
+        "streamReplacesSoundCards": "As placas de som deixam de capturar quando usa um fluxo. Pode adicioná-las novamente nas Definições.",
+        "soundCardReplacesStream": "O fluxo mostrado na opção de fluxo é desligado quando usa uma placa de som. Pode voltar a ligá-lo nas Definições.",
+        "reasons": {
+          "chooseDevice": "Escolha um dispositivo de áudio ou configure o áudio mais tarde.",
+          "devicesFailed": "Não foi possível listar os dispositivos de áudio. Tente novamente, use um fluxo ou configure o áudio mais tarde.",
+          "noDevices": "Nenhum dispositivo de áudio encontrado. Use um fluxo ou configure o áudio mais tarde.",
+          "enterUrl": "Introduza o URL do fluxo ou configure o áudio mais tarde.",
+          "urlScheme": "Introduza um URL do fluxo completo que comece por rtsp:// ou rtsps:// e não tenha espaços."
+        }
       },
       "detection": {
         "title": "Limiar de Deteção",
