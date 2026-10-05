@@ -47,6 +47,7 @@
     settingsActions,
     settingsStore,
     settingsValidationErrors,
+    type BirdWeatherSettings,
     type MQTTSettings,
     type SettingsFormData,
   } from '$lib/stores/settings';
@@ -83,51 +84,41 @@
     return redacted;
   }
 
-  // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
-  let settings = $derived(
-    $integrationSettings || {
-      birdweather: {
-        enabled: false,
-        id: '',
-        latitude: 0,
-        longitude: 0,
-        locationAccuracy: 1000,
-        threshold: 0.7,
-        debug: false,
-      },
-      mqtt: {
-        enabled: false,
-        broker: '',
-        port: 1883,
-        username: '',
-        password: '',
-        topic: 'birdnet',
-        retain: false,
-        tls: {
-          enabled: false,
-          insecureSkipVerify: false,
-        },
-        homeAssistant: {
-          enabled: false,
-          discoveryPrefix: 'homeassistant',
-          deviceName: 'BirdNET-Go',
-        },
-      },
-      observability: {
-        prometheus: {
-          enabled: false,
-          port: 9090,
-          path: '/metrics',
-        },
-      },
-      ebird: {
-        enabled: false,
-        apiKey: '',
-        cacheTTL: 24,
-        locale: 'en',
-      },
-    }
-  );
+  // Sections that can be missing until the settings have loaded
+  const DEFAULT_BIRDWEATHER: BirdWeatherSettings = {
+    enabled: false,
+    id: '',
+    latitude: 0,
+    longitude: 0,
+    locationAccuracy: 1000,
+    threshold: 0.7,
+    debug: false,
+  };
+
+  const DEFAULT_MQTT: MQTTSettings = {
+    enabled: false,
+    broker: '',
+    port: 1883,
+    username: '',
+    password: '',
+    topic: 'birdnet',
+    retain: false,
+    tls: {
+      enabled: false,
+      insecureSkipVerify: false,
+    },
+    homeAssistant: {
+      enabled: false,
+      discoveryPrefix: 'homeassistant',
+      deviceName: 'BirdNET-Go',
+    },
+  };
+
+  let settings = $derived({
+    ...$integrationSettings,
+    birdweather: $integrationSettings.birdweather ?? DEFAULT_BIRDWEATHER,
+    mqtt: $integrationSettings.mqtt ?? DEFAULT_MQTT,
+  });
 
   let store = $derived($settingsStore);
 
@@ -164,8 +155,8 @@
   // Validate eBird: enabled requires API key
   $effect(() => {
     const EBIRD_ERROR_KEY = 'ebird-api-key-required';
-    const ebirdEnabled = settings.ebird?.enabled ?? false;
-    const ebirdApiKey = settings.ebird?.apiKey?.trim() ?? '';
+    const ebirdEnabled = settings.ebird.enabled ?? false;
+    const ebirdApiKey = settings.ebird.apiKey?.trim() ?? '';
     const needsError = ebirdEnabled && !ebirdApiKey;
 
     // Use .update() to avoid reading the store inside this effect,
@@ -216,7 +207,7 @@
   let mqttUploadKey = $state('');
 
   // Derive a stable flag to prevent $effect reruns when unrelated settings change
-  let mqttTlsEnabled = $derived(settings.mqtt?.tls?.enabled ?? false);
+  let mqttTlsEnabled = $derived(settings.mqtt.tls?.enabled ?? false);
 
   $effect(() => {
     if (mqttTlsEnabled) {
@@ -321,71 +312,71 @@
   // BirdWeather update handlers
   function updateBirdWeatherEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
-      birdweather: { ...settings.birdweather!, enabled },
+      birdweather: { ...settings.birdweather, enabled },
     });
   }
 
   function updateBirdWeatherId(id: string) {
     settingsActions.updateSection('realtime', {
-      birdweather: { ...settings.birdweather!, id },
+      birdweather: { ...settings.birdweather, id },
     });
   }
 
   function updateBirdWeatherThreshold(threshold: number) {
     settingsActions.updateSection('realtime', {
-      birdweather: { ...settings.birdweather!, threshold },
+      birdweather: { ...settings.birdweather, threshold },
     });
   }
 
   // MQTT update handlers
   function updateMQTTEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
-      mqtt: { ...settings.mqtt!, enabled },
+      mqtt: { ...settings.mqtt, enabled },
     });
   }
 
   function updateMQTTBroker(broker: string) {
     settingsActions.updateSection('realtime', {
-      mqtt: { ...settings.mqtt!, broker },
+      mqtt: { ...settings.mqtt, broker },
     });
   }
 
   function updateMQTTTopic(topic: string) {
     settingsActions.updateSection('realtime', {
-      mqtt: { ...settings.mqtt!, topic },
+      mqtt: { ...settings.mqtt, topic },
     });
   }
 
   function updateMQTTUsername(username: string) {
     settingsActions.updateSection('realtime', {
-      mqtt: { ...settings.mqtt!, username },
+      mqtt: { ...settings.mqtt, username },
     });
   }
 
   function updateMQTTPassword(password: string) {
     settingsActions.updateSection('realtime', {
-      mqtt: { ...settings.mqtt!, password },
+      mqtt: { ...settings.mqtt, password },
     });
   }
 
   function updateMQTTTLSEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
-      mqtt: { ...settings.mqtt!, tls: { ...settings.mqtt!.tls, enabled } },
+      mqtt: { ...settings.mqtt, tls: { ...settings.mqtt.tls, enabled } },
     });
   }
 
   function updateMQTTTLSInsecureSkipVerify(insecureSkipVerify: boolean) {
     settingsActions.updateSection('realtime', {
       mqtt: {
-        ...settings.mqtt!,
-        tls: { ...settings.mqtt!.tls, insecureSkipVerify },
+        ...settings.mqtt,
+        tls: { ...settings.mqtt.tls, insecureSkipVerify },
       },
     });
   }
 
   function updateMQTTRetain(retain: boolean) {
     settingsActions.updateSection('realtime', {
-      mqtt: { ...(settings.mqtt as MQTTSettings), retain },
+      mqtt: { ...settings.mqtt, retain },
     });
   }
 
@@ -403,9 +394,9 @@
   ) {
     settingsActions.updateSection('realtime', {
       mqtt: {
-        ...(settings.mqtt as MQTTSettings),
+        ...settings.mqtt,
         homeAssistant: {
-          ...(settings.mqtt?.homeAssistant ?? DEFAULT_HOME_ASSISTANT_SETTINGS),
+          ...(settings.mqtt.homeAssistant ?? DEFAULT_HOME_ASSISTANT_SETTINGS),
           [field]: value,
         },
       },
@@ -485,25 +476,25 @@
   // eBird update handlers
   function updateEBirdEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
-      ebird: { ...settings.ebird!, enabled },
+      ebird: { ...settings.ebird, enabled },
     });
   }
 
   function updateEBirdApiKey(apiKey: string) {
     settingsActions.updateSection('realtime', {
-      ebird: { ...settings.ebird!, apiKey },
+      ebird: { ...settings.ebird, apiKey },
     });
   }
 
   function updateEBirdLocale(locale: string) {
     settingsActions.updateSection('realtime', {
-      ebird: { ...settings.ebird!, locale },
+      ebird: { ...settings.ebird, locale },
     });
   }
 
   function updateEBirdCacheTTL(cacheTTL: number) {
     settingsActions.updateSection('realtime', {
-      ebird: { ...settings.ebird!, cacheTTL },
+      ebird: { ...settings.ebird, cacheTTL },
     });
   }
 
@@ -529,7 +520,7 @@
 
     try {
       // Get current form values (unsaved changes) instead of saved settings
-      const currentBirdweather = store.formData?.realtime?.birdweather || settings.birdweather!;
+      const currentBirdweather = store.formData?.realtime?.birdweather ?? settings.birdweather;
       // Exclude latitude/longitude (PII) and redact station ID before logging
       logger.debug(
         'BirdWeather test config:',
@@ -747,7 +738,7 @@
 
     try {
       // Get current form values (unsaved changes) instead of saved settings
-      const currentMqtt = store.formData?.realtime?.mqtt || settings.mqtt!;
+      const currentMqtt = store.formData?.realtime?.mqtt ?? settings.mqtt;
       logger.debug('MQTT test config:', redactForLogging(currentMqtt, ['password', 'username']));
 
       // Prepare test payload matching the MQTT handler's TestConfig structure
@@ -757,7 +748,7 @@
         topic: currentMqtt.topic || 'birdnet',
         username: currentMqtt.username || '',
         password: currentMqtt.password || '',
-        retain: (currentMqtt as MQTTSettings).retain || false,
+        retain: currentMqtt.retain ?? false,
         tls: {
           insecureSkipVerify: currentMqtt.tls?.insecureSkipVerify ?? false,
           caCert: '',
@@ -955,7 +946,7 @@
     testStates.ebird.stages = [];
 
     try {
-      const currentEbird = store.formData?.realtime?.ebird || settings.ebird!;
+      const currentEbird = store.formData?.realtime?.ebird ?? settings.ebird;
 
       const testPayload = {
         enabled: currentEbird.enabled || false,
@@ -1145,7 +1136,7 @@
         {/if}
 
         <Checkbox
-          checked={settings.birdweather!.enabled}
+          checked={settings.birdweather.enabled}
           label={t('settings.integration.birdweather.enable')}
           disabled={store.isLoading || store.isSaving}
           onchange={updateBirdWeatherEnabled}
@@ -1153,40 +1144,40 @@
 
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
         <fieldset
-          disabled={!settings.birdweather?.enabled || store.isLoading || store.isSaving}
+          disabled={!settings.birdweather.enabled || store.isLoading || store.isSaving}
           class="contents"
           aria-describedby="birdweather-status"
         >
           <span id="birdweather-status" class="sr-only">
-            {settings.birdweather?.enabled
+            {settings.birdweather.enabled
               ? t('settings.integration.birdweather.enable')
               : t('settings.integration.birdweather.test.enabledRequired')}
           </span>
           <div
             class="transition-opacity duration-200"
-            class:opacity-50={!settings.birdweather?.enabled}
+            class:opacity-50={!settings.birdweather.enabled}
           >
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <PasswordField
                 label={t('settings.integration.birdweather.token.label')}
-                value={settings.birdweather!.id}
+                value={settings.birdweather.id}
                 onUpdate={updateBirdWeatherId}
                 placeholder=""
                 helpText={t('settings.integration.birdweather.token.helpText')}
-                disabled={!settings.birdweather?.enabled || store.isLoading || store.isSaving}
+                disabled={!settings.birdweather.enabled || store.isLoading || store.isSaving}
                 allowReveal={true}
               />
 
               <NumberField
                 label={t('settings.integration.birdweather.threshold.label')}
-                value={settings.birdweather!.threshold}
+                value={settings.birdweather.threshold}
                 onUpdate={updateBirdWeatherThreshold}
                 min={0}
                 max={1}
                 step={0.01}
                 placeholder="0.7"
                 helpText={t('settings.integration.birdweather.threshold.helpText')}
-                disabled={!settings.birdweather?.enabled || store.isLoading || store.isSaving}
+                disabled={!settings.birdweather.enabled || store.isLoading || store.isSaving}
               />
             </div>
 
@@ -1198,17 +1189,17 @@
                   loading={testStates.birdweather.isRunning}
                   loadingText={t('settings.integration.birdweather.test.loading')}
                   disabled={!(
-                    store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled
+                    store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather.enabled
                   ) ||
-                    !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id) ||
+                    !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather.id) ||
                     testStates.birdweather.isRunning}
                 >
                   {t('settings.integration.birdweather.test.button')}
                 </SettingsButton>
                 <span class="text-sm text-[var(--color-base-content)] opacity-70">
-                  {#if !(store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled)}
+                  {#if !(store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather.enabled)}
                     {t('settings.integration.birdweather.test.enabledRequired')}
-                  {:else if !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id)}
+                  {:else if !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather.id)}
                     {t('settings.integration.birdweather.test.tokenRequired')}
                   {:else if testStates.birdweather.isRunning}
                     {t('settings.integration.birdweather.test.inProgress')}
@@ -1246,7 +1237,7 @@
     >
       <div class="space-y-4">
         <Checkbox
-          checked={settings.mqtt!.enabled}
+          checked={settings.mqtt.enabled}
           label={t('settings.integration.mqtt.enable')}
           disabled={store.isLoading || store.isSaving}
           onchange={updateMQTTEnabled}
@@ -1254,42 +1245,42 @@
 
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
         <fieldset
-          disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+          disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
           class="contents"
           aria-describedby="mqtt-status"
         >
           <span id="mqtt-status" class="sr-only">
-            {settings.mqtt?.enabled
+            {settings.mqtt.enabled
               ? t('settings.integration.mqtt.enable')
               : t('settings.integration.mqtt.test.enabledRequired')}
           </span>
           <div
             class="space-y-4 transition-opacity duration-200"
-            class:opacity-50={!settings.mqtt?.enabled}
+            class:opacity-50={!settings.mqtt.enabled}
           >
             <TextInput
               id="mqtt-broker"
-              value={settings.mqtt!.broker}
+              value={settings.mqtt.broker}
               label={t('settings.integration.mqtt.broker.label')}
               placeholder={t('settings.integration.mqtt.broker.placeholder')}
-              disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+              disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
               onchange={updateMQTTBroker}
             />
 
             <!-- TLS/SSL Security -->
             <div class="flex flex-col gap-2">
               <Checkbox
-                checked={settings.mqtt?.tls?.enabled ?? false}
+                checked={settings.mqtt.tls?.enabled ?? false}
                 label={t('settings.integration.mqtt.tls.enable')}
-                disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
                 onchange={updateMQTTTLSEnabled}
               />
 
-              {#if settings.mqtt?.tls?.enabled}
+              {#if settings.mqtt.tls?.enabled}
                 <Checkbox
-                  checked={settings.mqtt?.tls?.insecureSkipVerify ?? false}
+                  checked={settings.mqtt.tls?.insecureSkipVerify ?? false}
                   label={t('settings.integration.mqtt.tls.skipVerify')}
-                  disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                  disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
                   onchange={updateMQTTTLSInsecureSkipVerify}
                 />
 
@@ -1324,7 +1315,7 @@
                           >
                             {t('settings.integration.mqtt.tls.certificates.caLabel')}
                           </span>
-                          <CertificateInfoCard certInfo={mqttCertInfo!.ca} />
+                          <CertificateInfoCard certInfo={mqttCertInfo.ca} />
                         </div>
                       {/if}
                       {#if mqttCertInfo?.client?.installed}
@@ -1334,7 +1325,7 @@
                           >
                             {t('settings.integration.mqtt.tls.certificates.clientCertLabel')}
                           </span>
-                          <CertificateInfoCard certInfo={mqttCertInfo!.client} />
+                          <CertificateInfoCard certInfo={mqttCertInfo.client} />
                         </div>
                       {/if}
 
@@ -1409,10 +1400,10 @@
 
             <TextInput
               id="mqtt-topic"
-              value={settings.mqtt!.topic}
+              value={settings.mqtt.topic}
               label={t('settings.integration.mqtt.topic.label')}
               placeholder={t('settings.integration.mqtt.topic.placeholder')}
-              disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+              disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
               onchange={updateMQTTTopic}
             />
 
@@ -1425,20 +1416,20 @@
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextInput
                   id="mqtt-username"
-                  value={settings.mqtt!.username || ''}
+                  value={settings.mqtt.username || ''}
                   label={t('settings.integration.mqtt.authentication.username.label')}
                   placeholder=""
-                  disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                  disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
                   onchange={value => updateMQTTUsername(value)}
                 />
 
                 <PasswordField
                   label={t('settings.integration.mqtt.authentication.password.label')}
-                  value={settings.mqtt!.password || ''}
+                  value={settings.mqtt.password || ''}
                   onUpdate={updateMQTTPassword}
                   placeholder=""
                   helpText={t('settings.integration.mqtt.authentication.password.helpText')}
-                  disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                  disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
                   allowReveal={true}
                 />
               </div>
@@ -1451,9 +1442,9 @@
               </h3>
 
               <Checkbox
-                checked={settings.mqtt?.homeAssistant?.enabled ?? false}
+                checked={settings.mqtt.homeAssistant?.enabled ?? false}
                 label={t('settings.integration.mqtt.homeAssistant.enable')}
-                disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
                 onchange={updateMQTTHomeAssistantEnabled}
               />
 
@@ -1461,15 +1452,15 @@
                 <span>{@html t('settings.integration.mqtt.homeAssistant.description')}</span>
               </SettingsNote>
 
-              {#if settings.mqtt?.homeAssistant?.enabled}
+              {#if settings.mqtt.homeAssistant?.enabled}
                 <!-- Retain Messages for Home Assistant -->
                 <div class="mt-4">
                   <!-- prettier-ignore -->
                   <Checkbox
-                    checked={(settings.mqtt as MQTTSettings).retain ?? false}
+                    checked={settings.mqtt.retain ?? false}
                     onchange={(checked) => updateMQTTRetain(checked)}
                     label={t('settings.integration.mqtt.homeAssistant.retain.label')}
-                    disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                    disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
                   />
 
                   <SettingsNote>
@@ -1480,19 +1471,19 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                   <TextInput
                     id="mqtt-ha-prefix"
-                    value={settings.mqtt?.homeAssistant?.discoveryPrefix ?? 'homeassistant'}
+                    value={settings.mqtt.homeAssistant?.discoveryPrefix ?? 'homeassistant'}
                     label={t('settings.integration.mqtt.homeAssistant.discoveryPrefix.label')}
                     placeholder="homeassistant"
-                    disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                    disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
                     onchange={updateMQTTHomeAssistantPrefix}
                   />
 
                   <TextInput
                     id="mqtt-ha-device-name"
-                    value={settings.mqtt?.homeAssistant?.deviceName ?? 'BirdNET-Go'}
+                    value={settings.mqtt.homeAssistant?.deviceName ?? 'BirdNET-Go'}
                     label={t('settings.integration.mqtt.homeAssistant.deviceName.label')}
                     placeholder="BirdNET-Go"
-                    disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                    disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
                     onchange={updateMQTTHomeAssistantDeviceName}
                   />
                 </div>
@@ -1509,7 +1500,7 @@
                 <div class="flex items-center gap-4 mt-4">
                   <button
                     class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!settings.mqtt?.enabled ||
+                    disabled={!settings.mqtt.enabled ||
                       store.isLoading ||
                       store.isSaving ||
                       isSendingDiscovery ||
@@ -1542,16 +1533,16 @@
                   onclick={testMQTT}
                   loading={testStates.mqtt.isRunning}
                   loadingText={t('settings.integration.mqtt.test.loading')}
-                  disabled={!(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled) ||
-                    !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker) ||
+                  disabled={!(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt.enabled) ||
+                    !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt.broker) ||
                     testStates.mqtt.isRunning}
                 >
                   {t('settings.integration.mqtt.test.button')}
                 </SettingsButton>
                 <span class="text-sm text-[var(--color-base-content)] opacity-70">
-                  {#if !(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled)}
+                  {#if !(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt.enabled)}
                     {t('settings.integration.mqtt.test.enabledRequired')}
-                  {:else if !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker)}
+                  {:else if !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt.broker)}
                     {t('settings.integration.mqtt.test.brokerRequired')}
                   {:else if testStates.mqtt.isRunning}
                     {t('settings.integration.mqtt.test.inProgress')}
@@ -1589,7 +1580,7 @@
     >
       <div class="space-y-4">
         <Checkbox
-          checked={settings.observability!.prometheus.enabled}
+          checked={settings.observability.prometheus.enabled}
           label={t('settings.integration.observability.enable')}
           disabled={store.isLoading || store.isSaving}
           onchange={updateObservabilityEnabled}
@@ -1597,25 +1588,23 @@
 
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
         <fieldset
-          disabled={!settings.observability?.prometheus.enabled ||
-            store.isLoading ||
-            store.isSaving}
+          disabled={!settings.observability.prometheus.enabled || store.isLoading || store.isSaving}
           class="contents"
           aria-describedby="prometheus-status"
         >
           <span id="prometheus-status" class="sr-only">
-            {settings.observability?.prometheus.enabled
+            {settings.observability.prometheus.enabled
               ? t('settings.integration.observability.enable')
               : t('settings.integration.observability.disabled')}
           </span>
           <div
             class="transition-opacity duration-200"
-            class:opacity-50={!settings.observability?.prometheus.enabled}
+            class:opacity-50={!settings.observability.prometheus.enabled}
           >
             <ListenAddressSelector
               listen={$realtimeSettings?.telemetry?.listen ?? '0.0.0.0:8090'}
               onchange={updateObservabilityListen}
-              disabled={!settings.observability?.prometheus.enabled ||
+              disabled={!settings.observability.prometheus.enabled ||
                 store.isLoading ||
                 store.isSaving}
             />
@@ -1637,7 +1626,7 @@
     >
       <div class="space-y-4">
         <Checkbox
-          checked={settings.ebird!.enabled}
+          checked={settings.ebird.enabled}
           label={t('settings.integration.ebird.enable')}
           disabled={store.isLoading || store.isSaving}
           onchange={updateEBirdEnabled}
@@ -1645,16 +1634,16 @@
 
         <!-- Fieldset for accessible disabled state -->
         <fieldset
-          disabled={!settings.ebird?.enabled || store.isLoading || store.isSaving}
+          disabled={!settings.ebird.enabled || store.isLoading || store.isSaving}
           class="contents"
           aria-describedby="ebird-status"
         >
           <span id="ebird-status" class="sr-only">
-            {settings.ebird?.enabled
+            {settings.ebird.enabled
               ? t('settings.integration.ebird.enable')
               : t('settings.integration.ebird.enabledRequired')}
           </span>
-          <div class="transition-opacity duration-200" class:opacity-50={!settings.ebird?.enabled}>
+          <div class="transition-opacity duration-200" class:opacity-50={!settings.ebird.enabled}>
             <!-- API Key Info Banner -->
             <ErrorAlert type="info" className="mb-4">
               {#snippet children()}
@@ -1665,19 +1654,19 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <PasswordField
                 label={t('settings.integration.ebird.apiKey.label')}
-                value={settings.ebird!.apiKey}
+                value={settings.ebird.apiKey}
                 onUpdate={updateEBirdApiKey}
                 placeholder=""
                 helpText={t('settings.integration.ebird.apiKey.helpText')}
-                disabled={!settings.ebird?.enabled || store.isLoading || store.isSaving}
+                disabled={!settings.ebird.enabled || store.isLoading || store.isSaving}
                 allowReveal={true}
               />
 
               <SelectDropdown
-                value={settings.ebird!.locale}
+                value={settings.ebird.locale}
                 options={ebirdLocaleOptions}
                 label={t('settings.integration.ebird.locale.label')}
-                disabled={!settings.ebird?.enabled || store.isLoading || store.isSaving}
+                disabled={!settings.ebird.enabled || store.isLoading || store.isSaving}
                 onChange={value => updateEBirdLocale(value as string)}
               />
             </div>
@@ -1685,14 +1674,14 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
               <NumberField
                 label={t('settings.integration.ebird.cacheTTL.label')}
-                value={settings.ebird!.cacheTTL}
+                value={settings.ebird.cacheTTL}
                 onUpdate={updateEBirdCacheTTL}
                 min={1}
                 max={168}
                 step={1}
                 placeholder="24"
                 helpText={t('settings.integration.ebird.cacheTTL.helpText')}
-                disabled={!settings.ebird?.enabled || store.isLoading || store.isSaving}
+                disabled={!settings.ebird.enabled || store.isLoading || store.isSaving}
               />
             </div>
 
@@ -1703,18 +1692,16 @@
                   onclick={testEBird}
                   loading={testStates.ebird.isRunning}
                   loadingText={t('settings.integration.ebird.test.loading')}
-                  disabled={!(
-                    store.formData?.realtime?.ebird?.enabled ?? settings.ebird?.enabled
-                  ) ||
-                    !(store.formData?.realtime?.ebird?.apiKey ?? settings.ebird?.apiKey) ||
+                  disabled={!(store.formData?.realtime?.ebird?.enabled ?? settings.ebird.enabled) ||
+                    !(store.formData?.realtime?.ebird?.apiKey ?? settings.ebird.apiKey) ||
                     testStates.ebird.isRunning}
                 >
                   {t('settings.integration.ebird.test.button')}
                 </SettingsButton>
                 <span class="text-sm text-[var(--color-base-content)] opacity-70">
-                  {#if !(store.formData?.realtime?.ebird?.enabled ?? settings.ebird?.enabled)}
+                  {#if !(store.formData?.realtime?.ebird?.enabled ?? settings.ebird.enabled)}
                     {t('settings.integration.ebird.test.enabledRequired')}
-                  {:else if !(store.formData?.realtime?.ebird?.apiKey ?? settings.ebird?.apiKey)}
+                  {:else if !(store.formData?.realtime?.ebird?.apiKey ?? settings.ebird.apiKey)}
                     {t('settings.integration.ebird.test.apiKeyRequired')}
                   {:else if testStates.ebird.isRunning}
                     {t('settings.integration.ebird.test.inProgress')}

@@ -46,7 +46,7 @@ describe('Date Persistence Utilities', () => {
       value: {
         href: 'http://localhost:3000/ui/dashboard',
         search: '',
-      } as Location,
+      },
       writable: true,
       configurable: true,
     });
@@ -154,7 +154,7 @@ describe('Date Persistence Utilities', () => {
         value: {
           href: 'http://localhost:3000/ui/dashboard?view=grid&limit=10',
           search: '?view=grid&limit=10',
-        } as Location,
+        },
         writable: true,
         configurable: true,
       });

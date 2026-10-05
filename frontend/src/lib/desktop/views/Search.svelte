@@ -5,7 +5,7 @@
   import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
-  import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
+  import TimeOfDayIcon, { isTimeOfDay } from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import { getLocale, t } from '$lib/i18n';
   import { dashboardSettings } from '$lib/stores/settings';
   import { toastActions } from '$lib/stores/toast';
@@ -870,7 +870,10 @@
                   <td>{formatDate(result.timestamp)}</td>
                   <td>
                     <div class="flex items-center">
-                      <TimeOfDayIcon timeOfDay={result.timeOfDay as any} className="mr-1" />
+                      <TimeOfDayIcon
+                        timeOfDay={isTimeOfDay(result.timeOfDay) ? result.timeOfDay : undefined}
+                        className="mr-1"
+                      />
                       <span>{result.timeOfDay || t('search.detailsPanel.unknownSpecies')}</span>
                     </div>
                   </td>
@@ -1168,7 +1171,10 @@
                 <!-- Time of Day + Date/Time -->
                 <div class="w-16 shrink-0 text-sm opacity-80">
                   <div class="flex items-center gap-1">
-                    <TimeOfDayIcon timeOfDay={result.timeOfDay as any} className="size-4" />
+                    <TimeOfDayIcon
+                      timeOfDay={isTimeOfDay(result.timeOfDay) ? result.timeOfDay : undefined}
+                      className="size-4"
+                    />
                     <span class="capitalize">{result.timeOfDay}</span>
                   </div>
                   <div class="mt-1 text-xs opacity-70 leading-tight">

@@ -203,15 +203,12 @@
   let groupedOptions = $derived.by(() => {
     if (!groupBy) return { '': filteredOptions };
 
-    return filteredOptions.reduce(
-      (groups, option) => {
-        const group = option.group || '';
-        const existingGroup = safeGet(groups, group, []);
-        Object.assign(groups, { [group]: safeArraySpread(existingGroup, [option]) });
-        return groups;
-      },
-      {} as Record<string, SelectOption[]>
-    );
+    return filteredOptions.reduce<Record<string, SelectOption[]>>((groups, option) => {
+      const group = option.group || '';
+      const existingGroup = safeGet(groups, group, []);
+      Object.assign(groups, { [group]: safeArraySpread(existingGroup, [option]) });
+      return groups;
+    }, {});
   });
 
   // Options in the order they are rendered: grouped when groupBy is on, so keyboard

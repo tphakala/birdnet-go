@@ -33,11 +33,10 @@ const { default: WizardDropdownStep } = await import('./WizardDropdownStep.test.
 
 type StepModule = { default: Component<WizardStepProps> };
 
-const loadStep = (): Promise<StepModule> =>
-  Promise.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+const loadStep = (): Promise<StepModule> => Promise.resolve({ default: WizardTestStep });
 
 const loadDropdownStep = (): Promise<StepModule> =>
-  Promise.resolve({ default: WizardDropdownStep as unknown as Component<WizardStepProps> });
+  Promise.resolve({ default: WizardDropdownStep });
 
 // One loader per step index; tests replace entries to control chunk loading.
 let loaders: Array<() => Promise<StepModule>> = [];
@@ -219,7 +218,7 @@ describe('WizardDialog', () => {
     expect(heading()).toHaveTextContent('test.step2');
     expect(stepControl.leave).toHaveBeenCalledTimes(1);
 
-    load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+    load.resolve({ default: WizardTestStep });
     await waitForPrimaryEnabled();
     await waitOutStepMoveGuard();
     await user.click(primaryButton());
@@ -236,7 +235,7 @@ describe('WizardDialog', () => {
 
     await user.dblClick(primaryButton());
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
-    load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+    load.resolve({ default: WizardTestStep });
 
     await waitFor(() => expect(describedText(primaryButton())).toBe('wizard.reasons.completeStep'));
     expect(primaryButton()).toHaveTextContent('wizard.done');
@@ -418,7 +417,7 @@ describe('WizardDialog', () => {
 
     expect(retry).not.toBeInTheDocument();
     expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull();
-    load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+    load.resolve({ default: WizardTestStep });
     await waitForPrimaryEnabled();
   });
 
@@ -452,7 +451,7 @@ describe('WizardDialog', () => {
     await user.dblClick(backButton());
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
-    load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+    load.resolve({ default: WizardTestStep });
   });
 
   it('a click right after the next step is ready does not move again', async () => {

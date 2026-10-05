@@ -214,7 +214,7 @@
   // failure (dynamic import network error, MapLibre constructor throw) so the
   // effect below does NOT infinite-retry on every reactive cycle. The flag is
   // automatically reset when the user leaves the Location tab so the next
-  // visit gets a fresh attempt — making transient failures user-recoverable
+  // visit gets a fresh attempt, making transient failures user-recoverable
   // by toggling away and back, instead of permanently stuck until reload.
   // Recoverable failures (container detached during import) intentionally do
   // NOT set this and naturally retry on the next reactive cycle.
@@ -226,7 +226,7 @@
   // SettingsTabs.svelte, so the `bind:this={mapElement}` target may not be
   // attached to the DOM in the same reactive round that flips `activeTab`.
   // Await a tick so the DOM settles, then double-check the container is
-  // actually connected before handing it to MapLibre — otherwise MapLibre's
+  // actually connected before handing it to MapLibre, otherwise MapLibre's
   // internal `_resolveContainer` throws on a null/undefined element.
   $effect(() => {
     const isLocationTab = activeTab === 'location';
@@ -263,8 +263,8 @@
 
     // Synchronous read so Svelte tracks `mapElement` as a reactive dependency
     // of this effect. Without this, the `mapElement` access inside the
-    // `tick().then(...)` microtask callback below is NOT tracked — effects
-    // only pick up dependencies read synchronously during the effect body —
+    // `tick().then(...)` microtask callback below is NOT tracked (effects
+    // only pick up dependencies read synchronously during the effect body),
     // and the effect would never re-run when `bind:this` populates
     // `mapElement` after the conditional `{#if isActive}` mounts the tab.
     const el = mapElement;
@@ -300,9 +300,9 @@
 
       clearTimeout(coordinateUpdateTimer);
       coordinateUpdateTimer = setTimeout(() => {
-        if (lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)) {
-          const currentZoom = map!.getZoom();
-          map!.easeTo({
+        if (map && lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)) {
+          const currentZoom = map.getZoom();
+          map.easeTo({
             center: [lng, lat],
             zoom: currentZoom,
             duration: 300,
@@ -311,11 +311,14 @@
           if (marker) {
             marker.setLngLat([lng, lat]);
           } else if (maplibregl && settings.birdnet.locationConfigured) {
-            marker = new maplibregl.Marker({ draggable: true }).setLngLat([lng, lat]).addTo(map!);
-            marker.on('dragend', () => {
-              const lngLat = marker!.getLngLat();
+            const newMarker = new maplibregl.Marker({ draggable: true })
+              .setLngLat([lng, lat])
+              .addTo(map);
+            newMarker.on('dragend', () => {
+              const lngLat = newMarker.getLngLat();
               updateMarker(lngLat.lat, lngLat.lng);
             });
+            marker = newMarker;
           }
         }
       }, 500);
@@ -505,14 +508,15 @@
       mapElement.addEventListener('wheel', handleWheel as globalThis.EventListener, false);
 
       if ($birdnetSettings?.locationConfigured && maplibregl) {
-        marker = new maplibregl.Marker({ draggable: true })
+        const newMarker = new maplibregl.Marker({ draggable: true })
           .setLngLat([initialLng, initialLat])
           .addTo(map);
 
-        marker.on('dragend', () => {
-          const lngLat = marker!.getLngLat();
+        newMarker.on('dragend', () => {
+          const lngLat = newMarker.getLngLat();
           updateMarker(lngLat.lat, lngLat.lng);
         });
+        marker = newMarker;
       }
 
       if (map) {
@@ -588,11 +592,12 @@
     if (marker) {
       marker.setLngLat([lng, lat]);
     } else if (maplibregl) {
-      marker = new maplibregl.Marker({ draggable: true }).setLngLat([lng, lat]).addTo(map);
-      marker.on('dragend', () => {
-        const lngLat = marker!.getLngLat();
+      const newMarker = new maplibregl.Marker({ draggable: true }).setLngLat([lng, lat]).addTo(map);
+      newMarker.on('dragend', () => {
+        const lngLat = newMarker.getLngLat();
         updateMarker(lngLat.lat, lngLat.lng);
       });
+      marker = newMarker;
     }
 
     if (modalMap) {
@@ -605,12 +610,13 @@
       if (modalMarker) {
         modalMarker.setLngLat([lng, lat]);
       } else if (maplibregl) {
-        modalMarker = new maplibregl.Marker({ draggable: true })
+        const newMarker = new maplibregl.Marker({ draggable: true })
           .setLngLat([lng, lat])
           .addTo(modalMap);
+        modalMarker = newMarker;
 
-        modalMarker.on('dragend', () => {
-          const lngLat = modalMarker!.getLngLat();
+        newMarker.on('dragend', () => {
+          const lngLat = newMarker.getLngLat();
           const roundedLat = parseFloat(lngLat.lat.toFixed(3));
           const roundedLng = parseFloat(lngLat.lng.toFixed(3));
 
@@ -672,13 +678,14 @@
         false
       );
 
-      if ($birdnetSettings?.locationConfigured) {
-        modalMarker = new maplibregl!.Marker({ draggable: true })
+      if ($birdnetSettings?.locationConfigured && maplibregl) {
+        const newMarker = new maplibregl.Marker({ draggable: true })
           .setLngLat([currentLng, currentLat])
           .addTo(modalMap);
+        modalMarker = newMarker;
 
-        modalMarker.on('dragend', () => {
-          const lngLat = modalMarker!.getLngLat();
+        newMarker.on('dragend', () => {
+          const lngLat = newMarker.getLngLat();
           const roundedLat = parseFloat(lngLat.lat.toFixed(3));
           const roundedLng = parseFloat(lngLat.lng.toFixed(3));
 

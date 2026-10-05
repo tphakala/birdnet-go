@@ -264,7 +264,7 @@ interface SimStore {
 
 function freshStore(): SimStore {
   return {
-    audio: audioOf({ sources: [{ ...TEMPLATE_SOURCE }], source: '' }) as SimStore['audio'],
+    audio: audioOf({ sources: [{ ...TEMPLATE_SOURCE }], source: '' }),
     rtsp: { streams: [] },
   };
 }

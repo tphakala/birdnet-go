@@ -55,8 +55,6 @@ vi.mock('$lib/utils/logger', () => ({
   })),
 }));
 
-/* global Audio */
-
 describe('AudioPlayer', () => {
   let mockPlay: ReturnType<typeof vi.fn>;
   let mockPause: ReturnType<typeof vi.fn>;
@@ -115,11 +113,11 @@ describe('AudioPlayer', () => {
     });
 
     // Mock Audio constructor (audio elements are now created dynamically)
-    mockAudioInstance = document.createElement('audio') as HTMLAudioElement;
+    mockAudioInstance = document.createElement('audio');
     // Use a class mock that returns our controlled instance
     vi.spyOn(window, 'Audio').mockImplementation(function (this: HTMLAudioElement) {
       return mockAudioInstance;
-    } as unknown as typeof Audio);
+    });
   });
 
   afterEach(() => {
@@ -379,7 +377,7 @@ describe('AudioPlayer', () => {
     progressBar.focus();
 
     // Test space (play/pause) - this should work with the play button
-    const playButton = screen.getByLabelText('Play') as HTMLElement;
+    const playButton = screen.getByLabelText('Play');
     playButton.focus();
     await user.keyboard(' ');
     expect(mockPlay).toHaveBeenCalled();

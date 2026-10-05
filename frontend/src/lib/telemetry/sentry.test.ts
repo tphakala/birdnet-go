@@ -51,7 +51,7 @@ describe('beforeSend privacy filtering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     initSentry({ dsn: 'https://test@sentry.io/123', systemId: 'sys-1', version: '1.0.0' });
-    beforeSend = vi.mocked(Sentry.init).mock.calls[0][0]?.beforeSend as BeforeSendFn;
+    beforeSend = vi.mocked(Sentry.init).mock.calls[0][0]?.beforeSend;
   });
 
   it('registers a beforeSend hook', () => {
@@ -61,67 +61,67 @@ describe('beforeSend privacy filtering', () => {
 
   it('drops events where originalException has status 401', () => {
     const error = Object.assign(new Error('Unauthorized'), { status: 401 });
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).toBeNull();
   });
 
   it('drops events where originalException has status 403', () => {
     const error = Object.assign(new Error('Forbidden'), { status: 403 });
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).toBeNull();
   });
 
   it('drops events where originalException has status 409', () => {
     const error = Object.assign(new Error('Conflict'), { status: 409 });
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).toBeNull();
   });
 
   it('passes through non-auth errors', () => {
     const error = Object.assign(new Error('Server Error'), { status: 500 });
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).not.toBeNull();
   });
 
   it('strips user data', () => {
-    const event = { type: undefined, user: { ip_address: '1.2.3.4' } } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, {} as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined, user: { ip_address: '1.2.3.4' } };
+    const result = beforeSend?.(event, {});
     expect(result).not.toBeNull();
     expect((result as Sentry.ErrorEvent).user).toBeUndefined();
   });
 
   it('strips server_name', () => {
-    const event = { type: undefined, server_name: 'my-host' } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, {} as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined, server_name: 'my-host' };
+    const result = beforeSend?.(event, {});
     expect((result as Sentry.ErrorEvent).server_name).toBeUndefined();
   });
 
   it('scrubs same-origin request URL to path only', () => {
     const origin = globalThis.location.origin;
-    const event = {
+    const event: Sentry.ErrorEvent = {
       type: undefined,
       request: { url: `${origin}/settings?apiKey=secret&token=abc` },
-    } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, {} as Sentry.EventHint) as Sentry.ErrorEvent;
+    };
+    const result = beforeSend?.(event, {}) as Sentry.ErrorEvent;
     expect(result.request?.url).toBe('/settings');
   });
 
   it('preserves external origin in request URL', () => {
-    const event = {
+    const event: Sentry.ErrorEvent = {
       type: undefined,
       request: { url: 'https://api.example.com/v1/data?key=secret' },
-    } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, {} as Sentry.EventHint) as Sentry.ErrorEvent;
+    };
+    const result = beforeSend?.(event, {}) as Sentry.ErrorEvent;
     expect(result.request?.url).toBe('https://api.example.com/v1/data');
   });
 
   it('scrubs same-origin breadcrumb URLs to path only', () => {
     const origin = globalThis.location.origin;
-    const event = {
+    const event: Sentry.ErrorEvent = {
       type: undefined,
       breadcrumbs: [
         {
@@ -133,14 +133,14 @@ describe('beforeSend privacy filtering', () => {
           data: { target: 'button.save' },
         },
       ],
-    } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, {} as Sentry.EventHint) as Sentry.ErrorEvent;
+    };
+    const result = beforeSend?.(event, {}) as Sentry.ErrorEvent;
     expect(result.breadcrumbs?.[0]?.data?.url).toBe('/api/v2/settings');
     expect(result.breadcrumbs?.[1]?.data?.target).toBe('button.save');
   });
 
   it('strips request/response bodies from breadcrumbs', () => {
-    const event = {
+    const event: Sentry.ErrorEvent = {
       type: undefined,
       breadcrumbs: [
         {
@@ -153,8 +153,8 @@ describe('beforeSend privacy filtering', () => {
           },
         },
       ],
-    } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, {} as Sentry.EventHint) as Sentry.ErrorEvent;
+    };
+    const result = beforeSend?.(event, {}) as Sentry.ErrorEvent;
     expect(result.breadcrumbs?.[0]?.data?.request_body).toBeUndefined();
     expect(result.breadcrumbs?.[0]?.data?.response_body).toBeUndefined();
     expect(result.breadcrumbs?.[0]?.data?.body).toBeUndefined();
@@ -162,47 +162,47 @@ describe('beforeSend privacy filtering', () => {
 
   it('drops network TypeErrors unconditionally', () => {
     const error = new TypeError('Failed to fetch');
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).toBeNull();
   });
 
   it('drops Safari Load failed TypeErrors', () => {
     const error = new TypeError('Load failed');
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).toBeNull();
   });
 
   it('drops events with empty error message', () => {
     const error = new Error('');
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).toBeNull();
   });
 
   it('drops events with <anonymous> error message', () => {
     const error = new Error('<anonymous>');
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).toBeNull();
   });
 
   it('drops events with callback error message', () => {
     const error = new Error('callback');
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).toBeNull();
   });
 
   it('drops string exceptions with generic messages', () => {
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: 'callback' } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: 'callback' });
     expect(result).toBeNull();
   });
 
   it('drops errors whose frames are all Safari extension (webkit-masked-url)', () => {
-    const event = {
+    const event: Sentry.ErrorEvent = {
       type: undefined,
       exception: {
         values: [
@@ -217,13 +217,13 @@ describe('beforeSend privacy filtering', () => {
           },
         ],
       },
-    } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, {} as Sentry.EventHint);
+    };
+    const result = beforeSend?.(event, {});
     expect(result).toBeNull();
   });
 
   it('drops errors from chrome-extension frames', () => {
-    const event = {
+    const event: Sentry.ErrorEvent = {
       type: undefined,
       exception: {
         values: [
@@ -235,8 +235,8 @@ describe('beforeSend privacy filtering', () => {
           },
         ],
       },
-    } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, {} as Sentry.EventHint);
+    };
+    const result = beforeSend?.(event, {});
     expect(result).toBeNull();
   });
 
@@ -249,19 +249,19 @@ describe('beforeSend privacy filtering', () => {
       'safari-web-extension://UUID/content.js',
     ];
     for (const filename of prefixes) {
-      const event = {
+      const event: Sentry.ErrorEvent = {
         type: undefined,
         exception: {
           values: [{ type: 'Error', stacktrace: { frames: [{ function: 'x', filename }] } }],
         },
-      } as Sentry.ErrorEvent;
-      const result = beforeSend?.(event, {} as Sentry.EventHint);
+      };
+      const result = beforeSend?.(event, {});
       expect(result, `expected ${filename} to be dropped`).toBeNull();
     }
   });
 
   it('keeps errors that have at least one app frame among extension frames', () => {
-    const event = {
+    const event: Sentry.ErrorEvent = {
       type: undefined,
       exception: {
         values: [
@@ -276,47 +276,47 @@ describe('beforeSend privacy filtering', () => {
           },
         ],
       },
-    } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, {} as Sentry.EventHint);
+    };
+    const result = beforeSend?.(event, {});
     expect(result).not.toBeNull();
   });
 
   it('keeps errors that carry no stack frames', () => {
-    const event = {
+    const event: Sentry.ErrorEvent = {
       type: undefined,
       exception: { values: [{ type: 'Error', value: 'real app error' }] },
-    } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, {} as Sentry.EventHint);
+    };
+    const result = beforeSend?.(event, {});
     expect(result).not.toBeNull();
   });
 
   it('drops ResizeObserver loop errors', () => {
     const error = new Error('ResizeObserver loop completed with undelivered notifications');
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).toBeNull();
   });
 
   it('sets fingerprint for API errors with status code', () => {
     const error = Object.assign(new Error('Serverfehler'), { status: 500, isNetworkError: false });
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).not.toBeNull();
     expect((result as Sentry.ErrorEvent).fingerprint).toEqual(['ApiError', '500']);
   });
 
   it('does not set fingerprint for non-API errors with status property', () => {
     const error = Object.assign(new Error('Custom error'), { status: 418 });
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).not.toBeNull();
     expect((result as Sentry.ErrorEvent).fingerprint).toBeUndefined();
   });
 
   it('does not set fingerprint for errors without status', () => {
     const error = new Error('some error');
-    const event = { type: undefined } as Sentry.ErrorEvent;
-    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    const event: Sentry.ErrorEvent = { type: undefined };
+    const result = beforeSend?.(event, { originalException: error });
     expect(result).not.toBeNull();
     expect((result as Sentry.ErrorEvent).fingerprint).toBeUndefined();
   });

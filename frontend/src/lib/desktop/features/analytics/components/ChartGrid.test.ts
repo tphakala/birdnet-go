@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/svelte';
 import ChartGrid from './ChartGrid.svelte';
+import type { AnyChartComponent, ChartDef } from '../registry/types';
 
 vi.mock('../registry/analyticsControls.svelte', () => ({
   analyticsControls: {
@@ -21,32 +22,34 @@ vi.mock('../registry/analyticsControls.svelte', () => ({
 
 describe('ChartGrid', () => {
   it('renders one card container per chart', () => {
-    const charts = [
+    // Placeholder component: the test only counts the card containers
+    const component = {} as unknown as AnyChartComponent;
+    const charts: ChartDef[] = [
       {
         id: 'a',
         size: 'normal',
-        group: 'overview' as const,
+        group: 'overview',
         titleKey: 'test',
         descKey: 'test',
         emptyKey: 'test',
         emptyHintKey: 'test',
-        component: {} as never,
+        component,
         fetch: vi.fn().mockResolvedValue([]),
         supports: { species: true, source: false },
       },
       {
         id: 'b',
         size: 'full',
-        group: 'overview' as const,
+        group: 'overview',
         titleKey: 'test',
         descKey: 'test',
         emptyKey: 'test',
         emptyHintKey: 'test',
-        component: {} as never,
+        component,
         fetch: vi.fn().mockResolvedValue([]),
         supports: { species: false, source: true },
       },
-    ] as never[];
+    ];
     const { container } = render(ChartGrid, { props: { charts } });
     expect(container.querySelectorAll('[data-chart-id]')).toHaveLength(2);
   });

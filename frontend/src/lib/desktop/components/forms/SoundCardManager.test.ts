@@ -218,7 +218,7 @@ describe('SoundCardManager sample rate probe (issue #3593)', () => {
         },
       ],
       // A is configured under its legacy index; B is unconfigured.
-      [{ name: 'mic-a', device: ':1,0', gain: 1, models: [] } as AudioSourceConfig]
+      [{ name: 'mic-a', device: ':1,0', gain: 1, models: [] }]
     );
     await openAddForm();
 

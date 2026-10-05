@@ -3,7 +3,7 @@ import { render, cleanup } from '@testing-library/svelte';
 
 import { CHART_REGISTRY } from './charts';
 import type { AnalyticsParams } from './types';
-import { makeChartCtx } from './__tests__/registryFixtures';
+import { makeAnalyticsParams, makeChartCtx } from './__tests__/registryFixtures';
 import SpeciesRidgeline from '../components/charts/d3/SpeciesRidgeline.svelte';
 import type { RidgelineSeries } from '../components/charts/d3/utils/ridgeline';
 
@@ -28,8 +28,8 @@ if (!def?.mapProps) {
 }
 const mapProps = def.mapProps;
 
-// mapProps for this chart ignores params (always top-N); an empty object is enough.
-const params = {} as AnalyticsParams;
+// mapProps for this chart ignores params (always top-N); any valid params will do.
+const params: AnalyticsParams = makeAnalyticsParams();
 
 /** A 20-length density with a single peak bin, mimicking the server's normalized confidence bins. */
 function bins(peak: number): number[] {

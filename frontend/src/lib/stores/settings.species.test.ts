@@ -1,11 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { get } from 'svelte/store';
-import {
-  settingsStore,
-  settingsActions,
-  type SettingsFormData,
-  type SpeciesConfig,
-} from './settings';
+import { settingsStore, settingsActions, type SpeciesConfig } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi';
 import { toastActions } from './toast';
 import { createEmptySettings } from '../../types/test-helpers';
@@ -175,7 +170,7 @@ describe('Species Settings Store', () => {
       expect(toastActions.error).not.toHaveBeenCalled();
 
       // Get the data that was sent to save
-      const savedData = mockSave.mock.calls[0][0] as SettingsFormData;
+      const savedData = mockSave.mock.calls[0][0];
       const speciesConfig = savedData.realtime?.species?.config['Zero Test'];
 
       // Verify zero values were included in save
@@ -234,7 +229,7 @@ describe('Species Settings Store', () => {
       await settingsActions.saveSettings();
 
       // Verify both birds are in saved data and other fields are preserved
-      const savedData = mockSave.mock.calls[0][0] as SettingsFormData;
+      const savedData = mockSave.mock.calls[0][0];
       const realtime = savedData.realtime;
       const species = realtime?.species;
 

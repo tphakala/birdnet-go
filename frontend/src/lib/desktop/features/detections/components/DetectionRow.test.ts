@@ -25,16 +25,17 @@ function createMockDetection(overrides: Partial<Detection> = {}): Detection {
     id: 123,
     date: '2024-01-15',
     time: '10:30:00',
+    beginTime: '2024-01-15T10:30:00',
+    endTime: '2024-01-15T10:30:03',
+    speciesCode: 'amerob',
     commonName: 'American Robin',
     scientificName: 'Turdus migratorius',
     confidence: 0.85,
+    verified: 'unverified',
     locked: false,
-    sourceType: 'microphone',
-    sourceName: 'default',
     clipName: 'clip_001.wav',
-    spectrogramPath: '/spectrograms/clip_001.png',
     ...overrides,
-  } as Detection;
+  };
 }
 
 async function openMenuAndClick(itemName: RegExp) {

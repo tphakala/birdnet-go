@@ -24,7 +24,20 @@ import type { Detection } from '$lib/types/detection.types';
 const mockFetch = vi.mocked(fetchWithCSRF);
 
 function detection(overrides: Partial<Detection>): Detection {
-  return { id: 1, commonName: 'House Sparrow', locked: false, ...overrides } as Detection;
+  return {
+    id: 1,
+    date: '2024-01-15',
+    time: '10:30:00',
+    beginTime: '2024-01-15T10:30:00',
+    endTime: '2024-01-15T10:30:03',
+    speciesCode: 'houspa',
+    scientificName: 'Passer domesticus',
+    commonName: 'House Sparrow',
+    confidence: 0.9,
+    verified: 'unverified',
+    locked: false,
+    ...overrides,
+  };
 }
 
 describe('useDetectionActions', () => {

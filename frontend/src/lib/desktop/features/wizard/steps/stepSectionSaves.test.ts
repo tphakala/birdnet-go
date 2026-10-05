@@ -39,14 +39,16 @@ import {
 /** The shared server fixture, with the location and privacy filter state these steps start from. */
 const serverSettings = (): SettingsFormData => {
   const settings = sharedServerSettings();
+  const privacyFilter = settings.realtime?.privacyFilter;
+  if (!privacyFilter) throw new Error('shared server fixture has no privacy filter section');
   return {
     ...settings,
     birdnet: { ...settings.birdnet, latitude: 40, longitude: -74 },
     realtime: {
       ...settings.realtime,
-      privacyFilter: { ...settings.realtime?.privacyFilter, enabled: true },
+      privacyFilter: { ...privacyFilter, enabled: true },
     },
-  } as SettingsFormData;
+  };
 };
 
 const patchCalls = () => vi.mocked(settingsAPI.patchSection).mock.calls;

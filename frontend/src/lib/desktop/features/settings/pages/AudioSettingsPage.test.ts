@@ -487,7 +487,7 @@ describe('AudioSettingsPage - Stream Configuration', () => {
       render(AudioSettingsPage);
 
       // Simulate removing the first stream
-      const remainingStreams = [initialStreams[1]!]; // eslint-disable-line @typescript-eslint/no-non-null-assertion -- Safe: test data
+      const remainingStreams = [initialStreams[1]];
       settingsActions.updateSection('realtime', {
         rtsp: {
           streams: remainingStreams,

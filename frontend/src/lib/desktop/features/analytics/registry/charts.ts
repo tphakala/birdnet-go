@@ -307,7 +307,7 @@ async function fetchHeatmap(params: AnalyticsParams, signal?: AbortSignal): Prom
     throw new Error('Invalid heatmap response: expected an object');
   }
   const body = data as HeatmapResponse;
-  const cells = (body.cells ?? {}) as { dateIndex?: unknown; slot?: unknown; count?: unknown };
+  const cells = body.cells ?? {};
 
   // Restrict the resolution to the values the server can emit so the chart's slot math
   // (1440 / resolution) and hourly fold stay well-defined.
@@ -904,7 +904,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     fetch: fetchSpeciesDistribution,
     // Always a view of the user's species selection (empty selection shows the card's empty state, so
     // this only ever renders selected species).
-    mapProps: data => ({ series: data as SpeciesDistributionDatum[] }),
+    mapProps: data => ({ series: data }),
     size: 'full',
     supports: { species: true, source: false },
     // A ridgeline needs at least a couple of species to read as one; one lonely ridge is not useful.
@@ -923,7 +923,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     // Always a view of the user's species selection (empty selection shows the card's empty state, so
     // this only ever renders selected species). The fetch result is the raw row array, so the default
     // array-length count (the band count) drives the not-enough-data gate.
-    mapProps: data => ({ series: data as SuccessionDatum[] }),
+    mapProps: data => ({ series: data }),
     size: 'full',
     supports: { species: true, source: false },
     // A streamgraph needs at least a few bands to weave into a visible handover; one or two bands is

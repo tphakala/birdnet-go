@@ -28,7 +28,7 @@ class ControllableIO {
   el?: Element;
   constructor(cb: IntersectionObserverCallback) {
     this.cb = cb;
-    ioInstances.push({ cb, fire: (i: boolean) => this.emit(i) } as FakeIO);
+    ioInstances.push({ cb, fire: (i: boolean) => this.emit(i) });
   }
   observe(el: Element) {
     this.el = el;
@@ -37,8 +37,9 @@ class ControllableIO {
     if (autoIntersect) this.emit(true);
   }
   emit(intersecting: boolean) {
+    // Partial entry: the component only reads isIntersecting and target
     this.cb(
-      [{ isIntersecting: intersecting, target: this.el } as IntersectionObserverEntry],
+      [{ isIntersecting: intersecting, target: this.el } as unknown as IntersectionObserverEntry],
       this as unknown as IntersectionObserver
     );
   }

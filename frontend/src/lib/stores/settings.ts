@@ -928,7 +928,7 @@ export interface TestResult {
 }
 
 // Initialize empty settings data
-function createEmptySettings(): SettingsFormData {
+function createEmptySettings(): SettingsFormData & { security: SecuritySettings } {
   return {
     main: {
       name: '',
@@ -1412,7 +1412,7 @@ export const settingsActions = {
       const mergedData = { ...createEmptySettings(), ...data };
 
       // Apply coercion to each section
-      const coercedData = { ...mergedData } as SettingsFormData;
+      const coercedData = { ...mergedData };
       for (const [section, sectionData] of Object.entries(mergedData)) {
         if (sectionData && typeof sectionData === 'object') {
           const coercedSection = coerceSettings(section, sectionData as Record<string, unknown>);
@@ -1441,17 +1441,13 @@ export const settingsActions = {
 
   updateSection<K extends keyof SettingsFormData>(section: K, data: Partial<SettingsFormData[K]>) {
     settingsStore.update(state => {
-      const currentSectionData = safeGet(
-        state.formData,
-        section as string,
-        {} as SettingsFormData[K]
-      );
+      const currentSectionData = safeGet<SettingsFormData, K>(state.formData, section);
       const mergedData = safeSpread(currentSectionData, data) as SettingsFormData[K];
 
       // Apply coercion immediately to ensure values are always within valid ranges
       // This is especially important for NumberField components that need instant validation
       const coercedData = coerceSettings(
-        section as string,
+        section,
         mergedData as Record<string, unknown>
       ) as SettingsFormData[K];
 
@@ -1530,7 +1526,7 @@ export const settingsActions = {
       // practice this never fires: the cert handlers that call this only run
       // after settings have loaded, so security is always populated.
       const sync = (security?: SecuritySettings): SecuritySettings => ({
-        ...(security ?? createEmptySettings().security ?? ({} as SecuritySettings)),
+        ...(security ?? createEmptySettings().security),
         tlsMode: mode,
         autoTls,
       });

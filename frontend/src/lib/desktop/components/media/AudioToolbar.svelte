@@ -229,7 +229,7 @@
           e.preventDefault();
           const rect = progressBarEl.getBoundingClientRect();
           const centerX = rect.left + rect.width / 2;
-          onSeek({ clientX: centerX } as MouseEvent);
+          onSeek(new MouseEvent('click', { clientX: centerX }));
         }
       }}
     >
@@ -240,7 +240,7 @@
   <!-- Selection range display -->
   <div class="toolbar-group selection-controls">
     <span class="time-range" class:dimmed={!hasSelection}>
-      {formatSelectionTime(selectionStart)} – {formatSelectionTime(selectionEnd)}
+      {formatSelectionTime(selectionStart)} - {formatSelectionTime(selectionEnd)}
     </span>
     <button
       class="toolbar-btn"

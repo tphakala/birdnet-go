@@ -66,7 +66,8 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
           },
         },
       },
-      originalData: {} as SettingsFormData,
+      // Deliberately empty baseline, not a complete SettingsFormData
+      originalData: {} as unknown as SettingsFormData,
       isLoading: false,
       isSaving: false,
       activeSection: 'main',
@@ -79,7 +80,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     // Get initial state
     const initialState = get(settingsStore);
     expect(initialState.formData.birdnet).toBeDefined();
-    const birdnetSettings = initialState.formData.birdnet as BirdNetSettings;
+    const birdnetSettings = initialState.formData.birdnet;
 
     const initialRangeFilter = birdnetSettings.rangeFilter;
     expect(initialRangeFilter).toBeDefined();
@@ -95,7 +96,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
 
     // Get updated state
     const updatedState = get(settingsStore);
-    const updatedBirdnet = updatedState.formData.birdnet as BirdNetSettings;
+    const updatedBirdnet = updatedState.formData.birdnet;
 
     // Verify coordinates were updated
     expect(updatedBirdnet.latitude).toBe(51.5074);
@@ -110,7 +111,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     // Get initial coordinates
     const initialState = get(settingsStore);
     expect(initialState.formData.birdnet).toBeDefined();
-    const birdnetSettings = initialState.formData.birdnet as BirdNetSettings;
+    const birdnetSettings = initialState.formData.birdnet;
 
     const initialLat = birdnetSettings.latitude;
     const initialLng = birdnetSettings.longitude;
@@ -127,7 +128,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
 
     // Get updated state
     const updatedState = get(settingsStore);
-    const updatedBirdnet = updatedState.formData.birdnet as BirdNetSettings;
+    const updatedBirdnet = updatedState.formData.birdnet;
 
     // Verify range filter was updated
     expect(updatedBirdnet.rangeFilter.threshold).toBe(0.05);
@@ -160,7 +161,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
 
     // Get final state
     const finalState = get(settingsStore);
-    const finalBirdnet = finalState.formData.birdnet as BirdNetSettings;
+    const finalBirdnet = finalState.formData.birdnet;
 
     // Verify all updates were applied correctly
     expect(finalBirdnet.latitude).toBe(48.8566);
@@ -174,7 +175,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     // Update only the range filter threshold (partial update)
     const storeState = get(settingsStore);
     expect(storeState.formData.birdnet).toBeDefined();
-    const birdnetSettings = storeState.formData.birdnet as BirdNetSettings;
+    const birdnetSettings = storeState.formData.birdnet;
 
     const currentRangeFilter = birdnetSettings.rangeFilter;
     expect(currentRangeFilter).toBeDefined();
@@ -188,7 +189,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
 
     // Get updated state
     const updatedState = get(settingsStore);
-    const updatedBirdnet = updatedState.formData.birdnet as BirdNetSettings;
+    const updatedBirdnet = updatedState.formData.birdnet;
 
     // Verify only threshold was updated, other fields preserved
     expect(updatedBirdnet.rangeFilter.threshold).toBe(0.07);
@@ -287,7 +288,7 @@ describe('Settings Store - Model/Label Path Null Conversion', () => {
             species: [],
           },
         },
-      } as SettingsFormData,
+      },
       isLoading: false,
       isSaving: false,
       activeSection: 'main',
@@ -510,7 +511,7 @@ describe('Settings Store - UI Locale Preservation (#2756/#2760)', () => {
           locale: backendLocale,
         },
       },
-    } as unknown as SettingsFormData;
+    };
 
     settingsStore.set({
       formData: JSON.parse(JSON.stringify(snapshot)) as SettingsFormData,
@@ -596,17 +597,18 @@ describe('Settings Store - syncTLSMode preserves unsaved Security edits', () => 
     formSecurity: ReturnType<typeof baseSecurity>,
     originalSecurity: ReturnType<typeof baseSecurity>
   ) => {
+    // Empty birdnet sections: only the security section matters to these tests
     settingsStore.set({
       formData: {
         main: { name: 'TestNode' },
-        birdnet: {} as BirdNetSettings,
+        birdnet: {} as unknown as BirdNetSettings,
         security: formSecurity,
-      } as SettingsFormData,
+      },
       originalData: {
         main: { name: 'TestNode' },
-        birdnet: {} as BirdNetSettings,
+        birdnet: {} as unknown as BirdNetSettings,
         security: originalSecurity,
-      } as SettingsFormData,
+      },
       isLoading: false,
       isSaving: false,
       activeSection: 'security',
@@ -692,10 +694,11 @@ describe('Settings Store - syncTLSMode preserves unsaved Security edits', () => 
   it('falls back to default security fields when the section is absent', () => {
     // Defensive branch: a store seeded before the security section loaded.
     // The sync must still yield a complete security object, not a bare
-    // { tlsMode, autoTls } that strips required fields.
+    // { tlsMode, autoTls } that strips required fields. The other sections stay
+    // empty because only security matters here.
     settingsStore.set({
-      formData: { main: { name: 'TestNode' }, birdnet: {} as BirdNetSettings } as SettingsFormData,
-      originalData: {} as SettingsFormData,
+      formData: { main: { name: 'TestNode' }, birdnet: {} as unknown as BirdNetSettings },
+      originalData: {} as unknown as SettingsFormData,
       isLoading: false,
       isSaving: false,
       activeSection: 'security',
@@ -812,7 +815,7 @@ describe('Settings Store - HuggingFace endpoint', () => {
       originalData: {
         main: { name: 'TestNode' },
         birdnet: original,
-      } as SettingsFormData,
+      },
       isLoading: false,
       isSaving: false,
       activeSection: 'birdnet',

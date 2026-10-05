@@ -761,8 +761,8 @@
         const ntfyPattern =
           /^ntfy:\/\/(?:([^:@/?]+)(?::([^@/?]*))?@)?([^/?]+)(?:\/([^?]*))?(?:\?(.*))?$/;
         /* eslint-enable security/detect-unsafe-regex */
-        if (safeRegexTest(ntfyPattern, url, 500)) {
-          const match = url.match(ntfyPattern)!;
+        const match = safeRegexTest(ntfyPattern, url, 500) ? url.match(ntfyPattern) : null;
+        if (match) {
           const [, user, pass, hostOrTopic, pathPart, queryString] = match;
 
           serviceFormData.ntfyUsername = user ? decodeURIComponent(user) : '';
@@ -788,8 +788,8 @@
         /* eslint-disable security/detect-unsafe-regex -- no nested quantifiers; each segment is bounded by literal anchors */
         const gotifyPattern = /^gotify:\/\/([^/?]+)(?:\/([^?]*))?(?:\?(.*))?$/;
         /* eslint-enable security/detect-unsafe-regex */
-        if (safeRegexTest(gotifyPattern, url, 500)) {
-          const match = url.match(gotifyPattern)!;
+        const match = safeRegexTest(gotifyPattern, url, 500) ? url.match(gotifyPattern) : null;
+        if (match) {
           const [, host, token, queryString] = match;
 
           serviceFormData.gotifyServer = host || '';

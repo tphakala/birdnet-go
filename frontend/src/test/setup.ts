@@ -607,7 +607,7 @@ class MockResizeObserver {
   unobserve = vi.fn();
   disconnect = vi.fn();
 }
-globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver = MockResizeObserver;
 
 // Mock HTMLCanvasElement.getContext for axe-core accessibility tests
 HTMLCanvasElement.prototype.getContext = vi.fn().mockImplementation(function (contextType: string) {
@@ -663,7 +663,7 @@ window.getComputedStyle = vi.fn().mockImplementation(function () {
   const style = {
     ...DEFAULT_COMPUTED_STYLES,
     getPropertyValue: vi.fn().mockImplementation(function (property: string) {
-      const computedStyle = { ...DEFAULT_COMPUTED_STYLES } as Record<string, string>;
+      const computedStyle: Record<string, string> = { ...DEFAULT_COMPUTED_STYLES };
       return (
         // eslint-disable-next-line security/detect-object-injection -- intentional property access in test mock
         computedStyle[property] ||
@@ -792,15 +792,12 @@ vi.mock('$lib/utils/security', async importOriginal => ({
   // Mock safeSpread to just spread objects without security validation for tests
   safeSpread: vi.fn(
     (...objects: Array<Record<string, unknown> | null | undefined>): Record<string, unknown> => {
-      return objects.reduce(
-        (result: Record<string, unknown>, obj) => {
-          if (obj != null && typeof obj === 'object') {
-            return { ...result, ...obj };
-          }
-          return result;
-        },
-        {} as Record<string, unknown>
-      );
+      return objects.reduce<Record<string, unknown>>((result, obj) => {
+        if (obj != null && typeof obj === 'object') {
+          return { ...result, ...obj };
+        }
+        return result;
+      }, {});
     }
   ),
   // Mock URL validation for RTSP and other protocols

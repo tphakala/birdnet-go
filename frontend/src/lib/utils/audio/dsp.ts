@@ -118,12 +118,12 @@ export function calculateCoefficients(
   if (filter.type === 'BandReject' || filter.type === 'BandStop' || filter.type === 'Notch') {
     // For band-reject filters, convert bandwidth (Hz) to Q
     // Q = center_frequency / bandwidth_hz
-    const width = (filter as BandFilter).width ?? 100;
+    const width = filter.width ?? 100;
     q = fc / Math.max(1, width);
     q = Math.max(0.1, Math.min(100, q)); // Clamp Q to reasonable range
     alpha = sinOmega / (2 * q);
   } else if (filter.type === 'BandPass') {
-    const width = (filter as BandFilter).width ?? 100;
+    const width = filter.width ?? 100;
     q = fc / Math.max(1, width);
     q = Math.max(0.1, Math.min(100, q));
     alpha = sinOmega / (2 * q);
@@ -194,7 +194,7 @@ export function calculateCoefficients(
       break;
 
     case 'LowShelf': {
-      const gain = (filter as GainFilter).gain ?? 0;
+      const gain = filter.gain ?? 0;
       const A = Math.pow(10, gain / 40);
       const beta = Math.sqrt(A) / q;
       b0 = A * (A + 1 - (A - 1) * cosOmega + beta * sinOmega);
@@ -207,7 +207,7 @@ export function calculateCoefficients(
     }
 
     case 'HighShelf': {
-      const gain = (filter as GainFilter).gain ?? 0;
+      const gain = filter.gain ?? 0;
       const A = Math.pow(10, gain / 40);
       const beta = Math.sqrt(A) / q;
       b0 = A * (A + 1 + (A - 1) * cosOmega + beta * sinOmega);
@@ -220,7 +220,7 @@ export function calculateCoefficients(
     }
 
     case 'Peaking': {
-      const gain = (filter as GainFilter).gain ?? 0;
+      const gain = filter.gain ?? 0;
       const A = Math.pow(10, gain / 40);
       b0 = 1 + alpha * A;
       b1 = -2 * cosOmega;

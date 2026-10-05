@@ -407,7 +407,7 @@
         gain: editGain,
         equalizer: transformedEqualizer,
         quietHours: editQuietHours,
-      } as StreamConfig);
+      });
       if (success) {
         isEditing = false;
       }

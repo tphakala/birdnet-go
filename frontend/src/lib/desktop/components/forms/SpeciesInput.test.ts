@@ -210,7 +210,7 @@ describe('SpeciesInput', () => {
 
     // Input value should remain populated with the selected prediction so
     // callers can read it via bind:value or a separate submit button.
-    const input = screen.getByRole('combobox') as HTMLInputElement;
+    const input = screen.getByRole('combobox');
     expect(input).toHaveValue('American Robin');
   });
 
@@ -468,7 +468,7 @@ describe('SpeciesInput', () => {
         },
       });
 
-      const input = screen.getByRole('combobox') as HTMLInputElement;
+      const input = screen.getByRole('combobox');
       input.getBoundingClientRect = vi.fn().mockReturnValue(mockRect);
 
       await fireEvent.focus(input);
@@ -505,7 +505,7 @@ describe('SpeciesInput', () => {
         },
       });
 
-      const input = screen.getByRole('combobox') as HTMLInputElement;
+      const input = screen.getByRole('combobox');
       input.getBoundingClientRect = vi.fn().mockReturnValue(mockRect);
 
       await fireEvent.focus(input);
@@ -543,7 +543,7 @@ describe('SpeciesInput', () => {
         },
       });
 
-      const input = screen.getByRole('combobox') as HTMLInputElement;
+      const input = screen.getByRole('combobox');
       input.getBoundingClientRect = vi.fn().mockReturnValue(mockRect);
 
       await fireEvent.focus(input);
@@ -575,7 +575,7 @@ describe('SpeciesInput', () => {
         },
       });
 
-      const input = screen.getByRole('combobox') as HTMLInputElement;
+      const input = screen.getByRole('combobox');
       input.getBoundingClientRect = vi.fn().mockReturnValue(mockRect);
 
       await fireEvent.focus(input);

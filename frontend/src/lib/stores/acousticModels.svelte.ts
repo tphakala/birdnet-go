@@ -121,7 +121,7 @@ export function acousticModelAvailability(): AcousticModelAvailability {
 
 function applySnapshot(data: unknown): void {
   const snapshot: Partial<InferenceStatusResponse> =
-    typeof data === 'object' && data !== null ? (data as Partial<InferenceStatusResponse>) : {};
+    typeof data === 'object' && data !== null ? data : {};
   // An older server omits the field; treat that like the "" sentinel (no verdict).
   state = typeof snapshot.acousticModelsState === 'string' ? snapshot.acousticModelsState : '';
   defaultTargets = Array.isArray(snapshot.defaultTargets)

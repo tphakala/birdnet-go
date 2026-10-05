@@ -34,6 +34,7 @@ export function renderComponent<T extends SvelteComponent>(
 export function mockFetch(url: string, response: unknown, status: number = 200): void {
   globalThis.fetch = vi.fn().mockImplementation((requestUrl: string) => {
     if (requestUrl.includes(url)) {
+      // Partial Response: only the members the code under test reads
       return Promise.resolve({
         ok: status >= 200 && status < 300,
         status,
@@ -41,7 +42,7 @@ export function mockFetch(url: string, response: unknown, status: number = 200):
         text: () => Promise.resolve(JSON.stringify(response)),
         headers: new Headers(),
         statusText: status >= 200 && status < 300 ? 'OK' : 'Error',
-        type: 'basic' as ResponseType,
+        type: 'basic',
         url: requestUrl,
         redirected: false,
         body: null,
@@ -52,7 +53,7 @@ export function mockFetch(url: string, response: unknown, status: number = 200):
         clone: function () {
           return this;
         },
-      } as Response);
+      } as unknown as Response);
     }
     return Promise.reject(new Error('Not found'));
   });
