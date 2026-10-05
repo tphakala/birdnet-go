@@ -9,6 +9,7 @@ import (
 	"cmp"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -114,12 +115,21 @@ func (c *Handler) serveRetainedSpectrogram(ctx echo.Context, noteID string, noCl
 // serveExistingRender serves a non-empty regular-file spectrogram render of the clip at
 // relClipPath (the clip's SecureFS-relative audio path, which need not exist). It
 // prefers the exact file the request parameters name and otherwise picks the
-// nearest render of the same clip. served is false, with no response written, when
-// the clip has no usable render. It never generates a spectrogram.
+// nearest render of the same clip when the exact one is missing, empty or not a
+// regular file. served is false, with no response written, when the clip has no
+// usable render; served is true when a response was written, including the error
+// response for an unexpected stat or serve failure. It never generates a
+// spectrogram.
 func (c *Handler) serveExistingRender(ctx echo.Context, noteID, relClipPath string, params spectrogramParameters, freqSuffix string) (served bool, err error) {
 	_, _, _, exact := buildSpectrogramPaths(relClipPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
 	target := exact
-	if info, statErr := c.SFS.StatRel(exact); statErr != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+	info, statErr := c.SFS.StatRel(exact)
+	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		// A failure other than "missing" (permission, I/O) is a filesystem problem,
+		// not an absent render, so it is reported instead of hidden behind a 404.
+		return true, c.translateSecureFSError(ctx, statErr, msgServeSpectrogramFailed)
+	}
+	if statErr != nil || !info.Mode().IsRegular() || info.Size() == 0 {
 		target = c.nearestRender(relClipPath, params)
 		if target == "" {
 			return false, nil

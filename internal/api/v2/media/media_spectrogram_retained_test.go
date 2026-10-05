@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -451,4 +452,31 @@ func TestServeSpectrogramByID_SpectrogramOnly_ExactNameDirectoryFallsThroughToNe
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, "raw 1026", rec.Body.String())
+}
+
+// skipIfDirPermissionsNotEnforced skips a test that relies on chmod 0 making a
+// directory unusable: root ignores directory permissions, and on Windows chmod
+// only toggles the read-only attribute.
+func skipIfDirPermissionsNotEnforced(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("directory permissions are not enforced here")
+	}
+}
+
+func TestServeSpectrogramByID_SpectrogramOnly_UnexpectedStatErrorIsReportedNotA404(t *testing.T) {
+	skipIfDirPermissionsNotEnforced(t)
+
+	h, e, root := newRetainedTestHandler(t, conf.SpectrogramModeAuto)
+	writeRetainedFile(t, root, "2026/01/a_514px.png", "exact render")
+	dir := filepath.Join(root, "2026", "01")
+	require.NoError(t, os.Chmod(dir, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o750) })
+	h.DS = noClipDS(t, retainedClipName, false)
+
+	rec := serveSpectrogram(t, h, e, "?size=md&raw=true")
+
+	assert.NotEqual(t, http.StatusOK, rec.Code)
+	assert.NotEqual(t, http.StatusNotFound, rec.Code, "a filesystem failure must not look like a missing render")
+	assert.NotContains(t, rec.Body.String(), msgRetainedSpectrogramMissing)
 }
