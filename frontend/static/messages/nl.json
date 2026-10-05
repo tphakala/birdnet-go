@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Minder fout-positieven, kan sommige vogels missen",
         "highSensitivity": "Hoge gevoeligheid",
         "highSensitivityDesc": "Meer detecties, meer fout-positieven",
+        "descriptionStored": "Kies hoe streng de vogelidentificatie moet zijn. Huidig: {threshold}, geen preset.",
         "threshold": "Betrouwbaarheidsdrempel",
         "fpFilterNote": "Zodra je systeem draait en bewezen is, kun je het fout-positievenfilter inschakelen in Instellingen om onjuiste detecties verder te verminderen."
       },

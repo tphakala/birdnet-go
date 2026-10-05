@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Moins de faux positifs, peut manquer certains oiseaux",
         "highSensitivity": "Haute sensibilité",
         "highSensitivityDesc": "Plus de détections, plus de faux positifs",
+        "descriptionStored": "Choisissez le niveau de rigueur de l'identification des oiseaux. Actuel : {threshold}, aucun préréglage.",
         "threshold": "Seuil de confiance",
         "fpFilterNote": "Une fois votre système en marche et éprouvé, vous pouvez activer le filtre de faux positifs dans les Paramètres pour réduire davantage les détections incorrectes."
       },

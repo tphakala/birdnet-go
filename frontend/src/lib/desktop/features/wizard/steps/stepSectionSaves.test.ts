@@ -175,3 +175,72 @@ describe('wizard steps save with section PATCH requests', () => {
     expect(settingsAPI.save).not.toHaveBeenCalled();
   });
 });
+
+describe('DetectionStep on the real settings store', () => {
+  const withThreshold = (threshold: number): SettingsFormData => {
+    const settings = serverSettings();
+    return { ...settings, birdnet: { ...settings.birdnet, threshold } };
+  };
+  const checkedName = () =>
+    screen.getAllByRole('radio').filter(r => r.getAttribute('aria-checked') === 'true');
+  const loadThreshold = async (threshold: number) => {
+    vi.mocked(settingsAPI.load).mockResolvedValue(withThreshold(threshold));
+    vi.mocked(settingsAPI.patchSection).mockReset().mockResolvedValue({});
+    await settingsActions.loadSettings();
+  };
+
+  it('stored 0.75: a pick saves once and a remount shows the pick without a stored value line', async () => {
+    await loadThreshold(0.75);
+    const first = renderStep(DetectionStep);
+    await flushAsync();
+    await fireEvent.click(
+      screen.getByRole('radio', { name: /wizard\.steps\.detection\.highAccuracy/ })
+    );
+    await first.leave();
+    first.unmount();
+
+    const second = renderStep(DetectionStep);
+    await flushAsync();
+
+    expect(patchCalls()).toEqual([['birdnet', { threshold: 0.9 }]]);
+    expect(checkedName()).toHaveLength(1);
+    expect(checkedName()[0]).toHaveAccessibleName(/highAccuracy/);
+    expect(screen.queryByText(/detection\.descriptionStored/)).toBeNull();
+    await second.leave();
+    expect(patchCalls()).toHaveLength(1);
+  });
+
+  it('stored 0.75: leaving untouched twice writes nothing and keeps the stored value line', async () => {
+    await loadThreshold(0.75);
+    const first = renderStep(DetectionStep);
+    await flushAsync();
+    await first.leave();
+    first.unmount();
+    const second = renderStep(DetectionStep);
+    await flushAsync();
+
+    expect(checkedName()).toHaveLength(0);
+    expect(screen.getByText(/detection\.descriptionStored/)).toBeInTheDocument();
+    await second.leave();
+    expect(patchCalls()).toEqual([]);
+  });
+
+  it('stored 0.8: a failed save is resent and a successful one is not', async () => {
+    await loadThreshold(0.8);
+    const { leave } = renderStep(DetectionStep);
+    await flushAsync();
+    await fireEvent.click(
+      screen.getByRole('radio', { name: /wizard\.steps\.detection\.highAccuracy/ })
+    );
+    vi.mocked(settingsAPI.patchSection).mockRejectedValueOnce(new Error('offline'));
+
+    await expect(leave()).rejects.toThrow();
+    await leave();
+    await leave();
+
+    expect(patchCalls()).toEqual([
+      ['birdnet', { threshold: 0.9 }],
+      ['birdnet', { threshold: 0.9 }],
+    ]);
+  });
+});

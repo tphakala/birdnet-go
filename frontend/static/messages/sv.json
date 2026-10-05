@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Färre falska positiva, kan missa vissa fåglar",
         "highSensitivity": "Hög känslighet",
         "highSensitivityDesc": "Fler detekteringar, fler falska positiva",
+        "descriptionStored": "Välj hur strikt fågelidentifieringen ska vara. Nuvarande: {threshold}, ingen förinställning.",
         "threshold": "Konfidenströskel",
         "fpFilterNote": "När ditt system är igång och beprövat kan du aktivera filtret för falska positiva under Inställningar för att ytterligare minska felaktiga detekteringar."
       },

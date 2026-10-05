@@ -5328,6 +5328,7 @@
         "highAccuracyDesc": "Menej falošných detekcií, môže vynechať niektoré vtáky",
         "highSensitivity": "Vysoká citlivosť",
         "highSensitivityDesc": "Viac detekcií, viac falošných detekcií",
+        "descriptionStored": "Vyberte, aká prísna má byť identifikácia vtákov. Aktuálne: {threshold}, žiadna predvoľba.",
         "threshold": "Prahová hodnota spoľahlivosti",
         "fpFilterNote": "Keď váš systém beží a je overený, môžete povoliť filter falošných detekcií v Nastaveniach na ďalšie zníženie nesprávnych detekcií."
       },
