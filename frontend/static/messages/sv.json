@@ -3210,7 +3210,11 @@
         "enable": "Aktivera BirdWeather-uppladdningar",
         "token": {
           "label": "BirdWeather-token",
-          "helpText": "Din unika BirdWeather-token."
+          "helpText": "Din unika BirdWeather-token.",
+          "errors": {
+            "required": "Ange din BirdWeather-token eller stäng av BirdWeather.",
+            "format": "En BirdWeather-token består av 24 bokstäver och siffror."
+          }
         },
         "threshold": {
           "label": "Uppladdningströskelvärde",

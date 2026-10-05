@@ -3210,7 +3210,11 @@
         "enable": "Abilita Caricamenti BirdWeather",
         "token": {
           "label": "Token BirdWeather",
-          "helpText": "Il tuo token BirdWeather univoco."
+          "helpText": "Il tuo token BirdWeather univoco.",
+          "errors": {
+            "required": "Inserisci il tuo token BirdWeather oppure disattiva BirdWeather.",
+            "format": "Un token BirdWeather è composto da 24 lettere e cifre."
+          }
         },
         "threshold": {
           "label": "Soglia Caricamento",

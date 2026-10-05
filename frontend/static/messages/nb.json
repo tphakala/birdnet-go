@@ -3210,7 +3210,11 @@
         "enable": "Aktiver BirdWeather-opplastinger",
         "token": {
           "label": "BirdWeather-token",
-          "helpText": "Din unike BirdWeather-token."
+          "helpText": "Din unike BirdWeather-token.",
+          "errors": {
+            "required": "Skriv inn BirdWeather-tokenet ditt, eller slå av BirdWeather.",
+            "format": "Et BirdWeather-token har 24 bokstaver og sifre."
+          }
         },
         "threshold": {
           "label": "Opplastingsterskel",

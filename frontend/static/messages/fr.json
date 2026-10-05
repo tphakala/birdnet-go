@@ -3210,7 +3210,11 @@
         "enable": "Activer les téléchargements BirdWeather",
         "token": {
           "label": "Jeton BirdWeather",
-          "helpText": "Votre jeton BirdWeather unique."
+          "helpText": "Votre jeton BirdWeather unique.",
+          "errors": {
+            "required": "Saisissez votre jeton BirdWeather ou désactivez BirdWeather.",
+            "format": "Un jeton BirdWeather comprend 24 lettres et chiffres."
+          }
         },
         "threshold": {
           "label": "Seuil de téléchargement",

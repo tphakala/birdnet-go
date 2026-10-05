@@ -58,6 +58,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { birdweatherTokenProblem } from '$lib/utils/birdweather';
   import CertificateField from '$lib/desktop/components/forms/CertificateField.svelte';
   import CertificateInfoCard from '$lib/desktop/components/ui/CertificateInfoCard.svelte';
   import { settingsAPI, type MQTTTLSCertificateInfo } from '$lib/utils/settingsApi';
@@ -176,6 +177,45 @@
     return () => {
       // Clear only eBird validation errors when leaving this page
       settingsValidationErrors.update(errors => errors.filter(e => e !== EBIRD_ERROR_KEY));
+    };
+  });
+
+  // Validate BirdWeather: enabled requires a well-formed token. Off never blocks, the
+  // field is disabled then and the backend does not check the token either.
+  const BIRDWEATHER_TOKEN_ERROR_KEY = 'birdweather-token-invalid';
+  let birdweatherTokenError = $derived(
+    birdweatherTokenProblem(settings.birdweather.enabled, settings.birdweather.id)
+  );
+
+  // Shown on this tab whenever the check blocks saving, so the field always says why Save is disabled.
+  let birdweatherTokenMessage = $derived(
+    birdweatherTokenError === 'required'
+      ? t('settings.integration.birdweather.token.errors.required')
+      : birdweatherTokenError === 'format'
+        ? t('settings.integration.birdweather.token.errors.format')
+        : undefined
+  );
+
+  $effect(() => {
+    const needsError = birdweatherTokenError !== null;
+
+    // Same pattern as the eBird check above: .update() so the effect never reads the store.
+    settingsValidationErrors.update(errors => {
+      const hasError = errors.includes(BIRDWEATHER_TOKEN_ERROR_KEY);
+      if (needsError && !hasError) {
+        return [...errors, BIRDWEATHER_TOKEN_ERROR_KEY];
+      }
+      if (!needsError && hasError) {
+        return errors.filter(e => e !== BIRDWEATHER_TOKEN_ERROR_KEY);
+      }
+      return errors;
+    });
+
+    return () => {
+      // Clear only this check's error when leaving the page
+      settingsValidationErrors.update(errors =>
+        errors.filter(e => e !== BIRDWEATHER_TOKEN_ERROR_KEY)
+      );
     };
   });
 
@@ -317,8 +357,9 @@
   }
 
   function updateBirdWeatherId(id: string) {
+    // The server does not trim the token, so it is trimmed here and a paste with a trailing space or newline is saved clean.
     settingsActions.updateSection('realtime', {
-      birdweather: { ...settings.birdweather, id },
+      birdweather: { ...settings.birdweather, id: id.trim() },
     });
   }
 
@@ -1162,6 +1203,7 @@
                 label={t('settings.integration.birdweather.token.label')}
                 value={settings.birdweather.id}
                 onUpdate={updateBirdWeatherId}
+                error={birdweatherTokenMessage}
                 placeholder=""
                 helpText={t('settings.integration.birdweather.token.helpText')}
                 disabled={!settings.birdweather.enabled || store.isLoading || store.isSaving}
