@@ -595,6 +595,56 @@ describe('SelectDropdown Accessibility', () => {
     expect(search).toHaveAttribute('aria-activedescendant', options[0].id);
   });
 
+  it('highlights the last option when ArrowUp is pressed with nothing highlighted', async () => {
+    const { user, search } = await openSearchable();
+
+    await user.keyboard('{ArrowUp}');
+
+    const options = screen.getAllByRole('option');
+    expect(search).toHaveAttribute('aria-activedescendant', options[options.length - 1].id);
+  });
+
+  it('keeps the first option highlighted when ArrowUp is pressed on it', async () => {
+    const { user, search } = await openSearchable();
+
+    await user.keyboard('{ArrowDown}{ArrowUp}{ArrowUp}');
+
+    const options = screen.getAllByRole('option');
+    expect(search).toHaveAttribute('aria-activedescendant', options[0].id);
+  });
+
+  describe('with interleaved groups', () => {
+    const interleaved: SelectOption[] = [
+      { value: 'a1', label: 'A1', group: 'A' },
+      { value: 'b1', label: 'B1', group: 'B' },
+      { value: 'a2', label: 'A2', group: 'A' },
+    ];
+
+    it('walks the options in the order they are rendered', async () => {
+      const { user, search } = await openSearchable({ options: interleaved, groupBy: true });
+      const rendered = screen.getAllByRole('option');
+      expect(rendered.map(o => o.textContent.trim())).toEqual(['A1', 'A2', 'B1']);
+      rendered.forEach((option, index) =>
+        expect(option.id.endsWith(`-option-${index}`)).toBe(true)
+      );
+
+      for (const [index, label] of ['A1', 'A2', 'B1'].entries()) {
+        await user.keyboard('{ArrowDown}');
+        const active = document.getElementById(search.getAttribute('aria-activedescendant') ?? '');
+        expect(active?.textContent.trim()).toBe(label);
+        expect(active).toBe(rendered[index]);
+      }
+    });
+
+    it('selects the option that is highlighted on screen with Enter', async () => {
+      const { user, onChange } = await openSearchable({ options: interleaved, groupBy: true });
+
+      await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+
+      expect(onChange).toHaveBeenCalledWith('a2');
+    });
+  });
+
   it('drops aria-activedescendant when the options shrink below the highlighted index', async () => {
     const user = userEvent.setup();
     const { rerender } = selectTest.render({ props: { options: fruit, searchable: true } });
@@ -738,6 +788,33 @@ describe('SelectDropdown Accessibility', () => {
     expect(onChange).toHaveBeenCalledWith('apple');
     await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
     expect(document.activeElement).toBe(screen.getByRole('button'));
+  });
+
+  it('keeps focus in the search box when a multiple-select option is clicked without taking focus', async () => {
+    const { onChange, search } = await openSearchable({ multiple: true });
+    search.blur();
+    expect(document.activeElement).toBe(document.body);
+
+    await fireEvent.click(screen.getAllByRole('option')[0]);
+
+    expect(onChange).toHaveBeenCalledWith(['apple']);
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    expect(document.activeElement).toBe(search);
+  });
+
+  it('keeps focus on the trigger when a multiple-select option without search is clicked without taking focus', async () => {
+    const user = userEvent.setup();
+    selectTest.render({ props: { options: fruit, multiple: true } });
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+    await screen.findByRole('listbox');
+    trigger.blur();
+    expect(document.activeElement).toBe(document.body);
+
+    await fireEvent.click(screen.getAllByRole('option')[0]);
+
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('does not move focus on an outside click', async () => {

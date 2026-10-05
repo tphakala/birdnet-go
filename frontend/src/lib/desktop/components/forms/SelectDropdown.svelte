@@ -214,6 +214,10 @@
     );
   });
 
+  // Options in the order they are rendered: grouped when groupBy is on, so keyboard
+  // navigation, ids and aria-activedescendant agree with what is on screen
+  let renderedOptions = $derived(groupBy ? Object.values(groupedOptions).flat() : filteredOptions);
+
   let canAddMore = $derived(
     !maxSelections ||
       !multiple ||
@@ -294,6 +298,11 @@
 
       value = newValues;
       onChange?.(newValues);
+      // The popover stays open, so a click that took no focus (Safari) must not leave focus on
+      // <body>, outside the dialog's focus trap. The search box is where typing continues.
+      if (document.activeElement === document.body) {
+        (searchable ? inputElement : buttonElement)?.focus();
+      }
     } else {
       value = option.value;
       onChange?.(option.value);
@@ -322,12 +331,13 @@
   // Move the highlighted option down (1) or up (-1), clamped to the list
   function moveHighlight(delta: 1 | -1) {
     // Nothing rendered to highlight, and aria-activedescendant must not name a missing option
-    if (filteredOptions.length === 0) return;
+    const lastIndex = renderedOptions.length - 1;
+    if (lastIndex < 0) return;
     if (delta === 1) {
-      highlightedIndex =
-        highlightedIndex === -1 ? 0 : Math.min(highlightedIndex + 1, filteredOptions.length - 1);
+      highlightedIndex = highlightedIndex === -1 ? 0 : Math.min(highlightedIndex + 1, lastIndex);
     } else {
-      highlightedIndex = Math.max(highlightedIndex - 1, -1);
+      // ArrowUp from nothing wraps to the last option; at the first option it stays there
+      highlightedIndex = highlightedIndex === -1 ? lastIndex : Math.max(highlightedIndex - 1, 0);
     }
     scrollToHighlighted();
   }
@@ -361,7 +371,7 @@
       case 'Enter': {
         // Always consumed, so Enter in the search box never submits a surrounding form
         event.preventDefault();
-        const highlighted = safeArrayAccess(filteredOptions, highlightedIndex);
+        const highlighted = safeArrayAccess(renderedOptions, highlightedIndex);
         if (highlightedIndex >= 0 && highlighted) selectOption(highlighted);
         break;
       }
@@ -369,7 +379,7 @@
   }
 
   function handleKeyDown(event: KeyboardEvent) {
-    const allOptions = filteredOptions;
+    const allOptions = renderedOptions;
 
     switch (event.key) {
       case 'Escape':
@@ -585,7 +595,7 @@
               role="searchbox"
               aria-controls="{fieldId}-listbox"
               aria-activedescendant={highlightedIndex >= 0 &&
-              highlightedIndex < filteredOptions.length
+              highlightedIndex < renderedOptions.length
                 ? `${fieldId}-option-${highlightedIndex}`
                 : undefined}
             />
@@ -606,8 +616,9 @@
               {t('components.forms.select.noOptions')}
             </div>
           {:else}
-            {@const flatOptions = filteredOptions}
-            {@const optionIndexMap = new Map(flatOptions.map((option, index) => [option, index]))}
+            {@const optionIndexMap = new Map(
+              renderedOptions.map((option, index) => [option, index])
+            )}
             {#each Object.entries(groupedOptions) as [group, options] (group)}
               {#if group && groupBy}
                 <div

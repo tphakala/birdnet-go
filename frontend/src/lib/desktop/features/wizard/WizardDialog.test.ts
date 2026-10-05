@@ -687,6 +687,26 @@ describe('WizardDialog Accessibility', () => {
     await waitFor(() => expect(document.activeElement).toBe(primaryButton()));
   });
 
+  it('moves focus to Back when Back is clicked on step 3 while focus was on body', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await screen.findByRole('dialog', { name: 'test.step2' });
+    await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
+    await user.click(primaryButton());
+    await screen.findByRole('dialog', { name: 'test.step3' });
+    await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
+    primaryButton().blur();
+    expect(document.activeElement).toBe(document.body);
+
+    await fireEvent.click(backButton());
+
+    await screen.findByRole('dialog', { name: 'test.step2' });
+    await waitFor(() => expect(document.activeElement).toBe(backButton()));
+  });
+
   it('leaves focus alone when Back finishes after the user moved it', async () => {
     renderWizard(componentSteps(3));
     await waitForPrimaryEnabled();

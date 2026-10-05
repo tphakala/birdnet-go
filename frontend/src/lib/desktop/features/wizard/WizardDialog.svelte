@@ -124,17 +124,16 @@
     wizardState.stepStatus === 'failed' && retriedIndex === wizardState.currentStepIndex
   );
 
-  // Back is not rendered on the first step, so the Back button unmounts when it returns
-  // there and focus falls to <body> (as it also does for a click that took no focus),
-  // outside the dialog's focus trap. Move focus to Next in that case, unless the user has
-  // already moved it elsewhere.
+  // Focus falls to <body> when Back unmounts (it is not rendered on the first step) and
+  // when a click took no focus, outside the dialog's focus trap. Move it to Back when that
+  // button remains, otherwise to Next, unless the user has already moved it elsewhere.
   async function goBack() {
     await wizardState.back();
     await tick();
     const focusLost = document.activeElement === null || document.activeElement === document.body;
-    if (!backButtonRef?.isConnected && focusLost) {
-      primaryButtonRef?.focus();
-    }
+    if (!focusLost) return;
+    // Back stays mounted from step 3 on; from step 2 it unmounts, so Next takes the focus
+    (backButtonRef?.isConnected ? backButtonRef : primaryButtonRef)?.focus();
   }
 
   function reloadPage() {
