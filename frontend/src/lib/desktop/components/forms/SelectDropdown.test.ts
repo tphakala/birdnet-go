@@ -8,6 +8,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import SelectDropdown from './SelectDropdown.svelte';
 import type { SelectOption } from './SelectDropdown.types';
+import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 
 // Mock scrollIntoView which is not available in jsdom
 beforeEach(() => {
@@ -537,5 +538,238 @@ describe('SelectDropdown', () => {
     });
 
     expect(screen.getByText('Choose your favorite fruit')).toBeInTheDocument();
+  });
+});
+
+describe('SelectDropdown Accessibility', () => {
+  const selectTest = createComponentTestFactory(SelectDropdown);
+
+  const fruit: SelectOption[] = [
+    { value: 'apple', label: 'Apple' },
+    { value: 'banana', label: 'Banana' },
+    { value: 'cherry', label: 'Cherry' },
+  ];
+
+  async function openSearchable(props: Record<string, unknown> = {}) {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    selectTest.render({ props: { options: fruit, searchable: true, onChange, ...props } });
+    await user.click(screen.getAllByRole('button')[0]);
+    const search = await screen.findByRole('searchbox');
+    await waitFor(() => expect(search).toHaveFocus());
+    return { user, onChange, search };
+  }
+
+  /** Records Escape keydowns that reach the document, like Modal's listener. */
+  function trackDocumentEscape() {
+    const seen: string[] = [];
+    const listener = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') seen.push(event.key);
+    };
+    document.addEventListener('keydown', listener);
+    return { seen, stop: () => document.removeEventListener('keydown', listener) };
+  }
+
+  it('moves the highlight with arrow keys in the search box and selects with Enter', async () => {
+    const { user, onChange, search } = await openSearchable();
+
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+
+    const options = screen.getAllByRole('option');
+    expect(options[1].id).not.toBe('');
+    expect(search).toHaveAttribute('aria-activedescendant', options[1].id);
+
+    await user.keyboard('{Enter}');
+
+    expect(onChange).toHaveBeenCalledWith('banana');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByRole('button'));
+  });
+
+  it('does nothing on Enter in the search box when no option is highlighted', async () => {
+    const { user, onChange } = await openSearchable();
+
+    await user.keyboard('{Enter}');
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
+  it('typing a space in the search box types a space instead of selecting', async () => {
+    const { user, onChange, search } = await openSearchable();
+
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('a b');
+
+    expect(search).toHaveValue('a b');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
+  it('Escape in the search box closes only the list and does not reach the document', async () => {
+    const { user } = await openSearchable();
+    const escapes = trackDocumentEscape();
+
+    await user.keyboard('{Escape}');
+    escapes.stop();
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(screen.getByRole('button'));
+    expect(escapes.seen).toEqual([]);
+  });
+
+  it('Escape on a focused option closes only the list and does not reach the document', async () => {
+    const user = userEvent.setup();
+    selectTest.render({ props: { options: fruit, multiple: true } });
+    await user.click(screen.getByRole('button'));
+    const option = (await screen.findAllByRole('option'))[0];
+    option.focus();
+    const escapes = trackDocumentEscape();
+
+    await user.keyboard('{Escape}');
+    escapes.stop();
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(screen.getByRole('button'));
+    expect(escapes.seen).toEqual([]);
+  });
+
+  /** Renders the dropdown between two plain buttons so Tab has somewhere to land. */
+  function renderBetweenButtons(props: Record<string, unknown>) {
+    const before = document.createElement('button');
+    before.textContent = 'Before';
+    const after = document.createElement('button');
+    after.textContent = 'After';
+    document.body.append(before);
+    const result = selectTest.render({ props: { options: fruit, ...props } });
+    document.body.append(after);
+    return {
+      before,
+      after,
+      cleanup: () => {
+        before.remove();
+        after.remove();
+        result.unmount();
+      },
+    };
+  }
+
+  it('Tab in the search box closes the list and moves focus on from the trigger', async () => {
+    const user = userEvent.setup();
+    const { after, cleanup } = renderBetweenButtons({ searchable: true });
+    try {
+      await user.click(screen.getByRole('button', { name: /select/i }));
+      await waitFor(() => expect(screen.getByRole('searchbox')).toHaveFocus());
+
+      await user.keyboard('{Tab}');
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(document.activeElement).toBe(after);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('Shift+Tab from a focused option closes the list and moves focus on from the trigger', async () => {
+    const user = userEvent.setup();
+    const { before, cleanup } = renderBetweenButtons({ multiple: true });
+    try {
+      await user.click(screen.getByRole('button', { name: /select/i }));
+      const option = (await screen.findAllByRole('option'))[0];
+      option.focus();
+
+      await user.keyboard('{Shift>}{Tab}{/Shift}');
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(document.activeElement).toBe(before);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('returns focus to the trigger after an option is clicked', async () => {
+    const { user } = await openSearchable();
+
+    const option = screen.getAllByRole('option')[0];
+    option.focus();
+    await user.click(option);
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(screen.getByRole('button'));
+  });
+
+  it('does not move focus on an outside click', async () => {
+    const user = userEvent.setup();
+    selectTest.render({ props: { options: fruit } });
+    const outside = document.createElement('button');
+    outside.textContent = 'Outside';
+    document.body.appendChild(outside);
+    try {
+      await user.click(screen.getByRole('button', { name: /select/i }));
+      await screen.findByRole('listbox');
+
+      await user.click(outside);
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(document.activeElement).toBe(outside);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it('names the open listbox from the label associated with the trigger', async () => {
+    const user = userEvent.setup();
+    const { container } = selectTest.render({ props: { options: fruit, id: 'device-field' } });
+    const externalLabel = document.createElement('label');
+    externalLabel.htmlFor = 'device-field';
+    externalLabel.textContent = 'Audio Device';
+    container.prepend(externalLabel);
+
+    await user.click(screen.getByRole('button'));
+
+    expect(await screen.findByRole('listbox', { name: 'Audio Device' })).toBeInTheDocument();
+  });
+
+  it('keeps the label prop as the listbox name and adds no aria-label without any label', async () => {
+    const user = userEvent.setup();
+    const labelled = selectTest.render({ props: { options: fruit, label: 'Fruit' } });
+    await user.click(screen.getByRole('button'));
+    const named = await screen.findByRole('listbox', { name: 'Fruit' });
+    expect(named).toHaveAttribute('aria-labelledby');
+    expect(named).not.toHaveAttribute('aria-label');
+    labelled.unmount();
+
+    selectTest.render({ props: { options: fruit } });
+    await user.click(screen.getByRole('button'));
+    const unnamed = await screen.findByRole('listbox');
+    expect(unnamed).not.toHaveAttribute('aria-label');
+  });
+
+  it('links help text and the aria-describedby prop together on the trigger', () => {
+    const both = selectTest.render({
+      props: { options: fruit, id: 'both', helpText: 'Help', 'aria-describedby': 'extra-note' },
+    });
+    expect(screen.getByRole('button').getAttribute('aria-describedby')).toBe(
+      'both-help extra-note'
+    );
+    both.unmount();
+
+    const only = selectTest.render({
+      props: { options: fruit, id: 'only', 'aria-describedby': 'extra-note' },
+    });
+    expect(screen.getByRole('button').getAttribute('aria-describedby')).toBe('extra-note');
+    only.unmount();
+
+    selectTest.render({ props: { options: fruit, id: 'none' } });
+    expect(screen.getByRole('button')).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('has no violations with the searchable list open and an option highlighted', async () => {
+    const { user, search } = await openSearchable({ label: 'Fruit' });
+    await user.keyboard('{ArrowDown}');
+    expect(search).toHaveAttribute('aria-activedescendant');
+
+    // The landmark rule is about whole pages, not an isolated component
+    await expectNoA11yViolations(document.body, { rules: { region: { enabled: false } } });
   });
 });

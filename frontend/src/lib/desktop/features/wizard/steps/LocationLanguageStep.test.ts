@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fireEvent } from '@testing-library/svelte';
+import { fireEvent, waitFor } from '@testing-library/svelte';
 import type { SettingsFormData } from '$lib/stores/settings';
 
 // Mock API to prevent network calls during mount
@@ -344,5 +344,39 @@ describe('LocationLanguageStep - UI locale persistence in the leave handler', ()
     await flushAsync();
 
     expect(currentLocale).toBe('en');
+  });
+});
+
+describe('LocationLanguageStep Accessibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentLocale = 'en';
+  });
+
+  const speciesLabel = (container: HTMLElement) =>
+    container.querySelector('label[for="wizard-species-locale"]');
+
+  it('labels the species language dropdown only once it is rendered', async () => {
+    const { container } = renderStep(LocationLanguageStep);
+
+    // While the locales load there is no control for the label to point at
+    expect(speciesLabel(container)).toBeNull();
+    expect(document.getElementById('wizard-species-locale')).toBeNull();
+
+    await waitFor(() => expect(document.getElementById('wizard-species-locale')).not.toBeNull());
+    expect(speciesLabel(container)).not.toBeNull();
+  });
+
+  it('describes the species language dropdown with its help text', async () => {
+    renderStep(LocationLanguageStep);
+    const trigger = await waitFor(() => {
+      const el = document.getElementById('wizard-species-locale');
+      if (!el) throw new Error('species dropdown not rendered');
+      return el;
+    });
+
+    expect(trigger).toHaveAccessibleDescription(
+      'wizard.steps.locationLanguage.speciesLanguageHelp'
+    );
   });
 });

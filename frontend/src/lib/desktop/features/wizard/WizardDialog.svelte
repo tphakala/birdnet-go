@@ -15,6 +15,7 @@
 
   const logger = loggers.ui;
 
+  const TITLE_ID = generateId('wizard-title');
   const NEXT_REASON_ID = generateId('wizard-next-reason');
   const ALERT_ID = generateId('wizard-alert');
   const SAVING_STATUS_ID = generateId('wizard-saving-status');
@@ -37,6 +38,8 @@
   // too, only a page reload can fetch the chunk again.
   let retriedIndex = $state(-1);
   let reloadButtonRef = $state<HTMLButtonElement>();
+  let backButtonRef = $state<HTMLButtonElement>();
+  let primaryButtonRef = $state<HTMLButtonElement>();
   let leaveConfirmOpen = $state(false);
   let importGeneration = 0;
   // retryNonce as of the last import, to tell a Retry from a step change
@@ -121,6 +124,19 @@
     wizardState.stepStatus === 'failed' && retriedIndex === wizardState.currentStepIndex
   );
 
+  // Back is not rendered on the first step, so the focused Back button unmounts when it
+  // returns there and focus would fall to <body>, outside the dialog's focus trap. Move
+  // focus to Next in that case, unless the user has already moved it elsewhere.
+  async function goBack() {
+    const hadFocus = document.activeElement === backButtonRef;
+    await wizardState.back();
+    await tick();
+    const focusLost = document.activeElement === null || document.activeElement === document.body;
+    if (hadFocus && !backButtonRef?.isConnected && focusLost) {
+      primaryButtonRef?.focus();
+    }
+  }
+
   function reloadPage() {
     window.location.reload();
   }
@@ -199,10 +215,12 @@
   closeOnBackdrop={false}
   closeOnEsc={!leaveConfirmOpen}
   onClose={requestLeave}
+  aria-labelledby={TITLE_ID}
+  aria-describedby={undefined}
 >
   {#snippet header()}
     <div class="flex items-center justify-between">
-      <h3 id="modal-title" class="text-lg font-bold">{stepTitle}</h3>
+      <h3 id={TITLE_ID} class="text-lg font-bold">{stepTitle}</h3>
       <WizardProgressBar
         currentStep={wizardState.currentStepIndex}
         totalSteps={wizardState.totalSteps}
@@ -259,7 +277,7 @@
     <p
       id={ALERT_ID}
       role="alert"
-      class={alertText ? 'mt-2 text-sm text-[var(--color-error)]' : 'sr-only'}
+      class={alertText ? 'mt-2 text-sm text-[var(--text-error)]' : 'sr-only'}
     >
       {alertText}
     </p>
@@ -290,9 +308,10 @@
       <div class="flex shrink-0 items-center gap-2">
         {#if !wizardState.isFirstStep}
           <button
+            bind:this={backButtonRef}
             type="button"
             class="{SECONDARY_BUTTON_CLASS} aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-            onclick={() => wizardState.back()}
+            onclick={() => void goBack()}
             aria-disabled={!wizardState.canGoBack ? 'true' : undefined}
             aria-describedby={backDescribedBy}
           >
@@ -301,6 +320,7 @@
           </button>
         {/if}
         <button
+          bind:this={primaryButtonRef}
           type="button"
           class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--color-primary)] bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary-hover)] aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
           onclick={() => (wizardState.isLastStep ? wizardState.complete() : wizardState.next())}

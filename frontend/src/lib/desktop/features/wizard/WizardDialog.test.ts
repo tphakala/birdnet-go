@@ -28,11 +28,15 @@ const { wizardState, STEP_MOVE_GUARD_MS } = await import('./wizardState.svelte')
 const { stepControl } = await import('./wizardTestStepControl');
 const { default: WizardDialog } = await import('./WizardDialog.svelte');
 const { default: WizardTestStep } = await import('./WizardTestStep.test.svelte');
+const { default: WizardDropdownStep } = await import('./WizardDropdownStep.test.svelte');
 
 type StepModule = { default: Component<WizardStepProps> };
 
 const loadStep = (): Promise<StepModule> =>
   Promise.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+
+const loadDropdownStep = (): Promise<StepModule> =>
+  Promise.resolve({ default: WizardDropdownStep as unknown as Component<WizardStepProps> });
 
 // One loader per step index; tests replace entries to control chunk loading.
 let loaders: Array<() => Promise<StepModule>> = [];
@@ -178,7 +182,7 @@ describe('WizardDialog', () => {
     ).toBe(true);
     expect(heading()).toHaveTextContent('test.step1');
 
-    save.resolve();
+    save.resolve(undefined);
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
   });
@@ -192,7 +196,7 @@ describe('WizardDialog', () => {
     await user.dblClick(primaryButton());
     expect(stepControl.leave).toHaveBeenCalledTimes(1);
 
-    save.resolve();
+    save.resolve(undefined);
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
     await waitForPrimaryEnabled();
@@ -274,7 +278,7 @@ describe('WizardDialog', () => {
     await waitFor(() => expect(isContentInert()).toBe(true));
     expect(contentBox()).toHaveAttribute('aria-busy', 'true');
 
-    save.resolve();
+    save.resolve(undefined);
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
     await waitForPrimaryEnabled();
@@ -316,7 +320,7 @@ describe('WizardDialog', () => {
     expect(describedText(backButton())).toBe('wizard.status.saving');
     expect(heading()).toHaveTextContent('test.step2');
 
-    save.resolve();
+    save.resolve(undefined);
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step1'));
   });
@@ -467,7 +471,7 @@ describe('WizardDialog', () => {
     expect(stepControl.leave).toHaveBeenCalledTimes(1);
     expect(api.post).toHaveBeenCalledTimes(1);
 
-    save.resolve();
+    save.resolve(undefined);
     await Promise.resolve();
 
     expect(wizardState.isActive).toBe(false);
@@ -577,7 +581,7 @@ describe('WizardDialog', () => {
       await user.keyboard('{Escape}');
       expect(confirmation()).toBeInTheDocument();
 
-      save.resolve();
+      save.resolve(undefined);
     });
 
     it('X on the whats-new flow closes without confirmation', async () => {
@@ -591,11 +595,6 @@ describe('WizardDialog', () => {
     });
   });
 });
-
-// The wizard Modal has no accessible name yet: naming it belongs to the Modal-level
-// accessibility work. The confirmation's name and description are asserted by role
-// queries in the leave confirmation tests above.
-const A11Y_OPTIONS = { rules: { 'aria-dialog-name': { enabled: false } } };
 
 describe('WizardDialog Accessibility', () => {
   let user: ReturnType<typeof userEvent.setup>;
@@ -612,7 +611,7 @@ describe('WizardDialog Accessibility', () => {
     await waitForPrimaryEnabled();
 
     expect(heading()).toHaveTextContent('test.step1');
-    await expectNoA11yViolations(container, A11Y_OPTIONS);
+    await expectNoA11yViolations(container);
   });
 
   it('has no violations in the load error state', async () => {
@@ -623,7 +622,7 @@ describe('WizardDialog Accessibility', () => {
     await screen.findByRole('button', { name: /common\.retry/ });
 
     expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.stepLoadFailed');
-    await expectNoA11yViolations(container, A11Y_OPTIONS);
+    await expectNoA11yViolations(container);
   });
 
   it('has no violations with the leave confirmation open', async () => {
@@ -633,6 +632,97 @@ describe('WizardDialog Accessibility', () => {
     const dialog = await screen.findByRole('alertdialog', { name: 'wizard.leaveConfirm.title' });
 
     expect(dialog).toHaveAccessibleDescription('wizard.leaveConfirm.message');
-    await expectNoA11yViolations(container, A11Y_OPTIONS);
+    await expectNoA11yViolations(container);
+  });
+
+  it('names the dialog with the step title and renames it on the next step', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+
+    expect(screen.getByRole('dialog', { name: 'test.step1' })).toBeInTheDocument();
+
+    await user.click(primaryButton());
+
+    expect(await screen.findByRole('dialog', { name: 'test.step2' })).toBeInTheDocument();
+  });
+
+  it('does not describe the dialog with the whole step body', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+
+    expect(screen.getByRole('dialog', { name: 'test.step1' })).not.toHaveAttribute(
+      'aria-describedby'
+    );
+  });
+
+  it('keeps focus in the dialog when Back returns to the first step', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
+    await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
+
+    backButton().focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step1'));
+    await waitFor(() => expect(document.activeElement).toBe(primaryButton()));
+  });
+
+  it('leaves focus alone when Back finishes after the user moved it', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await screen.findByRole('dialog', { name: 'test.step2' });
+    await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
+
+    const save = deferred<undefined>();
+    stepControl.leave = vi.fn(() => save.promise);
+    const close = screen.getByRole('button', { name: 'common.aria.closeModal' });
+    backButton().focus();
+    await user.keyboard('{Enter}');
+    close.focus();
+    save.resolve(undefined);
+
+    await screen.findByRole('dialog', { name: 'test.step1' });
+    // Let the focus handling that follows the step move run
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(document.activeElement).toBe(close);
+  });
+
+  it('Escape in an open step dropdown closes only the dropdown', async () => {
+    loaders = [loadDropdownStep, loadStep];
+    vi.mocked(getStepsForFlow).mockReturnValue(
+      loaders.map((_, i) => ({
+        id: `step-${i + 1}`,
+        type: 'component' as const,
+        titleKey: `test.step${i + 1}` as TranslationKey,
+        // eslint-disable-next-line security/detect-object-injection -- i is a bounded test index
+        component: () => loaders[i](),
+      }))
+    );
+    wizardState.launch('onboarding', { currentVersion: 'v1' });
+    renderTyped(WizardDialog);
+    const trigger = await waitFor(() => {
+      const el = document.getElementById('fixture-dropdown');
+      if (!el) throw new Error('fixture dropdown not rendered');
+      return el;
+    });
+
+    await user.click(trigger);
+    const search = await screen.findByRole('searchbox');
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(wizardState.isActive).toBe(true);
+    expect(document.activeElement).toBe(trigger);
+
+    await user.keyboard('{Escape}');
+
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
   });
 });

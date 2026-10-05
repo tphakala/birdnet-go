@@ -95,6 +95,7 @@
 
   /* Text colors */
   --text-muted: #475569; /* slate-600 - secondary/muted text */
+  --text-error: #b91c1c; /* red-700 - error text, 4.5:1 or more on base-100/200/300 */
 
   /* Component tokens */
   --radius-box: 0.5rem;
@@ -170,6 +171,7 @@
 
   /* Text colors */
   --text-muted: #e2e8f0; /* slate-200 - secondary/muted text (high contrast) */
+  --text-error: #f87171; /* red-400 - error text, 4.5:1 or more on base-100/200/300 */
 
   /* Shadows (darker for dark mode) */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
