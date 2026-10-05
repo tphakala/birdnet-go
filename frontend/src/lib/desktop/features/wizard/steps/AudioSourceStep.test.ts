@@ -317,7 +317,7 @@ describe('AudioSourceStep - leave handler', () => {
     expect(calls[3][1]).toEqual({ sources: [], source: '' });
   });
 
-  it('sends no second section once the step is unmounted during the first save', async () => {
+  it('finishes the stream change when the step unmounts during the first save', async () => {
     const firstSave = deferred();
     vi.mocked(settingsActions.saveSection).mockImplementation(section =>
       section === 'rtsp' ? firstSave.promise : Promise.resolve()
@@ -331,6 +331,58 @@ describe('AudioSourceStep - leave handler', () => {
     unmount();
     firstSave.resolve();
     await leaving;
+
+    const calls = vi.mocked(settingsActions.saveSection).mock.calls;
+    expect(calls.map(c => c[0])).toEqual(['rtsp', 'audio']);
+    expect(calls[1][1]).toEqual({ sources: [], source: '' });
+  });
+
+  it('finishes the sound card change when the step unmounts during the first save', async () => {
+    seed({ sources: [], source: '' }, [
+      { name: 'Yard', url: RTSP_URL, enabled: true, type: 'rtsp' },
+    ]);
+    vi.mocked(api.get).mockResolvedValue([USB]);
+    const firstSave = deferred();
+    vi.mocked(settingsActions.saveSection).mockImplementation(section =>
+      section === 'audio' ? firstSave.promise : Promise.resolve()
+    );
+    const { leave, unmount } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
+    await chooseUsbDevice();
+
+    const leaving = leave();
+    await flushAsync();
+    unmount();
+    firstSave.resolve();
+    await leaving;
+
+    const calls = vi.mocked(settingsActions.saveSection).mock.calls;
+    expect(calls.map(c => c[0])).toEqual(['audio', 'rtsp']);
+    expect(calls[1][1]).toEqual({
+      streams: [{ name: 'Yard', url: RTSP_URL, enabled: false, type: 'rtsp' }],
+    });
+  });
+
+  it('sends no second write when the first fails after unmount', async () => {
+    const firstSave = deferred();
+    vi.mocked(settingsActions.saveSection).mockImplementation(section =>
+      section === 'rtsp' ? firstSave.promise : Promise.resolve()
+    );
+    const { leave, unmount } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream();
+
+    const leaving = leave();
+    // Attach the handler before the rejection so it is never reported as unhandled
+    const failure = leaving.then(
+      () => undefined,
+      (error: unknown) => error
+    );
+    await flushAsync();
+    unmount();
+    firstSave.reject(new Error('save rtsp failed'));
+    expect(await failure).toEqual(new Error('save rtsp failed'));
 
     expect(vi.mocked(settingsActions.saveSection).mock.calls.map(c => c[0])).toEqual(['rtsp']);
   });
