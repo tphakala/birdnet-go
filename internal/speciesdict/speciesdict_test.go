@@ -20,7 +20,7 @@ import (
 // will no longer match and this test fails, pointing at the divergence.
 var expectedLocales = []string{
 	"cs", "da", "de", "en", "es", "fi", "fr", "hu",
-	"it", "lv", "nb", "nl", "pl", "pt", "sk", "sv",
+	"it", "lv", "nb", "nl", "pl", "pt", "sk", "sl", "sv",
 }
 
 func TestSupportedLocales_MatchesUISet(t *testing.T) {

@@ -30,7 +30,7 @@ import (
 // allowlist test and the CI drift gate guard against accidental divergence.
 var uiLocales = []string{
 	"cs", "da", "de", "en", "es", "fi", "fr", "hu",
-	"it", "lv", "nb", "nl", "pl", "pt", "sk", "sv",
+	"it", "lv", "nb", "nl", "pl", "pt", "sk", "sl", "sv",
 }
 
 func main() {
