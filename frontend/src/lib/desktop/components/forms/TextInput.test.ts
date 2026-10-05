@@ -78,6 +78,19 @@ describe('TextInput', () => {
     expect(oninput).toHaveBeenCalledWith('typing');
   });
 
+  it('calls onblur with the current value when the input loses focus', async () => {
+    const onblur = vi.fn();
+
+    render(TextInput, { props: { value: 'abc', onblur } });
+
+    const input = screen.getByRole('textbox');
+    await fireEvent.input(input, { target: { value: 'typed' } });
+    await fireEvent.blur(input);
+
+    expect(onblur).toHaveBeenCalledTimes(1);
+    expect(onblur).toHaveBeenCalledWith('typed');
+  });
+
   it('supports different input types', () => {
     render(TextInput, {
       props: {
@@ -371,5 +384,21 @@ describe('TextInput', () => {
     const container = screen.getByDisplayValue('');
     expect(container).toBeInTheDocument();
     expect(container).toHaveAttribute('id', 'custom-test-id');
+  });
+});
+
+describe('TextInput aria-invalid', () => {
+  it('forwards aria-invalid to the native input, not the wrapper', () => {
+    render(TextInput, { props: { value: '', 'aria-invalid': 'true' } });
+
+    const input = screen.getByRole('textbox');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input.parentElement).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('renders no aria-invalid when the prop is not set', () => {
+    render(TextInput, { props: { value: '' } });
+
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
   });
 });

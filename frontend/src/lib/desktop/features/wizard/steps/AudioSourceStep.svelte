@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, untrack } from 'svelte';
+  import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { t, type TranslationKey } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
@@ -17,6 +17,7 @@
   import {
     findDevice,
     initialAudioChoice,
+    isMalformedRtspUrl,
     isRtspUrl,
     soundCardPayloads,
     streamPayloads,
@@ -28,7 +29,10 @@
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
   const AUDIO_DEVICES_ENDPOINT = '/api/v2/system/audio/devices';
+  const URL_HELP_ID = generateId('wizard-rtsp-url-help');
   const URL_ERROR_ID = generateId('wizard-rtsp-url-error');
+  const DEVICE_FIELD_ID = 'wizard-audio-device';
+  const URL_FIELD_ID = 'wizard-rtsp-url';
 
   type DeviceState = 'loading' | 'ready' | 'failed';
 
@@ -101,9 +105,10 @@
     if (rtspUrl.trim() === '') return 'wizard.steps.audioSource.reasons.enterUrl';
     return isRtspUrl(rtspUrl) ? undefined : 'wizard.steps.audioSource.reasons.urlScheme';
   });
-  let urlError = $derived(
-    sourceType === 'rtsp' && incompleteReason === 'wizard.steps.audioSource.reasons.urlScheme'
-  );
+  // Set when the user leaves the URL field and on open for a saved URL; cleared by
+  // every edit. Display only: Next's reason does not depend on it.
+  let urlLeft = $state(initial.primaryStreamUrl !== null);
+  let showUrlError = $derived(urlLeft && sourceType === 'rtsp' && isMalformedRtspUrl(rtspUrl));
   // Primitives, so the effect below runs only when one of them changes
   let valid = $derived(skipped || incompleteReason === undefined);
   let reason = $derived(skipped ? undefined : incompleteReason);
@@ -115,31 +120,56 @@
     untrack(() => onValidChange?.(isValid, why));
   });
 
-  async function loadDevices(): Promise<void> {
+  // Resolves true when this load applied its result, false when a newer load superseded it
+  async function loadDevices(): Promise<boolean> {
     const sequence = ++loadSequence;
     deviceState = 'loading';
     deviceError = '';
     try {
       const data = await api.get<AudioDevice[]>(AUDIO_DEVICES_ENDPOINT);
-      if (sequence !== loadSequence) return;
+      if (sequence !== loadSequence) return false;
       devices = Array.isArray(data) ? data : [];
       deviceState = 'ready';
       if (selectedEntry === undefined) {
         const saved = findDevice(devices, initial.savedDevice);
         selectedDevice = saved ? deviceValue(saved) : '';
       }
+      return true;
     } catch (err) {
-      if (sequence !== loadSequence) return;
+      if (sequence !== loadSequence) return false;
       logger.error('Failed to load audio devices', err);
       devices = [];
       deviceError = err instanceof ApiError ? err.message : '';
       deviceState = 'failed';
+      return true;
     }
   }
 
   onMount(() => {
     void loadDevices();
   });
+
+  let deviceStatusRef = $state<HTMLDivElement>();
+  let retryButtonRef = $state<HTMLButtonElement>();
+
+  // The Retry button leaves the DOM while the list loads; park focus on the device
+  // status so it stays in the dialog, then hand it to the dropdown or back to Retry.
+  async function retryDevices() {
+    deviceStatusRef?.focus();
+    const applied = await loadDevices();
+    if (!applied) return;
+    await tick();
+    // Only move focus the step parked itself; the user may have moved it meanwhile
+    if (deviceStatusRef === undefined || document.activeElement !== deviceStatusRef) return;
+    if (deviceNotice === null) document.getElementById(DEVICE_FIELD_ID)?.focus();
+    else retryButtonRef?.focus();
+  }
+
+  async function switchToStream() {
+    setSourceType('rtsp');
+    await tick();
+    document.getElementById(URL_FIELD_ID)?.focus();
+  }
 
   // Last payload sent per section, so a repeated commit resends nothing. Cleared
   // by every edit, since a later choice can legitimately repeat an earlier payload.
@@ -149,6 +179,15 @@
     skipped = false;
     dirty = true;
     lastSent = {};
+  }
+
+  function onUrlInput() {
+    markEdited();
+    urlLeft = false;
+  }
+
+  function onUrlBlur() {
+    urlLeft = true;
   }
 
   function setSourceType(type: AudioSourceType) {
@@ -270,13 +309,13 @@
   {#if sourceType === 'soundcard'}
     <div>
       <label
-        for="wizard-audio-device"
+        for={DEVICE_FIELD_ID}
         class="mb-1 block text-sm font-medium text-[var(--color-base-content)]"
       >
         {t('wizard.steps.audioSource.deviceLabel')}
       </label>
       <!-- Always rendered so a change of device state is announced -->
-      <div role="status">
+      <div role="status" bind:this={deviceStatusRef} tabindex="-1" class="focus:outline-none">
         {#if deviceNotice === 'loading'}
           <p class="text-sm text-[var(--color-base-content)] opacity-80">
             {t(DEVICE_NOTICES.loading.text)}
@@ -295,14 +334,15 @@
               <button
                 type="button"
                 class={SECONDARY_BUTTON_CLASS}
-                onclick={() => void loadDevices()}
+                bind:this={retryButtonRef}
+                onclick={() => void retryDevices()}
               >
                 {t('common.retry')}
               </button>
               <button
                 type="button"
                 class={SECONDARY_BUTTON_CLASS}
-                onclick={() => setSourceType('rtsp')}
+                onclick={() => void switchToStream()}
               >
                 {t('wizard.steps.audioSource.useStreamInstead')}
               </button>
@@ -312,7 +352,7 @@
       </div>
       {#if deviceNotice === null}
         <SelectDropdown
-          id="wizard-audio-device"
+          id={DEVICE_FIELD_ID}
           options={deviceOptions}
           value={selectedDevice}
           searchable={true}
@@ -330,28 +370,28 @@
   {#if sourceType === 'rtsp'}
     <div>
       <label
-        for="wizard-rtsp-url"
+        for={URL_FIELD_ID}
         class="mb-1 block text-sm font-medium text-[var(--color-base-content)]"
       >
         {t('wizard.steps.audioSource.rtspUrlLabel')}
       </label>
-      <p class="mb-2 text-sm text-[var(--color-base-content)] opacity-80">
+      <p id={URL_HELP_ID} class="mb-2 text-sm text-[var(--color-base-content)] opacity-80">
         {t('wizard.steps.audioSource.rtspUrlHelp')}
       </p>
       <TextInput
-        id="wizard-rtsp-url"
+        id={URL_FIELD_ID}
         bind:value={rtspUrl}
         placeholder={t('wizard.steps.audioSource.rtspUrlPlaceholder')}
-        aria-describedby={urlError ? URL_ERROR_ID : undefined}
-        oninput={markEdited}
+        aria-describedby={showUrlError ? `${URL_HELP_ID} ${URL_ERROR_ID}` : URL_HELP_ID}
+        aria-invalid={showUrlError ? 'true' : undefined}
+        oninput={onUrlInput}
+        onblur={onUrlBlur}
       />
-      <!-- Always rendered so the error is announced when it appears -->
-      <p
-        id={URL_ERROR_ID}
-        role="alert"
-        class={urlError ? 'mt-1 text-sm text-[var(--color-error)]' : 'sr-only'}
-      >
-        {urlError ? t('wizard.steps.audioSource.reasons.urlScheme') : ''}
+      <!-- Always rendered with two lines reserved (the message wraps to two in the dialog;
+           a longer one would still grow the line): the alert is announced when it fills,
+           and showing it does not move the controls below -->
+      <p id={URL_ERROR_ID} role="alert" class="mt-1 min-h-10 text-sm text-[var(--color-error)]">
+        {showUrlError ? t('wizard.steps.audioSource.reasons.urlScheme') : ''}
       </p>
       {#if initial.savedDevice !== ''}
         <SettingsNote className="mt-3">

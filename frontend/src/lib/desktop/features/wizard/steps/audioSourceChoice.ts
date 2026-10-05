@@ -60,6 +60,11 @@ export function isRtspUrl(url: string): boolean {
   }
 }
 
+/** Whether a stream URL has been entered but is not acceptable: non-empty after trimming and refused by isRtspUrl. */
+export function isMalformedRtspUrl(url: string): boolean {
+  return url.trim() !== '' && !isRtspUrl(url);
+}
+
 function sourcesOf(audio: AudioSettings | undefined): AudioSourceConfig[] {
   return Array.isArray(audio?.sources) ? audio.sources : [];
 }
