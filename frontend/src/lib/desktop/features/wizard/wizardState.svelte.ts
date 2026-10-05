@@ -249,12 +249,7 @@ async function next(): Promise<void> {
 
 async function back(): Promise<void> {
   if (!canGoBack || isStepMoveGuarded()) return;
-  // An invalid step has nothing safe to save; its edits are discarded.
-  if (isStepValid) {
-    await runLeave(() => moveBy(-1));
-  } else {
-    moveBy(-1);
-  }
+  await runLeave(() => moveBy(-1));
 }
 
 function skip(): void {

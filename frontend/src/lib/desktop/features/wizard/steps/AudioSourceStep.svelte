@@ -243,7 +243,7 @@
   // differs. Each choice writes the new source first and removes the old one
   // last, so a failure in between never leaves the station without a source.
   async function commit(): Promise<void> {
-    if (!dirty || skipped) return;
+    if (!dirty || skipped || incompleteReason !== undefined) return;
     const realtime = storedRealtime();
     if (sourceType === 'soundcard') {
       const device = selectedEntry;

@@ -105,6 +105,43 @@ describe('wizard steps save with section PATCH requests', () => {
     }
   });
 
+  it('returning to Integration after Back from a malformed token shows the stored BirdWeather state and the saved toggles', async () => {
+    const first = renderStep(IntegrationStep);
+    await flushAsync();
+    await fireEvent.click(
+      screen.getByRole('button', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
+    );
+    await fireEvent.click(
+      screen.getByRole('button', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
+    );
+    await fireEvent.click(
+      screen.getByRole('button', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
+    );
+    await fireEvent.input(await screen.findByRole('textbox'), { target: { value: 'abc' } });
+
+    await first.leave();
+    first.unmount();
+    const second = renderStep(IntegrationStep);
+    await flushAsync();
+
+    expect(patchCalls()).toEqual([
+      ['privacyfilter', { enabled: false }],
+      ['sentry', { enabled: true }],
+    ]);
+    expect(
+      screen.getByRole('button', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
+    ).toHaveAttribute('aria-pressed', 'false');
+    expect(
+      screen.getByRole('button', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      screen.getByRole('button', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
+    ).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('textbox')).toBeNull();
+    await second.leave();
+    expect(patchCalls()).toHaveLength(2);
+  });
+
   it('AudioSourceStep stream choice keeps existing streams and clears sound cards', async () => {
     const { leave } = renderStep(AudioSourceStep);
     await flushAsync();

@@ -356,6 +356,32 @@ describe('AudioSourceStep - leave handler', () => {
     ]);
   });
 
+  it('leaving with a malformed stream URL sends nothing', async () => {
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream('camera.example/stream');
+
+    await leave();
+
+    expect(settingsActions.saveSection).not.toHaveBeenCalled();
+  });
+
+  it('leaving while the device list reloads sends nothing', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('boom'));
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    const reload = deferred<unknown[]>();
+    vi.mocked(api.get).mockReturnValueOnce(reload.promise);
+    await clickRetry();
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
+
+    await leave();
+
+    expect(settingsActions.saveSection).not.toHaveBeenCalled();
+    reload.resolve([USB]);
+    await flushAsync();
+  });
+
   it('preselects the saved device by its stable id and writes nothing', async () => {
     seed({ sources: [{ ...TEMPLATE_SOURCE, device: 'usb-path:bus-1' }], source: '' });
     vi.mocked(api.get).mockResolvedValue([USB]);

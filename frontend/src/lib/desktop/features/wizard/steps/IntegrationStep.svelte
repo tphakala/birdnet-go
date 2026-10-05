@@ -114,6 +114,9 @@
     const next = currentPayloads();
     for (const section of SECTIONS) {
       if (left) return;
+      // Back runs this on an invalid step too: the invalid BirdWeather section
+      // stays unsent and unsaved, the valid sections are saved.
+      if (section === 'birdweather' && !isValid) continue;
       // eslint-disable-next-line security/detect-object-injection -- section is a member of SECTIONS
       const body = next[section];
       const json = JSON.stringify(body);

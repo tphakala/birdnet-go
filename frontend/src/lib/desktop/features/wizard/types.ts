@@ -40,8 +40,9 @@ export interface WizardStepProps {
   onValidChange?: (valid: boolean, reason?: TranslationKey) => void;
   /**
    * Registers the step's leave handler, which Next, Back and Done await before
-   * navigating. Register once at mount; the returned function unregisters the
-   * handler and must run when the step is destroyed.
+   * navigating. Back runs it on an invalid step too, so the handler must send
+   * only the parts that are valid now. Register once at mount; the returned
+   * function unregisters the handler and must run when the step is destroyed.
    */
   registerLeaveHandler?: (handler: StepLeaveHandler) => () => void;
 }

@@ -123,7 +123,7 @@
 
   // The UI language applies, and is cached in localStorage, as soon as it is
   // picked. When the wizard leaves this step without saving it (Skip, Leave
-  // setup, Back on an invalid step), restore the language from the last save.
+  // setup), restore the language from the last save.
   // If a save is still in flight, wait for it to settle first: a saved language
   // stays so the UI matches the backend, otherwise the old one comes back.
   let uiLocaleAtLastSave = getLocale();
