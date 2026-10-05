@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { t, type TranslationKey } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
@@ -218,17 +218,11 @@
   // Next, Back and Done await the commit; it never runs on Skip or Leave setup.
   onMount(() => registerLeaveHandler?.(commit));
 
-  // Set when the step unmounts, so a commit still in flight sends no further sections.
-  let left = false;
-  onDestroy(() => {
-    left = true;
-  });
-
   async function send<S extends 'audio' | 'rtsp'>(
     section: S,
     body: SettingsSectionPayloads[S] | null
   ): Promise<void> {
-    if (body === null || left) return;
+    if (body === null) return;
     const json = JSON.stringify(body);
     // eslint-disable-next-line security/detect-object-injection -- section is 'audio' or 'rtsp'
     if (lastSent[section] === json) return;
@@ -241,7 +235,10 @@
   // Only runs if the user made changes and has valid data. The payloads are built
   // from the stored settings at this moment, so a retry resends only what still
   // differs. Each choice writes the new source first and removes the old one
-  // last, so a failure in between never leaves the station without a source.
+  // last, so a failure in between never leaves the station without a source. A
+  // commit that has started is not abandoned when the wizard closes (Skip); if
+  // its second write then fails, the old source stays enabled and the error is
+  // only logged.
   async function commit(): Promise<void> {
     if (!dirty || skipped || incompleteReason !== undefined) return;
     const realtime = storedRealtime();
