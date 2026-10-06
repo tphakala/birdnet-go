@@ -777,3 +777,85 @@ func TestGetOrLoad_HitDoesNotAllocate(t *testing.T) {
 	})
 	assert.Zero(t, allocs, "a hit must not copy the key or start a flight")
 }
+
+// TestCache_PanicUnderLockReleasesMutex pins that a panic raised while the
+// cache lock is held (an uncomparable dynamic key, a panicking clock) unwinds
+// with the lock released, so a caller that recovers can keep using the cache.
+func TestCache_PanicUnderLockReleasesMutex(t *testing.T) {
+	t.Parallel()
+	uncomparable := []int{1}
+
+	t.Run("uncomparable key", func(t *testing.T) {
+		t.Parallel()
+		c := New[any, int](testTTL)
+		ops := map[string]func(){
+			"Get":    func() { c.Get(uncomparable) },
+			"Set":    func() { c.Set(uncomparable, 1) },
+			"Delete": func() { c.Delete(uncomparable) },
+			"GetOrLoad": func() {
+				_, _ = c.GetOrLoad(t.Context(), uncomparable, func(context.Context) (int, error) { return 1, nil })
+			},
+		}
+		for name, op := range ops {
+			assert.Panics(t, op, name)
+			require.True(t, c.mu.TryLock(), "%s left the cache locked", name)
+			c.mu.Unlock()
+		}
+	})
+
+	t.Run("panicking clock", func(t *testing.T) {
+		t.Parallel()
+		var panicNow atomic.Bool
+		clock := func() time.Time {
+			if panicNow.Load() {
+				panic("clock failed")
+			}
+			return time.Unix(0, 0)
+		}
+		c := New[string, int](testTTL, WithClock(clock))
+		panicNow.Store(true)
+		ops := map[string]func(){
+			"Get": func() { c.Get("k") },
+			"Set": func() { c.Set("k", 1) },
+			"Len": func() { c.Len() },
+		}
+		for name, op := range ops {
+			assert.Panics(t, op, name)
+			require.True(t, c.mu.TryLock(), "%s left the cache locked", name)
+			c.mu.Unlock()
+		}
+	})
+}
+
+// TestGetOrLoad_PanickingClockInStoreReleasesCallers pins that a panic while a
+// finished load stores its result still releases the waiting callers and the
+// lock.
+func TestGetOrLoad_PanickingClockInStoreReleasesCallers(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		var panicNow atomic.Bool
+		clock := func() time.Time {
+			if panicNow.Load() {
+				panic("clock failed")
+			}
+			return time.Unix(0, 0)
+		}
+		c := New[string, int](testTTL, WithClock(clock))
+		release := make(chan struct{})
+		errs := make(chan error, 1)
+		go func() {
+			_, err := c.GetOrLoad(t.Context(), "k", func(context.Context) (int, error) {
+				<-release
+				panicNow.Store(true)
+				return 1, nil
+			})
+			errs <- err
+		}()
+		synctest.Wait()
+		close(release)
+		_, isPanic := errors.AsType[*PanicError](<-errs)
+		assert.True(t, isPanic)
+		require.True(t, c.mu.TryLock(), "the store left the cache locked")
+		c.mu.Unlock()
+	})
+}

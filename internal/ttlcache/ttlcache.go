@@ -21,8 +21,8 @@
 //     comparable; an uncomparable one panics, as it would in any Go map.
 //   - A loader must not call GetOrLoad for the same key on the same cache (it
 //     would wait for itself).
-//   - A loader runs on its own goroutine. A panic in it is recovered and
-//     returned as *PanicError, and a runtime.Goexit (such as testing.T.FailNow
+//   - A loader runs on its own goroutine. A panic in it, or while its result
+//     is stored, is recovered and returned as *PanicError, and a runtime.Goexit (such as testing.T.FailNow
 //     or testify require in a test loader) is returned as ErrLoaderExited, so
 //     waiting callers are always released.
 package ttlcache
@@ -47,14 +47,16 @@ const maxSweepPerWrite = 32
 const sweepAll = -1
 
 // ErrLoaderPanicked is wrapped by *PanicError, so errors.Is(err,
-// ErrLoaderPanicked) reports a loader that panicked.
+// ErrLoaderPanicked) reports a load that panicked, in the loader or while its
+// result was stored.
 var ErrLoaderPanicked = errors.NewStd("ttlcache: loader panicked")
 
 // ErrLoaderExited is returned by GetOrLoad when the loader goroutine exits
 // through runtime.Goexit without returning.
 var ErrLoaderExited = errors.NewStd("ttlcache: loader exited without returning")
 
-// PanicError is returned by GetOrLoad when the loader panics. The loader runs
+// PanicError is returned by GetOrLoad when a load panics, in the loader or
+// while its result is stored (for example in a WithClock clock). The loader runs
 // on a goroutine of its own, where an unrecovered panic would crash the
 // process, so the cache recovers it and hands it to every waiting caller.
 type PanicError struct {
@@ -255,8 +257,8 @@ func (c *Cache[K, V]) insertLocked(key K, value V, now time.Time) {
 // Get returns the live value for key. It counts one hit or one miss.
 func (c *Cache[K, V]) Get(key K) (V, bool) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	v, ok := c.lookupLocked(key, c.now())
-	c.mu.Unlock()
 	if ok {
 		c.hits.Add(1)
 	} else {
@@ -269,30 +271,30 @@ func (c *Cache[K, V]) Get(key K) (V, bool) {
 // overwrite it.
 func (c *Cache[K, V]) Set(key K, value V) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.generation++
 	c.insertLocked(key, value, c.now())
-	c.mu.Unlock()
 }
 
 // Delete removes key. Loads in flight will not store their result, including
 // loads for a key that was absent.
 func (c *Cache[K, V]) Delete(key K) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.generation++
 	if e, ok := c.entries[key]; ok {
 		c.removeLocked(e)
 	}
-	c.mu.Unlock()
 }
 
 // Clear removes every entry. Loads in flight will not store their result, and
 // a GetOrLoad that starts afterwards runs its own load.
 func (c *Cache[K, V]) Clear() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.generation++
 	clear(c.entries)
 	c.head, c.tail = nil, nil
-	c.mu.Unlock()
 }
 
 // Len returns the number of live entries. It first removes every expired
@@ -317,8 +319,8 @@ func (c *Cache[K, V]) Stats() Stats {
 // concurrent callers that miss on the same key and stores a successful result.
 //
 // It counts one hit or one miss per call. Errors from load are returned as-is
-// and are never cached. A panic in load is returned as *PanicError, and a
-// runtime.Goexit in load as ErrLoaderExited.
+// and are never cached. A panic in load, or while its result is stored, is
+// returned as *PanicError, and a runtime.Goexit in load as ErrLoaderExited.
 //
 // The loader runs on its own goroutine with a context that carries the values
 // of the caller that started the load but not its cancellation, so one caller
@@ -330,23 +332,10 @@ func (c *Cache[K, V]) Stats() Stats {
 // A Set, Delete or Clear that runs while a load is in flight discards that
 // load's store; its callers still receive the loaded value.
 func (c *Cache[K, V]) GetOrLoad(ctx context.Context, key K, load func(context.Context) (V, error)) (V, error) {
-	c.mu.Lock()
-	if v, ok := c.lookupLocked(key, c.now()); ok {
-		c.mu.Unlock()
-		c.hits.Add(1)
-		return v, nil
+	v, f, err := c.hitOrJoin(ctx, key, load)
+	if f == nil {
+		return v, err
 	}
-	c.misses.Add(1)
-	if err := ctx.Err(); err != nil {
-		c.mu.Unlock()
-		var zero V
-		return zero, err
-	}
-	// Still under the lock that saw the miss: join the load for this key and
-	// generation, or register a new one. A load that has already stored its
-	// value would have been a hit above, so no store can be missed in between.
-	f := c.joinOrStartLocked(ctx, key, load)
-	c.mu.Unlock()
 
 	select {
 	case <-ctx.Done():
@@ -355,6 +344,26 @@ func (c *Cache[K, V]) GetOrLoad(ctx context.Context, key K, load func(context.Co
 	case <-f.done:
 		return f.value, f.err
 	}
+}
+
+// hitOrJoin returns the live value for key, or the flight the caller waits
+// on, or ctx.Err() when ctx is done on a miss. The lookup and the flight
+// registration run under one lock, so a load that has already stored its value
+// is a hit and no store can be missed in between. The deferred unlock keeps
+// the cache usable when a key or the clock panics under the lock.
+func (c *Cache[K, V]) hitOrJoin(ctx context.Context, key K, load func(context.Context) (V, error)) (V, *flight[V], error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if v, ok := c.lookupLocked(key, c.now()); ok {
+		c.hits.Add(1)
+		return v, nil, nil
+	}
+	c.misses.Add(1)
+	var zero V
+	if err := ctx.Err(); err != nil {
+		return zero, nil, err
+	}
+	return zero, c.joinOrStartLocked(ctx, key, load), nil
 }
 
 // joinOrStartLocked returns the flight for key at the current generation,
@@ -372,8 +381,8 @@ func (c *Cache[K, V]) joinOrStartLocked(ctx context.Context, key K, load func(co
 }
 
 // runFlight runs one load, stores a successful result if no mutation happened
-// since the miss, and releases the waiting callers. A panic or Goexit in load
-// still releases them, with an error.
+// since the miss, and releases the waiting callers. A panic or Goexit in load,
+// or a panic while storing the result, still releases them, with an error.
 func (c *Cache[K, V]) runFlight(ctx context.Context, id flightID[K], f *flight[V], load func(context.Context) (V, error)) {
 	returned := false
 	defer func() {
@@ -384,22 +393,33 @@ func (c *Cache[K, V]) runFlight(ctx context.Context, id flightID[K], f *flight[V
 				f.err = ErrLoaderExited
 			}
 		}
-		c.mu.Lock()
-		delete(c.flights, id)
-		c.mu.Unlock()
+		c.unregister(id)
 		close(f.done)
 	}()
 
 	v, err := load(ctx)
-	returned = true
 	if err != nil {
 		f.err = err
-		return
+	} else {
+		c.storeIfCurrent(id, v)
+		f.value = v
 	}
-	f.value = v
+	returned = true
+}
+
+// storeIfCurrent stores a loaded value unless a mutation happened since the
+// miss that started the load.
+func (c *Cache[K, V]) storeIfCurrent(id flightID[K], v V) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.generation == id.gen {
 		c.insertLocked(id.key, v, c.now())
 	}
-	c.mu.Unlock()
+}
+
+// unregister removes a finished flight.
+func (c *Cache[K, V]) unregister(id flightID[K]) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.flights, id)
 }
