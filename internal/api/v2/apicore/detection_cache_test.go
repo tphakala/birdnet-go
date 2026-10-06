@@ -84,3 +84,37 @@ func TestDetectionPageCache_InvalidateAndLoaderError(t *testing.T) {
 	c.Invalidate()
 	assert.Equal(t, 0, c.Len())
 }
+
+func TestDetectionPageCache_LargePagesBypassCache(t *testing.T) {
+	t.Parallel()
+	c := NewDetectionPageCache()
+	ctx := t.Context()
+	var calls atomic.Int32
+	load := func(context.Context) (DetectionPage, error) {
+		calls.Add(1)
+		return DetectionPage{Total: 1}, nil
+	}
+
+	atBound := &DetectionPageKey{Kind: DetectionPageSearch, Limit: detectionCacheMaxPageNotes}
+	for range 2 {
+		_, err := c.GetOrLoad(ctx, atBound, load)
+		require.NoError(t, err)
+	}
+	assert.Equal(t, int32(1), calls.Load(), "a page at the bound is cached")
+	assert.Equal(t, 1, c.Len())
+
+	overBound := &DetectionPageKey{Kind: DetectionPageSearch, Limit: detectionCacheMaxPageNotes + 1}
+	for range 2 {
+		_, err := c.GetOrLoad(ctx, overBound, load)
+		require.NoError(t, err)
+	}
+	assert.Equal(t, int32(3), calls.Load(), "a page over the bound loads every time")
+	assert.Equal(t, 1, c.Len(), "a page over the bound is not stored")
+	assert.Equal(t, uint64(1), c.Stats().Hits, "bypassed loads do not touch the stats")
+
+	done, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err := c.GetOrLoad(done, overBound, load)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, int32(3), calls.Load(), "a done context does not start a load")
+}

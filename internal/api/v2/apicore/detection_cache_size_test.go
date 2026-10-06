@@ -87,8 +87,8 @@ func retainedHeapBytes(size int) uint64 {
 
 // TestDetectionCacheMaxEntries_WorstCaseStaysWithinBudget measures the heap
 // retained by one cached detection page of 25, 100 and 1000 fully populated
-// notes and checks that detectionCacheMaxEntries pages of the largest size
-// (the maxNumResults page limit of the detections handler) stay within
+// notes and checks that detectionCacheMaxEntries pages of the largest
+// cacheable size (detectionCacheMaxPageNotes) stay within
 // detectionCacheMaxBytes.
 func TestDetectionCacheMaxEntries_WorstCaseStaysWithinBudget(t *testing.T) {
 	// Not parallel: heap measurements are skewed by concurrently running tests.
@@ -97,9 +97,9 @@ func TestDetectionCacheMaxEntries_WorstCaseStaysWithinBudget(t *testing.T) {
 		t.Logf("%4d notes per page: %9d bytes per page, %5d bytes per note", size, perPage, perPage/uint64(size))
 	}
 
-	worstPage := retainedHeapBytes(detectionCacheWorstPageNotes)
+	worstPage := retainedHeapBytes(detectionCacheMaxPageNotes)
 	worstCase := worstPage * detectionCacheMaxEntries
-	t.Logf("worst case: %d entries x %d notes = %d bytes (budget %d)", detectionCacheMaxEntries, detectionCacheWorstPageNotes, worstCase, detectionCacheMaxBytes)
+	t.Logf("worst case: %d entries x %d notes = %d bytes (budget %d)", detectionCacheMaxEntries, detectionCacheMaxPageNotes, worstCase, detectionCacheMaxBytes)
 
 	require.Positive(t, worstPage)
 	assert.LessOrEqual(t, worstCase, uint64(detectionCacheMaxBytes),

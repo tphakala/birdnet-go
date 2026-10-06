@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/ttlcache"
 )
 
 // cacheTestNotes is the page every cache test serves from the mock datastore.
@@ -181,11 +182,12 @@ func TestGetDetections_ConcurrentIdenticalRequestsQueryOnce(t *testing.T) {
 	}
 }
 
-// TestBatchResolveDetections_ServedFromCache pins that batch resolve uses the same
-// cached pages as the list endpoint.
-func TestBatchResolveDetections_ServedFromCache(t *testing.T) {
+// TestBatchResolveDetections_BypassesCache pins that batch resolve, which asks
+// for maxBatchSize+1 notes, is larger than the cacheable page bound and so
+// always reads the datastore: a batch selection must see current rows.
+func TestBatchResolveDetections_BypassesCache(t *testing.T) {
 	e, mockDS, h := setupTestEnvironment(t)
-	mockDS.EXPECT().SearchNotes("Crow", false, maxBatchSize+1, 0).Return(cacheTestNotes(), int64(1), nil).Once()
+	mockDS.EXPECT().SearchNotes("Crow", false, maxBatchSize+1, 0).Return(cacheTestNotes(), int64(1), nil).Twice()
 
 	resolve := func() string {
 		body, err := json.Marshal(BatchResolveRequest{QueryType: "search", Search: "Crow"})
@@ -201,14 +203,10 @@ func TestBatchResolveDetections_ServedFromCache(t *testing.T) {
 	first := resolve()
 	second := resolve()
 	assert.Equal(t, first, second)
-	stats := h.DetectionCache.Stats()
-	assert.Equal(t, uint64(1), stats.Misses)
-	assert.Equal(t, uint64(1), stats.Hits)
+	assert.Equal(t, 0, h.DetectionCache.Len())
+	assert.Equal(t, ttlcache.Stats{}, h.DetectionCache.Stats())
 }
 
-// TestDetectionCache_InvalidatedByWriteHandlers pins that every write handler
-// that calls invalidateDetectionCache empties the cache, so the next list
-// request queries the datastore again.
 func TestDetectionCache_InvalidatedByWriteHandlers(t *testing.T) {
 	tests := []struct {
 		name  string

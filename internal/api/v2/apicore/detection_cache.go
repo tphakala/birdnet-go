@@ -59,38 +59,41 @@ type DetectionPageKey struct {
 //
 // The detections list endpoint is public, so the cache must be bounded: a
 // client that walks offsets or varies filters would otherwise grow it without
-// limit for the five-minute TTL. A page can hold up to
-// detectionCacheWorstPageNotes notes, so the entry bound is derived from the
-// heap that such a page retains.
+// limit for the five-minute TTL. Two bounds apply: pages larger than
+// detectionCacheMaxPageNotes are never cached, and at most
+// detectionCacheMaxEntries pages are kept.
 //
 // Measured with TestDetectionCacheMaxEntries_WorstCaseStaysWithinBudget (Go
 // 1.27, linux/amd64; every note carries a review, a lock, one 160 byte comment,
 // source and model metadata and 24 to 60 byte strings, which is generous for
-// real rows). Three runs agreed within 0.1 percent:
+// real rows). The 100 and 1000 note figures agree within 0.1 percent across
+// runs; the 25 note figure varies between runs:
 //
-//	  25 notes per page:     26 KB retained per page (about 1.0 KB per note)
+//	  25 notes per page:  17-26 KB retained per page (0.7 to 1.0 KB per note)
 //	 100 notes per page:    144 KB retained per page (about 1.4 KB per note)
 //	1000 notes per page:  1365 KB retained per page (about 1.4 KB per note)
 //
-// The budget is 8 MiB (detectionCacheMaxBytes) for the worst case, which is
-// detectionCacheMaxEntries pages of 1000 notes: 8 MiB / 1.365 MB = 6.1, so 6
-// entries (8.18 MB measured). Typical 100-note pages then cost under 1 MB in
-// total. A 64-bit ARM measurement is NOT MEASURED; pointer and int sizes match
-// amd64, so the figures should carry over. A byte-weighted bound is a separate
-// follow-up; this count bound only caps the worst case.
+// The UI pages in 25 to 100 notes, so the page bound is 100: larger pages
+// (exports, batch selection) are rare and go straight to the datastore. The
+// budget is 8 MiB (detectionCacheMaxBytes) for the worst case of
+// detectionCacheMaxEntries full 100-note pages: 48 x 144 KB = 6.9 MB, which
+// leaves headroom. Bounding the entry count alone would have allowed only six
+// 1000-note pages, too few to help normal paging. A 64-bit ARM measurement is
+// NOT MEASURED; pointer and int sizes match amd64, so the figures should carry
+// over.
 const (
 	detectionCacheExpiry = 5 * time.Minute // Default detection-query cache expiration
 
 	// detectionCacheMaxEntries is the maximum number of cached detection pages.
-	detectionCacheMaxEntries = 6
+	detectionCacheMaxEntries = 48
 
 	// detectionCacheMaxBytes is the memory budget for the worst case on a
 	// Raspberry Pi.
 	detectionCacheMaxBytes = 8 << 20
 
-	// detectionCacheWorstPageNotes is the largest page a request can cache. It
-	// mirrors maxNumResults in the detections package.
-	detectionCacheWorstPageNotes = 1000
+	// detectionCacheMaxPageNotes is the largest page that is cached. Requests
+	// for more notes per page bypass the cache.
+	detectionCacheMaxPageNotes = 100
 )
 
 // DetectionPageCache caches detection pages. All methods are safe on a nil
@@ -115,10 +118,20 @@ func NewDetectionPageCache(opts ...ttlcache.Option) *DetectionPageCache {
 // concurrent callers. See ttlcache.Cache.GetOrLoad for the context contract:
 // the loader's context is not cancelled when the caller's is.
 //
+// Pages with a Limit above detectionCacheMaxPageNotes are loaded directly and
+// not cached, which keeps the worst-case memory of the cache bounded. A nil
+// cache loads every page directly. On both direct paths a context that is
+// already done returns its error without calling load.
+//
 // The key is a pointer only because the struct is large; it is copied and must
 // not be nil.
 func (c *DetectionPageCache) GetOrLoad(ctx context.Context, key *DetectionPageKey, load func(context.Context) (DetectionPage, error)) (DetectionPage, error) {
-	if c == nil {
+	if c == nil || key.Limit > detectionCacheMaxPageNotes {
+		// Match the cached path: a caller that has already gone away gets its
+		// context error instead of starting a datastore query.
+		if err := ctx.Err(); err != nil {
+			return DetectionPage{}, err
+		}
 		return load(ctx)
 	}
 	return c.cache.GetOrLoad(ctx, *key, load)
