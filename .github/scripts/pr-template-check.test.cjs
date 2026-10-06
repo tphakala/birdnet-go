@@ -6,6 +6,7 @@ const { describe, it } = require('node:test');
 
 const {
   COMMENT_MARKER,
+  CONSENTED_LABEL,
   EXEMPT_LABEL,
   NEEDS_TEMPLATE_LABEL,
   TEMPLATE_PATH,
@@ -233,6 +234,33 @@ describe('checkPullRequest', () => {
     );
   });
 
+  it('accepts consent recorded with the relicense: consented label instead of the box', () => {
+    const body = filledTemplate({
+      tick: line => !line.includes('#4243') && untickFeatureBox(line),
+    });
+    const check = labels => checkPullRequest({ title: 'fix: x', body, template, labels });
+    assert.deepEqual(check([CONSENTED_LABEL]), []);
+    assert.equal(check([]).length, 1);
+    assert.equal(check(['relicense: pending']).length, 1);
+  });
+
+  it('keeps the other requirements when consent is recorded', () => {
+    const problems = checkPullRequest({
+      title: 'feat: x',
+      body: ownFormatBody,
+      template,
+      labels: [CONSENTED_LABEL],
+    });
+    assert.ok(problems.includes('The **Licensing (required)** section is missing.'));
+    assert.ok(problems.some(p => p.startsWith('The Contributing Guidelines checkbox')));
+    assert.ok(problems.some(p => p.includes('"Feature PRs only" checkbox')));
+    assert.ok(!problems.some(p => p.startsWith('The relicensing agreement')));
+    const reworded = template.replace('relicense it', 'license it again');
+    assert.throws(() =>
+      checkPullRequest({ title: 'fix: x', body: '', template: reworded, labels: [CONSENTED_LABEL] })
+    );
+  });
+
   it('rejects a feature without the feature box ticked', () => {
     const body = filledTemplate({ tick: untickFeatureBox });
     const problems = checkPullRequest({ title: 'feat!: breaking feature', body, template });
@@ -407,6 +435,13 @@ describe('run', () => {
       env.calls.map(c => c.name),
       ['removeLabel', 'deleteComment']
     );
+    assert.equal(env.core.failed, null);
+  });
+
+  it('passes the pull request labels to the check', async () => {
+    const body = filledTemplate({ tick: line => !line.includes('#4243') });
+    const env = fakeEnvironment({ title: 'feat: x', body, labels: [CONSENTED_LABEL] });
+    await run(env);
     assert.equal(env.core.failed, null);
   });
 

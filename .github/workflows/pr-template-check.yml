@@ -2,8 +2,9 @@ name: PR Template Check
 
 # Checks that pull requests from forks follow .github/pull_request_template.md:
 # every template section present and filled in, the Contributing Guidelines and
-# relicensing boxes ticked, and for feat PRs the feature ownership box ticked and
-# a linked issue or discussion. A failing PR gets the "needs: template" label and
+# relicensing boxes ticked (a "relicense: consented" label stands in for the
+# relicensing box), and for feat PRs the feature ownership box ticked and a
+# linked issue or discussion. A failing PR gets the "needs: template" label and
 # one comment listing what is missing; both go away once the description is
 # fixed. The "template: exempt" label skips the check.
 #

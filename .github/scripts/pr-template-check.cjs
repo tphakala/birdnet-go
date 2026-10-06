@@ -17,6 +17,8 @@ const COMMENT_MARKER = '<!-- pr-template-check -->';
 const COMMENT_AUTHOR = 'github-actions[bot]';
 const NEEDS_TEMPLATE_LABEL = 'needs: template';
 const EXEMPT_LABEL = 'template: exempt';
+// The maintainer's record that the author has already agreed to the relicensing.
+const CONSENTED_LABEL = 'relicense: consented';
 const HTTP_NOT_FOUND = 404;
 
 const FEATURE_TITLE = /^feat(\([^)]*\))?!?:/i;
@@ -201,11 +203,12 @@ function checkBox(sections, templateSections, required) {
 
 /**
  * Compares a pull request with the template.
- * @param {{title: string, body: string|null, template: string}} pr
+ * @param {{title: string, body: string|null, template: string, labels?: string[]}} pr
+ *   labels: a relicense: consented label stands in for the relicensing box
  * @returns {string[]} problems, empty when the description follows the template
  * @throws {Error} when the template itself lacks a required checkbox
  */
-function checkPullRequest({ title, body, template }) {
+function checkPullRequest({ title, body, template, labels = [] }) {
   const problems = [];
   const text = body || '';
   const sections = parseSections(text);
@@ -233,9 +236,12 @@ function checkPullRequest({ title, body, template }) {
     }
   }
 
+  const consented = labels.includes(CONSENTED_LABEL);
   for (const box of required) {
+    // Checked even when consent is recorded, so a template that loses the box
+    // still fails loudly.
     const problem = checkBox(sections, templateSections, box);
-    if (problem) {
+    if (problem && !(box === LICENSING_BOX && consented)) {
       problems.push(problem);
     }
   }
@@ -287,7 +293,7 @@ async function run({ github, context, core }) {
     core.info(`Skipping the check: the pull request has the "${EXEMPT_LABEL}" label.`);
   } else {
     const template = fs.readFileSync(TEMPLATE_PATH, 'utf8');
-    problems = checkPullRequest({ title: pr.title, body: pr.body, template });
+    problems = checkPullRequest({ title: pr.title, body: pr.body, template, labels });
   }
 
   const comments = await github.paginate(github.rest.issues.listComments, {
@@ -325,6 +331,7 @@ async function run({ github, context, core }) {
 
 module.exports = {
   COMMENT_MARKER,
+  CONSENTED_LABEL,
   EXEMPT_LABEL,
   NEEDS_TEMPLATE_LABEL,
   TEMPLATE_PATH,
