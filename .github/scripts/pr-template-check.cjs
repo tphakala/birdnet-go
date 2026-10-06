@@ -265,15 +265,19 @@ function renderComment(problems) {
 }
 
 /**
- * Removes a label, ignoring one that is already gone.
+ * Runs a GitHub API call, treating 404 Not Found as the target being gone.
+ * @param {() => Promise<unknown>} call
+ * @returns {Promise<boolean>} false when the call returned 404
  */
-async function removeLabel(github, params) {
+async function ignoreNotFound(call) {
   try {
-    await github.rest.issues.removeLabel(params);
+    await call();
+    return true;
   } catch (error) {
     if (error.status !== HTTP_NOT_FOUND) {
       throw error;
     }
+    return false;
   }
 }
 
@@ -304,25 +308,35 @@ async function run({ github, context, core }) {
     c => c.user && c.user.login === COMMENT_AUTHOR && c.body.includes(COMMENT_MARKER)
   );
 
+  // The label calls below do not trust the payload's label list for the
+  // needs-template label: it is a snapshot from when the event fired, and an
+  // overlapping run may have changed it since. Label adds and removes are safe
+  // to repeat. A request from a cancelled run can still land after this run's;
+  // the next event on the pull request corrects the label and the comment.
   if (problems.length === 0) {
-    if (labels.includes(NEEDS_TEMPLATE_LABEL)) {
-      await removeLabel(github, { ...issue, name: NEEDS_TEMPLATE_LABEL });
-    }
+    await ignoreNotFound(() =>
+      github.rest.issues.removeLabel({ ...issue, name: NEEDS_TEMPLATE_LABEL })
+    );
     if (comment) {
-      await github.rest.issues.deleteComment({ owner, repo, comment_id: comment.id });
+      await ignoreNotFound(() =>
+        github.rest.issues.deleteComment({ owner, repo, comment_id: comment.id })
+      );
     }
     core.info('The pull request description follows the template.');
     return;
   }
 
-  if (!labels.includes(NEEDS_TEMPLATE_LABEL)) {
-    await github.rest.issues.addLabels({ ...issue, labels: [NEEDS_TEMPLATE_LABEL] });
-  }
+  await github.rest.issues.addLabels({ ...issue, labels: [NEEDS_TEMPLATE_LABEL] });
   const body = renderComment(problems);
   if (!comment) {
     await github.rest.issues.createComment({ ...issue, body });
   } else if (comment.body !== body) {
-    await github.rest.issues.updateComment({ owner, repo, comment_id: comment.id, body });
+    const updated = await ignoreNotFound(() =>
+      github.rest.issues.updateComment({ owner, repo, comment_id: comment.id, body })
+    );
+    if (!updated) {
+      await github.rest.issues.createComment({ ...issue, body });
+    }
   }
   core.setFailed(
     `The pull request description does not follow the template:\n${problems.map(p => `- ${p}`).join('\n')}`

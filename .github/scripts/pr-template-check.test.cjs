@@ -333,10 +333,13 @@ describe('checkPullRequest', () => {
 });
 
 /** A fake of the parts of the github-script environment that run() uses. */
-function fakeEnvironment({ title, body, labels = [], comments = [] }) {
+function fakeEnvironment({ title, body, labels = [], comments = [], failures = {} }) {
   const calls = [];
   const record = name => async params => {
     calls.push({ name, params });
+    if (failures[name]) {
+      throw Object.assign(new Error(`HTTP ${failures[name]}`), { status: failures[name] });
+    }
     return {};
   };
   const github = {
@@ -391,9 +394,9 @@ describe('run', () => {
     await run(env);
     assert.deepEqual(
       env.calls.map(c => c.name),
-      ['updateComment']
+      ['addLabels', 'updateComment']
     );
-    assert.equal(env.calls[0].params.comment_id, 99);
+    assert.equal(env.calls[1].params.comment_id, 99);
   });
 
   it('leaves an up to date comment alone', async () => {
@@ -405,7 +408,10 @@ describe('run', () => {
       comments: [botComment(renderComment(problems))],
     });
     await run(env);
-    assert.deepEqual(env.calls, []);
+    assert.deepEqual(
+      env.calls.map(c => c.name),
+      ['addLabels']
+    );
     assert.ok(env.core.failed);
   });
 
@@ -419,7 +425,7 @@ describe('run', () => {
     await run(env);
     assert.deepEqual(
       env.calls.map(c => c.name),
-      ['createComment']
+      ['addLabels', 'createComment']
     );
   });
 
@@ -443,6 +449,91 @@ describe('run', () => {
     const env = fakeEnvironment({ title: 'feat: x', body, labels: [CONSENTED_LABEL] });
     await run(env);
     assert.equal(env.core.failed, null);
+  });
+
+  it('removes the label even when the event payload does not show it yet', async () => {
+    const env = fakeEnvironment({ title: 'feat: x', body: filledTemplate() });
+    await run(env);
+    assert.deepEqual(
+      env.calls.map(c => c.name),
+      ['removeLabel']
+    );
+    assert.equal(env.calls[0].params.name, NEEDS_TEMPLATE_LABEL);
+  });
+
+  it('ignores a label that is already gone', async () => {
+    const env = fakeEnvironment({
+      title: 'feat: x',
+      body: filledTemplate(),
+      failures: { removeLabel: 404 },
+    });
+    await run(env);
+    assert.deepEqual(
+      env.calls.map(c => c.name),
+      ['removeLabel']
+    );
+    assert.equal(env.core.failed, null);
+  });
+
+  it('propagates other errors from removing the label', async () => {
+    const env = fakeEnvironment({
+      title: 'feat: x',
+      body: filledTemplate(),
+      failures: { removeLabel: 500 },
+    });
+    await assert.rejects(run(env), { status: 500 });
+  });
+
+  it('ignores a comment that is already deleted', async () => {
+    const env = fakeEnvironment({
+      title: 'feat: x',
+      body: filledTemplate(),
+      comments: [botComment(`${COMMENT_MARKER}\nold text`)],
+      failures: { deleteComment: 404 },
+    });
+    await run(env);
+    assert.deepEqual(
+      env.calls.map(c => c.name),
+      ['removeLabel', 'deleteComment']
+    );
+    assert.equal(env.core.failed, null);
+  });
+
+  it('propagates other errors from deleting the comment', async () => {
+    const env = fakeEnvironment({
+      title: 'feat: x',
+      body: filledTemplate(),
+      comments: [botComment(`${COMMENT_MARKER}\nold text`)],
+      failures: { deleteComment: 500 },
+    });
+    await assert.rejects(run(env), { status: 500 });
+  });
+
+  it('posts a new comment when the one it would update is gone', async () => {
+    const env = fakeEnvironment({
+      title: 'feat: x',
+      body: ownFormatBody,
+      comments: [botComment(`${COMMENT_MARKER}\nold text`)],
+      failures: { updateComment: 404 },
+    });
+    await run(env);
+    assert.deepEqual(
+      env.calls.map(c => c.name),
+      ['addLabels', 'updateComment', 'createComment']
+    );
+    assert.equal(env.calls[2].params.issue_number, 7);
+    assert.equal(env.calls[2].params.body, env.calls[1].params.body);
+    assert.ok(env.core.failed);
+  });
+
+  it('propagates other errors from updating the comment', async () => {
+    const env = fakeEnvironment({
+      title: 'feat: x',
+      body: ownFormatBody,
+      comments: [botComment(`${COMMENT_MARKER}\nold text`)],
+      failures: { updateComment: 500 },
+    });
+    await assert.rejects(run(env), { status: 500 });
   });
 
   it('passes a pull request with the exempt label', async () => {
