@@ -123,6 +123,10 @@ func NewCORS(config *SecurityConfig) echo.MiddlewareFunc {
 // NewSecureHeaders creates a middleware that sets security-related HTTP headers.
 // In addition to Echo's built-in secure headers, this sets Cross-Origin-Opener-Policy
 // and adds a frame-ancestors CSP directive when embedding is not allowed.
+//
+// HSTS is sent when Echo's c.Scheme() reports "https". Since Echo v4.16 that
+// depends on Echo#SchemeExtractor, which the API core configures to honor
+// X-Forwarded-Proto only from trusted proxies (see apicore).
 func NewSecureHeaders(config *SecurityConfig) echo.MiddlewareFunc {
 	xFrameOptions := "SAMEORIGIN"
 	if config.AllowEmbedding {

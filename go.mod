@@ -14,7 +14,7 @@ require (
 	github.com/jarcoal/httpmock v1.4.2
 	github.com/jlaffaye/ftp v0.2.4
 	github.com/klauspost/cpuid/v2 v2.4.0
-	github.com/labstack/echo/v4 v4.15.4
+	github.com/labstack/echo/v4 v4.16.0
 	github.com/moby/moby/api v1.55.0
 	github.com/nicholas-fedor/shoutrrr v0.17.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
