@@ -711,6 +711,16 @@ func TestCache_ConcurrentMixedAccess(t *testing.T) {
 	c := New[int, int](testTTL, WithClock(clk.Now), WithMaxEntries(maxSize))
 	ctx := t.Context()
 
+	// Workers record invariant violations here; the test asserts on its own
+	// goroutine after the join.
+	var mu sync.Mutex
+	var failures []string
+	fail := func(format string, args ...any) {
+		mu.Lock()
+		defer mu.Unlock()
+		failures = append(failures, fmt.Sprintf(format, args...))
+	}
+
 	var wg sync.WaitGroup
 	for w := range workers {
 		wg.Go(func() {
@@ -731,22 +741,44 @@ func TestCache_ConcurrentMixedAccess(t *testing.T) {
 				case 4:
 					v, err := c.GetOrLoad(ctx, k, func(context.Context) (int, error) { return valueFor(k), nil })
 					if err != nil {
-						t.Errorf("GetOrLoad: %v", err)
+						fail("GetOrLoad(%d): %v", k, err)
 						return
 					}
-					assert.Equal(t, valueFor(k), v)
+					if v != valueFor(k) {
+						fail("GetOrLoad(%d) = %d, want %d", k, v, valueFor(k))
+					}
 				case 5:
-					assert.LessOrEqual(t, c.Len(), maxSize)
+					if n := c.Len(); n > maxSize {
+						fail("Len() = %d, want at most %d", n, maxSize)
+					}
 				default:
-					if v, ok := c.Get(k); ok {
-						assert.Equal(t, valueFor(k), v)
+					if v, ok := c.Get(k); ok && v != valueFor(k) {
+						fail("Get(%d) = %d, want %d", k, v, valueFor(k))
 					}
 				}
 			}
 		})
 	}
 	wg.Wait()
+
+	assert.Empty(t, failures)
 	assert.LessOrEqual(t, c.Len(), maxSize)
+}
+
+func TestLen_SweepsExpiredEntriesWithoutARead(t *testing.T) {
+	t.Parallel()
+	// More entries than one write sweeps, so only a full sweep empties the cache.
+	const entries = maxSweepPerWrite + 8
+	c, clk := newTestCache(testTTL)
+	for i := range entries {
+		c.Set(fmt.Sprintf("k%d", i), i)
+	}
+	assert.Equal(t, entries, c.Len())
+
+	clk.Advance(testTTL)
+	// No Get touched the entries, so only Len's own sweep can drop them.
+	assert.Equal(t, 0, c.Len())
+	assert.Empty(t, c.entries)
 }
 
 func TestCache_NoGoroutineLeaks(t *testing.T) {
