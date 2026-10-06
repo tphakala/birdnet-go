@@ -33,8 +33,10 @@ const CODE_FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 const CHECKBOX = /^ {0,3}[-*+][ \t]+\[([ xX])\][ \t]+(.*)$/;
 // An unclosed comment hides the rest of the description when GitHub renders it.
 const HTML_COMMENT = /<!--[\s\S]*?(?:-->|$)/g;
+// #123, owner/repo#123, or an issue or discussion URL. The owner/repo form is
+// matched from its slash so the pattern stays linear on long words.
 const ISSUE_REFERENCE =
-  /(^|[^\w&])#\d+\b|github\.com\/[\w.-]+\/[\w.-]+\/(issues|discussions)\/\d+/i;
+  /(^|[^\w&])#\d+\b|\/[\w.-]+#\d+\b|github\.com\/[\w.-]+\/[\w.-]+\/(issues|discussions)\/\d+/i;
 
 // Checkboxes the author must tick. Each is found in the template's section by a
 // phrase from its line, and the description must carry that line unchanged.

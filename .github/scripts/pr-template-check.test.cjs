@@ -68,6 +68,19 @@ describe('checkPullRequest', () => {
     assert.deepEqual(checkPullRequest({ title: 'feat: add a provider', body, template }), []);
   });
 
+  it('accepts a cross-repository reference as the related issue of a feature', () => {
+    const body = filledTemplate({ related: 'Agreed in tphakala/birdnet-go#4144' });
+    assert.deepEqual(checkPullRequest({ title: 'feat: add a provider', body, template }), []);
+  });
+
+  it('checks issue references in linear time', () => {
+    const related = `${'a'.repeat(30000)} ${'/a'.repeat(15000)} ${'github.com/a'.repeat(3000)}`;
+    const body = filledTemplate({ related });
+    const started = Date.now();
+    checkPullRequest({ title: 'feat: add a provider', body, template });
+    assert.ok(Date.now() - started < 500, `took ${Date.now() - started} ms`);
+  });
+
   it('accepts upper case X and Windows line endings', () => {
     const body = filledTemplate({ tick: untickFeatureBox })
       .replaceAll('- [x]', '- [X]')
