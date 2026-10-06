@@ -177,7 +177,7 @@ func TestTrustedProxySchemeExtractor_AgreesWithIPExtractor(t *testing.T) {
 
 // TestTrustedProxySchemeExtractor_HotReloadSequence pins that TrustedProxies
 // changes take effect on the next request, for both CoW-published settings and
-// in-place slice mutation, and that a reappearing list is not served stale.
+// reassignment on the same settings pointer, and that a reappearing list is not served stale.
 func TestTrustedProxySchemeExtractor_HotReloadSequence(t *testing.T) {
 	t.Parallel()
 
@@ -217,7 +217,7 @@ func TestTrustedProxySchemeExtractor_HotReloadSequence(t *testing.T) {
 		}
 	})
 
-	t.Run("mutate slice in place", func(t *testing.T) {
+	t.Run("assign new slice on same settings", func(t *testing.T) {
 		t.Parallel()
 		settings := &conf.Settings{}
 		extractor := newTrustedProxySchemeExtractor(func() *conf.Settings { return settings })
@@ -228,6 +228,27 @@ func TestTrustedProxySchemeExtractor_HotReloadSequence(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestTrustedProxySchemeExtractor_HotReloadEditsElementInPlace pins that editing
+// an element of the already-published TrustedProxies slice, without assigning a
+// new slice, still takes effect: the cached checker must not alias that slice.
+func TestTrustedProxySchemeExtractor_HotReloadEditsElementInPlace(t *testing.T) {
+	t.Parallel()
+
+	list := []string{"203.0.113.0/24"}
+	settings := &conf.Settings{}
+	settings.Security.TrustedProxies = list
+	extractor := newTrustedProxySchemeExtractor(func() *conf.Settings { return settings })
+	xfpHTTPS := map[string]string{headerXFP: "https"}
+
+	assert.Equal(t, schemeHTTPS, extractor(newSchemeRequest(testPublicPeerAddr, xfpHTTPS)))
+	assert.Equal(t, schemeHTTP, extractor(newSchemeRequest(peerCGNAT, xfpHTTPS)))
+
+	list[0] = "100.64.0.0/10"
+
+	assert.Equal(t, schemeHTTP, extractor(newSchemeRequest(testPublicPeerAddr, xfpHTTPS)), "old range must stop being trusted")
+	assert.Equal(t, schemeHTTPS, extractor(newSchemeRequest(peerCGNAT, xfpHTTPS)), "edited range must be trusted")
 }
 
 func TestTrustedProxySchemeExtractor_NilSettings(t *testing.T) {
