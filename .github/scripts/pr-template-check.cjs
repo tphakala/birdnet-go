@@ -340,12 +340,14 @@ function checkPullRequest({ title, body, template, labels = [] }) {
   const sections = parseSections(text);
 
   const templateSections = parseSections(template);
+  const feature = FEATURE_TITLE.test(title || '');
   for (const [key, { name, boxes }] of templateSections) {
     const section = sections.get(key);
     if (!section) {
       problems.push(`The **${name}** section is missing.`);
-    } else if (section.content.trim() === '') {
-      // A section of checkboxes cannot be answered with "does not apply".
+    } else if (section.content.trim() === '' && !(feature && key === RELATED_SECTION)) {
+      // A section of checkboxes cannot be answered with "does not apply", and an
+      // empty Related issue on a feature is reported below as a missing link.
       const fix =
         boxes.length > 0
           ? 'Copy its checkboxes from the template and tick them.'
@@ -355,7 +357,7 @@ function checkPullRequest({ title, body, template, labels = [] }) {
   }
 
   const required = [CONTRIBUTING_BOX, LICENSING_BOX];
-  if (FEATURE_TITLE.test(title || '')) {
+  if (feature) {
     required.push(FEATURE_BOX);
     const related = sections.get(RELATED_SECTION);
     if (related && !ISSUE_REFERENCE.test(related.content)) {

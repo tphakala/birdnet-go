@@ -171,6 +171,13 @@ describe('checkPullRequest', () => {
     }
   });
 
+  it('gives a feature with an empty Related issue one remedy', () => {
+    const body = filledTemplate().replace('Closes #123', '');
+    assert.deepEqual(checkPullRequest({ title: 'feat: x', body, template }), [
+      'Feature pull requests must link the issue or discussion where the feature was agreed with the maintainer, under **Related issue**.',
+    ]);
+  });
+
   it('rejects an empty body', () => {
     const problems = checkPullRequest({ title: 'fix: something', body: null, template });
     assert.ok(problems.length > 0);
