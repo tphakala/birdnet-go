@@ -127,6 +127,44 @@ describe('checkPullRequest', () => {
     assert.match(problems[0], /must link the issue or discussion/);
   });
 
+  it('parses long heading lines in linear time', () => {
+    const lineLength = 3000;
+    const body = [`## a${' '.repeat(lineLength)}x`, `## b${'('.repeat(lineLength)}`].join('\n');
+    const started = Date.now();
+    checkPullRequest({ title: 'fix: something', body, template });
+    assert.ok(Date.now() - started < 500, `took ${Date.now() - started} ms`);
+  });
+
+  it('reads ATX closing hashes the way GitHub renders them', () => {
+    const fill = filledTemplate({ tick: untickFeatureBox });
+    const closed = fill.replace('## Description', '## Description ##');
+    assert.deepEqual(checkPullRequest({ title: 'fix: something', body: closed, template }), []);
+    // A hash run with no space before it is part of the heading text.
+    const glued = fill.replace('## Description', '## Description#');
+    assert.ok(
+      checkPullRequest({ title: 'fix: something', body: glued, template }).includes(
+        'The **Description** section is missing.'
+      )
+    );
+  });
+
+  it('parses heading edge cases', () => {
+    const missing = (heading, body) =>
+      checkPullRequest({ title: 'fix: x', body, template: `${heading}\n` }).filter(p =>
+        p.includes(' section ')
+      );
+    // A tab after ##, a tab before the closing run, a stray carriage return.
+    assert.deepEqual(missing('## Notes', '##\tNotes\ntext'), []);
+    assert.deepEqual(missing('## Notes', '## Notes\t##  \ntext'), []);
+    assert.deepEqual(missing('## Notes', '## Notes\r\r\ntext'), []);
+    // A heading that is only a closing run has empty text, not "##".
+    assert.deepEqual(missing('## Notes', '## ##\ntext'), ['The **Notes** section is missing.']);
+    // Only a trailing note after other text is dropped from the key.
+    assert.deepEqual(missing('## (note)', '## (note)\ntext'), []);
+    assert.deepEqual(missing('## Notes', '## Notes)\ntext'), ['The **Notes** section is missing.']);
+    assert.deepEqual(missing('## Notes (a)', '## Notes\ntext'), []);
+  });
+
   it('matches a heading without the note in parentheses', () => {
     const body = filledTemplate({ tick: untickFeatureBox }).replace(
       '## Licensing (required)',

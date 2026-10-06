@@ -20,10 +20,11 @@ const EXEMPT_LABEL = 'template: exempt';
 const HTTP_NOT_FOUND = 404;
 
 const FEATURE_TITLE = /^feat(\([^)]*\))?!?:/i;
-const SECTION_HEADING = /^##\s+(.+?)\s*#*\s*$/;
+// Linear on purpose: a body can hold a 65k character line, and a pattern with
+// several adjacent quantifiers here backtracked for hours on one.
+const SECTION_HEADING = /^##[ \t]+(\S[^\n]*)$/;
 const CODE_FENCE = /^\s*(```|~~~)/;
 const CHECKBOX = /^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/;
-const HEADING_NOTE = /\s*\([^)]*\)\s*$/;
 const HTML_COMMENT = /<!--[\s\S]*?-->/g;
 const ISSUE_REFERENCE =
   /(^|[^\w&])#\d+\b|github\.com\/[\w.-]+\/[\w.-]+\/(issues|discussions)\/\d+/i;
@@ -34,11 +35,44 @@ const LICENSING_BOX = /relicense/i;
 const FEATURE_BOX = /^feature prs only/i;
 
 /**
+ * Removes trailing whitespace and the optional closing run of # from an ATX
+ * heading's text.
+ * @param {string} text
+ * @returns {string}
+ */
+function stripClosingHashes(text) {
+  const trimmed = text.trimEnd();
+  let end = trimmed.length;
+  while (end > 0 && trimmed[end - 1] === '#') {
+    end--;
+  }
+  if (end === trimmed.length || (end > 0 && !/[ \t]/.test(trimmed[end - 1]))) {
+    return trimmed;
+  }
+  return trimmed.slice(0, end).trimEnd();
+}
+
+/**
+ * Turns a heading into its section key: lower case, without a trailing note in
+ * parentheses, so "Licensing" matches "Licensing (required)".
+ * @param {string} name
+ * @returns {string}
+ */
+function sectionKey(name) {
+  let key = name;
+  if (key.endsWith(')')) {
+    const open = key.lastIndexOf('(');
+    if (open > 0) {
+      key = key.slice(0, open).trimEnd();
+    }
+  }
+  return key.toLowerCase();
+}
+
+/**
  * Splits Markdown into its level 2 sections, with HTML comments removed.
  * @param {string} markdown
- * @returns {Map<string, {name: string, content: string}>} keyed by the lower case
- *   heading without a trailing note in parentheses, so "Licensing" matches
- *   "Licensing (required)"
+ * @returns {Map<string, {name: string, content: string}>} keyed by sectionKey
  */
 function parseSections(markdown) {
   const sections = new Map();
@@ -50,8 +84,8 @@ function parseSections(markdown) {
     }
     const heading = inFence ? null : SECTION_HEADING.exec(line);
     if (heading) {
-      current = { name: heading[1], content: '' };
-      sections.set(current.name.replace(HEADING_NOTE, '').toLowerCase(), current);
+      current = { name: stripClosingHashes(heading[1]), content: '' };
+      sections.set(sectionKey(current.name), current);
     } else if (current) {
       current.content += `${line}\n`;
     }
