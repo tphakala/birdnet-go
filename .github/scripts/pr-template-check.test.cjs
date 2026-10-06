@@ -114,6 +114,25 @@ describe('checkPullRequest', () => {
     );
   });
 
+  it('does not tell authors a checkbox section may be skipped', () => {
+    const body =
+      '## Description\n\nx\n\n## Related issue\n\n\n## Checklist\n\n## Licensing (required)\n';
+    const problems = checkPullRequest({ title: 'fix: x', body, template });
+    assert.ok(
+      problems.includes(
+        'The **Related issue** section is empty. If it does not apply, say so in a sentence.'
+      )
+    );
+    for (const name of ['Checklist', 'Licensing (required)']) {
+      assert.ok(
+        problems.includes(
+          `The **${name}** section is empty. Copy its checkboxes from the template and tick them.`
+        ),
+        `expected the ${name} message, got ${JSON.stringify(problems)}`
+      );
+    }
+  });
+
   it('rejects an empty body', () => {
     const problems = checkPullRequest({ title: 'fix: something', body: null, template });
     assert.ok(problems.length > 0);

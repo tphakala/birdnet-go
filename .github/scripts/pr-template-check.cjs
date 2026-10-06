@@ -216,14 +216,17 @@ function checkPullRequest({ title, body, template, labels = [] }) {
   const sections = parseSections(text);
 
   const templateSections = parseSections(template);
-  for (const [key, { name }] of templateSections) {
+  for (const [key, { name, boxes }] of templateSections) {
     const section = sections.get(key);
     if (!section) {
       problems.push(`The **${name}** section is missing.`);
     } else if (section.content.trim() === '') {
-      problems.push(
-        `The **${name}** section is empty. If it does not apply, say so in a sentence.`
-      );
+      // A section of checkboxes cannot be answered with "does not apply".
+      const fix =
+        boxes.length > 0
+          ? 'Copy its checkboxes from the template and tick them.'
+          : 'If it does not apply, say so in a sentence.';
+      problems.push(`The **${name}** section is empty. ${fix}`);
     }
   }
 
