@@ -113,8 +113,8 @@ func NewDetectionPageCache(opts ...ttlcache.Option) *DetectionPageCache {
 	}
 }
 
-// GetOrLoad returns the cached page for key or loads it once for all
-// concurrent callers. A cached load follows the context contract of
+// GetOrLoad returns the cached page for key, or loads it once for all
+// concurrent callers that miss on a cacheable key. A cached load follows the context contract of
 // ttlcache.Cache.GetOrLoad: its context is not cancelled when the caller's is.
 // A direct load (below) runs on the caller's own context.
 //
