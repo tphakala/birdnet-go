@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/patrickmn/go-cache"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/ttlcache"
 )
 
 // GetLogger returns the package logger for the ebird module
@@ -21,11 +21,19 @@ func GetLogger() logger.Logger {
 	return logger.Global().Module("ebird")
 }
 
+// speciesKey identifies one cached species taxonomy lookup.
+type speciesKey struct {
+	code, locale string
+}
+
 // Client provides methods for interacting with the eBird API
 type Client struct {
 	config        Config
 	httpClient    *http.Client
-	cache         *cache.Cache
+	taxonomy      *ttlcache.Cache[string, []TaxonomyEntry]    // keyed by locale
+	species       *ttlcache.Cache[speciesKey, *TaxonomyEntry] // keyed by species code and locale
+	familyTrees   *ttlcache.Cache[string, *TaxonomyTree]      // keyed by scientific name as passed
+	observations  *ttlcache.Cache[observationKey, []Observation]
 	rateLimiter   *time.Ticker
 	mu            sync.RWMutex
 	lastRequest   time.Time
@@ -36,8 +44,6 @@ type Client struct {
 	// Metrics
 	metrics struct {
 		apiCalls      int64
-		cacheHits     int64
-		cacheMisses   int64
 		apiErrors     int64
 		totalDuration time.Duration
 		mu            sync.RWMutex
@@ -76,9 +82,12 @@ func NewClient(config Config) (*Client, error) {
 		httpClient: &http.Client{
 			Timeout: config.Timeout,
 		},
-		cache:       cache.New(config.CacheTTL, config.CacheTTL*2),
-		rateLimiter: time.NewTicker(time.Duration(config.RateLimitMS) * time.Millisecond),
-		debug:       debug,
+		taxonomy:     ttlcache.New[string, []TaxonomyEntry](config.CacheTTL),
+		species:      ttlcache.New[speciesKey, *TaxonomyEntry](config.CacheTTL),
+		familyTrees:  ttlcache.New[string, *TaxonomyTree](config.CacheTTL),
+		observations: ttlcache.New[observationKey, []Observation](config.CacheTTL),
+		rateLimiter:  time.NewTicker(time.Duration(config.RateLimitMS) * time.Millisecond),
+		debug:        debug,
 	}
 
 	// Log successful initialization
@@ -98,204 +107,133 @@ func (c *Client) Close() {
 	GetLogger().Info("Closing eBird client")
 }
 
-// GetTaxonomy retrieves the complete eBird taxonomy, optionally filtered by locale
+// GetTaxonomy retrieves the complete eBird taxonomy, optionally filtered by locale.
+// Concurrent calls for the same locale share one download.
 func (c *Client) GetTaxonomy(ctx context.Context, locale string) ([]TaxonomyEntry, error) {
-	log := GetLogger()
-	cacheKey := fmt.Sprintf("taxonomy:%s", locale)
+	return c.taxonomy.GetOrLoad(ctx, locale, func(loadCtx context.Context) ([]TaxonomyEntry, error) {
+		// Apply timeout to API request
+		reqCtx, cancel := context.WithTimeout(loadCtx, c.config.Timeout)
+		defer cancel()
 
-	// Check cache first
-	if cached, found := c.cache.Get(cacheKey); found {
-		if taxonomy, ok := cached.([]TaxonomyEntry); ok {
-			c.metrics.mu.Lock()
-			c.metrics.cacheHits++
-			c.metrics.mu.Unlock()
-
-			log.Debug("eBird taxonomy cache hit",
-				logger.String("cache_key", cacheKey),
-				logger.Int("entries", len(taxonomy)))
-			return taxonomy, nil
+		// Build URL - eBird API defaults to CSV, we need to specify fmt=json
+		url := fmt.Sprintf("%s/ref/taxonomy/ebird?fmt=json", c.config.BaseURL)
+		if locale != "" {
+			url = fmt.Sprintf("%s&locale=%s", url, locale)
 		}
-	}
 
-	// Cache miss
-	c.metrics.mu.Lock()
-	c.metrics.cacheMisses++
-	c.metrics.mu.Unlock()
+		// Make API request with retry for transient failures
+		var taxonomy []TaxonomyEntry
+		err := c.doRequestWithRetry(reqCtx, "GET", url, nil, &taxonomy)
+		if err != nil {
+			// doRequest already returns enhanced errors, just return them
+			return nil, err
+		}
 
-	// Apply timeout to API request
-	reqCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
-	defer cancel()
+		GetLogger().Debug("eBird taxonomy fetched",
+			logger.Int("entries", len(taxonomy)),
+			logger.String("locale", locale))
 
-	// Build URL - eBird API defaults to CSV, we need to specify fmt=json
-	url := fmt.Sprintf("%s/ref/taxonomy/ebird?fmt=json", c.config.BaseURL)
-	if locale != "" {
-		url = fmt.Sprintf("%s&locale=%s", url, locale)
-	}
-
-	// Make API request with retry for transient failures
-	var taxonomy []TaxonomyEntry
-	err := c.doRequestWithRetry(reqCtx, "GET", url, nil, &taxonomy)
-	if err != nil {
-		// doRequest already returns enhanced errors, just return them
-		return nil, err
-	}
-
-	// Cache the result
-	c.cache.Set(cacheKey, taxonomy, cache.DefaultExpiration)
-
-	log.Debug("eBird taxonomy cached",
-		logger.String("cache_key", cacheKey),
-		logger.Int("entries", len(taxonomy)),
-		logger.String("locale", locale))
-
-	return taxonomy, nil
+		return taxonomy, nil
+	})
 }
 
 // GetSpeciesTaxonomy retrieves taxonomy information for a specific species
 func (c *Client) GetSpeciesTaxonomy(ctx context.Context, speciesCode, locale string) (*TaxonomyEntry, error) {
-	log := GetLogger()
-	cacheKey := fmt.Sprintf("species:%s:%s", speciesCode, locale)
+	key := speciesKey{code: speciesCode, locale: locale}
+	return c.species.GetOrLoad(ctx, key, func(loadCtx context.Context) (*TaxonomyEntry, error) {
+		// Apply timeout to API request
+		reqCtx, cancel := context.WithTimeout(loadCtx, c.config.Timeout)
+		defer cancel()
 
-	// Check cache first
-	if cached, found := c.cache.Get(cacheKey); found {
-		if entry, ok := cached.(*TaxonomyEntry); ok {
-			c.metrics.mu.Lock()
-			c.metrics.cacheHits++
-			c.metrics.mu.Unlock()
-
-			log.Debug("eBird species cache hit",
-				logger.String("cache_key", cacheKey),
-				logger.String("species_code", speciesCode))
-			return entry, nil
+		// Build URL - eBird API defaults to CSV, we need to specify fmt=json
+		url := fmt.Sprintf("%s/ref/taxonomy/ebird/%s?fmt=json", c.config.BaseURL, speciesCode)
+		if locale != "" {
+			url = fmt.Sprintf("%s&locale=%s", url, locale)
 		}
-	}
 
-	// Cache miss
-	c.metrics.mu.Lock()
-	c.metrics.cacheMisses++
-	c.metrics.mu.Unlock()
+		// Make API request with retry for transient failures
+		var entries []TaxonomyEntry
+		err := c.doRequestWithRetry(reqCtx, "GET", url, nil, &entries)
+		if err != nil {
+			// doRequest already returns enhanced errors, just return them
+			return nil, err
+		}
 
-	// Apply timeout to API request
-	reqCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
-	defer cancel()
+		if len(entries) == 0 {
+			return nil, errors.Newf("species not found: %s", speciesCode).
+				Category(errors.CategoryNotFound).
+				Context("species_code", speciesCode).
+				Component("ebird").
+				Build()
+		}
 
-	// Build URL - eBird API defaults to CSV, we need to specify fmt=json
-	url := fmt.Sprintf("%s/ref/taxonomy/ebird/%s?fmt=json", c.config.BaseURL, speciesCode)
-	if locale != "" {
-		url = fmt.Sprintf("%s&locale=%s", url, locale)
-	}
-
-	// Make API request with retry for transient failures
-	var entries []TaxonomyEntry
-	err := c.doRequestWithRetry(reqCtx, "GET", url, nil, &entries)
-	if err != nil {
-		// doRequest already returns enhanced errors, just return them
-		return nil, err
-	}
-
-	if len(entries) == 0 {
-		return nil, errors.Newf("species not found: %s", speciesCode).
-			Category(errors.CategoryNotFound).
-			Context("species_code", speciesCode).
-			Component("ebird").
-			Build()
-	}
-
-	entry := &entries[0]
-
-	// Cache the result
-	c.cache.Set(cacheKey, entry, cache.DefaultExpiration)
-
-	return entry, nil
+		return &entries[0], nil
+	})
 }
 
 // BuildFamilyTree builds a complete taxonomic tree for a species
 func (c *Client) BuildFamilyTree(ctx context.Context, scientificName string) (*TaxonomyTree, error) {
-	log := GetLogger()
-	cacheKey := fmt.Sprintf("family_tree:%s", scientificName)
-
-	log.Debug("Building family tree",
+	GetLogger().Debug("Building family tree",
 		logger.String("scientific_name", scientificName))
 
-	// Check cache first
-	if cached, found := c.cache.Get(cacheKey); found {
-		if tree, ok := cached.(*TaxonomyTree); ok {
-			c.metrics.mu.Lock()
-			c.metrics.cacheHits++
-			c.metrics.mu.Unlock()
-
-			log.Debug("eBird family tree cache hit",
-				logger.String("cache_key", cacheKey),
-				logger.String("scientific_name", scientificName))
-			return tree, nil
+	return c.familyTrees.GetOrLoad(ctx, scientificName, func(loadCtx context.Context) (*TaxonomyTree, error) {
+		// Get full taxonomy to search for the species
+		taxonomy, err := c.GetTaxonomy(loadCtx, "")
+		if err != nil {
+			return nil, err
 		}
-	}
 
-	// Cache miss
-	c.metrics.mu.Lock()
-	c.metrics.cacheMisses++
-	c.metrics.mu.Unlock()
-
-	// Get full taxonomy to search for the species
-	taxonomy, err := c.GetTaxonomy(ctx, "")
-	if err != nil {
-		return nil, err
-	}
-
-	// Find the species in taxonomy
-	var speciesEntry *TaxonomyEntry
-	for i := range taxonomy {
-		if strings.EqualFold(taxonomy[i].ScientificName, scientificName) {
-			speciesEntry = &taxonomy[i]
-			break
+		// Find the species in taxonomy
+		var speciesEntry *TaxonomyEntry
+		for i := range taxonomy {
+			if strings.EqualFold(taxonomy[i].ScientificName, scientificName) {
+				speciesEntry = &taxonomy[i]
+				break
+			}
 		}
-	}
 
-	if speciesEntry == nil {
-		return nil, errors.Newf("species not found in eBird taxonomy: %s", scientificName).
-			Category(errors.CategoryNotFound).
-			Context("scientific_name", scientificName).
-			Component("ebird").
-			Build()
-	}
+		if speciesEntry == nil {
+			return nil, errors.Newf("species not found in eBird taxonomy: %s", scientificName).
+				Category(errors.CategoryNotFound).
+				Context("scientific_name", scientificName).
+				Component("ebird").
+				Build()
+		}
 
-	// Parse genus from scientific name (first part before space)
-	parts := strings.Split(speciesEntry.ScientificName, " ")
-	genus := ""
-	if len(parts) > 0 {
-		genus = parts[0]
-	}
+		// Parse genus from scientific name (first part before space)
+		parts := strings.Split(speciesEntry.ScientificName, " ")
+		genus := ""
+		if len(parts) > 0 {
+			genus = parts[0]
+		}
 
-	// Build the family tree
-	tree := &TaxonomyTree{
-		Kingdom:       "Animalia", // All birds are in kingdom Animalia
-		Phylum:        "Chordata", // All birds are in phylum Chordata
-		Class:         "Aves",     // All entries are birds
-		Order:         speciesEntry.Order,
-		Family:        speciesEntry.FamilySciName,
-		FamilyCommon:  speciesEntry.FamilyComName,
-		Genus:         genus,
-		Species:       speciesEntry.ScientificName,
-		SpeciesCommon: speciesEntry.CommonName,
-		UpdatedAt:     time.Now(),
-	}
+		// Build the family tree
+		tree := &TaxonomyTree{
+			Kingdom:       "Animalia", // All birds are in kingdom Animalia
+			Phylum:        "Chordata", // All birds are in phylum Chordata
+			Class:         "Aves",     // All entries are birds
+			Order:         speciesEntry.Order,
+			Family:        speciesEntry.FamilySciName,
+			FamilyCommon:  speciesEntry.FamilyComName,
+			Genus:         genus,
+			Species:       speciesEntry.ScientificName,
+			SpeciesCommon: speciesEntry.CommonName,
+			UpdatedAt:     time.Now(),
+		}
 
-	// Find subspecies if this is a species entry
-	if speciesEntry.Category == "species" {
-		subspecies := c.findSubspecies(taxonomy, speciesEntry.SpeciesCode)
-		tree.Subspecies = subspecies
-	}
+		// Find subspecies if this is a species entry
+		if speciesEntry.Category == "species" {
+			tree.Subspecies = c.findSubspecies(taxonomy, speciesEntry.SpeciesCode)
+		}
 
-	// Cache the result
-	c.cache.Set(cacheKey, tree, cache.DefaultExpiration)
+		GetLogger().Info("eBird family tree built",
+			logger.String("scientific_name", scientificName),
+			logger.String("order", tree.Order),
+			logger.String("family", tree.Family),
+			logger.Int("subspecies_count", len(tree.Subspecies)))
 
-	log.Info("eBird family tree built",
-		logger.String("scientific_name", scientificName),
-		logger.String("order", tree.Order),
-		logger.String("family", tree.Family),
-		logger.Int("subspecies_count", len(tree.Subspecies)))
-
-	return tree, nil
+		return tree, nil
+	})
 }
 
 // findSubspecies finds all subspecies for a given species code
@@ -622,14 +560,17 @@ func (c *Client) doRequestWithRetry(ctx context.Context, method, url string, bod
 
 // ClearCache clears all cached data
 func (c *Client) ClearCache() {
-	c.cache.Flush()
+	c.taxonomy.Clear()
+	c.species.Clear()
+	c.familyTrees.Clear()
+	c.observations.Clear()
 	GetLogger().Info("eBird cache cleared")
 }
 
-// GetCacheStats returns cache statistics
+// GetCacheStats returns the number of live cached items across all eBird
+// caches. The size is not tracked and is always 0.
 func (c *Client) GetCacheStats() (itemCount int, size int64) {
-	itemCount = c.cache.ItemCount()
-	// Note: go-cache doesn't provide size info directly
+	itemCount = c.taxonomy.Len() + c.species.Len() + c.familyTrees.Len() + c.observations.Len()
 	return itemCount, 0
 }
 
@@ -645,13 +586,15 @@ type Metrics struct {
 
 // GetMetrics returns current client metrics
 func (c *Client) GetMetrics() Metrics {
+	cacheHits, cacheMisses := c.cacheTotals()
+
 	c.metrics.mu.RLock()
 	defer c.metrics.mu.RUnlock()
 
 	metrics := Metrics{
 		APICalls:      c.metrics.apiCalls,
-		CacheHits:     c.metrics.cacheHits,
-		CacheMisses:   c.metrics.cacheMisses,
+		CacheHits:     cacheHits,
+		CacheMisses:   cacheMisses,
 		APIErrors:     c.metrics.apiErrors,
 		TotalDuration: c.metrics.totalDuration,
 	}
@@ -661,6 +604,17 @@ func (c *Client) GetMetrics() Metrics {
 	}
 
 	return metrics
+}
+
+// cacheTotals sums the hit and miss counters of all four caches.
+func (c *Client) cacheTotals() (hits, misses int64) {
+	for _, st := range []ttlcache.Stats{
+		c.taxonomy.Stats(), c.species.Stats(), c.familyTrees.Stats(), c.observations.Stats(),
+	} {
+		hits += int64(st.Hits)
+		misses += int64(st.Misses)
+	}
+	return hits, misses
 }
 
 // getErrorCategory determines the appropriate error category based on HTTP status code

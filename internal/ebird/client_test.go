@@ -1,8 +1,11 @@
 package ebird
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -405,19 +408,118 @@ func TestParseErrors(t *testing.T) {
 }
 
 func TestCacheStats(t *testing.T) {
-	client := setupTestClient(t, httptest.NewServer(nil))
+	server := setupMockServer(t, map[string]mockResponse{
+		"/ref/taxonomy/ebird?fmt=json": {
+			status: http.StatusOK,
+			body:   `[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1"}]`,
+		},
+		"/ref/taxonomy/ebird/x?fmt=json": {
+			status: http.StatusOK,
+			body:   `[{"sciName": "Test species", "comName": "Test", "speciesCode": "x"}]`,
+		},
+	})
+	defer server.Close()
+
+	client := setupTestClient(t, server)
 	disableLogging(t)
 
 	// Initially empty
-	count, _ := client.GetCacheStats()
+	count, size := client.GetCacheStats()
 	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), size)
 
-	// Add some items to cache
-	client.cache.Set("test1", "value1", time.Hour)
-	client.cache.Set("test2", "value2", time.Hour)
+	_, err := client.GetTaxonomy(t.Context(), "")
+	require.NoError(t, err)
+	_, err = client.GetSpeciesTaxonomy(t.Context(), "x", "")
+	require.NoError(t, err)
 
 	count, _ = client.GetCacheStats()
 	assert.Equal(t, 2, count)
+
+	client.ClearCache()
+	count, _ = client.GetCacheStats()
+	assert.Equal(t, 0, count)
+}
+
+func TestGetTaxonomy_ConcurrentMissesFetchOnce(t *testing.T) {
+	const callers = 8
+	var requests atomic.Int32
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1"}]`))
+	}))
+	defer server.Close()
+
+	client := setupTestClient(t, server)
+
+	var wg sync.WaitGroup
+	errs := make([]error, callers)
+	lens := make([]int, callers)
+	for i := range callers {
+		wg.Go(func() {
+			tax, err := client.GetTaxonomy(t.Context(), "")
+			errs[i], lens[i] = err, len(tax)
+		})
+	}
+	// Wait until the one fetch is in flight, give the other callers time to
+	// miss and join it, then release it.
+	require.Eventually(t, func() bool { return requests.Load() == 1 }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool {
+		return client.taxonomy.Stats().Misses == callers
+	}, 5*time.Second, time.Millisecond)
+	close(release)
+	wg.Wait()
+
+	for i := range callers {
+		require.NoError(t, errs[i])
+		assert.Equal(t, 1, lens[i])
+	}
+	assert.Equal(t, int32(1), requests.Load())
+}
+
+func TestGetTaxonomy_CallerCancelDoesNotAbortSharedFetch(t *testing.T) {
+	var requests atomic.Int32
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1"}]`))
+	}))
+	defer server.Close()
+
+	client := setupTestClient(t, server)
+
+	ctxA, cancelA := context.WithCancel(t.Context())
+	errA := make(chan error, 1)
+	go func() {
+		_, err := client.GetTaxonomy(ctxA, "")
+		errA <- err
+	}()
+	require.Eventually(t, func() bool { return requests.Load() == 1 }, 5*time.Second, time.Millisecond)
+
+	type result struct {
+		tax []TaxonomyEntry
+		err error
+	}
+	resB := make(chan result, 1)
+	go func() {
+		tax, err := client.GetTaxonomy(t.Context(), "")
+		resB <- result{tax, err}
+	}()
+	require.Eventually(t, func() bool { return client.taxonomy.Stats().Misses == 2 }, 5*time.Second, time.Millisecond)
+
+	cancelA()
+	require.ErrorIs(t, <-errA, context.Canceled)
+
+	close(release)
+	r := <-resB
+	require.NoError(t, r.err)
+	assert.Len(t, r.tax, 1)
+	assert.Equal(t, int32(1), requests.Load(), "the abandoned caller did not abort or repeat the fetch")
 }
 
 func TestMetrics(t *testing.T) {
