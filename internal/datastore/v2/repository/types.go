@@ -54,6 +54,10 @@ type SearchFilters struct {
 	// true = has review with verdict, false = no review or no verdict.
 	IsReviewed *bool
 
+	// ExcludeFalsePositive drops detections reviewed as false_positive, keeping
+	// unreviewed and correct ones.
+	ExcludeFalsePositive bool
+
 	// IsLocked filters by lock status (optional).
 	IsLocked *bool
 

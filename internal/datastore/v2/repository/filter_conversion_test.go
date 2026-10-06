@@ -983,6 +983,19 @@ func TestConvertSearchFilters(t *testing.T) {
 		assert.Nil(t, result.IsReviewed)
 	})
 
+	t.Run("exclude false positive sets ExcludeFalsePositive only", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			ExcludeFalsePositive: true,
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+
+		assert.True(t, result.ExcludeFalsePositive)
+		assert.Nil(t, result.Verified)
+		assert.Nil(t, result.IsReviewed)
+	})
+
 	t.Run("locked only sets IsLocked true", func(t *testing.T) {
 		filters := &datastore.SearchFilters{
 			LockedOnly: true,

@@ -2149,14 +2149,17 @@ type SearchFilters struct {
 	VerifiedOnly      bool
 	UnverifiedOnly    bool
 	FalsePositiveOnly bool
-	LockedOnly        bool
-	UnlockedOnly      bool
-	Device            string
-	TimeOfDay         string // "any", "day", "night", "sunrise", "sunset"
-	Page              int
-	PerPage           int
-	SortBy            string
-	Ctx               context.Context // Add context for cancellation/timeout
+	// ExcludeFalsePositive drops detections reviewed as false_positive, keeping
+	// unreviewed and correct ones (the condition the analytics queries use).
+	ExcludeFalsePositive bool
+	LockedOnly           bool
+	UnlockedOnly         bool
+	Device               string
+	TimeOfDay            string // "any", "day", "night", "sunrise", "sunset"
+	Page                 int
+	PerPage              int
+	SortBy               string
+	Ctx                  context.Context // Add context for cancellation/timeout
 }
 
 // sanitise validates and normalises the search filters, returning an error for invalid combinations.
@@ -2190,8 +2193,11 @@ func (f *SearchFilters) sanitise() error {
 	if f.FalsePositiveOnly {
 		verifiedFilterCount++
 	}
+	if f.ExcludeFalsePositive {
+		verifiedFilterCount++
+	}
 	if verifiedFilterCount > 1 {
-		return errors.Newf("verified_only, unverified_only, and false_positive_only are mutually exclusive").
+		return errors.Newf("verified_only, unverified_only, false_positive_only, and exclude_false_positive are mutually exclusive").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Build()
@@ -2270,6 +2276,9 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 			string(entities.VerificationCorrect), string(entities.VerificationFalsePositive))
 	case filters.FalsePositiveOnly:
 		query = query.Where("note_reviews.verified = ?", string(entities.VerificationFalsePositive))
+	case filters.ExcludeFalsePositive:
+		query = query.Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)",
+			string(entities.VerificationFalsePositive))
 	}
 
 	if filters.LockedOnly {
