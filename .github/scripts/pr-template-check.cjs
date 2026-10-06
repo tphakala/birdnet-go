@@ -8,18 +8,27 @@
 const fs = require('fs');
 const path = require('path');
 
+/** Path of the pull request template the description is checked against. */
 const TEMPLATE_PATH = path.join(__dirname, '..', 'pull_request_template.md');
 const REPO_URL = 'https://github.com/tphakala/birdnet-go';
 const TEMPLATE_URL = `${REPO_URL}/blob/main/.github/pull_request_template.md`;
 const CONTRIBUTING_URL = `${REPO_URL}/blob/main/CONTRIBUTING.md`;
 
+/** Hidden marker that identifies the check's own comment on a pull request. */
 const COMMENT_MARKER = '<!-- pr-template-check -->';
+/** Login of the account that posts the comment with the workflow's GITHUB_TOKEN. */
 const COMMENT_AUTHOR = 'github-actions[bot]';
+/** Label on a pull request whose description does not follow the template. */
 const NEEDS_TEMPLATE_LABEL = 'needs: template';
+/** Maintainer label that skips the check. */
 const EXEMPT_LABEL = 'template: exempt';
-// The maintainer's record that the author has already agreed to the relicensing.
+/** The maintainer's record that the author has already agreed to the relicensing. */
 const CONSENTED_LABEL = 'relicense: consented';
 const HTTP_NOT_FOUND = 404;
+// The largest page the GitHub REST API returns.
+const COMMENTS_PER_PAGE = 100;
+// Template section a feature pull request links its agreed issue or discussion in.
+const RELATED_SECTION = 'related issue';
 
 const FEATURE_TITLE = /^feat(\([^)]*\))?!?:/i;
 // Linear on purpose: a body can hold a 65k character line, and a pattern with
@@ -233,7 +242,7 @@ function checkPullRequest({ title, body, template, labels = [] }) {
   const required = [CONTRIBUTING_BOX, LICENSING_BOX];
   if (FEATURE_TITLE.test(title || '')) {
     required.push(FEATURE_BOX);
-    const related = sections.get('related issue');
+    const related = sections.get(RELATED_SECTION);
     if (related && !ISSUE_REFERENCE.test(related.content)) {
       problems.push(
         'Feature pull requests must link the issue or discussion where the feature was agreed with the maintainer, under **Related issue**.'
@@ -254,6 +263,15 @@ function checkPullRequest({ title, body, template, labels = [] }) {
 }
 
 /**
+ * Formats problems as a Markdown list, one per line.
+ * @param {string[]} problems
+ * @returns {string}
+ */
+function formatList(problems) {
+  return problems.map(problem => `- ${problem}`).join('\n');
+}
+
+/**
  * Builds the comment that lists what the description is missing.
  * @param {string[]} problems
  * @returns {string}
@@ -263,7 +281,7 @@ function renderComment(problems) {
     COMMENT_MARKER,
     `Thanks for the pull request. Before it is reviewed, the description needs to follow the [pull request template](${TEMPLATE_URL}):`,
     '',
-    ...problems.map(problem => `- ${problem}`),
+    formatList(problems),
     '',
     `Edit the description to fix these; this check runs again on every edit. If a tool wrote its own description, replace it with the template's text and fill that in. See [Pull Request Process](${CONTRIBUTING_URL}#pull-request-process), and for features also [Fixes and Features](${CONTRIBUTING_URL}#fixes-and-features-what-to-expect) and [Feature Ownership](${CONTRIBUTING_URL}#feature-ownership).`,
   ].join('\n');
@@ -307,7 +325,7 @@ async function run({ github, context, core }) {
 
   const comments = await github.paginate(github.rest.issues.listComments, {
     ...issue,
-    per_page: 100,
+    per_page: COMMENTS_PER_PAGE,
   });
   const comment = comments.find(
     c => c.user && c.user.login === COMMENT_AUTHOR && c.body.includes(COMMENT_MARKER)
@@ -344,11 +362,12 @@ async function run({ github, context, core }) {
     }
   }
   core.setFailed(
-    `The pull request description does not follow the template:\n${problems.map(p => `- ${p}`).join('\n')}`
+    `The pull request description does not follow the template:\n${formatList(problems)}`
   );
 }
 
 module.exports = {
+  COMMENT_AUTHOR,
   COMMENT_MARKER,
   CONSENTED_LABEL,
   EXEMPT_LABEL,

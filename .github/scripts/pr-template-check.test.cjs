@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const { describe, it } = require('node:test');
 
 const {
+  COMMENT_AUTHOR,
   COMMENT_MARKER,
   CONSENTED_LABEL,
   EXEMPT_LABEL,
@@ -359,7 +360,15 @@ describe('checkPullRequest', () => {
   });
 
   it('ignores headings inside code blocks', () => {
-    const body = `${filledTemplate({ tick: untickFeatureBox })}\n\`\`\`\n## Licensing\n\`\`\`\n`;
+    const body = `\`\`\`\n${filledTemplate({ tick: untickFeatureBox })}\n\`\`\`\n`;
+    const problems = checkPullRequest({ title: 'fix: something', body, template });
+    for (const section of ['Description', 'Related issue', 'Checklist', 'Licensing (required)']) {
+      assert.ok(problems.includes(`The **${section}** section is missing.`), section);
+    }
+  });
+
+  it('does not require a linked issue on a fix', () => {
+    const body = filledTemplate({ related: 'No related issue', tick: untickFeatureBox });
     assert.deepEqual(checkPullRequest({ title: 'fix: something', body, template }), []);
   });
 });
@@ -375,7 +384,11 @@ function fakeEnvironment({ title, body, labels = [], comments = [], failures = {
     return {};
   };
   const github = {
-    paginate: async () => comments,
+    paginate: async (route, params) => {
+      assert.equal(route, github.rest.issues.listComments);
+      assert.equal(params.issue_number, 7);
+      return comments;
+    },
     rest: {
       issues: {
         listComments: record('listComments'),
@@ -401,9 +414,13 @@ function fakeEnvironment({ title, body, labels = [], comments = [], failures = {
   return { github, context, core, calls };
 }
 
-const botComment = body => ({ id: 99, user: { login: 'github-actions[bot]' }, body });
+const botComment = body => ({ id: 99, user: { login: COMMENT_AUTHOR }, body });
 
 describe('run', () => {
+  it('finds its comment by the account GITHUB_TOKEN posts as', () => {
+    assert.equal(COMMENT_AUTHOR, 'github-actions[bot]');
+  });
+
   it('labels, comments and fails when the description does not follow the template', async () => {
     const env = fakeEnvironment({ title: 'feat: x', body: ownFormatBody });
     await run(env);
