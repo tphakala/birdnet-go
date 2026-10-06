@@ -3,6 +3,13 @@
 // The pr-template-check workflow runs this on pull_request_target from a checkout
 // of the base branch tip, so the script and the template come from the base
 // branch, not the pull request. The PR title and body are only parsed as text.
+//
+// The parser approximates how GitHub renders Markdown closely enough for
+// descriptions written from the template; it is a compliance check, not the
+// record of relicensing consent. The maintainer confirms consent before merging
+// (the relicense: consented label, or the agreement on the pull request), so
+// formatting crafted to look ticked without rendering as a ticked box is out of
+// scope here.
 'use strict';
 
 const fs = require('fs');
@@ -40,6 +47,18 @@ const CODE_FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 // A list item indented four or more spaces is an indented code block, not a
 // checkbox, unless it continues a list; the template's boxes are never nested.
 const CHECKBOX = /^ {0,3}[-*+][ \t]+\[([ xX])\][ \t]+(.*)$/;
+// A line indented at least two columns, the content offset of a "- [ ]" item at
+// the margin, belongs to that item whatever block it starts. An item with a
+// deeper offset is over-counted, which fails closed.
+const ITEM_CONTENT = /^(?: {2}|\t| \t)/;
+// HTML that starts a block (and so ends a paragraph) rather than sitting inline:
+// comments, processing instructions, declarations, and the block-level tags.
+const HTML_BLOCK_START =
+  /^ {0,3}(?:<!--|<\?|<![A-Za-z]|<\/?(?:address|article|aside|blockquote|details|dialog|div|dl|fieldset|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|pre|script|section|style|summary|table|tbody|td|textarea|tfoot|th|thead|tr|ul)(?:[\s/>]|$))/i;
+// Lines at the margin that start a new block (a list item, heading, block quote
+// or thematic break) instead of continuing a box's text.
+const BLOCK_START =
+  /^ {0,3}(?:(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)|#{1,6}(?:[ \t]|$)|>|(?:-[ \t]*){3,}$|(?:\*[ \t]*){3,}$|(?:_[ \t]*){3,}$)/;
 // An unclosed comment hides the rest of the description when GitHub renders it.
 const HTML_COMMENT = /<!--[\s\S]*?(?:-->|$)/g;
 // #123, owner/repo#123, or an issue or discussion URL. The owner/repo form is
@@ -112,8 +131,9 @@ function sectionKey(name) {
 
 /**
  * Splits Markdown into its level 2 sections, with HTML comments removed. Task
- * list items outside fenced and indented code are collected per section, and a
- * repeated heading adds to its first section.
+ * list items outside fenced and indented code are collected per section, each
+ * with the text GitHub renders inside its item (continuation lines and indented
+ * content included), and a repeated heading adds to its first section.
  * @param {string} markdown
  * @returns {Map<string, {name: string, content: string, boxes: {checked: boolean, text: string}[]}>}
  *   keyed by sectionKey
@@ -122,20 +142,12 @@ function parseSections(markdown) {
   const sections = new Map();
   let current = null;
   let openFence = null;
+  // The box whose list item is still open, and whether its paragraph is. Like
+  // GitHub, indented lines after a box, and unindented lines up to a blank line
+  // or a new block, count as part of the box's text.
+  let itemBox = null;
+  let paragraphOpen = false;
   for (const line of markdown.replace(HTML_COMMENT, '').split(/\r?\n/)) {
-    const fence = CODE_FENCE.exec(line);
-    if (openFence) {
-      if (fence && closesFence(openFence, fence)) {
-        openFence = null;
-      }
-      if (current) {
-        current.content += `${line}\n`;
-      }
-      continue;
-    }
-    if (fence && !(fence[1][0] === '`' && fence[2].includes('`'))) {
-      openFence = fence[1];
-    }
     const heading = openFence ? null : SECTION_HEADING.exec(line);
     if (heading) {
       const name = stripClosingHashes(heading[1]);
@@ -145,13 +157,56 @@ function parseSections(markdown) {
         sections.set(key, { name, content: '', boxes: [] });
       }
       current = sections.get(key);
-    } else if (current) {
-      current.content += `${line}\n`;
-      const box = openFence ? null : CHECKBOX.exec(line);
-      if (box) {
-        current.boxes.push({ checked: box[1] !== ' ', text: normalizeSpace(box[2]) });
-      }
+      itemBox = null;
+      continue;
     }
+    if (current) {
+      current.content += `${line}\n`;
+    }
+    if (openFence) {
+      const fence = CODE_FENCE.exec(line);
+      if (fence && closesFence(openFence, fence)) {
+        openFence = null;
+      }
+      continue;
+    }
+    const blank = line.trim() === '';
+    if (itemBox && !blank && ITEM_CONTENT.test(line)) {
+      itemBox.parts.push(normalizeSpace(line));
+      continue;
+    }
+    if (blank) {
+      paragraphOpen = false;
+      continue;
+    }
+    const fence = CODE_FENCE.exec(line);
+    if (fence && !(fence[1][0] === '`' && fence[2].includes('`'))) {
+      openFence = fence[1];
+      itemBox = null;
+      continue;
+    }
+    const box = current && CHECKBOX.exec(line);
+    if (box) {
+      // Text is gathered in parts and joined once, so a long item stays linear.
+      itemBox = { checked: box[1] !== ' ', parts: [normalizeSpace(box[2])] };
+      paragraphOpen = true;
+      current.boxes.push(itemBox);
+    } else if (
+      itemBox &&
+      paragraphOpen &&
+      !BLOCK_START.test(line) &&
+      !HTML_BLOCK_START.test(line)
+    ) {
+      itemBox.parts.push(normalizeSpace(line));
+    } else {
+      itemBox = null;
+    }
+  }
+  for (const section of sections.values()) {
+    section.boxes = section.boxes.map(({ checked, parts }) => ({
+      checked,
+      text: parts.filter(Boolean).join(' '),
+    }));
   }
   return sections;
 }

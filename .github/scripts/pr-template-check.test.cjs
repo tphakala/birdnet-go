@@ -181,6 +181,70 @@ describe('checkPullRequest', () => {
     assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), [CONSENT_MISSING]);
   });
 
+  describe('a line right after a box, which GitHub renders as part of its text', () => {
+    const reworded =
+      "The relicensing agreement under **Licensing** does not match the template's wording. Copy it unchanged from the template and tick it. The pull request cannot be merged without it.";
+    const withNextLine = next =>
+      filledTemplate({ tick: untickFeatureBox }).replace(
+        tickedConsent,
+        `${tickedConsent}\n${next}`
+      );
+    const check = body => checkPullRequest({ title: 'fix: x', body, template });
+
+    for (const [name, next] of [
+      ['a reservation', 'Except that I do not grant the relicensing right.'],
+      ['an indented reservation', '  except for the files under docs/'],
+      ['an indented setext underline', '  ---'],
+      ['a nested bullet', '  - except for the files under docs/'],
+      ['a nested numbered item', '  1. except for the files under docs/'],
+      ['an indented heading', '  # except for docs'],
+      ['an indented fence', '  ```\n  except for docs\n  ```'],
+      ['an indented paragraph after a blank line', '\n  Except for the files under docs/'],
+      ['an inline HTML caveat', '<sub>except for docs</sub>'],
+      ['an autolink caveat', '<https://example.com> except for docs'],
+      ['a tab indented paragraph after a blank line', '\n\tExcept for docs'],
+    ]) {
+      it(`counts ${name} as part of the box`, () => {
+        assert.deepEqual(check(withNextLine(next)), [reworded]);
+      });
+    }
+
+    for (const [name, next] of [
+      ['a blank line and then text', '\nThanks for reviewing.'],
+      ['another list item', '- a note'],
+      ['a heading', '## Notes\ntext'],
+      ['a lower level heading', '### Notes'],
+      ['a fence', '```\ncode\n```'],
+      ['a block quote', '> a quote'],
+      ['a thematic break', '***'],
+      ['an HTML block', '<details>\n<summary>Logs</summary>\n</details>'],
+      ['a whitespace-only line', '   \nThanks for reviewing.'],
+      ['a fence, for text after it', '```\ncode\n```\nThanks for reviewing.'],
+      ['an unindented paragraph, for indented text after it', '\nThanks\n  more'],
+      ['a blank line, for text indented one space', '\n Thanks for reviewing.'],
+      ['an ordered list item', '2. a note'],
+    ]) {
+      it(`ends the box at ${name}`, () => {
+        assert.deepEqual(check(withNextLine(next)), []);
+      });
+    }
+  });
+
+  it('ignores a checkbox before the first section', () => {
+    const body = `- [x] stray\n\n${filledTemplate({ tick: untickFeatureBox })}`;
+    assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), []);
+  });
+
+  it('collects a box with many continuation lines in linear time', () => {
+    const body = filledTemplate({ tick: untickFeatureBox }).replace(
+      tickedConsent,
+      `${tickedConsent}\n${'a\n'.repeat(30000)}`
+    );
+    const started = Date.now();
+    checkPullRequest({ title: 'fix: x', body, template });
+    assert.ok(Date.now() - started < LINEAR_TIME_BUDGET_MS, `took ${Date.now() - started} ms`);
+  });
+
   it('accepts a box with extra spaces inside and after it', () => {
     const spaced = `${tickedConsent.replace(' I agree ', '  I   agree ')} \t`;
     const body = filledTemplate({ tick: untickFeatureBox }).replace(tickedConsent, spaced);
