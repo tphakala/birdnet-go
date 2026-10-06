@@ -706,7 +706,33 @@
         "error": "Tietojen lataus epäonnistui",
         "complete": "Tiedot ladattu onnistuneesti"
       },
-      "noSpecies": "Ei havaintoja tänä päivänä"
+      "noSpecies": "Ei havaintoja tänä päivänä",
+      "phone": {
+        "columns": {
+          "conf": "Luott.",
+          "count": "Määrä"
+        },
+        "columnNames": {
+          "name": "lajin nimi",
+          "conf": "luotettavuus",
+          "count": "havaintojen määrä",
+          "latest": "viimeksi kuultu"
+        },
+        "sortBy": "Lajittele: {column}",
+        "sortedAscending": "Lajiteltu: {column}, nouseva. Napauta kääntääksesi järjestyksen.",
+        "sortedDescending": "Lajiteltu: {column}, laskeva. Napauta kääntääksesi järjestyksen.",
+        "rowLabel": "{name}: {count, plural, one {# havainto} other {# havaintoa}}, luotettavuus {confidence} %, huippu klo {peak}. Napauta nähdäksesi tiedot.",
+        "taxon": {
+          "all": "Kaikki",
+          "bird": "Linnut",
+          "bat": "Lepakot",
+          "other": "Muut"
+        },
+        "peakAt": "Huippu klo {time}",
+        "firstHeard": "Kuultu ensimmäisen kerran klo {time}",
+        "lastHeard": "Kuultu viimeksi klo {time}",
+        "history": "Historia"
+      }
     },
     "recentDetections": {
       "title": "Viimeisimmät havainnot",

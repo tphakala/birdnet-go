@@ -566,6 +566,24 @@ export type TranslationKey =
   | 'dashboard.dailySummary.loading.error'
   | 'dashboard.dailySummary.loading.complete'
   | 'dashboard.dailySummary.noSpecies'
+  | 'dashboard.dailySummary.phone.columns.conf'
+  | 'dashboard.dailySummary.phone.columns.count'
+  | 'dashboard.dailySummary.phone.columnNames.name'
+  | 'dashboard.dailySummary.phone.columnNames.conf'
+  | 'dashboard.dailySummary.phone.columnNames.count'
+  | 'dashboard.dailySummary.phone.columnNames.latest'
+  | 'dashboard.dailySummary.phone.sortBy' // params: column
+  | 'dashboard.dailySummary.phone.sortedAscending' // params: column
+  | 'dashboard.dailySummary.phone.sortedDescending' // params: column
+  | 'dashboard.dailySummary.phone.rowLabel' // params: name, count, confidence, peak
+  | 'dashboard.dailySummary.phone.taxon.all'
+  | 'dashboard.dailySummary.phone.taxon.bird'
+  | 'dashboard.dailySummary.phone.taxon.bat'
+  | 'dashboard.dailySummary.phone.taxon.other'
+  | 'dashboard.dailySummary.phone.peakAt' // params: time
+  | 'dashboard.dailySummary.phone.firstHeard' // params: time
+  | 'dashboard.dailySummary.phone.lastHeard' // params: time
+  | 'dashboard.dailySummary.phone.history'
   | 'dashboard.recentDetections.title'
   | 'dashboard.recentDetections.subtitle'
   | 'dashboard.recentDetections.controls.show'
@@ -4399,6 +4417,18 @@ export type TranslationParams = {
     endHour: string | number;
   };
   'dashboard.dailySummary.tooltips.infrequent': { days: string | number };
+  'dashboard.dailySummary.phone.sortBy': { column: string | number };
+  'dashboard.dailySummary.phone.sortedAscending': { column: string | number };
+  'dashboard.dailySummary.phone.sortedDescending': { column: string | number };
+  'dashboard.dailySummary.phone.rowLabel': {
+    name: string | number;
+    count: string | number;
+    confidence: string | number;
+    peak: string | number;
+  };
+  'dashboard.dailySummary.phone.peakAt': { time: string | number };
+  'dashboard.dailySummary.phone.firstHeard': { time: string | number };
+  'dashboard.dailySummary.phone.lastHeard': { time: string | number };
   'dashboard.recentDetections.modals.showSpecies': { species: string | number };
   'dashboard.recentDetections.modals.ignoreSpecies': { species: string | number };
   'dashboard.recentDetections.modals.showSpeciesConfirm': { species: string | number };

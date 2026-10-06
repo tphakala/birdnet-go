@@ -706,7 +706,33 @@
         "error": "Neizdevās ielādēt datus",
         "complete": "Dati veiksmīgi ielādēti"
       },
-      "noSpecies": "Šajā datumā nav atklāta neviena suga"
+      "noSpecies": "Šajā datumā nav atklāta neviena suga",
+      "phone": {
+        "columns": {
+          "conf": "Droš.",
+          "count": "Skaits"
+        },
+        "columnNames": {
+          "name": "sugas nosaukuma",
+          "conf": "drošības",
+          "count": "atklāšanas reižu skaita",
+          "latest": "pēdējās dzirdēšanas laika"
+        },
+        "sortBy": "Kārtot pēc: {column}",
+        "sortedAscending": "Sakārtots pēc: {column}, augošā secībā. Pieskarieties, lai apgrieztu.",
+        "sortedDescending": "Sakārtots pēc: {column}, dilstošā secībā. Pieskarieties, lai apgrieztu.",
+        "rowLabel": "{name}: {count, plural, zero {# atklāšanu} one {# atklāšana} other {# atklāšanas}}, drošība {confidence}%, maksimums plkst. {peak}. Pieskarieties, lai skatītu detaļas.",
+        "taxon": {
+          "all": "Visi",
+          "bird": "Putni",
+          "bat": "Sikspārņi",
+          "other": "Citi"
+        },
+        "peakAt": "Maksimums plkst. {time}",
+        "firstHeard": "Pirmo reizi dzirdēts plkst. {time}",
+        "lastHeard": "Pēdējo reizi dzirdēts plkst. {time}",
+        "history": "Vēsture"
+      }
     },
     "recentDetections": {
       "title": "Nesenās atklāšanas",

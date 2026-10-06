@@ -706,7 +706,33 @@
         "error": "Gegevens inlezen is mislukt",
         "complete": "Gegevens zijn succesvol ingelezen"
       },
-      "noSpecies": "Geen soorten herkend op deze datum"
+      "noSpecies": "Geen soorten herkend op deze datum",
+      "phone": {
+        "columns": {
+          "conf": "Betr.",
+          "count": "Aantal"
+        },
+        "columnNames": {
+          "name": "soortnaam",
+          "conf": "betrouwbaarheid",
+          "count": "aantal herkenningen",
+          "latest": "laatst gehoord"
+        },
+        "sortBy": "Sorteren op {column}",
+        "sortedAscending": "Gesorteerd op {column}, oplopend. Tik om de volgorde om te draaien.",
+        "sortedDescending": "Gesorteerd op {column}, aflopend. Tik om de volgorde om te draaien.",
+        "rowLabel": "{name}: {count, plural, one {# herkenning} other {# herkenningen}}, {confidence}% betrouwbaarheid, piek om {peak}. Tik voor details.",
+        "taxon": {
+          "all": "Alle",
+          "bird": "Vogels",
+          "bat": "Vleermuizen",
+          "other": "Overig"
+        },
+        "peakAt": "Piek om {time}",
+        "firstHeard": "Eerst gehoord om {time}",
+        "lastHeard": "Laatst gehoord om {time}",
+        "history": "Geschiedenis"
+      }
     },
     "recentDetections": {
       "title": "Recent herkend",

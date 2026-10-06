@@ -706,7 +706,33 @@
         "error": "Nepodařilo se načíst data",
         "complete": "Data úspěšně načtena"
       },
-      "noSpecies": "V tento den nebyly detekovány žádné druhy"
+      "noSpecies": "V tento den nebyly detekovány žádné druhy",
+      "phone": {
+        "columns": {
+          "conf": "Přesn.",
+          "count": "Počet"
+        },
+        "columnNames": {
+          "name": "názvu druhu",
+          "conf": "spolehlivosti",
+          "count": "počtu detekcí",
+          "latest": "času posledního zaslechnutí"
+        },
+        "sortBy": "Seřadit podle {column}",
+        "sortedAscending": "Seřazeno podle {column} vzestupně. Klepnutím změníte pořadí.",
+        "sortedDescending": "Seřazeno podle {column} sestupně. Klepnutím změníte pořadí.",
+        "rowLabel": "{name}: {count, plural, one {# detekce} few {# detekce} many {# detekce} other {# detekcí}}, spolehlivost {confidence} %, maximum v {peak}. Klepnutím zobrazíte podrobnosti.",
+        "taxon": {
+          "all": "Vše",
+          "bird": "Ptáci",
+          "bat": "Netopýři",
+          "other": "Ostatní"
+        },
+        "peakAt": "Maximum v {time}",
+        "firstHeard": "Poprvé zaslechnuto v {time}",
+        "lastHeard": "Naposledy zaslechnuto v {time}",
+        "history": "Historie"
+      }
     },
     "recentDetections": {
       "title": "Nedávné detekce",

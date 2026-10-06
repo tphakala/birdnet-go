@@ -196,6 +196,7 @@ export interface DailySpeciesSummary {
   days_this_year?: number; // Days since first this year
   days_this_season?: number; // Days since first this season
   current_season?: string; // Current season name
+  taxonomic_class?: string; // Label's taxonomic class ("Aves", "Chiroptera", "" for none); absent on rows added live by SSE
   // Animation state flags
   isNew?: boolean; // New species row animation (temporary for SSE updates)
   countIncreased?: boolean; // Count increment animation

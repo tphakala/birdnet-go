@@ -706,7 +706,33 @@
         "error": "Az adatok betöltése sikertelen",
         "complete": "Adatok sikeresen betöltve"
       },
-      "noSpecies": "Ezen a napon nem észleltek fajokat"
+      "noSpecies": "Ezen a napon nem észleltek fajokat",
+      "phone": {
+        "columns": {
+          "conf": "Megb.",
+          "count": "Db"
+        },
+        "columnNames": {
+          "name": "fajnév",
+          "conf": "megbízhatóság",
+          "count": "észlelések száma",
+          "latest": "utoljára hallott idő"
+        },
+        "sortBy": "Rendezés: {column}",
+        "sortedAscending": "Rendezve: {column}, növekvő. Koppintson a sorrend megfordításához.",
+        "sortedDescending": "Rendezve: {column}, csökkenő. Koppintson a sorrend megfordításához.",
+        "rowLabel": "{name}: {count, plural, one {# észlelés} other {# észlelés}}, {confidence}% megbízhatóság, csúcs ekkor: {peak}. Koppintson a részletekért.",
+        "taxon": {
+          "all": "Mind",
+          "bird": "Madarak",
+          "bat": "Denevérek",
+          "other": "Egyéb"
+        },
+        "peakAt": "Csúcs ekkor: {time}",
+        "firstHeard": "Először hallható ekkor: {time}",
+        "lastHeard": "Utoljára hallható ekkor: {time}",
+        "history": "Előzmények"
+      }
     },
     "recentDetections": {
       "title": "Legutóbbi észlelések",
