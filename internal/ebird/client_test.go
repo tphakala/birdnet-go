@@ -599,3 +599,111 @@ func TestMetrics(t *testing.T) {
 	assert.Equal(t, int64(4), metrics.APICalls, "Should count all retry attempts")
 	assert.Equal(t, int64(3), metrics.APIErrors, "Should count all error responses")
 }
+
+// countingServer serves fixed JSON bodies by path and query and counts the
+// requests made for each.
+type countingServer struct {
+	*httptest.Server
+	mu       sync.Mutex
+	requests map[string]int
+}
+
+func newCountingServer(t *testing.T, bodies map[string]string) *countingServer {
+	t.Helper()
+	cs := &countingServer{requests: make(map[string]int)}
+	cs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := r.URL.Path
+		if r.URL.RawQuery != "" {
+			key += "?" + r.URL.RawQuery
+		}
+		cs.mu.Lock()
+		cs.requests[key]++
+		cs.mu.Unlock()
+		body, ok := bodies[key]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(cs.Close)
+	return cs
+}
+
+func (cs *countingServer) count(key string) int {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	return cs.requests[key]
+}
+
+const (
+	testTaxonomyPath   = "/ref/taxonomy/ebird?fmt=json"
+	testSpeciesPath    = "/ref/taxonomy/ebird/x?fmt=json"
+	testSpeciesPathFi  = "/ref/taxonomy/ebird/x?fmt=json&locale=fi"
+	testObservationURL = "/v2/data/obs/geo/recent?lat=60.1700&lng=24.9400&back=14&maxResults=200"
+	testTaxonomyBody   = `[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1", "familySciName": "Testidae"}]`
+)
+
+// TestCachedLookups_SpeciesAndFamilyTree pins that repeated species and family
+// tree lookups are served from their caches, and that the species cache keeps
+// one entry per locale.
+func TestCachedLookups_SpeciesAndFamilyTree(t *testing.T) {
+	server := newCountingServer(t, map[string]string{
+		testTaxonomyPath:  testTaxonomyBody,
+		testSpeciesPath:   `[{"sciName": "Test species", "comName": "Test", "speciesCode": "x"}]`,
+		testSpeciesPathFi: `[{"sciName": "Test species", "comName": "Testi", "speciesCode": "x"}]`,
+	})
+	client := setupTestClient(t, server.Server)
+	disableLogging(t)
+	ctx := t.Context()
+
+	for range 2 {
+		entry, err := client.GetSpeciesTaxonomy(ctx, "x", "")
+		require.NoError(t, err)
+		assert.Equal(t, "Test", entry.CommonName)
+		entryFi, err := client.GetSpeciesTaxonomy(ctx, "x", "fi")
+		require.NoError(t, err)
+		assert.Equal(t, "Testi", entryFi.CommonName, "each locale gets its own entry")
+	}
+	assert.Equal(t, 1, server.count(testSpeciesPath), "the default locale is fetched once")
+	assert.Equal(t, 1, server.count(testSpeciesPathFi), "the fi locale is fetched once")
+
+	first, err := client.BuildFamilyTree(ctx, "Test species")
+	require.NoError(t, err)
+	second, err := client.BuildFamilyTree(ctx, "Test species")
+	require.NoError(t, err)
+	assert.Same(t, first, second, "the second tree comes from the family tree cache")
+	assert.Equal(t, uint64(1), client.familyTrees.Stats().Hits)
+	assert.Equal(t, uint64(1), client.familyTrees.Stats().Misses)
+}
+
+// TestMetrics_SumsEveryCache pins that GetMetrics reports the hits and misses
+// of all four caches, not only the taxonomy cache.
+func TestMetrics_SumsEveryCache(t *testing.T) {
+	server := newCountingServer(t, map[string]string{
+		testTaxonomyPath:   testTaxonomyBody,
+		testSpeciesPath:    `[{"sciName": "Test species", "comName": "Test", "speciesCode": "x"}]`,
+		testObservationURL: `[]`,
+	})
+	client := setupTestClient(t, server.Server)
+	disableLogging(t)
+	ctx := t.Context()
+
+	for range 2 {
+		_, err := client.GetTaxonomy(ctx, "")
+		require.NoError(t, err)
+		_, err = client.GetSpeciesTaxonomy(ctx, "x", "")
+		require.NoError(t, err)
+		_, err = client.BuildFamilyTree(ctx, "Test species")
+		require.NoError(t, err)
+		_, err = client.GetRecentObservations(ctx, 60.17, 24.94, 14)
+		require.NoError(t, err)
+	}
+
+	// Each cache misses once and then hits once. The first family tree load
+	// also reads the taxonomy, which is a second taxonomy hit.
+	metrics := client.GetMetrics()
+	assert.Equal(t, int64(4), metrics.CacheMisses)
+	assert.Equal(t, int64(5), metrics.CacheHits)
+}
