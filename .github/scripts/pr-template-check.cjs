@@ -54,7 +54,7 @@ const CHECKBOX = /^ {0,3}[-*+][ \t]+\[([ xX])\][ \t]+([^\n]*)$/;
 // deeper offset is over-counted, which fails closed.
 const ITEM_CONTENT = /^(?: {2}|\t| \t)/;
 // HTML that starts a block (and so ends a paragraph) rather than sitting inline:
-// comments, processing instructions, declarations, and the block-level tags.
+// comments, processing instructions, declarations, and common block-level tags.
 const HTML_BLOCK_START =
   /^ {0,3}(?:<!--|<\?|<![A-Za-z]|<\/?(?:address|article|aside|blockquote|details|dialog|div|dl|fieldset|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|pre|script|section|style|summary|table|tbody|td|textarea|tfoot|th|thead|tr|ul)(?:[\s/>]|$))/i;
 // Lines at the margin that start a new block (a list item, heading, block quote
@@ -285,8 +285,9 @@ function closesFence(openFence, fence) {
 }
 
 /**
- * Trims a line and collapses its runs of spaces and tabs, so extra spacing
- * still compares equal. A line re-wrapped onto two lines does not.
+ * Trims a line and collapses its runs of whitespace, so extra spacing still
+ * compares equal. The lines gathered into one box are joined with a space, so
+ * a line re-wrapped onto two lines matches too.
  * @param {string} text
  * @returns {string}
  */
@@ -322,7 +323,7 @@ function checkBox(sections, templateSections, required) {
       : `${required.label} under **${where}** is not ticked.${consequence}`;
   }
   if (boxes.some(b => required.pattern.test(b.text))) {
-    return `${required.label} under **${where}** does not match the template's wording. Copy it unchanged from the template and tick it.${consequence}`;
+    return `${required.label} under **${where}** does not match the template's wording, or has text added inside its list item. Copy it unchanged from the template, tick it, and put any notes outside the list.${consequence}`;
   }
   return `${required.label} is missing from **${where}**. Copy it from the template and tick it.${consequence}`;
 }
@@ -348,10 +349,12 @@ function checkPullRequest({ title, body, template, labels = [] }) {
     } else if (section.content.trim() === '' && !(feature && key === RELATED_SECTION)) {
       // A section of checkboxes cannot be answered with "does not apply", and an
       // empty Related issue on a feature is reported below as a missing link.
-      const fix =
-        boxes.length > 0
-          ? 'Copy its checkboxes from the template and tick them.'
-          : 'If it does not apply, say so in a sentence.';
+      let fix = 'If it does not apply, say so in a sentence.';
+      if (boxes.length === 1) {
+        fix = 'Copy its checkbox from the template and tick it.';
+      } else if (boxes.length > 1) {
+        fix = 'Copy its checkboxes from the template and tick the ones that apply.';
+      }
       problems.push(`The **${name}** section is empty. ${fix}`);
     }
   }

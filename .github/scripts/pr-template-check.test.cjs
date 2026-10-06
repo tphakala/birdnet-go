@@ -161,11 +161,12 @@ describe('checkPullRequest', () => {
         'The **Related issue** section is empty. If it does not apply, say so in a sentence.'
       )
     );
-    for (const name of ['Checklist', 'Licensing (required)']) {
+    for (const [name, fix] of [
+      ['Checklist', 'Copy its checkboxes from the template and tick the ones that apply.'],
+      ['Licensing (required)', 'Copy its checkbox from the template and tick it.'],
+    ]) {
       assert.ok(
-        problems.includes(
-          `The **${name}** section is empty. Copy its checkboxes from the template and tick them.`
-        ),
+        problems.includes(`The **${name}** section is empty. ${fix}`),
         `expected the ${name} message, got ${JSON.stringify(problems)}`
       );
     }
@@ -211,7 +212,7 @@ describe('checkPullRequest', () => {
 
   describe('a line right after a box, which GitHub renders as part of its text', () => {
     const reworded =
-      "The relicensing agreement under **Licensing** does not match the template's wording. Copy it unchanged from the template and tick it. The pull request cannot be merged without it.";
+      "The relicensing agreement under **Licensing** does not match the template's wording, or has text added inside its list item. Copy it unchanged from the template, tick it, and put any notes outside the list. The pull request cannot be merged without it.";
     const withNextLine = next =>
       filledTemplate({ tick: untickFeatureBox }).replace(
         tickedConsent,
@@ -317,6 +318,16 @@ describe('checkPullRequest', () => {
     assert.ok(Date.now() - started < LINEAR_TIME_BUDGET_MS, `took ${Date.now() - started} ms`);
   });
 
+  it('accepts a consent line re-wrapped onto two lines', () => {
+    for (const wrapped of [
+      tickedConsent.replace(' and I agree', '\nand I agree'),
+      tickedConsent.replace(' and I agree', '\n  and I agree'),
+    ]) {
+      const body = filledTemplate({ tick: untickFeatureBox }).replace(tickedConsent, wrapped);
+      assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), [], wrapped);
+    }
+  });
+
   it('accepts a box with extra spaces inside and after it', () => {
     const spaced = `${tickedConsent.replace(' I agree ', '  I   agree ')} \t`;
     const body = filledTemplate({ tick: untickFeatureBox }).replace(tickedConsent, spaced);
@@ -334,7 +345,7 @@ describe('checkPullRequest', () => {
       .join('\n');
     const problems = checkPullRequest({ title: 'fix: something', body, template });
     assert.deepEqual(problems, [
-      "The relicensing agreement under **Licensing** does not match the template's wording. Copy it unchanged from the template and tick it. The pull request cannot be merged without it.",
+      "The relicensing agreement under **Licensing** does not match the template's wording, or has text added inside its list item. Copy it unchanged from the template, tick it, and put any notes outside the list. The pull request cannot be merged without it.",
     ]);
   });
 
@@ -344,7 +355,7 @@ describe('checkPullRequest', () => {
       '- [x] My contribution carries the relicensing grant from the contributing guidelines.'
     );
     assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), [
-      "The relicensing agreement under **Licensing** does not match the template's wording. Copy it unchanged from the template and tick it. The pull request cannot be merged without it.",
+      "The relicensing agreement under **Licensing** does not match the template's wording, or has text added inside its list item. Copy it unchanged from the template, tick it, and put any notes outside the list. The pull request cannot be merged without it.",
     ]);
   });
 
@@ -422,7 +433,7 @@ describe('checkPullRequest', () => {
       '- [x] I skimmed the [Contributing Guidelines]'
     );
     assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), [
-      "The Contributing Guidelines checkbox under **Checklist** does not match the template's wording. Copy it unchanged from the template and tick it.",
+      "The Contributing Guidelines checkbox under **Checklist** does not match the template's wording, or has text added inside its list item. Copy it unchanged from the template, tick it, and put any notes outside the list.",
     ]);
   });
 
