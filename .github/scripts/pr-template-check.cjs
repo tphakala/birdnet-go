@@ -69,10 +69,12 @@ const COMMENT_CLOSE_SEARCH_OFFSET = 2;
 // An unclosed comment with at most this many spaces before it on its line starts
 // an HTML block that runs to the end of the description.
 const BLOCK_MAX_INDENT = 3;
-// #123, owner/repo#123, or an issue or discussion URL. The owner/repo form is
-// matched from its slash so the pattern stays linear on long words.
+// #123, owner/repo#123, or an issue or discussion URL. The owner has no dots,
+// as on GitHub, and must follow a boundary that is not part of a path, so a URL
+// fragment such as example.com/docs#2 does not count. Each boundary starts one
+// scan bounded by its word, so the pattern stays linear on long words.
 const ISSUE_REFERENCE =
-  /(^|[^\w&])#\d+\b|\/[\w.-]+#\d+\b|github\.com\/[\w.-]+\/[\w.-]+\/(issues|discussions)\/\d+/i;
+  /(^|[^\w&])#\d+\b|(?:^|[^\w./-])[\w-]+\/[\w.-]+#\d+\b|github\.com\/[\w.-]+\/[\w.-]+\/(issues|discussions)\/\d+/i;
 
 // Checkboxes the author must tick. Each is found in the template's section by a
 // phrase from its line, and the description must carry that line unchanged.
@@ -83,7 +85,7 @@ const CONTRIBUTING_BOX = {
 };
 const LICENSING_BOX = {
   section: 'licensing',
-  pattern: /relicense/i,
+  pattern: /relicens/i,
   label: 'The relicensing agreement',
   consequence: ' The pull request cannot be merged without it.',
 };

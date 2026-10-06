@@ -85,6 +85,26 @@ describe('checkPullRequest', () => {
     assert.deepEqual(checkPullRequest({ title: 'feat: add a provider', body, template }), []);
   });
 
+  it('does not take a URL fragment as a linked issue', () => {
+    for (const related of ['See https://example.com/docs#2', 'See example.com/docs#2']) {
+      const body = filledTemplate({ related });
+      const problems = checkPullRequest({ title: 'feat: add a provider', body, template });
+      assert.equal(problems.length, 1, related);
+      assert.match(problems[0], /must link the issue or discussion/);
+    }
+  });
+
+  it('accepts owner/repo#N wherever it starts', () => {
+    for (const related of [
+      'tphakala/birdnet-go#4144',
+      'Agreed in the discussion.\ntphakala/birdnet-go#4144',
+      'Closes:tphakala/birdnet-go#4144',
+    ]) {
+      const body = filledTemplate({ related });
+      assert.deepEqual(checkPullRequest({ title: 'feat: x', body, template }), [], related);
+    }
+  });
+
   it('checks issue references in linear time', () => {
     const related = `${'a'.repeat(100000)} ${'/a'.repeat(1500)} ${'github.com/a'.repeat(200)}`;
     const body = filledTemplate({ related });
@@ -311,6 +331,16 @@ describe('checkPullRequest', () => {
     ]);
   });
 
+  it('reports a reworded relicensing box that says relicensing', () => {
+    const body = filledTemplate({ tick: untickFeatureBox }).replace(
+      tickedConsent,
+      '- [x] My contribution carries the relicensing grant from the contributing guidelines.'
+    );
+    assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), [
+      "The relicensing agreement under **Licensing** does not match the template's wording. Copy it unchanged from the template and tick it. The pull request cannot be merged without it.",
+    ]);
+  });
+
   it('is not misled by other checkboxes that mention the same words', () => {
     const body = filledTemplate({ tick: untickFeatureBox }).replace(
       'Fixes the audio player freeze.',
@@ -406,10 +436,10 @@ describe('checkPullRequest', () => {
   });
 
   it('fails loudly when the template loses a required checkbox', () => {
-    const reworded = template.replace('relicense it', 'license it again');
+    const reworded = template.replace(consentLine, '- [ ] I agree.');
     assert.throws(
       () => checkPullRequest({ title: 'fix: x', body: filledTemplate(), template: reworded }),
-      /no checkbox matching \/relicense\/i under "licensing"/
+      /no checkbox matching \/relicens\/i under "licensing"/
     );
   });
 
@@ -434,7 +464,7 @@ describe('checkPullRequest', () => {
     assert.ok(problems.some(p => p.startsWith('The Contributing Guidelines checkbox')));
     assert.ok(problems.some(p => p.includes('"Feature PRs only" checkbox')));
     assert.ok(!problems.some(p => p.startsWith('The relicensing agreement')));
-    const reworded = template.replace('relicense it', 'license it again');
+    const reworded = template.replace(consentLine, '- [ ] I agree.');
     assert.throws(() =>
       checkPullRequest({ title: 'fix: x', body: '', template: reworded, labels: [CONSENTED_LABEL] })
     );
