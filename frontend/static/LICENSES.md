@@ -19,17 +19,17 @@ Source: MIT
 
 ### cloud.google.com/go/auth
 
-License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.23.2/auth/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.24.0/auth/LICENSE
 Source: Apache-2.0
 
 ### cloud.google.com/go/auth/oauth2adapt
 
-License: https://github.com/googleapis/google-cloud-go/blob/auth/oauth2adapt/v0.2.8/auth/oauth2adapt/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/auth/oauth2adapt/v0.3.0/auth/oauth2adapt/LICENSE
 Source: Apache-2.0
 
 ### cloud.google.com/go/compute/metadata
 
-License: https://github.com/googleapis/google-cloud-go/blob/compute/metadata/v0.9.0/compute/metadata/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/compute/metadata/v0.10.0/compute/metadata/LICENSE
 Source: Apache-2.0
 
 ### filippo.io/edwards25519
@@ -124,7 +124,7 @@ Source: MIT
 
 ### github.com/google/s2a-go
 
-License: https://github.com/google/s2a-go/blob/v0.1.9/LICENSE.md
+License: https://github.com/google/s2a-go/blob/v0.1.10/LICENSE.md
 Source: Apache-2.0
 
 ### github.com/google/uuid
@@ -134,12 +134,12 @@ Source: BSD-3-Clause
 
 ### github.com/googleapis/enterprise-certificate-proxy/client
 
-License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.21/LICENSE
+License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.22/LICENSE
 Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
 
-License: https://github.com/googleapis/gax-go/blob/v2.24.0/v2/LICENSE
+License: https://github.com/googleapis/gax-go/blob/v2.26.2/v2/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gorilla/mux
@@ -234,12 +234,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.20.0/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.21.1/LICENSE.md
 Source: MIT
 
 ### github.com/nicholas-fedor/shoutrrr/pkg/color
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.20.0/pkg/color/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.21.1/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -424,7 +424,7 @@ Source: LGPL-2.1
 
 ### github.com/tphakala/go-audio-stream
 
-License: https://github.com/tphakala/go-audio-stream/blob/v0.5.0/LICENSE
+License: https://github.com/tphakala/go-audio-stream/blob/v0.6.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-flac
@@ -464,7 +464,7 @@ Source: MIT
 
 ### github.com/tphakala/simd
 
-License: https://github.com/tphakala/simd/blob/v1.10.0/LICENSE
+License: https://github.com/tphakala/simd/blob/v1.11.0/LICENSE
 Source: MIT
 
 ### github.com/valyala/bytebufferpool
@@ -564,17 +564,17 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.297.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.300.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/08b0e4226688/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/b14227669459/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
 
-License: https://github.com/grpc/grpc-go/blob/v1.83.2/LICENSE
+License: https://github.com/grpc/grpc-go/blob/v1.84.0/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/protobuf
@@ -601,4 +601,24 @@ Source: MIT
 
 License: https://github.com/go-gorm/gorm/blob/v1.31.2/LICENSE
 Source: MIT
+
+### mellium.im/reader
+
+License: 
+Source: BSD-2-Clause
+
+### mellium.im/sasl
+
+License: 
+Source: BSD-2-Clause
+
+### mellium.im/xmlstream
+
+License: 
+Source: BSD-2-Clause
+
+### mellium.im/xmpp
+
+License: 
+Source: BSD-2-Clause
 
