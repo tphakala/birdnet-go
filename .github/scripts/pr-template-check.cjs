@@ -59,8 +59,14 @@ const HTML_BLOCK_START =
 // or thematic break) instead of continuing a box's text.
 const BLOCK_START =
   /^ {0,3}(?:(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)|#{1,6}(?:[ \t]|$)|>|(?:-[ \t]*){3,}$|(?:\*[ \t]*){3,}$|(?:_[ \t]*){3,}$)/;
-// An unclosed comment hides the rest of the description when GitHub renders it.
-const HTML_COMMENT = /<!--[\s\S]*?(?:-->|$)/g;
+const COMMENT_OPEN = '<!--';
+const COMMENT_CLOSE = '-->';
+// "<!-->" and "<!--->" are complete comments, so the closing marker is searched
+// for from inside the opening one.
+const COMMENT_CLOSE_SEARCH_OFFSET = 2;
+// An unclosed comment with at most this many spaces before it on its line starts
+// an HTML block that runs to the end of the description.
+const BLOCK_MAX_INDENT = 3;
 // #123, owner/repo#123, or an issue or discussion URL. The owner/repo form is
 // matched from its slash so the pattern stays linear on long words.
 const ISSUE_REFERENCE =
@@ -130,6 +136,56 @@ function sectionKey(name) {
 }
 
 /**
+ * Removes HTML comments roughly the way GitHub hides them: a closed comment is
+ * removed, and an unclosed one at the start of a line (after at most three
+ * spaces) is removed together with everything after it. An unclosed comment
+ * after other text on its line is shown as text by GitHub, so it stays. Comments
+ * inside containers (lists, block quotes) and closed comments spanning blocks are
+ * approximated; see the scope note at the top of this file.
+ * @param {string} markdown
+ * @returns {string}
+ */
+function stripComments(markdown) {
+  let out = '';
+  let from = 0;
+  let closed = true;
+  for (;;) {
+    const start = markdown.indexOf(COMMENT_OPEN, from);
+    if (start < 0) {
+      return out + markdown.slice(from);
+    }
+    // Once one comment has no closing marker, no later one can have it either.
+    const end = closed ? markdown.indexOf(COMMENT_CLOSE, start + COMMENT_CLOSE_SEARCH_OFFSET) : -1;
+    if (end >= 0) {
+      out += markdown.slice(from, start);
+      from = end + COMMENT_CLOSE.length;
+      continue;
+    }
+    closed = false;
+    if (startsLine(markdown, start)) {
+      return out + markdown.slice(from, start);
+    }
+    out += markdown.slice(from, start + COMMENT_OPEN.length);
+    from = start + COMMENT_OPEN.length;
+  }
+}
+
+/**
+ * Reports whether only up to BLOCK_MAX_INDENT spaces precede a position on its
+ * line. It looks back a bounded distance, so calling it per comment is linear.
+ * @param {string} text
+ * @param {number} position
+ * @returns {boolean}
+ */
+function startsLine(text, position) {
+  let at = position;
+  while (at > 0 && position - at < BLOCK_MAX_INDENT && text[at - 1] === ' ') {
+    at--;
+  }
+  return at === 0 || text[at - 1] === '\n';
+}
+
+/**
  * Splits Markdown into its level 2 sections, with HTML comments removed. Task
  * list items outside fenced and indented code are collected per section, each
  * with the text GitHub renders inside its item (continuation lines and indented
@@ -147,7 +203,7 @@ function parseSections(markdown) {
   // or a new block, count as part of the box's text.
   let itemBox = null;
   let paragraphOpen = false;
-  for (const line of markdown.replace(HTML_COMMENT, '').split(/\r?\n/)) {
+  for (const line of stripComments(markdown).split(/\r?\n/)) {
     const heading = openFence ? null : SECTION_HEADING.exec(line);
     if (heading) {
       const name = stripClosingHashes(heading[1]);
@@ -431,5 +487,6 @@ module.exports = {
   checkPullRequest,
   parseSections,
   renderComment,
+  stripComments,
   run,
 };

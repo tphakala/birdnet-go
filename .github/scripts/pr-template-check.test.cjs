@@ -15,6 +15,7 @@ const {
   parseSections,
   renderComment,
   run,
+  stripComments,
 } = require('./pr-template-check.cjs');
 
 const template = fs.readFileSync(TEMPLATE_PATH, 'utf8');
@@ -227,6 +228,43 @@ describe('checkPullRequest', () => {
       it(`ends the box at ${name}`, () => {
         assert.deepEqual(check(withNextLine(next)), []);
       });
+    }
+  });
+
+  it('keeps the description after an unclosed comment that does not start a line', () => {
+    const body = filledTemplate({ tick: untickFeatureBox }).replace(
+      'Fixes the audio player freeze.',
+      'Fixes the audio player freeze. Svelte comments open with <!-- in markup.'
+    );
+    assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), []);
+  });
+
+  it('handles many unclosed comments on one line in linear time', () => {
+    const body = filledTemplate({ tick: untickFeatureBox }).replace(
+      'Fixes the audio player freeze.',
+      `Fixes it. x${'<!--'.repeat(16000)}`
+    );
+    const started = Date.now();
+    checkPullRequest({ title: 'fix: x', body, template });
+    assert.ok(Date.now() - started < LINEAR_TIME_BUDGET_MS, `took ${Date.now() - started} ms`);
+  });
+
+  it('strips comments the way GitHub hides them', () => {
+    for (const [input, expected] of [
+      ['a <!-- b --> c', 'a  c'],
+      ['a<!---->b', 'ab'],
+      ['a<!-->b', 'ab'],
+      ['a<!--->b', 'ab'],
+      ['a <!-- b\nc --> d', 'a  d'],
+      ['a <!-- b', 'a <!-- b'],
+      ['a <!-- b\n<!-- c', 'a <!-- b\n'],
+      ['x\n<!-- open\nrest', 'x\n'],
+      ['x\n   <!-- open\nrest', 'x\n   '],
+      ['x\n    <!-- open\nrest', 'x\n    <!-- open\nrest'],
+      ['x\r\n<!-- open\r\nrest', 'x\r\n'],
+      ['<!-- open\nrest', ''],
+    ]) {
+      assert.equal(stripComments(input), expected, JSON.stringify(input));
     }
   });
 
