@@ -413,7 +413,7 @@ describe('checkPullRequest', () => {
       ]);
     });
 
-    it('is consent in a fence opened with an info string', () => {
+    it('still finds consent after a fence opened with an info string', () => {
       const body = filledTemplate({ tick: untickFeatureBox }).replace(
         'Fixes the audio player freeze.',
         'Fixes the audio player freeze.\n\n```js\nconst x = 1;\n```'
@@ -636,7 +636,6 @@ describe('run', () => {
       assert.ok(env.calls[1].params.body.includes(`\n- ${problem}`), problem);
       assert.ok(env.core.failed.includes(`\n- ${problem}`), problem);
     }
-    assert.ok(env.core.failed);
   });
 
   it('updates its own comment instead of posting another one', async () => {

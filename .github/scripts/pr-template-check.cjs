@@ -36,6 +36,9 @@ const HTTP_NOT_FOUND = 404;
 const COMMENTS_PER_PAGE = 100;
 // Template section a feature pull request links its agreed issue or discussion in.
 const RELATED_SECTION = 'related issue';
+// Template sections that hold the required checkboxes.
+const CHECKLIST_SECTION = 'checklist';
+const LICENSING_SECTION = 'licensing';
 
 const FEATURE_TITLE = /^feat(\([^)]*\))?!?:/i;
 // Linear on purpose: a body can hold a 65k character line, and a pattern with
@@ -79,18 +82,18 @@ const ISSUE_REFERENCE =
 // Checkboxes the author must tick. Each is found in the template's section by a
 // phrase from its line, and the description must carry that line unchanged.
 const CONTRIBUTING_BOX = {
-  section: 'checklist',
+  section: CHECKLIST_SECTION,
   pattern: /contributing guidelines/i,
   label: 'The Contributing Guidelines checkbox',
 };
 const LICENSING_BOX = {
-  section: 'licensing',
+  section: LICENSING_SECTION,
   pattern: /relicens/i,
   label: 'The relicensing agreement',
   consequence: ' The pull request cannot be merged without it.',
 };
 const FEATURE_BOX = {
-  section: 'checklist',
+  section: CHECKLIST_SECTION,
   pattern: /^feature prs only/i,
   label: 'This is a feature pull request, but the "Feature PRs only" checkbox',
 };
