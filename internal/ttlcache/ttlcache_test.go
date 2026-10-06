@@ -945,14 +945,16 @@ func TestGetOrLoad_LoaderContextKeepsCallerValues(t *testing.T) {
 // unregisters the new load, whose value is then stored.
 func TestSetAndDelete_NewLoadOfSameKeySurvivesOldLoad(t *testing.T) {
 	t.Parallel()
-	for name, mutate := range map[string]func(c *Cache[string, int]){
-		"Set":    func(c *Cache[string, int]) { c.Set("k", 1); c.Delete("k") },
-		"Delete": func(c *Cache[string, int]) { c.Delete("k") },
+	// The Set case lets the value it wrote expire, so the next miss starts a
+	// new load while the old one is still in flight.
+	for name, mutate := range map[string]func(c *Cache[string, int], clk *fakeClock){
+		"Set":    func(c *Cache[string, int], clk *fakeClock) { c.Set("k", 1); clk.Advance(testTTL) },
+		"Delete": func(c *Cache[string, int], _ *fakeClock) { c.Delete("k") },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			synctest.Test(t, func(t *testing.T) {
-				c := New[string, int](testTTL)
+				c, clk := newTestCache(testTTL)
 				releaseOld := make(chan struct{})
 				releaseNew := make(chan struct{})
 				var calls atomic.Int32
@@ -970,7 +972,7 @@ func TestSetAndDelete_NewLoadOfSameKeySurvivesOldLoad(t *testing.T) {
 					oldResult <- v
 				}()
 				synctest.Wait()
-				mutate(c)
+				mutate(c, clk)
 				go func() {
 					v, _ := c.GetOrLoad(t.Context(), "k", loaderFor(releaseNew, 20))
 					newResult <- v

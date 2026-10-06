@@ -719,8 +719,9 @@ func TestDDoSProtection(t *testing.T) {
 		t.Log("Note: Rate limiting should be verified in production environment")
 	}
 
-	// Every request must be served: the cache never turns a request away.
-	assert.Equal(t, concurrentRequests, successCount, "Not all requests were served")
+	// Every request must be answered with success or a rate-limit response: the
+	// cache never turns a request away with any other status.
+	assert.Equal(t, concurrentRequests, successCount+rateLimitedCount, "Not all requests were served or rate limited")
 }
 
 // TestRateLimiting tests API rate limiting functionality

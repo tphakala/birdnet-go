@@ -123,14 +123,19 @@ func TestDetectionPageCache_DirectLoadPanicBecomesPanicError(t *testing.T) {
 	t.Parallel()
 	panicking := func(context.Context) (DetectionPage, error) { panic("datastore exploded") }
 
-	for name, c := range map[string]*DetectionPageCache{
-		"nil cache":       nil,
-		"page over bound": NewDetectionPageCache(),
+	for name, tc := range map[string]struct {
+		cache *DetectionPageCache
+		limit int
+	}{
+		"nil cache":       {nil, detectionCacheMaxPageNotes + 1},
+		"page over bound": {NewDetectionPageCache(), detectionCacheMaxPageNotes + 1},
+		"zero limit":      {NewDetectionPageCache(), 0},
+		"negative limit":  {NewDetectionPageCache(), -1},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			key := &DetectionPageKey{Kind: DetectionPageSearch, Limit: detectionCacheMaxPageNotes + 1}
-			_, err := c.GetOrLoad(t.Context(), key, panicking)
+			key := &DetectionPageKey{Kind: DetectionPageSearch, Limit: tc.limit}
+			_, err := tc.cache.GetOrLoad(t.Context(), key, panicking)
 			pe, ok := errors.AsType[*ttlcache.PanicError](err)
 			require.True(t, ok, "got %v", err)
 			assert.Equal(t, "datastore exploded", pe.Value)
