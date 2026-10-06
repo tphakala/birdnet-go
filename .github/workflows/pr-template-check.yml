@@ -8,9 +8,10 @@ name: PR Template Check
 # fixed. The "template: exempt" label skips the check.
 #
 # pull_request_target is needed to label and comment on fork PRs. It is safe here
-# because the job checks out only the base branch (the check script and the
-# template) and reads the PR title and body as data from the event payload. Never
-# check out or run the pull request's code in this workflow.
+# because the job checks out only the .github directory of the default branch tip
+# (the same commit this workflow file comes from) and reads the PR title and body
+# as data from the event payload. Never check out or run the pull request's code
+# in this workflow.
 on:
   pull_request_target:
     # synchronize keeps the check attached to the latest head commit.
@@ -45,10 +46,11 @@ jobs:
       # Adds and removes the label and the comment on the pull request.
       pull-requests: write
     steps:
+      # No ref: under pull_request_target, checkout defaults to the base branch tip.
+      # The PR's base.sha is older for any PR not rebased since this script landed.
       - name: Checkout base branch
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
           sparse-checkout: .github
 

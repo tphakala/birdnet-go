@@ -1,8 +1,8 @@
 // Checks that a pull request description follows .github/pull_request_template.md.
 //
-// The pr-template-check workflow runs this on pull_request_target, so the script
-// and the template are always read from the base branch. It never checks out or
-// runs code from the pull request; the PR title and body are only parsed as text.
+// The pr-template-check workflow runs this on pull_request_target from a checkout
+// of the base branch tip, so the script and the template come from the base
+// branch, not the pull request. The PR title and body are only parsed as text.
 'use strict';
 
 const fs = require('fs');
