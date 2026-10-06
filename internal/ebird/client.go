@@ -255,9 +255,16 @@ func (c *Client) findSubspecies(taxonomy []TaxonomyEntry, speciesCode string) []
 func (c *Client) doRequest(ctx context.Context, method, url string, body io.Reader, result any) error {
 	log := GetLogger()
 
-	// Rate limiting
+	// Rate limiting. The wait also ends with the request context: Close stops
+	// the ticker, and a load running detached from its caller would otherwise
+	// wait for a tick that never comes.
 	c.mu.Lock()
-	<-c.rateLimiter.C
+	select {
+	case <-c.rateLimiter.C:
+	case <-ctx.Done():
+		c.mu.Unlock()
+		return ctx.Err()
+	}
 	c.lastRequest = time.Now()
 	c.mu.Unlock()
 

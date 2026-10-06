@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -706,4 +707,27 @@ func TestMetrics_SumsEveryCache(t *testing.T) {
 	metrics := client.GetMetrics()
 	assert.Equal(t, int64(4), metrics.CacheMisses)
 	assert.Equal(t, int64(5), metrics.CacheHits)
+}
+
+// TestClose_RateLimitWaitEndsWithRequestTimeout pins that a fetch waiting for
+// the rate limiter after Close (which stops the ticker) gives up when its
+// request timeout expires instead of blocking forever. The fetch runs as a
+// detached cache load, so nothing else would release it.
+func TestClose_RateLimitWaitEndsWithRequestTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client, err := NewClient(Config{
+			APIKey:      "test-key",
+			BaseURL:     "http://127.0.0.1:1", // never contacted
+			Timeout:     time.Second,
+			CacheTTL:    time.Hour,
+			RateLimitMS: 10,
+		})
+		require.NoError(t, err)
+		disableLogging(t)
+		client.Close()
+
+		_, err = client.GetTaxonomy(t.Context(), "")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
 }
