@@ -1,6 +1,6 @@
 name: PR Template Check
 
-# Checks that pull requests from forks follow .github/pull_request_template.md:
+# Checks that open pull requests from forks follow .github/pull_request_template.md:
 # every template section present and filled in, the Contributing Guidelines and
 # relicensing boxes ticked (a "relicense: consented" label stands in for the
 # relicensing box), and for feat PRs the feature ownership box ticked and a
@@ -28,11 +28,13 @@ concurrency:
 
 jobs:
   check-template:
-    # Fork PRs only, and not bots. Every label event re-runs the full check rather
-    # than skipping: a skipped run would replace a failed check on the PR and read
-    # as a pass. Label changes made by this job use GITHUB_TOKEN, so they do not
-    # trigger new runs.
+    # Open fork PRs only, and not bots. Edits and label changes on closed or merged
+    # PRs, such as relicensing labels, are not checked. Every label event on an
+    # open PR re-runs the full check rather than skipping: a skipped run would
+    # replace a failed check on the PR and read as a pass. Label changes made by
+    # this job use GITHUB_TOKEN, so they do not trigger new runs.
     if: >-
+      github.event.pull_request.state == 'open' &&
       github.event.pull_request.head.repo.full_name != github.repository &&
       github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-24.04
