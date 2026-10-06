@@ -242,11 +242,6 @@ Source: MIT
 License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.21.1/pkg/color/LICENSE.md
 Source: MIT
 
-### github.com/patrickmn/go-cache
-
-License: https://github.com/patrickmn/go-cache/blob/v2.1.0/LICENSE
-Source: MIT
-
 ### github.com/pb33f/ordered-map/v2
 
 License: https://github.com/pb33f/ordered-map/blob/v2.3.1/LICENSE
