@@ -23,7 +23,6 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/moby/moby/api v1.56.1
 	github.com/nicholas-fedor/shoutrrr v0.21.1
-	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/sftp v1.13.11
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3

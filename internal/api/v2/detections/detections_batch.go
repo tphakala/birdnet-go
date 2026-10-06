@@ -251,8 +251,11 @@ func (c *Handler) BatchResolveDetections(ctx echo.Context) error {
 		Offset:     0,
 	}
 
-	notes, totalCount, err := c.getDetectionsByQueryType(params)
+	notes, totalCount, err := c.getDetectionsByQueryType(ctx.Request().Context(), params)
 	if err != nil {
+		if ended, respErr := c.respondIfRequestEnded(ctx, err, "Detection resolve request ended before completion"); ended {
+			return respErr
+		}
 		return c.HandleError(ctx, err, "Failed to resolve detections", http.StatusInternalServerError)
 	}
 

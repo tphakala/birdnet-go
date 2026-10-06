@@ -320,10 +320,9 @@ func TestMain(m *testing.M) {
 Start from an empty ignore list rather than copying one from another test, and
 never add a broad ignore that can hide real leaks (`sync.runtime_notifyListWait`
 hides any goroutine stuck in `sync.Cond.Wait`). Add an ignore only for a named goroutine
-you have seen in a failure and cannot stop, such as the go-cache janitor
-(`goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run")`),
-which has no Stop method and exits only when its cache is garbage collected,
-something goleak's retry cannot wait for. Do not ignore a goroutine you can
+you have seen in a failure and cannot stop, such as a third-party worker with
+no Stop method that exits only when it is garbage collected, something goleak's
+retry cannot wait for. Do not ignore a goroutine you can
 stop: `database/sql.(*DB).connectionOpener`, for example, exits when the
 database is closed, so close it in `t.Cleanup` instead. goleak already filters
 the test runner's own goroutines, so never add `testing.(*T).Run` or

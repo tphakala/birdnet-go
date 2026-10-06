@@ -1,9 +1,13 @@
 package detections
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 )
 
 func TestNeedsAdvancedRouting(t *testing.T) {
@@ -200,16 +204,94 @@ func TestNeedsAdvancedRouting(t *testing.T) {
 	}
 }
 
-// TestAdvancedSearchCacheKey_NoDelimiterCollision pins that free-text filter values containing
-// the key's own delimiter cannot make two different requests share a cache entry.
-func TestAdvancedSearchCacheKey_NoDelimiterCollision(t *testing.T) {
+// TestAdvancedPageKey_NoDelimiterCollision pins that free-text filter values that
+// concatenate to the same text cannot make two different requests share a cache entry.
+func TestAdvancedPageKey_NoDelimiterCollision(t *testing.T) {
 	t.Parallel()
 	a := detectionQueryParams{QueryType: queryTypeSearch, Location: "node", Source: "rtsp://camera", Locked: "true"}
 	b := detectionQueryParams{QueryType: queryTypeSearch, Location: "node:rtsp", Source: "//camera", Locked: "true"}
-	assert.NotEqual(t, a.advancedSearchCacheKey(), b.advancedSearchCacheKey())
+	assert.NotEqual(t, a.advancedPageKey(), b.advancedPageKey())
 
 	same := a
-	assert.Equal(t, a.advancedSearchCacheKey(), same.advancedSearchCacheKey())
+	assert.Equal(t, a.advancedPageKey(), same.advancedPageKey())
 	same.Source = "rtsp://camera2"
-	assert.NotEqual(t, a.advancedSearchCacheKey(), same.advancedSearchCacheKey(), "source must be part of the key")
+	assert.NotEqual(t, a.advancedPageKey(), same.advancedPageKey(), "source must be part of the key")
+}
+
+// TestAdvancedPageKey_EveryFilterFieldChangesKey fails when a field is added to
+// detectionQueryParams without being keyed. QueryType and IncludeWeather are the
+// only fields buildAdvancedSearchFilters never reads, so they must not change
+// the key; every other field must.
+func TestAdvancedPageKey_EveryFilterFieldChangesKey(t *testing.T) {
+	t.Parallel()
+	base := detectionQueryParams{}
+	baseKey := base.advancedPageKey()
+
+	for field := range reflect.TypeFor[detectionQueryParams]().Fields() {
+		p := base
+		v := reflect.ValueOf(&p).Elem().FieldByName(field.Name)
+		switch v.Kind() {
+		case reflect.String:
+			v.SetString("x")
+		case reflect.Int:
+			v.SetInt(7)
+		case reflect.Bool:
+			v.SetBool(true)
+		case reflect.Slice:
+			v.Set(reflect.ValueOf([]string{"Parus major"}))
+		default:
+			require.Failf(t, "unsupported field kind", "%s has kind %s: extend this test", field.Name, v.Kind())
+		}
+
+		if field.Name == "QueryType" || field.Name == "IncludeWeather" {
+			assert.Equal(t, baseKey, p.advancedPageKey(), "%s must not change the key", field.Name)
+			continue
+		}
+		assert.NotEqual(t, baseKey, p.advancedPageKey(), "%s must be part of the key", field.Name)
+	}
+}
+
+// TestPageKeys_MatchDatastoreArguments pins that each simple page key carries
+// exactly the arguments its datastore call uses and nothing else, so two keys
+// are equal only when the loaders would query identically.
+func TestPageKeys_MatchDatastoreArguments(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		got  *apicore.DetectionPageKey
+		want *apicore.DetectionPageKey
+	}{
+		{
+			name: "hourly",
+			got:  hourlyPageKey("2025-03-07", "08", 2, 10, 20),
+			want: &apicore.DetectionPageKey{Kind: apicore.DetectionPageHourly, Date: "2025-03-07", Hour: "08", Duration: 2, Limit: 10, Offset: 20},
+		},
+		{
+			name: "species",
+			got:  speciesPageKey("Parus major", "2025-03-07", "08", 2, 10, 20),
+			want: &apicore.DetectionPageKey{Kind: apicore.DetectionPageSpecies, Species: "Parus major", Date: "2025-03-07", Hour: "08", Duration: 2, Limit: 10, Offset: 20},
+		},
+		{
+			name: "search without alternatives",
+			got:  searchPageKey("crow", nil, 10, 20),
+			want: &apicore.DetectionPageKey{Kind: apicore.DetectionPageSearch, Search: "crow", Limit: 10, Offset: 20},
+		},
+		{
+			name: "search with alternatives",
+			got:  searchPageKey("owl", []string{"Tyto alba", "Strix aluco"}, 10, 20),
+			want: &apicore.DetectionPageKey{Kind: apicore.DetectionPageSearch, Search: "owl", SearchScientific: "Tyto alba\x00Strix aluco", Limit: 10, Offset: 20},
+		},
+		{
+			name: "empty search is the all query",
+			got:  searchPageKey("", nil, 10, 20),
+			want: &apicore.DetectionPageKey{Kind: apicore.DetectionPageSearch, Limit: 10, Offset: 20},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, tt.got)
+		})
+	}
+	assert.NotEqual(t, hourlyPageKey("d", "h", 1, 1, 0), speciesPageKey("", "d", "h", 1, 1, 0), "kinds never share a key")
 }

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -615,19 +614,16 @@ func TestDDoSProtection(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupTestEnvironment(t)
 
-	// Initialize the detection cache manually since routes aren't initialized in test environment
-	controller.DetectionCache = cache.New(5*time.Minute, 10*time.Minute)
-
 	// Number of concurrent requests to simulate
 	concurrentRequests := 50
 
-	// Setup mock expectations - with caching enabled and concurrent requests,
-	// multiple requests may check the cache before the first one populates it.
-	// Use Maybe() to allow for race conditions in concurrent testing.
+	// Concurrent identical requests share one datastore load: a caller either
+	// joins the load in flight or hits the cache once it is stored, so the
+	// datastore is queried exactly once.
 	mockDS.EXPECT().
 		SearchNotes(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.Note{}, int64(0), nil).
-		Maybe() // Multiple requests may call before cache is populated
+		Once()
 
 	// Create a wait group to synchronize goroutines
 	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
@@ -670,10 +666,8 @@ func TestDDoSProtection(t *testing.T) {
 	var totalResponseTime time.Duration
 	successCount := 0
 	rateLimitedCount := 0
-	totalRequests := 0
 
 	for code := range statusCodesChan {
-		totalRequests++
 		switch code {
 		case http.StatusOK:
 			successCount++
@@ -704,8 +698,8 @@ func TestDDoSProtection(t *testing.T) {
 		t.Log("Note: Rate limiting should be verified in production environment")
 	}
 
-	// Verify all requests were handled (either successfully or rate-limited)
-	assert.Equal(t, concurrentRequests, totalRequests, "Not all requests were processed")
+	// Every request must be served: the cache never turns a request away.
+	assert.Equal(t, concurrentRequests, successCount, "Not all requests were served")
 }
 
 // TestRateLimiting tests API rate limiting functionality
