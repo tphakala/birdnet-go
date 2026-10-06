@@ -675,8 +675,9 @@ func (p *detectionQueryParams) needsAdvancedRouting() bool {
 // respondIfRequestEnded handles an error that the end of the request itself
 // caused: the request context is done (client disconnect, or a server-side
 // deadline on it) and err is the matching context error. That is an expected
-// lifecycle event, so it is logged at debug instead of error and answered with
-// the status the analytics handlers use (499 for a cancel, 408 for a deadline).
+// lifecycle event, so it is logged at debug instead of error, with the
+// correlation id the client receives, and answered with the status the
+// analytics handlers use (499 for a cancel, 408 for a deadline).
 // It reports whether it handled the error; a datastore error that merely wraps
 // a context error while the request is still live is not handled here.
 func (c *Handler) respondIfRequestEnded(ctx echo.Context, err error, logMsg string) (handled bool, respErr error) {
@@ -695,12 +696,15 @@ func (c *Handler) respondIfRequestEnded(ctx echo.Context, err error, logMsg stri
 	default:
 		return false, nil
 	}
+	resp := c.NewErrorResponse(err, msg, code)
 	c.LogDebugIfEnabled(logMsg,
 		logger.Error(err),
+		logger.String("correlation_id", resp.CorrelationID),
+		logger.String("method", ctx.Request().Method),
 		logger.String("path", apicore.RoutePattern(ctx)),
 		logger.String("ip", ctx.RealIP()),
 	)
-	return true, ctx.JSON(code, c.NewErrorResponse(err, msg, code))
+	return true, ctx.JSON(code, resp)
 }
 
 // getDetectionsByQueryType retrieves detections based on the query type. The

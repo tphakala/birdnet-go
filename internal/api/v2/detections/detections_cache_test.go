@@ -340,9 +340,10 @@ func postBatch(t *testing.T, e *echo.Echo, handler func(echo.Context) error, bod
 // does not expect (Module, With, Log) cannot hit a nil interface.
 type levelRecorder struct {
 	logger.Logger
-	mu     sync.Mutex
-	debugs []string
-	errs   []string
+	mu          sync.Mutex
+	debugs      []string
+	debugFields map[string][]logger.Field
+	errs        []string
 }
 
 func newLevelRecorder() *levelRecorder {
@@ -353,10 +354,27 @@ func (r *levelRecorder) Trace(string, ...logger.Field) {}
 func (r *levelRecorder) Info(string, ...logger.Field)  {}
 func (r *levelRecorder) Warn(string, ...logger.Field)  {}
 
-func (r *levelRecorder) Debug(msg string, _ ...logger.Field) {
+func (r *levelRecorder) Debug(msg string, fields ...logger.Field) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.debugs = append(r.debugs, msg)
+	if r.debugFields == nil {
+		r.debugFields = make(map[string][]logger.Field)
+	}
+	r.debugFields[msg] = fields
+}
+
+// debugField returns the value of key in the fields of the last debug line
+// logged with msg.
+func (r *levelRecorder) debugField(msg, key string) (any, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, f := range r.debugFields[msg] {
+		if f.Key == key {
+			return f.Value, true
+		}
+	}
+	return nil, false
 }
 
 func (r *levelRecorder) Error(msg string, _ ...logger.Field) {
@@ -487,4 +505,34 @@ func TestGetDetections_AllQueryLogsAllDetections(t *testing.T) {
 	defer rec.mu.Unlock()
 	assert.Contains(t, rec.errs, "Failed to get all detections")
 	assert.NotContains(t, rec.errs, "Failed to search notes")
+}
+
+// TestGetDetections_RequestEndedLogsCorrelationID pins that the debug line for a
+// request that ended carries the correlation id the client received, so the
+// response can be traced back to the log.
+func TestGetDetections_RequestEndedLogsCorrelationID(t *testing.T) {
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	e, _, h := setupTestEnvironment(t)
+	rec := newLevelRecorder()
+	h.APILogger = rec
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections?queryType=search&search=Crow", http.NoBody).WithContext(canceled)
+	resp := httptest.NewRecorder()
+	c := e.NewContext(req, resp)
+	c.SetPath("/api/v2/detections")
+	require.NoError(t, h.GetDetections(c))
+	require.Equal(t, apicore.StatusClientClosedRequest, resp.Code)
+
+	var body apicore.ErrorResponse
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+	require.NotEmpty(t, body.CorrelationID)
+
+	const msg = "Detections request ended before completion"
+	id, ok := rec.debugField(msg, "correlation_id")
+	require.True(t, ok, "the request-ended line logs correlation_id")
+	assert.Equal(t, body.CorrelationID, id)
+	method, ok := rec.debugField(msg, "method")
+	require.True(t, ok, "the request-ended line logs method")
+	assert.Equal(t, http.MethodGet, method)
 }
