@@ -40,10 +40,11 @@ const RELATED_SECTION = 'related issue';
 const CHECKLIST_SECTION = 'checklist';
 const LICENSING_SECTION = 'licensing';
 
-const FEATURE_TITLE = /^feat(\([^)]*\))?!?:/i;
+// feat: as in Conventional Commits, and feature: as some contributors write it.
+const FEATURE_TITLE = /^feat(?:ure)?(\([^)]*\))?!?:/i;
 // Linear on purpose: a body can hold a 65k character line, and a pattern with
 // several adjacent quantifiers here backtracked for hours on one.
-const SECTION_HEADING = /^##[ \t]+(\S[^\n]*)$/;
+const SECTION_HEADING = /^ {0,3}##[ \t]+(\S[^\n]*)$/;
 // A fenced code block opens with three or more backticks or tildes indented at
 // most three spaces, and closes on a run of the same character at least as long.
 // The info string is matched with [^\n], not ., which stops at U+2028 and made
@@ -72,12 +73,13 @@ const COMMENT_CLOSE_SEARCH_OFFSET = 2;
 // An unclosed comment with at most this many spaces before it on its line starts
 // an HTML block that runs to the end of the description.
 const BLOCK_MAX_INDENT = 3;
-// #123, owner/repo#123, or an issue or discussion URL. The owner has no dots,
-// as on GitHub, and must follow a boundary that is not part of a path, so a URL
-// fragment such as example.com/docs#2 does not count. Each boundary starts one
-// scan bounded by its word, so the pattern stays linear on long words.
+// #123, owner/repo#123, or an issue or discussion URL. A bare #123 must not
+// follow a slash, and the owner has no dots, as on GitHub, and must follow a
+// boundary that is not part of a path, so URL fragments such as example.com/docs#2
+// and example.com/docs/#2 do not count. Each boundary starts one scan bounded by
+// its word, so the pattern stays linear on long words.
 const ISSUE_REFERENCE =
-  /(^|[^\w&])#\d+\b|(?:^|[^\w./-])[\w-]+\/[\w.-]+#\d+\b|github\.com\/[\w.-]+\/[\w.-]+\/(issues|discussions)\/\d+/i;
+  /(^|[^\w&/])#\d+\b|(?:^|[^\w./-])[\w-]+\/[\w.-]+#\d+\b|github\.com\/[\w.-]+\/[\w.-]+\/(issues|discussions)\/\d+/i;
 
 // Checkboxes the author must tick. Each is found in the template's section by a
 // phrase from its line, and the description must carry that line unchanged.
@@ -211,7 +213,9 @@ function parseSections(markdown) {
   let itemBox = null;
   let paragraphOpen = false;
   for (const line of stripComments(markdown).split(/\r?\n/)) {
-    const heading = openFence ? null : SECTION_HEADING.exec(line);
+    // A heading indented into an open item belongs to the item, as on GitHub.
+    const heading =
+      openFence || (itemBox && ITEM_CONTENT.test(line)) ? null : SECTION_HEADING.exec(line);
     if (heading) {
       const name = stripClosingHashes(heading[1]);
       const key = sectionKey(name);
@@ -429,8 +433,8 @@ async function ignoreNotFound(call) {
 
 /**
  * Entry point for actions/github-script: checks the pull request in the event
- * payload, keeps the label and the comment in sync, and fails when the
- * description does not follow the template.
+ * payload, keeps the label and a single marker comment in sync (removing any
+ * duplicates), and fails when the description does not follow the template.
  * @param {{github: object, context: object, core: object}} env the Octokit
  *   client, the workflow run context, and @actions/core, as github-script passes them
  * @returns {Promise<void>}
@@ -453,23 +457,25 @@ async function run({ github, context, core }) {
     ...issue,
     per_page: COMMENTS_PER_PAGE,
   });
-  const comment = comments.find(
-    c => c.user && c.user.login === COMMENT_AUTHOR && c.body.includes(COMMENT_MARKER)
+  // Normally there is one marker comment, but a request from a cancelled run can
+  // add a second; the first is kept and any others are removed.
+  const [comment, ...duplicates] = comments.filter(
+    c => c.user && c.user.login === COMMENT_AUTHOR && c.body && c.body.includes(COMMENT_MARKER)
   );
+  const deleteComment = ({ id }) =>
+    ignoreNotFound(() => github.rest.issues.deleteComment({ owner, repo, comment_id: id }));
 
   // The label calls below do not trust the payload's label list for the
   // needs-template label: it is a snapshot from when the event fired, and an
   // overlapping run may have changed it since. Label adds and removes are safe
   // to repeat. A request from a cancelled run can still land after this run's;
-  // the next event on the pull request corrects the label and the comment.
+  // the next event on the pull request corrects the label and the comments.
   if (problems.length === 0) {
     await ignoreNotFound(() =>
       github.rest.issues.removeLabel({ ...issue, name: NEEDS_TEMPLATE_LABEL })
     );
-    if (comment) {
-      await ignoreNotFound(() =>
-        github.rest.issues.deleteComment({ owner, repo, comment_id: comment.id })
-      );
+    for (const stale of comment ? [comment, ...duplicates] : []) {
+      await deleteComment(stale);
     }
     core.info('The pull request description follows the template.');
     return;
@@ -486,6 +492,9 @@ async function run({ github, context, core }) {
     if (!updated) {
       await github.rest.issues.createComment({ ...issue, body });
     }
+  }
+  for (const duplicate of duplicates) {
+    await deleteComment(duplicate);
   }
   core.setFailed(
     `The pull request description does not follow the template:\n${formatList(problems)}`

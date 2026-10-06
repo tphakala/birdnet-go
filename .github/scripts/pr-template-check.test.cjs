@@ -65,7 +65,7 @@ describe('checkPullRequest', () => {
     );
   });
 
-  it('accepts a filled in template on a feature that links its discussion', () => {
+  it('accepts a filled in template on a feature that links its issue', () => {
     const body = filledTemplate();
     assert.deepEqual(
       checkPullRequest({ title: 'feat(weather): add a provider', body, template }),
@@ -86,7 +86,11 @@ describe('checkPullRequest', () => {
   });
 
   it('does not take a URL fragment as a linked issue', () => {
-    for (const related of ['See https://example.com/docs#2', 'See example.com/docs#2']) {
+    for (const related of [
+      'See https://example.com/docs#2',
+      'See example.com/docs#2',
+      'See https://example.com/docs/#2',
+    ]) {
       const body = filledTemplate({ related });
       const problems = checkPullRequest({ title: 'feat: add a provider', body, template });
       assert.equal(problems.length, 1, related);
@@ -117,6 +121,7 @@ describe('checkPullRequest', () => {
     const body = filledTemplate({ tick: untickFeatureBox });
     assert.equal(checkPullRequest({ title: 'Feat(ui): x', body, template }).length, 1);
     assert.deepEqual(checkPullRequest({ title: 'fix: feat: x', body, template }), []);
+    assert.equal(checkPullRequest({ title: 'feature(ui): x', body, template }).length, 1);
   });
 
   it('accepts upper case X and Windows line endings', () => {
@@ -227,6 +232,7 @@ describe('checkPullRequest', () => {
       ['a nested bullet', '  - except for the files under docs/'],
       ['a nested numbered item', '  1. except for the files under docs/'],
       ['an indented heading', '  # except for docs'],
+      ['an indented level 2 heading', '  ## except for docs'],
       ['an indented fence', '  ```\n  except for docs\n  ```'],
       ['an indented paragraph after a blank line', '\n  Except for the files under docs/'],
       ['an inline HTML caveat', '<sub>except for docs</sub>'],
@@ -553,6 +559,14 @@ describe('checkPullRequest', () => {
     assert.deepEqual(checkPullRequest({ title: 'fix: something', body, template }), []);
   });
 
+  it('reads a heading indented up to three spaces', () => {
+    const body = filledTemplate({ tick: untickFeatureBox })
+      .replace('## Description', ' ## Description')
+      .replace('## Related issue', '  ## Related issue')
+      .replace('## Checklist', '   ## Checklist');
+    assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), []);
+  });
+
   it('ignores headings inside code blocks', () => {
     const body = `\`\`\`\n${filledTemplate({ tick: untickFeatureBox })}\n\`\`\`\n`;
     const problems = checkPullRequest({ title: 'fix: something', body, template });
@@ -616,7 +630,7 @@ function fakeEnvironment({ title, body, labels = [], comments = [], failures = {
 const botComment = body => ({ id: COMMENT_ID, user: { login: COMMENT_AUTHOR }, body });
 
 describe('run', () => {
-  it('finds its comment by the account GITHUB_TOKEN posts as', () => {
+  it('defines COMMENT_AUTHOR as the account GITHUB_TOKEN posts as', () => {
     assert.equal(COMMENT_AUTHOR, 'github-actions[bot]');
   });
 
@@ -711,6 +725,60 @@ describe('run', () => {
       title: 'feat: x',
       body: ownFormatBody,
       comments: [botComment('i18n validation results')],
+    });
+    await run(env);
+    assert.deepEqual(
+      env.calls.map(c => c.name),
+      ['addLabels', 'createComment']
+    );
+  });
+
+  it('removes duplicate marker comments when the description fails', async () => {
+    const env = fakeEnvironment({
+      title: 'feat: x',
+      body: ownFormatBody,
+      comments: [
+        botComment(`${COMMENT_MARKER}\nold text`),
+        { ...botComment(`${COMMENT_MARKER}\nolder text`), id: COMMENT_ID + 1 },
+      ],
+    });
+    await run(env);
+    assert.deepEqual(
+      env.calls.map(c => c.name),
+      ['addLabels', 'updateComment', 'deleteComment']
+    );
+    assert.equal(env.calls[1].params.comment_id, COMMENT_ID);
+    assert.equal(env.calls[2].params.comment_id, COMMENT_ID + 1);
+  });
+
+  it('removes every marker comment once the description is fixed', async () => {
+    const env = fakeEnvironment({
+      title: 'feat: x',
+      body: filledTemplate(),
+      comments: [
+        botComment(`${COMMENT_MARKER}\nold text`),
+        { ...botComment(`${COMMENT_MARKER}\nolder text`), id: COMMENT_ID + 1 },
+      ],
+    });
+    await run(env);
+    assert.deepEqual(
+      env.calls.map(c => [c.name, c.params.comment_id]),
+      [
+        ['removeLabel', undefined],
+        ['deleteComment', COMMENT_ID],
+        ['deleteComment', COMMENT_ID + 1],
+      ]
+    );
+  });
+
+  it('skips comments with no body or no author', async () => {
+    const env = fakeEnvironment({
+      title: 'feat: x',
+      body: ownFormatBody,
+      comments: [
+        { id: 1, user: { login: COMMENT_AUTHOR }, body: null },
+        { id: 2, user: null, body: COMMENT_MARKER },
+      ],
     });
     await run(env);
     assert.deepEqual(
