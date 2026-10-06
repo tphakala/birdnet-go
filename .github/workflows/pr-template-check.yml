@@ -9,9 +9,10 @@ name: PR Template Check
 # fixed. The "template: exempt" label skips the check.
 #
 # pull_request_target is needed to label and comment on fork PRs. It is safe here
-# because the job checks out only the .github directory of the base branch tip
-# (the same commit this workflow file comes from) and reads the PR title and body
-# as data from the event payload. Never check out or run the pull request's code
+# because the job checks out the .github directory (plus the root-level files a
+# cone-mode sparse checkout always includes) of the base branch tip, the same
+# commit this workflow file comes from, and reads the PR title and body as data
+# from the event payload. Never check out or run the pull request's code
 # in this workflow.
 on:
   pull_request_target:

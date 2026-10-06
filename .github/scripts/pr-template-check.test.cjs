@@ -556,6 +556,9 @@ describe('checkPullRequest', () => {
   });
 });
 
+const PR_NUMBER = 7;
+const COMMENT_ID = 99;
+
 /** A fake of the parts of the github-script environment that run() uses. */
 function fakeEnvironment({ title, body, labels = [], comments = [], failures = {} }) {
   const calls = [];
@@ -569,7 +572,7 @@ function fakeEnvironment({ title, body, labels = [], comments = [], failures = {
   const github = {
     paginate: async (route, params) => {
       assert.equal(route, github.rest.issues.listComments);
-      assert.equal(params.issue_number, 7);
+      assert.equal(params.issue_number, PR_NUMBER);
       return comments;
     },
     rest: {
@@ -585,7 +588,9 @@ function fakeEnvironment({ title, body, labels = [], comments = [], failures = {
   };
   const context = {
     repo: { owner: 'tphakala', repo: 'birdnet-go' },
-    payload: { pull_request: { number: 7, title, body, labels: labels.map(name => ({ name })) } },
+    payload: {
+      pull_request: { number: PR_NUMBER, title, body, labels: labels.map(name => ({ name })) },
+    },
   };
   const core = {
     failed: null,
@@ -597,7 +602,7 @@ function fakeEnvironment({ title, body, labels = [], comments = [], failures = {
   return { github, context, core, calls };
 }
 
-const botComment = body => ({ id: 99, user: { login: COMMENT_AUTHOR }, body });
+const botComment = body => ({ id: COMMENT_ID, user: { login: COMMENT_AUTHOR }, body });
 
 describe('run', () => {
   it('finds its comment by the account GITHUB_TOKEN posts as', () => {
@@ -635,7 +640,7 @@ describe('run', () => {
       env.calls.map(c => c.name),
       ['addLabels', 'updateComment']
     );
-    assert.equal(env.calls[1].params.comment_id, 99);
+    assert.equal(env.calls[1].params.comment_id, COMMENT_ID);
   });
 
   it('leaves an up to date comment alone', async () => {
@@ -680,7 +685,7 @@ describe('run', () => {
       env.calls.map(c => c.name),
       ['removeLabel', 'deleteComment']
     );
-    assert.equal(env.calls[1].params.comment_id, 99);
+    assert.equal(env.calls[1].params.comment_id, COMMENT_ID);
     assert.equal(env.core.failed, null);
   });
 
@@ -774,7 +779,7 @@ describe('run', () => {
       env.calls.map(c => c.name),
       ['addLabels', 'updateComment', 'createComment']
     );
-    assert.equal(env.calls[2].params.issue_number, 7);
+    assert.equal(env.calls[2].params.issue_number, PR_NUMBER);
     assert.equal(env.calls[2].params.body, env.calls[1].params.body);
     assert.ok(env.core.failed);
   });

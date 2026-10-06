@@ -425,6 +425,9 @@ async function ignoreNotFound(call) {
  * Entry point for actions/github-script: checks the pull request in the event
  * payload, keeps the label and the comment in sync, and fails when the
  * description does not follow the template.
+ * @param {{github: object, context: object, core: object}} env the Octokit
+ *   client, the workflow run context, and @actions/core, as github-script passes them
+ * @returns {Promise<void>}
  */
 async function run({ github, context, core }) {
   const pr = context.payload.pull_request;
