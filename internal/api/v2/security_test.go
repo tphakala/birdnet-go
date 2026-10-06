@@ -21,6 +21,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// concurrencyWaitTimeout bounds how long a test waits for its concurrent
+// callers to reach the expected state. It is generous so a loaded CI runner
+// under -race does not fail the test; a correct run finishes in milliseconds.
+const concurrencyWaitTimeout = time.Minute
+
 // searchNotesEmptyMock returns a mockSetup function that configures empty search results.
 // Use this to reduce duplication in tests that mock SearchNotes.
 func searchNotesEmptyMock() func(*mock.Mock) {
@@ -665,7 +670,7 @@ func TestDDoSProtection(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool { return controller.DetectionCache.Stats().Misses == uint64(concurrentRequests) },
-		5*time.Second, time.Millisecond, "every request reaches the cache before the load finishes")
+		concurrencyWaitTimeout, time.Millisecond, "every request reaches the cache before the load finishes")
 	releaseOnce.Do(func() { close(release) })
 
 	// Wait for all requests to complete

@@ -14,6 +14,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// concurrencyWaitTimeout bounds how long a test waits for its concurrent
+// callers to reach the expected state. It is generous so a loaded CI runner
+// under -race does not fail the test; a correct run finishes in milliseconds.
+const concurrencyWaitTimeout = time.Minute
+
 func TestNewClient(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -479,10 +484,10 @@ func TestGetTaxonomy_ConcurrentMissesFetchOnce(t *testing.T) {
 	}
 	// Wait until the one fetch is in flight, give the other callers time to
 	// miss and join it, then release it.
-	require.Eventually(t, func() bool { return requests.Load() == 1 }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return requests.Load() == 1 }, concurrencyWaitTimeout, time.Millisecond)
 	require.Eventually(t, func() bool {
 		return client.taxonomy.Stats().Misses == callers
-	}, 5*time.Second, time.Millisecond)
+	}, concurrencyWaitTimeout, time.Millisecond)
 	releaseOnce.Do(func() { close(release) })
 	wg.Wait()
 
@@ -515,7 +520,7 @@ func TestGetTaxonomy_CallerCancelDoesNotAbortSharedFetch(t *testing.T) {
 		_, err := client.GetTaxonomy(ctxA, "")
 		errA <- err
 	}()
-	require.Eventually(t, func() bool { return requests.Load() == 1 }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return requests.Load() == 1 }, concurrencyWaitTimeout, time.Millisecond)
 
 	type result struct {
 		tax []TaxonomyEntry
@@ -526,13 +531,13 @@ func TestGetTaxonomy_CallerCancelDoesNotAbortSharedFetch(t *testing.T) {
 		tax, err := client.GetTaxonomy(t.Context(), "")
 		resB <- result{tax, err}
 	}()
-	require.Eventually(t, func() bool { return client.taxonomy.Stats().Misses == 2 }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return client.taxonomy.Stats().Misses == 2 }, concurrencyWaitTimeout, time.Millisecond)
 
 	cancelA()
 	select {
 	case err := <-errA:
 		require.ErrorIs(t, err, context.Canceled)
-	case <-time.After(5 * time.Second): // only reached when the caller waits for the shared fetch
+	case <-time.After(concurrencyWaitTimeout): // only reached when the caller waits for the shared fetch
 		require.FailNow(t, "the cancelled caller did not return while the shared fetch was running")
 	}
 

@@ -24,6 +24,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/ttlcache"
 )
 
+// concurrencyWaitTimeout bounds how long a test waits for its concurrent
+// callers to reach the expected state. It is generous so a loaded CI runner
+// under -race does not fail the test; a correct run finishes in milliseconds.
+const concurrencyWaitTimeout = time.Minute
+
 // cacheTestNotes is the page every cache test serves from the mock datastore.
 func cacheTestNotes() []datastore.Note {
 	return []datastore.Note{{
@@ -173,7 +178,7 @@ func TestGetDetections_ConcurrentIdenticalRequestsQueryOnce(t *testing.T) {
 		})
 	}
 	require.Eventually(t, func() bool { return h.DetectionCache.Stats().Misses == callers },
-		5*time.Second, time.Millisecond, "every caller reaches the cache before the load finishes")
+		concurrencyWaitTimeout, time.Millisecond, "every caller reaches the cache before the load finishes")
 	releaseOnce.Do(func() { close(release) })
 	wg.Wait()
 
