@@ -507,7 +507,7 @@ refactor(analysis): optimize detection pipeline
 
 **PR Description:** GitHub fills the description from the [PR template](.github/pull_request_template.md) when you open a pull request. Follow it: keep every section, fill each one in, and go through every checkbox. Do not replace it with your own format or delete sections, and do not leave the template's placeholder comments as the only content. If a section does not apply, say so in a sentence (for example "No related issue" under Related issue, with the problem explained in Description).
 
-Pull requests that do not follow the template are sent back to the author before they are reviewed.
+Pull requests that do not follow the template are sent back to the author before they are reviewed. An automated check enforces this on pull requests from forks: it labels a pull request `needs: template`, comments with what is missing, and runs again every time you edit the description.
 
 If you use an AI tool to write the description, check that it used the template; some tools write their own format by default.
 
