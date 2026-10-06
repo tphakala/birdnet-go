@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/patrickmn/go-cache"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -31,9 +30,7 @@ import (
 
 // Cache tuning constants for the shared detection caches owned by Core.
 const (
-	detectionCacheExpiry  = 5 * time.Minute  // Default detection-query cache expiration
-	detectionCacheCleanup = 10 * time.Minute // Detection-query cache cleanup interval
-	detectionRateCacheTTL = 5 * time.Minute  // Detection-rate cache TTL (database overview)
+	detectionRateCacheTTL = 5 * time.Minute // Detection-rate cache TTL (database overview)
 )
 
 // Default path and permission constants used while resolving the media export root.
@@ -92,8 +89,9 @@ type Core struct {
 	// inference-topology broadcast (BroadcastInferenceTopologyChanged).
 	MetricsStore observability.MetricsStore
 
-	// DetectionCache caches detection queries.
-	DetectionCache *cache.Cache
+	// DetectionCache caches detection list pages. It is nil-safe (a nil cache
+	// loads every page directly) and owns no goroutine.
+	DetectionCache *DetectionPageCache
 	// DetectionRateCache caches detection rate results for the database overview endpoint.
 	DetectionRateCache *datastore.DetectionRateCache
 
@@ -171,7 +169,7 @@ func NewCore(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		Repo:               repo, // Bridge to new domain model (nil if datastore disabled)
 		BirdImageCache:     birdImageCache,
 		SunCalc:            sunCalc,
-		DetectionCache:     cache.New(detectionCacheExpiry, detectionCacheCleanup),
+		DetectionCache:     NewDetectionPageCache(),
 		SFS:                sfs, // Assign SecureFS instance
 		Metrics:            metrics,
 		ctx:                ctx,

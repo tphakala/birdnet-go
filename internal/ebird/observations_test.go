@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -65,4 +66,34 @@ func TestGetRecentObservations_DefaultDays(t *testing.T) {
 	results, err := client.GetRecentObservations(t.Context(), 60.17, 24.94, 0)
 	require.NoError(t, err)
 	assert.Empty(t, results)
+}
+
+func TestGetRecentObservations_KeyRoundsToFourDecimals(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"speciesCode": "eurblk", "comName": "Eurasian Blackbird"}]`))
+	}))
+	defer server.Close()
+
+	client := setupTestClient(t, server)
+
+	first, err := client.GetRecentObservations(t.Context(), 60.12341, 24.94, 14)
+	require.NoError(t, err)
+	second, err := client.GetRecentObservations(t.Context(), 60.12344, 24.94, 14)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), requests.Load(), "both coordinates round to 60.1234")
+
+	require.Len(t, first, 1)
+	first[0].CommonName = "mutated"
+	require.Len(t, second, 1)
+	assert.Equal(t, "Eurasian Blackbird", second[0].CommonName, "results are independent copies")
+	third, err := client.GetRecentObservations(t.Context(), 60.12341, 24.94, 14)
+	require.NoError(t, err)
+	assert.Equal(t, "Eurasian Blackbird", third[0].CommonName)
+
+	_, err = client.GetRecentObservations(t.Context(), 60.12351, 24.94, 14)
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), requests.Load(), "a different rounded key fetches again")
 }

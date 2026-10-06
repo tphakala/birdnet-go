@@ -27,7 +27,8 @@ import (
 // test and never stopped) still fails the check.
 //
 // extra options are appended after the snapshot, for per-test ignores of
-// named goroutines that cannot be stopped, such as the go-cache janitor.
+// named goroutines that cannot be stopped, such as a third-party worker that has
+// no Stop method.
 //
 // This helper is for per-test checks. Do not pass IgnoreCurrent to a
 // package-wide goleak.VerifyTestMain gate: the option is evaluated before

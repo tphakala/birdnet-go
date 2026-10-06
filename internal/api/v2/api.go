@@ -916,12 +916,6 @@ func (c *Controller) Shutdown() {
 		GetLogger().Error("Error flushing logs", logger.Error(err))
 	}
 
-	// TODO: The go-cache library's janitor goroutine cannot be stopped.
-	// Consider migrating to a context-aware cache implementation.
-	if c.DetectionCache != nil {
-		c.DetectionCache.Flush()
-	}
-
 	c.Debug("API Controller shutdown complete")
 }
 

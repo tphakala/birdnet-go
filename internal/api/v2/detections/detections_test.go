@@ -129,10 +129,6 @@ func getConcurrencyLevel() int {
 
 // TestGetDetections tests the GetDetections endpoint with various query types
 func TestGetDetections(t *testing.T) {
-	// Setup
-	e, mockDS, controller := setupTestEnvironment(t)
-	controller.RegisterDetectionRoutes(controller.Group) // Ensure routes are registered on the test echo instance
-
 	// Create mock data
 	mockNotes := []datastore.Note{
 		{
@@ -542,8 +538,10 @@ func TestGetDetections(t *testing.T) {
 	for _, tc := range testCases {
 		localTC := tc // Capture range variable
 		t.Run(localTC.name, func(t *testing.T) {
-			// Setup mock expectations
-			mockDS.ExpectedCalls = nil
+			// Each subtest gets its own handler and cache, so a cached page from one
+			// case can never answer another.
+			e, mockDS, controller := setupTestEnvironment(t)
+			controller.RegisterDetectionRoutes(controller.Group) // Ensure routes are registered on the test echo instance
 			localTC.mockSetup(&mockDS.Mock)
 
 			// Create request with query parameters

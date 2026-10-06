@@ -1,15 +1,24 @@
 package ebird
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// concurrencyWaitTimeout bounds how long a test waits for its concurrent
+// callers to reach the expected state. It is generous so a loaded CI runner
+// under -race does not fail the test; a correct run finishes in milliseconds.
+const concurrencyWaitTimeout = time.Minute
 
 func TestNewClient(t *testing.T) {
 	tests := []struct {
@@ -405,19 +414,139 @@ func TestParseErrors(t *testing.T) {
 }
 
 func TestCacheStats(t *testing.T) {
-	client := setupTestClient(t, httptest.NewServer(nil))
+	server := setupMockServer(t, map[string]mockResponse{
+		"/ref/taxonomy/ebird?fmt=json": {
+			status: http.StatusOK,
+			body:   `[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1"}]`,
+		},
+		"/ref/taxonomy/ebird/x?fmt=json": {
+			status: http.StatusOK,
+			body:   `[{"sciName": "Test species", "comName": "Test", "speciesCode": "x"}]`,
+		},
+		"/v2/data/obs/geo/recent?lat=60.1700&lng=24.9400&back=14&maxResults=200": {
+			status: http.StatusOK,
+			body:   `[]`,
+		},
+	})
+	defer server.Close()
+
+	client := setupTestClient(t, server)
 	disableLogging(t)
 
 	// Initially empty
-	count, _ := client.GetCacheStats()
+	count, size := client.GetCacheStats()
 	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), size)
 
-	// Add some items to cache
-	client.cache.Set("test1", "value1", time.Hour)
-	client.cache.Set("test2", "value2", time.Hour)
+	_, err := client.GetTaxonomy(t.Context(), "")
+	require.NoError(t, err)
+	_, err = client.GetSpeciesTaxonomy(t.Context(), "x", "")
+	require.NoError(t, err)
+	_, err = client.BuildFamilyTree(t.Context(), "Test species")
+	require.NoError(t, err)
+	_, err = client.GetRecentObservations(t.Context(), 60.17, 24.94, 14)
+	require.NoError(t, err)
 
+	// One item in each of the four caches.
 	count, _ = client.GetCacheStats()
-	assert.Equal(t, 2, count)
+	assert.Equal(t, 4, count)
+
+	client.ClearCache()
+	count, _ = client.GetCacheStats()
+	assert.Equal(t, 0, count)
+}
+
+func TestGetTaxonomy_ConcurrentMissesFetchOnce(t *testing.T) {
+	const callers = 8
+	var requests atomic.Int32
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1"}]`))
+	}))
+	defer server.Close()
+	// Registered after server.Close so it runs first: a failed wait below must
+	// not leave the handlers parked, because Close waits for them.
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+
+	client := setupTestClient(t, server)
+
+	var wg sync.WaitGroup
+	errs := make([]error, callers)
+	lens := make([]int, callers)
+	for i := range callers {
+		wg.Go(func() {
+			tax, err := client.GetTaxonomy(t.Context(), "")
+			errs[i], lens[i] = err, len(tax)
+		})
+	}
+	// Wait until the one fetch is in flight, give the other callers time to
+	// miss and join it, then release it.
+	require.Eventually(t, func() bool { return requests.Load() == 1 }, concurrencyWaitTimeout, time.Millisecond)
+	require.Eventually(t, func() bool {
+		return client.taxonomy.Stats().Misses == callers
+	}, concurrencyWaitTimeout, time.Millisecond)
+	releaseOnce.Do(func() { close(release) })
+	wg.Wait()
+
+	for i := range callers {
+		require.NoError(t, errs[i])
+		assert.Equal(t, 1, lens[i])
+	}
+	assert.Equal(t, int32(1), requests.Load())
+}
+
+func TestGetTaxonomy_CallerCancelDoesNotAbortSharedFetch(t *testing.T) {
+	var requests atomic.Int32
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1"}]`))
+	}))
+	defer server.Close()
+	// Registered after server.Close so it runs first (see the test above).
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+
+	client := setupTestClient(t, server)
+
+	ctxA, cancelA := context.WithCancel(t.Context())
+	errA := make(chan error, 1)
+	go func() {
+		_, err := client.GetTaxonomy(ctxA, "")
+		errA <- err
+	}()
+	require.Eventually(t, func() bool { return requests.Load() == 1 }, concurrencyWaitTimeout, time.Millisecond)
+
+	type result struct {
+		tax []TaxonomyEntry
+		err error
+	}
+	resB := make(chan result, 1)
+	go func() {
+		tax, err := client.GetTaxonomy(t.Context(), "")
+		resB <- result{tax, err}
+	}()
+	require.Eventually(t, func() bool { return client.taxonomy.Stats().Misses == 2 }, concurrencyWaitTimeout, time.Millisecond)
+
+	cancelA()
+	select {
+	case err := <-errA:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(concurrencyWaitTimeout): // only reached when the caller waits for the shared fetch
+		require.FailNow(t, "the cancelled caller did not return while the shared fetch was running")
+	}
+
+	releaseOnce.Do(func() { close(release) })
+	r := <-resB
+	require.NoError(t, r.err)
+	assert.Len(t, r.tax, 1)
+	assert.Equal(t, int32(1), requests.Load(), "the abandoned caller did not abort or repeat the fetch")
 }
 
 func TestMetrics(t *testing.T) {
@@ -470,4 +599,135 @@ func TestMetrics(t *testing.T) {
 	metrics = client.GetMetrics()
 	assert.Equal(t, int64(4), metrics.APICalls, "Should count all retry attempts")
 	assert.Equal(t, int64(3), metrics.APIErrors, "Should count all error responses")
+}
+
+// countingServer serves fixed JSON bodies by path and query and counts the
+// requests made for each.
+type countingServer struct {
+	*httptest.Server
+	mu       sync.Mutex
+	requests map[string]int
+}
+
+func newCountingServer(t *testing.T, bodies map[string]string) *countingServer {
+	t.Helper()
+	cs := &countingServer{requests: make(map[string]int)}
+	cs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := r.URL.Path
+		if r.URL.RawQuery != "" {
+			key += "?" + r.URL.RawQuery
+		}
+		cs.mu.Lock()
+		cs.requests[key]++
+		cs.mu.Unlock()
+		body, ok := bodies[key]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(cs.Close)
+	return cs
+}
+
+func (cs *countingServer) count(key string) int {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	return cs.requests[key]
+}
+
+const (
+	testTaxonomyPath   = "/ref/taxonomy/ebird?fmt=json"
+	testSpeciesPath    = "/ref/taxonomy/ebird/x?fmt=json"
+	testSpeciesPathFi  = "/ref/taxonomy/ebird/x?fmt=json&locale=fi"
+	testObservationURL = "/v2/data/obs/geo/recent?lat=60.1700&lng=24.9400&back=14&maxResults=200"
+	testTaxonomyBody   = `[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1", "familySciName": "Testidae"}]`
+)
+
+// TestCachedLookups_SpeciesAndFamilyTree pins that repeated species and family
+// tree lookups are served from their caches, and that the species cache keeps
+// one entry per locale.
+func TestCachedLookups_SpeciesAndFamilyTree(t *testing.T) {
+	server := newCountingServer(t, map[string]string{
+		testTaxonomyPath:  testTaxonomyBody,
+		testSpeciesPath:   `[{"sciName": "Test species", "comName": "Test", "speciesCode": "x"}]`,
+		testSpeciesPathFi: `[{"sciName": "Test species", "comName": "Testi", "speciesCode": "x"}]`,
+	})
+	client := setupTestClient(t, server.Server)
+	disableLogging(t)
+	ctx := t.Context()
+
+	for range 2 {
+		entry, err := client.GetSpeciesTaxonomy(ctx, "x", "")
+		require.NoError(t, err)
+		assert.Equal(t, "Test", entry.CommonName)
+		entryFi, err := client.GetSpeciesTaxonomy(ctx, "x", "fi")
+		require.NoError(t, err)
+		assert.Equal(t, "Testi", entryFi.CommonName, "each locale gets its own entry")
+	}
+	assert.Equal(t, 1, server.count(testSpeciesPath), "the default locale is fetched once")
+	assert.Equal(t, 1, server.count(testSpeciesPathFi), "the fi locale is fetched once")
+
+	first, err := client.BuildFamilyTree(ctx, "Test species")
+	require.NoError(t, err)
+	second, err := client.BuildFamilyTree(ctx, "Test species")
+	require.NoError(t, err)
+	assert.Same(t, first, second, "the second tree comes from the family tree cache")
+	assert.Equal(t, uint64(1), client.familyTrees.Stats().Hits)
+	assert.Equal(t, uint64(1), client.familyTrees.Stats().Misses)
+}
+
+// TestMetrics_SumsEveryCache pins that GetMetrics reports the hits and misses
+// of all four caches, not only the taxonomy cache.
+func TestMetrics_SumsEveryCache(t *testing.T) {
+	server := newCountingServer(t, map[string]string{
+		testTaxonomyPath:   testTaxonomyBody,
+		testSpeciesPath:    `[{"sciName": "Test species", "comName": "Test", "speciesCode": "x"}]`,
+		testObservationURL: `[]`,
+	})
+	client := setupTestClient(t, server.Server)
+	disableLogging(t)
+	ctx := t.Context()
+
+	for range 2 {
+		_, err := client.GetTaxonomy(ctx, "")
+		require.NoError(t, err)
+		_, err = client.GetSpeciesTaxonomy(ctx, "x", "")
+		require.NoError(t, err)
+		_, err = client.BuildFamilyTree(ctx, "Test species")
+		require.NoError(t, err)
+		_, err = client.GetRecentObservations(ctx, 60.17, 24.94, 14)
+		require.NoError(t, err)
+	}
+
+	// Each cache misses once and then hits once. The first family tree load
+	// also reads the taxonomy, which is a second taxonomy hit.
+	metrics := client.GetMetrics()
+	assert.Equal(t, int64(4), metrics.CacheMisses)
+	assert.Equal(t, int64(5), metrics.CacheHits)
+}
+
+// TestClose_RateLimitWaitEndsWithRequestTimeout pins that a fetch waiting for
+// the rate limiter after Close (which stops the ticker) gives up when its
+// request timeout expires instead of blocking forever. The fetch runs as a
+// detached cache load, so nothing else would release it.
+func TestClose_RateLimitWaitEndsWithRequestTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client, err := NewClient(Config{
+			APIKey:      "test-key",
+			BaseURL:     "http://127.0.0.1:1", // never contacted
+			Timeout:     time.Second,
+			CacheTTL:    time.Hour,
+			RateLimitMS: 10,
+		})
+		require.NoError(t, err)
+		disableLogging(t)
+		client.Close()
+
+		_, err = client.GetTaxonomy(t.Context(), "")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
 }
