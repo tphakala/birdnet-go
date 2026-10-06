@@ -1381,7 +1381,7 @@ func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 			MAX(d.confidence) as max_confidence,
 			MAX(d.detected_at) as latest_time,
 			MIN(d.detected_at) as first_time,
-			MAX(tc.name) as taxonomic_class
+			COALESCE(MAX(tc.name), '') as taxonomic_class
 		`).
 		Joins(fmt.Sprintf("JOIN %slabels l ON d.label_id = l.id", prefix)).
 		Joins(fmt.Sprintf("LEFT JOIN %staxonomic_classes tc ON l.taxonomic_class_id = tc.id", prefix)).

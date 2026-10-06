@@ -11,6 +11,7 @@
   import { api } from '$lib/utils/api';
   import { addDays, getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { loggers } from '$lib/utils/logger';
+  import { fillDailyCounts } from './speciesHistory';
 
   const logger = loggers.ui;
 
@@ -70,10 +71,7 @@
       .get<DailyCountResponse>(`/api/v2/analytics/time/daily?${search}`)
       .then(response => {
         if (cancelled) return;
-        const points = (response?.data ?? []).flatMap(d => {
-          const date = parseLocalDateString(d.date);
-          return date ? [{ date, value: d.count }] : [];
-        });
+        const points = fillDailyCounts(response?.data ?? [], startDate, endDate);
         series = [{ id: scientificName, label: displayName, data: points }];
         status = 'loaded';
       })
