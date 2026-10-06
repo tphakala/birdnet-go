@@ -23,16 +23,35 @@ const FEATURE_TITLE = /^feat(\([^)]*\))?!?:/i;
 // Linear on purpose: a body can hold a 65k character line, and a pattern with
 // several adjacent quantifiers here backtracked for hours on one.
 const SECTION_HEADING = /^##[ \t]+(\S[^\n]*)$/;
-const CODE_FENCE = /^\s*(```|~~~)/;
-const CHECKBOX = /^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/;
-const HTML_COMMENT = /<!--[\s\S]*?-->/g;
+// A fenced code block opens with three or more backticks or tildes indented at
+// most three spaces, and closes on a run of the same character at least as long.
+const CODE_FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+// A list item indented four or more spaces is an indented code block, not a
+// checkbox, unless it continues a list; the template's boxes are never nested.
+const CHECKBOX = /^ {0,3}[-*+][ \t]+\[([ xX])\][ \t]+(.*)$/;
+// An unclosed comment hides the rest of the description when GitHub renders it.
+const HTML_COMMENT = /<!--[\s\S]*?(?:-->|$)/g;
 const ISSUE_REFERENCE =
   /(^|[^\w&])#\d+\b|github\.com\/[\w.-]+\/[\w.-]+\/(issues|discussions)\/\d+/i;
 
-// Checkboxes the author must tick, found by a phrase from the template line.
-const CONTRIBUTING_BOX = /contributing guidelines/i;
-const LICENSING_BOX = /relicense/i;
-const FEATURE_BOX = /^feature prs only/i;
+// Checkboxes the author must tick. Each is found in the template's section by a
+// phrase from its line, and the description must carry that line unchanged.
+const CONTRIBUTING_BOX = {
+  section: 'checklist',
+  pattern: /contributing guidelines/i,
+  label: 'The Contributing Guidelines checkbox',
+};
+const LICENSING_BOX = {
+  section: 'licensing',
+  pattern: /relicense/i,
+  label: 'The relicensing agreement',
+  consequence: ' The pull request cannot be merged without it.',
+};
+const FEATURE_BOX = {
+  section: 'checklist',
+  pattern: /^feature prs only/i,
+  label: 'This is a feature pull request, but the "Feature PRs only" checkbox',
+};
 
 /**
  * Removes trailing whitespace and the optional closing run of # from an ATX
@@ -53,83 +72,146 @@ function stripClosingHashes(text) {
 }
 
 /**
- * Turns a heading into its section key: lower case, without a trailing note in
- * parentheses, so "Licensing" matches "Licensing (required)".
+ * Drops a trailing note in parentheses from a heading, so "Licensing
+ * (required)" reads as "Licensing".
+ * @param {string} name
+ * @returns {string}
+ */
+function withoutNote(name) {
+  if (name.endsWith(')')) {
+    const open = name.lastIndexOf('(');
+    if (open > 0) {
+      return name.slice(0, open).trimEnd();
+    }
+  }
+  return name;
+}
+
+/**
+ * Turns a heading into its section key: lower case and without a trailing
+ * note, so "Licensing" matches "Licensing (required)".
  * @param {string} name
  * @returns {string}
  */
 function sectionKey(name) {
-  let key = name;
-  if (key.endsWith(')')) {
-    const open = key.lastIndexOf('(');
-    if (open > 0) {
-      key = key.slice(0, open).trimEnd();
-    }
-  }
-  return key.toLowerCase();
+  return withoutNote(name).toLowerCase();
 }
 
 /**
- * Splits Markdown into its level 2 sections, with HTML comments removed.
+ * Splits Markdown into its level 2 sections, with HTML comments removed. Task
+ * list items outside fenced and indented code are collected per section, and a
+ * repeated heading adds to its first section.
  * @param {string} markdown
- * @returns {Map<string, {name: string, content: string}>} keyed by sectionKey
+ * @returns {Map<string, {name: string, content: string, boxes: {checked: boolean, text: string}[]}>}
+ *   keyed by sectionKey
  */
 function parseSections(markdown) {
   const sections = new Map();
   let current = null;
-  let inFence = false;
+  let openFence = null;
   for (const line of markdown.replace(HTML_COMMENT, '').split(/\r?\n/)) {
-    if (CODE_FENCE.test(line)) {
-      inFence = !inFence;
+    const fence = CODE_FENCE.exec(line);
+    if (openFence) {
+      if (fence && closesFence(openFence, fence)) {
+        openFence = null;
+      }
+      if (current) {
+        current.content += `${line}\n`;
+      }
+      continue;
     }
-    const heading = inFence ? null : SECTION_HEADING.exec(line);
+    if (fence && !(fence[1][0] === '`' && fence[2].includes('`'))) {
+      openFence = fence[1];
+    }
+    const heading = openFence ? null : SECTION_HEADING.exec(line);
     if (heading) {
-      current = { name: stripClosingHashes(heading[1]), content: '' };
-      sections.set(sectionKey(current.name), current);
+      const name = stripClosingHashes(heading[1]);
+      const key = sectionKey(name);
+      // A repeated heading continues the first section rather than replacing it.
+      if (!sections.has(key)) {
+        sections.set(key, { name, content: '', boxes: [] });
+      }
+      current = sections.get(key);
     } else if (current) {
       current.content += `${line}\n`;
+      const box = openFence ? null : CHECKBOX.exec(line);
+      if (box) {
+        current.boxes.push({ checked: box[1] !== ' ', text: normalizeSpace(box[2]) });
+      }
     }
   }
   return sections;
 }
 
 /**
- * Lists the task list items in Markdown.
- * @param {string} markdown
- * @returns {{checked: boolean, text: string}[]}
+ * Reports whether a fence line closes the open fence: the same character, at
+ * least as long, and nothing after it.
+ * @param {string} openFence the opening run of backticks or tildes
+ * @param {RegExpExecArray} fence a CODE_FENCE match
+ * @returns {boolean}
  */
-function parseCheckboxes(markdown) {
-  return markdown
-    .replace(HTML_COMMENT, '')
-    .split(/\r?\n/)
-    .map(line => CHECKBOX.exec(line))
-    .filter(Boolean)
-    .map(match => ({ checked: match[1] !== ' ', text: match[2].trim() }));
+function closesFence(openFence, fence) {
+  return (
+    fence[1][0] === openFence[0] && fence[1].length >= openFence.length && fence[2].trim() === ''
+  );
 }
 
 /**
- * Reports a required checkbox that is missing or not ticked.
+ * Trims a line and collapses its runs of spaces and tabs, so extra spacing
+ * still compares equal. A line re-wrapped onto two lines does not.
+ * @param {string} text
+ * @returns {string}
+ */
+function normalizeSpace(text) {
+  return text.trim().split(/\s+/).join(' ');
+}
+
+/**
+ * Reports a required checkbox that is missing, reworded or not ticked.
+ * @param {Map} sections the description's sections
+ * @param {Map} templateSections the template's sections
+ * @param {{section: string, pattern: RegExp, label: string, consequence?: string}} required
  * @returns {string|null}
  */
-function checkBox(boxes, pattern, missing, unticked) {
-  const box = boxes.find(b => pattern.test(b.text));
-  if (!box) {
-    return missing;
+function checkBox(sections, templateSections, required) {
+  const templateSection = templateSections.get(required.section);
+  const expected =
+    templateSection && templateSection.boxes.find(b => required.pattern.test(b.text));
+  if (!expected) {
+    throw new Error(
+      `The PR template has no checkbox matching ${required.pattern} under "${required.section}"; update pr-template-check.cjs.`
+    );
   }
-  return box.checked ? null : unticked;
+  const where = withoutNote(templateSection.name);
+  const consequence = required.consequence || '';
+  const boxes = sections.has(required.section) ? sections.get(required.section).boxes : [];
+  // Every copy of the line must be ticked, so one ticked copy cannot outvote
+  // an unticked one.
+  const copies = boxes.filter(b => b.text === expected.text);
+  if (copies.length > 0) {
+    return copies.every(b => b.checked)
+      ? null
+      : `${required.label} under **${where}** is not ticked.${consequence}`;
+  }
+  if (boxes.some(b => required.pattern.test(b.text))) {
+    return `${required.label} under **${where}** does not match the template's wording. Copy it unchanged from the template and tick it.${consequence}`;
+  }
+  return `${required.label} is missing from **${where}**. Copy it from the template and tick it.${consequence}`;
 }
 
 /**
  * Compares a pull request with the template.
  * @param {{title: string, body: string|null, template: string}} pr
  * @returns {string[]} problems, empty when the description follows the template
+ * @throws {Error} when the template itself lacks a required checkbox
  */
 function checkPullRequest({ title, body, template }) {
   const problems = [];
   const text = body || '';
   const sections = parseSections(text);
 
-  for (const [key, { name }] of parseSections(template)) {
+  const templateSections = parseSections(template);
+  for (const [key, { name }] of templateSections) {
     const section = sections.get(key);
     if (!section) {
       problems.push(`The **${name}** section is missing.`);
@@ -140,26 +222,9 @@ function checkPullRequest({ title, body, template }) {
     }
   }
 
-  const boxes = parseCheckboxes(text);
-  const required = [
-    [
-      CONTRIBUTING_BOX,
-      'The Contributing Guidelines checkbox is missing from **Checklist**. Copy it from the template and tick it.',
-      'The Contributing Guidelines checkbox under **Checklist** is not ticked.',
-    ],
-    [
-      LICENSING_BOX,
-      'The relicensing agreement under **Licensing** is missing. Copy it from the template and tick it. The pull request cannot be merged without it.',
-      'The relicensing agreement under **Licensing** is not ticked. The pull request cannot be merged without it.',
-    ],
-  ];
-
+  const required = [CONTRIBUTING_BOX, LICENSING_BOX];
   if (FEATURE_TITLE.test(title || '')) {
-    required.push([
-      FEATURE_BOX,
-      'This is a feature pull request, but the "Feature PRs only" checkbox is missing from **Checklist**. Copy it from the template and tick it.',
-      'This is a feature pull request, but the "Feature PRs only" checkbox under **Checklist** is not ticked.',
-    ]);
+    required.push(FEATURE_BOX);
     const related = sections.get('related issue');
     if (related && !ISSUE_REFERENCE.test(related.content)) {
       problems.push(
@@ -168,8 +233,8 @@ function checkPullRequest({ title, body, template }) {
     }
   }
 
-  for (const [pattern, missing, unticked] of required) {
-    const problem = checkBox(boxes, pattern, missing, unticked);
+  for (const box of required) {
+    const problem = checkBox(sections, templateSections, box);
     if (problem) {
       problems.push(problem);
     }
@@ -264,6 +329,7 @@ module.exports = {
   NEEDS_TEMPLATE_LABEL,
   TEMPLATE_PATH,
   checkPullRequest,
+  parseSections,
   renderComment,
   run,
 };

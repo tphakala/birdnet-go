@@ -10,6 +10,7 @@ const {
   NEEDS_TEMPLATE_LABEL,
   TEMPLATE_PATH,
   checkPullRequest,
+  parseSections,
   renderComment,
   run,
 } = require('./pr-template-check.cjs');
@@ -105,6 +106,133 @@ describe('checkPullRequest', () => {
     assert.ok(problems.some(p => p.startsWith('The relicensing agreement')));
   });
 
+  it('does not accept ticked boxes inside a code block', () => {
+    const fenced =
+      '```\n- [x] I have read the Contributing Guidelines\n- [x] I agree to relicense\n```';
+    const body = filledTemplate({ tick: () => false }).replace(
+      'Fixes the audio player freeze.',
+      `Fixes the audio player freeze.\n\n${fenced}`
+    );
+    const problems = checkPullRequest({ title: 'fix: something', body, template });
+    assert.ok(problems.some(p => p.includes('Contributing Guidelines checkbox under')));
+    assert.ok(
+      problems.some(p => p.includes('relicensing agreement under **Licensing** is not ticked'))
+    );
+  });
+
+  it('does not accept a reworded relicensing box as consent', () => {
+    const body = filledTemplate({ tick: untickFeatureBox })
+      .split('\n')
+      .map(line =>
+        line.includes('#4243') && line.startsWith('- [x]')
+          ? '- [x] I do not agree to relicense my work.'
+          : line
+      )
+      .join('\n');
+    const problems = checkPullRequest({ title: 'fix: something', body, template });
+    assert.deepEqual(problems, [
+      "The relicensing agreement under **Licensing** does not match the template's wording. Copy it unchanged from the template and tick it. The pull request cannot be merged without it.",
+    ]);
+  });
+
+  it('is not misled by other checkboxes that mention the same words', () => {
+    const body = filledTemplate({ tick: untickFeatureBox }).replace(
+      'Fixes the audio player freeze.',
+      'Fixes the audio player freeze.\n\n- [ ] relicense the docs later\n- [ ] read the Contributing Guidelines again'
+    );
+    assert.deepEqual(checkPullRequest({ title: 'fix: something', body, template }), []);
+  });
+
+  describe('a consent line that GitHub does not render as a ticked checkbox', () => {
+    const consentLine = template
+      .split('\n')
+      .find(line => line.startsWith('- [ ]') && line.includes('#4243'));
+    const ticked = consentLine.replace('- [ ]', '- [x]');
+    const licensing = '## Licensing (required)';
+    // The real box left unticked, with the variant inserted above it.
+    const withLicensing = section =>
+      filledTemplate({ tick: untickFeatureBox })
+        .replace(ticked, consentLine)
+        .replace(`${licensing}\n`, `${licensing}\n\n${section}\n`);
+    const notTicked = body =>
+      checkPullRequest({ title: 'fix: x', body, template }).some(p =>
+        p.startsWith('The relicensing agreement')
+      );
+
+    for (const [name, wrapped] of [
+      ['inside a tilde fence that contains a backtick fence', `~~~\n\`\`\`\n${ticked}\n~~~`],
+      ['inside a backtick fence that contains a tilde line', `\`\`\`\n~~~\n${ticked}\n\`\`\``],
+      [
+        'inside a longer fence that contains a shorter one',
+        `\`\`\`\`\n\`\`\`\n${ticked}\n\`\`\`\n\`\`\`\``,
+      ],
+      ['in an indented code block', `text\n\n    ${ticked}`],
+      ['after an unclosed HTML comment', `<!--\n${ticked}`],
+    ]) {
+      it(`is not consent ${name}`, () => {
+        assert.ok(
+          notTicked(withLicensing(wrapped)),
+          'expected the agreement to be reported as not ticked'
+        );
+      });
+    }
+
+    it('is not consent when another copy is unticked', () => {
+      const body = filledTemplate({ tick: untickFeatureBox }).replace(
+        ticked,
+        `${ticked}\n${consentLine}`
+      );
+      assert.ok(notTicked(body));
+    });
+
+    it('is consent in a fence opened with an info string', () => {
+      const body = filledTemplate({ tick: untickFeatureBox }).replace(
+        'Fixes the audio player freeze.',
+        'Fixes the audio player freeze.\n\n```js\nconst x = 1;\n```'
+      );
+      assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), []);
+    });
+  });
+
+  it('merges a repeated section instead of replacing it', () => {
+    const body = `${filledTemplate({ tick: untickFeatureBox })}\n## Licensing\n\nnothing more\n`;
+    assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), []);
+  });
+
+  it('reports a reworded Contributing Guidelines box', () => {
+    const body = filledTemplate({ tick: untickFeatureBox }).replace(
+      '- [x] I have read the [Contributing Guidelines]',
+      '- [x] I skimmed the [Contributing Guidelines]'
+    );
+    assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), [
+      "The Contributing Guidelines checkbox under **Checklist** does not match the template's wording. Copy it unchanged from the template and tick it.",
+    ]);
+  });
+
+  it('is not misled by a decoy box in the same section', () => {
+    const body = filledTemplate({ tick: untickFeatureBox }).replace(
+      '## Licensing (required)\n',
+      '## Licensing (required)\n\n- [ ] relicense the docs later\n'
+    );
+    assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), []);
+  });
+
+  it('fails loudly when the template loses a required section', () => {
+    const noLicensing = template.slice(0, template.indexOf('## Licensing'));
+    assert.throws(
+      () => checkPullRequest({ title: 'fix: x', body: filledTemplate(), template: noLicensing }),
+      /under "licensing"/
+    );
+  });
+
+  it('fails loudly when the template loses a required checkbox', () => {
+    const reworded = template.replace('relicense it', 'license it again');
+    assert.throws(
+      () => checkPullRequest({ title: 'fix: x', body: filledTemplate(), template: reworded }),
+      /no checkbox matching \/relicense\/i under "licensing"/
+    );
+  });
+
   it('rejects a feature without the feature box ticked', () => {
     const body = filledTemplate({ tick: untickFeatureBox });
     const problems = checkPullRequest({ title: 'feat!: breaking feature', body, template });
@@ -149,20 +277,17 @@ describe('checkPullRequest', () => {
   });
 
   it('parses heading edge cases', () => {
-    const missing = (heading, body) =>
-      checkPullRequest({ title: 'fix: x', body, template: `${heading}\n` }).filter(p =>
-        p.includes(' section ')
-      );
+    const keys = body => [...parseSections(body).keys()];
     // A tab after ##, a tab before the closing run, a stray carriage return.
-    assert.deepEqual(missing('## Notes', '##\tNotes\ntext'), []);
-    assert.deepEqual(missing('## Notes', '## Notes\t##  \ntext'), []);
-    assert.deepEqual(missing('## Notes', '## Notes\r\r\ntext'), []);
+    assert.deepEqual(keys('##\tNotes'), ['notes']);
+    assert.deepEqual(keys('## Notes\t##  '), ['notes']);
+    assert.deepEqual(keys('## Notes\r\r\ntext'), ['notes']);
     // A heading that is only a closing run has empty text, not "##".
-    assert.deepEqual(missing('## Notes', '## ##\ntext'), ['The **Notes** section is missing.']);
+    assert.deepEqual(keys('## ##'), ['']);
     // Only a trailing note after other text is dropped from the key.
-    assert.deepEqual(missing('## (note)', '## (note)\ntext'), []);
-    assert.deepEqual(missing('## Notes', '## Notes)\ntext'), ['The **Notes** section is missing.']);
-    assert.deepEqual(missing('## Notes (a)', '## Notes\ntext'), []);
+    assert.deepEqual(keys('## (note)'), ['(note)']);
+    assert.deepEqual(keys('## Notes)'), ['notes)']);
+    assert.deepEqual(keys('## Notes (a) (b)'), ['notes (a)']);
   });
 
   it('matches a heading without the note in parentheses', () => {
