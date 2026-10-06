@@ -417,6 +417,10 @@ func TestCacheStats(t *testing.T) {
 			status: http.StatusOK,
 			body:   `[{"sciName": "Test species", "comName": "Test", "speciesCode": "x"}]`,
 		},
+		"/v2/data/obs/geo/recent?lat=60.1700&lng=24.9400&back=14&maxResults=200": {
+			status: http.StatusOK,
+			body:   `[]`,
+		},
 	})
 	defer server.Close()
 
@@ -432,9 +436,14 @@ func TestCacheStats(t *testing.T) {
 	require.NoError(t, err)
 	_, err = client.GetSpeciesTaxonomy(t.Context(), "x", "")
 	require.NoError(t, err)
+	_, err = client.BuildFamilyTree(t.Context(), "Test species")
+	require.NoError(t, err)
+	_, err = client.GetRecentObservations(t.Context(), 60.17, 24.94, 14)
+	require.NoError(t, err)
 
+	// One item in each of the four caches.
 	count, _ = client.GetCacheStats()
-	assert.Equal(t, 2, count)
+	assert.Equal(t, 4, count)
 
 	client.ClearCache()
 	count, _ = client.GetCacheStats()
@@ -452,6 +461,10 @@ func TestGetTaxonomy_ConcurrentMissesFetchOnce(t *testing.T) {
 		_, _ = w.Write([]byte(`[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1"}]`))
 	}))
 	defer server.Close()
+	// Registered after server.Close so it runs first: a failed wait below must
+	// not leave the handlers parked, because Close waits for them.
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
 
 	client := setupTestClient(t, server)
 
@@ -470,7 +483,7 @@ func TestGetTaxonomy_ConcurrentMissesFetchOnce(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return client.taxonomy.Stats().Misses == callers
 	}, 5*time.Second, time.Millisecond)
-	close(release)
+	releaseOnce.Do(func() { close(release) })
 	wg.Wait()
 
 	for i := range callers {
@@ -490,6 +503,9 @@ func TestGetTaxonomy_CallerCancelDoesNotAbortSharedFetch(t *testing.T) {
 		_, _ = w.Write([]byte(`[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1"}]`))
 	}))
 	defer server.Close()
+	// Registered after server.Close so it runs first (see the test above).
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
 
 	client := setupTestClient(t, server)
 
@@ -513,9 +529,14 @@ func TestGetTaxonomy_CallerCancelDoesNotAbortSharedFetch(t *testing.T) {
 	require.Eventually(t, func() bool { return client.taxonomy.Stats().Misses == 2 }, 5*time.Second, time.Millisecond)
 
 	cancelA()
-	require.ErrorIs(t, <-errA, context.Canceled)
+	select {
+	case err := <-errA:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second): // only reached when the caller waits for the shared fetch
+		require.FailNow(t, "the cancelled caller did not return while the shared fetch was running")
+	}
 
-	close(release)
+	releaseOnce.Do(func() { close(release) })
 	r := <-resB
 	require.NoError(t, r.err)
 	assert.Len(t, r.tax, 1)
