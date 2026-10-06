@@ -9,26 +9,20 @@ name: PR Template Check
 # fixed. The "template: exempt" label skips the check.
 #
 # pull_request_target is needed to label and comment on fork PRs. It is safe here
-# because the job checks out only the .github directory of the default branch tip
+# because the job checks out only the .github directory of the base branch tip
 # (the same commit this workflow file comes from) and reads the PR title and body
 # as data from the event payload. Never check out or run the pull request's code
 # in this workflow.
 on:
   pull_request_target:
-    # synchronize keeps the check attached to the latest head commit.
+    # synchronize re-runs the check on every push to the pull request.
     types: [opened, edited, reopened, synchronize, labeled, unlabeled]
-  # Runs the check script's unit tests when the script or this workflow changes.
-  pull_request:
-    paths:
-      - '.github/scripts/pr-template-check*'
-      - '.github/pull_request_template.md'
-      - '.github/workflows/pr-template-check.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: pr-template-check-${{ github.event_name }}-${{ github.event.pull_request.number }}
+  group: pr-template-check-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -38,7 +32,6 @@ jobs:
     # as a pass. Label changes made by this job use GITHUB_TOKEN, so they do not
     # trigger new runs.
     if: >-
-      github.event_name == 'pull_request_target' &&
       github.event.pull_request.head.repo.full_name != github.repository &&
       github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-24.04
@@ -64,15 +57,3 @@ jobs:
             const { run } = require('./.github/scripts/pr-template-check.cjs');
             await run({ github, context, core });
 
-  test-script:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-          sparse-checkout: .github
-
-      - name: Run the check script tests
-        run: node --test .github/scripts/pr-template-check.test.cjs

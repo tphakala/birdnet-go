@@ -1,0 +1,45 @@
+name: PR Template Check Tests
+
+# Unit tests for .github/scripts/pr-template-check.cjs. They read the real PR
+# template, so they also run when the template changes, including template edits
+# pushed straight to main: a reworded checkbox there would otherwise break the
+# check for every fork pull request unnoticed.
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/pr-template-check*'
+      - '.github/pull_request_template.md'
+      - '.github/workflows/pr-template-check*.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/scripts/pr-template-check*'
+      - '.github/pull_request_template.md'
+      - '.github/workflows/pr-template-check*.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-template-check-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Run the check script tests
+        run: node --test .github/scripts/pr-template-check.test.cjs
