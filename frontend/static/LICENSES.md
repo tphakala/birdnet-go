@@ -194,7 +194,7 @@ Source: BSD-3-Clause
 
 ### github.com/labstack/echo/v4
 
-License: https://github.com/labstack/echo/blob/v4.15.4/LICENSE
+License: https://github.com/labstack/echo/blob/v4.16.0/LICENSE
 Source: MIT
 
 ### github.com/labstack/gommon
