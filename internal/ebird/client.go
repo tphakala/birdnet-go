@@ -558,19 +558,34 @@ func (c *Client) doRequestWithRetry(ctx context.Context, method, url string, bod
 	return lastErr
 }
 
+// statCache is the part of a ttlcache.Cache the client-wide cache operations
+// need, independent of key and value types.
+type statCache interface {
+	Clear()
+	Len() int
+	Stats() ttlcache.Stats
+}
+
+// caches returns every cache the client owns, so whole-client operations
+// cannot miss one.
+func (c *Client) caches() []statCache {
+	return []statCache{c.taxonomy, c.species, c.familyTrees, c.observations}
+}
+
 // ClearCache clears all cached data
 func (c *Client) ClearCache() {
-	c.taxonomy.Clear()
-	c.species.Clear()
-	c.familyTrees.Clear()
-	c.observations.Clear()
+	for _, cc := range c.caches() {
+		cc.Clear()
+	}
 	GetLogger().Info("eBird cache cleared")
 }
 
 // GetCacheStats returns the number of live cached items across all eBird
 // caches. The size is not tracked and is always 0.
 func (c *Client) GetCacheStats() (itemCount int, size int64) {
-	itemCount = c.taxonomy.Len() + c.species.Len() + c.familyTrees.Len() + c.observations.Len()
+	for _, cc := range c.caches() {
+		itemCount += cc.Len()
+	}
 	return itemCount, 0
 }
 
@@ -606,11 +621,10 @@ func (c *Client) GetMetrics() Metrics {
 	return metrics
 }
 
-// cacheTotals sums the hit and miss counters of all four caches.
+// cacheTotals sums the hit and miss counters of all caches.
 func (c *Client) cacheTotals() (hits, misses int64) {
-	for _, st := range []ttlcache.Stats{
-		c.taxonomy.Stats(), c.species.Stats(), c.familyTrees.Stats(), c.observations.Stats(),
-	} {
+	for _, cc := range c.caches() {
+		st := cc.Stats()
 		hits += int64(st.Hits)
 		misses += int64(st.Misses)
 	}

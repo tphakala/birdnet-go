@@ -26,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/spectrogram/specfile"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"github.com/tphakala/birdnet-go/internal/ttlcache"
 )
 
 // dateValidationError represents a date parameter validation failure.
@@ -268,12 +269,12 @@ func speciesPageKey(species, date, hour string, duration, numResults, offset int
 }
 
 // searchPageKey builds the cache key for a SearchNotes page. The text query and
-// the scientific-name alternatives (NUL-joined, since NUL cannot occur in a
-// name) are the only inputs the datastore call reads besides the page window.
+// the scientific-name alternatives are the only inputs the datastore call reads
+// besides the page window.
 func searchPageKey(search string, scientific []string, numResults, offset int) *apicore.DetectionPageKey {
 	return &apicore.DetectionPageKey{
 		Kind: apicore.DetectionPageSearch, Search: search,
-		SearchScientific: strings.Join(scientific, "\x00"),
+		SearchScientific: strings.Join(scientific, apicore.DetectionPageNameSeparator),
 		Limit:            numResults, Offset: offset,
 	}
 }
@@ -287,7 +288,7 @@ func (p *detectionQueryParams) advancedPageKey() *apicore.DetectionPageKey {
 	return &apicore.DetectionPageKey{
 		Kind:             apicore.DetectionPageAdvanced,
 		Search:           p.Search,
-		SearchScientific: strings.Join(p.SearchScientific, "\x00"),
+		SearchScientific: strings.Join(p.SearchScientific, apicore.DetectionPageNameSeparator),
 		Limit:            p.NumResults,
 		Offset:           p.Offset,
 		Confidence:       p.Confidence,
@@ -696,7 +697,7 @@ func (c *Handler) respondIfRequestEnded(ctx echo.Context, err error, logMsg stri
 	}
 	c.LogDebugIfEnabled(logMsg,
 		logger.Error(err),
-		logger.String("path", ctx.Request().URL.Path),
+		logger.String("path", apicore.RoutePattern(ctx)),
 		logger.String("ip", ctx.RealIP()),
 	)
 	return true, ctx.JSON(code, c.NewErrorResponse(err, msg, code))
@@ -992,7 +993,8 @@ func (c *Handler) createPaginatedResponse(detections []DetectionResponse, totalR
 }
 
 // cachedPage returns the page cached under key, or runs load once for all
-// concurrent callers that miss on it. Errors are returned as-is and never cached.
+// concurrent callers that miss on it. Errors are returned as-is and never cached;
+// a panicking loader comes back as a *ttlcache.PanicError and its stack is logged.
 func (c *Handler) cachedPage(ctx context.Context, key *apicore.DetectionPageKey, load func() ([]datastore.Note, int64, error)) ([]datastore.Note, int64, error) {
 	page, err := c.DetectionCache.GetOrLoad(ctx, key, func(context.Context) (apicore.DetectionPage, error) {
 		notes, total, err := load()
@@ -1002,6 +1004,14 @@ func (c *Handler) cachedPage(ctx context.Context, key *apicore.DetectionPageKey,
 		return apicore.DetectionPage{Notes: notes, Total: total}, nil
 	})
 	if err != nil {
+		// A panicking loader is recovered by the cache so it cannot crash the
+		// process; log its stack here, since the error only carries the value.
+		if pe, ok := errors.AsType[*ttlcache.PanicError](err); ok {
+			c.LogErrorIfEnabled("Detection page loader panicked",
+				logger.Error(err),
+				logger.String("stack", string(pe.Stack)),
+			)
+		}
 		return nil, 0, err
 	}
 	return page.Notes, page.Total, nil
@@ -1203,7 +1213,16 @@ func (c *Handler) getSearchDetections(ctx context.Context, search string, scient
 		} else {
 			notes, totalCount, err = c.DS.SearchNotes(search, false, numResults, offset)
 		}
+		listAll := search == "" && len(scientific) == 0
 		if err != nil {
+			if listAll {
+				c.LogErrorIfEnabled("Failed to get all detections",
+					logger.Int("limit", numResults),
+					logger.Int("offset", offset),
+					logger.Error(err),
+				)
+				return nil, 0, err
+			}
 			c.LogErrorIfEnabled("Failed to search notes",
 				logger.String("query", search),
 				logger.Int("limit", numResults),
@@ -1213,6 +1232,13 @@ func (c *Handler) getSearchDetections(ctx context.Context, search string, scient
 			return nil, 0, err
 		}
 
+		if listAll {
+			c.LogInfoIfEnabled("Retrieved all detections",
+				logger.Int("count", len(notes)),
+				logger.Int64("total", totalCount),
+			)
+			return notes, totalCount, nil
+		}
 		c.LogInfoIfEnabled("Retrieved search results",
 			logger.String("query", search),
 			logger.Int("count", len(notes)),

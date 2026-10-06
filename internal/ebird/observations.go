@@ -20,9 +20,13 @@ type Observation struct {
 	HowMany        int     `json:"howMany"`
 }
 
-// observationKey identifies one cached observations lookup. The coordinates
-// are the %.4f strings the request URL uses, so keys round exactly like the
-// request does.
+// coordinateFormat renders observation coordinates with four decimals (about
+// 11 m). The cache key and the request URL use the same strings, so keys round
+// exactly like the request does.
+const coordinateFormat = "%.4f"
+
+// observationKey identifies one cached observations lookup by the formatted
+// coordinates and the look-back window.
 type observationKey struct {
 	lat, lng string
 	days     int
@@ -38,8 +42,8 @@ func (c *Client) GetRecentObservations(ctx context.Context, lat, lng float64, da
 	}
 
 	key := observationKey{
-		lat:  fmt.Sprintf("%.4f", lat),
-		lng:  fmt.Sprintf("%.4f", lng),
+		lat:  fmt.Sprintf(coordinateFormat, lat),
+		lng:  fmt.Sprintf(coordinateFormat, lng),
 		days: days,
 	}
 	obs, err := c.observations.GetOrLoad(ctx, key, func(loadCtx context.Context) ([]Observation, error) {

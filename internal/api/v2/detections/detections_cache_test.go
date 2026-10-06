@@ -447,3 +447,38 @@ func TestGetDetections_LoaderErrorIsNotCached(t *testing.T) {
 	status, _ = getDetectionsBody(t, e, h, query)
 	assert.Equal(t, http.StatusOK, status)
 }
+
+// TestGetDetections_LoaderPanicIsLogged pins that a datastore panic inside a
+// cached load becomes a 500 with the panic logged at error level, since the
+// cache recovers it before Echo's recover middleware could see it.
+func TestGetDetections_LoaderPanicIsLogged(t *testing.T) {
+	e, mockDS, h := setupTestEnvironment(t)
+	rec := &levelRecorder{}
+	h.APILogger = rec
+	mockDS.EXPECT().SearchNotes("Crow", false, 10, 0).Run(func(string, bool, int, int) {
+		panic("datastore exploded")
+	}).Once()
+	query := url.Values{"queryType": {"search"}, "search": {"Crow"}, "numResults": {"10"}}
+
+	status, _ := getDetectionsBody(t, e, h, query)
+	assert.Equal(t, http.StatusInternalServerError, status)
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	assert.Contains(t, rec.errs, "Detection page loader panicked")
+}
+
+// TestGetDetections_AllQueryLogsAllDetections pins that the default query type
+// keeps its own log messages after sharing the search loader.
+func TestGetDetections_AllQueryLogsAllDetections(t *testing.T) {
+	e, mockDS, h := setupTestEnvironment(t)
+	rec := &levelRecorder{}
+	h.APILogger = rec
+	mockDS.EXPECT().SearchNotes("", false, 10, 0).Return(nil, int64(0), assert.AnError).Once()
+
+	status, _ := getDetectionsBody(t, e, h, url.Values{"numResults": {"10"}})
+	assert.Equal(t, http.StatusInternalServerError, status)
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	assert.Contains(t, rec.errs, "Failed to get all detections")
+	assert.NotContains(t, rec.errs, "Failed to search notes")
+}

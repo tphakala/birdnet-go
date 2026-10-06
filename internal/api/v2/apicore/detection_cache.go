@@ -9,34 +9,39 @@ import (
 )
 
 // DetectionPage is one cached page of detections together with the total
-// number of matches for the query that produced it.
+// number of matches for the query that produced it. Notes is shared by every
+// caller served from the same entry and must be treated as read-only.
 type DetectionPage struct {
 	Notes []datastore.Note
 	Total int64
 }
+
+// DetectionPageKind names the datastore call a cached detection page comes
+// from.
+type DetectionPageKind string
 
 // Page kinds used as DetectionPageKey.Kind. The detections handler picks the
 // kind from the datastore call a request resolves to, so two kinds never share
 // an entry unless they run the identical call.
 const (
 	// DetectionPageHourly keys GetHourlyDetections pages.
-	DetectionPageHourly = "hourly"
+	DetectionPageHourly DetectionPageKind = "hourly"
 	// DetectionPageSpecies keys SpeciesDetections pages.
-	DetectionPageSpecies = "species"
+	DetectionPageSpecies DetectionPageKind = "species"
 	// DetectionPageSearch keys SearchNotes and its common-name variant,
 	// including the empty search that lists everything.
-	DetectionPageSearch = "search"
+	DetectionPageSearch DetectionPageKind = "search"
 	// DetectionPageAdvanced keys SearchNotesAdvanced pages built from the
 	// request filters.
-	DetectionPageAdvanced = "advanced"
+	DetectionPageAdvanced DetectionPageKind = "advanced"
 )
 
 // DetectionPageKey identifies one cached detection page. It is a flat
 // comparable struct: every field a loader reads must be set by the key
 // builder, and fields a kind does not use stay zero. SearchScientific is the
-// NUL-joined list of scientific-name alternatives.
+// list of scientific-name alternatives joined with DetectionPageNameSeparator.
 type DetectionPageKey struct {
-	Kind             string
+	Kind             DetectionPageKind
 	Date, Hour       string
 	Duration         int
 	Species          string
@@ -54,6 +59,11 @@ type DetectionPageKey struct {
 	SortBy           string
 	Limit, Offset    int
 }
+
+// DetectionPageNameSeparator joins scientific-name alternatives in
+// DetectionPageKey.SearchScientific. NUL cannot occur in a name, so two
+// different lists never join to the same string.
+const DetectionPageNameSeparator = "\x00"
 
 // Detection cache sizing.
 //
@@ -82,7 +92,7 @@ type DetectionPageKey struct {
 // NOT MEASURED; pointer and int sizes match amd64, so the figures should carry
 // over.
 const (
-	detectionCacheExpiry = 5 * time.Minute // Default detection-query cache expiration
+	detectionCacheExpiry = 5 * time.Minute // Detection-query cache expiration
 
 	// detectionCacheMaxEntries is the maximum number of cached detection pages.
 	detectionCacheMaxEntries = 48

@@ -17,7 +17,8 @@
 //     backwards only weakens the sweep, never the guarantee that a read does not
 //     return an expired entry, because every read checks the entry's own expiry.
 //   - Keys must be reflexive (key == key). Float keys holding NaN are
-//     unsupported.
+//     unsupported. With an interface key type, every dynamic key value must be
+//     comparable; an uncomparable one panics, as it would in any Go map.
 //   - A loader must not call GetOrLoad for the same key on the same cache (it
 //     would wait for itself).
 //   - A loader must not call runtime.Goexit, so no testing.T.FailNow or
@@ -354,7 +355,10 @@ func (c *Cache[K, V]) GetOrLoad(ctx context.Context, key K, load func(context.Co
 		}
 		// The flight ran for a different key that encodes to the same flight
 		// key. Run our own load against the current generation, so the result
-		// is storable even if a mutation happened meanwhile.
+		// is storable even if a mutation happened meanwhile. This load runs
+		// synchronously and is not deduplicated, so the caller cannot give up
+		// early. It needs two keys whose %#v forms collide, which the flat
+		// key types used in this repository cannot produce.
 		c.mu.Lock()
 		gen = c.generation
 		c.mu.Unlock()
