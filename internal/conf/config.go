@@ -1591,10 +1591,10 @@ type Security struct {
 	// exposed instance. The reserved value "cloudflare" (TrustedProxyCloudflarePreset)
 	// expands to Cloudflare's published edge ranges. The same trust decides whether
 	// X-Forwarded-Proto (and X-Forwarded-Ssl, X-Forwarded-Protocol, X-Url-Scheme)
-	// is honored when deciding whether to send the HSTS header (other HTTPS checks, such as
-	// the COOP header and the CSRF cookie Secure flag, do not consult this list): a proxy on a
+	// is honored when deciding whether to send the HSTS header, so a proxy on a
 	// public or 100.64.0.0/10 (CGNAT, Tailscale IPv4) address must be listed here
-	// for HSTS to be sent. Hot-reloadable.
+	// for HSTS to be sent. Other HTTPS checks, such as the COOP header and the
+	// CSRF cookie Secure flag, do not consult this list. Hot-reloadable.
 	TrustedProxies []string     `yaml:"trustedproxies" json:"trustedProxies"`
 	PublicAccess   PublicAccess `yaml:"publicaccess" json:"publicAccess"` // features accessible without authentication
 	// PrivateMode, when true, requires the user to authenticate before any

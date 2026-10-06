@@ -135,10 +135,10 @@ type Core struct {
 
 // NewCore builds the shared API v2 substrate. It resolves the media export root,
 // creates the SecureFS sandbox and the cancellation context, wires the
-// trusted-proxy IP and scheme extractors, loads the taxonomy database, initializes the eBird
-// client (when enabled) and the SSE manager. The functional options (auth
-// middleware, audio engine, etc.) and the echo Group + group middleware are
-// applied by the facade after construction.
+// trusted-proxy IP and scheme extractors, loads the taxonomy database,
+// initializes the eBird client (when enabled) and the SSE manager. The
+// functional options (auth middleware, audio engine, etc.) and the echo Group +
+// group middleware are applied by the facade after construction.
 func NewCore(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	metrics *observability.Metrics,

@@ -44,8 +44,9 @@ func isUnixSocketPeer(remoteAddr string) bool {
 //
 // The trusted set is loopback, link-local and private peers, unix-socket peers,
 // and Security.TrustedProxies (including the cloudflare preset), read per request
-// from getSettings so changes hot-reload. It must stay in lockstep with
-// newTrustedProxyIPExtractor so one list governs both client IP and scheme.
+// from getSettings so changes hot-reload. Apart from unix-socket peers, which
+// only matter for the scheme, it must trust exactly the peers that
+// newTrustedProxyIPExtractor trusts, so one list governs client IP and scheme.
 func newTrustedProxySchemeExtractor(getSettings func() *conf.Settings) echo.SchemeExtractor {
 	var cache atomic.Pointer[trustedProxyChecker]
 	fromHeaders := echo.LegacySchemeExtractor()
