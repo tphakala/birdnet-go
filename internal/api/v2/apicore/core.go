@@ -135,7 +135,7 @@ type Core struct {
 
 // NewCore builds the shared API v2 substrate. It resolves the media export root,
 // creates the SecureFS sandbox and the cancellation context, wires the
-// trusted-proxy IP extractor, loads the taxonomy database, initializes the eBird
+// trusted-proxy IP and scheme extractors, loads the taxonomy database, initializes the eBird
 // client (when enabled) and the SSE manager. The functional options (auth
 // middleware, audio engine, etc.) and the echo Group + group middleware are
 // applied by the facade after construction.
@@ -184,15 +184,20 @@ func NewCore(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	// field doc and the settings update handlers.
 	c.Settings.Store(settings)
 
-	// Configure the trusted-proxy-gated IP extractor. Forwarded client-IP headers
-	// (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) are honored only when the
-	// connection peer is a trusted proxy (loopback/link-local/private by default,
-	// plus Security.TrustedProxies); otherwise the real peer address is used. It
-	// reads this controller's own settings snapshot per request (published above
-	// and on every save), so it honors the controller's TrustedProxies and
-	// hot-reloads without a restart.
+	// Configure the trusted-proxy-gated IP and scheme extractors. Forwarded
+	// client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) and
+	// forwarded scheme headers (X-Forwarded-Proto and siblings) are honored only
+	// when the connection peer is a trusted proxy (loopback/link-local/private by
+	// default, plus Security.TrustedProxies); otherwise the real peer address and
+	// connection scheme are used. The scheme extractor is needed because Echo
+	// v4.16 otherwise trusts scheme headers from loopback/link-local/private
+	// peers only, so a proxy on a public or CGNAT address would lose HSTS. Both
+	// read this controller's own settings snapshot per request (published above
+	// and on every save), so they honor the controller's TrustedProxies and
+	// hot-reload without a restart.
 	e.IPExtractor = newTrustedProxyIPExtractor(c.ControllerSettings)
-	GetLogger().Info("Configured trusted-proxy-gated IP extractor (forwarded client IP honored only from trusted proxies)")
+	e.SchemeExtractor = newTrustedProxySchemeExtractor(c.ControllerSettings)
+	GetLogger().Info("Configured trusted-proxy-gated IP and scheme extractors (forwarded client IP and scheme honored only from trusted proxies)")
 
 	// Propagate the derived FFprobe path from config validation to the
 	// ffmpeg package so executeFFprobe can find it without PATH lookup.
