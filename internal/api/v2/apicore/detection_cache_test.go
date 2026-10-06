@@ -24,7 +24,7 @@ func TestDetectionPageCache_NilReceiverIsSafe(t *testing.T) {
 	}
 
 	for range 2 {
-		page, err := c.GetOrLoad(t.Context(), &DetectionPageKey{Kind: DetectionPageSearch}, load)
+		page, err := c.GetOrLoad(t.Context(), &DetectionPageKey{Kind: DetectionPageSearch, Limit: 10}, load)
 		require.NoError(t, err)
 		assert.Equal(t, int64(3), page.Total)
 	}
@@ -46,7 +46,7 @@ func TestNewDetectionPageCache_AppliesTTLAndBound(t *testing.T) {
 		calls.Add(1)
 		return DetectionPage{Notes: []datastore.Note{{ID: 1}}, Total: 1}, nil
 	}
-	key := &DetectionPageKey{Kind: DetectionPageHourly, Date: "2026-01-01"}
+	key := &DetectionPageKey{Kind: DetectionPageHourly, Date: "2026-01-01", Limit: 10}
 
 	_, err := c.GetOrLoad(ctx, key, load)
 	require.NoError(t, err)
@@ -60,7 +60,7 @@ func TestNewDetectionPageCache_AppliesTTLAndBound(t *testing.T) {
 	assert.Equal(t, int32(2), calls.Load(), "miss at the TTL")
 
 	for i := range detectionCacheMaxEntries + 1 {
-		_, err := c.GetOrLoad(ctx, &DetectionPageKey{Kind: DetectionPageSearch, Offset: i}, load)
+		_, err := c.GetOrLoad(ctx, &DetectionPageKey{Kind: DetectionPageSearch, Limit: 10, Offset: i}, load)
 		require.NoError(t, err)
 	}
 	assert.Equal(t, detectionCacheMaxEntries, c.Len())
@@ -71,7 +71,7 @@ func TestDetectionPageCache_InvalidateAndLoaderError(t *testing.T) {
 	t.Parallel()
 	c := NewDetectionPageCache()
 	ctx := t.Context()
-	key := &DetectionPageKey{Kind: DetectionPageSpecies, Species: "Parus major"}
+	key := &DetectionPageKey{Kind: DetectionPageSpecies, Species: "Parus major", Limit: 10}
 	sentinel := errors.NewStd("datastore down")
 
 	_, err := c.GetOrLoad(ctx, key, func(context.Context) (DetectionPage, error) { return DetectionPage{}, sentinel })
@@ -136,5 +136,27 @@ func TestDetectionPageCache_DirectLoadPanicBecomesPanicError(t *testing.T) {
 			assert.Equal(t, "datastore exploded", pe.Value)
 			assert.NotEmpty(t, pe.Stack)
 		})
+	}
+}
+
+// TestDetectionPageCache_NonPositiveLimitBypassesCache pins that a page with no
+// positive limit is never stored. Advanced search reads such a limit as no
+// limit, so storing it could break the cache's memory bound.
+func TestDetectionPageCache_NonPositiveLimitBypassesCache(t *testing.T) {
+	t.Parallel()
+	for _, limit := range []int{0, -1} {
+		c := NewDetectionPageCache()
+		var calls atomic.Int32
+		load := func(context.Context) (DetectionPage, error) {
+			calls.Add(1)
+			return DetectionPage{Total: 1}, nil
+		}
+		key := &DetectionPageKey{Kind: DetectionPageSearch, Limit: limit}
+		for range 2 {
+			_, err := c.GetOrLoad(t.Context(), key, load)
+			require.NoError(t, err)
+		}
+		assert.Equal(t, int32(2), calls.Load(), "limit %d loads every time", limit)
+		assert.Equal(t, 0, c.Len(), "limit %d is not stored", limit)
 	}
 }

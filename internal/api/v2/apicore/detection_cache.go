@@ -117,8 +117,9 @@ func NewDetectionPageCache(opts ...ttlcache.Option) *DetectionPageCache {
 // concurrent callers. See ttlcache.Cache.GetOrLoad for the context contract:
 // the loader's context is not cancelled when the caller's is.
 //
-// Pages with a Limit above detectionCacheMaxPageNotes are loaded directly and
-// not cached, which keeps the worst-case memory of the cache bounded. A nil
+// Pages with a Limit above detectionCacheMaxPageNotes, or with no positive
+// Limit (which advanced search reads as no limit), are loaded directly and not
+// cached, which keeps the worst-case memory of the cache bounded. A nil
 // cache loads every page directly. On both direct paths a context that is
 // already done returns its error without calling load, and a panic in load is
 // returned as *ttlcache.PanicError, as on the cached path.
@@ -126,7 +127,7 @@ func NewDetectionPageCache(opts ...ttlcache.Option) *DetectionPageCache {
 // The key is a pointer only because the struct is large; it is copied and must
 // not be nil.
 func (c *DetectionPageCache) GetOrLoad(ctx context.Context, key *DetectionPageKey, load func(context.Context) (DetectionPage, error)) (DetectionPage, error) {
-	if c == nil || key.Limit > detectionCacheMaxPageNotes {
+	if c == nil || key.Limit <= 0 || key.Limit > detectionCacheMaxPageNotes {
 		// Match the cached path: a caller that has already gone away gets its
 		// context error instead of starting a datastore query.
 		if err := ctx.Err(); err != nil {
