@@ -2,6 +2,7 @@ package apicore
 
 import (
 	"context"
+	"runtime/debug"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -67,30 +68,18 @@ const DetectionPageNameSeparator = "\x00"
 
 // Detection cache sizing.
 //
-// The detections list endpoint is public, so the cache must be bounded: a
-// client that walks offsets or varies filters would otherwise grow it without
-// limit for the five-minute TTL. Two bounds apply: pages larger than
-// detectionCacheMaxPageNotes are never cached, and at most
-// detectionCacheMaxEntries pages are kept.
+// The detections list endpoint is public, so the cache is bounded twice: pages
+// larger than detectionCacheMaxPageNotes are never cached, and at most
+// detectionCacheMaxEntries pages are kept. The UI pages in 25 to 100 notes, so
+// larger pages (exports, batch selection) are rare and go straight to the
+// datastore.
 //
-// Measured with TestDetectionCacheMaxEntries_WorstCaseStaysWithinBudget (Go
-// 1.27, linux/amd64; every note carries a review, a lock, one 160 byte comment,
-// source and model metadata and 24 to 60 byte strings, which is generous for
-// real rows). The 100 and 1000 note figures agree within 0.1 percent across
-// runs; the 25 note figure varies between runs:
-//
-//	  25 notes per page:  17-26 KB retained per page (0.7 to 1.0 KB per note)
-//	 100 notes per page:    144 KB retained per page (about 1.4 KB per note)
-//	1000 notes per page:  1365 KB retained per page (about 1.4 KB per note)
-//
-// The UI pages in 25 to 100 notes, so the page bound is 100: larger pages
-// (exports, batch selection) are rare and go straight to the datastore. The
-// budget is 8 MiB (detectionCacheMaxBytes) for the worst case of
-// detectionCacheMaxEntries full 100-note pages: 48 x 144 KB = 6.9 MB, which
-// leaves headroom. Bounding the entry count alone would have allowed only six
-// 1000-note pages, too few to help normal paging. A 64-bit ARM measurement is
-// NOT MEASURED; pointer and int sizes match amd64, so the figures should carry
-// over.
+// TestDetectionCacheMaxEntries_WorstCaseStaysWithinBudget measures the heap a
+// page retains: about 144 KB for 100 fully populated notes on linux/amd64. The
+// worst case of 48 such pages is about 6.9 MB, within the 8 MiB budget
+// (detectionCacheMaxBytes) for a Raspberry Pi. Bounding the entry count alone
+// would have allowed only six 1000-note pages (about 1.4 MB each), too few to
+// help normal paging.
 const (
 	detectionCacheExpiry = 5 * time.Minute // Detection-query cache expiration
 
@@ -131,7 +120,8 @@ func NewDetectionPageCache(opts ...ttlcache.Option) *DetectionPageCache {
 // Pages with a Limit above detectionCacheMaxPageNotes are loaded directly and
 // not cached, which keeps the worst-case memory of the cache bounded. A nil
 // cache loads every page directly. On both direct paths a context that is
-// already done returns its error without calling load.
+// already done returns its error without calling load, and a panic in load is
+// returned as *ttlcache.PanicError, as on the cached path.
 //
 // The key is a pointer only because the struct is large; it is copied and must
 // not be nil.
@@ -142,9 +132,21 @@ func (c *DetectionPageCache) GetOrLoad(ctx context.Context, key *DetectionPageKe
 		if err := ctx.Err(); err != nil {
 			return DetectionPage{}, err
 		}
-		return load(ctx)
+		return loadDirect(ctx, load)
 	}
 	return c.cache.GetOrLoad(ctx, *key, load)
+}
+
+// loadDirect runs load on the caller's goroutine and turns a panic into a
+// *ttlcache.PanicError, so callers handle a panicking loader the same way
+// whether or not the page was cacheable.
+func loadDirect(ctx context.Context, load func(context.Context) (DetectionPage, error)) (page DetectionPage, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			page, err = DetectionPage{}, &ttlcache.PanicError{Value: r, Stack: debug.Stack()}
+		}
+	}()
+	return load(ctx)
 }
 
 // Invalidate drops every cached page and discards the results of loads in

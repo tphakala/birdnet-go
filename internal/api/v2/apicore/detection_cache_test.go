@@ -118,3 +118,23 @@ func TestDetectionPageCache_LargePagesBypassCache(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, int32(3), calls.Load(), "a done context does not start a load")
 }
+
+func TestDetectionPageCache_DirectLoadPanicBecomesPanicError(t *testing.T) {
+	t.Parallel()
+	panicking := func(context.Context) (DetectionPage, error) { panic("datastore exploded") }
+
+	for name, c := range map[string]*DetectionPageCache{
+		"nil cache":       nil,
+		"page over bound": NewDetectionPageCache(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			key := &DetectionPageKey{Kind: DetectionPageSearch, Limit: detectionCacheMaxPageNotes + 1}
+			_, err := c.GetOrLoad(t.Context(), key, panicking)
+			pe, ok := errors.AsType[*ttlcache.PanicError](err)
+			require.True(t, ok, "got %v", err)
+			assert.Equal(t, "datastore exploded", pe.Value)
+			assert.NotEmpty(t, pe.Stack)
+		})
+	}
+}

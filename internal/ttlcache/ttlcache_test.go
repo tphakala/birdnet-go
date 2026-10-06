@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -293,13 +294,14 @@ func TestGetOrLoad_CallerAfterFlightFinishesDoesNotReload(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 5, v)
 
-	// Simulate a caller that missed before the first flight stored its value:
-	// it enters the flight directly, and the peek finds the stored entry.
-	res, err := c.loadAndStore(ctx, c.generation, "k", constLoader(&calls, 6))
+	v, err = c.GetOrLoad(ctx, "k", constLoader(&calls, 6))
 	require.NoError(t, err)
-	assert.Equal(t, 5, res.value)
+	assert.Equal(t, 5, v, "the finished flight's value is served from the cache")
 	assert.Equal(t, int32(1), calls.Load())
-	assert.Equal(t, Stats{Misses: 1}, c.Stats(), "the peek does not count")
+	assert.Equal(t, Stats{Hits: 1, Misses: 1}, c.Stats())
+	c.mu.Lock()
+	assert.Empty(t, c.flights, "a finished flight is unregistered")
+	c.mu.Unlock()
 }
 
 func TestGetOrLoad_LoaderErrorNotCached(t *testing.T) {
@@ -521,7 +523,7 @@ func TestGetOrLoad_LoaderPanicBecomesPanicError(t *testing.T) {
 	})
 }
 
-func TestGetOrLoad_ErrorDoesNotTriggerCollisionFallback(t *testing.T) {
+func TestGetOrLoad_JoinedCallersShareLoaderError(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		c := New[string, int](testTTL)
@@ -546,78 +548,38 @@ func TestGetOrLoad_ErrorDoesNotTriggerCollisionFallback(t *testing.T) {
 			require.ErrorIs(t, <-errs, sentinel)
 		}
 		assert.Equal(t, int32(1), calls.Load())
+		assert.Equal(t, 0, c.Len())
 	})
 }
 
-// collidingKey encodes to one flight key whatever its field, to exercise the
-// collision fallback.
-type collidingKey struct{ n int }
-
-func (collidingKey) GoString() string { return "collidingKey" }
-
-func TestGetOrLoad_KeyEncodingCollisionReturnsOwnValue(t *testing.T) {
+func TestGetOrLoad_LoaderGoexitReleasesCallers(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		c := New[collidingKey, int](testTTL)
+		c := New[string, int](testTTL)
 		release := make(chan struct{})
-		loaderFor := func(n int) func(context.Context) (int, error) {
-			return func(context.Context) (int, error) {
-				<-release
-				return n * 10, nil
-			}
+		loader := func(context.Context) (int, error) {
+			<-release
+			runtime.Goexit()
+			return 0, nil
 		}
-		got := make(chan [2]int, 2)
-		for _, n := range []int{1, 2} {
+		errs := make(chan error, 2)
+		for range 2 {
 			go func() {
-				v, err := c.GetOrLoad(t.Context(), collidingKey{n}, loaderFor(n))
-				if err != nil {
-					v = -1
-				}
-				got <- [2]int{n, v}
+				_, err := c.GetOrLoad(t.Context(), "k", loader)
+				errs <- err
 			}()
 		}
 		synctest.Wait()
 		close(release)
 		for range 2 {
-			r := <-got
-			assert.Equal(t, r[0]*10, r[1], "key %d received its own value", r[0])
+			require.ErrorIs(t, <-errs, ErrLoaderExited)
 		}
-	})
-}
+		assert.Equal(t, 0, c.Len())
 
-func TestGetOrLoad_CollisionFallbackStoresAfterClear(t *testing.T) {
-	t.Parallel()
-	synctest.Test(t, func(t *testing.T) {
-		c := New[collidingKey, int](testTTL)
-		releaseFirst := make(chan struct{})
-		releaseSecond := make(chan struct{})
-		firstDone := make(chan struct{})
-		go func() {
-			defer close(firstDone)
-			_, _ = c.GetOrLoad(t.Context(), collidingKey{1}, func(context.Context) (int, error) {
-				<-releaseFirst
-				return 10, nil
-			})
-		}()
-		synctest.Wait()
-		secondDone := make(chan int, 1)
-		go func() {
-			v, _ := c.GetOrLoad(t.Context(), collidingKey{2}, func(context.Context) (int, error) {
-				<-releaseSecond
-				return 20, nil
-			})
-			secondDone <- v
-		}()
-		synctest.Wait() // the second caller joined the first flight and waits
-		c.Clear()
-		close(releaseFirst)
-		<-firstDone
-		synctest.Wait() // the fallback load is now running with the post-Clear generation
-		close(releaseSecond)
-		assert.Equal(t, 20, <-secondDone)
-		v, ok := c.Get(collidingKey{2})
-		require.True(t, ok, "the fallback result was stored")
-		assert.Equal(t, 20, v)
+		// The flight is unregistered, so the next caller loads again.
+		v, err := c.GetOrLoad(t.Context(), "k", func(context.Context) (int, error) { return 7, nil })
+		require.NoError(t, err)
+		assert.Equal(t, 7, v)
 	})
 }
 
@@ -792,4 +754,26 @@ func TestCache_NoGoroutineLeaks(t *testing.T) {
 		}
 		c.Clear()
 	}
+}
+
+// largeKey has the size of the detection page key, large enough that copying
+// it to the heap would show up as an allocation.
+type largeKey struct {
+	a, b, c, d, e, f, g, h, i, j string
+	n, m                         int
+}
+
+func loadLargeKeyValue(context.Context) (int, error) { return 1, nil }
+
+func TestGetOrLoad_HitDoesNotAllocate(t *testing.T) {
+	c := New[largeKey, int](testTTL)
+	ctx := t.Context()
+	key := largeKey{a: "hourly", n: 25}
+	_, err := c.GetOrLoad(ctx, key, loadLargeKeyValue)
+	require.NoError(t, err)
+
+	allocs := testing.AllocsPerRun(100, func() {
+		_, _ = c.GetOrLoad(ctx, key, loadLargeKeyValue)
+	})
+	assert.Zero(t, allocs, "a hit must not copy the key or start a flight")
 }

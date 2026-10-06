@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -334,13 +335,18 @@ func postBatch(t *testing.T, e *echo.Echo, handler func(echo.Context) error, bod
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
-// levelRecorder records the debug and error messages of a handler logger. The
-// embedded interface stays nil: only the levels the handler uses are overridden.
+// levelRecorder records the debug and error messages of a handler logger.
+// Everything else goes to the embedded discarding logger, so a call the test
+// does not expect (Module, With, Log) cannot hit a nil interface.
 type levelRecorder struct {
 	logger.Logger
 	mu     sync.Mutex
 	debugs []string
 	errs   []string
+}
+
+func newLevelRecorder() *levelRecorder {
+	return &levelRecorder{Logger: logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC)}
 }
 
 func (r *levelRecorder) Trace(string, ...logger.Field) {}
@@ -391,7 +397,7 @@ func TestGetDetections_RequestEnded(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			e, mockDS, h := setupTestEnvironment(t)
 			tt.setup(mockDS)
-			rec := &levelRecorder{}
+			rec := newLevelRecorder()
 			h.APILogger = rec
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections?queryType=search&search=Crow", http.NoBody).WithContext(tt.ctx)
@@ -417,7 +423,7 @@ func TestGetDetections_RequestEnded(t *testing.T) {
 // disconnected client like the list endpoint: 499, debug log, no error log.
 func TestBatchResolveDetections_ClientDisconnect(t *testing.T) {
 	e, _, h := setupTestEnvironment(t)
-	rec := &levelRecorder{}
+	rec := newLevelRecorder()
 	h.APILogger = rec
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -453,7 +459,7 @@ func TestGetDetections_LoaderErrorIsNotCached(t *testing.T) {
 // cache recovers it before Echo's recover middleware could see it.
 func TestGetDetections_LoaderPanicIsLogged(t *testing.T) {
 	e, mockDS, h := setupTestEnvironment(t)
-	rec := &levelRecorder{}
+	rec := newLevelRecorder()
 	h.APILogger = rec
 	mockDS.EXPECT().SearchNotes("Crow", false, 10, 0).Run(func(string, bool, int, int) {
 		panic("datastore exploded")
@@ -471,7 +477,7 @@ func TestGetDetections_LoaderPanicIsLogged(t *testing.T) {
 // keeps its own log messages after sharing the search loader.
 func TestGetDetections_AllQueryLogsAllDetections(t *testing.T) {
 	e, mockDS, h := setupTestEnvironment(t)
-	rec := &levelRecorder{}
+	rec := newLevelRecorder()
 	h.APILogger = rec
 	mockDS.EXPECT().SearchNotes("", false, 10, 0).Return(nil, int64(0), assert.AnError).Once()
 

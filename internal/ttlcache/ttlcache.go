@@ -21,22 +21,19 @@
 //     comparable; an uncomparable one panics, as it would in any Go map.
 //   - A loader must not call GetOrLoad for the same key on the same cache (it
 //     would wait for itself).
-//   - A loader must not call runtime.Goexit, so no testing.T.FailNow or
-//     testify require inside a test loader. The deduplication layer never
-//     answers such a flight and callers without a deadline block forever.
-//     Panics are recovered and returned as *PanicError.
+//   - A loader runs on its own goroutine. A panic in it is recovered and
+//     returned as *PanicError, and a runtime.Goexit (such as testing.T.FailNow
+//     or testify require in a test loader) is returned as ErrLoaderExited, so
+//     waiting callers are always released.
 package ttlcache
 
 import (
 	"context"
 	"fmt"
 	"runtime/debug"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/sync/singleflight"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -49,17 +46,17 @@ const maxSweepPerWrite = 32
 // sweepAll is the sweep limit used by Len to remove every expired entry.
 const sweepAll = -1
 
-// flightKeySeparator separates the generation from the key in a
-// deduplication key. NUL cannot appear in a decimal generation number.
-const flightKeySeparator = "\x00"
-
 // ErrLoaderPanicked is wrapped by *PanicError, so errors.Is(err,
 // ErrLoaderPanicked) reports a loader that panicked.
 var ErrLoaderPanicked = errors.NewStd("ttlcache: loader panicked")
 
-// PanicError is returned by GetOrLoad when the loader panics. The cache
-// recovers the panic because the deduplication layer would otherwise
-// re-raise it on a goroutine nobody can recover.
+// ErrLoaderExited is returned by GetOrLoad when the loader goroutine exits
+// through runtime.Goexit without returning.
+var ErrLoaderExited = errors.NewStd("ttlcache: loader exited without returning")
+
+// PanicError is returned by GetOrLoad when the loader panics. The loader runs
+// on a goroutine of its own, where an unrecovered panic would crash the
+// process, so the cache recovers it and hands it to every waiting caller.
 type PanicError struct {
 	// Value is the value passed to panic.
 	Value any
@@ -118,12 +115,20 @@ type entry[K comparable, V any] struct {
 	prev, next *entry[K, V]
 }
 
-// flightResult is what a deduplicated load returns. It carries the key the
-// load ran for, so a caller whose key merely encodes to the same flight key
-// can detect that the value is not its own.
-type flightResult[K comparable, V any] struct {
-	key   K
+// flightID identifies one in-flight load: the key and the generation the
+// loading callers missed at. Callers that miss after a mutation get a new
+// generation and therefore start a load of their own.
+type flightID[K comparable] struct {
+	gen uint64
+	key K
+}
+
+// flight is one in-flight load shared by every caller that missed on the same
+// flightID. value and err are written once, before done is closed.
+type flight[V any] struct {
+	done  chan struct{}
 	value V
+	err   error
 }
 
 // Cache is a TTL cache safe for concurrent use. The zero value is not usable;
@@ -140,8 +145,8 @@ type Cache[K comparable, V any] struct {
 	// load stores its result only if the generation is unchanged since the
 	// caller's miss, so a mutation discards the stores of loads in flight.
 	generation uint64
-
-	flights singleflight.Group
+	// flights holds the loads in progress, keyed by key and generation.
+	flights map[flightID[K]]*flight[V]
 
 	hits, misses, evictions atomic.Uint64
 }
@@ -158,6 +163,7 @@ func New[K comparable, V any](ttl time.Duration, opts ...Option) *Cache[K, V] {
 		now:        o.now,
 		maxEntries: o.maxEntries,
 		entries:    make(map[K]*entry[K, V]),
+		flights:    make(map[flightID[K]]*flight[V]),
 	}
 }
 
@@ -311,100 +317,89 @@ func (c *Cache[K, V]) Stats() Stats {
 // concurrent callers that miss on the same key and stores a successful result.
 //
 // It counts one hit or one miss per call. Errors from load are returned as-is
-// and are never cached. A panic in load is recovered and returned as
-// *PanicError.
+// and are never cached. A panic in load is returned as *PanicError, and a
+// runtime.Goexit in load as ErrLoaderExited.
 //
-// The loader receives a context that carries the values of the caller that
-// started the load but not its cancellation, so one caller giving up cannot
-// fail the others; the loader must bound its own run time. Each caller waits on
-// its own ctx and returns ctx.Err() when it is done first, while the load
-// continues and still fills the cache. If ctx is already done on a miss,
-// GetOrLoad returns ctx.Err() without loading.
+// The loader runs on its own goroutine with a context that carries the values
+// of the caller that started the load but not its cancellation, so one caller
+// giving up cannot fail the others; the loader must bound its own run time.
+// Each caller waits on its own ctx and returns ctx.Err() when it is done first,
+// while the load continues and still fills the cache. If ctx is already done on
+// a miss, GetOrLoad returns ctx.Err() without loading.
 //
 // A Set, Delete or Clear that runs while a load is in flight discards that
 // load's store; its callers still receive the loaded value.
 func (c *Cache[K, V]) GetOrLoad(ctx context.Context, key K, load func(context.Context) (V, error)) (V, error) {
-	var zero V
-
 	c.mu.Lock()
 	if v, ok := c.lookupLocked(key, c.now()); ok {
 		c.mu.Unlock()
 		c.hits.Add(1)
 		return v, nil
 	}
-	gen := c.generation
-	c.mu.Unlock()
 	c.misses.Add(1)
-
 	if err := ctx.Err(); err != nil {
+		c.mu.Unlock()
+		var zero V
 		return zero, err
 	}
-
-	detached := context.WithoutCancel(ctx)
-	ch := c.flights.DoChan(flightKey(gen, key), func() (any, error) {
-		return c.loadAndStore(detached, gen, key, load)
-	})
+	// Still under the lock that saw the miss: join the load for this key and
+	// generation, or register a new one. A load that has already stored its
+	// value would have been a hit above, so no store can be missed in between.
+	f := c.joinOrStartLocked(ctx, key, load)
+	c.mu.Unlock()
 
 	select {
 	case <-ctx.Done():
+		var zero V
 		return zero, ctx.Err()
-	case res := <-ch:
-		r, ok := res.Val.(flightResult[K, V])
-		if ok && r.key == key {
-			return r.value, res.Err
-		}
-		// The flight ran for a different key that encodes to the same flight
-		// key. Run our own load against the current generation, so the result
-		// is storable even if a mutation happened meanwhile. This load runs
-		// synchronously and is not deduplicated, so the caller cannot give up
-		// early. It needs two keys whose %#v forms collide, which the flat
-		// key types used in this repository cannot produce.
-		c.mu.Lock()
-		gen = c.generation
-		c.mu.Unlock()
-		own, err := c.loadAndStore(detached, gen, key, load)
-		return own.value, err
+	case <-f.done:
+		return f.value, f.err
 	}
 }
 
-// loadAndStore runs one load. The result always carries key, including on the
-// error and panic paths, so waiters never mistake them for a collision.
-func (c *Cache[K, V]) loadAndStore(ctx context.Context, gen uint64, key K, load func(context.Context) (V, error)) (res flightResult[K, V], err error) {
-	res.key = key
+// joinOrStartLocked returns the flight for key at the current generation,
+// starting a load on a new goroutine when there is none. It is separate from
+// GetOrLoad so that only the miss path copies the key to the heap.
+func (c *Cache[K, V]) joinOrStartLocked(ctx context.Context, key K, load func(context.Context) (V, error)) *flight[V] {
+	id := flightID[K]{gen: c.generation, key: key}
+	if f, ok := c.flights[id]; ok {
+		return f
+	}
+	f := &flight[V]{done: make(chan struct{})}
+	c.flights[id] = f
+	go c.runFlight(context.WithoutCancel(ctx), id, f, load)
+	return f
+}
+
+// runFlight runs one load, stores a successful result if no mutation happened
+// since the miss, and releases the waiting callers. A panic or Goexit in load
+// still releases them, with an error.
+func (c *Cache[K, V]) runFlight(ctx context.Context, id flightID[K], f *flight[V], load func(context.Context) (V, error)) {
+	returned := false
 	defer func() {
-		if r := recover(); r != nil {
-			var zero V
-			res.value = zero
-			err = &PanicError{Value: r, Stack: debug.Stack()}
+		if !returned {
+			if r := recover(); r != nil {
+				f.err = &PanicError{Value: r, Stack: debug.Stack()}
+			} else {
+				f.err = ErrLoaderExited
+			}
 		}
+		c.mu.Lock()
+		delete(c.flights, id)
+		c.mu.Unlock()
+		close(f.done)
 	}()
 
-	// A flight that finished just before this one started may have stored the
-	// value already; the peek closes that window without counting a hit.
-	c.mu.Lock()
-	if v, ok := c.lookupLocked(key, c.now()); ok {
-		c.mu.Unlock()
-		res.value = v
-		return res, nil
-	}
-	c.mu.Unlock()
-
 	v, err := load(ctx)
+	returned = true
 	if err != nil {
-		return res, err
+		f.err = err
+		return
 	}
-	res.value = v
-
+	f.value = v
 	c.mu.Lock()
-	if c.generation == gen {
-		c.insertLocked(key, v, c.now())
+	if c.generation == id.gen {
+		c.insertLocked(id.key, v, c.now())
 	}
 	c.mu.Unlock()
-	return res, nil
-}
-
-// flightKey builds the deduplication key. It is only a hint: callers compare
-// the returned key before trusting a shared value.
-func flightKey[K comparable](gen uint64, key K) string {
-	return strconv.FormatUint(gen, 10) + flightKeySeparator + fmt.Sprintf("%#v", key)
 }

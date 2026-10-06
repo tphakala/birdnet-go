@@ -1213,37 +1213,28 @@ func (c *Handler) getSearchDetections(ctx context.Context, search string, scient
 		} else {
 			notes, totalCount, err = c.DS.SearchNotes(search, false, numResults, offset)
 		}
-		listAll := search == "" && len(scientific) == 0
+		// The default (all) query type is an empty search; keep its own log
+		// messages so they stay distinguishable from text searches.
+		errMsg, okMsg := "Failed to search notes", "Retrieved search results"
+		var queryFields []logger.Field
+		if search == "" && len(scientific) == 0 {
+			errMsg, okMsg = "Failed to get all detections", "Retrieved all detections"
+		} else {
+			queryFields = []logger.Field{logger.String("query", search)}
+		}
 		if err != nil {
-			if listAll {
-				c.LogErrorIfEnabled("Failed to get all detections",
-					logger.Int("limit", numResults),
-					logger.Int("offset", offset),
-					logger.Error(err),
-				)
-				return nil, 0, err
-			}
-			c.LogErrorIfEnabled("Failed to search notes",
-				logger.String("query", search),
+			c.LogErrorIfEnabled(errMsg, append(queryFields,
 				logger.Int("limit", numResults),
 				logger.Int("offset", offset),
 				logger.Error(err),
-			)
+			)...)
 			return nil, 0, err
 		}
 
-		if listAll {
-			c.LogInfoIfEnabled("Retrieved all detections",
-				logger.Int("count", len(notes)),
-				logger.Int64("total", totalCount),
-			)
-			return notes, totalCount, nil
-		}
-		c.LogInfoIfEnabled("Retrieved search results",
-			logger.String("query", search),
+		c.LogInfoIfEnabled(okMsg, append(queryFields,
 			logger.Int("count", len(notes)),
 			logger.Int64("total", totalCount),
-		)
+		)...)
 
 		return notes, totalCount, nil
 	})
