@@ -1,10 +1,10 @@
 name: PR Template Check
 
-# Checks that open pull requests from forks follow .github/pull_request_template.md:
-# every template section present and filled in, the Contributing Guidelines and
-# relicensing boxes ticked (a "relicense: consented" label stands in for the
-# relicensing box), and for feat PRs the feature ownership box ticked and a
-# linked issue or discussion. A failing PR gets the "needs: template" label and
+# Checks that open pull requests from forks, other than the repository owner's,
+# follow .github/pull_request_template.md: every template section present and
+# filled in, the Contributing Guidelines and relicensing boxes ticked (a
+# "relicense: consented" label stands in for the relicensing box), and for feat
+# PRs the feature ownership box ticked and a linked issue or discussion. A failing PR gets the "needs: template" label and
 # one comment listing what is missing; both go away once the description is
 # fixed. The "template: exempt" label skips the check.
 #
@@ -28,15 +28,17 @@ concurrency:
 
 jobs:
   check-template:
-    # Open fork PRs only, and not bots. Edits and label changes on closed or merged
-    # PRs, such as relicensing labels, are not checked. Every label event on an
-    # open PR re-runs the full check rather than skipping: a skipped run would
-    # replace a failed check on the PR and read as a pass. Label changes made by
-    # this job use GITHUB_TOKEN, so they do not trigger new runs.
+    # Open fork PRs only, and not bots or the repository owner's own PRs. Edits
+    # and label changes on closed or merged PRs, such as relicensing labels, are
+    # not checked. Every label event on an open PR re-runs the full check rather
+    # than skipping: a skipped run would replace a failed check on the PR and read
+    # as a pass. Label changes made by this job use GITHUB_TOKEN, so they do not
+    # trigger new runs.
     if: >-
       github.event.pull_request.state == 'open' &&
       github.event.pull_request.head.repo.full_name != github.repository &&
-      github.event.pull_request.user.type != 'Bot'
+      github.event.pull_request.user.type != 'Bot' &&
+      github.event.pull_request.user.login != github.repository_owner
     runs-on: ubuntu-24.04
     # The check parses one PR description; it finishes in seconds.
     timeout-minutes: 5
