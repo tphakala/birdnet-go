@@ -904,3 +904,37 @@ func TestSetAndDelete_DoNotDisturbLoadsOfOtherKeys(t *testing.T) {
 		})
 	}
 }
+
+// loaderCtxKey is the context key TestGetOrLoad_LoaderContextKeepsCallerValues
+// stores its value under.
+type loaderCtxKey struct{}
+
+// TestGetOrLoad_LoaderContextKeepsCallerValues pins that the loader's context
+// carries the values of the caller that started the load (request-scoped data
+// such as logging fields) while the caller's cancellation does not reach it.
+func TestGetOrLoad_LoaderContextKeepsCallerValues(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		c := New[string, int](testTTL)
+		ctx, cancel := context.WithCancel(context.WithValue(t.Context(), loaderCtxKey{}, "request-42"))
+		release := make(chan struct{})
+		type seen struct {
+			value any
+			err   error
+		}
+		seenCh := make(chan seen, 1)
+		go func() {
+			_, _ = c.GetOrLoad(ctx, "k", func(loadCtx context.Context) (int, error) {
+				<-release
+				seenCh <- seen{value: loadCtx.Value(loaderCtxKey{}), err: loadCtx.Err()}
+				return 1, nil
+			})
+		}()
+		synctest.Wait()
+		cancel()
+		close(release)
+		got := <-seenCh
+		assert.Equal(t, "request-42", got.value, "the loader sees the caller's values")
+		assert.NoError(t, got.err, "the caller's cancellation does not reach the loader")
+	})
+}
