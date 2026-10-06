@@ -38,6 +38,7 @@ air realtime
 - ✅ Pre-commit hooks auto-format & lint
 - ✅ AI-assisted coding encouraged - use responsibly
 - ✅ Fix PRs merge quickly; [discuss new features first](#fixes-and-features-what-to-expect) or expect a wait of months
+- ✅ Feature authors [maintain what they add](#feature-ownership): no drive-by features
 
 **Need details?** Read the sections below. **Questions?** [Discord](https://discord.gg/gcSCFGUtsd)
 
@@ -444,6 +445,19 @@ Bug fix PRs and feature PRs are reviewed very differently, so set your expectati
 A working implementation does not answer either question, so a finished feature PR that arrives without prior discussion goes to the back of the queue.
 
 **To get a feature merged faster, discuss it first.** Open a [GitHub Discussion](https://github.com/tphakala/birdnet-go/discussions) or an [issue](https://github.com/tphakala/birdnet-go/issues), or ask on [Discord](https://discord.gg/gcSCFGUtsd), describing the problem the feature solves and your proposed approach. Wait for the maintainer to agree on scope and design before writing a lot of code. This saves you from building something that cannot be accepted, and a feature agreed on up front is reviewed like any other PR.
+
+#### Feature Ownership
+
+**If you contribute a feature, you take responsibility for maintaining it.** BirdNET-Go is maintained by volunteers in their spare time. A feature PR whose author submits the code and is never heard from again leaves every bug report, support question, and future breakage in that feature to the maintainer, so a feature PR is accepted on the understanding that its author stays involved after it merges.
+
+By opening a feature PR, you agree to:
+
+- Answer review feedback on the PR until it is merged or closed
+- Respond to issues and discussions about the feature, and fix bugs in it
+- Help keep the feature working when other parts of the application change around it
+- Say so on GitHub if you can no longer look after it, so it can be handed over or retired
+
+If you cannot make that commitment, open a [feature request](https://github.com/tphakala/birdnet-go/issues/new/choose) instead of a PR. A feature whose author has stopped responding may be disabled or removed when it breaks or becomes a support burden.
 
 ### Branch Naming
 
