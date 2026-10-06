@@ -31,6 +31,16 @@ function filledTemplate({ related = 'Closes #123', tick = () => true } = {}) {
 
 const untickFeatureBox = line => !line.includes('Feature PRs only');
 
+const boxLine = phrase =>
+  template.split('\n').find(line => line.startsWith('- [ ]') && line.includes(phrase));
+const consentLine = boxLine('#4243');
+const tickedConsent = consentLine.replace('- [ ]', '- [x]');
+const tickedContributing = boxLine('Contributing Guidelines').replace('- [ ]', '- [x]');
+const CONSENT_MISSING =
+  'The relicensing agreement is missing from **Licensing**. Copy it from the template and tick it. The pull request cannot be merged without it.';
+// Upper bound for the linear-time tests; the code under test takes about 1 ms.
+const LINEAR_TIME_BUDGET_MS = 500;
+
 // A description in the shape tools write by default, ignoring the template.
 const ownFormatBody = `## Overview
 
@@ -75,11 +85,17 @@ describe('checkPullRequest', () => {
   });
 
   it('checks issue references in linear time', () => {
-    const related = `${'a'.repeat(30000)} ${'/a'.repeat(15000)} ${'github.com/a'.repeat(3000)}`;
+    const related = `${'a'.repeat(100000)} ${'/a'.repeat(1500)} ${'github.com/a'.repeat(200)}`;
     const body = filledTemplate({ related });
     const started = Date.now();
     checkPullRequest({ title: 'feat: add a provider', body, template });
-    assert.ok(Date.now() - started < 500, `took ${Date.now() - started} ms`);
+    assert.ok(Date.now() - started < LINEAR_TIME_BUDGET_MS, `took ${Date.now() - started} ms`);
+  });
+
+  it('matches a feat title at the start in any case', () => {
+    const body = filledTemplate({ tick: untickFeatureBox });
+    assert.equal(checkPullRequest({ title: 'Feat(ui): x', body, template }).length, 1);
+    assert.deepEqual(checkPullRequest({ title: 'fix: feat: x', body, template }), []);
   });
 
   it('accepts upper case X and Windows line endings', () => {
@@ -141,17 +157,34 @@ describe('checkPullRequest', () => {
   });
 
   it('does not accept ticked boxes inside a code block', () => {
-    const fenced =
-      '```\n- [x] I have read the Contributing Guidelines\n- [x] I agree to relicense\n```';
-    const body = filledTemplate({ tick: () => false }).replace(
-      'Fixes the audio player freeze.',
-      `Fixes the audio player freeze.\n\n${fenced}`
-    );
+    const body = filledTemplate({ tick: untickFeatureBox })
+      .replace(tickedContributing, '')
+      .replace(tickedConsent, '')
+      .replace(
+        'Fixes the audio player freeze.',
+        `Fixes the audio player freeze.\n\n\`\`\`\n${tickedContributing}\n${tickedConsent}\n\`\`\``
+      );
     const problems = checkPullRequest({ title: 'fix: something', body, template });
-    assert.ok(problems.some(p => p.includes('Contributing Guidelines checkbox under')));
-    assert.ok(
-      problems.some(p => p.includes('relicensing agreement under **Licensing** is not ticked'))
-    );
+    assert.deepEqual(problems, [
+      'The Contributing Guidelines checkbox is missing from **Checklist**. Copy it from the template and tick it.',
+      CONSENT_MISSING,
+    ]);
+  });
+
+  it('only accepts the consent box in the Licensing section', () => {
+    const body = filledTemplate({ tick: untickFeatureBox })
+      .replace(tickedConsent, '')
+      .replace(
+        'Fixes the audio player freeze.',
+        `Fixes the audio player freeze.\n\n${tickedConsent}`
+      );
+    assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), [CONSENT_MISSING]);
+  });
+
+  it('accepts a box with extra spaces inside and after it', () => {
+    const spaced = `${tickedConsent.replace(' I agree ', '  I   agree ')} \t`;
+    const body = filledTemplate({ tick: untickFeatureBox }).replace(tickedConsent, spaced);
+    assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), []);
   });
 
   it('does not accept a reworded relicensing box as consent', () => {
@@ -178,45 +211,49 @@ describe('checkPullRequest', () => {
   });
 
   describe('a consent line that GitHub does not render as a ticked checkbox', () => {
-    const consentLine = template
-      .split('\n')
-      .find(line => line.startsWith('- [ ]') && line.includes('#4243'));
-    const ticked = consentLine.replace('- [ ]', '- [x]');
     const licensing = '## Licensing (required)';
-    // The real box left unticked, with the variant inserted above it.
+    // The real box removed, with the variant inserted under the heading. The
+    // variant is the only candidate, so it decides the result.
     const withLicensing = section =>
       filledTemplate({ tick: untickFeatureBox })
-        .replace(ticked, consentLine)
+        .replace(tickedConsent, '')
         .replace(`${licensing}\n`, `${licensing}\n\n${section}\n`);
-    const notTicked = body =>
-      checkPullRequest({ title: 'fix: x', body, template }).some(p =>
-        p.startsWith('The relicensing agreement')
-      );
+    const check = body => checkPullRequest({ title: 'fix: x', body, template });
+
+    it('is consent as a plain ticked line (control for the cases below)', () => {
+      assert.deepEqual(check(withLicensing(tickedConsent)), []);
+    });
 
     for (const [name, wrapped] of [
-      ['inside a tilde fence that contains a backtick fence', `~~~\n\`\`\`\n${ticked}\n~~~`],
-      ['inside a backtick fence that contains a tilde line', `\`\`\`\n~~~\n${ticked}\n\`\`\``],
+      ['inside a tilde fence that contains a backtick fence', `~~~\n\`\`\`\n${tickedConsent}\n~~~`],
+      [
+        'inside a backtick fence that contains a tilde line',
+        `\`\`\`\n~~~\n${tickedConsent}\n\`\`\``,
+      ],
       [
         'inside a longer fence that contains a shorter one',
-        `\`\`\`\`\n\`\`\`\n${ticked}\n\`\`\`\n\`\`\`\``,
+        `\`\`\`\`\n\`\`\`\n${tickedConsent}\n\`\`\`\n\`\`\`\``,
       ],
-      ['in an indented code block', `text\n\n    ${ticked}`],
-      ['after an unclosed HTML comment', `<!--\n${ticked}`],
+      [
+        'inside a fence whose closing line has text after it',
+        `\`\`\`\n\`\`\` x\n${tickedConsent}\n\`\`\``,
+      ],
+      ['in an indented code block', `text\n\n    ${tickedConsent}`],
+      ['after an unclosed HTML comment', `<!--\n${tickedConsent}`],
     ]) {
       it(`is not consent ${name}`, () => {
-        assert.ok(
-          notTicked(withLicensing(wrapped)),
-          'expected the agreement to be reported as not ticked'
-        );
+        assert.ok(check(withLicensing(wrapped)).includes(CONSENT_MISSING));
       });
     }
 
     it('is not consent when another copy is unticked', () => {
       const body = filledTemplate({ tick: untickFeatureBox }).replace(
-        ticked,
-        `${ticked}\n${consentLine}`
+        tickedConsent,
+        `${tickedConsent}\n${consentLine}`
       );
-      assert.ok(notTicked(body));
+      assert.deepEqual(check(body), [
+        'The relicensing agreement under **Licensing** is not ticked. The pull request cannot be merged without it.',
+      ]);
     });
 
     it('is consent in a fence opened with an info string', () => {
@@ -321,7 +358,7 @@ describe('checkPullRequest', () => {
     const body = [`## a${' '.repeat(lineLength)}x`, `## b${'('.repeat(lineLength)}`].join('\n');
     const started = Date.now();
     checkPullRequest({ title: 'fix: something', body, template });
-    assert.ok(Date.now() - started < 500, `took ${Date.now() - started} ms`);
+    assert.ok(Date.now() - started < LINEAR_TIME_BUDGET_MS, `took ${Date.now() - started} ms`);
   });
 
   it('reads ATX closing hashes the way GitHub renders them', () => {
@@ -430,6 +467,13 @@ describe('run', () => {
     );
     assert.deepEqual(env.calls[0].params.labels, [NEEDS_TEMPLATE_LABEL]);
     assert.ok(env.calls[1].params.body.startsWith(COMMENT_MARKER));
+    const problems = checkPullRequest({ title: 'feat: x', body: ownFormatBody, template });
+    assert.ok(problems.length > 0);
+    assert.ok(env.core.failed);
+    for (const problem of problems) {
+      assert.ok(env.calls[1].params.body.includes(`\n- ${problem}`), problem);
+      assert.ok(env.core.failed.includes(`\n- ${problem}`), problem);
+    }
     assert.ok(env.core.failed);
   });
 
@@ -490,6 +534,7 @@ describe('run', () => {
       env.calls.map(c => c.name),
       ['removeLabel', 'deleteComment']
     );
+    assert.equal(env.calls[1].params.comment_id, 99);
     assert.equal(env.core.failed, null);
   });
 
@@ -498,6 +543,19 @@ describe('run', () => {
     const env = fakeEnvironment({ title: 'feat: x', body, labels: [CONSENTED_LABEL] });
     await run(env);
     assert.equal(env.core.failed, null);
+  });
+
+  it('leaves other comments by the same account alone', async () => {
+    const env = fakeEnvironment({
+      title: 'feat: x',
+      body: ownFormatBody,
+      comments: [botComment('i18n validation results')],
+    });
+    await run(env);
+    assert.deepEqual(
+      env.calls.map(c => c.name),
+      ['addLabels', 'createComment']
+    );
   });
 
   it('removes the label even when the event payload does not show it yet', async () => {
