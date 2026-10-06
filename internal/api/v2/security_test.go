@@ -620,9 +620,17 @@ func TestDDoSProtection(t *testing.T) {
 	// Concurrent identical requests share one datastore load: a caller either
 	// joins the load in flight or hits the cache once it is stored, so the
 	// datastore is queried exactly once.
+	// The datastore call blocks until every caller has missed the cache, so the
+	// requests overlap instead of running one after another.
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
 	mockDS.EXPECT().
 		SearchNotes(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.Note{}, int64(0), nil).
+		RunAndReturn(func(string, bool, int, int) ([]datastore.Note, int64, error) {
+			<-release
+			return []datastore.Note{}, 0, nil
+		}).
 		Once()
 
 	// Create a wait group to synchronize goroutines
@@ -632,6 +640,7 @@ func TestDDoSProtection(t *testing.T) {
 	// Create channels to collect results
 	responseTimesChan := make(chan time.Duration, concurrentRequests)
 	statusCodesChan := make(chan int, concurrentRequests)
+	handlerErrsChan := make(chan error, concurrentRequests)
 
 	// Launch concurrent requests using Go 1.25 WaitGroup.Go() pattern
 	for range concurrentRequests {
@@ -646,9 +655,7 @@ func TestDDoSProtection(t *testing.T) {
 			startTime := time.Now()
 
 			// Call handler
-			if err := controller.detections.GetDetections(c); err != nil {
-				assert.NoError(t, err, "GetDetections failed")
-			}
+			handlerErrsChan <- controller.detections.GetDetections(c)
 
 			// Record response time
 			responseTime := time.Since(startTime)
@@ -657,10 +664,19 @@ func TestDDoSProtection(t *testing.T) {
 		})
 	}
 
+	require.Eventually(t, func() bool { return controller.DetectionCache.Stats().Misses == uint64(concurrentRequests) },
+		5*time.Second, time.Millisecond, "every request reaches the cache before the load finishes")
+	releaseOnce.Do(func() { close(release) })
+
 	// Wait for all requests to complete
 	wg.Wait()
 	close(responseTimesChan)
 	close(statusCodesChan)
+	close(handlerErrsChan)
+
+	for err := range handlerErrsChan {
+		require.NoError(t, err, "GetDetections failed")
+	}
 
 	// Collect results
 	var totalResponseTime time.Duration

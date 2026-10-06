@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -18,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // cacheTestNotes is the page every cache test serves from the mock datastore.
@@ -139,28 +141,43 @@ func TestGetDetections_AdvancedKeyIgnoresQueryType(t *testing.T) {
 }
 
 // TestGetDetections_ConcurrentIdenticalRequestsQueryOnce pins that simultaneous
-// identical requests share one datastore load.
+// identical requests share one datastore load. The datastore call blocks until
+// every caller has missed the cache, so the requests are forced to overlap and
+// a get-then-set cache that only works for sequential callers fails.
 func TestGetDetections_ConcurrentIdenticalRequestsQueryOnce(t *testing.T) {
 	const callers = 20
 	e, mockDS, h := setupTestEnvironment(t)
-	mockDS.EXPECT().SearchNotes("Crow", false, 10, 0).Return(cacheTestNotes(), int64(1), nil).Once()
+
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+	mockDS.EXPECT().SearchNotes("Crow", false, 10, 0).RunAndReturn(
+		func(string, bool, int, int) ([]datastore.Note, int64, error) {
+			<-release
+			return cacheTestNotes(), 1, nil
+		}).Once()
 
 	var wg sync.WaitGroup
 	statuses := make([]int, callers)
+	errs := make([]error, callers)
 	for i := range callers {
 		wg.Go(func() {
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections?queryType=search&search=Crow&numResults=10", http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 			c.SetPath("/api/v2/detections")
-			assert.NoError(t, h.GetDetections(c))
+			errs[i] = h.GetDetections(c)
 			statuses[i] = rec.Code
 		})
 	}
+	require.Eventually(t, func() bool { return h.DetectionCache.Stats().Misses == callers },
+		5*time.Second, time.Millisecond, "every caller reaches the cache before the load finishes")
+	releaseOnce.Do(func() { close(release) })
 	wg.Wait()
 
-	for i, status := range statuses {
-		assert.Equal(t, http.StatusOK, status, "caller %d", i)
+	for i := range callers {
+		require.NoError(t, errs[i], "caller %d", i)
+		assert.Equal(t, http.StatusOK, statuses[i], "caller %d", i)
 	}
 }
 
@@ -319,22 +336,104 @@ func postBatch(t *testing.T, e *echo.Echo, handler func(echo.Context) error, bod
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
-// TestGetDetections_ClientDisconnectIsNotAnError pins that a request whose context
-// ended before the page loaded gets the client-closed status without querying the
-// datastore (the strict mock fails on any unexpected call) and leaves no cache entry.
-func TestGetDetections_ClientDisconnectIsNotAnError(t *testing.T) {
+// levelRecorder records the debug and error messages of a handler logger. The
+// embedded interface stays nil: only the levels the handler uses are overridden.
+type levelRecorder struct {
+	logger.Logger
+	mu     sync.Mutex
+	debugs []string
+	errs   []string
+}
+
+func (r *levelRecorder) Trace(string, ...logger.Field) {}
+func (r *levelRecorder) Info(string, ...logger.Field)  {}
+func (r *levelRecorder) Warn(string, ...logger.Field)  {}
+
+func (r *levelRecorder) Debug(msg string, _ ...logger.Field) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.debugs = append(r.debugs, msg)
+}
+
+func (r *levelRecorder) Error(msg string, _ ...logger.Field) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.errs = append(r.errs, msg)
+}
+
+// TestGetDetections_RequestEnded pins how a list request whose context is done
+// is answered and logged: client disconnect as 499 and deadline as 408, both at
+// debug with nothing at error and no datastore query (the strict mock fails on
+// any unexpected call); a datastore error that only wraps a context error while
+// the request is still live keeps the 500 response and its error log.
+func TestGetDetections_RequestEnded(t *testing.T) {
+	expired, cancelExpired := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	t.Cleanup(cancelExpired)
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	tests := []struct {
+		name       string
+		ctx        context.Context
+		setup      func(m *mocks.MockInterface)
+		wantStatus int
+		wantDebug  bool
+	}{
+		{"client disconnect", canceled, func(*mocks.MockInterface) {}, apicore.StatusClientClosedRequest, true},
+		{"deadline", expired, func(*mocks.MockInterface) {}, http.StatusRequestTimeout, true},
+		{
+			"live request with a wrapped context error", t.Context(),
+			func(m *mocks.MockInterface) {
+				m.EXPECT().SearchNotes("Crow", false, 100, 0).Return(nil, int64(0), context.Canceled).Once()
+			},
+			http.StatusInternalServerError, false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, mockDS, h := setupTestEnvironment(t)
+			tt.setup(mockDS)
+			rec := &levelRecorder{}
+			h.APILogger = rec
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections?queryType=search&search=Crow", http.NoBody).WithContext(tt.ctx)
+			resp := httptest.NewRecorder()
+			c := e.NewContext(req, resp)
+			c.SetPath("/api/v2/detections")
+
+			require.NoError(t, h.GetDetections(c))
+			assert.Equal(t, tt.wantStatus, resp.Code)
+			assert.Equal(t, 0, h.DetectionCache.Len())
+			if tt.wantDebug {
+				assert.NotEmpty(t, rec.debugs, "logged at debug")
+				assert.Empty(t, rec.errs, "nothing at error")
+			} else {
+				assert.Empty(t, rec.debugs)
+				assert.NotEmpty(t, rec.errs, "a live request keeps its error log")
+			}
+		})
+	}
+}
+
+// TestBatchResolveDetections_ClientDisconnect pins that batch resolve answers a
+// disconnected client like the list endpoint: 499, debug log, no error log.
+func TestBatchResolveDetections_ClientDisconnect(t *testing.T) {
 	e, _, h := setupTestEnvironment(t)
+	rec := &levelRecorder{}
+	h.APILogger = rec
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections?queryType=search&search=Crow", http.NoBody).WithContext(ctx)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/detections")
+	body, err := json.Marshal(BatchResolveRequest{QueryType: "search", Search: "Crow"})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/batch/resolve", bytes.NewReader(body)).WithContext(ctx)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	resp := httptest.NewRecorder()
 
-	require.NoError(t, h.GetDetections(c))
-	assert.Equal(t, apicore.StatusClientClosedRequest, rec.Code)
-	assert.Equal(t, 0, h.DetectionCache.Len())
+	require.NoError(t, h.BatchResolveDetections(e.NewContext(req, resp)))
+	assert.Equal(t, apicore.StatusClientClosedRequest, resp.Code)
+	assert.NotEmpty(t, rec.debugs)
+	assert.Empty(t, rec.errs)
 }
 
 // TestGetDetections_LoaderErrorIsNotCached pins that a datastore failure still
