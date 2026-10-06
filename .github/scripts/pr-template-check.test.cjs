@@ -268,6 +268,13 @@ describe('checkPullRequest', () => {
     }
   });
 
+  it('reads a long fence line ending in a line separator in linear time', () => {
+    const body = `## Description\n\n${'`'.repeat(65000)}\u2028\n`;
+    const started = Date.now();
+    checkPullRequest({ title: 'fix: x', body, template });
+    assert.ok(Date.now() - started < LINEAR_TIME_BUDGET_MS, `took ${Date.now() - started} ms`);
+  });
+
   it('ignores a checkbox before the first section', () => {
     const body = `- [x] stray\n\n${filledTemplate({ tick: untickFeatureBox })}`;
     assert.deepEqual(checkPullRequest({ title: 'fix: x', body, template }), []);

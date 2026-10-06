@@ -43,10 +43,12 @@ const FEATURE_TITLE = /^feat(\([^)]*\))?!?:/i;
 const SECTION_HEADING = /^##[ \t]+(\S[^\n]*)$/;
 // A fenced code block opens with three or more backticks or tildes indented at
 // most three spaces, and closes on a run of the same character at least as long.
-const CODE_FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+// The info string is matched with [^\n], not ., which stops at U+2028 and made
+// a long fence line quadratic.
+const CODE_FENCE = /^ {0,3}(`{3,}|~{3,})([^\n]*)$/;
 // A list item indented four or more spaces is an indented code block, not a
 // checkbox, unless it continues a list; the template's boxes are never nested.
-const CHECKBOX = /^ {0,3}[-*+][ \t]+\[([ xX])\][ \t]+(.*)$/;
+const CHECKBOX = /^ {0,3}[-*+][ \t]+\[([ xX])\][ \t]+([^\n]*)$/;
 // A line indented at least two columns, the content offset of a "- [ ]" item at
 // the margin, belongs to that item whatever block it starts. An item with a
 // deeper offset is over-counted, which fails closed.
