@@ -938,3 +938,59 @@ func TestGetOrLoad_LoaderContextKeepsCallerValues(t *testing.T) {
 		assert.NoError(t, got.err, "the caller's cancellation does not reach the loader")
 	})
 }
+
+// TestSetAndDelete_NewLoadOfSameKeySurvivesOldLoad pins that after a Set or
+// Delete of a key whose load is in flight, a miss on that key starts its own
+// load, and the old load finishing first neither stores its value nor
+// unregisters the new load, whose value is then stored.
+func TestSetAndDelete_NewLoadOfSameKeySurvivesOldLoad(t *testing.T) {
+	t.Parallel()
+	for name, mutate := range map[string]func(c *Cache[string, int]){
+		"Set":    func(c *Cache[string, int]) { c.Set("k", 1); c.Delete("k") },
+		"Delete": func(c *Cache[string, int]) { c.Delete("k") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				c := New[string, int](testTTL)
+				releaseOld := make(chan struct{})
+				releaseNew := make(chan struct{})
+				var calls atomic.Int32
+				loaderFor := func(release chan struct{}, v int) func(context.Context) (int, error) {
+					return func(context.Context) (int, error) {
+						calls.Add(1)
+						<-release
+						return v, nil
+					}
+				}
+				oldResult := make(chan int, 1)
+				newResult := make(chan int, 1)
+				go func() {
+					v, _ := c.GetOrLoad(t.Context(), "k", loaderFor(releaseOld, 10))
+					oldResult <- v
+				}()
+				synctest.Wait()
+				mutate(c)
+				go func() {
+					v, _ := c.GetOrLoad(t.Context(), "k", loaderFor(releaseNew, 20))
+					newResult <- v
+				}()
+				synctest.Wait()
+				assert.Equal(t, int32(2), calls.Load(), "the miss after the write started its own load")
+
+				close(releaseOld)
+				assert.Equal(t, 10, <-oldResult)
+				synctest.Wait()
+				_, ok := c.Get("k")
+				assert.False(t, ok, "the old load did not store")
+
+				close(releaseNew)
+				assert.Equal(t, 20, <-newResult)
+				synctest.Wait()
+				v, ok := c.Get("k")
+				require.True(t, ok, "the new load stored its value")
+				assert.Equal(t, 20, v)
+			})
+		})
+	}
+}
