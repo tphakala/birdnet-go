@@ -118,7 +118,7 @@ type entry[K comparable, V any] struct {
 }
 
 // flightID identifies one in-flight load: the key and the generation the
-// loading callers missed at. Callers that miss after a mutation get a new
+// loading callers missed at. Callers that miss after a Clear get a new
 // generation and therefore start a load of their own.
 type flightID[K comparable] struct {
 	gen uint64
@@ -143,9 +143,10 @@ type Cache[K comparable, V any] struct {
 	mu         sync.Mutex
 	entries    map[K]*entry[K, V]
 	head, tail *entry[K, V] // write order: head is the oldest write
-	// generation is bumped by every explicit mutation (Set, Delete, Clear). A
-	// load stores its result only if the generation is unchanged since the
-	// caller's miss, so a mutation discards the stores of loads in flight.
+	// generation is bumped by Clear. A load stores its result only if the
+	// generation is unchanged since the caller's miss, so a Clear discards the
+	// stores of every load in flight. Set and Delete discard only the load of
+	// their own key, by unregistering its flight.
 	generation uint64
 	// flights holds the loads in progress, keyed by key and generation.
 	flights map[flightID[K]]*flight[V]
@@ -267,24 +268,32 @@ func (c *Cache[K, V]) Get(key K) (V, bool) {
 	return v, ok
 }
 
-// Set stores value under key and restarts its TTL. Loads in flight will not
-// overwrite it.
+// Set stores value under key and restarts its TTL. A load of key in flight
+// will not overwrite it; loads of other keys are not affected.
 func (c *Cache[K, V]) Set(key K, value V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.generation++
+	c.dropFlightLocked(key)
 	c.insertLocked(key, value, c.now())
 }
 
-// Delete removes key. Loads in flight will not store their result, including
-// loads for a key that was absent.
+// Delete removes key. A load of key in flight will not store its result, even
+// when key was absent, and a GetOrLoad of key that starts afterwards runs its
+// own load. Loads of other keys are not affected.
 func (c *Cache[K, V]) Delete(key K) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.generation++
+	c.dropFlightLocked(key)
 	if e, ok := c.entries[key]; ok {
 		c.removeLocked(e)
 	}
+}
+
+// dropFlightLocked unregisters the load of key at the current generation, if
+// any. The load still delivers its value to its callers but no longer stores
+// it, and the next miss on key starts a new load.
+func (c *Cache[K, V]) dropFlightLocked(key K) {
+	delete(c.flights, flightID[K]{gen: c.generation, key: key})
 }
 
 // Clear removes every entry. Loads in flight will not store their result, and
@@ -329,8 +338,9 @@ func (c *Cache[K, V]) Stats() Stats {
 // while the load continues and still fills the cache. If ctx is already done on
 // a miss, GetOrLoad returns ctx.Err() without loading.
 //
-// A Set, Delete or Clear that runs while a load is in flight discards that
-// load's store; its callers still receive the loaded value.
+// A Set or Delete of key, or a Clear, that runs while a load of key is in
+// flight discards that load's store; its callers still receive the loaded
+// value.
 func (c *Cache[K, V]) GetOrLoad(ctx context.Context, key K, load func(context.Context) (V, error)) (V, error) {
 	v, f, err := c.hitOrJoin(ctx, key, load)
 	if f == nil {
@@ -380,9 +390,10 @@ func (c *Cache[K, V]) joinOrStartLocked(ctx context.Context, key K, load func(co
 	return f
 }
 
-// runFlight runs one load, stores a successful result if no mutation happened
-// since the miss, and releases the waiting callers. A panic or Goexit in load,
-// or a panic while storing the result, still releases them, with an error.
+// runFlight runs one load, stores a successful result unless a Clear, or a Set
+// or Delete of its key, happened since the miss, and releases the waiting
+// callers. A panic or Goexit in load, or a panic while storing the result,
+// still releases them, with an error.
 func (c *Cache[K, V]) runFlight(ctx context.Context, id flightID[K], f *flight[V], load func(context.Context) (V, error)) {
 	returned := false
 	defer func() {
@@ -393,7 +404,7 @@ func (c *Cache[K, V]) runFlight(ctx context.Context, id flightID[K], f *flight[V
 				f.err = ErrLoaderExited
 			}
 		}
-		c.unregister(id)
+		c.unregister(id, f)
 		close(f.done)
 	}()
 
@@ -401,25 +412,29 @@ func (c *Cache[K, V]) runFlight(ctx context.Context, id flightID[K], f *flight[V
 	if err != nil {
 		f.err = err
 	} else {
-		c.storeIfCurrent(id, v)
+		c.storeIfCurrent(id, f, v)
 		f.value = v
 	}
 	returned = true
 }
 
-// storeIfCurrent stores a loaded value unless a mutation happened since the
-// miss that started the load.
-func (c *Cache[K, V]) storeIfCurrent(id flightID[K], v V) {
+// storeIfCurrent stores a loaded value unless, since the miss that started
+// the load, a Clear bumped the generation or a Set or Delete of the key
+// unregistered this flight.
+func (c *Cache[K, V]) storeIfCurrent(id flightID[K], f *flight[V], v V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.generation == id.gen {
+	if c.generation == id.gen && c.flights[id] == f {
 		c.insertLocked(id.key, v, c.now())
 	}
 }
 
-// unregister removes a finished flight.
-func (c *Cache[K, V]) unregister(id flightID[K]) {
+// unregister removes a finished flight, unless a Set or Delete already
+// replaced it with a newer flight for the same key.
+func (c *Cache[K, V]) unregister(id flightID[K], f *flight[V]) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	delete(c.flights, id)
+	if c.flights[id] == f {
+		delete(c.flights, id)
+	}
 }

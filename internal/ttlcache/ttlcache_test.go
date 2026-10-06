@@ -859,3 +859,48 @@ func TestGetOrLoad_PanickingClockInStoreReleasesCallers(t *testing.T) {
 		c.mu.Unlock()
 	})
 }
+
+// TestSetAndDelete_DoNotDisturbLoadsOfOtherKeys pins that writing one key
+// leaves an in-flight load of another key in place: concurrent misses on that
+// key still share it, and its result is still stored.
+func TestSetAndDelete_DoNotDisturbLoadsOfOtherKeys(t *testing.T) {
+	t.Parallel()
+	for name, mutate := range map[string]func(c *Cache[string, int]){
+		"Set":    func(c *Cache[string, int]) { c.Set("a", 1) },
+		"Delete": func(c *Cache[string, int]) { c.Delete("a") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				c := New[string, int](testTTL)
+				release := make(chan struct{})
+				var calls atomic.Int32
+				loader := func(context.Context) (int, error) {
+					calls.Add(1)
+					<-release
+					return 7, nil
+				}
+				results := make(chan int, 2)
+				get := func() {
+					v, err := c.GetOrLoad(t.Context(), "b", loader)
+					if err != nil {
+						v = -1
+					}
+					results <- v
+				}
+				go get()
+				synctest.Wait()
+				mutate(c)
+				go get()
+				synctest.Wait()
+				close(release)
+				assert.Equal(t, 7, <-results)
+				assert.Equal(t, 7, <-results)
+				assert.Equal(t, int32(1), calls.Load(), "the second miss joined the first load")
+				v, ok := c.Get("b")
+				require.True(t, ok, "the load of b was stored")
+				assert.Equal(t, 7, v)
+			})
+		})
+	}
+}
