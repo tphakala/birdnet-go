@@ -288,7 +288,8 @@ type Service struct {
 	// fetchMu serializes fetchAndSave so the exported Poll() and the StartPolling
 	// ticker cannot run a fetch concurrently. It also guards the hot-reload state
 	// below (sunCalc and authConfigKey), all of which is read/updated per cycle
-	// inside fetchAndSave.
+	// inside fetchAndSave. Also serializes StartPolling's provider snapshot and
+	// lifecycle start to prevent a race with reconcileConfig.
 	fetchMu sync.Mutex
 	// sunCalc is rebuilt when the configured coordinates change between cycles so
 	// sunrise/sunset track the current location after a UI location change.
@@ -300,6 +301,10 @@ type Service struct {
 	// captured when auth was disabled; a change re-enables fetching (hot-reload
 	// of the API key).
 	authConfigKey [32]byte
+	// lastTempestAddr is the listen address of the Tempest provider from the
+	// last reconciliation. Guarded by fetchMu. When the address changes while
+	// the provider stays Tempest, reconcileConfig triggers a listener rebind.
+	lastTempestAddr string
 	// providerBaselined is set true once reconcileConfig has run at least once.
 	// Its first run adopts the Service's existing provider/providerName as the
 	// baseline rather than resolving/swapping against settings, so a Service
@@ -772,10 +777,17 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 	// short-lived on-demand Poll() ctx.
 	s.setStartCtx(ctx)
 
+	// Serialize the provider snapshot and lifecycle start with reconcileConfig
+	// using fetchMu, so if reconcileConfig swaps the provider after we take
+	// the snapshot but before we start it, we don't accidentally start the old
+	// provider after the new one is already active.
+	s.fetchMu.Lock()
+	startProvider, _ := s.activeProvider()
+	s.fetchMu.Unlock()
+
 	// Providers that receive data in the background (e.g. Tempest's local UDP
 	// listener) get started here, tied to the same ctx as every fetch cycle
 	// below, so they stop automatically when polling stops.
-	startProvider, _ := s.activeProvider()
 	s.startProviderLifecycle(ctx, startProvider)
 
 	// Delay initial fetch to reduce startup DB contention with other services
@@ -911,6 +923,13 @@ func (s *Service) reconcileConfig(settings *conf.Settings) {
 			s.stopProviderLifecycle()
 			s.setProvider(newProvider, newProviderName)
 			previousProviderName = newProviderName
+			// Initialize lastTempestAddr for the new provider so subsequent calls
+			// to reconcileConfig don't spuriously detect an "address change".
+			if newProviderName == tempestProviderName {
+				s.lastTempestAddr = settings.Realtime.Weather.Tempest.ListenAddress
+			} else {
+				s.lastTempestAddr = ""
+			}
 
 			// StartPolling's Lifecycler check only runs once, against whichever
 			// provider was active when polling began, so a background-push
@@ -929,7 +948,32 @@ func (s *Service) reconcileConfig(settings *conf.Settings) {
 		}
 	}
 
-	// Rebuild sunCalc on a location change. Coordinates are PII, so the change
+	// Detect listen address changes for Tempest provider. If the provider name
+	// hasn't changed but it's Tempest and the listen address has, trigger a
+	// listener rebind without a full provider swap.
+	if previousProviderName == tempestProviderName {
+		currentAddr := settings.Realtime.Weather.Tempest.ListenAddress
+		if currentAddr != s.lastTempestAddr {
+			getLogger().Info("Tempest listen address changed, rebinding listener",
+				logger.String("previous_address", s.lastTempestAddr),
+				logger.String("new_address", currentAddr))
+			s.stopProviderLifecycle()
+			// After stopping, StartPolling's context still exists and the new address
+			// is in the same provider instance (TempestProvider stores the address at
+			// construction time), so a new Start() call will bind the new address.
+			// But we need to construct a NEW provider with the new address, since
+			// the old one has the address baked in.
+			newProvider, _, _ := resolveWeatherProvider(settings, s.weatherClient)
+			s.setProvider(newProvider, previousProviderName)
+			if startCtx := s.getStartCtx(); startCtx != nil {
+				s.startProviderLifecycle(startCtx, newProvider)
+			}
+			s.lastTempestAddr = currentAddr
+		}
+	} else if previousProviderName != tempestProviderName {
+		// Clear the lastTempestAddr when we're not on Tempest.
+		s.lastTempestAddr = ""
+	}
 	// is logged without the values themselves.
 	lat, lon := settings.BirdNET.Latitude, settings.BirdNET.Longitude
 	if lat != s.sunCalcLat || lon != s.sunCalcLon {

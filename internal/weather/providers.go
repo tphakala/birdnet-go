@@ -93,7 +93,13 @@ type PirateWeatherProvider struct {
 type TempestProvider struct {
 	listenAddress string
 
-	startOnce sync.Once
+	// lifecycle coordination: trackerMu protects currentAddr and closedCh.
+	// currentAddr is the address the running listener is bound to (or "" if none).
+	// closedCh is closed when the readLoop goroutine exits, allowing callers to
+	// wait for socket closure before retrying a bind.
+	trackerMu   sync.Mutex
+	currentAddr string
+	closedCh    chan struct{}
 
 	mu         sync.RWMutex
 	latest     *WeatherData

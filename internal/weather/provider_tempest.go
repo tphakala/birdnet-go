@@ -134,41 +134,73 @@ func (e *TempestExtras) SelectedJSON(fields conf.TempestExtraFields) (*string, e
 	return &result, nil
 }
 
-// Start implements the Lifecycler interface: it binds the UDP listener once
-// (subsequent calls are no-ops) and runs the read loop until ctx is
-// cancelled. Called by Service.StartPolling with a context tied to the poll
-// loop's stop channel, so the listener's lifetime matches the service's.
+// Start implements the Lifecycler interface: it attempts to bind the UDP listener
+// (retryable: multiple calls can succeed if the previous listener has closed).
+// Runs the read loop until ctx is cancelled. Called by Service.StartPolling with a
+// context tied to the poll loop's stop channel, so the listener's lifetime matches
+// the service's. Safe to call multiple times; only the first call per configuration
+// starts a listener, but if that listener closes and the configuration hasn't
+// changed, a subsequent call will start a fresh listener.
 func (p *TempestProvider) Start(ctx context.Context) {
-	p.startOnce.Do(func() {
-		addr := p.listenAddress
-		if addr == "" {
-			addr = tempestDefaultListenAddress
-		}
+	addr := p.listenAddress
+	if addr == "" {
+		addr = tempestDefaultListenAddress
+	}
 
-		udpAddr, err := net.ResolveUDPAddr("udp", addr)
-		if err != nil {
-			getLogger().Error("Failed to resolve Tempest listen address",
-				logger.Error(err), logger.String("address", addr))
+	p.trackerMu.Lock()
+	currentAddr := p.currentAddr
+	closedCh := p.closedCh
+	p.trackerMu.Unlock()
+
+	// If a listener is already running at this address, skip.
+	if currentAddr == addr {
+		return
+	}
+
+	// Wait for the previous listener to close before rebinding,
+	// if there was one.
+	if closedCh != nil {
+		select {
+		case <-closedCh:
+			// Previous listener closed; OK to continue
+		case <-ctx.Done():
 			return
 		}
+	}
 
-		conn, err := net.ListenUDP("udp", udpAddr)
-		if err != nil {
-			getLogger().Error("Failed to bind Tempest UDP listener",
-				logger.Error(err), logger.String("address", addr))
-			return
-		}
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		getLogger().Error("Failed to resolve Tempest listen address",
+			logger.Error(err), logger.String("address", addr))
+		return
+	}
 
-		getLogger().Info("Tempest UDP listener started", logger.String("address", addr))
+	conn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		getLogger().Error("Failed to bind Tempest UDP listener",
+			logger.Error(err), logger.String("address", addr))
+		return
+	}
 
-		go p.readLoop(ctx, conn)
-	})
+	getLogger().Info("Tempest UDP listener started", logger.String("address", addr))
+
+	// Create a channel to signal when the read loop exits.
+	closedCh = make(chan struct{})
+	p.trackerMu.Lock()
+	p.currentAddr = addr
+	p.closedCh = closedCh
+	p.trackerMu.Unlock()
+
+	go p.readLoop(ctx, conn, closedCh)
 }
 
 // readLoop continuously reads UDP packets and updates the cached observation.
 // It returns once ctx is done, which closes conn to unblock the blocking
-// ReadFromUDP call; that close is the single close point for conn.
-func (p *TempestProvider) readLoop(ctx context.Context, conn *net.UDPConn) {
+// ReadFromUDP call; that close is the single close point for conn. It signals
+// readDone when the read loop exits, allowing callers to wait for socket closure.
+func (p *TempestProvider) readLoop(ctx context.Context, conn *net.UDPConn, readDone chan<- struct{}) {
+	defer close(readDone)
+
 	go func() {
 		<-ctx.Done()
 		_ = conn.Close()
