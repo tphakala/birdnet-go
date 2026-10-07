@@ -10,7 +10,7 @@ import (
 )
 
 // TestCleanupSummaryNotKeepingUp verifies the primary WARN predicate: a usage
-// run that spent its whole time budget without lowering disk usage.
+// run that spent its whole time budget while disk usage rose.
 func TestCleanupSummaryNotKeepingUp(t *testing.T) {
 	t.Parallel()
 
@@ -19,7 +19,9 @@ func TestCleanupSummaryNotKeepingUp(t *testing.T) {
 		s    cleanupSummary
 		want bool
 	}{
-		{"usage, budget stop, usage not falling", cleanupSummary{stats: cleanupStats{StopReason: stopTimeBudget}, usageBefore: 90, usageAfter: 90, usageThreshold: 80}, true},
+		// Usage is a whole percent, so a working drain on a large disk can leave it
+		// unchanged over one run; that must not WARN.
+		{"usage, budget stop, usage unchanged", cleanupSummary{stats: cleanupStats{StopReason: stopTimeBudget}, usageBefore: 90, usageAfter: 90, usageThreshold: 80}, false},
 		{"usage, budget stop, usage rising", cleanupSummary{stats: cleanupStats{StopReason: stopTimeBudget}, usageBefore: 90, usageAfter: 92, usageThreshold: 80}, true},
 		{"usage, budget stop, usage falling", cleanupSummary{stats: cleanupStats{StopReason: stopTimeBudget}, usageBefore: 90, usageAfter: 85, usageThreshold: 80}, false},
 		{"age policy", cleanupSummary{stats: cleanupStats{StopReason: stopTimeBudget}, usageBefore: unknownUsagePercent, usageAfter: 90, usageThreshold: unknownUsagePercent}, false},
@@ -95,15 +97,15 @@ func TestLogCleanupSummaryWarnEmission(t *testing.T) {
 		assert.NotContains(t, out, "usage_threshold_pct", "age policy has no usage target to log")
 	})
 
-	t.Run("usage budget stop without a falling disk emits the not-keeping-up WARN", func(t *testing.T) {
+	t.Run("usage budget stop with a rising disk emits the not-keeping-up WARN", func(t *testing.T) {
 		s := &cleanupSummary{
 			policy: "usage", stats: cleanupStats{Scanned: 300, Deleted: 200, StopReason: stopTimeBudget, MoreWork: true},
 			duration:    time.Second,
-			usageBefore: 95, usageAfter: 95, usageThreshold: 80,
+			usageBefore: 95, usageAfter: 96, usageThreshold: 80,
 		}
 		out := logtest.Capture(t, func() { logCleanupSummary(s) })
 		assert.Contains(t, out, "level=WARN")
-		assert.Contains(t, out, "disk usage did not fall during this run")
+		assert.Contains(t, out, "disk usage rose during this run")
 	})
 
 	t.Run("usage over-target with a follow-up run pending does not WARN", func(t *testing.T) {

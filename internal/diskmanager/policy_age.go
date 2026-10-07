@@ -297,6 +297,7 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 
 	if !run.begin(files) {
 		stats.StopReason = run.stopReason
+		stats.MoreWork = run.moreWork(false)
 		return deletedCount, deletedNames, stats, nil
 	}
 

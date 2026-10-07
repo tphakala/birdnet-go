@@ -315,7 +315,7 @@ func TestDeletionRun_SettingsChangeEndsRun(t *testing.T) {
 		t.Parallel()
 		files := makeDrainFiles(t, t.TempDir(), 6)
 		run, _ := newTestRun(t, func(e *drainTestEnv, _ *deletionRun) {
-			e.settingsChanged = func(int) bool { return true }
+			e.settingsChanged = func(call int) bool { return call > 0 } // unchanged at begin
 		})
 
 		deleted, stats := runAge(files, run)
@@ -330,8 +330,8 @@ func TestDeletionRun_SettingsChangeEndsRun(t *testing.T) {
 		t.Parallel()
 		files := makeDrainFiles(t, t.TempDir(), 3)
 		run, _ := newTestRun(t, func(e *drainTestEnv, r *deletionRun) {
-			r.cfg.maxBatchDuration = 0 // a boundary is due at the first file
-			e.settingsChanged = func(int) bool { return true }
+			r.cfg.maxBatchDuration = 0                                  // a boundary is due at the first file
+			e.settingsChanged = func(call int) bool { return call > 0 } // unchanged at begin
 		})
 
 		deleted, stats := runAge(files, run)
@@ -339,6 +339,42 @@ func TestDeletionRun_SettingsChangeEndsRun(t *testing.T) {
 		assert.Empty(t, deleted)
 		assert.Equal(t, stopSettingsChanged, stats.StopReason)
 		assert.True(t, stats.MoreWork, "the new settings should take effect soon, even when nothing was deleted yet")
+	})
+
+	// The settings snapshot is taken before the scan, so a change made while the
+	// tree is walked must stop the run before its first deletion, not one batch later.
+	changedDuringScan := func(e *drainTestEnv, _ *deletionRun) {
+		e.settingsChanged = func(call int) bool { return call == 0 }
+	}
+
+	t.Run("age: change made during the scan", func(t *testing.T) {
+		t.Parallel()
+		files := makeDrainFiles(t, t.TempDir(), 3)
+		run, _ := newTestRun(t, changedDuringScan)
+
+		deleted, stats := runAge(files, run)
+
+		assert.Empty(t, deleted, "nothing may be deleted under the stale settings")
+		assert.Equal(t, stopSettingsChanged, stats.StopReason)
+		assert.True(t, stats.MoreWork)
+		assert.FileExists(t, files[0].Path)
+	})
+
+	t.Run("usage: change made during the scan", func(t *testing.T) {
+		t.Parallel()
+		testDir := t.TempDir()
+		files := makeDrainFiles(t, testDir, 3)
+		run, _ := newTestRun(t, changedDuringScan)
+
+		params := newUsageLoopTestParams(1000, 900, 80, 0)
+		deletedCount, _, _, stats, loopErr := processUsageDeletionLoop(files, buildSpeciesSubDirCountMap(files), params, testDir, run)
+		run.finish()
+
+		require.NoError(t, loopErr)
+		assert.Equal(t, 0, deletedCount, "nothing may be deleted under the stale settings")
+		assert.Equal(t, stopSettingsChanged, stats.StopReason)
+		assert.True(t, stats.MoreWork)
+		assert.FileExists(t, files[0].Path)
 	})
 }
 

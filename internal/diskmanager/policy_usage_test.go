@@ -1239,4 +1239,29 @@ func TestProcessUsageDeletionLoopStats(t *testing.T) {
 		assert.Equal(t, 0, speciesMonthCount["species_a"][testDir], "the vanished clip no longer counts toward its species and month")
 		assert.Empty(t, env.sleeps, "nothing was written, so no pacing wait")
 	})
+
+	t.Run("a file already gone lowers the usage estimate", func(t *testing.T) {
+		t.Parallel()
+		testDir := t.TempDir()
+
+		// Usage starts at 90% against an 80% target. The vanished clip freed
+		// 200 of 1000 bytes, which already brings usage to 70%, so the clip
+		// after it must be kept.
+		ghost := FileInfo{
+			Path:    filepath.Join(testDir, drainTestSpecies+"_80p_ghost.wav"),
+			Species: drainTestSpecies,
+			Size:    200,
+		}
+		files := append([]FileInfo{ghost}, makeDrainFiles(t, testDir, 1)...)
+
+		params := newUsageLoopTestParams(1000, 900, 80, 0)
+		run, _ := newTestRun(t)
+		deletedCount, _, _, stats, loopErr := processUsageDeletionLoop(files, buildSpeciesSubDirCountMap(files), params, testDir, run)
+
+		require.NoError(t, loopErr)
+		assert.Equal(t, 0, deletedCount, "usage already fell below the target")
+		assert.Equal(t, 1, stats.AlreadyGone)
+		assert.Equal(t, stopBelowThreshold, stats.StopReason)
+		assert.FileExists(t, files[1].Path)
+	})
 }

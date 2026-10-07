@@ -735,13 +735,15 @@ type cleanupSummary struct {
 }
 
 // notKeepingUp reports that a usage-based run used its whole time budget and
-// the disk usage did not fall during it: clips may be arriving as fast as the
-// paced deletion removes them. Only meaningful for the usage policy, and only
-// when both usage values were measured.
+// the disk usage rose during it: clips are arriving faster than the paced
+// deletion removes them. Usage is a whole percent, so an unchanged value is not
+// enough; on a large disk one run of a working drain can free less than 1%.
+// Only meaningful for the usage policy, and only when both usage values were
+// measured.
 func (s *cleanupSummary) notKeepingUp() bool {
 	return s.usageThreshold > 0 && s.stats.StopReason == stopTimeBudget &&
 		s.usageBefore != unknownUsagePercent && s.usageAfter != unknownUsagePercent &&
-		s.usageAfter >= s.usageBefore
+		s.usageAfter > s.usageBefore
 }
 
 // usageStillOverTarget reports that a usage-based run finished with the disk
@@ -771,7 +773,7 @@ func appendUsageFields(fields []logger.Field, s *cleanupSummary) []logger.Field 
 // logCleanupSummary emits a single INFO-level line summarizing a completed
 // cleanup run, so the guard (if any) that prevented deletion is visible without
 // enabling Debug logging. When a usage-based run spent its whole time budget
-// without lowering disk usage, or finished with the disk still at or above the
+// while disk usage rose, or finished with the disk still at or above the
 // configured target and no follow-up run pending, it additionally emits a WARN
 // so the "cleanup ran but disk stays full" condition (GitHub #4059, #3892) is
 // loud in default logs and in a support dump rather than requiring a live Debug
@@ -810,7 +812,7 @@ func logCleanupSummary(s *cleanupSummary) {
 			logger.Int("files_deleted", s.stats.Deleted),
 			logger.Bool("keep_spectrograms", s.keepSpectrograms),
 		}
-		log.Warn("retention cleanup is deleting at its paced rate but disk usage did not fall during this run; clips may be arriving faster than they can be removed",
+		log.Warn("retention cleanup is deleting at its paced rate but disk usage rose during this run; clips may be arriving faster than they can be removed",
 			appendUsageFields(warnFields, s)...)
 	case s.usageStillOverTarget() && !s.stats.MoreWork && s.stats.StopReason != stopQuit:
 		// The run ended for good (nothing pending, not interrupted) with the disk

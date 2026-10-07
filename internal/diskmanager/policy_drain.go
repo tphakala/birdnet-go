@@ -185,13 +185,19 @@ func (r *deletionRun) refreshLocks(files []FileInfo) error {
 
 // begin starts the run clock and refreshes the lock state of every file before
 // the first deletion, since the scan snapshot is older than the sort. It
-// returns false, with stopReason set, when the lock list cannot be read: the
-// run fails closed rather than delete on a stale lock state.
+// returns false, with stopReason set, when the lock list cannot be read (the
+// run fails closed rather than delete on a stale lock state) or when the
+// retention settings changed during the scan (the run would otherwise delete
+// a first batch under the old settings).
 func (r *deletionRun) begin(files []FileInfo) bool {
 	r.startedAt = r.now()
 	r.lastBoundaryAt = r.startedAt
 	if err := r.refreshLocks(files); err != nil {
 		r.failLockRefresh(err)
+		return false
+	}
+	if r.settingsChanged != nil && r.settingsChanged() {
+		r.stopReason = stopSettingsChanged
 		return false
 	}
 	return true

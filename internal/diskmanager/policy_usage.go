@@ -261,6 +261,7 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 
 	if !run.begin(files) {
 		stats.StopReason = run.stopReason
+		stats.MoreWork = run.moreWork(false)
 		return deletedCount, deletedNames, lastKnownGoodUsagePercent, stats, nil
 	}
 
@@ -330,11 +331,15 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 				return deletedCount, deletedNames, lastKnownGoodUsagePercent, stats, nil
 			}
 		case usageOutcomeAlreadyGone:
-			// Removed elsewhere since the scan. The disk usage estimate is left
-			// alone (the real usage already reflects the removal and the next
-			// refresh picks it up), and nothing was written, so no pacing wait.
+			// Removed elsewhere since the scan. Its space is already free, so
+			// lower the usage estimate as for a deletion; otherwise the run would
+			// keep deleting until the next refresh. If a disk reading taken after
+			// the removal (the initial one or a refresh) already counted it, the
+			// estimate runs low and the run stops early, which errs on the side
+			// of keeping clips. Nothing was written, so no
+			// pacing wait.
 			stats.AlreadyGone++
-			decrementSpeciesMonthCount(file, speciesMonthCount)
+			estimatedUsedBytes = updateUsageStateAfterDeletion(file, speciesMonthCount, estimatedUsedBytes, params.diskInfo.TotalBytes)
 		case usageOutcomeLocked:
 			stats.LockedSkipped++
 		case usageOutcomeMinClips:
