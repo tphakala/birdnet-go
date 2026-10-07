@@ -2449,23 +2449,51 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 		logger.Int("check_interval_minutes", checkInterval),
 		logger.String("operation", "clip_cleanup_init"))
 
-	// Re-read the interval before every wait so hot-reload takes effect.
-	delay := nextCleanupDelay(true, false, cleanupInterval())
+	deps := defaultClipCleanupDeps()
+	runClipCleanupLoop(quitChan, reconcileMonitorWait,
+		func() bool { return runClipCleanupPass(quitChan, dataStore, &deps) },
+		cleanupInterval)
+}
+
+// runClipCleanupLoop is the scheduling loop of clipCleanupMonitor. It waits with
+// wait, runs pass, and picks the next delay with nextCleanupDelay from pass's
+// result and a fresh interval() read, so a hot-reloaded interval applies to the
+// next wait. It returns when wait reports that quit closed.
+func runClipCleanupLoop(quitChan <-chan struct{}, wait func(<-chan struct{}, time.Duration) bool,
+	pass func() (moreWork bool), interval func() time.Duration) {
+	delay := nextCleanupDelay(true, false, interval())
 	for {
-		if !reconcileMonitorWait(quitChan, delay) {
-			log.Debug("clip cleanup monitor stopped",
+		if !wait(quitChan, delay) {
+			GetLogger().Debug("clip cleanup monitor stopped",
 				logger.String("operation", "clip_cleanup_stop"))
 			return
 		}
-		moreWork := runClipCleanupPass(quitChan, dataStore)
-		delay = nextCleanupDelay(false, moreWork, cleanupInterval())
+		moreWork := pass()
+		delay = nextCleanupDelay(false, moreWork, interval())
+	}
+}
+
+// clipCleanupDeps holds the diskmanager calls a cleanup pass makes, so tests can
+// replace them.
+type clipCleanupDeps struct {
+	ageCleanup      func(quit <-chan struct{}, db diskmanager.Interface) diskmanager.CleanupResult
+	usageCleanup    func(quit <-chan struct{}, db diskmanager.Interface) diskmanager.CleanupResult
+	shouldSkipUsage func(retention *conf.RetentionSettings, baseDir string) (skip bool, utilization int, err error)
+}
+
+// defaultClipCleanupDeps returns the production diskmanager calls.
+func defaultClipCleanupDeps() clipCleanupDeps {
+	return clipCleanupDeps{
+		ageCleanup:      diskmanager.AgeBasedCleanup,
+		usageCleanup:    diskmanager.UsageBasedCleanup,
+		shouldSkipUsage: diskmanager.ShouldSkipUsageBasedCleanup,
 	}
 }
 
 // runClipCleanupPass runs one retention cleanup pass for the current policy. It
 // returns true when the run asked for a follow-up (CleanupResult.MoreWork), so the
 // monitor schedules the next run soon.
-func runClipCleanupPass(quitChan <-chan struct{}, dataStore datastore.Interface) (moreWork bool) {
+func runClipCleanupPass(quitChan <-chan struct{}, dataStore datastore.Interface, deps *clipCleanupDeps) (moreWork bool) {
 	log := GetLogger()
 
 	currentSettings := conf.Setting()
@@ -2525,7 +2553,7 @@ func runClipCleanupPass(quitChan <-chan struct{}, dataStore datastore.Interface)
 		logger.String("operation", "clip_cleanup_task"))
 
 	if currentPolicy == "age" {
-		result := diskmanager.AgeBasedCleanup(quitChan, dataStore)
+		result := deps.ageCleanup(quitChan, dataStore)
 		if result.Err != nil {
 			log.Error("age-based cleanup failed",
 				logger.Error(result.Err),
@@ -2544,7 +2572,7 @@ func runClipCleanupPass(quitChan <-chan struct{}, dataStore datastore.Interface)
 		currentRetention := exportCfg.Retention
 		baseDir := exportCfg.Path
 
-		skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&currentRetention, baseDir)
+		skip, utilization, err := deps.shouldSkipUsage(&currentRetention, baseDir)
 		if err != nil {
 			log.Warn("failed to check disk usage",
 				logger.Error(err),
@@ -2557,7 +2585,7 @@ func runClipCleanupPass(quitChan <-chan struct{}, dataStore datastore.Interface)
 			return false
 		}
 
-		result := diskmanager.UsageBasedCleanup(quitChan, dataStore)
+		result := deps.usageCleanup(quitChan, dataStore)
 		if result.Err != nil {
 			log.Error("usage-based cleanup failed",
 				logger.Error(result.Err),
