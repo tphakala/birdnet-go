@@ -109,7 +109,7 @@ func TestConcurrentUpdates(t *testing.T) {
 				// This eliminates the need for manual wg.Add(1) and defer wg.Done()
 				wg.Go(func() {
 					// Errors are reported through errorsChan, so the return value is not needed.
-					_ = runConcurrentScenario(t, tt.scenario, goroutineID, controller, e, errorsChan)
+					_ = runConcurrentScenario(t, tt.scenario, goroutineID, controller, errorsChan)
 				})
 			}
 			wg.Wait()
@@ -140,7 +140,7 @@ func TestConcurrentUpdates(t *testing.T) {
 }
 
 // runConcurrentScenario executes a specific concurrent test scenario
-func runConcurrentScenario(t *testing.T, scenario string, goroutineID int, controller *Controller, e *echo.Echo, errorsChan chan error) error {
+func runConcurrentScenario(t *testing.T, scenario string, goroutineID int, controller *Controller, errorsChan chan error) error {
 	t.Helper()
 	switch scenario {
 	case "same-section":
@@ -148,7 +148,7 @@ func runConcurrentScenario(t *testing.T, scenario string, goroutineID int, contr
 	case "different-sections":
 		return runDifferentSectionsScenario(t, goroutineID, controller, errorsChan)
 	case "read-write":
-		return runReadWriteScenario(t, goroutineID, controller, e, errorsChan)
+		return runReadWriteScenario(t, goroutineID, controller, errorsChan)
 	case "rapid-sequential":
 		return runRapidSequentialScenario(t, goroutineID, controller, errorsChan)
 	case "save-disk":
@@ -195,7 +195,7 @@ func runDifferentSectionsScenario(t *testing.T, goroutineID int, controller *Con
 }
 
 // runReadWriteScenario handles mixed read and write operations
-func runReadWriteScenario(t *testing.T, goroutineID int, controller *Controller, e *echo.Echo, errorsChan chan error) error {
+func runReadWriteScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
 	t.Helper()
 	if goroutineID%2 == 0 {
 		// Write operation
@@ -209,16 +209,7 @@ func runReadWriteScenario(t *testing.T, goroutineID int, controller *Controller,
 		return err
 	}
 	// Read operation
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/dashboard", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("dashboard")
-
-	err := controller.GetSectionSettings(ctx)
-	if err == nil && rec.Code != http.StatusOK {
-		err = fmt.Errorf("GET dashboard: status %d: %s", rec.Code, rec.Body.String())
-	}
+	err := readSectionSettings(controller, "dashboard")
 	if err != nil {
 		errorsChan <- err
 	}
@@ -273,34 +264,29 @@ func TestRaceConditionScenarios(t *testing.T) {
 				// Cannot use synctest.Test here: handleSettingsChanges spawns a
 				// background goroutine with time.Sleep that outlives the test
 				// function, causing synctest's deadlock detector to fire.
+				const readers = 10
 				var wg sync.WaitGroup
+				// Workers report through errs; assertions run on the test goroutine.
+				errs := make(chan error, readers+1)
 
 				wg.Go(func() {
 					update := map[string]any{
 						"summaryLimit": readDuringWriteSummaryLimit,
 					}
-					assert.NoError(t, makeSettingsUpdate(t, controller, "dashboard", update))
+					errs <- makeSettingsUpdate(t, controller, "dashboard", update)
 				})
 
-				for range 10 {
+				for range readers {
 					wg.Go(func() {
-						req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/dashboard", http.NoBody)
-						rec := httptest.NewRecorder()
-						ctx := controller.Echo.NewContext(req, rec)
-						ctx.SetParamNames("section")
-						ctx.SetParamValues("dashboard")
-
-						err := controller.GetSectionSettings(ctx)
-						assert.NoError(t, err) //nolint:testifylint // require would call runtime.Goexit off the test goroutine
-						assert.Equal(t, http.StatusOK, rec.Code)
-
-						var response map[string]any
-						err = json.Unmarshal(rec.Body.Bytes(), &response)
-						assert.NoError(t, err)
+						errs <- readSectionSettings(controller, "dashboard")
 					})
 				}
 
 				wg.Wait()
+				close(errs)
+				for err := range errs {
+					require.NoError(t, err)
+				}
 
 				// The write must have landed, not just returned without a handler error.
 				assert.Equal(t, readDuringWriteSummaryLimit, controller.Settings.Load().Realtime.Dashboard.SummaryLimit)
@@ -319,7 +305,10 @@ func TestRaceConditionScenarios(t *testing.T) {
 				controller.Settings.Store(baseline)
 				wantProvider := baseline.Realtime.Dashboard.Thumbnails.ImageProvider
 
+				const writers = 2
 				var wg sync.WaitGroup
+				// Workers report through errs; assertions run on the test goroutine.
+				errs := make(chan error, writers)
 
 				wg.Go(func() {
 					update := map[string]any{
@@ -327,7 +316,7 @@ func TestRaceConditionScenarios(t *testing.T) {
 							"summary": true,
 						},
 					}
-					assert.NoError(t, makeSettingsUpdate(t, controller, "dashboard", update))
+					errs <- makeSettingsUpdate(t, controller, "dashboard", update)
 				})
 
 				wg.Go(func() {
@@ -336,10 +325,14 @@ func TestRaceConditionScenarios(t *testing.T) {
 							"recent": true,
 						},
 					}
-					assert.NoError(t, makeSettingsUpdate(t, controller, "dashboard", update))
+					errs <- makeSettingsUpdate(t, controller, "dashboard", update)
 				})
 
 				wg.Wait()
+				close(errs)
+				for err := range errs {
+					require.NoError(t, err)
+				}
 
 				// Both writes must have landed and the untouched sibling must be intact
 				thumbnails := controller.Settings.Load().Realtime.Dashboard.Thumbnails
@@ -388,6 +381,28 @@ func makeSettingsUpdate(t *testing.T, controller *Controller, section string, up
 	}
 	if rec.Code != http.StatusOK {
 		return fmt.Errorf("PATCH %s: status %d: %s", section, rec.Code, rec.Body.String())
+	}
+	return nil
+}
+
+// readSectionSettings sends a GET for the section and returns an error when the
+// handler returns one, the response status is not 200, or the body is not JSON.
+func readSectionSettings(controller *Controller, section string) error {
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/"+section, http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := controller.Echo.NewContext(req, rec)
+	ctx.SetParamNames("section")
+	ctx.SetParamValues(section)
+
+	if err := controller.GetSectionSettings(ctx); err != nil {
+		return err
+	}
+	if rec.Code != http.StatusOK {
+		return fmt.Errorf("GET %s: status %d: %s", section, rec.Code, rec.Body.String())
+	}
+	var response map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		return fmt.Errorf("GET %s: decode response: %w", section, err)
 	}
 	return nil
 }
