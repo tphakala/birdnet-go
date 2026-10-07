@@ -6,10 +6,9 @@
 //  1. Use sync.WaitGroup.Go(func()) instead of wg.Add(1) + go func() + defer wg.Done()
 //     Example: wg.Go(func() { /* work */ })
 //  2. Add test metadata with T.Attr("component", "name") and T.Attr("type", "test-type")
-//  3. Use T.Output() for structured logging: fmt.Fprintf(t.Output(), "message")
-//  4. testing/synctest.Test() creates deterministic "bubbles" but can deadlock with background
+//  3. testing/synctest.Test() creates deterministic "bubbles" but can deadlock with background
 //     goroutines that use time.Sleep() - avoid using it with code that spawns such goroutines
-//  5. For simple concurrent tests, prefer regular WaitGroup.Go() over synctest
+//  4. For simple concurrent tests, prefer regular WaitGroup.Go() over synctest
 package api
 
 import (
