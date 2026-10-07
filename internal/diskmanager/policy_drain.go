@@ -132,6 +132,8 @@ type deletionRun struct {
 	settingsChanged func() bool                                      // nil: never changed
 	release         func(paths []string) (retained, cleared int64)   // nil: no-op
 
+	locked map[string]struct{} // basenames of locked clips at the last refresh; nil: never refreshed
+
 	startedAt       time.Time
 	lastBoundaryAt  time.Time
 	batch           []string
@@ -163,9 +165,11 @@ func newDeletionRun(policy string, quit <-chan struct{}, db Interface, baseDir s
 	}
 }
 
-// refreshLocks re-reads the locked clip list and re-marks every file in files
-// by basename, the same way the scan does.
-func (r *deletionRun) refreshLocks(files []FileInfo) error {
+// refreshLocks re-reads the locked clip list into the run's lock set, keyed by
+// basename the same way the scan matches it. Files are not re-marked here;
+// markLocked applies the set to each file when the loop reaches it, so a
+// refresh costs one read of the lock list, not a pass over every unvisited file.
+func (r *deletionRun) refreshLocks() error {
 	if r.lockedClips == nil {
 		return nil
 	}
@@ -177,22 +181,30 @@ func (r *deletionRun) refreshLocks(files []FileInfo) error {
 	for _, p := range clips {
 		locked[filepath.Base(p)] = struct{}{}
 	}
-	for i := range files {
-		_, files[i].Locked = locked[filepath.Base(files[i].Path)]
-	}
+	r.locked = locked
 	return nil
 }
 
-// begin starts the run clock and refreshes the lock state of every file before
-// the first deletion, since the scan snapshot is older than the sort. It
+// markLocked sets file.Locked from the lock set of the last refresh. The loops
+// call it on each file just before deciding about it. Before any refresh (or
+// when lock refresh is disabled) it keeps the lock state from the scan.
+func (r *deletionRun) markLocked(file *FileInfo) {
+	if r.locked == nil {
+		return
+	}
+	_, file.Locked = r.locked[filepath.Base(file.Path)]
+}
+
+// begin starts the run clock and refreshes the lock set before the first
+// deletion, since the scan snapshot is older than the sort. It
 // returns false, with stopReason set, when the lock list cannot be read (the
 // run fails closed rather than delete on a stale lock state) or when the
 // retention settings changed during the scan (the run would otherwise delete
 // a first batch under the old settings).
-func (r *deletionRun) begin(files []FileInfo) bool {
+func (r *deletionRun) begin() bool {
 	r.startedAt = r.now()
 	r.lastBoundaryAt = r.startedAt
-	if err := r.refreshLocks(files); err != nil {
+	if err := r.refreshLocks(); err != nil {
 		r.failLockRefresh(err)
 		return false
 	}
@@ -232,11 +244,10 @@ func (r *deletionRun) releaseBatch() {
 
 // endBatch closes the current batch at a boundary. It releases the batch's
 // database references and pauses when the batch wrote anything. Then it checks
-// quit, the time budget and the settings, and refreshes the lock state of the
-// unvisited files in remaining, so each of those decisions is the last step
-// before deletion resumes. It returns false, with stopReason set, when the run
-// must end.
-func (r *deletionRun) endBatch(remaining []FileInfo) bool {
+// quit, the time budget and the settings, and refreshes the lock set, so each
+// of those decisions is the last step before deletion resumes. It returns
+// false, with stopReason set, when the run must end.
+func (r *deletionRun) endBatch() bool {
 	wrote := len(r.batch) > 0
 	r.releaseBatch()
 
@@ -258,7 +269,7 @@ func (r *deletionRun) endBatch(remaining []FileInfo) bool {
 		r.stopReason = stopSettingsChanged
 		return false
 	}
-	if err := r.refreshLocks(remaining); err != nil {
+	if err := r.refreshLocks(); err != nil {
 		r.failLockRefresh(err)
 		return false
 	}

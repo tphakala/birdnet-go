@@ -295,7 +295,7 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 
 	log := GetLogger()
 
-	if !run.begin(files) {
+	if !run.begin() {
 		stats.StopReason = run.stopReason
 		stats.MoreWork = run.moreWork(false)
 		return deletedCount, deletedNames, stats, nil
@@ -312,7 +312,7 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 		default:
 		}
 
-		if run.boundaryDue() && !run.endBatch(files[i:]) {
+		if run.boundaryDue() && !run.endBatch() {
 			stats.StopReason = run.stopReason
 			// files is sorted oldest first, so if the next file is not older
 			// than the cutoff, no age-eligible work remains.
@@ -325,6 +325,7 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 		}
 
 		file := &files[i]
+		run.markLocked(file)
 		deleted, reason, latency, delErr := processSingleAgeFile(file, retentionCutoffUnix, speciesTotalCount, minClipsPerSpecies, keepSpectrograms, run.now)
 
 		if errors.Is(delErr, errFileAlreadyGone) {

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	mock_diskmanager "github.com/tphakala/birdnet-go/internal/diskmanager/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // MockFileInfo implements os.FileInfo for testing
@@ -1069,6 +1070,9 @@ func newUsageLoopTestParams(totalBytes, usedBytes uint64, threshold, minClips in
 		minClipsPerSpecies:  minClips,
 		refreshInterval:     50, // large enough that these small tests never trigger a real disk refresh
 		keepSpectrograms:    true,
+		readDiskUsage: func(string) (DiskSpaceInfo, error) {
+			return DiskSpaceInfo{}, errors.NewStd("no real disk reading in tests")
+		},
 	}
 }
 
@@ -1240,13 +1244,13 @@ func TestProcessUsageDeletionLoopStats(t *testing.T) {
 		assert.Empty(t, env.sleeps, "nothing was written, so no pacing wait")
 	})
 
-	t.Run("a file already gone lowers the usage estimate", func(t *testing.T) {
-		t.Parallel()
+	// vanishedRun runs a ghost clip (200 of 1000 bytes, usage starting at 90%
+	// against an 80% target) followed by one real clip, with readDiskUsage
+	// faked by read, and returns the deleted count, the last usage percent and
+	// the run stats.
+	vanishedRun := func(t *testing.T, read func(string) (DiskSpaceInfo, error)) (deleted, lastUsagePct int, stats cleanupStats) {
+		t.Helper()
 		testDir := t.TempDir()
-
-		// Usage starts at 90% against an 80% target. The vanished clip freed
-		// 200 of 1000 bytes, which already brings usage to 70%, so the clip
-		// after it must be kept.
 		ghost := FileInfo{
 			Path:    filepath.Join(testDir, drainTestSpecies+"_80p_ghost.wav"),
 			Species: drainTestSpecies,
@@ -1255,13 +1259,44 @@ func TestProcessUsageDeletionLoopStats(t *testing.T) {
 		files := append([]FileInfo{ghost}, makeDrainFiles(t, testDir, 1)...)
 
 		params := newUsageLoopTestParams(1000, 900, 80, 0)
+		params.readDiskUsage = read
 		run, _ := newTestRun(t)
-		deletedCount, _, _, stats, loopErr := processUsageDeletionLoop(files, buildSpeciesSubDirCountMap(files), params, testDir, run)
-
+		deletedCount, _, lastUsagePct, stats, loopErr := processUsageDeletionLoop(files, buildSpeciesSubDirCountMap(files), params, testDir, run)
 		require.NoError(t, loopErr)
-		assert.Equal(t, 0, deletedCount, "usage already fell below the target")
 		assert.Equal(t, 1, stats.AlreadyGone)
+		return deletedCount, lastUsagePct, stats
+	}
+
+	t.Run("a vanished file lowers usage to a fresh reading", func(t *testing.T) {
+		t.Parallel()
+		// The reading taken after the ghost shows usage at 75%, which differs
+		// from the 70% that subtracting its size would give.
+		deleted, lastUsagePct, stats := vanishedRun(t, func(string) (DiskSpaceInfo, error) {
+			return DiskSpaceInfo{TotalBytes: 1000, UsedBytes: 750}, nil
+		})
+		assert.Equal(t, 0, deleted, "usage already fell below the target")
 		assert.Equal(t, stopBelowThreshold, stats.StopReason)
-		assert.FileExists(t, files[1].Path)
+		assert.Equal(t, 75, lastUsagePct, "the usage comes from the fresh reading")
+	})
+
+	t.Run("a vanished file already counted by a reading is not credited twice", func(t *testing.T) {
+		t.Parallel()
+		// The initial reading was taken after the ghost was removed, so usage
+		// really is 90%; subtracting its size again would stop at 70%.
+		deleted, _, stats := vanishedRun(t, func(string) (DiskSpaceInfo, error) {
+			return DiskSpaceInfo{TotalBytes: 1000, UsedBytes: 900}, nil
+		})
+		assert.Equal(t, 1, deleted, "usage is still over the target, so cleanup continues")
+		assert.Equal(t, stopExhausted, stats.StopReason)
+	})
+
+	t.Run("a vanished file subtracts its size when the reading fails", func(t *testing.T) {
+		t.Parallel()
+		deleted, lastUsagePct, stats := vanishedRun(t, func(string) (DiskSpaceInfo, error) {
+			return DiskSpaceInfo{}, errors.NewStd("statfs failed")
+		})
+		assert.Equal(t, 0, deleted, "the fallback errs on the side of keeping clips")
+		assert.Equal(t, stopBelowThreshold, stats.StopReason)
+		assert.Equal(t, 70, lastUsagePct, "the fallback subtracts the clip's size")
 	})
 }

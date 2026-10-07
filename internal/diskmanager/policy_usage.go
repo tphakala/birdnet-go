@@ -34,7 +34,8 @@ const (
 )
 
 // usageRefreshEveryDeletions is how often (in deletions) the loop replaces its
-// estimate of used bytes with a real disk usage reading.
+// estimate of used bytes with a real disk usage reading. A clip found already
+// gone also triggers a reading (see usageAfterVanishedFile).
 const usageRefreshEveryDeletions = 50
 
 // UsageBasedCleanup removes clips from the filesystem based on disk usage and the number of clips per species.
@@ -138,6 +139,7 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		minClipsPerSpecies:  minClipsPerSpecies,
 		refreshInterval:     usageRefreshEveryDeletions,
 		keepSpectrograms:    keepSpectrograms,
+		readDiskUsage:       GetDetailedDiskUsage,
 	}
 	startSnapshot := newRetentionSnapshot(baseDir, &retention)
 	run := newDeletionRun("usage", quit, db, baseDir, keepSpectrograms, &startSnapshot)
@@ -198,6 +200,9 @@ type usageLoopParams struct {
 	minClipsPerSpecies  int           // Minimum number of clips to preserve per species per directory
 	refreshInterval     int           // How often to refresh actual disk usage (every N deletions)
 	keepSpectrograms    bool          // Whether to keep spectrograms when deleting audio files
+
+	// readDiskUsage takes a real disk reading. It is a field so tests can fake it.
+	readDiskUsage func(path string) (DiskSpaceInfo, error)
 }
 
 // calculateUsagePercent computes the current estimated disk usage percentage.
@@ -236,6 +241,28 @@ func updateUsageStateAfterDeletion(file *FileInfo, speciesMonthCount map[string]
 	return estimatedUsedBytes
 }
 
+// usageAfterVanishedFile returns the disk info and used-bytes estimate after a
+// scanned file turned out to be already gone. Its space is already free, but
+// whether the current estimate still counts it depends on when the last disk
+// reading was taken, so it takes a fresh reading: keeping the old estimate
+// would let the run over-delete, and subtracting the size could count the file
+// twice and stop the run early. When the reading fails it subtracts the size,
+// which errs on the side of keeping clips.
+func usageAfterVanishedFile(file *FileInfo, baseDir string, params *usageLoopParams, estimatedUsedBytes uint64) (diskInfo DiskSpaceInfo, usedBytes uint64) {
+	if params.readDiskUsage != nil && baseDir != "" {
+		info, err := params.readDiskUsage(baseDir)
+		if err == nil {
+			updateDiskUsageMetrics(info)
+			return info, info.UsedBytes
+		}
+		GetLogger().Debug("Failed to read disk usage after a vanished clip, subtracting its size",
+			logger.String("policy", "usage"),
+			logger.Error(err))
+	}
+	fileSize := uint64(file.Size) // #nosec G115 -- file size conversion safe
+	return params.diskInfo, estimatedUsedBytes - min(fileSize, estimatedUsedBytes)
+}
+
 // processUsageDeletionLoop contains the core logic for iterating through files and deleting based on usage.
 // It continues until one of these conditions is met (stats.StopReason names it):
 //  1. Disk usage falls below the threshold (stopBelowThreshold)
@@ -259,7 +286,7 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 
 	log := GetLogger()
 
-	if !run.begin(files) {
+	if !run.begin() {
 		stats.StopReason = run.stopReason
 		stats.MoreWork = run.moreWork(false)
 		return deletedCount, deletedNames, lastKnownGoodUsagePercent, stats, nil
@@ -291,7 +318,7 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 			return deletedCount, deletedNames, lastKnownGoodUsagePercent, stats, loopErr
 		}
 
-		if run.boundaryDue() && !run.endBatch(files[i:]) {
+		if run.boundaryDue() && !run.endBatch() {
 			stats.StopReason = run.stopReason
 			stats.MoreWork = run.moreWork(currentUsagePercent >= params.usageThreshold)
 			log.Debug("Usage-based cleanup run stopped at a batch boundary",
@@ -302,6 +329,7 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 		}
 
 		file := &files[i]
+		run.markLocked(file)
 		stats.Scanned++
 		outcome, latency, deletionErr := handleUsageDeletionIteration(file, speciesMonthCount, params.minClipsPerSpecies, params.keepSpectrograms, currentUsagePercent, params.usageThreshold, run.now)
 
@@ -331,15 +359,11 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 				return deletedCount, deletedNames, lastKnownGoodUsagePercent, stats, nil
 			}
 		case usageOutcomeAlreadyGone:
-			// Removed elsewhere since the scan. Its space is already free, so
-			// lower the usage estimate as for a deletion; otherwise the run would
-			// keep deleting until the next refresh. If a disk reading taken after
-			// the removal (the initial one or a refresh) already counted it, the
-			// estimate runs low and the run stops early, which errs on the side
-			// of keeping clips. Nothing was written, so no
+			// Removed elsewhere since the scan. Nothing was written, so no
 			// pacing wait.
 			stats.AlreadyGone++
-			estimatedUsedBytes = updateUsageStateAfterDeletion(file, speciesMonthCount, estimatedUsedBytes, params.diskInfo.TotalBytes)
+			decrementSpeciesMonthCount(file, speciesMonthCount)
+			params.diskInfo, estimatedUsedBytes = usageAfterVanishedFile(file, baseDir, params, estimatedUsedBytes)
 		case usageOutcomeLocked:
 			stats.LockedSkipped++
 		case usageOutcomeMinClips:

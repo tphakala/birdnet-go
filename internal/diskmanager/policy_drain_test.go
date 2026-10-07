@@ -179,31 +179,49 @@ func TestDeletionRun_LockChangesHonoredAtBoundary(t *testing.T) {
 			wantAlive: nil,
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			files := makeDrainFiles(t, t.TempDir(), 6)
-			for _, i := range tt.scanLocked {
-				files[i].Locked = true
-			}
-			run, _ := newTestRun(t, func(e *drainTestEnv, _ *deletionRun) {
-				e.lockedClips = func(call int) ([]string, error) { return baseNames(files, tt.lockedAt(call)...), nil }
-			})
-
-			runAge(files, run)
-
-			alive := map[int]bool{}
-			for _, i := range tt.wantAlive {
-				alive[i] = true
-			}
-			for i, f := range files {
-				if alive[i] {
-					assert.FileExists(t, f.Path, "file %d must survive", i)
-				} else {
-					assert.NoFileExists(t, f.Path, "file %d must be deleted", i)
+	// Each loop applies the refreshed lock set to a file on its own, so both
+	// run the same table.
+	loops := []struct {
+		name string
+		run  func(t *testing.T, files []FileInfo, run *deletionRun)
+	}{
+		{"age", func(_ *testing.T, files []FileInfo, run *deletionRun) { runAge(files, run) }},
+		{"usage", func(t *testing.T, files []FileInfo, run *deletionRun) {
+			t.Helper()
+			// Usage stays far above the target, so only locks keep files.
+			params := newUsageLoopTestParams(1000, 900, 80, 0)
+			_, _, _, _, err := processUsageDeletionLoop(files, buildSpeciesSubDirCountMap(files), params, filepath.Dir(files[0].Path), run)
+			run.finish()
+			require.NoError(t, err)
+		}},
+	}
+	for _, loop := range loops {
+		for _, tt := range tests {
+			t.Run(loop.name+": "+tt.name, func(t *testing.T) {
+				t.Parallel()
+				files := makeDrainFiles(t, t.TempDir(), 6)
+				for _, i := range tt.scanLocked {
+					files[i].Locked = true
 				}
-			}
-		})
+				run, _ := newTestRun(t, func(e *drainTestEnv, _ *deletionRun) {
+					e.lockedClips = func(call int) ([]string, error) { return baseNames(files, tt.lockedAt(call)...), nil }
+				})
+
+				loop.run(t, files, run)
+
+				alive := map[int]bool{}
+				for _, i := range tt.wantAlive {
+					alive[i] = true
+				}
+				for i, f := range files {
+					if alive[i] {
+						assert.FileExists(t, f.Path, "file %d must survive", i)
+					} else {
+						assert.NoFileExists(t, f.Path, "file %d must be deleted", i)
+					}
+				}
+			})
+		}
 	}
 
 	t.Run("sparse deletions still refresh on time", func(t *testing.T) {
