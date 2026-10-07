@@ -294,3 +294,28 @@ func TestUnregisteredModelNames_PrimaryFallbackIsNotReportedAsAssigned(t *testin
 		assert.Equal(t, modelDisplayName("perch_v2"), got[0])
 	})
 }
+
+func TestNextCleanupDelay(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		first    bool
+		moreWork bool
+		interval time.Duration
+		want     time.Duration
+	}{
+		{"first run waits the startup delay", true, false, 15 * time.Minute, 5 * time.Minute},
+		{"first run never waits past a short interval", true, false, time.Minute, time.Minute},
+		{"run with work left follows up soon", false, true, 15 * time.Minute, time.Minute},
+		{"follow-up never waits past a short interval", false, true, 30 * time.Second, 30 * time.Second},
+		{"run without work left waits the full interval", false, false, 15 * time.Minute, 15 * time.Minute},
+		{"short interval without work left is unchanged", false, false, time.Minute, time.Minute},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, nextCleanupDelay(tt.first, tt.moreWork, tt.interval))
+		})
+	}
+}

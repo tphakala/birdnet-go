@@ -9,21 +9,34 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
-// TestCleanupSummaryHitDeletionCap verifies the primary WARN predicate: a run
-// is escalated when it was rate-limited by the per-run deletion cap while
-// candidate files still remained (GitHub #4059).
-func TestCleanupSummaryHitDeletionCap(t *testing.T) {
+// TestCleanupSummaryNotKeepingUp verifies the primary WARN predicate: a usage
+// run that spent its whole time budget without lowering disk usage.
+func TestCleanupSummaryNotKeepingUp(t *testing.T) {
 	t.Parallel()
 
-	capped := cleanupSummary{stats: cleanupStats{CapHit: true}}
-	uncapped := cleanupSummary{stats: cleanupStats{CapHit: false}}
-	assert.True(t, capped.hitDeletionCap(), "a capped run must escalate")
-	assert.False(t, uncapped.hitDeletionCap(), "an uncapped run must not escalate on the cap predicate")
+	tests := []struct {
+		name string
+		s    cleanupSummary
+		want bool
+	}{
+		{"usage, budget stop, usage not falling", cleanupSummary{stats: cleanupStats{StopReason: stopTimeBudget}, usageBefore: 90, usageAfter: 90, usageThreshold: 80}, true},
+		{"usage, budget stop, usage rising", cleanupSummary{stats: cleanupStats{StopReason: stopTimeBudget}, usageBefore: 90, usageAfter: 92, usageThreshold: 80}, true},
+		{"usage, budget stop, usage falling", cleanupSummary{stats: cleanupStats{StopReason: stopTimeBudget}, usageBefore: 90, usageAfter: 85, usageThreshold: 80}, false},
+		{"age policy", cleanupSummary{stats: cleanupStats{StopReason: stopTimeBudget}, usageBefore: unknownUsagePercent, usageAfter: 90, usageThreshold: unknownUsagePercent}, false},
+		{"usage not measured after", cleanupSummary{stats: cleanupStats{StopReason: stopTimeBudget}, usageBefore: 90, usageAfter: unknownUsagePercent, usageThreshold: 80}, false},
+		{"usage not measured before", cleanupSummary{stats: cleanupStats{StopReason: stopTimeBudget}, usageBefore: unknownUsagePercent, usageAfter: 90, usageThreshold: 80}, false},
+		{"settings changed stop", cleanupSummary{stats: cleanupStats{StopReason: stopSettingsChanged}, usageBefore: 90, usageAfter: 90, usageThreshold: 80}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, tt.s.notKeepingUp())
+		})
+	}
 }
 
 // TestCleanupSummaryUsageStillOverTarget verifies the secondary WARN predicate:
-// a usage-based run that finished without hitting the cap but left the disk at
-// or above its configured target. The predicate must not fire for the age
+// a usage-based run that left the disk at or above its configured target. The predicate must not fire for the age
 // policy (no target) or when the final usage could not be measured.
 func TestCleanupSummaryUsageStillOverTarget(t *testing.T) {
 	t.Parallel()
@@ -59,15 +72,20 @@ func TestCleanupSummaryUsageStillOverTarget(t *testing.T) {
 func TestLogCleanupSummaryWarnEmission(t *testing.T) {
 	// Not parallel: logtest.Capture swaps the process-global logger.
 
-	t.Run("age cap-hit emits WARN without usage sentinels", func(t *testing.T) {
+	t.Run("age summary has no usage fields and does not WARN on a budget stop with progress", func(t *testing.T) {
 		s := &cleanupSummary{
-			policy: "age", stats: cleanupStats{Scanned: 3, Deleted: 3, BytesFreed: 15, CapHit: true},
-			duration: time.Second, maxDeletions: 1000,
+			policy: "age", stats: cleanupStats{Scanned: 300, Deleted: 200, BytesFreed: 15, StopReason: stopTimeBudget, MoreWork: true, Batches: 1, RecordsCleared: 200},
+			duration:    time.Second,
 			usageBefore: unknownUsagePercent, usageAfter: unknownUsagePercent, usageThreshold: unknownUsagePercent,
 		}
 		out := logtest.Capture(t, func() { logCleanupSummary(s) })
-		assert.Contains(t, out, "level=WARN", "a capped run must escalate to WARN")
-		assert.Contains(t, out, "per-run deletion limit")
+		assert.Contains(t, out, "cleanup run summary")
+		assert.Contains(t, out, "stop_reason=time_budget")
+		assert.Contains(t, out, "more_work=true")
+		assert.Contains(t, out, "batches=1")
+		assert.Contains(t, out, "records_cleared=200")
+		assert.NotContains(t, out, "level=WARN", "a budget stop with progress is normal during a drain")
+		assert.NotContains(t, out, "cap_hit")
 		// The age policy has no usage measurement or target, so none of the
 		// usage_*_pct fields (which would carry the -1 sentinel) must be logged.
 		// Assert the keys are absent rather than the bare "-1" substring, which
@@ -77,10 +95,43 @@ func TestLogCleanupSummaryWarnEmission(t *testing.T) {
 		assert.NotContains(t, out, "usage_threshold_pct", "age policy has no usage target to log")
 	})
 
+	t.Run("usage budget stop without a falling disk emits the not-keeping-up WARN", func(t *testing.T) {
+		s := &cleanupSummary{
+			policy: "usage", stats: cleanupStats{Scanned: 300, Deleted: 200, StopReason: stopTimeBudget, MoreWork: true},
+			duration:    time.Second,
+			usageBefore: 95, usageAfter: 95, usageThreshold: 80,
+		}
+		out := logtest.Capture(t, func() { logCleanupSummary(s) })
+		assert.Contains(t, out, "level=WARN")
+		assert.Contains(t, out, "disk usage did not fall during this run")
+	})
+
+	t.Run("usage over-target with a follow-up run pending does not WARN", func(t *testing.T) {
+		s := &cleanupSummary{
+			policy: "usage", stats: cleanupStats{Scanned: 300, Deleted: 200, StopReason: stopTimeBudget, MoreWork: true},
+			duration:    time.Second,
+			usageBefore: 95, usageAfter: 90, usageThreshold: 80,
+		}
+		out := logtest.Capture(t, func() { logCleanupSummary(s) })
+		assert.Contains(t, out, "cleanup run summary")
+		assert.NotContains(t, out, "level=WARN", "the next run is already scheduled, so over-target is expected")
+	})
+
+	t.Run("usage over-target after a quit does not WARN", func(t *testing.T) {
+		s := &cleanupSummary{
+			policy: "usage", stats: cleanupStats{Scanned: 10, Deleted: 2, StopReason: stopQuit},
+			duration:    time.Second,
+			usageBefore: 95, usageAfter: 90, usageThreshold: 80,
+		}
+		out := logtest.Capture(t, func() { logCleanupSummary(s) })
+		assert.Contains(t, out, "stop_reason=quit")
+		assert.NotContains(t, out, "level=WARN", "an interrupted run says nothing about whether the target is reachable")
+	})
+
 	t.Run("usage over-target emits WARN with usage fields", func(t *testing.T) {
 		s := &cleanupSummary{
-			policy: "usage", stats: cleanupStats{Scanned: 10, Deleted: 2, BytesFreed: 2048},
-			duration: time.Second, maxDeletions: 1000,
+			policy: "usage", stats: cleanupStats{Scanned: 10, Deleted: 2, BytesFreed: 2048, StopReason: stopExhausted},
+			duration:    time.Second,
 			usageBefore: 95, usageAfter: 94, usageThreshold: 80,
 		}
 		out := logtest.Capture(t, func() { logCleanupSummary(s) })
@@ -92,8 +143,8 @@ func TestLogCleanupSummaryWarnEmission(t *testing.T) {
 
 	t.Run("healthy usage run does not WARN", func(t *testing.T) {
 		s := &cleanupSummary{
-			policy: "usage", stats: cleanupStats{Scanned: 10, Deleted: 10, BytesFreed: 4096},
-			duration: time.Second, maxDeletions: 1000,
+			policy: "usage", stats: cleanupStats{Scanned: 10, Deleted: 10, BytesFreed: 4096, StopReason: stopBelowThreshold},
+			duration:    time.Second,
 			usageBefore: 95, usageAfter: 70, usageThreshold: 80,
 		}
 		out := logtest.Capture(t, func() { logCleanupSummary(s) })

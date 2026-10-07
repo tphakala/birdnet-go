@@ -2398,7 +2398,43 @@ func classifyExportDir(path string) (exportDirState, error) {
 	}
 }
 
+// clipCleanupStartupDelay is the wait before the first cleanup run after
+// startup (capped at the check interval). It differs from clipReconcileStartupDelay
+// so the two boot-time scans of the export tree do not coincide.
+const clipCleanupStartupDelay = 5 * time.Minute
+
+// clipCleanupFollowUpDelay is the wait before the next run when a run stopped
+// on its time budget (or a settings change) with work left (capped at the check interval).
+const clipCleanupFollowUpDelay = 1 * time.Minute
+
+// cleanupInterval returns the configured cleanup check interval, read from the
+// live settings so a change takes effect before the next wait.
+func cleanupInterval() time.Duration {
+	interval := conf.Setting().Realtime.Audio.Export.Retention.CheckInterval
+	if interval <= 0 {
+		interval = conf.DefaultCleanupCheckInterval
+	}
+	return time.Duration(interval) * time.Minute
+}
+
+// nextCleanupDelay returns the wait before the next cleanup run: a short startup
+// delay for the first run, a short follow-up delay after a run that left work,
+// otherwise the full interval. Neither short delay exceeds the interval.
+func nextCleanupDelay(first, moreWork bool, interval time.Duration) time.Duration {
+	switch {
+	case first:
+		return min(clipCleanupStartupDelay, interval)
+	case moreWork:
+		return min(clipCleanupFollowUpDelay, interval)
+	default:
+		return interval
+	}
+}
+
 // clipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
+// The first run starts after clipCleanupStartupDelay (or the check interval when
+// that is shorter). After a run that stopped with work left, the next starts after
+// clipCleanupFollowUpDelay; otherwise after the check interval.
 func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	log := GetLogger()
 
@@ -2413,123 +2449,130 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 		logger.Int("check_interval_minutes", checkInterval),
 		logger.String("operation", "clip_cleanup_init"))
 
+	// Re-read the interval before every wait so hot-reload takes effect.
+	delay := nextCleanupDelay(true, false, cleanupInterval())
 	for {
-		// Re-read interval each iteration so hot-reload takes effect.
-		interval := conf.Setting().Realtime.Audio.Export.Retention.CheckInterval
-		if interval <= 0 {
-			interval = conf.DefaultCleanupCheckInterval
-		}
-		timer := time.NewTimer(time.Duration(interval) * time.Minute)
-
-		select {
-		case <-quitChan:
-			timer.Stop()
+		if !reconcileMonitorWait(quitChan, delay) {
 			log.Debug("clip cleanup monitor stopped",
 				logger.String("operation", "clip_cleanup_stop"))
 			return
-
-		case t := <-timer.C:
-			currentSettings := conf.Setting()
-			exportCfg := currentSettings.Realtime.Audio.Export
-			currentPolicy := exportCfg.Retention.Policy
-
-			// Re-checked every iteration (not just at Start()) so toggling
-			// retention off/on via the web UI takes effect without a restart.
-			if currentPolicy == policyNone {
-				log.Debug("skipping clip cleanup: retention policy is none",
-					logger.String("operation", "clip_cleanup_skip"))
-				continue
-			}
-
-			if strings.TrimSpace(exportCfg.Path) == "" {
-				log.Debug("skipping clip cleanup: export path not configured",
-					logger.String("operation", "clip_cleanup_skip"))
-				continue
-			}
-
-			// Skip the pass when the export directory is not a usable directory.
-			// When audio export is disabled the directory is never created (it is
-			// made lazily on the first clip save), and in Docker the clips volume
-			// may be unmounted. Without this guard the usage-based path below calls
-			// GetDiskUsage against a missing directory and warns on every interval.
-			// The check runs each iteration so re-enabling export (which recreates
-			// the directory) resumes cleanup without a restart. The DB reconcile
-			// crawler is a separate task that must run regardless of export state.
-			switch state, statErr := classifyExportDir(exportCfg.Path); state {
-			case exportDirMissing:
-				// Benign default state when export is off: log at Debug and skip.
-				log.Debug("skipping clip cleanup: export directory does not exist",
-					logger.String("path", exportCfg.Path),
-					logger.Error(statErr),
-					logger.String("operation", "clip_cleanup_skip"))
-				continue
-			case exportDirBad:
-				// Genuine access failure or a non-directory path: log at Warn so a
-				// real misconfiguration still surfaces. statErr is nil when the path
-				// exists but is not a directory.
-				fields := []logger.Field{
-					logger.String("path", exportCfg.Path),
-					logger.String("operation", "clip_cleanup_skip"),
-				}
-				if statErr != nil {
-					fields = append(fields, logger.Error(statErr))
-				}
-				log.Warn("skipping clip cleanup: export path is not a usable directory", fields...)
-				continue
-			case exportDirUsable:
-				// Fall through to run the cleanup pass.
-			}
-
-			log.Info("starting clip cleanup task",
-				logger.String("timestamp", t.Format(time.RFC3339)),
-				logger.String("policy", currentPolicy),
-				logger.String("operation", "clip_cleanup_task"))
-
-			if currentPolicy == "age" {
-				result := diskmanager.AgeBasedCleanup(quitChan, dataStore)
-				if result.Err != nil {
-					log.Error("age-based cleanup failed",
-						logger.Error(result.Err),
-						logger.String("operation", "age_based_cleanup"))
-				} else {
-					log.Info("age-based cleanup completed",
-						logger.Int("clips_removed", result.ClipsRemoved),
-						logger.Int("disk_utilization_percent", result.DiskUtilization),
-						logger.String("operation", "age_based_cleanup"))
-				}
-			}
-
-			if currentPolicy == "usage" {
-				currentRetention := exportCfg.Retention
-				baseDir := exportCfg.Path
-
-				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&currentRetention, baseDir)
-				if err != nil {
-					log.Warn("failed to check disk usage",
-						logger.Error(err),
-						logger.Bool("continuing_with_cleanup", true),
-						logger.String("operation", "usage_based_cleanup"))
-				} else if skip {
-					log.Debug("disk usage below threshold, skipping cleanup",
-						logger.Int("disk_utilization_percent", utilization),
-						logger.String("operation", "usage_based_cleanup"))
-					continue
-				}
-
-				result := diskmanager.UsageBasedCleanup(quitChan, dataStore)
-				if result.Err != nil {
-					log.Error("usage-based cleanup failed",
-						logger.Error(result.Err),
-						logger.String("operation", "usage_based_cleanup"))
-				} else {
-					log.Info("usage-based cleanup completed",
-						logger.Int("clips_removed", result.ClipsRemoved),
-						logger.Int("disk_utilization_percent", result.DiskUtilization),
-						logger.String("operation", "usage_based_cleanup"))
-				}
-			}
 		}
+		moreWork := runClipCleanupPass(quitChan, dataStore)
+		delay = nextCleanupDelay(false, moreWork, cleanupInterval())
 	}
+}
+
+// runClipCleanupPass runs one retention cleanup pass for the current policy. It
+// returns true when the run stopped with deletable work left, so the monitor
+// schedules the next run soon.
+func runClipCleanupPass(quitChan <-chan struct{}, dataStore datastore.Interface) (moreWork bool) {
+	log := GetLogger()
+
+	currentSettings := conf.Setting()
+	exportCfg := currentSettings.Realtime.Audio.Export
+	currentPolicy := exportCfg.Retention.Policy
+
+	// Re-checked every pass (not just at Start()) so toggling
+	// retention off/on via the web UI takes effect without a restart.
+	if currentPolicy == policyNone {
+		log.Debug("skipping clip cleanup: retention policy is none",
+			logger.String("operation", "clip_cleanup_skip"))
+		return false
+	}
+
+	if strings.TrimSpace(exportCfg.Path) == "" {
+		log.Debug("skipping clip cleanup: export path not configured",
+			logger.String("operation", "clip_cleanup_skip"))
+		return false
+	}
+
+	// Skip the pass when the export directory is not a usable directory.
+	// When audio export is disabled the directory is never created (it is
+	// made lazily on the first clip save), and in Docker the clips volume
+	// may be unmounted. Without this guard the usage-based path below calls
+	// GetDiskUsage against a missing directory and warns on every interval.
+	// The check runs each pass so re-enabling export (which recreates
+	// the directory) resumes cleanup without a restart. The DB reconcile
+	// crawler is a separate task that must run regardless of export state.
+	switch state, statErr := classifyExportDir(exportCfg.Path); state {
+	case exportDirMissing:
+		// Benign default state when export is off: log at Debug and skip.
+		log.Debug("skipping clip cleanup: export directory does not exist",
+			logger.String("path", exportCfg.Path),
+			logger.Error(statErr),
+			logger.String("operation", "clip_cleanup_skip"))
+		return false
+	case exportDirBad:
+		// Genuine access failure or a non-directory path: log at Warn so a
+		// real misconfiguration still surfaces. statErr is nil when the path
+		// exists but is not a directory.
+		fields := []logger.Field{
+			logger.String("path", exportCfg.Path),
+			logger.String("operation", "clip_cleanup_skip"),
+		}
+		if statErr != nil {
+			fields = append(fields, logger.Error(statErr))
+		}
+		log.Warn("skipping clip cleanup: export path is not a usable directory", fields...)
+		return false
+	case exportDirUsable:
+		// Fall through to run the cleanup pass.
+	}
+
+	log.Info("starting clip cleanup task",
+		logger.String("timestamp", time.Now().Format(time.RFC3339)),
+		logger.String("policy", currentPolicy),
+		logger.String("operation", "clip_cleanup_task"))
+
+	if currentPolicy == "age" {
+		result := diskmanager.AgeBasedCleanup(quitChan, dataStore)
+		if result.Err != nil {
+			log.Error("age-based cleanup failed",
+				logger.Error(result.Err),
+				logger.String("operation", "age_based_cleanup"))
+		} else {
+			log.Info("age-based cleanup completed",
+				logger.Int("clips_removed", result.ClipsRemoved),
+				logger.Int("disk_utilization_percent", result.DiskUtilization),
+				logger.Bool("more_work", result.MoreWork),
+				logger.String("operation", "age_based_cleanup"))
+		}
+		return result.MoreWork
+	}
+
+	if currentPolicy == "usage" {
+		currentRetention := exportCfg.Retention
+		baseDir := exportCfg.Path
+
+		skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&currentRetention, baseDir)
+		if err != nil {
+			log.Warn("failed to check disk usage",
+				logger.Error(err),
+				logger.Bool("continuing_with_cleanup", true),
+				logger.String("operation", "usage_based_cleanup"))
+		} else if skip {
+			log.Debug("disk usage below threshold, skipping cleanup",
+				logger.Int("disk_utilization_percent", utilization),
+				logger.String("operation", "usage_based_cleanup"))
+			return false
+		}
+
+		result := diskmanager.UsageBasedCleanup(quitChan, dataStore)
+		if result.Err != nil {
+			log.Error("usage-based cleanup failed",
+				logger.Error(result.Err),
+				logger.String("operation", "usage_based_cleanup"))
+		} else {
+			log.Info("usage-based cleanup completed",
+				logger.Int("clips_removed", result.ClipsRemoved),
+				logger.Int("disk_utilization_percent", result.DiskUtilization),
+				logger.Bool("more_work", result.MoreWork),
+				logger.String("operation", "usage_based_cleanup"))
+		}
+		return result.MoreWork
+	}
+
+	return false
 }
 
 // cleanupHLSWithTimeout runs HLS cleanup asynchronously with a timeout to prevent blocking shutdown
