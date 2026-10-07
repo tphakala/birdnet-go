@@ -517,3 +517,101 @@ func TestPrepareInitialCleanup_QuitDuringScanIsNotAnError(t *testing.T) {
 	assert.Empty(t, files)
 	assert.NoError(t, result.Err, "a scan cancelled by shutdown is not an error")
 }
+
+func TestDeletionRun_SlowDeletionLengthensTheWait(t *testing.T) {
+	t.Parallel()
+	const latency = 200 * time.Millisecond
+
+	t.Run("age", func(t *testing.T) {
+		t.Parallel()
+		files := makeDrainFiles(t, t.TempDir(), 1)
+		// The fake clock advances by one tick per now call, so the two calls
+		// around a deletion measure exactly one tick.
+		run, env := newTestRun(t, func(e *drainTestEnv, _ *deletionRun) { e.tick = latency })
+
+		runAge(files, run)
+
+		require.Len(t, env.sleeps, 1)
+		assert.Equal(t, slowDeletionBackoffFactor*latency, env.sleeps[0])
+	})
+
+	t.Run("usage", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		files := makeDrainFiles(t, dir, 1)
+		run, env := newTestRun(t, func(e *drainTestEnv, _ *deletionRun) { e.tick = latency })
+
+		_, _, _, _, err := processUsageDeletionLoop(files, buildSpeciesSubDirCountMap(files), newUsageLoopTestParams(1000, 500, 0, 0), dir, run)
+
+		require.NoError(t, err)
+		require.Len(t, env.sleeps, 1)
+		assert.Equal(t, slowDeletionBackoffFactor*latency, env.sleeps[0])
+	})
+}
+
+func TestDeletionRun_InterruptedBatchPauseStopsBeforeTheNextFile(t *testing.T) {
+	t.Parallel()
+	files := makeDrainFiles(t, t.TempDir(), 5)
+	// Sleeps in order: attempt 1, attempt 2, batch pause. The pause reports an
+	// interruption without closing quit, so only the pause's own result can
+	// stop the run.
+	run, env := newTestRun(t, func(e *drainTestEnv, _ *deletionRun) { e.failSleepAt = 3 })
+
+	deleted, stats := runAge(files, run)
+
+	assert.Equal(t, []string{files[0].Path, files[1].Path}, deleted)
+	assert.Equal(t, stopQuit, stats.StopReason)
+	assert.False(t, stats.MoreWork)
+	assert.Equal(t, [][]string{{files[0].Path, files[1].Path}}, env.releases)
+	assert.FileExists(t, files[2].Path, "nothing is deleted after the pause was interrupted")
+}
+
+func TestDeletionRun_SpentBudgetWithNothingDeletedAsksForNoFollowUp(t *testing.T) {
+	t.Parallel()
+	files := makeDrainFiles(t, t.TempDir(), 3)
+	for i := range files {
+		files[i].Locked = true
+	}
+	// A boundary is due at the first file (zero batch duration) and the budget is
+	// already spent, with nothing deletable in the list.
+	run, _ := newTestRun(t, func(_ *drainTestEnv, r *deletionRun) {
+		r.cfg.maxBatchDuration = 0
+		r.cfg.runBudget = 0
+	})
+
+	deleted, stats := runAge(files, run)
+
+	assert.Empty(t, deleted)
+	assert.Equal(t, stopTimeBudget, stats.StopReason)
+	assert.False(t, stats.MoreWork, "a budget stop that deleted nothing must not trigger a rescan loop")
+}
+
+// TestNewDeletionRun_ReadsLiveSettingsAndLocks pins the production wiring of
+// the closures. It replaces the global settings snapshot, so it is not parallel.
+func TestNewDeletionRun_ReadsLiveSettingsAndLocks(t *testing.T) {
+	baseDir := t.TempDir()
+	settings := conftest.NewTestSettings().WithAudioExport(baseDir, "wav", "96k").Apply()
+	settings.Realtime.Audio.Export.Retention.Policy = "age"
+	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
+
+	start := newRetentionSnapshot(baseDir, &settings.Realtime.Audio.Export.Retention)
+	db := &lockedDB{MockDB: &MockDB{}, locked: []string{"2020/01/locked.wav"}}
+	run := newDeletionRun("age", make(chan struct{}), db, baseDir, false, &start)
+
+	assert.False(t, run.settingsChanged(), "unchanged settings must not end the run")
+
+	settings.Realtime.Audio.Export.Retention.MinClips++
+	assert.True(t, run.settingsChanged(), "an edited tracked setting must end the run")
+
+	locked, err := run.lockedClips()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"2020/01/locked.wav"}, locked, "the lock list comes from the run's database")
+}
+
+// lockedDB is a MockDB that reports a fixed list of locked clip paths.
+type lockedDB struct {
+	*MockDB
+	locked []string
+}
+
+func (d *lockedDB) GetLockedNotesClipPaths() ([]string, error) { return d.locked, nil }

@@ -16,6 +16,7 @@ type drainTestEnv struct {
 	sleeps          []time.Duration // every requested wait, in order
 	quit            chan struct{}
 	quitAfterSleeps int // close quit during the Nth sleep (0: never)
+	failSleepAt     int // make the Nth sleep report an interruption without closing quit (0: never)
 
 	lockedCalls     int
 	sleepsAtLock    []int                            // len(sleeps) when each lock list read happened
@@ -59,6 +60,9 @@ func newTestRun(t *testing.T, opts ...func(*drainTestEnv, *deletionRun)) (*delet
 			case <-env.quit:
 				return false
 			default:
+			}
+			if env.failSleepAt > 0 && len(env.sleeps) == env.failSleepAt {
+				return false
 			}
 			if env.quitAfterSleeps > 0 && len(env.sleeps) == env.quitAfterSleeps {
 				close(env.quit)
