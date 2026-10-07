@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +13,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 )
 
 // Compile-time interface compliance check.
@@ -317,5 +320,91 @@ func TestNextCleanupDelay(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tt.want, nextCleanupDelay(tt.first, tt.moreWork, tt.interval))
 		})
+	}
+}
+
+// TestRunClipCleanupLoop_SchedulesFromPassResult verifies the monitor loop's
+// wiring around nextCleanupDelay: the first wait is the startup delay, a pass
+// that reports more work is followed by the short follow-up delay, and the
+// interval is re-read before every wait so a hot-reloaded value applies.
+func TestRunClipCleanupLoop_SchedulesFromPassResult(t *testing.T) {
+	t.Parallel()
+
+	const (
+		startInterval   = 30 * time.Minute
+		changedInterval = 20 * time.Minute
+	)
+	// interval() is read once before the first wait and once after each pass.
+	intervals := []time.Duration{startInterval, startInterval, changedInterval}
+	passResults := []bool{true, false} // more work, then done
+
+	var (
+		waits         []time.Duration
+		intervalReads int
+		passes        int
+	)
+	quit := make(chan struct{})
+	wait := func(_ <-chan struct{}, d time.Duration) bool {
+		waits = append(waits, d)
+		return len(waits) <= len(passResults) // stop at the wait after the last pass
+	}
+	pass := func() bool {
+		moreWork := passResults[passes]
+		passes++
+		return moreWork
+	}
+	interval := func() time.Duration {
+		d := intervals[intervalReads]
+		intervalReads++
+		return d
+	}
+
+	runClipCleanupLoop(quit, wait, pass, interval)
+
+	assert.Equal(t, []time.Duration{
+		clipCleanupStartupDelay,  // first run
+		clipCleanupFollowUpDelay, // the pass left work
+		changedInterval,          // the pass finished; the interval was re-read
+	}, waits)
+	assert.Equal(t, len(passResults), passes)
+}
+
+// TestRunClipCleanupPass_ReturnsMoreWork verifies that a pass reports the
+// cleanup's MoreWork for both policies, which is what lets the monitor start
+// the next run soon after a budget-limited run.
+func TestRunClipCleanupPass_ReturnsMoreWork(t *testing.T) {
+	// Not parallel: the pass reads the global settings snapshot.
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+
+	for _, policy := range []string{"age", "usage"} {
+		for _, moreWork := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/moreWork=%v", policy, moreWork), func(t *testing.T) {
+				settings := conftest.GetTestSettings()
+				settings.Realtime.Audio.Export.Path = t.TempDir()
+				settings.Realtime.Audio.Export.Retention.Policy = policy
+				conftest.SetTestSettings(settings)
+
+				calls := map[string]int{}
+				cleanupFor := func(name string) func(<-chan struct{}, diskmanager.Interface) diskmanager.CleanupResult {
+					return func(<-chan struct{}, diskmanager.Interface) diskmanager.CleanupResult {
+						calls[name]++
+						return diskmanager.CleanupResult{MoreWork: moreWork}
+					}
+				}
+				deps := clipCleanupDeps{
+					ageCleanup:   cleanupFor("age"),
+					usageCleanup: cleanupFor("usage"),
+					shouldSkipUsage: func(*conf.RetentionSettings, string) (bool, int, error) {
+						return false, 0, nil // do not skip: the usage cleanup runs
+					},
+				}
+
+				got := runClipCleanupPass(make(chan struct{}), nil, &deps)
+
+				assert.Equal(t, map[string]int{policy: 1}, calls, "only the %s cleanup runs, once", policy)
+				assert.Equal(t, moreWork, got)
+			})
+		}
 	}
 }

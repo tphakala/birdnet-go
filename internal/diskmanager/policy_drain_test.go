@@ -266,22 +266,63 @@ func TestDeletionRun_LockChangesHonoredAtBoundary(t *testing.T) {
 	})
 }
 
-func TestDeletionRun_RefreshesLocksAfterTheBatchPause(t *testing.T) {
+// pauseSlept reports whether the first batch pause has been slept: with a
+// batch of 2, the sleeps are attempt 1, attempt 2, then the pause.
+func pauseSlept(e *drainTestEnv) bool { return len(e.sleeps) >= 3 }
+
+// TestDeletionRun_ChecksRunAfterTheBatchPause verifies that endBatch makes its
+// stop decisions after the batch pause, so a change that happens during the
+// pause is acted on before the next deletion, not one batch later. Each
+// fixture flips only once the pause has been slept.
+func TestDeletionRun_ChecksRunAfterTheBatchPause(t *testing.T) {
 	t.Parallel()
-	files := makeDrainFiles(t, t.TempDir(), 4)
-	run, env := newTestRun(t, func(e *drainTestEnv, _ *deletionRun) {
-		e.lockedClips = func(int) ([]string, error) { return nil, nil }
+
+	t.Run("a lock taken during the pause keeps the file", func(t *testing.T) {
+		t.Parallel()
+		files := makeDrainFiles(t, t.TempDir(), 4)
+		run, env := newTestRun(t, func(e *drainTestEnv, _ *deletionRun) {
+			e.lockedClips = func(int) ([]string, error) {
+				if pauseSlept(e) {
+					return []string{filepath.Base(files[2].Path)}, nil
+				}
+				return nil, nil
+			}
+		})
+
+		runAge(files, run)
+
+		require.GreaterOrEqual(t, len(env.sleeps), 3)
+		require.Equal(t, deletionBatchPause, env.sleeps[2], "the third wait is the batch pause")
+		assert.FileExists(t, files[2].Path, "locked during the pause")
+		assert.NoFileExists(t, files[3].Path)
 	})
 
-	runAge(files, run)
+	t.Run("a settings change during the pause stops the run", func(t *testing.T) {
+		t.Parallel()
+		files := makeDrainFiles(t, t.TempDir(), 4)
+		run, _ := newTestRun(t, func(e *drainTestEnv, _ *deletionRun) {
+			e.settingsChanged = func(int) bool { return pauseSlept(e) }
+		})
 
-	// Sleeps in order: attempt 1, attempt 2, batch pause. The boundary's lock
-	// read (call 1) must come after the pause, so a lock taken during the pause
-	// is seen before the next deletion.
-	require.GreaterOrEqual(t, len(env.sleepsAtLock), 2)
-	require.GreaterOrEqual(t, len(env.sleeps), 3)
-	require.Equal(t, deletionBatchPause, env.sleeps[2], "the third wait is the batch pause")
-	assert.Equal(t, 3, env.sleepsAtLock[1], "the boundary lock read happens after the batch pause")
+		deleted, stats := runAge(files, run)
+
+		assert.Len(t, deleted, 2, "no deletion after the pause that saw the change")
+		assert.Equal(t, stopSettingsChanged, stats.StopReason)
+	})
+
+	t.Run("a budget spent during the pause stops the run", func(t *testing.T) {
+		t.Parallel()
+		files := makeDrainFiles(t, t.TempDir(), 4)
+		run, _ := newTestRun(t, func(_ *drainTestEnv, r *deletionRun) {
+			// The two attempts take 200 ms; only the 5 s pause spends the budget.
+			r.cfg.runBudget = time.Second
+		})
+
+		deleted, stats := runAge(files, run)
+
+		assert.Len(t, deleted, 2, "no deletion after the pause that spent the budget")
+		assert.Equal(t, stopTimeBudget, stats.StopReason)
+	})
 }
 
 func TestDeletionRun_LockRefreshErrorStops(t *testing.T) {
