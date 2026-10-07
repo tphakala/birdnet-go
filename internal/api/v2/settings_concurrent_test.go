@@ -33,7 +33,8 @@ const (
 	// summaryLimit that getTestSettings sets, so a rejected update leaves a value
 	// outside the range the same-section check accepts, and base plus the largest
 	// offset a scenario adds must stay inside the validated 10-1000 range, since
-	// an out-of-range value is reset by validation instead of being rejected.
+	// an out-of-range value is reset to 10 by validation
+	// (internal/conf/validate_realtime.go:170-172) instead of being rejected.
 	concurrentSummaryLimitBase = 200
 
 	// readDuringWriteSummaryLimit is the summaryLimit written while readers run
@@ -365,7 +366,8 @@ func TestRaceConditionScenarios(t *testing.T) {
 
 // makeSettingsUpdate sends a PATCH to the section and returns an error when the
 // handler returns one or the response status is not 200. HandleError writes a
-// 4xx/5xx response and returns nil, so the status must be checked as well.
+// 4xx/5xx response and returns nil (internal/api/v2/apicore/errors.go:131,
+// 182-184), so the status must be checked as well.
 func makeSettingsUpdate(t *testing.T, controller *Controller, section string, update any) error {
 	t.Helper()
 
