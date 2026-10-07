@@ -42,9 +42,13 @@ const (
 	// writes. It is a heuristic; it is not measured how much it helps.
 	deletionBatchPause = 5 * time.Second
 
-	// maxCleanupRunDuration is the time budget of one run. When it is spent the
-	// run stops at the next batch boundary and a new run rescans, which bounds
-	// how stale the scan snapshot (species counts, age cutoff) can get.
+	// maxCleanupRunDuration is the deletion time budget of one run. Its clock
+	// starts in begin, after the scan and sort. When it is spent the run
+	// stops at the next batch boundary and a new run rescans, which bounds how
+	// long one scan snapshot (file list, species counts, age cutoff) is used.
+	// The snapshot is older than that by the scan time. Locks and settings are
+	// re-checked at each boundary, and clips that arrive after the scan are
+	// not in the snapshot, so they are never deleted by this run.
 	maxCleanupRunDuration = 30 * time.Minute
 )
 
