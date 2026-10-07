@@ -18,6 +18,7 @@ type drainTestEnv struct {
 	quitAfterSleeps int // close quit during the Nth sleep (0: never)
 
 	lockedCalls     int
+	sleepsAtLock    []int                            // len(sleeps) when each lock list read happened
 	lockedClips     func(call int) ([]string, error) // nil: lock refresh disabled
 	settingsChanged func(call int) bool              // nil: never changed
 	settingsCalls   int
@@ -78,6 +79,7 @@ func newTestRun(t *testing.T, opts ...func(*drainTestEnv, *deletionRun)) (*delet
 		run.lockedClips = func() ([]string, error) {
 			call := env.lockedCalls
 			env.lockedCalls++
+			env.sleepsAtLock = append(env.sleepsAtLock, len(env.sleeps))
 			return env.lockedClips(call)
 		}
 	}

@@ -225,14 +225,19 @@ func (r *deletionRun) releaseBatch() {
 }
 
 // endBatch closes the current batch at a boundary. It releases the batch's
-// database references, then checks quit, the time budget and the settings,
-// refreshes the lock state of the unvisited files in remaining, and pauses
-// when the batch wrote anything. It returns false, with stopReason set, when
-// the run must end.
+// database references and pauses when the batch wrote anything. Then it checks
+// quit, the time budget and the settings, and refreshes the lock state of the
+// unvisited files in remaining, so each of those decisions is the last step
+// before deletion resumes. It returns false, with stopReason set, when the run
+// must end.
 func (r *deletionRun) endBatch(remaining []FileInfo) bool {
 	wrote := len(r.batch) > 0
 	r.releaseBatch()
 
+	if wrote && !r.sleep(r.quit, r.cfg.batchPause) {
+		r.stopReason = stopQuit
+		return false
+	}
 	select {
 	case <-r.quit:
 		r.stopReason = stopQuit
@@ -249,10 +254,6 @@ func (r *deletionRun) endBatch(remaining []FileInfo) bool {
 	}
 	if err := r.refreshLocks(remaining); err != nil {
 		r.failLockRefresh(err)
-		return false
-	}
-	if wrote && !r.sleep(r.quit, r.cfg.batchPause) {
-		r.stopReason = stopQuit
 		return false
 	}
 	r.lastBoundaryAt = r.now()

@@ -248,6 +248,24 @@ func TestDeletionRun_LockChangesHonoredAtBoundary(t *testing.T) {
 	})
 }
 
+func TestDeletionRun_RefreshesLocksAfterTheBatchPause(t *testing.T) {
+	t.Parallel()
+	files := makeDrainFiles(t, t.TempDir(), 4)
+	run, env := newTestRun(t, func(e *drainTestEnv, _ *deletionRun) {
+		e.lockedClips = func(int) ([]string, error) { return nil, nil }
+	})
+
+	runAge(files, run)
+
+	// Sleeps in order: attempt 1, attempt 2, batch pause. The boundary's lock
+	// read (call 1) must come after the pause, so a lock taken during the pause
+	// is seen before the next deletion.
+	require.GreaterOrEqual(t, len(env.sleepsAtLock), 2)
+	require.GreaterOrEqual(t, len(env.sleeps), 3)
+	require.Equal(t, deletionBatchPause, env.sleeps[2], "the third wait is the batch pause")
+	assert.Equal(t, 3, env.sleepsAtLock[1], "the boundary lock read happens after the batch pause")
+}
+
 func TestDeletionRun_LockRefreshErrorStops(t *testing.T) {
 	t.Parallel()
 
