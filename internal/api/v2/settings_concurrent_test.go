@@ -1,7 +1,6 @@
 // Package api v2 settings concurrent tests - leverages Go 1.25 features:
-// - testing/synctest for deterministic concurrent testing
 // - sync.WaitGroup.Go() for cleaner goroutine management
-// - T.Attr() and T.Output() for enhanced test metadata and reporting
+// - T.Attr() for enhanced test metadata
 //
 // LLM GUIDANCE for updating concurrent tests:
 //  1. Use sync.WaitGroup.Go(func()) instead of wg.Add(1) + go func() + defer wg.Done()
@@ -26,6 +25,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+)
+
+const (
+	// concurrentSummaryLimitBase is the base for every summaryLimit that the
+	// TestConcurrentUpdates scenarios send. It must differ from the baseline
+	// summaryLimit that getTestSettings sets, so a rejected update leaves a value
+	// outside the range the same-section check accepts, and base plus the largest
+	// offset a scenario adds must stay inside the validated 10-1000 range, since
+	// an out-of-range value is reset by validation instead of being rejected.
+	concurrentSummaryLimitBase = 200
+
+	// readDuringWriteSummaryLimit is the summaryLimit written while readers run
+	// in the "Read during write" race scenario. It differs from the baseline.
+	readDuringWriteSummaryLimit = 999
 )
 
 // TestConcurrentUpdates verifies the system handles concurrent updates safely
@@ -76,10 +89,16 @@ func TestConcurrentUpdates(t *testing.T) {
 			controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 100), DisableSaveSettings: true}
 			controller.Settings.Store(getTestSettings(t))
 
+			if tt.scenario == "same-section" {
+				// The final-value check below only means something if the baseline
+				// lies outside the range of values the updates send.
+				initial := controller.Settings.Load().Realtime.Dashboard.SummaryLimit
+				require.False(t, initial >= concurrentSummaryLimitBase && initial < concurrentSummaryLimitBase+tt.concurrency,
+					"baseline summaryLimit %d must lie outside the range the updates send", initial)
+			}
+
 			var wg sync.WaitGroup
 			errorsChan := make(chan error, tt.concurrency)
-			successCount := 0
-			var successMutex sync.Mutex
 
 			// Use Go 1.25 WaitGroup.Go() for cleaner goroutine management
 			// Note: synctest.Test() can cause deadlocks with background goroutines that use time.Sleep
@@ -89,7 +108,8 @@ func TestConcurrentUpdates(t *testing.T) {
 				// Use WaitGroup.Go() for automatic Add/Done management (Go 1.25)
 				// This eliminates the need for manual wg.Add(1) and defer wg.Done()
 				wg.Go(func() {
-					_ = runConcurrentScenario(t, tt.scenario, goroutineID, controller, e, errorsChan, &successMutex, &successCount)
+					// Errors are reported through errorsChan, so the return value is not needed.
+					_ = runConcurrentScenario(t, tt.scenario, goroutineID, controller, e, errorsChan)
 				})
 			}
 			wg.Wait()
@@ -110,25 +130,23 @@ func TestConcurrentUpdates(t *testing.T) {
 			// For same-section updates, verify one of the values "won"
 			if tt.scenario == "same-section" {
 				limit := settings.Realtime.Dashboard.SummaryLimit
-				assert.True(t, limit >= 100 && limit < 100+tt.concurrency,
+				assert.GreaterOrEqual(t, limit, concurrentSummaryLimitBase,
+					"Final value should be one of the concurrent updates")
+				assert.Less(t, limit, concurrentSummaryLimitBase+tt.concurrency,
 					"Final value should be one of the concurrent updates")
 			}
-
-			// Use T.Output() for structured logging
-			output := t.Output()
-			_, _ = fmt.Fprintf(output, "Scenario %s: %d successful operations\n", tt.scenario, successCount)
 		})
 	}
 }
 
 // runConcurrentScenario executes a specific concurrent test scenario
-func runConcurrentScenario(t *testing.T, scenario string, goroutineID int, controller *Controller, e *echo.Echo, errorsChan chan error, successMutex *sync.Mutex, successCount *int) error {
+func runConcurrentScenario(t *testing.T, scenario string, goroutineID int, controller *Controller, e *echo.Echo, errorsChan chan error) error {
 	t.Helper()
 	switch scenario {
 	case "same-section":
-		return runSameSectionScenario(t, goroutineID, controller, errorsChan, successMutex, successCount)
+		return runSameSectionScenario(t, goroutineID, controller, errorsChan)
 	case "different-sections":
-		return runDifferentSectionsScenario(t, goroutineID, controller, errorsChan, successMutex, successCount)
+		return runDifferentSectionsScenario(t, goroutineID, controller, errorsChan)
 	case "read-write":
 		return runReadWriteScenario(t, goroutineID, controller, e, errorsChan)
 	case "rapid-sequential":
@@ -136,35 +154,33 @@ func runConcurrentScenario(t *testing.T, scenario string, goroutineID int, contr
 	case "save-disk":
 		return runSaveLogicScenario(t, goroutineID, controller, errorsChan)
 	default:
-		return fmt.Errorf("unknown scenario: %s", scenario)
+		err := fmt.Errorf("unknown scenario: %s", scenario)
+		errorsChan <- err
+		return err
 	}
 }
 
 // runSameSectionScenario handles concurrent updates to the same section
-func runSameSectionScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error, successMutex *sync.Mutex, successCount *int) error {
+func runSameSectionScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
 	t.Helper()
 	update := map[string]any{
-		"summaryLimit": 100 + goroutineID,
+		"summaryLimit": concurrentSummaryLimitBase + goroutineID,
 	}
 	err := makeSettingsUpdate(t, controller, "dashboard", update)
 	if err != nil {
 		errorsChan <- err
-	} else {
-		successMutex.Lock()
-		*successCount++
-		successMutex.Unlock()
 	}
 	return err
 }
 
 // runDifferentSectionsScenario handles updates to different sections
-func runDifferentSectionsScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error, successMutex *sync.Mutex, successCount *int) error {
+func runDifferentSectionsScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
 	t.Helper()
 	sections := []string{"dashboard", "mqtt", "birdnet", "weather", "audio"}
 	section := sections[goroutineID%len(sections)]
 
 	updates := map[string]any{
-		"dashboard": map[string]any{"summaryLimit": 100 + goroutineID},
+		"dashboard": map[string]any{"summaryLimit": concurrentSummaryLimitBase + goroutineID},
 		"mqtt":      map[string]any{"topic": fmt.Sprintf("topic-%d", goroutineID)},
 		"birdnet":   map[string]any{"threshold": 0.1 + float64(goroutineID)*0.01},
 		"weather":   map[string]any{"pollInterval": 60 + goroutineID},
@@ -174,10 +190,6 @@ func runDifferentSectionsScenario(t *testing.T, goroutineID int, controller *Con
 	err := makeSettingsUpdate(t, controller, section, updates[section])
 	if err != nil {
 		errorsChan <- err
-	} else {
-		successMutex.Lock()
-		*successCount++
-		successMutex.Unlock()
 	}
 	return err
 }
@@ -188,7 +200,7 @@ func runReadWriteScenario(t *testing.T, goroutineID int, controller *Controller,
 	if goroutineID%2 == 0 {
 		// Write operation
 		update := map[string]any{
-			"summaryLimit": 100 + goroutineID,
+			"summaryLimit": concurrentSummaryLimitBase + goroutineID,
 		}
 		err := makeSettingsUpdate(t, controller, "dashboard", update)
 		if err != nil {
@@ -204,6 +216,9 @@ func runReadWriteScenario(t *testing.T, goroutineID int, controller *Controller,
 	ctx.SetParamValues("dashboard")
 
 	err := controller.GetSectionSettings(ctx)
+	if err == nil && rec.Code != http.StatusOK {
+		err = fmt.Errorf("GET dashboard: status %d: %s", rec.Code, rec.Body.String())
+	}
 	if err != nil {
 		errorsChan <- err
 	}
@@ -215,7 +230,7 @@ func runRapidSequentialScenario(t *testing.T, goroutineID int, controller *Contr
 	t.Helper()
 	for j := range 3 {
 		update := map[string]any{
-			"summaryLimit": 100 + goroutineID*10 + j,
+			"summaryLimit": concurrentSummaryLimitBase + goroutineID*10 + j,
 		}
 		err := makeSettingsUpdate(t, controller, "dashboard", update)
 		if err != nil {
@@ -230,7 +245,7 @@ func runRapidSequentialScenario(t *testing.T, goroutineID int, controller *Contr
 func runSaveLogicScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
 	t.Helper()
 	update := map[string]any{
-		"summaryLimit": 100 + goroutineID,
+		"summaryLimit": concurrentSummaryLimitBase + goroutineID,
 	}
 	err := makeSettingsUpdate(t, controller, "dashboard", update)
 	if err != nil {
@@ -262,9 +277,9 @@ func TestRaceConditionScenarios(t *testing.T) {
 
 				wg.Go(func() {
 					update := map[string]any{
-						"summaryLimit": 999,
+						"summaryLimit": readDuringWriteSummaryLimit,
 					}
-					_ = makeSettingsUpdate(t, controller, "dashboard", update)
+					assert.NoError(t, makeSettingsUpdate(t, controller, "dashboard", update))
 				})
 
 				for range 10 {
@@ -276,16 +291,19 @@ func TestRaceConditionScenarios(t *testing.T) {
 						ctx.SetParamValues("dashboard")
 
 						err := controller.GetSectionSettings(ctx)
-						require.NoError(t, err)
+						assert.NoError(t, err) //nolint:testifylint // require would call runtime.Goexit off the test goroutine
 						assert.Equal(t, http.StatusOK, rec.Code)
 
 						var response map[string]any
 						err = json.Unmarshal(rec.Body.Bytes(), &response)
-						require.NoError(t, err)
+						assert.NoError(t, err)
 					})
 				}
 
 				wg.Wait()
+
+				// The write must have landed, not just returned without a handler error.
+				assert.Equal(t, readDuringWriteSummaryLimit, controller.Settings.Load().Realtime.Dashboard.SummaryLimit)
 			},
 		},
 		{
@@ -293,6 +311,14 @@ func TestRaceConditionScenarios(t *testing.T) {
 			description: "Verify nested field updates don't corrupt parent objects",
 			scenario: func(t *testing.T, controller *Controller) {
 				t.Helper()
+				// Start with both flags false so a rejected write, or a merge that
+				// resets a sibling field, leaves a flag false after both writes set true.
+				baseline := getTestSettings(t)
+				baseline.Realtime.Dashboard.Thumbnails.Summary = false
+				baseline.Realtime.Dashboard.Thumbnails.Recent = false
+				controller.Settings.Store(baseline)
+				wantProvider := baseline.Realtime.Dashboard.Thumbnails.ImageProvider
+
 				var wg sync.WaitGroup
 
 				wg.Go(func() {
@@ -301,23 +327,25 @@ func TestRaceConditionScenarios(t *testing.T) {
 							"summary": true,
 						},
 					}
-					_ = makeSettingsUpdate(t, controller, "dashboard", update)
+					assert.NoError(t, makeSettingsUpdate(t, controller, "dashboard", update))
 				})
 
 				wg.Go(func() {
 					update := map[string]any{
 						"thumbnails": map[string]any{
-							"recent": false,
+							"recent": true,
 						},
 					}
-					_ = makeSettingsUpdate(t, controller, "dashboard", update)
+					assert.NoError(t, makeSettingsUpdate(t, controller, "dashboard", update))
 				})
 
 				wg.Wait()
 
-				// Verify both fields were updated
-				settings := controller.Settings.Load()
-				assert.NotNil(t, settings.Realtime.Dashboard.Thumbnails)
+				// Both writes must have landed and the untouched sibling must be intact
+				thumbnails := controller.Settings.Load().Realtime.Dashboard.Thumbnails
+				assert.True(t, thumbnails.Summary)
+				assert.True(t, thumbnails.Recent)
+				assert.Equal(t, wantProvider, thumbnails.ImageProvider)
 			},
 		},
 	}
@@ -335,7 +363,9 @@ func TestRaceConditionScenarios(t *testing.T) {
 	}
 }
 
-// Helper function for making settings updates
+// makeSettingsUpdate sends a PATCH to the section and returns an error when the
+// handler returns one or the response status is not 200. HandleError writes a
+// 4xx/5xx response and returns nil, so the status must be checked as well.
 func makeSettingsUpdate(t *testing.T, controller *Controller, section string, update any) error {
 	t.Helper()
 
@@ -352,5 +382,11 @@ func makeSettingsUpdate(t *testing.T, controller *Controller, section string, up
 	ctx.SetParamNames("section")
 	ctx.SetParamValues(section)
 
-	return controller.UpdateSectionSettings(ctx)
+	if err := controller.UpdateSectionSettings(ctx); err != nil {
+		return err
+	}
+	if rec.Code != http.StatusOK {
+		return fmt.Errorf("PATCH %s: status %d: %s", section, rec.Code, rec.Body.String())
+	}
+	return nil
 }
