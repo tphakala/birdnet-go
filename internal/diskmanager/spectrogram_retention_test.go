@@ -169,8 +169,9 @@ func ageRun(t *testing.T, baseDir string, db *MockDB) {
 	files, err := GetAudioFiles(baseDir, allowedFileTypes, db)
 	require.NoError(t, err)
 	cutoff := time.Now().Add(-time.Hour).Unix()
+	run, _ := newTestRun(t)
 	_, deleted, _, loopErr := processAgeBasedDeletionLoop(files, buildSpeciesTotalCountMap(files),
-		0, maxDeletionsPerRun, true, make(chan struct{}), cutoff)
+		0, true, run, cutoff)
 	require.NoError(t, loopErr)
 	releaseDeletedClipPaths(db, deleted, baseDir, "age", true)
 }
