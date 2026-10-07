@@ -275,12 +275,14 @@ func (r *deletionRun) afterDeletionAttempt(path string, deleted bool, latency ti
 	return true
 }
 
-// moreWork reports whether a follow-up run should start soon: the run
-// deleted something and stopped on a settings change, or on its time budget
-// while remainingWork says deletable candidates are left. A run that deleted
-// nothing never asks for one, so protected files cannot cause a rescan loop.
+// moreWork reports whether a follow-up run should start soon: the run stopped
+// on a settings change (the follow-up takes a fresh settings snapshot, so it
+// does not stop on that change again), or on its time budget after deleting
+// something while remainingWork says deletable candidates are left. A run that
+// deleted nothing never asks for one on its budget, so protected files cannot
+// cause a rescan loop.
 func (r *deletionRun) moreWork(remainingWork bool) bool {
-	return r.deletedTotal > 0 && (r.stopReason == stopSettingsChanged || (r.stopReason == stopTimeBudget && remainingWork))
+	return r.stopReason == stopSettingsChanged || (r.stopReason == stopTimeBudget && r.deletedTotal > 0 && remainingWork)
 }
 
 // finish releases the tail batch. It is safe to call more than once.

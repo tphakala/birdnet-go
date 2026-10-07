@@ -2404,7 +2404,7 @@ func classifyExportDir(path string) (exportDirState, error) {
 const clipCleanupStartupDelay = 5 * time.Minute
 
 // clipCleanupFollowUpDelay is the wait before the next run when a run stopped
-// on its time budget (or a settings change) with work left (capped at the check interval).
+// on its time budget with work left, or on a settings change (capped at the check interval).
 const clipCleanupFollowUpDelay = 1 * time.Minute
 
 // cleanupInterval returns the configured cleanup check interval, read from the
@@ -2433,7 +2433,7 @@ func nextCleanupDelay(first, moreWork bool, interval time.Duration) time.Duratio
 
 // clipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
 // The first run starts after clipCleanupStartupDelay (or the check interval when
-// that is shorter). After a run that stopped with work left, the next starts after
+// that is shorter). After a run that asked for a follow-up (CleanupResult.MoreWork), the next starts after
 // clipCleanupFollowUpDelay; otherwise after the check interval.
 func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	log := GetLogger()
@@ -2463,8 +2463,8 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 }
 
 // runClipCleanupPass runs one retention cleanup pass for the current policy. It
-// returns true when the run stopped with deletable work left, so the monitor
-// schedules the next run soon.
+// returns true when the run asked for a follow-up (CleanupResult.MoreWork), so the
+// monitor schedules the next run soon.
 func runClipCleanupPass(quitChan <-chan struct{}, dataStore datastore.Interface) (moreWork bool) {
 	log := GetLogger()
 

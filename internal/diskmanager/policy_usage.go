@@ -246,8 +246,8 @@ func updateUsageStateAfterDeletion(file *FileInfo, speciesMonthCount map[string]
 //  6. A quit signal is received (stopQuit)
 //  7. Too many deletion errors occurred (stopTooManyErrors)
 //
-// A run that stops at 3 or 4 after deleting something while usage is still at or
-// above the threshold sets stats.MoreWork.
+// A run that stops at 4 sets stats.MoreWork, and one that stops at 3 does when it
+// deleted something and usage is still at or above the threshold.
 func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map[string]int,
 	params *usageLoopParams, baseDir string,
 	run *deletionRun) (deletedCount int, deletedNames []string, lastKnownGoodUsagePercent int, stats cleanupStats, loopErr error) {

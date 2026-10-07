@@ -320,7 +320,7 @@ func TestDeletionRun_SettingsChangeEndsRun(t *testing.T) {
 
 		assert.Empty(t, deleted)
 		assert.Equal(t, stopSettingsChanged, stats.StopReason)
-		assert.False(t, stats.MoreWork, "a run that deleted nothing never asks for a follow-up")
+		assert.True(t, stats.MoreWork, "the new settings should take effect soon, even when nothing was deleted yet")
 	})
 }
 

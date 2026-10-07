@@ -283,8 +283,8 @@ func decrementSpeciesCount(speciesTotalCount map[string]int, species string) {
 //  5. A quit signal is received (stopQuit)
 //  6. Too many deletion errors occurred (stopTooManyErrors)
 //
-// A run that stops at 2 or 3 after deleting something while old files remain
-// sets stats.MoreWork.
+// A run that stops at 3 sets stats.MoreWork, and one that stops at 2 does when it
+// deleted something and old files remain.
 func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]int,
 	minClipsPerSpecies int, keepSpectrograms bool,
 	run *deletionRun, retentionCutoffUnix int64) (deletedCount int, deletedNames []string, stats cleanupStats, loopErr error) {

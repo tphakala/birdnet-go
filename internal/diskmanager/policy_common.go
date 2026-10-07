@@ -662,9 +662,9 @@ type CleanupResult struct {
 	Err             error // Any error that occurred during cleanup
 	ClipsRemoved    int   // Number of clips that were removed
 	DiskUtilization int   // Current disk utilization percentage after cleanup
-	// MoreWork reports that the run stopped before finishing, after deleting at
-	// least one clip, with deletable candidates left (its time budget ran out,
-	// or the retention settings changed). The caller should schedule the next
+	// MoreWork reports that the run stopped before finishing (the retention
+	// settings changed, or its time budget ran out after it deleted at least one
+	// clip with deletable candidates left). The caller should schedule the next
 	// run soon instead of waiting the full check interval.
 	MoreWork bool
 }
@@ -695,11 +695,11 @@ type cleanupStats struct {
 	BytesFreed      int64 // total size of the audio files actually deleted this run
 	// StopReason says why the run ended (the stop* constants).
 	StopReason string
-	// MoreWork reports that the run stopped on its time budget or a settings
-	// change after deleting at least one clip, with candidates left, so a
+	// MoreWork reports that the run stopped on a settings change, or on its time
+	// budget after deleting at least one clip with candidates left, so a
 	// follow-up run is worth starting soon. A remaining candidate can still be
-	// individually locked or min-clips-blocked; a follow-up run that deletes
-	// nothing never sets it again.
+	// individually locked or min-clips-blocked; a budget stop in a run that
+	// deleted nothing never sets it.
 	MoreWork bool
 	// Batches is the number of deletion batches whose database references were
 	// released.
