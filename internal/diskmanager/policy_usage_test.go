@@ -1075,7 +1075,7 @@ func newUsageLoopTestParams(totalBytes, usedBytes uint64, threshold, minClips in
 // TestProcessUsageDeletionLoopStats verifies that the per-run cleanupStats
 // summary (added for GitHub #3892 / #4059 diagnosability) correctly tallies
 // every outcome bucket, including the two distinct reasons the loop can stop
-// early (usage satisfied vs. max-deletions-per-run reached), without changing
+// early (usage satisfied vs. run time budget spent), without changing
 // which files get deleted.
 func TestProcessUsageDeletionLoopStats(t *testing.T) {
 	t.Parallel()
