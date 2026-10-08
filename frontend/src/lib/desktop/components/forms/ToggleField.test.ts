@@ -161,6 +161,16 @@ describe('ToggleField', () => {
     expect(screen.getByText('This is an error message')).toBeInTheDocument();
   });
 
+  it('shows the not-allowed cursor on the default label when disabled', () => {
+    render(ToggleField, {
+      props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), disabled: true },
+    });
+
+    const label = screen.getByText('Test Toggle').closest('label');
+    expect(label).toHaveClass('cursor-not-allowed');
+    expect(label).not.toHaveClass('cursor-pointer');
+  });
+
   it('applies error styling when error is present', () => {
     render(ToggleField, {
       props: {

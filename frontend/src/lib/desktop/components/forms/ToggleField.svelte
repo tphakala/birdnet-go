@@ -158,7 +158,13 @@
   {:else}
     <div class="flex items-center justify-between">
       <div class="flex-1">
-        <label for={fieldId} class="flex cursor-pointer items-start gap-2 p-0">
+        <label
+          for={fieldId}
+          class={cn(
+            'flex items-start gap-2 p-0',
+            disabled ? 'cursor-not-allowed' : 'cursor-pointer'
+          )}
+        >
           {#if icon}
             {@const Icon = icon}
             <Icon class="size-4 text-[var(--color-base-content)] opacity-60 mt-0.5 shrink-0" />
