@@ -29,7 +29,10 @@ interface ParsedTag {
   attributes: ParsedAttribute[];
 }
 
-/** Index of the brace that closes the one opened at `start`, skipping nested braces. */
+/**
+ * Index of the brace that closes the one opened at `start`, skipping nested braces. Throws when
+ * there is none, so a malformed source fails the test instead of looping.
+ */
 function closingBrace(source: string, start: number): number {
   let depth = 0;
   for (let i = start; i < source.length; i++) {
@@ -37,7 +40,7 @@ function closingBrace(source: string, start: number): number {
     if (char === '{') depth++;
     else if (char === '}' && --depth === 0) return i;
   }
-  return -1;
+  throw new Error(`unclosed brace at offset ${start}`);
 }
 
 /** Parses the attributes of a tag whose text starts right after the component name. */
@@ -73,6 +76,7 @@ function parseAttributes(source: string, from: number): { attributes: ParsedAttr
         i = end + 1;
       } else if (quote === '"' || quote === "'") {
         const end = source.indexOf(quote, i + 1);
+        if (end < 0) throw new Error(`unclosed quote at offset ${i}`);
         attributes.push({ name, value: source.slice(i + 1, end) });
         i = end + 1;
       } else {
@@ -117,9 +121,23 @@ function labelTargets(source: string): string[] {
   for (const match of text.matchAll(/<FormField\b/g)) {
     const { attributes } = parseAttributes(text, match.index + match[0].length);
     const id = attributes.find(attribute => attribute.name === 'id');
-    if (id?.value) targets.push(id.value);
+    // FormField renders its <label for> only when it has a label
+    if (id?.value && attributes.some(attribute => attribute.name === 'label')) {
+      targets.push(id.value);
+    }
   }
   return targets;
+}
+
+/** True when `target` names `id` as a whole token, not as part of a longer id. */
+function pointsAt(target: string, id: string): boolean {
+  const isIdChar = (char: string) => /[\w-]/.test(char);
+  for (let at = target.indexOf(id); at >= 0; at = target.indexOf(id, at + 1)) {
+    const before = at === 0 ? '' : target.charAt(at - 1);
+    const after = target.charAt(at + id.length);
+    if (!isIdChar(before) && !isIdChar(after)) return true;
+  }
+  return false;
 }
 
 /** Why a tag has no value-independent accessible name, or null when it has one. */
@@ -130,8 +148,19 @@ function namingProblem(tag: ParsedTag, targets: string[]): string | null {
   const id = tag.attributes.find(attribute => attribute.name === 'id');
   if (!id) return 'has no label, aria-label or id';
   const idText = (id.value ?? '').replace(/^\{|\}$/g, '').replace(/^['"]|['"]$/g, '');
-  if (idText && targets.some(target => target.includes(idText))) return null;
+  if (idText && targets.some(target => pointsAt(target, idText))) return null;
   return `has id ${id.value} but no <label for> or FormField id points at it in this file`;
+}
+
+/** Runs a scan of one source and names the file when the scan throws on malformed markup. */
+function inFile<T>(path: string, scan: () => T): T {
+  try {
+    return scan();
+  } catch (error) {
+    throw new Error(`${path}: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    });
+  }
 }
 
 describe('SelectDropdown naming guard', () => {
@@ -140,15 +169,18 @@ describe('SelectDropdown naming guard', () => {
   );
 
   it('finds the dropdown uses it is meant to guard', () => {
-    const count = productionFiles.reduce((sum, [, source]) => sum + findTags(source).length, 0);
+    const count = productionFiles.reduce(
+      (sum, [path, source]) => sum + inFile(path, () => findTags(source)).length,
+      0
+    );
     expect(count).toBeGreaterThan(50);
   });
 
   it('gives every SelectDropdown use a name that does not depend on the selected value', () => {
     const problems: string[] = [];
     for (const [path, source] of productionFiles) {
-      const targets = labelTargets(source);
-      for (const tag of findTags(source)) {
+      const targets = inFile(path, () => labelTargets(source));
+      for (const tag of inFile(path, () => findTags(source))) {
         const problem = namingProblem(tag, targets);
         if (problem) problems.push(`${path}:${tag.line} <${tag.component}> ${problem}`);
       }
@@ -184,6 +216,41 @@ describe('SelectDropdown naming guard', () => {
           <LanguageSelector id="lang" /><label for="lang">L</label>
         `)
       ).toEqual([null, null, null, null, null, null]);
+    });
+
+    it('flags an id that is only part of a label target', () => {
+      const [shorter] = problemsIn('<label for="timePeriod">T</label><SelectDropdown id="time" />');
+      expect(shorter).toContain('has id time but no <label for>');
+      const [dashed] = problemsIn(
+        '<label for="notification-type">T</label><SelectDropdown id="type" />'
+      );
+      expect(dashed).toContain('has id type but no <label for>');
+    });
+
+    it('does not count a FormField without a label as a label target', () => {
+      const [problem] = problemsIn('<FormField id="p"><SelectDropdown id="p" /></FormField>');
+      expect(problem).toContain('has id p but no <label for>');
+    });
+
+    it('accepts an id used inside a conditional for expression', () => {
+      expect(
+        problemsIn(`
+          <label for={ready ? FIELD_ID : undefined}>F</label><SelectDropdown id={FIELD_ID} />
+          <label for={loading ? undefined : 'wizard-field'}>W</label><SelectDropdown id="wizard-field" />
+        `)
+      ).toEqual([null, null]);
+    });
+
+    it('throws instead of looping on an unclosed brace or quote', () => {
+      expect(() => findTags('<SelectDropdown onChange={f(')).toThrow('unclosed');
+      expect(() => findTags('<SelectDropdown id="mine')).toThrow('unclosed');
+      expect(() => labelTargets('<FormField label={t(')).toThrow('unclosed');
+    });
+
+    it('names the file when a scan throws', () => {
+      expect(() =>
+        inFile('src/Broken.svelte', () => findTags('<SelectDropdown onChange={f('))
+      ).toThrow('src/Broken.svelte: unclosed brace');
     });
 
     it('ignores a dropdown mentioned in an HTML comment and attributes inside handlers', () => {
