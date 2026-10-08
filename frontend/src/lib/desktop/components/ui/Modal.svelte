@@ -150,8 +150,10 @@
      */
     describeBody?: boolean;
     /**
-     * Replaces the title heading. It receives the id the dialog is named by
-     * (aria-labelledby), which the heading inside it must carry as its `id`.
+     * Replaces the title heading. The dialog is named from `title` through
+     * aria-labelledby, which points at `titleId`, so a heading in this snippet
+     * must carry `id={titleId}` and `title` must be set; without `title`, pass
+     * `aria-labelledby` yourself.
      */
     header?: Snippet<[{ titleId: string }]>;
     children?: Snippet;
