@@ -7,7 +7,10 @@
  * A use is named when its tag has one of:
  * - the `label` prop (visible label rendered by the component),
  * - the `aria-label` prop,
- * - an `id` that a `<label for>` (or a FormField `id`) in the same file points at.
+ * - an `id` that a `<label for>` (or the `id` of a FormField that has a label) in the same file
+ *   points at.
+ * A naming prop counts only with a non-empty value, and a `for` expression that can evaluate to
+ * nothing counts only for the dropdowns listed in CONDITIONAL_LABEL_FOR.
  */
 import { describe, it, expect } from 'vitest';
 
@@ -140,17 +143,55 @@ function pointsAt(target: string, id: string): boolean {
   return false;
 }
 
-/** Why a tag has no value-independent accessible name, or null when it has one. */
-function namingProblem(tag: ParsedTag, targets: string[]): string | null {
-  const names = new Set(tag.attributes.map(attribute => attribute.name));
-  if (names.has('label') || names.has('aria-label')) return null;
+/** True for a for expression that can evaluate to nothing, so the association is not certain. */
+function isConditional(target: string): boolean {
+  return /\?|&&|\|\|/.test(target);
+}
 
-  const id = tag.attributes.find(attribute => attribute.name === 'id');
+/** True when a naming prop has a value that is not empty: a bare or empty prop names nothing. */
+function hasNamingValue(attribute: ParsedAttribute | undefined): boolean {
+  if (attribute?.value === undefined) return false;
+  const value = attribute.value.trim();
+  return value !== '' && !['', "''", '""', '``'].includes(value.replace(/^\{|\}$/g, '').trim());
+}
+
+/**
+ * Why a tag has no value-independent accessible name, or null when it has one.
+ * `allowConditionalFor` says whether a conditional `for` expression may stand as the name for
+ * the dropdown with that id (for a dropdown that is only rendered while the condition holds).
+ */
+function namingProblem(
+  tag: ParsedTag,
+  targets: string[],
+  allowConditionalFor: (idText: string) => boolean = () => false
+): string | null {
+  const attribute = (name: string) => tag.attributes.find(candidate => candidate.name === name);
+  if (hasNamingValue(attribute('label')) || hasNamingValue(attribute('aria-label'))) return null;
+
+  const id = attribute('id');
   if (!id) return 'has no label, aria-label or id';
   const idText = (id.value ?? '').replace(/^\{|\}$/g, '').replace(/^['"]|['"]$/g, '');
-  if (idText && targets.some(target => pointsAt(target, idText))) return null;
+  if (!idText) return 'has no label, aria-label or id';
+  const pointing = targets.filter(target => pointsAt(target, idText));
+  if (pointing.some(target => !isConditional(target))) return null;
+  if (pointing.length > 0) {
+    return allowConditionalFor(idText)
+      ? null
+      : `has id ${id.value} but only a conditional <label for> points at it, which can leave it unnamed`;
+  }
   return `has id ${id.value} but no <label for> or FormField id points at it in this file`;
 }
+
+/**
+ * Dropdowns named only by a conditional `for`, each rendered only while that condition holds, so
+ * the label never points at a missing control. Pinned by "every label points at a rendered
+ * control" in AudioSourceStep.test.ts and "labels the species language dropdown only once it
+ * is rendered" in LocationLanguageStep.test.ts.
+ */
+const CONDITIONAL_LABEL_FOR = new Map<string, string[]>([
+  ['/src/lib/desktop/features/wizard/steps/AudioSourceStep.svelte', ['DEVICE_FIELD_ID']],
+  ['/src/lib/desktop/features/wizard/steps/LocationLanguageStep.svelte', ['wizard-species-locale']],
+]);
 
 /** Runs a scan of one source and names the file when the scan throws on malformed markup. */
 function inFile<T>(path: string, scan: () => T): T {
@@ -181,7 +222,9 @@ describe('SelectDropdown naming guard', () => {
     for (const [path, source] of productionFiles) {
       const targets = inFile(path, () => labelTargets(source));
       for (const tag of inFile(path, () => findTags(source))) {
-        const problem = namingProblem(tag, targets);
+        const problem = namingProblem(tag, targets, idText =>
+          (CONDITIONAL_LABEL_FOR.get(path) ?? []).includes(idText)
+        );
         if (problem) problems.push(`${path}:${tag.line} <${tag.component}> ${problem}`);
       }
     }
@@ -228,9 +271,8 @@ describe('SelectDropdown naming guard', () => {
     });
 
     it('finds the whole id after an earlier partial match in the same target', () => {
-      expect(
-        problemsIn(`<label for={timeout ? 'time' : x}>T</label><SelectDropdown id="time" />`)
-      ).toEqual([null]);
+      expect(pointsAt('timeout time', 'time')).toBe(true);
+      expect(pointsAt('timeout', 'time')).toBe(false);
     });
 
     it('does not count a FormField without a label as a label target', () => {
@@ -238,11 +280,53 @@ describe('SelectDropdown naming guard', () => {
       expect(problem).toContain('has id p but no <label for>');
     });
 
-    it('accepts an id used inside a conditional for expression', () => {
+    it('rejects an id that a conditional for expression points at', () => {
+      const [first, second] = problemsIn(`
+        <label for={ready ? FIELD_ID : undefined}>F</label><SelectDropdown id={FIELD_ID} />
+        <label for={loading ? undefined : 'wizard-field'}>W</label><SelectDropdown id="wizard-field" />
+      `);
+      expect(first).toContain('only a conditional <label for>');
+      expect(second).toContain('only a conditional <label for>');
+    });
+
+    it('accepts a conditional for expression only where the caller allows it', () => {
+      const source = `<label for={loading ? undefined : 'wizard-field'}>W</label><SelectDropdown id="wizard-field" />`;
+      const targets = labelTargets(source);
+      const [tag] = findTags(source);
+      expect(namingProblem(tag, targets, idText => idText === 'wizard-field')).toBeNull();
+      expect(namingProblem(tag, targets, () => false)).not.toBeNull();
+    });
+
+    it('accepts a conditional for expression when another naming source applies', () => {
       expect(
         problemsIn(`
-          <label for={ready ? FIELD_ID : undefined}>F</label><SelectDropdown id={FIELD_ID} />
-          <label for={loading ? undefined : 'wizard-field'}>W</label><SelectDropdown id="wizard-field" />
+          <label for={ready ? FIELD_ID : undefined}>F</label>
+          <SelectDropdown id={FIELD_ID} aria-label="Field" />
+        `)
+      ).toEqual([null]);
+    });
+
+    it('rejects empty naming props and boolean aria-label', () => {
+      const unnamed = 'has no label, aria-label or id';
+      expect(
+        problemsIn(`
+          <SelectDropdown aria-label="" />
+          <SelectDropdown label="" />
+          <SelectDropdown aria-label=" " />
+          <SelectDropdown aria-label />
+          <SelectDropdown label />
+          <SelectDropdown aria-label={''} />
+          <SelectDropdown label={""} />
+          <SelectDropdown aria-label={\`\`} />
+        `)
+      ).toEqual(Array(8).fill(unnamed));
+    });
+
+    it('lets another naming source apply when a naming prop is empty', () => {
+      expect(
+        problemsIn(`
+          <label for="x">X</label><SelectDropdown id="x" aria-label="" />
+          <SelectDropdown label="" aria-label="Named" />
         `)
       ).toEqual([null, null]);
     });
