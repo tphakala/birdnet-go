@@ -212,7 +212,7 @@
     height: 1rem;
     border-radius: 9999px;
     background-color: color-mix(in srgb, var(--color-warning) 90%, transparent);
-    color: white;
+    color: var(--color-warning-content);
     font-size: 0.625rem;
     font-weight: 500;
   }

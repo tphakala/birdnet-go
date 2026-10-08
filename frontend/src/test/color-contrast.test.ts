@@ -3,7 +3,7 @@
  * Tests color combinations from the actual Tailwind v4 theme (src/styles/tailwind.css)
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
@@ -661,5 +661,63 @@ describe('Status colors with their content color', () => {
         });
       }
     }
+  });
+});
+
+describe('Components pair a status fill with its content color', () => {
+  const libDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'lib');
+  const sources = readdirSync(libDir, { recursive: true, encoding: 'utf8' })
+    .filter(file => file.endsWith('.svelte'))
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the component directory
+    .map(file => ({ file, text: readFileSync(join(libDir, file), 'utf8') }));
+
+  /** A status fill used in full, not as a translucent tint (`bg-[var(--color-error)]/10`). */
+  const SOLID_FILL = /bg-\[var\(--color-(?:info|success|warning|error)\)\](?![/\w])/g;
+  const QUOTES = ['"', "'", '`'];
+
+  /** The quoted string around `index`, which holds the whole class list of a Tailwind class string. */
+  function quotedAround(text: string, index: number): string {
+    const start = Math.max(...QUOTES.map(quote => text.lastIndexOf(quote, index)));
+    const ends = QUOTES.map(quote => text.indexOf(quote, index)).filter(end => end >= 0);
+    return text.slice(start + 1, Math.min(...ends));
+  }
+
+  it('scans the component sources', () => {
+    expect(sources.length).toBeGreaterThan(100);
+  });
+
+  it('no class string puts white text on a solid status token fill', () => {
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(SOLID_FILL)]
+        .filter(match => /(^|\s)text-white(\s|$)/.test(quotedAround(text, match.index)))
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('no class string fades a solid status token fill on hover', () => {
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(SOLID_FILL)]
+        .filter(match =>
+          /hover:bg-\[var\(--color-(?:info|success|warning|error)\)\]\//.test(
+            quotedAround(text, match.index)
+          )
+        )
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('no style rule puts white text on a status token fill', () => {
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(/\{[^{}]*\}/g)]
+        .filter(
+          ([rule]) =>
+            /background(?:-color)?:[^;]*var\(--color-(?:info|success|warning|error)\)/.test(rule) &&
+            /(?<![-\w])color:\s*(?:white|#fff(?:fff)?)\s*;/i.test(rule)
+        )
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
   });
 });
