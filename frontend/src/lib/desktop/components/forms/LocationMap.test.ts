@@ -923,18 +923,27 @@ describe('LocationMap place search', () => {
     try {
       const { props, rerender } = await mount({ placeSearch: true });
       const map = mapAt(0);
+      // The mock map never animates, so let it report the zoom it was last asked for.
+      let zoom = 10;
+      vi.mocked(map.getZoom).mockImplementation(() => zoom);
+      vi.mocked(map.easeTo).mockImplementation(options => {
+        zoom = options.zoom ?? zoom;
+        return map;
+      });
       vi.mocked(map.easeTo).mockClear();
 
       await searchAndPick();
       await rerender({ ...props, latitude: 60.167, longitude: 24.944 });
       await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
 
-      // The sync that follows the parent update keeps the zoom of the map
+      // The sync that follows the parent update keeps the chosen zoom
       expect(map.easeTo).toHaveBeenLastCalledWith({
         center: [24.944, 60.167],
-        zoom: 10,
+        zoom: 11,
         duration: COORDINATE_SYNC_DURATION_MS,
       });
+      // The flight has to end before that sync reads the zoom
+      expect(COORDINATE_SYNC_DURATION_MS).toBeLessThan(COORDINATE_SYNC_DEBOUNCE_MS);
     } finally {
       vi.useRealTimers();
     }

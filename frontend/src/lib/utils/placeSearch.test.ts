@@ -176,14 +176,21 @@ describe('placeSearch', () => {
 
     it('skips features with missing or out-of-range coordinates or ids', async () => {
       const valid = { ...HELSINKI_FEATURE, properties: { ...HELSINKI_FEATURE.properties } };
+      // Each broken feature has an id of its own, so only its geometry can drop it.
+      const withGeometry = (osmId: number, geometry: unknown) => ({
+        ...valid,
+        properties: { ...valid.properties, osm_id: osmId },
+        geometry,
+      });
       respondWith(
         featureCollection(
           valid,
-          { ...valid, geometry: { type: 'Point', coordinates: [24.9] } },
-          { ...valid, geometry: { type: 'Point', coordinates: ['24.9', '60.1'] } },
-          { ...valid, geometry: { type: 'Point', coordinates: [24.9, 91] } },
-          { ...valid, geometry: { type: 'Point', coordinates: [181, 60] } },
-          { ...valid, geometry: null },
+          withGeometry(101, { type: 'Point', coordinates: [24.9] }),
+          withGeometry(102, { type: 'Point', coordinates: ['24.9', '60.1'] }),
+          withGeometry(103, { type: 'Point', coordinates: [24.9, 91] }),
+          withGeometry(104, { type: 'Point', coordinates: [181, 60] }),
+          withGeometry(105, { type: 'Point', coordinates: [24.9, Number.NaN] }),
+          withGeometry(106, null),
           { ...valid, properties: { name: 'No id' } },
           { ...valid, properties: { ...valid.properties, osm_id: undefined, osm_type: 'N' } },
           { ...valid, properties: { ...valid.properties, osm_id: 7, name: undefined } },

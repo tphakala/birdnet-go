@@ -163,6 +163,19 @@ describe('PlaceSearch', () => {
       expect(fetchedQueries()).toEqual(['Ii']);
     });
 
+    it('does not search a blank query on Enter or with the submit button', async () => {
+      renderSearch();
+
+      await type('   ');
+      await press('Enter');
+      await fireEvent.click(screen.getByRole('button', { name: SUBMIT }));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      // No "searching" and no "nothing found" either: nothing was asked
+      expect(screen.getByRole('status').textContent).toBe('');
+    });
+
     it('does not search an empty query on Enter', async () => {
       renderSearch();
 
@@ -245,6 +258,18 @@ describe('PlaceSearch', () => {
       expect(input()).toHaveAttribute('aria-activedescendant', first.id);
     });
 
+    it('selects a result with a mouse click on the focused input', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(HELSINKI, HELSINGBORG)));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+      const onSelect = renderSearch();
+      await searchFor('Hels');
+
+      // A real press on an option must not blur the input, which would close the list first
+      await user.click(screen.getAllByRole('option')[0]);
+
+      expect(onSelect).toHaveBeenCalledExactlyOnceWith(HELSINKI_PLACE);
+    });
+
     it('selects a result with a click', async () => {
       fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(HELSINKI, HELSINGBORG)));
       const onSelect = renderSearch();
@@ -302,6 +327,27 @@ describe('PlaceSearch', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+
+    it('drops the results on screen when the text changes', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(HELSINKI, HELSINGBORG)));
+      const onSelect = renderSearch();
+      await searchFor('Hels');
+      await press('ArrowDown');
+      expect(screen.getAllByRole('option')).toHaveLength(2);
+
+      await type('Helsin');
+
+      // The old list is gone before anything is searched, so it cannot be clicked
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(input()).not.toHaveAttribute('aria-activedescendant');
+
+      await press('Enter');
+
+      // Enter searches the new text instead of picking the old active option
+      expect(screen.getByRole('status')).not.toHaveTextContent(RESULTS);
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(fetchedQueries().at(-1)).toBe('Helsin');
     });
 
     it('aborts the request of a search the input moved on from', async () => {
