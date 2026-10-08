@@ -29,7 +29,7 @@ export const ZOOM_STEP_DURATION_MS = 300;
  * placement waits this long when double-tap protection is on.
  */
 export const DOUBLE_TAP_WINDOW_MS = 300;
-/** Zoom of the world overview shown when the coordinates are 0,0. */
+/** Zoom of the world overview the `world` start view uses when the coordinates are 0,0. */
 export const WORLD_OVERVIEW_ZOOM = 1;
 /** Stacking order of the expanded map dialog, above the settings page chrome. */
 export const Z_INDEX_LOCATION_MAP_DIALOG = 9999;
@@ -53,10 +53,10 @@ function wrapLongitude(longitude: number): number {
 export type MapLibreModule = typeof import('maplibre-gl');
 
 /**
- * Which view a map is created in when the coordinates are not set (0,0).
- * `region` is the settings map (zoom 5); `world` shows the whole world. With
- * set coordinates both start at the default zoom, and the expanded map starts
- * at the inline map's current zoom instead.
+ * Which view the inline map is created in when the coordinates are not set
+ * (0,0): `region` is the settings map (zoom 5), `world` shows the whole world
+ * (zoom 1). With set coordinates both start at the default zoom. The expanded
+ * map starts at the inline map's current zoom instead.
  */
 export type LocationMapStartView = 'region' | 'world';
 
@@ -203,7 +203,9 @@ export function createLocationMapController(
   function pick(lat: number, lng: number) {
     if (destroyed) return;
     const roundedLatitude = roundCoordinate(lat);
-    const roundedLongitude = roundCoordinate(wrapLongitude(lng));
+    let roundedLongitude = roundCoordinate(wrapLongitude(lng));
+    // Rounding can land just east of the antimeridian on -180 again.
+    if (roundedLongitude === LONGITUDE_MIN) roundedLongitude = LONGITUDE_MAX;
 
     placeMarker(roundedLatitude, roundedLongitude);
     if (recenterOnPick) {

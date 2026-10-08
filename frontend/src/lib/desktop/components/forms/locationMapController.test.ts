@@ -200,6 +200,8 @@ describe('locationMapController', () => {
       [540.25, -179.75],
       [180, 180],
       [-180, 180],
+      [-179.9996, 180],
+      [180.0004, 180],
       [24.9876, 24.988],
     ])('click at longitude %s on a repeated world copy reports %s', (clicked, reported) => {
       const { map } = create({ showMarker: false });
