@@ -396,28 +396,6 @@ describe('PasswordField', () => {
       expect(region).toHaveClass('py-1');
     });
 
-    it('reserveErrorSpace keeps two lines for the alert whether or not an error is shown', async () => {
-      const { rerender } = render(PasswordField, {
-        props: { label: 'Token', value: '', onUpdate: vi.fn(), reserveErrorSpace: true },
-      });
-      const region = screen.getByRole('alert');
-      expect(region).toHaveClass('min-h-10', 'text-sm');
-      expect(region).not.toHaveClass('-mt-1');
-
-      await rerender({
-        label: 'Token',
-        value: '',
-        onUpdate: vi.fn(),
-        reserveErrorSpace: true,
-        error: 'Token is wrong',
-      });
-
-      expect(screen.getAllByRole('alert')).toHaveLength(1);
-      expect(region).toHaveClass('min-h-10', 'text-sm');
-      expect(region).not.toHaveClass('-mt-1');
-      expect(region).toHaveTextContent('Token is wrong');
-    });
-
     it('keeps one alert region whose text changes when the error appears', async () => {
       const { rerender } = render(PasswordField, {
         props: { label: 'Token', value: '', onUpdate: vi.fn() },

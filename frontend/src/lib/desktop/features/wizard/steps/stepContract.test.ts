@@ -100,7 +100,9 @@ const stepCases: StepCase[] = [
         screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
       );
       await fireEvent.input(
-        await screen.findByLabelText('settings.integration.birdweather.token.label'),
+        await screen.findByRole('textbox', {
+          name: 'settings.integration.birdweather.token.label',
+        }),
         { target: { value: 'abc' } }
       );
     },

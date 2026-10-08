@@ -24,10 +24,10 @@ import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 // Any 24 ASCII letters and digits
 const VALID_TOKEN = 'aB3dEf6hIj9lMn2pQr5tUv8x';
 
-// The token is a masked password field, so it has no textbox role: find it by its label
+// The token is a plain text input, so a browser does not offer to save it as a password
 const TOKEN_LABEL = 'settings.integration.birdweather.token.label';
-const tokenInput = () => screen.getByLabelText(TOKEN_LABEL);
-const findTokenInput = () => screen.findByLabelText(TOKEN_LABEL);
+const tokenInput = () => screen.getByRole('textbox', { name: TOKEN_LABEL });
+const findTokenInput = () => screen.findByRole('textbox', { name: TOKEN_LABEL });
 
 // The accessible names of the three cards
 const PRIVACY = /wizard\.steps\.integration\.privacyFilterLabel/;
@@ -336,30 +336,27 @@ describe('IntegrationStep - BirdWeather token', () => {
 
     const input = tokenInput();
     expect(input).toBeInstanceOf(HTMLInputElement);
-    expect(input).toHaveAttribute('type', 'password');
+    expect(input).toHaveAttribute('type', 'text');
   });
 
-  it('the token field is masked and the reveal button shows it', async () => {
+  it('the token field is a plain text input with no reveal button, so no browser offers to save it as a password', async () => {
     renderStep(IntegrationStep);
     await flushAsync();
     await toggleBirdweather();
     await typeToken(VALID_TOKEN);
 
-    expect(tokenInput()).toHaveAttribute('type', 'password');
-    await fireEvent.click(screen.getByRole('button', { name: 'forms.labels.showPassword' }));
-
     expect(tokenInput()).toHaveAttribute('type', 'text');
     expect(tokenInput()).toHaveValue(VALID_TOKEN);
+    expect(screen.queryByRole('button', { name: 'forms.labels.showPassword' })).toBeNull();
   });
 
-  it('typing in the token or clicking reveal does not toggle BirdWeather', async () => {
+  it('typing in or clicking the token does not toggle BirdWeather', async () => {
     renderStep(IntegrationStep);
     await flushAsync();
     await toggleBirdweather();
 
     await fireEvent.input(tokenInput(), { target: { value: 'abc' } });
     await fireEvent.click(tokenInput());
-    await fireEvent.click(screen.getByRole('button', { name: 'forms.labels.showPassword' }));
 
     expect(screen.getByRole('checkbox', { name: BIRDWEATHER })).toBeChecked();
     expect(tokenInput()).toHaveValue('abc');

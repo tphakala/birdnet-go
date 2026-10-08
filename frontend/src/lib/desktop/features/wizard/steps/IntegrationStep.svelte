@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from 'svelte';
   import { t, type TranslationKey } from '$lib/i18n';
-  import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
+  import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
@@ -14,11 +14,11 @@
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
   const TOKEN_FIELD_ID = generateId('wizard-birdweather-token');
-  // The token is masked like the settings page's, but it is not a login: 'off' keeps
-  // a password manager from filling a saved password into it, which would pass the
-  // format check and be saved as the station id. Browsers may still ignore it; if
-  // one does, switch this to 'new-password'.
-  const TOKEN_AUTOCOMPLETE: 'current-password' | 'new-password' | 'off' = 'off';
+  // The token is a plain text input, not a masked one: a password input makes browsers
+  // offer to save it as a site password after Next and fill a saved password into it,
+  // which would pass the format check and be saved as the station id. 'off' keeps
+  // autofill away from it.
+  const TOKEN_AUTOCOMPLETE = 'off';
 
   // Read synchronously so the first validity report already reflects the saved settings
   const store = get(settingsStore);
@@ -154,11 +154,11 @@
        does not move the card below. -->
   {#if birdweatherEnabled}
     <div class="ml-12 mt-[-0.25rem]">
-      <PasswordField
-        name={TOKEN_FIELD_ID}
+      <TextInput
+        id={TOKEN_FIELD_ID}
         label={t('settings.integration.birdweather.token.label')}
         value={birdweatherId}
-        onUpdate={onTokenUpdate}
+        oninput={onTokenUpdate}
         onblur={onTokenBlur}
         error={showTokenError && blockedReason ? t(blockedReason) : undefined}
         reserveErrorSpace

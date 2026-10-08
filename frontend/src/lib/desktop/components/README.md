@@ -63,7 +63,7 @@ This folder contains **shared components** used across the application. Feature-
 - `FormField.svelte` - Form field wrapper with validation
 - `InlineSlider.svelte` - Inline slider input for compact layouts
 - `NumberField.svelte` - Number input field
-- `PasswordField.svelte` - Password input with show/hide; `reserveErrorSpace` keeps two lines for the error alert so nothing below moves
+- `PasswordField.svelte` - Password input with show/hide
 - `RTSPUrlInput.svelte` - RTSP URL input with validation
 - `RTSPUrlManager.svelte` - Manage multiple RTSP URLs
 - `SelectDropdown.svelte` - Dropdown selection component
@@ -76,7 +76,7 @@ This folder contains **shared components** used across the application. Feature-
 - `StreamChannelControls.svelte` - Adaptive channel handling UI (format display, downmix/left/right selector, stereo energy analysis) shared by the stream add and edit forms
 - `StreamManager.svelte` - Manage multiple video/audio streams
 - `SubnetInput.svelte` - Subnet input with validation
-- `TextInput.svelte` - Text input field
+- `TextInput.svelte` - Text input field; `error` shows an alert and marks the input invalid, `reserveErrorSpace` keeps two lines for that alert so nothing below moves
 - `ToggleField.svelte` - Toggle/switch field; `variant="card"` draws a bordered card that toggles as a whole (icon turns primary while on)
 
 ## Media
