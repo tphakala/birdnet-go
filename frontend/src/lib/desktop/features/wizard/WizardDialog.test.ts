@@ -921,7 +921,7 @@ describe('WizardDialog Accessibility', () => {
       loaders.map((_, i) => ({
         id: `step-${i + 1}`,
         type: 'component' as const,
-        titleKey: `test.step${i + 1}` as TranslationKey,
+        titleKey: `test.step${i + 1}`,
         // eslint-disable-next-line security/detect-object-injection -- i is a bounded test index
         component: () => loaders[i](),
       }))
