@@ -364,6 +364,20 @@ describe('IntegrationStep - BirdWeather token', () => {
     expect(tokenInput()).toHaveValue('abc');
   });
 
+  it('the token field and its label are outside the BirdWeather card', async () => {
+    renderStep(IntegrationStep);
+    await flushAsync();
+    await toggleBirdweather();
+
+    const card = screen.getByRole('checkbox', { name: BIRDWEATHER }).closest('label');
+    expect(card).not.toBeNull();
+    expect(card).not.toContainElement(tokenInput());
+
+    await fireEvent.click(screen.getByText(TOKEN_LABEL));
+
+    expect(screen.getByRole('checkbox', { name: BIRDWEATHER })).toBeChecked();
+  });
+
   it('the token alert keeps its reserved height before and after the error appears', async () => {
     renderStep(IntegrationStep);
     await flushAsync();
@@ -424,13 +438,21 @@ describe('IntegrationStep - BirdWeather token', () => {
     expect(icon(SENTRY)).toHaveClass(primary);
   });
 
-  it('describes each card by its help text, not by a dangling id', async () => {
+  it.each([
+    [
+      /wizard\.steps\.integration\.privacyFilterLabel/,
+      'wizard.steps.integration.privacyFilterHelp',
+    ],
+    [/wizard\.steps\.integration\.birdweatherLabel/, 'wizard.steps.integration.birdweatherHelp'],
+    [
+      /wizard\.steps\.integration\.errorReportingLabel/,
+      'wizard.steps.integration.errorReportingHelp',
+    ],
+  ])('describes the card %s by its help text, not by a dangling id', async (name, help) => {
     renderStep(IntegrationStep);
     await flushAsync();
 
-    const toggle = screen.getByRole('checkbox', { name: BIRDWEATHER });
-
-    expect(toggle).toHaveAccessibleDescription('wizard.steps.integration.birdweatherHelp');
+    expect(screen.getByRole('checkbox', { name })).toHaveAccessibleDescription(help);
   });
 
   type Action = ['toggle'] | ['type', string] | ['blur'];

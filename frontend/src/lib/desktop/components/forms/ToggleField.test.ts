@@ -409,6 +409,56 @@ describe('ToggleField naming and description', () => {
   );
 });
 
+describe('ToggleField disabled, required and error state', () => {
+  it.each(VARIANTS)('disables the switch and ignores clicks when disabled (%s)', async variant => {
+    const onUpdate = vi.fn();
+    render(ToggleField, {
+      props: { label: 'Test Toggle', value: false, onUpdate, disabled: true, variant },
+    });
+    const toggle = screen.getByRole('checkbox');
+
+    expect(toggle).toBeDisabled();
+    await fireEvent.click(screen.getByText('Test Toggle'));
+
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it('the default variant dims its own switch when disabled', () => {
+    render(ToggleField, {
+      props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), disabled: true },
+    });
+
+    expect(screen.getByRole('checkbox')).toHaveClass(
+      'disabled:opacity-50',
+      'disabled:cursor-not-allowed'
+    );
+  });
+
+  it.each(VARIANTS)('marks the switch required and shows the asterisk (%s)', variant => {
+    render(ToggleField, {
+      props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), required: true, variant },
+    });
+
+    expect(screen.getByRole('checkbox')).toBeRequired();
+    expect(screen.getByText('*')).toBeInTheDocument();
+  });
+
+  it.each(VARIANTS)('shows the error text and the error colour on the switch (%s)', variant => {
+    render(ToggleField, {
+      props: {
+        label: 'Test Toggle',
+        value: true,
+        onUpdate: vi.fn(),
+        error: 'Toggle error',
+        variant,
+      },
+    });
+
+    expect(screen.getByText('Toggle error')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox')).toHaveClass('checked:bg-[var(--color-error)]');
+  });
+});
+
 describe('ToggleField error wiring', () => {
   it.each(VARIANTS)('keeps the description and adds the error text to it (%s)', variant => {
     render(ToggleField, {
