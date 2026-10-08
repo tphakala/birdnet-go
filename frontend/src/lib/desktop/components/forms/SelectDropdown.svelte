@@ -313,8 +313,9 @@
     const focusInPopover = dropdownElement?.contains(active) ?? false;
     const focusOnBody = restoreFromBody && (!active || active === document.body);
     if (focusOnBody || focusInPopover) {
-      // From the popover the user was working at the trigger; from body the click was elsewhere,
-      // so the dialog must not scroll back to the trigger
+      // From the popover the user was working at the trigger, so it scrolls into view. From body,
+      // the trigger is either in view (a click on it or on an option) or the click was elsewhere
+      // in the dialog (a background click); either way the dialog must not scroll
       buttonElement?.focus({ preventScroll: !focusInPopover });
     }
     isOpen = false;
