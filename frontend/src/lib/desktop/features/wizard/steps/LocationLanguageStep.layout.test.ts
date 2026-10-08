@@ -1,10 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('$lib/i18n', () => ({
-  t: vi.fn((key: string) => key),
-  getLocale: vi.fn(() => 'en'),
-}));
-
 vi.mock('$lib/utils/api', () => ({
   api: {
     get: vi.fn().mockResolvedValue({ en: 'English' }),
