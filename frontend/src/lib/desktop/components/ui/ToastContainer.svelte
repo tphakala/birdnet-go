@@ -78,7 +78,7 @@
   // list changes and by event handlers, never by the template.
   let focusedToastId: string | null = null;
   // Where focus was before it entered the toasts
-  let returnFocusTo: HTMLElement | null = null;
+  let returnFocusTo: HTMLElement | SVGElement | null = null;
   // Toast ids per region (in region order) as of the previous update, to find a removed toast's neighbours
   let previousOrder: string[][] | null = null;
 
@@ -107,7 +107,8 @@
     // toasts keeps the earlier answer.
     if (focusedToastId === null) {
       const from = event.relatedTarget;
-      returnFocusTo = from instanceof HTMLElement && isOutsideRegions(from) ? from : null;
+      const focusable = from instanceof HTMLElement || from instanceof SVGElement;
+      returnFocusTo = focusable && isOutsideRegions(from) ? from : null;
     }
     focusedToastId = toastId;
   }
