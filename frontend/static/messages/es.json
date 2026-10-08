@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Sin filtrado, cualquier detección por encima del umbral de confianza se acepta inmediatamente. Esto produce típicamente varios falsos positivos al día. Incluso un filtrado bajo mejora significativamente la calidad de los resultados."
         },
+        "rarityFilter": {
+          "title": "Filtro de rareza",
+          "description": "Exigir más detecciones de confirmación para las especies que son raras en tu ubicación",
+          "birdOnlyNote": "El filtro de rareza solo se aplica a los clasificadores de aves. Usa la probabilidad de presencia de cada especie del filtro de rango y solo aumenta el número de confirmaciones que exige el filtro de falsos positivos, nunca lo reduce.",
+          "locationRequiredNote": "No hay ninguna ubicación configurada. El filtro de rareza necesita una ubicación y el filtro de rango para saber lo común que es una especie, por lo que no tiene efecto hasta que configures una.",
+          "enable": {
+            "label": "Activar filtro de rareza",
+            "helpText": "Una especie rara tiene más probabilidades de ser una especie común mal identificada. Si se activa, una especie cuya probabilidad de presencia queda por debajo de una de las franjas siguientes necesita al menos ese número de detecciones de confirmación antes de aceptarse. Cada confirmación es una ventana de análisis, así que los valores más altos requieren un solapamiento mayor."
+          }
+        },
         "rangeFilter": {
           "title": "Filtro de rango",
           "description": "Limitar la detección a especies probables en su región geográfica",
@@ -4977,6 +4987,23 @@
       "numberField": {
         "adjustedToMinimum": "Valor ajustado al mínimo ({value})",
         "adjustedToMaximum": "Valor ajustado al máximo ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "Una especie usa la franja con el límite de presencia más bajo por debajo del cual se encuentra, así que el orden de las franjas no importa. Las especies iguales o superiores a todos los límites no necesitan confirmaciones adicionales.",
+        "emptyState": "No hay franjas configuradas. Añade al menos una franja; el filtro de rareza activado no se puede guardar sin franjas.",
+        "bandLabel": "Franja {number}",
+        "maxOccurrence": {
+          "label": "Presencia inferior a",
+          "helpText": "Se aplica a las especies cuya probabilidad de presencia en tu ubicación es inferior a este valor (de 0 a 1)."
+        },
+        "minDetections": {
+          "label": "Confirmaciones necesarias",
+          "helpText": "Número de detecciones de confirmación necesarias antes de aceptar una detección de estas especies."
+        },
+        "addBand": "Añadir franja",
+        "removeBand": "Eliminar franja {number}",
+        "lastBandRequired": "El filtro de rareza activado necesita al menos una franja. Desactiva el filtro para eliminar todas las franjas.",
+        "maxBandsReached": "Puedes configurar como máximo {max} franjas. Elimina una franja para añadir otra."
       },
       "rtsp": {
         "addNewStream": "Agregar nueva transmisión RTSP",

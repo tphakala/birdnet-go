@@ -40,8 +40,12 @@ func TestOrchestrator_AccessorsNilPrimary_NoPanic(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, scores2)
 
-	assert.Zero(t, o.GetSpeciesOccurrence("Turdus merula_Common Blackbird"))
-	assert.Zero(t, o.GetSpeciesOccurrenceAtTime("Turdus merula_Common Blackbird", time.Now()))
+	occurrence, valid := o.GetSpeciesOccurrence("Turdus merula_Common Blackbird")
+	assert.Zero(t, occurrence)
+	assert.False(t, valid)
+	occurrence, valid = o.GetSpeciesOccurrenceAtTime("Turdus merula_Common Blackbird", time.Now())
+	assert.Zero(t, occurrence)
+	assert.False(t, valid)
 
 	// Must not panic with a nil primary.
 	assert.NotPanics(t, func() { o.RunFilterProcess(time.Now().Format(time.DateOnly), 0) })

@@ -25,6 +25,7 @@ package classifier
 import (
 	"fmt"
 	"maps"
+	"math"
 	"os"
 	"runtime"
 	"sort"
@@ -829,9 +830,16 @@ func (rfs *rangeFilterService) getCachedSpeciesScores(targetDate time.Time, sett
 	// separate pre-call loadState, so the write-path genBefore == genNow check reflects the
 	// exact generation the scores were computed against and cannot spuriously reject a valid
 	// cache write when a reload lands between a pre-call sample and the prediction.
-	speciesScores, _, _, rfState, err := rfs.probableSpecies(targetDate, 0.0, settings)
+	speciesScores, _, filterActive, rfState, err := rfs.probableSpecies(targetDate, 0.0, settings)
 	if err != nil {
 		return nil, err
+	}
+	// Never cache or serve the synthetic fail-open scores (a backend unloaded, or a
+	// reload published no backend, after the caller's checks): they are all zero and
+	// would read as genuine "extremely rare" occurrences. An empty result sends the
+	// caller to its own fallback, which reports the score as not valid.
+	if !filterActive {
+		return map[string]float64{}, nil
 	}
 	genBefore := rfState.generation
 	scores := buildOccurrenceIndex(speciesScores)
@@ -875,41 +883,64 @@ func (rfs *rangeFilterService) getCachedSpeciesScores(targetDate time.Time, sett
 // occurrenceAtTime returns the occurrence probability for a species at a specific
 // time, ported from BirdNET.GetSpeciesOccurrenceAtTime. The caller supplies the
 // settings snapshot (the orchestrator's current settings).
-func (rfs *rangeFilterService) occurrenceAtTime(species string, detectionTime time.Time, settings *conf.Settings) float64 {
+//
+// valid reports whether occurrence is a genuine range-filter prediction for this
+// species. It is false, with occurrence 0, when no backend is loaded, no location is
+// configured, the prediction failed or was the synthetic fail-open fallback, or the
+// species has no geomodel score (including PassUnmappedSpecies backfill), so a caller
+// never mistakes a fallback zero for an "extremely rare" score (the same distinction
+// GetRarityContext's FilterActive makes, #3935).
+func (rfs *rangeFilterService) occurrenceAtTime(species string, detectionTime time.Time, settings *conf.Settings) (occurrence float64, valid bool) {
 	// Fast-path: no backend loaded, occurrence is 0. Lock-free read.
 	if rfs.loadState().backend == nil {
-		return 0.0
+		return 0.0, false
 	}
 
 	// If location not configured, the range filter is not active.
 	if !settings.BirdNET.LocationConfigured {
-		return 0.0
+		return 0.0, false
 	}
 
-	// Try cached scores first.
+	// Try cached scores first. getCachedSpeciesScores never returns (or caches) the
+	// synthetic fail-open scores, so a hit here is a genuine prediction.
 	cachedScores, err := rfs.getCachedSpeciesScores(detectionTime, settings)
 	if err == nil && len(cachedScores) > 0 {
 		if occurrence, found := lookupOccurrence(cachedScores, species); found {
-			return clampOccurrence(occurrence)
+			return indexedOccurrence(occurrence)
 		}
 	}
 
 	// Fallback on cache miss. Anchor to the local calendar day (matching
 	// getCachedSpeciesScores, which keys on the local DateOnly of detectionTime).
 	day := conf.LocalNoon(detectionTime)
-	speciesScores, _, _, _, err := rfs.probableSpecies(day, 0.0, settings)
+	speciesScores, _, filterActive, _, err := rfs.probableSpecies(day, 0.0, settings)
 	if err != nil {
 		rfs.Debug("Error getting probable species for occurrence: %v", err)
-		return 0.0
+		return 0.0, false
+	}
+	// A backend unloaded between the fast-path check and this prediction yields the
+	// synthetic fail-open scores; those are not genuine predictions.
+	if !filterActive {
+		return 0.0, false
 	}
 
 	// Resolve through the same index the cache uses, so a cache miss cannot answer
 	// differently from a cache hit for the same species.
 	if occurrence, found := lookupOccurrence(buildOccurrenceIndex(speciesScores), species); found {
-		return clampOccurrence(occurrence)
+		return indexedOccurrence(occurrence)
 	}
 
-	return 0.0
+	return 0.0, false
+}
+
+// indexedOccurrence converts an occurrence-index value to the (occurrence, valid)
+// pair occurrenceAtTime returns. unscoredOccurrence and NaN are not genuine scores, so
+// they report 0 and not valid; anything else is clamped to [0, 1] and valid.
+func indexedOccurrence(indexed float64) (occurrence float64, valid bool) {
+	if indexed == unscoredOccurrence || math.IsNaN(indexed) {
+		return 0.0, false
+	}
+	return clampOccurrence(indexed), true
 }
 
 // ----- backend builders (moved from birdnet.go / model_onnx.go, converted from

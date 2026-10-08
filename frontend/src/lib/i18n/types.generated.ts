@@ -1852,6 +1852,12 @@ export type TranslationKey =
   | 'settings.main.sections.falsePositiveFilter.levelNames.maximum'
   | 'settings.main.sections.falsePositiveFilter.levelNames.unknown'
   | 'settings.main.sections.falsePositiveFilter.warningOff'
+  | 'settings.main.sections.rarityFilter.title'
+  | 'settings.main.sections.rarityFilter.description'
+  | 'settings.main.sections.rarityFilter.birdOnlyNote'
+  | 'settings.main.sections.rarityFilter.locationRequiredNote'
+  | 'settings.main.sections.rarityFilter.enable.label'
+  | 'settings.main.sections.rarityFilter.enable.helpText'
   | 'settings.main.sections.rangeFilter.title'
   | 'settings.main.sections.rangeFilter.description'
   | 'settings.main.sections.rangeFilter.stationLocation.label'
@@ -3653,6 +3659,17 @@ export type TranslationKey =
   | 'components.audio.loadError'
   | 'components.forms.numberField.adjustedToMinimum' // params: value
   | 'components.forms.numberField.adjustedToMaximum' // params: value
+  | 'components.forms.rarityBands.orderHint'
+  | 'components.forms.rarityBands.emptyState'
+  | 'components.forms.rarityBands.bandLabel' // params: number
+  | 'components.forms.rarityBands.maxOccurrence.label'
+  | 'components.forms.rarityBands.maxOccurrence.helpText'
+  | 'components.forms.rarityBands.minDetections.label'
+  | 'components.forms.rarityBands.minDetections.helpText'
+  | 'components.forms.rarityBands.addBand'
+  | 'components.forms.rarityBands.removeBand' // params: number
+  | 'components.forms.rarityBands.lastBandRequired'
+  | 'components.forms.rarityBands.maxBandsReached' // params: max
   | 'components.forms.rtsp.addNewStream'
   | 'components.forms.rtsp.maxStreamsReached' // params: max
   | 'components.forms.rtsp.cameraPlaceholder'
@@ -4663,6 +4680,9 @@ export type TranslationParams = {
   'components.audio.queuePosition': { position: string | number };
   'components.forms.numberField.adjustedToMinimum': { value: string | number };
   'components.forms.numberField.adjustedToMaximum': { value: string | number };
+  'components.forms.rarityBands.bandLabel': { number: string | number };
+  'components.forms.rarityBands.removeBand': { number: string | number };
+  'components.forms.rarityBands.maxBandsReached': { max: string | number };
   'components.forms.rtsp.maxStreamsReached': { max: string | number };
   'components.forms.subnet.maxSubnetsReached': { max: string | number };
   'components.forms.species.suggestionsAvailable': { count: string | number };

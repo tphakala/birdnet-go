@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Zonder filtering wordt elke detectie boven de betrouwbaarheidsdrempel onmiddellijk geaccepteerd. Dit levert doorgaans meerdere vals-positieven per dag op. Zelfs lage filtering verbetert de resultaatkwaliteit aanzienlijk."
         },
+        "rarityFilter": {
+          "title": "Zeldzaamheidsfilter",
+          "description": "Meer bevestigende detecties vereisen voor soorten die op uw locatie zeldzaam zijn",
+          "birdOnlyNote": "Het zeldzaamheidsfilter geldt alleen voor vogelclassificatoren. Het gebruikt de voorkomenskans per soort uit het bereikfilter en verhoogt alleen het aantal bevestigingen dat het vals positief filter vereist, nooit verlaagt het dat.",
+          "locationRequiredNote": "Er is geen locatie geconfigureerd. Het zeldzaamheidsfilter heeft een locatie en het bereikfilter nodig om te weten hoe algemeen een soort is, dus het heeft geen effect totdat u een locatie instelt.",
+          "enable": {
+            "label": "Zeldzaamheidsfilter inschakelen",
+            "helpText": "Zeldzame soorten zijn vaker een verkeerd herkende algemene soort. Indien ingeschakeld heeft een soort waarvan de voorkomenskans onder een van de onderstaande klassen valt minstens zoveel bevestigende detecties nodig voordat deze wordt geaccepteerd. Elke bevestiging is één analysevenster, dus hogere aantallen vereisen een hogere overlapinstelling."
+          }
+        },
         "rangeFilter": {
           "title": "Bereik Filter",
           "description": "Beperk detectie tot soorten die waarschijnlijk voorkomen in uw geografische regio",
@@ -4977,6 +4987,23 @@
       "numberField": {
         "adjustedToMinimum": "Waarde is gewijzigd in de minimale waarde ({value})",
         "adjustedToMaximum": "Waarde is gewijzigd in de maximale waarde ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "Een soort gebruikt de klasse met de laagste voorkomensgrens waar deze onder valt, dus de volgorde van de klassen maakt niet uit. Soorten op of boven elke grens hebben geen extra bevestigingen nodig.",
+        "emptyState": "Geen klassen geconfigureerd. Voeg minstens één klasse toe; het ingeschakelde zeldzaamheidsfilter kan niet zonder klassen worden opgeslagen.",
+        "bandLabel": "Klasse {number}",
+        "maxOccurrence": {
+          "label": "Voorkomen onder",
+          "helpText": "Geldt voor soorten waarvan de voorkomenskans op uw locatie onder deze waarde ligt (0 tot 1)."
+        },
+        "minDetections": {
+          "label": "Vereiste bevestigingen",
+          "helpText": "Aantal bevestigende detecties dat nodig is voordat een detectie van deze soorten wordt geaccepteerd."
+        },
+        "addBand": "Klasse toevoegen",
+        "removeBand": "Klasse {number} verwijderen",
+        "lastBandRequired": "Het ingeschakelde zeldzaamheidsfilter heeft minstens één klasse nodig. Schakel het filter uit om alle klassen te verwijderen.",
+        "maxBandsReached": "U kunt maximaal {max} klassen configureren. Verwijder een klasse om een nieuwe toe te voegen."
       },
       "rtsp": {
         "addNewStream": "Nieuwe RTSP Stream Toevoegen",

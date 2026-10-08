@@ -59,6 +59,7 @@ func CloneSettings(src *Settings) *Settings {
 	dst.Realtime.Audio.Sources = cloneAudioSources(src.Realtime.Audio.Sources)
 	dst.Realtime.Audio.SoxAudioTypes = slices.Clone(src.Realtime.Audio.SoxAudioTypes)
 	dst.Realtime.Audio.Equalizer.Filters = slices.Clone(src.Realtime.Audio.Equalizer.Filters)
+	dst.Realtime.RarityFilter.Bands = slices.Clone(src.Realtime.RarityFilter.Bands)
 
 	// Realtime.Dashboard.
 	if src.Realtime.Dashboard.CustomColors != nil {

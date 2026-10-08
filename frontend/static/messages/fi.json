@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Ilman suodatusta jokainen luottamuskynnyksen ylittävä havainto hyväksytään välittömästi. Tämä tuottaa tyypillisesti useita vääriä positiivisia päivässä. Jo matala suodatus parantaa tulosten laatua merkittävästi."
         },
+        "rarityFilter": {
+          "title": "Harvinaisuussuodatin",
+          "description": "Vaadi enemmän vahvistavia havaintoja lajeille, jotka ovat sijainnissasi harvinaisia",
+          "birdOnlyNote": "Harvinaisuussuodatin koskee vain lintuluokittelijoita. Se käyttää aluesuodattimen esiintymistodennäköisyyttä kullekin lajille ja ainoastaan nostaa väärien positiivisten suodattimen vaatimaa vahvistusten määrää, ei koskaan laske sitä.",
+          "locationRequiredNote": "Sijaintia ei ole määritetty. Harvinaisuussuodatin tarvitsee sijainnin ja aluesuodattimen tietääkseen, kuinka yleinen laji on, joten se ei vaikuta ennen kuin asetat sijainnin.",
+          "enable": {
+            "label": "Ota harvinaisuussuodatin käyttöön",
+            "helpText": "Harvinainen laji on todennäköisemmin väärin tunnistettu yleinen laji. Kun suodatin on käytössä, laji, jonka esiintymistodennäköisyys osuu alla olevaan vyöhykkeeseen, tarvitsee vähintään vyöhykkeen määrän vahvistavia havaintoja ennen hyväksymistä. Jokainen vahvistus on yksi analyysi-ikkuna, joten suuremmat määrät vaativat suuremman päällekkäisyysasetuksen."
+          }
+        },
         "rangeFilter": {
           "title": "Aluesuodatin",
           "description": "Rajoita tunnistus lajeihin, jotka ovat todennäköisiä maantieteellisellä alueellasi",
@@ -4977,6 +4987,23 @@
       "numberField": {
         "adjustedToMinimum": "Arvo säädetty minimiin ({value})",
         "adjustedToMaximum": "Arvo säädetty maksimiin ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "Laji käyttää vyöhykettä, jonka esiintymisraja on pienin sen yläpuolella olevista, joten vyöhykkeiden järjestyksellä ei ole merkitystä. Lajit, jotka ovat kaikkien rajojen tasolla tai yläpuolella, eivät tarvitse lisävahvistuksia.",
+        "emptyState": "Vyöhykkeitä ei ole määritetty. Lisää vähintään yksi vyöhyke; käytössä olevaa harvinaisuussuodatinta ei voi tallentaa ilman vyöhykkeitä.",
+        "bandLabel": "Vyöhyke {number}",
+        "maxOccurrence": {
+          "label": "Esiintyminen alle",
+          "helpText": "Koskee lajeja, joiden esiintymistodennäköisyys sijainnissasi on tätä arvoa pienempi (0–1)."
+        },
+        "minDetections": {
+          "label": "Vaaditut vahvistukset",
+          "helpText": "Vahvistavien havaintojen määrä, joka tarvitaan ennen kuin näiden lajien havainto hyväksytään."
+        },
+        "addBand": "Lisää vyöhyke",
+        "removeBand": "Poista vyöhyke {number}",
+        "lastBandRequired": "Käytössä oleva harvinaisuussuodatin tarvitsee vähintään yhden vyöhykkeen. Poista suodatin käytöstä poistaaksesi kaikki vyöhykkeet.",
+        "maxBandsReached": "Voit määrittää enintään {max} vyöhykettä. Poista vyöhyke lisätäksesi uuden."
       },
       "rtsp": {
         "addNewStream": "Lisää uusi RTSP-striimi",

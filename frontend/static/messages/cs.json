@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Při vypnutém filtrování je každá detekce nad prahem spolehlivosti okamžitě přijata. To obvykle vede k několika falešným detekcím denně. I mírné filtrování výrazně zlepšuje kvalitu výsledků."
         },
+        "rarityFilter": {
+          "title": "Filtr vzácnosti",
+          "description": "Vyžadovat více potvrzujících detekcí u druhů, které jsou ve vaší lokalitě vzácné",
+          "birdOnlyNote": "Filtr vzácnosti platí pouze pro klasifikátory ptáků. Používá pravděpodobnost výskytu každého druhu z filtru výskytu a počet potvrzení vyžadovaný filtrem falešně pozitivních detekcí pouze zvyšuje, nikdy nesnižuje.",
+          "locationRequiredNote": "Není nastavena žádná poloha. Filtr vzácnosti potřebuje polohu a filtr výskytu, aby věděl, jak běžný druh je, takže do nastavení polohy nemá žádný účinek.",
+          "enable": {
+            "label": "Povolit filtr vzácnosti",
+            "helpText": "Vzácný druh je častěji chybně určený běžný druh. Je-li filtr povolen, druh, jehož pravděpodobnost výskytu spadá pod některé z níže uvedených pásem, potřebuje před přijetím alespoň tolik potvrzujících detekcí. Každé potvrzení je jedno okno analýzy, takže vyšší počty vyžadují vyšší nastavení překryvu."
+          }
+        },
         "rangeFilter": {
           "title": "Filtr výskytu",
           "description": "Omezit detekci na druhy pravděpodobné ve vašem geografickém regionu",
@@ -4977,6 +4987,23 @@
       "numberField": {
         "adjustedToMinimum": "Hodnota byla upravena na minimum ({value})",
         "adjustedToMaximum": "Hodnota byla upravena na maximum ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "Druh použije pásmo s nejnižší hranicí výskytu, pod kterou spadá, takže na pořadí pásem nezáleží. Druhy na nebo nad všemi hranicemi nepotřebují žádná další potvrzení.",
+        "emptyState": "Nejsou nastavena žádná pásma. Přidejte alespoň jedno pásmo; povolený filtr vzácnosti nelze bez pásem uložit.",
+        "bandLabel": "Pásmo {number}",
+        "maxOccurrence": {
+          "label": "Výskyt pod",
+          "helpText": "Platí pro druhy, jejichž pravděpodobnost výskytu ve vaší lokalitě je nižší než tato hodnota (0 až 1)."
+        },
+        "minDetections": {
+          "label": "Požadovaná potvrzení",
+          "helpText": "Počet potvrzujících detekcí potřebných před přijetím detekce těchto druhů."
+        },
+        "addBand": "Přidat pásmo",
+        "removeBand": "Odebrat pásmo {number}",
+        "lastBandRequired": "Povolený filtr vzácnosti potřebuje alespoň jedno pásmo. Chcete-li odebrat všechna pásma, filtr vypněte.",
+        "maxBandsReached": "Můžete nastavit nejvýše {max} pásem. Odeberte pásmo, chcete-li přidat další."
       },
       "rtsp": {
         "addNewStream": "Přidat nový RTSP stream",

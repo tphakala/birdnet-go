@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Med filtrering deaktivert godtas enhver registrering over sikkerhetsterskel umiddelbart. Dette gir typisk flere falske positive per dag. Selv mild filtrering forbedrer resultatkvaliteten betydelig."
         },
+        "rarityFilter": {
+          "title": "Sjeldenhetsfilter",
+          "description": "Krev flere bekreftende deteksjoner for arter som er sjeldne på din plassering",
+          "birdOnlyNote": "Sjeldenhetsfilteret gjelder bare for fugleklassifiserere. Det bruker utvalgsfilterets forekomstsannsynlighet for hver art, og øker bare antallet bekreftelser falsk positiv-filteret krever, aldri reduserer det.",
+          "locationRequiredNote": "Ingen plassering er konfigurert. Sjeldenhetsfilteret trenger en plassering og utvalgsfilteret for å vite hvor vanlig en art er, så det har ingen effekt før du angir en.",
+          "enable": {
+            "label": "Aktiver sjeldenhetsfilter",
+            "helpText": "Sjeldne arter er oftere en feilidentifisert vanlig art. Når filteret er aktivert, trenger en art med forekomstsannsynlighet under et intervall nedenfor minst så mange bekreftende deteksjoner før den godtas. Hver bekreftelse er ett analysevindu, så høyere antall krever en høyere overlappingsinnstilling."
+          }
+        },
         "rangeFilter": {
           "title": "Utvalgsfilter",
           "description": "Begrens deteksjon til arter som er sannsynlige i ditt geografiske område",
@@ -4977,6 +4987,23 @@
       "numberField": {
         "adjustedToMinimum": "Verdi ble justert til minimum ({value})",
         "adjustedToMaximum": "Verdi ble justert til maksimum ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "En art bruker intervallet med den laveste forekomstgrensen den faller under, så rekkefølgen på intervallene spiller ingen rolle. Arter på eller over alle grenser trenger ingen ekstra bekreftelser.",
+        "emptyState": "Ingen intervaller er konfigurert. Legg til minst ett intervall; sjeldenhetsfilteret kan ikke lagres aktivert uten intervaller.",
+        "bandLabel": "Intervall {number}",
+        "maxOccurrence": {
+          "label": "Forekomst under",
+          "helpText": "Gjelder arter med forekomstsannsynlighet på din plassering under denne verdien (0 til 1)."
+        },
+        "minDetections": {
+          "label": "Påkrevde bekreftelser",
+          "helpText": "Antall bekreftende deteksjoner som trengs før en deteksjon av disse artene godtas."
+        },
+        "addBand": "Legg til intervall",
+        "removeBand": "Fjern intervall {number}",
+        "lastBandRequired": "Det aktiverte sjeldenhetsfilteret trenger minst ett intervall. Slå av filteret for å fjerne alle intervaller.",
+        "maxBandsReached": "Du kan konfigurere maksimalt {max} intervaller. Fjern et intervall for å legge til et nytt."
       },
       "rtsp": {
         "addNewStream": "Legg til ny RTSP-strøm",

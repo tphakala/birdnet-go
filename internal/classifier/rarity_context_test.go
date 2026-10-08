@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -166,14 +167,16 @@ func TestGetSpeciesOccurrenceAtTime_AliasHitsCache(t *testing.T) {
 	o, inner := newAliasedGeomodelBirdNET(t, wantScore)
 	at := time.Date(2026, 5, 14, 12, 0, 0, 0, time.Local)
 
-	got := o.GetSpeciesOccurrenceAtTime(aliasLegacyLabel, at)
+	got, valid := o.GetSpeciesOccurrenceAtTime(aliasLegacyLabel, at)
 	assert.InDelta(t, wantScore, got, 0.001,
 		"legacy classifier label must resolve to the geomodel's canonical score")
+	assert.True(t, valid, "a cached geomodel score is a genuine prediction")
 	require.Equal(t, 1, inner.calls,
 		"first lookup should populate the cache and answer from it, not also run the fallback")
 
-	got = o.GetSpeciesOccurrenceAtTime(aliasLegacyLabel, at)
+	got, valid = o.GetSpeciesOccurrenceAtTime(aliasLegacyLabel, at)
 	assert.InDelta(t, wantScore, got, 0.001)
+	assert.True(t, valid)
 	assert.Equal(t, 1, inner.calls, "second lookup must be served entirely from cache")
 }
 
@@ -185,8 +188,9 @@ func TestGetSpeciesOccurrenceAtTime_CanonicalNameAlsoResolves(t *testing.T) {
 	o, _ := newAliasedGeomodelBirdNET(t, wantScore)
 	at := time.Date(2026, 5, 14, 12, 0, 0, 0, time.Local)
 
-	got := o.GetSpeciesOccurrenceAtTime(aliasCanonicalLabel, at)
+	got, valid := o.GetSpeciesOccurrenceAtTime(aliasCanonicalLabel, at)
 	assert.InDelta(t, wantScore, got, 0.001)
+	assert.True(t, valid)
 }
 
 // TestGetSpeciesOccurrenceAtTime_UnknownSpecies exercises the uncached fallback scan,
@@ -195,10 +199,51 @@ func TestGetSpeciesOccurrenceAtTime_UnknownSpecies(t *testing.T) {
 	o, inner := newAliasedGeomodelBirdNET(t, 0.42)
 	at := time.Date(2026, 5, 14, 12, 0, 0, 0, time.Local)
 
-	got := o.GetSpeciesOccurrenceAtTime("Myotis brandtii_Brandt's Bat", at)
+	got, valid := o.GetSpeciesOccurrenceAtTime("Myotis brandtii_Brandt's Bat", at)
 	assert.InDelta(t, 0.0, got, 0.001, "a species the range filter cannot score has no occurrence")
+	assert.False(t, valid, "a species missing from the prediction has no genuine score")
 	assert.Equal(t, 2, inner.calls,
 		"a cache miss must reach the uncached fallback, which recomputes the probable list")
+}
+
+// TestGetSpeciesOccurrenceAtTime_InvalidWithoutGenuinePrediction guards the #3935
+// distinction for the per-detection score: the synthetic zero returned when no location
+// is configured or no backend is loaded must be reported as not valid, so the rarity
+// filter never reads it as "extremely rare".
+func TestGetSpeciesOccurrenceAtTime_InvalidWithoutGenuinePrediction(t *testing.T) {
+	at := time.Date(2026, 5, 14, 12, 0, 0, 0, time.Local)
+
+	t.Run("no_location", func(t *testing.T) {
+		o, _ := newAliasedGeomodelBirdNET(t, 0.42)
+		noLocation := conf.CloneSettings(o.CurrentSettings())
+		noLocation.BirdNET.LocationConfigured = false
+
+		got, valid := o.rangeFilter.occurrenceAtTime(aliasLegacyLabel, at, noLocation)
+		assert.Zero(t, got)
+		assert.False(t, valid, "no location configured must not yield a valid score")
+	})
+
+	t.Run("cache_miss_never_caches_fail_open_scores", func(t *testing.T) {
+		o, _ := newAliasedGeomodelBirdNET(t, 0.42)
+		noLocation := conf.CloneSettings(o.CurrentSettings())
+		noLocation.BirdNET.LocationConfigured = false
+
+		// Reaching the cache with a fail-open prediction (as in a reload race after the
+		// caller's checks) must neither return nor cache the synthetic zeros.
+		scores, err := o.rangeFilter.getCachedSpeciesScores(at, noLocation)
+		require.NoError(t, err)
+		assert.Empty(t, scores)
+		o.rangeFilter.speciesCacheMu.RLock()
+		cached := len(o.rangeFilter.speciesCache)
+		o.rangeFilter.speciesCacheMu.RUnlock()
+		assert.Zero(t, cached, "fail-open scores must not be cached")
+	})
+
+	t.Run("no_backend", func(t *testing.T) {
+		got, valid := newTestRangeFilterService(nil).occurrenceAtTime(aliasLegacyLabel, at, &conf.Settings{})
+		assert.Zero(t, got)
+		assert.False(t, valid, "no backend loaded must not yield a valid score")
+	})
 }
 
 func TestGetRarityContext_UniversalGeomodel(t *testing.T) {
@@ -329,4 +374,29 @@ func TestGetRarityContext_NilPrimary(t *testing.T) {
 	assert.Nil(t, rc.Geomodel)
 	assert.Nil(t, rc.ClassifierLabels)
 	assert.Same(t, distinct, rc.Settings, "with no primary, GetRarityContext returns the orchestrator's current settings snapshot")
+}
+
+func TestIndexedOccurrence(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		indexed   float64
+		want      float64
+		wantValid bool
+	}{
+		{name: "genuine score", indexed: 0.42, want: 0.42, wantValid: true},
+		{name: "genuine zero", indexed: 0, want: 0, wantValid: true},
+		{name: "above range is clamped", indexed: 1.5, want: 1, wantValid: true},
+		{name: "unscored backfill", indexed: unscoredOccurrence, want: 0, wantValid: false},
+		{name: "NaN", indexed: math.NaN(), want: 0, wantValid: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, valid := indexedOccurrence(tt.indexed)
+			assert.InDelta(t, tt.want, got, 0.001)
+			assert.Equal(t, tt.wantValid, valid)
+		})
+	}
 }

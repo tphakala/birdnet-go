@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Szűrés nélkül a megbízhatósági küszöb feletti minden észlelés azonnal elfogadásra kerül. Ez általában naponta több hamis pozitívat eredményez. Már az enyhe szűrés is jelentősen javítja az eredmények minőségét."
         },
+        "rarityFilter": {
+          "title": "Ritkaságszűrő",
+          "description": "Több megerősítő észlelés megkövetelése a tartózkodási helyén ritka fajoknál",
+          "birdOnlyNote": "A ritkaságszűrő csak a madárosztályozókra vonatkozik. A tartomány szűrő fajonkénti előfordulási valószínűségét használja, és a hamis pozitív szűrő által megkövetelt megerősítések számát csak növeli, soha nem csökkenti.",
+          "locationRequiredNote": "Nincs beállítva helyszín. A ritkaságszűrőnek helyszínre és a tartomány szűrőre van szüksége ahhoz, hogy tudja, mennyire gyakori egy faj, ezért amíg nem állít be helyszínt, nincs hatása.",
+          "enable": {
+            "label": "Ritkaságszűrő engedélyezése",
+            "helpText": "Egy ritka faj nagyobb eséllyel egy tévesen azonosított gyakori faj. Engedélyezés esetén az a faj, amelynek előfordulási valószínűsége az alábbi sávok valamelyike alá esik, legalább ennyi megerősítő észlelést igényel az elfogadás előtt. Minden megerősítés egy elemzési ablak, ezért a nagyobb számokhoz nagyobb átfedési beállítás szükséges."
+          }
+        },
         "rangeFilter": {
           "title": "Tartomány szűrő",
           "description": "A detektálást a földrajzi régióban valószínű fajokra korlátozza",
@@ -4977,6 +4987,23 @@
       "numberField": {
         "adjustedToMinimum": "Az érték a minimumra ({value}) került beállításra",
         "adjustedToMaximum": "Az érték a maximumra ({value}) került beállításra"
+      },
+      "rarityBands": {
+        "orderHint": "Egy faj azt a sávot használja, amelynek előfordulási határa a legalacsonyabb azok közül, amelyek alá esik, így a sávok sorrendje nem számít. A minden határon vagy felette lévő fajoknak nincs szükségük további megerősítésre.",
+        "emptyState": "Nincsenek beállított sávok. Adjon hozzá legalább egy sávot; az engedélyezett ritkaságszűrő sávok nélkül nem menthető.",
+        "bandLabel": "{number}. sáv",
+        "maxOccurrence": {
+          "label": "Előfordulás ez alatt",
+          "helpText": "Azokra a fajokra vonatkozik, amelyek előfordulási valószínűsége az Ön helyszínén ennél az értéknél kisebb (0 és 1 között)."
+        },
+        "minDetections": {
+          "label": "Szükséges megerősítések",
+          "helpText": "Az ezen fajok észlelésének elfogadásához szükséges megerősítő észlelések száma."
+        },
+        "addBand": "Sáv hozzáadása",
+        "removeBand": "{number}. sáv eltávolítása",
+        "lastBandRequired": "Az engedélyezett ritkaságszűrőhöz legalább egy sáv szükséges. Az összes sáv eltávolításához kapcsolja ki a szűrőt.",
+        "maxBandsReached": "Legfeljebb {max} sávot állíthat be. Távolítson el egy sávot egy újabb hozzáadásához."
       },
       "rtsp": {
         "addNewStream": "Új RTSP stream hozzáadása",

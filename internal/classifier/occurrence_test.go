@@ -88,8 +88,9 @@ func TestGetSpeciesOccurrence(t *testing.T) {
 			// With no backend loaded, occurrenceAtTime short-circuits to 0, matching the
 			// former bn.GetSpeciesOccurrence nil-range-filter fast path these cases hit.
 			rfs := newTestRangeFilterService(nil)
-			occurrence := rfs.occurrenceAtTime(tt.species, time.Now(), settings)
+			occurrence, valid := rfs.occurrenceAtTime(tt.species, time.Now(), settings)
 			assert.InDelta(t, tt.expected, occurrence, 0.001, tt.description)
+			assert.False(t, valid, "no backend loaded must not yield a valid score")
 		})
 	}
 }

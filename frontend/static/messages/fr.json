@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Sans filtrage, toute détection au-dessus du seuil de confiance est acceptée immédiatement. Cela produit typiquement plusieurs faux positifs par jour. Même un filtrage faible améliore considérablement la qualité des résultats."
         },
+        "rarityFilter": {
+          "title": "Filtre de rareté",
+          "description": "Exiger davantage de détections de confirmation pour les espèces rares à votre emplacement",
+          "birdOnlyNote": "Le filtre de rareté s'applique uniquement aux classificateurs d'oiseaux. Il utilise la probabilité d'occurrence de chaque espèce fournie par le filtre de portée et ne fait qu'augmenter le nombre de confirmations exigé par le filtre de faux positifs, sans jamais le réduire.",
+          "locationRequiredNote": "Aucun emplacement n'est configuré. Le filtre de rareté a besoin d'un emplacement et du filtre de portée pour savoir si une espèce est commune ; il n'a donc aucun effet tant que vous n'en définissez pas un.",
+          "enable": {
+            "label": "Activer le filtre de rareté",
+            "helpText": "Une espèce rare est plus souvent une espèce commune mal identifiée. Une fois activé, une espèce dont la probabilité d'occurrence est inférieure à l'une des tranches ci-dessous doit obtenir au moins ce nombre de détections de confirmation avant d'être acceptée. Chaque confirmation correspond à une fenêtre d'analyse ; des nombres plus élevés exigent donc un chevauchement plus important."
+          }
+        },
         "rangeFilter": {
           "title": "Filtre de portée",
           "description": "Limiter la détection aux espèces probables dans votre région géographique",
@@ -4977,6 +4987,23 @@
       "numberField": {
         "adjustedToMinimum": "Valeur ajustée au minimum ({value})",
         "adjustedToMaximum": "Valeur ajustée au maximum ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "Une espèce utilise la tranche dont la limite d'occurrence est la plus basse parmi celles qui la dépassent ; l'ordre des tranches n'a donc pas d'importance. Les espèces égales ou supérieures à toutes les limites n'ont besoin d'aucune confirmation supplémentaire.",
+        "emptyState": "Aucune tranche configurée. Ajoutez au moins une tranche ; le filtre de rareté activé ne peut pas être enregistré sans tranche.",
+        "bandLabel": "Tranche {number}",
+        "maxOccurrence": {
+          "label": "Occurrence inférieure à",
+          "helpText": "S'applique aux espèces dont la probabilité d'occurrence à votre emplacement est inférieure à cette valeur (0 à 1)."
+        },
+        "minDetections": {
+          "label": "Confirmations requises",
+          "helpText": "Nombre de détections de confirmation nécessaires avant qu'une détection de ces espèces soit acceptée."
+        },
+        "addBand": "Ajouter une tranche",
+        "removeBand": "Supprimer la tranche {number}",
+        "lastBandRequired": "Le filtre de rareté activé nécessite au moins une tranche. Désactivez le filtre pour supprimer toutes les tranches.",
+        "maxBandsReached": "Vous pouvez configurer au maximum {max} tranches. Supprimez une tranche pour en ajouter une autre."
       },
       "rtsp": {
         "addNewStream": "Ajouter un nouveau flux RTSP",

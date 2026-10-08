@@ -64,6 +64,7 @@ This folder contains **shared components** used across the application. Feature-
 - `InlineSlider.svelte` - Inline slider input for compact layouts
 - `NumberField.svelte` - Number input field
 - `PasswordField.svelte` - Password input with show/hide
+- `RarityBandsEditor.svelte` - Editable list of rarity filter bands (occurrence limit and required confirmations)
 - `RTSPUrlInput.svelte` - RTSP URL input with validation
 - `RTSPUrlManager.svelte` - Manage multiple RTSP URLs
 - `SelectDropdown.svelte` - Dropdown selection component

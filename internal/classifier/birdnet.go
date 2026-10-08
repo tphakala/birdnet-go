@@ -702,29 +702,46 @@ func clampOccurrence(score float64) float64 {
 	}
 }
 
+// unscoredOccurrence is the occurrence-index value for a species the range filter
+// passes without a geomodel probability (a PassUnmappedSpecies backfill row). It lies
+// outside [0, 1] so it can never be mistaken for a score: clampOccurrence maps it to 0
+// for display, and occurrenceAtTime reports it as not valid. Indexing these species,
+// rather than leaving them out, keeps their lookups on the cache-hit path instead of
+// recomputing the probable-species list for every detection.
+const unscoredOccurrence = -1.0
+
 // buildOccurrenceIndex indexes native species scores for lookupOccurrence: every
 // species under its exact scientific name, plus a canonical-name entry wherever that
 // does not shadow an exact one. Synthetic override sentinels do not represent
-// geomodel probabilities and must not drive detection occurrence values. The cached
-// and uncached paths both build the index through this helper so they cannot disagree
-// about which species a name refers to.
+// geomodel probabilities and must not drive detection occurrence values; unmapped
+// backfill rows are indexed as unscoredOccurrence. The cached and uncached paths both
+// build the index through this helper so they cannot disagree about which species a
+// name refers to.
 func buildOccurrenceIndex(speciesScores []SpeciesScore) map[string]float64 {
 	scores := make(map[string]float64, len(speciesScores))
-	for _, s := range speciesScores {
+	indexValue := func(s *SpeciesScore) float64 {
+		if s.IsUnmappedBackfill {
+			return unscoredOccurrence
+		}
+		return s.Score
+	}
+	for i := range speciesScores {
+		s := &speciesScores[i]
 		if s.IsSyntheticOverride {
 			continue
 		}
 		if key := rawSpeciesKey(s.Label); key != "" {
-			scores[key] = s.Score
+			scores[key] = indexValue(s)
 		}
 	}
-	for _, s := range speciesScores {
+	for i := range speciesScores {
+		s := &speciesScores[i]
 		if s.IsSyntheticOverride {
 			continue
 		}
 		if key := canonicalSpeciesKey(s.Label); key != "" {
 			if _, exact := scores[key]; !exact {
-				scores[key] = s.Score
+				scores[key] = indexValue(s)
 			}
 		}
 	}

@@ -55,11 +55,12 @@ func TestCreateDetectionResult_ModelInfo(t *testing.T) {
 				0.95,
 				datastore.AudioSource{ID: "test", DisplayName: "Test"},
 				"clip.wav",
-				100*time.Millisecond, 0.5,
+				100*time.Millisecond, 0.5, true,
 				tc.modelID,
 				"Parus major_Great Tit_gretit1",
 			)
 
+			assert.True(t, result.OccurrenceValid, "occurrence validity must be carried onto the result")
 			assert.Equal(t, tc.expectedName, result.Model.Name)
 			assert.Equal(t, tc.expectedVersion, result.Model.Version)
 			assert.Equal(t, tc.expectedVariant, result.Model.Variant)
@@ -110,7 +111,7 @@ func TestCreateDetectionResult_ThresholdModelAware(t *testing.T) {
 				0.95,
 				datastore.AudioSource{ID: "test", DisplayName: "Test"},
 				"clip.wav",
-				100*time.Millisecond, 0.5,
+				100*time.Millisecond, 0.5, true,
 				tc.modelID,
 				"Parus major_Great Tit_gretit1",
 			)

@@ -2404,6 +2404,16 @@
           },
           "warningOff": "Sem filtragem, qualquer deteção acima do limiar de confiança é aceite imediatamente. Isto produz tipicamente vários falsos positivos por dia. Mesmo uma filtragem baixa melhora significativamente a qualidade dos resultados."
         },
+        "rarityFilter": {
+          "title": "Filtro de raridade",
+          "description": "Exigir mais detecções de confirmação para espécies raras na sua localização",
+          "birdOnlyNote": "O filtro de raridade aplica-se apenas aos classificadores de aves. Usa a probabilidade de ocorrência de cada espécie do filtro de alcance e apenas aumenta o número de confirmações exigido pelo filtro de falsos positivos, nunca o reduz.",
+          "locationRequiredNote": "Não há nenhuma localização configurada. O filtro de raridade precisa de uma localização e do filtro de alcance para saber quão comum é uma espécie, por isso não tem efeito até definir uma.",
+          "enable": {
+            "label": "Ativar filtro de raridade",
+            "helpText": "Uma espécie rara é mais provavelmente uma espécie comum mal identificada. Quando ativado, uma espécie cuja probabilidade de ocorrência fica abaixo de uma das faixas seguintes precisa de pelo menos esse número de detecções de confirmação antes de ser aceita. Cada confirmação é uma janela de análise, por isso valores mais altos exigem uma sobreposição maior."
+          }
+        },
         "rangeFilter": {
           "title": "Filtro de alcance",
           "description": "Limita a detecção a espécies prováveis em sua região geográfica",
@@ -4977,6 +4987,23 @@
       "numberField": {
         "adjustedToMinimum": "Valor ajustado para mínimo ({value})",
         "adjustedToMaximum": "Valor ajustado para máximo ({value})"
+      },
+      "rarityBands": {
+        "orderHint": "Uma espécie usa a faixa com o limite de ocorrência mais baixo abaixo do qual se encontra, por isso a ordem das faixas não importa. Espécies iguais ou acima de todos os limites não precisam de confirmações adicionais.",
+        "emptyState": "Nenhuma faixa configurada. Adicione pelo menos uma faixa; o filtro de raridade ativado não pode ser salvo sem faixas.",
+        "bandLabel": "Faixa {number}",
+        "maxOccurrence": {
+          "label": "Ocorrência abaixo de",
+          "helpText": "Aplica-se a espécies cuja probabilidade de ocorrência na sua localização está abaixo deste valor (0 a 1)."
+        },
+        "minDetections": {
+          "label": "Confirmações necessárias",
+          "helpText": "Número de detecções de confirmação necessárias antes de uma detecção destas espécies ser aceita."
+        },
+        "addBand": "Adicionar faixa",
+        "removeBand": "Remover faixa {number}",
+        "lastBandRequired": "O filtro de raridade ativado precisa de pelo menos uma faixa. Desative o filtro para remover todas as faixas.",
+        "maxBandsReached": "Pode configurar no máximo {max} faixas. Remova uma faixa para adicionar outra."
       },
       "rtsp": {
         "addNewStream": "Adicionar Novo Stream RTSP",
