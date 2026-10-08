@@ -437,6 +437,8 @@
       case ' ': {
         // Always consumed: left alone, the browser clicks the focused button on top of this
         event.preventDefault();
+        // A held key repeats keydown; only the first of the press acts, or the list would flicker
+        if (event.repeat) break;
         if (!isOpen) {
           toggleDropdown();
           break;

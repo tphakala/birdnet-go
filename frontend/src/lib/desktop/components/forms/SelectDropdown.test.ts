@@ -1514,6 +1514,27 @@ describe('SelectDropdown Accessibility', () => {
         await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
         expect(onChange).not.toHaveBeenCalled();
       });
+
+      it('ignores the repeats of a held key instead of toggling the list', async () => {
+        const user = userEvent.setup();
+        selectTest.render({ props: { options: fruit, label: 'Fruit' } });
+        const trigger = screen.getByRole('combobox');
+        trigger.focus();
+
+        // The first keydown of the press opens the list; the held key then repeats
+        await fireEvent.keyDown(trigger, { key });
+        await screen.findByRole('listbox');
+        expect(await fireEvent.keyDown(trigger, { key, repeat: true })).toBe(false);
+        await fireEvent.keyDown(trigger, { key, repeat: true });
+
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+        await user.keyboard('{Escape}');
+        await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+
+        // A repeat that arrives while the list is closed does not open it
+        await fireEvent.keyDown(trigger, { key, repeat: true });
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      });
     });
 
     it('keeps the list open on Enter when the highlighted option is disabled', async () => {
