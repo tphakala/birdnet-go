@@ -30,7 +30,8 @@ export const OPTION_HIGHLIGHT_OUTLINE_CLASS =
   'outline-2 -outline-offset-2 outline-[var(--color-base-content)]';
 
 /**
- * State classes of one option; exactly one plain background utility per combination.
+ * State classes of one option: at most one plain background utility. A selected or highlighted
+ * option has exactly one; an idle one has none, only the `hover:` variant.
  *
  * A selected option never gets a hover background, so the tint stays visible under the pointer.
  * `cn` only concatenates and does not merge conflicting Tailwind classes, so the background is
