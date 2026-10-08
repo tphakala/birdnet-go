@@ -71,7 +71,7 @@
     longitude: number;
     /** The coordinates are a real location, so the pin is shown. */
     locationSet: boolean;
-    /** Called with the rounded coordinates after a click or pin drag. */
+    /** Called with the rounded coordinates after a click, a pin drag or a chosen place. */
     onLocationChange: (_latitude: number, _longitude: number) => void;
     /** Heading of the expanded map dialog. */
     title: string;

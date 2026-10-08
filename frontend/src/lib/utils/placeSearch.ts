@@ -8,7 +8,7 @@
  * and French, the interface language. It never carries coordinates, cookies,
  * a referrer or the CSRF token, which is why it uses plain `fetch` and not
  * `api` or `fetchWithCSRF`. The browser still sends an `Origin` header and the
- * user's public IP address, which the search UI discloses.
+ * user's public IP address, which the search UI does not mention.
  */
 
 /** Photon search endpoint. */
