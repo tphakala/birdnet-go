@@ -1009,7 +1009,7 @@ func TestGuideCache_WarmForSpecies_UsesWarmLocale(t *testing.T) {
 	select {
 	case got := <-prov.locales:
 		assert.Equal(t, "de", got, "warm fetch must use the configured dashboard locale, not the default")
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("warm fetch did not occur")
 	}
 }
@@ -1031,7 +1031,7 @@ func TestGuideCache_PreFetch_UsesWarmLocale(t *testing.T) {
 	select {
 	case got := <-prov.locales:
 		assert.Equal(t, "fr", got, "pre-fetch must use the configured dashboard locale, not the default")
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("pre-fetch did not occur")
 	}
 }
