@@ -41,7 +41,7 @@ describe('LocationMap when MapLibre fails to load', () => {
   it('stays silent when the library fails after the component is gone', async () => {
     const result = testFactory.render();
     result.unmount();
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await vi.dynamicImportSettled();
 
     expect(toastActions.error).not.toHaveBeenCalled();
     expect(MapLibreMap).not.toHaveBeenCalled();

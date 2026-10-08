@@ -4,6 +4,12 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/svelt
 import userEvent from '@testing-library/user-event';
 import { Map as MapLibreMap, Marker } from 'maplibre-gl';
 import LocationMap from './LocationMap.svelte';
+import {
+  COORDINATE_SYNC_DEBOUNCE_MS,
+  COORDINATE_SYNC_DURATION_MS,
+  DOUBLE_TAP_WINDOW_MS,
+  ZOOM_STEP_DURATION_MS,
+} from './locationMapController';
 import { toastActions } from '$lib/stores/toast';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import { createComponentTestFactory } from '../../../../test/render-helpers';
@@ -17,6 +23,11 @@ const EXPAND = 'components.locationMap.expand';
 const MAP_LABEL = 'components.locationMap.mapLabel';
 const EXPANDED_MAP_LABEL = 'components.locationMap.expandedMapLabel';
 const CLOSE = 'Close modal';
+const DONE = 'common.done';
+// Placing a pin does not animate the map (MAP_CONFIG.ANIMATION_DURATION is 0).
+const NO_ANIMATION_MS = 0;
+// Time that is safely past a pending coordinate sync.
+const PAST_SYNC_MS = COORDINATE_SYNC_DEBOUNCE_MS + 100;
 
 type Props = ComponentProps<typeof LocationMap>;
 
@@ -83,13 +94,71 @@ describe('LocationMap', () => {
   });
 
   describe('building the map', () => {
-    it('builds no map when the component is gone before the library loads', async () => {
-      const result = testFactory.render(createProps());
-      result.unmount();
-      await new Promise(resolve => setTimeout(resolve, 50));
+    it('does not build the map until ready', async () => {
+      const props = createProps({ ready: false });
+      const result = testFactory.render(props);
 
+      await vi.dynamicImportSettled();
       expect(mapCount()).toBe(0);
-      expect(toastActions.error).not.toHaveBeenCalled();
+
+      await result.rerender({ ...props, ready: true });
+      await vi.waitFor(() => expect(mapCount()).toBe(1));
+    });
+
+    it('builds the settings map with a pin and the region zoom by default', async () => {
+      await mount({ latitude: 60, longitude: 24, locationSet: true });
+
+      expect(mapOptionsAt(0)).toMatchObject({ center: [24, 60], zoom: 11, touchZoomRotate: false });
+      expect(vi.mocked(Marker)).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows no pin when the location is not set', async () => {
+      await mount({ latitude: 0, longitude: 0, locationSet: false });
+
+      expect(mapOptionsAt(0).zoom).toBe(5);
+      expect(vi.mocked(Marker)).not.toHaveBeenCalled();
+    });
+
+    it('starts at the world overview when the coordinates are 0,0 and startView is world', async () => {
+      await mount({ latitude: 0, longitude: 0, locationSet: false, startView: 'world' });
+
+      expect(mapOptionsAt(0).zoom).toBe(1);
+    });
+
+    it('enables pinch zoom on both maps only when asked', async () => {
+      const user = userEvent.setup();
+      await mount({ pinchZoom: true });
+      await openExpanded(user);
+
+      for (const index of [0, 1]) {
+        expect(mapOptionsAt(index).touchZoomRotate).toBe(true);
+        expect(mapAt(index).touchZoomRotate.disableRotation).toHaveBeenCalled();
+      }
+    });
+
+    it('keeps pinch zoom off on both maps by default', async () => {
+      const user = userEvent.setup();
+      await mount();
+      await openExpanded(user);
+
+      for (const index of [0, 1]) {
+        expect(mapOptionsAt(index).touchZoomRotate).toBe(false);
+      }
+    });
+
+    it('shows the placeholder and a toast when MapLibre fails to construct', async () => {
+      vi.mocked(MapLibreMap).mockImplementationOnce(function () {
+        throw new Error('WebGL unavailable');
+      });
+
+      testFactory.render(createProps());
+
+      expect(await screen.findByText('settings.main.errors.mapUnavailable')).toBeInTheDocument();
+      expect(toastActions.error).toHaveBeenCalledExactlyOnceWith(
+        'settings.main.errors.mapLoadFailed'
+      );
+      expect(screen.queryByRole('application')).not.toBeInTheDocument();
+      expect(mapCount()).toBe(1);
     });
 
     it('removes the map when unmounted', async () => {
@@ -111,7 +180,7 @@ describe('LocationMap', () => {
       const { props, rerender } = await mount();
 
       await rerender({ ...props, latitude: 61, longitude: 25 });
-      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS * 4);
 
       expect(props.onLocationChange).not.toHaveBeenCalled();
     });
@@ -122,14 +191,14 @@ describe('LocationMap', () => {
       vi.mocked(map.easeTo).mockClear();
 
       await rerender({ ...props, latitude: 61.5, longitude: 25.5 });
-      await vi.advanceTimersByTimeAsync(499);
+      await vi.advanceTimersByTimeAsync(COORDINATE_SYNC_DEBOUNCE_MS - 1);
       expect(map.easeTo).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1);
       expect(map.easeTo).toHaveBeenCalledExactlyOnceWith({
         center: [25.5, 61.5],
         zoom: 10,
-        duration: 300,
+        duration: COORDINATE_SYNC_DURATION_MS,
       });
     });
 
@@ -139,14 +208,14 @@ describe('LocationMap', () => {
       vi.mocked(map.easeTo).mockClear();
 
       await rerender({ ...props, latitude: 61, longitude: 25 });
-      await vi.advanceTimersByTimeAsync(300);
+      await vi.advanceTimersByTimeAsync(COORDINATE_SYNC_DEBOUNCE_MS / 2);
       await rerender({ ...props, latitude: 62, longitude: 25 });
-      await vi.advanceTimersByTimeAsync(600);
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
 
       expect(map.easeTo).toHaveBeenCalledExactlyOnceWith({
         center: [25, 62],
         zoom: 10,
-        duration: 300,
+        duration: COORDINATE_SYNC_DURATION_MS,
       });
     });
 
@@ -159,11 +228,11 @@ describe('LocationMap', () => {
       expect(vi.mocked(Marker)).not.toHaveBeenCalled();
 
       await rerender({ ...props, latitude: 5, longitude: 5, locationSet: false });
-      await vi.advanceTimersByTimeAsync(600);
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
       expect(vi.mocked(Marker)).not.toHaveBeenCalled();
 
       await rerender({ ...props, latitude: 5, longitude: 5, locationSet: true });
-      await vi.advanceTimersByTimeAsync(600);
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
       expect(vi.mocked(Marker)).toHaveBeenCalledTimes(1);
     });
 
@@ -179,13 +248,78 @@ describe('LocationMap', () => {
       vi.mocked(map.easeTo).mockClear();
 
       await rerender({ ...props, latitude: 60, longitude: 24, locationSet: true });
-      await vi.advanceTimersByTimeAsync(600);
-      expect(map.easeTo).toHaveBeenLastCalledWith({ center: [24, 60], zoom: 11, duration: 300 });
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
+      expect(map.easeTo).toHaveBeenLastCalledWith({
+        center: [24, 60],
+        zoom: 11,
+        duration: COORDINATE_SYNC_DURATION_MS,
+      });
 
       vi.mocked(map.getZoom).mockReturnValue(15);
       await rerender({ ...props, latitude: 61, longitude: 25, locationSet: true });
-      await vi.advanceTimersByTimeAsync(600);
-      expect(map.easeTo).toHaveBeenLastCalledWith({ center: [25, 61], zoom: 15, duration: 300 });
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
+      expect(map.easeTo).toHaveBeenLastCalledWith({
+        center: [25, 61],
+        zoom: 15,
+        duration: COORDINATE_SYNC_DURATION_MS,
+      });
+    });
+
+    it('world start view keeps a zoom below the location zoom when a pin already exists', async () => {
+      const { props, rerender } = await mount({ startView: 'world', locationSet: true });
+      const map = mapAt(0);
+      vi.mocked(map.getZoom).mockReturnValue(5);
+      vi.mocked(map.easeTo).mockClear();
+
+      await rerender({ ...props, latitude: 61, longitude: 25 });
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
+
+      expect(map.easeTo).toHaveBeenLastCalledWith({
+        center: [25, 61],
+        zoom: 5,
+        duration: COORDINATE_SYNC_DURATION_MS,
+      });
+    });
+
+    it('world start view keeps a zoom above the location zoom for the first location', async () => {
+      const { props, rerender } = await mount({
+        latitude: 0,
+        longitude: 0,
+        locationSet: false,
+        startView: 'world',
+      });
+      const map = mapAt(0);
+      vi.mocked(map.getZoom).mockReturnValue(14);
+      vi.mocked(map.easeTo).mockClear();
+
+      await rerender({ ...props, latitude: 60, longitude: 24, locationSet: true });
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
+
+      expect(map.easeTo).toHaveBeenLastCalledWith({
+        center: [24, 60],
+        zoom: 14,
+        duration: COORDINATE_SYNC_DURATION_MS,
+      });
+    });
+
+    it('keeps the zoom for the first location on a region map', async () => {
+      const { props, rerender } = await mount({
+        latitude: 0,
+        longitude: 0,
+        locationSet: false,
+      });
+      const map = mapAt(0);
+      vi.mocked(map.getZoom).mockReturnValue(5);
+      vi.mocked(map.easeTo).mockClear();
+
+      await rerender({ ...props, latitude: 60, longitude: 24, locationSet: true });
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
+
+      expect(map.easeTo).toHaveBeenLastCalledWith({
+        center: [24, 60],
+        zoom: 5,
+        duration: COORDINATE_SYNC_DURATION_MS,
+      });
     });
 
     it('leaves the inline map alone while the expanded map is open and catches up on close', async () => {
@@ -196,12 +330,16 @@ describe('LocationMap', () => {
       vi.mocked(map.easeTo).mockClear();
 
       await rerender({ ...props, latitude: 61, longitude: 25 });
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS * 2);
       expect(map.easeTo).not.toHaveBeenCalled();
 
-      await user.click(within(dialog).getByRole('button', { name: 'common.done' }));
-      await vi.advanceTimersByTimeAsync(600);
-      expect(map.easeTo).toHaveBeenCalledWith({ center: [25, 61], zoom: 10, duration: 300 });
+      await user.click(within(dialog).getByRole('button', { name: DONE }));
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
+      expect(map.easeTo).toHaveBeenCalledWith({
+        center: [25, 61],
+        zoom: 10,
+        duration: COORDINATE_SYNC_DURATION_MS,
+      });
     });
 
     it('does not move the map for NaN coordinates', async () => {
@@ -210,7 +348,7 @@ describe('LocationMap', () => {
       vi.mocked(map.easeTo).mockClear();
 
       await rerender({ ...props, latitude: Number.NaN, longitude: 25 });
-      await vi.advanceTimersByTimeAsync(600);
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
 
       expect(map.easeTo).not.toHaveBeenCalled();
     });
@@ -225,8 +363,8 @@ describe('LocationMap', () => {
       await user.click(screen.getByRole('button', { name: ZOOM_IN }));
       await user.click(screen.getByRole('button', { name: ZOOM_OUT }));
 
-      expect(map.zoomIn).toHaveBeenCalledWith({ duration: 300 });
-      expect(map.zoomOut).toHaveBeenCalledWith({ duration: 300 });
+      expect(map.zoomIn).toHaveBeenCalledWith({ duration: ZOOM_STEP_DURATION_MS });
+      expect(map.zoomOut).toHaveBeenCalledWith({ duration: ZOOM_STEP_DURATION_MS });
     });
 
     it('disables the buttons until the map exists', () => {
@@ -251,6 +389,27 @@ describe('LocationMap', () => {
       expect(mapRegion.parentElement).toContainElement(zoomIn);
     });
 
+    it('zooms the inline map with the wheel only while Ctrl is held', async () => {
+      await mount();
+      const map = mapAt(0);
+      const region = screen.getByRole('application', { name: MAP_LABEL });
+
+      const plain = new WheelEvent('wheel', { deltaY: -100, cancelable: true, bubbles: true });
+      region.dispatchEvent(plain);
+      expect(plain.defaultPrevented).toBe(false);
+      expect(map.zoomIn).not.toHaveBeenCalled();
+
+      const withCtrl = new WheelEvent('wheel', {
+        deltaY: -100,
+        ctrlKey: true,
+        cancelable: true,
+        bubbles: true,
+      });
+      region.dispatchEvent(withCtrl);
+      expect(withCtrl.defaultPrevented).toBe(true);
+      expect(map.zoomIn).toHaveBeenCalledTimes(1);
+    });
+
     it('applies the map height class', async () => {
       await mount({ mapClass: 'h-[300px]' });
 
@@ -265,6 +424,30 @@ describe('LocationMap', () => {
       handlerFor(mapAt(0), 'click')({ lngLat: { lat: 60.123456, lng: 24.987654 } });
 
       expect(props.onLocationChange).toHaveBeenCalledExactlyOnceWith(60.123, 24.988);
+    });
+
+    it('recentres the inline map on a click at its current zoom', async () => {
+      await mount();
+      const map = mapAt(0);
+
+      handlerFor(map, 'click')({ lngLat: { lat: 60.5, lng: 24.5 } });
+
+      expect(map.easeTo).toHaveBeenCalledWith({
+        center: [24.5, 60.5],
+        zoom: 10,
+        duration: NO_ANIMATION_MS,
+      });
+    });
+
+    it('waits out the double-tap window before reporting an inline click when asked', async () => {
+      vi.useFakeTimers();
+      const { props } = await mount({ doubleTapZoomKeepsPin: true });
+
+      handlerFor(mapAt(0), 'click')({ lngLat: { lat: 60.5, lng: 24.5 } });
+      expect(props.onLocationChange).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(DOUBLE_TAP_WINDOW_MS);
+      expect(props.onLocationChange).toHaveBeenCalledExactlyOnceWith(60.5, 24.5);
     });
 
     it('does not report anything after unmount', async () => {
@@ -316,7 +499,7 @@ describe('LocationMap', () => {
       const dialog = await openExpanded(user);
       const expandedMap = mapAt(1);
 
-      await user.click(within(dialog).getByRole('button', { name: 'common.done' }));
+      await user.click(within(dialog).getByRole('button', { name: DONE }));
 
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(expandedMap.remove).toHaveBeenCalledTimes(1);
@@ -350,6 +533,36 @@ describe('LocationMap', () => {
       expect(screen.getByRole('button', { name: EXPAND })).toHaveFocus();
     });
 
+    it('does not recentre the expanded map on a click and zooms it with the plain wheel', async () => {
+      const user = userEvent.setup();
+      await mount();
+      await openExpanded(user);
+      const expandedMap = mapAt(1);
+
+      handlerFor(expandedMap, 'click')({ lngLat: { lat: 60.5, lng: 24.5 } });
+      expect(expandedMap.easeTo).not.toHaveBeenCalled();
+
+      const region = screen.getByRole('application', { name: EXPANDED_MAP_LABEL });
+      const wheel = new WheelEvent('wheel', { deltaY: -100, cancelable: true, bubbles: true });
+      region.dispatchEvent(wheel);
+      expect(wheel.defaultPrevented).toBe(true);
+      expect(expandedMap.zoomIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('zoom buttons in the dialog zoom the expanded map, not the inline one', async () => {
+      const user = userEvent.setup();
+      await mount();
+      const dialog = await openExpanded(user);
+
+      await user.click(within(dialog).getByRole('button', { name: ZOOM_IN }));
+      await user.click(within(dialog).getByRole('button', { name: ZOOM_OUT }));
+
+      expect(mapAt(1).zoomIn).toHaveBeenCalledWith({ duration: ZOOM_STEP_DURATION_MS });
+      expect(mapAt(1).zoomOut).toHaveBeenCalledWith({ duration: ZOOM_STEP_DURATION_MS });
+      expect(mapAt(0).zoomIn).not.toHaveBeenCalled();
+      expect(mapAt(0).zoomOut).not.toHaveBeenCalled();
+    });
+
     it('a pick in the expanded map reports the location and updates the inline map', async () => {
       const user = userEvent.setup();
       const { props } = await mount();
@@ -363,7 +576,7 @@ describe('LocationMap', () => {
       expect(inlineMap.easeTo).toHaveBeenCalledWith({
         center: [24.988, 60.124],
         zoom: 10,
-        duration: 0,
+        duration: NO_ANIMATION_MS,
       });
     });
 
@@ -380,16 +593,19 @@ describe('LocationMap', () => {
     });
 
     it('a double-tap-protected pick made just before Done is kept', async () => {
-      const user = userEvent.setup();
+      vi.useFakeTimers();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const { props } = await mount({ doubleTapZoomKeepsPin: true });
       const dialog = await openExpanded(user);
 
       handlerFor(mapAt(1), 'click')({ lngLat: { lat: 60.5, lng: 24.5 } });
       expect(props.onLocationChange).not.toHaveBeenCalled();
 
-      await user.click(within(dialog).getByRole('button', { name: 'common.done' }));
-
+      await user.click(within(dialog).getByRole('button', { name: DONE }));
       expect(props.onLocationChange).toHaveBeenCalledExactlyOnceWith(60.5, 24.5);
+
+      await vi.advanceTimersByTimeAsync(DOUBLE_TAP_WINDOW_MS * 2);
+      expect(props.onLocationChange).toHaveBeenCalledTimes(1);
     });
 
     it('moves focus into the dialog on open and back to the expand button on close', async () => {
@@ -436,7 +652,7 @@ describe('LocationMap', () => {
         await mount();
         const dialog = await openExpanded(user);
         const close = within(dialog).getByRole('button', { name: CLOSE });
-        const done = within(dialog).getByRole('button', { name: 'common.done' });
+        const done = within(dialog).getByRole('button', { name: DONE });
 
         done.focus();
         await user.tab();
@@ -449,6 +665,28 @@ describe('LocationMap', () => {
       } finally {
         document.removeEventListener('keydown', documentKeydown);
       }
+    });
+
+    it('Shift+Tab from the dialog box wraps to the last element', async () => {
+      const user = userEvent.setup();
+      await mount();
+      const dialog = await openExpanded(user);
+
+      within(dialog).getByRole('document').focus();
+      await user.tab({ shift: true });
+
+      expect(within(dialog).getByRole('button', { name: DONE })).toHaveFocus();
+    });
+
+    it('Shift+Tab from the dialog root wraps to the last element', async () => {
+      const user = userEvent.setup();
+      await mount();
+      const dialog = await openExpanded(user);
+
+      dialog.focus();
+      await user.tab({ shift: true });
+
+      expect(within(dialog).getByRole('button', { name: DONE })).toHaveFocus();
     });
 
     it('clicking the dialog padding keeps focus inside the dialog', async () => {
