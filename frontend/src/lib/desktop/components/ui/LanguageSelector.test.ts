@@ -11,15 +11,18 @@ describe('LanguageSelector Accessibility', () => {
 
     expect(document.getElementById('language-field')).toHaveAttribute(
       'aria-describedby',
-      'language-help'
+      'language-field-value language-help'
     );
     expect(screen.getAllByRole('button')).toHaveLength(1);
   });
 
-  it('adds no aria-describedby without the prop', () => {
+  it('describes the trigger only by the selected language without the prop', () => {
     renderTyped(LanguageSelector, { props: { id: 'language-field' } });
 
-    expect(document.getElementById('language-field')).not.toHaveAttribute('aria-describedby');
+    expect(document.getElementById('language-field')).toHaveAttribute(
+      'aria-describedby',
+      'language-field-value'
+    );
   });
 
   it('names the trigger from the aria-label prop instead of the selected language', () => {

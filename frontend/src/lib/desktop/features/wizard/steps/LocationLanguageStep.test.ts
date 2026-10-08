@@ -392,8 +392,9 @@ describe('LocationLanguageStep Accessibility', () => {
       return el;
     });
 
+    // The displayed value comes first, then the help text
     expect(trigger).toHaveAccessibleDescription(
-      'wizard.steps.locationLanguage.speciesLanguageHelp'
+      'English wizard.steps.locationLanguage.speciesLanguageHelp'
     );
   });
 

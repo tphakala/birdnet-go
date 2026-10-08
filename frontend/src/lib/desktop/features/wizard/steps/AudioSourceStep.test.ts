@@ -1122,7 +1122,9 @@ describe('AudioSourceStep Accessibility', () => {
     await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
     await chooseUsbDevice();
 
-    expect(await deviceTrigger()).toHaveAccessibleDescription(`${KEY}.soundCardReplacesStream`);
+    expect(await deviceTrigger()).toHaveAccessibleDescription(
+      `USB Mic ${KEY}.soundCardReplacesStream`
+    );
   });
 
   it('describes the URL input with the note that sound cards stop', async () => {
