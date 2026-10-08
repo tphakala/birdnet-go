@@ -940,23 +940,132 @@ describe('SelectDropdown Accessibility', () => {
     expect(unnamed).not.toHaveAttribute('aria-label');
   });
 
+  it('names the trigger and the open listbox from the aria-label prop, not the selected value', async () => {
+    const user = userEvent.setup();
+    selectTest.render({ props: { options: fruit, value: 'banana', 'aria-label': 'Fruit picker' } });
+
+    const trigger = screen.getByRole('button', { name: 'Fruit picker' });
+    expect(trigger).toHaveTextContent('Banana');
+
+    await user.click(trigger);
+
+    expect(await screen.findByRole('listbox', { name: 'Fruit picker' })).toBeInTheDocument();
+  });
+
+  it('lets the aria-label prop win over a label element associated by id', async () => {
+    const user = userEvent.setup();
+    const { container } = selectTest.render({
+      props: { options: fruit, id: 'fruit-field', 'aria-label': 'Fruit picker' },
+    });
+    const externalLabel = document.createElement('label');
+    externalLabel.htmlFor = 'fruit-field';
+    externalLabel.textContent = 'Outer label';
+    container.prepend(externalLabel);
+
+    await user.click(screen.getByRole('button', { name: 'Fruit picker' }));
+
+    expect(await screen.findByRole('listbox', { name: 'Fruit picker' })).toBeInTheDocument();
+  });
+
+  describe('selected value as description', () => {
+    const namingPaths: Array<[string, Record<string, unknown>, boolean]> = [
+      ['the label prop', { label: 'Fruit' }, false],
+      ['the aria-label prop', { 'aria-label': 'Fruit' }, false],
+      ['a label element associated by id', { id: 'fruit-field' }, true],
+    ];
+
+    it.each(namingPaths)(
+      'keeps the field name as the name and exposes the selected value as the description with %s',
+      async (_path, props, withExternalLabel) => {
+        const user = userEvent.setup();
+        const { container } = selectTest.render({
+          props: { options: fruit, value: 'apple', ...props },
+        });
+        if (withExternalLabel) {
+          const externalLabel = document.createElement('label');
+          externalLabel.htmlFor = 'fruit-field';
+          externalLabel.textContent = 'Fruit';
+          container.prepend(externalLabel);
+        }
+
+        const trigger = screen.getByRole('button', { name: 'Fruit' });
+        expect(trigger).toHaveAccessibleDescription('Apple');
+
+        await user.click(trigger);
+        await user.click(await screen.findByRole('option', { name: /Cherry/ }));
+
+        expect(screen.getByRole('button', { name: 'Fruit' })).toHaveAccessibleDescription('Cherry');
+      }
+    );
+
+    it('describes a multiple selection by the displayed count and an empty one by the placeholder', async () => {
+      const user = userEvent.setup();
+      selectTest.render({
+        props: {
+          options: fruit,
+          multiple: true,
+          value: ['apple'],
+          placeholder: 'Pick fruit',
+          label: 'Fruit',
+        },
+      });
+
+      const trigger = screen.getByRole('button', { name: 'Fruit' });
+      expect(trigger).toHaveAccessibleDescription('1 selected');
+
+      await user.click(trigger);
+      await user.click(await screen.findByRole('option', { name: /Banana/ }));
+      expect(trigger).toHaveAccessibleDescription('2 selected');
+
+      selectTest.render({ props: { options: fruit, placeholder: 'Pick fruit', label: 'Other' } });
+      expect(screen.getByRole('button', { name: 'Other' })).toHaveAccessibleDescription(
+        'Pick fruit'
+      );
+    });
+
+    it('lists the value id before the help text and the caller ids in aria-describedby', () => {
+      selectTest.render({
+        props: {
+          options: fruit,
+          id: 'desc-field',
+          label: 'Fruit',
+          helpText: 'Help',
+          'aria-describedby': 'extra-note',
+        },
+      });
+
+      expect(screen.getByRole('button', { name: 'Fruit' }).getAttribute('aria-describedby')).toBe(
+        'desc-field-value desc-field-help extra-note'
+      );
+    });
+  });
+
+  it('renders no aria-label on the trigger when the label prop is used', () => {
+    selectTest.render({ props: { options: fruit, label: 'Fruit', 'aria-label': 'Ignored' } });
+
+    const trigger = screen.getByRole('button', { name: 'Fruit' });
+    expect(trigger).not.toHaveAttribute('aria-label');
+  });
+
   it('links help text and the aria-describedby prop together on the trigger', () => {
     const both = selectTest.render({
       props: { options: fruit, id: 'both', helpText: 'Help', 'aria-describedby': 'extra-note' },
     });
     expect(screen.getByRole('button').getAttribute('aria-describedby')).toBe(
-      'both-help extra-note'
+      'both-value both-help extra-note'
     );
     both.unmount();
 
     const only = selectTest.render({
       props: { options: fruit, id: 'only', 'aria-describedby': 'extra-note' },
     });
-    expect(screen.getByRole('button').getAttribute('aria-describedby')).toBe('extra-note');
+    expect(screen.getByRole('button').getAttribute('aria-describedby')).toBe(
+      'only-value extra-note'
+    );
     only.unmount();
 
     selectTest.render({ props: { options: fruit, id: 'none' } });
-    expect(screen.getByRole('button')).not.toHaveAttribute('aria-describedby');
+    expect(screen.getByRole('button').getAttribute('aria-describedby')).toBe('none-value');
   });
 
   it('has no violations with the searchable list open and an option highlighted', async () => {

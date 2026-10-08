@@ -1043,7 +1043,8 @@
       "error": "Hiba a detektálás betöltésekor: {error}",
       "loadingResults": "{count} eredmény betöltése...",
       "thumbnailLoading": "{species} bélyegkép betöltése...",
-      "thumbnailLoaded": "{species} bélyegkép betöltve"
+      "thumbnailLoaded": "{species} bélyegkép betöltve",
+      "resultsPerPage": "Találatok oldalanként"
     },
     "errors": {
       "notFound": "A detektálás nem található. Lehet, hogy törölték vagy az ID hibás.",

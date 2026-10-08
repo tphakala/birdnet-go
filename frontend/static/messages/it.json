@@ -1043,7 +1043,8 @@
       "error": "Errore caricamento rilevamento: {error}",
       "loadingResults": "Caricamento di {count} risultati...",
       "thumbnailLoading": "Caricamento miniatura di {species}...",
-      "thumbnailLoaded": "Miniatura di {species} caricata"
+      "thumbnailLoaded": "Miniatura di {species} caricata",
+      "resultsPerPage": "Risultati per pagina"
     },
     "errors": {
       "notFound": "Rilevamento non trovato. Potrebbe essere stato eliminato o l'ID non è corretto.",

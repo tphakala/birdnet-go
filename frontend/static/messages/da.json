@@ -1043,7 +1043,8 @@
       "error": "Fejl ved indlæsning af registrering: {error}",
       "loadingResults": "Indlæser {count} resultater...",
       "thumbnailLoading": "Indlæser {species} miniaturebillede...",
-      "thumbnailLoaded": "Miniaturebillede af {species} indlæst"
+      "thumbnailLoaded": "Miniaturebillede af {species} indlæst",
+      "resultsPerPage": "Resultater pr. side"
     },
     "errors": {
       "notFound": "Registrering ikke fundet. Den kan være blevet slettet, eller ID'et er forkert.",

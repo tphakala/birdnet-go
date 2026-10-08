@@ -1043,7 +1043,8 @@
       "error": "Błąd ładowania detekcji: {error}",
       "loadingResults": "Ładowanie {count} wyników...",
       "thumbnailLoading": "Ładowanie miniatury {species}...",
-      "thumbnailLoaded": "Miniatura {species} załadowana"
+      "thumbnailLoaded": "Miniatura {species} załadowana",
+      "resultsPerPage": "Wyników na stronę"
     },
     "errors": {
       "notFound": "Nie znaleziono detekcji. Mogła zostać usunięta lub identyfikator jest nieprawidłowy.",

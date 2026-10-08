@@ -1043,7 +1043,8 @@
       "error": "Chyba při načítání detekce: {error}",
       "loadingResults": "Načítání {count} výsledků...",
       "thumbnailLoading": "Načítání náhledu {species}...",
-      "thumbnailLoaded": "Náhled {species} načten"
+      "thumbnailLoaded": "Náhled {species} načten",
+      "resultsPerPage": "Počet výsledků na stránku"
     },
     "errors": {
       "notFound": "Detekce nebyla nalezena. Možná byla odstraněna nebo je ID nesprávné.",

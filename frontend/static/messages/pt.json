@@ -1043,7 +1043,8 @@
       "error": "Erro ao carregar detecção: {error}",
       "loadingResults": "Carregando {count} resultados...",
       "thumbnailLoading": "Carregando miniatura de {species}...",
-      "thumbnailLoaded": "Miniatura de {species} carregada"
+      "thumbnailLoaded": "Miniatura de {species} carregada",
+      "resultsPerPage": "Resultados por página"
     },
     "errors": {
       "notFound": "Detecção não encontrada. Pode ter sido excluída ou o ID está incorreto.",

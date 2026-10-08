@@ -1043,7 +1043,8 @@
       "error": "Fehler beim Laden der Erkennung: {error}",
       "loadingResults": "Lade {count} Ergebnisse...",
       "thumbnailLoading": "Lade Vorschaubild von {species}...",
-      "thumbnailLoaded": "Vorschaubild von {species} geladen"
+      "thumbnailLoaded": "Vorschaubild von {species} geladen",
+      "resultsPerPage": "Ergebnisse pro Seite"
     },
     "errors": {
       "notFound": "Erkennung nicht gefunden. Sie wurde möglicherweise gelöscht oder die ID ist falsch.",
