@@ -108,6 +108,17 @@ describe('Checkbox', () => {
     expect(visualCheckbox).toHaveClass('w-6', 'h-6');
   });
 
+  it('draws the unchecked box border with at least 3:1 contrast', () => {
+    const { container } = render(Checkbox, {
+      props: { checked: false, label: 'Test checkbox' },
+    });
+
+    // WCAG 1.4.11: the box outline is the only cue for an unchecked checkbox
+    const visualCheckbox = container.querySelector('span.relative');
+    expect(visualCheckbox).toHaveClass('border-[var(--color-base-content)]/60');
+    expect(visualCheckbox).not.toHaveClass('border-[var(--border-200)]');
+  });
+
   it('applies variant classes correctly when checked', () => {
     const { container } = render(Checkbox, {
       props: {

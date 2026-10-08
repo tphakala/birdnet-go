@@ -119,7 +119,8 @@
     <span
       class={cn(
         'relative inline-flex items-center justify-center mr-2 shrink-0 border-2 rounded transition-all',
-        'border-[var(--border-200)] bg-[var(--color-base-100)]',
+        // At least 3:1 against the page in both themes (WCAG 1.4.11)
+        'border-[var(--color-base-content)]/60 bg-[var(--color-base-100)]',
         'peer-focus-visible:outline-2 peer-focus-visible:outline-[var(--color-primary)] peer-focus-visible:outline-offset-2',
         'peer-disabled:opacity-50 peer-disabled:cursor-not-allowed',
         safeGet(sizeClasses, size, ''),
