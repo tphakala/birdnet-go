@@ -12,6 +12,11 @@ export interface ComponentStep {
   type: 'component';
   titleKey: string; // i18n key
   component: () => Promise<{ default: Component<WizardStepProps> }>;
+  /**
+   * i18n key of the error toast shown when this step's save fails after the wizard
+   * closed (Skip, Leave setup, relaunch). The generic message is used when unset.
+   */
+  unfinishedSaveKey?: TranslationKey;
 }
 
 export interface ContentStep {
@@ -26,7 +31,8 @@ export type WizardStep = ComponentStep | ContentStep;
 
 /**
  * Saves a step's pending edits. Rejects when the save fails; the wizard then
- * stays on the step and shows an error.
+ * stays on the step and shows an error. A rejection that arrives after the wizard
+ * closed is reported as an error toast instead.
  */
 export type StepLeaveHandler = () => Promise<void>;
 

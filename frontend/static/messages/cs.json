@@ -5253,7 +5253,9 @@
       "saveFailed": "Tento krok se nepodařilo uložit. Zkontrolujte připojení a zkuste to znovu, nebo přeskočte nastavení a změňte to později v Nastavení.",
       "saveRejected": "Nastavení v tomto kroku nebylo přijato. Zkontrolujte hodnoty a zkuste to znovu, nebo přeskočte nastavení a změňte to později v Nastavení.",
       "stepLoadFailed": "Tento krok se nepodařilo načíst. Stiskněte Zkusit znovu, nebo obnovte stránku.",
-      "stepLoadFailedReload": "Tento krok se stále nepodařilo načíst. Obnovte stránku a zkuste to znovu; volby uložené v předchozích krocích zůstanou zachovány."
+      "stepLoadFailedReload": "Tento krok se stále nepodařilo načíst. Obnovte stránku a zkuste to znovu; volby uložené v předchozích krocích zůstanou zachovány.",
+      "audioSourceSaveUnfinished": "Změna zdroje zvuku nebyla dokončena. Zkontrolujte zdroje zvuku v sekci Nastavení > Zvuk.",
+      "saveUnfinished": "Některé změny z nastavení se neuložily. Zkontrolujte je v Nastavení."
     },
     "reasons": {
       "completeStep": "Pro pokračování dokončete tento krok."
@@ -5261,6 +5263,7 @@
     "leaveConfirm": {
       "title": "Opustit nastavení?",
       "message": "Nastavení se znovu neotevře. Volby uložené v předchozích krocích zůstanou zachovány; změny v tomto kroku se neuloží. Vše můžete později změnit v Nastavení.",
+      "messageSaving": "Nastavení se znovu neotevře. Volby uložené v předchozích krocích zůstanou zachovány. Tento krok se stále ukládá a některé nebo všechny jeho změny se nemusí zachovat. Vše můžete později změnit v Nastavení.",
       "stay": "Pokračovat v nastavení",
       "leave": "Opustit nastavení"
     },

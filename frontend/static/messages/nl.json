@@ -5253,7 +5253,9 @@
       "saveFailed": "Deze stap kon niet worden opgeslagen. Controleer de verbinding en probeer het opnieuw, of sla de installatie over en wijzig dit later in Instellingen.",
       "saveRejected": "De instellingen in deze stap zijn niet geaccepteerd. Controleer de waarden en probeer het opnieuw, of sla de installatie over en wijzig dit later in Instellingen.",
       "stepLoadFailed": "Deze stap kon niet worden geladen. Druk op Opnieuw proberen of laad de pagina opnieuw.",
-      "stepLoadFailedReload": "Deze stap kon nog steeds niet worden geladen. Laad de pagina opnieuw om het nogmaals te proberen; keuzes die in eerdere stappen zijn opgeslagen blijven behouden."
+      "stepLoadFailedReload": "Deze stap kon nog steeds niet worden geladen. Laad de pagina opnieuw om het nogmaals te proberen; keuzes die in eerdere stappen zijn opgeslagen blijven behouden.",
+      "audioSourceSaveUnfinished": "De wijziging van de audiobron is niet voltooid. Controleer de audiobronnen via Instellingen > Audio.",
+      "saveUnfinished": "Sommige wijzigingen uit de installatie zijn niet opgeslagen. Controleer ze in Instellingen."
     },
     "reasons": {
       "completeStep": "Voltooi deze stap om verder te gaan."
@@ -5261,6 +5263,7 @@
     "leaveConfirm": {
       "title": "Installatie verlaten?",
       "message": "De installatie wordt niet opnieuw geopend. Keuzes die in eerdere stappen zijn opgeslagen blijven behouden; wijzigingen in deze stap worden niet opgeslagen. Je kunt later alles wijzigen in Instellingen.",
+      "messageSaving": "De installatie wordt niet opnieuw geopend. Keuzes die in eerdere stappen zijn opgeslagen blijven behouden. Deze stap wordt nog opgeslagen en een deel van de wijzigingen of alle wijzigingen blijft mogelijk niet behouden. Je kunt later alles wijzigen in Instellingen.",
       "stay": "Doorgaan met installatie",
       "leave": "Installatie verlaten"
     },

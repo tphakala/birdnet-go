@@ -420,6 +420,32 @@ describe('AudioSourceStep - leave handler', () => {
     expect(vi.mocked(settingsActions.saveSection).mock.calls.map(c => c[0])).toEqual(['rtsp']);
   });
 
+  it('rejects when the second write fails after unmount, so the wizard can report it', async () => {
+    const secondSave = deferred();
+    vi.mocked(settingsActions.saveSection).mockImplementation(section =>
+      section === 'audio' ? secondSave.promise : Promise.resolve()
+    );
+    const { leave, unmount } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream();
+
+    const leaving = leave();
+    // Attach the handler before the rejection so it is never reported as unhandled
+    const failure = leaving.then(
+      () => undefined,
+      (error: unknown) => error
+    );
+    await flushAsync();
+    unmount();
+    secondSave.reject(new Error('save audio failed'));
+    expect(await failure).toEqual(new Error('save audio failed'));
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls.map(c => c[0])).toEqual([
+      'rtsp',
+      'audio',
+    ]);
+  });
+
   it('retry after a failed second section re-sends only that section when nothing was edited', async () => {
     // The store keeps nothing, so the first section is rebuilt identically on the retry
     vi.mocked(settingsActions.saveSection).mockImplementation(async section => {

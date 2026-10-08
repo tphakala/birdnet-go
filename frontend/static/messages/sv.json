@@ -5253,7 +5253,9 @@
       "saveFailed": "Det här steget kunde inte sparas. Kontrollera anslutningen och försök igen, eller hoppa över konfigurationen och ändra det senare i Inställningar.",
       "saveRejected": "Inställningarna i det här steget godkändes inte. Kontrollera värdena och försök igen, eller hoppa över konfigurationen och ändra det senare i Inställningar.",
       "stepLoadFailed": "Det här steget kunde inte läsas in. Tryck på Försök igen eller ladda om sidan.",
-      "stepLoadFailedReload": "Det här steget kunde fortfarande inte läsas in. Ladda om sidan för att försöka igen; val som sparats i tidigare steg behålls."
+      "stepLoadFailedReload": "Det här steget kunde fortfarande inte läsas in. Ladda om sidan för att försöka igen; val som sparats i tidigare steg behålls.",
+      "audioSourceSaveUnfinished": "Ändringen av ljudkällan slutfördes inte. Kontrollera ljudkällorna under Inställningar > Ljud.",
+      "saveUnfinished": "Några ändringar från konfigurationen sparades inte. Kontrollera dem i Inställningar."
     },
     "reasons": {
       "completeStep": "Slutför det här steget för att fortsätta."
@@ -5261,6 +5263,7 @@
     "leaveConfirm": {
       "title": "Lämna konfigurationen?",
       "message": "Konfigurationen öppnas inte igen. Val som sparats i tidigare steg behålls; ändringar i det här steget sparas inte. Du kan ändra allt senare i Inställningar.",
+      "messageSaving": "Konfigurationen öppnas inte igen. Val som sparats i tidigare steg behålls. Det här steget sparas fortfarande, och några av eller alla ändringarna behålls kanske inte. Du kan ändra allt senare i Inställningar.",
       "stay": "Fortsätt konfigurera",
       "leave": "Lämna konfigurationen"
     },

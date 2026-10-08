@@ -5253,7 +5253,9 @@
       "saveFailed": "Could not save this step. Check the connection and try again, or skip setup and change this later in Settings.",
       "saveRejected": "The settings on this step were not accepted. Check the values and try again, or skip setup and change this later in Settings.",
       "stepLoadFailed": "This step could not be loaded. Press Retry, or reload the page.",
-      "stepLoadFailedReload": "This step still could not be loaded. Reload the page to try again; choices saved on earlier steps are kept."
+      "stepLoadFailedReload": "This step still could not be loaded. Reload the page to try again; choices saved on earlier steps are kept.",
+      "audioSourceSaveUnfinished": "The audio source change did not finish. Check the audio sources in Settings > Audio.",
+      "saveUnfinished": "Some changes from setup were not saved. Check them in Settings."
     },
     "reasons": {
       "completeStep": "Complete this step to continue."
@@ -5261,6 +5263,7 @@
     "leaveConfirm": {
       "title": "Leave setup?",
       "message": "Setup will not open again. Choices saved on earlier steps are kept; changes on this step are not saved. You can change everything later in Settings.",
+      "messageSaving": "Setup will not open again. Choices saved on earlier steps are kept. This step is still saving, and some or all of its changes may not be kept. You can change everything later in Settings.",
       "stay": "Keep setting up",
       "leave": "Leave setup"
     },

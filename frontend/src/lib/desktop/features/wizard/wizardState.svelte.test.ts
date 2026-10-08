@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { TranslationKey } from '$lib/i18n';
 import type { WizardStep } from './types';
 import { deferred, type Deferred } from '../../../../test/async-helpers';
 
@@ -10,6 +11,17 @@ vi.mock('$lib/utils/api', async importOriginal => ({
   },
 }));
 
+// The wizard reports a save that fails after it closed in an error toast; translate
+// to the key so the tests can name the message.
+vi.mock('$lib/i18n', () => ({
+  t: vi.fn((key: string) => key),
+  getLocale: vi.fn(() => 'en'),
+}));
+
+vi.mock('$lib/stores/toast', () => ({
+  toastActions: { error: vi.fn() },
+}));
+
 // Mock getStepsForFlow so we can control what steps are returned
 vi.mock('./wizardRegistry', () => ({
   getStepsForFlow: vi.fn(() => []),
@@ -19,6 +31,7 @@ vi.mock('./wizardRegistry', () => ({
 const { api, ApiError } = await import('$lib/utils/api');
 const { wizardState, STEP_MOVE_GUARD_MS } = await import('./wizardState.svelte');
 const { getStepsForFlow } = await import('./wizardRegistry');
+const { toastActions } = await import('$lib/stores/toast');
 
 // Test fixtures
 function createTestSteps(count: number): WizardStep[] {
@@ -27,6 +40,18 @@ function createTestSteps(count: number): WizardStep[] {
     type: 'content' as const,
     title: `Step ${i}`,
     content: `Content for step ${i}`,
+  }));
+}
+
+// Component steps (the kind that can have a leave handler); `unfinishedSaveKeys[i]` is
+// the unfinishedSaveKey of step i, if any.
+function createComponentSteps(unfinishedSaveKeys: Array<TranslationKey | undefined>): WizardStep[] {
+  return unfinishedSaveKeys.map((unfinishedSaveKey, i) => ({
+    id: `component-${i}`,
+    type: 'component' as const,
+    titleKey: `component.${i}.title`,
+    component: () => Promise.reject(new Error('not rendered in state tests')),
+    unfinishedSaveKey,
   }));
 }
 
@@ -284,6 +309,7 @@ describe('wizardState - state machine', () => {
       expect(wizardState.stepError).toBe('wizard.errors.saveFailed');
       expect(wizardState.isSaving).toBe(false);
       expect(wizardState.canAdvance).toBe(true);
+      expect(toastActions.error).not.toHaveBeenCalled();
 
       await wizardState.next(); // retry calls the handler again
 
@@ -618,7 +644,7 @@ describe('wizardState - state machine', () => {
       expect(wizardState.stepError).toBeNull();
     });
 
-    it('ignores a late failure of a save started before the skip', async () => {
+    it('reports a save that fails after Skip in a toast and leaves the step state alone', async () => {
       launchSteps(3);
       const d = deferred();
       wizardState.registerLeaveHandler(() => d.promise);
@@ -632,6 +658,70 @@ describe('wizardState - state machine', () => {
 
       expect(wizardState.stepError).toBeNull();
       expect(wizardState.isSaving).toBe(false);
+      expect(toastActions.error).toHaveBeenCalledTimes(1);
+      expect(toastActions.error).toHaveBeenCalledWith('wizard.errors.saveUnfinished', {
+        duration: null,
+      });
+    });
+
+    it('shows no toast when a save started before Skip succeeds', async () => {
+      launchSteps(3);
+      const d = deferred();
+      wizardState.registerLeaveHandler(() => d.promise);
+      readyStep();
+      const nav = wizardState.next();
+      await flush();
+
+      wizardState.skip();
+      d.resolve();
+      await nav;
+
+      expect(toastActions.error).not.toHaveBeenCalled();
+    });
+
+    it('names the step that started the save when it fails after Skip and a relaunch', async () => {
+      const audioKey: TranslationKey = 'wizard.errors.audioSourceSaveUnfinished';
+      vi.mocked(getStepsForFlow).mockReturnValue(
+        createComponentSteps([undefined, audioKey, undefined])
+      );
+      wizardState.launch('onboarding');
+      wizardState.registerLeaveHandler(() => Promise.resolve());
+      readyStep();
+      await wizardState.next();
+      expect(wizardState.currentStepIndex).toBe(1);
+
+      const d = deferred();
+      wizardState.registerLeaveHandler(() => d.promise);
+      readyStep();
+      const nav = wizardState.next();
+      await flush();
+
+      wizardState.skip();
+      wizardState.launch('onboarding');
+      expect(wizardState.currentStepIndex).toBe(0);
+      d.reject(new Error('late'));
+      await nav;
+
+      expect(toastActions.error).toHaveBeenCalledTimes(1);
+      expect(toastActions.error).toHaveBeenCalledWith(audioKey, { duration: null });
+    });
+
+    it('uses the generic message for a component step without its own', async () => {
+      vi.mocked(getStepsForFlow).mockReturnValue(createComponentSteps([undefined, undefined]));
+      wizardState.launch('onboarding');
+      const d = deferred();
+      wizardState.registerLeaveHandler(() => d.promise);
+      readyStep();
+      const nav = wizardState.next();
+      await flush();
+
+      wizardState.skip();
+      d.reject(new Error('late'));
+      await nav;
+
+      expect(toastActions.error).toHaveBeenCalledWith('wizard.errors.saveUnfinished', {
+        duration: null,
+      });
     });
   });
 
@@ -778,6 +868,7 @@ describe('wizardState - state machine', () => {
       expect(wizardState.isActive).toBe(true);
       expect(wizardState.stepError).toBe('wizard.errors.saveFailed');
       expect(api.post).not.toHaveBeenCalled();
+      expect(toastActions.error).not.toHaveBeenCalled();
     });
   });
 
@@ -967,6 +1058,9 @@ describe('wizardState - state machine', () => {
       ['ready', 'next', 'resolve', 'ready', 'notValid', 'back', 'resolve'],
       ['ready', 'next', 'relaunch', 'resolve', 'ready', 'next', 'resolve'],
       ['next', 'complete', 'back', 'skip', 'complete'],
+      ['ready', 'next', 'skip', 'reject'],
+      ['ready', 'next', 'relaunch', 'reject', 'ready', 'next', 'reject'],
+      ['ready', 'next', 'skip', 'resolve', 'skip'],
     ];
 
     it.each(sequences.map(seq => [seq.join(' > '), seq] as const))(
@@ -977,6 +1071,9 @@ describe('wizardState - state machine', () => {
         const pending: Array<{ d: Deferred; generation: number; settled: boolean }> = [];
         let generation = 0;
         let allowDismiss = false;
+        // A rejection that outlives its session is reported once in a toast; one
+        // in the open session is shown on the step and never toasted.
+        let expectedToasts = 0;
         const violations: string[] = [];
 
         for (const op of sequence) {
@@ -1022,7 +1119,10 @@ describe('wizardState - state machine', () => {
               if (entry) {
                 entry.settled = true;
                 if (op === 'resolve') entry.d.resolve();
-                else entry.d.reject(new Error('rejected'));
+                else {
+                  if (entry.generation !== generation) expectedToasts++;
+                  entry.d.reject(new Error('rejected'));
+                }
               }
               break;
             }
@@ -1036,6 +1136,10 @@ describe('wizardState - state machine', () => {
           }
           if (!allowDismiss && vi.mocked(api.post).mock.calls.length !== postsBefore) {
             violations.push(`${op}: dismissed without skip or a ready last step`);
+          }
+          const toasts = vi.mocked(toastActions.error).mock.calls.length;
+          if (toasts !== expectedToasts) {
+            violations.push(`${op}: ${toasts} toasts, expected ${expectedToasts}`);
           }
           if (
             wizardState.isSaving &&

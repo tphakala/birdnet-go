@@ -5253,7 +5253,9 @@
       "saveFailed": "Impossible d'enregistrer cette étape. Vérifiez la connexion et réessayez, ou passez la configuration et modifiez cela plus tard dans les Paramètres.",
       "saveRejected": "Les paramètres de cette étape n'ont pas été acceptés. Vérifiez les valeurs et réessayez, ou passez la configuration et modifiez cela plus tard dans les Paramètres.",
       "stepLoadFailed": "Impossible de charger cette étape. Appuyez sur Réessayer ou rechargez la page.",
-      "stepLoadFailedReload": "Cette étape ne peut toujours pas être chargée. Rechargez la page pour réessayer ; les choix enregistrés aux étapes précédentes sont conservés."
+      "stepLoadFailedReload": "Cette étape ne peut toujours pas être chargée. Rechargez la page pour réessayer ; les choix enregistrés aux étapes précédentes sont conservés.",
+      "audioSourceSaveUnfinished": "Le changement de source audio n'a pas abouti. Vérifiez les sources audio dans Paramètres > Audio.",
+      "saveUnfinished": "Certaines modifications de la configuration n'ont pas été enregistrées. Vérifiez-les dans les Paramètres."
     },
     "reasons": {
       "completeStep": "Terminez cette étape pour continuer."
@@ -5261,6 +5263,7 @@
     "leaveConfirm": {
       "title": "Quitter la configuration ?",
       "message": "La configuration ne s'ouvrira plus. Les choix enregistrés aux étapes précédentes sont conservés ; les modifications de cette étape ne sont pas enregistrées. Vous pourrez tout modifier plus tard dans les Paramètres.",
+      "messageSaving": "La configuration ne s'ouvrira plus. Les choix enregistrés aux étapes précédentes sont conservés. Cette étape est encore en cours d'enregistrement, et certaines de ses modifications, voire toutes, risquent de ne pas être conservées. Vous pourrez tout modifier plus tard dans les Paramètres.",
       "stay": "Continuer la configuration",
       "leave": "Quitter la configuration"
     },

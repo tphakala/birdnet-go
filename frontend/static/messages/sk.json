@@ -5253,7 +5253,9 @@
       "saveFailed": "Tento krok sa nepodarilo uložiť. Skontrolujte pripojenie a skúste to znova, alebo preskočte nastavenie a zmeňte to neskôr v Nastaveniach.",
       "saveRejected": "Nastavenia v tomto kroku neboli prijaté. Skontrolujte hodnoty a skúste to znova, alebo preskočte nastavenie a zmeňte to neskôr v Nastaveniach.",
       "stepLoadFailed": "Tento krok sa nepodarilo načítať. Stlačte Skúsiť znova alebo obnovte stránku.",
-      "stepLoadFailedReload": "Tento krok sa stále nepodarilo načítať. Obnovte stránku a skúste to znova; voľby uložené v predchádzajúcich krokoch zostanú zachované."
+      "stepLoadFailedReload": "Tento krok sa stále nepodarilo načítať. Obnovte stránku a skúste to znova; voľby uložené v predchádzajúcich krokoch zostanú zachované.",
+      "audioSourceSaveUnfinished": "Zmena zdroja zvuku sa nedokončila. Skontrolujte zdroje zvuku v sekcii Nastavenia > Zvuk.",
+      "saveUnfinished": "Niektoré zmeny z nastavenia sa neuložili. Skontrolujte ich v Nastaveniach."
     },
     "reasons": {
       "completeStep": "Na pokračovanie dokončite tento krok."
@@ -5261,6 +5263,7 @@
     "leaveConfirm": {
       "title": "Opustiť nastavenie?",
       "message": "Nastavenie sa znova neotvorí. Voľby uložené v predchádzajúcich krokoch zostanú zachované; zmeny v tomto kroku sa neuložia. Všetko môžete neskôr zmeniť v Nastaveniach.",
+      "messageSaving": "Nastavenie sa znova neotvorí. Voľby uložené v predchádzajúcich krokoch zostanú zachované. Tento krok sa ešte ukladá a niektoré alebo všetky jeho zmeny sa nemusia zachovať. Všetko môžete neskôr zmeniť v Nastaveniach.",
       "stay": "Pokračovať v nastavení",
       "leave": "Opustiť nastavenie"
     },
