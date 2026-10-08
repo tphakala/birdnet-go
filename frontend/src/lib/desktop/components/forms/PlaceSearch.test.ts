@@ -538,6 +538,19 @@ describe('PlaceSearch', () => {
       expect(document.activeElement).toBe(input());
     });
 
+    it('closes the list when the input loses focus', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(HELSINKI, HELSINGBORG)));
+      renderSearch();
+      await searchFor('Hels');
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+      input().blur();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(input()).toHaveAttribute('aria-expanded', 'false');
+    });
+
     it('starts at the first option when ArrowDown reopens the list after a blur', async () => {
       fetchMock.mockImplementation(() =>
         Promise.resolve(jsonResponse(HELSINKI, HELSINGBORG, HELSINGFORS))
