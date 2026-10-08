@@ -3,6 +3,7 @@ import {
   OPTION_BASE_CLASS,
   OPTION_SELECTED_BG_CLASS,
   OPTION_HIGHLIGHT_BG_CLASS,
+  OPTION_HOVER_CLASS,
   OPTION_HIGHLIGHT_OUTLINE_CLASS,
   getOptionStateClasses,
 } from './SelectDropdown.styles';
@@ -41,6 +42,30 @@ describe('SelectDropdown option state classes', () => {
           present: state.highlighted,
         });
       }
+    }
+  });
+
+  it('draws the highlight outline in base-content, 2px wide and inset', () => {
+    const result = tokens(getOptionStateClasses({ selected: false, highlighted: true }));
+    expect(result).toEqual(
+      expect.arrayContaining([
+        'outline-2',
+        '-outline-offset-2',
+        'outline-[var(--color-base-content)]',
+      ])
+    );
+  });
+
+  it('tints a highlighted unselected option with the base-content highlight background', () => {
+    const result = tokens(getOptionStateClasses({ selected: false, highlighted: true }));
+    expect(result).toContain(OPTION_HIGHLIGHT_BG_CLASS);
+    expect(result).not.toContain(OPTION_SELECTED_BG_CLASS);
+  });
+
+  it('adds the hover tint to unselected options only', () => {
+    for (const state of COMBINATIONS) {
+      const hasHover = tokens(getOptionStateClasses(state)).includes(OPTION_HOVER_CLASS);
+      expect({ state, hasHover }).toEqual({ state, hasHover: !state.selected });
     }
   });
 

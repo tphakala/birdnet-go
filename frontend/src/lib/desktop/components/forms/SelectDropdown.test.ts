@@ -464,6 +464,11 @@ describe('SelectDropdown', () => {
       // First ArrowDown should highlight first option
       await user.keyboard('{ArrowDown}');
       expect(options[0]).toHaveClass(...OPTION_HIGHLIGHT_OUTLINE_CLASS.split(' '));
+      expect(options[0]).toHaveClass(
+        'outline-2',
+        '-outline-offset-2',
+        'outline-[var(--color-base-content)]'
+      );
 
       // Second ArrowDown should highlight second option
       await user.keyboard('{ArrowDown}');
