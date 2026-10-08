@@ -217,7 +217,7 @@
     return () => syncDebounce.cancel();
   });
 
-  // A pick on one map moves the other one, then tells the parent.
+  // A pick on one map is reported to the parent, then moves the other map.
   function handlePick(source: 'inline' | 'expanded', lat: number, lng: number) {
     if (destroyed) return;
     onLocationChange(lat, lng);
