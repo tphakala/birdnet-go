@@ -768,6 +768,43 @@ describe('Modal', () => {
       expect(cardA).toHaveFocus();
     });
 
+    describe('with checkVisibility available', () => {
+      // jsdom has no checkVisibility. This stand-in reports a node inside a
+      // [data-vis-hidden] element as hidden only when asked to consider the
+      // visibility property, as a browser does for visibility:hidden.
+      beforeEach(() => {
+        Object.defineProperty(HTMLElement.prototype, 'checkVisibility', {
+          configurable: true,
+          writable: true,
+          value(this: HTMLElement, options?: { visibilityProperty?: boolean }) {
+            return !(options?.visibilityProperty && this.closest('[data-vis-hidden]'));
+          },
+        });
+      });
+
+      afterEach(() => {
+        Reflect.deleteProperty(HTMLElement.prototype, 'checkVisibility');
+      });
+
+      it('Tab wraps past a visibility-hidden last control', async () => {
+        await renderHost({ visibilityHiddenLast: true });
+        button('Last').focus();
+
+        await user.tab();
+
+        expect(button('First')).toHaveFocus();
+      });
+
+      it('keeps the controls as candidates while the dialog itself is still hidden', async () => {
+        await renderHost({ visibilityHiddenLast: true, dialogHidden: true });
+        button('Last').focus();
+
+        await user.tab();
+
+        expect(button('Hidden last')).toHaveFocus();
+      });
+    });
+
     it('only the topmost of two open modals handles Tab', async () => {
       const view = stackHostTest.render({ props: { firstOpen: true, secondOpen: false } });
       await waitFor(() => expect(button('Lower action')).toHaveFocus());

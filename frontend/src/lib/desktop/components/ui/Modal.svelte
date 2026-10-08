@@ -37,27 +37,35 @@
     return el instanceof HTMLInputElement && el.type === 'radio';
   }
 
+  // Both option names: Chromium 105 to 120 knows only checkVisibilityCSS, newer engines
+  // also take visibilityProperty. Either makes visibility:hidden count as hidden.
+  const VISIBILITY_AWARE_OPTIONS = { visibilityProperty: true, checkVisibilityCSS: true };
+
   /**
    * Elements inside root that the Tab key can reach, in document order: not
    * disabled, tabindex not negative, not a hidden input, not inside an inert or
-   * hidden subtree, and not removed by display:none. Radio buttons are listed as
-   * the browser tabs them, see collapseRadioGroups().
+   * hidden subtree, and not hidden by display:none or visibility:hidden. Radio
+   * buttons are listed as the browser tabs them, see collapseRadioGroups().
    */
   function getTabbable(root: HTMLElement): HTMLElement[] {
     return collapseRadioGroups(getTabbableUncollapsed(root));
   }
 
   function getTabbableUncollapsed(root: HTMLElement): HTMLElement[] {
+    // The dialog is visibility:hidden during its first open frame, which would
+    // drop every candidate, so the visibility property counts only once the box
+    // itself is visible. jsdom has no checkVisibility, so tests see all candidates.
+    const options =
+      typeof root.checkVisibility === 'function' && root.checkVisibility(VISIBILITY_AWARE_OPTIONS)
+        ? VISIBILITY_AWARE_OPTIONS
+        : undefined;
     return Array.from(root.querySelectorAll<HTMLElement>(TABBABLE_CANDIDATE_SELECTOR)).filter(
       el => {
         if (el.matches(':disabled')) return false;
         if (el.tabIndex < 0) return false;
         if (el instanceof HTMLInputElement && el.type === 'hidden') return false;
         if (el.closest(TAB_EXCLUDING_ANCESTOR_SELECTOR)) return false;
-        // Default options only: display-based. visibilityProperty would drop
-        // everything while the dialog is visibility:hidden during its first
-        // open frame. jsdom has no checkVisibility, so tests see all candidates.
-        if (typeof el.checkVisibility === 'function' && !el.checkVisibility()) return false;
+        if (typeof el.checkVisibility === 'function' && !el.checkVisibility(options)) return false;
         return true;
       }
     );

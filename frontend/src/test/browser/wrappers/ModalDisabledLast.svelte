@@ -14,6 +14,7 @@
   {#snippet footer()}
     <button type="button">Middle</button>
     <button type="button" disabled>Disabled last</button>
+    <button type="button" style:visibility="hidden">Invisible last</button>
   {/snippet}
 </Modal>
 

@@ -15,6 +15,8 @@
     escapeHandled = false,
     radioLayout = 'none',
     hideFooter = false,
+    visibilityHiddenLast = false,
+    dialogHidden = false,
     onClose = undefined,
   }: {
     isOpen?: boolean;
@@ -29,13 +31,23 @@
     /** split: a checked radio, a button, then the group's second radio, nothing else in the body */
     radioLayout?: 'none' | 'split' | 'trailing-unchecked' | 'leading-unchecked';
     hideFooter?: boolean;
+    /** a last control that a test's checkVisibility stub reports hidden (data-vis-hidden) */
+    visibilityHiddenLast?: boolean;
+    /** marks the dialog itself as hidden for the same stub, as in its first open frame */
+    dialogHidden?: boolean;
     onClose?: () => void;
   } = $props();
 </script>
 
 <button type="button">Outside before</button>
 
-<Modal {isOpen} title="Trap Modal" showCloseButton={false} {onClose}>
+<Modal
+  {isOpen}
+  title="Trap Modal"
+  showCloseButton={false}
+  {onClose}
+  data-vis-hidden={dialogHidden ? '' : undefined}
+>
   {#snippet children()}
     {#if showRadios}
       <input type="radio" name="mode" value="a" aria-label="Mode A" />
@@ -74,6 +86,9 @@
       <button type="button" disabled={lastDisabled} tabindex={lastTabindex}>Last</button>
       {#if showExtra}
         <button type="button">Extra</button>
+      {/if}
+      {#if visibilityHiddenLast}
+        <button type="button" data-vis-hidden>Hidden last</button>
       {/if}
       {#if showTrailingCard}
         <div tabindex="-1" role="group" aria-label="Trailing card">Trailing card</div>
