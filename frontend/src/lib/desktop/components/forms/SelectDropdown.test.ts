@@ -9,6 +9,11 @@ import userEvent from '@testing-library/user-event';
 import SelectDropdown from './SelectDropdown.svelte';
 import type { SelectOption } from './SelectDropdown.types';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
+import {
+  OPTION_SELECTED_BG_CLASS,
+  OPTION_HIGHLIGHT_BG_CLASS,
+  OPTION_HIGHLIGHT_OUTLINE_CLASS,
+} from './SelectDropdown.styles';
 
 // Mock scrollIntoView which is not available in jsdom
 beforeEach(() => {
@@ -458,11 +463,83 @@ describe('SelectDropdown', () => {
 
       // First ArrowDown should highlight first option
       await user.keyboard('{ArrowDown}');
-      expect(options[0]).toHaveClass('bg-[var(--color-base-200)]');
+      expect(options[0]).toHaveClass(...OPTION_HIGHLIGHT_OUTLINE_CLASS.split(' '));
+      expect(options[0]).toHaveClass(
+        'outline-2',
+        '-outline-offset-2',
+        'outline-[var(--color-base-content)]'
+      );
+      expect(options[0]).toHaveClass(OPTION_HIGHLIGHT_BG_CLASS);
 
       // Second ArrowDown should highlight second option
       await user.keyboard('{ArrowDown}');
-      expect(options[1]).toHaveClass('bg-[var(--color-base-200)]');
+      expect(options[1]).toHaveClass(...OPTION_HIGHLIGHT_OUTLINE_CLASS.split(' '));
+      // The highlight moves rather than accumulates
+      expect(options[0]).not.toHaveClass('outline-2');
+    });
+
+    it('shows the selected option in base-content text with a base-content check', async () => {
+      selectTest.render({
+        props: {
+          options: basicOptions,
+          value: 'banana',
+        },
+      });
+
+      await fireEvent.click(screen.getByRole('button'));
+
+      const selected = screen
+        .getAllByRole('option')
+        .find(option => option.getAttribute('aria-selected') === 'true');
+      expect(selected).toBeDefined();
+      expect(selected?.className).toContain('text-[var(--color-base-content)]');
+      const primaryClasses = (selected?.className ?? '')
+        .split(/\s+/)
+        .filter(token => token.includes('--color-primary'));
+      expect(primaryClasses).toEqual([OPTION_SELECTED_BG_CLASS]);
+      const check = selected?.querySelector('svg');
+      expect(check).not.toBeNull();
+      expect(check?.getAttribute('class') ?? '').not.toContain('--color-primary');
+    });
+
+    it('outlines the selected option when it is highlighted and keeps its tint', async () => {
+      const user = userEvent.setup();
+
+      selectTest.render({
+        props: {
+          options: basicOptions,
+          value: 'apple',
+        },
+      });
+
+      const button = screen.getByRole('button');
+      button.focus();
+      await user.keyboard('{ArrowDown}');
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+      await user.keyboard('{ArrowDown}');
+
+      const options = screen.getAllByRole('option');
+      expect(options[0]).toHaveClass(...OPTION_SELECTED_BG_CLASS.split(' '));
+      expect(options[0]).toHaveClass('outline-2');
+      expect(options[0]).not.toHaveClass(...OPTION_HIGHLIGHT_BG_CLASS.split(' '));
+    });
+
+    it('gives options a focus-visible outline instead of hiding focus', async () => {
+      selectTest.render({
+        props: {
+          options: basicOptions,
+        },
+      });
+
+      await fireEvent.click(screen.getByRole('button'));
+
+      for (const option of screen.getAllByRole('option')) {
+        expect(option.className).toContain('focus-visible:outline-2');
+        expect(option.className).toContain('focus-visible:outline-[var(--color-base-content)]');
+        expect(option.className).not.toContain('focus:outline-hidden');
+      }
     });
 
     it('opens with Enter or Space', async () => {
