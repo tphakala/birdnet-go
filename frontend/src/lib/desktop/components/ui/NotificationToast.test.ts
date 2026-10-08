@@ -149,6 +149,8 @@ describe('NotificationToast', () => {
     expect(classes).toContain('border');
     expect(classes).toContain('border-current');
     expect(classes.filter(name => name.split(':').pop()?.startsWith('bg-'))).toEqual([]);
+    // The only text utility is the size, so the label keeps the toast's own text colour.
+    expect(classes.filter(name => name.split(':').pop()?.startsWith('text-'))).toEqual(['text-xs']);
   });
 
   it('renders at different positions', () => {
