@@ -1167,6 +1167,20 @@ describe('SelectDropdown Accessibility', () => {
       expect(trigger).not.toHaveAttribute('aria-activedescendant');
     });
 
+    it('drops aria-activedescendant and aria-controls from the trigger after a trigger click closes the list', async () => {
+      const { user, trigger } = await openWithArrowDown();
+      await user.keyboard('{ArrowDown}{ArrowDown}');
+      expect(trigger).toHaveAttribute('aria-activedescendant');
+
+      // Whichever way the list closes, a closed trigger names no option and no listbox
+      await user.click(trigger);
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).not.toHaveAttribute('aria-activedescendant');
+      expect(trigger).not.toHaveAttribute('aria-controls');
+    });
+
     it('gives the searchable trigger and search box the same active descendant', async () => {
       const { user, search } = await openSearchable({ label: 'Fruit' });
       const trigger = screen.getByRole('combobox');
