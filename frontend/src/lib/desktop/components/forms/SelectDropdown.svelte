@@ -8,6 +8,7 @@
   import { computeAnchorPosition, type AnchorPosition } from '$lib/utils/anchorPosition';
   import { safeGet, safeArrayAccess, safeArraySpread } from '$lib/utils/security';
   import { t } from '$lib/i18n';
+  import { OPTION_BASE_CLASS, getOptionStateClasses } from './SelectDropdown.styles';
 
   interface Props {
     options: SelectOption[];
@@ -635,12 +636,13 @@
                   type="button"
                   id="{fieldId}-option-{flatIndex}"
                   class={cn(
-                    'w-full text-left hover:bg-[var(--color-base-200)] focus:bg-[var(--color-base-200)] focus:outline-hidden flex items-center gap-2 rounded',
+                    OPTION_BASE_CLASS,
                     safeGet(menuSizeClasses, menuSize, ''),
-                    isSelected(option) &&
-                      'bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] text-[var(--color-primary)]',
-                    option.disabled && 'opacity-50 cursor-not-allowed',
-                    highlightedIndex === flatIndex && 'bg-[var(--color-base-200)]'
+                    getOptionStateClasses({
+                      selected: isSelected(option),
+                      highlighted: highlightedIndex === flatIndex,
+                    }),
+                    option.disabled && 'opacity-50 cursor-not-allowed'
                   )}
                   disabled={option.disabled}
                   onclick={() => selectOption(option)}
@@ -649,7 +651,7 @@
                 >
                   <span class="size-4 shrink-0 flex items-center justify-center">
                     {#if isSelected(option)}
-                      <Check class="size-4 text-[var(--color-primary)]" />
+                      <Check class="size-4" />
                     {/if}
                   </span>
 
