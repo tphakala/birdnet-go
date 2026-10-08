@@ -161,6 +161,20 @@ describe('AnalysisSettingsPage range filter dialog', () => {
     expect(viewSpecies).toHaveFocus();
   });
 
+  it('does not move focus on close when View Species was removed while the dialog was open', async () => {
+    const user = userEvent.setup();
+    const viewSpecies = await openDialog(user);
+    await screen.findByRole('heading', { name: DIALOG_TITLE });
+    await waitFor(() => expect(rangeDialog().contains(document.activeElement)).toBe(true));
+    const focusSpy = vi.spyOn(viewSpecies, 'focus');
+    viewSpecies.remove();
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: DIALOG_TITLE })).toBeNull());
+    expect(focusSpy).not.toHaveBeenCalled();
+  });
+
   it('the range filter dialog is named by its own title', async () => {
     const user = userEvent.setup();
     await openDialog(user);

@@ -762,7 +762,8 @@
         }
       }, 0);
     } else if (previouslyFocusedElement) {
-      previouslyFocusedElement.focus();
+      // The button may have been removed while the dialog was open
+      if (previouslyFocusedElement.isConnected) previouslyFocusedElement.focus();
       previouslyFocusedElement = null;
     }
 
