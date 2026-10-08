@@ -92,7 +92,7 @@
 
   function startEditing() {
     isEditing = true;
-    // Only clear the local display — don't propagate to the parent store
+    // Only clear the local display; don't propagate to the parent store
     // until the user actually types a new value via the input handler.
     value = '';
   }
@@ -184,7 +184,7 @@
     </label>
   {/if}
 
-  <!-- Redacted "secret is set" display — shown when value is the redacted placeholder and user is not editing -->
+  <!-- Redacted "secret is set" display: shown when value is the redacted placeholder and user is not editing -->
   {#if isRedacted && !isEditing}
     <div class="relative flex items-center gap-2">
       <div

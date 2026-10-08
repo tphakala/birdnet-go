@@ -384,8 +384,8 @@ describe('ToggleField naming and description', () => {
 
     const describedBy = screen.getByRole('checkbox').getAttribute('aria-describedby');
 
-    expect(describedBy).toBeTruthy();
-    expect(document.getElementById(describedBy as string)).toHaveTextContent('Toggle description');
+    if (!describedBy) throw new Error('aria-describedby is missing');
+    expect(document.getElementById(describedBy)).toHaveTextContent('Toggle description');
   });
 
   it.each(VARIANTS)(
@@ -407,6 +407,37 @@ describe('ToggleField naming and description', () => {
       expect(toggle).toHaveAccessibleDescription('Toggle description');
     }
   );
+});
+
+describe('ToggleField error wiring', () => {
+  it.each(VARIANTS)('keeps the description and adds the error text to it (%s)', variant => {
+    render(ToggleField, {
+      props: {
+        label: 'Test Toggle',
+        description: 'Toggle description',
+        error: 'Toggle error',
+        value: false,
+        onUpdate: vi.fn(),
+        variant,
+      },
+    });
+
+    const toggle = screen.getByRole('checkbox');
+
+    expect(toggle).toHaveAccessibleName('Test Toggle');
+    expect(toggle).toHaveAccessibleDescription('Toggle description Toggle error');
+  });
+
+  it.each(VARIANTS)('marks the switch invalid only while an error is set (%s)', async variant => {
+    const props = { label: 'Test Toggle', value: false, onUpdate: vi.fn(), variant };
+    const { rerender } = render(ToggleField, { props });
+
+    expect(screen.getByRole('checkbox')).not.toHaveAttribute('aria-invalid');
+
+    await rerender({ ...props, error: 'Toggle error' });
+
+    expect(screen.getByRole('checkbox')).toHaveAttribute('aria-invalid', 'true');
+  });
 });
 
 describe('ToggleField card variant', () => {
@@ -461,17 +492,38 @@ describe('ToggleField card variant', () => {
       'has-[input:focus-visible]:outline-[var(--color-primary)]'
     );
     expect(toggle).not.toHaveClass('focus-visible:outline-2');
+    // The browser's own ring on the switch would double the card ring
+    expect(toggle).toHaveClass('focus-visible:outline-none');
   });
 
-  it('dims the card and blocks the pointer when disabled', () => {
+  it('a disabled card shows only the not-allowed cursor, is dimmed once and ignores hover', () => {
     render(ToggleField, {
       props: { ...baseProps, value: false, onUpdate: vi.fn(), disabled: true },
     });
+    const toggle = screen.getByRole('checkbox');
+    const card = toggle.closest('label');
 
-    expect(screen.getByRole('checkbox').closest('label')).toHaveClass(
-      'opacity-50',
-      'cursor-not-allowed'
-    );
+    // cn does not merge conflicting utilities, so a pointer class would win over not-allowed
+    expect(card).toHaveClass('opacity-50', 'cursor-not-allowed');
+    expect(card).not.toHaveClass('cursor-pointer');
+    expect(card).not.toHaveClass('hover:border-[var(--border-300)]');
+    // The card is already dimmed, so the switch must not dim a second time
+    expect(toggle).not.toHaveClass('disabled:opacity-50');
+  });
+
+  it('an enabled card shows the pointer cursor and only an unchecked one reacts to hover', async () => {
+    const onUpdate = vi.fn();
+    const { rerender } = render(ToggleField, { props: { ...baseProps, value: false, onUpdate } });
+    const card = screen.getByRole('checkbox').closest('label');
+
+    expect(card).toHaveClass('cursor-pointer', 'hover:border-[var(--border-300)]');
+    expect(card).not.toHaveClass('cursor-not-allowed');
+
+    await rerender({ ...baseProps, value: true, onUpdate });
+
+    expect(card).toHaveClass('cursor-pointer', 'border-[var(--color-primary)]');
+    // A checked card keeps its primary border on hover
+    expect(card).not.toHaveClass('hover:border-[var(--border-300)]');
   });
 
   it('keeps the default variant ring on the switch itself', () => {

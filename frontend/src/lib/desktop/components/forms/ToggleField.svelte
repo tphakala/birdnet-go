@@ -53,7 +53,7 @@
     onUpdate(newValue);
   }
 
-  // Native Tailwind toggle classes — shared base + size variants
+  // Native Tailwind toggle classes: shared base + size variants
   const toggleSharedClasses = `
     appearance-none rounded-full cursor-pointer transition-all relative
     bg-[var(--color-base-300)]
@@ -61,12 +61,14 @@
     before:rounded-full before:bg-[var(--color-base-100)]
     before:shadow-sm before:transition-transform
     checked:bg-[var(--color-primary)]
-    disabled:opacity-50 disabled:cursor-not-allowed
+    disabled:cursor-not-allowed
   `.trim();
 
-  // The default variant rings the switch itself; the card variant rings the card instead
-  const toggleFocusClasses =
-    'focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2';
+  // The default variant rings and dims the switch itself. The card variant rings and dims
+  // the card instead, and clears the browser's own ring so it does not double the card ring.
+  const toggleDefaultClasses =
+    'focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 disabled:opacity-50';
+  const toggleCardClasses = 'focus-visible:outline-none';
 
   const toggleSizeClasses = {
     sm: 'w-10 h-5 before:w-4 before:h-4 checked:before:translate-x-5',
@@ -78,16 +80,23 @@
 
   const toggleErrorClasses = 'checked:bg-[var(--color-error)]';
 
+  // cn does not merge conflicting utilities, so the cursor and the hover border are chosen
+  // by state here instead of being overridden later
   const CARD_BASE_CLASS =
-    'flex w-full cursor-pointer items-start gap-3 rounded-lg border-2 p-4 text-left transition-[border-color,background-color] motion-reduce:transition-none has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-[var(--color-primary)] has-[input:focus-visible]:outline-offset-2';
+    'flex w-full items-start gap-3 rounded-lg border-2 p-4 text-left transition-[border-color,background-color] motion-reduce:transition-none has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-[var(--color-primary)] has-[input:focus-visible]:outline-offset-2';
   const CARD_ON_CLASS = 'border-[var(--color-primary)] bg-[var(--color-primary)]/5';
-  const CARD_OFF_CLASS = 'border-[var(--border-200)] hover:border-[var(--border-300)]';
+  const CARD_OFF_CLASS = 'border-[var(--border-200)]';
+  const CARD_ENABLED_CLASS = 'cursor-pointer';
+  const CARD_DISABLED_CLASS = 'cursor-not-allowed opacity-50';
+  // Only an unchecked, enabled card reacts to hover, so a checked card keeps its primary border
+  const CARD_HOVER_CLASS = 'hover:border-[var(--border-300)]';
 
   let cardClasses = $derived(
     cn(
       CARD_BASE_CLASS,
       value ? CARD_ON_CLASS : CARD_OFF_CLASS,
-      disabled && 'cursor-not-allowed opacity-50'
+      disabled ? CARD_DISABLED_CLASS : CARD_ENABLED_CLASS,
+      !value && !disabled && CARD_HOVER_CLASS
     )
   );
   let cardIconClasses = $derived(
@@ -97,7 +106,12 @@
     )
   );
 
-  let describedBy = $derived(error ? `${fieldId}-error` : description ? descriptionId : undefined);
+  // The description first, then the error: neither is part of the accessible name
+  let describedBy = $derived(
+    [description ? descriptionId : undefined, error ? `${fieldId}-error` : undefined]
+      .filter(Boolean)
+      .join(' ') || undefined
+  );
 </script>
 
 <div class={cn('min-w-0', className)} {...rest}>
@@ -126,13 +140,19 @@
       <input
         id={fieldId}
         type="checkbox"
-        class={cn(toggleBaseClasses, 'mt-0.5 shrink-0', error && toggleErrorClasses)}
+        class={cn(
+          toggleBaseClasses,
+          toggleCardClasses,
+          'mt-0.5 shrink-0',
+          error && toggleErrorClasses
+        )}
         checked={value}
         {disabled}
         {required}
         onchange={handleChange}
         aria-labelledby={labelId}
         aria-describedby={describedBy}
+        aria-invalid={error ? 'true' : undefined}
       />
     </label>
   {:else}
@@ -163,13 +183,14 @@
         <input
           id={fieldId}
           type="checkbox"
-          class={cn(toggleBaseClasses, toggleFocusClasses, error && toggleErrorClasses)}
+          class={cn(toggleBaseClasses, toggleDefaultClasses, error && toggleErrorClasses)}
           checked={value}
           {disabled}
           {required}
           onchange={handleChange}
           aria-labelledby={labelId}
           aria-describedby={describedBy}
+          aria-invalid={error ? 'true' : undefined}
         />
       </div>
     </div>
