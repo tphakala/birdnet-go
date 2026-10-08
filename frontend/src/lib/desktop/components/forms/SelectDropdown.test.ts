@@ -1455,6 +1455,32 @@ describe('SelectDropdown Accessibility', () => {
       expect(document.activeElement).toBe(document.body);
     });
 
+    it('restores focus from body without scrolling the trigger into view', async () => {
+      const user = userEvent.setup();
+      const { text } = renderInDialog();
+      const trigger = screen.getByRole('combobox');
+      await user.click(trigger);
+      await screen.findByRole('listbox');
+      trigger.blur();
+      const focus = vi.spyOn(trigger, 'focus');
+
+      // The click was somewhere else in the dialog, so the dialog must not scroll back to the trigger
+      await fireEvent.click(text);
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+    });
+
+    it('scrolls the trigger into view when focus moves back from the open list', async () => {
+      const { user } = await openSearchable({ label: 'Fruit' });
+      const focus = vi.spyOn(screen.getByRole('combobox'), 'focus');
+
+      await user.keyboard('{Escape}');
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: false });
+    });
+
     it('leaves focus on body after a background click outside any dialog', async () => {
       const user = userEvent.setup();
       selectTest.render({ props: { options: fruit } });

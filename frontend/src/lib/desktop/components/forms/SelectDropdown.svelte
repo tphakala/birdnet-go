@@ -310,9 +310,12 @@
   // with a click that took no focus (Safari).
   function closeDropdown({ restoreFromBody = false }: { restoreFromBody?: boolean } = {}) {
     const active = document.activeElement;
+    const focusInPopover = dropdownElement?.contains(active) ?? false;
     const focusOnBody = restoreFromBody && (!active || active === document.body);
-    if (focusOnBody || dropdownElement?.contains(active)) {
-      buttonElement?.focus();
+    if (focusOnBody || focusInPopover) {
+      // From the popover the user was working at the trigger; from body the click was elsewhere,
+      // so the dialog must not scroll back to the trigger
+      buttonElement?.focus({ preventScroll: !focusInPopover });
     }
     isOpen = false;
     searchQuery = '';
