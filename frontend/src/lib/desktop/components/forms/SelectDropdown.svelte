@@ -9,6 +9,7 @@
   import { safeGet, safeArrayAccess, safeArraySpread } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { OPTION_BASE_CLASS, getOptionStateClasses } from './SelectDropdown.styles';
+  import { optionId, activeOptionId, isOptionHighlighted } from './SelectDropdown.highlight';
 
   interface Props {
     options: SelectOption[];
@@ -115,13 +116,12 @@
     () => (buttonElement?.closest('[role="dialog"]') as HTMLElement | null) ?? document.body
   );
 
-  // Trigger description: the displayed value first, so it stays exposed when a label or
-  // aria-label replaces the button content in the name, then the help text (when shown) and
-  // any caller-provided ids
+  // Trigger description: the help text (when shown) and any caller-provided ids. The displayed
+  // value is not listed: a role="combobox" button exposes its content as the combobox value, and
+  // naming it here too would make a screen reader announce it twice.
   let triggerDescribedBy = $derived(
-    [`${fieldId}-value`, helpText ? `${fieldId}-help` : undefined, ariaDescribedBy]
-      .filter(Boolean)
-      .join(' ')
+    [helpText ? `${fieldId}-help` : undefined, ariaDescribedBy].filter(Boolean).join(' ') ||
+      undefined
   );
 
   // Accessible name for the open listbox when the `label` prop is not used and no `aria-label`
@@ -225,6 +225,12 @@
   // Options in the order they are rendered: grouped when groupBy is on, so keyboard
   // navigation, ids and aria-activedescendant agree with what is on screen
   let renderedOptions = $derived(groupBy ? Object.values(groupedOptions).flat() : filteredOptions);
+
+  // Id of the highlighted option while the list is open, shared by the trigger and the search
+  // box (focus sits in one or the other); undefined when it would name a missing option
+  let activeDescendantId = $derived(
+    isOpen ? activeOptionId(fieldId, highlightedIndex, renderedOptions.length) : undefined
+  );
 
   let canAddMore = $derived(
     !maxSelections ||
@@ -443,7 +449,7 @@
   function scrollToHighlighted() {
     if (highlightedIndex < 0 || !dropdownElement) return;
 
-    const highlighted = document.getElementById(`${fieldId}-option-${highlightedIndex}`);
+    const highlighted = document.getElementById(optionId(fieldId, highlightedIndex));
 
     if (highlighted instanceof HTMLElement) {
       highlighted.scrollIntoView({ block: 'nearest' });
@@ -522,13 +528,16 @@
       {disabled}
       onclick={toggleDropdown}
       onkeydown={handleKeyDown}
+      role="combobox"
       aria-haspopup="listbox"
       aria-expanded={isOpen}
+      aria-controls={isOpen ? `${fieldId}-listbox` : undefined}
+      aria-activedescendant={activeDescendantId}
       aria-labelledby={label ? `${fieldId}-label` : undefined}
       aria-label={label ? undefined : ariaLabel}
       aria-describedby={triggerDescribedBy}
     >
-      <span id="{fieldId}-value" class="flex items-center gap-2 truncate min-w-0">
+      <span class="flex items-center gap-2 truncate min-w-0">
         {#if renderSelected && selectedOptions.length > 0}
           {@render renderSelected(selectedOptions)}
         {:else if selectedOptions.length > 0 && !multiple}
@@ -607,10 +616,7 @@
               aria-label={t('components.forms.select.searchOptions')}
               role="searchbox"
               aria-controls="{fieldId}-listbox"
-              aria-activedescendant={highlightedIndex >= 0 &&
-              highlightedIndex < renderedOptions.length
-                ? `${fieldId}-option-${highlightedIndex}`
-                : undefined}
+              aria-activedescendant={activeDescendantId}
             />
           </div>
         {/if}
@@ -645,13 +651,13 @@
                 {@const flatIndex = optionIndexMap.get(option) ?? -1}
                 <button
                   type="button"
-                  id="{fieldId}-option-{flatIndex}"
+                  id={optionId(fieldId, flatIndex)}
                   class={cn(
                     OPTION_BASE_CLASS,
                     safeGet(menuSizeClasses, menuSize, ''),
                     getOptionStateClasses({
                       selected: isSelected(option),
-                      highlighted: highlightedIndex === flatIndex,
+                      highlighted: isOptionHighlighted(flatIndex, highlightedIndex),
                     }),
                     option.disabled && 'opacity-50 cursor-not-allowed'
                   )}

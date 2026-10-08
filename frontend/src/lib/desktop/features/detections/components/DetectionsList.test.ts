@@ -30,7 +30,7 @@ describe('DetectionsList accessibility', () => {
       },
     });
 
-    const trigger = screen.getByRole('button', { name: 'detections.aria.resultsPerPage' });
+    const trigger = screen.getByRole('combobox', { name: 'detections.aria.resultsPerPage' });
     expect(trigger).toHaveTextContent('25');
   });
 });

@@ -52,7 +52,7 @@ describe('NotificationsSettingsPage protocol dropdown names', () => {
 
   async function chooseService(user: ReturnType<typeof userEvent.setup>, service: string) {
     await user.click(
-      await screen.findByRole('button', {
+      await screen.findByRole('combobox', {
         name: 'settings.notifications.push.services.selectLabel',
       })
     );
@@ -69,7 +69,7 @@ describe('NotificationsSettingsPage protocol dropdown names', () => {
     );
     await fireEvent.change(server, { target: { value: 'ntfy.example.org' } });
 
-    const protocol = await screen.findByRole('button', {
+    const protocol = await screen.findByRole('combobox', {
       name: 'settings.notifications.push.services.ntfy.protocol.label',
     });
     expect(protocol).toHaveTextContent('HTTPS');
@@ -80,7 +80,7 @@ describe('NotificationsSettingsPage protocol dropdown names', () => {
     await openProviderForm(user);
     await chooseService(user, 'Gotify');
 
-    const protocol = await screen.findByRole('button', {
+    const protocol = await screen.findByRole('combobox', {
       name: 'settings.notifications.push.services.gotify.protocol.label',
     });
     expect(protocol).toHaveTextContent('HTTPS');

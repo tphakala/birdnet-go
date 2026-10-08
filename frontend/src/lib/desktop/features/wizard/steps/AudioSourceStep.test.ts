@@ -1122,9 +1122,10 @@ describe('AudioSourceStep Accessibility', () => {
     await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
     await chooseUsbDevice();
 
-    expect(await deviceTrigger()).toHaveAccessibleDescription(
-      `USB Mic ${KEY}.soundCardReplacesStream`
-    );
+    const trigger = await deviceTrigger();
+    // The chosen device is the combobox value, so the description is the note alone
+    expect(trigger).toHaveTextContent('USB Mic');
+    expect(trigger).toHaveAccessibleDescription(`${KEY}.soundCardReplacesStream`);
   });
 
   it('describes the URL input with the note that sound cards stop', async () => {

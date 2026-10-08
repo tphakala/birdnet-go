@@ -195,7 +195,7 @@ describe('AudioEqualizerSettings', () => {
         },
       });
 
-      const trigger = await screen.findByRole('button', { name: 'Attenuation' });
+      const trigger = await screen.findByRole('combobox', { name: 'Attenuation' });
       expect(trigger).toHaveTextContent('24dB');
     });
 
@@ -210,11 +210,11 @@ describe('AudioEqualizerSettings', () => {
       });
 
       await user.click(
-        await screen.findByRole('button', { name: 'settings.audio.audioFilters.newFilterType' })
+        await screen.findByRole('combobox', { name: 'settings.audio.audioFilters.newFilterType' })
       );
       await user.click(await screen.findByRole('option', { name: /HighPass/ }));
 
-      const trigger = await screen.findByRole('button', { name: 'Attenuation' });
+      const trigger = await screen.findByRole('combobox', { name: 'Attenuation' });
       expect(trigger).toHaveTextContent('12dB');
     });
   });

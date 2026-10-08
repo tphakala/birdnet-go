@@ -392,9 +392,10 @@ describe('LocationLanguageStep Accessibility', () => {
       return el;
     });
 
-    // The displayed value comes first, then the help text
+    // The displayed value is the combobox value, so the description is the help text alone
+    expect(trigger).toHaveTextContent('English');
     expect(trigger).toHaveAccessibleDescription(
-      'English wizard.steps.locationLanguage.speciesLanguageHelp'
+      'wizard.steps.locationLanguage.speciesLanguageHelp'
     );
   });
 

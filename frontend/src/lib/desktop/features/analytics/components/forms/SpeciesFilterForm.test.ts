@@ -65,7 +65,7 @@ describe('SpeciesFilterForm', () => {
     });
 
     // The trigger is named by its <label for>, and shows the selected option as its text
-    const timePeriodSelect = screen.getByRole('button', { name: 'Time Period' });
+    const timePeriodSelect = screen.getByRole('combobox', { name: 'Time Period' });
     expect(timePeriodSelect).toHaveTextContent('All Time');
   });
 
@@ -83,7 +83,7 @@ describe('SpeciesFilterForm', () => {
 
     // The trigger is named by its <label for>; the default sort order count_desc shows
     // "Most Detections"
-    const sortSelect = screen.getByRole('button', { name: 'Sort By' });
+    const sortSelect = screen.getByRole('combobox', { name: 'Sort By' });
     expect(sortSelect).toHaveTextContent('Most Detections');
   });
 

@@ -1046,7 +1046,7 @@ describe('Modal', () => {
       await waitFor(() =>
         expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true)
       );
-      await user.click(screen.getByRole('button', { name: /Choice/ }));
+      await user.click(screen.getByRole('combobox', { name: /Choice/ }));
       const search = await screen.findByRole('searchbox');
       await waitFor(() => expect(search).toHaveFocus());
       return search;

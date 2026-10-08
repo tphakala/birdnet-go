@@ -83,7 +83,7 @@ describe('SelectDropdown', () => {
         props: { options: basicOptions },
       });
 
-      const button = screen.getByRole('button');
+      const button = screen.getByRole('combobox');
       await fireEvent.click(button);
 
       expect(screen.getByText('Apple')).toBeInTheDocument();
@@ -97,7 +97,7 @@ describe('SelectDropdown', () => {
         props: { options: basicOptions },
       });
 
-      const button = screen.getByRole('button');
+      const button = screen.getByRole('combobox');
       await fireEvent.click(button);
 
       expect(screen.getByText('Apple')).toBeInTheDocument();
@@ -117,7 +117,7 @@ describe('SelectDropdown', () => {
         props: { options: basicOptions },
       });
 
-      const button = screen.getByRole('button');
+      const button = screen.getByRole('combobox');
       await fireEvent.click(button);
 
       expect(screen.getByText('Apple')).toBeInTheDocument();
@@ -141,11 +141,11 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
       await fireEvent.click(screen.getByText('Banana'));
 
       expect(onChange).toHaveBeenCalledWith('banana');
-      expect(screen.getByRole('button')).toHaveTextContent('Banana');
+      expect(screen.getByRole('combobox')).toHaveTextContent('Banana');
     });
 
     it('displays initial value', () => {
@@ -156,7 +156,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      expect(screen.getByRole('button')).toHaveTextContent('Cherry');
+      expect(screen.getByRole('combobox')).toHaveTextContent('Cherry');
     });
 
     it('updates display when value changes', async () => {
@@ -167,11 +167,11 @@ describe('SelectDropdown', () => {
         },
       });
 
-      expect(screen.getByRole('button')).toHaveTextContent('Apple');
+      expect(screen.getByRole('combobox')).toHaveTextContent('Apple');
 
       await rerender({ value: 'banana' });
 
-      expect(screen.getByRole('button')).toHaveTextContent('Banana');
+      expect(screen.getByRole('combobox')).toHaveTextContent('Banana');
     });
   });
 
@@ -187,13 +187,13 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
       await fireEvent.click(screen.getByText('Apple'));
       await fireEvent.click(screen.getByText('Banana'));
 
       expect(onChange).toHaveBeenCalledWith(['apple']);
       expect(onChange).toHaveBeenCalledWith(['apple', 'banana']);
-      expect(screen.getByRole('button')).toHaveTextContent('2 selected');
+      expect(screen.getByRole('combobox')).toHaveTextContent('2 selected');
     });
 
     it('deselects on second click', async () => {
@@ -208,7 +208,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
       await fireEvent.click(screen.getByText('Apple'));
 
       expect(onChange).toHaveBeenCalledWith(['banana']);
@@ -222,7 +222,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
 
       const options = screen.getAllByRole('option');
       expect(options).toHaveLength(basicOptions.length);
@@ -241,7 +241,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
       await fireEvent.click(screen.getByText('Cherry'));
 
       expect(onChange).not.toHaveBeenCalled();
@@ -258,7 +258,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
 
       expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
     });
@@ -273,7 +273,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
 
       const searchInput = screen.getByPlaceholderText('Search...');
       await user.type(searchInput, 'app');
@@ -292,7 +292,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
 
       const searchInput = screen.getByPlaceholderText('Search...');
       await user.type(searchInput, 'xyz');
@@ -312,7 +312,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
 
       const searchInput = screen.getByPlaceholderText('Search...');
       await user.type(searchInput, 'test');
@@ -382,7 +382,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
 
       expect(screen.getByText('Fruits')).toBeInTheDocument();
       expect(screen.getByText('Vegetables')).toBeInTheDocument();
@@ -396,7 +396,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
 
       expect(screen.queryByText('Fruits')).not.toBeInTheDocument();
       expect(screen.queryByText('Vegetables')).not.toBeInTheDocument();
@@ -411,7 +411,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
 
       expect(screen.getByText('🍎')).toBeInTheDocument();
       expect(screen.getByText('Sweet red fruit')).toBeInTheDocument();
@@ -427,7 +427,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
 
       const searchInput = screen.getByPlaceholderText('Search...');
       await user.type(searchInput, 'tropical');
@@ -447,7 +447,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      const button = screen.getByRole('button');
+      const button = screen.getByRole('combobox');
 
       // Open dropdown with keyboard
       button.focus();
@@ -486,7 +486,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
 
       const selected = screen
         .getAllByRole('option')
@@ -512,7 +512,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      const button = screen.getByRole('button');
+      const button = screen.getByRole('combobox');
       button.focus();
       await user.keyboard('{ArrowDown}');
       await waitFor(() => {
@@ -533,7 +533,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
 
       for (const option of screen.getAllByRole('option')) {
         expect(option.className).toContain('focus-visible:outline-2');
@@ -551,7 +551,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      const button = screen.getByRole('button');
+      const button = screen.getByRole('combobox');
       button.focus();
 
       await user.keyboard('{Enter}');
@@ -569,7 +569,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      const button = screen.getByRole('button');
+      const button = screen.getByRole('combobox');
       expect(button).toBeDisabled();
     });
 
@@ -586,7 +586,7 @@ describe('SelectDropdown', () => {
         },
       });
 
-      await fireEvent.click(screen.getByRole('button'));
+      await fireEvent.click(screen.getByRole('combobox'));
 
       const bananaOption = screen.getByText('Banana').closest('button');
       expect(bananaOption).toHaveClass('opacity-50');
@@ -631,7 +631,7 @@ describe('SelectDropdown Accessibility', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     selectTest.render({ props: { options: fruit, searchable: true, onChange, ...props } });
-    await user.click(screen.getAllByRole('button')[0]);
+    await user.click(screen.getAllByRole('combobox')[0]);
     const search = await screen.findByRole('searchbox');
     await waitFor(() => expect(search).toHaveFocus());
     return { user, onChange, search };
@@ -660,7 +660,7 @@ describe('SelectDropdown Accessibility', () => {
 
     expect(onChange).toHaveBeenCalledWith('banana');
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    expect(document.activeElement).toBe(screen.getByRole('button'));
+    expect(document.activeElement).toBe(screen.getByRole('combobox'));
   });
 
   it('moves the highlight up with ArrowUp in the search box', async () => {
@@ -725,7 +725,7 @@ describe('SelectDropdown Accessibility', () => {
   it('drops aria-activedescendant when the options shrink below the highlighted index', async () => {
     const user = userEvent.setup();
     const { rerender } = selectTest.render({ props: { options: fruit, searchable: true } });
-    await user.click(screen.getAllByRole('button')[0]);
+    await user.click(screen.getAllByRole('combobox')[0]);
     const search = await screen.findByRole('searchbox');
     await waitFor(() => expect(search).toHaveFocus());
     await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
@@ -779,14 +779,14 @@ describe('SelectDropdown Accessibility', () => {
     escapes.stop();
 
     await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
-    expect(document.activeElement).toBe(screen.getByRole('button'));
+    expect(document.activeElement).toBe(screen.getByRole('combobox'));
     expect(escapes.seen).toEqual([]);
   });
 
   it('Escape on a focused option closes only the list and does not reach the document', async () => {
     const user = userEvent.setup();
     selectTest.render({ props: { options: fruit, multiple: true } });
-    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByRole('combobox'));
     const option = (await screen.findAllByRole('option'))[0];
     option.focus();
     const escapes = trackDocumentEscape();
@@ -795,7 +795,7 @@ describe('SelectDropdown Accessibility', () => {
     escapes.stop();
 
     await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
-    expect(document.activeElement).toBe(screen.getByRole('button'));
+    expect(document.activeElement).toBe(screen.getByRole('combobox'));
     expect(escapes.seen).toEqual([]);
   });
 
@@ -825,7 +825,7 @@ describe('SelectDropdown Accessibility', () => {
   it('Tab in the search box closes the list and moves focus on from the trigger', async () => {
     const user = userEvent.setup();
     const { after } = renderBetweenButtons({ searchable: true });
-    await user.click(screen.getByRole('button', { name: /select/i }));
+    await user.click(screen.getByRole('combobox'));
     await waitFor(() => expect(screen.getByRole('searchbox')).toHaveFocus());
 
     await user.keyboard('{Tab}');
@@ -837,7 +837,7 @@ describe('SelectDropdown Accessibility', () => {
   it('Shift+Tab from a focused option closes the list and moves focus on from the trigger', async () => {
     const user = userEvent.setup();
     const { before } = renderBetweenButtons({ multiple: true });
-    await user.click(screen.getByRole('button', { name: /select/i }));
+    await user.click(screen.getByRole('combobox'));
     const option = (await screen.findAllByRole('option'))[0];
     option.focus();
 
@@ -855,7 +855,7 @@ describe('SelectDropdown Accessibility', () => {
     await user.click(option);
 
     await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
-    expect(document.activeElement).toBe(screen.getByRole('button'));
+    expect(document.activeElement).toBe(screen.getByRole('combobox'));
   });
 
   it('returns focus to the trigger when focus was on body at selection time', async () => {
@@ -868,7 +868,7 @@ describe('SelectDropdown Accessibility', () => {
 
     expect(onChange).toHaveBeenCalledWith('apple');
     await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
-    expect(document.activeElement).toBe(screen.getByRole('button'));
+    expect(document.activeElement).toBe(screen.getByRole('combobox'));
   });
 
   it('keeps focus in the search box when a multiple-select option is clicked without taking focus', async () => {
@@ -886,7 +886,7 @@ describe('SelectDropdown Accessibility', () => {
   it('keeps focus on the trigger when a multiple-select option without search is clicked without taking focus', async () => {
     const user = userEvent.setup();
     selectTest.render({ props: { options: fruit, multiple: true } });
-    const trigger = screen.getByRole('button');
+    const trigger = screen.getByRole('combobox');
     await user.click(trigger);
     await screen.findByRole('listbox');
     trigger.blur();
@@ -903,7 +903,7 @@ describe('SelectDropdown Accessibility', () => {
     selectTest.render({ props: { options: fruit } });
     const outside = addButton('Outside');
 
-    await user.click(screen.getByRole('button', { name: /select/i }));
+    await user.click(screen.getByRole('combobox'));
     await screen.findByRole('listbox');
 
     await user.click(outside);
@@ -920,7 +920,7 @@ describe('SelectDropdown Accessibility', () => {
     externalLabel.textContent = 'Audio Device';
     container.prepend(externalLabel);
 
-    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByRole('combobox'));
 
     expect(await screen.findByRole('listbox', { name: 'Audio Device' })).toBeInTheDocument();
   });
@@ -928,14 +928,14 @@ describe('SelectDropdown Accessibility', () => {
   it('keeps the label prop as the listbox name and adds no aria-label without any label', async () => {
     const user = userEvent.setup();
     const labelled = selectTest.render({ props: { options: fruit, label: 'Fruit' } });
-    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByRole('combobox'));
     const named = await screen.findByRole('listbox', { name: 'Fruit' });
     expect(named).toHaveAttribute('aria-labelledby');
     expect(named).not.toHaveAttribute('aria-label');
     labelled.unmount();
 
     selectTest.render({ props: { options: fruit } });
-    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByRole('combobox'));
     const unnamed = await screen.findByRole('listbox');
     expect(unnamed).not.toHaveAttribute('aria-label');
   });
@@ -944,7 +944,7 @@ describe('SelectDropdown Accessibility', () => {
     const user = userEvent.setup();
     selectTest.render({ props: { options: fruit, value: 'banana', 'aria-label': 'Fruit picker' } });
 
-    const trigger = screen.getByRole('button', { name: 'Fruit picker' });
+    const trigger = screen.getByRole('combobox', { name: 'Fruit picker' });
     expect(trigger).toHaveTextContent('Banana');
 
     await user.click(trigger);
@@ -962,12 +962,16 @@ describe('SelectDropdown Accessibility', () => {
     externalLabel.textContent = 'Outer label';
     container.prepend(externalLabel);
 
-    await user.click(screen.getByRole('button', { name: 'Fruit picker' }));
+    await user.click(screen.getByRole('combobox', { name: 'Fruit picker' }));
 
     expect(await screen.findByRole('listbox', { name: 'Fruit picker' })).toBeInTheDocument();
   });
 
-  describe('selected value as description', () => {
+  describe('selected value', () => {
+    // A combobox exposes its displayed text as its value, so the trigger must not also list the
+    // value in aria-describedby: a screen reader would announce it twice (measured in Chromium:
+    // a button with role combobox and an aria-describedby on its value span reports the same
+    // text as both value and description).
     const namingPaths: Array<[string, Record<string, unknown>, boolean]> = [
       ['the label prop', { label: 'Fruit' }, false],
       ['the aria-label prop', { 'aria-label': 'Fruit' }, false],
@@ -975,7 +979,7 @@ describe('SelectDropdown Accessibility', () => {
     ];
 
     it.each(namingPaths)(
-      'keeps the field name as the name and exposes the selected value as the description with %s',
+      'keeps the field name as the name and shows the selected value as the trigger text with %s',
       async (_path, props, withExternalLabel) => {
         const user = userEvent.setup();
         const { container } = selectTest.render({
@@ -988,17 +992,20 @@ describe('SelectDropdown Accessibility', () => {
           container.prepend(externalLabel);
         }
 
-        const trigger = screen.getByRole('button', { name: 'Fruit' });
-        expect(trigger).toHaveAccessibleDescription('Apple');
+        const trigger = screen.getByRole('combobox', { name: 'Fruit' });
+        expect(trigger).toHaveTextContent('Apple');
+        expect(trigger).toHaveAccessibleDescription('');
 
         await user.click(trigger);
         await user.click(await screen.findByRole('option', { name: /Cherry/ }));
 
-        expect(screen.getByRole('button', { name: 'Fruit' })).toHaveAccessibleDescription('Cherry');
+        const updated = screen.getByRole('combobox', { name: 'Fruit' });
+        expect(updated).toHaveTextContent('Cherry');
+        expect(updated).toHaveAccessibleDescription('');
       }
     );
 
-    it('describes a multiple selection by the displayed count and an empty one by the placeholder', async () => {
+    it('shows a multiple selection as the displayed count and an empty one as the placeholder', async () => {
       const user = userEvent.setup();
       selectTest.render({
         props: {
@@ -1010,62 +1017,48 @@ describe('SelectDropdown Accessibility', () => {
         },
       });
 
-      const trigger = screen.getByRole('button', { name: 'Fruit' });
-      expect(trigger).toHaveAccessibleDescription('1 selected');
+      const trigger = screen.getByRole('combobox', { name: 'Fruit' });
+      expect(trigger).toHaveTextContent('1 selected');
 
       await user.click(trigger);
       await user.click(await screen.findByRole('option', { name: /Banana/ }));
-      expect(trigger).toHaveAccessibleDescription('2 selected');
+      expect(trigger).toHaveTextContent('2 selected');
 
       selectTest.render({ props: { options: fruit, placeholder: 'Pick fruit', label: 'Other' } });
-      expect(screen.getByRole('button', { name: 'Other' })).toHaveAccessibleDescription(
-        'Pick fruit'
-      );
+      expect(screen.getByRole('combobox', { name: 'Other' })).toHaveTextContent('Pick fruit');
     });
 
-    it('lists the value id before the help text and the caller ids in aria-describedby', () => {
-      selectTest.render({
-        props: {
-          options: fruit,
-          id: 'desc-field',
-          label: 'Fruit',
-          helpText: 'Help',
-          'aria-describedby': 'extra-note',
-        },
+    it('describes the trigger with the help text and the caller ids only, not the value', () => {
+      const both = selectTest.render({
+        props: { options: fruit, id: 'both', helpText: 'Help', 'aria-describedby': 'extra-note' },
       });
-
-      expect(screen.getByRole('button', { name: 'Fruit' }).getAttribute('aria-describedby')).toBe(
-        'desc-field-value desc-field-help extra-note'
+      expect(screen.getByRole('combobox').getAttribute('aria-describedby')).toBe(
+        'both-help extra-note'
       );
+      both.unmount();
+
+      const only = selectTest.render({
+        props: { options: fruit, id: 'only', 'aria-describedby': 'extra-note' },
+      });
+      expect(screen.getByRole('combobox').getAttribute('aria-describedby')).toBe('extra-note');
+      only.unmount();
+
+      const help = selectTest.render({
+        props: { options: fruit, id: 'help', label: 'Fruit', helpText: 'Help' },
+      });
+      expect(screen.getByRole('combobox')).toHaveAccessibleDescription('Help');
+      help.unmount();
+
+      selectTest.render({ props: { options: fruit, id: 'none' } });
+      expect(screen.getByRole('combobox')).not.toHaveAttribute('aria-describedby');
     });
   });
 
   it('renders no aria-label on the trigger when the label prop is used', () => {
     selectTest.render({ props: { options: fruit, label: 'Fruit', 'aria-label': 'Ignored' } });
 
-    const trigger = screen.getByRole('button', { name: 'Fruit' });
+    const trigger = screen.getByRole('combobox', { name: 'Fruit' });
     expect(trigger).not.toHaveAttribute('aria-label');
-  });
-
-  it('links help text and the aria-describedby prop together on the trigger', () => {
-    const both = selectTest.render({
-      props: { options: fruit, id: 'both', helpText: 'Help', 'aria-describedby': 'extra-note' },
-    });
-    expect(screen.getByRole('button').getAttribute('aria-describedby')).toBe(
-      'both-value both-help extra-note'
-    );
-    both.unmount();
-
-    const only = selectTest.render({
-      props: { options: fruit, id: 'only', 'aria-describedby': 'extra-note' },
-    });
-    expect(screen.getByRole('button').getAttribute('aria-describedby')).toBe(
-      'only-value extra-note'
-    );
-    only.unmount();
-
-    selectTest.render({ props: { options: fruit, id: 'none' } });
-    expect(screen.getByRole('button').getAttribute('aria-describedby')).toBe('none-value');
   });
 
   it('has no violations with the searchable list open and an option highlighted', async () => {
@@ -1075,5 +1068,133 @@ describe('SelectDropdown Accessibility', () => {
 
     // The landmark rule is about whole pages, not an isolated component
     await expectNoA11yViolations(document.body, { rules: { region: { enabled: false } } });
+  });
+
+  describe('combobox exposure', () => {
+    const OUTLINE = OPTION_HIGHLIGHT_OUTLINE_CLASS.split(' ');
+
+    /** The option that carries the keyboard highlight outline, or undefined when none does. */
+    function outlinedOption() {
+      return screen.queryAllByRole('option').find(option => option.classList.contains(OUTLINE[0]));
+    }
+
+    async function openWithArrowDown(props: Record<string, unknown> = {}) {
+      const user = userEvent.setup();
+      const rendered = selectTest.render({ props: { options: fruit, label: 'Fruit', ...props } });
+      const trigger = screen.getByRole('combobox');
+      trigger.focus();
+      await user.keyboard('{ArrowDown}');
+      await screen.findByRole('listbox');
+      return { user, trigger, ...rendered };
+    }
+
+    it('makes the trigger a combobox that keeps aria-haspopup listbox', () => {
+      selectTest.render({ props: { options: fruit, label: 'Fruit' } });
+
+      const trigger = screen.getByRole('combobox', { name: 'Fruit' });
+      expect(trigger.tagName).toBe('BUTTON');
+      expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).not.toHaveAttribute('aria-controls');
+      expect(trigger).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('points the trigger at the open listbox with aria-controls', async () => {
+      const { user, trigger } = await openWithArrowDown();
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(trigger).toHaveAttribute('aria-controls', screen.getByRole('listbox').id);
+
+      await user.keyboard('{Escape}');
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).not.toHaveAttribute('aria-controls');
+    });
+
+    it('exposes the highlighted option on the trigger with aria-activedescendant', async () => {
+      const { user, trigger } = await openWithArrowDown();
+      expect(trigger).not.toHaveAttribute('aria-activedescendant');
+
+      for (const [key, label] of [
+        ['{ArrowDown}', 'Apple'],
+        ['{ArrowDown}', 'Banana'],
+        ['{ArrowDown}', 'Cherry'],
+        ['{ArrowUp}', 'Banana'],
+      ] as const) {
+        await user.keyboard(key);
+        const outlined = outlinedOption();
+        expect(outlined?.textContent.trim()).toBe(label);
+        expect(trigger).toHaveAttribute('aria-activedescendant', outlined?.id);
+      }
+    });
+
+    it('walks the trigger active descendant in rendered order with interleaved groups', async () => {
+      const interleaved: SelectOption[] = [
+        { value: 'a1', label: 'A1', group: 'A' },
+        { value: 'b1', label: 'B1', group: 'B' },
+        { value: 'a2', label: 'A2', group: 'A' },
+      ];
+      const { user, trigger } = await openWithArrowDown({ options: interleaved, groupBy: true });
+
+      for (const label of ['A1', 'A2', 'B1']) {
+        await user.keyboard('{ArrowDown}');
+        const active = document.getElementById(trigger.getAttribute('aria-activedescendant') ?? '');
+        expect(active?.textContent.trim()).toBe(label);
+        expect(active).toBe(outlinedOption());
+      }
+    });
+
+    it('drops the trigger aria-activedescendant when the options shrink below the highlight', async () => {
+      const { user, trigger, rerender } = await openWithArrowDown();
+      await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+      expect(trigger).toHaveAttribute('aria-activedescendant');
+
+      await rerender({ options: fruit.slice(0, 2), label: 'Fruit' });
+
+      expect(trigger).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('clears the trigger aria-activedescendant on close and does not restore it on reopen', async () => {
+      const { user, trigger } = await openWithArrowDown();
+      await user.keyboard('{ArrowDown}{ArrowDown}');
+      expect(trigger).toHaveAttribute('aria-activedescendant');
+
+      await user.keyboard('{Escape}');
+      expect(trigger).not.toHaveAttribute('aria-activedescendant');
+
+      await user.keyboard('{Enter}');
+      await screen.findByRole('listbox');
+      expect(trigger).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('gives the searchable trigger and search box the same active descendant', async () => {
+      const { user, search } = await openSearchable({ label: 'Fruit' });
+      const trigger = screen.getByRole('combobox');
+
+      await user.keyboard('{ArrowDown}');
+
+      const active = search.getAttribute('aria-activedescendant');
+      expect(active).toBeTruthy();
+      expect(trigger).toHaveAttribute('aria-activedescendant', active);
+      expect(trigger).toHaveAttribute('aria-controls', search.getAttribute('aria-controls'));
+    });
+
+    it('has no violations with the non-searchable list open and an option highlighted', async () => {
+      const { user, trigger } = await openWithArrowDown();
+      await user.keyboard('{ArrowDown}');
+      expect(trigger).toHaveAttribute('aria-activedescendant');
+
+      await expectNoA11yViolations(document.body, { rules: { region: { enabled: false } } });
+    });
+
+    it('has no violations with the list closed', async () => {
+      selectTest.render({ props: { options: fruit, label: 'Fruit', value: 'apple' } });
+      expect(screen.getByRole('combobox', { name: 'Fruit' })).toHaveAttribute(
+        'aria-expanded',
+        'false'
+      );
+
+      await expectNoA11yViolations(document.body, { rules: { region: { enabled: false } } });
+    });
   });
 });

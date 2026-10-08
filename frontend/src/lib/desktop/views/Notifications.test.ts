@@ -26,7 +26,7 @@ describe('Notifications filter dropdown names', () => {
   ])('names the filter %s independently of the selected value', async (name, shownValue) => {
     render(Notifications);
 
-    await waitFor(() => expect(screen.getByRole('button', { name })).toBeInTheDocument());
-    expect(screen.getByRole('button', { name })).toHaveTextContent(shownValue);
+    await waitFor(() => expect(screen.getByRole('combobox', { name })).toBeInTheDocument());
+    expect(screen.getByRole('combobox', { name })).toHaveTextContent(shownValue);
   });
 });
