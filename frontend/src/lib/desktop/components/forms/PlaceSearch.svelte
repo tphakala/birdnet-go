@@ -19,7 +19,7 @@
 
   Props:
   - onSelect: called with the chosen place
-  - disabled: disables the input and button and hides the results
+  - disabled: disables the input and button, drops the results and cancels a pending search
   - className: additional classes for the root
 
   @component
@@ -46,7 +46,7 @@
   interface Props {
     /** Called with the place the user picked. */
     onSelect: (_place: PlaceResult) => void;
-    /** Disable the input and button and hide the results. */
+    /** Disable the input and button, drop the results and cancel a pending search. */
     disabled?: boolean;
     className?: string;
   }
