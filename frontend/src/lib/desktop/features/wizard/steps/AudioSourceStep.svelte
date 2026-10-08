@@ -7,6 +7,8 @@
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { Mic, Video } from '@lucide/svelte';
+  import RadioCardGroup from '$lib/desktop/components/ui/RadioCardGroup.svelte';
+  import type { RadioCardOption } from '$lib/desktop/components/ui/RadioCardGroup.types';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
   import { SECONDARY_BUTTON_CLASS } from '../styles';
@@ -209,6 +211,11 @@
     markEdited();
   }
 
+  let sourceOptions = $derived<RadioCardOption<AudioSourceType>[]>([
+    { value: 'soundcard', label: t('wizard.steps.audioSource.soundcard'), icon: Mic },
+    { value: 'rtsp', label: t('wizard.steps.audioSource.rtspStream'), icon: Video },
+  ]);
+
   function setDevice(value: string | string[]) {
     if (typeof value === 'string') {
       selectedDevice = value;
@@ -274,47 +281,13 @@
     <span class="mb-2 block text-sm font-medium text-[var(--color-base-content)]">
       {t('wizard.steps.audioSource.sourceTypeLabel')}
     </span>
-    <div
-      class="grid grid-cols-2 gap-3"
-      role="radiogroup"
+    <RadioCardGroup
+      options={sourceOptions}
+      value={sourceType}
+      onChange={setSourceType}
+      columns={2}
       aria-label={t('wizard.steps.audioSource.sourceTypeLabel')}
-    >
-      <button
-        type="button"
-        role="radio"
-        aria-checked={sourceType === 'soundcard'}
-        class="flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-colors {sourceType ===
-        'soundcard'
-          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-          : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
-        onclick={() => setSourceType('soundcard')}
-      >
-        <Mic class="size-5 shrink-0 text-[var(--color-base-content)]" />
-        <span class="text-sm font-medium text-[var(--color-base-content)]">
-          {t('wizard.steps.audioSource.soundcard')}
-        </span>
-      </button>
-
-      <button
-        type="button"
-        role="radio"
-        aria-checked={sourceType === 'rtsp'}
-        class="flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-colors {sourceType ===
-        'rtsp'
-          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-          : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
-        onclick={() => setSourceType('rtsp')}
-      >
-        <Video
-          class="size-5 shrink-0 {sourceType === 'rtsp'
-            ? 'text-[var(--color-primary)]'
-            : 'text-[var(--color-base-content)] opacity-70'}"
-        />
-        <span class="text-sm font-medium text-[var(--color-base-content)]">
-          {t('wizard.steps.audioSource.rtspStream')}
-        </span>
-      </button>
-    </div>
+    />
   </div>
 
   {#if sourceType === 'soundcard'}

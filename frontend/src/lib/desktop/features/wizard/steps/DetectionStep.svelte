@@ -4,6 +4,8 @@
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { Scale, Target, Radio } from '@lucide/svelte';
+  import RadioCardGroup from '$lib/desktop/components/ui/RadioCardGroup.svelte';
+  import type { RadioCardOption } from '$lib/desktop/components/ui/RadioCardGroup.types';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
 
@@ -63,7 +65,18 @@
   // no card; the intro paragraph states the value instead of the generic text.
   const storedNoMatch = $derived(savedThreshold !== undefined && !matchingPreset(savedThreshold));
 
-  let selectedId = $state<string | undefined>(matchingPreset(initialThreshold)?.id);
+  let selectedId = $state<string | null>(matchingPreset(initialThreshold)?.id ?? null);
+
+  const presetOptions = $derived<RadioCardOption[]>(
+    presets.map(p => ({
+      value: p.id,
+      label: t(p.titleKey),
+      description: t(p.descKey),
+      detail: `${t('wizard.steps.detection.threshold')}: ${p.threshold}`,
+      icon: p.icon,
+      badge: p.recommended ? t('wizard.steps.detection.balancedRecommended') : undefined,
+    }))
+  );
 
   $effect(() => {
     untrack(() => onValidChange?.(true));
@@ -96,52 +109,13 @@
       : t('wizard.steps.detection.description')}
   </p>
 
-  <div
-    class="space-y-3"
-    role="radiogroup"
+  <RadioCardGroup
+    options={presetOptions}
+    value={selectedId}
+    onChange={selectOption}
     aria-label={t('wizard.steps.detection.title')}
     aria-describedby={storedNoMatch ? INTRO_ID : undefined}
-  >
-    {#each presets as preset (preset.id)}
-      {@const PresetIcon = preset.icon}
-      <button
-        type="button"
-        role="radio"
-        aria-checked={selectedId === preset.id}
-        class="flex w-full items-start gap-3 rounded-lg border-2 p-4 text-left transition-colors {selectedId ===
-        preset.id
-          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-          : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
-        onclick={() => selectOption(preset.id)}
-      >
-        <PresetIcon
-          class="mt-0.5 size-5 shrink-0 {selectedId === preset.id
-            ? 'text-[var(--color-primary)]'
-            : 'text-[var(--color-base-content)] opacity-70'}"
-        />
-        <div class="flex-1">
-          <div class="flex items-center gap-2">
-            <span class="text-sm font-medium text-[var(--color-base-content)]">
-              {t(preset.titleKey)}
-            </span>
-            {#if preset.recommended}
-              <span
-                class="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-base-content)]"
-              >
-                {t('wizard.steps.detection.balancedRecommended')}
-              </span>
-            {/if}
-          </div>
-          <p class="mt-0.5 text-sm text-[var(--color-base-content)] opacity-80">
-            {t(preset.descKey)}
-          </p>
-          <p class="mt-1 text-sm font-mono text-[var(--color-base-content)] opacity-70">
-            {t('wizard.steps.detection.threshold')}: {preset.threshold}
-          </p>
-        </div>
-      </button>
-    {/each}
-  </div>
+  />
 
   <SettingsNote className="mt-0">
     <p>{t('wizard.steps.detection.fpFilterNote')}</p>
