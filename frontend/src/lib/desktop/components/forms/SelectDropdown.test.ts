@@ -1537,23 +1537,81 @@ describe('SelectDropdown Accessibility', () => {
       });
     });
 
-    it('keeps the list open on Enter when the highlighted option is disabled', async () => {
-      const user = userEvent.setup();
-      const onChange = vi.fn();
-      const withDisabled: SelectOption[] = [
-        { value: 'apple', label: 'Apple' },
-        { value: 'banana', label: 'Banana', disabled: true },
-        { value: 'cherry', label: 'Cherry' },
-      ];
-      selectTest.render({ props: { options: withDisabled, label: 'Fruit', onChange } });
-      screen.getByRole('combobox').focus();
-      await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
-      expect(outlinedOption()?.textContent.trim()).toBe('Banana');
+    describe.each([
+      ['Enter', '{Enter}'],
+      ['Space', ' '],
+    ])('%s on the open trigger with an option highlighted', (_name, press) => {
+      it('keeps the list open when the highlighted option is disabled', async () => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        const withDisabled: SelectOption[] = [
+          { value: 'apple', label: 'Apple' },
+          { value: 'banana', label: 'Banana', disabled: true },
+          { value: 'cherry', label: 'Cherry' },
+        ];
+        selectTest.render({ props: { options: withDisabled, label: 'Fruit', onChange } });
+        screen.getByRole('combobox').focus();
+        await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+        expect(outlinedOption()?.textContent.trim()).toBe('Banana');
 
-      await user.keyboard('{Enter}');
+        await user.keyboard(press);
 
-      expect(screen.getByRole('listbox')).toBeInTheDocument();
-      expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+        expect(onChange).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['first', '{ArrowDown}{ArrowDown}', 'apple'],
+        ['last', '{ArrowDown}{ArrowUp}', 'cherry'],
+      ])(
+        'selects the %s option and closes the single-select list',
+        async (_which, moves, value) => {
+          const user = userEvent.setup();
+          const onChange = vi.fn();
+          selectTest.render({ props: { options: fruit, label: 'Fruit', onChange } });
+          const trigger = screen.getByRole('combobox');
+          trigger.focus();
+          await user.keyboard(moves);
+          expect(outlinedOption()).toBeDefined();
+
+          await user.keyboard(press);
+
+          expect(onChange).toHaveBeenCalledExactlyOnceWith(value);
+          await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+          expect(document.activeElement).toBe(trigger);
+        }
+      );
+
+      it('toggles the highlighted option and keeps the multiple-select list open', async () => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        selectTest.render({ props: { options: fruit, label: 'Fruit', multiple: true, onChange } });
+        screen.getByRole('combobox').focus();
+        await user.keyboard('{ArrowDown}{ArrowDown}');
+
+        await user.keyboard(press);
+        expect(onChange).toHaveBeenLastCalledWith(['apple']);
+        await user.keyboard(press);
+        expect(onChange).toHaveBeenLastCalledWith([]);
+
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      it('closes without selecting when the options shrank below the highlight', async () => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        const { rerender } = selectTest.render({
+          props: { options: fruit, label: 'Fruit', onChange },
+        });
+        screen.getByRole('combobox').focus();
+        await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}');
+        await rerender({ options: fruit.slice(0, 1), label: 'Fruit', onChange });
+
+        await user.keyboard(press);
+
+        await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+        expect(onChange).not.toHaveBeenCalled();
+      });
     });
 
     type User = ReturnType<typeof userEvent.setup>;
