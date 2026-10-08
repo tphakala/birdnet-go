@@ -173,7 +173,8 @@ interface Props {
   className?: string;
   onClose?: () => void;
   onConfirm?: () => void | Promise<void>;
-  header?: Snippet;
+  describeBody?: boolean;
+  header?: Snippet<[{ titleId: string }]>;
   children?: Snippet;
   footer?: Snippet;
 }
@@ -204,7 +205,7 @@ interface Props {
 - Async confirm handlers
 - Keyboard/backdrop controls
 - Loading states
-- Full accessibility
+- Named by `title` (a `header` snippet receives `titleId` for its heading's `id`) and described by its body only with `describeBody`
 
 ---
 
@@ -350,7 +351,7 @@ interface Props<T extends string> extends Omit<HTMLAttributes<HTMLDivElement>, '
 - `onChange` fires on every activation, including a click on the card that is already checked, so a handler must be idempotent. With a single enabled card the arrows do nothing; Space or a click checks it
 - The caller names the group with `aria-label` or `aria-labelledby`; other attributes (for example `aria-describedby`) go to the `radiogroup` element
 - Each card is a `role="radio"` button, so its accessible name is its visible content (label, badge, description, detail)
-- Inside a `Modal` whose first focusable element is a `RadioCardGroup`, the modal's initial focus can land on an unchecked card, because its selector also matches `tabindex="-1"` buttons (`Modal.svelte`); give the dialog an earlier focusable element, such as a header close button
+- Inside a `Modal`, initial focus goes to the first tabbable control, so a leading `RadioCardGroup` receives it on its single Tab stop (the checked card, else the first enabled card), and focusing it selects nothing
 
 ---
 
