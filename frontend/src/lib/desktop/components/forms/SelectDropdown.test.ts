@@ -1624,6 +1624,24 @@ describe('SelectDropdown Accessibility', () => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
       });
 
+      it('ignores the repeats of a held key on a highlighted multiple-select option', async () => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        selectTest.render({ props: { options: fruit, label: 'Fruit', multiple: true, onChange } });
+        const trigger = screen.getByRole('combobox');
+        trigger.focus();
+        await user.keyboard('{ArrowDown}{ArrowDown}');
+        await user.keyboard(press);
+        expect(onChange).toHaveBeenCalledExactlyOnceWith(['apple']);
+        // Odd count of repeats: an unguarded handler would toggle the option off again
+        const key = press === ' ' ? ' ' : 'Enter';
+
+        await fireEvent.keyDown(trigger, { key, repeat: true });
+
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
       it('closes without selecting when the options shrank below the highlight', async () => {
         const user = userEvent.setup();
         const onChange = vi.fn();
