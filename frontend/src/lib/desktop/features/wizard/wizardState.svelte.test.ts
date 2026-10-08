@@ -62,6 +62,17 @@ function launchSteps(count: number): void {
   wizardState.launch('onboarding');
 }
 
+// Starts a save that stays pending on the current step, then skips the wizard while it runs
+async function startSaveThenSkip(): Promise<{ d: Deferred<void>; nav: Promise<void> }> {
+  const d = deferred();
+  wizardState.registerLeaveHandler(() => d.promise);
+  readyStep();
+  const nav = wizardState.next();
+  await flush();
+  wizardState.skip();
+  return { d, nav };
+}
+
 describe('wizardState - state machine', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -635,13 +646,8 @@ describe('wizardState - state machine', () => {
 
     it('reports a save that fails after Skip in a toast and leaves the step state alone', async () => {
       launchSteps(3);
-      const d = deferred();
-      wizardState.registerLeaveHandler(() => d.promise);
-      readyStep();
-      const nav = wizardState.next();
-      await flush();
+      const { d, nav } = await startSaveThenSkip();
 
-      wizardState.skip();
       d.reject(new Error('late'));
       await nav;
 
@@ -655,13 +661,8 @@ describe('wizardState - state machine', () => {
 
     it('shows no toast when a save started before Skip succeeds', async () => {
       launchSteps(3);
-      const d = deferred();
-      wizardState.registerLeaveHandler(() => d.promise);
-      readyStep();
-      const nav = wizardState.next();
-      await flush();
+      const { d, nav } = await startSaveThenSkip();
 
-      wizardState.skip();
       d.resolve();
       await nav;
 
@@ -672,13 +673,7 @@ describe('wizardState - state machine', () => {
       const audioKey: TranslationKey = 'wizard.errors.audioSourceSaveUnfinished';
       vi.mocked(getStepsForFlow).mockReturnValue(createComponentSteps([audioKey, undefined]));
       wizardState.launch('onboarding');
-      const d = deferred();
-      wizardState.registerLeaveHandler(() => d.promise);
-      readyStep();
-      const nav = wizardState.next();
-      await flush();
-
-      wizardState.skip();
+      const { d, nav } = await startSaveThenSkip();
       // The steps are gone when the save fails, so the key cannot be looked up then
       expect(wizardState.totalSteps).toBe(0);
       expect(wizardState.currentStep).toBeNull();
@@ -700,13 +695,7 @@ describe('wizardState - state machine', () => {
       await wizardState.next();
       expect(wizardState.currentStepIndex).toBe(1);
 
-      const d = deferred();
-      wizardState.registerLeaveHandler(() => d.promise);
-      readyStep();
-      const nav = wizardState.next();
-      await flush();
-
-      wizardState.skip();
+      const { d, nav } = await startSaveThenSkip();
       wizardState.launch('onboarding');
       expect(wizardState.currentStepIndex).toBe(0);
       d.reject(new Error('late'));
@@ -719,13 +708,7 @@ describe('wizardState - state machine', () => {
     it('uses the generic message for a component step without its own', async () => {
       vi.mocked(getStepsForFlow).mockReturnValue(createComponentSteps([undefined, undefined]));
       wizardState.launch('onboarding');
-      const d = deferred();
-      wizardState.registerLeaveHandler(() => d.promise);
-      readyStep();
-      const nav = wizardState.next();
-      await flush();
-
-      wizardState.skip();
+      const { d, nav } = await startSaveThenSkip();
       d.reject(new Error('late'));
       await nav;
 
@@ -738,13 +721,7 @@ describe('wizardState - state machine', () => {
   describe('session guard', () => {
     it('does not move a relaunched wizard when an old save resolves', async () => {
       launchSteps(3);
-      const d = deferred();
-      wizardState.registerLeaveHandler(() => d.promise);
-      readyStep();
-      const nav = wizardState.next();
-      await flush();
-
-      wizardState.skip();
+      const { d, nav } = await startSaveThenSkip();
       launchSteps(3);
       d.resolve();
       await nav;

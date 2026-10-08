@@ -95,6 +95,26 @@ const visibleWithText = (text: string) =>
 // The footer reason: the paragraph in the row that holds the Next button
 const footerReason = () => primaryButton().closest('div.w-full')?.querySelector('p') ?? null;
 
+const closeButton = () => screen.getByRole('button', { name: 'common.aria.closeModal' });
+
+// Starts a save that stays pending and returns once the wizard shows it saving
+async function startPendingSave(user: ReturnType<typeof userEvent.setup>) {
+  const save = deferred();
+  stepControl.leave = vi.fn(() => save.promise);
+  const { container } = renderWizard(componentSteps(3));
+  await waitForPrimaryEnabled();
+  await user.click(primaryButton());
+  await waitFor(() => expect(primaryButton()).toHaveTextContent('wizard.status.saving'));
+  return { save, container };
+}
+
+// Starts a save that stays pending, then opens the confirmation over it
+async function openConfirmationDuringSave(user: ReturnType<typeof userEvent.setup>) {
+  const started = await startPendingSave(user);
+  await user.click(closeButton());
+  return started;
+}
+
 describe('WizardDialog', () => {
   let user: ReturnType<typeof userEvent.setup>;
 
@@ -165,14 +185,7 @@ describe('WizardDialog', () => {
   });
 
   it('Next waits for the step save and shows Saving', async () => {
-    const save = deferred();
-    stepControl.leave = vi.fn(() => save.promise);
-    renderWizard(componentSteps(3));
-    await waitForPrimaryEnabled();
-
-    await user.click(primaryButton());
-
-    await waitFor(() => expect(primaryButton()).toHaveTextContent('wizard.status.saving'));
+    const { save } = await startPendingSave(user);
     expect(isBlocked(primaryButton())).toBe(true);
     // Saving shows once, on the button; the footer reason does not repeat it
     expect(visibleWithText('wizard.status.saving')).toEqual([primaryButton()]);
@@ -474,12 +487,7 @@ describe('WizardDialog', () => {
   });
 
   it('Skip closes at once without calling the leave handler again and ignores the pending save', async () => {
-    const save = deferred();
-    stepControl.leave = vi.fn(() => save.promise);
-    renderWizard(componentSteps(3));
-    await waitForPrimaryEnabled();
-    await user.click(primaryButton());
-    await waitFor(() => expect(primaryButton()).toHaveTextContent('wizard.status.saving'));
+    const { save } = await startPendingSave(user);
 
     await user.click(screen.getByRole('button', { name: 'wizard.skip' }));
 
@@ -497,12 +505,7 @@ describe('WizardDialog', () => {
   });
 
   it('Skip during a save that later fails shows an error toast', async () => {
-    const save = deferred();
-    stepControl.leave = vi.fn(() => save.promise);
-    renderWizard(componentSteps(3));
-    await waitForPrimaryEnabled();
-    await user.click(primaryButton());
-    await waitFor(() => expect(primaryButton()).toHaveTextContent('wizard.status.saving'));
+    const { save } = await startPendingSave(user);
     await user.click(screen.getByRole('button', { name: 'wizard.skip' }));
 
     save.reject(new Error('late'));
@@ -514,7 +517,6 @@ describe('WizardDialog', () => {
   });
 
   describe('leave confirmation', () => {
-    const closeButton = () => screen.getByRole('button', { name: 'common.aria.closeModal' });
     const confirmation = () =>
       screen.queryByRole('alertdialog', { name: 'wizard.leaveConfirm.title' });
 
@@ -541,20 +543,8 @@ describe('WizardDialog', () => {
       expect(confirmation()).toHaveAccessibleDescription('wizard.leaveConfirm.message');
     });
 
-    // Starts a save that stays pending, then opens the confirmation over it
-    async function openConfirmationDuringSave() {
-      const save = deferred();
-      stepControl.leave = vi.fn(() => save.promise);
-      renderWizard(componentSteps(3));
-      await waitForPrimaryEnabled();
-      await user.click(primaryButton());
-      await waitFor(() => expect(primaryButton()).toHaveTextContent('wizard.status.saving'));
-      await user.click(closeButton());
-      return save;
-    }
-
     it('describes the confirmation with the in-flight message while a save is running', async () => {
-      const save = await openConfirmationDuringSave();
+      const { save } = await openConfirmationDuringSave(user);
 
       expect(confirmation()).toHaveAccessibleDescription('wizard.leaveConfirm.messageSaving');
 
@@ -562,7 +552,7 @@ describe('WizardDialog', () => {
     });
 
     it('switches the confirmation to the normal message when the save finishes while it is open', async () => {
-      const save = await openConfirmationDuringSave();
+      const { save } = await openConfirmationDuringSave(user);
       expect(confirmation()).toHaveAccessibleDescription('wizard.leaveConfirm.messageSaving');
 
       save.resolve(undefined);
@@ -573,7 +563,7 @@ describe('WizardDialog', () => {
     });
 
     it('switches the confirmation to the normal message when the save fails while it is open', async () => {
-      const save = await openConfirmationDuringSave();
+      const { save } = await openConfirmationDuringSave(user);
       expect(confirmation()).toHaveAccessibleDescription('wizard.leaveConfirm.messageSaving');
 
       save.reject(new Error('save failed'));
@@ -585,7 +575,7 @@ describe('WizardDialog', () => {
     });
 
     it('Leave setup during a save that later fails shows an error toast', async () => {
-      const save = await openConfirmationDuringSave();
+      const { save } = await openConfirmationDuringSave(user);
       await user.click(screen.getByRole('button', { name: 'wizard.leaveConfirm.leave' }));
       await waitFor(() => expect(wizardState.isActive).toBe(false));
 
@@ -656,12 +646,7 @@ describe('WizardDialog', () => {
     });
 
     it('X and Escape open the confirmation while a save is running', async () => {
-      const save = deferred();
-      stepControl.leave = vi.fn(() => save.promise);
-      renderWizard(componentSteps(3));
-      await waitForPrimaryEnabled();
-      await user.click(primaryButton());
-      await waitFor(() => expect(primaryButton()).toHaveTextContent('wizard.status.saving'));
+      const { save } = await startPendingSave(user);
 
       await user.click(closeButton());
       expect(confirmation()).toBeInTheDocument();
@@ -726,13 +711,7 @@ describe('WizardDialog Accessibility', () => {
   });
 
   it('has no violations with the leave confirmation open during a save', async () => {
-    const save = deferred();
-    stepControl.leave = vi.fn(() => save.promise);
-    const { container } = renderWizard(componentSteps(3));
-    await waitForPrimaryEnabled();
-    await user.click(primaryButton());
-    await waitFor(() => expect(primaryButton()).toHaveTextContent('wizard.status.saving'));
-    await user.click(screen.getByRole('button', { name: 'common.aria.closeModal' }));
+    const { save, container } = await openConfirmationDuringSave(user);
     const dialog = await screen.findByRole('alertdialog', { name: 'wizard.leaveConfirm.title' });
 
     expect(dialog).toHaveAccessibleDescription('wizard.leaveConfirm.messageSaving');

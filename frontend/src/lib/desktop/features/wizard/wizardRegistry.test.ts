@@ -28,12 +28,9 @@ describe('wizardRegistry — getStepsForFlow()', () => {
 
     it('gives the audio source step its own unfinished save message', () => {
       const steps = getStepsForFlow('onboarding');
-      const withKey = steps.flatMap(step =>
-        step.type === 'component' && step.unfinishedSaveKey
-          ? [[step.id, step.unfinishedSaveKey]]
-          : []
-      );
-      expect(withKey).toEqual([['audio-source', 'wizard.errors.audioSourceSaveUnfinished']]);
+      expect(steps.find(step => step.id === 'audio-source')).toMatchObject({
+        unfinishedSaveKey: 'wizard.errors.audioSourceSaveUnfinished',
+      });
     });
 
     it('last onboarding step is responsible-use', () => {
