@@ -141,6 +141,9 @@ describe('WizardDialog', () => {
     await waitFor(() => expect(describedText(primaryButton())).toBe('wizard.reasons.completeStep'));
 
     expect(isBlocked(primaryButton())).toBe(true);
+    // The reason is never cut off: long translations wrap instead of being clamped
+    const reasonId = primaryButton().getAttribute('aria-describedby') ?? '';
+    expect(document.getElementById(reasonId)?.className ?? '').not.toContain('line-clamp');
     await user.click(primaryButton());
     expect(heading()).toHaveTextContent('test.step1');
     expect(stepControl.leave).not.toHaveBeenCalled();

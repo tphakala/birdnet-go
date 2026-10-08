@@ -57,6 +57,30 @@ describe('Button', () => {
     expect(button).toHaveClass('extra-class');
     expect(button).toHaveClass('inline-flex');
   });
+  it('darkens the primary variant on hover and press instead of fading it', () => {
+    render(ButtonHarness, { props: { variant: 'primary' } });
+
+    const button = screen.getByRole('button');
+    expect(button).toHaveClass(
+      'hover:bg-[var(--color-primary-hover)]',
+      'active:bg-[var(--color-primary-hover)]'
+    );
+    expect(button.className).not.toContain('bg-[var(--color-primary)]/');
+  });
+
+  it('fades a blocked button less while it has keyboard focus so its ring stays visible', () => {
+    render(ButtonHarness, { props: { 'aria-disabled': 'true' } });
+
+    expect(screen.getByRole('button')).toHaveClass('aria-disabled:focus-visible:opacity-75');
+  });
+
+  it('does not animate the focus ring colour', () => {
+    render(ButtonHarness);
+
+    const button = screen.getByRole('button');
+    expect(button).not.toHaveClass('transition-colors');
+    expect(button).toHaveClass('motion-reduce:transition-none');
+  });
 });
 
 describe('Button Accessibility Tests', () => {

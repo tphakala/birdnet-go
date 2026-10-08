@@ -65,7 +65,7 @@
     default:
       'bg-[var(--color-base-200)] text-[var(--color-base-content)] border border-[var(--color-base-300)] hover:bg-[var(--color-base-300)] active:bg-[var(--color-base-300)]/80',
     primary:
-      'bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary)]/85 active:bg-[var(--color-primary)]/70',
+      'bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] hover:border-[var(--color-primary-hover)] active:bg-[var(--color-primary-hover)] active:border-[var(--color-primary-hover)]',
     success:
       'bg-[var(--color-success)]/15 text-[var(--color-success)] border border-[var(--color-success)]/25 hover:bg-[var(--color-success)]/25 active:bg-[var(--color-success)]/35',
     warning:
@@ -84,9 +84,10 @@
   {title}
   {...rest}
   class={cn(
-    'inline-flex items-center justify-center rounded-lg font-medium transition-colors',
+    'inline-flex items-center justify-center rounded-lg font-medium transition-[color,background-color,border-color] motion-reduce:transition-none',
     'focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2',
-    'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed',
+    // A blocked button stays focusable; the ring needs 3:1, so it fades less while focused
+    'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:focus-visible:opacity-75',
     'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
     safeGet(sizeClasses, size, ''),
     safeGet(variantClasses, variant, ''),

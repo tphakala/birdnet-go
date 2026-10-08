@@ -296,7 +296,7 @@
       </Button>
       <p
         id={NEXT_REASON_ID}
-        class="line-clamp-2 min-w-0 flex-1 text-right text-sm leading-tight text-[var(--color-base-content)] opacity-70"
+        class="min-w-0 flex-1 text-right text-sm leading-tight text-[var(--color-base-content)] opacity-70"
         title={nextReason || undefined}
       >
         {nextReason}

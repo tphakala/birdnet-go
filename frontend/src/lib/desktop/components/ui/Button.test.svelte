@@ -1,10 +1,12 @@
 <script lang="ts">
   import Button from './Button.svelte';
+  import type { ComponentProps } from 'svelte';
   import type { HTMLButtonAttributes } from 'svelte/elements';
 
   // Test harness: binds Button's ref and reports it through `holder`
   interface Props extends Omit<HTMLButtonAttributes, 'class'> {
     class?: string;
+    variant?: ComponentProps<typeof Button>['variant'];
     holder?: { el?: HTMLButtonElement | null };
   }
 
