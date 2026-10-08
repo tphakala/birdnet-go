@@ -693,6 +693,33 @@ describe('Modal', () => {
       expect(button('Last')).toHaveFocus();
     });
 
+    it('Tab from the checked radio reaches a control placed between two radios of the same group', async () => {
+      await renderHost({ radioLayout: 'split', hideFooter: true });
+      screen.getByRole('radio', { name: 'Split A' }).focus();
+
+      await user.tab();
+
+      expect(button('Between')).toHaveFocus();
+    });
+
+    it('Tab from the first radio of an unchecked trailing group wraps to the first control', async () => {
+      await renderHost({ radioLayout: 'trailing-unchecked', hideFooter: true });
+      screen.getByRole('radio', { name: 'Size X' }).focus();
+
+      await user.tab();
+
+      expect(button('First')).toHaveFocus();
+    });
+
+    it('Shift+Tab from the last radio of an unchecked leading group wraps to the last control', async () => {
+      await renderHost({ radioLayout: 'leading-unchecked', hideFooter: true });
+      screen.getByRole('radio', { name: 'Pick Q' }).focus();
+
+      await user.tab({ shift: true });
+
+      expect(button('First')).toHaveFocus();
+    });
+
     it('Tab from a tabindex=-1 element inside the dialog follows native order when controls follow it', async () => {
       await renderHost({ showCard: true });
       screen.getByRole('group', { name: 'Card' }).focus();

@@ -13,6 +13,8 @@
     showTrailingCard = false,
     showRadios = false,
     escapeHandled = false,
+    radioLayout = 'none',
+    hideFooter = false,
     onClose = undefined,
   }: {
     isOpen?: boolean;
@@ -24,6 +26,9 @@
     showTrailingCard?: boolean;
     showRadios?: boolean;
     escapeHandled?: boolean;
+    /** split: a checked radio, a button, then the group's second radio, nothing else in the body */
+    radioLayout?: 'none' | 'split' | 'trailing-unchecked' | 'leading-unchecked';
+    hideFooter?: boolean;
     onClose?: () => void;
   } = $props();
 </script>
@@ -43,20 +48,36 @@
         onkeydown={event => event.key === 'Escape' && event.preventDefault()}
       />
     {/if}
-    <button type="button" disabled={firstDisabled}>First</button>
-    {#if showCard}
-      <div tabindex="-1" role="group" aria-label="Card">Card</div>
+    {#if radioLayout === 'split'}
+      <input type="radio" name="split" value="a" aria-label="Split A" checked />
+      <button type="button">Between</button>
+      <input type="radio" name="split" value="b" aria-label="Split B" />
+    {:else}
+      {#if radioLayout === 'leading-unchecked'}
+        <input type="radio" name="pick" value="p" aria-label="Pick P" />
+        <input type="radio" name="pick" value="q" aria-label="Pick Q" />
+      {/if}
+      <button type="button" disabled={firstDisabled}>First</button>
+      {#if showCard}
+        <div tabindex="-1" role="group" aria-label="Card">Card</div>
+      {/if}
+      {#if radioLayout === 'trailing-unchecked'}
+        <input type="radio" name="size" value="x" aria-label="Size X" />
+        <input type="radio" name="size" value="y" aria-label="Size Y" />
+      {/if}
     {/if}
   {/snippet}
 
   {#snippet footer()}
-    <button type="button">Middle</button>
-    <button type="button" disabled={lastDisabled} tabindex={lastTabindex}>Last</button>
-    {#if showExtra}
-      <button type="button">Extra</button>
-    {/if}
-    {#if showTrailingCard}
-      <div tabindex="-1" role="group" aria-label="Trailing card">Trailing card</div>
+    {#if !hideFooter}
+      <button type="button">Middle</button>
+      <button type="button" disabled={lastDisabled} tabindex={lastTabindex}>Last</button>
+      {#if showExtra}
+        <button type="button">Extra</button>
+      {/if}
+      {#if showTrailingCard}
+        <div tabindex="-1" role="group" aria-label="Trailing card">Trailing card</div>
+      {/if}
     {/if}
   {/snippet}
 </Modal>

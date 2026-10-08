@@ -93,20 +93,15 @@
   }
 
   /**
-   * The element Tab leaves from when the focused element is `active`: the
-   * element itself, except that a named radio group is left from its last radio
-   * (first radio with Shift+Tab).
+   * Whether two nodes are named radios of one group. Tab leaves a group from
+   * any of its radios, so the other radios of the focused radio's group are
+   * neither before nor after it.
    */
-  function tabExitPoint(
-    active: HTMLElement,
-    tabbable: HTMLElement[],
-    backwards: boolean
-  ): HTMLElement {
-    if (!isRadio(active)) return active;
-    const key = radioGroupKey(active);
-    if (key === null) return active;
-    const members = tabbable.filter(el => isRadio(el) && radioGroupKey(el) === key);
-    return (backwards ? members[0] : members[members.length - 1]) ?? active;
+  function inSameRadioGroup(a: Node, b: Node): boolean {
+    if (!(a instanceof HTMLElement) || !(b instanceof HTMLElement)) return false;
+    if (!isRadio(a) || !isRadio(b)) return false;
+    const key = radioGroupKey(a);
+    return key !== null && key === radioGroupKey(b);
   }
 </script>
 
@@ -309,15 +304,12 @@
       return;
     }
 
-    const exitPoint = tabExitPoint(
-      active as HTMLElement,
-      getTabbableUncollapsed(modalElement),
-      event.shiftKey
-    );
     const direction = event.shiftKey
       ? Node.DOCUMENT_POSITION_PRECEDING
       : Node.DOCUMENT_POSITION_FOLLOWING;
-    const hasNext = items.some(item => exitPoint.compareDocumentPosition(item) & direction);
+    const hasNext = items.some(
+      item => !inSameRadioGroup(item, active) && active.compareDocumentPosition(item) & direction
+    );
     if (!hasNext) {
       event.preventDefault();
       (event.shiftKey ? items.at(-1) : items[0])?.focus();
