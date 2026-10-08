@@ -119,6 +119,20 @@ describe('Checkbox', () => {
     expect(visualCheckbox).not.toHaveClass('border-[var(--border-200)]');
   });
 
+  it('transitions only colours on the box and drops the transition under reduced motion', () => {
+    const { container } = render(Checkbox, {
+      props: { checked: false, label: 'Test checkbox' },
+    });
+
+    // transition-all would also fade the focus ring in from the text colour
+    const visualCheckbox = container.querySelector('span.relative');
+    expect(visualCheckbox).toHaveClass(
+      'transition-[color,background-color,border-color]',
+      'motion-reduce:transition-none'
+    );
+    expect(visualCheckbox).not.toHaveClass('transition-all');
+  });
+
   it('applies variant classes correctly when checked', () => {
     const { container } = render(Checkbox, {
       props: {

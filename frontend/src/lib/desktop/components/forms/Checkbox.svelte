@@ -118,7 +118,7 @@
     <!-- Custom checkbox visual -->
     <span
       class={cn(
-        'relative inline-flex items-center justify-center mr-2 shrink-0 border-2 rounded transition-all',
+        'relative inline-flex items-center justify-center mr-2 shrink-0 border-2 rounded transition-[color,background-color,border-color] motion-reduce:transition-none',
         // At least 3:1 against the page in both themes (WCAG 1.4.11)
         'border-[var(--color-base-content)]/60 bg-[var(--color-base-100)]',
         'peer-focus-visible:outline-2 peer-focus-visible:outline-[var(--color-primary)] peer-focus-visible:outline-offset-2',

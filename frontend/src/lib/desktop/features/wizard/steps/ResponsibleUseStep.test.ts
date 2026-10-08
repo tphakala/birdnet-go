@@ -63,6 +63,18 @@ describe('ResponsibleUseStep', () => {
   });
 });
 
+describe('ResponsibleUseStep motion', () => {
+  it('transitions only colours on the card and drops the transition under reduced motion', () => {
+    renderTyped(ResponsibleUseStep, { props: {} });
+
+    expect(card()).toHaveClass(
+      'transition-[color,background-color,border-color]',
+      'motion-reduce:transition-none'
+    );
+    expect(card()).not.toHaveClass('transition-colors');
+  });
+});
+
 describe('ResponsibleUseStep Accessibility', () => {
   it('has no violations while unchecked', async () => {
     const { container } = renderTyped(ResponsibleUseStep, { props: {} });

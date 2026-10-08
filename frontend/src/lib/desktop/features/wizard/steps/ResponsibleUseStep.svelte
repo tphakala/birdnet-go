@@ -44,7 +44,7 @@
     bind:checked={acknowledged}
     size="sm"
     className="mt-6"
-    labelClassName="w-full rounded-lg border-2 p-4 transition-colors {acknowledged
+    labelClassName="w-full rounded-lg border-2 p-4 transition-[color,background-color,border-color] motion-reduce:transition-none {acknowledged
       ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
       : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
   >
