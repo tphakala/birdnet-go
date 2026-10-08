@@ -41,7 +41,7 @@
   let { options, value, onChange, columns = 1, className = '', ...rest }: Props<T> = $props();
 
   const CARD_BASE_CLASS =
-    'flex w-full gap-3 rounded-lg border-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2';
+    'flex w-full gap-3 rounded-lg border-2 text-left transition-[border-color,background-color] motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2';
   const BADGE_CLASS =
     'rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-base-content)]';
 
