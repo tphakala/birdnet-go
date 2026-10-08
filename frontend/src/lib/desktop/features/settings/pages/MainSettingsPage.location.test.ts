@@ -22,11 +22,12 @@ function latestMapProps(): ComponentProps<typeof LocationMap> {
   return props;
 }
 
-function setStore(
-  birdnet: Partial<SettingsFormData['birdnet']>,
-  state: { isLoading?: boolean } = {}
-) {
-  const formData = {
+type BirdnetOverrides = { [K in keyof SettingsFormData['birdnet']]?: unknown };
+
+function createFormData(birdnet: BirdnetOverrides): SettingsFormData {
+  // A deliberately partial fixture: only the sections the page reads for the
+  // Location tab are filled in.
+  return {
     main: { name: 'TestNode' },
     birdnet: {
       modelPath: '',
@@ -48,11 +49,13 @@ function setStore(
       ...birdnet,
     },
   } as unknown as SettingsFormData;
+}
 
+function setStore(birdnet: BirdnetOverrides, state: { isLoading?: boolean } = {}) {
   settingsStore.set({
-    formData,
-    // The baseline is a structural copy, as after a settings load.
-    originalData: JSON.parse(JSON.stringify(formData)) as SettingsFormData,
+    formData: createFormData(birdnet),
+    // The baseline equals the form data, as right after a settings load.
+    originalData: createFormData(birdnet),
     isLoading: state.isLoading ?? false,
     isSaving: false,
     activeSection: 'main',
@@ -118,15 +121,93 @@ describe('MainSettingsPage location map', () => {
     await vi.waitFor(() => expect(latestMapProps().ready).toBe(true));
   });
 
-  it('does not change the stored location by only showing the map', async () => {
-    setStore({ latitude: 60.123, longitude: 24.456, locationConfigured: true });
+  it('does not write the location when the Location tab opens', async () => {
+    setStore({ latitude: 0, longitude: 0, locationConfigured: false });
     await openLocationTab();
 
-    const state = get(settingsStore);
-    expect(state.formData.birdnet).toMatchObject({
-      latitude: state.originalData.birdnet.latitude,
-      longitude: state.originalData.birdnet.longitude,
-      locationConfigured: state.originalData.birdnet.locationConfigured,
+    expect(get(settingsStore).formData.birdnet).toMatchObject({
+      latitude: 0,
+      longitude: 0,
+      locationConfigured: false,
+    });
+  });
+
+  describe('with a pending browser location request', () => {
+    const geolocation = {
+      getCurrentPosition: vi.fn<Geolocation['getCurrentPosition']>(),
+      watchPosition: vi.fn<Geolocation['watchPosition']>(),
+      clearWatch: vi.fn<Geolocation['clearWatch']>(),
+    };
+
+    beforeEach(() => {
+      geolocation.getCurrentPosition.mockReset();
+      Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
+      Object.defineProperty(navigator, 'geolocation', { configurable: true, value: geolocation });
+    });
+
+    afterEach(() => {
+      Reflect.deleteProperty(navigator, 'geolocation');
+      Reflect.deleteProperty(window, 'isSecureContext');
+    });
+
+    async function startBrowserRequest(): Promise<PositionCallback> {
+      let respond: PositionCallback | undefined;
+      geolocation.getCurrentPosition.mockImplementationOnce(success => {
+        respond = success;
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Use browser location' }));
+      if (!respond) throw new Error('the browser location request was not started');
+      return respond;
+    }
+
+    function position(latitude: number, longitude: number): GeolocationPosition {
+      return {
+        coords: {
+          latitude,
+          longitude,
+          accuracy: 10,
+          altitude: null,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+          toJSON: () => ({}),
+        },
+        timestamp: 0,
+        toJSON: () => ({}),
+      };
+    }
+
+    it('a map pick on the current coordinates still discards the late browser result', async () => {
+      setStore({ latitude: 60.123, longitude: 24.456, locationConfigured: true });
+      await openLocationTab();
+      const respond = await startBrowserRequest();
+
+      // Same values as stored: only the coordinate intent version tells the
+      // button that the user acted on the map.
+      latestMapProps().onLocationChange(60.123, 24.456);
+      await vi.waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Use browser location' })).not.toBeDisabled()
+      );
+      respond(position(10.5, 20.5));
+
+      expect(get(settingsStore).formData.birdnet).toMatchObject({
+        latitude: 60.123,
+        longitude: 24.456,
+      });
+    });
+
+    it('a browser result applies its coordinates and marks the location configured', async () => {
+      setStore({ latitude: 0, longitude: 0, locationConfigured: false });
+      await openLocationTab();
+      const respond = await startBrowserRequest();
+
+      respond(position(10.5, 20.5));
+
+      expect(get(settingsStore).formData.birdnet).toMatchObject({
+        latitude: 10.5,
+        longitude: 20.5,
+        locationConfigured: true,
+      });
     });
   });
 });
