@@ -22,6 +22,11 @@
     required?: boolean;
     /** Optional id for the control element (for label association) */
     id?: string;
+    /**
+     * Visible label, rendered by the component. A trigger needs a name that does not depend on
+     * the selected value, because the displayed text is the combobox value, not its name: give
+     * `label`, `aria-label`, or an `id` that a `<label for>` points at.
+     */
     label?: string;
     /**
      * Accessible name for the trigger and the open listbox when there is no visible `label`
@@ -30,7 +35,7 @@
      */
     'aria-label'?: string;
     helpText?: string;
-    /** Space-separated ids of extra elements that describe the trigger (in addition to the displayed value and helpText) */
+    /** Space-separated ids of extra elements that describe the trigger (in addition to helpText; the displayed value is the combobox value, not part of the description) */
     'aria-describedby'?: string;
     className?: string;
     dropdownClassName?: string;
