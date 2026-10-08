@@ -107,6 +107,13 @@ describe('placeSearch', () => {
       }
     });
 
+    it('answers a blank query without a request', async () => {
+      for (const query of ['', '   ']) {
+        expect(await searchPlaces(query, { locale: 'en' })).toEqual({ status: 'ok', results: [] });
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     it('trims the query', async () => {
       respondWith(featureCollection());
       await searchPlaces('  Helsinki  ', { locale: 'en' });

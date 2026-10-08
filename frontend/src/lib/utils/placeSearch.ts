@@ -163,6 +163,8 @@ export async function searchPlaces(
   // A function, so each check reads the live flag instead of a narrowed value.
   const callerAborted = () => signal?.aborted === true;
   if (callerAborted()) return { status: 'aborted' };
+  // Photon rejects an empty query, so there is nothing to ask.
+  if (query.trim() === '') return { status: 'ok', results: [] };
 
   // An own controller serves the timeout without AbortSignal.any/timeout.
   const controller = new AbortController();
