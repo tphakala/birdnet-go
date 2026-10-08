@@ -5085,6 +5085,13 @@
       "viewDetections": "Bekijk {name} detecties",
       "largeView": "Grote weergave van {name}",
       "clickToView": "Klik om detecties te bekijken"
+    },
+    "locationMap": {
+      "mapLabel": "Kaart voor het kiezen van de stationslocatie",
+      "expandedMapLabel": "Kaart op volledig scherm voor het kiezen van de stationslocatie",
+      "zoomIn": "Inzoomen",
+      "zoomOut": "Uitzoomen",
+      "expand": "Kaart op volledig scherm weergeven"
     }
   },
   "connectivity": {

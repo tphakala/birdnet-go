@@ -5085,6 +5085,13 @@
       "viewDetections": "Visa detektioner för {name}",
       "largeView": "Stor vy av {name}",
       "clickToView": "Klicka för att se detektioner"
+    },
+    "locationMap": {
+      "mapLabel": "Karta för att välja stationens plats",
+      "expandedMapLabel": "Helskärmskarta för att välja stationens plats",
+      "zoomIn": "Zooma in",
+      "zoomOut": "Zooma ut",
+      "expand": "Utöka kartan till helskärm"
     }
   },
   "connectivity": {

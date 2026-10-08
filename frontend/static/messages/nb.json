@@ -5085,6 +5085,13 @@
       "viewDetections": "Se {name}-deteksjoner",
       "largeView": "Stor visning av {name}",
       "clickToView": "Klikk for å se deteksjoner"
+    },
+    "locationMap": {
+      "mapLabel": "Kart for å velge stasjonsposisjon",
+      "expandedMapLabel": "Fullskjermkart for å velge stasjonsposisjon",
+      "zoomIn": "Zoom inn",
+      "zoomOut": "Zoom ut",
+      "expand": "Utvid kartet til fullskjerm"
     }
   },
   "connectivity": {

@@ -5085,6 +5085,13 @@
       "viewDetections": "Ver detecciones de {name}",
       "largeView": "Vista ampliada de {name}",
       "clickToView": "Haga clic para ver las detecciones"
+    },
+    "locationMap": {
+      "mapLabel": "Mapa para seleccionar la ubicación de la estación",
+      "expandedMapLabel": "Mapa a pantalla completa para seleccionar la ubicación de la estación",
+      "zoomIn": "Acercar",
+      "zoomOut": "Alejar",
+      "expand": "Ampliar el mapa a pantalla completa"
     }
   },
   "connectivity": {
