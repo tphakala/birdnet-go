@@ -5092,7 +5092,20 @@
       "expandedMapLabel": "Carte plein écran pour sélectionner l'emplacement de la station",
       "zoomIn": "Zoom avant",
       "zoomOut": "Zoom arrière",
-      "expand": "Agrandir la carte en plein écran"
+      "expand": "Agrandir la carte en plein écran",
+      "search": {
+        "label": "Rechercher un lieu",
+        "placeholder": "Ville ou adresse",
+        "submit": "Rechercher",
+        "disclosure": "Les recherches sont envoyées à Photon (photon.komoot.io), qui utilise les données d'OpenStreetMap.",
+        "openPhoton": "Ouvrir Photon dans un nouvel onglet",
+        "searching": "Recherche en cours...",
+        "results": "{count, plural, one {# lieu trouvé} other {# lieux trouvés}}",
+        "noResults": "Aucun lieu trouvé. Essayez un autre nom ou cliquez sur la carte.",
+        "errorNetwork": "La recherche de lieux n'est pas disponible. Vérifiez la connexion internet. Vous pouvez toujours cliquer sur la carte ou saisir les coordonnées.",
+        "errorRateLimited": "Trop de recherches. Patientez un instant et réessayez.",
+        "errorUnavailable": "Le service de recherche n'a pas répondu. Vous pouvez toujours cliquer sur la carte ou saisir les coordonnées."
+      }
     }
   },
   "connectivity": {

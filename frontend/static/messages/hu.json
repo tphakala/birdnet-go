@@ -5092,7 +5092,20 @@
       "expandedMapLabel": "Teljes képernyős térkép az állomás helyszínének kiválasztásához",
       "zoomIn": "Nagyítás",
       "zoomOut": "Kicsinyítés",
-      "expand": "Térkép megnyitása teljes képernyőn"
+      "expand": "Térkép megnyitása teljes képernyőn",
+      "search": {
+        "label": "Hely keresése",
+        "placeholder": "Település vagy cím",
+        "submit": "Keresés",
+        "disclosure": "A keresések a Photon szolgáltatáshoz (photon.komoot.io) kerülnek elküldésre, amely OpenStreetMap-adatokat használ.",
+        "openPhoton": "Photon megnyitása új lapon",
+        "searching": "Keresés...",
+        "results": "{count, plural, one {# hely található} other {# hely található}}",
+        "noResults": "Nem található hely. Próbáljon másik nevet, vagy kattintson a térképre.",
+        "errorNetwork": "A helykeresés nem érhető el. Ellenőrizze az internetkapcsolatot. A térképre továbbra is kattinthat, vagy megadhatja a koordinátákat.",
+        "errorRateLimited": "Túl sok keresés. Várjon egy kicsit, majd próbálja újra.",
+        "errorUnavailable": "A keresőszolgáltatás nem válaszolt. A térképre továbbra is kattinthat, vagy megadhatja a koordinátákat."
+      }
     }
   },
   "connectivity": {

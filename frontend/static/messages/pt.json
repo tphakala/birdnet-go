@@ -5092,7 +5092,20 @@
       "expandedMapLabel": "Mapa em tela cheia para selecionar a localização da estação",
       "zoomIn": "Ampliar",
       "zoomOut": "Reduzir",
-      "expand": "Expandir o mapa para tela cheia"
+      "expand": "Expandir o mapa para tela cheia",
+      "search": {
+        "label": "Pesquisar um local",
+        "placeholder": "Localidade ou morada",
+        "submit": "Pesquisar",
+        "disclosure": "As pesquisas são enviadas para o Photon (photon.komoot.io), que usa dados do OpenStreetMap.",
+        "openPhoton": "Abrir o Photon num novo separador",
+        "searching": "A pesquisar...",
+        "results": "{count, plural, one {# local encontrado} other {# locais encontrados}}",
+        "noResults": "Nenhum local encontrado. Tente outro nome ou clique no mapa.",
+        "errorNetwork": "A pesquisa de locais não está disponível. Verifique a ligação à internet. Ainda pode clicar no mapa ou introduzir as coordenadas.",
+        "errorRateLimited": "Demasiadas pesquisas. Aguarde um momento e tente novamente.",
+        "errorUnavailable": "O serviço de pesquisa não respondeu. Ainda pode clicar no mapa ou introduzir as coordenadas."
+      }
     }
   },
   "connectivity": {

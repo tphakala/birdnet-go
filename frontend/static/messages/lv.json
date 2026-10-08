@@ -5092,7 +5092,20 @@
       "expandedMapLabel": "Pilnekrāna karte stacijas atrašanās vietas izvēlei",
       "zoomIn": "Tuvināt",
       "zoomOut": "Tālināt",
-      "expand": "Izvērst karti pilnekrāna skatā"
+      "expand": "Izvērst karti pilnekrāna skatā",
+      "search": {
+        "label": "Meklēt vietu",
+        "placeholder": "Pilsēta vai adrese",
+        "submit": "Meklēt",
+        "disclosure": "Meklēšanas pieprasījumi tiek nosūtīti pakalpojumam Photon (photon.komoot.io), kas izmanto OpenStreetMap datus.",
+        "openPhoton": "Atvērt Photon jaunā cilnē",
+        "searching": "Meklē...",
+        "results": "{count, plural, zero {Atrastas # vietas} one {Atrasta # vieta} other {Atrastas # vietas}}",
+        "noResults": "Vietas netika atrastas. Izmēģiniet citu nosaukumu vai noklikšķiniet uz kartes.",
+        "errorNetwork": "Vietu meklēšana nav pieejama. Pārbaudiet interneta savienojumu. Joprojām varat noklikšķināt uz kartes vai ievadīt koordinātas.",
+        "errorRateLimited": "Pārāk daudz meklēšanas pieprasījumu. Uzgaidiet brīdi un mēģiniet vēlreiz.",
+        "errorUnavailable": "Meklēšanas pakalpojums neatbildēja. Joprojām varat noklikšķināt uz kartes vai ievadīt koordinātas."
+      }
     }
   },
   "connectivity": {

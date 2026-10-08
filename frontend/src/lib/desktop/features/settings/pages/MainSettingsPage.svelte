@@ -641,6 +641,7 @@
           $birdnetSettings?.longitude !== undefined}
         title={t('settings.main.sections.rangeFilter.stationLocation.label')}
         onLocationChange={updateLocationSettings}
+        placeSearch
       />
     </SettingsSection>
 

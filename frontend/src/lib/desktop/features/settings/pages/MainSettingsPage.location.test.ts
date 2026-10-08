@@ -99,6 +99,14 @@ describe('MainSettingsPage location map', () => {
     expect(latestMapProps().locationSet).toBe(false);
   });
 
+  it('enables place search on the map', async () => {
+    setStore({ latitude: 60.123, longitude: 24.456, locationConfigured: true });
+
+    await openLocationTab();
+
+    expect(latestMapProps().placeSearch).toBe(true);
+  });
+
   it('a map pick updates the coordinates and marks the location configured', async () => {
     setStore({ latitude: 0, longitude: 0, locationConfigured: false });
     await openLocationTab();

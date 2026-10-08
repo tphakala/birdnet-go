@@ -5092,7 +5092,20 @@
       "expandedMapLabel": "Kaart op volledig scherm voor het kiezen van de stationslocatie",
       "zoomIn": "Inzoomen",
       "zoomOut": "Uitzoomen",
-      "expand": "Kaart op volledig scherm weergeven"
+      "expand": "Kaart op volledig scherm weergeven",
+      "search": {
+        "label": "Een plaats zoeken",
+        "placeholder": "Plaats of adres",
+        "submit": "Zoeken",
+        "disclosure": "Zoekopdrachten worden naar Photon (photon.komoot.io) gestuurd, dat OpenStreetMap-gegevens gebruikt.",
+        "openPhoton": "Photon openen in een nieuw tabblad",
+        "searching": "Bezig met zoeken...",
+        "results": "{count, plural, one {# plaats gevonden} other {# plaatsen gevonden}}",
+        "noResults": "Geen plaatsen gevonden. Probeer een andere naam of klik op de kaart.",
+        "errorNetwork": "Plaatsen zoeken is niet beschikbaar. Controleer de internetverbinding. U kunt nog steeds op de kaart klikken of coördinaten invoeren.",
+        "errorRateLimited": "Te veel zoekopdrachten. Wacht even en probeer het opnieuw.",
+        "errorUnavailable": "De zoekdienst reageerde niet. U kunt nog steeds op de kaart klikken of coördinaten invoeren."
+      }
     }
   },
   "connectivity": {
