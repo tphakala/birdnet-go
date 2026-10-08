@@ -201,11 +201,11 @@ interface Props {
 **Features:**
 
 - Multiple modal types
-- 5 size variants
+- Size variants from `sm` to `7xl`, plus `full`
 - Async confirm handlers
 - Keyboard/backdrop controls
 - Loading states
-- Named by `title` (a `header` snippet receives `titleId` for its heading's `id`) and described by its body only with `describeBody`
+- Named by `title` (a `header` snippet receives `titleId` for its heading's `id`) and described by its body only with `describeBody`; to describe it by one element instead, pass `aria-describedby` with that element's id (other attributes are spread onto the dialog element)
 
 ---
 

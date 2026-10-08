@@ -34,10 +34,15 @@ describe('MigrationConfirmDialog', () => {
     expect(dialog.getAttribute('aria-labelledby')).toBe(heading.id);
   });
 
-  it('describes the dialog with its message', async () => {
+  it('describes the dialog with its message only', async () => {
     await renderOpen();
 
-    expect(screen.getByRole('dialog')).toHaveAccessibleDescription(/\S/);
+    const dialog = screen.getByRole('dialog');
+    const describedBy = dialog.getAttribute('aria-describedby') ?? '';
+    const message = document.getElementById(describedBy);
+    expect(message?.tagName).toBe('P');
+    expect(dialog).toHaveAccessibleDescription(message?.textContent.trim() ?? '');
+    expect(screen.getByRole('checkbox').closest(`#${describedBy}`)).toBeNull();
   });
 
   it('Tab from Cancel stays in the dialog while Start is disabled', async () => {

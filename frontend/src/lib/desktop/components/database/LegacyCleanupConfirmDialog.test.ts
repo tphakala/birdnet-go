@@ -17,7 +17,11 @@ describe('LegacyCleanupConfirmDialog', () => {
 
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveAccessibleName(/\S/);
-    expect(dialog).toHaveAccessibleDescription(/\S/);
+    const describedBy = dialog.getAttribute('aria-describedby') ?? '';
+    const message = document.getElementById(describedBy);
+    expect(message?.tagName).toBe('P');
+    expect(dialog).toHaveAccessibleDescription(message?.textContent.trim() ?? '');
+    expect(screen.getByRole('checkbox').closest(`#${describedBy}`)).toBeNull();
   });
 
   it('Tab from Cancel stays in the dialog while Delete is disabled', async () => {
