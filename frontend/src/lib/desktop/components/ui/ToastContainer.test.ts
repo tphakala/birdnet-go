@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import ToastContainer from './ToastContainer.svelte';
+import { toastActions } from '$lib/stores/toast';
 
 // setup.ts mocks the toast store without the `toasts` store this component
 // reads; use the real store here.
@@ -25,5 +27,31 @@ describe('ToastContainer', () => {
       expect(screen.getByRole('region', { name: key })).toBeInTheDocument();
     }
     expect(screen.getAllByRole('region')).toHaveLength(REGION_KEYS.length);
+  });
+});
+
+describe('ToastContainer auto-dismiss', () => {
+  const DEFAULT_DURATION_MS = 5000;
+  const MARGIN_MS = 1000;
+
+  afterEach(() => {
+    vi.useRealTimers();
+    toastActions.clear();
+  });
+
+  it('keeps a toast with a null duration on screen after the default duration', async () => {
+    vi.useFakeTimers();
+    render(ToastContainer);
+
+    toastActions.error('Persistent failure', { duration: null });
+    toastActions.info('Brief note');
+    await tick();
+    expect(screen.getByText('Persistent failure')).toBeInTheDocument();
+    expect(screen.getByText('Brief note')).toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(DEFAULT_DURATION_MS + MARGIN_MS);
+
+    expect(screen.getByText('Persistent failure')).toBeInTheDocument();
+    expect(screen.queryByText('Brief note')).not.toBeInTheDocument();
   });
 });
