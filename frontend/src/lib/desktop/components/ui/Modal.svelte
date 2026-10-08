@@ -10,6 +10,8 @@
     opener: HTMLElement | SVGElement | null;
     /** Set when a Modal this one was opened from closes first; replaces `opener` as the place to restore focus to */
     restoreTo: HTMLElement | SVGElement | null;
+    /** Moves focus to this dialog's first tabbable control, else its box */
+    focusInto: () => void;
   }
 
   // CSS selector for elements that may be keyboard focusable. getTabbable()
@@ -206,6 +208,7 @@
     },
     opener: null,
     restoreTo: null,
+    focusInto: () => setInitialFocus(),
   };
   // Ids are per instance and fixed for its life: the dialog is always mounted,
   // so a shared literal would repeat on every page that has two Modals
@@ -279,11 +282,26 @@
     }
   }
 
+  /**
+   * Whether `node` is inside an `aria-modal` dialog that is not this Modal's own
+   * dialog element and not another Modal's. The nearest `aria-modal` ancestor is
+   * checked, because such a dialog can sit inside this one's element.
+   */
+  function isInForeignModalDialog(node: unknown): boolean {
+    if (!(node instanceof HTMLElement || node instanceof SVGElement)) return false;
+    const nearest = node.closest(ARIA_MODAL_SELECTOR);
+    if (!nearest || nearest === dialogElement) return false;
+    return !openModals.some(entry => entry.dialog === nearest);
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       // Escape that a control inside already used (closing its own list, say)
       // does not also close the dialog, and a dialog under another stays open
       if (event.defaultPrevented || !isTopmost()) return;
+      // Escape inside another modal dialog (the range filter dialog, or the expanded map
+      // portalled into this dialog element) belongs to that dialog, not to this one
+      if (isInForeignModalDialog(event.target)) return;
       if (closeOnEsc && !loading && !isConfirming) handleClose();
     } else if (event.key === 'Tab') {
       trapFocus(event);
@@ -309,8 +327,9 @@
     const active = document.activeElement;
 
     if (!active || !dialogElement.contains(active)) {
-      if (active?.closest(ARIA_MODAL_SELECTOR)) return;
-      // Focus is on <body> or on the page behind the dialog: bring it back in
+      // Another modal dialog owns focus; a lower Modal does not (focus in it moves up here)
+      if (isInForeignModalDialog(active)) return;
+      // Focus is on <body>, on the page behind the dialog or in a lower Modal: bring it back in
       event.preventDefault();
       const items = getTabbable(modalElement);
       (event.shiftKey ? items.at(-1) : items[0])?.focus();
@@ -419,6 +438,9 @@
     }
     const above = openModals.at(index);
     if (above?.opener && stackEntry.dialog?.contains(above.opener)) above.restoreTo = target;
+    // Focus left on a control of this now hidden dialog moves into the dialog on top
+    const active = document.activeElement;
+    if (active && stackEntry.dialog?.contains(active)) openModals.at(-1)?.focusInto();
   }
 
   $effect(() => {

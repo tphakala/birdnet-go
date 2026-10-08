@@ -906,6 +906,26 @@ describe('Modal', () => {
       expect(button('Page button')).toHaveFocus();
     });
 
+    it('closing the lower modal while focus is on its control moves focus into the upper one', async () => {
+      await openBoth();
+      button('Lower action').focus();
+
+      await press('Toggle lower');
+
+      expect(button('Upper action')).toHaveFocus();
+    });
+
+    it('Tab with focus in a lower modal moves focus into the topmost one', async () => {
+      await openBoth();
+      button('Lower action').focus();
+
+      // fireEvent returns false when a listener called preventDefault
+      const notPrevented = await fireEvent.keyDown(button('Lower action'), { key: 'Tab' });
+
+      expect(notPrevented).toBe(false);
+      expect(button('Upper action')).toHaveFocus();
+    });
+
     it('closing the upper modal returns focus to the control it was opened from', async () => {
       await openBoth();
 
@@ -981,6 +1001,62 @@ describe('Modal', () => {
 
       expect(bar).toHaveFocus();
       svg.remove();
+    });
+  });
+
+  describe('Escape with another aria-modal dialog above', () => {
+    function addOtherDialog(parent: HTMLElement) {
+      const other = document.createElement('div');
+      other.setAttribute('role', 'dialog');
+      other.setAttribute('aria-modal', 'true');
+      const field = document.createElement('input');
+      other.append(field);
+      parent.append(other);
+      return { other, field };
+    }
+
+    it('does not close on an Escape from a dialog placed inside its own dialog element', async () => {
+      const onClose = vi.fn();
+      const host = createComponentTestFactory(ModalTrapHost);
+      host.render({ props: { onClose } });
+      // An expanded map portalled into the Modal's dialog element, for example
+      const { other, field } = addOtherDialog(screen.getByRole('dialog', { name: 'Trap Modal' }));
+      try {
+        field.focus();
+
+        await fireEvent.keyDown(field, { key: 'Escape' });
+
+        expect(onClose).not.toHaveBeenCalled();
+      } finally {
+        other.remove();
+      }
+    });
+
+    it('does not close on an Escape from a dialog elsewhere in the page', async () => {
+      const onClose = vi.fn();
+      const host = createComponentTestFactory(ModalTrapHost);
+      host.render({ props: { onClose } });
+      const { other, field } = addOtherDialog(document.body);
+      try {
+        field.focus();
+
+        await fireEvent.keyDown(field, { key: 'Escape' });
+
+        expect(onClose).not.toHaveBeenCalled();
+      } finally {
+        other.remove();
+      }
+    });
+
+    it('still closes on an Escape from a control of its own dialog', async () => {
+      const onClose = vi.fn();
+      const host = createComponentTestFactory(ModalTrapHost);
+      host.render({ props: { onClose } });
+      screen.getByRole('button', { name: 'Middle' }).focus();
+
+      await user.keyboard('{Escape}');
+
+      expect(onClose).toHaveBeenCalledTimes(1);
     });
   });
 
