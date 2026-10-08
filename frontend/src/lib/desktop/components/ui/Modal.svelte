@@ -326,9 +326,11 @@
 
     const active = document.activeElement;
 
+    // Another modal dialog owns focus, even one placed inside this dialog's element; a
+    // lower Modal does not (focus in it moves up here)
+    if (isInForeignModalDialog(active)) return;
+
     if (!active || !dialogElement.contains(active)) {
-      // Another modal dialog owns focus; a lower Modal does not (focus in it moves up here)
-      if (isInForeignModalDialog(active)) return;
       // Focus is on <body>, on the page behind the dialog or in a lower Modal: bring it back in
       event.preventDefault();
       const items = getTabbable(modalElement);

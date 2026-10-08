@@ -13,6 +13,7 @@ import ModalTestWrapper from './Modal.test.svelte';
 import ModalTrapHost from './Modal.trap.test.svelte';
 import ModalStackHost from './Modal.stack.test.svelte';
 import ModalToggleHost from './Modal.toggle.test.svelte';
+import ModalSelectHost from './Modal.select.test.svelte';
 import ModalCardsHost from './Modal.cards.test.svelte';
 
 function blurActiveElement() {
@@ -680,6 +681,27 @@ describe('Modal', () => {
       }
     });
 
+    it('Tab with focus in a dialog placed inside its own dialog element leaves focus there', async () => {
+      await renderHost();
+      // An expanded map portalled into the Modal's dialog element, for example
+      const other = document.createElement('div');
+      other.setAttribute('role', 'dialog');
+      other.setAttribute('aria-modal', 'true');
+      const field = document.createElement('input');
+      other.append(field);
+      screen.getByRole('dialog', { name: 'Trap Modal' }).append(other);
+      try {
+        field.focus();
+
+        const notPrevented = await fireEvent.keyDown(field, { key: 'Tab' });
+
+        expect(notPrevented).toBe(true);
+        expect(field).toHaveFocus();
+      } finally {
+        other.remove();
+      }
+    });
+
     it('skips tabindex=-1 buttons when wrapping', async () => {
       await renderHost({ lastTabindex: -1 });
       button('Middle').focus();
@@ -1001,6 +1023,43 @@ describe('Modal', () => {
 
       expect(bar).toHaveFocus();
       svg.remove();
+    });
+  });
+
+  describe('with a searchable dropdown inside', () => {
+    async function openDropdown(props: { dropdownLast?: boolean } = {}) {
+      renderTyped(ModalSelectHost, { props });
+      await waitFor(() =>
+        expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true)
+      );
+      await user.click(screen.getByRole('button', { name: /Choice/ }));
+      const search = await screen.findByRole('searchbox');
+      await waitFor(() => expect(search).toHaveFocus());
+      return search;
+    }
+
+    it('Tab from the search box closes the list and moves on from the dropdown, not to the first control', async () => {
+      await openDropdown();
+
+      await user.tab();
+
+      expect(screen.getByRole('button', { name: 'After' })).toHaveFocus();
+    });
+
+    it('Shift+Tab from the search box moves back from the dropdown, not to the last control', async () => {
+      await openDropdown();
+
+      await user.tab({ shift: true });
+
+      expect(screen.getByRole('button', { name: 'Before' })).toHaveFocus();
+    });
+
+    it('Tab from the search box of the last control wraps to the first control', async () => {
+      await openDropdown({ dropdownLast: true });
+
+      await user.tab();
+
+      expect(screen.getByRole('button', { name: 'Before' })).toHaveFocus();
     });
   });
 
