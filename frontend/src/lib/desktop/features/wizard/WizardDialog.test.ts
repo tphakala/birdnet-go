@@ -915,6 +915,38 @@ describe('WizardDialog Accessibility', () => {
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
   });
 
+  it('returns focus to an open step dropdown trigger after a click on dialog text leaves it on body', async () => {
+    loaders = [loadDropdownStep, loadStep];
+    vi.mocked(getStepsForFlow).mockReturnValue(
+      loaders.map((_, i) => ({
+        id: `step-${i + 1}`,
+        type: 'component' as const,
+        titleKey: `test.step${i + 1}` as TranslationKey,
+        // eslint-disable-next-line security/detect-object-injection -- i is a bounded test index
+        component: () => loaders[i](),
+      }))
+    );
+    wizardState.launch('onboarding', { currentVersion: 'v1' });
+    renderTyped(WizardDialog);
+    const trigger = await waitFor(() => {
+      const el = document.getElementById('fixture-dropdown');
+      if (!el) throw new Error('fixture dropdown not rendered');
+      return el;
+    });
+    await user.click(trigger);
+    const search = await screen.findByRole('searchbox');
+    await waitFor(() => expect(search).toHaveFocus());
+    search.blur();
+    expect(document.activeElement).toBe(document.body);
+
+    // A click on dialog text that takes no focus (Safari) leaves it on body, outside the focus trap
+    await fireEvent.click(screen.getByRole('heading', { name: 'test.step1' }));
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(wizardState.isActive).toBe(true);
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('colours the footer alert with the error text token', async () => {
     stepControl.leave = vi.fn(() => Promise.reject(new Error('save failed')));
     renderWizard(componentSteps(3));

@@ -1291,4 +1291,272 @@ describe('SelectDropdown Accessibility', () => {
       await expectNoA11yViolations(document.body, { rules: { region: { enabled: false } } });
     });
   });
+
+  describe('closing and focus', () => {
+    const OUTLINE_CLASS = OPTION_HIGHLIGHT_OUTLINE_CLASS.split(' ')[0];
+
+    /** The option that carries the keyboard highlight outline, or undefined when none does. */
+    function outlinedOption() {
+      return screen
+        .queryAllByRole('option')
+        .find(option => option.classList.contains(OUTLINE_CLASS));
+    }
+
+    /** Opens the non-searchable list with Enter and highlights the second option. */
+    async function openAndHighlight(props: Record<string, unknown> = {}) {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      selectTest.render({ props: { options: fruit, label: 'Fruit', onChange, ...props } });
+      const trigger = screen.getByRole('combobox');
+      trigger.focus();
+      await user.keyboard('{Enter}');
+      await screen.findByRole('listbox');
+      await user.keyboard('{ArrowDown}{ArrowDown}');
+      expect(outlinedOption()?.textContent.trim()).toBe('Banana');
+      return { user, onChange, trigger };
+    }
+
+    const dialogs: HTMLElement[] = [];
+
+    afterEach(() => {
+      dialogs.splice(0).forEach(dialog => dialog.remove());
+    });
+
+    /** Renders the dropdown inside a role="dialog" container that also holds plain content. */
+    function renderInDialog(props: Record<string, unknown> = {}) {
+      const dialog = document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      dialog.setAttribute('aria-modal', 'true');
+      document.body.append(dialog);
+      dialogs.push(dialog);
+      const text = document.createElement('p');
+      text.textContent = 'Dialog text';
+      const otherButton = document.createElement('button');
+      otherButton.textContent = 'Other control';
+      dialog.append(text, otherButton);
+      // `target` is a Svelte mount option the render helper passes through
+      const rendered = selectTest.render({
+        props: { options: fruit, label: 'Fruit', ...props },
+        target: dialog,
+      });
+      return { dialog, text, otherButton, ...rendered };
+    }
+
+    it('clears the search text and highlight when the trigger closes the list', async () => {
+      const { user } = await openSearchable({ label: 'Fruit' });
+      const trigger = screen.getByRole('combobox');
+      await user.keyboard('ban');
+      expect(screen.getAllByRole('option')).toHaveLength(1);
+      await user.keyboard('{ArrowDown}');
+      expect(trigger).toHaveAttribute('aria-activedescendant');
+
+      await user.click(trigger);
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      await user.click(trigger);
+
+      const search = await screen.findByRole('searchbox');
+      expect(search).toHaveValue('');
+      expect(screen.getAllByRole('option')).toHaveLength(fruit.length);
+      expect(search).not.toHaveAttribute('aria-activedescendant');
+      expect(trigger).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('drops the highlight when a trigger click closes the non-searchable list', async () => {
+      const { user, trigger } = await openAndHighlight();
+
+      await user.click(trigger);
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      await user.keyboard('{Enter}');
+      await screen.findByRole('listbox');
+
+      expect(outlinedOption()).toBeUndefined();
+      expect(trigger).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('returns focus to the trigger when a trigger click closes the list with focus on body', async () => {
+      const user = userEvent.setup();
+      selectTest.render({ props: { options: fruit } });
+      const trigger = screen.getByRole('combobox');
+      await user.click(trigger);
+      await screen.findByRole('listbox');
+      trigger.blur();
+      expect(document.activeElement).toBe(document.body);
+
+      // fireEvent does not move focus, like a click on a button in Safari
+      await fireEvent.click(trigger);
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it('returns focus to the trigger after a background click inside a dialog leaves it on body', async () => {
+      const user = userEvent.setup();
+      const { text } = renderInDialog();
+      const trigger = screen.getByRole('combobox');
+      await user.click(trigger);
+      await screen.findByRole('listbox');
+      trigger.blur();
+      expect(document.activeElement).toBe(document.body);
+
+      await fireEvent.click(text);
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it('returns focus to the trigger after a click on the dialog backdrop leaves it on body', async () => {
+      const user = userEvent.setup();
+      const { dialog } = renderInDialog();
+      const trigger = screen.getByRole('combobox');
+      await user.click(trigger);
+      await screen.findByRole('listbox');
+      trigger.blur();
+
+      await fireEvent.click(dialog);
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it('does not pull focus back when a click inside a dialog lands on another control', async () => {
+      const user = userEvent.setup();
+      const { otherButton } = renderInDialog();
+      const trigger = screen.getByRole('combobox');
+      await user.click(trigger);
+      await screen.findByRole('listbox');
+      trigger.blur();
+
+      await fireEvent.click(otherButton);
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('does not pull focus back when a click lands inside a different dialog', async () => {
+      const user = userEvent.setup();
+      renderInDialog();
+      const trigger = screen.getByRole('combobox');
+      // Another dialog (a login or confirmation modal) owns focus while it is open
+      const foreign = document.createElement('div');
+      foreign.setAttribute('role', 'dialog');
+      foreign.setAttribute('aria-modal', 'true');
+      const foreignText = document.createElement('p');
+      foreignText.textContent = 'Foreign dialog text';
+      foreign.append(foreignText);
+      document.body.append(foreign);
+      dialogs.push(foreign);
+      await user.click(trigger);
+      await screen.findByRole('listbox');
+      trigger.blur();
+
+      await fireEvent.click(foreignText);
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('leaves focus on body after a background click outside any dialog', async () => {
+      const user = userEvent.setup();
+      selectTest.render({ props: { options: fruit } });
+      const trigger = screen.getByRole('combobox');
+      await user.click(trigger);
+      await screen.findByRole('listbox');
+      trigger.blur();
+
+      await fireEvent.click(document.body);
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('Escape on the trigger closes only the list and does not reach the document', async () => {
+      const { user, trigger } = await openAndHighlight();
+      const escapes = trackDocumentEscape();
+
+      await user.keyboard('{Escape}');
+      escapes.stop();
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+      expect(document.activeElement).toBe(trigger);
+      expect(escapes.seen).toEqual([]);
+    });
+
+    describe.each([
+      ['Enter', 'Enter'],
+      ['Space', ' '],
+    ])('%s on the open trigger', (_name, key) => {
+      it('is cancelled and closes the list when nothing is highlighted', async () => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        selectTest.render({ props: { options: fruit, label: 'Fruit', onChange } });
+        const trigger = screen.getByRole('combobox');
+        await user.click(trigger);
+        await screen.findByRole('listbox');
+
+        // A cancelled keydown means the browser fires no click, so the list closes once, here
+        expect(await fireEvent.keyDown(trigger, { key })).toBe(false);
+
+        await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+        expect(onChange).not.toHaveBeenCalled();
+      });
+
+      it('leaves the list closed after a full key press with nothing highlighted', async () => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        selectTest.render({ props: { options: fruit, label: 'Fruit', onChange } });
+        const trigger = screen.getByRole('combobox');
+        trigger.focus();
+        await user.keyboard('{ArrowDown}');
+        await screen.findByRole('listbox');
+
+        await user.keyboard(key === ' ' ? ' ' : '{Enter}');
+
+        await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+        expect(onChange).not.toHaveBeenCalled();
+      });
+    });
+
+    it('keeps the list open on Enter when the highlighted option is disabled', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const withDisabled: SelectOption[] = [
+        { value: 'apple', label: 'Apple' },
+        { value: 'banana', label: 'Banana', disabled: true },
+        { value: 'cherry', label: 'Cherry' },
+      ];
+      selectTest.render({ props: { options: withDisabled, label: 'Fruit', onChange } });
+      screen.getByRole('combobox').focus();
+      await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+      expect(outlinedOption()?.textContent.trim()).toBe('Banana');
+
+      await user.keyboard('{Enter}');
+
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    type User = ReturnType<typeof userEvent.setup>;
+
+    it.each([
+      ['a trigger click', (user: User, trigger: HTMLElement) => user.click(trigger)],
+      ['Escape', (user: User) => user.keyboard('{Escape}')],
+      ['Tab', (user: User) => user.keyboard('{Tab}')],
+      ['an outside click', (user: User) => user.click(addButton('Outside'))],
+      ['selecting an option', (user: User) => user.click(screen.getAllByRole('option')[2])],
+    ])(
+      'starts the next opening without a highlight after closing with %s',
+      async (_name, close) => {
+        const { user, trigger } = await openAndHighlight();
+
+        await close(user, trigger);
+        await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+        trigger.focus();
+        await user.keyboard('{Enter}');
+        await screen.findByRole('listbox');
+
+        expect(outlinedOption()).toBeUndefined();
+        expect(trigger).not.toHaveAttribute('aria-activedescendant');
+      }
+    );
+  });
 });
