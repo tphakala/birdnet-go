@@ -1,3 +1,112 @@
+<script module lang="ts">
+  // Open Modal instances, oldest first. Only the last one (the topmost) acts on
+  // Tab and Escape, so a dialog opened over another (the setup wizard and its
+  // leave confirmation) does not have its keys handled twice.
+  const openModals: object[] = [];
+
+  // CSS selector for elements that may be keyboard focusable. getTabbable()
+  // narrows the matches to the ones the Tab key actually reaches.
+  const TABBABLE_CANDIDATE_SELECTOR =
+    'button, a[href], area[href], input, select, textarea, summary, [tabindex]';
+
+  // Ancestors that take their whole subtree out of the tab order
+  const TAB_EXCLUDING_ANCESTOR_SELECTOR = '[inert], [hidden]';
+
+  // Stable number per form element, so a radio group key can include its form
+  const formNumbers = new WeakMap<object, number>();
+  let formNumberCount = 0;
+
+  /**
+   * Radio buttons that share a name and form are one Tab stop in browsers.
+   * Returns null for a radio without a name, which is a stop of its own.
+   */
+  function radioGroupKey(radio: HTMLInputElement): string | null {
+    if (!radio.name) return null;
+    let formNumber = 0;
+    if (radio.form) {
+      formNumber = formNumbers.get(radio.form) ?? ++formNumberCount;
+      formNumbers.set(radio.form, formNumber);
+    }
+    return `${formNumber}:${radio.name}`;
+  }
+
+  function isRadio(el: HTMLElement): el is HTMLInputElement {
+    return el instanceof HTMLInputElement && el.type === 'radio';
+  }
+
+  /**
+   * Elements inside root that the Tab key can reach, in document order: not
+   * disabled, tabindex not negative, not a hidden input, not inside an inert or
+   * hidden subtree, and not removed by display:none. Radio buttons are listed as
+   * the browser tabs them, see collapseRadioGroups().
+   */
+  function getTabbable(root: HTMLElement): HTMLElement[] {
+    return collapseRadioGroups(getTabbableUncollapsed(root));
+  }
+
+  function getTabbableUncollapsed(root: HTMLElement): HTMLElement[] {
+    return Array.from(root.querySelectorAll<HTMLElement>(TABBABLE_CANDIDATE_SELECTOR)).filter(
+      el => {
+        if (el.matches(':disabled')) return false;
+        if (el.tabIndex < 0) return false;
+        if (el instanceof HTMLInputElement && el.type === 'hidden') return false;
+        if (el.closest(TAB_EXCLUDING_ANCESTOR_SELECTOR)) return false;
+        // Default options only: display-based. visibilityProperty would drop
+        // everything while the dialog is visibility:hidden during its first
+        // open frame. jsdom has no checkVisibility, so tests see all candidates.
+        if (typeof el.checkVisibility === 'function' && !el.checkVisibility()) return false;
+        return true;
+      }
+    );
+  }
+
+  /**
+   * A named radio group is one Tab stop: Tab enters it at the checked radio (at
+   * the first, or the last with Shift+Tab, when none is checked) and leaves it
+   * from any radio. Keeps those stops and drops the other radios of each group.
+   */
+  function collapseRadioGroups(items: HTMLElement[]): HTMLElement[] {
+    const groups = new Map<string, HTMLInputElement[]>();
+    for (const el of items) {
+      if (!isRadio(el)) continue;
+      const key = radioGroupKey(el);
+      if (key === null) continue;
+      groups.set(key, [...(groups.get(key) ?? []), el]);
+    }
+    const stops = new Set<HTMLElement>();
+    for (const members of groups.values()) {
+      const checked = members.find(radio => radio.checked);
+      if (checked) {
+        stops.add(checked);
+      } else {
+        stops.add(members[0]);
+        stops.add(members[members.length - 1]);
+      }
+    }
+    return items.filter(el => {
+      if (!isRadio(el) || radioGroupKey(el) === null) return true;
+      return stops.has(el);
+    });
+  }
+
+  /**
+   * The element Tab leaves from when the focused element is `active`: the
+   * element itself, except that a named radio group is left from its last radio
+   * (first radio with Shift+Tab).
+   */
+  function tabExitPoint(
+    active: HTMLElement,
+    tabbable: HTMLElement[],
+    backwards: boolean
+  ): HTMLElement {
+    if (!isRadio(active)) return active;
+    const key = radioGroupKey(active);
+    if (key === null) return active;
+    const members = tabbable.filter(el => isRadio(el) && radioGroupKey(el) === key);
+    return (backwards ? members[0] : members[members.length - 1]) ?? active;
+  }
+</script>
+
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { untrack, type Snippet } from 'svelte';
@@ -7,10 +116,6 @@
   import { loggers } from '$lib/utils/logger';
 
   const logger = loggers.ui;
-
-  // CSS selector for focusable elements used in focus management
-  const FOCUSABLE_SELECTOR =
-    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
   // How long initial focus keeps retrying while the dialog cannot take focus yet.
   // The open transition hides the dialog (visibility) for its first frame, and
@@ -67,15 +172,11 @@
   let modalElement = $state<HTMLDivElement>();
   let dialogElement = $state<HTMLDivElement>();
   let previousActiveElement: HTMLElement | null = null;
-  let focusGeneration = $state(0);
+  // Identity of this instance in the openModals stack
+  const stackToken = {};
 
-  /**
-   * Increment the focus generation counter to force re-evaluation of the
-   * cached focusable elements list. Call this after dynamic content changes
-   * (e.g., wizard step transitions) that add or remove focusable elements.
-   */
-  export function refreshFocusTrap() {
-    focusGeneration++;
+  function isTopmost(): boolean {
+    return openModals.at(-1) === stackToken;
   }
 
   const modalBoxBase =
@@ -149,46 +250,59 @@
     }
   }
 
-  // PERFORMANCE OPTIMIZATION: Cache focusable elements with $derived
-  // Avoids repeated DOM queries during focus management.
-  // Reading focusGeneration ensures the list is refreshed when refreshFocusTrap() is called.
-  let focusableElements = $derived.by(() => {
-    void focusGeneration; // trigger re-evaluation when incremented
-    if (!modalElement) return [];
-    return Array.from(modalElement.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
-  });
-
+  /**
+   * Keeps Tab inside the topmost open Modal. The tabbable controls are read
+   * from the DOM on each key press, so controls that appear, disappear, or are
+   * enabled or disabled after the dialog opened are accounted for.
+   *
+   * Native Tab order is left alone while focus is inside the dialog; the trap
+   * intervenes only at the boundaries (the last control with Tab, the first
+   * with Shift+Tab) and when focus is not on any control of this dialog (on
+   * `<body>`, or outside it). Focus inside another `aria-modal` element, such as
+   * LoginModal, is left alone. Content portaled outside the dialog element
+   * counts as outside, so do not portal focusable content from a Modal body to
+   * `document.body`.
+   */
   function trapFocus(event: KeyboardEvent) {
-    if (!modalElement) return;
+    if (event.defaultPrevented || !isTopmost() || !modalElement || !dialogElement) return;
 
-    const elements = focusableElements;
-    const firstFocusable = elements[0];
-    const lastFocusable = elements[elements.length - 1];
+    const active = document.activeElement;
 
-    if (event.shiftKey) {
-      if (document.activeElement === firstFocusable) {
-        lastFocusable?.focus();
-        event.preventDefault();
-      }
-    } else {
-      if (document.activeElement === lastFocusable) {
-        firstFocusable?.focus();
-        event.preventDefault();
-      }
+    if (!active || !dialogElement.contains(active)) {
+      if (active instanceof HTMLElement && active.closest('[aria-modal="true"]')) return;
+      // Focus is on <body> or on the page behind the dialog: bring it back in
+      event.preventDefault();
+      const items = getTabbable(modalElement);
+      (event.shiftKey ? items.at(-1) : items[0])?.focus();
+      if (!dialogElement.contains(document.activeElement)) modalElement.focus();
+      return;
+    }
+
+    const items = getTabbable(modalElement);
+    if (items.length === 0) {
+      event.preventDefault();
+      modalElement.focus();
+      return;
+    }
+
+    const exitPoint = tabExitPoint(
+      active as HTMLElement,
+      getTabbableUncollapsed(modalElement),
+      event.shiftKey
+    );
+    const direction = event.shiftKey
+      ? Node.DOCUMENT_POSITION_PRECEDING
+      : Node.DOCUMENT_POSITION_FOLLOWING;
+    const hasNext = items.some(item => exitPoint.compareDocumentPosition(item) & direction);
+    if (!hasNext) {
+      event.preventDefault();
+      (event.shiftKey ? items.at(-1) : items[0])?.focus();
     }
   }
 
-  // PERFORMANCE OPTIMIZATION: Use cached focusable elements
   function setInitialFocus() {
     if (!modalElement) return;
-
-    const elements = focusableElements;
-
-    if (elements.length > 0) {
-      elements[0].focus();
-    } else {
-      modalElement.focus();
-    }
+    (getTabbable(modalElement)[0] ?? modalElement).focus();
   }
 
   function isFocusInside(): boolean {
@@ -250,11 +364,14 @@
 
       const stopInitialFocus = scheduleInitialFocus();
 
+      openModals.push(stackToken);
       document.addEventListener('keydown', handleKeydown);
 
       return () => {
         stopInitialFocus();
         document.removeEventListener('keydown', handleKeydown);
+        const stackIndex = openModals.indexOf(stackToken);
+        if (stackIndex !== -1) openModals.splice(stackIndex, 1);
         restoreFocus();
       };
     }

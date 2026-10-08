@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 
 // Mock logger so tests can verify no password is leaked to log calls.
 vi.mock('$lib/utils/logger', () => ({
@@ -379,6 +380,26 @@ describe('BirdNetPiImportWizard', () => {
         source_path: '/external/birdnet-pi/birds.db',
       });
     });
+  });
+
+  it('Tab from Cancel stays in the dialog while the import is starting', async () => {
+    // A request that never settles keeps Start disabled, with Cancel the last enabled control
+    vi.mocked(api.post).mockReturnValue(new Promise(() => {}));
+    render(BirdNetPiImportWizard, { props: { onClose } });
+    await navigatePastSource();
+    await waitFor(() => screen.getByText('system.importExport.mode.label'));
+    await fireEvent.click(screen.getByRole('button', { name: /common.buttons.next/ }));
+    await waitFor(() => screen.getByText('system.importExport.confirm.description'));
+    const start = screen.getByRole('button', { name: /system.importExport.confirm.startButton/ });
+    await fireEvent.click(start);
+    await waitFor(() => expect(start).toBeDisabled());
+    const cancel = screen.getByRole('button', { name: /cancel/i });
+    cancel.focus();
+
+    await userEvent.setup().tab();
+
+    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    expect(start).not.toHaveFocus();
   });
 
   it('selecting db-audio posts mode db-audio to the API', async () => {

@@ -22,7 +22,6 @@
   const LEAVE_TITLE_ID = generateId('wizard-leave-title');
   const LEAVE_DESC_ID = generateId('wizard-leave-desc');
 
-  let modalRef = $state<Modal>();
   let contentRef = $state<HTMLDivElement>();
   let loadedComponent = $state<Component<WizardStepProps> | null>(null);
   // Index of the step the rendered component was loaded for
@@ -80,7 +79,6 @@
           await tick();
           if (gen !== importGeneration) return;
           wizardState.setStepStatus('ready', index);
-          modalRef?.refreshFocusTrap();
         },
         async err => {
           if (gen !== importGeneration) return;
@@ -106,8 +104,6 @@
           wizardState.setStepStatus('ready', index);
         });
       }
-      // Refresh focus trap for ContentStep transitions too
-      tick().then(() => modalRef?.refreshFocusTrap());
     }
   });
 
@@ -212,7 +208,6 @@
 </script>
 
 <Modal
-  bind:this={modalRef}
   isOpen={wizardState.isActive}
   size="2xl"
   className="w-full"

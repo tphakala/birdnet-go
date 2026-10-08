@@ -7,8 +7,12 @@ import {
   waitFor,
 } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'svelte';
 import Modal from './Modal.svelte';
 import ModalTestWrapper from './Modal.test.svelte';
+import ModalTrapHost from './Modal.trap.test.svelte';
+import ModalStackHost from './Modal.stack.test.svelte';
+import ModalCardsHost from './Modal.cards.test.svelte';
 
 describe('Modal', () => {
   let user: ReturnType<typeof userEvent.setup>;
@@ -473,6 +477,195 @@ describe('Modal', () => {
       screen.getByRole('dialog').dispatchEvent(new Event('transitionend'));
 
       expect(confirm).toHaveFocus();
+    });
+  });
+  describe('focus trap', () => {
+    const button = (name: string) => screen.getByRole('button', { name });
+    const trapHostTest = createComponentTestFactory(ModalTrapHost);
+    const stackHostTest = createComponentTestFactory(ModalStackHost);
+
+    /** Renders the trap host and waits until initial focus is inside the dialog. */
+    async function renderHost(props: ComponentProps<typeof ModalTrapHost> = {}) {
+      const view = trapHostTest.render({ props });
+      await waitFor(() => {
+        expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+      });
+      return view;
+    }
+
+    it('Tab from the last enabled control wraps to the first when the last button is disabled', async () => {
+      await renderHost({ lastDisabled: true });
+      button('Middle').focus();
+
+      await user.tab();
+
+      expect(button('First')).toHaveFocus();
+    });
+
+    it('Shift+Tab from the first enabled control wraps to the last when the first is disabled', async () => {
+      renderTyped(ModalTrapHost, { props: { firstDisabled: true } });
+      button('Middle').focus();
+
+      await user.tab({ shift: true });
+
+      expect(button('Last')).toHaveFocus();
+    });
+
+    it('a control enabled after opening joins the trap', async () => {
+      const view = await renderHost({ lastDisabled: true });
+      button('Middle').focus();
+
+      await view.rerender({ lastDisabled: false });
+      await user.tab();
+      expect(button('Last')).toHaveFocus();
+
+      await user.tab();
+      expect(button('First')).toHaveFocus();
+    });
+
+    it('a control added after opening joins the trap', async () => {
+      const view = await renderHost();
+      button('Last').focus();
+
+      await view.rerender({ showExtra: true });
+      await user.tab();
+      expect(button('Extra')).toHaveFocus();
+
+      await user.tab();
+      expect(button('First')).toHaveFocus();
+    });
+
+    it('Tab with focus on body moves focus to the first control', async () => {
+      await renderHost();
+      (document.activeElement as HTMLElement).blur();
+      expect(document.body).toHaveFocus();
+
+      await user.tab();
+
+      expect(button('First')).toHaveFocus();
+    });
+
+    it('Shift+Tab with focus on body moves focus to the last control', async () => {
+      await renderHost();
+      (document.activeElement as HTMLElement).blur();
+      expect(document.body).toHaveFocus();
+
+      await user.tab({ shift: true });
+
+      expect(button('Last')).toHaveFocus();
+    });
+
+    it('Tab with focus outside the dialog moves focus back into it', async () => {
+      await renderHost();
+      button('Outside after').focus();
+
+      await user.tab();
+
+      expect(button('First')).toHaveFocus();
+    });
+
+    it('Tab with focus in another aria-modal dialog leaves focus there', async () => {
+      await renderHost();
+      const other = document.createElement('div');
+      other.setAttribute('role', 'dialog');
+      other.setAttribute('aria-modal', 'true');
+      const otherInput = document.createElement('input');
+      other.append(otherInput);
+      document.body.append(other);
+      try {
+        otherInput.focus();
+
+        // fireEvent returns false when a listener called preventDefault
+        const notPrevented = await fireEvent.keyDown(otherInput, { key: 'Tab' });
+
+        expect(notPrevented).toBe(true);
+        expect(otherInput).toHaveFocus();
+      } finally {
+        other.remove();
+      }
+    });
+
+    it('skips tabindex=-1 buttons when wrapping', async () => {
+      await renderHost({ lastTabindex: -1 });
+      button('Middle').focus();
+
+      await user.tab();
+
+      expect(button('First')).toHaveFocus();
+    });
+
+    it('Shift+Tab from the checked radio of a leading radio group wraps to the last control', async () => {
+      await renderHost({ showRadios: true });
+      const checked = screen.getByRole('radio', { name: 'Mode B' });
+      checked.focus();
+
+      await user.tab({ shift: true });
+
+      expect(button('Last')).toHaveFocus();
+    });
+
+    it('Tab from a tabindex=-1 element inside the dialog follows native order when controls follow it', async () => {
+      await renderHost({ showCard: true });
+      screen.getByRole('group', { name: 'Card' }).focus();
+
+      await user.tab();
+
+      expect(button('Middle')).toHaveFocus();
+    });
+
+    it('Tab from a tabindex=-1 element inside the dialog wraps when nothing follows it', async () => {
+      await renderHost({ showTrailingCard: true });
+      screen.getByRole('group', { name: 'Trailing card' }).focus();
+
+      await user.tab();
+
+      expect(button('First')).toHaveFocus();
+    });
+
+    it('initial focus skips a disabled first control', async () => {
+      await renderHost({ firstDisabled: true });
+
+      expect(button('Middle')).toHaveFocus();
+    });
+
+    it('initial focus goes to the dialog box when every control is disabled', async () => {
+      modalTest.render({ props: { isOpen: true, type: 'confirm', loading: true, title: 'Busy' } });
+
+      await waitFor(() => {
+        expect(screen.getByRole('document')).toHaveFocus();
+      });
+    });
+
+    it('leaves native Tab order alone around a roving card group with focus on an unchecked card', async () => {
+      renderTyped(ModalCardsHost, {});
+      await waitFor(() => {
+        expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+      });
+      const cardB = screen.getByRole('radio', { name: 'Card B' });
+      const cardA = screen.getByRole('radio', { name: 'Card A' });
+      cardB.focus();
+
+      await user.tab();
+      expect(button('Next')).toHaveFocus();
+
+      await user.tab({ shift: true });
+      expect(cardA).toHaveFocus();
+    });
+
+    it('only the topmost of two open modals handles Tab', async () => {
+      const view = stackHostTest.render({ props: { firstOpen: true, secondOpen: false } });
+      await waitFor(() => expect(button('Lower action')).toHaveFocus());
+      await view.rerender({ firstOpen: true, secondOpen: true });
+      await waitFor(() => expect(button('Upper action')).toHaveFocus());
+      (document.activeElement as HTMLElement).blur();
+
+      await user.tab();
+      expect(button('Upper action')).toHaveFocus();
+
+      await view.rerender({ firstOpen: true, secondOpen: false });
+      (document.activeElement as HTMLElement).blur();
+      await user.tab();
+      expect(button('Lower action')).toHaveFocus();
     });
   });
 });
