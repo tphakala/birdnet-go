@@ -419,13 +419,42 @@ describe('Modal', () => {
 
       const panel = screen.getByRole('document');
       expect(panel).toHaveClass('overflow-y-auto');
-      expect(panel).not.toHaveClass('overflow-hidden', 'flex-col');
+      expect(panel).not.toHaveClass('overflow-hidden');
+      expect(panel).not.toHaveClass('flex-col');
       expect(bodyOf().className).toBe('py-4');
       expect(screen.getByText('Custom Action').parentElement?.className).toBe(
         'flex justify-end gap-2 mt-6'
       );
       // The header renders directly in the panel, without a wrapper
       expect(screen.getByText('Custom Header').parentElement?.parentElement).toBe(panel);
+    });
+
+    it('scrollBody keeps the built-in confirm footer and a title-only header outside the body', () => {
+      modalTest.render({
+        props: {
+          isOpen: true,
+          scrollBody: true,
+          type: 'confirm',
+          title: 'Only a title',
+          confirmLabel: 'Go ahead',
+        },
+      });
+
+      expect(screen.getByText('Only a title').parentElement).toHaveClass('shrink-0');
+      expect(screen.getByRole('button', { name: 'Go ahead' }).parentElement).toHaveClass(
+        'shrink-0'
+      );
+    });
+
+    it('without scrollBody the built-in confirm footer and title-only header are not wrapped', () => {
+      modalTest.render({
+        props: { isOpen: true, type: 'confirm', title: 'Only a title', confirmLabel: 'Go ahead' },
+      });
+
+      expect(screen.getByText('Only a title').parentElement).toBe(screen.getByRole('document'));
+      expect(screen.getByRole('button', { name: 'Go ahead' }).parentElement?.className).toBe(
+        'flex justify-end gap-2 mt-6'
+      );
     });
 
     it('keeps the full size width with and without scrollBody', () => {

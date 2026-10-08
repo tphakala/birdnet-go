@@ -771,6 +771,31 @@ describe('WizardDialog', () => {
       expect(contentBox()).toHaveClass('min-h-[20rem]');
     });
 
+    it('fills the step box with the loading spinner while the step loads', async () => {
+      const pending = deferred<StepModule>();
+      vi.mocked(getStepsForFlow).mockReturnValue(componentSteps(2));
+      loaders[0] = () => pending.promise;
+      wizardState.launch('onboarding', { currentVersion: 'v1' });
+      renderTyped(WizardDialog);
+
+      const stepBox = bodyRegion().firstElementChild;
+      await waitFor(() => expect(stepBox?.firstElementChild).toHaveClass('flex-1'));
+      expect(stepBox?.firstElementChild).not.toHaveClass('h-full');
+      pending.resolve({ default: WizardTestStep });
+    });
+
+    it('fills the step box with the failed state so Retry stays centred', async () => {
+      renderWizard(componentSteps(3));
+      loaders[1] = () => Promise.reject(new Error('chunk failed'));
+      await waitForPrimaryEnabled();
+
+      await user.click(primaryButton());
+
+      const retry = await screen.findByRole('button', { name: /common\.retry/ });
+      expect(retry.parentElement).toHaveClass('flex-1');
+      expect(retry.parentElement).not.toHaveClass('h-full');
+    });
+
     it('the header row reserves room for the close button', async () => {
       renderWizard(componentSteps(3));
       await waitForPrimaryEnabled();
