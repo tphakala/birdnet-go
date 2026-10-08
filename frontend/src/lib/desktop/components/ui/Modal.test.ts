@@ -928,6 +928,20 @@ describe('Modal', () => {
       expect(button('Page button')).toHaveFocus();
     });
 
+    it('closing the upper modal opened from the page behind moves focus into the lower one, not behind it', async () => {
+      renderTyped(ModalToggleHost, {});
+      await press('Toggle lower');
+      await waitFor(() => expect(button('Lower action')).toHaveFocus());
+      // The upper dialog is opened from a control outside the lower one
+      button('Toggle upper').focus();
+      await press('Toggle upper');
+      await waitFor(() => expect(button('Upper action')).toHaveFocus());
+
+      await press('Toggle upper');
+
+      expect(button('Lower action')).toHaveFocus();
+    });
+
     it('closing the lower modal while focus is on its control moves focus into the upper one', async () => {
       await openBoth();
       button('Lower action').focus();

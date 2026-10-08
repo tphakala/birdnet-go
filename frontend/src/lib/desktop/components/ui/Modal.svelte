@@ -428,7 +428,14 @@
     openModals.splice(index, 1);
     const target = stackEntry.restoreTo ?? stackEntry.opener;
     if (wasTopmost) {
-      restoreFocus(target);
+      // With a Modal still open below, focus goes back only to a target inside it
+      // (not to the page behind its aria-modal dialog); otherwise into that Modal
+      const remaining = openModals.at(-1);
+      if (remaining && !(target && remaining.dialog?.contains(target))) {
+        remaining.focusInto();
+      } else {
+        restoreFocus(target);
+      }
       // No usable target (body, removed, or null): focus must not stay on a control of the dialog that is now hidden
       const active = document.activeElement;
       if (
