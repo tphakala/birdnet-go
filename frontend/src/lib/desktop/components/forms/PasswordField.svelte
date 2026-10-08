@@ -227,7 +227,7 @@
         {#if allowReveal}
           <button
             type="button"
-            class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-sm text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] transition-colors disabled:opacity-50"
+            class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-sm text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 disabled:opacity-50"
             onclick={togglePasswordVisibility}
             {disabled}
             aria-label={showPassword
