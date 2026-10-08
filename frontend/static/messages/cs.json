@@ -5085,6 +5085,13 @@
       "viewDetections": "Zobrazit detekce druhu {name}",
       "largeView": "Velké zobrazení druhu {name}",
       "clickToView": "Klikněte pro zobrazení detekcí"
+    },
+    "locationMap": {
+      "mapLabel": "Mapa pro výběr polohy stanice",
+      "expandedMapLabel": "Mapa na celou obrazovku pro výběr polohy stanice",
+      "zoomIn": "Přiblížit",
+      "zoomOut": "Oddálit",
+      "expand": "Rozbalit mapu na celou obrazovku"
     }
   },
   "connectivity": {

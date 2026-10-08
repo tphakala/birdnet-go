@@ -5085,6 +5085,13 @@
       "viewDetections": "Näytä lajin {name} havainnot",
       "largeView": "Suuri kuva lajista {name}",
       "clickToView": "Napsauta nähdäksesi havainnot"
+    },
+    "locationMap": {
+      "mapLabel": "Kartta aseman sijainnin valitsemiseen",
+      "expandedMapLabel": "Koko näytön kartta aseman sijainnin valitsemiseen",
+      "zoomIn": "Lähennä",
+      "zoomOut": "Loitonna",
+      "expand": "Laajenna kartta koko näytölle"
     }
   },
   "connectivity": {

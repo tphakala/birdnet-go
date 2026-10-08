@@ -384,4 +384,23 @@ describe('CurrentLocationButton', () => {
     expect(onLocation).not.toHaveBeenCalled();
     expect(toastActions.error).toHaveBeenCalledWith('Could not determine the device location.');
   });
+
+  it('compact hides the label and idle help but keeps the accuracy readout', async () => {
+    const onLocation = vi.fn();
+    geolocationMock.getCurrentPosition.mockImplementationOnce(success => {
+      success(createPosition(52.1236, 4.9876, 7.6));
+    });
+
+    const result = testFactory.render({ compact: true, onLocation });
+    expect(screen.queryByText('Automatic location')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Fills the coordinates using this browser's location.")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use browser location' })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Use browser location' }));
+    await result.rerender({ compact: true, latitude: 52.124, longitude: 4.988, onLocation });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Estimated accuracy: within 60 m');
+  });
 });

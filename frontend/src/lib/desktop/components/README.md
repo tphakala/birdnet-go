@@ -62,6 +62,7 @@ This folder contains **shared components** used across the application. Feature-
 - `DateRangePicker.svelte` - Date range selection
 - `FormField.svelte` - Form field wrapper with validation
 - `InlineSlider.svelte` - Inline slider input for compact layouts
+- `LocationMap.svelte` - Map for picking a station location (click or drag the pin, coordinates rounded to 3 decimals), with zoom buttons, Ctrl/Cmd+wheel zoom and an expand button opening a full screen map in a dialog portalled into the surrounding dialog or the page body. `onLocationChange` fires only for a click or pin drag, never for prop changes. Required props: `latitude`, `longitude`, `locationSet` (pin shown), `onLocationChange`, `title` (expanded dialog heading). Optional props (defaults reproduce the settings page map): `ready=true` (build the map once true), `mapClass='h-[350px]'`, `controls='below'|'overlay'` (button placement), `pinchZoom=false` (two-finger zoom, rotation stays off), `doubleTapZoomKeepsPin=false` (a pick waits 300 ms and is dropped when a double click, double tap or zoom gesture follows), `startView='region'|'world'` (zoom 5 or 1 while unset; `world` also zooms to 11 for the first location), `className`. Map logic lives in `locationMapController.ts`
 - `NumberField.svelte` - Number input field
 - `PasswordField.svelte` - Password input with show/hide
 - `RTSPUrlInput.svelte` - RTSP URL input with validation

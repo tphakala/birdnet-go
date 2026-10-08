@@ -5085,6 +5085,13 @@
       "viewDetections": "Visualizza rilevamenti di {name}",
       "largeView": "Vista ingrandita di {name}",
       "clickToView": "Fai clic per visualizzare i rilevamenti"
+    },
+    "locationMap": {
+      "mapLabel": "Mappa per selezionare la posizione della stazione",
+      "expandedMapLabel": "Mappa a schermo intero per selezionare la posizione della stazione",
+      "zoomIn": "Ingrandisci",
+      "zoomOut": "Riduci",
+      "expand": "Espandi la mappa a schermo intero"
     }
   },
   "connectivity": {

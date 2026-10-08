@@ -5085,6 +5085,13 @@
       "viewDetections": "Se {name} detektioner",
       "largeView": "Stor visning af {name}",
       "clickToView": "Klik for at se detektioner"
+    },
+    "locationMap": {
+      "mapLabel": "Kort til valg af stationsplacering",
+      "expandedMapLabel": "Fuldskærmskort til valg af stationsplacering",
+      "zoomIn": "Zoom ind",
+      "zoomOut": "Zoom ud",
+      "expand": "Udvid kortet til fuld skærm"
     }
   },
   "connectivity": {

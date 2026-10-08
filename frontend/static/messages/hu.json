@@ -5085,6 +5085,13 @@
       "viewDetections": "{name} észleléseinek megtekintése",
       "largeView": "{name} nagy nézete",
       "clickToView": "Kattints az észlelések megtekintéséhez"
+    },
+    "locationMap": {
+      "mapLabel": "Térkép az állomás helyszínének kiválasztásához",
+      "expandedMapLabel": "Teljes képernyős térkép az állomás helyszínének kiválasztásához",
+      "zoomIn": "Nagyítás",
+      "zoomOut": "Kicsinyítés",
+      "expand": "Térkép megnyitása teljes képernyőn"
     }
   },
   "connectivity": {

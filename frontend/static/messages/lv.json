@@ -5085,6 +5085,13 @@
       "viewDetections": "Apskatīt {name} novērojumus",
       "largeView": "{name} lielais skats",
       "clickToView": "Noklikšķiniet, lai skatītu novērojumus"
+    },
+    "locationMap": {
+      "mapLabel": "Karte stacijas atrašanās vietas izvēlei",
+      "expandedMapLabel": "Pilnekrāna karte stacijas atrašanās vietas izvēlei",
+      "zoomIn": "Tuvināt",
+      "zoomOut": "Tālināt",
+      "expand": "Izvērst karti pilnekrāna skatā"
     }
   },
   "connectivity": {
