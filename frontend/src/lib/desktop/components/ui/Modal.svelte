@@ -124,6 +124,7 @@
 </script>
 
 <script lang="ts">
+  /* global ResizeObserver */
   import { cn } from '$lib/utils/cn';
   import { untrack, type Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
@@ -244,6 +245,18 @@
   const SCROLL_BODY_CLASS =
     'min-h-0 flex-auto overflow-y-auto overflow-x-hidden overscroll-contain -mx-6 px-6 py-4 scroll-py-4 scroll-shadow-y';
 
+  // Once the body scrolls it is a tab stop, so the keyboard can scroll text that has no
+  // control in it. The ring is inset: the panel clips anything drawn outside the body.
+  const SCROLLABLE_BODY_CLASS =
+    'focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-[-2px]';
+
+  let bodyElement = $state<HTMLDivElement>();
+  // Whether the scrollBody body has more content than fits (set by the observers below)
+  let bodyOverflows = $state(false);
+  // A focusable region needs a name: the dialog's own label (an aria-labelledby passed
+  // in, else the title) also names the body
+  const bodyLabelledBy = $derived(rest['aria-labelledby'] ?? (title ? titleId : undefined));
+
   const sizeClasses: Record<ModalSize, string> = {
     sm: 'max-w-sm',
     md: 'max-w-md',
@@ -276,6 +289,11 @@
 
   const btnBase =
     'inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium leading-5 rounded-[var(--radius-field)] cursor-pointer transition-all duration-[var(--animation-btn)] ease-in-out border border-transparent select-none disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 active:not-disabled:scale-[0.98]';
+
+  // The close button is its own set of classes, not btnBase plus overrides: cn() joins
+  // without resolving conflicts, so btnBase's px-4 py-2 would beat a px-0 and widen it
+  const closeBtnClasses =
+    'absolute right-2 top-2 inline-flex size-8 items-center justify-center p-0 aspect-square rounded-[var(--radius-full)] cursor-pointer transition-all duration-[var(--animation-btn)] ease-in-out border border-transparent select-none bg-transparent text-[var(--color-base-content)] hover:not-disabled:bg-[var(--hover-overlay)] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 active:not-disabled:scale-[0.98]';
 
   const ghostBtnClasses = `${btnBase} bg-transparent border-transparent text-[var(--color-base-content)] hover:not-disabled:bg-[var(--hover-overlay)]`;
 
@@ -474,6 +492,33 @@
     if (active && stackEntry.dialog?.contains(active)) openModals.at(-1)?.focusInto();
   }
 
+  // Tracks whether the scrollBody body overflows: on its own resize, and on the resize of
+  // its children, which are re-observed when they are replaced
+  $effect(() => {
+    const body = bodyElement;
+    if (!scrollBody || !body) {
+      bodyOverflows = false;
+      return;
+    }
+    const update = () => {
+      bodyOverflows = body.scrollHeight > body.clientHeight;
+    };
+    const sizes = new ResizeObserver(update);
+    const observeBody = () => {
+      sizes.disconnect();
+      sizes.observe(body);
+      for (const child of body.children) sizes.observe(child);
+      update();
+    };
+    const replaced = new MutationObserver(observeBody);
+    replaced.observe(body, { childList: true });
+    observeBody();
+    return () => {
+      sizes.disconnect();
+      replaced.disconnect();
+    };
+  });
+
   $effect(() => {
     if (isOpen) {
       // Not an element of this dialog (focus left there by a quick close and reopen): keep the earlier opener
@@ -540,13 +585,7 @@
     {#if showCloseButton && type === 'default'}
       <button
         type="button"
-        class={cn(
-          btnBase,
-          'bg-transparent border-transparent text-[var(--color-base-content)] hover:not-disabled:bg-[var(--hover-overlay)]',
-          'rounded-[var(--radius-full)] p-2 aspect-square',
-          'px-0 py-0 text-[0.8125rem] leading-[1.125rem]',
-          'absolute right-2 top-2 size-8'
-        )}
+        class={closeBtnClasses}
         onclick={handleClose}
         disabled={loading || isConfirming}
         aria-label={t('common.aria.closeModal')}
@@ -564,7 +603,16 @@
     {/if}
 
     {#if children}
-      <div id={bodyId} class={scrollBody ? SCROLL_BODY_CLASS : 'py-4'}>
+      <!-- A scrollable region must be reachable by keyboard (WCAG 2.1.1); see bodyOverflows -->
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <div
+        bind:this={bodyElement}
+        id={bodyId}
+        class={scrollBody ? cn(SCROLL_BODY_CLASS, bodyOverflows && SCROLLABLE_BODY_CLASS) : 'py-4'}
+        tabindex={scrollBody && bodyOverflows ? 0 : undefined}
+        role={scrollBody && bodyOverflows && bodyLabelledBy ? 'region' : undefined}
+        aria-labelledby={scrollBody && bodyOverflows && bodyLabelledBy ? bodyLabelledBy : undefined}
+      >
         {@render children()}
       </div>
     {/if}

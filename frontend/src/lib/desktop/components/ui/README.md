@@ -203,7 +203,7 @@ interface Props {
 
 - Multiple modal types
 - Size variants from `sm` to `7xl`, plus `full`
-- `scrollBody` keeps the header and footer in view and scrolls only the body once the dialog reaches its maximum height (default off: the whole panel scrolls as one). The body then runs to the panel edges so focus rings are not clipped, and shows an edge shadow on a side with content out of view. Content wider than the dialog is clipped, not scrolled sideways, and the body assumes the panel's default `p-6` padding, so a `className` that sets less padding pushes the body past the panel edge, where its scrollbar and focus rings are clipped
+- `scrollBody` keeps the header and footer in view and scrolls only the body once the dialog reaches its maximum height (default off: the whole panel scrolls as one). The body then runs to the panel edges so focus rings are not clipped, and shows an edge shadow on a side with content out of view. Content wider than the dialog is clipped, not scrolled sideways, and the body assumes the panel's default `p-6` padding, so a `className` that sets less padding pushes the body past the panel edge, where its scrollbar and focus rings are clipped. While the body overflows it is a tab stop and a named region (the dialog's label), with an inset focus ring, so the keyboard can scroll it
 - Async confirm handlers
 - Keyboard/backdrop controls
 - Loading states

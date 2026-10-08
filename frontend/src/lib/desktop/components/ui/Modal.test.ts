@@ -457,6 +457,101 @@ describe('Modal', () => {
       );
     });
 
+    describe('keyboard scrolling of the body', () => {
+      // jsdom has no layout: report an overflowing body through scrollHeight and
+      // clientHeight, and run the size observers the Modal registered on demand
+      let overflowing = false;
+      const sizeCallbacks: Array<() => void> = [];
+
+      beforeEach(() => {
+        overflowing = false;
+        sizeCallbacks.length = 0;
+        vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(function (
+          this: Element
+        ) {
+          return overflowing && this.id.startsWith('modal-body') ? 500 : 0;
+        });
+        vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(function (
+          this: Element
+        ) {
+          return this.id.startsWith('modal-body') ? 100 : 0;
+        });
+        vi.stubGlobal(
+          'ResizeObserver',
+          class {
+            constructor(callback: ResizeObserverCallback) {
+              sizeCallbacks.push(() => callback([], this));
+            }
+            observe() {}
+            unobserve() {}
+            disconnect() {}
+          }
+        );
+      });
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+      });
+
+      const runSizeObservers = () => sizeCallbacks.forEach(callback => callback());
+
+      it('scrollBody makes an overflowing body a named, focusable region', async () => {
+        overflowing = true;
+        renderHost({ scrollBody: true });
+
+        await waitFor(() => expect(bodyOf()).toHaveAttribute('tabindex', '0'));
+        expect(bodyOf()).toHaveAttribute('role', 'region');
+        expect(bodyOf().getAttribute('aria-labelledby')).toBe(
+          screen.getByRole('dialog').getAttribute('aria-labelledby')
+        );
+        expect(bodyOf().getAttribute('aria-labelledby')).toBeTruthy();
+        // An inset ring: the panel clips anything drawn outside the body
+        expect(bodyOf().className).toContain('focus-visible:outline-offset-[-2px]');
+      });
+
+      it('scrollBody leaves a body that fits out of the tab order', () => {
+        renderHost({ scrollBody: true });
+
+        expect(bodyOf()).not.toHaveAttribute('tabindex');
+        expect(bodyOf()).not.toHaveAttribute('role');
+      });
+
+      it('scrollBody follows the body as its content grows past the dialog and shrinks back', async () => {
+        renderHost({ scrollBody: true });
+        expect(bodyOf()).not.toHaveAttribute('tabindex');
+
+        overflowing = true;
+        runSizeObservers();
+        await waitFor(() => expect(bodyOf()).toHaveAttribute('tabindex', '0'));
+
+        overflowing = false;
+        runSizeObservers();
+        await waitFor(() => expect(bodyOf()).not.toHaveAttribute('tabindex'));
+        expect(bodyOf()).not.toHaveAttribute('role');
+      });
+
+      it('without scrollBody an overflowing body is not made focusable', () => {
+        overflowing = true;
+        renderHost({});
+        runSizeObservers();
+
+        expect(bodyOf()).not.toHaveAttribute('tabindex');
+        expect(bodyOf()).not.toHaveAttribute('role');
+        expect(bodyOf().className).toBe('py-4');
+      });
+    });
+
+    it('the close button is a 32 px square without conflicting padding classes', () => {
+      renderHost({});
+
+      const close = screen.getByRole('button', { name: /close/i });
+      expect(close).toHaveClass('size-8', 'p-0');
+      for (const conflicting of ['px-4', 'py-2', 'p-2', 'px-0', 'py-0', 'text-sm']) {
+        expect(close).not.toHaveClass(conflicting);
+      }
+    });
+
     it('keeps the full size width with and without scrollBody', () => {
       const { unmount } = renderHost({ size: 'full' });
       expect(screen.getByRole('document')).toHaveClass('max-w-full', 'w-full');
