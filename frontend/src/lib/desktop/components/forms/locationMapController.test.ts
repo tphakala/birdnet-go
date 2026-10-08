@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  COORDINATE_SYNC_DURATION_MS,
   DOUBLE_TAP_WINDOW_MS,
   ZOOM_STEP_DURATION_MS,
   createLocationMapController,
@@ -8,9 +7,6 @@ import {
   type LocationMapControllerOptions,
   type MapLibreModule,
 } from './locationMapController';
-
-// Placing a pin does not animate the map (MAP_CONFIG.ANIMATION_DURATION is 0).
-const NO_ANIMATION_MS = 0;
 
 type Handler = (event: unknown) => void;
 
@@ -177,11 +173,7 @@ describe('locationMapController', () => {
 
       click(map, 52.5, 4.5);
 
-      expect(map.easeTo).toHaveBeenCalledWith({
-        center: [4.5, 52.5],
-        zoom: 14,
-        duration: NO_ANIMATION_MS,
-      });
+      expect(map.easeTo).toHaveBeenCalledWith({ center: [4.5, 52.5], zoom: 14, duration: 0 });
     });
 
     it('does not recentre when recenterOnPick is not set', () => {
@@ -222,10 +214,7 @@ describe('locationMapController', () => {
     it('never reports a pick', () => {
       const { controller } = create();
 
-      controller.showLocation(61, 25, {
-        createMarker: true,
-        duration: COORDINATE_SYNC_DURATION_MS,
-      });
+      controller.showLocation(61, 25, { createMarker: true, duration: 300 });
 
       expect(onPick).not.toHaveBeenCalled();
     });
@@ -233,16 +222,10 @@ describe('locationMapController', () => {
     it('creates a marker only when asked', () => {
       const { controller } = create({ showMarker: false });
 
-      controller.showLocation(61, 25, {
-        createMarker: false,
-        duration: COORDINATE_SYNC_DURATION_MS,
-      });
+      controller.showLocation(61, 25, { createMarker: false, duration: 300 });
       expect(controller.hasMarker()).toBe(false);
 
-      controller.showLocation(61, 25, {
-        createMarker: true,
-        duration: COORDINATE_SYNC_DURATION_MS,
-      });
+      controller.showLocation(61, 25, { createMarker: true, duration: 300 });
       expect(controller.hasMarker()).toBe(true);
       expect(lastOf(fake.markers).lngLat).toEqual([25, 61]);
     });
@@ -251,26 +234,11 @@ describe('locationMapController', () => {
       const { controller, map } = create();
       map.zoom = 9;
 
-      controller.showLocation(61, 25, {
-        createMarker: true,
-        duration: COORDINATE_SYNC_DURATION_MS,
-      });
-      expect(map.easeTo).toHaveBeenLastCalledWith({
-        center: [25, 61],
-        zoom: 9,
-        duration: COORDINATE_SYNC_DURATION_MS,
-      });
+      controller.showLocation(61, 25, { createMarker: true, duration: 300 });
+      expect(map.easeTo).toHaveBeenLastCalledWith({ center: [25, 61], zoom: 9, duration: 300 });
 
-      controller.showLocation(61, 25, {
-        createMarker: true,
-        zoom: 12,
-        duration: NO_ANIMATION_MS,
-      });
-      expect(map.easeTo).toHaveBeenLastCalledWith({
-        center: [25, 61],
-        zoom: 12,
-        duration: NO_ANIMATION_MS,
-      });
+      controller.showLocation(61, 25, { createMarker: true, zoom: 12, duration: 0 });
+      expect(map.easeTo).toHaveBeenLastCalledWith({ center: [25, 61], zoom: 12, duration: 0 });
     });
   });
 
