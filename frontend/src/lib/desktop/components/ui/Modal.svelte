@@ -114,6 +114,7 @@
   import { X } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { generateId } from '$lib/utils/uuid';
 
   const logger = loggers.ui;
 
@@ -142,7 +143,17 @@
     className?: string;
     onClose?: () => void;
     onConfirm?: () => void | Promise<void>;
-    header?: Snippet;
+    /**
+     * Describe the dialog by its body content (aria-describedby). Off by default
+     * because a long or structured body makes a poor description; turn it on
+     * when the body is the short question or message being confirmed.
+     */
+    describeBody?: boolean;
+    /**
+     * Replaces the title heading. It receives the id the dialog is named by
+     * (aria-labelledby), which the heading inside it must carry as its `id`.
+     */
+    header?: Snippet<[{ titleId: string }]>;
     children?: Snippet;
     footer?: Snippet;
   }
@@ -159,6 +170,7 @@
     closeOnEsc = true,
     showCloseButton = true,
     loading = false,
+    describeBody = false,
     className = '',
     onClose,
     onConfirm,
@@ -174,6 +186,10 @@
   let previousActiveElement: HTMLElement | null = null;
   // Identity of this instance in the openModals stack
   const stackToken = {};
+  // Ids are per instance and fixed for its life: the dialog is always mounted,
+  // so a shared literal would repeat on every page that has two Modals
+  const titleId = generateId('modal-title');
+  const bodyId = generateId('modal-body');
 
   function isTopmost(): boolean {
     return openModals.at(-1) === stackToken;
@@ -392,8 +408,8 @@
   )}
   role="dialog"
   aria-modal="true"
-  aria-labelledby={title ? 'modal-title' : undefined}
-  aria-describedby={children ? 'modal-body' : undefined}
+  aria-labelledby={title ? titleId : undefined}
+  aria-describedby={describeBody && children ? bodyId : undefined}
   onclick={handleBackdropClick}
   {...rest}
 >
@@ -427,13 +443,13 @@
     {/if}
 
     {#if header}
-      {@render header()}
+      {@render header({ titleId })}
     {:else if title}
-      <h3 id="modal-title" class="font-bold text-lg mb-4">{title}</h3>
+      <h3 id={titleId} class="font-bold text-lg mb-4">{title}</h3>
     {/if}
 
     {#if children}
-      <div id="modal-body" class="py-4">
+      <div id={bodyId} class="py-4">
         {@render children()}
       </div>
     {/if}

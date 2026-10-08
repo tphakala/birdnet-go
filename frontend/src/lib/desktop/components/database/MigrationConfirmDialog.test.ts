@@ -25,6 +25,21 @@ describe('MigrationConfirmDialog', () => {
     });
   }
 
+  it('names the dialog with its title', async () => {
+    await renderOpen();
+
+    const dialog = screen.getByRole('dialog');
+    const heading = screen.getByRole('heading', { level: 3 });
+    expect(dialog).toHaveAccessibleName(heading.textContent.trim());
+    expect(dialog.getAttribute('aria-labelledby')).toBe(heading.id);
+  });
+
+  it('describes the dialog with its message', async () => {
+    await renderOpen();
+
+    expect(screen.getByRole('dialog')).toHaveAccessibleDescription(/\S/);
+  });
+
   it('Tab from Cancel stays in the dialog while Start is disabled', async () => {
     await renderOpen();
     const { cancel, start } = footerButtons();

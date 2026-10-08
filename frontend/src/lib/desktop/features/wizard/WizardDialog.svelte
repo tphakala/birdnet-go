@@ -216,7 +216,6 @@
   closeOnEsc={!leaveConfirmOpen}
   onClose={requestLeave}
   aria-labelledby={TITLE_ID}
-  aria-describedby={undefined}
 >
   {#snippet header()}
     <div class="flex items-center justify-between">

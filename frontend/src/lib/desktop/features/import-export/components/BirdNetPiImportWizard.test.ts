@@ -218,6 +218,14 @@ describe('BirdNetPiImportWizard', () => {
     });
   });
 
+  it('names the dialog with the wizard title', async () => {
+    render(BirdNetPiImportWizard, { props: { onClose } });
+
+    expect(
+      await screen.findByRole('dialog', { name: 'system.importExport.birdnetPi.wizardTitle' })
+    ).toBeInTheDocument();
+  });
+
   it('shows loading spinner on initial load', () => {
     render(BirdNetPiImportWizard, { props: { onClose } });
     // During loading the spinner should be present

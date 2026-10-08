@@ -4,6 +4,22 @@ import userEvent from '@testing-library/user-event';
 import LegacyCleanupConfirmDialog from './LegacyCleanupConfirmDialog.svelte';
 
 describe('LegacyCleanupConfirmDialog', () => {
+  it('describes the dialog with its message', () => {
+    render(LegacyCleanupConfirmDialog, {
+      props: {
+        open: true,
+        sizeBytes: 1024,
+        isLoading: false,
+        onConfirm: vi.fn(),
+        onCancel: vi.fn(),
+      },
+    });
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveAccessibleName(/\S/);
+    expect(dialog).toHaveAccessibleDescription(/\S/);
+  });
+
   it('Tab from Cancel stays in the dialog while Delete is disabled', async () => {
     const user = userEvent.setup();
     render(LegacyCleanupConfirmDialog, {

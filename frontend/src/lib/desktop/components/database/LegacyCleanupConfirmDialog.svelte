@@ -40,6 +40,7 @@
   closeOnEsc={!isLoading}
   showCloseButton={false}
   loading={isLoading}
+  describeBody
   onClose={onCancel}
 >
   {#snippet children()}

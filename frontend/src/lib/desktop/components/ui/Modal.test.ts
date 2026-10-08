@@ -372,9 +372,77 @@ describe('Modal', () => {
       },
     });
 
-    const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveAttribute('aria-modal', 'true');
-    expect(dialog).toHaveAttribute('aria-labelledby', 'modal-title');
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+  });
+
+  describe('labelling', () => {
+    const stackTest = createComponentTestFactory(ModalStackHost);
+
+    it('names the dialog by its title', () => {
+      modalTest.render({ props: { isOpen: true, title: 'Accessible Modal' } });
+
+      expect(screen.getByRole('dialog', { name: 'Accessible Modal' })).toBeInTheDocument();
+    });
+
+    it('points aria-labelledby at its own title element', () => {
+      modalTest.render({ props: { isOpen: true, title: 'Accessible Modal' } });
+
+      const dialog = screen.getByRole('dialog');
+      const titleId = dialog.getAttribute('aria-labelledby');
+      expect(titleId).toBeTruthy();
+      expect(document.getElementById(titleId as string)).toHaveTextContent('Accessible Modal');
+      expect(titleId).not.toBe('modal-title');
+    });
+
+    it('two open modals have distinct title and body ids', () => {
+      stackTest.render({ props: { firstOpen: true, secondOpen: true, describeBody: true } });
+
+      const lower = screen.getByRole('dialog', { name: 'Lower modal' });
+      const upper = screen.getByRole('dialog', { name: 'Upper modal' });
+      expect(lower.getAttribute('aria-labelledby')).not.toBe(upper.getAttribute('aria-labelledby'));
+      expect(lower.getAttribute('aria-describedby')).not.toBe(
+        upper.getAttribute('aria-describedby')
+      );
+      expect(lower).toHaveAccessibleDescription('Lower action');
+      expect(upper).toHaveAccessibleDescription('Upper action');
+    });
+
+    it('keeps its ids across close and reopen', async () => {
+      const view = stackTest.render({ props: { firstOpen: true, describeBody: true } });
+      const dialog = screen.getByRole('dialog', { name: 'Lower modal' });
+      const before = [
+        dialog.getAttribute('aria-labelledby'),
+        dialog.getAttribute('aria-describedby'),
+      ];
+
+      await view.rerender({ firstOpen: false, describeBody: true });
+      await view.rerender({ firstOpen: true, describeBody: true });
+
+      expect([
+        dialog.getAttribute('aria-labelledby'),
+        dialog.getAttribute('aria-describedby'),
+      ]).toEqual(before);
+    });
+
+    it('does not describe the dialog by default', () => {
+      renderTyped(ModalTestWrapper, { props: { isOpen: true, showChildren: true } });
+
+      expect(screen.getByRole('dialog')).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('describes the dialog by its body when describeBody is set', () => {
+      stackTest.render({ props: { firstOpen: true, describeBody: true } });
+
+      expect(screen.getByRole('dialog', { name: 'Lower modal' })).toHaveAccessibleDescription(
+        'Lower action'
+      );
+    });
+
+    it('a header snippet receives the title id', () => {
+      renderTyped(ModalTestWrapper, { props: { isOpen: true, showCustomHeader: true } });
+
+      expect(screen.getByRole('dialog', { name: 'Custom Header' })).toBeInTheDocument();
+    });
   });
 
   describe('initial focus', () => {
