@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Component } from 'svelte';
-import { renderTyped, screen, waitFor } from '../../../../test/render-helpers';
+import { renderTyped, screen, waitFor, fireEvent } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
+import type { TranslationKey } from '$lib/i18n';
 import type { WizardStep, WizardStepProps } from './types';
-import { deferred } from './wizardTestUtils';
+import { deferred } from '../../../../test/async-helpers';
+import { toastActions } from '$lib/stores/toast';
 
-vi.mock('$lib/utils/api', () => ({
+vi.mock('$lib/utils/api', async importOriginal => ({
+  ...(await importOriginal<typeof import('$lib/utils/api')>()),
   api: {
     post: vi.fn().mockResolvedValue({}),
   },
@@ -21,17 +24,20 @@ vi.mock('./wizardRegistry', () => ({
   getStepsForFlow: vi.fn(() => []),
 }));
 
-const { api } = await import('$lib/utils/api');
+const { api, ApiError } = await import('$lib/utils/api');
 const { getStepsForFlow } = await import('./wizardRegistry');
 const { wizardState, STEP_MOVE_GUARD_MS } = await import('./wizardState.svelte');
 const { stepControl } = await import('./wizardTestStepControl');
 const { default: WizardDialog } = await import('./WizardDialog.svelte');
 const { default: WizardTestStep } = await import('./WizardTestStep.test.svelte');
+const { default: WizardDropdownStep } = await import('./WizardDropdownStep.test.svelte');
 
 type StepModule = { default: Component<WizardStepProps> };
 
-const loadStep = (): Promise<StepModule> =>
-  Promise.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+const loadStep = (): Promise<StepModule> => Promise.resolve({ default: WizardTestStep });
+
+const loadDropdownStep = (): Promise<StepModule> =>
+  Promise.resolve({ default: WizardDropdownStep });
 
 // One loader per step index; tests replace entries to control chunk loading.
 let loaders: Array<() => Promise<StepModule>> = [];
@@ -89,6 +95,26 @@ const visibleWithText = (text: string) =>
 // The footer reason: the paragraph in the row that holds the Next button
 const footerReason = () => primaryButton().closest('div.w-full')?.querySelector('p') ?? null;
 
+const closeButton = () => screen.getByRole('button', { name: 'common.aria.closeModal' });
+
+// Starts a save that stays pending and returns once the wizard shows it saving
+async function startPendingSave(user: ReturnType<typeof userEvent.setup>) {
+  const save = deferred();
+  stepControl.leave = vi.fn(() => save.promise);
+  const { container } = renderWizard(componentSteps(3));
+  await waitForPrimaryEnabled();
+  await user.click(primaryButton());
+  await waitFor(() => expect(primaryButton()).toHaveTextContent('wizard.status.saving'));
+  return { save, container };
+}
+
+// Starts a save that stays pending, then opens the confirmation over it
+async function openConfirmationDuringSave(user: ReturnType<typeof userEvent.setup>) {
+  const started = await startPendingSave(user);
+  await user.click(closeButton());
+  return started;
+}
+
 describe('WizardDialog', () => {
   let user: ReturnType<typeof userEvent.setup>;
 
@@ -115,6 +141,20 @@ describe('WizardDialog', () => {
     await waitFor(() => expect(describedText(primaryButton())).toBe('wizard.reasons.completeStep'));
 
     expect(isBlocked(primaryButton())).toBe(true);
+    // The reason is never cut off: long translations wrap instead of being clamped
+    const reasonId = primaryButton().getAttribute('aria-describedby') ?? '';
+    expect(document.getElementById(reasonId)?.className ?? '').not.toContain('line-clamp');
+    await user.click(primaryButton());
+    expect(heading()).toHaveTextContent('test.step1');
+    expect(stepControl.leave).not.toHaveBeenCalled();
+  });
+
+  it('shows the reason the step reports instead of the generic one', async () => {
+    stepControl.validQueue = [false];
+    stepControl.reasonQueue = ['wizard.reasons.stepSpecific' as TranslationKey];
+    renderWizard(componentSteps(3));
+
+    await waitFor(() => expect(describedText(primaryButton())).toBe('wizard.reasons.stepSpecific'));
   });
 
   it('takes no space for the alert or the reason while there is nothing to say', async () => {
@@ -151,14 +191,7 @@ describe('WizardDialog', () => {
   });
 
   it('Next waits for the step save and shows Saving', async () => {
-    const save = deferred();
-    stepControl.leave = vi.fn(() => save.promise);
-    renderWizard(componentSteps(3));
-    await waitForPrimaryEnabled();
-
-    await user.click(primaryButton());
-
-    await waitFor(() => expect(primaryButton()).toHaveTextContent('wizard.status.saving'));
+    const { save } = await startPendingSave(user);
     expect(isBlocked(primaryButton())).toBe(true);
     // Saving shows once, on the button; the footer reason does not repeat it
     expect(visibleWithText('wizard.status.saving')).toEqual([primaryButton()]);
@@ -169,7 +202,7 @@ describe('WizardDialog', () => {
     ).toBe(true);
     expect(heading()).toHaveTextContent('test.step1');
 
-    save.resolve();
+    save.resolve(undefined);
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
   });
@@ -183,7 +216,7 @@ describe('WizardDialog', () => {
     await user.dblClick(primaryButton());
     expect(stepControl.leave).toHaveBeenCalledTimes(1);
 
-    save.resolve();
+    save.resolve(undefined);
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
     await waitForPrimaryEnabled();
@@ -205,7 +238,7 @@ describe('WizardDialog', () => {
     expect(heading()).toHaveTextContent('test.step2');
     expect(stepControl.leave).toHaveBeenCalledTimes(1);
 
-    load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+    load.resolve({ default: WizardTestStep });
     await waitForPrimaryEnabled();
     await waitOutStepMoveGuard();
     await user.click(primaryButton());
@@ -222,7 +255,7 @@ describe('WizardDialog', () => {
 
     await user.dblClick(primaryButton());
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
-    load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+    load.resolve({ default: WizardTestStep });
 
     await waitFor(() => expect(describedText(primaryButton())).toBe('wizard.reasons.completeStep'));
     expect(primaryButton()).toHaveTextContent('wizard.done');
@@ -253,6 +286,21 @@ describe('WizardDialog', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('');
   });
 
+  it('a save the server refuses as invalid shows the rejected message in the alert', async () => {
+    stepControl.leave = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new ApiError('refused', 400, new Response(null, { status: 400 })));
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+
+    await user.click(primaryButton());
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.saveRejected')
+    );
+    expect(heading()).toHaveTextContent('test.step1');
+  });
+
   it('makes the step content inert while saving and interactive again after the save', async () => {
     const save = deferred();
     stepControl.leave = vi.fn(() => save.promise);
@@ -265,7 +313,7 @@ describe('WizardDialog', () => {
     await waitFor(() => expect(isContentInert()).toBe(true));
     expect(contentBox()).toHaveAttribute('aria-busy', 'true');
 
-    save.resolve();
+    save.resolve(undefined);
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
     await waitForPrimaryEnabled();
@@ -307,7 +355,7 @@ describe('WizardDialog', () => {
     expect(describedText(backButton())).toBe('wizard.status.saving');
     expect(heading()).toHaveTextContent('test.step2');
 
-    save.resolve();
+    save.resolve(undefined);
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step1'));
   });
@@ -389,7 +437,7 @@ describe('WizardDialog', () => {
 
     expect(retry).not.toBeInTheDocument();
     expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull();
-    load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+    load.resolve({ default: WizardTestStep });
     await waitForPrimaryEnabled();
   });
 
@@ -423,7 +471,7 @@ describe('WizardDialog', () => {
     await user.dblClick(backButton());
 
     await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
-    load.resolve({ default: WizardTestStep as unknown as Component<WizardStepProps> });
+    load.resolve({ default: WizardTestStep });
   });
 
   it('a click right after the next step is ready does not move again', async () => {
@@ -445,12 +493,7 @@ describe('WizardDialog', () => {
   });
 
   it('Skip closes at once without calling the leave handler again and ignores the pending save', async () => {
-    const save = deferred();
-    stepControl.leave = vi.fn(() => save.promise);
-    renderWizard(componentSteps(3));
-    await waitForPrimaryEnabled();
-    await user.click(primaryButton());
-    await waitFor(() => expect(primaryButton()).toHaveTextContent('wizard.status.saving'));
+    const { save } = await startPendingSave(user);
 
     await user.click(screen.getByRole('button', { name: 'wizard.skip' }));
 
@@ -458,16 +501,49 @@ describe('WizardDialog', () => {
     expect(stepControl.leave).toHaveBeenCalledTimes(1);
     expect(api.post).toHaveBeenCalledTimes(1);
 
-    save.resolve();
+    save.resolve(undefined);
     await Promise.resolve();
 
     expect(wizardState.isActive).toBe(false);
     expect(wizardState.currentStepIndex).toBe(0);
     expect(api.post).toHaveBeenCalledTimes(1);
+    expect(toastActions.error).not.toHaveBeenCalled();
+  });
+
+  it('Skip during a save that later fails shows an error toast', async () => {
+    const { save } = await startPendingSave(user);
+    await user.click(screen.getByRole('button', { name: 'wizard.skip' }));
+
+    save.reject(new Error('late'));
+
+    await waitFor(() => expect(toastActions.error).toHaveBeenCalledTimes(1));
+    expect(toastActions.error).toHaveBeenCalledWith('wizard.errors.saveUnfinished', {
+      duration: null,
+    });
+  });
+
+  it('Skip, Back, Next and Retry use the shared focus ring', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
+    loaders[2] = () => Promise.reject(new Error('chunk failed'));
+    await waitOutStepMoveGuard();
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    const retry = await screen.findByRole('button', { name: /common\.retry/ });
+
+    for (const button of [
+      screen.getByRole('button', { name: 'wizard.skip' }),
+      backButton(),
+      primaryButton(),
+      retry,
+    ]) {
+      expect(button).toHaveClass('focus-visible:outline-2');
+    }
   });
 
   describe('leave confirmation', () => {
-    const closeButton = () => screen.getByRole('button', { name: 'common.aria.closeModal' });
     const confirmation = () =>
       screen.queryByRole('alertdialog', { name: 'wizard.leaveConfirm.title' });
 
@@ -485,13 +561,57 @@ describe('WizardDialog', () => {
       expect(api.post).not.toHaveBeenCalled();
     });
 
-    it('describes the confirmation with its message', async () => {
+    it('describes the confirmation with the normal message when no save is running', async () => {
       renderWizard(componentSteps(3));
       await waitForPrimaryEnabled();
 
       await user.click(closeButton());
 
       expect(confirmation()).toHaveAccessibleDescription('wizard.leaveConfirm.message');
+    });
+
+    it('describes the confirmation with the in-flight message while a save is running', async () => {
+      const { save } = await openConfirmationDuringSave(user);
+
+      expect(confirmation()).toHaveAccessibleDescription('wizard.leaveConfirm.messageSaving');
+
+      save.resolve(undefined);
+    });
+
+    it('switches the confirmation to the normal message when the save finishes while it is open', async () => {
+      const { save } = await openConfirmationDuringSave(user);
+      expect(confirmation()).toHaveAccessibleDescription('wizard.leaveConfirm.messageSaving');
+
+      save.resolve(undefined);
+
+      await waitFor(() =>
+        expect(confirmation()).toHaveAccessibleDescription('wizard.leaveConfirm.message')
+      );
+    });
+
+    it('switches the confirmation to the normal message when the save fails while it is open', async () => {
+      const { save } = await openConfirmationDuringSave(user);
+      expect(confirmation()).toHaveAccessibleDescription('wizard.leaveConfirm.messageSaving');
+
+      save.reject(new Error('save failed'));
+
+      await waitFor(() =>
+        expect(confirmation()).toHaveAccessibleDescription('wizard.leaveConfirm.message')
+      );
+      expect(toastActions.error).not.toHaveBeenCalled();
+    });
+
+    it('Leave setup during a save that later fails shows an error toast', async () => {
+      const { save } = await openConfirmationDuringSave(user);
+      await user.click(screen.getByRole('button', { name: 'wizard.leaveConfirm.leave' }));
+      await waitFor(() => expect(wizardState.isActive).toBe(false));
+
+      save.reject(new Error('late'));
+
+      await waitFor(() => expect(toastActions.error).toHaveBeenCalledTimes(1));
+      expect(toastActions.error).toHaveBeenCalledWith('wizard.errors.saveUnfinished', {
+        duration: null,
+      });
     });
 
     it('Escape opens the confirmation and Escape inside it returns to the wizard', async () => {
@@ -506,6 +626,26 @@ describe('WizardDialog', () => {
       await waitFor(() => expect(confirmation()).not.toBeInTheDocument());
       expect(wizardState.isActive).toBe(true);
       expect(api.post).not.toHaveBeenCalled();
+    });
+
+    it('Tab cycles inside the confirmation only', async () => {
+      renderWizard(componentSteps(3));
+      await waitForPrimaryEnabled();
+      await user.click(closeButton());
+      const stay = screen.getByRole('button', { name: 'wizard.leaveConfirm.stay' });
+      const leave = screen.getByRole('button', { name: 'wizard.leaveConfirm.leave' });
+      await waitFor(() => expect(stay).toHaveFocus());
+
+      await user.tab();
+      expect(leave).toHaveFocus();
+
+      await user.tab();
+      expect(stay).toHaveFocus();
+
+      // Focus lost to <body> returns to the confirmation, not the wizard behind it
+      stay.blur();
+      await user.tab();
+      expect(stay).toHaveFocus();
     });
 
     it('Keep setting up returns to the same step', async () => {
@@ -553,12 +693,7 @@ describe('WizardDialog', () => {
     });
 
     it('X and Escape open the confirmation while a save is running', async () => {
-      const save = deferred();
-      stepControl.leave = vi.fn(() => save.promise);
-      renderWizard(componentSteps(3));
-      await waitForPrimaryEnabled();
-      await user.click(primaryButton());
-      await waitFor(() => expect(primaryButton()).toHaveTextContent('wizard.status.saving'));
+      const { save } = await startPendingSave(user);
 
       await user.click(closeButton());
       expect(confirmation()).toBeInTheDocument();
@@ -568,7 +703,7 @@ describe('WizardDialog', () => {
       await user.keyboard('{Escape}');
       expect(confirmation()).toBeInTheDocument();
 
-      save.resolve();
+      save.resolve(undefined);
     });
 
     it('X on the whats-new flow closes without confirmation', async () => {
@@ -582,11 +717,6 @@ describe('WizardDialog', () => {
     });
   });
 });
-
-// The wizard Modal has no accessible name yet: naming it belongs to the Modal-level
-// accessibility work. The confirmation's name and description are asserted by role
-// queries in the leave confirmation tests above.
-const A11Y_OPTIONS = { rules: { 'aria-dialog-name': { enabled: false } } };
 
 describe('WizardDialog Accessibility', () => {
   let user: ReturnType<typeof userEvent.setup>;
@@ -603,7 +733,7 @@ describe('WizardDialog Accessibility', () => {
     await waitForPrimaryEnabled();
 
     expect(heading()).toHaveTextContent('test.step1');
-    await expectNoA11yViolations(container, A11Y_OPTIONS);
+    await expectNoA11yViolations(container);
   });
 
   it('has no violations in the load error state', async () => {
@@ -614,7 +744,7 @@ describe('WizardDialog Accessibility', () => {
     await screen.findByRole('button', { name: /common\.retry/ });
 
     expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.stepLoadFailed');
-    await expectNoA11yViolations(container, A11Y_OPTIONS);
+    await expectNoA11yViolations(container);
   });
 
   it('has no violations with the leave confirmation open', async () => {
@@ -624,6 +754,177 @@ describe('WizardDialog Accessibility', () => {
     const dialog = await screen.findByRole('alertdialog', { name: 'wizard.leaveConfirm.title' });
 
     expect(dialog).toHaveAccessibleDescription('wizard.leaveConfirm.message');
-    await expectNoA11yViolations(container, A11Y_OPTIONS);
+    await expectNoA11yViolations(container);
+  });
+
+  it('has no violations with the leave confirmation open during a save', async () => {
+    const { save, container } = await openConfirmationDuringSave(user);
+    const dialog = await screen.findByRole('alertdialog', { name: 'wizard.leaveConfirm.title' });
+
+    expect(dialog).toHaveAccessibleDescription('wizard.leaveConfirm.messageSaving');
+    await expectNoA11yViolations(container);
+
+    save.resolve(undefined);
+  });
+
+  it('names the dialog with the step title and renames it on the next step', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+
+    expect(screen.getByRole('dialog', { name: 'test.step1' })).toBeInTheDocument();
+
+    await user.click(primaryButton());
+
+    expect(await screen.findByRole('dialog', { name: 'test.step2' })).toBeInTheDocument();
+  });
+
+  it('does not describe the dialog with the whole step body', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+
+    expect(screen.getByRole('dialog', { name: 'test.step1' })).not.toHaveAttribute(
+      'aria-describedby'
+    );
+  });
+
+  it('Tab from Next wraps to the close button', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    primaryButton().focus();
+
+    await user.tab();
+
+    expect(closeButton()).toHaveFocus();
+  });
+
+  it('Shift+Tab from the close button wraps to Next', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    closeButton().focus();
+
+    await user.tab({ shift: true });
+
+    expect(primaryButton()).toHaveFocus();
+  });
+
+  it('keeps focus in the dialog when Back returns to the first step', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
+    await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
+
+    backButton().focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step1'));
+    await waitFor(() => expect(document.activeElement).toBe(primaryButton()));
+  });
+
+  it('moves focus to Next when Back is clicked while focus was on body', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await screen.findByRole('dialog', { name: 'test.step2' });
+    await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
+    // A click on a button that takes no focus (Safari) leaves focus on body
+    primaryButton().blur();
+    expect(document.activeElement).toBe(document.body);
+
+    await fireEvent.click(backButton());
+
+    await screen.findByRole('dialog', { name: 'test.step1' });
+    await waitFor(() => expect(document.activeElement).toBe(primaryButton()));
+  });
+
+  it('moves focus to Back when Back is clicked on step 3 while focus was on body', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await screen.findByRole('dialog', { name: 'test.step2' });
+    await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
+    await user.click(primaryButton());
+    await screen.findByRole('dialog', { name: 'test.step3' });
+    await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
+    primaryButton().blur();
+    expect(document.activeElement).toBe(document.body);
+
+    await fireEvent.click(backButton());
+
+    await screen.findByRole('dialog', { name: 'test.step2' });
+    await waitFor(() => expect(document.activeElement).toBe(backButton()));
+  });
+
+  it('leaves focus alone when Back finishes after the user moved it', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await screen.findByRole('dialog', { name: 'test.step2' });
+    await waitForPrimaryEnabled();
+    await waitOutStepMoveGuard();
+
+    const save = deferred<undefined>();
+    stepControl.leave = vi.fn(() => save.promise);
+    const close = screen.getByRole('button', { name: 'common.aria.closeModal' });
+    backButton().focus();
+    await user.keyboard('{Enter}');
+    close.focus();
+    save.resolve(undefined);
+
+    await screen.findByRole('dialog', { name: 'test.step1' });
+    // Let the focus handling that follows the step move run
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(document.activeElement).toBe(close);
+  });
+
+  it('Escape in an open step dropdown closes only the dropdown', async () => {
+    loaders = [loadDropdownStep, loadStep];
+    vi.mocked(getStepsForFlow).mockReturnValue(
+      loaders.map((_, i) => ({
+        id: `step-${i + 1}`,
+        type: 'component' as const,
+        titleKey: `test.step${i + 1}` as TranslationKey,
+        // eslint-disable-next-line security/detect-object-injection -- i is a bounded test index
+        component: () => loaders[i](),
+      }))
+    );
+    wizardState.launch('onboarding', { currentVersion: 'v1' });
+    renderTyped(WizardDialog);
+    const trigger = await waitFor(() => {
+      const el = document.getElementById('fixture-dropdown');
+      if (!el) throw new Error('fixture dropdown not rendered');
+      return el;
+    });
+
+    await user.click(trigger);
+    const search = await screen.findByRole('searchbox');
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(wizardState.isActive).toBe(true);
+    expect(document.activeElement).toBe(trigger);
+
+    await user.keyboard('{Escape}');
+
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+  });
+
+  it('colours the footer alert with the error text token', async () => {
+    stepControl.leave = vi.fn(() => Promise.reject(new Error('save failed')));
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+
+    await user.click(primaryButton());
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.saveFailed')
+    );
+    expect(screen.getByRole('alert')).toHaveClass('text-[var(--text-error)]');
   });
 });

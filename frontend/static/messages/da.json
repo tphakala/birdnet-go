@@ -3272,7 +3272,11 @@
         "enable": "Aktivér BirdWeather-uploads",
         "token": {
           "label": "BirdWeather-token",
-          "helpText": "Dit unikke BirdWeather-token."
+          "helpText": "Dit unikke BirdWeather-token.",
+          "errors": {
+            "required": "Indtast dit BirdWeather-token, eller slå BirdWeather fra.",
+            "format": "Et BirdWeather-token består af 24 bogstaver og cifre."
+          }
         },
         "threshold": {
           "label": "Uploadtærskel",
@@ -5188,6 +5192,13 @@
       "viewDetections": "Se {name} detektioner",
       "largeView": "Stor visning af {name}",
       "clickToView": "Klik for at se detektioner"
+    },
+    "locationMap": {
+      "mapLabel": "Kort til valg af stationsplacering",
+      "expandedMapLabel": "Fuldskærmskort til valg af stationsplacering",
+      "zoomIn": "Zoom ind",
+      "zoomOut": "Zoom ud",
+      "expand": "Udvid kortet til fuld skærm"
     }
   },
   "connectivity": {
@@ -5357,8 +5368,11 @@
     },
     "errors": {
       "saveFailed": "Dette trin kunne ikke gemmes. Kontroller forbindelsen og prøv igen, eller spring opsætningen over og ændr det senere i Indstillinger.",
+      "saveRejected": "Indstillingerne i dette trin blev ikke accepteret. Kontroller værdierne og prøv igen, eller spring opsætningen over og ændr det senere i Indstillinger.",
       "stepLoadFailed": "Dette trin kunne ikke indlæses. Tryk på Prøv igen, eller genindlæs siden.",
-      "stepLoadFailedReload": "Dette trin kunne stadig ikke indlæses. Genindlæs siden for at prøve igen; valg gemt i tidligere trin bevares."
+      "stepLoadFailedReload": "Dette trin kunne stadig ikke indlæses. Genindlæs siden for at prøve igen; valg gemt i tidligere trin bevares.",
+      "audioSourceSaveUnfinished": "Ændringen af lydkilden blev ikke gennemført. Tjek lydkilderne under Indstillinger > Lyd.",
+      "saveUnfinished": "Nogle ændringer fra opsætningen blev ikke gemt. Tjek dem i Indstillinger."
     },
     "reasons": {
       "completeStep": "Fuldfør dette trin for at fortsætte."
@@ -5366,6 +5380,7 @@
     "leaveConfirm": {
       "title": "Forlad opsætningen?",
       "message": "Opsætningen åbner ikke igen. Valg gemt i tidligere trin bevares; ændringer i dette trin gemmes ikke. Du kan ændre alt senere i Indstillinger.",
+      "messageSaving": "Opsætningen åbner ikke igen. Valg gemt i tidligere trin bevares. Dette trin er stadig ved at blive gemt, og nogle af eller alle dets ændringer bevares muligvis ikke. Du kan ændre alt senere i Indstillinger.",
       "stay": "Fortsæt opsætningen",
       "leave": "Forlad opsætningen"
     },
@@ -5413,7 +5428,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Indtast URL'en til din RTSP-lydstream",
         "additionalSourcesHint": "Du kan tilføje flere lydkilder senere under Indstillinger.",
-        "configureLater": "Spring over - konfigurér senere"
+        "devicesLoadFailed": "Lydenhederne på dette system kunne ikke vises.",
+        "useStreamInstead": "Brug en RTSP-stream i stedet",
+        "setUpLater": "Konfigurér lyd senere",
+        "setUpLaterChosen": "Lyd bliver ikke konfigureret nu. Tilføj et lydkort eller en stream senere i Indstillinger.",
+        "streamReplacesSoundCards": "Lydkort holder op med at optage, når du bruger en stream. Du kan tilføje dem igen i Indstillinger.",
+        "soundCardReplacesStream": "Streamen, der vises ved stream-valget, slås fra, når du bruger et lydkort. Du kan slå den til igen i Indstillinger.",
+        "reasons": {
+          "chooseDevice": "Vælg en lydenhed, eller konfigurér lyd senere.",
+          "devicesFailed": "Lydenhederne kunne ikke vises. Prøv igen, brug en stream, eller konfigurér lyd senere.",
+          "noDevices": "Ingen lydenhed fundet. Brug en stream, eller konfigurér lyd senere.",
+          "enterUrl": "Indtast stream-URL'en, eller konfigurér lyd senere.",
+          "urlScheme": "Angiv en komplet stream-URL, der starter med rtsp:// eller rtsps:// og ikke indeholder mellemrum."
+        }
       },
       "detection": {
         "title": "Detekteringsgrænse",
@@ -5425,6 +5452,7 @@
         "highAccuracyDesc": "Færre falske positiver, kan overse nogle fugle",
         "highSensitivity": "Høj følsomhed",
         "highSensitivityDesc": "Flere detekteringer, flere falske positiver",
+        "descriptionStored": "Vælg hvor streng fugleidentifikationen skal være. Nuværende: {threshold}, ingen forudindstilling.",
         "threshold": "Konfidensgrænse",
         "fpFilterNote": "Når dit system kører og er afprøvet, kan du aktivere filteret for falske positiver under Indstillinger for yderligere at reducere forkerte detekteringer."
       },
@@ -5434,10 +5462,12 @@
         "privacyFilterHelp": "Filtrerer detekteringer fra, når menneskestemmer registreres nær mikrofonen",
         "birdweatherLabel": "Del detekteringer med BirdWeather",
         "birdweatherHelp": "Bidrag med dine fugledetekteringer til BirdWeather-fællesskabsnetværket",
-        "birdweatherIdLabel": "BirdWeather stations-ID",
-        "birdweatherIdPlaceholder": "Indtast dit BirdWeather stations-ID",
         "errorReportingLabel": "Send anonyme fejlrapporter",
-        "errorReportingHelp": "Hjælp med at forbedre BirdNET-Go ved at sende anonyme fejlrapporter, når noget går galt"
+        "errorReportingHelp": "Hjælp med at forbedre BirdNET-Go ved at sende anonyme fejlrapporter, når noget går galt",
+        "reasons": {
+          "enterToken": "Indtast dit BirdWeather-token, eller slå deling med BirdWeather fra.",
+          "tokenFormat": "Et BirdWeather-token består af 24 bogstaver og cifre."
+        }
       },
       "responsibleUse": {
         "title": "Ansvarlig brug af BirdNET-Go",

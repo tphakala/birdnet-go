@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
   import WizardProgressBar from './WizardProgressBar.svelte';
   import WizardContentRenderer from './WizardContentRenderer.svelte';
   import { wizardState } from './wizardState.svelte';
@@ -14,17 +15,13 @@
 
   const logger = loggers.ui;
 
+  const TITLE_ID = generateId('wizard-title');
   const NEXT_REASON_ID = generateId('wizard-next-reason');
   const ALERT_ID = generateId('wizard-alert');
   const SAVING_STATUS_ID = generateId('wizard-saving-status');
   const LEAVE_TITLE_ID = generateId('wizard-leave-title');
   const LEAVE_DESC_ID = generateId('wizard-leave-desc');
 
-  // Shared by the Back, Retry and Reload page buttons
-  const SECONDARY_BUTTON_CLASS =
-    'inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--border-200)] bg-transparent px-4 py-2 text-sm font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--hover-overlay)]';
-
-  let modalRef = $state<Modal>();
   let contentRef = $state<HTMLDivElement>();
   let loadedComponent = $state<Component<WizardStepProps> | null>(null);
   // Index of the step the rendered component was loaded for
@@ -40,7 +37,15 @@
   // too, only a page reload can fetch the chunk again.
   let retriedIndex = $state(-1);
   let reloadButtonRef = $state<HTMLButtonElement>();
+  let backButtonRef = $state<HTMLButtonElement>();
+  let primaryButtonRef = $state<HTMLButtonElement>();
   let leaveConfirmOpen = $state(false);
+  // A save still running when setup closes keeps running, but some of its changes may
+  // not be kept; the confirmation says so while isSaving, and follows it while open.
+  // Both keys are literal so the i18n usage scanner sees them.
+  let leaveMessage = $derived(
+    wizardState.isSaving ? t('wizard.leaveConfirm.messageSaving') : t('wizard.leaveConfirm.message')
+  );
   let importGeneration = 0;
   // retryNonce as of the last import, to tell a Retry from a step change
   let lastRetryNonce = 0;
@@ -74,7 +79,6 @@
           await tick();
           if (gen !== importGeneration) return;
           wizardState.setStepStatus('ready', index);
-          modalRef?.refreshFocusTrap();
         },
         async err => {
           if (gen !== importGeneration) return;
@@ -100,8 +104,6 @@
           wizardState.setStepStatus('ready', index);
         });
       }
-      // Refresh focus trap for ContentStep transitions too
-      tick().then(() => modalRef?.refreshFocusTrap());
     }
   });
 
@@ -123,6 +125,18 @@
   let retryExhausted = $derived(
     wizardState.stepStatus === 'failed' && retriedIndex === wizardState.currentStepIndex
   );
+
+  // Focus falls to <body> when Back unmounts (it is not rendered on the first step) and
+  // when a click took no focus, outside the dialog's focus trap. Move it to Back when that
+  // button remains, otherwise to Next, unless the user has already moved it elsewhere.
+  async function goBack() {
+    await wizardState.back();
+    await tick();
+    const focusLost = document.activeElement === null || document.activeElement === document.body;
+    if (!focusLost) return;
+    // Back stays mounted from step 3 on; from step 2 it unmounts, so Next takes the focus
+    (backButtonRef?.isConnected ? backButtonRef : primaryButtonRef)?.focus();
+  }
 
   function reloadPage() {
     window.location.reload();
@@ -155,7 +169,7 @@
     if (wizardState.isSaving) return '';
     if (wizardState.stepStatus === 'failed') return '';
     if (wizardState.stepStatus === 'loading') return t('wizard.status.loadingStep');
-    return t('wizard.reasons.completeStep');
+    return t(wizardState.stepBlockedReason ?? 'wizard.reasons.completeStep');
   });
 
   let alertText = $derived.by(() => {
@@ -194,7 +208,6 @@
 </script>
 
 <Modal
-  bind:this={modalRef}
   isOpen={wizardState.isActive}
   size="2xl"
   className="w-full"
@@ -202,10 +215,11 @@
   closeOnBackdrop={false}
   closeOnEsc={!leaveConfirmOpen}
   onClose={requestLeave}
+  aria-labelledby={TITLE_ID}
 >
   {#snippet header()}
     <div class="flex items-center justify-between">
-      <h3 id="modal-title" class="text-lg font-bold">{stepTitle}</h3>
+      <h3 id={TITLE_ID} class="text-lg font-bold">{stepTitle}</h3>
       <WizardProgressBar
         currentStep={wizardState.currentStepIndex}
         totalSteps={wizardState.totalSteps}
@@ -231,20 +245,15 @@
       {:else if wizardState.stepStatus === 'failed'}
         <div class="flex h-full items-center justify-center">
           {#if retryExhausted}
-            <button
-              bind:this={reloadButtonRef}
-              type="button"
-              class={SECONDARY_BUTTON_CLASS}
-              onclick={reloadPage}
-            >
+            <Button variant="default" size="md" bind:ref={reloadButtonRef} onclick={reloadPage}>
               <RefreshCw class="size-4" />
               {t('wizard.actions.reloadPage')}
-            </button>
+            </Button>
           {:else}
-            <button type="button" class={SECONDARY_BUTTON_CLASS} onclick={retryLoad}>
+            <Button variant="default" size="md" onclick={retryLoad}>
               <RotateCw class="size-4" />
               {t('common.retry')}
-            </button>
+            </Button>
           {/if}
         </div>
       {:else if wizardState.currentStep?.type === 'content'}
@@ -252,7 +261,7 @@
       {:else if loadedComponent}
         {@const StepComponent = loadedComponent}
         <StepComponent
-          onValidChange={valid => wizardState.setStepValid(valid, loadedIndex)}
+          onValidChange={(valid, reason) => wizardState.setStepValid(valid, loadedIndex, reason)}
           registerLeaveHandler={wizardState.registerLeaveHandler}
         />
       {/if}
@@ -262,7 +271,7 @@
     <p
       id={ALERT_ID}
       role="alert"
-      class={alertText ? 'mt-2 text-sm text-[var(--color-error)]' : 'sr-only'}
+      class={alertText ? 'mt-2 text-sm text-[var(--text-error)]' : 'sr-only'}
     >
       {alertText}
     </p>
@@ -272,40 +281,37 @@
   {/snippet}
 
   {#snippet footer()}
-    <!-- One row whatever the state, so the footer height never changes: the reason
-         sits beside the buttons and clamps to two lines (still shorter than a
-         button) instead of adding a row -->
+    <!-- One row: the reason sits beside the buttons and wraps in full rather than
+         being cut off, so a long translation can make the footer taller -->
     <div class="flex w-full items-center gap-3">
-      <button
-        type="button"
-        class="inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius-field)] px-3 py-1.5 text-sm font-medium text-[var(--color-base-content)] opacity-70 transition-colors hover:bg-[var(--hover-overlay)] hover:opacity-100"
-        onclick={() => wizardState.skip()}
-      >
+      <Button variant="ghost" size="md" className="shrink-0" onclick={() => wizardState.skip()}>
         {t('wizard.skip')}
-      </button>
+      </Button>
       <p
         id={NEXT_REASON_ID}
-        class="line-clamp-2 min-w-0 flex-1 text-right text-sm leading-tight text-[var(--color-base-content)] opacity-70"
+        class="min-w-0 flex-1 text-right text-sm leading-tight text-[var(--color-base-content)] opacity-70"
         title={nextReason || undefined}
       >
         {nextReason}
       </p>
       <div class="flex shrink-0 items-center gap-2">
         {#if !wizardState.isFirstStep}
-          <button
-            type="button"
-            class="{SECONDARY_BUTTON_CLASS} aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-            onclick={() => wizardState.back()}
+          <Button
+            variant="default"
+            size="md"
+            bind:ref={backButtonRef}
+            onclick={() => void goBack()}
             aria-disabled={!wizardState.canGoBack ? 'true' : undefined}
             aria-describedby={backDescribedBy}
           >
             <ChevronLeft class="size-4" />
             {t('wizard.back')}
-          </button>
+          </Button>
         {/if}
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--color-primary)] bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary-hover)] aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+        <Button
+          variant="primary"
+          size="md"
+          bind:ref={primaryButtonRef}
           onclick={() => (wizardState.isLastStep ? wizardState.complete() : wizardState.next())}
           aria-disabled={!wizardState.canAdvance ? 'true' : undefined}
           aria-describedby={nextDescribedBy}
@@ -324,7 +330,7 @@
             {t('wizard.next')}
             <ChevronRight class="size-4" />
           {/if}
-        </button>
+        </Button>
       </div>
     </div>
   {/snippet}
@@ -345,7 +351,7 @@
   >
     {#snippet header()}
       <h3 id={LEAVE_TITLE_ID} class="mb-2 text-lg font-bold">{t('wizard.leaveConfirm.title')}</h3>
-      <p id={LEAVE_DESC_ID} class="text-sm">{t('wizard.leaveConfirm.message')}</p>
+      <p id={LEAVE_DESC_ID} class="text-sm">{leaveMessage}</p>
     {/snippet}
   </Modal>
 {/if}

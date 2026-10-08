@@ -3272,7 +3272,11 @@
         "enable": "Ota käyttöön BirdWeather-lähetykset",
         "token": {
           "label": "BirdWeather-tunnus",
-          "helpText": "Yksilöllinen BirdWeather-tunnuksesi."
+          "helpText": "Yksilöllinen BirdWeather-tunnuksesi.",
+          "errors": {
+            "required": "Anna BirdWeather-tunnuksesi tai poista BirdWeather käytöstä.",
+            "format": "BirdWeather-tunnuksessa on 24 kirjainta ja numeroa."
+          }
         },
         "threshold": {
           "label": "Lähetyskynnys",
@@ -5188,6 +5192,13 @@
       "viewDetections": "Näytä lajin {name} havainnot",
       "largeView": "Suuri kuva lajista {name}",
       "clickToView": "Napsauta nähdäksesi havainnot"
+    },
+    "locationMap": {
+      "mapLabel": "Kartta aseman sijainnin valitsemiseen",
+      "expandedMapLabel": "Koko näytön kartta aseman sijainnin valitsemiseen",
+      "zoomIn": "Lähennä",
+      "zoomOut": "Loitonna",
+      "expand": "Laajenna kartta koko näytölle"
     }
   },
   "connectivity": {
@@ -5357,8 +5368,11 @@
     },
     "errors": {
       "saveFailed": "Tämän vaiheen tallennus epäonnistui. Tarkista yhteys ja yritä uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
+      "saveRejected": "Tämän vaiheen asetuksia ei hyväksytty. Tarkista arvot ja yritä uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
       "stepLoadFailed": "Tämän vaiheen lataus epäonnistui. Paina Yritä uudelleen tai lataa sivu uudelleen.",
-      "stepLoadFailedReload": "Tämän vaiheen lataus epäonnistui edelleen. Lataa sivu uudelleen ja yritä uudestaan; aiemmissa vaiheissa tallennetut valinnat säilyvät."
+      "stepLoadFailedReload": "Tämän vaiheen lataus epäonnistui edelleen. Lataa sivu uudelleen ja yritä uudestaan; aiemmissa vaiheissa tallennetut valinnat säilyvät.",
+      "audioSourceSaveUnfinished": "Äänilähteen vaihto ei valmistunut. Tarkista äänilähteet kohdasta Asetukset > Ääni.",
+      "saveUnfinished": "Osa käyttöönoton muutoksista ei tallentunut. Tarkista ne Asetuksissa."
     },
     "reasons": {
       "completeStep": "Suorita tämä vaihe loppuun jatkaaksesi."
@@ -5366,6 +5380,7 @@
     "leaveConfirm": {
       "title": "Poistutaanko käyttöönotosta?",
       "message": "Käyttöönotto ei avaudu uudelleen. Aiemmissa vaiheissa tallennetut valinnat säilyvät; tämän vaiheen muutoksia ei tallenneta. Voit muuttaa kaiken myöhemmin Asetuksissa.",
+      "messageSaving": "Käyttöönotto ei avaudu uudelleen. Aiemmissa vaiheissa tallennetut valinnat säilyvät. Tämän vaiheen tallennus on vielä kesken, ja osa sen muutoksista tai kaikki ne eivät välttämättä säily. Voit muuttaa kaiken myöhemmin Asetuksissa.",
       "stay": "Jatka käyttöönottoa",
       "leave": "Poistu käyttöönotosta"
     },
@@ -5413,7 +5428,19 @@
         "rtspUrlPlaceholder": "rtsp://kayttaja:salasana@host:port/stream",
         "rtspUrlHelp": "Syötä RTSP-äänilähetyksesi URL",
         "additionalSourcesHint": "Voit lisätä äänilähteitä myöhemmin Asetuksissa.",
-        "configureLater": "Ohita - määritä myöhemmin"
+        "devicesLoadFailed": "Tämän järjestelmän äänilaitteita ei voitu listata.",
+        "useStreamInstead": "Käytä RTSP-lähetystä sen sijaan",
+        "setUpLater": "Määritä ääni myöhemmin",
+        "setUpLaterChosen": "Ääntä ei määritetä nyt. Lisää äänikortti tai lähetys myöhemmin Asetuksissa.",
+        "streamReplacesSoundCards": "Äänikortit lakkaavat tallentamasta, kun käytät lähetystä. Voit lisätä ne uudelleen Asetuksissa.",
+        "soundCardReplacesStream": "Lähetysvaihtoehdossa näkyvä lähetys kytketään pois, kun käytät äänikorttia. Voit kytkeä sen takaisin päälle Asetuksissa.",
+        "reasons": {
+          "chooseDevice": "Valitse äänilaite tai määritä ääni myöhemmin.",
+          "devicesFailed": "Äänilaitteita ei voitu listata. Yritä uudelleen, käytä lähetystä tai määritä ääni myöhemmin.",
+          "noDevices": "Äänilaitetta ei löytynyt. Käytä lähetystä tai määritä ääni myöhemmin.",
+          "enterUrl": "Anna lähetyksen URL tai määritä ääni myöhemmin.",
+          "urlScheme": "Anna täydellinen lähetyksen URL-osoite, joka alkaa merkkijonolla rtsp:// tai rtsps:// eikä sisällä välilyöntejä."
+        }
       },
       "detection": {
         "title": "Tunnistuskynnys",
@@ -5425,6 +5452,7 @@
         "highAccuracyDesc": "Vähemmän vääriä havaintoja, saattaa ohittaa joitakin lintuja",
         "highSensitivity": "Korkea herkkyys",
         "highSensitivityDesc": "Enemmän havaintoja, enemmän vääriä positiivisia",
+        "descriptionStored": "Valitse, kuinka tarkka lintutunnistuksen tulee olla. Nykyinen: {threshold}, ei esiasetusta.",
         "threshold": "Luottamuskynnys",
         "fpFilterNote": "Kun järjestelmäsi on toiminnassa ja todettu toimivaksi, voit ottaa väärien positiivisten suodattimen käyttöön Asetuksissa vähentääksesi virheellisiä havaintoja entisestään."
       },
@@ -5434,10 +5462,12 @@
         "privacyFilterHelp": "Suodattaa havainnot, kun mikrofonin lähellä havaitaan ihmisen puhetta",
         "birdweatherLabel": "Jaa havainnot BirdWeatheriin",
         "birdweatherHelp": "Osallistu lintuhavainnoillasi BirdWeather-yhteisöverkkoon",
-        "birdweatherIdLabel": "BirdWeather-aseman ID",
-        "birdweatherIdPlaceholder": "Syötä BirdWeather-asemasi ID",
         "errorReportingLabel": "Lähetä nimettömiä virheilmoituksia",
-        "errorReportingHelp": "Auta parantamaan BirdNET-Go:ta lähettämällä nimettömiä virheilmoituksia ongelmatilanteissa"
+        "errorReportingHelp": "Auta parantamaan BirdNET-Go:ta lähettämällä nimettömiä virheilmoituksia ongelmatilanteissa",
+        "reasons": {
+          "enterToken": "Anna BirdWeather-tunnuksesi tai poista jakaminen BirdWeatherin kanssa käytöstä.",
+          "tokenFormat": "BirdWeather-tunnuksessa on 24 kirjainta ja numeroa."
+        }
       },
       "responsibleUse": {
         "title": "BirdNET-Go:n vastuullinen käyttö",

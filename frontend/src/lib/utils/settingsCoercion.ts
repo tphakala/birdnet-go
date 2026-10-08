@@ -183,7 +183,7 @@ export function coerceObject<T extends Record<string, unknown>>(
 }
 
 function coerceStreamConfig(stream: unknown): UnknownSettings {
-  const rawStream = coerceObject(stream, {} as UnknownSettings);
+  const rawStream = coerceObject<UnknownSettings>(stream, {});
 
   const coercedStream: UnknownSettings = {
     ...rawStream,
@@ -214,7 +214,7 @@ function coerceStreamConfig(stream: unknown): UnknownSettings {
 }
 
 function coerceRTSPSettings(settings: unknown): UnknownSettings {
-  const rawRtsp = coerceObject(settings, {} as UnknownSettings);
+  const rawRtsp = coerceObject<UnknownSettings>(settings, {});
 
   return {
     ...rawRtsp,
@@ -504,10 +504,7 @@ export function coerceSpeciesSettings(
   const coerced: PartialSpeciesSettings = {
     include: coerceArray<string>(safeSettings.include, []),
     exclude: coerceArray<string>(safeSettings.exclude, []),
-    config: coerceObject<Record<string, SpeciesConfig>>(
-      safeSettings.config as UnknownSettings,
-      {} as Record<string, SpeciesConfig>
-    ),
+    config: coerceObject<Record<string, SpeciesConfig>>(safeSettings.config, {}),
   };
 
   // Validate and clean species config
@@ -907,9 +904,9 @@ function coerceDashboardSettings(value: unknown): UnknownSettings {
 export function coerceSettings(section: string, data: UnknownSettings): UnknownSettings {
   switch (section) {
     case 'birdnet':
-      return coerceBirdNetSettings(data as PartialBirdNetSettings);
+      return coerceBirdNetSettings(data);
     case 'audio':
-      return coerceAudioSettings(data as PartialAudioSettings);
+      return coerceAudioSettings(data);
     case 'realtime': {
       // Handle realtime nested structures
       const coercedRealtime: UnknownSettings = { ...data };
@@ -967,13 +964,13 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
       return coercedRealtime;
     }
     case 'security':
-      return coerceSecuritySettings(data as PartialSecuritySettings);
+      return coerceSecuritySettings(data);
     case 'species':
-      return coerceSpeciesSettings(data as PartialSpeciesSettings);
+      return coerceSpeciesSettings(data);
     case 'mqtt':
-      return coerceMQTTSettings(data as PartialMQTTSettings);
+      return coerceMQTTSettings(data);
     case 'notification':
-      return coerceNotificationSettings(data as PartialNotificationSettings);
+      return coerceNotificationSettings(data);
     default:
       return data;
   }

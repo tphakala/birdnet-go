@@ -3,6 +3,14 @@
  * Tests color combinations from the actual Tailwind v4 theme (src/styles/tailwind.css)
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import {
+  OPTION_SELECTED_BG_CLASS,
+  OPTION_HIGHLIGHT_BG_CLASS,
+  OPTION_HIGHLIGHT_OUTLINE_CLASS,
+} from '../lib/desktop/components/forms/SelectDropdown.styles';
 
 // WCAG 2.1 Level AA contrast ratios
 const WCAG_AA_NORMAL = 4.5; // Normal text
@@ -55,6 +63,32 @@ function applyOpacity(baseColor: string, backgroundColor: string, opacity: numbe
   const b = Math.round(base.b * opacity + bg.b * (1 - opacity));
 
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+/**
+ * Body of the first block in `css` whose selector line starts with `selector`.
+ */
+function blockBody(css: string, selector: string): string {
+  const start = css.indexOf(`${selector} {`);
+  if (start < 0) {
+    throw new Error(`block "${selector}" not found`);
+  }
+  const end = css.indexOf('\n}', start);
+  return css.slice(start, end);
+}
+
+/** Hex value of custom property `name` in a block body, or null when it is not set to a hex. */
+function findVar(body: string, name: string): string | null {
+  // eslint-disable-next-line security/detect-non-literal-regexp -- name is one of the fixed custom property names used by the callers
+  const match = new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`).exec(body);
+  return match?.[1] ?? null;
+}
+
+/** Hex value of custom property `name` in a block body; fails the test when it is missing. */
+function readVar(body: string, name: string): string {
+  const value = findVar(body, name);
+  expect(value, `${name} is defined as a hex colour`).not.toBeNull();
+  return value ?? '';
 }
 
 describe('Color Contrast Tests', () => {
@@ -244,7 +278,7 @@ describe('Color Contrast Tests', () => {
   });
 
   describe('Tailwind Utility Color Contrast (System Components)', () => {
-    describe('Light mode — text on surface-100 (#ffffff)', () => {
+    describe('Light mode: text on surface-100 (#ffffff)', () => {
       const bg = lightTheme.surface100;
 
       it('text-slate-600 passes AA for normal text', () => {
@@ -260,7 +294,7 @@ describe('Color Contrast Tests', () => {
       });
     });
 
-    describe('Dark mode — text on surface-100 (#0f172a)', () => {
+    describe('Dark mode: text on surface-100 (#0f172a)', () => {
       const bg = darkTheme.surface100;
 
       it('text-slate-400 passes AA for normal text', () => {
@@ -296,5 +330,159 @@ describe('Color Contrast Tests', () => {
         expect(getContrastRatio(color, lightTheme.background)).toBeLessThan(WCAG_AA_NORMAL);
       });
     });
+  });
+});
+
+describe('Accessibility: error text token', () => {
+  const css = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'styles', 'tailwind.css'),
+    'utf8'
+  );
+
+  const themes = [
+    {
+      name: 'light',
+      base: blockBody(css, '@theme'),
+      text: blockBody(css, ":root,\n[data-theme='light']"),
+    },
+    {
+      name: 'dark',
+      base: blockBody(css, "[data-theme='dark']"),
+      text: blockBody(css, "[data-theme='dark']"),
+    },
+  ];
+
+  for (const theme of themes) {
+    for (const surface of ['--color-base-100', '--color-base-200', '--color-base-300']) {
+      it(`--text-error passes AA on ${surface} in the ${theme.name} theme`, () => {
+        const ratio = getContrastRatio(
+          readVar(theme.text, '--text-error'),
+          readVar(theme.base, surface)
+        );
+        expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      });
+    }
+  }
+});
+
+describe('SelectDropdown option states in every color scheme', () => {
+  const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
+  const tailwindCss = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');
+  const schemesCss = readFileSync(join(stylesDir, 'schemes.css'), 'utf8');
+
+  const FIXED_SCHEMES = ['blue', 'forest', 'amber', 'violet', 'rose'];
+  const ALL_SCHEMES = [...FIXED_SCHEMES, 'custom'];
+
+  /** Minimum ratio for the focus outline against its neighbours (WCAG 1.4.11). */
+  const OUTLINE_MIN_RATIO = 3;
+
+  const lightBase = blockBody(tailwindCss, '@theme');
+  const darkBase = blockBody(tailwindCss, "[data-theme='dark']");
+
+  /** Tint fraction written as `var(--token)_NN%` in a class constant. */
+  function tintFraction(token: string, classes: string): number {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- token is a fixed custom property name
+    const match = new RegExp(`var\\(${token}\\)_(\\d+)%`).exec(classes);
+    if (!match) {
+      throw new Error(`${token} tint percentage not found in "${classes}"`);
+    }
+    return Number(match[1]) / 100;
+  }
+
+  /** Custom property written as `outline-[var(--token)]` in a class constant. */
+  function outlineColorToken(classes: string): string {
+    const match = /outline-\[var\((--[a-z0-9-]+)\)\]/.exec(classes);
+    if (!match) {
+      throw new Error(`outline color not found in "${classes}"`);
+    }
+    return match[1];
+  }
+
+  const outlineToken = outlineColorToken(OPTION_HIGHLIGHT_OUTLINE_CLASS);
+
+  const selectedFraction = tintFraction('--color-primary', OPTION_SELECTED_BG_CLASS);
+  const highlightFraction = tintFraction('--color-base-content', OPTION_HIGHLIGHT_BG_CLASS);
+
+  /** Primary color of a scheme in a theme, mirroring the cascade in tailwind.css and schemes.css. */
+  function primaryOf(scheme: string, theme: 'light' | 'dark'): string {
+    const lightScheme = findVar(
+      blockBody(schemesCss, `\n[data-scheme='${scheme}']`),
+      '--color-primary'
+    );
+    if (theme === 'light') {
+      return lightScheme ?? readVar(lightBase, '--color-primary');
+    }
+    const darkSelector = `[data-theme='dark'][data-scheme='${scheme}']`;
+    const darkScheme = schemesCss.includes(`${darkSelector} {`)
+      ? findVar(blockBody(schemesCss, darkSelector), '--color-primary')
+      : null;
+    return darkScheme ?? lightScheme ?? readVar(darkBase, '--color-primary');
+  }
+
+  /** Contrast figures of one option for a given primary color and theme. */
+  function measure(primary: string, theme: 'light' | 'dark') {
+    const base = theme === 'light' ? lightBase : darkBase;
+    const surface = readVar(base, '--color-base-100');
+    const content = readVar(base, '--color-base-content');
+    const outline = readVar(base, outlineToken);
+    const selectedTint = applyOpacity(primary, surface, selectedFraction);
+    const highlightTint = applyOpacity(content, surface, highlightFraction);
+    return {
+      textOnSelected: getContrastRatio(content, selectedTint),
+      textOnHighlight: getContrastRatio(content, highlightTint),
+      outlineOnSurface: getContrastRatio(outline, surface),
+      outlineOnSelected: getContrastRatio(outline, selectedTint),
+      outlineOnHighlight: getContrastRatio(outline, highlightTint),
+    };
+  }
+
+  it('measures an outline color that no scheme overrides', () => {
+    // The matrix reads the outline token from the theme blocks only, so a token that
+    // schemes.css redefines per scheme (such as --color-primary) would be measured wrongly.
+    expect(schemesCss).not.toContain(`${outlineToken}:`);
+  });
+
+  it('covers every scheme defined in schemes.css', () => {
+    const names = new Set(
+      [...schemesCss.matchAll(/\[data-scheme=["']?([^"'\]]+)["']?\]/g)].map(m => m[1])
+    );
+    expect([...names].sort()).toEqual([...ALL_SCHEMES].sort());
+  });
+
+  for (const scheme of FIXED_SCHEMES) {
+    for (const theme of ['light', 'dark'] as const) {
+      it(`${scheme} ${theme}: option text and highlight outline meet AA`, () => {
+        const m = measure(primaryOf(scheme, theme), theme);
+        expect(m.textOnSelected).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        expect(m.textOnHighlight).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        expect(m.outlineOnSurface).toBeGreaterThanOrEqual(OUTLINE_MIN_RATIO);
+        expect(m.outlineOnSelected).toBeGreaterThanOrEqual(OUTLINE_MIN_RATIO);
+        expect(m.outlineOnHighlight).toBeGreaterThanOrEqual(OUTLINE_MIN_RATIO);
+      });
+    }
+  }
+
+  it('custom scheme: option text and outline pass for any primary color', () => {
+    const channel = [0x00, 0x33, 0x66, 0x99, 0xcc, 0xff];
+    const toHex = (n: number) => n.toString(16).padStart(2, '0');
+    const primaries = ['#2563eb', '#3b82f6'];
+    for (const r of channel) {
+      for (const g of channel) {
+        for (const b of channel) {
+          primaries.push(`#${toHex(r)}${toHex(g)}${toHex(b)}`);
+        }
+      }
+    }
+    expect(primaries).toHaveLength(216 + 2);
+
+    for (const theme of ['light', 'dark'] as const) {
+      for (const primary of primaries) {
+        const m = measure(primary, theme);
+        expect(m.textOnSelected, `${theme} ${primary} text`).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        expect(m.outlineOnSelected, `${theme} ${primary} outline`).toBeGreaterThanOrEqual(
+          OUTLINE_MIN_RATIO
+        );
+      }
+    }
   });
 });

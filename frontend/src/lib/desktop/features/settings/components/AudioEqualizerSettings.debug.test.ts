@@ -23,12 +23,10 @@ describe('AudioEqualizerSettings - Debug New Filter Creation', () => {
     vi.clearAllMocks();
 
     // Mock failing API to force fallback config
-    global.fetch = vi.fn(() =>
-      Promise.resolve({ ok: false } as unknown as Response)
-    ) as typeof global.fetch;
+    global.fetch = vi.fn(() => Promise.resolve({ ok: false } as unknown as Response));
     document.querySelector = vi.fn(() => ({
       getAttribute: () => 'csrf',
-    })) as typeof document.querySelector;
+    }));
   });
 
   it('should render filter type dropdown with expected controls', async () => {

@@ -78,6 +78,19 @@ describe('TextInput', () => {
     expect(oninput).toHaveBeenCalledWith('typing');
   });
 
+  it('calls onblur with the current value when the input loses focus', async () => {
+    const onblur = vi.fn();
+
+    render(TextInput, { props: { value: 'abc', onblur } });
+
+    const input = screen.getByRole('textbox');
+    await fireEvent.input(input, { target: { value: 'typed' } });
+    await fireEvent.blur(input);
+
+    expect(onblur).toHaveBeenCalledTimes(1);
+    expect(onblur).toHaveBeenCalledWith('typed');
+  });
+
   it('supports different input types', () => {
     render(TextInput, {
       props: {
@@ -371,5 +384,96 @@ describe('TextInput', () => {
     const container = screen.getByDisplayValue('');
     expect(container).toBeInTheDocument();
     expect(container).toHaveAttribute('id', 'custom-test-id');
+  });
+});
+
+describe('TextInput aria-invalid', () => {
+  it('forwards aria-invalid to the native input, not the wrapper', () => {
+    render(TextInput, { props: { value: '', 'aria-invalid': 'true' } });
+
+    const input = screen.getByRole('textbox');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input.parentElement).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('renders no aria-invalid when the prop is not set', () => {
+    render(TextInput, { props: { value: '' } });
+
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
+  });
+});
+
+describe('TextInput Accessibility error styling', () => {
+  it.each<[string, 'true' | true]>([
+    ['the string true', 'true'],
+    ['the boolean true', true],
+  ])('shows error styling when aria-invalid is %s', (_label, ariaInvalid) => {
+    render(TextInput, { props: { value: '', 'aria-invalid': ariaInvalid } });
+
+    expect(screen.getByRole('textbox')).toHaveClass('input-error');
+  });
+
+  it('shows no error styling when aria-invalid is unset or false', () => {
+    const unset = render(TextInput, { props: { value: '' } });
+    expect(screen.getByRole('textbox')).not.toHaveClass('input-error');
+    unset.unmount();
+
+    render(TextInput, { props: { value: '', 'aria-invalid': 'false' } });
+    expect(screen.getByRole('textbox')).not.toHaveClass('input-error');
+  });
+});
+
+describe('TextInput error region and autocomplete', () => {
+  it('renders no alert region unless an error is set or space is reserved', () => {
+    render(TextInput, { props: { value: '', label: 'Token', id: 'tok' } });
+
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('forwards autocomplete to the native input', () => {
+    render(TextInput, { props: { value: '', autocomplete: 'off' } });
+
+    expect(screen.getByRole('textbox')).toHaveAttribute('autocomplete', 'off');
+  });
+
+  it('shows the error in one alert region, marks the input invalid and describes it by the error', () => {
+    render(TextInput, {
+      props: { value: '', label: 'Token', id: 'tok', error: 'Token is wrong' },
+    });
+
+    const input = screen.getByRole('textbox');
+    const alert = screen.getByRole('alert');
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(alert).toHaveTextContent('Token is wrong');
+    expect(alert).toHaveAttribute('id', 'tok-error');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAttribute('aria-describedby', 'tok-error');
+    expect(input).toHaveClass('input-error');
+  });
+
+  it('joins an external description with the error id', () => {
+    render(TextInput, {
+      props: { value: '', id: 'tok', error: 'Bad', 'aria-describedby': 'hint' },
+    });
+
+    expect(screen.getByRole('textbox')).toHaveAttribute('aria-describedby', 'hint tok-error');
+  });
+
+  it('reserveErrorSpace keeps one two-line alert region whether or not an error is shown', async () => {
+    const { rerender } = render(TextInput, {
+      props: { value: '', id: 'tok', reserveErrorSpace: true },
+    });
+    const region = screen.getByRole('alert');
+    expect(region).toHaveClass('min-h-10', 'text-sm');
+    expect(region.textContent.trim()).toBe('');
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-describedby');
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
+
+    await rerender({ value: '', id: 'tok', reserveErrorSpace: true, error: 'Token is wrong' });
+
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getByRole('alert')).toBe(region);
+    expect(region).toHaveClass('min-h-10', 'text-sm');
+    expect(region).toHaveTextContent('Token is wrong');
   });
 });

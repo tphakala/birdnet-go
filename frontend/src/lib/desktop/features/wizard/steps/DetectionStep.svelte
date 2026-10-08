@@ -4,6 +4,8 @@
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { Scale, Target, Radio } from '@lucide/svelte';
+  import RadioCardGroup from '$lib/desktop/components/ui/RadioCardGroup.svelte';
+  import type { RadioCardOption } from '$lib/desktop/components/ui/RadioCardGroup.types';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
 
@@ -30,7 +32,7 @@
       id: 'balanced',
       titleKey: 'wizard.steps.detection.balanced',
       descKey: 'wizard.steps.detection.balancedDesc',
-      threshold: 0.8,
+      threshold: 0.7,
       icon: Scale,
       recommended: true,
     },
@@ -43,90 +45,77 @@
     },
   ];
 
-  let selectedPreset = $state('balanced');
-  let dirty = $state(false);
+  /** Thresholds closer than this are the same stored value (float noise from YAML). */
+  const THRESHOLD_EPSILON = 1e-6;
+
+  const INTRO_ID = 'wizard-detection-intro';
+
+  const sameThreshold = (a: number, b: number) => Math.abs(a - b) < THRESHOLD_EPSILON;
+
+  // What the server holds, not the form copy, read once so the first render is
+  // already right. The wizard opens only after settings load.
+  // The threshold the server holds as far as this step knows; moves after a save.
+  const initialThreshold = get(settingsStore).originalData?.birdnet?.threshold;
+  let savedThreshold = $state(initialThreshold);
+
+  const matchingPreset = (threshold: number | undefined) =>
+    threshold === undefined ? undefined : presets.find(p => sameThreshold(p.threshold, threshold));
+
+  // A stored value that matches no preset (a hand edit, an older wizard) checks
+  // no card; the intro paragraph states the value instead of the generic text.
+  const storedNoMatch = $derived(savedThreshold !== undefined && !matchingPreset(savedThreshold));
+
+  let selectedId = $state<string | null>(matchingPreset(initialThreshold)?.id ?? null);
+
+  const presetOptions = $derived<RadioCardOption[]>(
+    presets.map(p => ({
+      value: p.id,
+      label: t(p.titleKey),
+      description: t(p.descKey),
+      detail: `${t('wizard.steps.detection.threshold')}: ${p.threshold}`,
+      icon: p.icon,
+      badge: p.recommended ? t('wizard.steps.detection.balancedRecommended') : undefined,
+    }))
+  );
 
   $effect(() => {
     untrack(() => onValidChange?.(true));
   });
 
-  onMount(() => {
-    // Load current threshold and match to a preset
-    const store = get(settingsStore);
-    const currentThreshold = store?.formData?.birdnet?.threshold;
-    if (currentThreshold !== undefined) {
-      const match = presets.find(p => p.threshold === currentThreshold);
-      if (match) {
-        selectedPreset = match.id;
-      }
-    }
-  });
-
-  function selectPreset(id: string) {
-    selectedPreset = id;
-    dirty = true;
+  function selectOption(id: string) {
+    selectedId = id;
   }
 
   // Next, Back and Done await the commit; it never runs on Skip or Leave setup.
   onMount(() => registerLeaveHandler?.(commit));
 
-  // Save the step's edits when the wizard leaves it with Next, Back or Done.
-  // Only runs if the user made changes.
+  // Save the step's pick when the wizard leaves it with Next, Back or Done.
+  // Nothing is sent unless the pick differs from what is stored, so passing
+  // through the step untouched never rewrites the configuration, and a failed
+  // save is resent by the next leave.
   async function commit(): Promise<void> {
-    if (!dirty) return;
-    const preset = presets.find(p => p.id === selectedPreset);
-    if (!preset) return;
-    await settingsActions.saveSection('birdnet', { threshold: preset.threshold });
-    dirty = false;
+    const option = presets.find(o => o.id === selectedId);
+    if (!option) return;
+    if (savedThreshold !== undefined && sameThreshold(option.threshold, savedThreshold)) return;
+    await settingsActions.saveSection('birdnet', { threshold: option.threshold });
+    savedThreshold = option.threshold;
   }
 </script>
 
 <div class="space-y-5">
-  <p class="text-sm text-[var(--color-base-content)]">
-    {t('wizard.steps.detection.description')}
+  <p id={INTRO_ID} class="text-sm text-[var(--color-base-content)]">
+    {storedNoMatch
+      ? t('wizard.steps.detection.descriptionStored', { threshold: savedThreshold })
+      : t('wizard.steps.detection.description')}
   </p>
 
-  <div class="space-y-3" role="radiogroup" aria-label={t('wizard.steps.detection.title')}>
-    {#each presets as preset (preset.id)}
-      {@const PresetIcon = preset.icon}
-      <button
-        type="button"
-        role="radio"
-        aria-checked={selectedPreset === preset.id}
-        class="flex w-full items-start gap-3 rounded-lg border-2 p-4 text-left transition-colors {selectedPreset ===
-        preset.id
-          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-          : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
-        onclick={() => selectPreset(preset.id)}
-      >
-        <PresetIcon
-          class="mt-0.5 size-5 shrink-0 {selectedPreset === preset.id
-            ? 'text-[var(--color-primary)]'
-            : 'text-[var(--color-base-content)] opacity-70'}"
-        />
-        <div class="flex-1">
-          <div class="flex items-center gap-2">
-            <span class="text-sm font-medium text-[var(--color-base-content)]">
-              {t(preset.titleKey)}
-            </span>
-            {#if preset.recommended}
-              <span
-                class="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-primary)]"
-              >
-                {t('wizard.steps.detection.balancedRecommended')}
-              </span>
-            {/if}
-          </div>
-          <p class="mt-0.5 text-sm text-[var(--color-base-content)] opacity-80">
-            {t(preset.descKey)}
-          </p>
-          <p class="mt-1 text-sm font-mono text-[var(--color-base-content)] opacity-70">
-            {t('wizard.steps.detection.threshold')}: {preset.threshold}
-          </p>
-        </div>
-      </button>
-    {/each}
-  </div>
+  <RadioCardGroup
+    options={presetOptions}
+    value={selectedId}
+    onChange={selectOption}
+    aria-label={t('wizard.steps.detection.title')}
+    aria-describedby={storedNoMatch ? INTRO_ID : undefined}
+  />
 
   <SettingsNote className="mt-0">
     <p>{t('wizard.steps.detection.fpFilterNote')}</p>

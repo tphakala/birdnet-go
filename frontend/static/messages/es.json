@@ -3272,7 +3272,11 @@
         "enable": "Habilitar cargas a BirdWeather",
         "token": {
           "label": "Token de BirdWeather",
-          "helpText": "Tu token único de BirdWeather."
+          "helpText": "Tu token único de BirdWeather.",
+          "errors": {
+            "required": "Introduce tu token de BirdWeather o desactiva BirdWeather.",
+            "format": "Un token de BirdWeather tiene 24 letras y dígitos."
+          }
         },
         "threshold": {
           "label": "Umbral de carga",
@@ -5188,6 +5192,13 @@
       "viewDetections": "Ver detecciones de {name}",
       "largeView": "Vista ampliada de {name}",
       "clickToView": "Haga clic para ver las detecciones"
+    },
+    "locationMap": {
+      "mapLabel": "Mapa para seleccionar la ubicación de la estación",
+      "expandedMapLabel": "Mapa a pantalla completa para seleccionar la ubicación de la estación",
+      "zoomIn": "Acercar",
+      "zoomOut": "Alejar",
+      "expand": "Ampliar el mapa a pantalla completa"
     }
   },
   "connectivity": {
@@ -5357,8 +5368,11 @@
     },
     "errors": {
       "saveFailed": "No se pudo guardar este paso. Comprueba la conexión e inténtalo de nuevo, u omite la configuración y cámbialo más tarde en Ajustes.",
+      "saveRejected": "Los ajustes de este paso no se aceptaron. Comprueba los valores e inténtalo de nuevo, u omite la configuración y cámbialo más tarde en Ajustes.",
       "stepLoadFailed": "No se pudo cargar este paso. Pulsa Reintentar o recarga la página.",
-      "stepLoadFailedReload": "Este paso sigue sin poder cargarse. Recarga la página para volver a intentarlo; las opciones guardadas en pasos anteriores se conservan."
+      "stepLoadFailedReload": "Este paso sigue sin poder cargarse. Recarga la página para volver a intentarlo; las opciones guardadas en pasos anteriores se conservan.",
+      "audioSourceSaveUnfinished": "El cambio de la fuente de audio no se completó. Comprueba las fuentes de audio en Configuración > Audio.",
+      "saveUnfinished": "Algunos cambios de la configuración no se guardaron. Compruébalos en Ajustes."
     },
     "reasons": {
       "completeStep": "Completa este paso para continuar."
@@ -5366,6 +5380,7 @@
     "leaveConfirm": {
       "title": "¿Salir de la configuración?",
       "message": "La configuración no se volverá a abrir. Las opciones guardadas en pasos anteriores se conservan; los cambios de este paso no se guardan. Puedes cambiarlo todo más tarde en Ajustes.",
+      "messageSaving": "La configuración no se volverá a abrir. Las opciones guardadas en pasos anteriores se conservan. Este paso aún se está guardando y es posible que algunos de sus cambios, o todos, no se conserven. Puedes cambiarlo todo más tarde en Ajustes.",
       "stay": "Seguir configurando",
       "leave": "Salir de la configuración"
     },
@@ -5413,7 +5428,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Ingresa la URL de tu transmisión de audio RTSP",
         "additionalSourcesHint": "Puedes agregar más fuentes de audio después en Configuración.",
-        "configureLater": "Omitir - configurar más tarde"
+        "devicesLoadFailed": "No se pudieron listar los dispositivos de audio de este sistema.",
+        "useStreamInstead": "Usar una transmisión RTSP en su lugar",
+        "setUpLater": "Configurar el audio más tarde",
+        "setUpLaterChosen": "El audio no se configurará ahora. Añade una tarjeta de sonido o una transmisión más tarde en Ajustes.",
+        "streamReplacesSoundCards": "Las tarjetas de sonido dejan de capturar cuando usas una transmisión. Puedes añadirlas de nuevo en Ajustes.",
+        "soundCardReplacesStream": "La transmisión que se muestra en la opción de transmisión se desactiva cuando usas una tarjeta de sonido. Puedes activarla de nuevo en Ajustes.",
+        "reasons": {
+          "chooseDevice": "Elige un dispositivo de audio o configura el audio más tarde.",
+          "devicesFailed": "No se pudieron listar los dispositivos de audio. Reintenta, usa una transmisión o configura el audio más tarde.",
+          "noDevices": "No se encontró ningún dispositivo de audio. Usa una transmisión o configura el audio más tarde.",
+          "enterUrl": "Introduce la URL de la transmisión o configura el audio más tarde.",
+          "urlScheme": "Introduce una URL de transmisión completa que empiece por rtsp:// o rtsps:// y no contenga espacios."
+        }
       },
       "detection": {
         "title": "Umbral de detección",
@@ -5425,6 +5452,7 @@
         "highAccuracyDesc": "Menos falsos positivos, puede omitir algunas aves",
         "highSensitivity": "Alta sensibilidad",
         "highSensitivityDesc": "Más detecciones, más falsos positivos",
+        "descriptionStored": "Elige qué tan estricta debe ser la identificación de aves. Actual: {threshold}, sin coincidencia.",
         "threshold": "Umbral de confianza",
         "fpFilterNote": "Una vez que tu sistema esté funcionando y comprobado, puedes activar el filtro de falsos positivos en Configuración para reducir aún más las detecciones incorrectas."
       },
@@ -5434,10 +5462,12 @@
         "privacyFilterHelp": "Filtra las detecciones cuando se detectan voces humanas cerca del micrófono",
         "birdweatherLabel": "Compartir detecciones con BirdWeather",
         "birdweatherHelp": "Contribuye tus detecciones de aves a la red comunitaria de BirdWeather",
-        "birdweatherIdLabel": "ID de estación de BirdWeather",
-        "birdweatherIdPlaceholder": "Ingresa tu ID de estación de BirdWeather",
         "errorReportingLabel": "Enviar reportes de error anónimos",
-        "errorReportingHelp": "Ayuda a mejorar BirdNET-Go enviando reportes de error anónimos cuando algo sale mal"
+        "errorReportingHelp": "Ayuda a mejorar BirdNET-Go enviando reportes de error anónimos cuando algo sale mal",
+        "reasons": {
+          "enterToken": "Introduce tu token de BirdWeather o desactiva el uso compartido con BirdWeather.",
+          "tokenFormat": "Un token de BirdWeather tiene 24 letras y dígitos."
+        }
       },
       "responsibleUse": {
         "title": "Uso responsable de BirdNET-Go",

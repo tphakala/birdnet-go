@@ -26,7 +26,7 @@
   - emptyMessage?: string - Message when no data
   - Various styling options (striped, hoverable, compact, fullWidth)
 -->
-<script lang="ts" generics="T extends Record<string, any>">
+<script lang="ts" generics="T extends Record<string, unknown>">
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
@@ -34,7 +34,10 @@
   import { XCircle, ChevronUp, ChevronDown } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
-  interface Props<T extends Record<string, any>> extends Omit<HTMLAttributes<HTMLElement>, 'data'> {
+  interface Props<T extends Record<string, unknown>> extends Omit<
+    HTMLAttributes<HTMLElement>,
+    'data'
+  > {
     columns: Column<T>[];
     data: T[];
     loading?: boolean;
@@ -97,8 +100,9 @@
     if (column.renderHtml) {
       return column.renderHtml(item, index);
     }
-    // Safe property access with proper generic constraint
-    return item[column.key as keyof T] ?? '';
+    const value = item[column.key];
+    if (value === undefined || value === null) return '';
+    return typeof value === 'number' ? value : String(value);
   }
 
   function getAlignClass(align?: string): string {

@@ -23,7 +23,8 @@ const clipReconcilePassInterval = 1 * time.Hour
 // clipReconcileMonitor continuously reconciles persisted clip_name references
 // against the audio files on disk, clearing references to files that no longer
 // exist (ghosts from failed exports, or from detections created while export was
-// off). Unlike clipCleanupMonitor it runs regardless of the retention policy and
+// off), or re-linking them to a surviving spectrogram render when there is one.
+// Unlike clipCleanupMonitor it runs regardless of the retention policy and
 // regardless of whether audio export is currently enabled, because orphaned
 // references persist across runtime toggling of the export setting. It reads the
 // export path via conf.Setting() each pass so hot-reload takes effect, and the
@@ -58,6 +59,7 @@ func clipReconcileMonitor(quitChan <-chan struct{}, dataStore datastore.Interfac
 				log.Info("clip reconcile pass completed",
 					logger.Int("scanned", result.Scanned),
 					logger.Int64("cleared", result.Cleared),
+					logger.Int64("retained", result.Retained),
 					logger.String("operation", "clip_reconcile_pass"))
 			}
 		}

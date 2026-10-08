@@ -3272,7 +3272,11 @@
         "enable": "Włącz Przesyłanie do BirdWeather",
         "token": {
           "label": "Token BirdWeather",
-          "helpText": "Twój unikalny token BirdWeather."
+          "helpText": "Twój unikalny token BirdWeather.",
+          "errors": {
+            "required": "Wpisz token BirdWeather albo wyłącz BirdWeather.",
+            "format": "Token BirdWeather składa się z 24 liter i cyfr."
+          }
         },
         "threshold": {
           "label": "Próg Przesyłania",
@@ -5188,6 +5192,13 @@
       "viewDetections": "Wyświetl detekcje {name}",
       "largeView": "Duży widok {name}",
       "clickToView": "Kliknij, aby wyświetlić detekcje"
+    },
+    "locationMap": {
+      "mapLabel": "Mapa do wyboru lokalizacji stacji",
+      "expandedMapLabel": "Mapa pełnoekranowa do wyboru lokalizacji stacji",
+      "zoomIn": "Powiększ",
+      "zoomOut": "Pomniejsz",
+      "expand": "Rozwiń mapę na pełny ekran"
     }
   },
   "connectivity": {
@@ -5357,8 +5368,11 @@
     },
     "errors": {
       "saveFailed": "Nie udało się zapisać tego kroku. Sprawdź połączenie i spróbuj ponownie albo pomiń konfigurację i zmień to później w Ustawieniach.",
+      "saveRejected": "Ustawienia z tego kroku nie zostały przyjęte. Sprawdź wartości i spróbuj ponownie albo pomiń konfigurację i zmień to później w Ustawieniach.",
       "stepLoadFailed": "Nie udało się załadować tego kroku. Naciśnij Ponów próbę lub odśwież stronę.",
-      "stepLoadFailedReload": "Nadal nie udało się załadować tego kroku. Odśwież stronę, aby spróbować ponownie; wybory zapisane w poprzednich krokach zostają zachowane."
+      "stepLoadFailedReload": "Nadal nie udało się załadować tego kroku. Odśwież stronę, aby spróbować ponownie; wybory zapisane w poprzednich krokach zostają zachowane.",
+      "audioSourceSaveUnfinished": "Zmiana źródła dźwięku nie została dokończona. Sprawdź źródła dźwięku w sekcji Ustawienia > Dźwięk.",
+      "saveUnfinished": "Niektóre zmiany z konfiguracji nie zostały zapisane. Sprawdź je w Ustawieniach."
     },
     "reasons": {
       "completeStep": "Ukończ ten krok, aby kontynuować."
@@ -5366,6 +5380,7 @@
     "leaveConfirm": {
       "title": "Opuścić konfigurację?",
       "message": "Konfiguracja nie otworzy się ponownie. Wybory zapisane w poprzednich krokach zostają zachowane; zmiany w tym kroku nie zostaną zapisane. Wszystko możesz zmienić później w Ustawieniach.",
+      "messageSaving": "Konfiguracja nie otworzy się ponownie. Wybory zapisane w poprzednich krokach zostają zachowane. Ten krok jest jeszcze zapisywany, a część jego zmian lub wszystkie mogą nie zostać zachowane. Wszystko możesz zmienić później w Ustawieniach.",
       "stay": "Kontynuuj konfigurację",
       "leave": "Opuść konfigurację"
     },
@@ -5413,7 +5428,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Wprowadź URL twojego strumienia audio RTSP",
         "additionalSourcesHint": "Możesz dodać więcej źródeł audio później w Ustawieniach.",
-        "configureLater": "Pomiń - skonfiguruj później"
+        "devicesLoadFailed": "Nie udało się wyświetlić listy urządzeń audio w tym systemie.",
+        "useStreamInstead": "Użyj zamiast tego strumienia RTSP",
+        "setUpLater": "Skonfiguruj dźwięk później",
+        "setUpLaterChosen": "Dźwięk nie zostanie teraz skonfigurowany. Kartę dźwiękową lub strumień możesz dodać później w Ustawieniach.",
+        "streamReplacesSoundCards": "Karty dźwiękowe przestają nagrywać, gdy używasz strumienia. Możesz dodać je ponownie w Ustawieniach.",
+        "soundCardReplacesStream": "Strumień widoczny przy opcji strumienia zostanie wyłączony, gdy użyjesz karty dźwiękowej. Możesz włączyć go ponownie w Ustawieniach.",
+        "reasons": {
+          "chooseDevice": "Wybierz urządzenie audio lub skonfiguruj dźwięk później.",
+          "devicesFailed": "Nie udało się wyświetlić listy urządzeń audio. Spróbuj ponownie, użyj strumienia lub skonfiguruj dźwięk później.",
+          "noDevices": "Nie znaleziono urządzenia audio. Użyj strumienia lub skonfiguruj dźwięk później.",
+          "enterUrl": "Wpisz adres URL strumienia lub skonfiguruj dźwięk później.",
+          "urlScheme": "Podaj pełny adres URL strumienia, który zaczyna się od rtsp:// lub rtsps:// i nie zawiera spacji."
+        }
       },
       "detection": {
         "title": "Próg detekcji",
@@ -5425,6 +5452,7 @@
         "highAccuracyDesc": "Mniej fałszywych detekcji, może pominąć niektóre ptaki",
         "highSensitivity": "Wysoka czułość",
         "highSensitivityDesc": "Więcej detekcji, więcej fałszywych wyników",
+        "descriptionStored": "Wybierz, jak rygorystyczna powinna być identyfikacja ptaków. Obecnie: {threshold}, brak presetu.",
         "threshold": "Próg pewności",
         "fpFilterNote": "Gdy system będzie działał i sprawdzony, możesz włączyć filtr fałszywych wyników w Ustawieniach, aby jeszcze bardziej ograniczyć błędne detekcje."
       },
@@ -5434,10 +5462,12 @@
         "privacyFilterHelp": "Odfiltrowuje detekcje, gdy w pobliżu mikrofonu wykryto głosy ludzkie",
         "birdweatherLabel": "Udostępnij detekcje w BirdWeather",
         "birdweatherHelp": "Udostępnij swoje detekcje ptaków w sieci społeczności BirdWeather",
-        "birdweatherIdLabel": "ID stacji BirdWeather",
-        "birdweatherIdPlaceholder": "Wprowadź ID twojej stacji BirdWeather",
         "errorReportingLabel": "Wysyłaj anonimowe raporty o błędach",
-        "errorReportingHelp": "Pomóż ulepszyć BirdNET-Go wysyłając anonimowe raporty o błędach, gdy coś pójdzie nie tak"
+        "errorReportingHelp": "Pomóż ulepszyć BirdNET-Go wysyłając anonimowe raporty o błędach, gdy coś pójdzie nie tak",
+        "reasons": {
+          "enterToken": "Wpisz token BirdWeather albo wyłącz udostępnianie w BirdWeather.",
+          "tokenFormat": "Token BirdWeather składa się z 24 liter i cyfr."
+        }
       },
       "responsibleUse": {
         "title": "Odpowiedzialne korzystanie z BirdNET-Go",

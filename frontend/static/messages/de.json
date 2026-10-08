@@ -3272,7 +3272,11 @@
         "enable": "BirdWeather-Uploads aktivieren",
         "token": {
           "label": "BirdWeather-Token",
-          "helpText": "Ihr einzigartiges BirdWeather-Token."
+          "helpText": "Ihr einzigartiges BirdWeather-Token.",
+          "errors": {
+            "required": "Geben Sie Ihr Token ein oder schalten Sie BirdWeather aus.",
+            "format": "Ein BirdWeather-Token besteht aus 24 Buchstaben und Ziffern."
+          }
         },
         "threshold": {
           "label": "Upload-Schwellenwert",
@@ -5188,6 +5192,13 @@
       "viewDetections": "{name}-Erkennungen ansehen",
       "largeView": "Große Ansicht von {name}",
       "clickToView": "Klicken, um Erkennungen anzusehen"
+    },
+    "locationMap": {
+      "mapLabel": "Karte zur Auswahl des Stationsstandorts",
+      "expandedMapLabel": "Vollbildkarte zur Auswahl des Stationsstandorts",
+      "zoomIn": "Vergrößern",
+      "zoomOut": "Verkleinern",
+      "expand": "Karte im Vollbild anzeigen"
     }
   },
   "connectivity": {
@@ -5357,8 +5368,11 @@
     },
     "errors": {
       "saveFailed": "Dieser Schritt konnte nicht gespeichert werden. Prüfen Sie die Verbindung und versuchen Sie es erneut, oder überspringen Sie die Einrichtung und ändern Sie dies später in den Einstellungen.",
+      "saveRejected": "Die Einstellungen in diesem Schritt wurden nicht akzeptiert. Prüfen Sie die Werte und versuchen Sie es erneut, oder überspringen Sie die Einrichtung und ändern Sie dies später in den Einstellungen.",
       "stepLoadFailed": "Dieser Schritt konnte nicht geladen werden. Klicken Sie auf Erneut versuchen oder laden Sie die Seite neu.",
-      "stepLoadFailedReload": "Dieser Schritt konnte weiterhin nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen; in früheren Schritten gespeicherte Auswahlen bleiben erhalten."
+      "stepLoadFailedReload": "Dieser Schritt konnte weiterhin nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen; in früheren Schritten gespeicherte Auswahlen bleiben erhalten.",
+      "audioSourceSaveUnfinished": "Die Änderung der Audioquelle wurde nicht abgeschlossen. Prüfen Sie die Audioquellen unter Einstellungen > Audio.",
+      "saveUnfinished": "Einige Änderungen aus der Einrichtung wurden nicht gespeichert. Prüfen Sie diese in den Einstellungen."
     },
     "reasons": {
       "completeStep": "Schließen Sie diesen Schritt ab, um fortzufahren."
@@ -5366,6 +5380,7 @@
     "leaveConfirm": {
       "title": "Einrichtung verlassen?",
       "message": "Die Einrichtung wird nicht erneut geöffnet. In früheren Schritten gespeicherte Auswahlen bleiben erhalten; Änderungen in diesem Schritt werden nicht gespeichert. Sie können später alles in den Einstellungen ändern.",
+      "messageSaving": "Die Einrichtung wird nicht erneut geöffnet. In früheren Schritten gespeicherte Auswahlen bleiben erhalten. Dieser Schritt wird noch gespeichert, und einige oder alle seiner Änderungen gehen möglicherweise verloren. Sie können später alles in den Einstellungen ändern.",
       "stay": "Einrichtung fortsetzen",
       "leave": "Einrichtung verlassen"
     },
@@ -5413,7 +5428,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Geben Sie die URL Ihres RTSP-Audiostreams ein",
         "additionalSourcesHint": "Sie können später in den Einstellungen weitere Audioquellen hinzufügen.",
-        "configureLater": "Überspringen - später konfigurieren"
+        "devicesLoadFailed": "Die Audiogeräte dieses Systems konnten nicht aufgelistet werden.",
+        "useStreamInstead": "Stattdessen einen RTSP-Stream verwenden",
+        "setUpLater": "Audio später einrichten",
+        "setUpLaterChosen": "Audio wird jetzt nicht eingerichtet. Fügen Sie später in den Einstellungen eine Soundkarte oder einen Stream hinzu.",
+        "streamReplacesSoundCards": "Soundkarten nehmen nicht mehr auf, wenn Sie einen Stream verwenden. Sie können sie in den Einstellungen wieder hinzufügen.",
+        "soundCardReplacesStream": "Der bei der Stream-Option angezeigte Stream wird ausgeschaltet, wenn Sie eine Soundkarte verwenden. Sie können ihn in den Einstellungen wieder einschalten.",
+        "reasons": {
+          "chooseDevice": "Wählen Sie ein Audiogerät oder richten Sie Audio später ein.",
+          "devicesFailed": "Die Audiogeräte konnten nicht aufgelistet werden. Wiederholen Sie den Versuch, verwenden Sie einen Stream oder richten Sie Audio später ein.",
+          "noDevices": "Kein Audiogerät gefunden. Verwenden Sie einen Stream oder richten Sie Audio später ein.",
+          "enterUrl": "Geben Sie die Stream-URL ein oder richten Sie Audio später ein.",
+          "urlScheme": "Geben Sie eine vollständige Stream-URL ein, die mit rtsp:// oder rtsps:// beginnt und keine Leerzeichen enthält."
+        }
       },
       "detection": {
         "title": "Erkennungsschwelle",
@@ -5425,6 +5452,7 @@
         "highAccuracyDesc": "Weniger Fehlerkennungen, kann einige Vögel verpassen",
         "highSensitivity": "Hohe Empfindlichkeit",
         "highSensitivityDesc": "Mehr Erkennungen, mehr Fehlerkennungen",
+        "descriptionStored": "Wählen Sie, wie streng die Vogelidentifizierung sein soll. Aktuell: {threshold}, passt zu keiner Voreinstellung.",
         "threshold": "Konfidenzschwelle",
         "fpFilterNote": "Sobald Ihr System läuft und sich bewährt hat, können Sie den Falsch-Positiv-Filter in den Einstellungen aktivieren, um fehlerhafte Erkennungen weiter zu reduzieren."
       },
@@ -5434,10 +5462,12 @@
         "privacyFilterHelp": "Filtert Erkennungen heraus, wenn menschliche Stimmen in der Nähe des Mikrofons erkannt werden",
         "birdweatherLabel": "Erkennungen mit BirdWeather teilen",
         "birdweatherHelp": "Tragen Sie Ihre Vogelerkennungen zum BirdWeather-Community-Netzwerk bei",
-        "birdweatherIdLabel": "BirdWeather-Stations-ID",
-        "birdweatherIdPlaceholder": "Geben Sie Ihre BirdWeather-Stations-ID ein",
         "errorReportingLabel": "Anonyme Fehlerberichte senden",
-        "errorReportingHelp": "Helfen Sie, BirdNET-Go zu verbessern, indem Sie anonyme Fehlerberichte senden, wenn etwas schiefgeht"
+        "errorReportingHelp": "Helfen Sie, BirdNET-Go zu verbessern, indem Sie anonyme Fehlerberichte senden, wenn etwas schiefgeht",
+        "reasons": {
+          "enterToken": "Geben Sie Ihr Token ein oder schalten Sie das Teilen aus.",
+          "tokenFormat": "Ein BirdWeather-Token besteht aus 24 Buchstaben und Ziffern."
+        }
       },
       "responsibleUse": {
         "title": "Verantwortungsvolle Nutzung von BirdNET-Go",

@@ -276,10 +276,13 @@ realtime:
     remember: 60 # How long to remember barks for filtering (in seconds)
     species: ["Eurasian Eagle-Owl", "Hooded Crow"] # Species prone to dog bark confusion
 
-  # RTSP streaming settings
+  # RTSP and other network audio streams
   rtsp:
-    transport: "tcp" # RTSP Transport Protocol: tcp or udp
-    urls: [] # RTSP stream URLs
+    # Each entry needs a name, a url and a type (rtsp, http, hls, rtmp or udp). Optional
+    # fields: enabled, transport (tcp or udp), mediaMode, channelMode and gain.
+    # A legacy `urls` list in an older config is converted to streams on startup.
+    streams: []
+    transport: "tcp" # Default transport (tcp or udp) for RTSP and RTMP streams that do not set their own
 
   # MQTT integration
   mqtt:
@@ -2233,7 +2236,7 @@ This produces Discord messages with:
 - Green color bar (color code `3066993` = green; use `15158332` for red, `3447003` for blue)
 - Species name, confidence, and location as inline fields
 
-> **Note**: The `bg_*` metadata fields (bird image URL, confidence, location, etc.) are populated for detection notifications. See [template variables](#available-template-fields) below for the full list.
+> **Note**: The `bg_*` metadata fields (bird image URL, confidence, location, etc.) are populated for detection notifications. See the detection metadata fields in the [Webhook section](#2-webhook-custom-http) below for the full list.
 
 **Troubleshooting Discord**
 

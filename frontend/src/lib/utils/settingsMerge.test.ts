@@ -39,7 +39,8 @@ describe('mergeSettingsPatch', () => {
     );
     const result = mergeSettingsPatch({}, patch);
     expect(result).toEqual({ ok: 1 });
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    const probe: Record<string, unknown> = {};
+    expect(probe.polluted).toBeUndefined();
     expect(Object.hasOwn(result, 'constructor')).toBe(false);
     expect(Object.hasOwn(result, 'prototype')).toBe(false);
   });

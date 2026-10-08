@@ -179,6 +179,9 @@ func (m *ActionMockDatastore) GetNoteClipPath(_ string) (string, error) {
 func (m *ActionMockDatastore) GetNoteModelType(_ string) (string, error) {
 	return "bird", nil
 }
+func (m *ActionMockDatastore) GetNoteKeptSpectrogram(_ string) (clipName, modelType string, err error) {
+	return "", "bird", nil
+}
 func (m *ActionMockDatastore) DeleteNoteClipPath(_ string) error {
 	return nil
 }
@@ -275,6 +278,9 @@ func (m *ActionMockDatastore) GetLockedNotesClipPaths() ([]string, error) {
 	return nil, nil
 }
 func (m *ActionMockDatastore) ClearNoteClipPathsByNames(_ []string) (int64, error) {
+	return 0, nil
+}
+func (m *ActionMockDatastore) RetainNoteSpectrogramsByClipNames(_ []string) (int64, error) {
 	return 0, nil
 }
 func (m *ActionMockDatastore) GetNoteClipReferences(_ uint, _ int) ([]diskmanager.ClipReference, error) {

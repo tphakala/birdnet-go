@@ -1,6 +1,7 @@
-import { api } from '$lib/utils/api';
+import { api, ApiError } from '$lib/utils/api';
 import { loggers } from '$lib/utils/logger';
-import type { TranslationKey } from '$lib/i18n';
+import { t, type TranslationKey } from '$lib/i18n';
+import { toastActions } from '$lib/stores/toast';
 import type {
   StepLeaveHandler,
   StepStatus,
@@ -25,6 +26,8 @@ let stepStatus = $state<StepStatus>('loading');
 let isSaving = $state<boolean>(false);
 // i18n key of the error to show for the current step, or null
 let stepError = $state<TranslationKey | null>(null);
+// i18n key of why the current step is not valid, as reported by the step, or null
+let stepBlockedReason = $state<TranslationKey | null>(null);
 let previousVersion = $state<string | null>(null);
 let currentVersion = $state<string | null>(null);
 
@@ -46,6 +49,23 @@ let leaveHandler: StepLeaveHandler | null = null;
 let session = 0;
 
 const SAVE_FAILED_KEY: TranslationKey = 'wizard.errors.saveFailed';
+const SAVE_REJECTED_KEY: TranslationKey = 'wizard.errors.saveRejected';
+const SAVE_UNFINISHED_KEY: TranslationKey = 'wizard.errors.saveUnfinished';
+const HTTP_STATUS_BAD_REQUEST = 400;
+const HTTP_STATUS_UNPROCESSABLE = 422;
+
+/**
+ * The error message key for a failed step save: "not accepted" when the server
+ * answered 400 or 422, so the user is not told to check the connection after a
+ * validation refusal; the connection message for everything else.
+ */
+function saveErrorKey(err: unknown): TranslationKey {
+  const refused =
+    err instanceof ApiError &&
+    !err.isNetworkError &&
+    (err.status === HTTP_STATUS_BAD_REQUEST || err.status === HTTP_STATUS_UNPROCESSABLE);
+  return refused ? SAVE_REJECTED_KEY : SAVE_FAILED_KEY;
+}
 
 /**
  * How long Next, Back and Done ignore clicks after a step move, counted from
@@ -89,6 +109,7 @@ function resetStepFlags(): void {
   stepStatus = 'loading';
   isSaving = false;
   stepError = null;
+  stepBlockedReason = null;
   leaveHandler = null;
   clearStepMoveGuard();
 }
@@ -181,20 +202,41 @@ function setStepStatus(next: StepStatus, index: number): void {
   }
 }
 
-function setStepValid(valid: boolean, index: number = currentStepIndex): void {
+function setStepValid(
+  valid: boolean,
+  index: number = currentStepIndex,
+  reason?: TranslationKey
+): void {
   if (isActive && index === currentStepIndex) {
     isStepValid = valid;
+    stepBlockedReason = valid ? null : (reason ?? null);
   }
+}
+
+/**
+ * Tells the user that a step save which was still running when the wizard closed
+ * failed. The step is gone by then, so the failure is shown in a toast that stays
+ * until dismissed (a null duration), with the message of the step that started
+ * the save, or the generic one.
+ */
+function reportUnfinishedSave(step: WizardStep | null): void {
+  const key =
+    step?.type === 'component' && step.unfinishedSaveKey
+      ? step.unfinishedSaveKey
+      : SAVE_UNFINISHED_KEY;
+  toastActions.error(t(key), { duration: null });
 }
 
 // Runs the current step's leave handler, then move() if the wizard is still on
 // the same session and step. isSaving is set before the first await so a second
 // click in the same tick is refused; it stays true until move() runs, and move()
-// clears it in the same synchronous block that moves the step. A result that
-// belongs to another session or step never touches state.
+// clears it in the same synchronous block that moves the step. A failure that
+// belongs to another session or step is reported in a toast, for the step that
+// started the save, and never touches state.
 async function runLeave(move: () => void): Promise<void> {
   const startSession = session;
   const startIndex = currentStepIndex;
+  const startStep = currentStep;
   isSaving = true;
   stepError = null;
   const isStale = () => startSession !== session || startIndex !== currentStepIndex;
@@ -202,8 +244,10 @@ async function runLeave(move: () => void): Promise<void> {
     await leaveHandler?.();
   } catch (err) {
     loggers.ui.error('Wizard step save failed', err);
-    if (!isStale()) {
-      stepError = SAVE_FAILED_KEY;
+    if (isStale()) {
+      reportUnfinishedSave(startStep);
+    } else {
+      stepError = saveErrorKey(err);
       isSaving = false;
     }
     return;
@@ -225,12 +269,7 @@ async function next(): Promise<void> {
 
 async function back(): Promise<void> {
   if (!canGoBack || isStepMoveGuarded()) return;
-  // An invalid step has nothing safe to save; its edits are discarded.
-  if (isStepValid) {
-    await runLeave(() => moveBy(-1));
-  } else {
-    moveBy(-1);
-  }
+  await runLeave(() => moveBy(-1));
 }
 
 function skip(): void {
@@ -273,6 +312,9 @@ export const wizardState = {
   },
   get isStepValid() {
     return isStepValid;
+  },
+  get stepBlockedReason() {
+    return stepBlockedReason;
   },
   get stepStatus() {
     return stepStatus;

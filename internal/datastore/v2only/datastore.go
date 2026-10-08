@@ -1029,7 +1029,8 @@ func (ds *Datastore) Get(id string) (datastore.Note, error) {
 	return ds.detectionToNote(det), nil
 }
 
-// detectionToNote converts a v2 Detection to a legacy Note.
+// detectionToNote converts a v2 Detection to a legacy Note, including the runtime-only
+// SpectrogramClipName of a detection whose audio was removed but whose spectrogram was kept.
 // Common name is looked up from the name maps which are built at startup.
 func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 	// Guard against nil detection to prevent panics
@@ -1057,6 +1058,10 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 	clipName := ""
 	if det.ClipName != nil {
 		clipName = *det.ClipName
+	}
+	spectrogramClipName := ""
+	if det.SpectrogramClipName != nil {
+		spectrogramClipName = *det.SpectrogramClipName
 	}
 
 	lat := 0.0
@@ -1127,24 +1132,25 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 	}
 
 	note := datastore.Note{
-		ID:             det.ID,
-		Date:           dateStr,
-		Time:           timeStr,
-		ScientificName: scientificName,
-		CommonName:     commonName,
-		SpeciesCode:    ds.speciesCodeMap[scientificName],
-		Confidence:     det.Confidence,
-		Latitude:       lat,
-		Longitude:      lon,
-		ClipName:       clipName,
-		BeginTime:      beginTime,
-		EndTime:        endTime,
-		ProcessingTime: processingTime,
-		Source:         source,
-		Comments:       comments,
-		Unlikely:       det.Unlikely,
-		Verified:       verified,
-		Locked:         locked,
+		ID:                  det.ID,
+		Date:                dateStr,
+		Time:                timeStr,
+		ScientificName:      scientificName,
+		CommonName:          commonName,
+		SpeciesCode:         ds.speciesCodeMap[scientificName],
+		Confidence:          det.Confidence,
+		Latitude:            lat,
+		Longitude:           lon,
+		ClipName:            clipName,
+		SpectrogramClipName: spectrogramClipName,
+		BeginTime:           beginTime,
+		EndTime:             endTime,
+		ProcessingTime:      processingTime,
+		Source:              source,
+		Comments:            comments,
+		Unlikely:            det.Unlikely,
+		Verified:            verified,
+		Locked:              locked,
 	}
 
 	// Populate model info from preloaded Model entity. ModelType is carried here
@@ -1216,6 +1222,11 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 		audioFilePath = *det.ClipName
 		hasAudio = true
 	}
+	spectrogramClipName := ""
+	if det.SpectrogramClipName != nil {
+		spectrogramClipName = *det.SpectrogramClipName
+	}
+	spectrogramOnly := datastore.IsSpectrogramOnly(audioFilePath, spectrogramClipName)
 
 	// Verification status from Review.
 	// Emit the same vocabulary the rest of the API speaks ("correct",
@@ -1262,23 +1273,24 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 	}
 
 	return datastore.DetectionRecord{
-		ID:             strconv.FormatUint(uint64(det.ID), 10),
-		Timestamp:      timestamp,
-		ScientificName: scientificName,
-		CommonName:     commonName,
-		Confidence:     det.Confidence,
-		Latitude:       lat,
-		Longitude:      lon,
-		Week:           week,
-		AudioFilePath:  audioFilePath,
-		Verified:       verified,
-		Locked:         locked,
-		Unlikely:       det.Unlikely,
-		HasAudio:       hasAudio,
-		Device:         device,
-		Source:         source,
-		TimeOfDay:      timeOfDay,
-		ModelType:      modelType,
+		ID:              strconv.FormatUint(uint64(det.ID), 10),
+		Timestamp:       timestamp,
+		ScientificName:  scientificName,
+		CommonName:      commonName,
+		Confidence:      det.Confidence,
+		Latitude:        lat,
+		Longitude:       lon,
+		Week:            week,
+		AudioFilePath:   audioFilePath,
+		Verified:        verified,
+		Locked:          locked,
+		Unlikely:        det.Unlikely,
+		HasAudio:        hasAudio,
+		SpectrogramOnly: spectrogramOnly,
+		Device:          device,
+		Source:          source,
+		TimeOfDay:       timeOfDay,
+		ModelType:       modelType,
 	}
 }
 
@@ -1779,6 +1791,44 @@ func (ds *Datastore) GetNoteModelType(noteID string) (string, error) {
 		return "", fmt.Errorf("invalid note ID for model type lookup: %w", err)
 	}
 	return ds.detection.GetModelType(ctx, id)
+}
+
+// GetNoteKeptSpectrogram returns, in one narrow query, the clip name a spectrogram
+// was kept under after retention removed the detection's audio (empty when there is
+// none) and the AI model type ("bird" when unknown). It returns
+// repository.ErrDetectionNotFound when the detection does not exist.
+func (ds *Datastore) GetNoteKeptSpectrogram(noteID string) (clipName, modelType string, err error) {
+	id, err := parseID(noteID)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid note ID for kept spectrogram lookup: %w", err)
+	}
+	prefix := ds.manager.TablePrefix()
+	detectionsTable := prefix + "detections"
+	modelsTable := prefix + "ai_models"
+
+	var row struct {
+		SpectrogramClipName *string `gorm:"column:spectrogram_clip_name"`
+		ModelType           *string `gorm:"column:model_type"`
+	}
+	err = ds.manager.DB().WithContext(context.Background()).Table(detectionsTable).
+		Select(detectionsTable+".spectrogram_clip_name, "+modelsTable+".model_type").
+		Joins("LEFT JOIN "+modelsTable+" ON "+modelsTable+".id = "+detectionsTable+".model_id").
+		Where(detectionsTable+".id = ?", id).
+		Take(&row).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", "", repository.ErrDetectionNotFound
+		}
+		return "", "", err
+	}
+	modelType = string(entities.ModelTypeBird)
+	if row.ModelType != nil && *row.ModelType != "" {
+		modelType = *row.ModelType
+	}
+	if row.SpectrogramClipName != nil {
+		clipName = *row.SpectrogramClipName
+	}
+	return clipName, modelType, nil
 }
 
 // DeleteNoteClipPath deletes the clip path for a note.
@@ -2510,20 +2560,23 @@ func (ds *Datastore) GetLockedNotesClipPaths() ([]string, error) {
 	return ds.detection.GetLockedClipPaths(ctx)
 }
 
+// clipNameBatchSize bounds the number of names per UPDATE to stay within SQLite's
+// parameter limit (999).
+const clipNameBatchSize = 500
+
 // ClearNoteClipPathsByNames clears the clip_name field for detections matching the given filenames.
-// Updates are batched to stay within SQLite's parameter limit (999).
+// It leaves spectrogram_clip_name alone. Updates are batched to stay within SQLite's parameter limit (999).
 func (ds *Datastore) ClearNoteClipPathsByNames(clipNames []string) (int64, error) {
 	if len(clipNames) == 0 {
 		return 0, nil
 	}
 
-	const batchSize = 500
 	var totalAffected int64
 	ctx := context.Background()
 	detectionsTable := ds.manager.TablePrefix() + "detections"
 
-	for i := 0; i < len(clipNames); i += batchSize {
-		end := min(i+batchSize, len(clipNames))
+	for i := 0; i < len(clipNames); i += clipNameBatchSize {
+		end := min(i+clipNameBatchSize, len(clipNames))
 		batch := clipNames[i:end]
 
 		result := ds.manager.DB().WithContext(ctx).
@@ -2532,6 +2585,39 @@ func (ds *Datastore) ClearNoteClipPathsByNames(clipNames []string) (int64, error
 			Update("clip_name", nil)
 		if result.Error != nil {
 			return totalAffected, fmt.Errorf("failed to clear clip paths for %d names: %w", len(batch), result.Error)
+		}
+		totalAffected += result.RowsAffected
+	}
+
+	return totalAffected, nil
+}
+
+// RetainNoteSpectrogramsByClipNames moves clip_name into spectrogram_clip_name for
+// detections matching the given filenames and clears clip_name, so a spectrogram
+// render that outlives its audio stays reachable. Updates are batched to stay
+// within SQLite's parameter limit (999). Rows already moved no longer match
+// clip_name, so a rerun changes nothing.
+func (ds *Datastore) RetainNoteSpectrogramsByClipNames(clipNames []string) (int64, error) {
+	if len(clipNames) == 0 {
+		return 0, nil
+	}
+
+	var totalAffected int64
+	ctx := context.Background()
+	detectionsTable := ds.manager.TablePrefix() + "detections"
+	// Raw SQL on purpose: the SET order is load-bearing. GORM sorts the keys of an
+	// Updates(map) call, which would emit clip_name = NULL first, and MySQL
+	// evaluates single-table assignments left to right, so spectrogram_clip_name
+	// would then be copied from the already-cleared column and the link lost.
+	query := "UPDATE " + detectionsTable + " SET spectrogram_clip_name = clip_name, clip_name = NULL WHERE clip_name IN ?"
+
+	for i := 0; i < len(clipNames); i += clipNameBatchSize {
+		end := min(i+clipNameBatchSize, len(clipNames))
+		batch := clipNames[i:end]
+
+		result := ds.manager.DB().WithContext(ctx).Exec(query, batch)
+		if result.Error != nil {
+			return totalAffected, fmt.Errorf("failed to retain spectrogram clip names for %d names: %w", len(batch), result.Error)
 		}
 		totalAffected += result.RowsAffected
 	}

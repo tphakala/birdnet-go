@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { deferred } from '../../test/async-helpers';
 
 vi.mock('$lib/utils/api', () => ({
   api: { get: vi.fn(), post: vi.fn() },
@@ -22,14 +23,6 @@ function status(restartRequired: boolean): Status {
     restart_required: restartRequired,
     restart_reasons: restartRequired ? ['audio'] : [],
   };
-}
-
-function deferred<T>() {
-  let resolve: (value: T) => void = () => {};
-  const promise = new Promise<T>(res => {
-    resolve = res;
-  });
-  return { promise, resolve };
 }
 
 describe('fetchRestartStatus', () => {

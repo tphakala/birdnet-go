@@ -33,7 +33,7 @@ const nonFiniteConfidence = 0
 
 // lastParseErrorCount remembers the unparseable-file count from the previous
 // scan so the summary warning fires when the situation changes rather than on
-// every check interval.
+// every cleanup run.
 //
 //nolint:gochecknoglobals // scan-to-scan log dedup state, see GetAudioFilesContext
 var lastParseErrorCount atomic.Int64
@@ -75,6 +75,9 @@ type FileInfo struct {
 type Interface interface {
 	GetLockedNotesClipPaths() ([]string, error)
 	ClearNoteClipPathsByNames(clipNames []string) (int64, error)
+	// RetainNoteSpectrogramsByClipNames clears clip_name like ClearNoteClipPathsByNames
+	// and records the name as the clip a kept spectrogram render belongs to.
+	RetainNoteSpectrogramsByClipNames(clipNames []string) (int64, error)
 }
 
 // LoadPolicy loads the cleanup policies from a CSV file
@@ -330,7 +333,7 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 	// Files that failed to parse are excluded from every retention policy, so an
 	// operator whose disk keeps filling needs to see this at the default log
 	// level, not only with diskmanager debug logging enabled. The scan repeats
-	// every check interval and a foreign file never goes away by itself, so warn
+	// every cleanup run and a foreign file never goes away by itself, so warn
 	// only when the count changes and demote the steady-state repeats to debug.
 	if state.parseErrorCount > 0 {
 		summary := log.Debug

@@ -33,6 +33,7 @@
   {confirmLabel}
   {cancelLabel}
   {confirmVariant}
+  describeBody
   {onClose}
   {onConfirm}
   className="modal-bottom sm:modal-middle"

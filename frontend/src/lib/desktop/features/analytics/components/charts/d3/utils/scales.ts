@@ -125,7 +125,7 @@ export function getNiceTicks(domain: [number, number], targetTicks = 5): number[
 export function formatTick(value: number | Date, type: 'number' | 'time' | 'hour'): string {
   switch (type) {
     case 'number':
-      return numberFormat('.0f')(value as number);
+      return numberFormat('.0f')(value);
     case 'time':
       return timeFormat('%b %d')(value as Date);
     case 'hour': {

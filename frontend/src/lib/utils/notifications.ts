@@ -173,7 +173,7 @@ export function mapApiNotification(notification: NotificationInput): Notificatio
   return {
     ...notification,
     read: notification.status === 'read' || notification.status === 'acknowledged',
-  } as Notification;
+  };
 }
 
 /**
@@ -523,7 +523,7 @@ export function getDisplayableContext(
     ) {
       continue;
     }
-    // Skip objects/arrays — only display scalar values
+    // Skip objects/arrays, only display scalar values
     if (typeof value === 'object') {
       continue;
     }

@@ -71,7 +71,7 @@ When eBird is enabled, the species endpoint includes taxonomy information:
 The eBird client caches API responses to improve performance and reduce API usage:
 
 - Default cache TTL: 24 hours (configurable)
-- Cache is automatically cleaned up
+- Expired entries are dropped when read, in a bounded sweep on writes, and when the item count is taken
 - Taxonomy data rarely changes, so longer cache times are recommended
 
 ## Error Handling

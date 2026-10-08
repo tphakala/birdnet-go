@@ -15,7 +15,11 @@
 <script lang="ts">
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import { t } from '$lib/i18n';
+  import { generateId } from '$lib/utils/uuid';
   import { AlertTriangle, Loader2 } from '@lucide/svelte';
+
+  // Describe the dialog by the message only: the body also holds the checkbox label.
+  const messageId = generateId('confirm-message');
 
   interface Props {
     open: boolean;
@@ -51,21 +55,22 @@
   closeOnEsc={!isLoading}
   showCloseButton={false}
   loading={isLoading}
+  aria-describedby={messageId}
   onClose={onCancel}
 >
-  {#snippet header()}
+  {#snippet header({ titleId })}
     <div class="flex items-center gap-4 mb-6">
       <div class="p-3 rounded-full bg-[var(--color-warning)]/10">
         <AlertTriangle class="size-7 text-[var(--color-warning)]" />
       </div>
-      <h3 id="modal-title" class="text-xl font-semibold text-[var(--color-base-content)]">
+      <h3 id={titleId} class="text-xl font-semibold text-[var(--color-base-content)]">
         {t('system.database.migration.confirmDialog.title')}
       </h3>
     </div>
   {/snippet}
 
   {#snippet children()}
-    <p class="text-base text-[var(--color-base-content)]/80 mb-6 leading-relaxed">
+    <p id={messageId} class="text-base text-[var(--color-base-content)]/80 mb-6 leading-relaxed">
       {t('system.database.migration.confirmDialog.message')}
     </p>
 

@@ -25,16 +25,17 @@ function createMockDetection(overrides: Partial<Detection> = {}): Detection {
     id: 123,
     date: '2024-01-15',
     time: '10:30:00',
+    beginTime: '2024-01-15T10:30:00',
+    endTime: '2024-01-15T10:30:03',
+    speciesCode: 'amerob',
     commonName: 'American Robin',
     scientificName: 'Turdus migratorius',
     confidence: 0.85,
+    verified: 'unverified',
     locked: false,
-    sourceType: 'microphone',
-    sourceName: 'default',
     clipName: 'clip_001.wav',
-    spectrogramPath: '/spectrograms/clip_001.png',
     ...overrides,
-  } as Detection;
+  };
 }
 
 async function openMenuAndClick(itemName: RegExp) {
@@ -168,5 +169,60 @@ describe('DetectionRow recording cell gating', () => {
     });
 
     expect(container.querySelector('.spectrogram-player')).toBeNull();
+  });
+
+  // Retention removed the audio but kept the image: show the image only.
+  it('renders a plain spectrogram image, without a player, for a spectrogram-only detection', () => {
+    const { container } = render(DetectionRow, {
+      props: {
+        detection: createMockDetection({ id: 603, clipName: '', spectrogramOnly: true }),
+        showRecordingColumn: true,
+      },
+    });
+
+    expect(container.querySelector('.spectrogram-player')).toBeNull();
+    const img = container.querySelector('img.spectrogram-img');
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute('src')).toContain('/api/v2/spectrogram/603?size=md&raw=true');
+  });
+
+  it('caps the spectrogram-only image at the width of the player it replaces', () => {
+    const { container } = render(DetectionRow, {
+      props: {
+        detection: createMockDetection({ id: 606, clipName: '', spectrogramOnly: true }),
+        showRecordingColumn: true,
+      },
+    });
+
+    const imageContainer = container.querySelector('.spectrogram-image-container');
+    expect(imageContainer).not.toBeNull();
+    expect(imageContainer?.classList.contains('max-w-[200px]')).toBe(true);
+  });
+
+  it('omits the download action for a spectrogram-only detection', async () => {
+    render(DetectionRow, {
+      props: {
+        detection: createMockDetection({ id: 604, clipName: '', spectrogramOnly: true }),
+        showRecordingColumn: true,
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+
+    expect(screen.queryByRole('menuitem', { name: /download/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps the player for a detection that still has audio even if flagged spectrogram-only', () => {
+    const { container } = render(DetectionRow, {
+      props: {
+        detection: createMockDetection({
+          id: 605,
+          clipName: 'clip_605.wav',
+          spectrogramOnly: true,
+        }),
+      },
+    });
+
+    expect(container.querySelector('.spectrogram-player')).not.toBeNull();
   });
 });

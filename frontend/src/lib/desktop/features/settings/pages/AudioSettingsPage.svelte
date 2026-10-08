@@ -464,7 +464,7 @@
       });
     }
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, sources },
+      audio: { ...settings.audio, sources },
     });
   }
 
@@ -482,7 +482,7 @@
 
   function updateExportEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, export: { ...settings.audio.export, enabled } },
+      audio: { ...settings.audio, export: { ...settings.audio.export, enabled } },
     });
   }
 
@@ -490,7 +490,7 @@
     const nextBitrate = chooseBitrateForFormat(type, settings.audio.export.bitrate ?? '');
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: { ...settings.audio.export, type, bitrate: nextBitrate },
       },
     });
@@ -499,7 +499,7 @@
   function updateUltrasonicExportFormat(ultrasonicType: LosslessExportFormat) {
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: { ...settings.audio.export, ultrasonicType },
       },
     });
@@ -510,7 +510,7 @@
 
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: { ...settings.audio.export, bitrate: formattedBitrate },
       },
     });
@@ -520,7 +520,7 @@
   function updateRetentionPolicy(policy: string) {
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, policy },
@@ -532,7 +532,7 @@
   function updateRetentionMaxAge(maxAge: string) {
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, maxAge },
@@ -544,7 +544,7 @@
   function updateRetentionMaxUsage(maxUsage: string) {
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, maxUsage },
@@ -556,7 +556,7 @@
   function updateRetentionMinClips(minClips: number) {
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, minClips },
@@ -568,7 +568,7 @@
   function updateRetentionKeepSpectrograms(keepSpectrograms: boolean) {
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, keepSpectrograms },
@@ -641,7 +641,7 @@
 
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         equalizer: transformedSettings,
       },
     });
@@ -810,7 +810,7 @@
             onchange={() =>
               settingsActions.updateSection('realtime', {
                 audio: {
-                  ...$audioSettings!,
+                  ...settings.audio,
                   export: {
                     ...settings.audio.export,
                     normalization: {
@@ -848,7 +848,7 @@
                   onUpdate={value =>
                     settingsActions.updateSection('realtime', {
                       audio: {
-                        ...$audioSettings!,
+                        ...settings.audio,
                         export: {
                           ...settings.audio.export,
                           normalization: {
@@ -886,7 +886,7 @@
                   onUpdate={value =>
                     settingsActions.updateSection('realtime', {
                       audio: {
-                        ...$audioSettings!,
+                        ...settings.audio,
                         export: {
                           ...settings.audio.export,
                           normalization: {
@@ -952,7 +952,7 @@
           onchange={enabled =>
             settingsActions.updateSection('realtime', {
               audio: {
-                ...$audioSettings!,
+                ...settings.audio,
                 soundLevel: {
                   ...settings.audio.soundLevel,
                   enabled,
@@ -983,7 +983,7 @@
                 onUpdate={value =>
                   settingsActions.updateSection('realtime', {
                     audio: {
-                      ...$audioSettings!,
+                      ...settings.audio,
                       soundLevel: { ...settings.audio.soundLevel, interval: value },
                     },
                   })}
@@ -1087,7 +1087,7 @@
                   if (settings.audio.export.preCapture > maxPreCapture) {
                     settingsActions.updateSection('realtime', {
                       audio: {
-                        ...$audioSettings!,
+                        ...settings.audio,
                         export: {
                           ...settings.audio.export,
                           length: value,
@@ -1098,7 +1098,7 @@
                   } else {
                     settingsActions.updateSection('realtime', {
                       audio: {
-                        ...$audioSettings!,
+                        ...settings.audio,
                         export: { ...settings.audio.export, length: value },
                       },
                     });
@@ -1121,7 +1121,7 @@
                 onUpdate={value =>
                   settingsActions.updateSection('realtime', {
                     audio: {
-                      ...$audioSettings!,
+                      ...settings.audio,
                       export: { ...settings.audio.export, preCapture: value },
                     },
                   })}
@@ -1144,7 +1144,7 @@
                 onUpdate={value =>
                   settingsActions.updateSection('realtime', {
                     audio: {
-                      ...$audioSettings!,
+                      ...settings.audio,
                       export: { ...settings.audio.export, gain: value },
                     },
                   })}
@@ -1289,7 +1289,7 @@
               onchange={() =>
                 settingsActions.updateSection('realtime', {
                   audio: {
-                    ...$audioSettings!,
+                    ...settings.audio,
                     export: { ...settings.audio.export, path: settings.audio.export.path },
                   },
                 })}

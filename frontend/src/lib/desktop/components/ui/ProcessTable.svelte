@@ -130,13 +130,10 @@
   // PERFORMANCE OPTIMIZATION: Cache process display names with $derived
   // Avoid string processing in template for BirdNET-Go name transformation
   let processDisplayNames = $derived(
-    processes.reduce(
-      (acc, process) => {
-        acc[process.pid] = process.name === 'main' ? 'BirdNET-Go' : process.name;
-        return acc;
-      },
-      {} as Record<number, string>
-    )
+    processes.reduce<Record<number, string>>((acc, process) => {
+      acc[process.pid] = process.name === 'main' ? 'BirdNET-Go' : process.name;
+      return acc;
+    }, {})
   );
 
   function handleToggleChange() {

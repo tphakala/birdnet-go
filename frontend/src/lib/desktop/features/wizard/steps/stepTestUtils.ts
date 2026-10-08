@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { screen } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
 import type { Component } from 'svelte';
 import type { SettingsFormData } from '$lib/stores/settings';
@@ -7,16 +8,20 @@ import type { StepLeaveHandler, WizardStepProps } from '../types';
 
 /**
  * Renders a wizard step with a registerLeaveHandler spy and exposes the handler
- * it registered as leave().
+ * it registered as leave(). Extra props, such as an onValidChange spy, are merged
+ * into the step's props.
  */
-export function renderStep(StepComponent: Component<WizardStepProps>) {
+export function renderStep(
+  StepComponent: Component<WizardStepProps>,
+  props?: Omit<WizardStepProps, 'registerLeaveHandler'>
+) {
   let handler: StepLeaveHandler | undefined;
   const unregister = vi.fn();
   const registerLeaveHandler = vi.fn((h: StepLeaveHandler) => {
     handler = h;
     return unregister;
   });
-  const result = renderTyped(StepComponent, { props: { registerLeaveHandler } });
+  const result = renderTyped(StepComponent, { props: { ...props, registerLeaveHandler } });
   return {
     ...result,
     registerLeaveHandler,
@@ -57,6 +62,17 @@ export function createSettingsMock(formData: unknown) {
   return {
     settingsStore,
     StreamTypes: { RTSP: 'rtsp' },
+    // Same shape as the real constant, which audioSourceChoice.ts imports
+    defaultQuietHoursConfig: {
+      enabled: false,
+      mode: 'fixed',
+      startTime: '22:00',
+      endTime: '06:00',
+      startEvent: 'sunset',
+      startOffset: 0,
+      endEvent: 'sunrise',
+      endOffset: 0,
+    },
     settingsActions: {
       saveSection: vi.fn().mockResolvedValue(undefined),
       updateSection: vi.fn(),
@@ -64,3 +80,6 @@ export function createSettingsMock(formData: unknown) {
     },
   };
 }
+
+/** The step's option card with the given accessible name. */
+export const radio = (name: RegExp) => screen.getByRole('radio', { name });

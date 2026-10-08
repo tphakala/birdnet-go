@@ -212,7 +212,10 @@ func (m *mockStore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters
 }
 func (m *mockStore) GetNoteClipPath(noteID string) (string, error) { return "", nil }
 func (m *mockStore) GetNoteModelType(_ string) (string, error)     { return "bird", nil }
-func (m *mockStore) DeleteNoteClipPath(noteID string) error        { return nil }
+func (m *mockStore) GetNoteKeptSpectrogram(_ string) (clipName, modelType string, err error) {
+	return "", "bird", nil
+}
+func (m *mockStore) DeleteNoteClipPath(noteID string) error { return nil }
 func (m *mockStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]datastore.ClipForRemoval, error) {
 	return nil, nil
 }
@@ -255,6 +258,9 @@ func (m *mockStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
 func (m *mockStore) IsNoteLocked(noteID string) (bool, error)            { return false, nil }
 func (m *mockStore) GetLockedNotesClipPaths() ([]string, error)          { return nil, nil }
 func (m *mockStore) ClearNoteClipPathsByNames(_ []string) (int64, error) { return 0, nil }
+func (m *mockStore) RetainNoteSpectrogramsByClipNames(_ []string) (int64, error) {
+	return 0, nil
+}
 func (m *mockStore) GetNoteClipReferences(_ uint, _ int) ([]diskmanager.ClipReference, error) {
 	return nil, nil
 }

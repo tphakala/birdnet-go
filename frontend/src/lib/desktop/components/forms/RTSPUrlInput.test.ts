@@ -88,7 +88,7 @@ describe('RTSPUrlInput', () => {
       },
     });
 
-    const input = screen.getByPlaceholderText(/Enter RTSP URL/) as HTMLInputElement;
+    const input = screen.getByPlaceholderText<HTMLInputElement>(/Enter RTSP URL/);
     const addButton = screen.getByRole('button', { name: 'Add' });
 
     await fireEvent.input(input, { target: { value: 'rtsp://new.example.com/stream' } });

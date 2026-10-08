@@ -92,7 +92,7 @@ export function createSafeMap<V>(): Map<string, V>;
 // eslint-disable-next-line no-redeclare
 export function createSafeMap<V>(obj?: Record<string, V>): Map<string, V> {
   if (obj) {
-    return new Map(Object.entries(obj) as [string, V][]);
+    return new Map(Object.entries(obj));
   }
   return new Map<string, V>();
 }
@@ -217,12 +217,12 @@ export function safeSwitch<T>(key: string, cases: Record<string, T>, defaultValu
  * Prevents "Spread types may only be created from object types" errors
  */
 export function safeSpread<T extends object>(...objects: (T | undefined | null)[]): Partial<T> {
-  return objects.reduce((result, obj) => {
+  return objects.reduce<Partial<T>>((result, obj) => {
     if (obj != null && typeof obj === 'object') {
       return { ...result, ...obj };
     }
     return result;
-  }, {} as Partial<T>);
+  }, {});
 }
 
 /**

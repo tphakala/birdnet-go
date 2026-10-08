@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * MiniSpectrogram — Compact live spectrogram widget for the dashboard
+   * MiniSpectrogram: Compact live spectrogram widget for the dashboard
    *
    * Displays a real-time scrolling waterfall spectrogram of the first available
    * audio source. Manages its own HLS.js connection, heartbeat, and access control.
@@ -214,7 +214,8 @@
 
       if (signal.aborted) return;
 
-      activeStreamToken = data.stream_token;
+      const streamToken = data.stream_token;
+      activeStreamToken = streamToken;
       const hlsUrl = buildAppUrl(data.playlist_url);
 
       audioElement = new globalThis.Audio();
@@ -230,15 +231,15 @@
           try {
             await audioElement?.play();
           } catch {
-            /* autoplay blocked — spectrogram still renders */
+            /* autoplay blocked, spectrogram still renders */
           }
           if (signal.aborted) return;
 
-          // Mark as active BEFORE spectro.connect() — the connect may hang
+          // Mark as active BEFORE spectro.connect(), the connect may hang
           // if AudioContext.resume() blocks on autoplay policy (no user gesture
           // on page reload). The spectrogram canvas will show black until the
           // context resumes, which is better than an infinite spinner.
-          startHeartbeat(activeStreamToken!);
+          startHeartbeat(streamToken);
           isActive = true;
           isConnecting = false;
           persistToggleState(true);
@@ -271,8 +272,8 @@
         }
         if (signal.aborted || !audioElement) return;
 
-        // Mark active before spectro.connect() — see MANIFEST_PARSED comment above
-        startHeartbeat(activeStreamToken!);
+        // Mark active before spectro.connect(), see MANIFEST_PARSED comment above
+        startHeartbeat(streamToken);
         isActive = true;
         isConnecting = false;
         persistToggleState(true);
@@ -282,7 +283,7 @@
           spectro.disconnect();
         }
       } else {
-        // Browser supports neither HLS.js nor native HLS — tear down
+        // Browser supports neither HLS.js nor native HLS, tear down
         logger.warn('MiniSpectrogram: browser does not support HLS');
         stop();
         return;
@@ -386,7 +387,7 @@
   }
 
   // Diff incoming pending detections and queue new labels.
-  // Always update prevSnapshot — even when pendingDetections is empty — so
+  // Always update prevSnapshot (even when pendingDetections is empty) so
   // stale species are cleared after detections stop.
   $effect(() => {
     if (!activeSourceId) return;

@@ -3272,7 +3272,11 @@
         "enable": "Enable BirdWeather Uploads",
         "token": {
           "label": "BirdWeather token",
-          "helpText": "Your unique BirdWeather token."
+          "helpText": "Your unique BirdWeather token.",
+          "errors": {
+            "required": "Enter your BirdWeather token, or turn BirdWeather off.",
+            "format": "A BirdWeather token is 24 letters and digits."
+          }
         },
         "threshold": {
           "label": "Upload Threshold",
@@ -5188,6 +5192,13 @@
       "viewDetections": "View {name} detections",
       "largeView": "Large view of {name}",
       "clickToView": "Click to view detections"
+    },
+    "locationMap": {
+      "mapLabel": "Map for selecting station location",
+      "expandedMapLabel": "Full screen map for selecting station location",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "expand": "Expand map to full screen"
     }
   },
   "connectivity": {
@@ -5357,8 +5368,11 @@
     },
     "errors": {
       "saveFailed": "Could not save this step. Check the connection and try again, or skip setup and change this later in Settings.",
+      "saveRejected": "The settings on this step were not accepted. Check the values and try again, or skip setup and change this later in Settings.",
       "stepLoadFailed": "This step could not be loaded. Press Retry, or reload the page.",
-      "stepLoadFailedReload": "This step still could not be loaded. Reload the page to try again; choices saved on earlier steps are kept."
+      "stepLoadFailedReload": "This step still could not be loaded. Reload the page to try again; choices saved on earlier steps are kept.",
+      "audioSourceSaveUnfinished": "The audio source change did not finish. Check the audio sources in Settings > Audio.",
+      "saveUnfinished": "Some changes from setup were not saved. Check them in Settings."
     },
     "reasons": {
       "completeStep": "Complete this step to continue."
@@ -5366,6 +5380,7 @@
     "leaveConfirm": {
       "title": "Leave setup?",
       "message": "Setup will not open again. Choices saved on earlier steps are kept; changes on this step are not saved. You can change everything later in Settings.",
+      "messageSaving": "Setup will not open again. Choices saved on earlier steps are kept. This step is still saving, and some or all of its changes may not be kept. You can change everything later in Settings.",
       "stay": "Keep setting up",
       "leave": "Leave setup"
     },
@@ -5413,7 +5428,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
         "additionalSourcesHint": "You can add more audio sources later in Settings.",
-        "configureLater": "Skip - configure later"
+        "devicesLoadFailed": "Could not list the audio devices on this system.",
+        "useStreamInstead": "Use an RTSP stream instead",
+        "setUpLater": "Set up audio later",
+        "setUpLaterChosen": "Audio will not be set up now. Add a sound card or stream later in Settings.",
+        "streamReplacesSoundCards": "Sound cards stop capturing when you use a stream. You can add them again in Settings.",
+        "soundCardReplacesStream": "The stream shown on the stream option is turned off when you use a sound card. You can turn it on again in Settings.",
+        "reasons": {
+          "chooseDevice": "Choose an audio device, or set up audio later.",
+          "devicesFailed": "Audio devices could not be listed. Retry, use a stream, or set up audio later.",
+          "noDevices": "No audio device found. Use a stream, or set up audio later.",
+          "enterUrl": "Enter the stream URL, or set up audio later.",
+          "urlScheme": "Enter a complete stream URL that starts with rtsp:// or rtsps:// and has no spaces."
+        }
       },
       "detection": {
         "title": "Detection Threshold",
@@ -5425,6 +5452,7 @@
         "highAccuracyDesc": "Fewer false positives, may miss some birds",
         "highSensitivity": "High Sensitivity",
         "highSensitivityDesc": "More detections, more false positives",
+        "descriptionStored": "Choose how strict the bird identification should be. Current: {threshold}, matches no preset.",
         "threshold": "Confidence threshold",
         "fpFilterNote": "Once your system is running and proven, you can enable the false positive filter in Settings to further reduce incorrect detections."
       },
@@ -5434,10 +5462,12 @@
         "privacyFilterHelp": "Filters out detections when human voices are detected near the microphone",
         "birdweatherLabel": "Share detections with BirdWeather",
         "birdweatherHelp": "Contribute your bird detections to the BirdWeather community network",
-        "birdweatherIdLabel": "BirdWeather Station ID",
-        "birdweatherIdPlaceholder": "Enter your BirdWeather station ID",
         "errorReportingLabel": "Send anonymous error reports",
-        "errorReportingHelp": "Help improve BirdNET-Go by sending anonymous error reports when something goes wrong"
+        "errorReportingHelp": "Help improve BirdNET-Go by sending anonymous error reports when something goes wrong",
+        "reasons": {
+          "enterToken": "Enter your BirdWeather token, or turn off sharing with BirdWeather.",
+          "tokenFormat": "A BirdWeather token is 24 letters and digits."
+        }
       },
       "responsibleUse": {
         "title": "Using BirdNET-Go Responsibly",

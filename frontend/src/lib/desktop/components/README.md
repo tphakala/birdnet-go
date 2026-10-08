@@ -58,10 +58,11 @@ This folder contains **shared components** used across the application. Feature-
 
 ## Forms
 
-- `Checkbox.svelte` - Checkbox input with label
+- `Checkbox.svelte` - Checkbox input with label (`labelClassName` replaces the label's default `py-1`; its base classes `flex items-center justify-start cursor-pointer` always stay and are not merged with conflicting utilities)
 - `DateRangePicker.svelte` - Date range selection
 - `FormField.svelte` - Form field wrapper with validation
 - `InlineSlider.svelte` - Inline slider input for compact layouts
+- `LocationMap.svelte` - Map for picking a station location (click or drag the pin, coordinates rounded to 3 decimals), with zoom buttons, Ctrl/Cmd+wheel zoom and an expand button opening a full screen map in a dialog portalled into the surrounding dialog or the page body. `onLocationChange` fires only for a click or pin drag, never for prop changes. Required props: `latitude`, `longitude`, `locationSet` (pin shown), `onLocationChange`, `title` (expanded dialog heading). Optional props (defaults reproduce the settings page map): `ready=true` (build the map once true), `mapClass='h-[350px]'`, `controls='below'|'overlay'` (button placement), `pinchZoom=false` (two-finger zoom, rotation stays off), `doubleTapZoomKeepsPin=false` (a pick waits 300 ms and is dropped when a double click, double tap or zoom gesture follows), `startView='region'|'world'` (the start zoom is chosen when the inline map is created and depends on whether the coordinates are set (not 0,0): 11 when set, else 5 for `region` or 1 for `world`; the expanded map starts at the inline map's current zoom; `world` also raises the zoom to at least 11 when a first location arrives through the `latitude` and `longitude` props with `locationSet` true and no pin yet, a click does not), `className`. Map logic lives in `locationMapController.ts`
 - `NumberField.svelte` - Number input field
 - `PasswordField.svelte` - Password input with show/hide
 - `RTSPUrlInput.svelte` - RTSP URL input with validation
@@ -76,13 +77,14 @@ This folder contains **shared components** used across the application. Feature-
 - `StreamChannelControls.svelte` - Adaptive channel handling UI (format display, downmix/left/right selector, stereo energy analysis) shared by the stream add and edit forms
 - `StreamManager.svelte` - Manage multiple video/audio streams
 - `SubnetInput.svelte` - Subnet input with validation
-- `TextInput.svelte` - Text input field
-- `ToggleField.svelte` - Toggle/switch field
+- `TextInput.svelte` - Text input field; `error` shows an alert and marks the input invalid, `reserveErrorSpace` keeps two lines for that alert so nothing below moves
+- `ToggleField.svelte` - Toggle/switch field; `variant="card"` draws a bordered card that toggles as a whole (icon turns primary while on)
 
 ## Media
 
 - `AudioPlayer.svelte` - Audio playback controls with spectrogram
 - `SpectrogramPlayer.svelte` - Compact spectrogram player for table rows (play overlay + progress bar)
+- `SpectrogramImage.svelte` - Image-only spectrogram for detections whose audio was removed by retention (no player, no download)
 
 ## Modals
 
@@ -101,7 +103,7 @@ This folder contains **shared components** used across the application. Feature-
 - `ActionMenu.svelte` - Dropdown action menu
 - `AudioLevelIndicator.svelte` - Audio level visualization
 - `Badge.svelte` - Status/count badges
-- `Button.svelte` - Reusable button with variant (default, primary, success, warning, error, ghost) and size (xs, sm, md, lg) support
+- `Button.svelte` - Reusable button with variant (default, primary, success, warning, error, ghost) and size (xs, sm, md, lg) support, a bindable `ref` to the `<button>`, aria-disabled styling that keeps the button focusable, and a shared keyboard focus ring
 - `Card.svelte` - Generic card container
 - `CollapsibleCard.svelte` - Collapsible card container
 - `CollapsibleSection.svelte` - Collapsible content section
@@ -119,6 +121,7 @@ This folder contains **shared components** used across the application. Feature-
 - `ProcessTable.svelte` - Process status table
 - `ProgressBar.svelte` - Progress bar indicator
 - `ProgressCard.svelte` - Progress display card
+- `RadioCardGroup.svelte` - Card-style radio group with one Tab stop and arrow-key selection (WAI-ARIA radio pattern)
 - `SearchBox.svelte` - Search input box
 - `Select.svelte` - Select dropdown
 - `SelectionToolbar.svelte` - Sticky toolbar for multiselect list views (selection count, select-all banner, action slot)

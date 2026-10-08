@@ -2,7 +2,7 @@ package telemetry
 
 import (
 	"context"
-	"fmt" // Using fmt instead of errors package to avoid circular dependencies
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"

@@ -17,10 +17,19 @@ noted. Frontend test rules are in the Testing section below (the root
 
 ## Critical Rules
 
+- **Desktop and tablet only; mobile is out of scope (maintainer decision).** Never
+  optimize, fix, screenshot-test or file issues for phone viewports, and never
+  add phone-specific layouts or workarounds. UI test passes cover desktop and
+  iPad sizes only. See the root `AGENTS.md`.
 - **NEVER use `any`.** Type it, or use `unknown` plus a type guard. Tests are the
   only exception (see Testing below).
 - **NEVER use type or non-null assertions to silence the compiler**
-  (`value as string`, `value!`). Check for `undefined` instead.
+  (`value as string`, `value!`). Check for `undefined`, narrow with a type
+  guard or a discriminant, annotate the variable, or pass a type argument
+  (`getByRole<HTMLInputElement>(...)`). Never assert an object literal
+  (`{ ... } as T`): it skips the missing and excess property checks, so use
+  `satisfies T` or an annotated const. ESLint enforces the object literal,
+  non-null and redundant assertion rules, in `.svelte` files too.
 - **NEVER write inline SVGs.** Use `@lucide/svelte` icons.
 - **NEVER use `toISOString()` for dates.** It converts to UTC; use
   `getLocalDateString()` / `getLocalTimeString()` from `$lib/utils/date`.
@@ -131,6 +140,13 @@ const value = map.get(key);
 if (value !== undefined) {
   use(value);
 }
+
+// Narrow a union by its discriminant instead of asserting its payload
+type Action = ['type', string] | ['toggle'];
+if (action[0] === 'type') typeToken(action[1]);
+
+// Check a literal against a type without widening it
+const fallback = { enabled: false, id: '' } satisfies Partial<BirdWeatherSettings>;
 
 // ?? for defaults: only null/undefined fall through
 const items = data.items ?? [];
@@ -244,7 +260,12 @@ Theme colours are written as CSS variables in arbitrary values
 - Every state (loading, saving, validating, error, success) has a visible,
   labelled indicator; a bare spinner is not enough. Fetching, saving and
   processing are distinct states with distinct labels.
-- Validation errors appear next to the offending field with the specific reason.
+- Validation errors appear next to the offending field with the specific
+  reason, including a required field left empty. Show the error once the field
+  is left or a submit is attempted, clear it when the user edits the field, and
+  set `aria-invalid` plus `aria-describedby` pointing at the message. A reason
+  shown on a disabled button does not replace the field message; a form needs
+  both.
 - Destructive actions confirm with context: what will be deleted and what else
   is affected.
 - Empty states explain how to populate them.
@@ -335,4 +356,10 @@ change a rule, confirm it fires on a file that contains a guaranteed match.
   comment saying why. Prefer `unknown`, or define a local
   `type DeepPartial<T> = { [K in keyof T]?: DeepPartial<T[K]> }` for partial
   fixtures.
+- Tests follow the assertion rule too. Build complete typed fixtures
+  (`satisfies T`, an annotated const, or a factory taking overrides) and narrow
+  unions by their discriminant instead of asserting. A fixture that is
+  deliberately partial or malformed (a mock of a large interface such as an
+  Event or a DOM node) may use `as unknown as T`, with one comment per block
+  saying why.
 - Put component tests next to the component (`Component.test.ts`).

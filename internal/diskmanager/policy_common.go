@@ -2,7 +2,9 @@
 package diskmanager
 
 import (
+	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,14 +16,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/formatutil"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"github.com/tphakala/birdnet-go/internal/spectrogram/specfile"
 )
 
-// deletionThrottleDelay is the delay between file deletions to prevent I/O overload
-const deletionThrottleDelay = 100 * time.Millisecond
-
-// maxDeletionsPerRun limits the number of files deleted in a single cleanup run
-// to prevent excessive I/O impact and allow other processes to use the disk
-const maxDeletionsPerRun = 1000
+// errFileAlreadyGone is returned by deleteAudioFile when the audio file no
+// longer exists, for example because it was removed between the scan and the
+// deletion attempt. It is not a failure of the cleanup: the clip is gone.
+var errFileAlreadyGone = errors.NewStd("audio file already gone")
 
 // configKeyRetentionMaxUsage is the config key for the retention max usage percentage setting
 const configKeyRetentionMaxUsage = "retention.max_usage"
@@ -172,6 +173,12 @@ func deleteAudioFile(file *FileInfo, policy string) error {
 	}
 
 	err := os.Remove(file.Path)
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		log.Debug("Audio file already gone, nothing to delete",
+			logger.String("policy", policy),
+			logger.String("path", file.Path))
+		return errFileAlreadyGone
+	}
 	if err != nil {
 		// Create enhanced error with proper context
 		enhancedErr := errors.New(err).
@@ -250,14 +257,12 @@ func tryDeleteSpectrogram(pngPath, variant, policy string, log logger.Logger) in
 
 // deleteFileAndOptionalSpectrogram handles the deletion of the audio file
 // and its associated spectrogram with enhanced error handling, metrics, and timing.
+// It returns errFileAlreadyGone, without touching the spectrogram, when the audio file no longer exists.
 func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectrograms bool, policy string) error {
 	log := GetLogger()
 
 	// Start timing the operation
 	startTime := time.Now()
-
-	// Throttle slightly before deletion
-	time.Sleep(deletionThrottleDelay)
 
 	// Log intent before deleting
 	log.Debug("Deleting file based on policy",
@@ -270,6 +275,9 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 
 	// Delete the audio file (reuse common helper)
 	if err := deleteAudioFile(file, policy); err != nil {
+		if errors.Is(err, errFileAlreadyGone) {
+			return err
+		}
 		// Record timing for failed operations
 		if m := getMetrics(); m != nil {
 			duration := time.Since(startTime).Seconds()
@@ -396,19 +404,31 @@ func categorizeFilePath(path string) string {
 	return "simple-filename"
 }
 
-// clearDeletedClipPaths removes stale clip_name references from the database
-// for files that were deleted from disk by the retention policy.
-// deletedPaths contains absolute file paths; baseDir is the audio export root
-// used to compute relative paths matching the clip_name format in the database.
-func clearDeletedClipPaths(db Interface, deletedPaths []string, baseDir, policy string) {
+// releaseDeletedClipPaths updates the database references of audio clips the
+// retention policy deleted from disk. deletedPaths contains absolute file paths;
+// baseDir is the audio export root used to compute relative paths matching the
+// clip_name format in the database.
+//
+// A non-empty clip_name means "the audio exists", so a deleted clip's clip_name is
+// cleared. When keepSpectrograms is on and a spectrogram render of the clip survived
+// on disk, the clip name is moved into spectrogram_clip_name instead, so the kept
+// image stays reachable. When it cannot be told whether a render survived (the
+// directory or an entry could not be read), or the move fails, the row is left
+// untouched: a cleared row is never visited by the reconcile pass again, while an
+// untouched one is re-linked or cleared by it on its next run.
+//
+// It returns how many rows were retained and how many were cleared.
+func releaseDeletedClipPaths(db Interface, deletedPaths []string, baseDir, policy string, keepSpectrograms bool) (retained, cleared int64) {
 	if len(deletedPaths) == 0 {
-		return
+		return 0, 0
 	}
 
 	log := GetLogger()
 
 	// Convert absolute file paths to relative clip names matching database format
-	clipNames := make([]string, 0, len(deletedPaths))
+	var retain, drop []string
+	uncertain := 0
+	dirCache := make(map[string][]os.DirEntry)
 	for _, absPath := range deletedPaths {
 		relPath, err := filepath.Rel(baseDir, absPath)
 		if err != nil {
@@ -418,27 +438,90 @@ func clearDeletedClipPaths(db Interface, deletedPaths []string, baseDir, policy 
 				logger.Error(err))
 			continue
 		}
-		clipNames = append(clipNames, filepath.ToSlash(relPath))
+		clipName := filepath.ToSlash(relPath)
+		state := renderAbsent
+		if keepSpectrograms {
+			state = hasKeptSpectrogram(absPath, dirCache)
+		}
+		switch state {
+		case renderPresent:
+			retain = append(retain, clipName)
+		case renderIndeterminate:
+			uncertain++ // neither retain nor clear: the reconcile pass decides
+		case renderAbsent:
+			drop = append(drop, clipName)
+		}
 	}
 
-	if len(clipNames) == 0 {
-		return
+	if len(retain) > 0 {
+		var err error
+		retained, err = db.RetainNoteSpectrogramsByClipNames(retain)
+		if err != nil {
+			// The rows keep clip_name, so the reconcile pass re-links the renders or
+			// clears the rows on its next run.
+			log.Warn("Failed to retain spectrogram references for deleted files, leaving them for the reconcile pass",
+				logger.String("policy", policy),
+				logger.Int("deleted_files", len(retain)),
+				logger.Error(err))
+			retained = 0
+		}
 	}
 
-	cleared, err := db.ClearNoteClipPathsByNames(clipNames)
-	if err != nil {
-		log.Warn("Failed to clear clip paths for deleted files",
+	if len(drop) > 0 {
+		var err error
+		cleared, err = db.ClearNoteClipPathsByNames(drop)
+		if err != nil {
+			log.Warn("Failed to clear clip paths for deleted files",
+				logger.String("policy", policy),
+				logger.Int("deleted_files", len(drop)),
+				logger.Error(err))
+			cleared = 0
+		}
+	}
+
+	if uncertain > 0 {
+		log.Warn("Could not tell whether a spectrogram render survived, leaving references for the reconcile pass",
 			logger.String("policy", policy),
-			logger.Int("deleted_files", len(clipNames)),
-			logger.Error(err))
-		return
+			logger.Int("deleted_files", uncertain))
 	}
 
-	if cleared > 0 {
-		log.Info("Cleared stale clip path references",
+	if cleared > 0 || retained > 0 {
+		// Runs once per batch, so the totals go to the run summary at Info.
+		log.Debug("Updated clip path references for deleted files",
 			logger.String("policy", policy),
+			logger.Int64("records_retained", retained),
 			logger.Int64("records_cleared", cleared),
-			logger.Int("files_deleted", len(clipNames)))
+			logger.Int("files_deleted", len(deletedPaths)))
+	}
+	return retained, cleared
+}
+
+// hasKeptSpectrogram reports whether a non-empty spectrogram render of the deleted
+// audio file audioPath is still on disk: renderPresent, renderAbsent, or
+// renderIndeterminate when the directory could not be listed or a matching entry
+// could not be inspected and no other render was found. dirCache holds one
+// directory listing per directory for the duration of a run. A missing directory
+// has no render; any other listing failure is indeterminate and is not cached.
+func hasKeptSpectrogram(audioPath string, dirCache map[string][]os.DirEntry) renderState {
+	dir := filepath.Dir(audioPath)
+	entries, seen := dirCache[dir]
+	if !seen {
+		read, err := os.ReadDir(dir)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return renderIndeterminate
+		}
+		entries = read
+		dirCache[dir] = entries
+	}
+	clipBase := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
+	found, indeterminate := specfile.Renders(entries, clipBase)
+	switch {
+	case len(found) > 0:
+		return renderPresent
+	case indeterminate:
+		return renderIndeterminate
+	default:
+		return renderAbsent
 	}
 }
 
@@ -493,7 +576,9 @@ func ShouldSkipUsageBasedCleanup(retention *conf.RetentionSettings, baseDir stri
 // prepareInitialCleanup fetches settings, audio files, and performs initial checks.
 // It returns the files, base directory, retention settings, and a boolean indicating if cleanup should proceed.
 // If proceed is false, it also returns a completed CleanupResult.
-func prepareInitialCleanup(db Interface) (files []FileInfo, baseDir string, retention conf.RetentionSettings, proceed bool, result CleanupResult) {
+// The directory walk is cancelled when quit closes; that is reported as a
+// no-action result, not as an error.
+func prepareInitialCleanup(quit <-chan struct{}, db Interface) (files []FileInfo, baseDir string, retention conf.RetentionSettings, proceed bool, result CleanupResult) {
 	settings := conf.Setting()
 	baseDir = settings.Realtime.Audio.Export.Path
 	retention = settings.Realtime.Audio.Export.Retention // Return the whole retention struct
@@ -517,7 +602,15 @@ func prepareInitialCleanup(db Interface) (files []FileInfo, baseDir string, rete
 		}
 	}
 
-	files, err := GetAudioFiles(baseDir, allowedFileTypes, db)
+	scanCtx, cancelScan := quitContext(quit)
+	defer cancelScan()
+	files, err := GetAudioFilesContext(scanCtx, baseDir, allowedFileTypes, db)
+	if errors.Is(err, context.Canceled) {
+		GetLogger().Info("cleanup interrupted by shutdown during scan",
+			logger.String("policy", retention.Policy),
+			logger.String("base_dir", baseDir))
+		return nil, baseDir, retention, false, CleanupResult{}
+	}
 	if err != nil {
 		// Try to get current disk usage for the result even if file listing failed
 		currentUsage, diskErr := GetDiskUsage(baseDir)
@@ -569,18 +662,24 @@ type CleanupResult struct {
 	Err             error // Any error that occurred during cleanup
 	ClipsRemoved    int   // Number of clips that were removed
 	DiskUtilization int   // Current disk utilization percentage after cleanup
+	// MoreWork reports that the run stopped before finishing (the retention
+	// settings changed, or its time budget ran out after it deleted at least one
+	// clip with deletable candidates left). The caller should schedule the next
+	// run soon instead of waiting the full check interval.
+	MoreWork bool
 }
 
 // cleanupStats accumulates per-run, per-file outcome counts for a cleanup pass.
-// It is purely observational: nothing here changes deletion behavior. It exists
-// so a cleanup run that deletes nothing can be diagnosed from an INFO-level log
-// line (or a support dump) without asking the user to enable Debug logging and
-// reproduce, e.g. GitHub #3892 and #4059 where zero deletions had no visible
-// explanation in the default log output.
+// Apart from MoreWork, which feeds CleanupResult.MoreWork, it is observational:
+// nothing here changes deletion behavior. It exists so a cleanup run that
+// deletes nothing can be diagnosed from an INFO-level log line (or a support
+// dump) without asking the user to enable Debug logging and reproduce, e.g.
+// GitHub #3892 and #4059 where zero deletions had no visible explanation in the
+// default log output.
 //
 // The buckets need not sum to Scanned, and the exact semantics differ per
 // policy. The age policy sets Scanned to the total candidate count up front, so
-// files past an early stop (max-deletions-per-run reached or a quit signal) are
+// files past an early stop (time budget, settings change or a quit signal) are
 // counted in Scanned but in none of the outcome buckets. The usage policy
 // increments Scanned only for files it actually examines, and on an early stop
 // once disk usage drops below the threshold it tallies the unexamined remainder
@@ -591,21 +690,30 @@ type cleanupStats struct {
 	LockedSkipped   int   // skipped because the clip is locked/protected
 	MinClipsBlocked int   // skipped because deletion would violate the minimum-clips-per-species guard
 	NotEligible     int   // age: not old enough. usage: usage already below threshold when reached
+	AlreadyGone     int   // audio file no longer existed when the run reached it (removed elsewhere)
 	Errors          int   // deletion attempts that failed
 	BytesFreed      int64 // total size of the audio files actually deleted this run
-	// CapHit reports that the run deleted the maximum allowed this cycle
-	// (maxDeletionsPerRun) and stopped with candidate work still remaining, i.e.
-	// it was rate-limited rather than reaching the end of the work. It is the
-	// signal that distinguishes "nothing left to delete" from "hit the per-run
-	// limit, come back next cycle" on high-volume installs (GitHub #4059), and
-	// it is what justifies the WARN in logCleanupSummary. The age loop guards on
-	// age eligibility of the next unvisited file before setting it (files are
-	// sorted oldest-first); the usage loop sets it only on a genuine
-	// max-deletions stop, never when usage already fell below target. A remaining
-	// candidate can still be individually locked or min-clips-blocked, so CapHit
-	// means "the cap cut the run short", not "more clips are guaranteed
-	// deletable"; the WARN wording is phrased accordingly.
-	CapHit bool
+	// StopReason says why the run ended (the stop* constants).
+	StopReason string
+	// MoreWork reports that the run stopped on a settings change, or on its time
+	// budget after deleting at least one clip with candidates left, so a
+	// follow-up run is worth starting soon. A remaining candidate can still be
+	// individually locked or min-clips-blocked; a budget stop in a run that
+	// deleted nothing never sets it.
+	MoreWork bool
+	// Batches is the number of deletion batches whose database references were
+	// released.
+	Batches int
+	// RecordsRetained and RecordsCleared total the database rows updated for
+	// the deleted clips across all batches.
+	RecordsRetained, RecordsCleared int64
+}
+
+// addRunTotals copies the batch and release totals of run into the stats.
+func (s *cleanupStats) addRunTotals(run *deletionRun) {
+	s.Batches = run.batches
+	s.RecordsRetained = run.recordsRetained
+	s.RecordsCleared = run.recordsCleared
 }
 
 // unknownUsagePercent marks a disk-usage percentage that could not be measured
@@ -621,20 +729,26 @@ type cleanupSummary struct {
 	stats            cleanupStats
 	duration         time.Duration
 	keepSpectrograms bool // when true, .png spectrograms are left on disk beside deleted audio (GitHub #4059)
-	maxDeletions     int  // the per-run deletion cap that produced stats.CapHit
 	usageBefore      int  // disk usage % at run start; unknownUsagePercent if not measured/applicable
 	usageAfter       int  // disk usage % at run end; unknownUsagePercent if not measured
 	usageThreshold   int  // target usage %; <= 0 means not applicable (age policy)
 }
 
-// hitDeletionCap reports that the run was rate-limited by the per-run deletion
-// cap while candidate files remained. This is the primary WARN condition.
-func (s *cleanupSummary) hitDeletionCap() bool { return s.stats.CapHit }
+// notKeepingUp reports that a usage-based run used its whole time budget and
+// the disk usage rose during it: clips are arriving faster than the paced
+// deletion removes them. Usage is a whole percent, so an unchanged value is not
+// enough; on a large disk one run of a working drain can free less than 1%.
+// Only meaningful for the usage policy, and only when both usage values were
+// measured.
+func (s *cleanupSummary) notKeepingUp() bool {
+	return s.usageThreshold > 0 && s.stats.StopReason == stopTimeBudget &&
+		s.usageBefore != unknownUsagePercent && s.usageAfter != unknownUsagePercent &&
+		s.usageAfter > s.usageBefore
+}
 
 // usageStillOverTarget reports that a usage-based run finished with the disk
-// still at or above its configured target, despite not hitting the cap. It is
-// only meaningful for the usage policy (usageThreshold > 0) and when the final
-// usage was actually measured.
+// still at or above its configured target. It is only meaningful for the usage
+// policy (usageThreshold > 0) and when the final usage was actually measured.
 func (s *cleanupSummary) usageStillOverTarget() bool {
 	return s.usageThreshold > 0 && s.usageAfter != unknownUsagePercent && s.usageAfter >= s.usageThreshold
 }
@@ -658,11 +772,12 @@ func appendUsageFields(fields []logger.Field, s *cleanupSummary) []logger.Field 
 
 // logCleanupSummary emits a single INFO-level line summarizing a completed
 // cleanup run, so the guard (if any) that prevented deletion is visible without
-// enabling Debug logging. When the run was rate-limited by the per-run deletion
-// cap, or when a usage-based run finished with the disk still at or above the
-// configured target, it additionally emits a WARN so the "cleanup ran but disk
-// stays full" condition (GitHub #4059, #3892) is loud in default logs and in a
-// support dump rather than requiring a live Debug reproduction.
+// enabling Debug logging. When a usage-based run spent its whole time budget
+// while disk usage rose, or finished with the disk still at or above the
+// configured target and no follow-up run pending, it additionally emits a WARN
+// so the "cleanup ran but disk stays full" condition (GitHub #4059, #3892) is
+// loud in default logs and in a support dump rather than requiring a live Debug
+// reproduction.
 func logCleanupSummary(s *cleanupSummary) {
 	log := GetLogger()
 
@@ -675,36 +790,35 @@ func logCleanupSummary(s *cleanupSummary) {
 		logger.Int("locked_skipped", s.stats.LockedSkipped),
 		logger.Int("min_clips_blocked", s.stats.MinClipsBlocked),
 		logger.Int("not_eligible", s.stats.NotEligible),
+		logger.Int("already_gone", s.stats.AlreadyGone),
 		logger.Int("errors", s.stats.Errors),
 		logger.Bool("keep_spectrograms", s.keepSpectrograms),
-		logger.Bool("cap_hit", s.stats.CapHit),
-		logger.Int("max_deletions", s.maxDeletions),
+		logger.String("stop_reason", s.stats.StopReason),
+		logger.Bool("more_work", s.stats.MoreWork),
+		logger.Int("batches", s.stats.Batches),
+		logger.Int64("records_retained", s.stats.RecordsRetained),
+		logger.Int64("records_cleared", s.stats.RecordsCleared),
 		logger.Duration("duration", s.duration),
 	}
 	log.Info("cleanup run summary", appendUsageFields(fields, s)...)
 
-	// At most one WARN fires. Cap-hit takes precedence over still-over-target
-	// because it names a concrete, actionable cause (the per-run limit), whereas
-	// over-target is the more general symptom a cap-hit already explains.
+	// At most one WARN fires. Not-keeping-up takes precedence over
+	// still-over-target because it names a concrete cause, whereas over-target is
+	// the more general symptom.
 	switch {
-	case s.hitDeletionCap():
-		// The run deleted up to the cap with deletable work still remaining. On
-		// a busy install the disk can keep filling faster than a single capped
-		// run drains it; surfacing this is what turns #4059 from "auto-delete
-		// does nothing" into an explained, actionable state.
+	case s.notKeepingUp():
 		warnFields := []logger.Field{
 			logger.String("policy", s.policy),
 			logger.Int("files_deleted", s.stats.Deleted),
-			logger.Int("max_deletions", s.maxDeletions),
 			logger.Bool("keep_spectrograms", s.keepSpectrograms),
 		}
-		log.Warn("retention cleanup reached the per-run deletion limit and stopped before examining all candidates; if clips keep accumulating, disk may not reach target until later runs",
+		log.Warn("retention cleanup is deleting at its paced rate but disk usage rose during this run; clips may be arriving faster than they can be removed",
 			appendUsageFields(warnFields, s)...)
-	case s.usageStillOverTarget():
-		// Usage-based run finished without hitting the cap, yet the disk is
-		// still at or above target. Something other than the rate limit is
-		// preventing deletions (all remaining clips locked, min-clips guard,
-		// or spectrograms retained under keep_spectrograms).
+	case s.usageStillOverTarget() && !s.stats.MoreWork && s.stats.StopReason != stopQuit:
+		// The run ended for good (nothing pending, not interrupted) with the disk
+		// still at or above target. Something is preventing deletions (all
+		// remaining clips locked, min-clips guard, or spectrograms retained under
+		// keep_spectrograms).
 		warnFields := []logger.Field{
 			logger.String("policy", s.policy),
 			logger.Int("files_deleted", s.stats.Deleted),

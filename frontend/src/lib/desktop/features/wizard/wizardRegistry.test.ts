@@ -26,6 +26,13 @@ describe('wizardRegistry — getStepsForFlow()', () => {
       expect(steps[0].id).toBe('welcome');
     });
 
+    it('gives the audio source step its own unfinished save message', () => {
+      const steps = getStepsForFlow('onboarding');
+      expect(steps.find(step => step.id === 'audio-source')).toMatchObject({
+        unfinishedSaveKey: 'wizard.errors.audioSourceSaveUnfinished',
+      });
+    });
+
     it('last onboarding step is responsible-use', () => {
       const steps = getStepsForFlow('onboarding');
       expect(steps[steps.length - 1].id).toBe('responsible-use');

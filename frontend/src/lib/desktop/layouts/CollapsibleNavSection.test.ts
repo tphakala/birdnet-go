@@ -28,7 +28,7 @@ describe('CollapsibleNavSection', () => {
     isCollapsed: false,
     expanded: false,
     routeActive: false,
-    routeCache: { [ROUTE_KEY]: false } as Record<string, boolean>,
+    routeCache: { [ROUTE_KEY]: false } satisfies Record<string, boolean>,
     onToggleExpanded: vi.fn(),
     onNavigate: vi.fn(),
     showTooltip: vi.fn(),

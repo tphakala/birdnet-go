@@ -358,7 +358,11 @@ Look for these patterns in logs:
 ```yaml
 realtime:
   rtsp:
-    transport: tcp # Try: tcp, udp, udp_multicast, http
+    streams:
+      - name: Front Yard
+        url: rtsp://admin:password@192.168.1.100:554/stream1
+        type: rtsp
+        transport: tcp # Try: tcp or udp
 ```
 
 ### 5. Enable Debug Logging
@@ -380,10 +384,15 @@ realtime:
 ```yaml
 realtime:
   rtsp:
-    urls:
-      - "rtsp://admin:password@192.168.1.100:554/stream1"
-      - "rtsp://admin:password@192.168.1.101:554/stream1"
-    transport: tcp
+    streams:
+      - name: Front Yard
+        url: "rtsp://admin:password@192.168.1.100:554/stream1"
+        type: rtsp
+        transport: tcp
+      - name: Back Yard
+        url: "rtsp://admin:password@192.168.1.101:554/stream1"
+        type: rtsp
+        transport: tcp
     health:
       healthydatathreshold: 90 # Allow 90 seconds without data
       monitoringinterval: 30 # Check every 30 seconds
@@ -407,9 +416,11 @@ realtime:
 ```yaml
 realtime:
   rtsp:
-    urls:
-      - "rtsp://admin:password@192.168.1.100:554/stream1"
-    transport: tcp
+    streams:
+      - name: Front Yard
+        url: "rtsp://admin:password@192.168.1.100:554/stream1"
+        type: rtsp
+        transport: tcp
     health:
       healthydatathreshold: 60
       monitoringinterval: 30
@@ -421,9 +432,11 @@ realtime:
 ```yaml
 realtime:
   rtsp:
-    urls:
-      - "rtsp://admin:password@192.168.1.100:554/stream1"
-    transport: tcp
+    streams:
+      - name: Front Yard
+        url: "rtsp://admin:password@192.168.1.100:554/stream1"
+        type: rtsp
+        transport: tcp
     health:
       healthydatathreshold: 30 # Quick failure detection
       monitoringinterval: 15 # Frequent health checks

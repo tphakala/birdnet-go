@@ -3272,7 +3272,11 @@
         "enable": "Povoliť nahrávanie do BirdWeather",
         "token": {
           "label": "Token BirdWeather",
-          "helpText": "Váš jedinečný token BirdWeather."
+          "helpText": "Váš jedinečný token BirdWeather.",
+          "errors": {
+            "required": "Zadajte token BirdWeather alebo BirdWeather vypnite.",
+            "format": "Token BirdWeather má 24 písmen a číslic."
+          }
         },
         "threshold": {
           "label": "Prah nahrávania",
@@ -5188,6 +5192,13 @@
       "viewDetections": "Zobraziť detekcie druhu {name}",
       "largeView": "Veľké zobrazenie druhu {name}",
       "clickToView": "Kliknite pre zobrazenie detekcií"
+    },
+    "locationMap": {
+      "mapLabel": "Mapa na výber polohy stanice",
+      "expandedMapLabel": "Mapa na celú obrazovku na výber polohy stanice",
+      "zoomIn": "Priblížiť",
+      "zoomOut": "Oddialiť",
+      "expand": "Rozbaliť mapu na celú obrazovku"
     }
   },
   "connectivity": {
@@ -5357,8 +5368,11 @@
     },
     "errors": {
       "saveFailed": "Tento krok sa nepodarilo uložiť. Skontrolujte pripojenie a skúste to znova, alebo preskočte nastavenie a zmeňte to neskôr v Nastaveniach.",
+      "saveRejected": "Nastavenia v tomto kroku neboli prijaté. Skontrolujte hodnoty a skúste to znova, alebo preskočte nastavenie a zmeňte to neskôr v Nastaveniach.",
       "stepLoadFailed": "Tento krok sa nepodarilo načítať. Stlačte Skúsiť znova alebo obnovte stránku.",
-      "stepLoadFailedReload": "Tento krok sa stále nepodarilo načítať. Obnovte stránku a skúste to znova; voľby uložené v predchádzajúcich krokoch zostanú zachované."
+      "stepLoadFailedReload": "Tento krok sa stále nepodarilo načítať. Obnovte stránku a skúste to znova; voľby uložené v predchádzajúcich krokoch zostanú zachované.",
+      "audioSourceSaveUnfinished": "Zmena zdroja zvuku sa nedokončila. Skontrolujte zdroje zvuku v sekcii Nastavenia > Zvuk.",
+      "saveUnfinished": "Niektoré zmeny z nastavenia sa neuložili. Skontrolujte ich v Nastaveniach."
     },
     "reasons": {
       "completeStep": "Na pokračovanie dokončite tento krok."
@@ -5366,6 +5380,7 @@
     "leaveConfirm": {
       "title": "Opustiť nastavenie?",
       "message": "Nastavenie sa znova neotvorí. Voľby uložené v predchádzajúcich krokoch zostanú zachované; zmeny v tomto kroku sa neuložia. Všetko môžete neskôr zmeniť v Nastaveniach.",
+      "messageSaving": "Nastavenie sa znova neotvorí. Voľby uložené v predchádzajúcich krokoch zostanú zachované. Tento krok sa ešte ukladá a niektoré alebo všetky jeho zmeny sa nemusia zachovať. Všetko môžete neskôr zmeniť v Nastaveniach.",
       "stay": "Pokračovať v nastavení",
       "leave": "Opustiť nastavenie"
     },
@@ -5413,7 +5428,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Zadajte URL vášho RTSP audio streamu",
         "additionalSourcesHint": "Ďalšie zdroje zvuku môžete pridať neskôr v Nastaveniach.",
-        "configureLater": "Preskočiť - nastaviť neskôr"
+        "devicesLoadFailed": "Zvukové zariadenia v tomto systéme sa nepodarilo vypísať.",
+        "useStreamInstead": "Namiesto toho použiť RTSP stream",
+        "setUpLater": "Nastaviť zvuk neskôr",
+        "setUpLaterChosen": "Zvuk sa teraz nenastaví. Zvukovú kartu alebo stream môžete pridať neskôr v Nastaveniach.",
+        "streamReplacesSoundCards": "Zvukové karty prestanú zachytávať, keď použijete stream. Môžete ich znova pridať v Nastaveniach.",
+        "soundCardReplacesStream": "Stream zobrazený pri možnosti streamu sa vypne, keď použijete zvukovú kartu. Môžete ho znova zapnúť v Nastaveniach.",
+        "reasons": {
+          "chooseDevice": "Vyberte zvukové zariadenie alebo nastavte zvuk neskôr.",
+          "devicesFailed": "Zvukové zariadenia sa nepodarilo vypísať. Skúste to znova, použite stream alebo nastavte zvuk neskôr.",
+          "noDevices": "Nebolo nájdené žiadne zvukové zariadenie. Použite stream alebo nastavte zvuk neskôr.",
+          "enterUrl": "Zadajte URL streamu alebo nastavte zvuk neskôr.",
+          "urlScheme": "Zadajte úplnú URL streamu, ktorá začína rtsp:// alebo rtsps:// a neobsahuje medzery."
+        }
       },
       "detection": {
         "title": "Prah detekcie",
@@ -5425,6 +5452,7 @@
         "highAccuracyDesc": "Menej falošných detekcií, môže vynechať niektoré vtáky",
         "highSensitivity": "Vysoká citlivosť",
         "highSensitivityDesc": "Viac detekcií, viac falošných detekcií",
+        "descriptionStored": "Vyberte, aká prísna má byť identifikácia vtákov. Aktuálne: {threshold}, žiadna predvoľba.",
         "threshold": "Prahová hodnota spoľahlivosti",
         "fpFilterNote": "Keď váš systém beží a je overený, môžete povoliť filter falošných detekcií v Nastaveniach na ďalšie zníženie nesprávnych detekcií."
       },
@@ -5434,10 +5462,12 @@
         "privacyFilterHelp": "Odfiltruje detekcie, keď sú pri mikrofóne detegované ľudské hlasy",
         "birdweatherLabel": "Zdieľať detekcie s BirdWeather",
         "birdweatherHelp": "Prispievajte svojimi detekciami vtákov do komunitnej siete BirdWeather",
-        "birdweatherIdLabel": "ID stanice BirdWeather",
-        "birdweatherIdPlaceholder": "Zadajte ID vašej stanice BirdWeather",
         "errorReportingLabel": "Odosielať anonymné hlásenia o chybách",
-        "errorReportingHelp": "Pomôžte zlepšiť BirdNET-Go odosielaním anonymných hlásení o chybách, keď niečo zlyhá"
+        "errorReportingHelp": "Pomôžte zlepšiť BirdNET-Go odosielaním anonymných hlásení o chybách, keď niečo zlyhá",
+        "reasons": {
+          "enterToken": "Zadajte token BirdWeather alebo vypnite zdieľanie s BirdWeather.",
+          "tokenFormat": "Token BirdWeather má 24 písmen a číslic."
+        }
       },
       "responsibleUse": {
         "title": "Zodpovedné používanie BirdNET-Go",

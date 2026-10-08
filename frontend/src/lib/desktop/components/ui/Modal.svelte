@@ -1,3 +1,128 @@
+<script module lang="ts">
+  // Open Modal instances, oldest first. Only the last one (the topmost) acts on
+  // Tab and Escape, so a dialog opened over another (the setup wizard and its
+  // leave confirmation) does not have its keys handled twice.
+  const openModals: OpenModal[] = [];
+
+  /** What one open Modal tells the others: its dialog, where it was opened from, where focus goes on close. */
+  interface OpenModal {
+    dialog: HTMLElement | undefined;
+    opener: HTMLElement | SVGElement | null;
+    /** Set when a Modal this one was opened from closes first; replaces `opener` as the place to restore focus to */
+    restoreTo: HTMLElement | SVGElement | null;
+    /** Moves focus to this dialog's first tabbable control, else its box */
+    focusInto: () => void;
+  }
+
+  // CSS selector for elements that may be keyboard focusable. getTabbable()
+  // narrows the matches to the ones the Tab key actually reaches.
+  const TABBABLE_CANDIDATE_SELECTOR =
+    'button, a[href], area[href], input, select, textarea, summary, [tabindex]';
+
+  // Another modal dialog (LoginModal, the range filter dialog) that owns focus while open
+  const ARIA_MODAL_SELECTOR = '[aria-modal="true"]';
+
+  // Ancestors that take their whole subtree out of the tab order
+  const TAB_EXCLUDING_ANCESTOR_SELECTOR = '[inert], [hidden]';
+
+  // Stable number per form element, so a radio group key can include its form
+  const formNumbers = new WeakMap<object, number>();
+  let formNumberCount = 0;
+
+  /**
+   * Radio buttons that share a name and form are one Tab stop in browsers.
+   * Returns null for a radio without a name, which is a stop of its own.
+   */
+  function radioGroupKey(radio: HTMLInputElement): string | null {
+    if (!radio.name) return null;
+    let formNumber = 0;
+    if (radio.form) {
+      formNumber = formNumbers.get(radio.form) ?? ++formNumberCount;
+      formNumbers.set(radio.form, formNumber);
+    }
+    return `${formNumber}:${radio.name}`;
+  }
+
+  function isRadio(el: HTMLElement): el is HTMLInputElement {
+    return el instanceof HTMLInputElement && el.type === 'radio';
+  }
+
+  // Both option names: Chromium 105 to 120 knows only checkVisibilityCSS, newer engines
+  // also take visibilityProperty. Either makes visibility:hidden count as hidden.
+  const VISIBILITY_AWARE_OPTIONS = { visibilityProperty: true, checkVisibilityCSS: true };
+
+  /**
+   * Elements inside root that the Tab key can reach, in document order: not
+   * disabled, tabindex not negative, not a hidden input, not inside an inert or
+   * hidden subtree, and not hidden by display:none or visibility:hidden. Radio
+   * buttons are listed as the browser tabs them, see collapseRadioGroups().
+   */
+  function getTabbable(root: HTMLElement): HTMLElement[] {
+    return collapseRadioGroups(getTabbableUncollapsed(root));
+  }
+
+  function getTabbableUncollapsed(root: HTMLElement): HTMLElement[] {
+    // The dialog is visibility:hidden during its first open frame, which would
+    // drop every candidate, so the visibility property counts only once the box
+    // itself is visible. jsdom has no checkVisibility, so tests see all candidates.
+    const options =
+      typeof root.checkVisibility === 'function' && root.checkVisibility(VISIBILITY_AWARE_OPTIONS)
+        ? VISIBILITY_AWARE_OPTIONS
+        : undefined;
+    return Array.from(root.querySelectorAll<HTMLElement>(TABBABLE_CANDIDATE_SELECTOR)).filter(
+      el => {
+        if (el.matches(':disabled')) return false;
+        if (el.tabIndex < 0) return false;
+        if (el instanceof HTMLInputElement && el.type === 'hidden') return false;
+        if (el.closest(TAB_EXCLUDING_ANCESTOR_SELECTOR)) return false;
+        if (typeof el.checkVisibility === 'function' && !el.checkVisibility(options)) return false;
+        return true;
+      }
+    );
+  }
+
+  /**
+   * A named radio group is one Tab stop: Tab enters it at the checked radio (at
+   * the first, or the last with Shift+Tab, when none is checked) and leaves it
+   * from any radio. Keeps those stops and drops the other radios of each group.
+   */
+  function collapseRadioGroups(items: HTMLElement[]): HTMLElement[] {
+    const groups = new Map<string, HTMLInputElement[]>();
+    for (const el of items) {
+      if (!isRadio(el)) continue;
+      const key = radioGroupKey(el);
+      if (key === null) continue;
+      groups.set(key, [...(groups.get(key) ?? []), el]);
+    }
+    const stops = new Set<HTMLElement>();
+    for (const members of groups.values()) {
+      const checked = members.find(radio => radio.checked);
+      if (checked) {
+        stops.add(checked);
+      } else {
+        stops.add(members[0]);
+        stops.add(members[members.length - 1]);
+      }
+    }
+    return items.filter(el => {
+      if (!isRadio(el) || radioGroupKey(el) === null) return true;
+      return stops.has(el);
+    });
+  }
+
+  /**
+   * Whether two nodes are named radios of one group. Tab leaves a group from
+   * any of its radios, so the other radios of the focused radio's group are
+   * neither before nor after it.
+   */
+  function inSameRadioGroup(a: Node, b: Node): boolean {
+    if (!(a instanceof HTMLElement) || !(b instanceof HTMLElement)) return false;
+    if (!isRadio(a) || !isRadio(b)) return false;
+    const key = radioGroupKey(a);
+    return key !== null && key === radioGroupKey(b);
+  }
+</script>
+
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { untrack, type Snippet } from 'svelte';
@@ -5,12 +130,9 @@
   import { X } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { generateId } from '$lib/utils/uuid';
 
   const logger = loggers.ui;
-
-  // CSS selector for focusable elements used in focus management
-  const FOCUSABLE_SELECTOR =
-    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
   // How long initial focus keeps retrying while the dialog cannot take focus yet.
   // The open transition hides the dialog (visibility) for its first frame, and
@@ -37,7 +159,19 @@
     className?: string;
     onClose?: () => void;
     onConfirm?: () => void | Promise<void>;
-    header?: Snippet;
+    /**
+     * Describe the dialog by its body content (aria-describedby). Off by default
+     * because a long or structured body makes a poor description; turn it on
+     * when the body is the short question or message being confirmed.
+     */
+    describeBody?: boolean;
+    /**
+     * Replaces the title heading. The dialog is named from `title` through
+     * aria-labelledby, which points at `titleId`, so a heading in this snippet
+     * must carry `id={titleId}` and `title` must be set; without `title`, pass
+     * `aria-labelledby` yourself.
+     */
+    header?: Snippet<[{ titleId: string }]>;
     children?: Snippet;
     footer?: Snippet;
   }
@@ -54,6 +188,7 @@
     closeOnEsc = true,
     showCloseButton = true,
     loading = false,
+    describeBody = false,
     className = '',
     onClose,
     onConfirm,
@@ -66,16 +201,22 @@
   let isConfirming = $state(false);
   let modalElement = $state<HTMLDivElement>();
   let dialogElement = $state<HTMLDivElement>();
-  let previousActiveElement: HTMLElement | null = null;
-  let focusGeneration = $state(0);
+  // This instance in the openModals stack
+  const stackEntry: OpenModal = {
+    get dialog() {
+      return dialogElement;
+    },
+    opener: null,
+    restoreTo: null,
+    focusInto: () => setInitialFocus(),
+  };
+  // Ids are per instance and fixed for its life: the dialog is always mounted,
+  // so a shared literal would repeat on every page that has two Modals
+  const titleId = generateId('modal-title');
+  const bodyId = generateId('modal-body');
 
-  /**
-   * Increment the focus generation counter to force re-evaluation of the
-   * cached focusable elements list. Call this after dynamic content changes
-   * (e.g., wizard step transitions) that add or remove focusable elements.
-   */
-  export function refreshFocusTrap() {
-    focusGeneration++;
+  function isTopmost(): boolean {
+    return openModals.at(-1) === stackEntry;
   }
 
   const modalBoxBase =
@@ -141,54 +282,85 @@
     }
   }
 
+  /**
+   * Whether `node` is inside an `aria-modal` dialog that is not this Modal's own
+   * dialog element and not another Modal's. The nearest `aria-modal` ancestor is
+   * checked, because such a dialog can sit inside this one's element.
+   */
+  function isInForeignModalDialog(node: unknown): boolean {
+    if (!(node instanceof HTMLElement || node instanceof SVGElement)) return false;
+    const nearest = node.closest(ARIA_MODAL_SELECTOR);
+    if (!nearest || nearest === dialogElement) return false;
+    return !openModals.some(entry => entry.dialog === nearest);
+  }
+
   function handleKeydown(event: KeyboardEvent) {
-    if (closeOnEsc && event.key === 'Escape' && !loading && !isConfirming) {
-      handleClose();
+    if (event.key === 'Escape') {
+      // Escape that a control inside already used (closing its own list, say)
+      // does not also close the dialog, and a dialog under another stays open
+      if (event.defaultPrevented || !isTopmost()) return;
+      // Escape inside another modal dialog (the range filter dialog, or the expanded map
+      // portalled into this dialog element) belongs to that dialog, not to this one
+      if (isInForeignModalDialog(event.target)) return;
+      if (closeOnEsc && !loading && !isConfirming) handleClose();
     } else if (event.key === 'Tab') {
       trapFocus(event);
     }
   }
 
-  // PERFORMANCE OPTIMIZATION: Cache focusable elements with $derived
-  // Avoids repeated DOM queries during focus management.
-  // Reading focusGeneration ensures the list is refreshed when refreshFocusTrap() is called.
-  let focusableElements = $derived.by(() => {
-    void focusGeneration; // trigger re-evaluation when incremented
-    if (!modalElement) return [];
-    return Array.from(modalElement.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
-  });
-
+  /**
+   * Keeps Tab inside the topmost open Modal. The tabbable controls are read
+   * from the DOM on each key press, so controls that appear, disappear, or are
+   * enabled or disabled after the dialog opened are accounted for.
+   *
+   * Native Tab order is left alone while focus is inside the dialog; the trap
+   * intervenes only at the boundaries (the last control with Tab, the first
+   * with Shift+Tab) and when focus is not on any control of this dialog (on
+   * `<body>`, or outside it). Focus inside another `aria-modal` element, such as
+   * LoginModal, is left alone. Content portaled outside the dialog element
+   * counts as outside, so do not portal focusable content from a Modal body to
+   * `document.body`.
+   */
   function trapFocus(event: KeyboardEvent) {
-    if (!modalElement) return;
+    if (event.defaultPrevented || !isTopmost() || !modalElement || !dialogElement) return;
 
-    const elements = focusableElements;
-    const firstFocusable = elements[0];
-    const lastFocusable = elements[elements.length - 1];
+    const active = document.activeElement;
 
-    if (event.shiftKey) {
-      if (document.activeElement === firstFocusable) {
-        lastFocusable?.focus();
-        event.preventDefault();
-      }
-    } else {
-      if (document.activeElement === lastFocusable) {
-        firstFocusable?.focus();
-        event.preventDefault();
-      }
+    // Another modal dialog owns focus, even one placed inside this dialog's element; a
+    // lower Modal does not (focus in it moves up here)
+    if (isInForeignModalDialog(active)) return;
+
+    if (!active || !dialogElement.contains(active)) {
+      // Focus is on <body>, on the page behind the dialog or in a lower Modal: bring it back in
+      event.preventDefault();
+      const items = getTabbable(modalElement);
+      (event.shiftKey ? items.at(-1) : items[0])?.focus();
+      if (!dialogElement.contains(document.activeElement)) modalElement.focus();
+      return;
+    }
+
+    const items = getTabbable(modalElement);
+    if (items.length === 0) {
+      event.preventDefault();
+      modalElement.focus();
+      return;
+    }
+
+    const direction = event.shiftKey
+      ? Node.DOCUMENT_POSITION_PRECEDING
+      : Node.DOCUMENT_POSITION_FOLLOWING;
+    const hasNext = items.some(
+      item => !inSameRadioGroup(item, active) && active.compareDocumentPosition(item) & direction
+    );
+    if (!hasNext) {
+      event.preventDefault();
+      (event.shiftKey ? items.at(-1) : items[0])?.focus();
     }
   }
 
-  // PERFORMANCE OPTIMIZATION: Use cached focusable elements
   function setInitialFocus() {
     if (!modalElement) return;
-
-    const elements = focusableElements;
-
-    if (elements.length > 0) {
-      elements[0].focus();
-    } else {
-      modalElement.focus();
-    }
+    (getTabbable(modalElement)[0] ?? modalElement).focus();
   }
 
   function isFocusInside(): boolean {
@@ -238,24 +410,69 @@
     return stop;
   }
 
-  function restoreFocus() {
-    if (previousActiveElement && 'focus' in previousActiveElement) {
-      (previousActiveElement as HTMLElement).focus();
+  // A trigger that was removed while the dialog was open (a delete flow) cannot take focus
+  function restoreFocus(target: HTMLElement | SVGElement | null) {
+    if (target?.isConnected && 'focus' in target) target.focus();
+  }
+
+  /**
+   * Closes this Modal's place in the stack. The topmost one returns focus to
+   * where it was opened from. One that closes under another open dialog leaves
+   * focus there; a dialog above it that was opened from inside this one then
+   * returns focus to where this one was opened from when it closes.
+   */
+  function leaveStack() {
+    const index = openModals.indexOf(stackEntry);
+    if (index === -1) return;
+    const wasTopmost = index === openModals.length - 1;
+    openModals.splice(index, 1);
+    const target = stackEntry.restoreTo ?? stackEntry.opener;
+    if (wasTopmost) {
+      // With a Modal still open below, focus goes back only to a target inside it
+      // (not to the page behind its aria-modal dialog); otherwise into that Modal
+      const remaining = openModals.at(-1);
+      if (remaining && !(target && remaining.dialog?.contains(target))) {
+        remaining.focusInto();
+      } else {
+        restoreFocus(target);
+      }
+      // No usable target (body, removed, or null): focus must not stay on a control of the dialog that is now hidden
+      const active = document.activeElement;
+      if (
+        (active instanceof HTMLElement || active instanceof SVGElement) &&
+        stackEntry.dialog?.contains(active)
+      )
+        active.blur();
+      return;
     }
+    const above = openModals.at(index);
+    if (above?.opener && stackEntry.dialog?.contains(above.opener)) above.restoreTo = target;
+    // Focus left on a control of this now hidden dialog moves into the dialog on top
+    const active = document.activeElement;
+    if (active && stackEntry.dialog?.contains(active)) openModals.at(-1)?.focusInto();
   }
 
   $effect(() => {
     if (isOpen) {
-      previousActiveElement = document.activeElement as HTMLElement;
+      // Not an element of this dialog (focus left there by a quick close and reopen): keep the earlier opener
+      const active = document.activeElement;
+      if (
+        (active instanceof HTMLElement || active instanceof SVGElement) &&
+        !untrack(() => dialogElement)?.contains(active)
+      ) {
+        stackEntry.opener = active;
+      }
+      stackEntry.restoreTo = null;
 
       const stopInitialFocus = scheduleInitialFocus();
 
+      openModals.push(stackEntry);
       document.addEventListener('keydown', handleKeydown);
 
       return () => {
         stopInitialFocus();
         document.removeEventListener('keydown', handleKeydown);
-        restoreFocus();
+        leaveStack();
       };
     }
   });
@@ -272,8 +489,8 @@
   )}
   role="dialog"
   aria-modal="true"
-  aria-labelledby={title ? 'modal-title' : undefined}
-  aria-describedby={children ? 'modal-body' : undefined}
+  aria-labelledby={title ? titleId : undefined}
+  aria-describedby={describeBody && children ? bodyId : undefined}
   onclick={handleBackdropClick}
   {...rest}
 >
@@ -307,13 +524,13 @@
     {/if}
 
     {#if header}
-      {@render header()}
+      {@render header({ titleId })}
     {:else if title}
-      <h3 id="modal-title" class="font-bold text-lg mb-4">{title}</h3>
+      <h3 id={titleId} class="font-bold text-lg mb-4">{title}</h3>
     {/if}
 
     {#if children}
-      <div id="modal-body" class="py-4">
+      <div id={bodyId} class="py-4">
         {@render children()}
       </div>
     {/if}

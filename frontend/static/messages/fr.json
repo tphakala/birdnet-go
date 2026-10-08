@@ -3272,7 +3272,11 @@
         "enable": "Activer les téléchargements BirdWeather",
         "token": {
           "label": "Jeton BirdWeather",
-          "helpText": "Votre jeton BirdWeather unique."
+          "helpText": "Votre jeton BirdWeather unique.",
+          "errors": {
+            "required": "Saisissez votre jeton BirdWeather ou désactivez BirdWeather.",
+            "format": "Un jeton BirdWeather comprend 24 lettres et chiffres."
+          }
         },
         "threshold": {
           "label": "Seuil de téléchargement",
@@ -5188,6 +5192,13 @@
       "viewDetections": "Voir les détections pour {name}",
       "largeView": "Vue agrandie de {name}",
       "clickToView": "Cliquez pour voir les détections"
+    },
+    "locationMap": {
+      "mapLabel": "Carte pour sélectionner l'emplacement de la station",
+      "expandedMapLabel": "Carte plein écran pour sélectionner l'emplacement de la station",
+      "zoomIn": "Zoom avant",
+      "zoomOut": "Zoom arrière",
+      "expand": "Agrandir la carte en plein écran"
     }
   },
   "connectivity": {
@@ -5357,8 +5368,11 @@
     },
     "errors": {
       "saveFailed": "Impossible d'enregistrer cette étape. Vérifiez la connexion et réessayez, ou passez la configuration et modifiez cela plus tard dans les Paramètres.",
+      "saveRejected": "Les paramètres de cette étape n'ont pas été acceptés. Vérifiez les valeurs et réessayez, ou passez la configuration et modifiez cela plus tard dans les Paramètres.",
       "stepLoadFailed": "Impossible de charger cette étape. Appuyez sur Réessayer ou rechargez la page.",
-      "stepLoadFailedReload": "Cette étape ne peut toujours pas être chargée. Rechargez la page pour réessayer ; les choix enregistrés aux étapes précédentes sont conservés."
+      "stepLoadFailedReload": "Cette étape ne peut toujours pas être chargée. Rechargez la page pour réessayer ; les choix enregistrés aux étapes précédentes sont conservés.",
+      "audioSourceSaveUnfinished": "Le changement de source audio n'a pas abouti. Vérifiez les sources audio dans Paramètres > Audio.",
+      "saveUnfinished": "Certaines modifications de la configuration n'ont pas été enregistrées. Vérifiez-les dans les Paramètres."
     },
     "reasons": {
       "completeStep": "Terminez cette étape pour continuer."
@@ -5366,6 +5380,7 @@
     "leaveConfirm": {
       "title": "Quitter la configuration ?",
       "message": "La configuration ne s'ouvrira plus. Les choix enregistrés aux étapes précédentes sont conservés ; les modifications de cette étape ne sont pas enregistrées. Vous pourrez tout modifier plus tard dans les Paramètres.",
+      "messageSaving": "La configuration ne s'ouvrira plus. Les choix enregistrés aux étapes précédentes sont conservés. Cette étape est encore en cours d'enregistrement, et certaines de ses modifications, voire toutes, risquent de ne pas être conservées. Vous pourrez tout modifier plus tard dans les Paramètres.",
       "stay": "Continuer la configuration",
       "leave": "Quitter la configuration"
     },
@@ -5413,7 +5428,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Entrez l'URL de votre flux audio RTSP",
         "additionalSourcesHint": "Vous pourrez ajouter d'autres sources audio plus tard dans les Paramètres.",
-        "configureLater": "Passer - configurer plus tard"
+        "devicesLoadFailed": "Impossible de lister les périphériques audio de ce système.",
+        "useStreamInstead": "Utiliser plutôt un flux RTSP",
+        "setUpLater": "Configurer l'audio plus tard",
+        "setUpLaterChosen": "L'audio ne sera pas configuré maintenant. Ajoutez une carte son ou un flux plus tard dans les Paramètres.",
+        "streamReplacesSoundCards": "Les cartes son cessent de capturer lorsque vous utilisez un flux. Vous pouvez les ajouter à nouveau dans les Paramètres.",
+        "soundCardReplacesStream": "Le flux affiché dans l'option de flux est désactivé lorsque vous utilisez une carte son. Vous pouvez le réactiver dans les Paramètres.",
+        "reasons": {
+          "chooseDevice": "Choisissez un périphérique audio ou configurez l'audio plus tard.",
+          "devicesFailed": "Les périphériques audio n'ont pas pu être listés. Réessayez, utilisez un flux ou configurez l'audio plus tard.",
+          "noDevices": "Aucun périphérique audio trouvé. Utilisez un flux ou configurez l'audio plus tard.",
+          "enterUrl": "Saisissez l'URL du flux ou configurez l'audio plus tard.",
+          "urlScheme": "Saisissez une URL de flux complète qui commence par rtsp:// ou rtsps:// et ne contient pas d'espaces."
+        }
       },
       "detection": {
         "title": "Seuil de détection",
@@ -5425,6 +5452,7 @@
         "highAccuracyDesc": "Moins de faux positifs, peut manquer certains oiseaux",
         "highSensitivity": "Haute sensibilité",
         "highSensitivityDesc": "Plus de détections, plus de faux positifs",
+        "descriptionStored": "Choisissez le niveau de rigueur de l'identification des oiseaux. Actuel : {threshold}, aucun préréglage.",
         "threshold": "Seuil de confiance",
         "fpFilterNote": "Une fois votre système en marche et éprouvé, vous pouvez activer le filtre de faux positifs dans les Paramètres pour réduire davantage les détections incorrectes."
       },
@@ -5434,10 +5462,12 @@
         "privacyFilterHelp": "Filtre les détections lorsque des voix humaines sont détectées à proximité du microphone",
         "birdweatherLabel": "Partager les détections avec BirdWeather",
         "birdweatherHelp": "Contribuez vos détections d'oiseaux au réseau communautaire BirdWeather",
-        "birdweatherIdLabel": "ID de station BirdWeather",
-        "birdweatherIdPlaceholder": "Entrez votre ID de station BirdWeather",
         "errorReportingLabel": "Envoyer des rapports d'erreurs anonymes",
-        "errorReportingHelp": "Aidez à améliorer BirdNET-Go en envoyant des rapports d'erreurs anonymes lorsque quelque chose ne fonctionne pas"
+        "errorReportingHelp": "Aidez à améliorer BirdNET-Go en envoyant des rapports d'erreurs anonymes lorsque quelque chose ne fonctionne pas",
+        "reasons": {
+          "enterToken": "Saisissez votre jeton BirdWeather ou désactivez le partage avec BirdWeather.",
+          "tokenFormat": "Un jeton BirdWeather comprend 24 lettres et chiffres."
+        }
       },
       "responsibleUse": {
         "title": "Utilisation responsable de BirdNET-Go",

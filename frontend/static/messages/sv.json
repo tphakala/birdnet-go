@@ -3272,7 +3272,11 @@
         "enable": "Aktivera BirdWeather-uppladdningar",
         "token": {
           "label": "BirdWeather-token",
-          "helpText": "Din unika BirdWeather-token."
+          "helpText": "Din unika BirdWeather-token.",
+          "errors": {
+            "required": "Ange din BirdWeather-token eller stäng av BirdWeather.",
+            "format": "En BirdWeather-token består av 24 bokstäver och siffror."
+          }
         },
         "threshold": {
           "label": "Uppladdningströskelvärde",
@@ -5188,6 +5192,13 @@
       "viewDetections": "Visa detektioner för {name}",
       "largeView": "Stor vy av {name}",
       "clickToView": "Klicka för att se detektioner"
+    },
+    "locationMap": {
+      "mapLabel": "Karta för att välja stationens plats",
+      "expandedMapLabel": "Helskärmskarta för att välja stationens plats",
+      "zoomIn": "Zooma in",
+      "zoomOut": "Zooma ut",
+      "expand": "Utöka kartan till helskärm"
     }
   },
   "connectivity": {
@@ -5357,8 +5368,11 @@
     },
     "errors": {
       "saveFailed": "Det här steget kunde inte sparas. Kontrollera anslutningen och försök igen, eller hoppa över konfigurationen och ändra det senare i Inställningar.",
+      "saveRejected": "Inställningarna i det här steget godkändes inte. Kontrollera värdena och försök igen, eller hoppa över konfigurationen och ändra det senare i Inställningar.",
       "stepLoadFailed": "Det här steget kunde inte läsas in. Tryck på Försök igen eller ladda om sidan.",
-      "stepLoadFailedReload": "Det här steget kunde fortfarande inte läsas in. Ladda om sidan för att försöka igen; val som sparats i tidigare steg behålls."
+      "stepLoadFailedReload": "Det här steget kunde fortfarande inte läsas in. Ladda om sidan för att försöka igen; val som sparats i tidigare steg behålls.",
+      "audioSourceSaveUnfinished": "Ändringen av ljudkällan slutfördes inte. Kontrollera ljudkällorna under Inställningar > Ljud.",
+      "saveUnfinished": "Några ändringar från konfigurationen sparades inte. Kontrollera dem i Inställningar."
     },
     "reasons": {
       "completeStep": "Slutför det här steget för att fortsätta."
@@ -5366,6 +5380,7 @@
     "leaveConfirm": {
       "title": "Lämna konfigurationen?",
       "message": "Konfigurationen öppnas inte igen. Val som sparats i tidigare steg behålls; ändringar i det här steget sparas inte. Du kan ändra allt senare i Inställningar.",
+      "messageSaving": "Konfigurationen öppnas inte igen. Val som sparats i tidigare steg behålls. Det här steget sparas fortfarande, och några av eller alla ändringarna behålls kanske inte. Du kan ändra allt senare i Inställningar.",
       "stay": "Fortsätt konfigurera",
       "leave": "Lämna konfigurationen"
     },
@@ -5413,7 +5428,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Ange URL:en till din RTSP-ljudström",
         "additionalSourcesHint": "Du kan lägga till fler ljudkällor senare under Inställningar.",
-        "configureLater": "Hoppa över - konfigurera senare"
+        "devicesLoadFailed": "Det gick inte att lista ljudenheterna på det här systemet.",
+        "useStreamInstead": "Använd en RTSP-ström i stället",
+        "setUpLater": "Konfigurera ljud senare",
+        "setUpLaterChosen": "Ljud konfigureras inte nu. Lägg till ett ljudkort eller en ström senare i Inställningar.",
+        "streamReplacesSoundCards": "Ljudkort slutar spela in när du använder en ström. Du kan lägga till dem igen i Inställningar.",
+        "soundCardReplacesStream": "Strömmen som visas vid strömalternativet stängs av när du använder ett ljudkort. Du kan slå på den igen i Inställningar.",
+        "reasons": {
+          "chooseDevice": "Välj en ljudenhet eller konfigurera ljud senare.",
+          "devicesFailed": "Ljudenheterna kunde inte listas. Försök igen, använd en ström eller konfigurera ljud senare.",
+          "noDevices": "Ingen ljudenhet hittades. Använd en ström eller konfigurera ljud senare.",
+          "enterUrl": "Ange ström-URL:en eller konfigurera ljud senare.",
+          "urlScheme": "Ange en komplett ström-URL som börjar med rtsp:// eller rtsps:// och inte innehåller blanksteg."
+        }
       },
       "detection": {
         "title": "Detekteringströskel",
@@ -5425,6 +5452,7 @@
         "highAccuracyDesc": "Färre falska positiva, kan missa vissa fåglar",
         "highSensitivity": "Hög känslighet",
         "highSensitivityDesc": "Fler detekteringar, fler falska positiva",
+        "descriptionStored": "Välj hur strikt fågelidentifieringen ska vara. Nuvarande: {threshold}, ingen förinställning.",
         "threshold": "Konfidenströskel",
         "fpFilterNote": "När ditt system är igång och beprövat kan du aktivera filtret för falska positiva under Inställningar för att ytterligare minska felaktiga detekteringar."
       },
@@ -5434,10 +5462,12 @@
         "privacyFilterHelp": "Filtrerar bort detekteringar när mänskliga röster upptäcks nära mikrofonen",
         "birdweatherLabel": "Dela detekteringar med BirdWeather",
         "birdweatherHelp": "Bidra med dina fågeldetekteringar till BirdWeather-gemenskapsnätverket",
-        "birdweatherIdLabel": "BirdWeather stations-ID",
-        "birdweatherIdPlaceholder": "Ange ditt BirdWeather stations-ID",
         "errorReportingLabel": "Skicka anonyma felrapporter",
-        "errorReportingHelp": "Hjälp till att förbättra BirdNET-Go genom att skicka anonyma felrapporter när något går fel"
+        "errorReportingHelp": "Hjälp till att förbättra BirdNET-Go genom att skicka anonyma felrapporter när något går fel",
+        "reasons": {
+          "enterToken": "Ange din BirdWeather-token eller stäng av delning med BirdWeather.",
+          "tokenFormat": "En BirdWeather-token består av 24 bokstäver och siffror."
+        }
       },
       "responsibleUse": {
         "title": "Ansvarsfull användning av BirdNET-Go",

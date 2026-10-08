@@ -41,7 +41,7 @@
     speciesTrackingSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import type { SpeciesConfig, SpeciesSettings } from '$lib/stores/settings';
+  import type { SpeciesSettings } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -171,11 +171,11 @@
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
-    (() => {
-      const base = $speciesSettings ?? {
-        include: [] as string[],
-        exclude: [] as string[],
-        config: {} as Record<string, SpeciesConfig>,
+    ((): SpeciesSettings => {
+      const base: SpeciesSettings = $speciesSettings ?? {
+        include: [],
+        exclude: [],
+        config: {},
       };
 
       // Ensure config is always a valid object to prevent Object.keys() errors
@@ -183,7 +183,7 @@
         include: base.include ?? [],
         exclude: base.exclude ?? [],
         config: isPlainObject(base.config) ? base.config : {},
-      } as SpeciesSettings;
+      };
     })()
   );
 

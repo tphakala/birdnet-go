@@ -4,6 +4,8 @@ import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS 
 import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+import { deferred } from '../../test/async-helpers';
+import { lookup, serverSettings } from '../../test/settings-helpers';
 
 // Mock the settings API
 vi.mock('$lib/utils/settingsApi.js', () => ({
@@ -64,7 +66,8 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
           },
         },
       },
-      originalData: {} as SettingsFormData,
+      // Deliberately empty baseline, not a complete SettingsFormData
+      originalData: {} as unknown as SettingsFormData,
       isLoading: false,
       isSaving: false,
       activeSection: 'main',
@@ -77,7 +80,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     // Get initial state
     const initialState = get(settingsStore);
     expect(initialState.formData.birdnet).toBeDefined();
-    const birdnetSettings = initialState.formData.birdnet as BirdNetSettings;
+    const birdnetSettings = initialState.formData.birdnet;
 
     const initialRangeFilter = birdnetSettings.rangeFilter;
     expect(initialRangeFilter).toBeDefined();
@@ -93,7 +96,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
 
     // Get updated state
     const updatedState = get(settingsStore);
-    const updatedBirdnet = updatedState.formData.birdnet as BirdNetSettings;
+    const updatedBirdnet = updatedState.formData.birdnet;
 
     // Verify coordinates were updated
     expect(updatedBirdnet.latitude).toBe(51.5074);
@@ -108,7 +111,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     // Get initial coordinates
     const initialState = get(settingsStore);
     expect(initialState.formData.birdnet).toBeDefined();
-    const birdnetSettings = initialState.formData.birdnet as BirdNetSettings;
+    const birdnetSettings = initialState.formData.birdnet;
 
     const initialLat = birdnetSettings.latitude;
     const initialLng = birdnetSettings.longitude;
@@ -125,7 +128,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
 
     // Get updated state
     const updatedState = get(settingsStore);
-    const updatedBirdnet = updatedState.formData.birdnet as BirdNetSettings;
+    const updatedBirdnet = updatedState.formData.birdnet;
 
     // Verify range filter was updated
     expect(updatedBirdnet.rangeFilter.threshold).toBe(0.05);
@@ -158,7 +161,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
 
     // Get final state
     const finalState = get(settingsStore);
-    const finalBirdnet = finalState.formData.birdnet as BirdNetSettings;
+    const finalBirdnet = finalState.formData.birdnet;
 
     // Verify all updates were applied correctly
     expect(finalBirdnet.latitude).toBe(48.8566);
@@ -172,7 +175,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     // Update only the range filter threshold (partial update)
     const storeState = get(settingsStore);
     expect(storeState.formData.birdnet).toBeDefined();
-    const birdnetSettings = storeState.formData.birdnet as BirdNetSettings;
+    const birdnetSettings = storeState.formData.birdnet;
 
     const currentRangeFilter = birdnetSettings.rangeFilter;
     expect(currentRangeFilter).toBeDefined();
@@ -186,7 +189,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
 
     // Get updated state
     const updatedState = get(settingsStore);
-    const updatedBirdnet = updatedState.formData.birdnet as BirdNetSettings;
+    const updatedBirdnet = updatedState.formData.birdnet;
 
     // Verify only threshold was updated, other fields preserved
     expect(updatedBirdnet.rangeFilter.threshold).toBe(0.07);
@@ -285,7 +288,7 @@ describe('Settings Store - Model/Label Path Null Conversion', () => {
             species: [],
           },
         },
-      } as SettingsFormData,
+      },
       isLoading: false,
       isSaving: false,
       activeSection: 'main',
@@ -508,7 +511,7 @@ describe('Settings Store - UI Locale Preservation (#2756/#2760)', () => {
           locale: backendLocale,
         },
       },
-    } as unknown as SettingsFormData;
+    };
 
     settingsStore.set({
       formData: JSON.parse(JSON.stringify(snapshot)) as SettingsFormData,
@@ -594,17 +597,18 @@ describe('Settings Store - syncTLSMode preserves unsaved Security edits', () => 
     formSecurity: ReturnType<typeof baseSecurity>,
     originalSecurity: ReturnType<typeof baseSecurity>
   ) => {
+    // Empty birdnet sections: only the security section matters to these tests
     settingsStore.set({
       formData: {
         main: { name: 'TestNode' },
-        birdnet: {} as BirdNetSettings,
+        birdnet: {} as unknown as BirdNetSettings,
         security: formSecurity,
-      } as SettingsFormData,
+      },
       originalData: {
         main: { name: 'TestNode' },
-        birdnet: {} as BirdNetSettings,
+        birdnet: {} as unknown as BirdNetSettings,
         security: originalSecurity,
-      } as SettingsFormData,
+      },
       isLoading: false,
       isSaving: false,
       activeSection: 'security',
@@ -690,10 +694,11 @@ describe('Settings Store - syncTLSMode preserves unsaved Security edits', () => 
   it('falls back to default security fields when the section is absent', () => {
     // Defensive branch: a store seeded before the security section loaded.
     // The sync must still yield a complete security object, not a bare
-    // { tlsMode, autoTls } that strips required fields.
+    // { tlsMode, autoTls } that strips required fields. The other sections stay
+    // empty because only security matters here.
     settingsStore.set({
-      formData: { main: { name: 'TestNode' }, birdnet: {} as BirdNetSettings } as SettingsFormData,
-      originalData: {} as SettingsFormData,
+      formData: { main: { name: 'TestNode' }, birdnet: {} as unknown as BirdNetSettings },
+      originalData: {} as unknown as SettingsFormData,
       isLoading: false,
       isSaving: false,
       activeSection: 'security',
@@ -810,7 +815,7 @@ describe('Settings Store - HuggingFace endpoint', () => {
       originalData: {
         main: { name: 'TestNode' },
         birdnet: original,
-      } as SettingsFormData,
+      },
       isLoading: false,
       isSaving: false,
       activeSection: 'birdnet',
@@ -967,72 +972,7 @@ describe('Settings Store - saveSettings refuses before settings load', () => {
 });
 
 describe('Settings Store - saveSection', () => {
-  /** A server response with distinct values in every section the wizard patches. */
-  const serverSettings = () =>
-    ({
-      main: { name: 'TestNode' },
-      birdnet: {
-        modelPath: '',
-        labelPath: '',
-        sensitivity: 1.0,
-        threshold: 0.8,
-        overlap: 0.0,
-        locale: 'en',
-        threads: 4,
-        latitude: 0,
-        longitude: 0,
-        locationConfigured: false,
-        rangeFilter: {
-          threshold: 0.03,
-          passUnmappedSpecies: false,
-          speciesCount: null,
-          species: [],
-        },
-      },
-      realtime: {
-        dashboard: { summaryLimit: 100, locale: 'en' },
-        audio: {
-          source: 'old-device',
-          sources: [{ name: 'Card', device: 'hw:0' }],
-          equalizer: {
-            enabled: true,
-            filters: [{ type: 'HighPass', frequency: 200, q: 0.7, passes: 1 }],
-          },
-          export: { enabled: true, type: 'wav' },
-        },
-        rtsp: {
-          streams: [{ name: 'Old', url: 'rtsp://old', enabled: true, type: 'rtsp' }],
-          health: { healthyDataThreshold: 60 },
-          ffmpegParameters: ['-x'],
-        },
-        privacyFilter: { enabled: false, confidence: 0.7, debug: true, vad: { enabled: true } },
-        birdweather: { enabled: false, id: '', threshold: 0.9, debug: true },
-      },
-      sentry: { enabled: false },
-    }) as unknown as SettingsFormData;
-
   type Snapshot = Record<string, unknown>;
-  const lookup = (root: unknown, path: string[]): unknown => {
-    let current: unknown = root;
-    for (const segment of path) {
-      if (current === null || typeof current !== 'object') return undefined;
-      const record = current as Record<string, unknown>;
-      // eslint-disable-next-line security/detect-object-injection -- test helper with fixed paths
-      current = Object.hasOwn(record, segment) ? record[segment] : undefined;
-    }
-    return current;
-  };
-
-  const deferred = <T>() => {
-    let resolve!: (value: T) => void;
-    let reject!: (reason: unknown) => void;
-    const promise = new Promise<T>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-    return { promise, resolve, reject };
-  };
-
   const loadFresh = async () => {
     settingsStore.set({
       formData: { main: { name: '' } } as unknown as SettingsFormData,
@@ -1283,24 +1223,6 @@ describe('Settings Store - saveSection', () => {
     expect(setLocale).not.toHaveBeenCalled();
   });
 
-  it('refreshes the restart status after a successful save and not after a failed one', async () => {
-    const restart = await import('$lib/stores/restart.svelte');
-    const refresh = vi.spyOn(restart, 'fetchRestartStatus').mockResolvedValue(undefined);
-    try {
-      vi.mocked(settingsAPI.patchSection).mockRejectedValueOnce(new Error('boom'));
-      await expect(settingsActions.saveSection('birdnet', { threshold: 0.7 })).rejects.toThrow(
-        'boom'
-      );
-
-      await settingsActions.saveSection('birdnet', { threshold: 0.9 });
-
-      await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
-      expect(refresh).toHaveBeenCalledTimes(1);
-    } finally {
-      refresh.mockRestore();
-    }
-  });
-
   it('does not show a toast', async () => {
     const { toastActions } = await import('./toast.js');
 
@@ -1404,4 +1326,45 @@ describe('Settings Store - saveSection', () => {
       expect(get(hasUnsavedChanges)).toBe(false);
     });
   });
+});
+
+describe('Settings Store - restart status refresh after a save', () => {
+  beforeEach(async () => {
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    vi.mocked(settingsAPI.patchSection).mockReset().mockResolvedValue({});
+    vi.mocked(settingsAPI.load).mockResolvedValue(serverSettings());
+    await settingsActions.loadSettings();
+  });
+
+  it.each([
+    {
+      path: 'saveSettings',
+      api: () => vi.mocked(settingsAPI.save),
+      save: () => settingsActions.saveSettings({ notify: false }),
+    },
+    {
+      path: 'saveSection',
+      api: () => vi.mocked(settingsAPI.patchSection),
+      save: () => settingsActions.saveSection('birdnet', { threshold: 0.9 }),
+    },
+  ])(
+    '$path refreshes after a successful save and not after a failed one',
+    async ({ api, save }) => {
+      const restart = await import('$lib/stores/restart.svelte');
+      const refresh = vi.spyOn(restart, 'fetchRestartStatus').mockResolvedValue(undefined);
+      try {
+        api().mockRejectedValueOnce(new Error('boom'));
+        await expect(save()).rejects.toThrow('boom');
+        await vi.dynamicImportSettled();
+        expect(refresh).not.toHaveBeenCalled();
+
+        await save();
+
+        await vi.dynamicImportSettled();
+        expect(refresh).toHaveBeenCalledTimes(1);
+      } finally {
+        refresh.mockRestore();
+      }
+    }
+  );
 });

@@ -71,7 +71,7 @@ describe('AudioEqualizerSettings', () => {
         ok: false, // Force fallback config usage
         json: () => Promise.resolve({}),
       } as unknown as Response)
-    ) as typeof global.fetch;
+    );
   });
 
   afterEach(() => {

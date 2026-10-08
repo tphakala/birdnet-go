@@ -3272,7 +3272,11 @@
         "enable": "Schakel BirdWeather Uploads in",
         "token": {
           "label": "BirdWeather-token",
-          "helpText": "Jouw unieke BirdWeather token."
+          "helpText": "Jouw unieke BirdWeather token.",
+          "errors": {
+            "required": "Voer je BirdWeather-token in of zet BirdWeather uit.",
+            "format": "Een BirdWeather-token bestaat uit 24 letters en cijfers."
+          }
         },
         "threshold": {
           "label": "Upload Drempelwaarde",
@@ -5188,6 +5192,13 @@
       "viewDetections": "Bekijk {name} detecties",
       "largeView": "Grote weergave van {name}",
       "clickToView": "Klik om detecties te bekijken"
+    },
+    "locationMap": {
+      "mapLabel": "Kaart voor het kiezen van de stationslocatie",
+      "expandedMapLabel": "Kaart op volledig scherm voor het kiezen van de stationslocatie",
+      "zoomIn": "Inzoomen",
+      "zoomOut": "Uitzoomen",
+      "expand": "Kaart op volledig scherm weergeven"
     }
   },
   "connectivity": {
@@ -5357,8 +5368,11 @@
     },
     "errors": {
       "saveFailed": "Deze stap kon niet worden opgeslagen. Controleer de verbinding en probeer het opnieuw, of sla de installatie over en wijzig dit later in Instellingen.",
+      "saveRejected": "De instellingen in deze stap zijn niet geaccepteerd. Controleer de waarden en probeer het opnieuw, of sla de installatie over en wijzig dit later in Instellingen.",
       "stepLoadFailed": "Deze stap kon niet worden geladen. Druk op Opnieuw proberen of laad de pagina opnieuw.",
-      "stepLoadFailedReload": "Deze stap kon nog steeds niet worden geladen. Laad de pagina opnieuw om het nogmaals te proberen; keuzes die in eerdere stappen zijn opgeslagen blijven behouden."
+      "stepLoadFailedReload": "Deze stap kon nog steeds niet worden geladen. Laad de pagina opnieuw om het nogmaals te proberen; keuzes die in eerdere stappen zijn opgeslagen blijven behouden.",
+      "audioSourceSaveUnfinished": "De wijziging van de audiobron is niet voltooid. Controleer de audiobronnen via Instellingen > Audio.",
+      "saveUnfinished": "Sommige wijzigingen uit de installatie zijn niet opgeslagen. Controleer ze in Instellingen."
     },
     "reasons": {
       "completeStep": "Voltooi deze stap om verder te gaan."
@@ -5366,6 +5380,7 @@
     "leaveConfirm": {
       "title": "Installatie verlaten?",
       "message": "De installatie wordt niet opnieuw geopend. Keuzes die in eerdere stappen zijn opgeslagen blijven behouden; wijzigingen in deze stap worden niet opgeslagen. Je kunt later alles wijzigen in Instellingen.",
+      "messageSaving": "De installatie wordt niet opnieuw geopend. Keuzes die in eerdere stappen zijn opgeslagen blijven behouden. Deze stap wordt nog opgeslagen en een deel van de wijzigingen of alle wijzigingen blijft mogelijk niet behouden. Je kunt later alles wijzigen in Instellingen.",
       "stay": "Doorgaan met installatie",
       "leave": "Installatie verlaten"
     },
@@ -5413,7 +5428,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Voer de URL van je RTSP-audiostream in",
         "additionalSourcesHint": "Je kunt later meer audiobronnen toevoegen in Instellingen.",
-        "configureLater": "Overslaan - later configureren"
+        "devicesLoadFailed": "De audioapparaten van dit systeem konden niet worden opgesomd.",
+        "useStreamInstead": "Gebruik in plaats daarvan een RTSP-stream",
+        "setUpLater": "Audio later instellen",
+        "setUpLaterChosen": "Audio wordt nu niet ingesteld. Voeg later in Instellingen een geluidskaart of stream toe.",
+        "streamReplacesSoundCards": "Geluidskaarten nemen niet meer op wanneer je een stream gebruikt. Je kunt ze opnieuw toevoegen in Instellingen.",
+        "soundCardReplacesStream": "De stream die bij de streamoptie wordt getoond, wordt uitgeschakeld wanneer je een geluidskaart gebruikt. Je kunt hem opnieuw inschakelen in Instellingen.",
+        "reasons": {
+          "chooseDevice": "Kies een audioapparaat, of stel audio later in.",
+          "devicesFailed": "De audioapparaten konden niet worden opgesomd. Probeer opnieuw, gebruik een stream, of stel audio later in.",
+          "noDevices": "Geen audioapparaat gevonden. Gebruik een stream, of stel audio later in.",
+          "enterUrl": "Voer de stream-URL in, of stel audio later in.",
+          "urlScheme": "Voer een volledige stream-URL in die begint met rtsp:// of rtsps:// en geen spaties bevat."
+        }
       },
       "detection": {
         "title": "Detectiedrempel",
@@ -5425,6 +5452,7 @@
         "highAccuracyDesc": "Minder fout-positieven, kan sommige vogels missen",
         "highSensitivity": "Hoge gevoeligheid",
         "highSensitivityDesc": "Meer detecties, meer fout-positieven",
+        "descriptionStored": "Kies hoe streng de vogelidentificatie moet zijn. Huidig: {threshold}, geen preset.",
         "threshold": "Betrouwbaarheidsdrempel",
         "fpFilterNote": "Zodra je systeem draait en bewezen is, kun je het fout-positievenfilter inschakelen in Instellingen om onjuiste detecties verder te verminderen."
       },
@@ -5434,10 +5462,12 @@
         "privacyFilterHelp": "Filtert detecties uit wanneer menselijke stemmen worden gedetecteerd bij de microfoon",
         "birdweatherLabel": "Detecties delen met BirdWeather",
         "birdweatherHelp": "Draag je vogeldetecties bij aan het BirdWeather-gemeenschapsnetwerk",
-        "birdweatherIdLabel": "BirdWeather Station-ID",
-        "birdweatherIdPlaceholder": "Voer je BirdWeather station-ID in",
         "errorReportingLabel": "Anonieme foutrapporten verzenden",
-        "errorReportingHelp": "Help BirdNET-Go te verbeteren door anonieme foutrapporten te verzenden wanneer er iets misgaat"
+        "errorReportingHelp": "Help BirdNET-Go te verbeteren door anonieme foutrapporten te verzenden wanneer er iets misgaat",
+        "reasons": {
+          "enterToken": "Voer het BirdWeather-token in of schakel het delen met BirdWeather uit.",
+          "tokenFormat": "Een BirdWeather-token bestaat uit 24 letters en cijfers."
+        }
       },
       "responsibleUse": {
         "title": "Verantwoord gebruik van BirdNET-Go",

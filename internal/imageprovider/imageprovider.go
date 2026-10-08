@@ -457,14 +457,19 @@ func (c *BirdImageCache) getProvider() (ImageProvider, error) {
 // isCacheEntryStale checks if a cache entry has exceeded its TTL.
 // Negative entries (not found) have a shorter TTL than positive entries.
 func isCacheEntryStale(cachedAt time.Time, isNegative bool) bool {
+	return isCacheEntryStaleAt(cachedAt, isNegative, time.Now())
+}
+
+// isCacheEntryStaleAt reports whether a cache entry is past its TTL at the
+// given instant. An entry exactly one TTL old is still fresh.
+func isCacheEntryStaleAt(cachedAt time.Time, isNegative bool, now time.Time) bool {
 	var ttl time.Duration
 	if isNegative {
 		ttl = negativeCacheTTL
 	} else {
 		ttl = defaultCacheTTL
 	}
-	cutoff := time.Now().Add(-ttl)
-	return cachedAt.Before(cutoff)
+	return cachedAt.Before(now.Add(-ttl))
 }
 
 // dbEntryToBirdImage converts a database cache entry to a BirdImage struct.

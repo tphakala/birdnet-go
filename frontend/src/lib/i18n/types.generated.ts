@@ -2408,6 +2408,8 @@ export type TranslationKey =
   | 'settings.integration.birdweather.enable'
   | 'settings.integration.birdweather.token.label'
   | 'settings.integration.birdweather.token.helpText'
+  | 'settings.integration.birdweather.token.errors.required'
+  | 'settings.integration.birdweather.token.errors.format'
   | 'settings.integration.birdweather.threshold.label'
   | 'settings.integration.birdweather.threshold.helpText'
   | 'settings.integration.birdweather.test.button'
@@ -3799,6 +3801,11 @@ export type TranslationKey =
   | 'components.birdThumbnail.viewDetections' // params: name
   | 'components.birdThumbnail.largeView' // params: name
   | 'components.birdThumbnail.clickToView'
+  | 'components.locationMap.mapLabel'
+  | 'components.locationMap.expandedMapLabel'
+  | 'components.locationMap.zoomIn'
+  | 'components.locationMap.zoomOut'
+  | 'components.locationMap.expand'
   | 'connectivity.offline'
   | 'detection.actions.back'
   | 'detection.actions.review'
@@ -3914,11 +3921,15 @@ export type TranslationKey =
   | 'wizard.status.saving'
   | 'wizard.status.loadingStep'
   | 'wizard.errors.saveFailed'
+  | 'wizard.errors.saveRejected'
   | 'wizard.errors.stepLoadFailed'
   | 'wizard.errors.stepLoadFailedReload'
+  | 'wizard.errors.audioSourceSaveUnfinished'
+  | 'wizard.errors.saveUnfinished'
   | 'wizard.reasons.completeStep'
   | 'wizard.leaveConfirm.title'
   | 'wizard.leaveConfirm.message'
+  | 'wizard.leaveConfirm.messageSaving'
   | 'wizard.leaveConfirm.stay'
   | 'wizard.leaveConfirm.leave'
   | 'wizard.whatsNew.title' // params: version
@@ -3957,7 +3968,17 @@ export type TranslationKey =
   | 'wizard.steps.audioSource.rtspUrlPlaceholder'
   | 'wizard.steps.audioSource.rtspUrlHelp'
   | 'wizard.steps.audioSource.additionalSourcesHint'
-  | 'wizard.steps.audioSource.configureLater'
+  | 'wizard.steps.audioSource.devicesLoadFailed'
+  | 'wizard.steps.audioSource.useStreamInstead'
+  | 'wizard.steps.audioSource.setUpLater'
+  | 'wizard.steps.audioSource.setUpLaterChosen'
+  | 'wizard.steps.audioSource.streamReplacesSoundCards'
+  | 'wizard.steps.audioSource.soundCardReplacesStream'
+  | 'wizard.steps.audioSource.reasons.chooseDevice'
+  | 'wizard.steps.audioSource.reasons.devicesFailed'
+  | 'wizard.steps.audioSource.reasons.noDevices'
+  | 'wizard.steps.audioSource.reasons.enterUrl'
+  | 'wizard.steps.audioSource.reasons.urlScheme'
   | 'wizard.steps.detection.title'
   | 'wizard.steps.detection.description'
   | 'wizard.steps.detection.balanced'
@@ -3967,6 +3988,7 @@ export type TranslationKey =
   | 'wizard.steps.detection.highAccuracyDesc'
   | 'wizard.steps.detection.highSensitivity'
   | 'wizard.steps.detection.highSensitivityDesc'
+  | 'wizard.steps.detection.descriptionStored' // params: threshold
   | 'wizard.steps.detection.threshold'
   | 'wizard.steps.detection.fpFilterNote'
   | 'wizard.steps.integration.title'
@@ -3974,10 +3996,10 @@ export type TranslationKey =
   | 'wizard.steps.integration.privacyFilterHelp'
   | 'wizard.steps.integration.birdweatherLabel'
   | 'wizard.steps.integration.birdweatherHelp'
-  | 'wizard.steps.integration.birdweatherIdLabel'
-  | 'wizard.steps.integration.birdweatherIdPlaceholder'
   | 'wizard.steps.integration.errorReportingLabel'
   | 'wizard.steps.integration.errorReportingHelp'
+  | 'wizard.steps.integration.reasons.enterToken'
+  | 'wizard.steps.integration.reasons.tokenFormat'
   | 'wizard.steps.responsibleUse.title'
   | 'wizard.steps.responsibleUse.intro'
   | 'wizard.steps.responsibleUse.point1'
@@ -4748,6 +4770,7 @@ export type TranslationParams = {
   'errors.streams.test.unsupportedScheme': { scheme: string | number };
   'wizard.progress': { current: string | number; total: string | number };
   'wizard.whatsNew.title': { version: string | number };
+  'wizard.steps.detection.descriptionStored': { threshold: string | number };
   'analysis.detection.batFalsePositiveFilter.detectionCount': {
     count: string | number;
     description: string | number;

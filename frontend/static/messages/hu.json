@@ -3272,7 +3272,11 @@
         "enable": "BirdWeather feltöltések engedélyezése",
         "token": {
           "label": "BirdWeather token",
-          "helpText": "Az Ön egyedi BirdWeather token-je."
+          "helpText": "Az Ön egyedi BirdWeather token-je.",
+          "errors": {
+            "required": "Adja meg a BirdWeather-tokent, vagy kapcsolja ki a BirdWeathert.",
+            "format": "A BirdWeather-token 24 betűből és számjegyből áll."
+          }
         },
         "threshold": {
           "label": "Feltöltési küszöbérték",
@@ -5188,6 +5192,13 @@
       "viewDetections": "{name} észleléseinek megtekintése",
       "largeView": "{name} nagy nézete",
       "clickToView": "Kattints az észlelések megtekintéséhez"
+    },
+    "locationMap": {
+      "mapLabel": "Térkép az állomás helyszínének kiválasztásához",
+      "expandedMapLabel": "Teljes képernyős térkép az állomás helyszínének kiválasztásához",
+      "zoomIn": "Nagyítás",
+      "zoomOut": "Kicsinyítés",
+      "expand": "Térkép megnyitása teljes képernyőn"
     }
   },
   "connectivity": {
@@ -5357,8 +5368,11 @@
     },
     "errors": {
       "saveFailed": "Ezt a lépést nem sikerült menteni. Ellenőrizze a kapcsolatot, és próbálja újra, vagy hagyja ki a beállítást, és módosítsa később a Beállításokban.",
+      "saveRejected": "A lépés beállításait nem fogadta el a rendszer. Ellenőrizze az értékeket, és próbálja újra, vagy hagyja ki a beállítást, és módosítsa később a Beállításokban.",
       "stepLoadFailed": "Ezt a lépést nem sikerült betölteni. Nyomja meg az Újra gombot, vagy töltse újra az oldalt.",
-      "stepLoadFailedReload": "Ezt a lépést továbbra sem sikerült betölteni. Töltse újra az oldalt az újrapróbálkozáshoz; a korábbi lépésekben mentett választások megmaradnak."
+      "stepLoadFailedReload": "Ezt a lépést továbbra sem sikerült betölteni. Töltse újra az oldalt az újrapróbálkozáshoz; a korábbi lépésekben mentett választások megmaradnak.",
+      "audioSourceSaveUnfinished": "A hangforrás módosítása nem fejeződött be. Ellenőrizze a hangforrásokat a Beállítások > Hang menüpontban.",
+      "saveUnfinished": "A beállítás során végzett néhány módosítás nem lett mentve. Ellenőrizze őket a Beállításokban."
     },
     "reasons": {
       "completeStep": "A folytatáshoz fejezze be ezt a lépést."
@@ -5366,6 +5380,7 @@
     "leaveConfirm": {
       "title": "Kilép a beállításból?",
       "message": "A beállítás nem nyílik meg újra. A korábbi lépésekben mentett választások megmaradnak; az ebben a lépésben végzett módosítások nem kerülnek mentésre. Mindent módosíthat később a Beállításokban.",
+      "messageSaving": "A beállítás nem nyílik meg újra. A korábbi lépésekben mentett választások megmaradnak. Ez a lépés még mentés alatt van, és a módosítások egy része vagy mindegyike elveszhet. Mindent módosíthat később a Beállításokban.",
       "stay": "Beállítás folytatása",
       "leave": "Kilépés a beállításból"
     },
@@ -5413,7 +5428,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Adja meg az RTSP audio stream URL-jét",
         "additionalSourcesHint": "Később további hang forrásokat adhat hozzá a Beállításokban.",
-        "configureLater": "Kihagyás - beállítás később"
+        "devicesLoadFailed": "Nem sikerült listázni a rendszer hangeszközeit.",
+        "useStreamInstead": "RTSP stream használata helyette",
+        "setUpLater": "Hang beállítása később",
+        "setUpLaterChosen": "A hang most nem lesz beállítva. Hangkártyát vagy streamet később adhat hozzá a Beállításokban.",
+        "streamReplacesSoundCards": "A hangkártyák nem rögzítenek tovább, ha streamet használ. A Beállításokban újra hozzáadhatja őket.",
+        "soundCardReplacesStream": "A stream opciónál látható stream kikapcsol, ha hangkártyát használ. A Beállításokban újra bekapcsolhatja.",
+        "reasons": {
+          "chooseDevice": "Válasszon hangeszközt, vagy állítsa be a hangot később.",
+          "devicesFailed": "A hangeszközöket nem sikerült listázni. Próbálja újra, használjon streamet, vagy állítsa be a hangot később.",
+          "noDevices": "Nem található hangeszköz. Használjon streamet, vagy állítsa be a hangot később.",
+          "enterUrl": "Adja meg a stream URL-jét, vagy állítsa be a hangot később.",
+          "urlScheme": "Adjon meg egy teljes stream URL-t, amely rtsp:// vagy rtsps:// előtaggal kezdődik, és nem tartalmaz szóközt."
+        }
       },
       "detection": {
         "title": "Detektálási küszöbérték",
@@ -5425,6 +5452,7 @@
         "highAccuracyDesc": "Kevesebb hamis pozitív, néhány madarat nem találhat meg",
         "highSensitivity": "Magas érzékenység",
         "highSensitivityDesc": "Több detektálás, több hamis pozitív",
+        "descriptionStored": "Válassza ki, mennyire szigorú legyen a madár azonosítás. Jelenlegi: {threshold}, nincs egyezés.",
         "threshold": "Megbízhatósági küszöbérték",
         "fpFilterNote": "Miután a rendszere működik és bevált, engedélyezheti a hamis pozitív szűrőt a Beállításokban a hibás detektálások további csökkentéséhez."
       },
@@ -5434,10 +5462,12 @@
         "privacyFilterHelp": "Kiszűri a detektálásokat, amikor emberi hangok észlelhetők a mikrofon közelében",
         "birdweatherLabel": "Detektálások megosztása a BirdWeather-rel",
         "birdweatherHelp": " Ossza meg madár detektálásait a BirdWeather közösségi hálózattal",
-        "birdweatherIdLabel": "BirdWeather állomás ID",
-        "birdweatherIdPlaceholder": "Adja meg a BirdWeather állomás ID-jét",
         "errorReportingLabel": "Névtelen hiba jelentések küldése",
-        "errorReportingHelp": "Segítsen fejleszteni a BirdNET-Go-t névtelen hiba jelentések küldésével, amikor valami hibásan működik"
+        "errorReportingHelp": "Segítsen fejleszteni a BirdNET-Go-t névtelen hiba jelentések küldésével, amikor valami hibásan működik",
+        "reasons": {
+          "enterToken": "Adja meg a BirdWeather-tokent, vagy kapcsolja ki a megosztást a BirdWeatherrel.",
+          "tokenFormat": "A BirdWeather-token 24 betűből és számjegyből áll."
+        }
       },
       "responsibleUse": {
         "title": "A BirdNET-Go felelős használata",

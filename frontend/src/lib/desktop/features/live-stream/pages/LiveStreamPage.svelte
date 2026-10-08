@@ -1,5 +1,5 @@
 <!--
-  LiveStreamPage.svelte — Full-page live audio spectrogram viewer
+  LiveStreamPage.svelte: Full-page live audio spectrogram viewer
 
   Connects to the HLS audio stream via hls.js, feeds it through the
   useSpectrogramAnalyser composable, and renders a scrolling waterfall
@@ -194,7 +194,8 @@
 
       if (signal.aborted) return;
 
-      activeStreamToken = data.stream_token;
+      const streamToken = data.stream_token;
+      activeStreamToken = streamToken;
       const hlsUrl = buildAppUrl(data.playlist_url);
 
       // Create audio element
@@ -220,7 +221,7 @@
         });
       });
       audioElement.addEventListener('playing', () => {
-        if (!hasStalled) return; // Ignore initial play — only log stall recovery
+        if (!hasStalled) return; // Ignore initial play, only log stall recovery
         hasStalled = false;
         logger.warn('Audio element: resumed from stall', {
           currentTime: audioElement?.currentTime?.toFixed(3),
@@ -336,7 +337,7 @@
             spectro.disconnect();
             return;
           }
-          startHeartbeat(activeStreamToken!);
+          startHeartbeat(streamToken);
           if (activeSourceId) {
             connectDetectionStream(activeSourceId);
           }
@@ -356,7 +357,7 @@
             });
             stopStream();
           } else {
-            // Non-fatal errors — log for debugging buffer issues
+            // Non-fatal errors, log for debugging buffer issues
             const info: Record<string, unknown> = {
               type: data.type,
               details: data.details,
@@ -406,7 +407,7 @@
           spectro.disconnect();
           return;
         }
-        startHeartbeat(activeStreamToken!);
+        startHeartbeat(streamToken);
         if (activeSourceId) {
           connectDetectionStream(activeSourceId);
         }
@@ -632,7 +633,7 @@
     return () => document.removeEventListener('keydown', handler);
   });
 
-  // No auto-start — browsers block AudioContext and audio.play() without a
+  // No auto-start, browsers block AudioContext and audio.play() without a
   // user gesture. The user must click the play button to start streaming.
   function handleStartClick() {
     if (selectedSourceId) {
@@ -640,7 +641,7 @@
     }
   }
 
-  // Periodic buffer health monitor — logs buffer state every 10s to help
+  // Periodic buffer health monitor, logs buffer state every 10s to help
   // diagnose intermittent audio gaps. Uses warn level so it appears in production.
   $effect(() => {
     if (!audioElement || !isStreaming) return;
@@ -742,7 +743,7 @@
         }
       }
 
-      // Prune labels older than LABEL_MAX_AGE_MS — runs regardless of playingDate
+      // Prune labels older than LABEL_MAX_AGE_MS, runs regardless of playingDate
       // availability so labels don't freeze on screen during buffer stalls
       const cutoff = now - LABEL_MAX_AGE_MS;
       overlayLabels = overlayLabels.filter(l => l.birthTime >= cutoff);
@@ -861,7 +862,7 @@
           className="h-full w-full"
         />
       {:else}
-        <!-- Click to start — user gesture required for AudioContext -->
+        <!-- Click to start, user gesture required for AudioContext -->
         <button
           onclick={handleStartClick}
           disabled={!selectedSourceId || sources.length === 0}

@@ -135,6 +135,7 @@
       <button
         type="button"
         class="inline-flex items-center justify-center p-1 rounded-full shrink-0 transition-colors hover:bg-white/20"
+        data-toast-close
         onclick={handleClose}
         aria-label={t('common.aria.closeNotification')}
       >

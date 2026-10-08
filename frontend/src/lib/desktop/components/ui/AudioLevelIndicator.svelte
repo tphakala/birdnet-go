@@ -11,7 +11,7 @@
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import Hls from 'hls.js';
   import type { ErrorData } from 'hls.js';
-  import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY, ERROR_HANDLING } from './hls-config';
+  import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY, EXPECTED_STALL_ERRORS } from './hls-config';
 
   const logger = loggers.audio;
 
@@ -72,7 +72,7 @@
 
   // NOTE: $derived.by with side effects is an anti-pattern (derived should be pure).
   // This creates the audio element lazily on first access and caches it.
-  // The event listeners inside modify $state (isPlaying) — acceptable here because
+  // The event listeners inside modify $state (isPlaying), acceptable here because
   // the guard (!audioElementRef) ensures the side effect runs exactly once.
   let audioElementRef: HTMLAudioElement | null = null;
   let cachedAudioElement = $derived.by(() => {
@@ -352,19 +352,13 @@
           stopPlayback();
         } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
           // Handle non-fatal media errors with improved categorization
-          if (ERROR_HANDLING.EXPECTED_STALL_ERRORS.includes(data.details as any)) {
+          if (EXPECTED_STALL_ERRORS.has(data.details)) {
             // Buffer stalls are expected in low-latency audio streaming
             // HLS.js will automatically handle recovery by buffering more segments
             logger.debug('Buffer stalled (expected for low-latency audio)', {
               details: data.details,
               bufferInfo: data.bufferInfo,
             });
-          } else if (ERROR_HANDLING.RECOVERABLE_MEDIA_ERRORS.includes(data.details as any)) {
-            // Try to recover from other recoverable media errors
-            logger.warn('Attempting to recover from recoverable media error', {
-              details: data.details,
-            });
-            hlsInstance?.recoverMediaError();
           } else {
             // Log unexpected media errors for investigation
             logger.warn('Unexpected non-fatal media error', {

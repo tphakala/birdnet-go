@@ -703,8 +703,11 @@ func (s *testLegacyInterface) SearchNotes(_ string, _ bool, _, _ int) ([]datasto
 func (s *testLegacyInterface) SearchNotesAdvanced(_ *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
 	return nil, 0, nil
 }
-func (s *testLegacyInterface) GetNoteClipPath(_ string) (string, error)              { return "", nil }
-func (s *testLegacyInterface) GetNoteModelType(_ string) (string, error)             { return "bird", nil }
+func (s *testLegacyInterface) GetNoteClipPath(_ string) (string, error)  { return "", nil }
+func (s *testLegacyInterface) GetNoteModelType(_ string) (string, error) { return "bird", nil }
+func (s *testLegacyInterface) GetNoteKeptSpectrogram(_ string) (clipName, modelType string, err error) {
+	return "", "bird", nil
+}
 func (s *testLegacyInterface) DeleteNoteClipPath(_ string) error                     { return nil }
 func (s *testLegacyInterface) GetNoteReview(_ string) (*datastore.NoteReview, error) { return nil, nil } //nolint:nilnil // stub
 func (s *testLegacyInterface) SaveNoteReview(_ *datastore.NoteReview) error          { return nil }
@@ -746,6 +749,9 @@ func (s *testLegacyInterface) GetImageCacheBatch(_ string, _ []string) (map[stri
 func (s *testLegacyInterface) SaveImageCache(_ *datastore.ImageCache) error        { return nil }
 func (s *testLegacyInterface) GetLockedNotesClipPaths() ([]string, error)          { return nil, nil }
 func (s *testLegacyInterface) ClearNoteClipPathsByNames(_ []string) (int64, error) { return 0, nil }
+func (s *testLegacyInterface) RetainNoteSpectrogramsByClipNames(_ []string) (int64, error) {
+	return 0, nil
+}
 func (s *testLegacyInterface) GetNoteClipReferences(_ uint, _ int) ([]diskmanager.ClipReference, error) {
 	return nil, nil
 }

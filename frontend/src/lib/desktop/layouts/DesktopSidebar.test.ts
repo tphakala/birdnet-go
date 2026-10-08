@@ -66,9 +66,9 @@ describe('DesktopSidebar - post-login redirect wiring (#3306)', () => {
     // LoginModal renders a hidden <input name="redirect"> bound to the redirect target.
     // It must carry the FULL current URL, query string included (the #3306 fix).
     await waitFor(() => {
-      const redirectInput = screen.getByDisplayValue(
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>(
         '/ui/detections?queryType=species&species=Phoenicurus+phoenicurus&date=2026-06-02'
-      ) as HTMLInputElement;
+      );
       expect(redirectInput.name).toBe('redirect');
     });
   });
@@ -86,7 +86,7 @@ describe('DesktopSidebar - post-login redirect wiring (#3306)', () => {
     await fireEvent.click(loginButton);
 
     await waitFor(() => {
-      const redirectInput = screen.getByDisplayValue('/ui/dashboard') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/dashboard');
       expect(redirectInput.name).toBe('redirect');
     });
   });

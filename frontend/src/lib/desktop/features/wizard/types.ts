@@ -1,4 +1,5 @@
 import type { Component } from 'svelte';
+import type { TranslationKey } from '$lib/i18n';
 
 export type WizardFlow = 'onboarding' | 'whats-new';
 export type WizardStatus = 'idle' | 'active' | 'completed';
@@ -11,6 +12,11 @@ export interface ComponentStep {
   type: 'component';
   titleKey: string; // i18n key
   component: () => Promise<{ default: Component<WizardStepProps> }>;
+  /**
+   * i18n key of the error toast shown when this step's save fails after the wizard
+   * closed (Skip, Leave setup, relaunch). The generic message is used when unset.
+   */
+  unfinishedSaveKey?: TranslationKey;
 }
 
 export interface ContentStep {
@@ -25,20 +31,24 @@ export type WizardStep = ComponentStep | ContentStep;
 
 /**
  * Saves a step's pending edits. Rejects when the save fails; the wizard then
- * stays on the step and shows an error.
+ * stays on the step and shows an error. A rejection that arrives after the wizard
+ * closed is reported as an error toast instead.
  */
 export type StepLeaveHandler = () => Promise<void>;
 
 export interface WizardStepProps {
   /**
    * Reports whether the step is valid. A step must call it at mount and on every
-   * validity change; until it does, Next stays disabled.
+   * validity change; until it does, Next stays disabled. `reason` is the i18n key
+   * of why the step is not valid yet; it is shown beside Next and linked by
+   * aria-describedby, and ignored when `valid` is true.
    */
-  onValidChange?: (valid: boolean) => void;
+  onValidChange?: (valid: boolean, reason?: TranslationKey) => void;
   /**
    * Registers the step's leave handler, which Next, Back and Done await before
-   * navigating. Register once at mount; the returned function unregisters the
-   * handler and must run when the step is destroyed.
+   * navigating. Back runs it on an invalid step too, so the handler must send
+   * only the parts that are valid now. Register once at mount; the returned
+   * function unregisters the handler and must run when the step is destroyed.
    */
   registerLeaveHandler?: (handler: StepLeaveHandler) => () => void;
 }

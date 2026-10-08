@@ -11,6 +11,11 @@
   import { toastActions } from '$lib/stores/toast';
   import { loggers } from '$lib/utils/logger';
   import { formatNumber } from '$lib/utils/formatters';
+  import {
+    getBrowserLocationSupport,
+    requestBrowserLocation,
+    type BrowserLocationResult,
+  } from '$lib/utils/geolocation';
   import SettingsButton from './SettingsButton.svelte';
 
   interface Props {
@@ -19,6 +24,8 @@
     coordinateIntentVersion?: number;
     onLocation: (_latitude: number, _longitude: number) => void;
     disabled?: boolean;
+    /** Hide the label row and the idle help text; the button and accuracy readout stay. */
+    compact?: boolean;
   }
 
   interface DetectedPosition {
@@ -35,39 +42,13 @@
     coordinateIntentVersion: number;
   }
 
-  interface BrowserGeolocationPosition {
-    coords: {
-      latitude: number;
-      longitude: number;
-      accuracy: number;
-    };
-  }
-
-  interface BrowserGeolocationError {
-    code: number;
-    message: string;
-  }
-
-  const COORDINATE_DECIMAL_PLACES = 3;
-  const GEOLOCATION_TIMEOUT_MS = 10_000;
-  const EARTH_RADIUS_METERS = 6_371_000;
-  const DEGREES_TO_RADIANS = Math.PI / 180;
-  const MIN_LATITUDE = -90;
-  const MAX_LATITUDE = 90;
-  const MIN_LONGITUDE = -180;
-  const MAX_LONGITUDE = 180;
-  const GEOLOCATION_ERRORS = {
-    permissionDenied: 1,
-    positionUnavailable: 2,
-    timeout: 3,
-  } as const;
-
   let {
     latitude,
     longitude,
     coordinateIntentVersion = 0,
     onLocation,
     disabled = false,
+    compact = false,
   }: Props = $props();
 
   const logger = loggers.settings;
@@ -114,47 +95,6 @@
     return true;
   }
 
-  function distanceInMeters(
-    startLatitude: number,
-    startLongitude: number,
-    endLatitude: number,
-    endLongitude: number
-  ): number {
-    const latitudeDelta = (endLatitude - startLatitude) * DEGREES_TO_RADIANS;
-    const longitudeDelta = (endLongitude - startLongitude) * DEGREES_TO_RADIANS;
-    const startLatitudeRadians = startLatitude * DEGREES_TO_RADIANS;
-    const endLatitudeRadians = endLatitude * DEGREES_TO_RADIANS;
-
-    const haversine =
-      Math.sin(latitudeDelta / 2) ** 2 +
-      Math.cos(startLatitudeRadians) *
-        Math.cos(endLatitudeRadians) *
-        Math.sin(longitudeDelta / 2) ** 2;
-    const centralAngle =
-      2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(Math.max(0, 1 - haversine)));
-
-    return EARTH_RADIUS_METERS * centralAngle;
-  }
-
-  function effectiveAccuracy(
-    accuracy: number,
-    detectedLatitude: number,
-    detectedLongitude: number,
-    roundedLatitude: number,
-    roundedLongitude: number
-  ): number | null {
-    if (!Number.isFinite(accuracy)) return null;
-
-    const roundingDisplacement = distanceInMeters(
-      detectedLatitude,
-      detectedLongitude,
-      roundedLatitude,
-      roundedLongitude
-    );
-
-    return Math.ceil(Math.max(0, accuracy) + roundingDisplacement);
-  }
-
   function showUnexpectedFailure(error?: unknown) {
     if (error !== undefined) {
       logger.error('Browser geolocation failed unexpectedly', error);
@@ -162,69 +102,54 @@
     toastActions.error(t('settings.main.sections.rangeFilter.stationLocation.geolocationFailed'));
   }
 
-  function handleGeolocationError(error: BrowserGeolocationError, requestId: number) {
-    if (!finishRequest(requestId)) return;
+  function handleResult(result: BrowserLocationResult, requestId: number) {
+    if (!isCurrentRequest(requestId)) return;
 
-    switch (error.code) {
-      case GEOLOCATION_ERRORS.permissionDenied:
-        logger.warn('Browser geolocation permission denied', error);
+    switch (result.status) {
+      case 'success':
+        handleSuccess(result, requestId);
+        return;
+      case 'denied':
+        finishRequest(requestId);
+        logger.warn('Browser geolocation permission denied', result.error);
         toastActions.warning(
           t('settings.main.sections.rangeFilter.stationLocation.geolocationDenied')
         );
-        break;
-      case GEOLOCATION_ERRORS.positionUnavailable:
-        logger.warn('Browser geolocation position unavailable', error);
+        return;
+      case 'unavailable':
+        finishRequest(requestId);
+        logger.warn('Browser geolocation position unavailable', result.error);
         toastActions.error(
           t('settings.main.sections.rangeFilter.stationLocation.geolocationUnavailable')
         );
-        break;
-      case GEOLOCATION_ERRORS.timeout:
-        logger.warn('Browser geolocation request timed out', error);
+        return;
+      case 'timeout':
+        finishRequest(requestId);
+        logger.warn('Browser geolocation request timed out', result.error);
         toastActions.error(
           t('settings.main.sections.rangeFilter.stationLocation.geolocationTimedOut')
         );
-        break;
+        return;
       default:
-        showUnexpectedFailure(error);
+        // invalid and failed coordinates, a synchronous API throw, and any
+        // other error code.
+        finishRequest(requestId);
+        showUnexpectedFailure(result.error);
     }
   }
 
-  function handleGeolocationSuccess(position: BrowserGeolocationPosition, requestId: number) {
-    if (!isCurrentRequest(requestId)) return;
-
-    const { latitude: detectedLatitude, longitude: detectedLongitude, accuracy } = position.coords;
-
-    if (
-      !Number.isFinite(detectedLatitude) ||
-      !Number.isFinite(detectedLongitude) ||
-      detectedLatitude < MIN_LATITUDE ||
-      detectedLatitude > MAX_LATITUDE ||
-      detectedLongitude < MIN_LONGITUDE ||
-      detectedLongitude > MAX_LONGITUDE
-    ) {
-      finishRequest(requestId);
-      showUnexpectedFailure(new Error('Browser returned invalid coordinates'));
-      return;
-    }
-
-    const roundedLatitude = Number(detectedLatitude.toFixed(COORDINATE_DECIMAL_PLACES));
-    const roundedLongitude = Number(detectedLongitude.toFixed(COORDINATE_DECIMAL_PLACES));
-    const roundedAccuracy = effectiveAccuracy(
-      accuracy,
-      detectedLatitude,
-      detectedLongitude,
-      roundedLatitude,
-      roundedLongitude
-    );
-
-    if (!finishRequest(requestId)) return;
+  function handleSuccess(
+    result: Extract<BrowserLocationResult, { status: 'success' }>,
+    requestId: number
+  ) {
+    finishRequest(requestId);
 
     try {
-      onLocation(roundedLatitude, roundedLongitude);
+      onLocation(result.latitude, result.longitude);
       detectedPosition = {
-        latitude: roundedLatitude,
-        longitude: roundedLongitude,
-        accuracy: roundedAccuracy,
+        latitude: result.latitude,
+        longitude: result.longitude,
+        accuracy: result.accuracyMeters,
         coordinateIntentVersion,
       };
       toastActions.success(
@@ -236,16 +161,14 @@
   }
 
   function useCurrentLocation() {
-    // Browsers may omit the API entirely on insecure origins, so report the
-    // secure-context problem first when it is known.
-    if (typeof window !== 'undefined' && window.isSecureContext === false) {
+    const support = getBrowserLocationSupport();
+    if (support === 'insecure') {
       toastActions.warning(
         t('settings.main.sections.rangeFilter.stationLocation.geolocationRequiresHttps')
       );
       return;
     }
-
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    if (support === 'unsupported') {
       toastActions.error(
         t('settings.main.sections.rangeFilter.stationLocation.geolocationUnsupported')
       );
@@ -257,21 +180,7 @@
     locating = true;
     detectedPosition = null;
 
-    try {
-      navigator.geolocation.getCurrentPosition(
-        position => handleGeolocationSuccess(position, requestId),
-        error => handleGeolocationError(error, requestId),
-        {
-          enableHighAccuracy: true,
-          timeout: GEOLOCATION_TIMEOUT_MS,
-          maximumAge: 0,
-        }
-      );
-    } catch (error) {
-      if (finishRequest(requestId)) {
-        showUnexpectedFailure(error);
-      }
-    }
+    requestBrowserLocation(result => handleResult(result, requestId));
   }
 
   onDestroy(() => {
@@ -281,11 +190,13 @@
 </script>
 
 <div class="form-control min-w-0">
-  <div class="label">
-    <span class="label-text">
-      {t('settings.main.sections.rangeFilter.stationLocation.automaticLocation')}
-    </span>
-  </div>
+  {#if !compact}
+    <div class="label">
+      <span class="label-text">
+        {t('settings.main.sections.rangeFilter.stationLocation.automaticLocation')}
+      </span>
+    </div>
+  {/if}
 
   <div class="flex flex-wrap items-center gap-x-3 gap-y-1 xl:flex-col xl:items-start">
     <SettingsButton
@@ -304,7 +215,7 @@
           accuracy: formatNumber(displayedAccuracy),
         })}
       </span>
-    {:else}
+    {:else if !compact}
       <span class="help-text">
         {t('settings.main.sections.rangeFilter.stationLocation.locationHelp')}
       </span>

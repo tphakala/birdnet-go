@@ -56,6 +56,13 @@ yourself before touching code in that area.
 
 - **API v1 is frozen.** Never add or extend v1 endpoints; all new endpoints go
   in `internal/api/v2/`.
+- **The frontend is for desktop and tablet only; mobile is out of scope.** Do
+  not optimize, fix, test or file issues for phone viewports or phone layouts
+  (about 640 px wide and below), and do not add phone-specific workarounds.
+  Mobile will get its own, separate UI. A defect that shows only at phone width
+  is not a defect. Tablets (touch, and narrow desktop windows at the `sm:` and
+  `md:` breakpoints) still count. This is a standing maintainer decision, not
+  a per-task call.
 - **Settings must hot-reload.** Every setting changed through the UI must take
   effect immediately, without a server restart. Read settings per request or
   per operation (for example dynamic middleware or an atomic settings snapshot);

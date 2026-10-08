@@ -3272,7 +3272,11 @@
         "enable": "Iespējot BirdWeather augšupielādes",
         "token": {
           "label": "BirdWeather tokens",
-          "helpText": "Jūsu unikālais BirdWeather tokens."
+          "helpText": "Jūsu unikālais BirdWeather tokens.",
+          "errors": {
+            "required": "Ievadiet savu BirdWeather tokenu vai izslēdziet BirdWeather.",
+            "format": "BirdWeather tokens sastāv no 24 burtiem un cipariem."
+          }
         },
         "threshold": {
           "label": "Augšupielādes slieksnis",
@@ -5188,6 +5192,13 @@
       "viewDetections": "Apskatīt {name} novērojumus",
       "largeView": "{name} lielais skats",
       "clickToView": "Noklikšķiniet, lai skatītu novērojumus"
+    },
+    "locationMap": {
+      "mapLabel": "Karte stacijas atrašanās vietas izvēlei",
+      "expandedMapLabel": "Pilnekrāna karte stacijas atrašanās vietas izvēlei",
+      "zoomIn": "Tuvināt",
+      "zoomOut": "Tālināt",
+      "expand": "Izvērst karti pilnekrāna skatā"
     }
   },
   "connectivity": {
@@ -5357,8 +5368,11 @@
     },
     "errors": {
       "saveFailed": "Šo soli neizdevās saglabāt. Pārbaudiet savienojumu un mēģiniet vēlreiz vai izlaidiet iestatīšanu un mainiet to vēlāk Iestatījumos.",
+      "saveRejected": "Šī soļa iestatījumi netika pieņemti. Pārbaudiet vērtības un mēģiniet vēlreiz vai izlaidiet iestatīšanu un mainiet to vēlāk Iestatījumos.",
       "stepLoadFailed": "Šo soli neizdevās ielādēt. Nospiediet Mēģināt vēlreiz vai pārlādējiet lapu.",
-      "stepLoadFailedReload": "Šo soli joprojām neizdevās ielādēt. Pārlādējiet lapu, lai mēģinātu vēlreiz; iepriekšējos soļos saglabātās izvēles tiek paturētas."
+      "stepLoadFailedReload": "Šo soli joprojām neizdevās ielādēt. Pārlādējiet lapu, lai mēģinātu vēlreiz; iepriekšējos soļos saglabātās izvēles tiek paturētas.",
+      "audioSourceSaveUnfinished": "Audio avota maiņa netika pabeigta. Pārbaudiet audio avotus sadaļā Iestatījumi > Audio.",
+      "saveUnfinished": "Dažas iestatīšanas laikā veiktās izmaiņas netika saglabātas. Pārbaudiet tās sadaļā Iestatījumi."
     },
     "reasons": {
       "completeStep": "Lai turpinātu, pabeidziet šo soli."
@@ -5366,6 +5380,7 @@
     "leaveConfirm": {
       "title": "Pamest iestatīšanu?",
       "message": "Iestatīšana vairs netiks atvērta. Iepriekšējos soļos saglabātās izvēles tiek paturētas; šī soļa izmaiņas netiek saglabātas. Visu varat mainīt vēlāk Iestatījumos.",
+      "messageSaving": "Iestatīšana vairs netiks atvērta. Iepriekšējos soļos saglabātās izvēles tiek paturētas. Šis solis vēl tiek saglabāts, un dažas vai visas tā izmaiņas var netikt paturētas. Visu varat mainīt vēlāk Iestatījumos.",
       "stay": "Turpināt iestatīšanu",
       "leave": "Pamest iestatīšanu"
     },
@@ -5413,7 +5428,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Ievadiet RTSP audio straumes URL",
         "additionalSourcesHint": "Papildu audio avotus varēsiet pievienot vēlāk iestatījumos.",
-        "configureLater": "Izlaist - konfigurēt vēlāk"
+        "devicesLoadFailed": "Neizdevās uzskaitīt šīs sistēmas audio ierīces.",
+        "useStreamInstead": "Tā vietā izmantot RTSP straumi",
+        "setUpLater": "Konfigurēt audio vēlāk",
+        "setUpLaterChosen": "Audio tagad netiks konfigurēts. Skaņas karti vai straumi varat pievienot vēlāk iestatījumos.",
+        "streamReplacesSoundCards": "Skaņas kartes pārstāj ierakstīt, kad izmantojat straumi. Tās varat pievienot atkal iestatījumos.",
+        "soundCardReplacesStream": "Straume, kas redzama straumes opcijā, tiek izslēgta, kad izmantojat skaņas karti. To varat ieslēgt atkal iestatījumos.",
+        "reasons": {
+          "chooseDevice": "Izvēlieties audio ierīci vai konfigurējiet audio vēlāk.",
+          "devicesFailed": "Audio ierīces neizdevās uzskaitīt. Mēģiniet vēlreiz, izmantojiet straumi vai konfigurējiet audio vēlāk.",
+          "noDevices": "Nav atrasta neviena audio ierīce. Izmantojiet straumi vai konfigurējiet audio vēlāk.",
+          "enterUrl": "Ievadiet straumes URL vai konfigurējiet audio vēlāk.",
+          "urlScheme": "Ievadiet pilnu straumes URL, kas sākas ar rtsp:// vai rtsps:// un nesatur atstarpes."
+        }
       },
       "detection": {
         "title": "Noteikšanas slieksnis",
@@ -5425,6 +5452,7 @@
         "highAccuracyDesc": "Mazāk kļūdaini pozitīvu, var palaist garām dažus putnus",
         "highSensitivity": "Augsts jutīgums",
         "highSensitivityDesc": "Vairāk noteikšanu, vairāk kļūdaini pozitīvu",
+        "descriptionStored": "Izvēlieties, cik stingrai jābūt putnu identificēšanai. Pašlaik: {threshold}, nav sakritības.",
         "threshold": "Ticamības slieksnis",
         "fpFilterNote": "Kad sistēma darbojas un ir pierādījusi sevi, varat ieslēgt kļūdaini pozitīvo filtru iestatījumos, lai vēl vairāk samazinātu nepareizas noteikšanas."
       },
@@ -5434,10 +5462,12 @@
         "privacyFilterHelp": "Filtrē noteikšanas, kad pie mikrofona tiek noteiktas cilvēku balsis",
         "birdweatherLabel": "Dalīties ar noteikšanām BirdWeather",
         "birdweatherHelp": "Sniedziet savu putnu noteikšanu ieguldījumu BirdWeather kopienas tīklā",
-        "birdweatherIdLabel": "BirdWeather stacijas ID",
-        "birdweatherIdPlaceholder": "Ievadiet savu BirdWeather stacijas ID",
         "errorReportingLabel": "Sūtīt anonīmus kļūdu ziņojumus",
-        "errorReportingHelp": "Palīdziet uzlabot BirdNET-Go, sūtot anonīmus kļūdu ziņojumus, kad kaut kas noiet greizi"
+        "errorReportingHelp": "Palīdziet uzlabot BirdNET-Go, sūtot anonīmus kļūdu ziņojumus, kad kaut kas noiet greizi",
+        "reasons": {
+          "enterToken": "Ievadiet savu BirdWeather tokenu vai izslēdziet kopīgošanu ar BirdWeather.",
+          "tokenFormat": "BirdWeather tokens sastāv no 24 burtiem un cipariem."
+        }
       },
       "responsibleUse": {
         "title": "BirdNET-Go atbildīga lietošana",

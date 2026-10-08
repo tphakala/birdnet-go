@@ -99,9 +99,11 @@
   // Show the Recording column when audio export is enabled (so it stays visible
   // even for a page that happens to have no clips yet) OR when any visible row
   // actually has a clip (so historical clips remain reachable after export is
-  // turned off). The per-row spectrogram is still gated on detection.clipName.
+  // turned off), or has a kept spectrogram image after retention removed its audio.
+  // The per-row player is still gated on detection.clipName.
   let showRecordingColumn = $derived(
-    appState.audioExportEnabled || (data?.notes ?? []).some(d => Boolean(d.clipName))
+    appState.audioExportEnabled ||
+      (data?.notes ?? []).some(d => Boolean(d.clipName) || Boolean(d.spectrogramOnly))
   );
 
   // Generate title based on query type

@@ -80,7 +80,10 @@ func (m *MockDatastore) GetNoteClipPath(string) (string, error) {
 	return "", datastore.ErrNoteReviewNotFound
 }
 func (m *MockDatastore) GetNoteModelType(_ string) (string, error) { return "bird", nil }
-func (m *MockDatastore) DeleteNoteClipPath(string) error           { return nil }
+func (m *MockDatastore) GetNoteKeptSpectrogram(_ string) (clipName, modelType string, err error) {
+	return "", "bird", nil
+}
+func (m *MockDatastore) DeleteNoteClipPath(string) error { return nil }
 func (m *MockDatastore) GetNoteReview(string) (*datastore.NoteReview, error) {
 	return nil, datastore.ErrNoteReviewNotFound
 }
@@ -142,6 +145,9 @@ func (m *MockDatastore) GetAllImageCaches(string) ([]datastore.ImageCache, error
 }
 func (m *MockDatastore) GetLockedNotesClipPaths() ([]string, error)          { return make([]string, 0), nil }
 func (m *MockDatastore) ClearNoteClipPathsByNames(_ []string) (int64, error) { return 0, nil }
+func (m *MockDatastore) RetainNoteSpectrogramsByClipNames(_ []string) (int64, error) {
+	return 0, nil
+}
 func (m *MockDatastore) GetNoteClipReferences(_ uint, _ int) ([]diskmanager.ClipReference, error) {
 	return nil, nil
 }
