@@ -2,7 +2,15 @@
   // Open Modal instances, oldest first. Only the last one (the topmost) acts on
   // Tab and Escape, so a dialog opened over another (the setup wizard and its
   // leave confirmation) does not have its keys handled twice.
-  const openModals: object[] = [];
+  const openModals: OpenModal[] = [];
+
+  /** What one open Modal tells the others: its dialog, where it was opened from, where focus goes on close. */
+  interface OpenModal {
+    dialog: HTMLElement | undefined;
+    opener: HTMLElement | null;
+    /** Set when a Modal this one was opened from closes first; replaces `opener` as the place to restore focus to */
+    restoreTo: HTMLElement | null;
+  }
 
   // CSS selector for elements that may be keyboard focusable. getTabbable()
   // narrows the matches to the ones the Tab key actually reaches.
@@ -191,16 +199,21 @@
   let isConfirming = $state(false);
   let modalElement = $state<HTMLDivElement>();
   let dialogElement = $state<HTMLDivElement>();
-  let previousActiveElement: HTMLElement | null = null;
-  // Identity of this instance in the openModals stack
-  const stackToken = {};
+  // This instance in the openModals stack
+  const stackEntry: OpenModal = {
+    get dialog() {
+      return dialogElement;
+    },
+    opener: null,
+    restoreTo: null,
+  };
   // Ids are per instance and fixed for its life: the dialog is always mounted,
   // so a shared literal would repeat on every page that has two Modals
   const titleId = generateId('modal-title');
   const bodyId = generateId('modal-body');
 
   function isTopmost(): boolean {
-    return openModals.at(-1) === stackToken;
+    return openModals.at(-1) === stackEntry;
   }
 
   const modalBoxBase =
@@ -376,27 +389,45 @@
     return stop;
   }
 
-  function restoreFocus() {
-    if (previousActiveElement && 'focus' in previousActiveElement) {
-      (previousActiveElement as HTMLElement).focus();
+  // A trigger that was removed while the dialog was open (a delete flow) cannot take focus
+  function restoreFocus(target: HTMLElement | null) {
+    if (target?.isConnected && 'focus' in target) target.focus();
+  }
+
+  /**
+   * Closes this Modal's place in the stack. The topmost one returns focus to
+   * where it was opened from. One that closes under another open dialog leaves
+   * focus there; a dialog above it that was opened from inside this one then
+   * returns focus to where this one was opened from when it closes.
+   */
+  function leaveStack() {
+    const index = openModals.indexOf(stackEntry);
+    if (index === -1) return;
+    const wasTopmost = index === openModals.length - 1;
+    openModals.splice(index, 1);
+    const target = stackEntry.restoreTo ?? stackEntry.opener;
+    if (wasTopmost) {
+      restoreFocus(target);
+      return;
     }
+    const above = openModals.at(index);
+    if (above?.opener && stackEntry.dialog?.contains(above.opener)) above.restoreTo = target;
   }
 
   $effect(() => {
     if (isOpen) {
-      previousActiveElement = document.activeElement as HTMLElement;
+      stackEntry.opener = document.activeElement as HTMLElement;
+      stackEntry.restoreTo = null;
 
       const stopInitialFocus = scheduleInitialFocus();
 
-      openModals.push(stackToken);
+      openModals.push(stackEntry);
       document.addEventListener('keydown', handleKeydown);
 
       return () => {
         stopInitialFocus();
         document.removeEventListener('keydown', handleKeydown);
-        const stackIndex = openModals.indexOf(stackToken);
-        if (stackIndex !== -1) openModals.splice(stackIndex, 1);
-        restoreFocus();
+        leaveStack();
       };
     }
   });

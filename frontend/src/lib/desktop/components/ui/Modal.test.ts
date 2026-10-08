@@ -12,6 +12,7 @@ import Modal from './Modal.svelte';
 import ModalTestWrapper from './Modal.test.svelte';
 import ModalTrapHost from './Modal.trap.test.svelte';
 import ModalStackHost from './Modal.stack.test.svelte';
+import ModalToggleHost from './Modal.toggle.test.svelte';
 import ModalCardsHost from './Modal.cards.test.svelte';
 
 function blurActiveElement() {
@@ -715,7 +716,7 @@ describe('Modal', () => {
       expect(button('First')).toHaveFocus();
     });
 
-    it('Shift+Tab from the last radio of an unchecked leading group wraps to the last control', async () => {
+    it('Shift+Tab from the last radio of an unchecked leading group wraps to the last control, the button after the group', async () => {
       await renderHost({ radioLayout: 'leading-unchecked', hideFooter: true });
       screen.getByRole('radio', { name: 'Pick Q' }).focus();
 
@@ -845,13 +846,15 @@ describe('Modal', () => {
           expect(button('First')).toHaveFocus();
         });
 
-        it('keeps the controls as candidates while the dialog itself is still hidden', async () => {
+        it('uses the display-only check while the dialog itself is still hidden, so the trap does not wrap', async () => {
           await renderHost({ visibilityHiddenLast: true, dialogHidden: true });
           button('Last').focus();
 
-          await user.tab();
+          // The control that only the visibility property hides still counts as a next stop,
+          // so the trap leaves the key alone (fireEvent returns false when it was prevented)
+          const notPrevented = await fireEvent.keyDown(button('Last'), { key: 'Tab' });
 
-          expect(button('Hidden last')).toHaveFocus();
+          expect(notPrevented).toBe(true);
         });
       }
     );
@@ -872,6 +875,60 @@ describe('Modal', () => {
       expect(button('Lower action')).toHaveFocus();
     });
   });
+
+  describe('focus restore', () => {
+    const button = (name: string) => screen.getByRole('button', { name });
+    const press = (name: string) => fireEvent.click(button(name));
+
+    async function openBoth() {
+      renderTyped(ModalToggleHost, {});
+      button('Page button').focus();
+      await press('Toggle lower');
+      await waitFor(() => expect(button('Lower action')).toHaveFocus());
+      await press('Toggle upper');
+      await waitFor(() => expect(button('Upper action')).toHaveFocus());
+    }
+
+    it('closing the lower of two open modals leaves focus in the upper one', async () => {
+      await openBoth();
+
+      await press('Toggle lower');
+
+      expect(button('Upper action')).toHaveFocus();
+    });
+
+    it('closing both modals in one update returns focus to the element focused before the first', async () => {
+      await openBoth();
+
+      await press('Close both');
+
+      expect(button('Page button')).toHaveFocus();
+    });
+
+    it('closing the upper modal returns focus to the control it was opened from', async () => {
+      await openBoth();
+
+      await press('Toggle upper');
+
+      expect(button('Lower action')).toHaveFocus();
+    });
+
+    it('does not move focus when the element it was opened from is gone', async () => {
+      renderTyped(ModalToggleHost, {});
+      const opener = document.createElement('button');
+      document.body.append(opener);
+      opener.focus();
+      await press('Toggle lower');
+      await waitFor(() => expect(button('Lower action')).toHaveFocus());
+      const focusSpy = vi.spyOn(opener, 'focus');
+      opener.remove();
+
+      await press('Toggle lower');
+
+      expect(focusSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Escape', () => {
     it('does not close on an Escape that a control inside already handled', async () => {
       const onClose = vi.fn();
