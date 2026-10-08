@@ -302,6 +302,28 @@ describe('LocationMap', () => {
       });
     });
 
+    it('world start view keeps the zoom for coordinates that are not a set location', async () => {
+      const { props, rerender } = await mount({
+        latitude: 0,
+        longitude: 0,
+        locationSet: false,
+        startView: 'world',
+      });
+      const map = mapAt(0);
+      vi.mocked(map.getZoom).mockReturnValue(1);
+      vi.mocked(map.easeTo).mockClear();
+
+      await rerender({ ...props, latitude: 5, longitude: 5, locationSet: false });
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
+
+      expect(map.easeTo).toHaveBeenLastCalledWith({
+        center: [5, 5],
+        zoom: 1,
+        duration: COORDINATE_SYNC_DURATION_MS,
+      });
+      expect(vi.mocked(Marker)).not.toHaveBeenCalled();
+    });
+
     it('keeps the zoom for the first location on a region map', async () => {
       const { props, rerender } = await mount({
         latitude: 0,

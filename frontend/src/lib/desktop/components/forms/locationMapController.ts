@@ -34,6 +34,21 @@ export const WORLD_OVERVIEW_ZOOM = 1;
 /** Stacking order of the expanded map dialog, above the settings page chrome. */
 export const Z_INDEX_LOCATION_MAP_DIALOG = 9999;
 
+const LONGITUDE_MIN = -180;
+const LONGITUDE_MAX = 180;
+const LONGITUDE_PERIOD = LONGITUDE_MAX - LONGITUDE_MIN;
+
+/**
+ * Bring a longitude from a repeated copy of the world map back into
+ * -180..180, the way MapLibre's `LngLat.wrap` does (-180 becomes 180).
+ */
+function wrapLongitude(longitude: number): number {
+  const wrapped =
+    ((((longitude - LONGITUDE_MIN) % LONGITUDE_PERIOD) + LONGITUDE_PERIOD) % LONGITUDE_PERIOD) +
+    LONGITUDE_MIN;
+  return wrapped === LONGITUDE_MIN ? LONGITUDE_MAX : wrapped;
+}
+
 /** The loaded MapLibre module. */
 export type MapLibreModule = typeof import('maplibre-gl');
 
@@ -188,7 +203,7 @@ export function createLocationMapController(
   function pick(lat: number, lng: number) {
     if (destroyed) return;
     const roundedLatitude = roundCoordinate(lat);
-    const roundedLongitude = roundCoordinate(lng);
+    const roundedLongitude = roundCoordinate(wrapLongitude(lng));
 
     placeMarker(roundedLatitude, roundedLongitude);
     if (recenterOnPick) {

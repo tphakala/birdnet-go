@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  COORDINATE_SYNC_DEBOUNCE_MS,
   COORDINATE_SYNC_DURATION_MS,
   DOUBLE_TAP_WINDOW_MS,
   ZOOM_STEP_DURATION_MS,
@@ -191,6 +192,32 @@ describe('locationMapController', () => {
 
       expect(map.easeTo).not.toHaveBeenCalled();
       expect(onPick).toHaveBeenCalledWith(52.5, 4.5);
+    });
+
+    it.each([
+      [190.1236, -169.876],
+      [-190.5, 169.5],
+      [540.25, -179.75],
+      [180, 180],
+      [-180, 180],
+      [24.9876, 24.988],
+    ])('click at longitude %s on a repeated world copy reports %s', (clicked, reported) => {
+      const { map } = create({ showMarker: false });
+
+      click(map, 52, clicked);
+
+      expect(onPick).toHaveBeenCalledExactlyOnceWith(52, reported);
+      expect(lastOf(fake.markers).lngLat).toEqual([reported, 52]);
+    });
+
+    it('dragend on a repeated world copy reports the wrapped longitude', () => {
+      create();
+      const marker = lastOf(fake.markers);
+      marker.lngLat = [-200.4321, 51.98765];
+
+      marker.handlers.get('dragend')?.({});
+
+      expect(onPick).toHaveBeenCalledExactlyOnceWith(51.988, 159.568);
     });
 
     it('moves the existing pin instead of creating another one', () => {
@@ -469,6 +496,16 @@ describe('locationMapController', () => {
       controller.destroy();
 
       expect(map.remove).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('timing constants', () => {
+    it('keep the values of the old settings map', () => {
+      // Literals on purpose: the other tests take their timings from these exports.
+      expect(COORDINATE_SYNC_DEBOUNCE_MS).toBe(500);
+      expect(COORDINATE_SYNC_DURATION_MS).toBe(300);
+      expect(ZOOM_STEP_DURATION_MS).toBe(300);
+      expect(DOUBLE_TAP_WINDOW_MS).toBe(300);
     });
   });
 
