@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import {
   OPTION_SELECTED_BG_CLASS,
   OPTION_HIGHLIGHT_BG_CLASS,
+  OPTION_HIGHLIGHT_OUTLINE_CLASS,
 } from '../lib/desktop/components/forms/SelectDropdown.styles';
 
 // WCAG 2.1 Level AA contrast ratios
@@ -370,7 +371,7 @@ describe('SelectDropdown option states in every color scheme', () => {
   const FIXED_SCHEMES = ['blue', 'forest', 'amber', 'violet', 'rose'];
   const ALL_SCHEMES = [...FIXED_SCHEMES, 'custom'];
 
-  /** Minimum ratio for text (WCAG 1.4.3) and for the focus outline (WCAG 1.4.11). */
+  /** Minimum ratio for the focus outline against its neighbours (WCAG 1.4.11). */
   const OUTLINE_MIN_RATIO = 3;
 
   const lightBase = blockBody(tailwindCss, '@theme');
@@ -383,6 +384,15 @@ describe('SelectDropdown option states in every color scheme', () => {
     expect(match, `${token} tint percentage in "${classes}"`).not.toBeNull();
     return Number(match?.[1]) / 100;
   }
+
+  /** Custom property written as `outline-[var(--token)]` in a class constant. */
+  function outlineColorToken(classes: string): string {
+    const match = /outline-\[var\((--[a-z0-9-]+)\)\]/.exec(classes);
+    expect(match, `outline color in "${classes}"`).not.toBeNull();
+    return match?.[1] ?? '';
+  }
+
+  const outlineToken = outlineColorToken(OPTION_HIGHLIGHT_OUTLINE_CLASS);
 
   const selectedFraction = tintFraction('--color-primary', OPTION_SELECTED_BG_CLASS);
   const highlightFraction = tintFraction('--color-base-content', OPTION_HIGHLIGHT_BG_CLASS);
@@ -408,20 +418,23 @@ describe('SelectDropdown option states in every color scheme', () => {
     const base = theme === 'light' ? lightBase : darkBase;
     const surface = readVar(base, '--color-base-100');
     const content = readVar(base, '--color-base-content');
+    const outline = readVar(base, outlineToken);
     const selectedTint = applyOpacity(primary, surface, selectedFraction);
     const highlightTint = applyOpacity(content, surface, highlightFraction);
     return {
       textOnSelected: getContrastRatio(content, selectedTint),
       textOnHighlight: getContrastRatio(content, highlightTint),
-      outlineOnSurface: getContrastRatio(content, surface),
-      outlineOnSelected: getContrastRatio(content, selectedTint),
-      outlineOnHighlight: getContrastRatio(content, highlightTint),
+      outlineOnSurface: getContrastRatio(outline, surface),
+      outlineOnSelected: getContrastRatio(outline, selectedTint),
+      outlineOnHighlight: getContrastRatio(outline, highlightTint),
     };
   }
 
   it('covers every scheme defined in schemes.css', () => {
-    const names = [...schemesCss.matchAll(/^\[data-scheme='([a-z]+)'\]/gm)].map(m => m[1]);
-    expect(names).toEqual(ALL_SCHEMES);
+    const names = new Set(
+      [...schemesCss.matchAll(/\[data-scheme=["']?([^"'\]]+)["']?\]/g)].map(m => m[1])
+    );
+    expect([...names].sort()).toEqual([...ALL_SCHEMES].sort());
   });
 
   for (const scheme of FIXED_SCHEMES) {
