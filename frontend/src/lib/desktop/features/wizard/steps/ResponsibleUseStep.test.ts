@@ -3,15 +3,13 @@ import { screen, fireEvent } from '@testing-library/svelte';
 import { renderTyped } from '../../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 
-vi.mock('$lib/i18n', () => ({
-  t: vi.fn((key: string) => key),
-  getLocale: vi.fn(() => 'en'),
-}));
-
 import ResponsibleUseStep from './ResponsibleUseStep.svelte';
 
 const ACKNOWLEDGE_NAME = /wizard\.steps\.responsibleUse\.acknowledge/;
 const PRIMARY_BORDER_CLASS = 'border-[var(--color-primary)]';
+const PRIMARY_TINT_CLASS = 'bg-[var(--color-primary)]/5';
+const IDLE_BORDER_CLASS = 'border-[var(--border-200)]';
+const HOVER_BORDER_CLASS = 'hover:border-[var(--border-300)]';
 
 const acknowledgeBox = () => screen.getByRole('checkbox', { name: ACKNOWLEDGE_NAME });
 
@@ -47,15 +45,21 @@ describe('ResponsibleUseStep', () => {
     expect(acknowledgeBox()).not.toBeChecked();
   });
 
-  it('marks the card with the primary border while acknowledged', async () => {
+  it('marks the card with the primary border and tint while acknowledged, and the idle and hover border otherwise', async () => {
     renderTyped(ResponsibleUseStep, { props: {} });
+    expect(card()).toHaveClass(IDLE_BORDER_CLASS, HOVER_BORDER_CLASS);
     expect(card()).not.toHaveClass(PRIMARY_BORDER_CLASS);
+    expect(card()).not.toHaveClass(PRIMARY_TINT_CLASS);
 
     await fireEvent.click(acknowledgeBox());
-    expect(card()).toHaveClass(PRIMARY_BORDER_CLASS);
+    expect(card()).toHaveClass(PRIMARY_BORDER_CLASS, PRIMARY_TINT_CLASS);
+    expect(card()).not.toHaveClass(IDLE_BORDER_CLASS);
+    expect(card()).not.toHaveClass(HOVER_BORDER_CLASS);
 
     await fireEvent.click(acknowledgeBox());
+    expect(card()).toHaveClass(IDLE_BORDER_CLASS, HOVER_BORDER_CLASS);
     expect(card()).not.toHaveClass(PRIMARY_BORDER_CLASS);
+    expect(card()).not.toHaveClass(PRIMARY_TINT_CLASS);
   });
 });
 

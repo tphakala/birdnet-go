@@ -195,10 +195,11 @@ describe('Checkbox', () => {
 
     const checkbox = screen.getByRole('checkbox');
     const label = checkbox.closest('label');
+    if (!(label instanceof HTMLLabelElement)) throw new Error('checkbox is not inside a label');
     expect(label).toHaveClass('w-full', 'p-4', 'flex', 'cursor-pointer');
     expect(label).not.toHaveClass('py-1');
 
-    await fireEvent.click(label as HTMLLabelElement);
+    await fireEvent.click(label);
     expect(checkbox).toBeChecked();
   });
 });
