@@ -628,6 +628,26 @@ describe('WizardDialog', () => {
       expect(api.post).not.toHaveBeenCalled();
     });
 
+    it('Tab cycles inside the confirmation only', async () => {
+      renderWizard(componentSteps(3));
+      await waitForPrimaryEnabled();
+      await user.click(closeButton());
+      const stay = screen.getByRole('button', { name: 'wizard.leaveConfirm.stay' });
+      const leave = screen.getByRole('button', { name: 'wizard.leaveConfirm.leave' });
+      await waitFor(() => expect(stay).toHaveFocus());
+
+      await user.tab();
+      expect(leave).toHaveFocus();
+
+      await user.tab();
+      expect(stay).toHaveFocus();
+
+      // Focus lost to <body> returns to the confirmation, not the wizard behind it
+      stay.blur();
+      await user.tab();
+      expect(stay).toHaveFocus();
+    });
+
     it('Keep setting up returns to the same step', async () => {
       renderWizard(componentSteps(3));
       await waitForPrimaryEnabled();
@@ -765,6 +785,26 @@ describe('WizardDialog Accessibility', () => {
     expect(screen.getByRole('dialog', { name: 'test.step1' })).not.toHaveAttribute(
       'aria-describedby'
     );
+  });
+
+  it('Tab from Next wraps to the close button', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    primaryButton().focus();
+
+    await user.tab();
+
+    expect(closeButton()).toHaveFocus();
+  });
+
+  it('Shift+Tab from the close button wraps to Next', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    closeButton().focus();
+
+    await user.tab({ shift: true });
+
+    expect(primaryButton()).toHaveFocus();
   });
 
   it('keeps focus in the dialog when Back returns to the first step', async () => {
