@@ -46,7 +46,8 @@ function generateId(): string {
 export const toastActions = {
   /**
    * Show a toast notification. `options.duration` of undefined uses the default
-   * duration; null (or 0) keeps the toast on screen until it is closed.
+   * duration; null (or 0) disables auto-dismiss, so the toast stays until it is
+   * closed or newer toasts push it out of the MAX_TOASTS window.
    */
   show(
     message: string,
