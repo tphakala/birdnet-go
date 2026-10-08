@@ -317,8 +317,8 @@ describe('ToggleField', () => {
     const toggle = screen.getByRole('checkbox');
     const errorId = toggle.getAttribute('aria-describedby');
 
-    expect(errorId).toBeTruthy();
-    const errorElement = document.getElementById(errorId as string);
+    if (!errorId) throw new Error('aria-describedby is missing');
+    const errorElement = document.getElementById(errorId);
     expect(errorElement).toHaveTextContent('Error message');
   });
 
