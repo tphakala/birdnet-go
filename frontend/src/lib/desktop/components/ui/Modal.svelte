@@ -168,7 +168,11 @@
     /**
      * Keep the header and footer in view and scroll only the body once the dialog
      * reaches its maximum height. Use for dialogs whose body can be taller than the
-     * viewport. Off by default: the whole panel then scrolls as one.
+     * viewport. Off by default: the whole panel then scrolls as one. With it on,
+     * content wider than the dialog is clipped instead of scrolling sideways, and
+     * the body assumes the panel's default `p-6` padding (a `className` that sets
+     * less padding pushes the body past the panel edge, where its scrollbar and
+     * focus rings are clipped).
      */
     scrollBody?: boolean;
     /**
