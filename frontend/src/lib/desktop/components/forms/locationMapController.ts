@@ -29,7 +29,7 @@ export const ZOOM_STEP_DURATION_MS = 300;
  * placement waits this long when double-tap protection is on.
  */
 export const DOUBLE_TAP_WINDOW_MS = 300;
-/** Zoom of the world overview shown while no location is set. */
+/** Zoom of the world overview shown when the coordinates are 0,0. */
 export const WORLD_OVERVIEW_ZOOM = 1;
 /** Stacking order of the expanded map dialog, above the settings page chrome. */
 export const Z_INDEX_LOCATION_MAP_DIALOG = 9999;
@@ -38,8 +38,9 @@ export const Z_INDEX_LOCATION_MAP_DIALOG = 9999;
 export type MapLibreModule = typeof import('maplibre-gl');
 
 /**
- * Which view an unset map starts in. `region` is the settings map (zoom 5
- * while unset); `world` shows the whole world while unset.
+ * Which view a map opens in when it has no inline zoom to copy. `region` is
+ * the settings map (zoom 5 when the coordinates are 0,0); `world` shows the
+ * whole world then.
  */
 export type LocationMapStartView = 'region' | 'world';
 
