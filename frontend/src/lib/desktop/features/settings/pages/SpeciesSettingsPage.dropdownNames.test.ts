@@ -36,6 +36,7 @@ const trackingSettings = {
 describe('SpeciesSettingsPage tracking dropdown names', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn();
+    // Partial on purpose: SettingsFormData is large and the page reads only these fields here
     const formData = {
       realtime: {
         species: { include: [], exclude: [], config: {} },
