@@ -256,6 +256,29 @@ describe('ToastContainer keyboard focus', () => {
     }
   });
 
+  it('moving focus from a toast to focusable SVG content ends focus tracking', async () => {
+    render(ToastContainer);
+    const id = toastActions.info('Left behind', { duration: null });
+    toastActions.info('Other', { duration: null });
+    await tick();
+    const chart = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    chart.setAttribute('tabindex', '0');
+    document.body.append(chart);
+    try {
+      closeButtons()[0].focus();
+      chart.focus();
+      chart.blur();
+      expect(document.body).toHaveFocus();
+
+      toastActions.remove(id);
+      await tick();
+
+      expect(document.body).toHaveFocus();
+    } finally {
+      chart.remove();
+    }
+  });
+
   it('a pointer press on SVG content outside the toasts ends focus tracking', async () => {
     render(ToastContainer);
     const id = toastActions.info('Left behind', { duration: null });
