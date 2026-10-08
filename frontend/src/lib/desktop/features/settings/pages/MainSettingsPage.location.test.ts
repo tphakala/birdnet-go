@@ -110,6 +110,13 @@ describe('MainSettingsPage location map', () => {
       longitude: 24.456,
       locationConfigured: true,
     });
+    await vi.waitFor(() =>
+      expect(latestMapProps()).toMatchObject({
+        latitude: 60.123,
+        longitude: 24.456,
+        locationSet: true,
+      })
+    );
   });
 
   it('does not mark the map ready while settings load', async () => {
@@ -208,6 +215,13 @@ describe('MainSettingsPage location map', () => {
         longitude: 20.5,
         locationConfigured: true,
       });
+      await vi.waitFor(() =>
+        expect(latestMapProps()).toMatchObject({
+          latitude: 10.5,
+          longitude: 20.5,
+          locationSet: true,
+        })
+      );
     });
   });
 });
