@@ -91,6 +91,7 @@
   --surface-400: #e2e8f0;
   --border-100: #e2e8f0;
   --border-200: #cbd5e1;
+  --border-300: #94a3b8; /* slate-400 - hover borders, a step darker than --border-200 */
   --hover-overlay: rgba(0, 0, 0, 0.05);
 
   /* Text colors */
@@ -167,6 +168,7 @@
   --surface-400: #475569; /* slate-600 - active states */
   --border-100: #1e293b; /* slate-800 - subtle borders */
   --border-200: #334155; /* slate-700 - prominent borders */
+  --border-300: #475569; /* slate-600 - hover borders, a step lighter than --border-200 */
   --hover-overlay: rgba(255, 255, 255, 0.05);
 
   /* Text colors */

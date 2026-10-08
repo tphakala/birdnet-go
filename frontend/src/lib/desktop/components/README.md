@@ -58,7 +58,7 @@ This folder contains **shared components** used across the application. Feature-
 
 ## Forms
 
-- `Checkbox.svelte` - Checkbox input with label
+- `Checkbox.svelte` - Checkbox input with label (`labelClassName` replaces the label's default `py-1`; its base classes `flex items-center justify-start cursor-pointer` always stay and are not merged with conflicting utilities)
 - `DateRangePicker.svelte` - Date range selection
 - `FormField.svelte` - Form field wrapper with validation
 - `InlineSlider.svelte` - Inline slider input for compact layouts
@@ -76,8 +76,8 @@ This folder contains **shared components** used across the application. Feature-
 - `StreamChannelControls.svelte` - Adaptive channel handling UI (format display, downmix/left/right selector, stereo energy analysis) shared by the stream add and edit forms
 - `StreamManager.svelte` - Manage multiple video/audio streams
 - `SubnetInput.svelte` - Subnet input with validation
-- `TextInput.svelte` - Text input field
-- `ToggleField.svelte` - Toggle/switch field
+- `TextInput.svelte` - Text input field; `error` shows an alert and marks the input invalid, `reserveErrorSpace` keeps two lines for that alert so nothing below moves
+- `ToggleField.svelte` - Toggle/switch field; `variant="card"` draws a bordered card that toggles as a whole (icon turns primary while on)
 
 ## Media
 
@@ -102,7 +102,7 @@ This folder contains **shared components** used across the application. Feature-
 - `ActionMenu.svelte` - Dropdown action menu
 - `AudioLevelIndicator.svelte` - Audio level visualization
 - `Badge.svelte` - Status/count badges
-- `Button.svelte` - Reusable button with variant (default, primary, success, warning, error, ghost) and size (xs, sm, md, lg) support
+- `Button.svelte` - Reusable button with variant (default, primary, success, warning, error, ghost) and size (xs, sm, md, lg) support, a bindable `ref` to the `<button>`, aria-disabled styling that keeps the button focusable, and a shared keyboard focus ring
 - `Card.svelte` - Generic card container
 - `CollapsibleCard.svelte` - Collapsible card container
 - `CollapsibleSection.svelte` - Collapsible content section

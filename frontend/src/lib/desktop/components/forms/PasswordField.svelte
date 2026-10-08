@@ -79,7 +79,7 @@
 
   function startEditing() {
     isEditing = true;
-    // Only clear the local display — don't propagate to the parent store
+    // Only clear the local display; don't propagate to the parent store
     // until the user actually types a new value via the input handler.
     value = '';
   }
@@ -171,7 +171,7 @@
     </label>
   {/if}
 
-  <!-- Redacted "secret is set" display — shown when value is the redacted placeholder and user is not editing -->
+  <!-- Redacted "secret is set" display: shown when value is the redacted placeholder and user is not editing -->
   {#if isRedacted && !isEditing}
     <div class="relative flex items-center gap-2">
       <div
@@ -227,7 +227,7 @@
         {#if allowReveal}
           <button
             type="button"
-            class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-sm text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] transition-colors disabled:opacity-50"
+            class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-sm text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 disabled:opacity-50"
             onclick={togglePasswordVisibility}
             {disabled}
             aria-label={showPassword

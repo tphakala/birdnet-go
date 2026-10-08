@@ -72,6 +72,18 @@ describe('PasswordField', () => {
     expect(screen.getByRole('button', { name: 'Show password' })).toBeInTheDocument();
   });
 
+  it('gives the reveal button the shared keyboard focus ring', () => {
+    render(PasswordField, {
+      props: { label: 'Password', value: '', onUpdate: vi.fn(), allowReveal: true },
+    });
+
+    expect(screen.getByRole('button', { name: 'Show password' })).toHaveClass(
+      'focus-visible:outline-2',
+      'focus-visible:outline-[var(--color-primary)]',
+      'focus-visible:outline-offset-2'
+    );
+  });
+
   it('hides password toggle button when allowReveal is false', () => {
     render(PasswordField, {
       props: {
