@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import PlaceSearch from './PlaceSearch.svelte';
 import {
   PHOTON_SITE_URL,
@@ -31,6 +32,7 @@ function feature(osmId: number, name: string, longitude: number, latitude: numbe
 
 const HELSINKI = feature(34914, 'Helsinki', 24.9435408, 60.1666204);
 const HELSINGBORG = feature(1, 'Helsingborg', 12.6945, 56.0465);
+const HELSINGFORS = feature(2, 'Helsingfors', 24.9384, 60.1699);
 const HELSINKI_PLACE: PlaceResult = {
   id: 'R:34914',
   name: 'Helsinki',
@@ -69,6 +71,8 @@ function input(): HTMLInputElement {
 }
 
 function type(value: string) {
+  // Typing happens in the focused input, as in a browser.
+  input().focus();
   return fireEvent.input(input(), { target: { value } });
 }
 
@@ -420,6 +424,51 @@ describe('PlaceSearch', () => {
     });
   });
 
+  describe('focus', () => {
+    it('does not open the list when the input lost focus before the results arrived', async () => {
+      const pending = deferNextFetch();
+      renderSearch();
+      await searchFor('Helsinki');
+
+      input().blur();
+      pending.resolve(jsonResponse(HELSINKI));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(input()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('opens the list with focus in the input after the search button was used', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(HELSINKI)));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+      renderSearch();
+      await type('Ii');
+
+      await user.click(screen.getByRole('button', { name: SUBMIT }));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+      expect(document.activeElement).toBe(input());
+    });
+
+    it('starts at the first option when ArrowDown reopens the list after a blur', async () => {
+      fetchMock.mockImplementation(() =>
+        Promise.resolve(jsonResponse(HELSINKI, HELSINGBORG, HELSINGFORS))
+      );
+      renderSearch();
+      await searchFor('Hels');
+      await press('ArrowDown');
+      await press('ArrowDown');
+
+      input().blur();
+      input().focus();
+      await press('ArrowDown');
+
+      const [first] = screen.getAllByRole('option');
+      expect(input()).toHaveAttribute('aria-activedescendant', first.id);
+    });
+  });
+
   describe('privacy', () => {
     it('explains that searches go to Photon', () => {
       renderSearch();
@@ -461,6 +510,7 @@ describe('PlaceSearch Accessibility', () => {
     expect(combobox).toHaveAttribute('aria-expanded', 'false');
     expect(combobox).toHaveAttribute('autocomplete', 'off');
 
+    combobox.focus();
     await fireEvent.input(combobox, { target: { value: 'Hels' } });
     await fireEvent.keyDown(combobox, { key: 'Enter' });
     const listbox = await screen.findByRole('listbox');
@@ -485,6 +535,7 @@ describe('PlaceSearch Accessibility', () => {
   it('has no axe violations with the results open', async () => {
     fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(HELSINKI, HELSINGBORG)));
     renderSearch();
+    input().focus();
     await fireEvent.input(input(), { target: { value: 'Hels' } });
     await fireEvent.keyDown(input(), { key: 'Enter' });
     await screen.findByRole('listbox');

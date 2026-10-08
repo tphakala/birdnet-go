@@ -133,7 +133,8 @@
     if (outcome.status === 'ok') {
       results = outcome.results;
       phase = 'done';
-      listOpen = outcome.results.length > 0;
+      // A list for an input that lost focus meanwhile could not be driven or dismissed.
+      listOpen = outcome.results.length > 0 && document.activeElement === inputElement;
     } else if (outcome.status === 'error') {
       failure = outcome.reason;
       phase = 'failed';
@@ -168,6 +169,13 @@
     if (text === '') return;
     autocomplete.cancel();
     void runSearch(text);
+  }
+
+  // The button took focus from the input; give it back so the results can be driven
+  // from the keyboard.
+  function searchFromButton() {
+    inputElement?.focus();
+    searchNow();
   }
 
   function selectPlace(place: PlaceResult) {
@@ -254,7 +262,10 @@
         type="search"
         value={query}
         oninput={handleInput}
-        onblur={() => (listOpen = false)}
+        onblur={() => {
+          listOpen = false;
+          activeIndex = -1;
+        }}
         placeholder={t('components.locationMap.search.placeholder')}
         autocomplete="off"
         role="combobox"
@@ -307,7 +318,7 @@
       size="md"
       className="shrink-0"
       aria-label={t('components.locationMap.search.submit')}
-      onclick={searchNow}
+      onclick={searchFromButton}
     >
       <Search class="size-4" aria-hidden="true" />
     </Button>

@@ -863,6 +863,7 @@ describe('LocationMap place search', () => {
   async function searchAndPick(scope: HTMLElement | undefined = undefined) {
     const root = scope ?? document.body;
     const box = within(root).getByRole('combobox', { name: SEARCH_LABEL });
+    box.focus();
     await fireEvent.input(box, { target: { value: 'Helsinki' } });
     await fireEvent.keyDown(box, { key: 'Enter' });
     await fireEvent.click(await within(root).findByRole('option'));
@@ -949,6 +950,7 @@ describe('LocationMap place search', () => {
     await mount({ placeSearch: true });
     const dialog = await openExpanded(user);
     const box = within(dialog).getByRole('combobox', { name: SEARCH_LABEL });
+    box.focus();
     await fireEvent.input(box, { target: { value: 'Helsinki' } });
     await fireEvent.keyDown(box, { key: 'Enter' });
     await within(dialog).findByRole('listbox');
