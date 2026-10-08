@@ -26,7 +26,7 @@
   - pinchZoom: allow two-finger pinch zoom (rotation stays off)
   - doubleTapZoomKeepsPin: placing the pin waits for a possible double click or
     double tap, which then zooms without moving the pin
-  - startView: `region` (settings) opens the inline map at zoom 5 and `world` at zoom 1 when the coordinates are 0,0, both at 11 otherwise; the expanded map opens at the inline map's current zoom
+  - startView: the start zoom is chosen when the inline map is created and depends on whether the coordinates are set (not 0,0): 11 when set, else 5 for `region` or 1 for `world`; the expanded map starts at the inline map's current zoom
 
   @component
 -->

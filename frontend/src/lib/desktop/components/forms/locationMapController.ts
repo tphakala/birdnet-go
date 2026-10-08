@@ -38,9 +38,10 @@ export const Z_INDEX_LOCATION_MAP_DIALOG = 9999;
 export type MapLibreModule = typeof import('maplibre-gl');
 
 /**
- * Which view a map opens in when it has no inline zoom to copy. `region` is
- * the settings map (zoom 5 when the coordinates are 0,0); `world` shows the
- * whole world then.
+ * Which view a map is created in when the coordinates are not set (0,0).
+ * `region` is the settings map (zoom 5); `world` shows the whole world. With
+ * set coordinates both start at the default zoom, and the expanded map starts
+ * at the inline map's current zoom instead.
  */
 export type LocationMapStartView = 'region' | 'world';
 
