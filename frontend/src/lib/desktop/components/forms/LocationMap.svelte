@@ -118,6 +118,9 @@
   let dialogBox: HTMLElement | undefined = $state();
   let closeButton: HTMLButtonElement | undefined = $state();
   let portalTarget: HTMLElement = $state.raw(document.body);
+  // A press that starts on the map and ends on the backdrop still fires click on
+  // the backdrop (the common ancestor), so only a press that began there closes.
+  let backdropPressStarted = false;
 
   async function initializeMap(container: HTMLElement) {
     // The effect waits for the bound container, but keep a local check so a
@@ -282,6 +285,7 @@
     // keep it.
     expandedController?.flushPendingPick();
     expanded = false;
+    backdropPressStarted = false;
     expandButton?.focus();
   }
 
@@ -457,7 +461,12 @@
     aria-modal="true"
     aria-labelledby={titleId}
     tabindex="-1"
-    onclick={e => e.target === e.currentTarget && closeExpanded()}
+    onpointerdown={e => (backdropPressStarted = e.button === 0 && e.target === e.currentTarget)}
+    onclick={e => {
+      const close = backdropPressStarted && e.target === e.currentTarget;
+      backdropPressStarted = false;
+      if (close) closeExpanded();
+    }}
   >
     <div
       bind:this={dialogBox}

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'svelte';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { Map as MapLibreMap, Marker } from 'maplibre-gl';
 import LocationMap from './LocationMap.svelte';
@@ -573,6 +573,27 @@ describe('LocationMap', () => {
 
       const reopened = await openExpanded(user);
       await user.click(reopened);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('stays open when a press that started on the map ends on the backdrop', async () => {
+      const user = userEvent.setup();
+      await mount();
+      const dialog = await openExpanded(user);
+      const box = within(dialog).getByRole('document');
+
+      // A pan from the map released over the backdrop: the browser sends the
+      // click to the common ancestor, the backdrop.
+      await fireEvent.pointerDown(box);
+      await fireEvent.click(dialog);
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+      // A later click without a press on the backdrop must not reuse a flag.
+      await fireEvent.click(dialog);
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+      await fireEvent.pointerDown(dialog);
+      await fireEvent.click(dialog);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
