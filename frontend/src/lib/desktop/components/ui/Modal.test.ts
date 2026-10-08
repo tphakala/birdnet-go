@@ -653,6 +653,27 @@ describe('Modal', () => {
       }
     });
 
+    it('Tab with focus on SVG content in another aria-modal dialog leaves focus there', async () => {
+      await renderHost();
+      const other = document.createElement('div');
+      other.setAttribute('role', 'dialog');
+      other.setAttribute('aria-modal', 'true');
+      const chart = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      chart.setAttribute('tabindex', '0');
+      other.append(chart);
+      document.body.append(other);
+      try {
+        chart.focus();
+
+        const notPrevented = await fireEvent.keyDown(chart, { key: 'Tab' });
+
+        expect(notPrevented).toBe(true);
+        expect(chart).toHaveFocus();
+      } finally {
+        other.remove();
+      }
+    });
+
     it('skips tabindex=-1 buttons when wrapping', async () => {
       await renderHost({ lastTabindex: -1 });
       button('Middle').focus();

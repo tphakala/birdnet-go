@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { tick } from 'svelte';
 import ToastContainer from './ToastContainer.svelte';
@@ -203,5 +203,47 @@ describe('ToastContainer keyboard focus', () => {
     await tick();
 
     expect(document.body).toHaveFocus();
+  });
+  it('closing a second toast in a row returns focus to the element focused before the toasts', async () => {
+    const user = userEvent.setup();
+    render(ToastContainer);
+    toastActions.info('First', { duration: null });
+    toastActions.info('Second', { duration: null });
+    await tick();
+    pageButton.focus();
+    await user.tab();
+    expect(closeButtons()[0]).toHaveFocus();
+
+    // The first close hands focus to the second toast, the second has nowhere to go
+    await user.keyboard('{Enter}');
+    await tick();
+    expect(closeButtons()[0]).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await tick();
+
+    expect(screen.queryByText('Second')).not.toBeInTheDocument();
+    expect(pageButton).toHaveFocus();
+  });
+
+  it('a pointer press on SVG content outside the toasts ends focus tracking', async () => {
+    render(ToastContainer);
+    const id = toastActions.info('Left behind', { duration: null });
+    toastActions.info('Other', { duration: null });
+    await tick();
+    closeButtons()[0].focus();
+    const chart = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    document.body.append(chart);
+    try {
+      // A press on an SVG element takes no focus, so focus falls to <body>
+      await fireEvent.pointerDown(chart);
+      closeButtons()[0].blur();
+
+      toastActions.remove(id);
+      await tick();
+
+      expect(document.body).toHaveFocus();
+    } finally {
+      chart.remove();
+    }
   });
 });

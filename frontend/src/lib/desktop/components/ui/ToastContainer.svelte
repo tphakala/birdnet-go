@@ -77,29 +77,39 @@
   // Focus tracking. Plain variables on purpose: they are read only when the toast
   // list changes and by event handlers, never by the template.
   let focusedToastId: string | null = null;
-  let focusedToastPosition: ToastPosition | null = null;
   // Where focus was before it entered the toasts
   let returnFocusTo: HTMLElement | null = null;
-  // Toast ids per position as of the previous update, to find a removed toast's neighbours
-  let previousOrder: Record<ToastPosition, string[]> | null = null;
+  // Toast ids per region (in region order) as of the previous update, to find a removed toast's neighbours
+  let previousOrder: string[][] | null = null;
 
+  // Attributes written in this file's template and in NotificationToast
   const REGION_SELECTOR = '[data-toast-region]';
+  const TOAST_SELECTOR = '[data-toast-id]';
+  const TOAST_CLOSE_SELECTOR = '[data-toast-close]';
 
-  function isOutsideRegions(node: unknown): node is HTMLElement {
-    return node instanceof HTMLElement && !node.closest(REGION_SELECTOR);
+  function isInsideRegions(node: Node): boolean {
+    for (const region of document.querySelectorAll(REGION_SELECTOR)) {
+      if (region.contains(node)) return true;
+    }
+    return false;
   }
 
-  function handleFocusIn(event: FocusEvent, position: ToastPosition) {
+  // Node, not HTMLElement: a press on SVG content has an SVGElement target
+  function isOutsideRegions(node: unknown): node is Node {
+    return node instanceof Node && !isInsideRegions(node);
+  }
+
+  function handleFocusIn(event: FocusEvent) {
     if (!(event.target instanceof HTMLElement)) return;
-    const toastId = event.target.closest<HTMLElement>('[data-toast-id]')?.dataset.toastId;
+    const toastId = event.target.closest<HTMLElement>(TOAST_SELECTOR)?.dataset.toastId;
     if (!toastId) return;
     // Entering from outside the toasts: remember where from. Moving between
     // toasts keeps the earlier answer.
     if (focusedToastId === null) {
-      returnFocusTo = isOutsideRegions(event.relatedTarget) ? event.relatedTarget : null;
+      const from = event.relatedTarget;
+      returnFocusTo = from instanceof HTMLElement && isOutsideRegions(from) ? from : null;
     }
     focusedToastId = toastId;
-    focusedToastPosition = position;
   }
 
   function handleFocusOut(event: FocusEvent) {
@@ -114,9 +124,9 @@
   }
 
   function closeButtonOf(toastId: string): HTMLElement | null {
-    for (const wrapper of document.querySelectorAll<HTMLElement>('[data-toast-id]')) {
+    for (const wrapper of document.querySelectorAll<HTMLElement>(TOAST_SELECTOR)) {
       if (wrapper.dataset.toastId === toastId) {
-        return wrapper.querySelector<HTMLElement>('[data-toast-close]');
+        return wrapper.querySelector<HTMLElement>(TOAST_CLOSE_SELECTOR);
       }
     }
     return null;
@@ -127,23 +137,19 @@
    * focus fell to <body>, move it to the next toast, else the previous one, else
    * back to where it came from. Focus the user has already moved is left alone.
    */
-  function restoreFocusAfterRemoval(
-    current: Record<ToastPosition, string[]>,
-    previous: Record<ToastPosition, string[]> | null
-  ) {
+  function restoreFocusAfterRemoval(current: string[][], previous: string[][] | null) {
     const removedId = focusedToastId;
-    const position = focusedToastPosition;
-    if (removedId === null || position === null) return;
-    // eslint-disable-next-line security/detect-object-injection -- Safe: position is a ToastPosition key
-    const remaining = current[position];
-    if (remaining.includes(removedId)) return;
+    if (removedId === null) return;
+    if (current.some(ids => ids.includes(removedId))) return;
 
     focusedToastId = null;
     const active = document.activeElement;
     if (active && active !== document.body) return;
 
-    // eslint-disable-next-line security/detect-object-injection -- Safe: position is a ToastPosition key
-    const before = previous?.[position] ?? [];
+    // The toast's region, in the previous and the current order
+    const regionIndex = previous?.findIndex(ids => ids.includes(removedId)) ?? -1;
+    const before = regionIndex >= 0 ? (previous?.at(regionIndex) ?? []) : [];
+    const remaining = regionIndex >= 0 ? (current.at(regionIndex) ?? []) : [];
     const index = before.indexOf(removedId);
     const next = before.slice(index + 1).find(id => remaining.includes(id));
     const earlier = before
@@ -152,7 +158,9 @@
       .at(-1);
     const neighbour = next ?? earlier;
     const target = neighbour ? closeButtonOf(neighbour) : null;
-    if (target) {
+    if (neighbour && target) {
+      // The neighbour now holds focus: keep tracking it, and keep the return target
+      focusedToastId = neighbour;
       target.focus();
     } else if (returnFocusTo?.isConnected && isOutsideRegions(returnFocusTo)) {
       returnFocusTo.focus();
@@ -160,17 +168,7 @@
   }
 
   $effect(() => {
-    const idsOf = (position: ToastPosition) =>
-      // eslint-disable-next-line security/detect-object-injection -- Safe: position is a ToastPosition key
-      toastsByPosition[position].map(toast => toast.id);
-    const current: Record<ToastPosition, string[]> = {
-      'top-left': idsOf('top-left'),
-      'top-center': idsOf('top-center'),
-      'top-right': idsOf('top-right'),
-      'bottom-left': idsOf('bottom-left'),
-      'bottom-center': idsOf('bottom-center'),
-      'bottom-right': idsOf('bottom-right'),
-    };
+    const current = Object.values(toastsByPosition).map(list => list.map(toast => toast.id));
     untrack(() => {
       restoreFocusAfterRemoval(current, previousOrder);
       previousOrder = current;
@@ -193,7 +191,7 @@
     aria-live="polite"
     aria-label={regionLabel(position as ToastPosition)}
     data-toast-region
-    onfocusin={event => handleFocusIn(event, position as ToastPosition)}
+    onfocusin={handleFocusIn}
     onfocusout={handleFocusOut}
   >
     <div class="flex flex-col gap-2">

@@ -9,6 +9,9 @@
   const TABBABLE_CANDIDATE_SELECTOR =
     'button, a[href], area[href], input, select, textarea, summary, [tabindex]';
 
+  // Another modal dialog (LoginModal, the range filter dialog) that owns focus while open
+  const ARIA_MODAL_SELECTOR = '[aria-modal="true"]';
+
   // Ancestors that take their whole subtree out of the tab order
   const TAB_EXCLUDING_ANCESTOR_SELECTOR = '[inert], [hidden]';
 
@@ -290,7 +293,7 @@
     const active = document.activeElement;
 
     if (!active || !dialogElement.contains(active)) {
-      if (active instanceof HTMLElement && active.closest('[aria-modal="true"]')) return;
+      if (active?.closest(ARIA_MODAL_SELECTOR)) return;
       // Focus is on <body> or on the page behind the dialog: bring it back in
       event.preventDefault();
       const items = getTabbable(modalElement);
