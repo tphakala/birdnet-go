@@ -408,6 +408,9 @@
     const target = stackEntry.restoreTo ?? stackEntry.opener;
     if (wasTopmost) {
       restoreFocus(target);
+      // No usable target (body, removed, or null): focus must not stay on a control of the dialog that is now hidden
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && stackEntry.dialog?.contains(active)) active.blur();
       return;
     }
     const above = openModals.at(index);
@@ -416,7 +419,11 @@
 
   $effect(() => {
     if (isOpen) {
-      stackEntry.opener = document.activeElement as HTMLElement;
+      // Not an element of this dialog (focus left there by a quick close and reopen): keep the earlier opener
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && !untrack(() => dialogElement)?.contains(active)) {
+        stackEntry.opener = active;
+      }
       stackEntry.restoreTo = null;
 
       const stopInitialFocus = scheduleInitialFocus();

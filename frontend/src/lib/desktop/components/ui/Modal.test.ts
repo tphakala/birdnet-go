@@ -586,9 +586,10 @@ describe('Modal', () => {
 
     it('a control enabled after opening joins the trap', async () => {
       const view = await renderHost({ lastDisabled: true });
-      button('Middle').focus();
 
+      // The harness rerender re-runs the open effect, which restores focus; place it after
       await view.rerender({ lastDisabled: false });
+      button('Middle').focus();
       await user.tab();
       expect(button('Last')).toHaveFocus();
 
@@ -598,9 +599,9 @@ describe('Modal', () => {
 
     it('a control added after opening joins the trap', async () => {
       const view = await renderHost();
-      button('Last').focus();
 
       await view.rerender({ showExtra: true });
+      button('Last').focus();
       await user.tab();
       expect(button('Extra')).toHaveFocus();
 
@@ -911,6 +912,43 @@ describe('Modal', () => {
       await press('Toggle upper');
 
       expect(button('Lower action')).toHaveFocus();
+    });
+
+    it('leaves no control of the closed dialog focused when the element it was opened from is gone', async () => {
+      renderTyped(ModalToggleHost, {});
+      const opener = document.createElement('button');
+      document.body.append(opener);
+      opener.focus();
+      await press('Toggle lower');
+      await waitFor(() => expect(button('Lower action')).toHaveFocus());
+      opener.remove();
+
+      await press('Toggle lower');
+
+      expect(document.body).toHaveFocus();
+    });
+
+    it('leaves no control of the closed dialog focused when focus was on body at open', async () => {
+      renderTyped(ModalToggleHost, {});
+      expect(document.body).toHaveFocus();
+      await press('Toggle lower');
+      await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+      await press('Toggle lower');
+
+      expect(document.body).toHaveFocus();
+    });
+
+    it('does not take its own control as the element it was opened from', async () => {
+      renderTyped(ModalToggleHost, {});
+      // The closed dialog stays in the page; focus can sit on one of its controls
+      screen.getByRole('button', { name: 'Lower action', hidden: true }).focus();
+      await press('Toggle lower');
+      await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+      await press('Toggle lower');
+
+      expect(document.body).toHaveFocus();
     });
 
     it('does not move focus when the element it was opened from is gone', async () => {
