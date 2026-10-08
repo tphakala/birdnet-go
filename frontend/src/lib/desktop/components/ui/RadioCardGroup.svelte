@@ -55,8 +55,8 @@
   let tabStopIndex = $derived(
     checkedIndex >= 0 ? checkedIndex : firstEnabledIndex >= 0 ? firstEnabledIndex : 0
   );
-  // Cards of a group share their padding and icon alignment
-  let hasDetails = $derived(options.some(o => o.description || o.detail));
+  // Cards of a group share their padding and icon alignment; a disabled card adds its reason line
+  let hasDetails = $derived(options.some(o => o.description || o.detail || o.disabled));
 
   function cardClass(option: RadioCardOption<T>, checked: boolean): string {
     const layout = hasDetails ? 'items-start p-4' : 'items-center p-3';
@@ -112,10 +112,12 @@
     const target = nextEnabledIndex(index, step);
     const option = options.at(target);
     if (target < 0 || option === undefined) return;
+    // The card element outlives a change to the list, its index may not
+    const targetCard = optionRefs.at(target);
     select(option);
     // Focus after the new card is checked and is the Tab stop, so it is announced as checked
     await tick();
-    optionRefs.at(target)?.focus();
+    targetCard?.focus();
   }
 </script>
 

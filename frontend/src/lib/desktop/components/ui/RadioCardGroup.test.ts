@@ -26,6 +26,7 @@ interface RenderOptions {
   columns?: 1 | 2;
   className?: string;
   groupAttrs?: Record<string, string>;
+  dropPrevious?: boolean;
 }
 
 function renderGroup({ initial = null, ...rest }: RenderOptions) {
@@ -454,6 +455,38 @@ describe('RadioCardGroup', () => {
     expect(radios()).toHaveLength(2);
     expect(radios()[1]).toHaveTextContent('Option c');
     expect(checkedValues()).toEqual(['Option c']);
+  });
+});
+
+describe('RadioCardGroup option list changes', () => {
+  it('focuses the card that was chosen when the change also removes an earlier card', async () => {
+    const { user, spy } = renderGroup({
+      options: makeOptions(3),
+      initial: 'a',
+      dropPrevious: true,
+    });
+    await tabIntoGroup(user);
+
+    await user.keyboard('{ArrowDown}');
+
+    await waitFor(() => expect(radios()).toHaveLength(2));
+    expect(spy).toHaveBeenCalledWith('b');
+    expect(checkedValues()).toEqual(['Option b']);
+    expect(document.activeElement).toBe(radios()[0]);
+    expect(radios()[0]).toHaveTextContent('Option b');
+  });
+
+  it('aligns icons to the top when a disabled option shows its reason', () => {
+    renderGroup({ options: makeOptions(2, [1]), initial: 'a' });
+
+    expect(radios()[0]).toHaveClass('items-start');
+    expect(radios()[1]).toHaveClass('items-start');
+  });
+
+  it('centres icons when no option has a second line', () => {
+    renderGroup({ options: makeOptions(2), initial: 'a' });
+
+    expect(radios()[0]).toHaveClass('items-center');
   });
 });
 
