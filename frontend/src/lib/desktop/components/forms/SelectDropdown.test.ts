@@ -768,8 +768,9 @@ describe('SelectDropdown Accessibility', () => {
 
     expect(search).toHaveValue('a b');
     expect(onChange).not.toHaveBeenCalled();
-    // No fruit matches "a b", so the open list shows its empty state instead of a listbox
+    // No fruit matches "a b", so the open list shows its empty state and still has no option
     expect(search).toBeInTheDocument();
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
     expect(screen.getByRole('status')).toHaveTextContent('No options found');
   });
 
@@ -1224,15 +1225,21 @@ describe('SelectDropdown Accessibility', () => {
       await expectNoA11yViolations(document.body, { rules: { region: { enabled: false } } });
     });
 
-    it('announces the empty list as a status and exposes no listbox without options', async () => {
+    it('keeps an empty listbox for the combobox to control and announces the empty state outside it', async () => {
       const user = userEvent.setup();
       selectTest.render({ props: { options: [], label: 'Fruit' } });
 
-      await user.click(screen.getByRole('combobox', { name: 'Fruit' }));
+      const trigger = screen.getByRole('combobox', { name: 'Fruit' });
+      await user.click(trigger);
 
-      expect(screen.getByRole('status')).toHaveTextContent('No options found');
-      // A listbox must contain options; an empty one holding only text fails aria-required-children
-      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      // The trigger's aria-controls must name a listbox, whether or not it has options
+      const listbox = screen.getByRole('listbox', { name: 'Fruit' });
+      expect(trigger).toHaveAttribute('aria-controls', listbox.id);
+      expect(listbox).toBeEmptyDOMElement();
+      // The empty-state text is a sibling of the listbox, not a child of it
+      const status = screen.getByRole('status');
+      expect(status).toHaveTextContent('No options found');
+      expect(listbox).not.toContainElement(status);
     });
 
     it('has no violations with the list open and empty', async () => {
@@ -1244,28 +1251,34 @@ describe('SelectDropdown Accessibility', () => {
       await expectNoA11yViolations(document.body, { rules: { region: { enabled: false } } });
     });
 
-    it('keeps the search box and the trigger pointing at an element that exists when no option matches', async () => {
+    it('keeps the search box and the trigger pointing at the listbox when no option matches', async () => {
       const { user, search } = await openSearchable({ label: 'Fruit' });
 
       await user.keyboard('zzz');
 
+      const listbox = screen.getByRole('listbox', { name: 'Fruit' });
+      expect(listbox).toBeEmptyDOMElement();
+      expect(search).toHaveAttribute('aria-controls', listbox.id);
+      expect(screen.getByRole('combobox')).toHaveAttribute('aria-controls', listbox.id);
       expect(screen.getByRole('status')).toHaveTextContent('No options found');
-      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-      const controlled = search.getAttribute('aria-controls') ?? '';
-      expect(document.getElementById(controlled)).toBeInTheDocument();
-      expect(screen.getByRole('combobox')).toHaveAttribute('aria-controls', controlled);
     });
 
-    it('brings the listbox back once an option matches again', async () => {
+    it('fills the same status element when the list becomes empty, so the change is announced', async () => {
       const { user } = await openSearchable({ label: 'Fruit' });
 
-      await user.keyboard('zzz');
-      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-      await user.clear(screen.getByRole('searchbox'));
-
-      expect(screen.getByRole('listbox', { name: 'Fruit' })).toBeInTheDocument();
+      // The live region is present, and empty, while there are options
+      const status = screen.getByRole('status');
+      expect(status).toBeEmptyDOMElement();
       expect(screen.getAllByRole('option')).toHaveLength(fruit.length);
-      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+      await user.keyboard('zzz');
+      expect(screen.getByRole('status')).toBe(status);
+      expect(status).toHaveTextContent('No options found');
+
+      await user.clear(screen.getByRole('searchbox'));
+      expect(screen.getByRole('status')).toBe(status);
+      expect(status).toBeEmptyDOMElement();
+      expect(screen.getAllByRole('option')).toHaveLength(fruit.length);
     });
 
     it('has no violations with the list closed', async () => {

@@ -237,8 +237,8 @@
     isOpen ? activeOptionId(fieldId, highlightedIndex, renderedOptions.length) : undefined
   );
 
-  // A listbox must contain options: with none, the container drops the role and the empty-state
-  // text is announced as a status instead (axe aria-required-children)
+  // With no options the listbox stays (the trigger and search box control it) but is empty; the
+  // empty-state text goes in a status region outside it, since a listbox may only hold options
   let hasOptions = $derived(filteredOptions.length > 0);
 
   let canAddMore = $derived(
@@ -632,21 +632,15 @@
         {/if}
 
         <div
-          class="overflow-auto p-1"
+          class={cn('overflow-auto', hasOptions && 'p-1')}
           style:max-height="{searchable ? maxHeight - 60 : maxHeight}px"
-          role={hasOptions ? 'listbox' : undefined}
-          aria-multiselectable={hasOptions ? multiple : undefined}
+          role="listbox"
+          aria-multiselectable={multiple}
           id="{fieldId}-listbox"
-          aria-labelledby={hasOptions && label ? `${fieldId}-label` : undefined}
-          aria-label={hasOptions && !label
-            ? ariaLabel || externalLabelText || undefined
-            : undefined}
+          aria-labelledby={label ? `${fieldId}-label` : undefined}
+          aria-label={label ? undefined : ariaLabel || externalLabelText || undefined}
         >
-          {#if !hasOptions}
-            <div role="status" class="p-4 text-center text-[var(--color-base-content)] opacity-60">
-              {t('components.forms.select.noOptions')}
-            </div>
-          {:else}
+          {#if hasOptions}
             {@const optionIndexMap = new Map(
               renderedOptions.map((option, index) => [option, index])
             )}
@@ -708,6 +702,17 @@
                 </button>
               {/each}
             {/each}
+          {/if}
+        </div>
+
+        <!-- Always rendered, so the text added when the list becomes empty is announced; it sits
+             outside the listbox because a listbox may only contain options -->
+        <div
+          role="status"
+          class={cn(!hasOptions && 'p-4 text-center text-[var(--color-base-content)] opacity-60')}
+        >
+          {#if !hasOptions}
+            {t('components.forms.select.noOptions')}
           {/if}
         </div>
 
