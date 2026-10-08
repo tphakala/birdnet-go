@@ -53,10 +53,11 @@
     onUpdate(newValue);
   }
 
-  // Native Tailwind toggle classes: shared base + size variants
+  // Native Tailwind toggle classes: shared base + size variants. The off track is
+  // base-content at 60% for at least 3:1 against the card (WCAG 1.4.11), as the Checkbox box is.
   const toggleSharedClasses = `
     appearance-none rounded-full cursor-pointer transition-all relative
-    bg-[var(--color-base-300)]
+    bg-[var(--color-base-content)]/60
     before:content-[''] before:absolute before:top-0.5 before:left-0.5
     before:rounded-full before:bg-[var(--color-base-100)]
     before:shadow-sm before:transition-transform

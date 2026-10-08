@@ -381,6 +381,24 @@ describe('ToggleField', () => {
   });
 });
 
+describe('ToggleField off-state track contrast', () => {
+  it.each(VARIANTS)(
+    'draws the %s variant off track with at least 3:1 contrast against its card',
+    variant => {
+      render(ToggleField, {
+        props: { label: 'Test Toggle', value: false, onUpdate: vi.fn(), variant },
+      });
+
+      // WCAG 1.4.11: the track is the only cue for the off state. base-content at 60% is at
+      // least 3:1 on base-100 and base-200 in both themes; base-300 is about 1.2:1.
+      const toggle = screen.getByRole('checkbox');
+      expect(toggle).toHaveClass('bg-[var(--color-base-content)]/60');
+      expect(toggle).not.toHaveClass('bg-[var(--color-base-300)]');
+      expect(toggle).toHaveClass('checked:bg-[var(--color-primary)]');
+    }
+  );
+});
+
 describe('ToggleField naming and description', () => {
   it('aria-describedby points at the rendered description', () => {
     render(ToggleField, {
