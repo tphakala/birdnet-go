@@ -413,8 +413,9 @@
 {/snippet}
 
 <div class={className}>
-  {#if placeSearch}
-    <PlaceSearch className="mb-3" disabled={!ready} onSelect={handlePlaceSelect} />
+  <!-- Shown only once the map can take a location: a disabled search box would have no visible reason -->
+  {#if placeSearch && ready}
+    <PlaceSearch className="mb-3" onSelect={handlePlaceSelect} />
   {/if}
   {#if loadError}
     <div

@@ -875,14 +875,11 @@ describe('LocationMap place search', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
-  it('disables the search until the map is ready', async () => {
+  it('shows the search only once the map is ready', async () => {
     const props = createProps({ placeSearch: true, ready: false });
     const result = testFactory.render(props);
 
-    expect(screen.getByRole('combobox', { name: SEARCH_LABEL })).toBeDisabled();
-    expect(
-      screen.getByRole('button', { name: 'components.locationMap.search.submit' })
-    ).toBeDisabled();
+    expect(screen.queryByRole('combobox', { name: SEARCH_LABEL })).not.toBeInTheDocument();
 
     await result.rerender({ ...props, ready: true });
     expect(screen.getByRole('combobox', { name: SEARCH_LABEL })).toBeEnabled();

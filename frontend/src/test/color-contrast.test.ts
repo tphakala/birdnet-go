@@ -548,12 +548,11 @@ describe('PlaceSearch colors in light and dark themes', () => {
         expect(getContrastRatio(outline, highlightTint)).toBeGreaterThanOrEqual(ICON_MIN_RATIO);
       });
 
-      it('disclosure text meets AA and its link icon meets 3:1', () => {
+      it('disclosure text and its link icon meet AA', () => {
         const text = tokenValue(textToken(PLACE_DISCLOSURE_CLASS));
         const icon = tokenValue(textToken(PLACE_DISCLOSURE_ICON_CLASS));
         expect(getContrastRatio(text, surface)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
         expect(getContrastRatio(icon, surface)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
-        expect(getContrastRatio(icon, surface)).toBeGreaterThanOrEqual(ICON_MIN_RATIO);
       });
 
       it('error and status line text meet AA', () => {
