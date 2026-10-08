@@ -198,6 +198,9 @@ describe('Checkbox', () => {
     if (!(label instanceof HTMLLabelElement)) throw new Error('checkbox is not inside a label');
     expect(label).toHaveClass('w-full', 'p-4', 'flex', 'cursor-pointer');
     expect(label).not.toHaveClass('py-1');
+    // The classes go on the label only, not on the outer wrapper
+    expect(label.parentElement).not.toHaveClass('w-full');
+    expect(label.parentElement).not.toHaveClass('p-4');
 
     await fireEvent.click(label);
     expect(checkbox).toBeChecked();
