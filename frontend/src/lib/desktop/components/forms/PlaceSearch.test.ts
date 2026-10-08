@@ -8,6 +8,8 @@ import {
   type PlaceResult,
 } from '$lib/utils/placeSearch';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
+import { OPTION_HIGHLIGHT_BG_CLASS, OPTION_HIGHLIGHT_OUTLINE_CLASS } from './SelectDropdown.styles';
+import { PLACE_ERROR_CLASS, PLACE_OPTION_DETAIL_CLASS } from './PlaceSearch.styles';
 
 const LABEL = 'components.locationMap.search.label';
 const SUBMIT = 'components.locationMap.search.submit';
@@ -300,6 +302,141 @@ describe('PlaceSearch', () => {
 
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
       expect(screen.getAllByText(NO_RESULTS).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('result presentation', () => {
+    it('highlights the active option with the shared highlight and not with the info color', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(HELSINKI, HELSINGBORG)));
+      renderSearch();
+      await searchFor('Hels');
+      await press('ArrowDown');
+
+      const [active, idle] = screen.getAllByRole('option');
+      for (const token of [
+        ...OPTION_HIGHLIGHT_BG_CLASS.split(' '),
+        ...OPTION_HIGHLIGHT_OUTLINE_CLASS.split(' '),
+      ]) {
+        expect(active).toHaveClass(token);
+        expect(idle).not.toHaveClass(token);
+      }
+      expect(active.className).not.toContain('--color-info');
+    });
+
+    it('shows the detail in the muted text color', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(HELSINKI)));
+      renderSearch();
+      await searchFor('Hels');
+
+      expect(screen.getByText('Finland')).toHaveClass(PLACE_OPTION_DETAIL_CLASS);
+    });
+
+    it('separates the name from the detail in the accessible name of an option', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(HELSINKI)));
+      renderSearch();
+      await searchFor('Hels');
+
+      // The comma is hidden text; jsdom puts spaces around inline elements, so allow them
+      expect(screen.getByRole('option', { name: /^Helsinki\s*,\s*Finland$/ })).toBeInTheDocument();
+    });
+
+    it('labels the kind of a place so look-alike results can be told apart', async () => {
+      const station = {
+        ...HELSINKI,
+        properties: {
+          ...HELSINKI.properties,
+          osm_id: 25474663,
+          osm_type: 'N',
+          osm_key: 'railway',
+          osm_value: 'station',
+        },
+      };
+      const city = {
+        ...HELSINKI,
+        properties: { ...HELSINKI.properties, osm_key: 'place', osm_value: 'city' },
+      };
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(city, station, HELSINGBORG)));
+      renderSearch();
+      await searchFor('Hels');
+
+      const [cityOption, stationOption, plainOption] = screen.getAllByRole('option');
+      expect(cityOption).toHaveAccessibleName(
+        /^Helsinki\s*,\s*components\.locationMap\.search\.kind\.city\s*,\s*Finland$/
+      );
+      expect(stationOption).toHaveAccessibleName(
+        /^Helsinki\s*,\s*components\.locationMap\.search\.kind\.station\s*,\s*Finland$/
+      );
+      expect(plainOption).toHaveAccessibleName(/^Helsingborg\s*,\s*Finland$/);
+    });
+  });
+
+  describe('failure display', () => {
+    it('announces a failure in an always-rendered alert region and not in the status region', async () => {
+      renderSearch();
+      const alert = screen.getByRole('alert');
+      expect(alert.textContent).toBe('');
+
+      fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      await searchFor('Helsinki');
+
+      expect(screen.getByRole('alert')).toBe(alert);
+      expect(alert).toHaveTextContent(ERROR_NETWORK);
+      expect(screen.getByRole('status')).not.toHaveTextContent(ERROR_NETWORK);
+    });
+
+    it('clears the alert when the next search starts', async () => {
+      renderSearch();
+      fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      await searchFor('Helsinki');
+      expect(screen.getByRole('alert')).toHaveTextContent(ERROR_NETWORK);
+
+      deferNextFetch();
+      await press('Enter');
+
+      expect(screen.getByRole('alert').textContent).toBe('');
+    });
+
+    it('does not use the alert region for a search without results', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse()));
+      renderSearch();
+      await searchFor('Zzzzz');
+
+      expect(screen.getByRole('alert').textContent).toBe('');
+      expect(screen.getByRole('status')).toHaveTextContent(NO_RESULTS);
+    });
+
+    it('styles a failure as an error with an icon and a search without results as plain text', async () => {
+      renderSearch();
+      fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      await searchFor('Helsinki');
+
+      const failure = screen
+        .getAllByText(ERROR_NETWORK)
+        .find(element => element.getAttribute('aria-hidden') === 'true');
+      expect(failure).toHaveClass(PLACE_ERROR_CLASS);
+      expect(failure?.querySelector('svg')).not.toBeNull();
+
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse()));
+      await type('Zzzzz');
+      await settle();
+
+      const empty = screen
+        .getAllByText(NO_RESULTS)
+        .find(element => element.getAttribute('aria-hidden') === 'true');
+      expect(empty).not.toHaveClass(PLACE_ERROR_CLASS);
+      expect(empty?.querySelector('svg')).toBeNull();
+    });
+
+    it('keeps the message line in the layout when it has no text', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse()));
+      const { container } = render(PlaceSearch, { props: { onSelect: vi.fn() } });
+      const line = container.querySelector('p[aria-hidden="true"]');
+      expect(line).not.toBeNull();
+      expect(line).toHaveClass('min-h-4');
+
+      await searchFor('Zzzzz');
+
+      expect(container.querySelector('p[aria-hidden="true"]')).toBe(line);
     });
   });
 

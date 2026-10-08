@@ -26,7 +26,7 @@
 -->
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { ExternalLink, Search } from '@lucide/svelte';
+  import { CircleAlert, ExternalLink, Search } from '@lucide/svelte';
   import { getLocale, t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { createDebounce } from '$lib/utils/debounce';
@@ -41,6 +41,15 @@
     type PlaceSearchFailure,
   } from '$lib/utils/placeSearch';
   import Button from '$lib/desktop/components/ui/Button.svelte';
+  import { getOptionStateClasses } from './SelectDropdown.styles';
+  import {
+    PLACE_DISCLOSURE_CLASS,
+    PLACE_DISCLOSURE_ICON_CLASS,
+    PLACE_ERROR_CLASS,
+    PLACE_MESSAGE_CLASS,
+    PLACE_OPTION_CLASS,
+    PLACE_OPTION_DETAIL_CLASS,
+  } from './PlaceSearch.styles';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
 
   interface Props {
@@ -88,15 +97,26 @@
     }
     return '';
   });
-  // What assistive technology hears: the message, or how many places were found.
+  let isFailure = $derived(phase === 'failed' && failure !== null);
+  // What the polite status region says: progress, or how many places were found. A failure
+  // goes to the alert region instead.
   let announcement = $derived(
     phase === 'done' && results.length > 0
       ? t('components.locationMap.search.results', { count: results.length })
-      : message
+      : isFailure
+        ? ''
+        : message
   );
+  let alertText = $derived(isFailure ? message : '');
   let describedBy = $derived(message ? `${disclosureId} ${messageId}` : disclosureId);
   let activePlace = $derived(listOpen && activeIndex >= 0 ? results.at(activeIndex) : undefined);
   let activeOptionId = $derived(activePlace ? optionId(activePlace) : undefined);
+
+  /** Kind label and place detail on the second line of an option. */
+  function detailText(place: PlaceResult): string {
+    const kind = place.kind ? t(`components.locationMap.search.kind.${place.kind}`) : '';
+    return [kind, place.detail].filter(Boolean).join(', ');
+  }
 
   function optionId(place: PlaceResult): string {
     return `${listboxId}-${place.id.replace(/[^A-Za-z0-9_-]/g, '_')}`;
@@ -309,16 +329,21 @@
               role="option"
               aria-selected={index === activeIndex}
               class={cn(
-                'cursor-pointer px-3 py-2 text-sm hover:bg-black/[0.04] dark:hover:bg-white/[0.04]',
-                index === activeIndex &&
-                  'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] text-[var(--color-info)]'
+                'cursor-pointer px-3 py-2 text-sm',
+                PLACE_OPTION_CLASS,
+                getOptionStateClasses({ selected: false, highlighted: index === activeIndex })
               )}
               onmousedown={event => event.preventDefault()}
               onclick={() => selectPlace(place)}
             >
-              <span class="font-medium">{place.name}</span>
-              {#if place.detail}
-                <span class="ml-1 text-xs opacity-70">{place.detail}</span>
+              <!-- The hidden comma ends the name, so a screen reader does not run it into the detail. -->
+              <span class="font-medium"
+                >{place.name}{#if detailText(place)}<span class="sr-only">,</span>{/if}</span
+              >
+              {#if detailText(place)}
+                <span class={cn('ml-1 text-xs', PLACE_OPTION_DETAIL_CLASS)}
+                  >{detailText(place)}</span
+                >
               {/if}
             </li>
           {/each}
@@ -340,19 +365,35 @@
   <!-- Always rendered; only its text changes, so changes are announced. -->
   <div class="sr-only" role="status" aria-atomic="true">{announcement}</div>
 
-  {#if message}
-    <p id={messageId} class="mt-1 flex items-center gap-1.5 text-xs" aria-hidden="true">
-      {message}
-    </p>
-  {/if}
+  <!-- Always rendered, like the status region, so a failure is announced when it appears. -->
+  <div class="sr-only" role="alert" aria-atomic="true">{alertText}</div>
 
-  <p id={disclosureId} class="mt-1 text-xs text-[var(--color-base-content)]/60">
+  <!-- Always rendered so a message appearing does not move what is below; the regions above
+       announce it. -->
+  <p
+    id={messageId}
+    class={cn(
+      'mt-1 flex min-h-4 items-center gap-1.5 text-xs',
+      isFailure ? PLACE_ERROR_CLASS : PLACE_MESSAGE_CLASS
+    )}
+    aria-hidden="true"
+  >
+    {#if isFailure}
+      <CircleAlert class="size-3.5 shrink-0" />
+    {/if}
+    {message}
+  </p>
+
+  <p id={disclosureId} class={cn('mt-1 text-xs', PLACE_DISCLOSURE_CLASS)}>
     {t('components.locationMap.search.disclosure')}
     <a
       href={PHOTON_SITE_URL}
       target="_blank"
       rel="noopener noreferrer"
-      class="ml-0.5 inline-flex align-middle text-[var(--color-info)] hover:opacity-80 focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]"
+      class={cn(
+        'ml-0.5 inline-flex align-middle hover:text-[var(--color-base-content)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]',
+        PLACE_DISCLOSURE_ICON_CLASS
+      )}
       aria-label={t('components.locationMap.search.openPhoton')}
     >
       <ExternalLink class="size-3" aria-hidden="true" />
