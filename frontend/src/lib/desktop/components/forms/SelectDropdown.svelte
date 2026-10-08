@@ -126,7 +126,7 @@
 
   // Portal target: nearest dialog ancestor (for focus containment) or body
   let portalTarget = $derived.by(
-    () => (buttonElement?.closest(DIALOG_SELECTOR) as HTMLElement | null) ?? document.body
+    () => buttonElement?.closest<HTMLElement>(DIALOG_SELECTOR) ?? document.body
   );
 
   // Trigger description: the help text (when shown) and any caller-provided ids. The displayed
