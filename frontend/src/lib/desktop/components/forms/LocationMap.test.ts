@@ -364,6 +364,31 @@ describe('LocationMap', () => {
       });
     });
 
+    it('removes the pin when the location stops being set', async () => {
+      const { props, rerender } = await mount({ locationSet: true });
+      const pin = vi.mocked(Marker).mock.results.at(0);
+      if (pin?.type !== 'return') throw new Error('the pin was not created');
+
+      await rerender({ ...props, locationSet: false });
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
+
+      expect(pin.value.remove).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['an infinite latitude', Number.POSITIVE_INFINITY, 25],
+      ['an infinite longitude', 61, Number.NEGATIVE_INFINITY],
+    ])('does not move the map for %s', async (_label, latitude, longitude) => {
+      const { props, rerender } = await mount();
+      const map = mapAt(0);
+      vi.mocked(map.easeTo).mockClear();
+
+      await rerender({ ...props, latitude, longitude });
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
+
+      expect(map.easeTo).not.toHaveBeenCalled();
+    });
+
     it('does not move the map for NaN coordinates', async () => {
       const { props, rerender } = await mount();
       const map = mapAt(0);
@@ -505,6 +530,16 @@ describe('LocationMap', () => {
       expect(vi.mocked(Marker)).toHaveBeenCalledTimes(2);
     });
 
+    it('starts the expanded map at the inline zoom even when that is zoom 0', async () => {
+      const user = userEvent.setup();
+      await mount();
+      vi.mocked(mapAt(0).getZoom).mockReturnValue(0);
+
+      await openExpanded(user);
+
+      expect(mapOptionsAt(1).zoom).toBe(0);
+    });
+
     it('shows the current coordinates in the dialog', async () => {
       const user = userEvent.setup();
       await mount({ latitude: 60.123, longitude: 24.456 });
@@ -555,7 +590,7 @@ describe('LocationMap', () => {
       expect(screen.getByRole('button', { name: EXPAND })).toHaveFocus();
     });
 
-    it('does not recentre the expanded map on a click and zooms it with the plain wheel', async () => {
+    it('does not recentre the expanded map on a click and leaves wheel zoom to MapLibre', async () => {
       const user = userEvent.setup();
       await mount();
       await openExpanded(user);
@@ -567,8 +602,10 @@ describe('LocationMap', () => {
       const region = screen.getByRole('application', { name: EXPANDED_MAP_LABEL });
       const wheel = new WheelEvent('wheel', { deltaY: -100, cancelable: true, bubbles: true });
       region.dispatchEvent(wheel);
-      expect(wheel.defaultPrevented).toBe(true);
-      expect(expandedMap.zoomIn).toHaveBeenCalledTimes(1);
+      // MapLibre's own scroll zoom does the zooming; a second custom step would double it.
+      expect(expandedMap.scrollZoom.enable).toHaveBeenCalledTimes(1);
+      expect(wheel.defaultPrevented).toBe(false);
+      expect(expandedMap.zoomIn).not.toHaveBeenCalled();
     });
 
     it('zoom buttons in the dialog zoom the expanded map, not the inline one', async () => {

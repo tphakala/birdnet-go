@@ -20,6 +20,7 @@ interface FakeMarker {
   lngLat: [number, number];
   handlers: Map<string, Handler>;
   setLngLat: ReturnType<typeof vi.fn>;
+  remove: ReturnType<typeof vi.fn>;
   addTo: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
   getLngLat: () => { lat: number; lng: number };
@@ -82,6 +83,7 @@ function createFakeMapLibre() {
           return fake;
         }),
         addTo: vi.fn(() => fake),
+        remove: vi.fn(() => fake),
         on: vi.fn((name: string, handler: Handler) => {
           handlers.set(name, handler);
           return fake;
@@ -276,6 +278,36 @@ describe('locationMapController', () => {
       expect(lastOf(fake.markers).lngLat).toEqual([25, 61]);
     });
 
+    it('removes an existing pin when asked to show a location without one', () => {
+      const { controller } = create({ showMarker: true });
+      const marker = lastOf(fake.markers);
+
+      controller.showLocation(61, 25, {
+        createMarker: false,
+        duration: COORDINATE_SYNC_DURATION_MS,
+      });
+
+      expect(marker.remove).toHaveBeenCalledTimes(1);
+      expect(controller.hasMarker()).toBe(false);
+      expect(onPick).not.toHaveBeenCalled();
+    });
+
+    it('creates a new pin after the old one was removed', () => {
+      const { controller } = create({ showMarker: true });
+
+      controller.showLocation(61, 25, {
+        createMarker: false,
+        duration: COORDINATE_SYNC_DURATION_MS,
+      });
+      controller.showLocation(62, 26, {
+        createMarker: true,
+        duration: COORDINATE_SYNC_DURATION_MS,
+      });
+
+      expect(fake.markers).toHaveLength(2);
+      expect(lastOf(fake.markers).lngLat).toEqual([26, 62]);
+    });
+
     it('keeps the current zoom unless one is given', () => {
       const { controller, map } = create();
       map.zoom = 9;
@@ -323,15 +355,17 @@ describe('locationMapController', () => {
       expect(map.scrollZoom.enable).not.toHaveBeenCalled();
     });
 
-    it('always wheel enables scroll zoom and zooms without a modifier', () => {
+    it('always wheel leaves zooming to MapLibre scroll zoom alone', () => {
       const { map } = create({ wheel: 'always' });
 
       const event = new WheelEvent('wheel', { deltaY: 100, cancelable: true });
       container.dispatchEvent(event);
 
       expect(map.scrollZoom.enable).toHaveBeenCalledTimes(1);
-      expect(event.defaultPrevented).toBe(true);
-      expect(map.zoomOut).toHaveBeenCalledWith({ duration: ZOOM_STEP_DURATION_MS });
+      // A second, custom zoom step on top of the native one would zoom twice per tick.
+      expect(event.defaultPrevented).toBe(false);
+      expect(map.zoomIn).not.toHaveBeenCalled();
+      expect(map.zoomOut).not.toHaveBeenCalled();
     });
   });
 
@@ -467,7 +501,7 @@ describe('locationMapController', () => {
   describe('destroy', () => {
     it('clears a pending pick, removes the wheel listener and the map', () => {
       vi.useFakeTimers();
-      const { controller, map } = create({ doubleTapZoomKeepsPin: true, wheel: 'always' });
+      const { controller, map } = create({ doubleTapZoomKeepsPin: true, wheel: 'modifier' });
 
       click(map, 52, 4);
       controller.destroy();
@@ -476,8 +510,20 @@ describe('locationMapController', () => {
       expect(onPick).not.toHaveBeenCalled();
       expect(map.remove).toHaveBeenCalledTimes(1);
 
-      container.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, cancelable: true }));
+      container.dispatchEvent(
+        new WheelEvent('wheel', { deltaY: 100, ctrlKey: true, cancelable: true })
+      );
       expect(map.zoomOut).not.toHaveBeenCalled();
+    });
+
+    it('removes the pin with the map', () => {
+      const { controller } = create({ showMarker: true });
+      const marker = lastOf(fake.markers);
+
+      controller.destroy();
+
+      expect(marker.remove).toHaveBeenCalledTimes(1);
+      expect(controller.hasMarker()).toBe(false);
     });
 
     it('reports nothing for a click or drag after destroy', () => {

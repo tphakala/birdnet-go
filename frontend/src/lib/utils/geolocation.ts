@@ -179,6 +179,7 @@ export function requestBrowserLocation(onResult: (result: BrowserLocationResult)
 
   const state = { reported: false };
   const report = (result: BrowserLocationResult) => {
+    if (state.reported) return;
     state.reported = true;
     onResult(result);
   };

@@ -190,7 +190,7 @@
   // location); the effect re-runs when it closes.
   const syncDebounce = createDebounce(
     (controller: LocationMapController, lat: number, lng: number, set: boolean) => {
-      if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
       let zoom: number | undefined;
       if (startView === 'world' && set && !controller.hasMarker()) {
@@ -247,7 +247,7 @@
             latitude,
             longitude,
             showMarker: locationSet,
-            zoom: inline?.getZoom() || initialZoom(latitude, longitude, startView),
+            zoom: inline?.getZoom() ?? initialZoom(latitude, longitude, startView),
             wheel: 'always',
             pinchZoom,
             doubleTapZoomKeepsPin,

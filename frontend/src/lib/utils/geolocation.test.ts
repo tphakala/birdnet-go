@@ -235,6 +235,19 @@ describe('requestBrowserLocation', () => {
     expect(results).toEqual([{ status: 'failed', error: thrown }]);
   });
 
+  it('reports only the first of two answers from the browser', () => {
+    geolocationMock.getCurrentPosition.mockImplementationOnce((success, failure) => {
+      success(createPosition(52.1, 4.3, 10));
+      failure?.(createPositionError(1));
+    });
+    const { results, request } = collect();
+
+    request();
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.status).toBe('success');
+  });
+
   it('reports once and lets a throwing result handler propagate', () => {
     geolocationMock.getCurrentPosition.mockImplementationOnce(success => {
       success(createPosition(52.1, 4.3, 10));

@@ -177,15 +177,24 @@ export function createLocationMapController(
     }
   }
 
+  // `always` hands every wheel event to MapLibre's own scroll zoom; adding the
+  // custom step as well would zoom twice per tick. `modifier` keeps scroll zoom
+  // off and zooms in steps only while Ctrl or Cmd is held.
   const handleWheel = (event: WheelEvent) => {
-    if (wheel === 'modifier' && !(event.ctrlKey || event.metaKey)) return;
+    if (!(event.ctrlKey || event.metaKey)) return;
     event.preventDefault();
     zoomBy(event.deltaY);
   };
   if (wheel === 'always') {
     map.scrollZoom.enable();
+  } else {
+    container.addEventListener('wheel', handleWheel, false);
   }
-  container.addEventListener('wheel', handleWheel, false);
+
+  function removeMarker() {
+    marker?.remove();
+    marker = null;
+  }
 
   function placeMarker(lat: number, lng: number) {
     if (marker) {
@@ -269,8 +278,10 @@ export function createLocationMapController(
     showLocation(lat, lng, { createMarker, zoom, duration }) {
       if (destroyed) return;
       map.easeTo({ center: [lng, lat], zoom: zoom ?? map.getZoom(), duration });
-      if (marker || createMarker) {
+      if (createMarker) {
         placeMarker(lat, lng);
+      } else {
+        removeMarker();
       }
     },
     flushPendingPick,
@@ -282,6 +293,7 @@ export function createLocationMapController(
       cancelPendingPick();
       destroyed = true;
       container.removeEventListener('wheel', handleWheel, false);
+      removeMarker();
       map.remove();
     },
   };
