@@ -5092,7 +5092,27 @@
       "expandedMapLabel": "Mapa na celú obrazovku na výber polohy stanice",
       "zoomIn": "Priblížiť",
       "zoomOut": "Oddialiť",
-      "expand": "Rozbaliť mapu na celú obrazovku"
+      "expand": "Rozbaliť mapu na celú obrazovku",
+      "search": {
+        "label": "Hľadať miesto",
+        "placeholder": "Mesto alebo adresa",
+        "submit": "Hľadať",
+        "disclosure": "Vyhľadávania sa odosielajú službe Photon (photon.komoot.io), ktorá používa údaje OpenStreetMap.",
+        "openPhoton": "Otvoriť Photon na novej karte",
+        "searching": "Hľadá sa...",
+        "results": "{count, plural, one {Nájdené # miesto} few {Nájdené # miesta} other {Nájdených # miest}}",
+        "noResults": "Nenašli sa žiadne miesta. Skúste iný názov alebo kliknite na mapu.",
+        "errorNetwork": "Vyhľadávanie miest nie je dostupné. Skontrolujte internetové pripojenie. Stále môžete kliknúť na mapu alebo zadať súradnice.",
+        "errorRateLimited": "Príliš veľa vyhľadávaní. Chvíľu počkajte a skúste to znova.",
+        "errorUnavailable": "Vyhľadávacia služba neodpovedala. Stále môžete kliknúť na mapu alebo zadať súradnice.",
+        "kind": {
+          "city": "Mesto",
+          "town": "Mestečko",
+          "village": "Dedina",
+          "station": "Stanica",
+          "airport": "Letisko"
+        }
+      }
     }
   },
   "connectivity": {

@@ -11,6 +11,14 @@ import {
   OPTION_HIGHLIGHT_BG_CLASS,
   OPTION_HIGHLIGHT_OUTLINE_CLASS,
 } from '../lib/desktop/components/forms/SelectDropdown.styles';
+import {
+  PLACE_DISCLOSURE_CLASS,
+  PLACE_DISCLOSURE_ICON_CLASS,
+  PLACE_ERROR_CLASS,
+  PLACE_MESSAGE_CLASS,
+  PLACE_OPTION_CLASS,
+  PLACE_OPTION_DETAIL_CLASS,
+} from '../lib/desktop/components/forms/PlaceSearch.styles';
 
 // WCAG 2.1 Level AA contrast ratios
 const WCAG_AA_NORMAL = 4.5; // Normal text
@@ -485,4 +493,82 @@ describe('SelectDropdown option states in every color scheme', () => {
       }
     }
   });
+});
+
+describe('PlaceSearch colors in light and dark themes', () => {
+  const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
+  const tailwindCss = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');
+  const lightBase = blockBody(tailwindCss, '@theme');
+  const lightText = blockBody(tailwindCss, ":root,\n[data-theme='light']");
+  const darkBase = blockBody(tailwindCss, "[data-theme='dark']");
+
+  /** Minimum ratio for an informative icon (WCAG 1.4.11). */
+  const ICON_MIN_RATIO = 3;
+
+  /** Custom property written as `text-[var(--token)]` in a class constant, without opacity. */
+  function textToken(classes: string): string {
+    const match = /(?:^|\s)text-\[var\((--[a-z0-9-]+)\)\](?!\/)/.exec(classes);
+    if (!match) {
+      throw new Error(`text color token not found in "${classes}"`);
+    }
+    return match[1];
+  }
+
+  /** Tint fraction written as `var(--token)_NN%` in a class constant. */
+  function highlightFraction(): number {
+    const match = /var\(--color-base-content\)_(\d+)%/.exec(OPTION_HIGHLIGHT_BG_CLASS);
+    if (!match) {
+      throw new Error('highlight tint not found');
+    }
+    return Number(match[1]) / 100;
+  }
+
+  for (const theme of ['light', 'dark'] as const) {
+    describe(`${theme} theme`, () => {
+      const base = theme === 'light' ? lightBase : darkBase;
+      const textBlock = theme === 'light' ? lightText : darkBase;
+      /** A token from the color block or, for the --text-* tokens, the theme's text block. */
+      const tokenValue = (token: string) => findVar(base, token) ?? readVar(textBlock, token);
+      const surface = readVar(base, '--color-base-100');
+      const content = readVar(base, '--color-base-content');
+      const highlightTint = applyOpacity(content, surface, highlightFraction());
+
+      it('option name and detail text meet AA on the surface and on the highlighted option', () => {
+        const name = tokenValue(textToken(PLACE_OPTION_CLASS));
+        const detail = tokenValue(textToken(PLACE_OPTION_DETAIL_CLASS));
+        for (const background of [surface, highlightTint]) {
+          expect(getContrastRatio(name, background)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+          expect(getContrastRatio(detail, background)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        }
+      });
+
+      it('uses the shared highlight outline and background', () => {
+        const outline = tokenValue(outlineToken(OPTION_HIGHLIGHT_OUTLINE_CLASS));
+        expect(getContrastRatio(outline, surface)).toBeGreaterThanOrEqual(ICON_MIN_RATIO);
+        expect(getContrastRatio(outline, highlightTint)).toBeGreaterThanOrEqual(ICON_MIN_RATIO);
+      });
+
+      it('disclosure text and its link icon meet AA', () => {
+        const text = tokenValue(textToken(PLACE_DISCLOSURE_CLASS));
+        const icon = tokenValue(textToken(PLACE_DISCLOSURE_ICON_CLASS));
+        expect(getContrastRatio(text, surface)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        expect(getContrastRatio(icon, surface)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      });
+
+      it('error and status line text meet AA', () => {
+        const error = tokenValue(textToken(PLACE_ERROR_CLASS));
+        const status = tokenValue(textToken(PLACE_MESSAGE_CLASS));
+        expect(getContrastRatio(error, surface)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        expect(getContrastRatio(status, surface)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      });
+    });
+  }
+
+  function outlineToken(classes: string): string {
+    const match = /outline-\[var\((--[a-z0-9-]+)\)\]/.exec(classes);
+    if (!match) {
+      throw new Error(`outline color not found in "${classes}"`);
+    }
+    return match[1];
+  }
 });

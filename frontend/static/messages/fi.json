@@ -5092,7 +5092,27 @@
       "expandedMapLabel": "Koko näytön kartta aseman sijainnin valitsemiseen",
       "zoomIn": "Lähennä",
       "zoomOut": "Loitonna",
-      "expand": "Laajenna kartta koko näytölle"
+      "expand": "Laajenna kartta koko näytölle",
+      "search": {
+        "label": "Hae paikkaa",
+        "placeholder": "Paikkakunta tai osoite",
+        "submit": "Hae",
+        "disclosure": "Haut lähetetään Photon-palveluun (photon.komoot.io), joka käyttää OpenStreetMap-dataa.",
+        "openPhoton": "Avaa Photon uudessa välilehdessä",
+        "searching": "Haetaan...",
+        "results": "{count, plural, one {# paikka löytyi} other {# paikkaa löytyi}}",
+        "noResults": "Paikkoja ei löytynyt. Kokeile toista nimeä tai napsauta karttaa.",
+        "errorNetwork": "Paikkahaku ei ole käytettävissä. Tarkista internetyhteys. Voit silti napsauttaa karttaa tai syöttää koordinaatit.",
+        "errorRateLimited": "Liian monta hakua. Odota hetki ja yritä uudelleen.",
+        "errorUnavailable": "Hakupalvelu ei vastannut. Voit silti napsauttaa karttaa tai syöttää koordinaatit.",
+        "kind": {
+          "city": "Kaupunki",
+          "town": "Taajama",
+          "village": "Kylä",
+          "station": "Asema",
+          "airport": "Lentokenttä"
+        }
+      }
     }
   },
   "connectivity": {

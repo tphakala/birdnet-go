@@ -5092,7 +5092,27 @@
       "expandedMapLabel": "Mapa a pantalla completa para seleccionar la ubicación de la estación",
       "zoomIn": "Acercar",
       "zoomOut": "Alejar",
-      "expand": "Ampliar el mapa a pantalla completa"
+      "expand": "Ampliar el mapa a pantalla completa",
+      "search": {
+        "label": "Buscar un lugar",
+        "placeholder": "Localidad o dirección",
+        "submit": "Buscar",
+        "disclosure": "Las búsquedas se envían a Photon (photon.komoot.io), que usa datos de OpenStreetMap.",
+        "openPhoton": "Abrir Photon en una pestaña nueva",
+        "searching": "Buscando...",
+        "results": "{count, plural, one {# lugar encontrado} other {# lugares encontrados}}",
+        "noResults": "No se encontraron lugares. Prueba con otro nombre o haz clic en el mapa.",
+        "errorNetwork": "La búsqueda de lugares no está disponible. Comprueba la conexión a internet. Aún puedes hacer clic en el mapa o introducir las coordenadas.",
+        "errorRateLimited": "Demasiadas búsquedas. Espera un momento e inténtalo de nuevo.",
+        "errorUnavailable": "El servicio de búsqueda no respondió. Aún puedes hacer clic en el mapa o introducir las coordenadas.",
+        "kind": {
+          "city": "Ciudad",
+          "town": "Localidad",
+          "village": "Pueblo",
+          "station": "Estación",
+          "airport": "Aeropuerto"
+        }
+      }
     }
   },
   "connectivity": {
