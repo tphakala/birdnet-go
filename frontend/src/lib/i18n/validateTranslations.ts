@@ -111,6 +111,8 @@ const SKIP_UNTRANSLATED_KEYWORDS = [
   'rtf',
   'tls',
   'loopback',
+  // Words spelled the same in English and another language
+  'village',
   // Hardware and ML terms
   'fp16',
   'ram',
