@@ -965,6 +965,23 @@ describe('Modal', () => {
 
       expect(focusSpy).not.toHaveBeenCalled();
     });
+
+    it('returns focus to focusable SVG content it was opened from', async () => {
+      renderTyped(ModalToggleHost, {});
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const bar = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      bar.setAttribute('tabindex', '0');
+      svg.append(bar);
+      document.body.append(svg);
+      bar.focus();
+      await press('Toggle lower');
+      await waitFor(() => expect(button('Lower action')).toHaveFocus());
+
+      await press('Toggle lower');
+
+      expect(bar).toHaveFocus();
+      svg.remove();
+    });
   });
 
   describe('Escape', () => {

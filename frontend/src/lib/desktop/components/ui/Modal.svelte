@@ -7,9 +7,9 @@
   /** What one open Modal tells the others: its dialog, where it was opened from, where focus goes on close. */
   interface OpenModal {
     dialog: HTMLElement | undefined;
-    opener: HTMLElement | null;
+    opener: HTMLElement | SVGElement | null;
     /** Set when a Modal this one was opened from closes first; replaces `opener` as the place to restore focus to */
-    restoreTo: HTMLElement | null;
+    restoreTo: HTMLElement | SVGElement | null;
   }
 
   // CSS selector for elements that may be keyboard focusable. getTabbable()
@@ -390,7 +390,7 @@
   }
 
   // A trigger that was removed while the dialog was open (a delete flow) cannot take focus
-  function restoreFocus(target: HTMLElement | null) {
+  function restoreFocus(target: HTMLElement | SVGElement | null) {
     if (target?.isConnected && 'focus' in target) target.focus();
   }
 
@@ -410,7 +410,11 @@
       restoreFocus(target);
       // No usable target (body, removed, or null): focus must not stay on a control of the dialog that is now hidden
       const active = document.activeElement;
-      if (active instanceof HTMLElement && stackEntry.dialog?.contains(active)) active.blur();
+      if (
+        (active instanceof HTMLElement || active instanceof SVGElement) &&
+        stackEntry.dialog?.contains(active)
+      )
+        active.blur();
       return;
     }
     const above = openModals.at(index);
@@ -421,7 +425,10 @@
     if (isOpen) {
       // Not an element of this dialog (focus left there by a quick close and reopen): keep the earlier opener
       const active = document.activeElement;
-      if (active instanceof HTMLElement && !untrack(() => dialogElement)?.contains(active)) {
+      if (
+        (active instanceof HTMLElement || active instanceof SVGElement) &&
+        !untrack(() => dialogElement)?.contains(active)
+      ) {
         stackEntry.opener = active;
       }
       stackEntry.restoreTo = null;
