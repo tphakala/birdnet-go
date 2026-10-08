@@ -19,6 +19,7 @@ const onboardingSteps: WizardStep[] = [
     type: 'component',
     titleKey: 'wizard.steps.audioSource.title',
     component: () => import('./steps/AudioSourceStep.svelte'),
+    unfinishedSaveKey: 'wizard.errors.audioSourceSaveUnfinished',
   },
   {
     id: 'detection',

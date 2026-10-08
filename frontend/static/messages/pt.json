@@ -5253,7 +5253,9 @@
       "saveFailed": "Não foi possível guardar este passo. Verifique a ligação e tente novamente, ou ignore a configuração e altere isto mais tarde nas Definições.",
       "saveRejected": "As definições deste passo não foram aceites. Verifique os valores e tente novamente, ou ignore a configuração e altere isto mais tarde nas Definições.",
       "stepLoadFailed": "Não foi possível carregar este passo. Prima Tentar novamente ou recarregue a página.",
-      "stepLoadFailedReload": "Ainda não foi possível carregar este passo. Recarregue a página para tentar novamente; as escolhas guardadas em passos anteriores são mantidas."
+      "stepLoadFailedReload": "Ainda não foi possível carregar este passo. Recarregue a página para tentar novamente; as escolhas guardadas em passos anteriores são mantidas.",
+      "audioSourceSaveUnfinished": "A alteração da fonte de áudio não foi concluída. Verifique as fontes de áudio em Configurações > Áudio.",
+      "saveUnfinished": "Algumas alterações da configuração não foram guardadas. Verifique-as nas Definições."
     },
     "reasons": {
       "completeStep": "Conclua este passo para continuar."
@@ -5261,6 +5263,7 @@
     "leaveConfirm": {
       "title": "Sair da configuração?",
       "message": "A configuração não será aberta novamente. As escolhas guardadas em passos anteriores são mantidas; as alterações neste passo não são guardadas. Pode alterar tudo mais tarde nas Definições.",
+      "messageSaving": "A configuração não será aberta novamente. As escolhas guardadas em passos anteriores são mantidas. Este passo ainda está a ser guardado e algumas ou todas as suas alterações podem não ser mantidas. Pode alterar tudo mais tarde nas Definições.",
       "stay": "Continuar a configurar",
       "leave": "Sair da configuração"
     },

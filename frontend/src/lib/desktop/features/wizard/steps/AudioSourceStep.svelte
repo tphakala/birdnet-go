@@ -245,8 +245,8 @@
   // differs. Each choice writes the new source first and removes the old one
   // last, so a failure in between never leaves the station without a source. A
   // commit that has started is not abandoned when the wizard closes (Skip); if
-  // its second write then fails, the old source stays enabled and the error is
-  // only logged.
+  // its second write then fails, the old source stays enabled and the wizard
+  // reports the failure in an error toast that points to Settings > Audio.
   async function commit(): Promise<void> {
     if (!dirty || skipped || incompleteReason !== undefined) return;
     const realtime = storedRealtime();

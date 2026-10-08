@@ -5253,7 +5253,9 @@
       "saveFailed": "Nie udało się zapisać tego kroku. Sprawdź połączenie i spróbuj ponownie albo pomiń konfigurację i zmień to później w Ustawieniach.",
       "saveRejected": "Ustawienia z tego kroku nie zostały przyjęte. Sprawdź wartości i spróbuj ponownie albo pomiń konfigurację i zmień to później w Ustawieniach.",
       "stepLoadFailed": "Nie udało się załadować tego kroku. Naciśnij Ponów próbę lub odśwież stronę.",
-      "stepLoadFailedReload": "Nadal nie udało się załadować tego kroku. Odśwież stronę, aby spróbować ponownie; wybory zapisane w poprzednich krokach zostają zachowane."
+      "stepLoadFailedReload": "Nadal nie udało się załadować tego kroku. Odśwież stronę, aby spróbować ponownie; wybory zapisane w poprzednich krokach zostają zachowane.",
+      "audioSourceSaveUnfinished": "Zmiana źródła dźwięku nie została dokończona. Sprawdź źródła dźwięku w sekcji Ustawienia > Dźwięk.",
+      "saveUnfinished": "Niektóre zmiany z konfiguracji nie zostały zapisane. Sprawdź je w Ustawieniach."
     },
     "reasons": {
       "completeStep": "Ukończ ten krok, aby kontynuować."
@@ -5261,6 +5263,7 @@
     "leaveConfirm": {
       "title": "Opuścić konfigurację?",
       "message": "Konfiguracja nie otworzy się ponownie. Wybory zapisane w poprzednich krokach zostają zachowane; zmiany w tym kroku nie zostaną zapisane. Wszystko możesz zmienić później w Ustawieniach.",
+      "messageSaving": "Konfiguracja nie otworzy się ponownie. Wybory zapisane w poprzednich krokach zostają zachowane. Ten krok jest jeszcze zapisywany, a część jego zmian lub wszystkie mogą nie zostać zachowane. Wszystko możesz zmienić później w Ustawieniach.",
       "stay": "Kontynuuj konfigurację",
       "leave": "Opuść konfigurację"
     },

@@ -41,6 +41,12 @@
   let backButtonRef = $state<HTMLButtonElement>();
   let primaryButtonRef = $state<HTMLButtonElement>();
   let leaveConfirmOpen = $state(false);
+  // A save still running when setup closes keeps running, but some of its changes may
+  // not be kept; the confirmation says so while isSaving, and follows it while open.
+  // Both keys are literal so the i18n usage scanner sees them.
+  let leaveMessage = $derived(
+    wizardState.isSaving ? t('wizard.leaveConfirm.messageSaving') : t('wizard.leaveConfirm.message')
+  );
   let importGeneration = 0;
   // retryNonce as of the last import, to tell a Retry from a step change
   let lastRetryNonce = 0;
@@ -361,7 +367,7 @@
   >
     {#snippet header()}
       <h3 id={LEAVE_TITLE_ID} class="mb-2 text-lg font-bold">{t('wizard.leaveConfirm.title')}</h3>
-      <p id={LEAVE_DESC_ID} class="text-sm">{t('wizard.leaveConfirm.message')}</p>
+      <p id={LEAVE_DESC_ID} class="text-sm">{leaveMessage}</p>
     {/snippet}
   </Modal>
 {/if}

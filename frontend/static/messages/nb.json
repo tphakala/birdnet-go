@@ -5253,7 +5253,9 @@
       "saveFailed": "Dette trinnet kunne ikke lagres. Sjekk tilkoblingen og prøv igjen, eller hopp over oppsettet og endre det senere i Innstillinger.",
       "saveRejected": "Innstillingene i dette trinnet ble ikke godtatt. Sjekk verdiene og prøv igjen, eller hopp over oppsettet og endre det senere i Innstillinger.",
       "stepLoadFailed": "Dette trinnet kunne ikke lastes. Trykk på Prøv igjen, eller last siden på nytt.",
-      "stepLoadFailedReload": "Dette trinnet kunne fortsatt ikke lastes. Last siden på nytt for å prøve igjen; valg som er lagret i tidligere trinn beholdes."
+      "stepLoadFailedReload": "Dette trinnet kunne fortsatt ikke lastes. Last siden på nytt for å prøve igjen; valg som er lagret i tidligere trinn beholdes.",
+      "audioSourceSaveUnfinished": "Endringen av lydkilde ble ikke fullført. Sjekk lydkildene under Innstillinger > Lyd.",
+      "saveUnfinished": "Noen endringer fra oppsettet ble ikke lagret. Sjekk dem i Innstillinger."
     },
     "reasons": {
       "completeStep": "Fullfør dette trinnet for å fortsette."
@@ -5261,6 +5263,7 @@
     "leaveConfirm": {
       "title": "Forlate oppsettet?",
       "message": "Oppsettet åpnes ikke igjen. Valg som er lagret i tidligere trinn beholdes; endringer i dette trinnet lagres ikke. Du kan endre alt senere i Innstillinger.",
+      "messageSaving": "Oppsettet åpnes ikke igjen. Valg som er lagret i tidligere trinn beholdes. Dette trinnet lagres fortsatt, og noen av eller alle endringene beholdes kanskje ikke. Du kan endre alt senere i Innstillinger.",
       "stay": "Fortsett oppsettet",
       "leave": "Forlat oppsettet"
     },

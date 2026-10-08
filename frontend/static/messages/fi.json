@@ -5253,7 +5253,9 @@
       "saveFailed": "Tämän vaiheen tallennus epäonnistui. Tarkista yhteys ja yritä uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
       "saveRejected": "Tämän vaiheen asetuksia ei hyväksytty. Tarkista arvot ja yritä uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
       "stepLoadFailed": "Tämän vaiheen lataus epäonnistui. Paina Yritä uudelleen tai lataa sivu uudelleen.",
-      "stepLoadFailedReload": "Tämän vaiheen lataus epäonnistui edelleen. Lataa sivu uudelleen ja yritä uudestaan; aiemmissa vaiheissa tallennetut valinnat säilyvät."
+      "stepLoadFailedReload": "Tämän vaiheen lataus epäonnistui edelleen. Lataa sivu uudelleen ja yritä uudestaan; aiemmissa vaiheissa tallennetut valinnat säilyvät.",
+      "audioSourceSaveUnfinished": "Äänilähteen vaihto ei valmistunut. Tarkista äänilähteet kohdasta Asetukset > Ääni.",
+      "saveUnfinished": "Osa käyttöönoton muutoksista ei tallentunut. Tarkista ne Asetuksissa."
     },
     "reasons": {
       "completeStep": "Suorita tämä vaihe loppuun jatkaaksesi."
@@ -5261,6 +5263,7 @@
     "leaveConfirm": {
       "title": "Poistutaanko käyttöönotosta?",
       "message": "Käyttöönotto ei avaudu uudelleen. Aiemmissa vaiheissa tallennetut valinnat säilyvät; tämän vaiheen muutoksia ei tallenneta. Voit muuttaa kaiken myöhemmin Asetuksissa.",
+      "messageSaving": "Käyttöönotto ei avaudu uudelleen. Aiemmissa vaiheissa tallennetut valinnat säilyvät. Tämän vaiheen tallennus on vielä kesken, ja osa sen muutoksista tai kaikki ne eivät välttämättä säily. Voit muuttaa kaiken myöhemmin Asetuksissa.",
       "stay": "Jatka käyttöönottoa",
       "leave": "Poistu käyttöönotosta"
     },

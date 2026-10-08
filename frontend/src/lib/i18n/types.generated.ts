@@ -3845,9 +3845,12 @@ export type TranslationKey =
   | 'wizard.errors.saveRejected'
   | 'wizard.errors.stepLoadFailed'
   | 'wizard.errors.stepLoadFailedReload'
+  | 'wizard.errors.audioSourceSaveUnfinished'
+  | 'wizard.errors.saveUnfinished'
   | 'wizard.reasons.completeStep'
   | 'wizard.leaveConfirm.title'
   | 'wizard.leaveConfirm.message'
+  | 'wizard.leaveConfirm.messageSaving'
   | 'wizard.leaveConfirm.stay'
   | 'wizard.leaveConfirm.leave'
   | 'wizard.whatsNew.title' // params: version

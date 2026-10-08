@@ -5253,7 +5253,9 @@
       "saveFailed": "Dette trin kunne ikke gemmes. Kontroller forbindelsen og prøv igen, eller spring opsætningen over og ændr det senere i Indstillinger.",
       "saveRejected": "Indstillingerne i dette trin blev ikke accepteret. Kontroller værdierne og prøv igen, eller spring opsætningen over og ændr det senere i Indstillinger.",
       "stepLoadFailed": "Dette trin kunne ikke indlæses. Tryk på Prøv igen, eller genindlæs siden.",
-      "stepLoadFailedReload": "Dette trin kunne stadig ikke indlæses. Genindlæs siden for at prøve igen; valg gemt i tidligere trin bevares."
+      "stepLoadFailedReload": "Dette trin kunne stadig ikke indlæses. Genindlæs siden for at prøve igen; valg gemt i tidligere trin bevares.",
+      "audioSourceSaveUnfinished": "Ændringen af lydkilden blev ikke gennemført. Tjek lydkilderne under Indstillinger > Lyd.",
+      "saveUnfinished": "Nogle ændringer fra opsætningen blev ikke gemt. Tjek dem i Indstillinger."
     },
     "reasons": {
       "completeStep": "Fuldfør dette trin for at fortsætte."
@@ -5261,6 +5263,7 @@
     "leaveConfirm": {
       "title": "Forlad opsætningen?",
       "message": "Opsætningen åbner ikke igen. Valg gemt i tidligere trin bevares; ændringer i dette trin gemmes ikke. Du kan ændre alt senere i Indstillinger.",
+      "messageSaving": "Opsætningen åbner ikke igen. Valg gemt i tidligere trin bevares. Dette trin er stadig ved at blive gemt, og nogle af eller alle dets ændringer bevares muligvis ikke. Du kan ændre alt senere i Indstillinger.",
       "stay": "Fortsæt opsætningen",
       "leave": "Forlad opsætningen"
     },

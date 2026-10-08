@@ -5253,7 +5253,9 @@
       "saveFailed": "Impossibile salvare questo passaggio. Controlla la connessione e riprova, oppure salta la configurazione e modificalo più tardi nelle Impostazioni.",
       "saveRejected": "Le impostazioni di questo passaggio non sono state accettate. Controlla i valori e riprova, oppure salta la configurazione e modificalo più tardi nelle Impostazioni.",
       "stepLoadFailed": "Impossibile caricare questo passaggio. Premi Riprova o ricarica la pagina.",
-      "stepLoadFailedReload": "Ancora impossibile caricare questo passaggio. Ricarica la pagina per riprovare; le scelte salvate nei passaggi precedenti vengono mantenute."
+      "stepLoadFailedReload": "Ancora impossibile caricare questo passaggio. Ricarica la pagina per riprovare; le scelte salvate nei passaggi precedenti vengono mantenute.",
+      "audioSourceSaveUnfinished": "La modifica della sorgente audio non è stata completata. Controlla le sorgenti audio in Impostazioni > Audio.",
+      "saveUnfinished": "Alcune modifiche della configurazione non sono state salvate. Controllale nelle Impostazioni."
     },
     "reasons": {
       "completeStep": "Completa questo passaggio per continuare."
@@ -5261,6 +5263,7 @@
     "leaveConfirm": {
       "title": "Uscire dalla configurazione?",
       "message": "La configurazione non verrà riaperta. Le scelte salvate nei passaggi precedenti vengono mantenute; le modifiche di questo passaggio non vengono salvate. Potrai cambiare tutto più tardi nelle Impostazioni.",
+      "messageSaving": "La configurazione non verrà riaperta. Le scelte salvate nei passaggi precedenti vengono mantenute. Questo passaggio è ancora in fase di salvataggio e alcune o tutte le sue modifiche potrebbero non essere mantenute. Potrai cambiare tutto più tardi nelle Impostazioni.",
       "stay": "Continua la configurazione",
       "leave": "Esci dalla configurazione"
     },
