@@ -74,6 +74,14 @@
     const gen = ++importGeneration;
     // A step change (or a relaunch) offers Retry again
     if (!isRetry) retriedIndex = -1;
+    // The dialog body is one element that scrolls for every step; a new step starts
+    // at its top. Read untracked so the step box mounting does not re-run this effect.
+    if (!isRetry && step) {
+      untrack(() => {
+        const body = contentRef?.parentElement;
+        if (body) body.scrollTop = 0;
+      });
+    }
     if (step?.type === 'component') {
       // A step move already starts as 'loading'; this also covers Retry
       untrack(() => wizardState.setStepStatus('loading', index));

@@ -778,6 +778,23 @@ describe('WizardDialog', () => {
       expect(heading().parentElement).toHaveClass('pe-10');
     });
 
+    it('starts each step at the top of the scrolling body, on Next and on Back', async () => {
+      renderWizard(componentSteps(3));
+      await waitForPrimaryEnabled();
+      bodyRegion().scrollTop = 120;
+
+      await user.click(primaryButton());
+      await screen.findByRole('dialog', { name: 'test.step2' });
+      expect(bodyRegion().scrollTop).toBe(0);
+      await waitForPrimaryEnabled();
+      await waitOutStepMoveGuard();
+
+      bodyRegion().scrollTop = 120;
+      await user.click(backButton());
+      await screen.findByRole('dialog', { name: 'test.step1' });
+      expect(bodyRegion().scrollTop).toBe(0);
+    });
+
     it('uses the wide width only on wide steps, across Next and Back', async () => {
       renderWizard(sizedSteps(['default', 'wide', undefined]));
       await waitForPrimaryEnabled();
