@@ -499,6 +499,21 @@ describe('PlaceSearch', () => {
       expect(input()).toHaveAttribute('aria-expanded', 'false');
     });
 
+    it('drops the answer of a request that was running when it was disabled', async () => {
+      const pending = deferNextFetch();
+      const onSelect = vi.fn<(place: PlaceResult) => void>();
+      const { rerender } = render(PlaceSearch, { props: { onSelect } });
+      await searchFor('Helsinki');
+
+      await rerender({ onSelect, disabled: true });
+      pending.resolve(jsonResponse(HELSINKI));
+      await vi.advanceTimersByTimeAsync(0);
+      await rerender({ onSelect, disabled: false });
+
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(screen.getByRole('status').textContent).toBe('');
+    });
+
     it('does not start a pending search once it is disabled', async () => {
       const onSelect = vi.fn<(place: PlaceResult) => void>();
       const { rerender } = render(PlaceSearch, { props: { onSelect } });
