@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-const { sources, show } = vi.hoisted(() => ({
-  sources: [] as Array<{ onmessage: ((event: MessageEvent) => void) | null }>,
-  show: vi.fn(),
-}));
+const { sources, show } = vi.hoisted(() => {
+  const created: Array<{ onmessage: ((event: MessageEvent) => void) | null }> = [];
+  return { sources: created, show: vi.fn() };
+});
 
 vi.mock('$lib/utils/ReconnectingEventSource', () => ({
   ReconnectingEventSource: class ReconnectingEventSource {
