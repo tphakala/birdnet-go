@@ -381,6 +381,63 @@ describe('Modal', () => {
     expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
   });
 
+  describe('scrollBody', () => {
+    const renderHost = (props: { scrollBody?: boolean; size?: 'md' | 'full' }) =>
+      renderTyped(ModalTestWrapper, {
+        props: {
+          isOpen: true,
+          showChildren: true,
+          showCustomHeader: true,
+          showCustomFooter: true,
+          ...props,
+        },
+      });
+
+    const bodyOf = () => {
+      const body = screen
+        .getByText('Custom modal content')
+        .closest<HTMLElement>('[id^="modal-body"]');
+      if (!body) throw new Error('modal body not found');
+      return body;
+    };
+
+    it('scrollBody keeps the header and footer outside the scrolling body', () => {
+      renderHost({ scrollBody: true });
+
+      const panel = screen.getByRole('document');
+      expect(panel).toHaveClass('flex', 'flex-col', 'overflow-hidden');
+      expect(panel).not.toHaveClass('overflow-y-auto');
+      expect(bodyOf()).toHaveClass('overflow-y-auto', 'min-h-0');
+      expect(bodyOf()).not.toContainElement(screen.getByText('Custom Header'));
+      expect(bodyOf()).not.toContainElement(screen.getByText('Custom Action'));
+      expect(screen.getByText('Custom Header').closest('.shrink-0')).not.toBeNull();
+      expect(screen.getByText('Custom Action').parentElement).toHaveClass('shrink-0');
+    });
+
+    it('without scrollBody the whole panel scrolls as before', () => {
+      renderHost({});
+
+      const panel = screen.getByRole('document');
+      expect(panel).toHaveClass('overflow-y-auto');
+      expect(panel).not.toHaveClass('overflow-hidden', 'flex-col');
+      expect(bodyOf().className).toBe('py-4');
+      expect(screen.getByText('Custom Action').parentElement?.className).toBe(
+        'flex justify-end gap-2 mt-6'
+      );
+      // The header renders directly in the panel, without a wrapper
+      expect(screen.getByText('Custom Header').parentElement?.parentElement).toBe(panel);
+    });
+
+    it('keeps the full size width with and without scrollBody', () => {
+      const { unmount } = renderHost({ size: 'full' });
+      expect(screen.getByRole('document')).toHaveClass('max-w-full', 'w-full');
+      unmount();
+
+      renderHost({ size: 'full', scrollBody: true });
+      expect(screen.getByRole('document')).toHaveClass('max-w-full', 'w-full');
+    });
+  });
+
   describe('labelling', () => {
     const stackTest = createComponentTestFactory(ModalStackHost);
 

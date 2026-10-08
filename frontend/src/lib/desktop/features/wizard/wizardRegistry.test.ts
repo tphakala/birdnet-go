@@ -33,6 +33,13 @@ describe('wizardRegistry — getStepsForFlow()', () => {
       });
     });
 
+    it('only the location step uses the wide width', () => {
+      const steps = getStepsForFlow('onboarding');
+      expect(steps.filter(s => s.type === 'component' && s.size === 'wide').map(s => s.id)).toEqual(
+        ['location-language']
+      );
+    });
+
     it('last onboarding step is responsible-use', () => {
       const steps = getStepsForFlow('onboarding');
       expect(steps[steps.length - 1].id).toBe('responsible-use');

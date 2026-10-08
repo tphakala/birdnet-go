@@ -7,6 +7,9 @@ export type WizardStatus = 'idle' | 'active' | 'completed';
 /** Load status of the current step, set by the dialog. */
 export type StepStatus = 'loading' | 'ready' | 'failed';
 
+/** Dialog width of a step: `wide` for steps with a map or a long list. */
+export type WizardStepSize = 'default' | 'wide';
+
 export interface ComponentStep {
   id: string;
   type: 'component';
@@ -17,6 +20,8 @@ export interface ComponentStep {
    * closed (Skip, Leave setup, relaunch). The generic message is used when unset.
    */
   unfinishedSaveKey?: TranslationKey;
+  /** Dialog width for this step: 'wide' for steps with a map or a long list. Default when unset. */
+  size?: WizardStepSize;
 }
 
 export interface ContentStep {

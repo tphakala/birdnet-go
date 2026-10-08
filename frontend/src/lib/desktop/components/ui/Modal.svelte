@@ -166,6 +166,12 @@
      */
     describeBody?: boolean;
     /**
+     * Keep the header and footer in view and scroll only the body once the dialog
+     * reaches its maximum height. Use for dialogs whose body can be taller than the
+     * viewport. Off by default: the whole panel then scrolls as one.
+     */
+    scrollBody?: boolean;
+    /**
      * Replaces the title heading. The dialog is named from `title` through
      * aria-labelledby, which points at `titleId`, so a heading in this snippet
      * must carry `id={titleId}` and `title` must be set; without `title`, pass
@@ -189,6 +195,7 @@
     showCloseButton = true,
     loading = false,
     describeBody = false,
+    scrollBody = false,
     className = '',
     onClose,
     onConfirm,
@@ -219,21 +226,32 @@
     return openModals.at(-1) === stackEntry;
   }
 
+  // overflow-y-auto is not part of the base: it belongs to the whole panel only when
+  // the panel scrolls as one, and cn() joins classes without resolving conflicts
   const modalBoxBase =
-    'bg-[var(--color-base-100)] rounded-[var(--radius-box)] p-6 max-h-[calc(100vh-2rem)] overflow-y-auto shadow-xl relative scale-95 transition-transform duration-200 ease-out';
+    'bg-[var(--color-base-100)] rounded-[var(--radius-box)] p-6 max-h-[calc(100vh-2rem)] shadow-xl relative scale-95 transition-transform duration-200 ease-out';
+
+  // The panel scrolls as one, or is a column whose body alone scrolls (scrollBody)
+  const panelLayout = $derived(scrollBody ? 'flex flex-col overflow-hidden' : 'overflow-y-auto');
+
+  // The scrolling body reaches the panel edges (-mx-6 px-6) so the scroll container
+  // does not clip the focus rings of controls near the sides; scroll-py-4 keeps room
+  // for a ring when the browser scrolls a focused control to the top or bottom edge.
+  const SCROLL_BODY_CLASS =
+    'min-h-0 flex-auto overflow-y-auto overflow-x-hidden overscroll-contain -mx-6 px-6 py-4 scroll-py-4 scroll-shadow-y';
 
   const sizeClasses: Record<ModalSize, string> = {
-    sm: `${modalBoxBase} max-w-sm`,
-    md: `${modalBoxBase} max-w-md`,
-    lg: `${modalBoxBase} max-w-lg`,
-    xl: `${modalBoxBase} max-w-xl`,
-    '2xl': `${modalBoxBase} max-w-2xl`,
-    '3xl': `${modalBoxBase} max-w-3xl`,
-    '4xl': `${modalBoxBase} max-w-4xl`,
-    '5xl': `${modalBoxBase} max-w-5xl`,
-    '6xl': `${modalBoxBase} max-w-6xl`,
-    '7xl': `${modalBoxBase} max-w-7xl`,
-    full: `${modalBoxBase} max-w-full w-full`,
+    sm: 'max-w-sm',
+    md: 'max-w-md',
+    lg: 'max-w-lg',
+    xl: 'max-w-xl',
+    '2xl': 'max-w-2xl',
+    '3xl': 'max-w-3xl',
+    '4xl': 'max-w-4xl',
+    '5xl': 'max-w-5xl',
+    '6xl': 'max-w-6xl',
+    '7xl': 'max-w-7xl',
+    full: 'max-w-full w-full',
   };
 
   const confirmButtonStyles: Record<typeof confirmVariant, string> = {
@@ -478,6 +496,14 @@
   });
 </script>
 
+{#snippet headerContent()}
+  {#if header}
+    {@render header({ titleId })}
+  {:else if title}
+    <h3 id={titleId} class="font-bold text-lg mb-4">{title}</h3>
+  {/if}
+{/snippet}
+
 <div
   bind:this={dialogElement}
   class={cn(
@@ -497,6 +523,8 @@
   <div
     bind:this={modalElement}
     class={cn(
+      modalBoxBase,
+      panelLayout,
       // eslint-disable-next-line security/detect-object-injection -- size is typed as ModalSize
       sizeClasses[size],
       { 'scale-100': isOpen },
@@ -523,24 +551,26 @@
       </button>
     {/if}
 
-    {#if header}
-      {@render header({ titleId })}
-    {:else if title}
-      <h3 id={titleId} class="font-bold text-lg mb-4">{title}</h3>
+    {#if scrollBody && (header || title)}
+      <div class="shrink-0">
+        {@render headerContent()}
+      </div>
+    {:else}
+      {@render headerContent()}
     {/if}
 
     {#if children}
-      <div id={bodyId} class="py-4">
+      <div id={bodyId} class={scrollBody ? SCROLL_BODY_CLASS : 'py-4'}>
         {@render children()}
       </div>
     {/if}
 
     {#if footer}
-      <div class="flex justify-end gap-2 mt-6">
+      <div class={cn('flex justify-end gap-2 mt-6', scrollBody && 'shrink-0')}>
         {@render footer()}
       </div>
     {:else if type !== 'default'}
-      <div class="flex justify-end gap-2 mt-6">
+      <div class={cn('flex justify-end gap-2 mt-6', scrollBody && 'shrink-0')}>
         <button
           type="button"
           class={ghostBtnClasses}

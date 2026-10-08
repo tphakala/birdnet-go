@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import Modal from './Modal.svelte';
 
   let {
@@ -6,10 +6,19 @@
     showChildren = false,
     showCustomHeader = false,
     showCustomFooter = false,
+    scrollBody = false,
+    size = 'md',
+  }: {
+    isOpen?: boolean;
+    showChildren?: boolean;
+    showCustomHeader?: boolean;
+    showCustomFooter?: boolean;
+    scrollBody?: boolean;
+    size?: 'md' | 'full';
   } = $props();
 </script>
 
-<Modal {isOpen} title="Test Modal">
+<Modal {isOpen} {scrollBody} {size} title="Test Modal">
   {#snippet header({ titleId })}
     {#if showCustomHeader}
       <div>

@@ -161,7 +161,7 @@ Comprehensive modal component with multiple types and configurations.
 interface Props {
   isOpen: boolean;
   title?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | '6xl' | '7xl' | 'full';
   type?: 'default' | 'confirm' | 'alert';
   confirmLabel?: string;
   cancelLabel?: string;
@@ -174,6 +174,7 @@ interface Props {
   onClose?: () => void;
   onConfirm?: () => void | Promise<void>;
   describeBody?: boolean;
+  scrollBody?: boolean;
   header?: Snippet<[{ titleId: string }]>;
   children?: Snippet;
   footer?: Snippet;
@@ -202,6 +203,7 @@ interface Props {
 
 - Multiple modal types
 - Size variants from `sm` to `7xl`, plus `full`
+- `scrollBody` keeps the header and footer in view and scrolls only the body once the dialog reaches its maximum height (default off: the whole panel scrolls as one). The body then runs to the panel edges so focus rings are not clipped, and shows an edge shadow on a side with content out of view
 - Async confirm handlers
 - Keyboard/backdrop controls
 - Loading states

@@ -53,6 +53,25 @@ function componentSteps(count: number): WizardStep[] {
   }));
 }
 
+// Component steps with the given width setting each (undefined leaves it unset)
+function sizedSteps(sizes: Array<'default' | 'wide' | undefined>): WizardStep[] {
+  const steps = componentSteps(sizes.length);
+  return steps.map((step, i) => ({
+    ...step,
+    // eslint-disable-next-line security/detect-object-injection -- i is a bounded test index
+    ...(sizes[i] ? { size: sizes[i] } : {}),
+  }));
+}
+
+// The region that scrolls inside the dialog panel
+const bodyRegion = () => {
+  const body = document.querySelector<HTMLElement>('[id^="modal-body"]');
+  if (!body) throw new Error('modal body not found');
+  return body;
+};
+
+const panel = () => screen.getByRole('document');
+
 function renderWizard(steps: WizardStep[], flow: 'onboarding' | 'whats-new' = 'onboarding') {
   vi.mocked(getStepsForFlow).mockReturnValue(steps);
   wizardState.launch(flow, { currentVersion: 'v1' });
@@ -714,6 +733,85 @@ describe('WizardDialog', () => {
       expect(confirmation()).not.toBeInTheDocument();
       expect(wizardState.isActive).toBe(false);
       expect(api.post).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('frame layout', () => {
+    it('keeps the step title and the footer buttons outside the scrolling body', async () => {
+      renderWizard(componentSteps(3));
+      await waitForPrimaryEnabled();
+
+      expect(bodyRegion()).toHaveClass('overflow-y-auto');
+      expect(panel()).not.toHaveClass('overflow-y-auto');
+      expect(bodyRegion()).not.toContainElement(heading());
+      expect(bodyRegion()).not.toContainElement(primaryButton());
+      expect(bodyRegion()).toContainElement(contentBox());
+    });
+
+    it('keeps the save-failed alert outside the scrolling body, above the buttons', async () => {
+      stepControl.leave = vi.fn(() => Promise.reject(new Error('save failed')));
+      renderWizard(componentSteps(3));
+      await waitForPrimaryEnabled();
+
+      await user.click(primaryButton());
+
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.saveFailed')
+      );
+      const alert = screen.getByRole('alert');
+      expect(bodyRegion()).not.toContainElement(alert);
+      expect(alert.compareDocumentPosition(primaryButton())).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
+    it('lets the step box take its content height instead of a fixed one', async () => {
+      renderWizard(componentSteps(3));
+      await waitForPrimaryEnabled();
+
+      expect(contentBox()?.className).not.toMatch(/(^|\s)h-\[/);
+      expect(contentBox()).toHaveClass('min-h-[20rem]');
+    });
+
+    it('the header row reserves room for the close button', async () => {
+      renderWizard(componentSteps(3));
+      await waitForPrimaryEnabled();
+
+      expect(heading().parentElement).toHaveClass('pe-10');
+    });
+
+    it('uses the wide width only on wide steps, across Next and Back', async () => {
+      renderWizard(sizedSteps(['default', 'wide', undefined]));
+      await waitForPrimaryEnabled();
+      expect(panel()).toHaveClass('max-w-2xl');
+
+      await user.click(primaryButton());
+      await screen.findByRole('dialog', { name: 'test.step2' });
+      expect(panel()).toHaveClass('max-w-4xl');
+      await waitForPrimaryEnabled();
+      await waitOutStepMoveGuard();
+
+      await user.click(primaryButton());
+      await screen.findByRole('dialog', { name: 'test.step3' });
+      expect(panel()).toHaveClass('max-w-2xl');
+      await waitForPrimaryEnabled();
+      await waitOutStepMoveGuard();
+
+      await user.click(backButton());
+      await screen.findByRole('dialog', { name: 'test.step2' });
+      expect(panel()).toHaveClass('max-w-4xl');
+      await waitForPrimaryEnabled();
+      await waitOutStepMoveGuard();
+
+      await user.click(backButton());
+      await screen.findByRole('dialog', { name: 'test.step1' });
+      expect(panel()).toHaveClass('max-w-2xl');
+    });
+
+    it('gives a content step the default width', async () => {
+      renderWizard([{ id: 'c1', type: 'content', title: 'First', content: 'one' }], 'whats-new');
+      await waitForPrimaryEnabled();
+
+      expect(panel()).toHaveClass('max-w-2xl');
+      expect(panel()).not.toHaveClass('max-w-4xl');
     });
   });
 });
