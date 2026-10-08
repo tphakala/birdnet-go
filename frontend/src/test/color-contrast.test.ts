@@ -70,7 +70,9 @@ function applyOpacity(baseColor: string, backgroundColor: string, opacity: numbe
  */
 function blockBody(css: string, selector: string): string {
   const start = css.indexOf(`${selector} {`);
-  expect(start, `block "${selector}" exists`).toBeGreaterThanOrEqual(0);
+  if (start < 0) {
+    throw new Error(`block "${selector}" not found`);
+  }
   const end = css.indexOf('\n}', start);
   return css.slice(start, end);
 }
@@ -381,15 +383,19 @@ describe('SelectDropdown option states in every color scheme', () => {
   function tintFraction(token: string, classes: string): number {
     // eslint-disable-next-line security/detect-non-literal-regexp -- token is a fixed custom property name
     const match = new RegExp(`var\\(${token}\\)_(\\d+)%`).exec(classes);
-    expect(match, `${token} tint percentage in "${classes}"`).not.toBeNull();
-    return Number(match?.[1]) / 100;
+    if (!match) {
+      throw new Error(`${token} tint percentage not found in "${classes}"`);
+    }
+    return Number(match[1]) / 100;
   }
 
   /** Custom property written as `outline-[var(--token)]` in a class constant. */
   function outlineColorToken(classes: string): string {
     const match = /outline-\[var\((--[a-z0-9-]+)\)\]/.exec(classes);
-    expect(match, `outline color in "${classes}"`).not.toBeNull();
-    return match?.[1] ?? '';
+    if (!match) {
+      throw new Error(`outline color not found in "${classes}"`);
+    }
+    return match[1];
   }
 
   const outlineToken = outlineColorToken(OPTION_HIGHLIGHT_OUTLINE_CLASS);
