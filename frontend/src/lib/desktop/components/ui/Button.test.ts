@@ -1,6 +1,5 @@
 /**
- * Accessibility test example demonstrating axe-core integration
- * Tests basic HTML button accessibility
+ * Button behaviour and accessibility tests (axe-core)
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
@@ -51,21 +50,22 @@ describe('Button', () => {
     expect(button).toHaveAttribute('aria-pressed', 'true');
     expect(button).toHaveAttribute('aria-describedby', 'reason');
   });
+  it('merges a plain class attribute with its own classes', () => {
+    render(ButtonHarness, { props: { class: 'extra-class' } });
+
+    const button = screen.getByRole('button');
+    expect(button).toHaveClass('extra-class');
+    expect(button).toHaveClass('inline-flex');
+  });
 });
 
 describe('Button Accessibility Tests', () => {
   it('should have no accessibility violations with proper label', async () => {
-    // Create a button element directly in JSDOM
-    document.body.innerHTML = '<button>Click Me</button>';
-    const button = document.querySelector('button');
-    expect(button).toBeTruthy();
-    if (!button) throw new Error('Button not found');
+    render(ButtonHarness);
+    const button = screen.getByRole('button');
+    expect(button).toHaveAccessibleName('Press me');
 
-    // Test with strict accessibility rules
     await expectNoA11yViolations(button, A11Y_CONFIGS.strict);
-
-    // Cleanup
-    document.body.innerHTML = '';
   });
 
   it('should fail accessibility test without proper label', async () => {
@@ -102,28 +102,18 @@ describe('Button Accessibility Tests', () => {
   });
 
   it('should pass form accessibility rules for submit button', async () => {
-    // Create submit button
-    document.body.innerHTML = '<button type="submit">Submit Form</button>';
-    const button = document.querySelector('button');
-    expect(button).toBeTruthy();
-    if (!button) throw new Error('Button not found');
+    render(ButtonHarness, { props: { type: 'submit' } });
+    const button = screen.getByRole('button');
+    expect(button).toHaveAttribute('type', 'submit');
 
     await expectNoA11yViolations(button, A11Y_CONFIGS.forms);
-
-    // Cleanup
-    document.body.innerHTML = '';
   });
 
   it('should handle disabled state accessibly', async () => {
-    // Create disabled button
-    document.body.innerHTML = '<button disabled>Disabled Button</button>';
-    const button = document.querySelector('button');
-    expect(button).toBeTruthy();
-    if (!button) throw new Error('Button not found');
+    render(ButtonHarness, { props: { disabled: true } });
+    const button = screen.getByRole('button');
+    expect(button).toBeDisabled();
 
     await expectNoA11yViolations(button, A11Y_CONFIGS.strict);
-
-    // Cleanup
-    document.body.innerHTML = '';
   });
 });

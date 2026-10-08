@@ -3,7 +3,8 @@
   import type { HTMLButtonAttributes } from 'svelte/elements';
 
   // Test harness: binds Button's ref and reports it through `holder`
-  interface Props extends HTMLButtonAttributes {
+  interface Props extends Omit<HTMLButtonAttributes, 'class'> {
+    class?: string;
     holder?: { el?: HTMLButtonElement | null };
   }
 

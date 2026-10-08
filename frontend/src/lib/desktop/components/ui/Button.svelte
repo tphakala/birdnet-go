@@ -30,7 +30,9 @@
   type ButtonVariant = 'default' | 'primary' | 'success' | 'warning' | 'error' | 'ghost';
   type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
-  interface Props extends HTMLButtonAttributes {
+  interface Props extends Omit<HTMLButtonAttributes, 'class'> {
+    /** Merged with the button's own classes, like className. */
+    class?: string;
     variant?: ButtonVariant;
     size?: ButtonSize;
     className?: string;
@@ -45,6 +47,7 @@
     type = 'button',
     title,
     className = '',
+    class: classProp,
     ref = $bindable(),
     onclick,
     children,
@@ -87,6 +90,7 @@
     'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
     safeGet(sizeClasses, size, ''),
     safeGet(variantClasses, variant, ''),
+    classProp,
     className
   )}
   {onclick}

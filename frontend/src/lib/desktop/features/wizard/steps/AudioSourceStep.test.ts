@@ -267,10 +267,12 @@ describe('AudioSourceStep - leave handler', () => {
     expect(settingsActions.saveSection).not.toHaveBeenCalled();
   });
 
-  it('Set up later marks its pressed state with the primary border class', async () => {
+  it('Set up later carries the pressed border variant and toggles aria-pressed', async () => {
     renderStep(AudioSourceStep);
     await flushAsync();
     const button = screen.getByRole('button', { name: `${KEY}.setUpLater` });
+    // The border is a CSS variant keyed on aria-pressed, so the attribute is what switches it
+    expect(button).toHaveAttribute('aria-pressed', 'false');
 
     await fireEvent.click(button);
 

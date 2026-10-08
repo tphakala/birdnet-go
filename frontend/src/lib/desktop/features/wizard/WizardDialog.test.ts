@@ -141,6 +141,9 @@ describe('WizardDialog', () => {
     await waitFor(() => expect(describedText(primaryButton())).toBe('wizard.reasons.completeStep'));
 
     expect(isBlocked(primaryButton())).toBe(true);
+    await user.click(primaryButton());
+    expect(heading()).toHaveTextContent('test.step1');
+    expect(stepControl.leave).not.toHaveBeenCalled();
   });
 
   it('shows the reason the step reports instead of the generic one', async () => {
