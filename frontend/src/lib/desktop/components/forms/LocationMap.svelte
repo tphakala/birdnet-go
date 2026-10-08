@@ -329,7 +329,11 @@
   $effect(() => {
     const button = closeButton;
     if (!button) return;
-    void tick().then(() => button.focus());
+    void tick().then(() => {
+      // The dialog may have closed meanwhile (the expanded map failed to
+      // build); focus then belongs to the expand button, not to a dying button.
+      if (expanded) button.focus();
+    });
   });
 
   onDestroy(() => {

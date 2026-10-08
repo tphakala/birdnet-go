@@ -347,6 +347,7 @@ describe('LocationMap', () => {
 
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect(toastActions.error).toHaveBeenCalledWith('settings.main.errors.modalMapLoadFailed');
+      expect(screen.getByRole('button', { name: EXPAND })).toHaveFocus();
     });
 
     it('a pick in the expanded map reports the location and updates the inline map', async () => {
