@@ -58,7 +58,7 @@ This folder contains **shared components** used across the application. Feature-
 
 ## Forms
 
-- `Checkbox.svelte` - Checkbox input with label
+- `Checkbox.svelte` - Checkbox input with label (`labelClassName` restyles the clickable label, for example as a card)
 - `DateRangePicker.svelte` - Date range selection
 - `FormField.svelte` - Form field wrapper with validation
 - `InlineSlider.svelte` - Inline slider input for compact layouts

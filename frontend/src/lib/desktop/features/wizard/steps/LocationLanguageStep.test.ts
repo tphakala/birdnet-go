@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import type { SettingsFormData } from '$lib/stores/settings';
 
 // Mock API to prevent network calls during mount
@@ -366,6 +366,22 @@ describe('LocationLanguageStep Accessibility', () => {
 
     await waitFor(() => expect(document.getElementById('wizard-species-locale')).not.toBeNull());
     expect(speciesLabel(container)).not.toBeNull();
+  });
+
+  it('shows the loading text with a spinner hidden from assistive technology while locales load', async () => {
+    renderStep(LocationLanguageStep);
+
+    const text = screen.getByText('wizard.steps.locationLanguage.localesLoading');
+    const box = text.parentElement;
+    if (!box) throw new Error('loading box not found');
+
+    const spinner = box.querySelector('[aria-hidden="true"]');
+    expect(spinner).not.toBeNull();
+    expect(spinner?.querySelector('.animate-spin')).not.toBeNull();
+    expect(within(box).queryByRole('status')).toBeNull();
+
+    // Let the locales settle so the pending request does not outlive the test
+    await waitFor(() => expect(document.getElementById('wizard-species-locale')).not.toBeNull());
   });
 
   it('describes the species language dropdown with its help text', async () => {

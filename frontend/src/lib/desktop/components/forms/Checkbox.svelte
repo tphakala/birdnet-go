@@ -11,6 +11,8 @@
     label?: string;
     id?: string;
     className?: string;
+    /** Classes for the inner label; replaces the default `py-1` padding when set. */
+    labelClassName?: string;
     size?: 'xs' | 'sm' | 'md' | 'lg';
     variant?: 'default' | 'primary' | 'secondary' | 'accent';
     helpText?: string;
@@ -26,6 +28,7 @@
     label,
     id,
     className = '',
+    labelClassName,
     size = 'xs',
     variant = 'primary',
     helpText,
@@ -95,7 +98,10 @@
 </script>
 
 <div class={cn('relative min-w-0', className)} {...rest}>
-  <label class="flex items-center cursor-pointer justify-start py-1" for={id}>
+  <label
+    class={cn('flex items-center cursor-pointer justify-start', labelClassName || 'py-1')}
+    for={id}
+  >
     <!-- Hidden native checkbox for accessibility -->
     <input
       type="checkbox"

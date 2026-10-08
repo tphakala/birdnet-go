@@ -181,4 +181,24 @@ describe('Checkbox', () => {
     const checkbox = screen.getByRole('checkbox');
     expect(checkbox).toHaveAttribute('id', 'test-checkbox');
   });
+
+  it('keeps py-1 on the label without labelClassName', () => {
+    render(Checkbox, { props: { checked: false, label: 'Test checkbox' } });
+
+    expect(screen.getByRole('checkbox').closest('label')).toHaveClass('py-1');
+  });
+
+  it('labelClassName replaces the default label padding and keeps the label the click target', async () => {
+    render(Checkbox, {
+      props: { checked: false, label: 'Test checkbox', labelClassName: 'w-full p-4' },
+    });
+
+    const checkbox = screen.getByRole('checkbox');
+    const label = checkbox.closest('label');
+    expect(label).toHaveClass('w-full', 'p-4', 'flex', 'cursor-pointer');
+    expect(label).not.toHaveClass('py-1');
+
+    await fireEvent.click(label as HTMLLabelElement);
+    expect(checkbox).toBeChecked();
+  });
 });

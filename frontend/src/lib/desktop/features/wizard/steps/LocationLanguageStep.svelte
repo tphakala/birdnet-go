@@ -6,6 +6,7 @@
   import Button from '$lib/desktop/components/ui/Button.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
+  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import LocationPickerMap from '../components/LocationPickerMap.svelte';
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
@@ -217,9 +218,7 @@
       <div
         class="flex items-center gap-3 rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] px-4 py-3"
       >
-        <span
-          class="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-300)] border-t-[var(--color-primary)]"
-        ></span>
+        <LoadingSpinner size="sm" aria-hidden="true" />
         <span class="text-sm font-medium text-[var(--color-base-content)] opacity-80"
           >{t('wizard.steps.locationLanguage.localesLoading')}</span
         >
