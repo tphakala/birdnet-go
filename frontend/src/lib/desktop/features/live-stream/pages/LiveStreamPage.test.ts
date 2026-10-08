@@ -20,7 +20,7 @@ describe('LiveStreamPage accessibility', () => {
   it('names the audio source dropdown independently of its placeholder or selection', () => {
     render(LiveStreamPage);
 
-    const trigger = screen.getByRole('button', { name: 'spectrogram.page.sourceLabel' });
+    const trigger = screen.getByRole('combobox', { name: 'spectrogram.page.sourceLabel' });
     expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
   });
 });

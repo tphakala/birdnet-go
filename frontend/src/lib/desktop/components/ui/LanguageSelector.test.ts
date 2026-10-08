@@ -11,23 +11,20 @@ describe('LanguageSelector Accessibility', () => {
 
     expect(document.getElementById('language-field')).toHaveAttribute(
       'aria-describedby',
-      'language-field-value language-help'
+      'language-help'
     );
-    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.getAllByRole('combobox')).toHaveLength(1);
   });
 
-  it('describes the trigger only by the selected language without the prop', () => {
+  it('has no description without the prop, since the selected language is the combobox value', () => {
     renderTyped(LanguageSelector, { props: { id: 'language-field' } });
 
-    expect(document.getElementById('language-field')).toHaveAttribute(
-      'aria-describedby',
-      'language-field-value'
-    );
+    expect(document.getElementById('language-field')).not.toHaveAttribute('aria-describedby');
   });
 
   it('names the trigger from the aria-label prop instead of the selected language', () => {
     renderTyped(LanguageSelector, { props: { 'aria-label': 'Interface language' } });
 
-    expect(screen.getByRole('button', { name: 'Interface language' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Interface language' })).toBeInTheDocument();
   });
 });

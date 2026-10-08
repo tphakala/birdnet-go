@@ -59,20 +59,20 @@ describe('SpeciesSettingsPage tracking dropdown names', () => {
       await screen.findByRole('tab', { name: /settings\.species\.tracking\.tabLabel/ })
     );
 
-    const resetMonth = await screen.findByRole('button', {
+    const resetMonth = await screen.findByRole('combobox', {
       name: 'settings.species.tracking.yearly.resetMonth.label',
     });
     expect(resetMonth).toHaveAttribute('aria-haspopup', 'listbox');
 
     // Each season's dropdown carries the season in its name, so the four are told apart
     const startMonths = ['spring', 'summer', 'fall', 'winter'].map(season =>
-      screen.getByRole('button', {
+      screen.getByRole('combobox', {
         name: `settings.species.tracking.seasonal.seasons.${season} settings.species.tracking.seasonal.seasons.startMonth`,
       })
     );
-    // The selected month is the description, not part of the name
-    expect(resetMonth).toHaveAccessibleDescription(/march/i);
-    expect(startMonths[0]).toHaveAccessibleDescription(/march/i);
-    expect(startMonths[1]).toHaveAccessibleDescription(/june/i);
+    // The selected month is the combobox value (its text), not part of the name
+    expect(resetMonth).toHaveTextContent(/march/i);
+    expect(startMonths[0]).toHaveTextContent(/march/i);
+    expect(startMonths[1]).toHaveTextContent(/june/i);
   });
 });

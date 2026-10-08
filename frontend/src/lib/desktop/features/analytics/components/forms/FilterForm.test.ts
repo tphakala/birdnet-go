@@ -46,7 +46,7 @@ describe('FilterForm', () => {
     });
 
     // The trigger is named by its <label for>, and shows the selected option as its text
-    const timePeriodSelect = screen.getByRole('button', { name: 'Time Period' });
+    const timePeriodSelect = screen.getByRole('combobox', { name: 'Time Period' });
     expect(timePeriodSelect).toHaveTextContent('All Time');
   });
 
@@ -177,7 +177,7 @@ describe('FilterForm', () => {
       },
     });
 
-    const select = screen.getByRole('button', { name: 'Time Period' });
+    const select = screen.getByRole('combobox', { name: 'Time Period' });
     expect(select).toBeInTheDocument();
 
     // Note: SelectDropdown value changes require clicking + menu interaction

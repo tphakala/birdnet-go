@@ -9,6 +9,7 @@
   import { safeGet, safeArrayAccess, safeArraySpread } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { OPTION_BASE_CLASS, getOptionStateClasses } from './SelectDropdown.styles';
+  import { optionId, activeOptionId, isOptionHighlighted } from './SelectDropdown.highlight';
 
   interface Props {
     options: SelectOption[];
@@ -21,6 +22,11 @@
     required?: boolean;
     /** Optional id for the control element (for label association) */
     id?: string;
+    /**
+     * Visible label, rendered by the component. A trigger needs a name that does not depend on
+     * the selected value, because the displayed text is the combobox value, not its name: give
+     * `label`, `aria-label`, or an `id` that a `<label for>` points at.
+     */
     label?: string;
     /**
      * Accessible name for the trigger and the open listbox when there is no visible `label`
@@ -29,7 +35,7 @@
      */
     'aria-label'?: string;
     helpText?: string;
-    /** Space-separated ids of extra elements that describe the trigger (in addition to the displayed value and helpText) */
+    /** Space-separated ids of extra elements that describe the trigger (in addition to helpText; the displayed value is the combobox value, not part of the description) */
     'aria-describedby'?: string;
     className?: string;
     dropdownClassName?: string;
@@ -115,13 +121,12 @@
     () => (buttonElement?.closest('[role="dialog"]') as HTMLElement | null) ?? document.body
   );
 
-  // Trigger description: the displayed value first, so it stays exposed when a label or
-  // aria-label replaces the button content in the name, then the help text (when shown) and
-  // any caller-provided ids
+  // Trigger description: the help text (when shown) and any caller-provided ids. The displayed
+  // value is not listed: a role="combobox" button exposes its content as the combobox value, and
+  // naming it here too would make a screen reader announce it twice.
   let triggerDescribedBy = $derived(
-    [`${fieldId}-value`, helpText ? `${fieldId}-help` : undefined, ariaDescribedBy]
-      .filter(Boolean)
-      .join(' ')
+    [helpText ? `${fieldId}-help` : undefined, ariaDescribedBy].filter(Boolean).join(' ') ||
+      undefined
   );
 
   // Accessible name for the open listbox when the `label` prop is not used and no `aria-label`
@@ -225,6 +230,16 @@
   // Options in the order they are rendered: grouped when groupBy is on, so keyboard
   // navigation, ids and aria-activedescendant agree with what is on screen
   let renderedOptions = $derived(groupBy ? Object.values(groupedOptions).flat() : filteredOptions);
+
+  // Id of the highlighted option while the list is open, shared by the trigger and the search
+  // box (focus sits in one or the other); undefined when it would name a missing option
+  let activeDescendantId = $derived(
+    isOpen ? activeOptionId(fieldId, highlightedIndex, renderedOptions.length) : undefined
+  );
+
+  // With no options the listbox stays (the trigger and search box control it) but is empty; the
+  // empty-state text goes in a status region outside it, since a listbox may only hold options
+  let hasOptions = $derived(filteredOptions.length > 0);
 
   let canAddMore = $derived(
     !maxSelections ||
@@ -443,7 +458,7 @@
   function scrollToHighlighted() {
     if (highlightedIndex < 0 || !dropdownElement) return;
 
-    const highlighted = document.getElementById(`${fieldId}-option-${highlightedIndex}`);
+    const highlighted = document.getElementById(optionId(fieldId, highlightedIndex));
 
     if (highlighted instanceof HTMLElement) {
       highlighted.scrollIntoView({ block: 'nearest' });
@@ -522,13 +537,17 @@
       {disabled}
       onclick={toggleDropdown}
       onkeydown={handleKeyDown}
+      role="combobox"
       aria-haspopup="listbox"
       aria-expanded={isOpen}
+      aria-required={required || undefined}
+      aria-controls={isOpen ? `${fieldId}-listbox` : undefined}
+      aria-activedescendant={activeDescendantId}
       aria-labelledby={label ? `${fieldId}-label` : undefined}
       aria-label={label ? undefined : ariaLabel}
       aria-describedby={triggerDescribedBy}
     >
-      <span id="{fieldId}-value" class="flex items-center gap-2 truncate min-w-0">
+      <span class="flex items-center gap-2 truncate min-w-0">
         {#if renderSelected && selectedOptions.length > 0}
           {@render renderSelected(selectedOptions)}
         {:else if selectedOptions.length > 0 && !multiple}
@@ -607,16 +626,13 @@
               aria-label={t('components.forms.select.searchOptions')}
               role="searchbox"
               aria-controls="{fieldId}-listbox"
-              aria-activedescendant={highlightedIndex >= 0 &&
-              highlightedIndex < renderedOptions.length
-                ? `${fieldId}-option-${highlightedIndex}`
-                : undefined}
+              aria-activedescendant={activeDescendantId}
             />
           </div>
         {/if}
 
         <div
-          class="overflow-auto p-1"
+          class={cn('overflow-auto', hasOptions && 'p-1')}
           style:max-height="{searchable ? maxHeight - 60 : maxHeight}px"
           role="listbox"
           aria-multiselectable={multiple}
@@ -624,11 +640,7 @@
           aria-labelledby={label ? `${fieldId}-label` : undefined}
           aria-label={label ? undefined : ariaLabel || externalLabelText || undefined}
         >
-          {#if filteredOptions.length === 0}
-            <div class="p-4 text-center text-[var(--color-base-content)] opacity-60">
-              {t('components.forms.select.noOptions')}
-            </div>
-          {:else}
+          {#if hasOptions}
             {@const optionIndexMap = new Map(
               renderedOptions.map((option, index) => [option, index])
             )}
@@ -645,13 +657,13 @@
                 {@const flatIndex = optionIndexMap.get(option) ?? -1}
                 <button
                   type="button"
-                  id="{fieldId}-option-{flatIndex}"
+                  id={optionId(fieldId, flatIndex)}
                   class={cn(
                     OPTION_BASE_CLASS,
                     safeGet(menuSizeClasses, menuSize, ''),
                     getOptionStateClasses({
                       selected: isSelected(option),
-                      highlighted: highlightedIndex === flatIndex,
+                      highlighted: isOptionHighlighted(flatIndex, highlightedIndex),
                     }),
                     option.disabled && 'opacity-50 cursor-not-allowed'
                   )}
@@ -690,6 +702,17 @@
                 </button>
               {/each}
             {/each}
+          {/if}
+        </div>
+
+        <!-- Always rendered, so the text added when the list becomes empty is announced; it sits
+             outside the listbox because a listbox may only contain options -->
+        <div
+          role="status"
+          class={cn(!hasOptions && 'p-4 text-center text-[var(--color-base-content)] opacity-60')}
+        >
+          {#if !hasOptions}
+            {t('components.forms.select.noOptions')}
           {/if}
         </div>
 
