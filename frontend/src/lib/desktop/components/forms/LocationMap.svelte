@@ -414,7 +414,7 @@
 
 <div class={className}>
   {#if placeSearch}
-    <PlaceSearch className="mb-3" onSelect={handlePlaceSelect} />
+    <PlaceSearch className="mb-3" disabled={!ready} onSelect={handlePlaceSelect} />
   {/if}
   {#if loadError}
     <div

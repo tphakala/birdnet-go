@@ -19,6 +19,7 @@
 
   Props:
   - onSelect: called with the chosen place
+  - disabled: disables the input and button and hides the results
   - className: additional classes for the root
 
   @component
@@ -45,10 +46,12 @@
   interface Props {
     /** Called with the place the user picked. */
     onSelect: (_place: PlaceResult) => void;
+    /** Disable the input and button and hide the results. */
+    disabled?: boolean;
     className?: string;
   }
 
-  let { onSelect, className = '' }: Props = $props();
+  let { onSelect, disabled = false, className = '' }: Props = $props();
 
   const inputId = generateId('place-search-input');
   const listboxId = generateId('place-search-list');
@@ -246,6 +249,14 @@
     return () => element.removeEventListener('keydown', handleKeydown);
   });
 
+  // A control the page disabled starts nothing and keeps no old results.
+  $effect(() => {
+    if (!disabled) return;
+    autocomplete.cancel();
+    invalidateSearch();
+    resetResults();
+  });
+
   onDestroy(() => {
     autocomplete.cancel();
     invalidateSearch();
@@ -261,6 +272,7 @@
         id={inputId}
         type="search"
         value={query}
+        {disabled}
         oninput={handleInput}
         onblur={() => {
           listOpen = false;
@@ -281,7 +293,7 @@
           <LoadingSpinner size="xs" aria-hidden="true" />
         </span>
       {/if}
-      {#if listOpen && results.length > 0}
+      {#if listOpen && results.length > 0 && !disabled}
         <ul
           id={listboxId}
           role="listbox"
@@ -318,6 +330,7 @@
       size="md"
       className="shrink-0"
       aria-label={t('components.locationMap.search.submit')}
+      {disabled}
       onclick={searchFromButton}
     >
       <Search class="size-4" aria-hidden="true" />

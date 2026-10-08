@@ -875,6 +875,19 @@ describe('LocationMap place search', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
+  it('disables the search until the map is ready', async () => {
+    const props = createProps({ placeSearch: true, ready: false });
+    const result = testFactory.render(props);
+
+    expect(screen.getByRole('combobox', { name: SEARCH_LABEL })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'components.locationMap.search.submit' })
+    ).toBeDisabled();
+
+    await result.rerender({ ...props, ready: true });
+    expect(screen.getByRole('combobox', { name: SEARCH_LABEL })).toBeEnabled();
+  });
+
   it('shows the search above the map when placeSearch is set', async () => {
     await mount({ placeSearch: true });
 

@@ -424,6 +424,47 @@ describe('PlaceSearch', () => {
     });
   });
 
+  describe('disabled', () => {
+    it('disables the controls and hides the results while disabled', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(HELSINKI)));
+      const onSelect = vi.fn<(place: PlaceResult) => void>();
+      const { rerender } = render(PlaceSearch, { props: { onSelect } });
+      await searchFor('Helsinki');
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+      await rerender({ onSelect, disabled: true });
+
+      expect(input()).toBeDisabled();
+      expect(screen.getByRole('button', { name: SUBMIT })).toBeDisabled();
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+
+    it('forgets the search when it is disabled, so enabling it again shows no old results', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(HELSINKI)));
+      const onSelect = vi.fn<(place: PlaceResult) => void>();
+      const { rerender } = render(PlaceSearch, { props: { onSelect } });
+      await searchFor('Helsinki');
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+      await rerender({ onSelect, disabled: true });
+      await rerender({ onSelect, disabled: false });
+
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(input()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('does not start a pending search once it is disabled', async () => {
+      const onSelect = vi.fn<(place: PlaceResult) => void>();
+      const { rerender } = render(PlaceSearch, { props: { onSelect } });
+      await type('Helsinki');
+
+      await rerender({ onSelect, disabled: true });
+      await settle();
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
   describe('focus', () => {
     it('does not open the list when the input lost focus before the results arrived', async () => {
       const pending = deferNextFetch();
