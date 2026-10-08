@@ -147,7 +147,7 @@ describe('resolveSpeciesGuideConfig', () => {
   it('falls back to ONE cached fetch of the public dashboard endpoint for guests', async () => {
     vi.mocked(api.get).mockResolvedValue({
       speciesGuide: { enabled: true, showNotes: false },
-    } as never);
+    });
 
     const [a, b] = await Promise.all([
       resolveSpeciesGuideConfig(undefined),
@@ -172,7 +172,7 @@ describe('resolveSpeciesGuideConfig', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-      vi.mocked(api.get).mockResolvedValue({ speciesGuide: { enabled: true } } as never);
+      vi.mocked(api.get).mockResolvedValue({ speciesGuide: { enabled: true } });
 
       await expect(resolveSpeciesGuideConfig(null)).resolves.toMatchObject({ enabled: true });
       expect(api.get).toHaveBeenCalledTimes(1);
@@ -185,7 +185,7 @@ describe('resolveSpeciesGuideConfig', () => {
       // Past the window: the endpoint is consulted again, and a since-disabled guide
       // is picked up instead of being served stale until a reload.
       vi.advanceTimersByTime(2);
-      vi.mocked(api.get).mockResolvedValue({ speciesGuide: { enabled: false } } as never);
+      vi.mocked(api.get).mockResolvedValue({ speciesGuide: { enabled: false } });
       await expect(resolveSpeciesGuideConfig(null)).resolves.toMatchObject({ enabled: false });
       expect(api.get).toHaveBeenCalledTimes(2);
     } finally {
@@ -199,7 +199,7 @@ describe('resolveSpeciesGuideConfig', () => {
     expect(cfg.enabled).toBe(false);
 
     // The failed promise must not be cached forever: the next call retries.
-    vi.mocked(api.get).mockResolvedValue({ speciesGuide: { enabled: true } } as never);
+    vi.mocked(api.get).mockResolvedValue({ speciesGuide: { enabled: true } });
     const retry = await resolveSpeciesGuideConfig(undefined);
     expect(retry.enabled).toBe(true);
     expect(api.get).toHaveBeenCalledTimes(2);

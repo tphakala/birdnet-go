@@ -59,7 +59,7 @@ describe('SimilarSpeciesPanel', () => {
       makeGuide({
         description:
           'A large, heavy-billed corvid.\n\n## Voice\nA deep croaking gronk.\n\n## Distribution and habitat\nMountains and coasts.\n\n## Behaviour\nForms large roosts.',
-      }) as never
+      })
     );
 
     render(SimilarSpeciesPanel, {
@@ -83,7 +83,7 @@ describe('SimilarSpeciesPanel', () => {
     vi.mocked(api.get).mockResolvedValue(
       makeGuide({
         description: `Short appearance.\n\n## Voice\n${longVoice}`,
-      }) as never
+      })
     );
 
     render(SimilarSpeciesPanel, { props: { mainName: 'American Crow', similar: [entry()] } });

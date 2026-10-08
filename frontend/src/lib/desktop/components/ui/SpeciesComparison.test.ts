@@ -91,7 +91,7 @@ describe('SpeciesComparison', () => {
           scientific_name: 'Turdus merula',
           genus: 'Turdus',
           similar: [],
-        } as never);
+        });
       return Promise.resolve(makeGuide({ description: longIntro }) as never);
     });
 
@@ -128,7 +128,7 @@ describe('SpeciesComparison', () => {
           scientific_name: 'Turdus merula',
           genus: 'Turdus',
           similar: [],
-        } as never);
+        });
       return Promise.resolve(makeGuide({ description: 'A short intro.' }) as never);
     });
 
@@ -154,7 +154,7 @@ describe('SpeciesComparison', () => {
             ],
           }) as never
         );
-      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] } as never);
+      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] });
     });
 
     render(SpeciesComparison, {
@@ -186,7 +186,7 @@ describe('SpeciesComparison', () => {
             current_season: 'summer',
           }) as never
         );
-      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] } as never);
+      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] });
     });
 
     render(SpeciesComparison, {
@@ -203,7 +203,7 @@ describe('SpeciesComparison', () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url.includes('/guide'))
         return Promise.resolve(makeGuide({ description: 'Just an intro.' }) as never);
-      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] } as never);
+      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] });
     });
 
     render(SpeciesComparison, {
@@ -281,7 +281,7 @@ describe('SpeciesComparison', () => {
             features: { notes: true, enrichments: true, similar_species: false, taxonomy: true },
           }) as never
         );
-      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] } as never);
+      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] });
     });
 
     render(SpeciesComparison, {
@@ -302,7 +302,7 @@ describe('SpeciesComparison', () => {
             features: { notes: true, enrichments: true, similar_species: false, taxonomy: true },
           }) as never
         );
-      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] } as never);
+      return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] });
     });
 
     render(SpeciesComparison, {
@@ -319,7 +319,7 @@ describe('SpeciesComparison', () => {
   });
 
   it('collapses and expands the guide body in place when the header toggle is clicked', async () => {
-    vi.mocked(api.get).mockResolvedValue(makeGuide() as never);
+    vi.mocked(api.get).mockResolvedValue(makeGuide());
 
     render(SpeciesComparison, {
       props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
@@ -365,7 +365,7 @@ describe('SpeciesComparison', () => {
           scientific_name: 'Turdus merula',
           genus: 'Turdus',
           similar: [],
-        } as never);
+        });
       return Promise.resolve(makeGuide({ description }) as never);
     });
 
@@ -413,7 +413,7 @@ describe('SpeciesComparison', () => {
           scientific_name: 'Turdus merula',
           genus: 'Turdus',
           similar: [],
-        } as never);
+        });
       return Promise.resolve(
         makeGuide({ description: 'An introduction.\n\n## Voice\nThe male sings.' }) as never
       );

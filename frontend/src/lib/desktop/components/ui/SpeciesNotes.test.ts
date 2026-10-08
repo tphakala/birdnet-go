@@ -71,7 +71,7 @@ describe('SpeciesNotes', () => {
     // Mirrors datastore.SpeciesNotesMaxResults: a full page means older notes
     // exist but are hidden, and the list must not read as complete.
     const capped = Array.from({ length: 500 }, (_, i) => note({ id: i + 1, entry: `Note ${i}` }));
-    vi.mocked(api.get).mockResolvedValue(capped as never);
+    vi.mocked(api.get).mockResolvedValue(capped);
     render(SpeciesNotes, { props: { scientificName: 'Turdus merula' } });
     expect(
       await screen.findByText('analytics.species.notes.truncated', {}, { timeout: 5000 })
@@ -99,7 +99,7 @@ describe('SpeciesNotes', () => {
 
   it('adds a note when authenticated', async () => {
     vi.mocked(api.get).mockResolvedValue([] as never);
-    vi.mocked(api.post).mockResolvedValue(note({ id: 2, entry: 'New note.' }) as never);
+    vi.mocked(api.post).mockResolvedValue(note({ id: 2, entry: 'New note.' }));
     render(SpeciesNotes, { props: { scientificName: 'Turdus merula' } });
 
     const textarea = await screen.findByPlaceholderText(
