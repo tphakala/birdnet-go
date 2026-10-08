@@ -29,6 +29,11 @@ const TOKEN_LABEL = 'settings.integration.birdweather.token.label';
 const tokenInput = () => screen.getByLabelText(TOKEN_LABEL);
 const findTokenInput = () => screen.findByLabelText(TOKEN_LABEL);
 
+// The accessible names of the three cards
+const PRIVACY = /wizard\.steps\.integration\.privacyFilterLabel/;
+const BIRDWEATHER = /wizard\.steps\.integration\.birdweatherLabel/;
+const SENTRY = /wizard\.steps\.integration\.errorReportingLabel/;
+
 // The leave handler contract shared by every step is in stepContract.test.ts
 describe('IntegrationStep - leave handler', () => {
   beforeEach(() => {
@@ -36,9 +41,6 @@ describe('IntegrationStep - leave handler', () => {
   });
 
   const clickByName = (name: RegExp) => fireEvent.click(screen.getByRole('checkbox', { name }));
-  const PRIVACY = /wizard\.steps\.integration\.privacyFilterLabel/;
-  const BIRDWEATHER = /wizard\.steps\.integration\.birdweatherLabel/;
-  const SENTRY = /wizard\.steps\.integration\.errorReportingLabel/;
 
   async function changeAll() {
     await clickByName(PRIVACY);
@@ -208,7 +210,6 @@ describe('IntegrationStep - leave handler', () => {
 describe('IntegrationStep - BirdWeather token', () => {
   const TOKEN_FORMAT = 'wizard.steps.integration.reasons.tokenFormat';
   const ENTER_TOKEN = 'wizard.steps.integration.reasons.enterToken';
-  const BIRDWEATHER = /wizard\.steps\.integration\.birdweatherLabel/;
   const initialForm = JSON.stringify(get(settingsStore).formData);
 
   const toggleBirdweather = () =>
@@ -421,8 +422,6 @@ describe('IntegrationStep - BirdWeather token', () => {
     await flushAsync();
     const icon = (name: RegExp) =>
       screen.getByRole('checkbox', { name }).closest('label')?.querySelector('svg');
-    const PRIVACY = /wizard\.steps\.integration\.privacyFilterLabel/;
-    const SENTRY = /wizard\.steps\.integration\.errorReportingLabel/;
     const primary = 'text-[var(--color-primary)]';
 
     expect(icon(PRIVACY)).toHaveClass(primary);
@@ -439,15 +438,9 @@ describe('IntegrationStep - BirdWeather token', () => {
   });
 
   it.each([
-    [
-      /wizard\.steps\.integration\.privacyFilterLabel/,
-      'wizard.steps.integration.privacyFilterHelp',
-    ],
-    [/wizard\.steps\.integration\.birdweatherLabel/, 'wizard.steps.integration.birdweatherHelp'],
-    [
-      /wizard\.steps\.integration\.errorReportingLabel/,
-      'wizard.steps.integration.errorReportingHelp',
-    ],
+    [PRIVACY, 'wizard.steps.integration.privacyFilterHelp'],
+    [BIRDWEATHER, 'wizard.steps.integration.birdweatherHelp'],
+    [SENTRY, 'wizard.steps.integration.errorReportingHelp'],
   ])('describes the card %s by its help text, not by a dangling id', async (name, help) => {
     renderStep(IntegrationStep);
     await flushAsync();
@@ -552,7 +545,6 @@ describe('IntegrationStep - BirdWeather token', () => {
     expect(invalidSpy.mock.calls.map(call => call[0])).not.toContain(true);
   });
   describe('with BirdWeather off', () => {
-    const PRIVACY = /wizard\.steps\.integration\.privacyFilterLabel/;
     const savedCalls = () => vi.mocked(settingsActions.saveSection).mock.calls;
 
     it('BirdWeather off with a malformed token sends nothing', async () => {
@@ -648,8 +640,6 @@ describe('IntegrationStep - BirdWeather token', () => {
 });
 
 describe('IntegrationStep Accessibility', () => {
-  const BIRDWEATHER = /wizard\.steps\.integration\.birdweatherLabel/;
-
   it('has no axe violations with BirdWeather off', async () => {
     const { container } = renderStep(IntegrationStep);
     await flushAsync();

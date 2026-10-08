@@ -114,6 +114,22 @@
   );
 </script>
 
+<!-- The switch is the same in both variants; only its extra classes differ -->
+{#snippet switchInput(variantClasses: string)}
+  <input
+    id={fieldId}
+    type="checkbox"
+    class={cn(toggleBaseClasses, variantClasses, error && toggleErrorClasses)}
+    checked={value}
+    {disabled}
+    {required}
+    onchange={handleChange}
+    aria-labelledby={labelId}
+    aria-describedby={describedBy}
+    aria-invalid={error ? 'true' : undefined}
+  />
+{/snippet}
+
 <div class={cn('min-w-0', className)} {...rest}>
   {#if variant === 'card'}
     <label for={fieldId} class={cardClasses}>
@@ -137,23 +153,7 @@
           </span>
         {/if}
       </span>
-      <input
-        id={fieldId}
-        type="checkbox"
-        class={cn(
-          toggleBaseClasses,
-          toggleCardClasses,
-          'mt-0.5 shrink-0',
-          error && toggleErrorClasses
-        )}
-        checked={value}
-        {disabled}
-        {required}
-        onchange={handleChange}
-        aria-labelledby={labelId}
-        aria-describedby={describedBy}
-        aria-invalid={error ? 'true' : undefined}
-      />
+      {@render switchInput(cn(toggleCardClasses, 'mt-0.5 shrink-0'))}
     </label>
   {:else}
     <div class="flex items-center justify-between">
@@ -180,18 +180,7 @@
       </div>
 
       <div class="shrink-0 ml-4">
-        <input
-          id={fieldId}
-          type="checkbox"
-          class={cn(toggleBaseClasses, toggleDefaultClasses, error && toggleErrorClasses)}
-          checked={value}
-          {disabled}
-          {required}
-          onchange={handleChange}
-          aria-labelledby={labelId}
-          aria-describedby={describedBy}
-          aria-invalid={error ? 'true' : undefined}
-        />
+        {@render switchInput(toggleDefaultClasses)}
       </div>
     </div>
   {/if}
