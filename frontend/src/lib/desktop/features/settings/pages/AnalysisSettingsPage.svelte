@@ -242,6 +242,7 @@
   );
   // Links the blocked (aria-disabled) Install button to the visible reason.
   const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
+  const RANGE_DIALOG_TITLE_ID = generateId('range-filter-dialog-title');
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
   // Element bindings should NOT use $state - causes showModal() to fail
@@ -735,7 +736,9 @@
   }
 
   let modalTrapHandler: ((_event: KeyboardEvent) => void) | null = null;
-  let modalElement: HTMLElement | null = null;
+  let rangeTrapElement: HTMLElement | null = null;
+  // The range filter species dialog, bound while it is open
+  let rangeDialogElement = $state<HTMLDivElement>();
 
   $effect(() => {
     let focusTimer: ReturnType<typeof setTimeout> | undefined;
@@ -744,9 +747,7 @@
       previouslyFocusedElement = document.activeElement as HTMLElement;
 
       focusTimer = setTimeout(() => {
-        const modal = document.querySelector(
-          '[role="dialog"][aria-labelledby="modal-title"]'
-        ) as HTMLElement;
+        const modal = rangeDialogElement;
         if (modal) {
           const focusableElements = getFocusableElements(modal);
           if (focusableElements.length > 0) {
@@ -755,7 +756,7 @@
             modal.focus();
           }
 
-          modalElement = modal;
+          rangeTrapElement = modal;
           modalTrapHandler = (event: KeyboardEvent) => handleFocusTrap(event, modal);
           modal.addEventListener('keydown', modalTrapHandler);
         }
@@ -767,9 +768,9 @@
 
     return () => {
       clearTimeout(focusTimer);
-      if (modalElement && modalTrapHandler) {
-        modalElement.removeEventListener('keydown', modalTrapHandler);
-        modalElement = null;
+      if (rangeTrapElement && modalTrapHandler) {
+        rangeTrapElement.removeEventListener('keydown', modalTrapHandler);
+        rangeTrapElement = null;
         modalTrapHandler = null;
       }
     };
@@ -3104,11 +3105,12 @@
 <!-- Range Filter Species Modal -->
 {#if rangeFilterState.showModal}
   <div
+    bind:this={rangeDialogElement}
     class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm"
     style:z-index="9999"
     role="dialog"
     aria-modal="true"
-    aria-labelledby="modal-title"
+    aria-labelledby={RANGE_DIALOG_TITLE_ID}
     tabindex="-1"
     onclick={e => e.target === e.currentTarget && (rangeFilterState.showModal = false)}
     onkeydown={e => e.key === 'Escape' && (rangeFilterState.showModal = false)}
@@ -3118,7 +3120,7 @@
       role="document"
     >
       <div class="flex justify-between items-center mb-4">
-        <h3 id="modal-title" class="text-xl font-semibold">
+        <h3 id={RANGE_DIALOG_TITLE_ID} class="text-xl font-semibold">
           {t('settings.main.sections.rangeFilter.modal.title')}
         </h3>
         <button
