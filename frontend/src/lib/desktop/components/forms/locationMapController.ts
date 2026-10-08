@@ -83,7 +83,7 @@ export interface LocationMapControllerOptions {
   zoom: number;
   /**
    * `modifier` zooms only with Ctrl or Cmd held (the page keeps scrolling
-   * otherwise); `always` zooms on every wheel event.
+   * otherwise); `always` leaves every wheel event to MapLibre's scroll zoom.
    */
   wheel: 'modifier' | 'always';
   /** Enable two-finger pinch zoom (rotation stays off). */
