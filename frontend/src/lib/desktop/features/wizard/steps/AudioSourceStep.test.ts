@@ -745,7 +745,21 @@ describe('AudioSourceStep - URL error timing', () => {
     expect(urlInput()).toHaveValue('http://x');
   });
 
-  it('shows no URL error while set up later is chosen', async () => {
+  it('shows no scheme error while set up later is chosen', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream('http://x');
+    await leaveUrl();
+    expectUrlError('urlScheme');
+
+    const setUpLater = screen.getByRole('button', { name: `${KEY}.setUpLater` });
+    await fireEvent.click(setUpLater);
+
+    expectUrlError(null);
+    expect(setUpLater).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('shows no empty URL error while set up later is chosen', async () => {
     renderStep(AudioSourceStep);
     await flushAsync();
     await chooseStream('');
