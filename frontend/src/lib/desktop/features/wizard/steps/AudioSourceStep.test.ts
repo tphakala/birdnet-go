@@ -595,21 +595,23 @@ describe('AudioSourceStep - device state reasons', () => {
   });
 });
 
-// What the URL field exposes: the alert text, aria-invalid and what aria-describedby points at (the help text, plus the alert while it shows)
-function expectUrlError(shown: boolean) {
+// What the URL field exposes: the alert text (the reason named, or empty), aria-invalid and what aria-describedby points at (the help text, plus the alert while it shows)
+function expectUrlError(reason: 'urlScheme' | 'enterUrl' | null) {
   const alert = urlAlert();
   const input = urlInput();
   const help = screen.getByText(`${KEY}.rtspUrlHelp`);
-  expect(alert.textContent.trim()).toBe(shown ? `${KEY}.reasons.urlScheme` : '');
+  expect(alert.textContent.trim()).toBe(reason === null ? '' : `${KEY}.reasons.${reason}`);
   // The help text is always linked; the error is added while it shows, then the note
   // that sound cards stop (present when the seed has a saved sound card)
   const note = screen.queryByText(`${KEY}.streamReplacesSoundCards`);
-  const expected = [help.id, shown ? alert.id : '', note?.id ?? ''].filter(Boolean).join(' ');
+  const expected = [help.id, reason === null ? '' : alert.id, note?.id ?? '']
+    .filter(Boolean)
+    .join(' ');
   expect(input).toHaveAttribute('aria-describedby', expected);
-  if (shown) {
-    expect(input).toHaveAttribute('aria-invalid', 'true');
-  } else {
+  if (reason === null) {
     expect(input).not.toHaveAttribute('aria-invalid');
+  } else {
+    expect(input).toHaveAttribute('aria-invalid', 'true');
   }
 }
 
@@ -628,10 +630,10 @@ describe('AudioSourceStep - URL error timing', () => {
     await waitFor(() =>
       expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.urlScheme`)
     );
-    expectUrlError(false);
+    expectUrlError(null);
 
     await leaveUrl();
-    expectUrlError(true);
+    expectUrlError('urlScheme');
     expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.urlScheme`);
   });
 
@@ -640,25 +642,26 @@ describe('AudioSourceStep - URL error timing', () => {
     await flushAsync();
     await chooseStream('http://x');
     await leaveUrl();
-    expectUrlError(true);
+    expectUrlError('urlScheme');
 
     await typeUrl(RTSP_URL);
-    expectUrlError(false);
+    expectUrlError(null);
     await leaveUrl();
-    expectUrlError(false);
+    expectUrlError(null);
 
     await typeUrl('rtsp://');
-    expectUrlError(false);
+    expectUrlError(null);
     await leaveUrl();
-    expectUrlError(true);
+    expectUrlError('urlScheme');
 
     await typeUrl('');
+    expectUrlError(null);
     await leaveUrl();
-    expectUrlError(false);
+    expectUrlError('enterUrl');
     await typeUrl('h');
-    expectUrlError(false);
+    expectUrlError(null);
     await leaveUrl();
-    expectUrlError(true);
+    expectUrlError('urlScheme');
     expect(urlInput()).toHaveValue('h');
   });
 
@@ -667,13 +670,13 @@ describe('AudioSourceStep - URL error timing', () => {
     await flushAsync();
     await chooseStream('http://x');
     await leaveUrl();
-    expectUrlError(true);
+    expectUrlError('urlScheme');
 
     await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
     await deviceTrigger();
     await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
 
-    expectUrlError(true);
+    expectUrlError('urlScheme');
     expect(urlInput()).toHaveValue('http://x');
   });
 
@@ -683,7 +686,109 @@ describe('AudioSourceStep - URL error timing', () => {
     await flushAsync();
 
     expect(await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`)).toHaveValue('rtsp://');
-    expectUrlError(true);
+    expectUrlError('urlScheme');
+  });
+
+  it('shows the enter URL error once an empty field is left, while Next names the same reason', async () => {
+    const onValidChange = vi.fn();
+    renderTyped(AudioSourceStep, { props: { onValidChange } });
+    await flushAsync();
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
+    await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
+    expect(urlInput()).toHaveValue('');
+
+    await leaveUrl();
+
+    expectUrlError('enterUrl');
+    expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.enterUrl`);
+  });
+
+  it('keeps the empty URL error hidden until the field is left', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
+    await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
+    expect(urlInput()).toHaveValue('');
+    expectUrlError(null);
+
+    await typeUrl('h');
+    await typeUrl('');
+
+    expectUrlError(null);
+  });
+
+  it('clears the empty URL error when a valid URL is typed', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream('');
+    await leaveUrl();
+    expectUrlError('enterUrl');
+
+    await typeUrl(RTSP_URL);
+    expectUrlError(null);
+    await leaveUrl();
+    expectUrlError(null);
+    expect(urlInput()).toHaveValue(RTSP_URL);
+  });
+
+  it('switches the message from enter URL to the scheme reason as the field is filled', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream('');
+    await leaveUrl();
+    expectUrlError('enterUrl');
+
+    await typeUrl('http://x');
+    expectUrlError(null);
+    await leaveUrl();
+    expectUrlError('urlScheme');
+    expect(urlInput()).toHaveValue('http://x');
+  });
+
+  it('shows no scheme error while set up later is chosen', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream('http://x');
+    await leaveUrl();
+    expectUrlError('urlScheme');
+
+    const setUpLater = screen.getByRole('button', { name: `${KEY}.setUpLater` });
+    await fireEvent.click(setUpLater);
+
+    expectUrlError(null);
+    expect(setUpLater).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('shows no empty URL error while set up later is chosen', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream('');
+    await leaveUrl();
+    expectUrlError('enterUrl');
+
+    await fireEvent.click(screen.getByRole('button', { name: `${KEY}.setUpLater` }));
+    expectUrlError(null);
+
+    await typeUrl('h');
+    expectUrlError(null);
+    await leaveUrl();
+    expectUrlError('urlScheme');
+    expect(screen.getByRole('button', { name: `${KEY}.setUpLater` })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  it.each([
+    { label: 'empty', url: '' },
+    { label: 'blank', url: '   ' },
+  ])('shows no URL error on open for a saved stream with a $label URL', async ({ url }) => {
+    seed({ sources: [] }, [{ name: 'Old', url, enabled: true, type: 'rtsp' }]);
+    renderStep(AudioSourceStep);
+    await flushAsync();
+
+    expect(await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`)).toHaveValue(url);
+    expectUrlError(null);
   });
 
   it('reserves the URL error line so showing it moves nothing', async () => {
@@ -831,6 +936,15 @@ describe('AudioSourceStep Accessibility', () => {
       },
     },
     {
+      name: 'with the empty URL error shown',
+      prepare: () => {},
+      ready: async () => {
+        await chooseStream('');
+        await leaveUrl();
+        expect(urlAlert()).toHaveTextContent(`${KEY}.reasons.enterUrl`);
+      },
+    },
+    {
       name: 'with the URL error shown',
       prepare: () => {},
       ready: async () => {
@@ -941,6 +1055,11 @@ describe('AudioSourceStep Accessibility', () => {
 
     await typeUrl(RTSP_URL);
     expect(urlInput()).not.toHaveClass('input-error');
+
+    await typeUrl('');
+    expect(urlInput()).not.toHaveClass('input-error');
+    await leaveUrl();
+    expect(urlInput()).toHaveClass('input-error');
   });
 
   it('names the open device listbox with the field label', async () => {

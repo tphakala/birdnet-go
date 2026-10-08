@@ -17,7 +17,6 @@
   import {
     findDevice,
     initialAudioChoice,
-    isMalformedRtspUrl,
     isRtspUrl,
     soundCardPayloads,
     streamPayloads,
@@ -107,10 +106,15 @@
     if (rtspUrl.trim() === '') return 'wizard.steps.audioSource.reasons.enterUrl';
     return isRtspUrl(rtspUrl) ? undefined : 'wizard.steps.audioSource.reasons.urlScheme';
   });
-  // Set when the user leaves the URL field and on open for a saved URL; cleared by
-  // every edit. Display only: Next's reason does not depend on it.
-  let urlLeft = $state(initial.primaryStreamUrl !== null);
-  let showUrlError = $derived(urlLeft && sourceType === 'rtsp' && isMalformedRtspUrl(rtspUrl));
+  // Primitives, so the effect below runs only when one of them changes
+  let valid = $derived(skipped || incompleteReason === undefined);
+  let reason = $derived(skipped ? undefined : incompleteReason);
+  // Set when the user leaves the URL field and on open for a saved non-empty URL;
+  // cleared by every edit. Display only: Next's reason does not depend on it.
+  let urlLeft = $state((initial.primaryStreamUrl ?? '').trim() !== '');
+  // Once the field is left, the error names the reason Next shows, and it stays
+  // hidden while Set up later is chosen, when reason is undefined
+  let showUrlError = $derived(urlLeft && sourceType === 'rtsp' && reason !== undefined);
   // The URL input is described by its help, the error while it shows, and the note
   // that sound cards stop once a stream is chosen over a saved sound card
   let urlDescribedBy = $derived(
@@ -122,9 +126,6 @@
       .filter(Boolean)
       .join(' ')
   );
-  // Primitives, so the effect below runs only when one of them changes
-  let valid = $derived(skipped || incompleteReason === undefined);
-  let reason = $derived(skipped ? undefined : incompleteReason);
 
   $effect(() => {
     // Read validity (tracked), but untrack the callback to avoid re-run if parent recreates it
@@ -403,7 +404,7 @@
            a longer one would still grow the line): the alert is announced when it fills,
            and showing it does not move the controls below -->
       <p id={URL_ERROR_ID} role="alert" class="mt-1 min-h-10 text-sm text-[var(--text-error)]">
-        {showUrlError ? t('wizard.steps.audioSource.reasons.urlScheme') : ''}
+        {showUrlError && reason ? t(reason) : ''}
       </p>
       {#if initial.savedDevice !== ''}
         <SettingsNote className="mt-3">
