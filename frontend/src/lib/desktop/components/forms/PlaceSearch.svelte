@@ -373,7 +373,8 @@
   <p
     id={messageId}
     class={cn(
-      'mt-1 flex min-h-4 items-center gap-1.5 text-xs',
+      // Two lines reserved: a longer translation wraps at tablet width and must not move the map
+      'mt-1 flex min-h-8 items-start gap-1.5 text-xs',
       isFailure ? PLACE_ERROR_CLASS : PLACE_MESSAGE_CLASS
     )}
     aria-hidden="true"

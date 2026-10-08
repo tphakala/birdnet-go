@@ -96,6 +96,8 @@ const PLACE_KINDS: readonly { key: string; value: string; kind: PlaceKind }[] = 
   { key: 'place', value: 'town', kind: 'town' },
   { key: 'place', value: 'village', kind: 'village' },
   { key: 'railway', value: 'station', kind: 'station' },
+  { key: 'railway', value: 'halt', kind: 'station' },
+  { key: 'railway', value: 'stop', kind: 'station' },
   { key: 'aeroway', value: 'aerodrome', kind: 'airport' },
 ];
 

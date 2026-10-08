@@ -182,6 +182,8 @@ describe('placeSearch', () => {
       expect((await kindOf('place', 'town'))?.kind).toBe('town');
       expect((await kindOf('place', 'village'))?.kind).toBe('village');
       expect((await kindOf('railway', 'station'))?.kind).toBe('station');
+      expect((await kindOf('railway', 'halt'))?.kind).toBe('station');
+      expect((await kindOf('railway', 'stop'))?.kind).toBe('station');
       expect((await kindOf('aeroway', 'aerodrome'))?.kind).toBe('airport');
     });
 

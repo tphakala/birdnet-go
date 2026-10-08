@@ -432,7 +432,7 @@ describe('PlaceSearch', () => {
       const { container } = render(PlaceSearch, { props: { onSelect: vi.fn() } });
       const line = container.querySelector('p[aria-hidden="true"]');
       expect(line).not.toBeNull();
-      expect(line).toHaveClass('min-h-4');
+      expect(line).toHaveClass('min-h-8');
 
       await searchFor('Zzzzz');
 
