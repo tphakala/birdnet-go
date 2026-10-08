@@ -3,6 +3,7 @@
   import { t, getLocale, setLocale } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import LanguageSelector from '$lib/desktop/components/ui/LanguageSelector.svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import LocationPickerMap from '../components/LocationPickerMap.svelte';
@@ -267,15 +268,16 @@
           {t('wizard.steps.locationLanguage.locationLabel')}
         </span>
         {#if hasGeolocation}
-          <button
-            type="button"
-            class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-field)] border border-[var(--border-200)] bg-transparent px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--hover-overlay)] disabled:opacity-50"
+          <Button
+            variant="default"
+            size="sm"
+            className="shrink-0 whitespace-nowrap"
             onclick={handleGeolocation}
             disabled={geolocating}
           >
             <MapPin class="size-3.5" />
             {t('wizard.steps.locationLanguage.useMyLocation')}
-          </button>
+          </Button>
         {/if}
       </div>
       <p class="mt-1 text-sm text-[var(--color-base-content)] opacity-80">

@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
   import WizardProgressBar from './WizardProgressBar.svelte';
   import WizardContentRenderer from './WizardContentRenderer.svelte';
   import { wizardState } from './wizardState.svelte';
@@ -11,7 +12,6 @@
   import type { WizardStepProps } from './types';
   import { generateId } from '$lib/utils/uuid';
   import { loggers } from '$lib/utils/logger';
-  import { SECONDARY_BUTTON_CLASS } from './styles';
 
   const logger = loggers.ui;
 
@@ -251,20 +251,15 @@
       {:else if wizardState.stepStatus === 'failed'}
         <div class="flex h-full items-center justify-center">
           {#if retryExhausted}
-            <button
-              bind:this={reloadButtonRef}
-              type="button"
-              class={SECONDARY_BUTTON_CLASS}
-              onclick={reloadPage}
-            >
+            <Button variant="default" size="md" bind:ref={reloadButtonRef} onclick={reloadPage}>
               <RefreshCw class="size-4" />
               {t('wizard.actions.reloadPage')}
-            </button>
+            </Button>
           {:else}
-            <button type="button" class={SECONDARY_BUTTON_CLASS} onclick={retryLoad}>
+            <Button variant="default" size="md" onclick={retryLoad}>
               <RotateCw class="size-4" />
               {t('common.retry')}
-            </button>
+            </Button>
           {/if}
         </div>
       {:else if wizardState.currentStep?.type === 'content'}
@@ -296,13 +291,9 @@
          sits beside the buttons and clamps to two lines (still shorter than a
          button) instead of adding a row -->
     <div class="flex w-full items-center gap-3">
-      <button
-        type="button"
-        class="inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius-field)] px-3 py-1.5 text-sm font-medium text-[var(--color-base-content)] opacity-70 transition-colors hover:bg-[var(--hover-overlay)] hover:opacity-100"
-        onclick={() => wizardState.skip()}
-      >
+      <Button variant="ghost" size="md" className="shrink-0" onclick={() => wizardState.skip()}>
         {t('wizard.skip')}
-      </button>
+      </Button>
       <p
         id={NEXT_REASON_ID}
         class="line-clamp-2 min-w-0 flex-1 text-right text-sm leading-tight text-[var(--color-base-content)] opacity-70"
@@ -312,22 +303,22 @@
       </p>
       <div class="flex shrink-0 items-center gap-2">
         {#if !wizardState.isFirstStep}
-          <button
-            bind:this={backButtonRef}
-            type="button"
-            class="{SECONDARY_BUTTON_CLASS} aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+          <Button
+            variant="default"
+            size="md"
+            bind:ref={backButtonRef}
             onclick={() => void goBack()}
             aria-disabled={!wizardState.canGoBack ? 'true' : undefined}
             aria-describedby={backDescribedBy}
           >
             <ChevronLeft class="size-4" />
             {t('wizard.back')}
-          </button>
+          </Button>
         {/if}
-        <button
-          bind:this={primaryButtonRef}
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--color-primary)] bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary-hover)] aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+        <Button
+          variant="primary"
+          size="md"
+          bind:ref={primaryButtonRef}
           onclick={() => (wizardState.isLastStep ? wizardState.complete() : wizardState.next())}
           aria-disabled={!wizardState.canAdvance ? 'true' : undefined}
           aria-describedby={nextDescribedBy}
@@ -346,7 +337,7 @@
             {t('wizard.next')}
             <ChevronRight class="size-4" />
           {/if}
-        </button>
+        </Button>
       </div>
     </div>
   {/snippet}

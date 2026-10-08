@@ -7,11 +7,11 @@
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { Mic, Video } from '@lucide/svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
   import RadioCardGroup from '$lib/desktop/components/ui/RadioCardGroup.svelte';
   import type { RadioCardOption } from '$lib/desktop/components/ui/RadioCardGroup.types';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
-  import { SECONDARY_BUTTON_CLASS } from '../styles';
   import { getLogger } from '$lib/utils/logger';
   import type { SettingsSectionPayloads } from '$lib/utils/settingsApi';
   import { generateId } from '$lib/utils/uuid';
@@ -316,21 +316,17 @@
               <p>{t(DEVICE_NOTICES.empty.text)}</p>
             {/if}
             <div class="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                class={SECONDARY_BUTTON_CLASS}
-                bind:this={retryButtonRef}
+              <Button
+                variant="default"
+                size="md"
+                bind:ref={retryButtonRef}
                 onclick={() => void retryDevices()}
               >
                 {t('common.retry')}
-              </button>
-              <button
-                type="button"
-                class={SECONDARY_BUTTON_CLASS}
-                onclick={() => void switchToStream()}
-              >
+              </Button>
+              <Button variant="default" size="md" onclick={() => void switchToStream()}>
                 {t('wizard.steps.audioSource.useStreamInstead')}
-              </button>
+              </Button>
             </div>
           </SettingsNote>
         {/if}
@@ -400,13 +396,14 @@
     <span role="status" class="sr-only">
       {skipped ? t('wizard.steps.audioSource.setUpLaterChosen') : ''}
     </span>
-    <button
-      type="button"
-      class="{SECONDARY_BUTTON_CLASS} shrink-0 {skipped ? 'border-[var(--color-primary)]' : ''}"
+    <Button
+      variant="default"
+      size="md"
+      className="shrink-0 aria-pressed:border-[var(--color-primary)]"
       aria-pressed={skipped}
       onclick={() => (skipped = true)}
     >
       {t('wizard.steps.audioSource.setUpLater')}
-    </button>
+    </Button>
   </div>
 </div>

@@ -2,8 +2,56 @@
  * Accessibility test example demonstrating axe-core integration
  * Tests basic HTML button accessibility
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import { expectNoA11yViolations, getA11yReport, A11Y_CONFIGS } from '$lib/utils/axe-utils';
+import ButtonHarness from './Button.test.svelte';
+
+describe('Button', () => {
+  it('binds ref to the rendered button element', async () => {
+    const holder: { el?: HTMLButtonElement | null } = {};
+    render(ButtonHarness, { holder });
+
+    await vi.waitFor(() => expect(holder.el).toBeDefined());
+    expect(holder.el).toBeInstanceOf(HTMLButtonElement);
+    expect(holder.el).toBe(screen.getByRole('button'));
+  });
+
+  it('keeps an aria-disabled button focusable and clickable, styled as disabled', async () => {
+    const onclick = vi.fn();
+    render(ButtonHarness, { 'aria-disabled': 'true', onclick });
+    const button = screen.getByRole('button');
+
+    button.focus();
+    await userEvent.setup().click(button);
+
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveFocus();
+    expect(onclick).toHaveBeenCalledTimes(1);
+    expect(button).toHaveClass('aria-disabled:opacity-50', 'aria-disabled:cursor-not-allowed');
+    expect(button.className).not.toContain('aria-disabled:pointer-events-none');
+  });
+
+  it('draws the shared focus-visible outline', () => {
+    render(ButtonHarness);
+
+    expect(screen.getByRole('button')).toHaveClass(
+      'focus-visible:outline-2',
+      'focus-visible:outline-[var(--color-primary)]',
+      'focus-visible:outline-offset-2'
+    );
+  });
+
+  it('passes aria-pressed and aria-describedby through to the button', () => {
+    render(ButtonHarness, { 'aria-pressed': true, 'aria-describedby': 'reason' });
+    const button = screen.getByRole('button');
+
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(button).toHaveAttribute('aria-describedby', 'reason');
+  });
+});
 
 describe('Button Accessibility Tests', () => {
   it('should have no accessibility violations with proper label', async () => {

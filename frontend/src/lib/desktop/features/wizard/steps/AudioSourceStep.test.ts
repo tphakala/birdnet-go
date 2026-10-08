@@ -267,6 +267,17 @@ describe('AudioSourceStep - leave handler', () => {
     expect(settingsActions.saveSection).not.toHaveBeenCalled();
   });
 
+  it('Set up later marks its pressed state with the primary border class', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    const button = screen.getByRole('button', { name: `${KEY}.setUpLater` });
+
+    await fireEvent.click(button);
+
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(button).toHaveClass('aria-pressed:border-[var(--color-primary)]');
+  });
+
   it('arrow keys switch the source type and the leave handler saves the stream', async () => {
     const { leave } = renderStep(AudioSourceStep);
     await flushAsync();

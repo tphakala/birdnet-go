@@ -12,6 +12,14 @@
   - title: Tooltip text
   - className: Additional CSS classes
   - onclick: Click handler
+  - ref: Bindable reference to the rendered <button> element (bind:ref), for focus management
+
+  Behaviour:
+  - Draws a 2px primary outline on keyboard focus (focus-visible).
+  - aria-disabled="true" dims the button and shows a not-allowed cursor but leaves it
+    focusable and clickable, so a blocked action can keep a reason reachable through
+    aria-describedby; the caller must ignore the click. Native `disabled` also blocks
+    pointer events.
 -->
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
@@ -26,6 +34,7 @@
     variant?: ButtonVariant;
     size?: ButtonSize;
     className?: string;
+    ref?: HTMLButtonElement;
     children: Snippet;
   }
 
@@ -36,6 +45,7 @@
     type = 'button',
     title,
     className = '',
+    ref = $bindable(),
     onclick,
     children,
     ...rest
@@ -65,12 +75,15 @@
 </script>
 
 <button
+  bind:this={ref}
   {type}
   {disabled}
   {title}
   {...rest}
   class={cn(
     'inline-flex items-center justify-center rounded-lg font-medium transition-colors',
+    'focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2',
+    'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed',
     'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
     safeGet(sizeClasses, size, ''),
     safeGet(variantClasses, variant, ''),

@@ -516,6 +516,27 @@ describe('WizardDialog', () => {
     });
   });
 
+  it('Skip, Back, Next and Retry use the shared focus ring', async () => {
+    renderWizard(componentSteps(3));
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    await waitFor(() => expect(heading()).toHaveTextContent('test.step2'));
+    loaders[2] = () => Promise.reject(new Error('chunk failed'));
+    await waitOutStepMoveGuard();
+    await waitForPrimaryEnabled();
+    await user.click(primaryButton());
+    const retry = await screen.findByRole('button', { name: /common\.retry/ });
+
+    for (const button of [
+      screen.getByRole('button', { name: 'wizard.skip' }),
+      backButton(),
+      primaryButton(),
+      retry,
+    ]) {
+      expect(button).toHaveClass('focus-visible:outline-2');
+    }
+  });
+
   describe('leave confirmation', () => {
     const confirmation = () =>
       screen.queryByRole('alertdialog', { name: 'wizard.leaveConfirm.title' });

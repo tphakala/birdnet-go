@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fireEvent, waitFor } from '@testing-library/svelte';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { fireEvent, screen, waitFor } from '@testing-library/svelte';
 import type { SettingsFormData } from '$lib/stores/settings';
 
 // Mock API to prevent network calls during mount
@@ -379,6 +379,33 @@ describe('LocationLanguageStep Accessibility', () => {
     expect(trigger).toHaveAccessibleDescription(
       'wizard.steps.locationLanguage.speciesLanguageHelp'
     );
+  });
+
+  describe('Use my location', () => {
+    const getCurrentPosition = vi.fn();
+
+    beforeEach(() => {
+      getCurrentPosition.mockReset();
+      vi.stubGlobal('navigator', { ...navigator, geolocation: { getCurrentPosition } });
+      vi.stubGlobal('isSecureContext', true);
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('Use my location is disabled while a position is requested', async () => {
+      renderStep(LocationLanguageStep);
+      const button = await screen.findByRole('button', {
+        name: 'wizard.steps.locationLanguage.useMyLocation',
+      });
+      expect(button).toBeEnabled();
+
+      await fireEvent.click(button);
+
+      expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+      expect(button).toBeDisabled();
+    });
   });
 
   it('describes the UI language selector with its help text', () => {
