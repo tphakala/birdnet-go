@@ -227,6 +227,12 @@ describe('SelectDropdown naming guard', () => {
       expect(dashed).toContain('has id type but no <label for>');
     });
 
+    it('finds the whole id after an earlier partial match in the same target', () => {
+      expect(
+        problemsIn(`<label for={timeout ? 'time' : x}>T</label><SelectDropdown id="time" />`)
+      ).toEqual([null]);
+    });
+
     it('does not count a FormField without a label as a label target', () => {
       const [problem] = problemsIn('<FormField id="p"><SelectDropdown id="p" /></FormField>');
       expect(problem).toContain('has id p but no <label for>');
