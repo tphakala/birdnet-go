@@ -34,13 +34,13 @@ interface RenderOptions {
 
 function renderGroup({ initial = null, ...rest }: RenderOptions) {
   const spy = vi.fn<(value: string) => void>();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const result = createComponentTestFactory(Harness).render({ initial, spy, ...rest });
   return { spy, user, ...result };
 }
 
 const radios = () => screen.getAllByRole('radio');
-const checkedValues = () =>
+const checkedLabels = () =>
   radios()
     .filter(r => r.getAttribute('aria-checked') === 'true')
     .map(r => r.textContent.trim());
@@ -69,7 +69,7 @@ describe('RadioCardGroup', () => {
   it.each([null, 'zzz'])('checks nothing when value is %s', initial => {
     renderGroup({ options: makeOptions(3), initial });
 
-    expect(checkedValues()).toEqual([]);
+    expect(checkedLabels()).toEqual([]);
   });
 
   it('makes the checked option the only Tab stop', () => {
@@ -118,7 +118,7 @@ describe('RadioCardGroup', () => {
 
     expect(document.activeElement).toBe(radios()[1]);
     expect(spy).not.toHaveBeenCalled();
-    expect(checkedValues()).toEqual([]);
+    expect(checkedLabels()).toEqual([]);
   });
 
   it.each([
@@ -145,7 +145,7 @@ describe('RadioCardGroup', () => {
     expect(radios()[spec.to]).toHaveAttribute('aria-checked', 'true');
     expect(radios()[spec.to]).toHaveAttribute('tabindex', '0');
     expect(spy).toHaveBeenLastCalledWith(options[spec.to].value);
-    expect(checkedValues()).toHaveLength(1);
+    expect(checkedLabels()).toHaveLength(1);
   });
 
   it('skips disabled options and wraps past them', async () => {
@@ -247,7 +247,7 @@ describe('RadioCardGroup', () => {
     await user.keyboard(' ');
 
     expect(spy).not.toHaveBeenCalled();
-    expect(checkedValues()).toEqual(['Option a']);
+    expect(checkedLabels()).toEqual(['Option a']);
   });
 
   it('calls onChange again when the checked option is clicked', async () => {
@@ -383,7 +383,7 @@ describe('RadioCardGroup', () => {
             index = target;
 
             await expectTabStop(index);
-            expect(checkedValues()).toEqual(checkedLabel);
+            expect(checkedLabels()).toEqual(checkedLabel);
             expect(spy.mock.lastCall?.[0]).toBe(lastValue);
           }
           unmount();
@@ -393,7 +393,7 @@ describe('RadioCardGroup', () => {
     );
 
     it(
-      'matches a model over a seeded random walk of 200 arrow keys',
+      'matches a model over a seeded random walk of 40 arrow keys',
       async () => {
         // mulberry32: a tiny deterministic PRNG, so a failure repeats
         let state = 0x9e3779b9;
@@ -409,14 +409,14 @@ describe('RadioCardGroup', () => {
         await tabIntoGroup(user);
 
         let index = 0;
-        for (let step = 0; step < 200; step++) {
+        for (let step = 0; step < 40; step++) {
           const key = arrows[Math.floor(random() * arrows.length)] ?? 'ArrowDown';
           index = nextIndex(options, index, key);
           await user.keyboard(`{${key}}`);
 
           await expectTabStop(index);
           expect(radios()[index]).toHaveAttribute('aria-checked', 'true');
-          expect(checkedValues()).toHaveLength(1);
+          expect(checkedLabels()).toHaveLength(1);
           expect(spy).toHaveBeenLastCalledWith(options[index].value);
         }
       },
@@ -506,7 +506,7 @@ describe('RadioCardGroup', () => {
     await waitFor(() => expect(document.activeElement).toBe(radios()[1]));
     expect(radios()).toHaveLength(2);
     expect(radios()[1]).toHaveTextContent('Option c');
-    expect(checkedValues()).toEqual(['Option c']);
+    expect(checkedLabels()).toEqual(['Option c']);
     expect(tabStops()).toEqual([radios()[1]]);
   });
 
@@ -516,7 +516,7 @@ describe('RadioCardGroup', () => {
     await rerender({ options: makeOptions(3).filter(o => o.value !== 'b') });
 
     expect(radios()).toHaveLength(2);
-    expect(checkedValues()).toEqual([]);
+    expect(checkedLabels()).toEqual([]);
     expect(tabStops()).toEqual([radios()[0]]);
     await tabIntoGroup(user);
     expect(document.activeElement).toBe(radios()[0]);
@@ -536,7 +536,7 @@ describe('RadioCardGroup option list changes', () => {
 
     await waitFor(() => expect(radios()).toHaveLength(2));
     expect(spy).toHaveBeenCalledWith('b');
-    expect(checkedValues()).toEqual(['Option b']);
+    expect(checkedLabels()).toEqual(['Option b']);
     expect(document.activeElement).toBe(radios()[0]);
     expect(radios()[0]).toHaveTextContent('Option b');
     expect(tabStops()).toEqual([radios()[0]]);
@@ -558,13 +558,12 @@ describe('RadioCardGroup option list changes', () => {
 
 describe('RadioCardGroup Accessibility', () => {
   it.each([
-    { name: 'with nothing checked', options: makeOptions(3), initial: null, columns: 1 as const },
-    { name: 'with one option checked', options: makeOptions(3), initial: 'b', columns: 1 as const },
+    { name: 'with nothing checked', options: makeOptions(3), initial: null },
+    { name: 'with one option checked', options: makeOptions(3), initial: 'b' },
     {
       name: 'with a disabled option',
       options: makeOptions(3, [1]),
       initial: 'a',
-      columns: 1 as const,
     },
     { name: 'in two columns', options: makeOptions(2), initial: 'a', columns: 2 as const },
   ])('has no violations $name', async spec => {

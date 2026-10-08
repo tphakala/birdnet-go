@@ -17,7 +17,7 @@ vi.mock('$lib/stores/settings', async () => {
 
 import DetectionStep from './DetectionStep.svelte';
 import { settingsActions, settingsStore } from '$lib/stores/settings';
-import { flushAsync, renderStep } from './stepTestUtils';
+import { flushAsync, radio, renderStep } from './stepTestUtils';
 
 /** Seeds the stored (server) threshold the step reads when it mounts. */
 function seedThreshold(threshold: number | undefined) {
@@ -32,7 +32,6 @@ function seedThreshold(threshold: number | undefined) {
 
 const checkedRadios = () =>
   screen.queryAllByRole('radio').filter(r => r.getAttribute('aria-checked') === 'true');
-const radio = (name: RegExp) => screen.getByRole('radio', { name });
 const storedLine = () => screen.queryByText(/wizard\.steps\.detection\.descriptionStored/);
 
 describe('DetectionStep - stored threshold', () => {

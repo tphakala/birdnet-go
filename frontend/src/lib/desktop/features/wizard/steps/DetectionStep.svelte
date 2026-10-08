@@ -65,7 +65,7 @@
   // no card; the intro paragraph states the value instead of the generic text.
   const storedNoMatch = $derived(savedThreshold !== undefined && !matchingPreset(savedThreshold));
 
-  let selectedId = $state<string | undefined>(matchingPreset(initialThreshold)?.id);
+  let selectedId = $state<string | null>(matchingPreset(initialThreshold)?.id ?? null);
 
   const presetOptions = $derived<RadioCardOption[]>(
     presets.map(p => ({
@@ -111,7 +111,7 @@
 
   <RadioCardGroup
     options={presetOptions}
-    value={selectedId ?? null}
+    value={selectedId}
     onChange={selectOption}
     aria-label={t('wizard.steps.detection.title')}
     aria-describedby={storedNoMatch ? INTRO_ID : undefined}

@@ -45,15 +45,27 @@
   const BADGE_CLASS =
     'rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-base-content)]';
 
-  let optionRefs = $state<HTMLButtonElement[]>([]);
+  const ARROW_STEP: Partial<Record<string, 1 | -1>> = {
+    ArrowDown: 1,
+    ArrowRight: 1,
+    ArrowUp: -1,
+    ArrowLeft: -1,
+  };
+
+  // Read only by the key handler, never by the template
+  const optionRefs: HTMLButtonElement[] = [];
 
   // A value that matches no option counts as nothing checked
   let checkedIndex = $derived(options.findIndex(o => value !== null && o.value === value));
-  let firstEnabledIndex = $derived(options.findIndex(o => !o.disabled));
   // The one option in the Tab order: the checked one (even when disabled), else the
   // first enabled one, else the first, so the group and its reasons stay reachable
   let tabStopIndex = $derived(
-    checkedIndex >= 0 ? checkedIndex : firstEnabledIndex >= 0 ? firstEnabledIndex : 0
+    checkedIndex >= 0
+      ? checkedIndex
+      : Math.max(
+          0,
+          options.findIndex(o => !o.disabled)
+        )
   );
   // Cards of a group share their padding and icon alignment; a disabled card adds its reason line
   let hasDetails = $derived(options.some(o => o.description || o.detail || o.disabled));
@@ -63,33 +75,20 @@
     let look = 'border-[var(--border-200)] hover:border-[var(--border-300)]';
     if (checked) look = 'border-[var(--color-primary)] bg-[var(--color-primary)]/5';
     else if (option.disabled) look = 'border-[var(--border-200)]';
-    return `${CARD_BASE_CLASS} ${layout} ${look}${option.disabled ? ' cursor-not-allowed' : ''}`;
+    return cn(CARD_BASE_CLASS, layout, look, option.disabled && 'cursor-not-allowed');
   }
 
   function iconClass(option: RadioCardOption<T>, checked: boolean): string {
     const colour = checked
       ? 'text-[var(--color-primary)]'
-      : `text-[var(--color-base-content)] ${option.disabled ? 'opacity-40' : 'opacity-70'}`;
-    return `size-5 shrink-0 ${hasDetails ? 'mt-0.5 ' : ''}${colour}`;
+      : cn('text-[var(--color-base-content)]', option.disabled ? 'opacity-40' : 'opacity-70');
+    return cn('size-5 shrink-0', hasDetails && 'mt-0.5', colour);
   }
 
   // Every activation (click, Space, Enter, arrow) is reported, the checked option included
   function select(option: RadioCardOption<T>) {
     if (option.disabled) return;
     onChange(option.value);
-  }
-
-  function arrowStep(key: string): 1 | -1 | 0 {
-    switch (key) {
-      case 'ArrowDown':
-      case 'ArrowRight':
-        return 1;
-      case 'ArrowUp':
-      case 'ArrowLeft':
-        return -1;
-      default:
-        return 0;
-    }
   }
 
   // The next enabled option in the direction of step, wrapping, or -1 when no other is enabled
@@ -105,13 +104,14 @@
   async function onKey(event: KeyboardEvent, index: number) {
     // Leave browser and OS shortcuts such as Alt+Left alone
     if (event.altKey || event.ctrlKey || event.metaKey) return;
-    const step = arrowStep(event.key);
-    if (step === 0) return;
+    const step = ARROW_STEP[event.key];
+    if (step === undefined) return;
     // Before any await, or the page still scrolls
     event.preventDefault();
     const target = nextEnabledIndex(index, step);
-    const option = options.at(target);
-    if (target < 0 || option === undefined) return;
+    if (target < 0) return;
+    const option = options[target];
+    if (option === undefined) return;
     // The card element outlives a change to the list, its index may not
     const targetCard = optionRefs.at(target);
     select(option);

@@ -26,7 +26,7 @@ import AudioSourceStep from './AudioSourceStep.svelte';
 import { settingsActions, settingsStore } from '$lib/stores/settings';
 import type { SettingsFormData } from '$lib/stores/settings';
 import { api, ApiError } from '$lib/utils/api';
-import { flushAsync, renderStep } from './stepTestUtils';
+import { flushAsync, radio, renderStep } from './stepTestUtils';
 import { renderTyped } from '../../../../../test/render-helpers';
 
 const RTSP_URL = 'rtsp://camera.example/stream';
@@ -45,8 +45,6 @@ function seed(audio: Record<string, unknown>, streams: unknown[] = []) {
     formData: { realtime } as unknown as SettingsFormData,
   }));
 }
-
-const radio = (name: RegExp) => screen.getByRole('radio', { name });
 
 const urlInput = () => screen.getByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
 const urlAlert = () => screen.getByRole('alert');

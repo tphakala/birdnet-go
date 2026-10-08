@@ -324,7 +324,7 @@ interface Props<T extends string> extends Omit<HTMLAttributes<HTMLDivElement>, '
 ```svelte
 <RadioCardGroup
   options={presetOptions}
-  value={selectedId ?? null}
+  value={selectedId}
   onChange={selectOption}
   aria-label={t('wizard.steps.detection.title')}
 />
