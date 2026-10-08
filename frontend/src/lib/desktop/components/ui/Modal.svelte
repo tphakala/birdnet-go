@@ -243,8 +243,11 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (closeOnEsc && event.key === 'Escape' && !loading && !isConfirming) {
-      handleClose();
+    if (event.key === 'Escape') {
+      // Escape that a control inside already used (closing its own list, say)
+      // does not also close the dialog, and a dialog under another stays open
+      if (event.defaultPrevented || !isTopmost()) return;
+      if (closeOnEsc && !loading && !isConfirming) handleClose();
     } else if (event.key === 'Tab') {
       trapFocus(event);
     }

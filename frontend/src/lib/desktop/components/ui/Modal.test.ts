@@ -668,4 +668,43 @@ describe('Modal', () => {
       expect(button('Lower action')).toHaveFocus();
     });
   });
+  describe('Escape', () => {
+    it('does not close on an Escape that a control inside already handled', async () => {
+      const onClose = vi.fn();
+      const host = createComponentTestFactory(ModalTrapHost);
+      host.render({ props: { escapeHandled: true, onClose } });
+      const field = screen.getByRole('textbox', { name: 'Handles Escape' });
+      field.focus();
+
+      await user.keyboard('{Escape}');
+
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('closes on an Escape nothing inside handled', async () => {
+      const onClose = vi.fn();
+      const host = createComponentTestFactory(ModalTrapHost);
+      host.render({ props: { onClose } });
+      screen.getByRole('button', { name: 'Middle' }).focus();
+
+      await user.keyboard('{Escape}');
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('only the topmost of two open modals closes on Escape', async () => {
+      const onCloseFirst = vi.fn();
+      const onCloseSecond = vi.fn();
+      const host = createComponentTestFactory(ModalStackHost);
+      const view = host.render({
+        props: { firstOpen: true, secondOpen: false, onCloseFirst, onCloseSecond },
+      });
+      await view.rerender({ firstOpen: true, secondOpen: true, onCloseFirst, onCloseSecond });
+
+      await user.keyboard('{Escape}');
+
+      expect(onCloseSecond).toHaveBeenCalledTimes(1);
+      expect(onCloseFirst).not.toHaveBeenCalled();
+    });
+  });
 });
