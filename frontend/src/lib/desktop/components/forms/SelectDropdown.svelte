@@ -237,6 +237,10 @@
     isOpen ? activeOptionId(fieldId, highlightedIndex, renderedOptions.length) : undefined
   );
 
+  // A listbox must contain options: with none, the container drops the role and the empty-state
+  // text is announced as a status instead (axe aria-required-children)
+  let hasOptions = $derived(filteredOptions.length > 0);
+
   let canAddMore = $derived(
     !maxSelections ||
       !multiple ||
@@ -536,6 +540,7 @@
       role="combobox"
       aria-haspopup="listbox"
       aria-expanded={isOpen}
+      aria-required={required || undefined}
       aria-controls={isOpen ? `${fieldId}-listbox` : undefined}
       aria-activedescendant={activeDescendantId}
       aria-labelledby={label ? `${fieldId}-label` : undefined}
@@ -629,14 +634,16 @@
         <div
           class="overflow-auto p-1"
           style:max-height="{searchable ? maxHeight - 60 : maxHeight}px"
-          role="listbox"
-          aria-multiselectable={multiple}
+          role={hasOptions ? 'listbox' : undefined}
+          aria-multiselectable={hasOptions ? multiple : undefined}
           id="{fieldId}-listbox"
-          aria-labelledby={label ? `${fieldId}-label` : undefined}
-          aria-label={label ? undefined : ariaLabel || externalLabelText || undefined}
+          aria-labelledby={hasOptions && label ? `${fieldId}-label` : undefined}
+          aria-label={hasOptions && !label
+            ? ariaLabel || externalLabelText || undefined
+            : undefined}
         >
-          {#if filteredOptions.length === 0}
-            <div class="p-4 text-center text-[var(--color-base-content)] opacity-60">
+          {#if !hasOptions}
+            <div role="status" class="p-4 text-center text-[var(--color-base-content)] opacity-60">
               {t('components.forms.select.noOptions')}
             </div>
           {:else}

@@ -768,7 +768,9 @@ describe('SelectDropdown Accessibility', () => {
 
     expect(search).toHaveValue('a b');
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    // No fruit matches "a b", so the open list shows its empty state instead of a listbox
+    expect(search).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('No options found');
   });
 
   it('Escape in the search box closes only the list and does not reach the document', async () => {
@@ -1199,6 +1201,71 @@ describe('SelectDropdown Accessibility', () => {
       expect(trigger).toHaveAttribute('aria-activedescendant');
 
       await expectNoA11yViolations(document.body, { rules: { region: { enabled: false } } });
+    });
+
+    it('exposes a required dropdown as required and leaves an optional one unmarked', () => {
+      const required = selectTest.render({
+        props: { options: fruit, label: 'Fruit', required: true },
+      });
+      expect(screen.getByRole('combobox', { name: /Fruit/ })).toHaveAttribute(
+        'aria-required',
+        'true'
+      );
+      required.unmount();
+
+      selectTest.render({ props: { options: fruit, label: 'Fruit' } });
+      expect(screen.getByRole('combobox', { name: 'Fruit' })).not.toHaveAttribute('aria-required');
+    });
+
+    it('has no violations for a required dropdown', async () => {
+      selectTest.render({ props: { options: fruit, label: 'Fruit', required: true } });
+      expect(screen.getByRole('combobox')).toHaveAttribute('aria-required', 'true');
+
+      await expectNoA11yViolations(document.body, { rules: { region: { enabled: false } } });
+    });
+
+    it('announces the empty list as a status and exposes no listbox without options', async () => {
+      const user = userEvent.setup();
+      selectTest.render({ props: { options: [], label: 'Fruit' } });
+
+      await user.click(screen.getByRole('combobox', { name: 'Fruit' }));
+
+      expect(screen.getByRole('status')).toHaveTextContent('No options found');
+      // A listbox must contain options; an empty one holding only text fails aria-required-children
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+
+    it('has no violations with the list open and empty', async () => {
+      const user = userEvent.setup();
+      selectTest.render({ props: { options: [], label: 'Fruit' } });
+      await user.click(screen.getByRole('combobox', { name: 'Fruit' }));
+      expect(await screen.findByText('No options found')).toBeInTheDocument();
+
+      await expectNoA11yViolations(document.body, { rules: { region: { enabled: false } } });
+    });
+
+    it('keeps the search box and the trigger pointing at an element that exists when no option matches', async () => {
+      const { user, search } = await openSearchable({ label: 'Fruit' });
+
+      await user.keyboard('zzz');
+
+      expect(screen.getByRole('status')).toHaveTextContent('No options found');
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      const controlled = search.getAttribute('aria-controls') ?? '';
+      expect(document.getElementById(controlled)).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toHaveAttribute('aria-controls', controlled);
+    });
+
+    it('brings the listbox back once an option matches again', async () => {
+      const { user } = await openSearchable({ label: 'Fruit' });
+
+      await user.keyboard('zzz');
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      await user.clear(screen.getByRole('searchbox'));
+
+      expect(screen.getByRole('listbox', { name: 'Fruit' })).toBeInTheDocument();
+      expect(screen.getAllByRole('option')).toHaveLength(fruit.length);
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
     });
 
     it('has no violations with the list closed', async () => {
