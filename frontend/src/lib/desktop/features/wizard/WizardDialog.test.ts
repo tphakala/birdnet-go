@@ -769,6 +769,8 @@ describe('WizardDialog', () => {
 
       expect(contentBox()?.className).not.toMatch(/(^|\s)h-\[/);
       expect(contentBox()).toHaveClass('min-h-[20rem]');
+      // The step lays itself out by this box's width (@2xl: variants), so it is a container
+      expect(contentBox()).toHaveClass('@container');
     });
 
     it('fills the step box with the loading spinner while the step loads', async () => {
