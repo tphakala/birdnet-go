@@ -8,7 +8,8 @@ export interface ToastMessage {
   id: string;
   type: ToastType;
   message: string;
-  duration?: number | null; // null means no auto-dismiss
+  /** Milliseconds before auto-dismiss. Omitted (undefined) uses the store default; null or 0 means no auto-dismiss. */
+  duration?: number | null;
   position?: ToastPosition;
   showIcon?: boolean;
   actions?: Array<{ label: string; onClick: () => void }>;
@@ -44,7 +45,9 @@ function generateId(): string {
 // Toast management functions
 export const toastActions = {
   /**
-   * Show a toast notification
+   * Show a toast notification. `options.duration` of undefined uses the default
+   * duration; null (or 0) disables auto-dismiss, so the toast stays until it is
+   * closed or newer toasts push it out of the MAX_TOASTS window.
    */
   show(
     message: string,
@@ -58,7 +61,8 @@ export const toastActions = {
       id,
       type,
       message,
-      duration: options.duration ?? state.defaultDuration,
+      // undefined falls back to the default; null is kept and means no auto-dismiss
+      duration: options.duration === undefined ? state.defaultDuration : options.duration,
       position: options.position ?? state.defaultPosition,
       showIcon: options.showIcon ?? true,
       actions: options.actions ?? [],
