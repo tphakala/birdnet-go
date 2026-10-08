@@ -42,7 +42,7 @@ const onboardingSteps: WizardStep[] = [
   },
 ];
 
-// Changelog registry — ordered from oldest to newest
+// Changelog registry, ordered from oldest to newest
 interface ChangelogEntry {
   version: string;
   title: string;

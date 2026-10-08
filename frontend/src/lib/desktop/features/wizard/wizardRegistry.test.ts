@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getStepsForFlow } from './wizardRegistry';
 
-describe('wizardRegistry — getStepsForFlow()', () => {
+describe('wizardRegistry: getStepsForFlow()', () => {
   describe('onboarding flow', () => {
     it('returns 6 steps for onboarding flow', () => {
       const steps = getStepsForFlow('onboarding');
