@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { tick } from 'svelte';
 import ToastContainer from './ToastContainer.svelte';
@@ -57,6 +57,10 @@ describe('ToastContainer auto-dismiss', () => {
   });
 });
 
+function blurActiveElement() {
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+}
+
 describe('ToastContainer keyboard focus', () => {
   // Label from the shared i18n mock in src/test/setup.ts
   const CLOSE_LABEL = 'Close notification';
@@ -66,6 +70,11 @@ describe('ToastContainer keyboard focus', () => {
   const MAX_TOASTS = 3;
 
   const closeButtons = () => screen.getAllByRole('button', { name: CLOSE_LABEL });
+  const closeOf = (text: string): HTMLElement => {
+    const alert = screen.getByText(text).closest<HTMLElement>('[role="alert"]');
+    if (!alert) throw new Error(`The toast "${text}" is not shown`);
+    return within(alert).getByRole('button', { name: CLOSE_LABEL });
+  };
 
   let pageButton: HTMLButtonElement;
 
@@ -197,7 +206,7 @@ describe('ToastContainer keyboard focus', () => {
     closeButtons()[0].focus();
     // A click on page content that takes no focus leaves focus on body
     await user.pointer({ target: document.body, keys: '[MouseLeft]' });
-    (document.activeElement as HTMLElement).blur();
+    blurActiveElement();
 
     toastActions.remove(id);
     await tick();
@@ -245,5 +254,81 @@ describe('ToastContainer keyboard focus', () => {
     } finally {
       chart.remove();
     }
+  });
+  it('removing a toast does not pull focus back after the user left it for a page element and focus later fell to body', async () => {
+    render(ToastContainer);
+    const id = toastActions.info('Left behind', { duration: null });
+    toastActions.info('Other', { duration: null });
+    await tick();
+    closeButtons()[0].focus();
+    pageButton.focus();
+    pageButton.blur();
+    expect(document.body).toHaveFocus();
+
+    toastActions.remove(id);
+    await tick();
+
+    expect(document.body).toHaveFocus();
+  });
+
+  it('closing the middle toast moves focus to the next one, not the previous one', async () => {
+    const user = userEvent.setup();
+    render(ToastContainer);
+    toastActions.info('First', { duration: null });
+    toastActions.info('Second', { duration: null });
+    toastActions.info('Third', { duration: null });
+    await tick();
+    closeOf('Second').focus();
+
+    await user.keyboard('{Enter}');
+    await tick();
+
+    expect(screen.queryByText('Second')).not.toBeInTheDocument();
+    expect(closeOf('Third')).toHaveFocus();
+  });
+
+  it('closing a focused toast in another position moves focus within that position', async () => {
+    const user = userEvent.setup();
+    render(ToastContainer);
+    toastActions.info('Top right', { duration: null });
+    toastActions.info('Bottom first', { duration: null, position: 'bottom-left' });
+    toastActions.info('Bottom second', { duration: null, position: 'bottom-left' });
+    await tick();
+    closeOf('Bottom first').focus();
+
+    await user.keyboard('{Enter}');
+    await tick();
+
+    expect(closeOf('Bottom second')).toHaveFocus();
+  });
+
+  it('closing the only toast of an earlier position returns focus to the page, not to a toast in a later position', async () => {
+    const user = userEvent.setup();
+    render(ToastContainer);
+    toastActions.info('Early only', { duration: null, position: 'top-left' });
+    toastActions.info('Late only', { duration: null, position: 'bottom-right' });
+    await tick();
+    pageButton.focus();
+    closeOf('Early only').focus();
+
+    await user.keyboard('{Enter}');
+    await tick();
+
+    expect(pageButton).toHaveFocus();
+  });
+
+  it('closing the only toast of a position returns focus to the page, not to a toast in another position', async () => {
+    const user = userEvent.setup();
+    render(ToastContainer);
+    toastActions.info('Top right', { duration: null });
+    toastActions.info('Bottom only', { duration: null, position: 'bottom-left' });
+    await tick();
+    pageButton.focus();
+    closeOf('Bottom only').focus();
+
+    await user.keyboard('{Enter}');
+    await tick();
+
+    expect(pageButton).toHaveFocus();
   });
 });

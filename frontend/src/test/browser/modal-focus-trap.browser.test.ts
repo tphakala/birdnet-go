@@ -1,10 +1,10 @@
 /**
  * Browser Mode Test: Modal keeps Tab inside the dialog
  *
- * jsdom models Tab order itself, so only a real browser shows whether the
- * trap lets a native Tab leave the dialog. The wrapper has a disabled last
- * button and a leading named radio group, the two shapes that escaped the old
- * trap.
+ * The jsdom tests rely on user-event's own model of Tab order, so only a real
+ * browser shows whether the trap lets a native Tab leave the dialog. The
+ * wrapper ends with a disabled, a visibility:hidden and a display:none button
+ * and has a leading named radio group, the shapes that escaped the old trap.
  *
  * Usage:
  *   npm run test:browser
@@ -18,6 +18,10 @@ import ModalDisabledLast from './wrappers/ModalDisabledLast.svelte';
 
 const TAB_PRESSES = 8;
 
+function blurActiveElement() {
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+}
+
 function activeIsInsideDialog(): boolean {
   const dialog = document.querySelector('[role="dialog"]');
   return !!dialog && dialog.contains(document.activeElement);
@@ -28,7 +32,7 @@ async function waitForInitialFocus() {
 }
 
 describe('Modal focus trap in a real browser', () => {
-  it('Tab never leaves the dialog when its last button is disabled', async () => {
+  it('Tab never leaves the dialog when its last buttons are disabled or hidden', async () => {
     await render(ModalDisabledLast, {});
     await waitForInitialFocus();
 
@@ -52,7 +56,7 @@ describe('Modal focus trap in a real browser', () => {
   it('Tab returns into the dialog when focus is on body', async () => {
     await render(ModalDisabledLast, {});
     await waitForInitialFocus();
-    (document.activeElement as HTMLElement).blur();
+    blurActiveElement();
 
     await userEvent.tab();
 

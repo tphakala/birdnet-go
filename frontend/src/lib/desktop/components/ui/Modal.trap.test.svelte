@@ -16,6 +16,7 @@
     radioLayout = 'none',
     hideFooter = false,
     visibilityHiddenLast = false,
+    skippedLast = 'none',
     dialogHidden = false,
     onClose = undefined,
   }: {
@@ -33,6 +34,8 @@
     hideFooter?: boolean;
     /** a last control that a test's checkVisibility stub reports hidden (data-vis-hidden) */
     visibilityHiddenLast?: boolean;
+    /** a last control the trap must skip: a hidden attribute, an inert subtree or a hidden input */
+    skippedLast?: 'none' | 'hidden-attribute' | 'inert' | 'hidden-input';
     /** marks the dialog itself as hidden for the same stub, as in its first open frame */
     dialogHidden?: boolean;
     onClose?: () => void;
@@ -86,6 +89,13 @@
       <button type="button" disabled={lastDisabled} tabindex={lastTabindex}>Last</button>
       {#if showExtra}
         <button type="button">Extra</button>
+      {/if}
+      {#if skippedLast === 'hidden-attribute'}
+        <button type="button" hidden>Hidden attribute</button>
+      {:else if skippedLast === 'inert'}
+        <div inert><button type="button">Inert button</button></div>
+      {:else if skippedLast === 'hidden-input'}
+        <input type="hidden" value="x" />
       {/if}
       {#if visibilityHiddenLast}
         <button type="button" data-vis-hidden>Hidden last</button>

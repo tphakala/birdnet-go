@@ -15,6 +15,7 @@
     <button type="button">Middle</button>
     <button type="button" disabled>Disabled last</button>
     <button type="button" style:visibility="hidden">Invisible last</button>
+    <button type="button" style:display="none">Display none last</button>
   {/snippet}
 </Modal>
 

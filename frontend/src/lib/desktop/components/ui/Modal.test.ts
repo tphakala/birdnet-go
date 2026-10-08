@@ -14,6 +14,10 @@ import ModalTrapHost from './Modal.trap.test.svelte';
 import ModalStackHost from './Modal.stack.test.svelte';
 import ModalCardsHost from './Modal.cards.test.svelte';
 
+function blurActiveElement() {
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+}
+
 describe('Modal', () => {
   let user: ReturnType<typeof userEvent.setup>;
   const modalTest = createComponentTestFactory(Modal);
@@ -390,7 +394,7 @@ describe('Modal', () => {
       const dialog = screen.getByRole('dialog');
       const titleId = dialog.getAttribute('aria-labelledby');
       expect(titleId).toBeTruthy();
-      expect(document.getElementById(titleId as string)).toHaveTextContent('Accessible Modal');
+      expect(document.getElementById(titleId ?? '')).toHaveTextContent('Accessible Modal');
       expect(titleId).not.toBe('modal-title');
     });
 
@@ -605,7 +609,7 @@ describe('Modal', () => {
 
     it('Tab with focus on body moves focus to the first control', async () => {
       await renderHost();
-      (document.activeElement as HTMLElement).blur();
+      blurActiveElement();
       expect(document.body).toHaveFocus();
 
       await user.tab();
@@ -615,7 +619,7 @@ describe('Modal', () => {
 
     it('Shift+Tab with focus on body moves focus to the last control', async () => {
       await renderHost();
-      (document.activeElement as HTMLElement).blur();
+      blurActiveElement();
       expect(document.body).toHaveFocus();
 
       await user.tab({ shift: true });
@@ -738,6 +742,41 @@ describe('Modal', () => {
       expect(button('First')).toHaveFocus();
     });
 
+    it.each([
+      ['a hidden attribute', 'hidden-attribute'],
+      ['an inert subtree', 'inert'],
+      ['a hidden input', 'hidden-input'],
+    ] as const)('Tab wraps past a last control with %s', async (_label, skippedLast) => {
+      await renderHost({ skippedLast });
+      button('Last').focus();
+
+      await user.tab();
+
+      expect(button('First')).toHaveFocus();
+    });
+
+    it('Tab keeps focus on the dialog box when no control is enabled', async () => {
+      modalTest.render({ props: { isOpen: true, type: 'confirm', loading: true, title: 'Busy' } });
+      const box = screen.getByRole('document');
+      await waitFor(() => expect(box).toHaveFocus());
+
+      await user.tab();
+
+      expect(box).toHaveFocus();
+    });
+
+    it('Tab moves focus from body to the dialog box when no control is enabled', async () => {
+      modalTest.render({ props: { isOpen: true, type: 'confirm', loading: true, title: 'Busy' } });
+      const box = screen.getByRole('document');
+      await waitFor(() => expect(box).toHaveFocus());
+      blurActiveElement();
+      expect(document.body).toHaveFocus();
+
+      await user.tab();
+
+      expect(box).toHaveFocus();
+    });
+
     it('initial focus skips a disabled first control', async () => {
       await renderHost({ firstDisabled: true });
 
@@ -768,55 +807,67 @@ describe('Modal', () => {
       expect(cardA).toHaveFocus();
     });
 
-    describe('with checkVisibility available', () => {
-      // jsdom has no checkVisibility. This stand-in reports a node inside a
-      // [data-vis-hidden] element as hidden only when asked to consider the
-      // visibility property, as a browser does for visibility:hidden.
-      beforeEach(() => {
-        Object.defineProperty(HTMLElement.prototype, 'checkVisibility', {
-          configurable: true,
-          writable: true,
-          value(this: HTMLElement, options?: { visibilityProperty?: boolean }) {
-            return !(options?.visibilityProperty && this.closest('[data-vis-hidden]'));
-          },
+    describe.each(['visibilityProperty', 'checkVisibilityCSS'] as const)(
+      'with an engine whose checkVisibility knows only %s',
+      knownOption => {
+        // jsdom has no checkVisibility. This stand-in reports a node inside a
+        // [data-vis-hidden] element as hidden only when asked to consider the
+        // visibility property under the one option name this engine knows, as
+        // Chromium before 121 (checkVisibilityCSS) and later versions
+        // (visibilityProperty) do for visibility:hidden.
+        beforeEach(() => {
+          Object.defineProperty(HTMLElement.prototype, 'checkVisibility', {
+            configurable: true,
+            writable: true,
+            value(
+              this: HTMLElement,
+              options?: { visibilityProperty?: boolean; checkVisibilityCSS?: boolean }
+            ) {
+              const considersVisibility =
+                knownOption === 'visibilityProperty'
+                  ? options?.visibilityProperty
+                  : options?.checkVisibilityCSS;
+              return !(considersVisibility && this.closest('[data-vis-hidden]'));
+            },
+          });
         });
-      });
 
-      afterEach(() => {
-        Reflect.deleteProperty(HTMLElement.prototype, 'checkVisibility');
-      });
+        afterEach(() => {
+          Reflect.deleteProperty(HTMLElement.prototype, 'checkVisibility');
+        });
 
-      it('Tab wraps past a visibility-hidden last control', async () => {
-        await renderHost({ visibilityHiddenLast: true });
-        button('Last').focus();
+        it('Tab wraps past a visibility-hidden last control', async () => {
+          await renderHost({ visibilityHiddenLast: true });
+          button('Last').focus();
 
-        await user.tab();
+          await user.tab();
 
-        expect(button('First')).toHaveFocus();
-      });
+          expect(button('First')).toHaveFocus();
+        });
 
-      it('keeps the controls as candidates while the dialog itself is still hidden', async () => {
-        await renderHost({ visibilityHiddenLast: true, dialogHidden: true });
-        button('Last').focus();
+        it('keeps the controls as candidates while the dialog itself is still hidden', async () => {
+          await renderHost({ visibilityHiddenLast: true, dialogHidden: true });
+          button('Last').focus();
 
-        await user.tab();
+          await user.tab();
 
-        expect(button('Hidden last')).toHaveFocus();
-      });
-    });
+          expect(button('Hidden last')).toHaveFocus();
+        });
+      }
+    );
 
     it('only the topmost of two open modals handles Tab', async () => {
       const view = stackHostTest.render({ props: { firstOpen: true, secondOpen: false } });
       await waitFor(() => expect(button('Lower action')).toHaveFocus());
       await view.rerender({ firstOpen: true, secondOpen: true });
       await waitFor(() => expect(button('Upper action')).toHaveFocus());
-      (document.activeElement as HTMLElement).blur();
+      blurActiveElement();
 
       await user.tab();
       expect(button('Upper action')).toHaveFocus();
 
       await view.rerender({ firstOpen: true, secondOpen: false });
-      (document.activeElement as HTMLElement).blur();
+      blurActiveElement();
       await user.tab();
       expect(button('Lower action')).toHaveFocus();
     });
