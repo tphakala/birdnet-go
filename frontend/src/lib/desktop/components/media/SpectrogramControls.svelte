@@ -80,6 +80,10 @@
     onAudioOutputToggle,
   }: Props = $props();
 
+  // Unique per instance so the color map label always points at its own dropdown
+  const instanceId = $props.id();
+  const colorMapId = `${instanceId}-color-map`;
+
   const MAX_FREQ = 24000;
   const MAX_GAIN_DB = 24;
   const SLIDER_CLASSES =
@@ -147,12 +151,12 @@
 
   <!-- Color map -->
   <div class="flex items-center gap-2">
-    <span class="text-[var(--color-base-content)]/70 whitespace-nowrap">
+    <label for={colorMapId} class="text-[var(--color-base-content)]/70 whitespace-nowrap">
       {t('spectrogram.controls.colorMap')}
-    </span>
+    </label>
     <SelectDropdown
+      id={colorMapId}
       options={colorMapOptions}
-      aria-label={t('spectrogram.controls.colorMap')}
       value={colorMap}
       variant="select"
       size="xs"

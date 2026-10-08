@@ -110,6 +110,11 @@
     Tooltip?: string;
   }
 
+  /** The Passes (attenuation) parameter is edited with a dropdown; the others use inputs */
+  function isPassesParam(param: FilterParameter): boolean {
+    return param.Name.toLowerCase() === 'passes';
+  }
+
   interface FilterTypeConfig {
     Parameters: FilterParameter[];
     Tooltip?: string;
@@ -454,16 +459,19 @@
             {#if !(param.Name === 'Q' && (filter.type === 'HighPass' || filter.type === 'LowPass'))}
               <div class="flex flex-col">
                 <div class="label pt-0">
-                  <span class="label-text-alt">
+                  <label
+                    for={isPassesParam(param) ? `eq-filter-${index}-passes` : undefined}
+                    class="label-text-alt"
+                  >
                     {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
-                  </span>
+                  </label>
                 </div>
-                {#if param.Name.toLowerCase() === 'passes'}
+                {#if isPassesParam(param)}
                   <!-- Select for Passes/Attenuation -->
                   <SelectDropdown
+                    id={`eq-filter-${index}-passes`}
                     value={String(filter.passes ?? param.Default ?? 1)}
                     options={attenuationOptions}
-                    aria-label={param.Label}
                     onChange={value =>
                       updateFilterParameter(index, param.Name, parseInt(value as string))}
                     {disabled}
@@ -566,16 +574,19 @@
             {#if !(param.Name === 'Q' && (newFilter.type === 'HighPass' || newFilter.type === 'LowPass'))}
               <div class="flex flex-col">
                 <div class="label">
-                  <span class="label-text">
+                  <label
+                    for={isPassesParam(param) ? 'eq-new-filter-passes' : undefined}
+                    class="label-text"
+                  >
                     {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
-                  </span>
+                  </label>
                 </div>
-                {#if param.Name.toLowerCase() === 'passes'}
+                {#if isPassesParam(param)}
                   <!-- Select for Passes/Attenuation -->
                   <SelectDropdown
+                    id="eq-new-filter-passes"
                     value={String(newFilter.passes ?? 1)}
                     options={attenuationOptions}
-                    aria-label={param.Label}
                     onChange={value => {
                       newFilter = { ...newFilter, passes: parseInt(value as string, 10) };
                     }}

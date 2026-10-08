@@ -23,9 +23,10 @@
     id?: string;
     label?: string;
     /**
-     * Accessible name for the trigger and the open listbox when there is no visible `label`
-     * prop. Use it so the name does not depend on the selected value. Ignored when `label`
-     * is set. Overrides a `<label for>` element associated through `id`.
+     * Accessible name for the trigger and the open listbox, for a control with no visible text
+     * of its own. Ignored when `label` is set. Where visible text sits next to the control,
+     * link it with a `<label for>` and `id` instead of repeating it here; an `aria-label`
+     * overrides that label.
      */
     'aria-label'?: string;
     helpText?: string;
