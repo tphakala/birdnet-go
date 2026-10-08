@@ -1550,9 +1550,10 @@ describe('SelectDropdown Accessibility', () => {
         // The first keydown of the press opens the list; the held key then repeats
         await fireEvent.keyDown(trigger, { key });
         await screen.findByRole('listbox');
+        // One repeat, not two: a second would toggle the list back and hide a missing guard
         expect(await fireEvent.keyDown(trigger, { key, repeat: true })).toBe(false);
-        await fireEvent.keyDown(trigger, { key, repeat: true });
 
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByRole('listbox')).toBeInTheDocument();
         await user.keyboard('{Escape}');
         await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
