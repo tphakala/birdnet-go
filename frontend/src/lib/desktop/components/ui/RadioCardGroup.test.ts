@@ -10,6 +10,9 @@ import type { RadioCardOption } from './RadioCardGroup.types';
 
 const VALUES = ['a', 'b', 'c', 'd'];
 
+/** The long key walks do hundreds of role queries; the 5 s default is too tight on a loaded CI worker. */
+const SLOW_TEST_TIMEOUT_MS = 30_000;
+
 /** Builds `count` options named a, b, c, d; the indexes in `disabled` are disabled with a reason. */
 function makeOptions(count: number, disabled: number[] = []): RadioCardOption[] {
   return VALUES.slice(0, count).map((value, index): RadioCardOption => {
@@ -184,6 +187,37 @@ describe('RadioCardGroup', () => {
     expect(document.activeElement).toBe(radios()[0]);
   });
 
+  it('checks the target card and makes it the Tab stop before focus lands on it', async () => {
+    const { user } = renderGroup({ options: makeOptions(2), initial: 'a' });
+    await tabIntoGroup(user);
+    const target = radios()[1];
+    const atFocus: Array<{ checked: string | null; tabindex: string | null }> = [];
+    target.addEventListener('focus', () =>
+      atFocus.push({
+        checked: target.getAttribute('aria-checked'),
+        tabindex: target.getAttribute('tabindex'),
+      })
+    );
+
+    await user.keyboard('{ArrowDown}');
+
+    await waitFor(() => expect(document.activeElement).toBe(target));
+    expect(atFocus).toEqual([{ checked: 'true', tabindex: '0' }]);
+  });
+
+  it('keeps a checked disabled first option as the Tab stop and arrows out of it to the next enabled option', async () => {
+    const { user, spy } = renderGroup({ options: makeOptions(3, [0]), initial: 'a' });
+    expect(tabStops()).toEqual([radios()[0]]);
+    await tabIntoGroup(user);
+    expect(document.activeElement).toBe(radios()[0]);
+
+    await user.keyboard('{ArrowDown}');
+
+    await waitFor(() => expect(document.activeElement).toBe(radios()[1]));
+    expect(spy).toHaveBeenLastCalledWith('b');
+    expect(tabStops()).toEqual([radios()[1]]);
+  });
+
   it('checks the focused option on Space', async () => {
     const { user, spy } = renderGroup({ options: makeOptions(3, [0]), initial: null });
     await tabIntoGroup(user);
@@ -291,85 +325,103 @@ describe('RadioCardGroup', () => {
       expect(tabStops()).toEqual([radios()[index]]);
     }
 
-    const cases = [1, 2, 3, 4].flatMap(count =>
-      [null, 'a'].flatMap(initial =>
-        [undefined, 0, 1, count - 1].flatMap(disabledIndex =>
-          // Disabling the only option of a group is not a case worth a row
-          disabledIndex !== undefined && count === 1
-            ? []
-            : [
-                {
-                  count,
-                  initial,
-                  disabledIndex,
-                  name: `${count} options, initial ${initial}, disabled ${disabledIndex}`,
-                },
-              ]
-        )
-      )
+    interface TabStopCase {
+      count: number;
+      initial: string | null;
+      disabledIndex: number | undefined;
+      name: string;
+    }
+
+    // One row per scenario that runs: a checked option that is disabled is left out
+    // (it has its own test) and so is a group of one with its only option disabled
+    const cases: TabStopCase[] = [];
+    for (const count of [1, 2, 3, 4]) {
+      const disabledChoices = [undefined, ...Array.from({ length: count }, (_, i) => i)];
+      for (const disabledIndex of disabledChoices) {
+        if (disabledIndex !== undefined && count === 1) continue;
+        for (const initial of [null, 'a']) {
+          if (initial !== null && disabledIndex === 0) continue;
+          const checked = initial === null ? 'nothing checked' : `${initial} checked`;
+          const disabled =
+            disabledIndex === undefined ? 'none disabled' : `${VALUES[disabledIndex]} disabled`;
+          cases.push({
+            count,
+            initial,
+            disabledIndex,
+            name: `${count} options, ${checked}, ${disabled}`,
+          });
+        }
+      }
+    }
+
+    it.each(cases)(
+      'keeps exactly one Tab stop through key sequences ($name)',
+      async spec => {
+        const options = makeOptions(
+          spec.count,
+          spec.disabledIndex === undefined ? [] : [spec.disabledIndex]
+        );
+        const initial = spec.initial;
+
+        for (const keys of KEY_SEQUENCES) {
+          const { user, spy, unmount } = renderGroup({ options, initial });
+          await tabIntoGroup(user);
+
+          let index = initial === null ? firstEnabled(options) : VALUES.indexOf(initial);
+          // What the parent holds: nothing until an option is checked
+          let checkedLabel: string[] = initial === null ? [] : [`Option ${initial}`];
+          let lastValue: string | undefined;
+          await expectTabStop(index);
+
+          for (const key of keys) {
+            const target = nextIndex(options, index, key);
+            await user.keyboard(`{${key}}`);
+            if (target !== index) {
+              checkedLabel = [`Option ${VALUES[target]}`];
+              lastValue = VALUES[target];
+            }
+            index = target;
+
+            await expectTabStop(index);
+            expect(checkedValues()).toEqual(checkedLabel);
+            expect(spy.mock.lastCall?.[0]).toBe(lastValue);
+          }
+          unmount();
+        }
+      },
+      SLOW_TEST_TIMEOUT_MS
     );
 
-    it.each(cases)('keeps exactly one Tab stop through key sequences ($name)', async spec => {
-      const options = makeOptions(
-        spec.count,
-        spec.disabledIndex === undefined ? [] : [spec.disabledIndex]
-      );
-      // The model starts from an enabled option; a checked disabled one is its own test above
-      const initial = options.find(o => o.value === spec.initial && !o.disabled)?.value ?? null;
-
-      for (const keys of KEY_SEQUENCES) {
-        const { user, spy, unmount } = renderGroup({ options, initial });
+    it(
+      'matches a model over a seeded random walk of 200 arrow keys',
+      async () => {
+        // mulberry32: a tiny deterministic PRNG, so a failure repeats
+        let state = 0x9e3779b9;
+        const random = () => {
+          state = (state + 0x6d2b79f5) | 0;
+          let t = Math.imul(state ^ (state >>> 15), 1 | state);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+        const arrows = ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'];
+        const options = makeOptions(4, [2]);
+        const { user, spy } = renderGroup({ options, initial: 'a' });
         await tabIntoGroup(user);
 
-        let index = initial === null ? firstEnabled(options) : VALUES.indexOf(initial);
-        // What the parent holds: nothing until an option is checked
-        let checkedLabel: string[] = initial === null ? [] : [`Option ${initial}`];
-        let lastValue: string | undefined;
-        await expectTabStop(index);
-
-        for (const key of keys) {
-          const target = nextIndex(options, index, key);
+        let index = 0;
+        for (let step = 0; step < 200; step++) {
+          const key = arrows[Math.floor(random() * arrows.length)] ?? 'ArrowDown';
+          index = nextIndex(options, index, key);
           await user.keyboard(`{${key}}`);
-          if (target !== index) {
-            checkedLabel = [`Option ${VALUES[target]}`];
-            lastValue = VALUES[target];
-          }
-          index = target;
 
           await expectTabStop(index);
-          expect(checkedValues()).toEqual(checkedLabel);
-          expect(spy.mock.lastCall?.[0]).toBe(lastValue);
+          expect(radios()[index]).toHaveAttribute('aria-checked', 'true');
+          expect(checkedValues()).toHaveLength(1);
+          expect(spy).toHaveBeenLastCalledWith(options[index].value);
         }
-        unmount();
-      }
-    });
-
-    it('matches a model over a seeded random walk of 200 arrow keys', async () => {
-      // mulberry32: a tiny deterministic PRNG, so a failure repeats
-      let state = 0x9e3779b9;
-      const random = () => {
-        state = (state + 0x6d2b79f5) | 0;
-        let t = Math.imul(state ^ (state >>> 15), 1 | state);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-      };
-      const arrows = ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'];
-      const options = makeOptions(4, [2]);
-      const { user, spy } = renderGroup({ options, initial: 'a' });
-      await tabIntoGroup(user);
-
-      let index = 0;
-      for (let step = 0; step < 200; step++) {
-        const key = arrows[Math.floor(random() * arrows.length)] ?? 'ArrowDown';
-        index = nextIndex(options, index, key);
-        await user.keyboard(`{${key}}`);
-
-        await expectTabStop(index);
-        expect(radios()[index]).toHaveAttribute('aria-checked', 'true');
-        expect(checkedValues()).toHaveLength(1);
-        expect(spy).toHaveBeenLastCalledWith(options[index].value);
-      }
-    });
+      },
+      SLOW_TEST_TIMEOUT_MS
+    );
   });
 
   it('passes extra attributes to the radiogroup and merges className', () => {
@@ -455,6 +507,19 @@ describe('RadioCardGroup', () => {
     expect(radios()).toHaveLength(2);
     expect(radios()[1]).toHaveTextContent('Option c');
     expect(checkedValues()).toEqual(['Option c']);
+    expect(tabStops()).toEqual([radios()[1]]);
+  });
+
+  it('makes the first enabled option the Tab stop when the checked option is removed', async () => {
+    const { user, rerender } = renderGroup({ options: makeOptions(3), initial: 'b' });
+
+    await rerender({ options: makeOptions(3).filter(o => o.value !== 'b') });
+
+    expect(radios()).toHaveLength(2);
+    expect(checkedValues()).toEqual([]);
+    expect(tabStops()).toEqual([radios()[0]]);
+    await tabIntoGroup(user);
+    expect(document.activeElement).toBe(radios()[0]);
   });
 });
 
@@ -474,6 +539,7 @@ describe('RadioCardGroup option list changes', () => {
     expect(checkedValues()).toEqual(['Option b']);
     expect(document.activeElement).toBe(radios()[0]);
     expect(radios()[0]).toHaveTextContent('Option b');
+    expect(tabStops()).toEqual([radios()[0]]);
   });
 
   it('aligns icons to the top when a disabled option shows its reason', () => {
