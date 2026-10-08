@@ -5104,7 +5104,14 @@
         "noResults": "Nie znaleziono miejsc. Spróbuj innej nazwy lub kliknij na mapę.",
         "errorNetwork": "Wyszukiwanie miejsc jest niedostępne. Sprawdź połączenie z internetem. Nadal możesz kliknąć na mapę lub wpisać współrzędne.",
         "errorRateLimited": "Zbyt wiele wyszukiwań. Poczekaj chwilę i spróbuj ponownie.",
-        "errorUnavailable": "Usługa wyszukiwania nie odpowiedziała. Nadal możesz kliknąć na mapę lub wpisać współrzędne."
+        "errorUnavailable": "Usługa wyszukiwania nie odpowiedziała. Nadal możesz kliknąć na mapę lub wpisać współrzędne.",
+        "kind": {
+          "city": "Miasto",
+          "town": "Miasteczko",
+          "village": "Wieś",
+          "station": "Stacja",
+          "airport": "Lotnisko"
+        }
       }
     }
   },

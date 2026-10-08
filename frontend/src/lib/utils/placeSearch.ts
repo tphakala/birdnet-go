@@ -33,6 +33,9 @@ const HTTP_TOO_MANY_REQUESTS = 429;
 const LATITUDE_LIMIT = 90;
 const LONGITUDE_LIMIT = 180;
 
+/** Kinds of place that get a label, so places with the same name can be told apart. */
+export type PlaceKind = 'city' | 'town' | 'village' | 'station' | 'airport';
+
 /** One place found by a search. */
 export interface PlaceResult {
   /** Stable identity: OpenStreetMap element type and id. */
@@ -40,6 +43,8 @@ export interface PlaceResult {
   name: string;
   /** City, state and country parts that differ from the name, or an empty string. */
   detail: string;
+  /** Present only for the kinds in `PlaceKind`. */
+  kind?: PlaceKind;
   latitude: number;
   longitude: number;
 }
@@ -85,6 +90,21 @@ function readString(properties: Record<string, unknown>, key: string): string | 
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
 }
 
+/** OpenStreetMap key and value pairs that map to a `PlaceKind`. */
+const PLACE_KINDS: readonly { key: string; value: string; kind: PlaceKind }[] = [
+  { key: 'place', value: 'city', kind: 'city' },
+  { key: 'place', value: 'town', kind: 'town' },
+  { key: 'place', value: 'village', kind: 'village' },
+  { key: 'railway', value: 'station', kind: 'station' },
+  { key: 'aeroway', value: 'aerodrome', kind: 'airport' },
+];
+
+function readKind(properties: Record<string, unknown>): PlaceKind | undefined {
+  const key = readString(properties, 'osm_key');
+  const value = readString(properties, 'osm_value');
+  return PLACE_KINDS.find(entry => entry.key === key && entry.value === value)?.kind;
+}
+
 function readIdentity(properties: Record<string, unknown>): string | undefined {
   const type = readString(properties, 'osm_type');
   const id = Object.entries(properties).find(([name]) => name === 'osm_id')?.[1];
@@ -127,7 +147,8 @@ function parseFeature(feature: unknown): PlaceResult | undefined {
     }
   }
 
-  return { id, name, detail: detailParts.join(', '), ...coordinates };
+  const kind = readKind(properties);
+  return { id, name, detail: detailParts.join(', '), ...(kind && { kind }), ...coordinates };
 }
 
 function parseResults(body: unknown): PlaceResult[] | undefined {

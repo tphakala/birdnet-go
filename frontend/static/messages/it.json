@@ -5104,7 +5104,14 @@
         "noResults": "Nessun luogo trovato. Prova con un altro nome o clicca sulla mappa.",
         "errorNetwork": "La ricerca di luoghi non è disponibile. Controlla la connessione a internet. Puoi comunque cliccare sulla mappa o inserire le coordinate.",
         "errorRateLimited": "Troppe ricerche. Attendi un momento e riprova.",
-        "errorUnavailable": "Il servizio di ricerca non ha risposto. Puoi comunque cliccare sulla mappa o inserire le coordinate."
+        "errorUnavailable": "Il servizio di ricerca non ha risposto. Puoi comunque cliccare sulla mappa o inserire le coordinate.",
+        "kind": {
+          "city": "Città",
+          "town": "Cittadina",
+          "village": "Villaggio",
+          "station": "Stazione",
+          "airport": "Aeroporto"
+        }
       }
     }
   },

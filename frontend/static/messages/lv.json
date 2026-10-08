@@ -5104,7 +5104,14 @@
         "noResults": "Vietas netika atrastas. Izmēģiniet citu nosaukumu vai noklikšķiniet uz kartes.",
         "errorNetwork": "Vietu meklēšana nav pieejama. Pārbaudiet interneta savienojumu. Joprojām varat noklikšķināt uz kartes vai ievadīt koordinātas.",
         "errorRateLimited": "Pārāk daudz meklēšanas pieprasījumu. Uzgaidiet brīdi un mēģiniet vēlreiz.",
-        "errorUnavailable": "Meklēšanas pakalpojums neatbildēja. Joprojām varat noklikšķināt uz kartes vai ievadīt koordinātas."
+        "errorUnavailable": "Meklēšanas pakalpojums neatbildēja. Joprojām varat noklikšķināt uz kartes vai ievadīt koordinātas.",
+        "kind": {
+          "city": "Pilsēta",
+          "town": "Miests",
+          "village": "Ciems",
+          "station": "Stacija",
+          "airport": "Lidosta"
+        }
       }
     }
   },

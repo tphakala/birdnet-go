@@ -5104,7 +5104,14 @@
         "noResults": "Paikkoja ei löytynyt. Kokeile toista nimeä tai napsauta karttaa.",
         "errorNetwork": "Paikkahaku ei ole käytettävissä. Tarkista internetyhteys. Voit silti napsauttaa karttaa tai syöttää koordinaatit.",
         "errorRateLimited": "Liian monta hakua. Odota hetki ja yritä uudelleen.",
-        "errorUnavailable": "Hakupalvelu ei vastannut. Voit silti napsauttaa karttaa tai syöttää koordinaatit."
+        "errorUnavailable": "Hakupalvelu ei vastannut. Voit silti napsauttaa karttaa tai syöttää koordinaatit.",
+        "kind": {
+          "city": "Kaupunki",
+          "town": "Taajama",
+          "village": "Kylä",
+          "station": "Asema",
+          "airport": "Lentokenttä"
+        }
       }
     }
   },

@@ -162,6 +162,53 @@ describe('placeSearch', () => {
       });
     });
 
+    it('reads the kind of a place from its OpenStreetMap key and value', async () => {
+      const kindOf = async (osmKey: string, osmValue: string) => {
+        respondWith(
+          featureCollection({
+            ...HELSINKI_FEATURE,
+            properties: {
+              ...HELSINKI_FEATURE.properties,
+              osm_key: osmKey,
+              osm_value: osmValue,
+            },
+          })
+        );
+        const outcome = await searchPlaces('Helsinki', { locale: 'en' });
+        return outcome.status === 'ok' ? outcome.results[0] : undefined;
+      };
+
+      expect((await kindOf('place', 'city'))?.kind).toBe('city');
+      expect((await kindOf('place', 'town'))?.kind).toBe('town');
+      expect((await kindOf('place', 'village'))?.kind).toBe('village');
+      expect((await kindOf('railway', 'station'))?.kind).toBe('station');
+      expect((await kindOf('aeroway', 'aerodrome'))?.kind).toBe('airport');
+    });
+
+    it('gives no kind to other places or to a key and value that do not belong together', async () => {
+      for (const [osmKey, osmValue] of [
+        ['place', 'hamlet'],
+        ['highway', 'bus_stop'],
+        ['boundary', 'city'],
+        ['place', 'station'],
+      ]) {
+        respondWith(
+          featureCollection({
+            ...HELSINKI_FEATURE,
+            properties: {
+              ...HELSINKI_FEATURE.properties,
+              osm_key: osmKey,
+              osm_value: osmValue,
+            },
+          })
+        );
+        const outcome = await searchPlaces('Helsinki', { locale: 'en' });
+        const result = outcome.status === 'ok' ? outcome.results[0] : undefined;
+        expect(result).toBeDefined();
+        expect(result).not.toHaveProperty('kind');
+      }
+    });
+
     it('leaves out detail parts that repeat the name', async () => {
       respondWith(
         featureCollection({

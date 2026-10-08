@@ -5104,7 +5104,14 @@
         "noResults": "Inga platser hittades. Prova ett annat namn eller klicka på kartan.",
         "errorNetwork": "Platssökningen är inte tillgänglig. Kontrollera internetanslutningen. Du kan fortfarande klicka på kartan eller ange koordinater.",
         "errorRateLimited": "För många sökningar. Vänta en stund och försök igen.",
-        "errorUnavailable": "Söktjänsten svarade inte. Du kan fortfarande klicka på kartan eller ange koordinater."
+        "errorUnavailable": "Söktjänsten svarade inte. Du kan fortfarande klicka på kartan eller ange koordinater.",
+        "kind": {
+          "city": "Stad",
+          "town": "Tätort",
+          "village": "By",
+          "station": "Station",
+          "airport": "Flygplats"
+        }
       }
     }
   },

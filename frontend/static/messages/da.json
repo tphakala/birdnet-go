@@ -5104,7 +5104,14 @@
         "noResults": "Ingen steder fundet. Prøv et andet navn, eller klik på kortet.",
         "errorNetwork": "Stedsøgning er ikke tilgængelig. Tjek internetforbindelsen. Du kan stadig klikke på kortet eller indtaste koordinater.",
         "errorRateLimited": "For mange søgninger. Vent et øjeblik, og prøv igen.",
-        "errorUnavailable": "Søgetjenesten svarede ikke. Du kan stadig klikke på kortet eller indtaste koordinater."
+        "errorUnavailable": "Søgetjenesten svarede ikke. Du kan stadig klikke på kortet eller indtaste koordinater.",
+        "kind": {
+          "city": "By",
+          "town": "Mindre by",
+          "village": "Landsby",
+          "station": "Station",
+          "airport": "Lufthavn"
+        }
       }
     }
   },

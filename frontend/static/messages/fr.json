@@ -5104,7 +5104,14 @@
         "noResults": "Aucun lieu trouvé. Essayez un autre nom ou cliquez sur la carte.",
         "errorNetwork": "La recherche de lieux n'est pas disponible. Vérifiez la connexion internet. Vous pouvez toujours cliquer sur la carte ou saisir les coordonnées.",
         "errorRateLimited": "Trop de recherches. Patientez un instant et réessayez.",
-        "errorUnavailable": "Le service de recherche n'a pas répondu. Vous pouvez toujours cliquer sur la carte ou saisir les coordonnées."
+        "errorUnavailable": "Le service de recherche n'a pas répondu. Vous pouvez toujours cliquer sur la carte ou saisir les coordonnées.",
+        "kind": {
+          "city": "Ville",
+          "town": "Petite ville",
+          "village": "Village",
+          "station": "Gare",
+          "airport": "Aéroport"
+        }
       }
     }
   },

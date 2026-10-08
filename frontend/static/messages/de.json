@@ -5104,7 +5104,14 @@
         "noResults": "Keine Orte gefunden. Versuchen Sie einen anderen Namen oder klicken Sie auf die Karte.",
         "errorNetwork": "Die Ortssuche ist nicht verfügbar. Prüfen Sie die Internetverbindung. Sie können weiterhin auf die Karte klicken oder Koordinaten eingeben.",
         "errorRateLimited": "Zu viele Suchanfragen. Warten Sie einen Moment und versuchen Sie es erneut.",
-        "errorUnavailable": "Der Suchdienst hat nicht geantwortet. Sie können weiterhin auf die Karte klicken oder Koordinaten eingeben."
+        "errorUnavailable": "Der Suchdienst hat nicht geantwortet. Sie können weiterhin auf die Karte klicken oder Koordinaten eingeben.",
+        "kind": {
+          "city": "Stadt",
+          "town": "Kleinstadt",
+          "village": "Dorf",
+          "station": "Bahnhof",
+          "airport": "Flughafen"
+        }
       }
     }
   },

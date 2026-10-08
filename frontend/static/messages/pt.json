@@ -5104,7 +5104,14 @@
         "noResults": "Nenhum local encontrado. Tente outro nome ou clique no mapa.",
         "errorNetwork": "A pesquisa de locais não está disponível. Verifique a ligação à internet. Ainda pode clicar no mapa ou introduzir as coordenadas.",
         "errorRateLimited": "Demasiadas pesquisas. Aguarde um momento e tente novamente.",
-        "errorUnavailable": "O serviço de pesquisa não respondeu. Ainda pode clicar no mapa ou introduzir as coordenadas."
+        "errorUnavailable": "O serviço de pesquisa não respondeu. Ainda pode clicar no mapa ou introduzir as coordenadas.",
+        "kind": {
+          "city": "Cidade",
+          "town": "Vila",
+          "village": "Aldeia",
+          "station": "Estação",
+          "airport": "Aeroporto"
+        }
       }
     }
   },

@@ -5104,7 +5104,14 @@
         "noResults": "Geen plaatsen gevonden. Probeer een andere naam of klik op de kaart.",
         "errorNetwork": "Plaatsen zoeken is niet beschikbaar. Controleer de internetverbinding. U kunt nog steeds op de kaart klikken of coördinaten invoeren.",
         "errorRateLimited": "Te veel zoekopdrachten. Wacht even en probeer het opnieuw.",
-        "errorUnavailable": "De zoekdienst reageerde niet. U kunt nog steeds op de kaart klikken of coördinaten invoeren."
+        "errorUnavailable": "De zoekdienst reageerde niet. U kunt nog steeds op de kaart klikken of coördinaten invoeren.",
+        "kind": {
+          "city": "Stad",
+          "town": "Plaats",
+          "village": "Dorp",
+          "station": "Station",
+          "airport": "Luchthaven"
+        }
       }
     }
   },

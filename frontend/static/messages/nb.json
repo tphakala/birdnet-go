@@ -5104,7 +5104,14 @@
         "noResults": "Fant ingen steder. Prøv et annet navn, eller klikk på kartet.",
         "errorNetwork": "Stedssøk er ikke tilgjengelig. Sjekk internettforbindelsen. Du kan fortsatt klikke på kartet eller skrive inn koordinater.",
         "errorRateLimited": "For mange søk. Vent litt og prøv igjen.",
-        "errorUnavailable": "Søketjenesten svarte ikke. Du kan fortsatt klikke på kartet eller skrive inn koordinater."
+        "errorUnavailable": "Søketjenesten svarte ikke. Du kan fortsatt klikke på kartet eller skrive inn koordinater.",
+        "kind": {
+          "city": "By",
+          "town": "Tettsted",
+          "village": "Landsby",
+          "station": "Stasjon",
+          "airport": "Flyplass"
+        }
       }
     }
   },

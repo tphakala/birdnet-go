@@ -5104,7 +5104,14 @@
         "noResults": "Nenašli sa žiadne miesta. Skúste iný názov alebo kliknite na mapu.",
         "errorNetwork": "Vyhľadávanie miest nie je dostupné. Skontrolujte internetové pripojenie. Stále môžete kliknúť na mapu alebo zadať súradnice.",
         "errorRateLimited": "Príliš veľa vyhľadávaní. Chvíľu počkajte a skúste to znova.",
-        "errorUnavailable": "Vyhľadávacia služba neodpovedala. Stále môžete kliknúť na mapu alebo zadať súradnice."
+        "errorUnavailable": "Vyhľadávacia služba neodpovedala. Stále môžete kliknúť na mapu alebo zadať súradnice.",
+        "kind": {
+          "city": "Mesto",
+          "town": "Mestečko",
+          "village": "Dedina",
+          "station": "Stanica",
+          "airport": "Letisko"
+        }
       }
     }
   },
