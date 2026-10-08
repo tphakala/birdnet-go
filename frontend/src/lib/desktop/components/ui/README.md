@@ -23,6 +23,7 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 
 - [Input](#input) - Text, number, date, and other input types
 - [Select](#select) - Dropdown selection component
+- [RadioCardGroup](#radiocardgroup) - Card-style single choice with arrow-key navigation
 - [DatePicker](#datepicker) - Date selection interface
 
 ### Feedback & Status
@@ -288,6 +289,68 @@ interface Props {
 - Two-way binding
 - Placeholder support
 - Disabled state
+
+---
+
+### RadioCardGroup
+
+**File**: `RadioCardGroup.svelte` (types in `RadioCardGroup.types.ts`)
+
+Card-style single choice that follows the WAI-ARIA radio group pattern. Use it when each option needs a title, a description or an icon; a plain radio list needs none of this.
+
+```typescript
+interface RadioCardOption<T extends string = string> {
+  value: T; // unique within the group
+  label: string;
+  description?: string;
+  detail?: string; // second line in a mono font
+  badge?: string; // small pill beside the label
+  icon?: LucideIcon;
+  disabled?: boolean; // when true, disabledReason is required
+  disabledReason?: string;
+}
+
+interface Props<T extends string> extends Omit<HTMLAttributes<HTMLDivElement>, 'role' | 'class'> {
+  options: RadioCardOption<T>[];
+  value: T | null; // the checked option, or null for none
+  onChange: (value: T) => void;
+  columns?: 1 | 2; // default 1
+  className?: string;
+}
+```
+
+**Usage:**
+
+```svelte
+<RadioCardGroup
+  options={presetOptions}
+  value={selectedId ?? null}
+  onChange={selectOption}
+  aria-label={t('wizard.steps.detection.title')}
+/>
+```
+
+**Keyboard:**
+
+| Key                             | Action                                                                |
+| ------------------------------- | --------------------------------------------------------------------- |
+| Tab, Shift+Tab                  | Enter or leave the group; the group is one Tab stop                   |
+| Arrow Down or Right             | Move focus to the next enabled card and check it, wrapping at the end |
+| Arrow Up or Left                | Move focus to the previous enabled card and check it, wrapping        |
+| Space                           | Check the focused card                                                |
+| Enter                           | Check the focused card (the native button click, same as a click)     |
+| Alt, Ctrl or Meta with an arrow | Not handled, so browser shortcuts such as Alt+Left keep working       |
+
+**Features:**
+
+- One Tab stop: the checked card, else the first enabled card, else the first card
+- Selection follows arrow-key focus; focus alone (Tab) never selects
+- Disabled cards are skipped by the arrows, stay focusable with `aria-disabled`, and must carry a `disabledReason` that is shown inside the card
+- The parent owns the selection (`value` is controlled); the component never keeps its own
+- `onChange` fires on every activation, including a click on the card that is already checked, so a handler must be idempotent. With a single enabled card the arrows do nothing; Space or a click checks it
+- The caller names the group with `aria-label` or `aria-labelledby`; other attributes (for example `aria-describedby`) go to the `radiogroup` element
+- Each card is a `role="radio"` button, so its accessible name is its visible content (label, badge, description, detail)
+- Inside a `Modal` whose first focusable element is a `RadioCardGroup`, the modal's initial focus can land on an unchecked card, because its selector also matches `tabindex="-1"` buttons (`Modal.svelte`); give the dialog an earlier focusable element, such as a header close button
 
 ---
 

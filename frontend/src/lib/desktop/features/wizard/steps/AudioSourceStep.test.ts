@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import { deferred } from '../../../../../test/async-helpers';
 
@@ -266,6 +267,40 @@ describe('AudioSourceStep - leave handler', () => {
     await leave();
 
     expect(settingsActions.saveSection).not.toHaveBeenCalled();
+  });
+
+  it('arrow keys switch the source type and the leave handler saves the stream', async () => {
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    const user = userEvent.setup();
+    radio(/wizard\.steps\.audioSource\.soundcard/).focus();
+
+    await user.keyboard('{ArrowRight}');
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(radio(/wizard\.steps\.audioSource\.rtspStream/))
+    );
+    expect(radio(/wizard\.steps\.audioSource\.rtspStream/)).toHaveAttribute('aria-checked', 'true');
+    await typeUrl(RTSP_URL);
+
+    await leave();
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls.map(c => c[0])).toEqual([
+      'rtsp',
+      'audio',
+    ]);
+  });
+
+  it('clicking the checked source type after set up later clears it', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    const button = screen.getByRole('button', { name: `${KEY}.setUpLater` });
+    await fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
+
+    expect(button).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('set up later after an edit discards the edit and sends nothing', async () => {
@@ -891,6 +926,33 @@ describe('AudioSourceStep Accessibility', () => {
   beforeEach(() => {
     vi.mocked(api.get).mockReset().mockResolvedValue([USB]);
     resetStore();
+  });
+
+  it('makes the source type group one Tab stop', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+
+    expect(radio(/wizard\.steps\.audioSource\.soundcard/)).toHaveAttribute('tabindex', '0');
+    expect(radio(/wizard\.steps\.audioSource\.rtspStream/)).toHaveAttribute('tabindex', '-1');
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
+    expect(radio(/wizard\.steps\.audioSource\.soundcard/)).toHaveAttribute('tabindex', '-1');
+    expect(radio(/wizard\.steps\.audioSource\.rtspStream/)).toHaveAttribute('tabindex', '0');
+  });
+
+  it('colours the checked source type icon with the primary colour', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    const icon = (name: RegExp) => radio(name).querySelector('svg');
+    const soundcard = /wizard\.steps\.audioSource\.soundcard/;
+    const stream = /wizard\.steps\.audioSource\.rtspStream/;
+
+    expect(icon(soundcard)).toHaveClass('text-[var(--color-primary)]');
+    expect(icon(stream)).not.toHaveClass('text-[var(--color-primary)]');
+
+    await fireEvent.click(radio(stream));
+
+    expect(icon(stream)).toHaveClass('text-[var(--color-primary)]');
+    expect(icon(soundcard)).not.toHaveClass('text-[var(--color-primary)]');
   });
 
   it.each([

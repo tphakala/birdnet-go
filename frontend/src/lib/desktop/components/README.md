@@ -120,6 +120,7 @@ This folder contains **shared components** used across the application. Feature-
 - `ProcessTable.svelte` - Process status table
 - `ProgressBar.svelte` - Progress bar indicator
 - `ProgressCard.svelte` - Progress display card
+- `RadioCardGroup.svelte` - Card-style radio group with one Tab stop and arrow-key selection (WAI-ARIA radio pattern)
 - `SearchBox.svelte` - Search input box
 - `Select.svelte` - Select dropdown
 - `SelectionToolbar.svelte` - Sticky toolbar for multiselect list views (selection count, select-all banner, action slot)
