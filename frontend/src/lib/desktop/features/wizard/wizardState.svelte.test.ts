@@ -11,17 +11,6 @@ vi.mock('$lib/utils/api', async importOriginal => ({
   },
 }));
 
-// The wizard reports a save that fails after it closed in an error toast; translate
-// to the key so the tests can name the message.
-vi.mock('$lib/i18n', () => ({
-  t: vi.fn((key: string) => key),
-  getLocale: vi.fn(() => 'en'),
-}));
-
-vi.mock('$lib/stores/toast', () => ({
-  toastActions: { error: vi.fn() },
-}));
-
 // Mock getStepsForFlow so we can control what steps are returned
 vi.mock('./wizardRegistry', () => ({
   getStepsForFlow: vi.fn(() => []),
@@ -677,6 +666,27 @@ describe('wizardState - state machine', () => {
       await nav;
 
       expect(toastActions.error).not.toHaveBeenCalled();
+    });
+
+    it('names the step that started the save when it fails after Skip without a relaunch', async () => {
+      const audioKey: TranslationKey = 'wizard.errors.audioSourceSaveUnfinished';
+      vi.mocked(getStepsForFlow).mockReturnValue(createComponentSteps([audioKey, undefined]));
+      wizardState.launch('onboarding');
+      const d = deferred();
+      wizardState.registerLeaveHandler(() => d.promise);
+      readyStep();
+      const nav = wizardState.next();
+      await flush();
+
+      wizardState.skip();
+      // The steps are gone when the save fails, so the key cannot be looked up then
+      expect(wizardState.totalSteps).toBe(0);
+      expect(wizardState.currentStep).toBeNull();
+      d.reject(new Error('late'));
+      await nav;
+
+      expect(toastActions.error).toHaveBeenCalledTimes(1);
+      expect(toastActions.error).toHaveBeenCalledWith(audioKey, { duration: null });
     });
 
     it('names the step that started the save when it fails after Skip and a relaunch', async () => {
