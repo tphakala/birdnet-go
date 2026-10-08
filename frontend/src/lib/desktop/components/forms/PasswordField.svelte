@@ -22,6 +22,12 @@
     showStrength?: boolean;
     allowReveal?: boolean;
     autocomplete?: 'current-password' | 'new-password' | 'off';
+    /**
+     * Keeps the alert region two lines tall (text-sm) whether or not an error is shown, so
+     * the controls below do not move when an error appears. By default the empty region
+     * adds no height and an error is one text-xs line.
+     */
+    reserveErrorSpace?: boolean;
     /** Id of an element that describes the input; joined with the error text id when error is set. */
     'aria-describedby'?: string;
     /** Marks the input invalid and gives it the error border, also without an error message. */
@@ -44,6 +50,7 @@
     showStrength = false,
     allowReveal = true,
     autocomplete = 'current-password',
+    reserveErrorSpace = false,
     'aria-describedby': ariaDescribedby,
     'aria-invalid': ariaInvalid,
     onblur,
@@ -59,6 +66,12 @@
   const isInvalid = $derived(
     Boolean(error) ||
       (ariaInvalid !== undefined && ariaInvalid !== false && ariaInvalid !== 'false')
+  );
+
+  const RESERVED_ALERT_CLASS = 'min-h-10 text-sm text-[var(--text-error)]';
+  const ERROR_ALERT_CLASS = 'py-1 text-xs leading-4 text-[var(--text-error)]';
+  const alertClass = $derived(
+    reserveErrorSpace ? RESERVED_ALERT_CLASS : error ? ERROR_ALERT_CLASS : '-mt-1'
   );
 
   let showPassword = $state(false);
@@ -311,12 +324,9 @@
 
   <!-- Error display: an always-present alert region whose text changes, so an error that
        appears is announced. It is not a .label-text-alt, whose opacity lowers the contrast. While
-       empty, -mt-1 cancels the .form-control flex gap (custom.css) so it adds no height. -->
-  <div
-    id={errorId}
-    role="alert"
-    class={error ? 'py-1 text-xs leading-4 text-[var(--text-error)]' : '-mt-1'}
-  >
+       empty, -mt-1 cancels the .form-control flex gap (custom.css) so it adds no height, unless
+       reserveErrorSpace keeps two lines for it. -->
+  <div id={errorId} role="alert" class={alertClass}>
     {error ?? ''}
   </div>
 </div>

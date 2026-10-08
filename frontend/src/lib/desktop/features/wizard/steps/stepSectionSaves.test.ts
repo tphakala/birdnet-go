@@ -82,10 +82,10 @@ describe('wizard steps save with section PATCH requests', () => {
     const { leave } = renderStep(IntegrationStep);
     await flushAsync();
     await fireEvent.click(
-      screen.getByRole('button', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
+      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
     );
     await fireEvent.click(
-      screen.getByRole('button', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
+      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
     );
 
     await leave();
@@ -109,15 +109,18 @@ describe('wizard steps save with section PATCH requests', () => {
     const first = renderStep(IntegrationStep);
     await flushAsync();
     await fireEvent.click(
-      screen.getByRole('button', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
+      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
     );
     await fireEvent.click(
-      screen.getByRole('button', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
+      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
     );
     await fireEvent.click(
-      screen.getByRole('button', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
+      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
     );
-    await fireEvent.input(await screen.findByRole('textbox'), { target: { value: 'abc' } });
+    await fireEvent.input(
+      await screen.findByLabelText('settings.integration.birdweather.token.label'),
+      { target: { value: 'abc' } }
+    );
 
     await first.leave();
     first.unmount();
@@ -129,15 +132,15 @@ describe('wizard steps save with section PATCH requests', () => {
       ['sentry', { enabled: true }],
     ]);
     expect(
-      screen.getByRole('button', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
-    ).toHaveAttribute('aria-pressed', 'false');
+      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
+    ).not.toBeChecked();
     expect(
-      screen.getByRole('button', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
-    ).toHaveAttribute('aria-pressed', 'true');
+      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
+    ).toBeChecked();
     expect(
-      screen.getByRole('button', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
-    ).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.queryByRole('textbox')).toBeNull();
+      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
+    ).not.toBeChecked();
+    expect(screen.queryByLabelText('settings.integration.birdweather.token.label')).toBeNull();
     await second.leave();
     expect(patchCalls()).toHaveLength(2);
   });

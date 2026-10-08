@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
+import { ShieldCheck } from '@lucide/svelte';
+import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import ToggleField from './ToggleField.svelte';
+
+const VARIANTS = ['default', 'card'] as const;
 
 describe('ToggleField', () => {
   it('renders with basic props', () => {
@@ -364,5 +368,135 @@ describe('ToggleField', () => {
     const wrapper = container.querySelector('.min-w-0');
     const description = wrapper?.querySelector('.help-text');
     expect(description).toBeNull();
+  });
+});
+
+describe('ToggleField naming and description', () => {
+  it('aria-describedby points at the rendered description', () => {
+    render(ToggleField, {
+      props: {
+        label: 'Test Toggle',
+        description: 'Toggle description',
+        value: false,
+        onUpdate: vi.fn(),
+      },
+    });
+
+    const describedBy = screen.getByRole('checkbox').getAttribute('aria-describedby');
+
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy as string)).toHaveTextContent('Toggle description');
+  });
+
+  it.each(VARIANTS)(
+    'names the switch with its label only and describes it with the description (%s)',
+    variant => {
+      render(ToggleField, {
+        props: {
+          label: 'Test Toggle',
+          description: 'Toggle description',
+          value: false,
+          onUpdate: vi.fn(),
+          variant,
+        },
+      });
+
+      const toggle = screen.getByRole('checkbox');
+
+      expect(toggle).toHaveAccessibleName('Test Toggle');
+      expect(toggle).toHaveAccessibleDescription('Toggle description');
+    }
+  );
+});
+
+describe('ToggleField card variant', () => {
+  const baseProps = {
+    label: 'Test Toggle',
+    description: 'Toggle description',
+    icon: ShieldCheck,
+    variant: 'card' as const,
+  };
+
+  it('a click anywhere on the card toggles once', async () => {
+    const onUpdate = vi.fn();
+    const { rerender } = render(ToggleField, { props: { ...baseProps, value: false, onUpdate } });
+
+    await fireEvent.click(screen.getByText('Toggle description'));
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate).toHaveBeenLastCalledWith(true);
+
+    await rerender({ ...baseProps, value: true, onUpdate });
+    await fireEvent.click(screen.getByText('Test Toggle'));
+    expect(onUpdate).toHaveBeenCalledTimes(2);
+    expect(onUpdate).toHaveBeenLastCalledWith(false);
+
+    await rerender({ ...baseProps, value: false, onUpdate });
+    await fireEvent.click(screen.getByRole('checkbox'));
+    expect(onUpdate).toHaveBeenCalledTimes(3);
+    expect(onUpdate).toHaveBeenLastCalledWith(true);
+  });
+
+  it('shows the checked state on the card and colours the icon primary only when on', async () => {
+    const onUpdate = vi.fn();
+    const { rerender } = render(ToggleField, { props: { ...baseProps, value: false, onUpdate } });
+    const card = screen.getByRole('checkbox').closest('label');
+    const icon = () => card?.querySelector('svg');
+
+    expect(card).toHaveClass('border-[var(--border-200)]');
+    expect(card).not.toHaveClass('border-[var(--color-primary)]');
+    expect(icon()).not.toHaveClass('text-[var(--color-primary)]');
+
+    await rerender({ ...baseProps, value: true, onUpdate });
+
+    expect(card).toHaveClass('border-[var(--color-primary)]', 'bg-[var(--color-primary)]/5');
+    expect(icon()).toHaveClass('text-[var(--color-primary)]');
+  });
+
+  it('draws the focus ring on the card, not on the switch', () => {
+    render(ToggleField, { props: { ...baseProps, value: false, onUpdate: vi.fn() } });
+    const toggle = screen.getByRole('checkbox');
+
+    expect(toggle.closest('label')).toHaveClass(
+      'has-[input:focus-visible]:outline-2',
+      'has-[input:focus-visible]:outline-[var(--color-primary)]'
+    );
+    expect(toggle).not.toHaveClass('focus-visible:outline-2');
+  });
+
+  it('dims the card and blocks the pointer when disabled', () => {
+    render(ToggleField, {
+      props: { ...baseProps, value: false, onUpdate: vi.fn(), disabled: true },
+    });
+
+    expect(screen.getByRole('checkbox').closest('label')).toHaveClass(
+      'opacity-50',
+      'cursor-not-allowed'
+    );
+  });
+
+  it('keeps the default variant ring on the switch itself', () => {
+    render(ToggleField, { props: { label: 'Test Toggle', value: false, onUpdate: vi.fn() } });
+
+    expect(screen.getByRole('checkbox')).toHaveClass('focus-visible:outline-2');
+  });
+});
+
+describe('ToggleField Accessibility', () => {
+  it.each(VARIANTS)('has no axe violations (%s)', async variant => {
+    for (const value of [false, true]) {
+      const { container, unmount } = render(ToggleField, {
+        props: {
+          label: 'Test Toggle',
+          description: 'Toggle description',
+          icon: ShieldCheck,
+          value,
+          onUpdate: vi.fn(),
+          variant,
+        },
+      });
+
+      await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
+      unmount();
+    }
   });
 });
