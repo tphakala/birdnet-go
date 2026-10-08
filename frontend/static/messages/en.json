@@ -1043,7 +1043,8 @@
       "error": "Error loading detection: {error}",
       "loadingResults": "Loading {count} results...",
       "thumbnailLoading": "Loading {species} thumbnail...",
-      "thumbnailLoaded": "{species} thumbnail loaded"
+      "thumbnailLoaded": "{species} thumbnail loaded",
+      "resultsPerPage": "Results per page"
     },
     "errors": {
       "notFound": "Detection not found. It may have been deleted or the ID is incorrect.",

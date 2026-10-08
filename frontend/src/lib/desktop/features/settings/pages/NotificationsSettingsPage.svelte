@@ -1617,6 +1617,7 @@
                         <SelectDropdown
                           bind:value={serviceFormData.ntfyProtocol}
                           options={protocolOptions}
+                          aria-label={t('settings.notifications.push.services.ntfy.protocol.label')}
                           variant="select"
                           size="sm"
                           menuSize="sm"
@@ -1734,6 +1735,7 @@
                       <SelectDropdown
                         bind:value={serviceFormData.gotifyProtocol}
                         options={protocolOptions}
+                        aria-label={t('settings.notifications.push.services.gotify.protocol.label')}
                         variant="select"
                         size="sm"
                         menuSize="sm"

@@ -1043,7 +1043,8 @@
       "error": "Fout bij het laden van herkenning: {error}",
       "loadingResults": "{count} resultaten laden...",
       "thumbnailLoading": "{species} miniatuur laden...",
-      "thumbnailLoaded": "Miniatuur van {species} geladen"
+      "thumbnailLoaded": "Miniatuur van {species} geladen",
+      "resultsPerPage": "Resultaten per pagina"
     },
     "errors": {
       "notFound": "Detectie niet gevonden. Deze is mogelijk verwijderd of de ID is onjuist.",

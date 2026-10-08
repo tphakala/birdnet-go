@@ -1043,7 +1043,8 @@
       "error": "Erreur lors du chargement de la détection : {error}",
       "loadingResults": "Chargement de {count} résultats...",
       "thumbnailLoading": "Chargement de la miniature de {species}...",
-      "thumbnailLoaded": "Miniature de {species} chargée"
+      "thumbnailLoaded": "Miniature de {species} chargée",
+      "resultsPerPage": "Résultats par page"
     },
     "errors": {
       "notFound": "Détection introuvable. Elle a peut-être été supprimée ou l'identifiant est incorrect.",

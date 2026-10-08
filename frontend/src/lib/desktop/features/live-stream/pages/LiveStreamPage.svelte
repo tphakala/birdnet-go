@@ -784,6 +784,7 @@
         </span>
         <SelectDropdown
           options={sourceOptions}
+          aria-label={t('spectrogram.page.sourceLabel')}
           value={selectedSourceId}
           placeholder={sources.length > 0
             ? t('spectrogram.page.sourceLabel')

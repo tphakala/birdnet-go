@@ -22,6 +22,12 @@
     /** Optional id for the control element (for label association) */
     id?: string;
     label?: string;
+    /**
+     * Accessible name for the trigger and the open listbox when there is no visible `label`
+     * prop. Use it so the name does not depend on the selected value. Ignored when `label`
+     * is set. Overrides a `<label for>` element associated through `id`.
+     */
+    'aria-label'?: string;
     helpText?: string;
     /** Space-separated ids of extra elements that describe the trigger (in addition to helpText) */
     'aria-describedby'?: string;
@@ -60,6 +66,7 @@
     required = false,
     id,
     label,
+    'aria-label': ariaLabel,
     helpText,
     'aria-describedby': ariaDescribedBy,
     className = '',
@@ -114,8 +121,8 @@
       undefined
   );
 
-  // Accessible name for the open listbox when the `label` prop is not used: the text of
-  // the labels associated with the trigger, read when the list opens.
+  // Accessible name for the open listbox when the `label` prop is not used and no `aria-label`
+  // was given: the text of the labels associated with the trigger, read when the list opens.
   let externalLabelText = $state('');
 
   // Size classes for trigger (padding + font size)
@@ -515,6 +522,7 @@
       aria-haspopup="listbox"
       aria-expanded={isOpen}
       aria-labelledby={label ? `${fieldId}-label` : undefined}
+      aria-label={label ? undefined : ariaLabel}
       aria-describedby={triggerDescribedBy}
     >
       <span class="flex items-center gap-2 truncate min-w-0">
@@ -611,7 +619,7 @@
           aria-multiselectable={multiple}
           id="{fieldId}-listbox"
           aria-labelledby={label ? `${fieldId}-label` : undefined}
-          aria-label={label ? undefined : externalLabelText || undefined}
+          aria-label={label ? undefined : ariaLabel || externalLabelText || undefined}
         >
           {#if filteredOptions.length === 0}
             <div class="p-4 text-center text-[var(--color-base-content)] opacity-60">

@@ -1043,7 +1043,8 @@
       "error": "Virhe havainnon latauksessa: {error}",
       "loadingResults": "Ladataan {count} tulosta...",
       "thumbnailLoading": "Ladataan {species} pikkukuvaa...",
-      "thumbnailLoaded": "Pikkukuva {species} ladattu"
+      "thumbnailLoaded": "Pikkukuva {species} ladattu",
+      "resultsPerPage": "Tuloksia sivulla"
     },
     "errors": {
       "notFound": "Havaintoa ei löytynyt. Se on ehkä poistettu tai tunniste on virheellinen.",

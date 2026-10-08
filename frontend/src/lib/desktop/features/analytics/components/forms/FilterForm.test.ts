@@ -45,9 +45,9 @@ describe('FilterForm', () => {
       },
     });
 
-    // SelectDropdown renders as a button, not combobox
-    const timePeriodSelect = screen.getByRole('button', { name: /all time/i });
-    expect(timePeriodSelect).toBeInTheDocument();
+    // The trigger is named by its <label for>, and shows the selected option as its text
+    const timePeriodSelect = screen.getByRole('button', { name: 'Time Period' });
+    expect(timePeriodSelect).toHaveTextContent('All Time');
   });
 
   it('shows custom date fields when custom time period is selected', () => {
@@ -177,8 +177,7 @@ describe('FilterForm', () => {
       },
     });
 
-    // SelectDropdown renders as a button, not combobox
-    const select = screen.getByRole('button', { name: /all time/i });
+    const select = screen.getByRole('button', { name: 'Time Period' });
     expect(select).toBeInTheDocument();
 
     // Note: SelectDropdown value changes require clicking + menu interaction

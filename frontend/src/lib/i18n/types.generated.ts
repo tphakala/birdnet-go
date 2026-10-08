@@ -829,6 +829,7 @@ export type TranslationKey =
   | 'detections.aria.loadingResults' // params: count
   | 'detections.aria.thumbnailLoading' // params: species
   | 'detections.aria.thumbnailLoaded' // params: species
+  | 'detections.aria.resultsPerPage'
   | 'detections.errors.notFound'
   | 'detections.errors.noPermission'
   | 'detections.errors.loginRequired'

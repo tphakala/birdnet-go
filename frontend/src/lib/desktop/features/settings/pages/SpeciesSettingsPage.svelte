@@ -1834,6 +1834,7 @@
                   </span>
                 </label>
                 <SelectDropdown
+                  id="yearly-reset-month"
                   value={String(
                     trackingSettings?.yearlyTracking?.resetMonth ??
                       TRACKING_DEFAULTS.yearlyTracking.resetMonth
@@ -1991,6 +1992,7 @@
                           </span>
                         </label>
                         <SelectDropdown
+                          id={`${season}-start-month`}
                           value={String(currentSeasonData?.startMonth ?? seasonDefaults.startMonth)}
                           options={monthOptions}
                           disabled={store.isLoading || store.isSaving}

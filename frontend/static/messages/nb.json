@@ -1043,7 +1043,8 @@
       "error": "Feil ved lasting av registrering: {error}",
       "loadingResults": "Laster {count} resultater...",
       "thumbnailLoading": "Laster miniatyrbilde for {species}...",
-      "thumbnailLoaded": "Miniatyrbilde for {species} lastet"
+      "thumbnailLoaded": "Miniatyrbilde for {species} lastet",
+      "resultsPerPage": "Resultater per side"
     },
     "errors": {
       "notFound": "Registrering ikke funnet. Den kan ha blitt slettet eller ID-en er feil.",

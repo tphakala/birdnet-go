@@ -1043,7 +1043,8 @@
       "error": "Fel vid laddning av detektering: {error}",
       "loadingResults": "Laddar {count} resultat...",
       "thumbnailLoading": "Laddar {species} miniatyrbild...",
-      "thumbnailLoaded": "Miniatyrbild av {species} laddad"
+      "thumbnailLoaded": "Miniatyrbild av {species} laddad",
+      "resultsPerPage": "Resultat per sida"
     },
     "errors": {
       "notFound": "Detekteringen hittades inte. Den kan ha tagits bort eller så är ID:t felaktigt.",
