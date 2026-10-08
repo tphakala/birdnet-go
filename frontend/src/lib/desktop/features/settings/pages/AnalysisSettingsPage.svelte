@@ -3079,7 +3079,7 @@
         <button
           type="button"
           onclick={handleUninstall}
-          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-error)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-error)]/80 transition-colors"
+          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-error)] px-4 py-2 text-sm font-medium text-[var(--color-error-content)] hover:bg-[var(--color-error-hover)] transition-colors"
         >
           <Trash2 class="size-4" />
           {t('analysis.gallery.remove')}

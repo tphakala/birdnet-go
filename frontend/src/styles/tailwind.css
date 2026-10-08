@@ -61,15 +61,15 @@
   /* Status colors — universal, not scheme-dependent */
   --color-info: #0ea5e9;
   --color-info-hover: #0284c7;
-  --color-info-content: #ffffff;
+  --color-info-content: #020617;
   --color-success: #22c55e;
   --color-success-hover: #16a34a;
-  --color-success-content: #ffffff;
+  --color-success-content: #020617;
   --color-warning: #f59e0b;
   --color-warning-hover: #d97706;
-  --color-warning-content: #ffffff;
-  --color-error: #ef4444;
-  --color-error-hover: #dc2626;
+  --color-warning-content: #020617;
+  --color-error: #dc2626;
+  --color-error-hover: #b91c1c;
   --color-error-content: #ffffff;
 }
 
@@ -150,15 +150,15 @@
   /* Status colors */
   --color-info: #0284c7;
   --color-info-hover: #0ea5e9;
-  --color-info-content: #ffffff;
+  --color-info-content: #020617;
   --color-success: #16a34a;
   --color-success-hover: #22c55e;
-  --color-success-content: #ffffff;
+  --color-success-content: #020617;
   --color-warning: #d97706;
   --color-warning-hover: #f59e0b;
-  --color-warning-content: #ffffff;
-  --color-error: #dc2626;
-  --color-error-hover: #ef4444;
+  --color-warning-content: #020617;
+  --color-error: #ef4444;
+  --color-error-hover: #f87171;
   --color-error-content: #020617;
 
   /* Surface colors - matching mockup hierarchy */

@@ -12,6 +12,11 @@ import {
   OPTION_HIGHLIGHT_OUTLINE_CLASS,
 } from '../lib/desktop/components/forms/SelectDropdown.styles';
 import {
+  TOAST_ACTION_CLASS,
+  TOAST_TYPE_CLASSES,
+} from '../lib/desktop/components/ui/NotificationToast.styles';
+import { confidenceColorClasses } from '../lib/desktop/features/dashboard/utils/confidenceColors';
+import {
   PLACE_DISCLOSURE_CLASS,
   PLACE_DISCLOSURE_ICON_CLASS,
   PLACE_ERROR_CLASS,
@@ -115,12 +120,12 @@ describe('Color Contrast Tests', () => {
     accent: '#0284c7', // --color-accent
     neutral: '#1f2937', // --color-neutral
     info: '#0ea5e9', // --color-info
-    infoContent: '#ffffff', // --color-info-content
+    infoContent: '#020617', // --color-info-content
     success: '#22c55e', // --color-success
-    successContent: '#ffffff', // --color-success-content
+    successContent: '#020617', // --color-success-content
     warning: '#f59e0b', // --color-warning
-    warningContent: '#ffffff', // --color-warning-content
-    error: '#ef4444', // --color-error
+    warningContent: '#020617', // --color-warning-content
+    error: '#dc2626', // --color-error
     errorContent: '#ffffff', // --color-error-content
   };
 
@@ -139,12 +144,12 @@ describe('Color Contrast Tests', () => {
     accent: '#0369a1', // --color-accent
     neutral: '#d1d5db', // --color-neutral
     info: '#0284c7', // --color-info
-    infoContent: '#ffffff', // --color-info-content
+    infoContent: '#020617', // --color-info-content
     success: '#16a34a', // --color-success
-    successContent: '#ffffff', // --color-success-content
+    successContent: '#020617', // --color-success-content
     warning: '#d97706', // --color-warning
-    warningContent: '#ffffff', // --color-warning-content
-    error: '#dc2626', // --color-error
+    warningContent: '#020617', // --color-warning-content
+    error: '#ef4444', // --color-error
     errorContent: '#020617', // --color-error-content
   };
 
@@ -571,4 +576,90 @@ describe('PlaceSearch colors in light and dark themes', () => {
     }
     return match[1];
   }
+});
+
+describe('Status colors with their content color', () => {
+  const css = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'styles', 'tailwind.css'),
+    'utf8'
+  );
+
+  const STATUSES = ['info', 'success', 'warning', 'error'] as const;
+  const lightBase = blockBody(css, '@theme');
+  const darkBlock = blockBody(css, "[data-theme='dark']");
+
+  /** A status token in a theme; the dark theme falls back to the @theme value when it sets none. */
+  function statusToken(theme: 'light' | 'dark', token: string): string {
+    if (theme === 'light') {
+      return readVar(lightBase, token);
+    }
+    return findVar(darkBlock, token) ?? readVar(lightBase, token);
+  }
+
+  for (const theme of ['light', 'dark'] as const) {
+    for (const status of STATUSES) {
+      const content = statusToken(theme, `--color-${status}-content`);
+
+      it(`${theme} ${status}: content text meets AA on the status fill`, () => {
+        const fill = statusToken(theme, `--color-${status}`);
+        expect(getContrastRatio(content, fill)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      });
+
+      it(`${theme} ${status}: content text meets AA on the hover fill`, () => {
+        const hover = statusToken(theme, `--color-${status}-hover`);
+        expect(getContrastRatio(content, hover)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      });
+    }
+  }
+
+  it('toast types pair each status fill with its content color', () => {
+    expect(Object.keys(TOAST_TYPE_CLASSES).sort()).toEqual([...STATUSES].sort());
+    for (const [status, classes] of Object.entries(TOAST_TYPE_CLASSES)) {
+      expect(classes).toContain(`bg-[var(--color-${status})]`);
+      expect(classes).toContain(`text-[var(--color-${status}-content)]`);
+    }
+  });
+
+  it('toast action buttons add no background', () => {
+    // The utility name follows the last variant prefix, so `hover:bg-white/30` counts too.
+    const backgrounds = TOAST_ACTION_CLASS.split(/\s+/).filter(token =>
+      token.slice(token.lastIndexOf(':') + 1).startsWith('bg-')
+    );
+    expect(backgrounds).toEqual([]);
+  });
+
+  describe('confidence blends', () => {
+    /** Confidence percentages that select the two color-mix bands (see confidenceColors.ts). */
+    const BLENDS = [
+      { band: 'success and warning', percent: 80 },
+      { band: 'warning and error', percent: 40 },
+    ];
+
+    for (const { band, percent } of BLENDS) {
+      const classes = confidenceColorClasses(percent);
+
+      it(`${band} blend uses a content token, not white`, () => {
+        expect(classes).not.toContain('text-white');
+        expect(classes).toMatch(/text-\[var\(--color-[a-z]+-content\)\]/);
+      });
+
+      for (const theme of ['light', 'dark'] as const) {
+        it(`${band} blend keeps AA with its content color in the ${theme} theme`, () => {
+          const mix = /color-mix\(in_srgb,var\((--[a-z-]+)\)_(\d+)%,var\((--[a-z-]+)\)\)/.exec(
+            classes
+          );
+          expect(mix, `color-mix found in "${classes}"`).not.toBeNull();
+          const [, first, share, second] = mix ?? [];
+          const fill = applyOpacity(
+            statusToken(theme, first),
+            statusToken(theme, second),
+            Number(share) / 100
+          );
+          const contentToken = /text-\[var\((--[a-z-]+)\)\]/.exec(classes)?.[1] ?? '';
+          const content = statusToken(theme, contentToken);
+          expect(getContrastRatio(content, fill)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        });
+      }
+    }
+  });
 });

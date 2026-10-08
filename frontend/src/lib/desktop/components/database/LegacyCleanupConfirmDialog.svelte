@@ -82,8 +82,8 @@
     </button>
     <button
       class="px-4 py-2 rounded-lg font-medium transition-colors
-             bg-[var(--color-error)] text-white
-             hover:bg-[var(--color-error)]/90
+             bg-[var(--color-error)] text-[var(--color-error-content)]
+             hover:bg-[var(--color-error-hover)]
              disabled:opacity-50 disabled:cursor-not-allowed
              inline-flex items-center gap-2"
       onclick={onConfirm}
