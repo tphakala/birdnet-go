@@ -42,8 +42,6 @@
   const logger = loggers.audio;
   const FFT_SIZE = 1024;
   const HEARTBEAT_INTERVAL = 20000;
-  // Links the visible "audio source" label to the source dropdown
-  const SOURCE_SELECT_ID = 'live-stream-source';
   /** How often (ms) to poll for label promotion and pruning */
   const LABEL_POLL_INTERVAL_MS = 200;
   /** Maximum label age (ms) before pruning from overlay */
@@ -781,12 +779,12 @@
 
       <!-- Source picker -->
       <div class="flex items-center gap-2">
-        <label for={SOURCE_SELECT_ID} class="text-sm text-[var(--color-base-content)]/70">
+        <span class="text-sm text-[var(--color-base-content)]/70">
           {t('spectrogram.page.sourceLabel')}
-        </label>
+        </span>
         <SelectDropdown
-          id={SOURCE_SELECT_ID}
           options={sourceOptions}
+          aria-label={t('spectrogram.page.sourceLabel')}
           value={selectedSourceId}
           placeholder={sources.length > 0
             ? t('spectrogram.page.sourceLabel')

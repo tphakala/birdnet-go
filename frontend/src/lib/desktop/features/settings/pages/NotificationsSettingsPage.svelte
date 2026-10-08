@@ -1729,16 +1729,13 @@
 
                     <!-- Protocol selector -->
                     <div class="flex items-center gap-2 mt-1">
-                      <label
-                        for="gotify-protocol"
-                        class="text-sm text-[var(--color-base-content)]/70"
-                      >
+                      <span class="text-sm text-[var(--color-base-content)]/70">
                         {t('settings.notifications.push.services.gotify.protocol.label')}
-                      </label>
+                      </span>
                       <SelectDropdown
-                        id="gotify-protocol"
                         bind:value={serviceFormData.gotifyProtocol}
                         options={protocolOptions}
+                        aria-label={t('settings.notifications.push.services.gotify.protocol.label')}
                         variant="select"
                         size="sm"
                         menuSize="sm"

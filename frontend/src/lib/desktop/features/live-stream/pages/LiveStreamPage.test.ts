@@ -20,13 +20,7 @@ describe('LiveStreamPage accessibility', () => {
   it('names the audio source dropdown independently of its placeholder or selection', () => {
     render(LiveStreamPage);
 
-    const trigger = screen.getByRole<HTMLButtonElement>('button', {
-      name: 'spectrogram.page.sourceLabel',
-    });
+    const trigger = screen.getByRole('button', { name: 'spectrogram.page.sourceLabel' });
     expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
-    // The visible text is the control's label, not a copy of it in aria-label
-    expect(trigger).not.toHaveAttribute('aria-label');
-    expect(trigger.labels).toHaveLength(1);
-    expect(trigger.labels[0]).toHaveTextContent('spectrogram.page.sourceLabel');
   });
 });

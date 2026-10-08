@@ -80,12 +80,9 @@ describe('NotificationsSettingsPage protocol dropdown names', () => {
     await openProviderForm(user);
     await chooseService(user, 'Gotify');
 
-    const protocol = await screen.findByRole<HTMLButtonElement>('button', {
+    const protocol = await screen.findByRole('button', {
       name: 'settings.notifications.push.services.gotify.protocol.label',
     });
     expect(protocol).toHaveTextContent('HTTPS');
-    // The visible text is the control's label, not a copy of it in aria-label
-    expect(protocol).not.toHaveAttribute('aria-label');
-    expect(protocol.labels).toHaveLength(1);
   });
 });

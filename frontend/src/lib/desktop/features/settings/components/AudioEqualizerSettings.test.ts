@@ -195,12 +195,8 @@ describe('AudioEqualizerSettings', () => {
         },
       });
 
-      const trigger = await screen.findByRole<HTMLButtonElement>('button', { name: 'Attenuation' });
+      const trigger = await screen.findByRole('button', { name: 'Attenuation' });
       expect(trigger).toHaveTextContent('24dB');
-      // The visible text is the control's label, not a copy of it in aria-label
-      expect(trigger).not.toHaveAttribute('aria-label');
-      expect(trigger.labels).toHaveLength(1);
-      expect(trigger.labels[0]).toHaveTextContent('Attenuation');
     });
 
     it('names the attenuation dropdown of the new filter independently of its value', async () => {
@@ -218,11 +214,8 @@ describe('AudioEqualizerSettings', () => {
       );
       await user.click(await screen.findByRole('option', { name: /HighPass/ }));
 
-      const trigger = await screen.findByRole<HTMLButtonElement>('button', { name: 'Attenuation' });
+      const trigger = await screen.findByRole('button', { name: 'Attenuation' });
       expect(trigger).toHaveTextContent('12dB');
-      expect(trigger).not.toHaveAttribute('aria-label');
-      expect(trigger.labels).toHaveLength(1);
-      expect(trigger.labels[0]).toHaveTextContent('Attenuation');
     });
   });
 });

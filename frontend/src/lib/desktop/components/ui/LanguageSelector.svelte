@@ -9,7 +9,7 @@
   interface Props {
     className?: string;
     id?: string;
-    /** Accessible name for the trigger, for use when there is no visible text to link with `<label for>` and `id` */
+    /** Accessible name for the trigger when no `<label for>` points at `id` */
     'aria-label'?: string;
     /** Space-separated ids of elements that describe the selector */
     'aria-describedby'?: string;
