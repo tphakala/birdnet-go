@@ -430,6 +430,12 @@ describe('SelectDropdown option states in every color scheme', () => {
     };
   }
 
+  it('measures an outline color that no scheme overrides', () => {
+    // The matrix reads the outline token from the theme blocks only, so a token that
+    // schemes.css redefines per scheme (such as --color-primary) would be measured wrongly.
+    expect(schemesCss).not.toContain(`${outlineToken}:`);
+  });
+
   it('covers every scheme defined in schemes.css', () => {
     const names = new Set(
       [...schemesCss.matchAll(/\[data-scheme=["']?([^"'\]]+)["']?\]/g)].map(m => m[1])
