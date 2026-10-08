@@ -92,7 +92,7 @@ describe('Button Accessibility Tests', () => {
     await expectNoA11yViolations(button, A11Y_CONFIGS.strict);
   });
 
-  it('should fail accessibility test without proper label', async () => {
+  it('axe helper rejects a raw button without an accessible name', async () => {
     // Create button without accessible name
     document.body.innerHTML = '<button></button>';
     const button = document.querySelector('button');
@@ -108,7 +108,7 @@ describe('Button Accessibility Tests', () => {
     document.body.innerHTML = '';
   });
 
-  it('should generate accessibility report', async () => {
+  it('axe helper builds a report for a raw button', async () => {
     // Create accessible button
     document.body.innerHTML = '<button>Save Changes</button>';
     const button = document.querySelector('button');

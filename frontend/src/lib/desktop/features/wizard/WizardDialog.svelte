@@ -287,9 +287,8 @@
   {/snippet}
 
   {#snippet footer()}
-    <!-- One row whatever the state, so the footer height never changes: the reason
-         sits beside the buttons and clamps to two lines (still shorter than a
-         button) instead of adding a row -->
+    <!-- One row: the reason sits beside the buttons and wraps in full rather than
+         being cut off, so a long translation can make the footer taller -->
     <div class="flex w-full items-center gap-3">
       <Button variant="ghost" size="md" className="shrink-0" onclick={() => wizardState.skip()}>
         {t('wizard.skip')}
