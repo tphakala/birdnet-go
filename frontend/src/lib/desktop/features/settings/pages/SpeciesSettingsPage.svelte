@@ -1987,6 +1987,10 @@
                     <div class="grid grid-cols-2 gap-3 items-end">
                       <div>
                         <label class="flex items-center py-2" for={`${season}-start-month`}>
+                          <!-- The card heading names the season on screen; the name carries it too -->
+                          <span class="sr-only">
+                            {t(`settings.species.tracking.seasonal.seasons.${season}`)}
+                          </span>
                           <span class="text-sm font-medium">
                             {t('settings.species.tracking.seasonal.seasons.startMonth')}
                           </span>

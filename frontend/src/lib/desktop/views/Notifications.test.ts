@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/svelte';
+import { removeStoredValue } from '$lib/utils/storage';
 import Notifications from './Notifications.svelte';
 
 vi.mock('$lib/utils/api', async importOriginal => ({
@@ -14,7 +15,8 @@ vi.mock('$lib/utils/api', async importOriginal => ({
 
 describe('Notifications filter dropdown names', () => {
   beforeEach(() => {
-    localStorage.clear();
+    // Only the view mode this view persists; other keys belong to other tests or the setup
+    removeStoredValue('notifications-view-mode');
   });
 
   it.each([

@@ -64,13 +64,15 @@ describe('SpeciesSettingsPage tracking dropdown names', () => {
     });
     expect(resetMonth).toHaveAttribute('aria-haspopup', 'listbox');
 
-    const startMonths = screen.getAllByRole('button', {
-      name: 'settings.species.tracking.seasonal.seasons.startMonth',
-    });
-    expect(startMonths).toHaveLength(4);
-    // The selected month is the trigger text, not its name
-    expect(resetMonth).toHaveTextContent(/march/i);
-    expect(startMonths[0]).toHaveTextContent(/march/i);
-    expect(startMonths[1]).toHaveTextContent(/june/i);
+    // Each season's dropdown carries the season in its name, so the four are told apart
+    const startMonths = ['spring', 'summer', 'fall', 'winter'].map(season =>
+      screen.getByRole('button', {
+        name: `settings.species.tracking.seasonal.seasons.${season} settings.species.tracking.seasonal.seasons.startMonth`,
+      })
+    );
+    // The selected month is the description, not part of the name
+    expect(resetMonth).toHaveAccessibleDescription(/march/i);
+    expect(startMonths[0]).toHaveAccessibleDescription(/march/i);
+    expect(startMonths[1]).toHaveAccessibleDescription(/june/i);
   });
 });
