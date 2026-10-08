@@ -129,6 +129,28 @@ describe('NotificationToast', () => {
     expect(action2).toHaveBeenCalledTimes(1);
   });
 
+  it.each([['info'], ['success'], ['warning'], ['error']] as const)(
+    'colours %s text with the content token of its fill',
+    type => {
+      const { container } = toastTest.render({ props: { type, message: `${type} message` } });
+
+      expect(container.querySelector('[role="alert"]')?.className).toContain(
+        `text-[var(--color-${type}-content)]`
+      );
+    }
+  );
+
+  it('outlines action buttons in the toast text colour and gives them no background', () => {
+    toastTest.render({
+      props: { message: 'Action toast', actions: [{ label: 'Retry', onClick: vi.fn() }] },
+    });
+
+    const classes = screen.getByText('Retry').className.split(/\s+/);
+    expect(classes).toContain('border');
+    expect(classes).toContain('border-current');
+    expect(classes.filter(name => name.split(':').pop()?.startsWith('bg-'))).toEqual([]);
+  });
+
   it('renders at different positions', () => {
     const positions = [
       'top-left',
