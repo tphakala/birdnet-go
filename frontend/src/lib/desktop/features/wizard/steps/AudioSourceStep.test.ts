@@ -779,12 +779,15 @@ describe('AudioSourceStep - URL error timing', () => {
     );
   });
 
-  it('shows no URL error on open for a saved stream with an empty URL', async () => {
-    seed({ sources: [] }, [{ name: 'Old', url: '', enabled: true, type: 'rtsp' }]);
+  it.each([
+    { label: 'empty', url: '' },
+    { label: 'blank', url: '   ' },
+  ])('shows no URL error on open for a saved stream with a $label URL', async ({ url }) => {
+    seed({ sources: [] }, [{ name: 'Old', url, enabled: true, type: 'rtsp' }]);
     renderStep(AudioSourceStep);
     await flushAsync();
 
-    expect(await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`)).toHaveValue('');
+    expect(await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`)).toHaveValue(url);
     expectUrlError(null);
   });
 
