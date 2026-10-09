@@ -389,11 +389,31 @@ describe('SelectDropdown', () => {
       selectTest.render({
         props: { options: basicOptions, value: 'apple', clearable: true },
       });
-      (document.activeElement as HTMLElement | null)?.blur();
+      const active = document.activeElement;
+      if (active instanceof HTMLElement) active.blur();
 
       await fireEvent.click(screen.getByLabelText('Clear selection'));
 
       expect(screen.getByRole('combobox')).toHaveFocus();
+    });
+
+    it('keeps focus where an onClear callback moved it', async () => {
+      const target = document.createElement('input');
+      document.body.append(target);
+      selectTest.render({
+        props: {
+          options: basicOptions,
+          value: 'apple',
+          clearable: true,
+          onClear: () => target.focus(),
+        },
+      });
+      screen.getByLabelText('Clear selection').focus();
+
+      await fireEvent.click(screen.getByLabelText('Clear selection'));
+
+      expect(target).toHaveFocus();
+      target.remove();
     });
 
     it('leaves focus on another control when the clear click did not take it', async () => {

@@ -368,7 +368,11 @@
     onChange?.(multiple ? [] : '');
     onClear?.();
     closeDropdown();
-    if (restore) buttonElement?.focus({ preventScroll: true });
+    // A callback may have moved focus on purpose; only take it back from body or the trigger
+    const after = document.activeElement;
+    const stillLost =
+      !after || after === document.body || (buttonElement?.contains(after) ?? false);
+    if (restore && stillLost) buttonElement?.focus({ preventScroll: true });
   }
 
   function handleSearch(event: Event) {
