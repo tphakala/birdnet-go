@@ -115,7 +115,7 @@ func TestSolve_Examples(t *testing.T) {
 			ms(2950), StatusOK, []string{},
 		},
 		{
-			// K = 0.6 -> s_min = 0.8 s exactly, which must stay 0.8 s.
+			// K = 0.45 -> s_min = 0.45 / 0.75 = 0.6 s exactly, which must stay 0.6 s.
 			"exact grid value stays",
 			input(true, ms(2900), []Pair{v24}, map[string]time.Duration{"v24": ms(450)}),
 			ms(2400), StatusCapped, []string{},
@@ -132,6 +132,80 @@ func TestSolve_Examples(t *testing.T) {
 			if tt.wantStatus == StatusOK && len(tt.in.Pairs) > 0 && len(tt.wantUnknown) == 0 {
 				assert.Positive(t, got.MinBaseStep, "a plan with known load reports the smallest sustained step")
 			}
+		})
+	}
+}
+
+// TestSolve_PlanFields pins the readout fields with hand-computed values: the
+// smallest sustained step (zero when no load depends on the overlap or when even
+// zero overlap is over the ceiling), the source and model counts, the per-model
+// latencies and the duties.
+func TestSolve_PlanFields(t *testing.T) {
+	t.Parallel()
+	v24 := pair("s", "v24", 3*time.Second)
+	v30 := pair("s", "v30", 5*time.Second)
+
+	t.Run("Pi 4B capped", func(t *testing.T) {
+		t.Parallel()
+		// K = 0.166 + 3*0.874/5 = 0.6904; s_min = 0.9205 -> 1.0 s.
+		got := Solve(input(true, ms(2800), []Pair{v30, v24}, map[string]time.Duration{"v24": ms(166), "v30": ms(874)}))
+		assert.Equal(t, ms(1000), got.MinBaseStep)
+		assert.Equal(t, 1, got.SourceCount)
+		assert.Equal(t, 2, got.ModelCount)
+		assert.Equal(t, []ModelCost{{ModelID: "v24", Latency: ms(166)}, {ModelID: "v30", Latency: ms(874)}}, got.Models)
+		// At 2.8 s: 0.166/0.2 + 0.874/(5*0.2/3) = 0.83 + 2.622.
+		assert.InDelta(t, 3.452, got.DutyAtConfigured, 1e-3)
+		// At 2.0 s: 0.166/1.0 + 0.874/(5/3) = 0.166 + 0.5244.
+		assert.InDelta(t, 0.6904, got.DutyAtEffective, 1e-3)
+	})
+	t.Run("grid snapping", func(t *testing.T) {
+		t.Parallel()
+		got := Solve(input(true, ms(2900), []Pair{v24}, map[string]time.Duration{"v24": ms(345)}))
+		assert.Equal(t, ms(500), got.MinBaseStep, "0.46 s rounds up to the 100 ms grid")
+	})
+	t.Run("exact grid value", func(t *testing.T) {
+		t.Parallel()
+		got := Solve(input(true, ms(2900), []Pair{v24}, map[string]time.Duration{"v24": ms(450)}))
+		assert.Equal(t, ms(600), got.MinBaseStep)
+	})
+	t.Run("two sources one model", func(t *testing.T) {
+		t.Parallel()
+		got := Solve(input(true, ms(1000), []Pair{pair("a", "v24", 3*time.Second), pair("b", "v24", 3*time.Second)},
+			map[string]time.Duration{"v24": ms(100)}))
+		assert.Equal(t, 2, got.SourceCount)
+		assert.Equal(t, 1, got.ModelCount)
+		assert.InDelta(t, 0.1, got.DutyAtConfigured, 1e-9, "two pairs at a 2 s step, 0.05 each")
+		// 2 * 0.1 / s <= 0.75 needs s >= 0.267 s, snapped to 300 ms.
+		assert.Equal(t, ms(300), got.MinBaseStep, "the configured overlap fits and the minimum step is still reported")
+	})
+	t.Run("configured fits", func(t *testing.T) {
+		t.Parallel()
+		// 0.166 / s <= 0.75 needs s >= 0.221 s, snapped to 300 ms; the configured
+		// 1.0 s step fits and is kept.
+		got := Solve(input(true, ms(2000), []Pair{v24}, map[string]time.Duration{"v24": ms(166)}))
+		assert.Equal(t, StatusOK, got.Status)
+		assert.Equal(t, ms(2000), got.EffectiveBaseOverlap)
+		assert.Equal(t, ms(300), got.MinBaseStep)
+	})
+	t.Run("negative latency reported as zero and unknown", func(t *testing.T) {
+		t.Parallel()
+		got := Solve(input(true, ms(2000), []Pair{v24}, map[string]time.Duration{"v24": ms(-5)}))
+		assert.Equal(t, []ModelCost{{ModelID: "v24", Latency: 0}}, got.Models)
+		assert.Equal(t, []string{"v24"}, got.UnknownLatencyModels)
+	})
+	zero := []struct {
+		name string
+		in   Input
+	}{
+		{"no pairs", input(true, ms(2800), nil, nil)},
+		{"unknown latency only", input(true, ms(2800), []Pair{v30}, nil)},
+		{"bat only under ceiling", input(true, ms(2800), []Pair{batPair("s")}, map[string]time.Duration{"bat": ms(300)})},
+		{"overloaded", input(true, 0, []Pair{v24}, map[string]time.Duration{"v24": ms(2500)})},
+	}
+	for _, tt := range zero {
+		t.Run(tt.name+" has no minimum step", func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, time.Duration(0), Solve(tt.in).MinBaseStep)
 		})
 	}
 }
