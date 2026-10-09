@@ -457,11 +457,15 @@ describe('Error text rules', () => {
     },
   ];
 
-  for (const { file, fills } of COMPONENTS_WITH_ERROR_TEXT) {
+  /** Source text of a listed component; read inside each test so a moved file fails only its tests. */
+  function componentText(file: string): string {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from the fixed list above
-    const text = readFileSync(join(desktopDir, file), 'utf8');
+    return readFileSync(join(desktopDir, file), 'utf8');
+  }
 
+  for (const { file, fills } of COMPONENTS_WITH_ERROR_TEXT) {
     it(`${file} has no plain color: var(--color-error) declaration`, () => {
+      const text = componentText(file);
       // `color:` declarations only; border-color and background-color keep the fill token
       expect(text).not.toMatch(/^\s*color:\s*var\(--color-error[,)]/m);
       expect(text).toMatch(/^\s*color:\s*var\(--text-error\)/m);
@@ -469,7 +473,7 @@ describe('Error text rules', () => {
 
     for (const { selector, declaration } of fills) {
       it(`${file} ${selector} keeps the fill token for its border or tint`, () => {
-        const bodies = ruleBodies(text, selector);
+        const bodies = ruleBodies(componentText(file), selector);
         expect(bodies.length, `${selector} rule found`).toBeGreaterThan(0);
         expect(bodies.some(body => body.includes(declaration))).toBe(true);
       });
