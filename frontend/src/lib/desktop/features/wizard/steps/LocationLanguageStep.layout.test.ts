@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { ComponentProps } from 'svelte';
 
 vi.mock('$lib/utils/api', () => ({
   api: {
@@ -7,8 +8,8 @@ vi.mock('$lib/utils/api', () => ({
   },
 }));
 
-// LocationPickerMap relies on maplibre-gl; LanguageSelector is not under test
-vi.mock('../components/LocationPickerMap.svelte');
+// LocationMap relies on maplibre-gl; LanguageSelector is not under test
+vi.mock('$lib/desktop/components/forms/LocationMap.svelte');
 vi.mock('$lib/desktop/components/ui/LanguageSelector.svelte');
 
 vi.mock('$lib/stores/settings', async () => {
@@ -20,7 +21,19 @@ vi.mock('$lib/stores/settings', async () => {
 });
 
 import LocationLanguageStep from './LocationLanguageStep.svelte';
+import LocationMap from '$lib/desktop/components/forms/LocationMap.svelte';
 import { flushAsync, renderStep } from './stepTestUtils';
+
+/** Props of the last rendered LocationMap (the component is automocked). */
+function latestMapProps(): ComponentProps<typeof LocationMap> {
+  const call = vi.mocked(LocationMap).mock.calls.at(-1);
+  const props = call?.[1];
+  // The lint type checker types a mocked component's call as a one-element tuple,
+  // so it cannot see that the props argument can be missing.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (!props) throw new Error('LocationMap was not rendered');
+  return props;
+}
 
 describe('LocationLanguageStep layout', () => {
   async function renderRoot() {
@@ -39,11 +52,13 @@ describe('LocationLanguageStep layout', () => {
     expect(root.children).toHaveLength(2);
   });
 
-  it('gives the map a height of its own, since the map fills its wrapper', async () => {
+  it('gives the map a fixed height of at least 300 px in both layouts', async () => {
     const root = await renderRoot();
     const mapColumn = root.lastElementChild;
 
-    // Stacked: a fixed height. Side by side: stretch with a floor, never zero
-    expect(mapColumn).toHaveClass('h-36', '@2xl:h-auto', '@2xl:min-h-72');
+    // The map sets its own height, so the column no longer sizes it
+    expect(latestMapProps().mapClass).toBe('h-[300px]');
+    expect(mapColumn).toHaveClass('min-w-0');
+    expect(mapColumn).not.toHaveClass('h-36');
   });
 });

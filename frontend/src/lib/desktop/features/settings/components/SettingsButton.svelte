@@ -19,6 +19,8 @@
   - loadingText: Text to show when loading (default: from translation)
   - variant: Button style variant (primary, secondary, ghost)
   - className: Additional CSS classes
+  - aria-describedby: ID of an element that describes the button (for example
+    the reason it is disabled)
   - children: Button content snippet
 
   @component
@@ -36,6 +38,7 @@
     loadingText?: string;
     variant?: ButtonVariant;
     className?: string;
+    'aria-describedby'?: string;
     children?: import('svelte').Snippet;
   }
 
@@ -46,6 +49,7 @@
     loadingText,
     variant = 'primary',
     className = '',
+    'aria-describedby': ariaDescribedBy,
     children,
   }: Props = $props();
 
@@ -76,6 +80,7 @@
   onclick={() => !isDisabled && onclick?.()}
   disabled={isDisabled}
   aria-busy={loading}
+  aria-describedby={ariaDescribedBy}
 >
   {#if loading}
     <span class="loading loading-spinner loading-xs"></span>

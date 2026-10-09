@@ -17,8 +17,8 @@ vi.mock('$lib/utils/api', () => ({
   },
 }));
 
-// LocationPickerMap relies on maplibre-gl; LanguageSelector is not under test
-vi.mock('../components/LocationPickerMap.svelte');
+// LocationMap relies on maplibre-gl; LanguageSelector is not under test
+vi.mock('$lib/desktop/components/forms/LocationMap.svelte');
 vi.mock('$lib/desktop/components/ui/LanguageSelector.svelte');
 
 vi.mock('$lib/stores/settings', async () => {

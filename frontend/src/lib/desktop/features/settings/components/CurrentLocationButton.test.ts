@@ -278,19 +278,59 @@ describe('CurrentLocationButton', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('reports an insecure origin before checking API availability', async () => {
-    setSecureContext(false);
-    setGeolocation(undefined);
-    const onLocation = vi.fn();
-    testFactory.render({ onLocation });
+  describe('on an insecure origin', () => {
+    const insecureHelp = 'Needs HTTPS or localhost. Search for a place or use the map instead.';
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Use browser location' }));
+    it('is disabled before any click on an insecure origin and explains the HTTPS requirement', async () => {
+      setSecureContext(false);
+      setGeolocation(undefined);
+      const onLocation = vi.fn();
+      testFactory.render({ onLocation });
 
-    expect(toastActions.warning).toHaveBeenCalledWith(
-      'Browser location requires HTTPS or localhost.'
-    );
-    expect(geolocationMock.getCurrentPosition).not.toHaveBeenCalled();
-    expect(onLocation).not.toHaveBeenCalled();
+      const button = screen.getByRole('button', { name: 'Use browser location' });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleDescription(insecureHelp);
+      expect(screen.getByText(insecureHelp)).toBeVisible();
+
+      await fireEvent.click(button);
+
+      expect(toastActions.warning).not.toHaveBeenCalled();
+      expect(geolocationMock.getCurrentPosition).not.toHaveBeenCalled();
+      expect(onLocation).not.toHaveBeenCalled();
+    });
+
+    it('shows the HTTPS explanation in compact mode too', () => {
+      setSecureContext(false);
+      testFactory.render({ compact: true });
+
+      const button = screen.getByRole('button', { name: 'Use browser location' });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleDescription(insecureHelp);
+      expect(screen.queryByText('Automatic location')).not.toBeInTheDocument();
+    });
+
+    it('keeps the HTTPS warning toast as a fallback when the origin turns insecure after rendering', async () => {
+      const onLocation = vi.fn();
+      testFactory.render({ onLocation });
+      setSecureContext(false);
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Use browser location' }));
+
+      expect(toastActions.warning).toHaveBeenCalledWith(
+        'Browser location requires HTTPS or localhost.'
+      );
+      expect(geolocationMock.getCurrentPosition).not.toHaveBeenCalled();
+      expect(onLocation).not.toHaveBeenCalled();
+    });
+
+    it('shows no HTTPS explanation on a secure origin', () => {
+      testFactory.render();
+
+      const button = screen.getByRole('button', { name: 'Use browser location' });
+      expect(button).toBeEnabled();
+      expect(button).not.toHaveAttribute('aria-describedby');
+      expect(screen.queryByText(insecureHelp)).not.toBeInTheDocument();
+    });
   });
 
   it('reports browsers without geolocation support', async () => {

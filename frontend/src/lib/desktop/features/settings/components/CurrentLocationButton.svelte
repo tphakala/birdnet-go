@@ -2,7 +2,10 @@
   Current Location Button
 
   Requests a single position from the browser and reports it to the parent
-  settings form. The parent remains responsible for persisting coordinates.
+  form (the settings page and the setup wizard). The parent remains
+  responsible for persisting coordinates. On an insecure origin (plain HTTP
+  other than localhost) the button is disabled from the start and a line
+  below it explains why.
 -->
 <script lang="ts">
   import { MapPin } from '@lucide/svelte';
@@ -11,6 +14,7 @@
   import { toastActions } from '$lib/stores/toast';
   import { loggers } from '$lib/utils/logger';
   import { formatNumber } from '$lib/utils/formatters';
+  import { generateId } from '$lib/utils/uuid';
   import {
     getBrowserLocationSupport,
     requestBrowserLocation,
@@ -24,7 +28,7 @@
     coordinateIntentVersion?: number;
     onLocation: (_latitude: number, _longitude: number) => void;
     disabled?: boolean;
-    /** Hide the label row and the idle help text; the button and accuracy readout stay. */
+    /** Hide the label row and the idle help text; the button, the accuracy readout and the HTTPS explanation stay. */
     compact?: boolean;
   }
 
@@ -52,6 +56,9 @@
   }: Props = $props();
 
   const logger = loggers.settings;
+  // A document's secure context never changes, so checking once is enough.
+  const insecureOrigin = getBrowserLocationSupport() === 'insecure';
+  const insecureHelpId = generateId('current-location-insecure-help');
   let active = true;
   let nextRequestId = 0;
   let locating = $state(false);
@@ -162,6 +169,8 @@
 
   function useCurrentLocation() {
     const support = getBrowserLocationSupport();
+    // Fallback only: an insecure origin known at render time already disables
+    // the button and explains why.
     if (support === 'insecure') {
       toastActions.warning(
         t('settings.main.sections.rangeFilter.stationLocation.geolocationRequiresHttps')
@@ -201,7 +210,8 @@
   <div class="flex flex-wrap items-center gap-x-3 gap-y-1 xl:flex-col xl:items-start">
     <SettingsButton
       onclick={useCurrentLocation}
-      {disabled}
+      disabled={disabled || insecureOrigin}
+      aria-describedby={insecureOrigin ? insecureHelpId : undefined}
       loading={locating}
       loadingText={t('settings.main.sections.rangeFilter.stationLocation.locating')}
     >
@@ -209,7 +219,11 @@
       {t('settings.main.sections.rangeFilter.stationLocation.useCurrentLocation')}
     </SettingsButton>
 
-    {#if displayedAccuracy !== null}
+    {#if insecureOrigin}
+      <span id={insecureHelpId} class="help-text">
+        {t('settings.main.sections.rangeFilter.stationLocation.geolocationInsecureHelp')}
+      </span>
+    {:else if displayedAccuracy !== null}
       <span class="help-text" role="status" aria-atomic="true">
         {t('settings.main.sections.rangeFilter.stationLocation.accuracy', {
           accuracy: formatNumber(displayedAccuracy),

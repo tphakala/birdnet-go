@@ -270,6 +270,23 @@ describe('SettingsButton', () => {
       expect(button).toHaveAttribute('aria-busy', 'false');
     });
 
+    it('passes aria-describedby to the button', () => {
+      testFactory.render({
+        'aria-describedby': 'settings-button-help',
+      });
+
+      expect(screen.getByRole('button')).toHaveAttribute(
+        'aria-describedby',
+        'settings-button-help'
+      );
+    });
+
+    it('renders no aria-describedby by default', () => {
+      testFactory.render({});
+
+      expect(screen.getByRole('button')).not.toHaveAttribute('aria-describedby');
+    });
+
     it('maintains focus state', () => {
       wrapperFactory.render({
         childContent: 'Focusable',

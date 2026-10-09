@@ -147,6 +147,29 @@ describe('MainSettingsPage location map', () => {
     });
   });
 
+  describe('on an insecure origin', () => {
+    beforeEach(() => {
+      Object.defineProperty(window, 'isSecureContext', { configurable: true, value: false });
+    });
+
+    afterEach(() => {
+      Reflect.deleteProperty(window, 'isSecureContext');
+    });
+
+    it('the settings page disables browser location and explains why on an insecure origin', async () => {
+      setStore({ latitude: 60.123, longitude: 24.456, locationConfigured: true });
+      await openLocationTab();
+
+      const button = screen.getByRole('button', { name: 'Use browser location' });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleDescription(
+        'Needs HTTPS or localhost. Search for a place or use the map instead.'
+      );
+      // The other ways to set the location stay available
+      expect(latestMapProps().placeSearch).toBe(true);
+    });
+  });
+
   describe('with a pending browser location request', () => {
     const geolocation = {
       getCurrentPosition: vi.fn<Geolocation['getCurrentPosition']>(),
