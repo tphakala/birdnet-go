@@ -433,6 +433,10 @@ export type TranslationKey =
   | 'notifications.content.inferenceFailing.title' // params: modelName
   | 'notifications.content.inferenceFailing.message' // params: modelName, failures, runtime
   | 'notifications.content.inferenceFailing.nonFiniteMessage' // params: modelName, failures, runtime
+  | 'notifications.content.analysis.cadenceCappedTitle'
+  | 'notifications.content.analysis.cadenceCappedMessage' // params: models, sources, configured, effective
+  | 'notifications.content.analysis.cadenceOverloadedTitle'
+  | 'notifications.content.analysis.cadenceOverloadedMessage' // params: models, sources
   | 'notifications.loading'
   | 'search.title'
   | 'search.results'
@@ -1842,7 +1846,6 @@ export type TranslationKey =
   | 'settings.main.sections.falsePositiveFilter.levels.balanced'
   | 'settings.main.sections.falsePositiveFilter.levels.strict'
   | 'settings.main.sections.falsePositiveFilter.levels.maximum'
-  | 'settings.main.sections.falsePositiveFilter.hardwareNote'
   | 'settings.main.sections.falsePositiveFilter.overlapAdjusted' // params: overlap
   | 'settings.main.sections.falsePositiveFilter.overlapReduced' // params: overlap
   | 'settings.main.sections.falsePositiveFilter.levelNames.off'
@@ -1853,6 +1856,18 @@ export type TranslationKey =
   | 'settings.main.sections.falsePositiveFilter.levelNames.maximum'
   | 'settings.main.sections.falsePositiveFilter.levelNames.unknown'
   | 'settings.main.sections.falsePositiveFilter.warningOff'
+  | 'settings.main.sections.falsePositiveFilter.readoutTitle'
+  | 'settings.main.sections.falsePositiveFilter.readoutPreviewTitle'
+  | 'settings.main.sections.falsePositiveFilter.readoutIntro' // params: seconds
+  | 'settings.main.sections.falsePositiveFilter.readoutLine' // params: model, count, windows, step
+  | 'settings.main.sections.falsePositiveFilter.readoutPreview'
+  | 'settings.main.sections.falsePositiveFilter.readoutPending'
+  | 'settings.main.sections.falsePositiveFilter.capNoticeTitle'
+  | 'settings.main.sections.falsePositiveFilter.capNotice' // params: models, sources, configured, effective
+  | 'settings.main.sections.falsePositiveFilter.overloadedNoticeTitle'
+  | 'settings.main.sections.falsePositiveFilter.overloadedNotice' // params: models, sources
+  | 'settings.main.sections.falsePositiveFilter.unknownLatency' // params: models
+  | 'settings.main.sections.falsePositiveFilter.cpuNote'
   | 'settings.main.sections.rangeFilter.title'
   | 'settings.main.sections.rangeFilter.description'
   | 'settings.main.sections.rangeFilter.stationLocation.label'
@@ -4379,6 +4394,16 @@ export type TranslationParams = {
     failures: string | number;
     runtime: string | number;
   };
+  'notifications.content.analysis.cadenceCappedMessage': {
+    models: string | number;
+    sources: string | number;
+    configured: string | number;
+    effective: string | number;
+  };
+  'notifications.content.analysis.cadenceOverloadedMessage': {
+    models: string | number;
+    sources: string | number;
+  };
   'search.resultsCountOther': { count: string | number };
   'search.review.reviewDetection': { species: string | number };
   'search.detailsPanel.expandDetails': { species: string | number };
@@ -4592,6 +4617,24 @@ export type TranslationParams = {
   };
   'settings.main.sections.falsePositiveFilter.overlapAdjusted': { overlap: string | number };
   'settings.main.sections.falsePositiveFilter.overlapReduced': { overlap: string | number };
+  'settings.main.sections.falsePositiveFilter.readoutIntro': { seconds: string | number };
+  'settings.main.sections.falsePositiveFilter.readoutLine': {
+    model: string | number;
+    count: string | number;
+    windows: string | number;
+    step: string | number;
+  };
+  'settings.main.sections.falsePositiveFilter.capNotice': {
+    models: string | number;
+    sources: string | number;
+    configured: string | number;
+    effective: string | number;
+  };
+  'settings.main.sections.falsePositiveFilter.overloadedNotice': {
+    models: string | number;
+    sources: string | number;
+  };
+  'settings.main.sections.falsePositiveFilter.unknownLatency': { models: string | number };
   'settings.main.sections.rangeFilter.stationLocation.accuracy': { accuracy: string | number };
   'settings.support.supportReport.githubRequired.description': { createIssueLink: string | number };
   'settings.support.supportReport.githubIssue.helper': {

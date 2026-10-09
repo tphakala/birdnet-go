@@ -125,8 +125,10 @@ func planCadenceForConfigs(bn *classifier.Orchestrator, configs []sourceConfigWi
 }
 
 // publishCadencePlan publishes the plan on the orchestrator, logs it, and tells
-// open UIs to refetch when the plan's outcome changed. A plan identical to the
-// published one is left in place and logged at debug level only.
+// open UIs to refetch when the plan's outcome or the inputs the settings page
+// shows (configured overlap, source and model counts) changed; a change in the
+// duty estimate alone does not. A plan identical to the published one is left
+// in place and logged at debug level only.
 func (p *AudioPipelineService) publishCadencePlan(bn *classifier.Orchestrator, plan *cadence.Plan, operation string) {
 	log := audiocore.GetLogger()
 	prev := bn.CadencePlan()
@@ -138,6 +140,7 @@ func (p *AudioPipelineService) publishCadencePlan(bn *classifier.Orchestrator, p
 		return
 	}
 	bn.SetCadencePlan(plan)
+	p.cadenceNotice.observe(plan)
 
 	log.Info("analysis cadence planned",
 		logger.Float64("configured_overlap", plan.ConfiguredBaseOverlap.Seconds()),
@@ -150,7 +153,7 @@ func (p *AudioPipelineService) publishCadencePlan(bn *classifier.Orchestrator, p
 		logger.Any("unknown_latency_models", plan.UnknownLatencyModels),
 		logger.String("operation", operation))
 
-	if cadence.SameOutcome(prev, plan) {
+	if cadence.SameOutcome(prev, plan) && sameCadenceInputs(prev, plan) {
 		return
 	}
 	if p.apiService != nil {
@@ -158,6 +161,14 @@ func (p *AudioPipelineService) publishCadencePlan(bn *classifier.Orchestrator, p
 			ctrl.BroadcastInferenceTopologyChanged()
 		}
 	}
+}
+
+// sameCadenceInputs reports whether two non-nil plans were solved for the same
+// configured overlap, source count and model count.
+func sameCadenceInputs(a, b *cadence.Plan) bool {
+	return a.ConfiguredBaseOverlap == b.ConfiguredBaseOverlap &&
+		a.SourceCount == b.SourceCount &&
+		a.ModelCount == b.ModelCount
 }
 
 // planAndPublishCadence plans for the given configs and publishes the result

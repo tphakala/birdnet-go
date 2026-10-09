@@ -16,6 +16,7 @@ import {
   acousticModelsError,
   acousticModelsLoaded,
   acousticModelsState,
+  analysisCadence,
   refreshAcousticModels,
   resetAcousticModelsForTest,
   subscribeAcousticModels,
@@ -166,6 +167,82 @@ describe('acousticModels store', () => {
       await refreshAcousticModels();
       expect(acousticModelsState()).toBe('degraded');
       expect(acousticModelAvailability()).toEqual({ kind: 'unknown' });
+    });
+
+    it('keeps the planned analysis cadence from the same snapshot', async () => {
+      const cadence = {
+        status: 'capped',
+        configuredOverlapSec: 2.8,
+        effectiveOverlapSec: 1.8,
+        minBaseStepMs: 1200,
+        estimatedDutyConfigured: 1.4,
+        estimatedDutyEffective: 0.58,
+        dutyCeiling: 0.75,
+        sourceCount: 1,
+        modelCount: 2,
+        unknownLatencyModels: ['Perch_V2'],
+        models: [
+          {
+            id: 'BirdNET_V2.4',
+            name: 'BirdNET v2.4',
+            clipMs: 3000,
+            stepMs: 1200,
+            probeLatencyMs: 166,
+            confirmations: 4,
+            windowsInReference: 5,
+          },
+        ],
+      };
+      apiGet.mockResolvedValueOnce({ ...snapshot('ok'), analysisCadence: cadence });
+      await refreshAcousticModels();
+      expect(analysisCadence()).toEqual(cadence);
+    });
+
+    it('reports no cadence for an older server, a plan not yet published, or a malformed one', async () => {
+      apiGet.mockResolvedValueOnce(snapshot('ok'));
+      await refreshAcousticModels();
+      expect(analysisCadence()).toBeNull();
+
+      apiGet.mockResolvedValueOnce({
+        ...snapshot('ok'),
+        analysisCadence: { status: 'sideways', models: 'none' },
+      });
+      await refreshAcousticModels();
+      expect(analysisCadence()).toBeNull();
+    });
+
+    it('drops malformed cadence model entries and a null unknown list', async () => {
+      apiGet.mockResolvedValueOnce({
+        ...snapshot('ok'),
+        analysisCadence: {
+          status: 'ok',
+          configuredOverlapSec: 2,
+          effectiveOverlapSec: 2,
+          minBaseStepMs: 0,
+          estimatedDutyConfigured: 0.2,
+          estimatedDutyEffective: 0.2,
+          dutyCeiling: 0.75,
+          sourceCount: 1,
+          modelCount: 1,
+          unknownLatencyModels: null,
+          models: [
+            null,
+            { id: 'x' },
+            {
+              id: 'BirdNET_V2.4',
+              name: 'BirdNET v2.4',
+              clipMs: 3000,
+              stepMs: 1000,
+              confirmations: 2,
+              windowsInReference: 6,
+            },
+          ],
+        },
+      });
+      await refreshAcousticModels();
+      const cadence = analysisCadence();
+      expect(cadence?.unknownLatencyModels).toEqual([]);
+      expect(cadence?.models.map(m => m.id)).toEqual(['BirdNET_V2.4']);
     });
 
     it('ignores a malformed defaultTargets payload', async () => {

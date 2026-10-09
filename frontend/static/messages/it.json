@@ -515,6 +515,12 @@
         "title": "{modelName} fallisce ogni analisi",
         "message": "{modelName} è caricato, ma le sue ultime {failures} analisi consecutive sono fallite su {runtime}: l'inferenza ha restituito un errore. L'audio viene acquisito, ma questo modello non rileva nulla. Controlla il modello nella pagina Sistema > Modelli IA.",
         "nonFiniteMessage": "{modelName} è caricato, ma le sue ultime {failures} analisi consecutive sono fallite su {runtime}: il modello ha restituito punteggi non validi (NaN o infiniti). L'audio viene acquisito, ma questo modello non rileva nulla. Controlla il modello nella pagina Sistema > Modelli IA."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Sovrapposizione dell'analisi limitata per questo dispositivo",
+        "cadenceCappedMessage": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} con la sovrapposizione configurata di {configured} s supera la capacità misurata di questo dispositivo, quindi l'audio viene analizzato con {effective} s di sovrapposizione. Per questo il filtro falsi positivi richiede meno conferme. Le impostazioni salvate non cambiano; vedi Impostazioni > Analisi.",
+        "cadenceOverloadedTitle": "Questo dispositivo non riesce a tenere il passo con l'analisi audio",
+        "cadenceOverloadedMessage": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} supera la capacità misurata di questo dispositivo anche senza sovrapposizione, quindi l'analisi può accumulare ritardo e alcuni rilevamenti possono andare persi. Attiva meno modelli o sorgenti audio."
       }
     },
     "loading": "Caricamento notifiche..."
@@ -2388,10 +2394,9 @@
             "lenient": "Per audio di bassa qualità (telecamere RTSP, microfoni webcam)",
             "moderate": "Equilibrato per configurazioni hobby tipiche",
             "balanced": "Comportamento originale pre-settembre 2025",
-            "strict": "RPi 4+ necessario. Per microfoni di alta qualità",
-            "maximum": "RPi 4+ necessario. Per microfoni di grado professionale"
+            "strict": "Per microfoni di alta qualità",
+            "maximum": "Per microfoni di grado professionale"
           },
-          "hardwareNote": "I livelli Rigoroso e Massimo richiedono impostazioni di sovrapposizione più alte e più risorse CPU. Hardware RPi 4 o migliore è richiesto per questi livelli.",
           "overlapAdjusted": "Impostazione sovrapposizione regolata automaticamente a {overlap}s per soddisfare i requisiti del filtro",
           "overlapReduced": "Impostazione sovrapposizione ridotta a {overlap}s per corrispondere al livello del filtro",
           "levelNames": {
@@ -2403,7 +2408,19 @@
             "maximum": "Massimo",
             "unknown": "Sconosciuto"
           },
-          "warningOff": "Senza filtraggio, qualsiasi rilevamento sopra la soglia di confidenza viene accettato immediatamente. Questo produce tipicamente diversi falsi positivi al giorno. Anche un filtraggio basso migliora significativamente la qualità dei risultati."
+          "warningOff": "Senza filtraggio, qualsiasi rilevamento sopra la soglia di confidenza viene accettato immediatamente. Questo produce tipicamente diversi falsi positivi al giorno. Anche un filtraggio basso migliora significativamente la qualità dei risultati.",
+          "readoutTitle": "Conferme richieste ora",
+          "readoutPreviewTitle": "Conferme richieste dopo il salvataggio (stima)",
+          "readoutIntro": "Un rilevamento viene accettato quando abbastanza finestre di analisi entro {seconds} secondi concordano.",
+          "readoutLine": "{model}: {count} su {windows} finestre, una nuova finestra ogni {step} s",
+          "readoutPreview": "Stima basata sulle modifiche non salvate. Il limite del dispositivo viene ricontrollato dopo il salvataggio.",
+          "readoutPending": "Le impostazioni salvate sono in fase di applicazione. Questi valori sono stime fino al riavvio dell'analisi.",
+          "capNoticeTitle": "Sovrapposizione limitata a quanto questo dispositivo può elaborare",
+          "capNotice": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} con la sovrapposizione configurata di {configured} s supera la capacità misurata di questo dispositivo, quindi l'audio viene analizzato con {effective} s di sovrapposizione. Per questo il filtro richiede meno conferme che a {configured} s. Le impostazioni salvate non cambiano.",
+          "overloadedNoticeTitle": "Questo dispositivo non riesce a tenere il passo con l'analisi",
+          "overloadedNotice": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} supera la capacità misurata di questo dispositivo anche senza sovrapposizione. L'analisi può accumulare ritardo e alcuni rilevamenti possono andare persi. Attiva meno modelli o sorgenti audio.",
+          "unknownLatency": "Non è stato possibile misurare il tempo di elaborazione per {models}, quindi non viene considerato quando la sovrapposizione viene limitata. L'analisi può comunque accumulare ritardo.",
+          "cpuNote": "Un'intensità maggiore analizza più spesso l'audio sovrapposto, il che costa tempo di CPU per ogni modello e sorgente audio attivi. BirdNET-Go limita automaticamente la sovrapposizione a quanto questo dispositivo può elaborare."
         },
         "rangeFilter": {
           "title": "Filtro Intervallo",

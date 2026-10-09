@@ -47,6 +47,19 @@
     MODEL_OPERATION_IN_PROGRESS_KEY,
   } from '$lib/utils/modelsApi';
   import { invalidateModels } from '$lib/stores/models.svelte';
+  import {
+    analysisCadence,
+    refreshAcousticModels,
+    watchAcousticModels,
+  } from '$lib/stores/acousticModels.svelte';
+  import {
+    FILTER_ACTIVE_MIN_LEVEL,
+    planLagsSettings,
+    previewReadout,
+    sameOverlap,
+    savedReadout,
+    type CadenceReadoutRow,
+  } from '$lib/desktop/features/settings/utils/fpCadence';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
@@ -593,7 +606,10 @@
     const minDet = calculateMinDetections(level, overlap);
     const baseDescription = t(levelData.descriptionKey);
 
-    if (level === 0) return baseDescription;
+    // With a published cadence plan the readout below the control states the
+    // real per-model counts, so the description must not repeat a count computed
+    // from the configured overlap, which the device may not be running.
+    if (level === 0 || cadence) return baseDescription;
 
     return t('settings.main.sections.falsePositiveFilter.detectionCount', {
       count: minDet.toString(),
@@ -634,6 +650,78 @@
       );
     }
   }
+
+  // ── False Positive Filter cadence readout ─────────────────────────────
+  // The planned analysis cadence comes from GET /api/v2/system/inference and
+  // follows re-plans through the topology stream. It is null for an older
+  // server or before the audio pipeline has published a plan; the control's
+  // description then falls back to the count from the configured overlap.
+  const cadence = $derived(analysisCadence());
+  const savedFpLevel = $derived(store.originalData.realtime?.falsePositiveFilter?.level ?? 0);
+  const savedOverlap = $derived(store.originalData.birdnet?.overlap ?? 0);
+  const formOverlap = $derived(birdnet?.overlap ?? 0);
+  const fpFilterActive = $derived(falsePositiveFilter.level >= FILTER_ACTIVE_MIN_LEVEL);
+  // Unsaved edits to the level or the overlap the level adjusts.
+  const fpCadenceEdited = $derived(
+    falsePositiveFilter.level !== savedFpLevel || !sameOverlap(formOverlap, savedOverlap)
+  );
+  // Saved, but the server has not re-planned for it yet.
+  const fpCadencePending = $derived(
+    !fpCadenceEdited && cadence !== null && planLagsSettings(cadence, savedOverlap, savedFpLevel)
+  );
+  const fpReadoutRows = $derived.by<CadenceReadoutRow[]>(() => {
+    if (!cadence || !fpFilterActive) return [];
+    if (fpCadenceEdited || fpCadencePending) {
+      return previewReadout(cadence, formOverlap, falsePositiveFilter.level);
+    }
+    return savedReadout(cadence);
+  });
+  const fpReadoutIsEstimate = $derived(fpCadenceEdited || fpCadencePending);
+  const fpUnknownLatencyNames = $derived.by<string[]>(() => {
+    if (!cadence) return [];
+    const names = new Map(cadence.models.map(m => [m.id, m.name]));
+    return cadence.unknownLatencyModels.map(id => names.get(id) ?? id);
+  });
+
+  const SECONDS_DECIMALS = 1;
+  const WINDOW_ROUNDING = 10;
+
+  /** Seconds with one decimal, in the user's number format. */
+  function formatSeconds(seconds: number): string {
+    return formatNumber(seconds, SECONDS_DECIMALS);
+  }
+
+  /** Window count: whole numbers without decimals, fractions with one. */
+  function formatWindows(windows: number): string {
+    const rounded = Math.round(windows * WINDOW_ROUNDING) / WINDOW_ROUNDING;
+    return formatNumber(rounded, Number.isInteger(rounded) ? 0 : SECONDS_DECIMALS);
+  }
+
+  /** Model names joined into one list for the unknown-latency note. */
+  function formatModelList(names: string[]): string {
+    return names.join(', ');
+  }
+
+  // Keep the cadence readout live while the page is open: the topology stream
+  // announces each re-plan.
+  $effect(() => watchAcousticModels());
+
+  // A saved level change that stays on one side of the filter on/off line does
+  // not re-plan, so no topology event follows; the per-model counts the server
+  // reports still change. Refetch when the saved level or overlap changes. The
+  // first observation after settings load is skipped (the watch already fetched).
+  let fpSavedKey: string | null = null;
+  $effect(() => {
+    if (!store.originalData.realtime) return; // settings not loaded yet
+    const key = `${savedFpLevel}:${savedOverlap}`;
+    if (fpSavedKey === null) {
+      fpSavedKey = key;
+      return;
+    }
+    if (key === fpSavedKey) return;
+    fpSavedKey = key;
+    void refreshAcousticModels();
+  });
 
   // ── Range filter state and functions ──────────────────────────────────
   interface RangeFilterSpecies {
@@ -1598,9 +1686,104 @@
           {#snippet icon()}<AlertTriangle class="size-4 text-[var(--color-warning)]" />{/snippet}
           <span>{t('settings.main.sections.falsePositiveFilter.warningOff')}</span>
         </SettingsNote>
-      {:else if falsePositiveFilter.level >= 4}
+      {:else}
+        {#if cadence?.status === 'capped'}
+          <div
+            class="mt-4 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
+            role="note"
+            data-testid="fp-cadence-capped"
+          >
+            <TriangleAlert
+              class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
+              aria-hidden="true"
+            />
+            <div class="text-[var(--color-base-content)]">
+              <p class="font-medium">
+                {t('settings.main.sections.falsePositiveFilter.capNoticeTitle')}
+              </p>
+              <p class="mt-1">
+                {t('settings.main.sections.falsePositiveFilter.capNotice', {
+                  models: cadence.modelCount,
+                  sources: cadence.sourceCount,
+                  configured: formatSeconds(cadence.configuredOverlapSec),
+                  effective: formatSeconds(cadence.effectiveOverlapSec),
+                })}
+              </p>
+            </div>
+          </div>
+        {:else if cadence?.status === 'overloaded'}
+          <div
+            class="mt-4 flex items-start gap-2 rounded-lg bg-[var(--color-error)]/10 p-3 text-sm"
+            role="note"
+            data-testid="fp-cadence-overloaded"
+          >
+            <XCircle class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-error)]" aria-hidden="true" />
+            <div class="text-[var(--color-base-content)]">
+              <p class="font-medium">
+                {t('settings.main.sections.falsePositiveFilter.overloadedNoticeTitle')}
+              </p>
+              <p class="mt-1">
+                {t('settings.main.sections.falsePositiveFilter.overloadedNotice', {
+                  models: cadence.modelCount,
+                  sources: cadence.sourceCount,
+                })}
+              </p>
+            </div>
+          </div>
+        {/if}
+
         <SettingsNote>
-          <span>{t('settings.main.sections.falsePositiveFilter.hardwareNote')}</span>
+          {#if fpReadoutRows.length > 0}
+            <div data-testid="fp-cadence-readout">
+              <p class="font-medium text-[var(--color-base-content)]">
+                {fpReadoutIsEstimate
+                  ? t('settings.main.sections.falsePositiveFilter.readoutPreviewTitle')
+                  : t('settings.main.sections.falsePositiveFilter.readoutTitle')}
+              </p>
+              <p class="mt-1 text-[var(--color-base-content)]/80">
+                {t('settings.main.sections.falsePositiveFilter.readoutIntro', {
+                  seconds: REFERENCE_WINDOW_SECONDS,
+                })}
+              </p>
+              <ul class="mt-2 space-y-1 text-[var(--color-base-content)]">
+                {#each fpReadoutRows as row (row.id)}
+                  <li class="tabular-nums">
+                    {t('settings.main.sections.falsePositiveFilter.readoutLine', {
+                      model: row.name,
+                      count: row.confirmations,
+                      windows: formatWindows(row.windows),
+                      step: formatSeconds(row.stepSeconds),
+                    })}
+                  </li>
+                {/each}
+              </ul>
+              {#if fpReadoutIsEstimate}
+                <p class="mt-2 text-xs text-[var(--color-base-content)]/80">
+                  {fpCadenceEdited
+                    ? t('settings.main.sections.falsePositiveFilter.readoutPreview')
+                    : t('settings.main.sections.falsePositiveFilter.readoutPending')}
+                </p>
+              {/if}
+            </div>
+          {/if}
+          {#if fpUnknownLatencyNames.length > 0}
+            <p
+              class={cn(fpReadoutRows.length > 0 && 'mt-2', 'text-[var(--color-base-content)]/80')}
+              data-testid="fp-cadence-unknown-latency"
+            >
+              {t('settings.main.sections.falsePositiveFilter.unknownLatency', {
+                models: formatModelList(fpUnknownLatencyNames),
+              })}
+            </p>
+          {/if}
+          <p
+            class={cn(
+              (fpReadoutRows.length > 0 || fpUnknownLatencyNames.length > 0) && 'mt-2',
+              'text-[var(--color-base-content)]/80'
+            )}
+          >
+            {t('settings.main.sections.falsePositiveFilter.cpuNote')}
+          </p>
         </SettingsNote>
       {/if}
     </SettingsSection>

@@ -515,6 +515,12 @@
         "title": "{modelName} fails every analysis",
         "message": "{modelName} is loaded, but its last {failures} analyses in a row failed on {runtime}: inference returned an error. Audio is captured but this model detects nothing. Check the model on the System > AI Models page.",
         "nonFiniteMessage": "{modelName} is loaded, but its last {failures} analyses in a row failed on {runtime}: the model returned invalid (NaN or infinite) scores. Audio is captured but this model detects nothing. Check the model on the System > AI Models page."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Analysis overlap limited for this device",
+        "cadenceCappedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} at the configured {configured} s overlap exceeds the measured capacity of this device, so audio is analyzed with {effective} s overlap. The false positive filter needs fewer confirmations as a result. Your saved settings are unchanged; see Settings > Analysis.",
+        "cadenceOverloadedTitle": "This device cannot keep up with audio analysis",
+        "cadenceOverloadedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap, so analysis can fall behind and detections can be missed. Enable fewer models or audio sources."
       }
     },
     "loading": "Loading notifications..."
@@ -2388,10 +2394,9 @@
             "lenient": "For low-quality audio (RTSP cameras, webcam mics)",
             "moderate": "Balanced for typical hobby setups",
             "balanced": "Original pre-Sept 2025 behavior",
-            "strict": "RPi 4+ needed. For high-quality microphones",
-            "maximum": "RPi 4+ needed. For professional-grade microphones"
+            "strict": "For high-quality microphones",
+            "maximum": "For professional-grade microphones"
           },
-          "hardwareNote": "Strict and Maximum levels require higher overlap settings and more CPU resources. RPi 4 or better hardware is required for these levels.",
           "overlapAdjusted": "Overlap setting automatically adjusted to {overlap}s to meet filter requirements",
           "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level",
           "levelNames": {
@@ -2403,7 +2408,19 @@
             "maximum": "Maximum",
             "unknown": "Unknown"
           },
-          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
+          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality.",
+          "readoutTitle": "Confirmations required now",
+          "readoutPreviewTitle": "Confirmations required after saving (estimate)",
+          "readoutIntro": "A detection is accepted when enough analysis windows within {seconds} seconds agree.",
+          "readoutLine": "{model}: {count} of {windows} windows, a new window every {step} s",
+          "readoutPreview": "Estimated from your unsaved changes. The device limit is checked again after saving.",
+          "readoutPending": "The saved settings are being applied. These values are estimates until analysis restarts.",
+          "capNoticeTitle": "Overlap limited to what this device can process",
+          "capNotice": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} at the configured {configured} s overlap exceeds the measured capacity of this device, so audio is analyzed with {effective} s overlap. The filter therefore needs fewer confirmations than at {configured} s. Your saved settings are unchanged.",
+          "overloadedNoticeTitle": "This device cannot keep up with analysis",
+          "overloadedNotice": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap. Analysis can fall behind and detections can be missed. Enable fewer models or audio sources.",
+          "unknownLatency": "Processing time could not be measured for {models}, so it is not counted when the overlap is limited. Analysis may still fall behind.",
+          "cpuNote": "A higher strength analyzes overlapping audio more often, which costs CPU time for every enabled model and audio source. BirdNET-Go limits the overlap automatically to what this device can process."
         },
         "rangeFilter": {
           "title": "Range Filter",

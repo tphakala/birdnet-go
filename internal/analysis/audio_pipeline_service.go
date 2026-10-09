@@ -94,6 +94,10 @@ type AudioPipelineService struct {
 	// by removeAllSoundLevelConsumers.
 	soundLevelConsumers map[string]string
 
+	// cadenceNotice is the bell notice for a first cadence plan that is capped
+	// or overloaded (see publishCadencePlan).
+	cadenceNotice cadenceNotice
+
 	// routeFailedLastPass records source IDs whose buffer route failed to come up on
 	// the previous reconfigure pass. It implements the "survives a reconfigure"
 	// suppression for #4208 (see routeReportDecision): a transient AddRoute failure

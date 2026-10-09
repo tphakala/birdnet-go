@@ -3,14 +3,16 @@
  *
  * Mirrors the classifier verdict served by GET /api/v2/system/inference
  * (`acousticModelsState`, `defaultTargets`, and the loaded models whose every
- * analysis fails) as module-level rune state shared by the dashboard banner and
- * the audio source editors.
+ * analysis fails) and the planned analysis cadence (`analysisCadence`) as
+ * module-level rune state shared by the dashboard banner, the audio source
+ * editors and the false positive filter readout on the analysis settings page.
  *
  * - subscribeAcousticModels(): fetch once for the first subscriber (and again on
  *   every remount after the last one left), cached for the rest. Editors use it.
  * - watchAcousticModels(): subscribe plus one shared topology SSE while any
- *   watcher is mounted, so the banner clears the moment a model loads or recovers. Only the
- *   dashboard banner uses it, so a dashboard holds a single extra SSE.
+ *   watcher is mounted, so the banner clears the moment a model loads or recovers
+ *   and the cadence readout follows a re-plan. The dashboard banner and the
+ *   analysis settings page use it; watchers share the one SSE.
  *
  * There are no timers: state refreshes on (re)mount, on SSE (re)connect and on
  * the topology-changed event. The endpoint and the stream are auth-protected, so
@@ -24,6 +26,9 @@ import { buildAppUrl } from '$lib/utils/urlHelpers';
 import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
 import {
   MODEL_HEALTH_FAILING,
+  type AnalysisCadenceInfo,
+  type AnalysisCadenceModel,
+  type AnalysisCadenceStatus,
   type InferenceStatusResponse,
 } from '$lib/desktop/features/system/inference.types';
 import { isNoAcousticModelState, type AcousticModelAvailability } from '$lib/types/models';
@@ -52,6 +57,8 @@ let state = $state<string | null>(null);
 let defaultTargets = $state<string[]>([]);
 /** Loaded models whose every analysis window fails, in snapshot order. */
 let failingModels = $state<FailingModel[]>([]);
+/** Planned analysis cadence; null until a plan is published, or on older servers. */
+let cadence = $state<AnalysisCadenceInfo | null>(null);
 /** True once a fetch has succeeded; the state is then meaningful. */
 let loaded = $state(false);
 /** True when the most recent fetch failed (a stale `state` may still be shown). */
@@ -76,6 +83,15 @@ export function acousticModelsError(): boolean {
 
 export function acousticDefaultTargets(): readonly string[] {
   return defaultTargets;
+}
+
+/**
+ * The planned analysis cadence from the last successful fetch, or null when the
+ * server has not published a plan yet, is too old to report one, or sent a
+ * malformed one.
+ */
+export function analysisCadence(): AnalysisCadenceInfo | null {
+  return cadence;
 }
 
 /** A loaded model that fails every analysis window. */
@@ -119,6 +135,75 @@ export function acousticModelAvailability(): AcousticModelAvailability {
   return { kind: 'unknown' };
 }
 
+const CADENCE_STATUSES: readonly AnalysisCadenceStatus[] = [
+  'ok',
+  'capped',
+  'overloaded',
+  'filterOff',
+];
+
+function isCadenceStatus(value: unknown): value is AnalysisCadenceStatus {
+  return CADENCE_STATUSES.some(status => status === value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function cadenceModelOf(value: unknown): AnalysisCadenceModel | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const m: Partial<Record<keyof AnalysisCadenceModel, unknown>> = value;
+  if (
+    typeof m.id !== 'string' ||
+    !isFiniteNumber(m.clipMs) ||
+    !isFiniteNumber(m.stepMs) ||
+    !isFiniteNumber(m.confirmations) ||
+    !isFiniteNumber(m.windowsInReference)
+  ) {
+    return null;
+  }
+  const model: AnalysisCadenceModel = {
+    id: m.id,
+    name: typeof m.name === 'string' && m.name !== '' ? m.name : m.id,
+    clipMs: m.clipMs,
+    stepMs: m.stepMs,
+    confirmations: m.confirmations,
+    windowsInReference: m.windowsInReference,
+  };
+  if (isFiniteNumber(m.probeLatencyMs)) model.probeLatencyMs = m.probeLatencyMs;
+  return model;
+}
+
+/** Validates the snapshot's `analysisCadence`; null when absent or malformed. */
+function analysisCadenceOf(value: unknown): AnalysisCadenceInfo | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const c: Partial<Record<keyof AnalysisCadenceInfo, unknown>> = value;
+  if (
+    !isCadenceStatus(c.status) ||
+    !isFiniteNumber(c.configuredOverlapSec) ||
+    !isFiniteNumber(c.effectiveOverlapSec) ||
+    !Array.isArray(c.models)
+  ) {
+    return null;
+  }
+  const numberOr = (v: unknown): number => (isFiniteNumber(v) ? v : 0);
+  return {
+    status: c.status,
+    configuredOverlapSec: c.configuredOverlapSec,
+    effectiveOverlapSec: c.effectiveOverlapSec,
+    minBaseStepMs: numberOr(c.minBaseStepMs),
+    estimatedDutyConfigured: numberOr(c.estimatedDutyConfigured),
+    estimatedDutyEffective: numberOr(c.estimatedDutyEffective),
+    dutyCeiling: numberOr(c.dutyCeiling),
+    sourceCount: numberOr(c.sourceCount),
+    modelCount: numberOr(c.modelCount),
+    unknownLatencyModels: Array.isArray(c.unknownLatencyModels)
+      ? c.unknownLatencyModels.filter((id): id is string => typeof id === 'string')
+      : [],
+    models: c.models.map(cadenceModelOf).filter((m): m is AnalysisCadenceModel => m !== null),
+  };
+}
+
 function applySnapshot(data: unknown): void {
   const snapshot: Partial<InferenceStatusResponse> =
     typeof data === 'object' && data !== null ? data : {};
@@ -128,6 +213,8 @@ function applySnapshot(data: unknown): void {
     ? snapshot.defaultTargets.filter((target): target is string => typeof target === 'string')
     : [];
   failingModels = failingModelsOf(snapshot.models);
+  // An older server, or one whose pipeline has not published a plan yet, omits it.
+  cadence = analysisCadenceOf(snapshot.analysisCadence);
 }
 
 async function fetchSnapshot(): Promise<void> {
@@ -243,6 +330,7 @@ export function resetAcousticModelsForTest(): void {
   state = null;
   defaultTargets = [];
   failingModels = [];
+  cadence = null;
   loaded = false;
   error = false;
   subscribers = 0;

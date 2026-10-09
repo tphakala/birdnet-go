@@ -234,4 +234,12 @@ const (
 	MsgInferenceFailingTitle            = "notifications.content.inferenceFailing.title"
 	MsgInferenceFailingMessage          = "notifications.content.inferenceFailing.message"
 	MsgInferenceFailingNonFiniteMessage = "notifications.content.inferenceFailing.nonFiniteMessage"
+
+	// Analysis cadence notices: the first cadence plan of the process limits the
+	// analysis overlap to what the hardware sustains (capped), or even zero overlap
+	// exceeds it (overloaded).
+	MsgCadenceCappedTitle       = "notifications.content.analysis.cadenceCappedTitle"
+	MsgCadenceCappedMessage     = "notifications.content.analysis.cadenceCappedMessage"
+	MsgCadenceOverloadedTitle   = "notifications.content.analysis.cadenceOverloadedTitle"
+	MsgCadenceOverloadedMessage = "notifications.content.analysis.cadenceOverloadedMessage"
 )

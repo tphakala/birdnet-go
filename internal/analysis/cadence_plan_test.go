@@ -479,3 +479,24 @@ func TestReplanCadence_NoBackendIsNoOp(t *testing.T) {
 	assert.NotPanics(t, p.replanCadence)
 	assert.Empty(t, p.restartChan)
 }
+
+func TestSameCadenceInputs(t *testing.T) {
+	t.Parallel()
+	base := cadence.Plan{ConfiguredBaseOverlap: 2 * time.Second, SourceCount: 1, ModelCount: 2, DutyAtEffective: 0.5}
+
+	drift := base
+	drift.DutyAtEffective = 0.6
+	assert.True(t, sameCadenceInputs(&base, &drift), "a duty change alone is not a new input")
+
+	overlap := base
+	overlap.ConfiguredBaseOverlap = 2500 * time.Millisecond
+	assert.False(t, sameCadenceInputs(&base, &overlap), "a new configured overlap must reach the settings page")
+
+	sources := base
+	sources.SourceCount = 2
+	assert.False(t, sameCadenceInputs(&base, &sources))
+
+	models := base
+	models.ModelCount = 3
+	assert.False(t, sameCadenceInputs(&base, &models))
+}

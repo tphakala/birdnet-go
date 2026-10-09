@@ -515,6 +515,12 @@
         "title": "{modelName} misslyckas vid varje analys",
         "message": "{modelName} är inläst, men de senaste {failures} analyserna i rad misslyckades på {runtime}: inferensen returnerade ett fel. Ljud spelas in, men den här modellen upptäcker ingenting. Kontrollera modellen på sidan System > AI-modeller.",
         "nonFiniteMessage": "{modelName} är inläst, men de senaste {failures} analyserna i rad misslyckades på {runtime}: modellen returnerade ogiltiga poäng (NaN eller oändliga). Ljud spelas in, men den här modellen upptäcker ingenting. Kontrollera modellen på sidan System > AI-modeller."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Analysöverlappning begränsad för den här enheten",
+        "cadenceCappedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} med den inställda överlappningen på {configured} s överskrider den här enhetens uppmätta kapacitet, så ljudet analyseras med {effective} s överlappning. Falskpositivfiltret kräver därför färre bekräftelser. Dina sparade inställningar är oförändrade; se Inställningar > Analys.",
+        "cadenceOverloadedTitle": "Den här enheten hinner inte med ljudanalysen",
+        "cadenceOverloadedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning, så analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor."
       }
     },
     "loading": "Laddar aviseringar..."
@@ -2388,10 +2394,9 @@
             "lenient": "För ljud med låg kvalitet (RTSP-kameror, webbkameramikrofoner)",
             "moderate": "Balanserad för typiska hobbyuppställningar",
             "balanced": "Ursprungligt beteende före september 2025",
-            "strict": "RPi 4+ krävs. För högkvalitativa mikrofoner",
-            "maximum": "RPi 4+ krävs. För professionella mikrofoner"
+            "strict": "För högkvalitativa mikrofoner",
+            "maximum": "För professionella mikrofoner"
           },
-          "hardwareNote": "Strikt- och maximumnivåer kräver högre överlappningsinställningar och mer CPU-resurser. RPi 4 eller bättre hårdvara krävs för dessa nivåer.",
           "overlapAdjusted": "Överlappningsinställningen justerades automatiskt till {overlap}s för att uppfylla filterkraven",
           "overlapReduced": "Överlappningsinställningen minskades till {overlap}s för att matcha filternivån",
           "levelNames": {
@@ -2403,7 +2408,19 @@
             "maximum": "Maximum",
             "unknown": "Okänd"
           },
-          "warningOff": "Utan filtrering accepteras varje detektering över konfidenströskeln omedelbart. Detta ger vanligtvis flera falska positiva per dag. Även låg filtrering förbättrar resultatkvaliteten avsevärt."
+          "warningOff": "Utan filtrering accepteras varje detektering över konfidenströskeln omedelbart. Detta ger vanligtvis flera falska positiva per dag. Även låg filtrering förbättrar resultatkvaliteten avsevärt.",
+          "readoutTitle": "Bekräftelser som krävs nu",
+          "readoutPreviewTitle": "Bekräftelser som krävs efter sparande (uppskattning)",
+          "readoutIntro": "En detektion godtas när tillräckligt många analysfönster inom {seconds} sekunder stämmer överens.",
+          "readoutLine": "{model}: {count} av {windows} fönster, ett nytt fönster var {step} s",
+          "readoutPreview": "Uppskattat utifrån dina osparade ändringar. Enhetens gräns kontrolleras igen efter sparande.",
+          "readoutPending": "De sparade inställningarna tillämpas. Värdena är uppskattningar tills analysen har startat om.",
+          "capNoticeTitle": "Överlappning begränsad till vad den här enheten klarar",
+          "capNotice": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} med den inställda överlappningen på {configured} s överskrider den här enhetens uppmätta kapacitet, så ljudet analyseras med {effective} s överlappning. Filtret kräver därför färre bekräftelser än vid {configured} s. Dina sparade inställningar är oförändrade.",
+          "overloadedNoticeTitle": "Den här enheten hinner inte med analysen",
+          "overloadedNotice": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning. Analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor.",
+          "unknownLatency": "Bearbetningstiden kunde inte mätas för {models}, så den räknas inte med när överlappningen begränsas. Analysen kan ändå hamna efter.",
+          "cpuNote": "En högre styrka analyserar överlappande ljud oftare, vilket kostar CPU-tid för varje aktiverad modell och ljudkälla. BirdNET-Go begränsar överlappningen automatiskt till vad den här enheten klarar att bearbeta."
         },
         "rangeFilter": {
           "title": "Områdesfilter",
