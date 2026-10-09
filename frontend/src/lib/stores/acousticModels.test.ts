@@ -621,7 +621,7 @@ describe('acousticModels store', () => {
       unwatch();
     });
 
-    it('skips a reconnect refresh while a fetch is running', async () => {
+    it('queues a reconnect refresh behind a fetch already running', async () => {
       apiGet.mockResolvedValueOnce(snapshot('ok'));
       const unwatch = watchAcousticModels();
       await flush();
@@ -632,12 +632,18 @@ describe('acousticModels store', () => {
       const running = invalidateAcousticModels();
       expect(apiGet).toHaveBeenCalledTimes(2);
 
+      // The running request may predate the server restart the reconnect
+      // announces, so one more fetch follows it and its answer wins.
+      apiGet.mockResolvedValueOnce(snapshot('load_failed'));
       fire(0, 'connected');
       await flush();
       expect(apiGet).toHaveBeenCalledTimes(2);
 
       resolve(snapshot('ok'));
       await running;
+      await flush();
+      expect(apiGet).toHaveBeenCalledTimes(3);
+      expect(acousticModelAvailability()).toEqual({ kind: 'none', reason: 'load_failed' });
       unwatch();
     });
 

@@ -325,16 +325,18 @@ function openTopologyStream(): void {
 
   // The server sends `connected` on every (re)connection. The first one lands
   // right after the subscribe fetch, so it only refreshes when that fetch has
-  // not succeeded; later ones mean a reconnect (server restart) and refresh
-  // unless a fetch is already running.
+  // not succeeded, sharing it if it is still running. Later ones mean a
+  // reconnect (server restart) that a running request may predate, so the
+  // refresh queues behind it.
   let initialConnect = true;
   source.addEventListener(CONNECTED_EVENT, () => {
     if (initialConnect) {
       initialConnect = false;
       if (loaded && !error) return;
+      void refreshAcousticModels();
+      return;
     }
-    if (inFlight) return;
-    void refreshAcousticModels();
+    void invalidateAcousticModels();
   });
 }
 
