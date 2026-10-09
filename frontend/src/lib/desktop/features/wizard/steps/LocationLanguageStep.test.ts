@@ -678,8 +678,12 @@ describe('LocationLanguageStep location', () => {
     await renderLocationStep();
 
     const button = screen.getByRole('button', { name: BROWSER_BUTTON });
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).not.toBeDisabled();
     expect(button).toHaveAccessibleDescription(INSECURE_HELP);
+    await fireEvent.click(button);
+    expect(getCurrentPosition).not.toHaveBeenCalled();
+    expect(toastActions.warning).not.toHaveBeenCalled();
     expect(latestMapProps().placeSearch).toBe(true);
   });
 

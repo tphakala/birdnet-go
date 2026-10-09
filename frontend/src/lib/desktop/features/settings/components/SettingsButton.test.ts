@@ -281,6 +281,26 @@ describe('SettingsButton', () => {
       );
     });
 
+    it('marks the button aria-disabled, keeps it focusable and suppresses clicks', async () => {
+      const onclick = vi.fn();
+      testFactory.render({ 'aria-disabled': true, onclick });
+
+      const button = screen.getByRole('button');
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      expect(button).not.toBeDisabled();
+      button.focus();
+      expect(document.activeElement).toBe(button);
+
+      await fireEvent.click(button);
+      expect(onclick).not.toHaveBeenCalled();
+    });
+
+    it('renders no aria-disabled by default', () => {
+      testFactory.render({});
+
+      expect(screen.getByRole('button')).not.toHaveAttribute('aria-disabled');
+    });
+
     it('renders no aria-describedby by default', () => {
       testFactory.render({});
 

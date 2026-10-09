@@ -4,8 +4,9 @@
   Requests a single position from the browser and reports it to the parent
   form (the settings page and the setup wizard). The parent remains
   responsible for persisting coordinates. On an insecure origin (plain HTTP
-  other than localhost) the button is disabled from the start and a line
-  below it explains why.
+  other than localhost) the button is marked unavailable from the start
+  (aria-disabled, so it stays in the tab order) and a line below it, linked as
+  its description, explains why.
 -->
 <script lang="ts">
   import { MapPin } from '@lucide/svelte';
@@ -169,8 +170,8 @@
 
   function useCurrentLocation() {
     const support = getBrowserLocationSupport();
-    // Fallback only: an insecure origin known at render time already disables
-    // the button and explains why.
+    // Fallback only: an insecure origin known at render time already makes
+    // the button unavailable and explains why.
     if (support === 'insecure') {
       toastActions.warning(
         t('settings.main.sections.rangeFilter.stationLocation.geolocationRequiresHttps')
@@ -210,7 +211,8 @@
   <div class="flex flex-wrap items-center gap-x-3 gap-y-1 xl:flex-col xl:items-start">
     <SettingsButton
       onclick={useCurrentLocation}
-      disabled={disabled || insecureOrigin}
+      {disabled}
+      aria-disabled={insecureOrigin}
       aria-describedby={insecureOrigin ? insecureHelpId : undefined}
       loading={locating}
       loadingText={t('settings.main.sections.rangeFilter.stationLocation.locating')}

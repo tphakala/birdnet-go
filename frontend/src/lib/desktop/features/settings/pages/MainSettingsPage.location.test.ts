@@ -161,7 +161,8 @@ describe('MainSettingsPage location map', () => {
       await openLocationTab();
 
       const button = screen.getByRole('button', { name: 'Use browser location' });
-      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      expect(button).not.toBeDisabled();
       expect(button).toHaveAccessibleDescription(
         'Needs HTTPS or localhost. Search for a place or use the map instead.'
       );

@@ -20,7 +20,9 @@
   - variant: Button style variant (primary, secondary, ghost)
   - className: Additional CSS classes
   - aria-describedby: ID of an element that describes the button (for example
-    the reason it is disabled)
+    the reason it is unavailable)
+  - aria-disabled: Mark the button unavailable but keep it in the tab order, so
+    its description is still announced; clicks, Enter and Space do nothing
   - children: Button content snippet
 
   @component
@@ -39,6 +41,7 @@
     variant?: ButtonVariant;
     className?: string;
     'aria-describedby'?: string;
+    'aria-disabled'?: boolean;
     children?: import('svelte').Snippet;
   }
 
@@ -50,6 +53,7 @@
     variant = 'primary',
     className = '',
     'aria-describedby': ariaDescribedBy,
+    'aria-disabled': ariaDisabled = false,
     children,
   }: Props = $props();
 
@@ -76,9 +80,14 @@
 
 <button
   type="button"
-  class={cn('btn btn-sm gap-2', variantClass, className)}
-  onclick={() => !isDisabled && onclick?.()}
+  class={cn(
+    'btn btn-sm gap-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-75',
+    variantClass,
+    className
+  )}
+  onclick={() => !isDisabled && !ariaDisabled && onclick?.()}
   disabled={isDisabled}
+  aria-disabled={ariaDisabled ? 'true' : undefined}
   aria-busy={loading}
   aria-describedby={ariaDescribedBy}
 >

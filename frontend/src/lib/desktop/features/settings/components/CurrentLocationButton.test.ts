@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import { createComponentTestFactory } from '../../../../../test/render-helpers';
 import CurrentLocationButton from './CurrentLocationButton.svelte';
 import { toastActions } from '$lib/stores/toast';
@@ -281,20 +282,27 @@ describe('CurrentLocationButton', () => {
   describe('on an insecure origin', () => {
     const insecureHelp = 'Needs HTTPS or localhost. Search for a place or use the map instead.';
 
-    it('is disabled before any click on an insecure origin and explains the HTTPS requirement', async () => {
+    it('is unavailable before any click on an insecure origin, stays reachable by Tab and explains why', async () => {
       setSecureContext(false);
       setGeolocation(undefined);
       const onLocation = vi.fn();
       testFactory.render({ onLocation });
 
       const button = screen.getByRole('button', { name: 'Use browser location' });
-      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      expect(button).not.toBeDisabled();
       expect(button).toHaveAccessibleDescription(insecureHelp);
       expect(screen.getByText(insecureHelp)).toBeVisible();
 
-      await fireEvent.click(button);
+      const user = userEvent.setup();
+      await user.tab();
+      expect(button).toHaveFocus();
+      await user.keyboard('{Enter}');
+      await user.keyboard(' ');
+      await user.click(button);
 
       expect(toastActions.warning).not.toHaveBeenCalled();
+      expect(toastActions.error).not.toHaveBeenCalled();
       expect(geolocationMock.getCurrentPosition).not.toHaveBeenCalled();
       expect(onLocation).not.toHaveBeenCalled();
     });
@@ -304,7 +312,7 @@ describe('CurrentLocationButton', () => {
       testFactory.render({ compact: true });
 
       const button = screen.getByRole('button', { name: 'Use browser location' });
-      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('aria-disabled', 'true');
       expect(button).toHaveAccessibleDescription(insecureHelp);
       expect(screen.queryByText('Automatic location')).not.toBeInTheDocument();
     });
@@ -328,6 +336,7 @@ describe('CurrentLocationButton', () => {
 
       const button = screen.getByRole('button', { name: 'Use browser location' });
       expect(button).toBeEnabled();
+      expect(button).not.toHaveAttribute('aria-disabled');
       expect(button).not.toHaveAttribute('aria-describedby');
       expect(screen.queryByText(insecureHelp)).not.toBeInTheDocument();
     });
