@@ -1146,6 +1146,25 @@ describe('Custom scheme hover and pressed fills', () => {
     }
   });
 
+  it('falls back to the content and shade the store derives for the default colours', () => {
+    // Before the store runs (custom selected, no stored colours) the CSS fallbacks apply; they
+    // must match what the store sets for its default colours, or the page flickers.
+    const body = blockBody(schemesCss, "\n[data-scheme='custom']");
+    for (const kind of ['primary', 'accent'] as const) {
+      // eslint-disable-next-line security/detect-non-literal-regexp -- fixed property names
+      const base = new RegExp(
+        `--color-${kind}:\\s*var\\(--custom-${kind},\\s*(#[0-9a-f]{6})\\)`
+      ).exec(body);
+      expect(base, `${kind} fallback`).not.toBeNull();
+      const fallback = base?.[1] ?? '';
+      const content = contentFor(fallback);
+      expect(body).toContain(`var(--custom-${kind}-content, ${content})`);
+      expect(body).toContain(
+        `var(--custom-${kind}-shade, ${content === '#ffffff' ? 'black' : 'white'})`
+      );
+    }
+  });
+
   it('the scheme store sets a shade away from the content colour', async () => {
     const { scheme } = await import('../lib/stores/scheme');
     scheme.setCustomColors({ primary: '#0d9488', accent: '#1e3a8a' });

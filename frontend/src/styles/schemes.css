@@ -128,7 +128,7 @@
   --color-accent-hover: color-mix(
     in srgb,
     var(--custom-accent, #0284c7) 85%,
-    var(--custom-accent-shade, black)
+    var(--custom-accent-shade, white)
   );
-  --color-accent-content: var(--custom-accent-content, #ffffff);
+  --color-accent-content: var(--custom-accent-content, #020617);
 }
