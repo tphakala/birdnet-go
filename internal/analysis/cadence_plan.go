@@ -167,32 +167,35 @@ func (p *AudioPipelineService) planAndPublishCadence(configs []sourceConfigWithM
 
 // applyCadenceDecision plans for the given configs and applies needsRestart for
 // an incremental path. loaded and defaults are bn's loaded models and default
-// targets, which the caller already holds. It returns true when a full restart
-// was queued and the caller must stop its incremental work; when the restart
-// could not be queued it returns false so the caller keeps its incremental path
-// and the next reconfigure detects the stale plan again.
-func (p *AudioPipelineService) applyCadenceDecision(bn *classifier.Orchestrator, configs []sourceConfigWithModels, loaded map[string]classifier.ModelInfo, defaults []classifier.ModelInfo, operation string) bool {
+// targets, which the caller already holds. When the effective overlap changes it
+// queues a full restart and leaves the published plan as it is; otherwise it
+// publishes the new plan. Either way the caller finishes its incremental work
+// under the published plan, so the buffers it allocates match the step of the
+// others, and per-source work the full restart does not repeat (Home Assistant
+// cleanup for deleted or renamed streams, the restarted source's probed
+// parameters) is not lost. The queued restart then rebuilds every buffer at the
+// new step.
+func (p *AudioPipelineService) applyCadenceDecision(bn *classifier.Orchestrator, configs []sourceConfigWithModels, loaded map[string]classifier.ModelInfo, defaults []classifier.ModelInfo, operation string) {
 	plan := planCadenceForConfigs(bn, configs, loaded, defaults)
 	if needsRestart(bn.CadencePlan(), &plan) {
 		audiocore.GetLogger().Info("analysis cadence changed, requesting capture restart",
 			logger.Float64("effective_overlap", plan.EffectiveBaseOverlap.Seconds()),
 			logger.String("status", string(plan.Status)),
 			logger.String("operation", operation))
-		return p.requestCaptureRestart()
+		p.requestCaptureRestart()
+		return
 	}
 	p.publishCadencePlan(bn, &plan, operation)
-	return false
 }
 
-// requestCaptureRestart queues a full capture restart without blocking and
-// reports whether the request was queued.
-func (p *AudioPipelineService) requestCaptureRestart() bool {
+// requestCaptureRestart queues a full capture restart without blocking. A full
+// channel already holds a pending restart, which re-plans when it runs, so a
+// dropped token is only logged.
+func (p *AudioPipelineService) requestCaptureRestart() {
 	ResetOverrunTrackers()
 	if !trySignalCaptureRestart(p.restartChan) {
 		audiocore.GetLogger().Warn("restart channel full, could not signal capture restart for the cadence plan")
-		return false
 	}
-	return true
 }
 
 // trySignalCaptureRestart queues one capture restart token on ch without

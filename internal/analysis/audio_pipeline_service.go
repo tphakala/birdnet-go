@@ -550,6 +550,8 @@ func (p *AudioPipelineService) restartAudioCapture() {
 // RestartSource tears down and reinitializes a single audio source.
 // Follows the same cleanup pattern as reconfigureChangedSources: remove routes,
 // clean up overrun trackers, untrack sound level, stop capture, then re-add.
+// When the rebuilt config changes the analysis cadence, it also queues a full
+// capture restart, which rebuilds every buffer at the new step.
 func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	p.sourcesMu.Lock()
 	defer p.sourcesMu.Unlock()
@@ -634,10 +636,11 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	}
 
 	// The rebuilt config may carry a model assignment the published cadence plan
-	// has not seen. If the plan would change, the source stays removed and a full
-	// restart (queued here) re-adds every source from current settings.
-	if bn := p.birdNET(); bn != nil && p.applyCadenceDecision(bn, sourceConfigs, loadedModelMap(bn), bn.DefaultTargets(), operationRestartSource) {
-		return nil
+	// has not seen. If the plan would change, a full restart is queued; the source
+	// is still re-added below under the published plan, so that restart finds it
+	// in the registry and keeps its probed parameters as a fallback.
+	if bn := p.birdNET(); bn != nil {
+		p.applyCadenceDecision(bn, sourceConfigs, loadedModelMap(bn), bn.DefaultTargets(), operationRestartSource)
 	}
 
 	// 6. Re-add source via engine, using the registry-assigned ID it returns (the
@@ -1463,7 +1466,9 @@ func (p *AudioPipelineService) forgetDeletedSourceHAEntities(src *audiocore.Audi
 // reconfigureChangedSources diffs the currently running sources against the
 // desired config from settings. Only sources that were added, removed, or
 // changed are touched - unchanged streams keep their capture buffers and
-// source IDs intact.
+// source IDs intact. When the desired sources change the analysis cadence, a
+// full capture restart is queued as well, which rebuilds every buffer at the
+// new step.
 func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan audiocore.AudioLevelData) {
 	p.sourcesMu.Lock()
 	defer p.sourcesMu.Unlock()
@@ -1492,11 +1497,10 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		defaultIDs = defaultTargetIDs(defaults)
 
 		// Re-plan the cadence for the desired sources. A different effective step
-		// cannot be applied to kept buffers, so request a full restart, which
-		// rebuilds everything from current settings; stop here in that case.
-		if p.applyCadenceDecision(bn, desiredConfigs, loadedModels, defaults, operationReconfigureDiff) {
-			return
-		}
+		// cannot be applied to kept buffers, so a full restart is queued; the diff
+		// below still runs under the published plan so deleted and renamed streams
+		// get their Home Assistant cleanup, which the restart does not repeat.
+		p.applyCadenceDecision(bn, desiredConfigs, loadedModels, defaults, operationReconfigureDiff)
 	}
 	bufMgr := p.engine.BufferManager()
 

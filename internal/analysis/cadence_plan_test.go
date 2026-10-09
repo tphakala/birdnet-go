@@ -368,13 +368,12 @@ func TestBufferIntervalFor_UsesEffectiveBaseOverlap(t *testing.T) {
 	assert.Equal(t, 3*time.Second-1800*time.Millisecond, bufferIntervalFor(bn, "unregistered"))
 }
 
-// TestRequestCaptureRestart_ReportsWhetherQueued pins that a dropped restart
-// token is reported, so RestartSource re-adds the source instead of leaving it
-// removed with no restart pending.
-func TestRequestCaptureRestart_ReportsWhetherQueued(t *testing.T) {
+// TestRequestCaptureRestart_DoesNotBlockWhenFull pins that a restart request on
+// a full channel returns instead of blocking the reconfigure that asked for it.
+func TestRequestCaptureRestart_DoesNotBlockWhenFull(t *testing.T) {
 	t.Parallel()
 	p := &AudioPipelineService{restartChan: make(chan struct{}, 1)}
-	assert.True(t, p.requestCaptureRestart(), "empty channel queues the restart")
-	assert.False(t, p.requestCaptureRestart(), "full channel drops the restart and says so")
+	p.requestCaptureRestart()
+	p.requestCaptureRestart()
 	assert.Len(t, p.restartChan, 1)
 }
