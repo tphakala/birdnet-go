@@ -153,3 +153,41 @@ func TestCalculateMinDetections_LevelChangeWithFixedPlan(t *testing.T) {
 	assert.Equal(t, 2, p.calculateMinDetections(), "level 2 at effective 1.8s: 30% of 5 windows, plan unchanged")
 	assert.Equal(t, 1800*time.Millisecond, orch.CadencePlan().EffectiveBaseOverlap)
 }
+
+// TestFlushPendingDetections_UsesEffectiveBaseOverlap pins that the flush, which
+// decides whether a pending detection is kept, counts confirmations at the
+// published plan's effective overlap. Level 5 needs 4 hits at the effective
+// 1.8 s (a 1.2 s step) but 21 at the configured 2.8 s, so a detection with 4
+// hits is flushed only when the flush follows the plan.
+func TestFlushPendingDetections_UsesEffectiveBaseOverlap(t *testing.T) {
+	conf.StoreSettings(nil)
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+
+	orch := &classifier.Orchestrator{}
+	orch.SetCadencePlan(&cadence.Plan{
+		ConfiguredBaseOverlap: 2800 * time.Millisecond,
+		EffectiveBaseOverlap:  1800 * time.Millisecond,
+		Status:                cadence.StatusCapped,
+	})
+	settings := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			FalsePositiveFilter: conf.FalsePositiveFilterSettings{Level: 5},
+		},
+		BirdNET: conf.BirdNETConfig{Overlap: 2.8},
+	}
+	p := &Processor{Settings: settings, Bn: orch, pendingDetections: make(map[string]PendingDetection)}
+
+	now := time.Now()
+	p.pendingDetections[pendingDetectionKey("src", "great tit")] = PendingDetection{
+		Confidence:    0.9,
+		Source:        "src",
+		FirstDetected: now.Add(-10 * time.Second),
+		FlushDeadline: now.Add(-time.Second),
+		Count:         4,
+	}
+
+	pending, flushed := p.flushPendingDetections()
+	assert.Equal(t, 1, pending)
+	assert.Equal(t, 1, flushed, "4 hits meet the level 5 count at the effective overlap")
+	assert.Empty(t, p.pendingDetections)
+}
