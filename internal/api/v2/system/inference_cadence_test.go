@@ -39,7 +39,7 @@ func TestBuildAnalysisCadence_UsesEffectiveOverlap(t *testing.T) {
 		DutyCeiling:           0.75,
 		SourceCount:           1,
 		ModelCount:            1,
-		Models:                []cadence.ModelCost{{ModelID: v24.ID, Latency: 166 * time.Millisecond, Known: true}},
+		Models:                []cadence.ModelCost{{ModelID: v24.ID, Latency: 166 * time.Millisecond}},
 	}
 
 	got := buildAnalysisCadence(plan, infos, s)

@@ -318,10 +318,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	watchdogCallbacks := audiocore.LivenessCallbacks{
 		RestartSource: p.RestartSource,
 		Escalate: func(_ string) {
-			select {
-			case p.restartChan <- struct{}{}:
-			default:
-			}
+			trySignalCaptureRestart(p.restartChan)
 		},
 		Notify: func(sourceID string, state audiocore.LivenessState, msg string) {
 			livenessNotif.notify(sourceID, state, msg)
@@ -639,7 +636,7 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	// The rebuilt config may carry a model assignment the published cadence plan
 	// has not seen. If the plan would change, the source stays removed and a full
 	// restart (queued here) re-adds every source from current settings.
-	if p.applyCadenceDecision(sourceConfigs, operationRestartSource) {
+	if bn := p.birdNET(); bn != nil && p.applyCadenceDecision(bn, sourceConfigs, loadedModelMap(bn), bn.DefaultTargets(), operationRestartSource) {
 		return nil
 	}
 
@@ -1489,17 +1486,15 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	var loadedModels map[string]classifier.ModelInfo
 	var defaultIDs []string
 	if p.bnAnalyzer != nil {
-		modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
-		loadedModels = make(map[string]classifier.ModelInfo, len(modelInfoSlice))
-		for i := range modelInfoSlice {
-			loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
-		}
-		defaultIDs = defaultTargetIDs(p.bnAnalyzer.BirdNET())
+		bn := p.bnAnalyzer.BirdNET()
+		loadedModels = loadedModelMap(bn)
+		defaults := bn.DefaultTargets()
+		defaultIDs = defaultTargetIDs(defaults)
 
 		// Re-plan the cadence for the desired sources. A different effective step
 		// cannot be applied to kept buffers, so request a full restart, which
 		// rebuilds everything from current settings; stop here in that case.
-		if p.applyCadenceDecision(desiredConfigs, operationReconfigureDiff) {
+		if p.applyCadenceDecision(bn, desiredConfigs, loadedModels, defaults, operationReconfigureDiff) {
 			return
 		}
 	}
@@ -2174,13 +2169,7 @@ func (p *AudioPipelineService) probeStreamSampleRate(url, name string) streamPro
 // UpdateMonitors. It resolves per-source model IDs to full ModelInfo so that
 // monitorConfig gets the correct spec (sample rate + clip length).
 func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]string, sourceIDs []string) map[string][]monitorConfig {
-	// Build lookup of loaded models by registry ID.
-	modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
-	loadedModels := make(map[string]classifier.ModelInfo, len(modelInfoSlice))
-	for i := range modelInfoSlice {
-		loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
-	}
-
+	loadedModels := loadedModelMap(p.bnAnalyzer.BirdNET())
 	defaultTargets := p.bnAnalyzer.BirdNET().DefaultTargets()
 	result := make(map[string][]monitorConfig, len(sourceIDs))
 

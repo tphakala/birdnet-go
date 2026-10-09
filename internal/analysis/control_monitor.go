@@ -1085,10 +1085,9 @@ func (cm *ControlMonitor) handleReconfigureQuietHours() {
 func (cm *ControlMonitor) handleRestartAudioCapture() {
 	GetLogger().Info("Restarting audio capture to apply analysis buffer changes")
 	ResetOverrunTrackers()
-	select {
-	case cm.restartChan <- struct{}{}:
+	if trySignalCaptureRestart(cm.restartChan) {
 		GetLogger().Info("audio capture restart signal sent")
-	default:
+	} else {
 		GetLogger().Warn("restart channel full, could not signal audio capture restart")
 	}
 }
@@ -1099,10 +1098,9 @@ func (cm *ControlMonitor) handleQuietHoursStopSoundCard() {
 
 	// Signal the audio capture goroutine to restart - when it restarts,
 	// CaptureAudio will check IsSoundCardInQuietHours() and skip the sound card.
-	select {
-	case cm.restartChan <- struct{}{}:
+	if trySignalCaptureRestart(cm.restartChan) {
 		GetLogger().Info("Quiet hours: sound card stop signal sent")
-	default:
+	} else {
 		GetLogger().Warn("Quiet hours: restart channel full, could not signal sound card stop")
 	}
 }
@@ -1113,10 +1111,9 @@ func (cm *ControlMonitor) handleQuietHoursStartSoundCard() {
 
 	// Signal the audio capture goroutine to restart - when it restarts,
 	// CaptureAudio will check IsSoundCardInQuietHours() and start the sound card normally.
-	select {
-	case cm.restartChan <- struct{}{}:
+	if trySignalCaptureRestart(cm.restartChan) {
 		GetLogger().Info("Quiet hours: sound card restart signal sent")
-	default:
+	} else {
 		GetLogger().Warn("Quiet hours: restart channel full, could not signal sound card restart")
 	}
 }

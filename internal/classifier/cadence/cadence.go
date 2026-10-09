@@ -10,9 +10,8 @@ package cadence
 
 import (
 	"cmp"
-	"math"
+	"reflect"
 	"slices"
-	"sort"
 	"time"
 )
 
@@ -32,16 +31,18 @@ const (
 	StatusFilterOff Status = "filterOff"
 )
 
-// FilterActiveMinLevel is the lowest false positive filter level at which the
+// filterActiveMinLevel is the lowest false positive filter level at which the
 // cadence cap applies; level 0 leaves the configured overlap untouched.
-const FilterActiveMinLevel = 1
+const filterActiveMinLevel = 1
 
-// epsilon absorbs floating point noise when snapping to the grid.
+// FilterActive reports whether a false positive filter level enables the
+// cadence cap.
+func FilterActive(level int) bool {
+	return level >= filterActiveMinLevel
+}
+
+// epsilon absorbs floating point noise in duty comparisons.
 const epsilon = 1e-9
-
-// minStep is the smallest step the duty model accepts, mirroring the
-// one-millisecond floor that the classifier applies to analysis steps.
-const minStep = time.Millisecond
 
 // Pair is one (source, model) analysis buffer.
 type Pair struct {
@@ -49,11 +50,12 @@ type Pair struct {
 	SourceKey string
 	// ModelID identifies the model whose latency is looked up in Input.Latency.
 	ModelID string
-	// Clip is the model clip length.
-	Clip time.Duration
-	// FixedStep is non-zero for pairs whose cadence does not follow the
-	// configured overlap (bat); such pairs count as fixed load.
-	FixedStep time.Duration
+	// StepAt returns the buffer's analysis step at a base overlap. The caller
+	// supplies the same step math the buffers use, so the duty estimate matches
+	// what they deliver; a pair whose cadence ignores the base overlap (bat)
+	// returns a constant step and counts as fixed load. It must return a
+	// positive step that does not grow as the base overlap grows.
+	StepAt func(baseOverlap time.Duration) time.Duration
 }
 
 // Input is everything the solver depends on.
@@ -65,7 +67,8 @@ type Input struct {
 	ConfiguredBaseOverlap time.Duration
 	// BaseClip is the clip length the base overlap is defined against.
 	BaseClip time.Duration
-	// Grid is the step granularity the effective step is snapped up to.
+	// Grid is the step granularity the effective step is snapped up to. A
+	// non-positive grid is treated as one millisecond.
 	Grid time.Duration
 	// DutyCeiling is the highest acceptable inference duty (0..1).
 	DutyCeiling float64
@@ -82,8 +85,6 @@ type ModelCost struct {
 	ModelID string
 	// Latency is the probed inference latency; zero when unknown.
 	Latency time.Duration
-	// Known reports whether a latency was available.
-	Known bool
 }
 
 // Plan is the solver result.
@@ -92,8 +93,9 @@ type Plan struct {
 	ConfiguredBaseOverlap time.Duration
 	// EffectiveBaseOverlap is the overlap the pipeline must use.
 	EffectiveBaseOverlap time.Duration
-	// MinBaseStep is the smallest base step meeting the ceiling; zero when
-	// unknown or not applicable.
+	// MinBaseStep is the smallest grid base step meeting the ceiling; zero when
+	// unknown or not applicable, including when no load depends on the overlap
+	// and when even zero overlap exceeds the ceiling.
 	MinBaseStep time.Duration
 	// Status relates effective to configured.
 	Status Status
@@ -113,13 +115,11 @@ type Plan struct {
 	Models []ModelCost
 }
 
-// Capped reports whether the effective overlap is below the configured one.
-func (p *Plan) Capped() bool {
-	return p != nil && p.EffectiveBaseOverlap < p.ConfiguredBaseOverlap
-}
-
-// SameCadence reports whether two plans produce the same analysis step. It is
-// nil-safe: two nil plans are equal, a nil and a non-nil plan are not.
+// SameCadence reports whether two plans give the analysis buffers the same step,
+// which depends only on the effective overlap. Buffers keep the step they were
+// allocated with, so this is the rule for whether a new plan needs a capture
+// restart. It is nil-safe: two nil plans are equal, a nil and a non-nil plan are
+// not.
 func SameCadence(a, b *Plan) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -127,19 +127,17 @@ func SameCadence(a, b *Plan) bool {
 	return a.EffectiveBaseOverlap == b.EffectiveBaseOverlap
 }
 
-// StepFor returns the analysis step of a pair at a base overlap. It mirrors
-// the classifier's overlap scaling: the overlap fraction is preserved across
-// clip lengths, and the step never drops below one millisecond.
-func StepFor(clip, fixedStep, baseOverlap, baseClip time.Duration) time.Duration {
-	if fixedStep > 0 {
-		return fixedStep
-	}
-	if baseClip <= 0 {
-		return clip
-	}
-	overlap := time.Duration(math.Round(float64(baseOverlap) * float64(clip) / float64(baseClip)))
-	overlap = min(max(overlap, 0), max(clip-minStep, 0))
-	return clip - overlap
+// SameOutcome reports whether two plans have the same cadence and the same
+// status. It is the rule for whether open UIs must refetch: a status change
+// (for example ok to overloaded) is news even when the step is unchanged, while
+// duty estimates drift with every probe and are not worth a broadcast.
+func SameOutcome(a, b *Plan) bool {
+	return SameCadence(a, b) && (a == nil || a.Status == b.Status)
+}
+
+// Equal reports whether two plans are identical in every field. It is nil-safe.
+func Equal(a, b *Plan) bool {
+	return reflect.DeepEqual(a, b)
 }
 
 // Solve computes the plan. It is pure and deterministic: the result does not
@@ -163,38 +161,33 @@ func Solve(in Input) Plan {
 	plan.UnknownLatencyModels = []string{}
 	for id := range models {
 		lat := in.Latency[id]
-		known := lat > 0
-		plan.Models = append(plan.Models, ModelCost{ModelID: id, Latency: max(lat, 0), Known: known})
-		if !known {
+		plan.Models = append(plan.Models, ModelCost{ModelID: id, Latency: max(lat, 0)})
+		if lat <= 0 {
 			plan.UnknownLatencyModels = append(plan.UnknownLatencyModels, id)
 		}
 	}
-	sort.Slice(plan.Models, func(i, j int) bool { return plan.Models[i].ModelID < plan.Models[j].ModelID })
+	slices.SortFunc(plan.Models, func(a, b ModelCost) int { return cmp.Compare(a.ModelID, b.ModelID) })
 	slices.Sort(plan.UnknownLatencyModels)
 
-	// k is the variable load in seconds of inference per base-step second;
-	// f is the fixed duty of pairs whose cadence ignores the overlap.
-	// Pairs are summed in a canonical order because float addition is not
-	// associative; the plan must not depend on the caller's ordering.
-	pairs := slices.Clone(in.Pairs)
+	// Pairs with a known latency are summed in a canonical order because float
+	// addition is not associative; the plan must not depend on the caller's
+	// ordering.
+	pairs := make([]Pair, 0, len(in.Pairs))
+	for _, p := range in.Pairs {
+		if in.Latency[p.ModelID] > 0 {
+			pairs = append(pairs, p)
+		}
+	}
 	slices.SortFunc(pairs, func(a, b Pair) int {
 		return cmp.Or(cmp.Compare(a.SourceKey, b.SourceKey), cmp.Compare(a.ModelID, b.ModelID))
 	})
-	var k, f float64
-	for _, p := range pairs {
-		lat := in.Latency[p.ModelID]
-		if lat <= 0 {
-			continue
-		}
-		if p.FixedStep > 0 {
-			f += lat.Seconds() / p.FixedStep.Seconds()
-		} else if p.Clip > 0 {
-			k += lat.Seconds() * in.BaseClip.Seconds() / p.Clip.Seconds()
-		}
-	}
+	// duty is the inference load in seconds of inference per second of audio.
 	duty := func(overlap time.Duration) float64 {
-		step := max(in.BaseClip-overlap, minStep)
-		return k/step.Seconds() + f
+		var d float64
+		for _, p := range pairs {
+			d += in.Latency[p.ModelID].Seconds() / p.StepAt(overlap).Seconds()
+		}
+		return d
 	}
 	plan.DutyAtConfigured = duty(in.ConfiguredBaseOverlap)
 	plan.DutyAtEffective = plan.DutyAtConfigured
@@ -203,36 +196,51 @@ func Solve(in Input) Plan {
 		plan.Status = StatusFilterOff
 		return plan
 	}
-	if in.DutyCeiling-f <= 0 {
+
+	grid := in.Grid
+	if grid <= 0 {
+		grid = time.Millisecond
+	}
+	// Steps are grid multiples up to the first one that reaches the base clip,
+	// where the overlap is zero. The duty does not rise as the step grows, so the
+	// smallest step meeting the ceiling is found by binary search.
+	maxSteps := int((in.BaseClip + grid - 1) / grid)
+	overlapAt := func(n int) time.Duration {
+		return max(in.BaseClip-time.Duration(n)*grid, 0)
+	}
+	fits := func(n int) bool { return duty(overlapAt(n)) <= in.DutyCeiling+epsilon }
+	if maxSteps < 1 || !fits(maxSteps) {
+		// Even zero overlap exceeds the ceiling: no step the pipeline can use
+		// sustains the load.
 		plan.EffectiveBaseOverlap = 0
 		plan.DutyAtEffective = duty(0)
 		plan.Status = StatusOverloaded
 		return plan
 	}
-	if k <= 0 {
+	if duty(0) == duty(overlapAt(1)) {
+		// No load depends on the overlap (no known latency, or fixed-cadence pairs
+		// only), so there is no smallest step to report and nothing to cap.
 		return plan
 	}
-
-	sMin := k / (in.DutyCeiling - f)
-	grid := in.Grid.Seconds()
-	if grid > 0 {
-		sMin = math.Ceil(sMin/grid-epsilon) * grid
+	lo, hi := 1, maxSteps // fits(hi) holds
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		if fits(mid) {
+			hi = mid
+		} else {
+			lo = mid + 1
+		}
 	}
-	plan.MinBaseStep = time.Duration(math.Round(sMin * float64(time.Second)))
+	plan.MinBaseStep = time.Duration(lo) * grid
 	if plan.DutyAtConfigured <= in.DutyCeiling+epsilon {
 		// The configured overlap already fits; snapping the minimum step up to the
 		// grid must not cut an overlap the hardware sustains. MinBaseStep stays set
 		// so the readout still shows the smallest step the hardware sustains.
 		return plan
 	}
-	ovMax := max(in.BaseClip-plan.MinBaseStep, 0)
-	plan.EffectiveBaseOverlap = min(in.ConfiguredBaseOverlap, ovMax)
+	plan.EffectiveBaseOverlap = min(in.ConfiguredBaseOverlap, overlapAt(lo))
 	plan.DutyAtEffective = duty(plan.EffectiveBaseOverlap)
-
-	switch {
-	case plan.DutyAtEffective > in.DutyCeiling+epsilon:
-		plan.Status = StatusOverloaded
-	case plan.EffectiveBaseOverlap < in.ConfiguredBaseOverlap:
+	if plan.EffectiveBaseOverlap < in.ConfiguredBaseOverlap {
 		plan.Status = StatusCapped
 	}
 	return plan

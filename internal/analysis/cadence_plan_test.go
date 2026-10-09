@@ -140,13 +140,32 @@ func TestBuildCadencePairs(t *testing.T) {
 		})
 	}
 
-	t.Run("bat gets a fixed step", func(t *testing.T) {
+	t.Run("bat keeps its fixed step", func(t *testing.T) {
 		t.Parallel()
 		got := buildCadencePairs([]sourceConfigWithModels{cadenceConfig("a", cadenceAlias(t, bat))},
 			cadenceLoaded(bat), nil)
 		require.Len(t, got, 1)
-		assert.Equal(t, cadenceModelInfo(bat).Spec.ClipLength/2, got[0].FixedStep)
+		for _, base := range []time.Duration{0, time.Second, 2800 * time.Millisecond} {
+			assert.Equal(t, cadenceModelInfo(bat).Spec.ClipLength/2, got[0].StepAt(base))
+		}
 	})
+}
+
+// TestBuildCadencePairs_StepMatchesBufferInterval pins that every pair's step is
+// the real buffer step for every registered model, so the duty estimate matches
+// what the buffers deliver.
+func TestBuildCadencePairs_StepMatchesBufferInterval(t *testing.T) {
+	t.Parallel()
+	for id, info := range classifier.ModelRegistry {
+		pairs := buildCadencePairs([]sourceConfigWithModels{cadenceConfig("a")}, cadenceLoaded(id),
+			[]classifier.ModelInfo{info})
+		require.Len(t, pairs, 1, id)
+		for _, ovSec := range []float64{0, 1.0, 2.0, 2.4, 2.8, 2.99} {
+			base := time.Duration(ovSec * float64(time.Second))
+			want := info.Spec.BufferInterval(classifier.ResolveModelOverlap(id, info.Spec, base))
+			assert.Equal(t, want, pairs[0].StepAt(base), "model %s overlap %.2f", id, ovSec)
+		}
+	}
 }
 
 func TestMatchModelTargets_NilCallbackMatchesResolve(t *testing.T) {
@@ -161,7 +180,7 @@ func TestMatchModelTargets_NilCallbackMatchesResolve(t *testing.T) {
 	assert.Len(t, skippedA, 2)
 }
 
-func TestDecideCadence(t *testing.T) {
+func TestNeedsRestart(t *testing.T) {
 	t.Parallel()
 	mk := func(configured, effective int) *cadence.Plan {
 		return &cadence.Plan{
@@ -173,20 +192,20 @@ func TestDecideCadence(t *testing.T) {
 		name      string
 		published *cadence.Plan
 		candidate *cadence.Plan
-		want      cadenceAction
+		want      bool
 	}{
-		{"nothing published, uncapped", nil, mk(2000, 2000), cadencePublish},
-		{"nothing published, capped", nil, mk(2800, 2000), cadenceRestart},
-		{"same effective", mk(2800, 2000), mk(2800, 2000), cadencePublish},
-		{"configured differs, effective equal", mk(2800, 2000), mk(2600, 2000), cadencePublish},
-		{"configured and effective differ", mk(2800, 2000), mk(1500, 1500), cadenceRestart},
-		{"cap tightened", mk(2800, 2000), mk(2800, 1500), cadenceRestart},
-		{"cap lifted", mk(2800, 2000), mk(2800, 2800), cadenceRestart},
+		{"nothing published, uncapped", nil, mk(2000, 2000), false},
+		{"nothing published, capped", nil, mk(2800, 2000), true},
+		{"same effective", mk(2800, 2000), mk(2800, 2000), false},
+		{"configured differs, effective equal", mk(2800, 2000), mk(2600, 2000), false},
+		{"configured and effective differ", mk(2800, 2000), mk(1500, 1500), true},
+		{"cap tightened", mk(2800, 2000), mk(2800, 1500), true},
+		{"cap lifted", mk(2800, 2000), mk(2800, 2800), true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, decideCadence(tt.published, tt.candidate))
+			assert.Equal(t, tt.want, needsRestart(tt.published, tt.candidate))
 		})
 	}
 }
@@ -194,11 +213,12 @@ func TestDecideCadence(t *testing.T) {
 func TestDrainRestartSignals(t *testing.T) {
 	t.Parallel()
 	ch := make(chan struct{}, 10)
-	assert.Zero(t, drainRestartSignals(ch), "empty channel must not block")
+	drainRestartSignals(ch) // an empty channel must not block
+	assert.Empty(t, ch)
 	for range 3 {
 		ch <- struct{}{}
 	}
-	assert.Equal(t, 3, drainRestartSignals(ch))
+	drainRestartSignals(ch)
 	assert.Empty(t, ch)
 }
 
@@ -247,15 +267,15 @@ func (h *replanHarness) setup(p *cadence.Plan) {
 	h.published = p
 }
 
-// incremental mirrors reconfigureChangedSources and RestartSource: restart or publish.
-func (h *replanHarness) incremental(p *cadence.Plan) cadenceAction {
-	a := decideCadence(h.published, p)
-	if a == cadenceRestart {
+// incremental mirrors reconfigureChangedSources and RestartSource: restart or
+// publish. It reports whether a restart was requested.
+func (h *replanHarness) incremental(p *cadence.Plan) bool {
+	if needsRestart(h.published, p) {
 		h.restarts++
-		return a
+		return true
 	}
 	h.published = p
-	return a
+	return false
 }
 
 func TestCadenceReplanSequence(t *testing.T) {
@@ -286,42 +306,42 @@ func TestCadenceReplanSequence(t *testing.T) {
 	assert.Less(t, capped, 2800*time.Millisecond)
 
 	// 2. A classifier is added: the step moves, so a restart is requested.
-	assert.Equal(t, cadenceRestart, h.incremental(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat)))
+	assert.True(t, h.incremental(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat)))
 	assert.Equal(t, 1, h.restarts)
 	// 3. The restart rebuilds and publishes.
 	h.setup(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat))
 	assert.Less(t, h.published.EffectiveBaseOverlap, capped)
 
 	// 4. Reconfigure with no change: publish, no restart.
-	assert.Equal(t, cadencePublish, h.incremental(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat)))
+	assert.False(t, h.incremental(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat)))
 	assert.Equal(t, 1, h.restarts)
 
 	// 5. A source that would fail AddSource still counts (pairs come from configs):
 	// the same configs yield the same plan, so no restart.
-	assert.Equal(t, cadencePublish, h.incremental(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat)))
+	assert.False(t, h.incremental(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat)))
 	assert.Equal(t, 1, h.restarts)
 
 	// 6. Overlap lowered below the cap but its restart signal was dropped: the
 	// reconfigure restarts on its own.
-	assert.Equal(t, cadenceRestart, h.incremental(h.plan(5, 1.0, explicit(t, v24, v3, perch), three, lat)))
+	assert.True(t, h.incremental(h.plan(5, 1.0, explicit(t, v24, v3, perch), three, lat)))
 	assert.Equal(t, 2, h.restarts)
 	h.setup(h.plan(5, 1.0, explicit(t, v24, v3, perch), three, lat))
 
 	// 7. Level to 0 and back: crossing re-plans, same-side changes do not.
-	assert.Equal(t, cadencePublish, h.incremental(h.plan(3, 1.0, explicit(t, v24, v3, perch), three, lat)), "level change on one side of 0")
+	assert.False(t, h.incremental(h.plan(3, 1.0, explicit(t, v24, v3, perch), three, lat)), "level change on one side of 0")
 	h.setup(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat))
-	assert.Equal(t, cadenceRestart, h.incremental(h.plan(0, 2.8, explicit(t, v24, v3, perch), three, lat)), "level to 0 lifts the cap")
+	assert.True(t, h.incremental(h.plan(0, 2.8, explicit(t, v24, v3, perch), three, lat)), "level to 0 lifts the cap")
 	h.setup(h.plan(0, 2.8, explicit(t, v24, v3, perch), three, lat))
 	assert.Equal(t, cadence.StatusFilterOff, h.published.Status)
 	assert.Equal(t, 2800*time.Millisecond, h.published.EffectiveBaseOverlap)
 	before := h.restarts
-	assert.Equal(t, cadenceRestart, h.incremental(h.plan(4, 2.8, explicit(t, v24, v3, perch), three, lat)), "level back on re-applies the cap")
+	assert.True(t, h.incremental(h.plan(4, 2.8, explicit(t, v24, v3, perch), three, lat)), "level back on re-applies the cap")
 	assert.Equal(t, before+1, h.restarts)
 
 	// 8. RestartSource after a model-assignment edit that adds a pair.
 	h.setup(h.plan(5, 2.8, explicit(t, v24), cadenceLoaded(v24, v3, perch), lat))
 	before = h.restarts
-	assert.Equal(t, cadenceRestart, h.incremental(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat)))
+	assert.True(t, h.incremental(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat)))
 	assert.Equal(t, before+1, h.restarts)
 }
 

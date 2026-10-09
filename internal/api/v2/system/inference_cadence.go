@@ -74,9 +74,7 @@ func buildAnalysisCadence(plan *cadence.Plan, infos []classifier.ModelInfo, sett
 	}
 	latency := make(map[string]time.Duration, len(plan.Models))
 	for _, m := range plan.Models {
-		if m.Known {
-			latency[m.ModelID] = m.Latency
-		}
+		latency[m.ModelID] = m.Latency
 	}
 	out := &AnalysisCadenceInfo{
 		Status:                  string(plan.Status),

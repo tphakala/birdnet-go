@@ -2739,8 +2739,8 @@ func analysisOverlapChanged(oldSettings, currentSettings *conf.Settings) bool {
 // overlap actually changes. Level changes that stay on one side of 0 need no
 // action: the confirmation count is recomputed at flush time.
 func falsePositiveFilterActiveChanged(oldSettings, currentSettings *conf.Settings) bool {
-	return (oldSettings.Realtime.FalsePositiveFilter.Level >= cadence.FilterActiveMinLevel) !=
-		(currentSettings.Realtime.FalsePositiveFilter.Level >= cadence.FilterActiveMinLevel)
+	return cadence.FilterActive(oldSettings.Realtime.FalsePositiveFilter.Level) !=
+		cadence.FilterActive(currentSettings.Realtime.FalsePositiveFilter.Level)
 }
 
 // dynamicThresholdEnabledChanged checks if the DynamicThreshold.Enabled flag was toggled.

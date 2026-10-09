@@ -2,6 +2,7 @@ package cadence
 
 import (
 	"maps"
+	"math"
 	"math/rand/v2"
 	"slices"
 	"testing"
@@ -19,12 +20,25 @@ const (
 
 func ms(n int) time.Duration { return time.Duration(n) * time.Millisecond }
 
+// ratioStep mirrors the classifier's step for a model whose overlap follows the
+// base overlap: the overlap fraction is preserved across clip lengths and the
+// step never drops below one millisecond. The real step function is supplied by
+// the analysis package and covered by its tests; this package cannot import the
+// classifier.
+func ratioStep(clip time.Duration) func(time.Duration) time.Duration {
+	return func(base time.Duration) time.Duration {
+		overlap := time.Duration(math.Round(float64(base) * float64(clip) / float64(testBaseClip)))
+		overlap = min(max(overlap, 0), max(clip-time.Millisecond, 0))
+		return max(clip-overlap, time.Millisecond)
+	}
+}
+
 func pair(src, model string, clip time.Duration) Pair {
-	return Pair{SourceKey: src, ModelID: model, Clip: clip}
+	return Pair{SourceKey: src, ModelID: model, StepAt: ratioStep(clip)}
 }
 
 func batPair(src string) Pair {
-	return Pair{SourceKey: src, ModelID: "bat", Clip: 3 * time.Second, FixedStep: 1500 * time.Millisecond}
+	return Pair{SourceKey: src, ModelID: "bat", StepAt: func(time.Duration) time.Duration { return 1500 * time.Millisecond }}
 }
 
 func input(active bool, overlap time.Duration, pairs []Pair, lat map[string]time.Duration) Input {
@@ -214,23 +228,36 @@ func TestSolve_Transitions(t *testing.T) {
 	}
 }
 
-func TestSameCadence(t *testing.T) {
+func TestPlanComparisons(t *testing.T) {
 	t.Parallel()
-	a := &Plan{EffectiveBaseOverlap: ms(1000), DutyAtEffective: 0.1}
-	b := &Plan{EffectiveBaseOverlap: ms(1000), DutyAtEffective: 0.2}
-	c := &Plan{EffectiveBaseOverlap: ms(900)}
+	a := &Plan{EffectiveBaseOverlap: ms(1000), DutyAtEffective: 0.1, Status: StatusOK}
+	b := &Plan{EffectiveBaseOverlap: ms(1000), DutyAtEffective: 0.2, Status: StatusOK}
+	c := &Plan{EffectiveBaseOverlap: ms(900), Status: StatusOK}
+	d := &Plan{EffectiveBaseOverlap: ms(1000), DutyAtEffective: 0.1, Status: StatusOverloaded}
+
 	assert.True(t, SameCadence(nil, nil))
 	assert.False(t, SameCadence(a, nil))
 	assert.True(t, SameCadence(a, b))
 	assert.False(t, SameCadence(a, c))
-	assert.False(t, c.Capped())
-	assert.True(t, (&Plan{ConfiguredBaseOverlap: ms(2000), EffectiveBaseOverlap: ms(1000)}).Capped())
+	assert.True(t, SameCadence(a, d), "status does not change the step")
+
+	assert.True(t, SameOutcome(nil, nil))
+	assert.False(t, SameOutcome(nil, a))
+	assert.True(t, SameOutcome(a, b), "duty drift is not a new outcome")
+	assert.False(t, SameOutcome(a, d))
+
+	assert.True(t, Equal(nil, nil))
+	assert.False(t, Equal(a, nil))
+	assert.False(t, Equal(a, b))
+	same := *a
+	assert.True(t, Equal(a, &same))
+	same.Models = []ModelCost{{ModelID: "x", Latency: ms(5)}}
+	assert.False(t, Equal(a, &same))
 }
 
-func TestStepFor(t *testing.T) {
+func TestFilterActive(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, ms(1500), StepFor(3*time.Second, ms(1500), ms(2000), testBaseClip))
-	assert.Equal(t, ms(1000), StepFor(3*time.Second, 0, ms(2000), testBaseClip))
-	// 5 s clip scales overlap to 3.333 s, leaving a 1.667 s step.
-	assert.InDelta(t, 1666.667, float64(StepFor(5*time.Second, 0, ms(2000), testBaseClip))/float64(time.Millisecond), 0.01)
+	assert.False(t, FilterActive(0))
+	assert.True(t, FilterActive(1))
+	assert.True(t, FilterActive(5))
 }

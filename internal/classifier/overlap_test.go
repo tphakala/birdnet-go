@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -127,24 +126,4 @@ func TestConfiguredBaseOverlap(t *testing.T) {
 	assert.Equal(t, time.Duration(0), ConfiguredBaseOverlap(s))
 	s.BirdNET.Overlap = 2.8
 	assert.Equal(t, 2800*time.Millisecond, ConfiguredBaseOverlap(s))
-}
-
-// TestCadenceStepMatchesBufferInterval pins that the solver's step model equals
-// the real buffer step for every registered model, so the duty estimate matches
-// what the buffers deliver.
-func TestCadenceStepMatchesBufferInterval(t *testing.T) {
-	t.Parallel()
-	frame := time.Second / 32000 // finest registered sample rate granularity
-	for id, info := range ModelRegistry {
-		for _, ovSec := range []float64{0, 1.0, 2.0, 2.4, 2.8, 2.99} {
-			base := time.Duration(ovSec * float64(time.Second))
-			want := info.Spec.BufferInterval(ResolveModelOverlap(id, info.Spec, base))
-			var fixed time.Duration
-			if id == RegistryIDBat {
-				fixed = info.Spec.ClipLength / 2
-			}
-			got := cadence.StepFor(info.Spec.ClipLength, fixed, base, AnalysisBaseClipLength)
-			assert.InDelta(t, float64(want), float64(got), float64(frame), "model %s overlap %.2f", id, ovSec)
-		}
-	}
 }

@@ -19,30 +19,13 @@ const (
 	cadenceGrid = 100 * time.Millisecond
 )
 
-// cadenceAction is what the pipeline does with a freshly solved cadence plan.
-type cadenceAction int
-
-const (
-	// cadencePublish publishes the plan; the buffers already carry its step.
-	cadencePublish cadenceAction = iota
-	// cadenceRestart requests a full capture restart, which re-plans and
-	// reallocates every analysis buffer with the new step.
-	cadenceRestart
-)
-
-// String returns a log-friendly name for the action.
-func (a cadenceAction) String() string {
-	if a == cadenceRestart {
-		return "restart"
-	}
-	return "publish"
-}
-
 // buildCadencePairs lists the (source, model) analysis buffers the pipeline
 // allocates for the given source configs, resolving models exactly as
 // registerConsumersForSources does (explicit list, else default-target fallback).
 // Pairs come from the desired configs, not from AddSource successes, so a
 // persistently failing source cannot make the plan differ between planning sites.
+// Each pair's step uses the buffers' own step math, so a fixed-cadence model
+// (bat) keeps its fixed step whatever the base overlap.
 func buildCadencePairs(configs []sourceConfigWithModels, loaded map[string]classifier.ModelInfo, defaults []classifier.ModelInfo) []cadence.Pair {
 	var pairs []cadence.Pair
 	for _, scm := range configs {
@@ -52,20 +35,18 @@ func buildCadencePairs(configs []sourceConfigWithModels, loaded map[string]class
 		}
 		seen := make(map[string]bool, len(targets))
 		for i := range targets {
-			info := &targets[i]
-			if seen[info.ID] {
+			id, spec := targets[i].ID, targets[i].Spec
+			if seen[id] {
 				continue // one buffer per (source, model), as AllocateAnalysis allocates
 			}
-			seen[info.ID] = true
-			pair := cadence.Pair{
+			seen[id] = true
+			pairs = append(pairs, cadence.Pair{
 				SourceKey: scm.config.ConnectionString,
-				ModelID:   info.ID,
-				Clip:      info.Spec.ClipLength,
-			}
-			if info.ID == classifier.RegistryIDBat {
-				pair.FixedStep = info.Spec.ClipLength / 2
-			}
-			pairs = append(pairs, pair)
+				ModelID:   id,
+				StepAt: func(base time.Duration) time.Duration {
+					return spec.BufferInterval(classifier.ResolveModelOverlap(id, spec, base))
+				},
+			})
 		}
 	}
 	return pairs
@@ -75,7 +56,7 @@ func buildCadencePairs(configs []sourceConfigWithModels, loaded map[string]class
 // cap applies only while the false positive filter is on.
 func planCadence(settings *conf.Settings, pairs []cadence.Pair, latencies map[string]time.Duration) cadence.Plan {
 	return cadence.Solve(cadence.Input{
-		FilterActive:          settings.Realtime.FalsePositiveFilter.Level >= cadence.FilterActiveMinLevel,
+		FilterActive:          cadence.FilterActive(settings.Realtime.FalsePositiveFilter.Level),
 		ConfiguredBaseOverlap: classifier.ConfiguredBaseOverlap(settings),
 		BaseClip:              classifier.AnalysisBaseClipLength,
 		Grid:                  cadenceGrid,
@@ -85,64 +66,74 @@ func planCadence(settings *conf.Settings, pairs []cadence.Pair, latencies map[st
 	})
 }
 
-// decideCadence compares the published plan with a candidate for an incremental
-// path (reconfigure, single-source restart). Buffers keep the step of the plan
-// that was published when they were allocated, so a candidate with a different
-// effective overlap needs a full restart, which also re-plans. It does not rely on
+// needsRestart reports whether an incremental path (reconfigure, single-source
+// restart) must request a full capture restart instead of publishing the
+// candidate. Buffers keep the step of the plan that was published when they were
+// allocated, so a candidate with a different effective overlap needs a full
+// restart, which also re-plans. With nothing published yet the buffers use the
+// configured overlap, so only a capped candidate needs one. It does not rely on
 // the overlap-change restart signal: that signal is dropped when the restart
 // channel is full, and treating the plan as unchanged would then pin stale
 // buffers.
-func decideCadence(published, candidate *cadence.Plan) cadenceAction {
+func needsRestart(published, candidate *cadence.Plan) bool {
 	if published == nil {
-		if candidate.Capped() {
-			return cadenceRestart
-		}
-		return cadencePublish
+		return candidate.EffectiveBaseOverlap < candidate.ConfiguredBaseOverlap
 	}
-	if !cadence.SameCadence(published, candidate) {
-		return cadenceRestart
-	}
-	return cadencePublish
+	return !cadence.SameCadence(published, candidate)
 }
 
-// drainRestartSignals consumes any further restart tokens already queued on ch
-// and returns how many it removed, so several queued restarts run as one.
-func drainRestartSignals(ch <-chan struct{}) int {
-	drained := 0
+// drainRestartSignals consumes any further restart tokens already queued on ch,
+// so several queued restarts run as one.
+func drainRestartSignals(ch <-chan struct{}) {
 	for {
 		select {
 		case <-ch:
-			drained++
 		default:
-			return drained
+			return
 		}
 	}
 }
 
-// planCadenceForConfigs solves the cadence for the desired source configs against
-// the loaded models. It returns false when no classifier is attached.
-func (p *AudioPipelineService) planCadenceForConfigs(configs []sourceConfigWithModels) (cadence.Plan, bool) {
-	if p.bnAnalyzer == nil || p.bnAnalyzer.BirdNET() == nil {
-		return cadence.Plan{}, false
-	}
-	bn := p.bnAnalyzer.BirdNET()
+// loadedModelMap returns the backend's loaded models keyed by registry ID.
+func loadedModelMap(bn classifierBackend) map[string]classifier.ModelInfo {
 	infos := bn.ModelInfos()
 	loaded := make(map[string]classifier.ModelInfo, len(infos))
 	for i := range infos {
 		loaded[infos[i].ID] = infos[i]
 	}
-	pairs := buildCadencePairs(configs, loaded, bn.DefaultTargets())
-	return planCadence(conf.Setting(), pairs, bn.ProbedLatencies()), true
+	return loaded
+}
+
+// birdNET returns the attached classifier, or nil when none is attached.
+func (p *AudioPipelineService) birdNET() *classifier.Orchestrator {
+	if p.bnAnalyzer == nil {
+		return nil
+	}
+	return p.bnAnalyzer.BirdNET()
+}
+
+// planCadenceForConfigs solves the cadence for the desired source configs against
+// the backend's loaded models and default targets.
+func planCadenceForConfigs(bn *classifier.Orchestrator, configs []sourceConfigWithModels, loaded map[string]classifier.ModelInfo, defaults []classifier.ModelInfo) cadence.Plan {
+	return planCadence(conf.Setting(), buildCadencePairs(configs, loaded, defaults), bn.ProbedLatencies())
 }
 
 // publishCadencePlan publishes the plan on the orchestrator, logs it, and tells
-// open UIs to refetch when the plan changed.
-func (p *AudioPipelineService) publishCadencePlan(plan *cadence.Plan, operation string) {
-	bn := p.bnAnalyzer.BirdNET()
+// open UIs to refetch when the plan's outcome changed. A plan identical to the
+// published one is left in place and logged at debug level only.
+func (p *AudioPipelineService) publishCadencePlan(bn *classifier.Orchestrator, plan *cadence.Plan, operation string) {
+	log := audiocore.GetLogger()
 	prev := bn.CadencePlan()
+	if cadence.Equal(prev, plan) {
+		log.Debug("analysis cadence unchanged",
+			logger.Float64("effective_overlap", plan.EffectiveBaseOverlap.Seconds()),
+			logger.String("status", string(plan.Status)),
+			logger.String("operation", operation))
+		return
+	}
 	bn.SetCadencePlan(plan)
 
-	audiocore.GetLogger().Info("analysis cadence planned",
+	log.Info("analysis cadence planned",
 		logger.Float64("configured_overlap", plan.ConfiguredBaseOverlap.Seconds()),
 		logger.Float64("effective_overlap", plan.EffectiveBaseOverlap.Seconds()),
 		logger.String("status", string(plan.Status)),
@@ -153,7 +144,7 @@ func (p *AudioPipelineService) publishCadencePlan(plan *cadence.Plan, operation 
 		logger.Any("unknown_latency_models", plan.UnknownLatencyModels),
 		logger.String("operation", operation))
 
-	if prev != nil && prev.EffectiveBaseOverlap == plan.EffectiveBaseOverlap && prev.Status == plan.Status {
+	if cadence.SameOutcome(prev, plan) {
 		return
 	}
 	if p.apiService != nil {
@@ -166,32 +157,30 @@ func (p *AudioPipelineService) publishCadencePlan(plan *cadence.Plan, operation 
 // planAndPublishCadence plans for the given configs and publishes the result
 // unconditionally. Used by full rebuilds, which allocate every buffer afresh.
 func (p *AudioPipelineService) planAndPublishCadence(configs []sourceConfigWithModels, operation string) {
-	plan, ok := p.planCadenceForConfigs(configs)
-	if !ok {
+	bn := p.birdNET()
+	if bn == nil {
 		return
 	}
-	p.publishCadencePlan(&plan, operation)
+	plan := planCadenceForConfigs(bn, configs, loadedModelMap(bn), bn.DefaultTargets())
+	p.publishCadencePlan(bn, &plan, operation)
 }
 
-// applyCadenceDecision plans for the given configs and applies decideCadence for
-// an incremental path. It returns true when a full restart was queued and the
-// caller must stop its incremental work; when the restart could not be queued it
-// returns false so the caller keeps its incremental path and the next reconfigure
-// detects the stale plan again.
-func (p *AudioPipelineService) applyCadenceDecision(configs []sourceConfigWithModels, operation string) bool {
-	plan, ok := p.planCadenceForConfigs(configs)
-	if !ok {
-		return false
-	}
-	action := decideCadence(p.bnAnalyzer.BirdNET().CadencePlan(), &plan)
-	if action == cadenceRestart {
+// applyCadenceDecision plans for the given configs and applies needsRestart for
+// an incremental path. loaded and defaults are bn's loaded models and default
+// targets, which the caller already holds. It returns true when a full restart
+// was queued and the caller must stop its incremental work; when the restart
+// could not be queued it returns false so the caller keeps its incremental path
+// and the next reconfigure detects the stale plan again.
+func (p *AudioPipelineService) applyCadenceDecision(bn *classifier.Orchestrator, configs []sourceConfigWithModels, loaded map[string]classifier.ModelInfo, defaults []classifier.ModelInfo, operation string) bool {
+	plan := planCadenceForConfigs(bn, configs, loaded, defaults)
+	if needsRestart(bn.CadencePlan(), &plan) {
 		audiocore.GetLogger().Info("analysis cadence changed, requesting capture restart",
 			logger.Float64("effective_overlap", plan.EffectiveBaseOverlap.Seconds()),
 			logger.String("status", string(plan.Status)),
 			logger.String("operation", operation))
 		return p.requestCaptureRestart()
 	}
-	p.publishCadencePlan(&plan, operation)
+	p.publishCadencePlan(bn, &plan, operation)
 	return false
 }
 
@@ -199,11 +188,20 @@ func (p *AudioPipelineService) applyCadenceDecision(configs []sourceConfigWithMo
 // reports whether the request was queued.
 func (p *AudioPipelineService) requestCaptureRestart() bool {
 	ResetOverrunTrackers()
+	if !trySignalCaptureRestart(p.restartChan) {
+		audiocore.GetLogger().Warn("restart channel full, could not signal capture restart for the cadence plan")
+		return false
+	}
+	return true
+}
+
+// trySignalCaptureRestart queues one capture restart token on ch without
+// blocking and reports whether it was queued.
+func trySignalCaptureRestart(ch chan<- struct{}) bool {
 	select {
-	case p.restartChan <- struct{}{}:
+	case ch <- struct{}{}:
 		return true
 	default:
-		audiocore.GetLogger().Warn("restart channel full, could not signal capture restart for the cadence plan")
 		return false
 	}
 }
