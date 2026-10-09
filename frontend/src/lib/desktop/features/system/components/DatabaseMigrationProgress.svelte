@@ -273,7 +273,7 @@
       <button
         onclick={onStart}
         disabled={isStarting}
-        class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg cursor-pointer bg-[var(--color-success)] text-[var(--color-success-content)] hover:bg-[var(--color-success-hover,var(--color-success))] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg cursor-pointer bg-[var(--color-success)] text-[var(--color-success-content)] hover:bg-[var(--color-success-hover)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
       >
         {#if isStarting}
           <Loader2 class="w-4 h-4 animate-spin" />
@@ -539,7 +539,7 @@
           {#if status?.can_resume}
             <button
               onclick={onResume}
-              class="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer bg-[var(--color-success)] text-[var(--color-success-content)] hover:bg-[var(--color-success-hover,var(--color-success))] transition-colors"
+              class="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer bg-[var(--color-success)] text-[var(--color-success-content)] hover:bg-[var(--color-success-hover)] transition-colors"
             >
               <Play class="w-3.5 h-3.5" />
               {t('system.database.migration.actions.resume')}

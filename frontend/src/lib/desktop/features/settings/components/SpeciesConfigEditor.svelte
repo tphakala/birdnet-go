@@ -54,7 +54,7 @@
     onPredictionSelect,
   }: Props = $props();
 
-  // Form state initialized from props — parent uses {#key} to reset on species change
+  // Form state initialized from props: parent uses {#key} to reset on species change
   // svelte-ignore state_referenced_locally
   const existingAction = config?.actions?.[0];
   // The field DISPLAYS the localized label, while canonicalSpecies holds the value

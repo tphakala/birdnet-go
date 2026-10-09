@@ -6,7 +6,11 @@
   import { t } from '$lib/i18n';
   import { safeGet } from '$lib/utils/security';
   import type { ToastType } from '$lib/stores/toast';
-  import { TOAST_TYPE_CLASSES, TOAST_ACTION_CLASS } from './NotificationToast.styles';
+  import {
+    TOAST_TYPE_CLASSES,
+    TOAST_ACTION_CLASS,
+    TOAST_CLOSE_CLASS,
+  } from './NotificationToast.styles';
 
   type ToastPosition =
     'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
@@ -123,7 +127,7 @@
 
       <button
         type="button"
-        class="inline-flex items-center justify-center p-1 rounded-full shrink-0 transition-colors hover:bg-white/20"
+        class={TOAST_CLOSE_CLASS}
         data-toast-close
         onclick={handleClose}
         aria-label={t('common.aria.closeNotification')}

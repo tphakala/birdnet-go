@@ -80,6 +80,17 @@
     error: 'bg-[var(--color-error)]',
   };
 
+  // Label text on the filled part of the bar uses the content color of the fill it sits on.
+  const labelOnFillClasses: Record<ProgressVariant, string> = {
+    primary: 'text-[var(--color-primary-content)]',
+    secondary: 'text-[var(--color-secondary-content)]',
+    accent: 'text-[var(--color-accent-content)]',
+    info: 'text-[var(--color-info-content)]',
+    success: 'text-[var(--color-success-content)]',
+    warning: 'text-[var(--color-warning-content)]',
+    error: 'text-[var(--color-error-content)]',
+  };
+
   const containerClasses = $derived(
     cn(
       'w-full bg-[var(--color-base-300)] rounded-full overflow-hidden relative',
@@ -101,10 +112,12 @@
   );
 
   let labelClasses = $derived(
-    cn('absolute inset-0 flex items-center justify-center text-xs font-medium', {
-      'text-white mix-blend-difference': percentage > 50,
-      'text-[var(--color-base-content)]': percentage <= 50,
-    })
+    cn(
+      'absolute inset-0 flex items-center justify-center text-xs font-medium',
+      percentage > 50
+        ? safeGet(labelOnFillClasses, currentVariant, 'text-[var(--color-primary-content)]')
+        : 'text-[var(--color-base-content)]'
+    )
   );
 </script>
 

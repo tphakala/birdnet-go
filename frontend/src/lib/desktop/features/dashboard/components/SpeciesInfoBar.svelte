@@ -42,7 +42,7 @@
   const isFalsePositive = $derived(detection.verified === 'false_positive');
   const isUnlikely = $derived(detection.unlikely === true);
 
-  // Thumbnail URL — buildAppUrl prepends the configured base path so the
+  // Thumbnail URL: buildAppUrl prepends the configured base path so the
   // image resolves correctly behind reverse proxies (e.g. /birdnet/...).
   const thumbnailUrl = $derived(
     buildAppUrl(`/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName)}`)

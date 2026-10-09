@@ -153,6 +153,16 @@ describe('NotificationToast', () => {
     expect(classes.filter(name => name.split(':').pop()?.startsWith('text-'))).toEqual(['text-xs']);
   });
 
+  it('gives the close button no background fill', () => {
+    toastTest.render({ props: { message: 'Close toast' } });
+
+    const classes = screen.getByLabelText('Close notification').className.split(/\s+/);
+    expect(classes.filter(name => name.split(':').pop()?.startsWith('bg-'))).toEqual([]);
+    expect(
+      classes.some(name => name.startsWith('hover:ring') || name.startsWith('hover:underline'))
+    ).toBe(true);
+  });
+
   it('renders at different positions', () => {
     const positions = [
       'top-left',

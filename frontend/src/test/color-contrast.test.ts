@@ -13,6 +13,7 @@ import {
 } from '../lib/desktop/components/forms/SelectDropdown.styles';
 import {
   TOAST_ACTION_CLASS,
+  TOAST_CLOSE_CLASS,
   TOAST_TYPE_CLASSES,
 } from '../lib/desktop/components/ui/NotificationToast.styles';
 import { confidenceColorClasses } from '../lib/desktop/features/dashboard/utils/confidenceColors';
@@ -588,13 +589,20 @@ describe('Status colors with their content color', () => {
   const lightBase = blockBody(css, '@theme');
   const darkBlock = blockBody(css, "[data-theme='dark']");
 
-  /** A status token in a theme; the dark theme falls back to the @theme value when it sets none. */
+  /** A status token in a theme. Each theme must define it explicitly, with no fallback to the other. */
   function statusToken(theme: 'light' | 'dark', token: string): string {
-    if (theme === 'light') {
-      return readVar(lightBase, token);
-    }
-    return findVar(darkBlock, token) ?? readVar(lightBase, token);
+    return readVar(theme === 'light' ? lightBase : darkBlock, token);
   }
+
+  it('defines every status, hover and content token in each theme block', () => {
+    for (const theme of ['light', 'dark'] as const) {
+      for (const status of STATUSES) {
+        for (const suffix of ['', '-hover', '-content']) {
+          expect(() => statusToken(theme, `--color-${status}${suffix}`)).not.toThrow();
+        }
+      }
+    }
+  });
 
   for (const theme of ['light', 'dark'] as const) {
     for (const status of STATUSES) {
@@ -618,6 +626,13 @@ describe('Status colors with their content color', () => {
       expect(classes).toContain(`bg-[var(--color-${status})]`);
       expect(classes).toContain(`text-[var(--color-${status}-content)]`);
     }
+  });
+
+  it('toast close button adds no background', () => {
+    const backgrounds = TOAST_CLOSE_CLASS.split(/\s+/).filter(token =>
+      token.slice(token.lastIndexOf(':') + 1).startsWith('bg-')
+    );
+    expect(backgrounds).toEqual([]);
   });
 
   it('toast action buttons add no background', () => {

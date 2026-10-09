@@ -285,8 +285,34 @@ describe('ProgressBar', () => {
       showLabel: true,
     });
 
-    label = container2.querySelector('.text-white');
+    label = container2.querySelector('.text-\\[var\\(--color-primary-content\\)\\]');
     expect(label).toBeInTheDocument();
-    expect(label).toHaveClass('mix-blend-difference');
+    expect(label).not.toHaveClass('mix-blend-difference');
+    expect(label).not.toHaveClass('text-white');
+  });
+
+  it.each(['primary', 'secondary', 'accent', 'info', 'success', 'warning', 'error'] as const)(
+    'labels a mostly filled %s bar with the content color of its fill',
+    variant => {
+      const { container } = progressTest.render({ value: 70, showLabel: true, variant });
+
+      const bar = container.querySelector(`.bg-\\[var\\(--color-${variant}\\)\\]`);
+      expect(bar).toBeInTheDocument();
+      const label = container.querySelector(`.text-\\[var\\(--color-${variant}-content\\)\\]`);
+      expect(label).toBeInTheDocument();
+      expect(label?.className).not.toContain('mix-blend');
+    }
+  );
+
+  it('labels a mostly filled bar with the content color of the threshold variant', () => {
+    const { container } = progressTest.render({
+      value: 90,
+      showLabel: true,
+      colorThresholds: [{ value: 80, variant: 'warning' }],
+    });
+
+    expect(
+      container.querySelector('.text-\\[var\\(--color-warning-content\\)\\]')
+    ).toBeInTheDocument();
   });
 });

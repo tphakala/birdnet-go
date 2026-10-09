@@ -22,3 +22,7 @@ export const TOAST_TYPE_CLASSES: Record<ToastType, string> = {
 /** Action button: outlined in the toast's text colour, with no background. */
 export const TOAST_ACTION_CLASS =
   'inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded border border-current transition-colors hover:underline';
+
+/** Close button: no background fill, so the icon keeps the toast's own contrast; a ring marks hover. */
+export const TOAST_CLOSE_CLASS =
+  'inline-flex items-center justify-center p-1 rounded-full shrink-0 transition-colors hover:ring-1 hover:ring-current';

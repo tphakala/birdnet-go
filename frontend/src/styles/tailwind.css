@@ -32,7 +32,7 @@
   --grid-template-columns-12: repeat(12, minmax(0, 1fr));
   --grid-template-columns-4: repeat(4, minmax(0, 1fr));
 
-  /* Primary & accent — Blue scheme defaults.
+  /* Primary & accent - Blue scheme defaults.
      Other schemes override via [data-scheme] selectors in schemes.css. */
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
@@ -58,7 +58,7 @@
   --color-base-300: #e5e7eb;
   --color-base-content: #1f2937;
 
-  /* Status colors — universal, not scheme-dependent */
+  /* Status colors: universal, not scheme-dependent */
   --color-info: #0ea5e9;
   --color-info-hover: #0284c7;
   --color-info-content: #020617;
