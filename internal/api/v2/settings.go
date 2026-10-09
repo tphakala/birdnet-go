@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/classifier/region"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
@@ -2487,6 +2488,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, ToastTypeInfo, toastDurationLong},
 	{"Models.Enabled", "reconcile_models", modelsEnabledChanged, "Applying enabled model changes...", "", ToastTypeInfo, toastDurationLong},
 	{"Analysis overlap", actionRestartAudioCapture, analysisOverlapChanged, "Restarting audio capture to apply new overlap...", "", ToastTypeInfo, toastDurationMedium},
+	{"FP filter cadence", actionReconfigureAudioSources, falsePositiveFilterActiveChanged, "Re-planning the analysis cadence...", "", ToastTypeInfo, toastDurationMedium},
 	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, ToastTypeInfo, toastDurationMedium},
 	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", notification.MsgSettingsUpdatingIntervals, ToastTypeInfo, toastDurationShort},
 	{"Dynamic thresholds", "reconfigure_dynamic_thresholds", dynamicThresholdEnabledChanged, "Reconfiguring dynamic thresholds...", notification.MsgSettingsReconfiguringDynamicThresholds, ToastTypeInfo, toastDurationMedium},
@@ -2728,6 +2730,17 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 // rebuilds the model instance, not the source buffers).
 func analysisOverlapChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return oldSettings.BirdNET.Overlap != currentSettings.BirdNET.Overlap
+}
+
+// falsePositiveFilterActiveChanged reports whether the bird false positive filter
+// crossed between off (level 0) and on (level >= 1). The analysis cadence cap
+// applies only while the filter is on, so crossing re-plans the cadence through
+// reconfigure_audio_sources, which restarts capture only when the effective
+// overlap actually changes. Level changes that stay on one side of 0 need no
+// action: the confirmation count is recomputed at flush time.
+func falsePositiveFilterActiveChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return cadence.FilterActive(oldSettings.Realtime.FalsePositiveFilter.Level) !=
+		cadence.FilterActive(currentSettings.Realtime.FalsePositiveFilter.Level)
 }
 
 // dynamicThresholdEnabledChanged checks if the DynamicThreshold.Enabled flag was toggled.

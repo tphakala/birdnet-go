@@ -54,3 +54,28 @@ func TestHandleReloadBirdnet_V24NotLoaded_SkipsPrimaryReload(t *testing.T) {
 	assert.NotPanics(t, func() { cm.handleReloadBirdnet() },
 		"a BirdNET reload with v2.4 not loaded must skip the primary reload, not panic or error")
 }
+
+// TestHandleReloadBirdnet_ReplansCadence pins that a BirdNET reload, which
+// re-probes model latency, re-plans the analysis cadence through the re-plan
+// hook and does not run a full source reconfigure (which probes every stream).
+func TestHandleReloadBirdnet_ReplansCadence(t *testing.T) {
+	// Not parallel: NewOrchestrator publishes into the global settings snapshot.
+	settings := conftest.GetTestSettings()
+	settings.Models.Enabled = []string{} // N=0: nothing to reload, the hook still runs
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	orch, err := classifier.NewOrchestrator(settings)
+	require.NoError(t, err)
+	t.Cleanup(orch.Delete)
+
+	var replans, reconfigures int
+	cm := &ControlMonitor{
+		bn:                   orch,
+		replanCadenceFn:      func() { replans++ },
+		reconfigureSourcesFn: func() { reconfigures++ },
+	}
+	cm.handleReloadBirdnet()
+	assert.Equal(t, 1, replans, "the reload must re-plan the cadence once")
+	assert.Zero(t, reconfigures, "the reload must not reconfigure (and probe) the sources")
+}

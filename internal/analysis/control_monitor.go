@@ -58,6 +58,10 @@ type ControlMonitor struct {
 	// duplicating source setup logic.
 	reconfigureSourcesFn func()
 
+	// replanCadenceFn re-plans the analysis cadence without probing or diffing
+	// sources. Set by AudioPipelineService after construction; nil skips it.
+	replanCadenceFn func()
+
 	// reconfigureSoundLevelFn reconciles the sound level DSP pipeline (router
 	// routes, per-source Processor, bridge goroutines) with the current
 	// Realtime.Audio.SoundLevel.Enabled value. Provided by AudioPipelineService
@@ -428,6 +432,13 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 	if err := cm.bn.ReloadSecondaryModels(); err != nil {
 		GetLogger().Error("Failed to reload secondary models", logger.Error(err))
 		cm.notifyError("Failed to reload secondary models", err)
+	}
+
+	// A thread or backend change reloads the models and re-probes their latency,
+	// so re-plan the analysis cadence (restarts capture only if the step changes).
+	// The sources did not change, so no stream is probed or reconfigured.
+	if cm.replanCadenceFn != nil {
+		cm.replanCadenceFn()
 	}
 
 	emitHotReload("birdnet_model")
@@ -1079,10 +1090,9 @@ func (cm *ControlMonitor) handleReconfigureQuietHours() {
 func (cm *ControlMonitor) handleRestartAudioCapture() {
 	GetLogger().Info("Restarting audio capture to apply analysis buffer changes")
 	ResetOverrunTrackers()
-	select {
-	case cm.restartChan <- struct{}{}:
+	if trySignalCaptureRestart(cm.restartChan) {
 		GetLogger().Info("audio capture restart signal sent")
-	default:
+	} else {
 		GetLogger().Warn("restart channel full, could not signal audio capture restart")
 	}
 }
@@ -1093,10 +1103,9 @@ func (cm *ControlMonitor) handleQuietHoursStopSoundCard() {
 
 	// Signal the audio capture goroutine to restart - when it restarts,
 	// CaptureAudio will check IsSoundCardInQuietHours() and skip the sound card.
-	select {
-	case cm.restartChan <- struct{}{}:
+	if trySignalCaptureRestart(cm.restartChan) {
 		GetLogger().Info("Quiet hours: sound card stop signal sent")
-	default:
+	} else {
 		GetLogger().Warn("Quiet hours: restart channel full, could not signal sound card stop")
 	}
 }
@@ -1107,10 +1116,9 @@ func (cm *ControlMonitor) handleQuietHoursStartSoundCard() {
 
 	// Signal the audio capture goroutine to restart - when it restarts,
 	// CaptureAudio will check IsSoundCardInQuietHours() and start the sound card normally.
-	select {
-	case cm.restartChan <- struct{}{}:
+	if trySignalCaptureRestart(cm.restartChan) {
 		GetLogger().Info("Quiet hours: sound card restart signal sent")
-	default:
+	} else {
 		GetLogger().Warn("Quiet hours: restart channel full, could not signal sound card restart")
 	}
 }

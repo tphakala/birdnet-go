@@ -79,14 +79,14 @@ type classifierBackend interface {
 	DefaultTargets() []classifier.ModelInfo
 	PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error)
 	CurrentSettings() *conf.Settings
+	EffectiveBaseOverlap() time.Duration
 	ModelSpecFor(modelID string) (classifier.ModelSpec, bool)
 }
 
-// defaultTargetIDs returns the registry IDs of DefaultTargets() in order: the set a
-// source with no resolvable model list is analyzed with. Nil at N = 0 or when no
-// default target is loaded.
-func defaultTargetIDs(bn classifierBackend) []string {
-	targets := bn.DefaultTargets()
+// defaultTargetIDs returns the registry IDs of the default targets in order: the
+// set a source with no resolvable model list is analyzed with. Nil at N = 0 or
+// when no default target is loaded.
+func defaultTargetIDs(targets []classifier.ModelInfo) []string {
 	if len(targets) == 0 {
 		return nil
 	}

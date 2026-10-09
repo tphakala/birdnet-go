@@ -377,16 +377,9 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 
 	// Derive the analysis buffer interval from the model's spec and the
 	// effective overlap, so the overrun threshold matches the real cadence
-	// (which now honors birdnet.overlap; the bat model stays fixed at 50%).
+	// (which follows the effective base overlap; the bat model stays fixed at 50%).
 	// If inference exceeds this interval the pipeline falls behind real-time.
-	settings := bn.CurrentSettings()
-	spec, ok := bn.ModelSpecFor(modelID)
-	if !ok {
-		// Defensive fallback for an unregistered model: assume the BirdNET base
-		// clip. BufferInterval depends only on ClipLength and the overlap.
-		spec = classifier.ModelSpec{ClipLength: 3 * time.Second}
-	}
-	effectiveBufferDuration := spec.BufferInterval(classifier.ResolveModelOverlap(modelID, spec, settings))
+	effectiveBufferDuration := bufferIntervalFor(bn, modelID)
 
 	if elapsedTime > effectiveBufferDuration {
 		log.Warn("processing time exceeded buffer interval",
@@ -527,4 +520,17 @@ func convert16BitToFloat32WithPool(bufMgr *buffer.Manager, sample []byte) []floa
 		float32Data[i] = float32(s) / divisor
 	}
 	return float32Data
+}
+
+// bufferIntervalFor returns the analysis buffer interval for a model under the
+// effective base overlap (the published cadence plan's), which is what the
+// allocated buffer actually advances by. Used for the overrun threshold.
+func bufferIntervalFor(bn classifierBackend, modelID string) time.Duration {
+	spec, ok := bn.ModelSpecFor(modelID)
+	if !ok {
+		// Defensive fallback for an unregistered model: assume the BirdNET base
+		// clip. BufferInterval depends only on ClipLength and the overlap.
+		spec = classifier.ModelSpec{ClipLength: classifier.AnalysisBaseClipLength}
+	}
+	return spec.BufferInterval(classifier.ResolveModelOverlap(modelID, spec, bn.EffectiveBaseOverlap()))
 }

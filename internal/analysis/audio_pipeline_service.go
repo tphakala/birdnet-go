@@ -318,10 +318,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	watchdogCallbacks := audiocore.LivenessCallbacks{
 		RestartSource: p.RestartSource,
 		Escalate: func(_ string) {
-			select {
-			case p.restartChan <- struct{}{}:
-			default:
-			}
+			trySignalCaptureRestart(p.restartChan)
 		},
 		Notify: func(sourceID string, state audiocore.LivenessState, msg string) {
 			livenessNotif.notify(sourceID, state, msg)
@@ -418,6 +415,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	reconfigureMonitoringFn := p.apiService.ReconfigureMonitoring
 	apiController := p.apiService.APIController()
 	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine, reconfigureFn, reconfigureSoundLevelFn, reconfigureMonitoringFn)
+	p.ctrlMonitor.replanCadenceFn = p.replanCadence
 	p.ctrlMonitor.Start()
 
 	// Start restart loop goroutine.
@@ -427,6 +425,10 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			case <-p.done:
 				return
 			case <-p.restartChan:
+				// Several queued restarts (overlap change, cadence re-plan, quiet
+				// hours) rebuild the same state, so run them as one. A token that
+				// arrives during the restart still triggers one more.
+				drainRestartSignals(p.restartChan)
 				p.restartAudioCapture()
 			}
 		}
@@ -549,6 +551,8 @@ func (p *AudioPipelineService) restartAudioCapture() {
 // RestartSource tears down and reinitializes a single audio source.
 // Follows the same cleanup pattern as reconfigureChangedSources: remove routes,
 // clean up overrun trackers, untrack sound level, stop capture, then re-add.
+// When the rebuilt config changes the analysis cadence, it also queues a full
+// capture restart, which rebuilds every buffer at the new step.
 func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	p.sourcesMu.Lock()
 	defer p.sourcesMu.Unlock()
@@ -632,6 +636,14 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 		return fmt.Errorf("restart source: config for %s no longer exists in settings", sourceID)
 	}
 
+	// The rebuilt config may carry a model assignment the published cadence plan
+	// has not seen. If the plan would change, a full restart is queued; the source
+	// is still re-added below under the published plan, so that restart finds it
+	// in the registry and keeps its probed parameters as a fallback.
+	if bn := p.birdNET(); bn != nil {
+		p.applyCadenceDecision(bn, sourceConfigs, loadedModelMap(bn), bn.DefaultTargets(), operationRestartSource)
+	}
+
 	// 6. Re-add source via engine, using the registry-assigned ID it returns (the
 	// source may get a new ID).
 	newSourceID, err := p.engine.AddSource(targetConfig.config)
@@ -709,6 +721,12 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 	// pre-removal snapshot on a full restart so a probe failure does not collapse
 	// a high-rate source (#4350).
 	sourceConfigs := p.buildSourceConfigsWithModels(fallbackSources)
+
+	// Plan the analysis cadence from every desired source (not only the ones that
+	// AddSource succeeds for) and publish it before any buffer is allocated: this
+	// is a full rebuild, so every buffer is created with the published step.
+	p.planAndPublishCadence(sourceConfigs, operation)
+
 	sourceModelMap := make(map[string][]string, len(sourceConfigs))
 	var sourceIDs []string
 	for _, scm := range sourceConfigs {
@@ -1051,6 +1069,7 @@ const (
 	operationGainChange        = "gain_change"
 	operationModelChange       = "model_change"
 	operationRouteRetry        = "route_retry"
+	operationReplanCadence     = "replan_cadence"
 )
 
 // isReconfigureOperation reports whether a registerConsumersForSources pass was
@@ -1449,7 +1468,9 @@ func (p *AudioPipelineService) forgetDeletedSourceHAEntities(src *audiocore.Audi
 // reconfigureChangedSources diffs the currently running sources against the
 // desired config from settings. Only sources that were added, removed, or
 // changed are touched - unchanged streams keep their capture buffers and
-// source IDs intact.
+// source IDs intact. When the desired sources change the analysis cadence, a
+// full capture restart is queued as well, which rebuilds every buffer at the
+// new step.
 func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan audiocore.AudioLevelData) {
 	p.sourcesMu.Lock()
 	defer p.sourcesMu.Unlock()
@@ -1472,12 +1493,16 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	var loadedModels map[string]classifier.ModelInfo
 	var defaultIDs []string
 	if p.bnAnalyzer != nil {
-		modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
-		loadedModels = make(map[string]classifier.ModelInfo, len(modelInfoSlice))
-		for i := range modelInfoSlice {
-			loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
-		}
-		defaultIDs = defaultTargetIDs(p.bnAnalyzer.BirdNET())
+		bn := p.bnAnalyzer.BirdNET()
+		loadedModels = loadedModelMap(bn)
+		defaults := bn.DefaultTargets()
+		defaultIDs = defaultTargetIDs(defaults)
+
+		// Re-plan the cadence for the desired sources. A different effective step
+		// cannot be applied to kept buffers, so a full restart is queued; the diff
+		// below still runs under the published plan so deleted and renamed streams
+		// get their Home Assistant cleanup, which the restart does not repeat.
+		p.applyCadenceDecision(bn, desiredConfigs, loadedModels, defaults, operationReconfigureDiff)
 	}
 	bufMgr := p.engine.BufferManager()
 
@@ -1835,6 +1860,14 @@ func (p *AudioPipelineService) captureAllStreamFallbacks() map[string]streamFall
 // fallback; RestartSource removes the source before building, so it captures the
 // parameters first and passes them here.
 func (p *AudioPipelineService) buildSourceConfigsWithModels(fallbackSources map[string]streamFallback) []sourceConfigWithModels {
+	return p.buildSourceConfigs(fallbackSources, true)
+}
+
+// buildSourceConfigs builds the desired source configs. With probeStreams false it
+// skips the stream probes and the probe-failure logging: the configs then carry
+// the same sources and model assignments with fallback stream parameters, which
+// is all cadence planning reads, and no stream is contacted.
+func (p *AudioPipelineService) buildSourceConfigs(fallbackSources map[string]streamFallback, probeStreams bool) []sourceConfigWithModels {
 	settings := conf.Setting()
 	var result []sourceConfigWithModels
 
@@ -1850,7 +1883,10 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels(fallbackSources map[
 	// channel counts. This lets us skip FFmpeg resampling when the source
 	// already matches the target, detect sub-48 kHz sources that need
 	// upsampling, and pass channel info for the channel selection filter.
-	probeResults := p.probeAllStreams(enabledStreams)
+	var probeResults map[string]streamProbeResult
+	if probeStreams {
+		probeResults = p.probeAllStreams(enabledStreams)
+	}
 
 	// RTSP streams.
 	for _, stream := range enabledStreams {
@@ -1887,6 +1923,8 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels(fallbackSources map[
 		// retention warning. escalate requires no rate fallback, so it never
 		// coincides with a retained rate.
 		switch {
+		case !probeStreams:
+			// No probe ran, so a fallback is expected and nothing failed.
 		case escalate:
 			// Carry the channel-retention state even on the escalation path: the
 			// rate is lost, but a channel count may still have been recovered, and
@@ -1907,7 +1945,7 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels(fallbackSources map[
 				logger.Bool("channels_retained", channelsRetained),
 				logger.String("operation", "probe_stream"))
 		}
-		if isBat && sourceSampleRate > 0 && sourceSampleRate < ffmpeg.MinBatSampleRate {
+		if probeStreams && isBat && sourceSampleRate > 0 && sourceSampleRate < ffmpeg.MinBatSampleRate {
 			GetLogger().Warn("stream sample rate below bat model minimum",
 				logger.String("stream", stream.Name),
 				logger.Int("sample_rate", sourceSampleRate),
@@ -2150,13 +2188,7 @@ func (p *AudioPipelineService) probeStreamSampleRate(url, name string) streamPro
 // UpdateMonitors. It resolves per-source model IDs to full ModelInfo so that
 // monitorConfig gets the correct spec (sample rate + clip length).
 func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]string, sourceIDs []string) map[string][]monitorConfig {
-	// Build lookup of loaded models by registry ID.
-	modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
-	loadedModels := make(map[string]classifier.ModelInfo, len(modelInfoSlice))
-	for i := range modelInfoSlice {
-		loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
-	}
-
+	loadedModels := loadedModelMap(p.bnAnalyzer.BirdNET())
 	defaultTargets := p.bnAnalyzer.BirdNET().DefaultTargets()
 	result := make(map[string][]monitorConfig, len(sourceIDs))
 
@@ -2203,6 +2235,23 @@ func deallocateStaleAnalysisBuffers(bufMgr *buffer.Manager, sourceID string, des
 // warning log, and reported to the caller through skipped so the omission can be
 // surfaced to the user instead of only reaching a log file.
 func resolveModelTargets(configModelIDs []string, loadedModels map[string]classifier.ModelInfo) (targets []classifier.ModelInfo, skipped []string) {
+	return matchModelTargets(configModelIDs, loadedModels, func(configID, registryID string, known bool) {
+		if !known {
+			GetLogger().Warn("unknown model ID in source config, skipping",
+				logger.String("config_id", configID))
+			return
+		}
+		GetLogger().Warn("model configured for source but not loaded",
+			logger.String("config_id", configID),
+			logger.String("registry_id", registryID))
+	})
+}
+
+// matchModelTargets is the pure matching behind resolveModelTargets. onSkip, when
+// non-nil, is called for each skipped config ID with its resolved registry ID and
+// whether the ID is a known model; the planner passes nil so planning does not
+// repeat the warnings.
+func matchModelTargets(configModelIDs []string, loadedModels map[string]classifier.ModelInfo, onSkip func(configID, registryID string, known bool)) (targets []classifier.ModelInfo, skipped []string) {
 	if len(configModelIDs) == 0 {
 		return nil, nil
 	}
@@ -2210,16 +2259,17 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 	for _, configID := range configModelIDs {
 		registryID, known := classifier.ResolveConfigModelID(configID)
 		if !known {
-			GetLogger().Warn("unknown model ID in source config, skipping",
-				logger.String("config_id", configID))
+			if onSkip != nil {
+				onSkip(configID, registryID, false)
+			}
 			skipped = append(skipped, configID)
 			continue
 		}
 		info, loaded := loadedModels[registryID]
 		if !loaded {
-			GetLogger().Warn("model configured for source but not loaded",
-				logger.String("config_id", configID),
-				logger.String("registry_id", registryID))
+			if onSkip != nil {
+				onSkip(configID, registryID, true)
+			}
 			skipped = append(skipped, configID)
 			continue
 		}
