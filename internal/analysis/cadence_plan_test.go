@@ -222,6 +222,21 @@ func TestDrainRestartSignals(t *testing.T) {
 	assert.Empty(t, ch)
 }
 
+// TestPlanCadence_NilSettingsPlansFilterOff pins that settings that could not be
+// loaded plan as empty settings instead of panicking.
+func TestPlanCadence_NilSettingsPlansFilterOff(t *testing.T) {
+	t.Parallel()
+	v24 := classifier.RegistryIDBirdNETV24
+	pairs := buildCadencePairs([]sourceConfigWithModels{cadenceConfig("a")}, cadenceLoaded(v24),
+		[]classifier.ModelInfo{cadenceModelInfo(v24)})
+	var plan cadence.Plan
+	require.NotPanics(t, func() {
+		plan = planCadence(nil, pairs, map[string]time.Duration{v24: 400 * time.Millisecond})
+	})
+	assert.Equal(t, cadence.StatusFilterOff, plan.Status)
+	assert.Equal(t, time.Duration(0), plan.EffectiveBaseOverlap)
+}
+
 func TestPlanCadence_FilterOffKeepsConfigured(t *testing.T) {
 	t.Parallel()
 	v24 := classifier.RegistryIDBirdNETV24

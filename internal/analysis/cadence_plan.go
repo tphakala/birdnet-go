@@ -53,8 +53,13 @@ func buildCadencePairs(configs []sourceConfigWithModels, loaded map[string]class
 }
 
 // planCadence solves the cadence for the given pairs and probed latencies. The
-// cap applies only while the false positive filter is on.
+// cap applies only while the false positive filter is on. Nil settings (settings
+// that could not be loaded) plan as empty settings: filter off, no configured
+// overlap.
 func planCadence(settings *conf.Settings, pairs []cadence.Pair, latencies map[string]time.Duration) cadence.Plan {
+	if settings == nil {
+		settings = &conf.Settings{}
+	}
 	return cadence.Solve(cadence.Input{
 		FilterActive:          cadence.FilterActive(settings.Realtime.FalsePositiveFilter.Level),
 		ConfiguredBaseOverlap: classifier.ConfiguredBaseOverlap(settings),
