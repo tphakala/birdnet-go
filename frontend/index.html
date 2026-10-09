@@ -42,8 +42,13 @@
                   var L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
                   return L > 0.179 ? '#020617' : '#ffffff';
                 }
-                root.setProperty('--custom-primary-content', contrast(c.primary));
-                root.setProperty('--custom-accent-content', contrast(c.accent || c.primary));
+                var pc = contrast(c.primary);
+                var ac = contrast(c.accent || c.primary);
+                root.setProperty('--custom-primary-content', pc);
+                root.setProperty('--custom-accent-content', ac);
+                // Hover and pressed states move away from the content colour
+                root.setProperty('--custom-primary-shade', pc === '#ffffff' ? 'black' : 'white');
+                root.setProperty('--custom-accent-shade', ac === '#ffffff' ? 'black' : 'white');
               }
             }
           } else {

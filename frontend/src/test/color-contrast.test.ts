@@ -1101,3 +1101,58 @@ describe('Primary and accent content in every color scheme', () => {
     });
   });
 });
+
+describe('Custom scheme hover and pressed fills', () => {
+  const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
+  const schemesCss = readFileSync(join(stylesDir, 'schemes.css'), 'utf8');
+
+  /** Same rule as the scheme store: dark text on light colours, white on dark ones. */
+  function contentFor(hex: string): string {
+    const n = parseInt(hex.slice(1), 16);
+    const lin = (v: number) => {
+      const s = v / 255;
+      return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    const l = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+    return l > 0.179 ? '#020617' : '#ffffff';
+  }
+
+  it('mixes hover and pressed fills toward the shade the scheme store sets', () => {
+    const body = blockBody(schemesCss, "\n[data-scheme='custom']");
+    for (const name of ['--color-primary-hover', '--color-primary-active']) {
+      // eslint-disable-next-line security/detect-non-literal-regexp -- fixed property names
+      expect(body).toMatch(new RegExp(`${name}:[^;]*var\\(--custom-primary-shade`));
+    }
+    expect(body).toMatch(/--color-accent-hover:[^;]*var\(--custom-accent-shade/);
+    // No theme-specific override mixes toward a fixed colour regardless of the content
+    expect(schemesCss).not.toContain("[data-theme='dark'][data-scheme='custom']");
+  });
+
+  it('keeps at least the rest contrast on hover and pressed for any custom colour', () => {
+    const channel = ['00', '33', '66', '99', 'cc', 'ff'];
+    for (const r of channel) {
+      for (const g of channel) {
+        for (const b of channel) {
+          const primary = `#${r}${g}${b}`;
+          const content = contentFor(primary);
+          const shade = content === '#ffffff' ? '#000000' : '#ffffff';
+          const rest = getContrastRatio(content, primary);
+          const hover = getContrastRatio(content, applyOpacity(primary, shade, 0.85));
+          const active = getContrastRatio(content, applyOpacity(primary, shade, 0.7));
+          expect(hover, `${primary} hover`).toBeGreaterThanOrEqual(rest - 0.01);
+          expect(active, `${primary} pressed`).toBeGreaterThanOrEqual(rest - 0.01);
+        }
+      }
+    }
+  });
+
+  it('the scheme store sets a shade away from the content colour', async () => {
+    const { scheme } = await import('../lib/stores/scheme');
+    scheme.setCustomColors({ primary: '#0d9488', accent: '#1e3a8a' });
+    const style = document.documentElement.style;
+    expect(style.getPropertyValue('--custom-primary-content')).toBe('#020617');
+    expect(style.getPropertyValue('--custom-primary-shade')).toBe('white');
+    expect(style.getPropertyValue('--custom-accent-content')).toBe('#ffffff');
+    expect(style.getPropertyValue('--custom-accent-shade')).toBe('black');
+  });
+});

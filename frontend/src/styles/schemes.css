@@ -107,21 +107,28 @@
 
 /* --- Custom (user-defined) ---
    JS sets --custom-primary and --custom-accent on
-   document.documentElement.style. Hover/active variants
-   are auto-derived via color-mix(). Content color
-   (black or white) is computed by JS based on luminance. */
+   document.documentElement.style. Content color
+   (black or white) is computed by JS based on luminance, and
+   hover/active variants are mixed away from it (toward the
+   --custom-*-shade that JS sets) so they keep its contrast. */
 [data-scheme='custom'] {
   --color-primary: var(--custom-primary, #2563eb);
-  --color-primary-hover: color-mix(in srgb, var(--custom-primary, #2563eb) 85%, black);
-  --color-primary-active: color-mix(in srgb, var(--custom-primary, #2563eb) 70%, black);
+  --color-primary-hover: color-mix(
+    in srgb,
+    var(--custom-primary, #2563eb) 85%,
+    var(--custom-primary-shade, black)
+  );
+  --color-primary-active: color-mix(
+    in srgb,
+    var(--custom-primary, #2563eb) 70%,
+    var(--custom-primary-shade, black)
+  );
   --color-primary-content: var(--custom-primary-content, #ffffff);
   --color-accent: var(--custom-accent, #0284c7);
-  --color-accent-hover: color-mix(in srgb, var(--custom-accent, #0284c7) 85%, black);
+  --color-accent-hover: color-mix(
+    in srgb,
+    var(--custom-accent, #0284c7) 85%,
+    var(--custom-accent-shade, black)
+  );
   --color-accent-content: var(--custom-accent-content, #ffffff);
-}
-
-[data-theme='dark'][data-scheme='custom'] {
-  --color-primary-hover: color-mix(in srgb, var(--custom-primary, #3b82f6) 80%, white);
-  --color-primary-active: color-mix(in srgb, var(--custom-primary, #3b82f6) 85%, black);
-  --color-accent-hover: color-mix(in srgb, var(--custom-accent, #0369a1) 80%, white);
 }
