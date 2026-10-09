@@ -205,7 +205,7 @@ func TestCadenceNotice_NilPlanIgnored(t *testing.T) {
 
 func TestCadenceNotice_ChangedInputsReplace(t *testing.T) {
 	t.Parallel()
-	svc := newCadenceNoticeRecorder(t, 3, 2)
+	svc := newCadenceNoticeRecorder(t, 4, 3)
 	n := newTestCadenceNotice(svc)
 
 	n.observe(noticePlan(cadence.StatusCapped, 2800*time.Millisecond, 1800*time.Millisecond))
@@ -221,11 +221,19 @@ func TestCadenceNotice_ChangedInputsReplace(t *testing.T) {
 	created, _ = svc.counts()
 	assert.Equal(t, 3, created, "a new source count the text states replaces the notice")
 	assert.Equal(t, 2, svc.last().MessageParams["sources"])
+
+	fewerModels := noticePlan(cadence.StatusCapped, 2500*time.Millisecond, 1800*time.Millisecond)
+	fewerModels.SourceCount = 2
+	fewerModels.ModelCount = 1
+	n.observe(fewerModels)
+	created, _ = svc.counts()
+	assert.Equal(t, 4, created, "a new model count the text states replaces the notice")
+	assert.Equal(t, 1, svc.last().MessageParams["models"])
 }
 
 func TestCadenceNotice_OverloadedIgnoresConfiguredOverlap(t *testing.T) {
 	t.Parallel()
-	svc := newCadenceNoticeRecorder(t, 2, 1)
+	svc := newCadenceNoticeRecorder(t, 3, 2)
 	n := newTestCadenceNotice(svc)
 
 	n.observe(noticePlan(cadence.StatusOverloaded, 2800*time.Millisecond, 0))
@@ -240,6 +248,14 @@ func TestCadenceNotice_OverloadedIgnoresConfiguredOverlap(t *testing.T) {
 	created, _ = svc.counts()
 	assert.Equal(t, 2, created, "a new model count the text states replaces the notice")
 	assert.Equal(t, 1, svc.last().MessageParams["models"])
+
+	more := noticePlan(cadence.StatusOverloaded, 2400*time.Millisecond, 0)
+	more.ModelCount = 1
+	more.SourceCount = 3
+	n.observe(more)
+	created, _ = svc.counts()
+	assert.Equal(t, 3, created, "a new source count the text states replaces the notice")
+	assert.Equal(t, 3, svc.last().MessageParams["sources"])
 }
 
 func TestCadenceNotice_RetryRaisesAfterFailedCreate(t *testing.T) {
