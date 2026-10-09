@@ -14,9 +14,11 @@
  *   and the cadence readout follows a re-plan. The dashboard banner and the
  *   analysis settings page use it; watchers share the one SSE.
  *
- * There are no timers: state refreshes on (re)mount, on SSE (re)connect and on
- * the topology-changed event. The endpoint and the stream are auth-protected, so
- * a guest viewer never calls them and the state stays "unknown".
+ * There is no polling: state refreshes on (re)mount, on SSE (re)connect, on the
+ * topology-changed event (debounced, since one change can announce itself more
+ * than once) and on an explicit refresh or invalidate. The endpoint and the
+ * stream are auth-protected, so a guest viewer never calls them and the state
+ * stays "unknown".
  */
 import { untrack } from 'svelte';
 import { api } from '$lib/utils/api';
@@ -24,6 +26,7 @@ import { loggers } from '$lib/utils/logger';
 import { isGuestMode } from '$lib/stores/appState.svelte';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
 import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
+import { isPlainObject } from '$lib/utils/security';
 import {
   MODEL_HEALTH_FAILING,
   type AnalysisCadenceInfo,
@@ -49,6 +52,11 @@ export const TOPOLOGY_EVENT = 'system.inference_topology_changed';
 
 const CONNECTED_EVENT = 'connected';
 const SSE_MAX_RETRY_MS = 30000;
+/**
+ * Trailing debounce for topology-changed events: a re-plan, a reconfigure and a
+ * model load can each announce the same change, so a burst becomes one fetch.
+ */
+export const TOPOLOGY_REFRESH_DEBOUNCE_MS = 300;
 const STATE_OK = 'ok';
 
 /** Last classifier verdict string as served; null until the first successful fetch. */
@@ -67,9 +75,10 @@ let error = $state(false);
 let subscribers = 0;
 let watchers = 0;
 let inFlight: Promise<void> | null = null;
-/** One fetch queued behind inFlight, shared by every caller that arrives meanwhile. */
+/** One fetch queued behind inFlight by invalidateAcousticModels, shared by its callers. */
 let queued: Promise<void> | null = null;
 let topologySource: ReconnectingEventSource | null = null;
+let topologyRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function acousticModelsState(): string | null {
   return state;
@@ -112,12 +121,9 @@ function failingModelsOf(models: unknown): FailingModel[] {
   if (!Array.isArray(models)) return [];
   const out: FailingModel[] = [];
   for (const m of models) {
-    if (typeof m !== 'object' || m === null) continue;
-    const { id, name, health } = m as { id?: unknown; name?: unknown; health?: unknown };
-    const state =
-      typeof health === 'object' && health !== null
-        ? (health as { state?: unknown }).state
-        : undefined;
+    if (!isPlainObject(m)) continue;
+    const { id, name, health } = m;
+    const state = isPlainObject(health) ? health.state : undefined;
     if (state === MODEL_HEALTH_FAILING && typeof id === 'string') {
       out.push({ id, name: typeof name === 'string' && name !== '' ? name : id });
     }
@@ -152,63 +158,74 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+/** Validates one cadence model entry; null when a field the readout needs is malformed. */
 function cadenceModelOf(value: unknown): AnalysisCadenceModel | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const m: Partial<Record<keyof AnalysisCadenceModel, unknown>> = value;
+  if (!isPlainObject(value)) return null;
+  const { id, name, clipMs, stepMs, confirmations, windowsInReference } = value;
   if (
-    typeof m.id !== 'string' ||
-    !isFiniteNumber(m.clipMs) ||
-    !isFiniteNumber(m.stepMs) ||
-    !isFiniteNumber(m.confirmations) ||
-    !isFiniteNumber(m.windowsInReference)
+    typeof id !== 'string' ||
+    !isFiniteNumber(clipMs) ||
+    !isFiniteNumber(stepMs) ||
+    !isFiniteNumber(confirmations) ||
+    !isFiniteNumber(windowsInReference)
   ) {
     return null;
   }
-  const model: AnalysisCadenceModel = {
-    id: m.id,
-    name: typeof m.name === 'string' && m.name !== '' ? m.name : m.id,
-    clipMs: m.clipMs,
-    stepMs: m.stepMs,
-    confirmations: m.confirmations,
-    windowsInReference: m.windowsInReference,
+  return {
+    id,
+    name: typeof name === 'string' && name !== '' ? name : id,
+    clipMs,
+    stepMs,
+    confirmations,
+    windowsInReference,
   };
-  if (isFiniteNumber(m.probeLatencyMs)) model.probeLatencyMs = m.probeLatencyMs;
-  return model;
 }
 
-/** Validates the snapshot's `analysisCadence`; null when absent or malformed. */
+/**
+ * Validates the snapshot's `analysisCadence`; null when absent or malformed.
+ * Fields nothing in the UI reads (the duty estimates and probe latencies) are
+ * not kept.
+ */
 function analysisCadenceOf(value: unknown): AnalysisCadenceInfo | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const c: Partial<Record<keyof AnalysisCadenceInfo, unknown>> = value;
+  if (!isPlainObject(value)) return null;
+  const {
+    status,
+    filterLevel,
+    configuredOverlapSec,
+    effectiveOverlapSec,
+    minBaseStepMs,
+    sourceCount,
+    modelCount,
+    unknownLatencyModels,
+    models,
+  } = value;
   if (
-    !isCadenceStatus(c.status) ||
-    !isFiniteNumber(c.configuredOverlapSec) ||
-    !isFiniteNumber(c.effectiveOverlapSec) ||
-    !Array.isArray(c.models)
+    !isCadenceStatus(status) ||
+    !isFiniteNumber(filterLevel) ||
+    !isFiniteNumber(configuredOverlapSec) ||
+    !isFiniteNumber(effectiveOverlapSec) ||
+    !Array.isArray(models)
   ) {
     return null;
   }
   const numberOr = (v: unknown): number => (isFiniteNumber(v) ? v : 0);
   return {
-    status: c.status,
-    configuredOverlapSec: c.configuredOverlapSec,
-    effectiveOverlapSec: c.effectiveOverlapSec,
-    minBaseStepMs: numberOr(c.minBaseStepMs),
-    estimatedDutyConfigured: numberOr(c.estimatedDutyConfigured),
-    estimatedDutyEffective: numberOr(c.estimatedDutyEffective),
-    dutyCeiling: numberOr(c.dutyCeiling),
-    sourceCount: numberOr(c.sourceCount),
-    modelCount: numberOr(c.modelCount),
-    unknownLatencyModels: Array.isArray(c.unknownLatencyModels)
-      ? c.unknownLatencyModels.filter((id): id is string => typeof id === 'string')
+    status,
+    filterLevel,
+    configuredOverlapSec,
+    effectiveOverlapSec,
+    minBaseStepMs: numberOr(minBaseStepMs),
+    sourceCount: numberOr(sourceCount),
+    modelCount: numberOr(modelCount),
+    unknownLatencyModels: Array.isArray(unknownLatencyModels)
+      ? unknownLatencyModels.filter((id): id is string => typeof id === 'string')
       : [],
-    models: c.models.map(cadenceModelOf).filter((m): m is AnalysisCadenceModel => m !== null),
+    models: models.map(cadenceModelOf).filter((m): m is AnalysisCadenceModel => m !== null),
   };
 }
 
 function applySnapshot(data: unknown): void {
-  const snapshot: Partial<InferenceStatusResponse> =
-    typeof data === 'object' && data !== null ? data : {};
+  const snapshot: Record<string, unknown> = isPlainObject(data) ? data : {};
   // An older server omits the field; treat that like the "" sentinel (no verdict).
   state = typeof snapshot.acousticModelsState === 'string' ? snapshot.acousticModelsState : '';
   defaultTargets = Array.isArray(snapshot.defaultTargets)
@@ -235,26 +252,34 @@ async function fetchSnapshot(): Promise<void> {
 }
 
 /**
- * Re-read the verdict. A call while a fetch is running queues one more fetch
- * after it, because the running request may predate the change the caller wants
- * to see (a settings save the server has just applied); every caller that
- * arrives meanwhile shares that queued fetch. Guests get a resolved no-op
- * because the endpoint would only answer 401.
+ * Re-read the verdict. Concurrent callers share one request; guests get a
+ * resolved no-op because the endpoint would only answer 401.
  */
 export function refreshAcousticModels(): Promise<void> {
   if (isGuestMode()) return Promise.resolve();
-  if (inFlight) {
-    queued ??= inFlight.then(() => {
-      queued = null;
-      return refreshAcousticModels();
-    });
-    return queued;
-  }
+  if (inFlight) return inFlight;
   const run = fetchSnapshot().finally(() => {
     if (inFlight === run) inFlight = null;
   });
   inFlight = run;
   return run;
+}
+
+/**
+ * Re-read the verdict after a change the caller has just made (a settings save
+ * the server has applied). A running request may predate that change, so a call
+ * during one queues exactly one more fetch after it; every caller that arrives
+ * meanwhile shares that queued fetch. Without a running request it is a plain
+ * refresh. Guests get a resolved no-op.
+ */
+export function invalidateAcousticModels(): Promise<void> {
+  if (isGuestMode()) return Promise.resolve();
+  if (!inFlight) return refreshAcousticModels();
+  queued ??= inFlight.then(() => {
+    queued = null;
+    return refreshAcousticModels();
+  });
+  return queued;
 }
 
 /**
@@ -295,24 +320,40 @@ function openTopologyStream(): void {
   }
   topologySource = source;
 
-  source.addEventListener(TOPOLOGY_EVENT, () => {
-    void refreshAcousticModels();
-  });
+  source.addEventListener(TOPOLOGY_EVENT, scheduleTopologyRefresh);
 
   // The server sends `connected` on every (re)connection. The first one lands
   // right after the subscribe fetch, so it only refreshes when that fetch has
-  // not succeeded; later ones mean a reconnect (server restart) and always refresh.
+  // not succeeded; later ones mean a reconnect (server restart) and refresh
+  // unless a fetch is already running.
   let initialConnect = true;
   source.addEventListener(CONNECTED_EVENT, () => {
     if (initialConnect) {
       initialConnect = false;
       if (loaded && !error) return;
     }
+    if (inFlight) return;
     void refreshAcousticModels();
   });
 }
 
+/** Refreshes once a burst of topology-changed events has gone quiet. */
+function scheduleTopologyRefresh(): void {
+  cancelTopologyRefresh();
+  topologyRefreshTimer = setTimeout(() => {
+    topologyRefreshTimer = null;
+    void refreshAcousticModels();
+  }, TOPOLOGY_REFRESH_DEBOUNCE_MS);
+}
+
+function cancelTopologyRefresh(): void {
+  if (topologyRefreshTimer === null) return;
+  clearTimeout(topologyRefreshTimer);
+  topologyRefreshTimer = null;
+}
+
 function closeTopologyStream(): void {
+  cancelTopologyRefresh();
   if (!topologySource) return;
   topologySource.close();
   topologySource = null;

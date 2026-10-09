@@ -2,14 +2,15 @@
  * Tests for the acoustic model availability store.
  *
  * Covers the verdict mapping (ok / none_installed / load_failed / "" / unknown),
- * the guest guard, in-flight de-duplication, subscribe refcounting and the
- * watch path that keeps a single topology SSE open and refreshes on the
- * topology event and on reconnect.
+ * the guest guard, in-flight sharing, the queued fetch of an invalidate,
+ * subscribe refcounting and the watch path that keeps a single topology SSE
+ * open and refreshes on the (debounced) topology event and on reconnect.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   TOPOLOGY_EVENT,
   TOPOLOGY_ONLY_FILTER,
+  TOPOLOGY_REFRESH_DEBOUNCE_MS,
   acousticDefaultTargets,
   acousticFailingModels,
   acousticModelAvailability,
@@ -17,6 +18,7 @@ import {
   acousticModelsLoaded,
   acousticModelsState,
   analysisCadence,
+  invalidateAcousticModels,
   refreshAcousticModels,
   resetAcousticModelsForTest,
   subscribeAcousticModels,
@@ -172,6 +174,7 @@ describe('acousticModels store', () => {
     it('keeps the planned analysis cadence from the same snapshot', async () => {
       const cadence = {
         status: 'capped',
+        filterLevel: 5,
         configuredOverlapSec: 2.8,
         effectiveOverlapSec: 1.8,
         minBaseStepMs: 1200,
@@ -195,7 +198,27 @@ describe('acousticModels store', () => {
       };
       apiGet.mockResolvedValueOnce({ ...snapshot('ok'), analysisCadence: cadence });
       await refreshAcousticModels();
-      expect(analysisCadence()).toEqual(cadence);
+      // The duty estimates and probe latencies are not kept: nothing reads them.
+      expect(analysisCadence()).toEqual({
+        status: 'capped',
+        filterLevel: 5,
+        configuredOverlapSec: 2.8,
+        effectiveOverlapSec: 1.8,
+        minBaseStepMs: 1200,
+        sourceCount: 1,
+        modelCount: 2,
+        unknownLatencyModels: ['Perch_V2'],
+        models: [
+          {
+            id: 'BirdNET_V2.4',
+            name: 'BirdNET v2.4',
+            clipMs: 3000,
+            stepMs: 1200,
+            confirmations: 4,
+            windowsInReference: 5,
+          },
+        ],
+      });
     });
 
     it('reports no cadence for an older server, a plan not yet published, or a malformed one', async () => {
@@ -213,6 +236,7 @@ describe('acousticModels store', () => {
 
     const validCadence = () => ({
       status: 'ok',
+      filterLevel: 2,
       configuredOverlapSec: 2,
       effectiveOverlapSec: 2,
       minBaseStepMs: 0,
@@ -236,6 +260,7 @@ describe('acousticModels store', () => {
 
     it.each([
       ['an unknown status', { status: 'sideways' }],
+      ['a missing filter level', { filterLevel: undefined }],
       ['a missing configured overlap', { configuredOverlapSec: undefined }],
       ['a non-finite effective overlap', { effectiveOverlapSec: Number.NaN }],
       ['models that are not a list', { models: 'none' }],
@@ -278,10 +303,10 @@ describe('acousticModels store', () => {
     it('defaults optional numbers that are null or not finite to zero', async () => {
       apiGet.mockResolvedValueOnce({
         ...snapshot('ok'),
-        analysisCadence: { ...validCadence(), dutyCeiling: null, minBaseStepMs: Number.NaN },
+        analysisCadence: { ...validCadence(), sourceCount: null, minBaseStepMs: Number.NaN },
       });
       await refreshAcousticModels();
-      expect(analysisCadence()).toMatchObject({ dutyCeiling: 0, minBaseStepMs: 0 });
+      expect(analysisCadence()).toMatchObject({ sourceCount: 0, minBaseStepMs: 0 });
     });
 
     it('keeps only the string entries of unknownLatencyModels', async () => {
@@ -295,23 +320,13 @@ describe('acousticModels store', () => {
 
     it('defaults the optional numbers to zero', async () => {
       const rest: Record<string, unknown> = validCadence();
-      for (const key of [
-        'minBaseStepMs',
-        'estimatedDutyConfigured',
-        'estimatedDutyEffective',
-        'dutyCeiling',
-        'sourceCount',
-        'modelCount',
-      ]) {
+      for (const key of ['minBaseStepMs', 'sourceCount', 'modelCount']) {
         Reflect.deleteProperty(rest, key);
       }
       apiGet.mockResolvedValueOnce({ ...snapshot('ok'), analysisCadence: rest });
       await refreshAcousticModels();
       expect(analysisCadence()).toMatchObject({
         minBaseStepMs: 0,
-        estimatedDutyConfigured: 0,
-        estimatedDutyEffective: 0,
-        dutyCeiling: 0,
         sourceCount: 0,
         modelCount: 0,
       });
@@ -322,6 +337,7 @@ describe('acousticModels store', () => {
         ...snapshot('ok'),
         analysisCadence: {
           status: 'ok',
+          filterLevel: 2,
           configuredOverlapSec: 2,
           effectiveOverlapSec: 2,
           minBaseStepMs: 0,
@@ -372,14 +388,38 @@ describe('acousticModels store', () => {
       expect(acousticModelAvailability()).toEqual({ kind: 'unknown' });
     });
 
+    it('shares one request between concurrent callers', async () => {
+      let resolve!: (value: unknown) => void;
+      apiGet.mockImplementationOnce(() => new Promise(res => (resolve = res)));
+
+      const first = refreshAcousticModels();
+      const second = refreshAcousticModels();
+      expect(second).toBe(first);
+      expect(apiGet).toHaveBeenCalledTimes(1);
+
+      resolve(snapshot('ok'));
+      await first;
+      expect(apiGet).toHaveBeenCalledTimes(1);
+      expect(acousticModelsState()).toBe('ok');
+    });
+  });
+
+  describe('invalidateAcousticModels', () => {
+    it('fetches at once when nothing is running', async () => {
+      apiGet.mockResolvedValueOnce(snapshot('ok'));
+      await invalidateAcousticModels();
+      expect(apiGet).toHaveBeenCalledTimes(1);
+      expect(acousticModelsState()).toBe('ok');
+    });
+
     it('queues one fetch behind a running one and shares it between later callers', async () => {
       let resolve!: (value: unknown) => void;
       apiGet.mockImplementationOnce(() => new Promise(res => (resolve = res)));
       apiGet.mockResolvedValueOnce(snapshot('none_installed'));
 
       const first = refreshAcousticModels();
-      const second = refreshAcousticModels();
-      const third = refreshAcousticModels();
+      const second = invalidateAcousticModels();
+      const third = invalidateAcousticModels();
       expect(second).not.toBe(first);
       expect(third).toBe(second);
       expect(apiGet).toHaveBeenCalledTimes(1);
@@ -391,10 +431,16 @@ describe('acousticModels store', () => {
       expect(apiGet).toHaveBeenCalledTimes(2);
       expect(acousticModelsState()).toBe('none_installed');
 
-      // Nothing stays queued: a later refresh is a single new request.
+      // Nothing stays queued: a later invalidate is a single new request.
       apiGet.mockResolvedValueOnce(snapshot('ok'));
-      await refreshAcousticModels();
+      await invalidateAcousticModels();
       expect(apiGet).toHaveBeenCalledTimes(3);
+    });
+
+    it('never calls the auth-protected endpoint for a guest', async () => {
+      isGuestMode.mockReturnValue(true);
+      await invalidateAcousticModels();
+      expect(apiGet).not.toHaveBeenCalled();
     });
   });
 
@@ -458,22 +504,46 @@ describe('acousticModels store', () => {
       expect(sse.instances[0]?.closed).toBe(true);
     });
 
-    it('refreshes on the topology-changed event', async () => {
-      apiGet.mockResolvedValueOnce(snapshot('none_installed'));
-      const unwatch = watchAcousticModels();
-      await flush();
-      expect(acousticModelAvailability()).toEqual({ kind: 'none', reason: 'none_installed' });
+    it('refreshes once a burst of topology-changed events goes quiet', async () => {
+      vi.useFakeTimers();
+      try {
+        apiGet.mockResolvedValueOnce(snapshot('none_installed'));
+        const unwatch = watchAcousticModels();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(acousticModelAvailability()).toEqual({ kind: 'none', reason: 'none_installed' });
 
-      apiGet.mockResolvedValueOnce(snapshot('ok', ['BirdNET_V2.4']));
-      fire(0, TOPOLOGY_EVENT);
-      await flush();
+        apiGet.mockResolvedValueOnce(snapshot('ok', ['BirdNET_V2.4']));
+        fire(0, TOPOLOGY_EVENT);
+        await vi.advanceTimersByTimeAsync(TOPOLOGY_REFRESH_DEBOUNCE_MS - 1);
+        fire(0, TOPOLOGY_EVENT);
+        await vi.advanceTimersByTimeAsync(TOPOLOGY_REFRESH_DEBOUNCE_MS - 1);
+        expect(apiGet).toHaveBeenCalledTimes(1);
 
-      expect(apiGet).toHaveBeenCalledTimes(2);
-      expect(acousticModelAvailability()).toEqual({
-        kind: 'ready',
-        defaultTargets: ['BirdNET_V2.4'],
-      });
-      unwatch();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(apiGet).toHaveBeenCalledTimes(2);
+        expect(acousticModelAvailability()).toEqual({
+          kind: 'ready',
+          defaultTargets: ['BirdNET_V2.4'],
+        });
+        unwatch();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('drops a pending topology refresh when the last watcher leaves', async () => {
+      vi.useFakeTimers();
+      try {
+        apiGet.mockResolvedValue(snapshot('ok'));
+        const unwatch = watchAcousticModels();
+        await vi.advanceTimersByTimeAsync(0);
+        fire(0, TOPOLOGY_EVENT);
+        unwatch();
+        await vi.advanceTimersByTimeAsync(TOPOLOGY_REFRESH_DEBOUNCE_MS);
+        expect(apiGet).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('skips the initial connected event once loaded but refreshes on a reconnect', async () => {
@@ -489,6 +559,26 @@ describe('acousticModels store', () => {
       fire(0, 'connected');
       await flush();
       expect(apiGet).toHaveBeenCalledTimes(2);
+      unwatch();
+    });
+
+    it('skips a reconnect refresh while a fetch is running', async () => {
+      apiGet.mockResolvedValueOnce(snapshot('ok'));
+      const unwatch = watchAcousticModels();
+      await flush();
+      fire(0, 'connected'); // initial connect, already loaded
+
+      let resolve!: (value: unknown) => void;
+      apiGet.mockImplementationOnce(() => new Promise(res => (resolve = res)));
+      const running = invalidateAcousticModels();
+      expect(apiGet).toHaveBeenCalledTimes(2);
+
+      fire(0, 'connected');
+      await flush();
+      expect(apiGet).toHaveBeenCalledTimes(2);
+
+      resolve(snapshot('ok'));
+      await running;
       unwatch();
     });
 

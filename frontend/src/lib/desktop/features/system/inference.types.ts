@@ -312,7 +312,7 @@ export interface AnalysisCadenceModel {
   clipMs: number;
   /** How often a new analysis window is produced, in milliseconds. */
   stepMs: number;
-  /** Measured inference latency the plan was solved with; absent when unknown. */
+  /** Measured inference latency the plan was solved with; absent when unknown. Not kept by the store. */
   probeLatencyMs?: number;
   /** Analysis windows within the reference window that must agree. */
   confirmations: number;
@@ -328,15 +328,23 @@ export interface AnalysisCadenceModel {
  */
 export interface AnalysisCadenceInfo {
   status: AnalysisCadenceStatus;
+  /**
+   * False positive filter level the per-model confirmations were computed for,
+   * read by the server at request time.
+   */
+  filterLevel: number;
   /** birdnet.overlap in seconds on the 3 s base clip. */
   configuredOverlapSec: number;
   /** Overlap in use, in seconds on the 3 s base clip. */
   effectiveOverlapSec: number;
   /** Smallest sustainable base step in ms; 0 = unknown, not applicable or overloaded. */
   minBaseStepMs: number;
-  estimatedDutyConfigured: number;
-  estimatedDutyEffective: number;
-  dutyCeiling: number;
+  /** Estimated inference duty at the configured overlap. Not kept by the store. */
+  estimatedDutyConfigured?: number;
+  /** Estimated inference duty at the effective overlap. Not kept by the store. */
+  estimatedDutyEffective?: number;
+  /** Duty the planner keeps the load under. Not kept by the store. */
+  dutyCeiling?: number;
   sourceCount: number;
   modelCount: number;
   /** Models whose latency could not be measured; never null on the wire. */
