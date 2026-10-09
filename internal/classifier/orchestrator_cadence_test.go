@@ -169,3 +169,53 @@ func TestProbeLatency_TimeoutCountsAsTimeout(t *testing.T) {
 		assert.Equal(t, warmupTimeout, got)
 	})
 }
+
+// TestRunPendingWarmups_StoresProbedLatency pins that the deferred warm-up path
+// records the probe median for the model, and a failing probe leaves it unknown.
+func TestRunPendingWarmups_StoresProbedLatency(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		good := newScripted(time.Second, 100*time.Millisecond, 300*time.Millisecond, 200*time.Millisecond)
+		good.id = "Good_Model"
+		bad := newScripted(time.Second, time.Millisecond, time.Millisecond, time.Millisecond)
+		bad.id = "Bad_Model"
+		bad.failOn = 3 // warm-up is call 1, the untimed probe run call 2, the first timed run call 3
+
+		o := &Orchestrator{
+			models: map[string]*modelEntry{
+				good.id: {instance: good},
+				bad.id:  {instance: bad},
+			},
+			modelRSS: make(map[string]int64),
+		}
+		o.deferWarmup(good.id, 0)
+		o.deferWarmup(bad.id, 0)
+		o.runPendingWarmups()
+
+		got := o.ProbedLatencies()
+		assert.Equal(t, 200*time.Millisecond, got[good.id])
+		assert.NotContains(t, got, bad.id)
+	})
+}
+
+// TestModelInfos_StampsEffectiveOverlap pins that ModelInfos resolves each model's
+// overlap from the published cadence plan, not from the configured overlap.
+func TestModelInfos_StampsEffectiveOverlap(t *testing.T) {
+	t.Parallel()
+	s := &conf.Settings{}
+	s.BirdNET.Overlap = 2.8
+	inst := newScripted()
+	o := &Orchestrator{
+		Settings: s,
+		models:   map[string]*modelEntry{inst.id: {instance: inst}},
+	}
+
+	infos := o.ModelInfos()
+	require.Len(t, infos, 1)
+	assert.Equal(t, 2800*time.Millisecond, infos[0].Overlap, "no plan: configured overlap")
+
+	o.SetCadencePlan(&cadence.Plan{ConfiguredBaseOverlap: 2800 * time.Millisecond, EffectiveBaseOverlap: 1800 * time.Millisecond})
+	infos = o.ModelInfos()
+	require.Len(t, infos, 1)
+	assert.Equal(t, 1800*time.Millisecond, infos[0].Overlap, "published plan wins")
+}

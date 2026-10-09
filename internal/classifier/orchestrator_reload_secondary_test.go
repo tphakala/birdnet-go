@@ -568,3 +568,48 @@ func TestBuildPerch_DoesNotQueuePathCorrection(t *testing.T) {
 	assert.Empty(t, o.pendingPathCorrections,
 		"build* must never queue: only a loader may turn a resolution into a config rewrite")
 }
+
+// TestReloadSecondaryModels_StoresProbedLatency pins that a reload replaces the
+// model's probed latency after the swap, and that a failing probe leaves the model
+// unknown instead of keeping the replaced instance's latency.
+func TestReloadSecondaryModels_StoresProbedLatency(t *testing.T) {
+	spec := ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}
+	tests := []struct {
+		name    string
+		predict func(context.Context, [][]float32) ([]datastore.Results, error)
+		known   bool
+	}{
+		{"probe succeeds", func(context.Context, [][]float32) ([]datastore.Results, error) {
+			time.Sleep(time.Millisecond)
+			return nil, nil
+		}, true},
+		{"probe fails", func(context.Context, [][]float32) ([]datastore.Results, error) {
+			return nil, errors.NewStd("probe failure")
+		}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setGlobalBackend(t, "openvino", "gpu", "/opt/ov")
+			o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+			o.models[testSecondaryID] = &modelEntry{
+				instance: &reloadFakeModel{id: testSecondaryID},
+				backend:  secondaryBackendKey{backend: "onnx"},
+			}
+			stale := time.Hour
+			o.storeProbedLatency(testSecondaryID, stale, true)
+
+			newInst := &mockModelInstance{id: testSecondaryID, spec: spec, predict: tt.predict}
+			registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+				return newInst, nil
+			})
+			_ = o.ReloadSecondaryModels()
+
+			got, ok := o.ProbedLatencies()[testSecondaryID]
+			assert.Equal(t, tt.known, ok)
+			if tt.known {
+				assert.Positive(t, got)
+				assert.Less(t, got, stale, "the stale latency of the replaced instance must be overwritten")
+			}
+		})
+	}
+}
