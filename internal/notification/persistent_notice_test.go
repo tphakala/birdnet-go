@@ -420,3 +420,27 @@ func TestService_DeleteMarksToasts(t *testing.T) {
 		require.Fail(t, "no deletion event")
 	}
 }
+
+// TestDefaultNoticeService_NilWhenUninitialized pins that an uninitialized
+// process-wide service is returned as a nil interface, not a boxed nil pointer.
+func TestDefaultNoticeService_NilWhenUninitialized(t *testing.T) {
+	// Not parallel: swaps the package-global service instance.
+	mu.Lock()
+	prev := instance
+	instance = nil
+	mu.Unlock()
+	t.Cleanup(func() {
+		mu.Lock()
+		instance = prev
+		mu.Unlock()
+	})
+
+	assert.Nil(t, DefaultNoticeService())
+
+	svc := NewService(DefaultServiceConfig())
+	t.Cleanup(svc.Stop)
+	mu.Lock()
+	instance = svc
+	mu.Unlock()
+	assert.Same(t, svc, DefaultNoticeService())
+}

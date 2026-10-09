@@ -481,25 +481,35 @@ func TestReplanCadence_NoBackendIsNoOp(t *testing.T) {
 	assert.Empty(t, p.restartChan)
 }
 
-func TestSameCadenceInputs(t *testing.T) {
+func TestCadencePlanNeedsBroadcast(t *testing.T) {
 	t.Parallel()
-	base := cadence.Plan{ConfiguredBaseOverlap: 2 * time.Second, SourceCount: 1, ModelCount: 2, DutyAtEffective: 0.5}
+	base := cadence.Plan{
+		Status:                cadence.StatusCapped,
+		ConfiguredBaseOverlap: 2 * time.Second,
+		EffectiveBaseOverlap:  1500 * time.Millisecond,
+		SourceCount:           1,
+		ModelCount:            2,
+		DutyAtEffective:       0.5,
+	}
+
+	assert.True(t, cadencePlanNeedsBroadcast(nil, &base), "the first plan reaches open pages")
 
 	drift := base
 	drift.DutyAtEffective = 0.6
-	assert.True(t, sameCadenceInputs(&base, &drift), "a duty change alone is not a new input")
+	assert.False(t, cadencePlanNeedsBroadcast(&base, &drift), "a duty change alone is not announced")
 
 	overlap := base
 	overlap.ConfiguredBaseOverlap = 2500 * time.Millisecond
-	assert.False(t, sameCadenceInputs(&base, &overlap), "a new configured overlap must reach the settings page")
+	assert.True(t, cadencePlanNeedsBroadcast(&base, &overlap),
+		"a new configured overlap must reach the settings page even when the capped outcome is unchanged")
 
-	sources := base
-	sources.SourceCount = 2
-	assert.False(t, sameCadenceInputs(&base, &sources))
+	effective := base
+	effective.EffectiveBaseOverlap = time.Second
+	assert.True(t, cadencePlanNeedsBroadcast(&base, &effective))
 
-	models := base
-	models.ModelCount = 3
-	assert.False(t, sameCadenceInputs(&base, &models))
+	status := base
+	status.Status = cadence.StatusOverloaded
+	assert.True(t, cadencePlanNeedsBroadcast(&base, &status))
 }
 
 // TestPublishCadencePlan_FeedsTheBellNotice pins that publishing a capped first

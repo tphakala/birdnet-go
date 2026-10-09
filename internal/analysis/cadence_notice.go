@@ -11,9 +11,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
-// cadenceNoticeComponent is the notification component of the cadence notice.
-const cadenceNoticeComponent = "analysis"
-
 // cadenceNoticeOverlapDecimals is how many decimals overlaps show in the notice;
 // the planner works on a 100 ms grid.
 const cadenceNoticeOverlapDecimals = 1
@@ -40,9 +37,8 @@ type cadenceNotice struct {
 	// Tests replace it.
 	service func() notification.NoticeService
 
-	seen   bool          // a plan has been observed
-	active bool          // a notice is due
-	plan   *cadence.Plan // the plan the due notice describes
+	seen bool          // a plan has been observed
+	plan *cadence.Plan // the plan the due notice describes; nil when none is due
 }
 
 // observe records a newly published plan and brings the bell notice in line.
@@ -52,18 +48,15 @@ func (n *cadenceNotice) observe(plan *cadence.Plan) {
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	switch {
-	case !n.seen:
-		n.seen = true
-		n.active = cadenceNoticeDue(plan)
-	case n.active && !cadenceNoticeDue(plan):
-		n.active = false
-	}
-	if n.active {
-		n.plan = plan
-	} else {
+	// Only the first plan can make the notice due; later plans keep a due
+	// notice current or clear it for good.
+	if !n.seen || n.plan != nil {
 		n.plan = nil
+		if cadenceNoticeDue(plan) {
+			n.plan = plan
+		}
 	}
+	n.seen = true
 	n.reconcileLocked()
 }
 
@@ -93,16 +86,12 @@ func (n *cadenceNotice) reconcileLocked() {
 	}
 }
 
-// noticeService returns the configured service, or the process-wide one. A nil
-// *notification.Service is returned as a nil interface.
+// noticeService returns the configured service, or the process-wide one.
 func (n *cadenceNotice) noticeService() notification.NoticeService {
 	if n.service != nil {
 		return n.service()
 	}
-	if svc := notification.GetService(); svc != nil {
-		return svc
-	}
-	return nil
+	return notification.DefaultNoticeService()
 }
 
 // cadenceNoticeSignature keys the notice on its status and the values its text
@@ -156,7 +145,7 @@ func newCadenceNotification(plan *cadence.Plan) *notification.Notification {
 			"This device cannot keep up with audio analysis",
 			fmt.Sprintf("Running %s on %s exceeds the measured capacity of this device even without overlap, so analysis can fall behind and detections can be missed. Enable fewer models or audio sources, or choose a faster model variant.", models, sources),
 		).
-			WithComponent(cadenceNoticeComponent).
+			WithComponent(notification.ComponentAnalysis).
 			WithTitleKey(notification.MsgCadenceOverloadedTitle, nil).
 			WithMessageKey(notification.MsgCadenceOverloadedMessage, params).
 			WithDeliveryTarget(notification.DeliveryTargetBell)
@@ -168,7 +157,7 @@ func newCadenceNotification(plan *cadence.Plan) *notification.Notification {
 		"Analysis overlap limited for this device",
 		fmt.Sprintf("Running %s on %s at the configured %s s overlap exceeds the measured capacity of this device, so audio is analyzed with %s s overlap. This can lower the number of confirmations the false positive filter requires. Your saved settings are unchanged; see Settings > Analysis.", models, sources, params["configured"], params["effective"]),
 	).
-		WithComponent(cadenceNoticeComponent).
+		WithComponent(notification.ComponentAnalysis).
 		WithTitleKey(notification.MsgCadenceCappedTitle, nil).
 		WithMessageKey(notification.MsgCadenceCappedMessage, params).
 		WithDeliveryTarget(notification.DeliveryTargetBell)

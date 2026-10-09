@@ -107,6 +107,7 @@ func TestCadenceNotice_FirstPlanCappedRaisesOnce(t *testing.T) {
 	assert.Equal(t, notification.MsgCadenceCappedMessage, notif.MessageKey)
 	assert.Equal(t, notification.TypeWarning, notif.Type)
 	assert.Equal(t, notification.DeliveryTargetBell, notif.DeliveryTarget)
+	assert.Equal(t, notification.ComponentAnalysis, notif.Component)
 	assert.Equal(t, "2.8", notif.MessageParams["configured"])
 	assert.Equal(t, "1.8", notif.MessageParams["effective"])
 	assert.Equal(t, 2, notif.MessageParams["models"])

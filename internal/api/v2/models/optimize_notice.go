@@ -172,13 +172,7 @@ func (c *Handler) noticeSvc() noticeService {
 	if c.notices != nil {
 		return c.notices
 	}
-	// Check the concrete pointer before boxing it: returning a nil *Service as
-	// noticeService would yield a non-nil interface, defeating the caller's nil
-	// check and panicking on the first call.
-	if svc := notification.GetService(); svc != nil {
-		return svc
-	}
-	return nil
+	return notification.DefaultNoticeService()
 }
 
 // syncOptimizeNotice evaluates the optimize offers and raises, replaces, or

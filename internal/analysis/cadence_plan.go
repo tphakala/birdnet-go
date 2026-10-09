@@ -125,10 +125,13 @@ func planCadenceForConfigs(bn *classifier.Orchestrator, configs []sourceConfigWi
 }
 
 // publishCadencePlan publishes the plan on the orchestrator, logs it, and tells
-// open UIs to refetch when the plan's outcome or the inputs the settings page
-// shows (configured overlap, source and model counts) changed; a change in the
-// duty estimate alone does not. A plan identical to the published one is left
-// in place and logged at debug level only.
+// open UIs to refetch when the plan's outcome or its configured overlap changed;
+// a change in the duty estimate alone does not. The configured overlap counts
+// because an overlap save re-plans through restart_audio_capture, which
+// broadcasts nothing itself, and on a capped device the outcome can stay the
+// same. Source and model count changes need no check here: the reconfigure
+// handlers that change them broadcast after re-planning. A plan identical to the
+// published one is left in place and logged at debug level only.
 func (p *AudioPipelineService) publishCadencePlan(bn *classifier.Orchestrator, plan *cadence.Plan, operation string) {
 	log := audiocore.GetLogger()
 	prev := bn.CadencePlan()
@@ -153,7 +156,7 @@ func (p *AudioPipelineService) publishCadencePlan(bn *classifier.Orchestrator, p
 		logger.Any("unknown_latency_models", plan.UnknownLatencyModels),
 		logger.String("operation", operation))
 
-	if cadence.SameOutcome(prev, plan) && sameCadenceInputs(prev, plan) {
+	if !cadencePlanNeedsBroadcast(prev, plan) {
 		return
 	}
 	if p.apiService != nil {
@@ -163,12 +166,10 @@ func (p *AudioPipelineService) publishCadencePlan(bn *classifier.Orchestrator, p
 	}
 }
 
-// sameCadenceInputs reports whether two non-nil plans were solved for the same
-// configured overlap, source count and model count.
-func sameCadenceInputs(a, b *cadence.Plan) bool {
-	return a.ConfiguredBaseOverlap == b.ConfiguredBaseOverlap &&
-		a.SourceCount == b.SourceCount &&
-		a.ModelCount == b.ModelCount
+// cadencePlanNeedsBroadcast reports whether open UIs must refetch after plan
+// replaces prev: the outcome or the configured overlap changed. plan is non-nil.
+func cadencePlanNeedsBroadcast(prev, plan *cadence.Plan) bool {
+	return !cadence.SameOutcome(prev, plan) || prev.ConfiguredBaseOverlap != plan.ConfiguredBaseOverlap
 }
 
 // planAndPublishCadence plans for the given configs and publishes the result
