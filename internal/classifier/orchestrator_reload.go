@@ -59,7 +59,7 @@ type reloadOpts struct {
 //
 // Lock order: o.reloadMu -> o.rebuildMu -> o.mu -> inferenceMu -> entry.mu -> bn.mu.
 // reloadEntry holds o.reloadMu across build, swap and notify; it takes o.mu only to
-// snapshot the entry, inferenceMu only for the warm-up, entry.mu only for the swap, and
+// snapshot the entry, inferenceMu only for the warm-up and each latency probe run, entry.mu only for the swap, and
 // calls reloadAnchorRangeFilter (rfs.buildMu -> rfs.mu) and rebuildSpeciesIndex
 // (o.rebuildMu -> o.mu) holding only o.reloadMu.
 func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts reloadOpts) (swapped bool, err error) {
@@ -139,19 +139,21 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	//    the v2.4 anchor to stay byte-identical. Secondaries warm up exactly as before,
 	//    serialized behind live inference on inferenceMu (bounded by warmupTimeout).
 	input := silentInput(next.Spec())
+	var warmedUp bool
 	if recordRSS {
 		func() {
 			o.inferenceMu.Lock()
 			defer o.inferenceMu.Unlock()
-			o.warmupAndRecordRSS(registryID, before, next, input)
+			warmedUp = o.warmupAndRecordRSS(registryID, before, next, input)
 		}()
 	}
 
 	// 5b. Probe inference latency on the private instance (secondaries and the v2.4
 	//     anchor alike). Each run takes only inferenceMu: entry.mu guards the serving
 	//     instance and must not be held. The result is stored after the swap succeeds.
-	//     The anchor skipped the warm-up, so its probe starts with an untimed run.
-	probed, probeOK := o.probeLatency(registryID, next, input, recordRSS, func(run func()) bool {
+	//     The anchor skipped the warm-up, and a failed warm-up may not have run the
+	//     lazy allocation, so in both cases the probe starts with an untimed run.
+	probed, probeOK := o.probeLatency(registryID, next, input, warmedUp, func(run func()) bool {
 		o.inferenceMu.Lock()
 		defer o.inferenceMu.Unlock()
 		run()

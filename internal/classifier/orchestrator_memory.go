@@ -45,28 +45,31 @@ func (o *Orchestrator) captureRSSBefore() uint64 {
 // calls instance.Predict directly (never o.PredictModel) to avoid the re-entrant
 // o.mu lock and to keep the warm-up out of the global inference counters.
 // Negative deltas (OS page reclamation, measurement noise) are clamped to zero.
-// RSS is host-RAM only and approximate.
-func (o *Orchestrator) warmupAndRecordRSS(modelID string, before uint64, instance ModelInstance, input [][]float32) {
-	o.warmup(modelID, instance, input)
+// RSS is host-RAM only and approximate. It reports whether the warm-up inference
+// succeeded, so the latency probe knows whether lazy allocation already happened.
+func (o *Orchestrator) warmupAndRecordRSS(modelID string, before uint64, instance ModelInstance, input [][]float32) (warmedUp bool) {
+	warmedUp = o.warmup(modelID, instance, input)
 
 	after, err := sysinfo.CurrentProcessRSS()
 	if err != nil || before == 0 {
-		return // RSS unavailable: leave the model out of modelRSS (endpoint shows n/a)
+		return warmedUp // RSS unavailable: leave the model out of modelRSS (endpoint shows n/a)
 	}
 	delta := max(int64(after)-int64(before), 0)
 	o.rssMu.Lock()
 	o.modelRSS[modelID] = delta
 	o.rssMu.Unlock()
+	return warmedUp
 }
 
-// warmup runs a single silent inference. Failures are non-fatal and logged at
-// debug level; the model still loads. A nil input (a spec without samples) skips
-// the warm-up.
-func (o *Orchestrator) warmup(modelID string, instance ModelInstance, input [][]float32) {
+// warmup runs a single silent inference and reports whether it succeeded.
+// Failures are non-fatal and logged at debug level; the model still loads. A nil
+// input (a spec without samples) skips the warm-up and reports false.
+func (o *Orchestrator) warmup(modelID string, instance ModelInstance, input [][]float32) bool {
 	if input == nil {
-		return
+		return false
 	}
-	_, _ = predictOnce(modelID, instance, input, "warm-up inference failed (non-fatal)")
+	_, err := predictOnce(modelID, instance, input, "warm-up inference failed (non-fatal)")
+	return err == nil
 }
 
 // silentInput returns one clip of silence sized from the model spec, or nil when
@@ -144,6 +147,7 @@ func (o *Orchestrator) warmupRegisteredModel(modelID string, before uint64) {
 	}
 
 	var input [][]float32
+	var warmedUp bool
 	instance := func() ModelInstance {
 		o.inferenceMu.Lock()
 		defer o.inferenceMu.Unlock()
@@ -155,7 +159,7 @@ func (o *Orchestrator) warmupRegisteredModel(modelID string, before uint64) {
 		}
 
 		input = silentInput(entry.instance.Spec())
-		o.warmupAndRecordRSS(modelID, before, entry.instance, input)
+		warmedUp = o.warmupAndRecordRSS(modelID, before, entry.instance, input)
 		return entry.instance
 	}()
 	if instance == nil {
@@ -164,9 +168,10 @@ func (o *Orchestrator) warmupRegisteredModel(modelID string, before uint64) {
 
 	// Probe outside the warm-up's locked section: probeLatency re-acquires the locks
 	// for each run, so live inference interleaves between runs. Each run re-checks
-	// that the entry still serves the same instance. The warm-up just ran on this
-	// instance, so the probe needs no untimed run of its own.
-	latency, ok := o.probeLatency(modelID, instance, input, true, func(run func()) bool {
+	// that the entry still serves the same instance. When the warm-up succeeded on
+	// this instance the probe needs no untimed run of its own; when it failed, lazy
+	// allocation may not have happened yet, so the probe keeps its untimed run.
+	latency, ok := o.probeLatency(modelID, instance, input, warmedUp, func(run func()) bool {
 		o.inferenceMu.Lock()
 		defer o.inferenceMu.Unlock()
 		entry.mu.Lock()

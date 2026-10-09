@@ -210,6 +210,29 @@ func TestRunPendingWarmups_StoresProbedLatency(t *testing.T) {
 	})
 }
 
+// TestRunPendingWarmups_FailedWarmupKeepsUntimedRun pins that a failed warm-up
+// does not let the probe skip its untimed run: the lazy allocation it absorbs
+// would otherwise land in the first timed sample and inflate the median.
+func TestRunPendingWarmups_FailedWarmupKeepsUntimedRun(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		// Call 1 is the failing warm-up, call 2 the slow untimed run, calls 3 to 5
+		// the timed runs. Counting call 2 would make the median 300 ms.
+		inst := newScripted(0, 5*time.Second, 100*time.Millisecond, 300*time.Millisecond, 200*time.Millisecond)
+		inst.failOn = 1
+
+		o := &Orchestrator{
+			models:   map[string]*modelEntry{inst.id: {instance: inst}},
+			modelRSS: make(map[string]int64),
+		}
+		o.deferWarmup(inst.id, 0)
+		o.runPendingWarmups()
+
+		assert.Equal(t, 200*time.Millisecond, o.ProbedLatencies()[inst.id])
+		assert.Equal(t, 1+1+cadenceProbeRuns, inst.calls)
+	})
+}
+
 // TestModelInfos_StampsEffectiveOverlap pins that ModelInfos resolves each model's
 // overlap from the published cadence plan, not from the configured overlap.
 func TestModelInfos_StampsEffectiveOverlap(t *testing.T) {
