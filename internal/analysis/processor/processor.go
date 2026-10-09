@@ -295,6 +295,9 @@ func suggestLevelForDisabledFilter(overlap float64) {
 
 // validateOverlapForLevel checks if the current overlap is sufficient for the
 // configured filter level and provides warnings/recommendations if not optimal.
+// minDetections is the count at the configured overlap; it is logged as
+// configured_min_detections because the analysis cadence cap can lower the
+// overlap in use, and with it the count the filter applies.
 func validateOverlapForLevel(level int, overlap, minOverlap float64, minDetections int) {
 	if overlap < minOverlap {
 		// Overlap is too low for this level
@@ -303,8 +306,8 @@ func validateOverlapForLevel(level int, overlap, minOverlap float64, minDetectio
 			logger.Int("level", level),
 			logger.String("level_name", getLevelName(level)),
 			logger.Float64("min_overlap", minOverlap),
-			logger.Float64("current_overlap", overlap),
-			logger.Int("min_detections", minDetections),
+			logger.Float64("configured_overlap", overlap),
+			logger.Int("configured_min_detections", minDetections),
 			logger.String("hardware_req", getHardwareRequirementForLevel(level)),
 			logger.Int("recommended_level_for_overlap", recommendedForCurrent),
 			logger.String("operation", "false_positive_filter_config"))
@@ -323,7 +326,7 @@ func validateOverlapForLevel(level int, overlap, minOverlap float64, minDetectio
 			logger.String("level_name", getLevelName(level)),
 			logger.Float64("overlap", overlap),
 			logger.Float64("min_overlap", minOverlap),
-			logger.Int("min_detections", minDetections),
+			logger.Int("configured_min_detections", minDetections),
 			logger.String("hardware_req", getHardwareRequirementForLevel(level)),
 			logger.String("operation", "false_positive_filter_config"))
 	}
@@ -368,7 +371,8 @@ func validateAndLogFilterConfig(settings *conf.Settings) {
 	overlap := settings.BirdNET.Overlap
 	minOverlap := getMinimumOverlapForLevel(level)
 
-	// Calculate what minDetections will be with current settings
+	// minDetections at the configured overlap. No cadence plan exists yet at
+	// startup; under the cap the filter applies the count at the effective overlap.
 	minDetections := calculateMinDetectionsFromSettings(settings, classifier.ConfiguredBaseOverlap(settings))
 
 	if level == 0 {
