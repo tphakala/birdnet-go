@@ -187,6 +187,32 @@ describe('fpCadence', () => {
       expect(planLagsSettings(cadence(), 2.4, 3)).toBe(true);
     });
 
+    it('is true when the server counts were computed for another level', () => {
+      // The fixture counts are level 5 (4 of 5, 3 of 3); level 3 needs 3 and 2.
+      expect(planLagsSettings(cadence(), 2.8, 3)).toBe(true);
+    });
+
+    it('applies the 0.1 s step floor when checking the server counts', () => {
+      // Overlap 2.95 s: 120 windows, but the filter floors the step at 0.1 s,
+      // so level 5 needs ceil(60 * 0.7) = 42, not 84.
+      const fine = cadence({
+        status: 'ok',
+        configuredOverlapSec: 2.95,
+        effectiveOverlapSec: 2.95,
+        models: [
+          {
+            id: 'BirdNET_V2.4',
+            name: 'BirdNET v2.4',
+            clipMs: 3000,
+            stepMs: 50,
+            confirmations: 42,
+            windowsInReference: 120,
+          },
+        ],
+      });
+      expect(planLagsSettings(fine, 2.95, 5)).toBe(false);
+    });
+
     it('is true when the saved level crosses the filter on/off line', () => {
       expect(planLagsSettings(cadence({ status: 'filterOff' }), 2.8, 5)).toBe(true);
       expect(planLagsSettings(cadence(), 2.8, 0)).toBe(true);

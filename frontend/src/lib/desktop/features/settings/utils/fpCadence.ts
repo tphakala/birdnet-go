@@ -166,10 +166,12 @@ export function sameOverlap(a: number, b: number): boolean {
 }
 
 /**
- * True when the published plan does not yet reflect the saved settings: the
- * saved overlap differs from the plan's configured one, or the saved level is on
- * the other side of the filter on/off line. The server re-plans after a save, so
- * this is a short-lived state.
+ * True when the snapshot does not yet reflect the saved settings: the saved
+ * overlap differs from the plan's configured one, the saved level is on the
+ * other side of the filter on/off line, or a bird model's confirmations were
+ * computed for another level than the saved one (the server computes them per
+ * request, so a level change that does not re-plan shows up only on the next
+ * fetch). A fetch after the save clears it.
  */
 export function planLagsSettings(
   cadence: AnalysisCadenceInfo,
@@ -180,6 +182,12 @@ export function planLagsSettings(
   const savedFilterOn = savedLevel >= FILTER_ACTIVE_MIN_LEVEL;
   return (
     !sameOverlap(savedOverlapSeconds, cadence.configuredOverlapSec) ||
-    planFilterOn !== savedFilterOn
+    planFilterOn !== savedFilterOn ||
+    birdModels(cadence).some(
+      m =>
+        m.windowsInReference > 0 &&
+        m.confirmations !==
+          minDetectionsForStep(REFERENCE_WINDOW_SECONDS / m.windowsInReference, savedLevel)
+    )
   );
 }
