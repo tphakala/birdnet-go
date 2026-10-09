@@ -93,7 +93,8 @@ type Plan struct {
 	ConfiguredBaseOverlap time.Duration
 	// EffectiveBaseOverlap is the overlap the pipeline must use.
 	EffectiveBaseOverlap time.Duration
-	// MinBaseStep is the smallest grid base step meeting the ceiling; zero when
+	// MinBaseStep is the smallest grid base step meeting the ceiling, capped at
+	// BaseClip (which need not be a grid multiple); zero when
 	// unknown or not applicable, including when no load depends on the overlap
 	// and when even zero overlap exceeds the ceiling.
 	MinBaseStep time.Duration
