@@ -59,9 +59,9 @@ type reloadOpts struct {
 //
 // Lock order: o.reloadMu -> o.rebuildMu -> o.mu -> inferenceMu -> entry.mu -> bn.mu.
 // reloadEntry holds o.reloadMu across build, swap and notify; it takes o.mu only to
-// snapshot the entry, inferenceMu only for the warm-up and each latency probe run, entry.mu only for the swap, and
-// calls reloadAnchorRangeFilter (rfs.buildMu -> rfs.mu) and rebuildSpeciesIndex
-// (o.rebuildMu -> o.mu) holding only o.reloadMu.
+// snapshot the entry, inferenceMu only for the warm-up and each latency probe run,
+// entry.mu only for the swap, and calls reloadAnchorRangeFilter (rfs.buildMu ->
+// rfs.mu) and rebuildSpeciesIndex (o.rebuildMu -> o.mu) holding only o.reloadMu.
 func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts reloadOpts) (swapped bool, err error) {
 	o.reloadMu.Lock()
 	defer o.reloadMu.Unlock()
