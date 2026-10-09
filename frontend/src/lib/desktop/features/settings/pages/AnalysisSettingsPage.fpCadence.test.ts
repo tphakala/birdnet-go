@@ -478,17 +478,24 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
 
   it('stops watching the inference snapshot when the page unmounts', async () => {
     const unwatch = vi.fn();
+    const original = vi.mocked(watchAcousticModels).getMockImplementation();
     vi.mocked(watchAcousticModels).mockClear();
     vi.mocked(watchAcousticModels).mockReturnValue(unwatch);
-    cadenceState.value = cadence();
-    setSettings({ level: 5, overlap: 2.8 });
-    const { unmount } = render(AnalysisSettingsPage);
-    await tick();
-    expect(vi.mocked(watchAcousticModels)).toHaveBeenCalledTimes(1);
-    expect(unwatch).not.toHaveBeenCalled();
+    try {
+      cadenceState.value = cadence();
+      setSettings({ level: 5, overlap: 2.8 });
+      const { unmount } = render(AnalysisSettingsPage);
+      await tick();
+      expect(vi.mocked(watchAcousticModels)).toHaveBeenCalledTimes(1);
+      expect(unwatch).not.toHaveBeenCalled();
 
-    unmount();
-    expect(unwatch).toHaveBeenCalledTimes(1);
+      unmount();
+      expect(unwatch).toHaveBeenCalledTimes(1);
+    } finally {
+      // Later tests in this file get the factory's watch mock back.
+      vi.mocked(watchAcousticModels).mockReset();
+      if (original) vi.mocked(watchAcousticModels).mockImplementation(original);
+    }
   });
 
   it('never mentions the removed hardware note', () => {
