@@ -530,7 +530,7 @@ func bufferIntervalFor(bn classifierBackend, modelID string) time.Duration {
 	if !ok {
 		// Defensive fallback for an unregistered model: assume the BirdNET base
 		// clip. BufferInterval depends only on ClipLength and the overlap.
-		spec = classifier.ModelSpec{ClipLength: 3 * time.Second}
+		spec = classifier.ModelSpec{ClipLength: classifier.AnalysisBaseClipLength}
 	}
 	return spec.BufferInterval(classifier.ResolveModelOverlap(modelID, spec, bn.EffectiveBaseOverlap()))
 }

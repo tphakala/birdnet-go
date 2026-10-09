@@ -17,9 +17,6 @@ const (
 	cadenceDutyCeiling = 0.75
 	// cadenceGrid is the granularity the planned analysis step is snapped up to.
 	cadenceGrid = 100 * time.Millisecond
-	// fpFilterMinActiveLevel is the lowest false positive filter level at which the
-	// cadence cap applies; level 0 leaves the configured overlap untouched.
-	fpFilterMinActiveLevel = 1
 )
 
 // cadenceAction is what the pipeline does with a freshly solved cadence plan.
@@ -78,7 +75,7 @@ func buildCadencePairs(configs []sourceConfigWithModels, loaded map[string]class
 // cap applies only while the false positive filter is on.
 func planCadence(settings *conf.Settings, pairs []cadence.Pair, latencies map[string]time.Duration) cadence.Plan {
 	return cadence.Solve(cadence.Input{
-		FilterActive:          settings.Realtime.FalsePositiveFilter.Level >= fpFilterMinActiveLevel,
+		FilterActive:          settings.Realtime.FalsePositiveFilter.Level >= cadence.FilterActiveMinLevel,
 		ConfiguredBaseOverlap: classifier.ConfiguredBaseOverlap(settings),
 		BaseClip:              classifier.AnalysisBaseClipLength,
 		Grid:                  cadenceGrid,

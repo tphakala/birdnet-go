@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/classifier/region"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
@@ -2738,8 +2739,8 @@ func analysisOverlapChanged(oldSettings, currentSettings *conf.Settings) bool {
 // overlap actually changes. Level changes that stay on one side of 0 need no
 // action: the confirmation count is recomputed at flush time.
 func falsePositiveFilterActiveChanged(oldSettings, currentSettings *conf.Settings) bool {
-	return (oldSettings.Realtime.FalsePositiveFilter.Level >= 1) !=
-		(currentSettings.Realtime.FalsePositiveFilter.Level >= 1)
+	return (oldSettings.Realtime.FalsePositiveFilter.Level >= cadence.FilterActiveMinLevel) !=
+		(currentSettings.Realtime.FalsePositiveFilter.Level >= cadence.FilterActiveMinLevel)
 }
 
 // dynamicThresholdEnabledChanged checks if the DynamicThreshold.Enabled flag was toggled.

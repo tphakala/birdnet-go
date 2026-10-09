@@ -32,6 +32,10 @@ const (
 	StatusFilterOff Status = "filterOff"
 )
 
+// FilterActiveMinLevel is the lowest false positive filter level at which the
+// cadence cap applies; level 0 leaves the configured overlap untouched.
+const FilterActiveMinLevel = 1
+
 // epsilon absorbs floating point noise when snapping to the grid.
 const epsilon = 1e-9
 
