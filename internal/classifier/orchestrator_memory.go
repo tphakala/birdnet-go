@@ -132,7 +132,9 @@ func (o *Orchestrator) runPendingWarmups() {
 // unloaded (absent, or instance == nil) before it ran, so a teardown that races
 // the load leaves no stale modelRSS entry. Unlike PredictModel it does not record
 // into globalInferenceCounters (warmupAndRecordRSS calls instance.Predict
-// directly), so the warm-up does not pollute inference stats.
+// directly), so the warm-up does not pollute inference stats. After the warm-up
+// it probes the model's latency and stores the result only while the entry still
+// serves the probed instance, checked and stored under entry.mu.
 func (o *Orchestrator) warmupRegisteredModel(modelID string, before uint64) {
 	o.mu.RLock()
 	entry, ok := o.models[modelID]
@@ -175,10 +177,12 @@ func (o *Orchestrator) warmupRegisteredModel(modelID string, before uint64) {
 		run()
 		return true
 	})
+	// Store under entry.mu, as reloadEntry does with its swap, so a reload or
+	// unload cannot land between the serving check and the store and have its
+	// newer state overwritten by this instance's latency.
 	entry.mu.Lock()
-	stillServing := entry.instance == instance
-	entry.mu.Unlock()
-	if stillServing {
+	defer entry.mu.Unlock()
+	if entry.instance == instance {
 		o.storeProbedLatency(modelID, latency, ok)
 	}
 }
