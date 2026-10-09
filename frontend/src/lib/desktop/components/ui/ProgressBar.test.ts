@@ -106,7 +106,7 @@ describe('ProgressBar', () => {
       showLabel: true,
     });
 
-    expect(screen.getByText('75%')).toBeInTheDocument();
+    expect(screen.getAllByText('75%')[0]).toBeInTheDocument();
   });
 
   it('uses custom label format', () => {
@@ -120,7 +120,7 @@ describe('ProgressBar', () => {
     });
 
     expect(labelFormat).toHaveBeenCalledWith(30, 100);
-    expect(screen.getByText('30 of 100')).toBeInTheDocument();
+    expect(screen.getAllByText('30 of 100')[0]).toBeInTheDocument();
   });
 
   it('applies color thresholds', async () => {
@@ -269,6 +269,71 @@ describe('ProgressBar', () => {
 
     const progressbar = screen.getByRole('progressbar');
     expect(progressbar).toHaveAttribute('aria-label', '75%');
+  });
+
+  describe('label over the fill and the track', () => {
+    /** The two copies of the label: the track copy and the fill copy. */
+    function labelCopies(container: HTMLElement) {
+      return {
+        track: container.querySelector<HTMLElement>('[data-label-part="track"]'),
+        fill: container.querySelector<HTMLElement>('[data-label-part="fill"]'),
+      };
+    }
+
+    it.each(['primary', 'success', 'warning', 'error'] as const)(
+      'draws a base-content copy on the track and a %s content copy on the fill',
+      variant => {
+        const { container } = progressTest.render({ value: 70, showLabel: true, variant });
+        const { track, fill } = labelCopies(container);
+
+        expect(track).toHaveTextContent('70%');
+        expect(track).toHaveClass('text-[var(--color-base-content)]');
+        expect(fill).toHaveTextContent('70%');
+        expect(fill).toHaveClass(`text-[var(--color-${variant}-content)]`);
+        expect(fill?.className).not.toContain('mix-blend');
+      }
+    );
+
+    it('hides only the fill copy from assistive technology', () => {
+      const { container } = progressTest.render({ value: 70, showLabel: true });
+      const { track, fill } = labelCopies(container);
+
+      expect(fill).toHaveAttribute('aria-hidden', 'true');
+      expect(track).not.toHaveAttribute('aria-hidden');
+    });
+
+    it.each([
+      [0, 'inset(0 100% 0 0)', 'inset(0 0 0 0%)'],
+      [30, 'inset(0 70% 0 0)', 'inset(0 0 0 30%)'],
+      [70, 'inset(0 30% 0 0)', 'inset(0 0 0 70%)'],
+      [100, 'inset(0 0% 0 0)', 'inset(0 0 0 100%)'],
+    ])('clips the two copies at the fill edge for value %i', (value, fillClip, trackClip) => {
+      const { container } = progressTest.render({ value, showLabel: true });
+      const { track, fill } = labelCopies(container);
+
+      expect(fill?.style.clipPath).toBe(fillClip);
+      expect(track?.style.clipPath).toBe(trackClip);
+    });
+
+    it('follows the threshold variant and the value range', () => {
+      const { container } = progressTest.render({
+        value: 45,
+        max: 50,
+        showLabel: true,
+        colorThresholds: [{ value: 80, variant: 'warning' }],
+      });
+      const { track, fill } = labelCopies(container);
+
+      expect(fill).toHaveClass('text-[var(--color-warning-content)]');
+      expect(fill?.style.clipPath).toBe('inset(0 10% 0 0)');
+      expect(track?.style.clipPath).toBe('inset(0 0 0 90%)');
+    });
+
+    it('renders no label copies when showLabel is false', () => {
+      const { container } = progressTest.render({ value: 70 });
+
+      expect(container.querySelector('[data-label-part]')).toBeNull();
+    });
   });
 
   it('adjusts label color based on progress', () => {

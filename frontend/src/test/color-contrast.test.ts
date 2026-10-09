@@ -732,6 +732,34 @@ describe('Components pair a status fill with its content color', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('no style rule puts white text on a literal status color fill', () => {
+    // The status token values of both themes, plus the emerald green the Search badges used.
+    const css = readFileSync(join(libDir, '..', 'styles', 'tailwind.css'), 'utf8');
+    const tokenBlocks = [blockBody(css, '@theme'), blockBody(css, "[data-theme='dark']")];
+    const literals = [
+      ...tokenBlocks.flatMap(block =>
+        ['info', 'success', 'warning', 'error'].flatMap(status => [
+          readVar(block, `--color-${status}`),
+          readVar(block, `--color-${status}-hover`),
+        ])
+      ),
+      '#10b981',
+    ].map(hex => hex.toLowerCase());
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(/\{[^{}]*\}/g)]
+        .filter(([rule]) => {
+          const fill = /background(?:-color)?:\s*(#[0-9a-fA-F]{6})\b/.exec(rule)?.[1];
+          return (
+            fill !== undefined &&
+            literals.includes(fill.toLowerCase()) &&
+            /(?<![-\w])color:\s*(?:white|#fff(?:fff)?)\s*;/i.test(rule)
+          );
+        })
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+
   it('no style rule puts white text on a status token fill', () => {
     const offenders = sources.flatMap(({ file, text }) =>
       [...text.matchAll(/\{[^{}]*\}/g)]
