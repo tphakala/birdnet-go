@@ -86,14 +86,23 @@ func TestProbeLatency_MedianOfRuns(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		o := &Orchestrator{modelRSS: map[string]int64{"Probe_Model": 7}}
-		// First run is the untimed one (5s would dominate if it were counted).
-		inst := newScripted(4*time.Second, 300*time.Millisecond, 100*time.Millisecond, 200*time.Millisecond)
+		// First run is the untimed one (4 s would dominate if it were counted). The
+		// timed runs include one slow outlier, so the median (200 ms) differs from
+		// the mean (500 ms).
+		inst := newScripted(4*time.Second, 1200*time.Millisecond, 100*time.Millisecond, 200*time.Millisecond)
 		got, ok := o.probeLatency("Probe_Model", inst, silentInput(inst.Spec()), false, func(run func()) bool { run(); return true })
 		require.True(t, ok)
-		assert.Equal(t, 200*time.Millisecond, got)
+		assert.Equal(t, 200*time.Millisecond, got, "median of the timed runs, not their mean")
 		assert.Equal(t, 1+cadenceProbeRuns, inst.calls)
 		rss, _ := o.ModelRSS()
 		assert.Equal(t, map[string]int64{"Probe_Model": 7}, rss, "probe must not touch RSS accounting")
+
+		// The same runs in another order put the median first, so neither the last
+		// run nor the unsorted middle run can pass for it.
+		reordered := newScripted(4*time.Second, 200*time.Millisecond, 1200*time.Millisecond, 100*time.Millisecond)
+		got, ok = o.probeLatency("Probe_Model", reordered, silentInput(reordered.Spec()), false, func(run func()) bool { run(); return true })
+		require.True(t, ok)
+		assert.Equal(t, 200*time.Millisecond, got, "median regardless of run order")
 	})
 }
 
