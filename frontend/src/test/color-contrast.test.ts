@@ -473,6 +473,17 @@ describe('Error text rules', () => {
       expect(text).toMatch(/^\s*color:\s*var\(--text-error\)/m);
     });
 
+    for (const { selector } of fills) {
+      it(`${file} ${selector} colours its text with --text-error`, () => {
+        const bodies = ruleBodies(componentText(file), selector);
+        expect(bodies.length, `${selector} rule found`).toBeGreaterThan(0);
+        // At least the base rule sets the text token; a theme override may blend it further
+        expect(bodies.some(body => /(?:^|[;{\s])color:\s*var\(--text-error\)/.test(body))).toBe(
+          true
+        );
+      });
+    }
+
     for (const { selector, declaration } of fills) {
       it(`${file} ${selector} keeps the fill token for its border or tint`, () => {
         const bodies = ruleBodies(componentText(file), selector);
