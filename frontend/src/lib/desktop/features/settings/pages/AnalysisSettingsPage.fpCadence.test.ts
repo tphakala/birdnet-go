@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, within } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { t } from '$lib/i18n';
 import type { AnalysisCadenceInfo } from '$lib/desktop/features/system/inference.types';
 
@@ -82,6 +83,7 @@ vi.mock('$lib/utils/api', async () => {
 
 import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import { navigation } from '$lib/stores/navigation.svelte';
+import { refreshAcousticModels, watchAcousticModels } from '$lib/stores/acousticModels.svelte';
 
 const FP = 'settings.main.sections.falsePositiveFilter';
 
@@ -186,12 +188,40 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
   });
 
   it('shows the capped notice and the server counts for the bird models', () => {
-    cadenceState.value = cadence();
+    // Server steps that the client estimate would not produce (it gives 4 of 5
+    // and 3 of 3 at the 1.2 s cap), so the readout must come from the server.
+    const base = cadence();
+    cadenceState.value = cadence({
+      models: [
+        ...base.models.filter(m => m.id === 'Bat'),
+        {
+          id: 'BirdNET_V2.4',
+          name: 'BirdNET v2.4',
+          clipMs: 3000,
+          stepMs: 1500,
+          confirmations: 3,
+          windowsInReference: 4,
+        },
+        {
+          id: 'BirdNET_V3.0',
+          name: 'BirdNET v3.0',
+          clipMs: 5000,
+          stepMs: 2500,
+          confirmations: 2,
+          windowsInReference: 2.4,
+        },
+      ],
+    });
     setSettings({ level: 5, overlap: 2.8 });
     render(AnalysisSettingsPage);
 
     expect(screen.getByTestId('fp-cadence-capped')).toBeInTheDocument();
-    expect(paramsFor(`${FP}.capNotice`).at(-1)).toMatchObject({ models: 3, sources: 2 });
+    expect(paramsFor(`${FP}.capNotice`).at(-1)).toEqual({
+      models: 3,
+      sources: 2,
+      configured: '2.8',
+      effective: '1.8',
+    });
 
     const readout = screen.getByTestId('fp-cadence-readout');
     expect(within(readout).getByText(`${FP}.readoutTitle`)).toBeInTheDocument();
@@ -199,12 +229,14 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
     const lines = paramsFor(`${FP}.readoutLine`);
     expect(lines.map(p => [p.model, p.count])).toEqual(
       expect.arrayContaining([
-        ['BirdNET v2.4', 4],
-        ['BirdNET v3.0', 3],
+        ['BirdNET v2.4', 3],
+        ['BirdNET v3.0', 2],
       ])
     );
+    expect(lines.map(p => p.windows)).toEqual(expect.arrayContaining(['4', '2.4']));
     expect(lines.some(p => p.model === 'Bat')).toBe(false);
     expect(screen.queryByText(`${FP}.readoutPreview`)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('fp-cadence-unknown-latency')).not.toBeInTheDocument();
     expect(screen.getByText(`${FP}.cpuNote`)).toBeInTheDocument();
   });
 
@@ -228,6 +260,7 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
     render(AnalysisSettingsPage);
 
     expect(screen.getByTestId('fp-cadence-overloaded')).toBeInTheDocument();
+    expect(paramsFor(`${FP}.overloadedNotice`).at(-1)).toEqual({ models: 3, sources: 2 });
     expect(screen.queryByTestId('fp-cadence-capped')).not.toBeInTheDocument();
   });
 
@@ -288,12 +321,57 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
   });
 
   it('marks the counts as estimates while saved settings are not applied yet', () => {
-    cadenceState.value = cadence({ configuredOverlapSec: 2.4 });
+    // The stale server counts (overlap 2.4 s) differ from the estimate for the
+    // saved 2.8 s capped at the 1.2 s step (4 of 5, 3 of 3).
+    cadenceState.value = cadence({
+      configuredOverlapSec: 2.4,
+      effectiveOverlapSec: 2.4,
+      models: [
+        {
+          id: 'BirdNET_V2.4',
+          name: 'BirdNET v2.4',
+          clipMs: 3000,
+          stepMs: 600,
+          confirmations: 7,
+          windowsInReference: 10,
+        },
+        {
+          id: 'BirdNET_V3.0',
+          name: 'BirdNET v3.0',
+          clipMs: 5000,
+          stepMs: 1000,
+          confirmations: 5,
+          windowsInReference: 6,
+        },
+      ],
+    });
     setSettings({ level: 5, overlap: 2.8 });
     render(AnalysisSettingsPage);
 
     expect(screen.getByText(`${FP}.readoutPreviewTitle`)).toBeInTheDocument();
     expect(screen.getByText(`${FP}.readoutPending`)).toBeInTheDocument();
+    const lines = paramsFor(`${FP}.readoutLine`);
+    expect(lines.map(p => [p.model, p.count])).toEqual(
+      expect.arrayContaining([
+        ['BirdNET v2.4', 4],
+        ['BirdNET v3.0', 3],
+      ])
+    );
+    expect(lines.some(p => p.count === 7 || p.count === 5)).toBe(false);
+  });
+
+  it('watches the inference snapshot and refetches it after a saved level change', async () => {
+    cadenceState.value = cadence();
+    setSettings({ level: 5, overlap: 2.8 });
+    render(AnalysisSettingsPage);
+    await tick();
+
+    expect(vi.mocked(watchAcousticModels)).toHaveBeenCalled();
+    vi.mocked(refreshAcousticModels).mockClear();
+
+    setSettings({ level: 4, overlap: 2.8 });
+    await tick();
+    expect(vi.mocked(refreshAcousticModels)).toHaveBeenCalledTimes(1);
   });
 
   it('never mentions the removed hardware note', () => {
