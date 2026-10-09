@@ -1772,7 +1772,7 @@
             </button>
             <button
               type="button"
-              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={!rangeFilterState.speciesCount ||
                 rangeFilterState.downloading ||
                 !birdnet?.locationConfigured}
@@ -2139,7 +2139,7 @@
           <button
             type="button"
             onclick={openOptimizeReview}
-            class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary)]/80"
+            class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary-hover)]"
           >
             {t('analysis.gallery.optimize.review')}
           </button>
@@ -2488,7 +2488,7 @@
                     'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors',
                     optimizePaused
                       ? 'cursor-not-allowed opacity-50'
-                      : 'hover:bg-[var(--color-primary)]/80'
+                      : 'hover:not-disabled:bg-[var(--color-primary-hover)]'
                   )}
                   aria-label="{t('analysis.gallery.optimize.swap')} {entry.name}"
                 >
@@ -2770,7 +2770,7 @@
           'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors',
           !entry.compatible || isInstalling || installPaused
             ? 'opacity-50'
-            : 'hover:bg-[var(--color-primary)]/80',
+            : 'hover:bg-[var(--color-primary-hover)]',
           installPaused && 'cursor-not-allowed'
         )}
         aria-label="{t('analysis.gallery.install')} {entry.name}"
@@ -3033,7 +3033,7 @@
           aria-disabled={installBlocked ? 'true' : undefined}
           aria-describedby={installBlocked ? INSTALL_BLOCKED_HELP_ID : undefined}
           title={installBlocked ? t('analysis.gallery.variants.incompatible') : undefined}
-          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-[var(--color-primary)]"
+          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary-hover)] transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-[var(--color-primary)]"
         >
           <Download class="size-4" />
           {t('analysis.gallery.license.acceptAndInstall')}
@@ -3212,7 +3212,7 @@
       >
         <button
           type="button"
-          class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           onclick={downloadSpeciesCSV}
           disabled={rangeFilterState.loading ||
             rangeFilterState.downloading ||

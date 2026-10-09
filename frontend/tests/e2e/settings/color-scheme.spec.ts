@@ -98,7 +98,7 @@ test.describe('Color Scheme Switching', () => {
 
     const schemes = [
       { label: 'settings.appearance.schemeForest', id: 'forest', color: '#047857' },
-      { label: 'settings.appearance.schemeAmber', id: 'amber', color: '#d97706' },
+      { label: 'settings.appearance.schemeAmber', id: 'amber', color: '#b45309' },
       { label: 'settings.appearance.schemeViolet', id: 'violet', color: '#7c3aed' },
       { label: 'settings.appearance.schemeRose', id: 'rose', color: '#e11d48' },
       { label: 'settings.appearance.schemeBlue', id: 'blue', color: '#2563eb' },

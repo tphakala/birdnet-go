@@ -26,7 +26,7 @@
   const schemes: ReadonlyArray<SchemeOption> = [
     { id: 'blue', labelKey: 'settings.appearance.schemeBlue', color: '#2563eb' },
     { id: 'forest', labelKey: 'settings.appearance.schemeForest', color: '#047857' },
-    { id: 'amber', labelKey: 'settings.appearance.schemeAmber', color: '#d97706' },
+    { id: 'amber', labelKey: 'settings.appearance.schemeAmber', color: '#b45309' },
     { id: 'violet', labelKey: 'settings.appearance.schemeViolet', color: '#7c3aed' },
     { id: 'rose', labelKey: 'settings.appearance.schemeRose', color: '#e11d48' },
     {

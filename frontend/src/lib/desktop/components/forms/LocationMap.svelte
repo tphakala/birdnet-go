@@ -561,7 +561,7 @@
         </p>
         <button
           type="button"
-          class="inline-flex items-center justify-center h-10 px-4 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors"
+          class="inline-flex items-center justify-center h-10 px-4 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors"
           onclick={closeExpanded}
         >
           {t('common.done')}

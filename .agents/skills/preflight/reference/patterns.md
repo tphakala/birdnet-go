@@ -1587,7 +1587,7 @@ This project uses native Tailwind v4.1 only. Any daisyUI class is a code smell.
 <div class="card card-body">Content</div>
 
 <!-- GOOD: Native Tailwind v4.1 with theme CSS variables (follows light/dark theme) -->
-<button class="px-4 py-2 bg-[var(--color-primary)] text-[var(--color-primary-content)] rounded-lg hover:bg-[var(--color-primary)]/85 transition-colors">Submit</button>
+<button class="px-4 py-2 bg-[var(--color-primary)] text-[var(--color-primary-content)] rounded-lg hover:not-disabled:bg-[var(--color-primary-hover)] transition-colors">Submit</button>
 <div class="p-6 bg-[var(--color-base-100)] text-[var(--color-base-content)] rounded-xl shadow-md">Content</div>
 ```
 
