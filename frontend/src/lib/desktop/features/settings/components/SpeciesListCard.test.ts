@@ -65,7 +65,7 @@ describe('SpeciesListCard value/display split', () => {
     const option = await screen.findByText('Punarinta');
     expect(screen.queryByText('American Robin')).not.toBeInTheDocument();
 
-    await fireEvent.mouseDown(option);
+    await fireEvent.click(option);
 
     // The persisted value is canonical.
     expect(onAdd).toHaveBeenCalledWith('American Robin');
@@ -132,6 +132,7 @@ describe('SpeciesListCard combobox keyboard highlight', () => {
   }
 
   async function openListWithRerender(predictions: string[] = crowPredictions) {
+    const onAdd = vi.fn();
     const { rerender } = render(SpeciesListCard, {
       props: {
         title: 'Always Include',
@@ -142,7 +143,7 @@ describe('SpeciesListCard combobox keyboard highlight', () => {
         inputLabel: 'Add species',
         inputPlaceholder: '',
         emptyMessage: '',
-        onAdd: vi.fn(),
+        onAdd,
         onRemove: vi.fn(),
         onInput: vi.fn(),
       },
@@ -150,7 +151,7 @@ describe('SpeciesListCard combobox keyboard highlight', () => {
     const input = screen.getByRole('combobox');
     await fireEvent.focus(input);
     await screen.findAllByRole('option');
-    return { input, rerender };
+    return { input, rerender, onAdd };
   }
 
   it('ArrowDown points aria-activedescendant at the first suggestion', async () => {
@@ -333,17 +334,86 @@ describe('SpeciesListCard combobox keyboard highlight', () => {
     expect(scroll.mock.contexts[0]).toBe(screen.getAllByRole('option')[0]);
   });
 
-  it('ArrowUp after the list shrank below the highlight lands on the last suggestion', async () => {
+  it('drops the highlight when the predictions shrink without typing', async () => {
     const { input, rerender } = await openListWithRerender(threeAmericans);
     for (let press = 0; press < 3; press++) {
       await fireEvent.keyDown(input, { key: 'ArrowDown' });
     }
+
     await rerender({ predictions: ['American Robin'] });
+
     expect(input).not.toHaveAttribute('aria-activedescendant');
+    expect(screen.getByRole('option')).toHaveAttribute('aria-selected', 'false');
+  });
 
-    await fireEvent.keyDown(input, { key: 'ArrowUp' });
+  it('drops the highlight when new predictions reorder the same number of suggestions', async () => {
+    const { input, rerender, onAdd } = await openListWithRerender(threeAmericans);
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input).toHaveAttribute('aria-activedescendant', screen.getAllByRole('option')[0].id);
 
-    expect(input).toHaveAttribute('aria-activedescendant', screen.getByRole('option').id);
+    await rerender({ predictions: ['American Wren', 'American Crow', 'American Robin'] });
+
+    expect(screen.getAllByRole('option')).toHaveLength(3);
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+    for (const option of screen.getAllByRole('option')) {
+      expect(option).toHaveAttribute('aria-selected', 'false');
+    }
+    // Enter adds the typed text, not whichever species now sits at the old index
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onAdd).toHaveBeenCalledWith('american');
+  });
+
+  it('keeps the highlight when the predictions arrive again unchanged', async () => {
+    const { input, rerender } = await openListWithRerender(threeAmericans);
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+    await rerender({ predictions: [...threeAmericans] });
+
+    expect(input).toHaveAttribute('aria-activedescendant', screen.getAllByRole('option')[0].id);
+  });
+
+  it('does not take ArrowUp from the input when the list is closed', async () => {
+    const input = await openList();
+    await fireEvent.keyDown(input, { key: 'Escape' });
+
+    const notPrevented = await fireEvent.keyDown(input, { key: 'ArrowUp' });
+
+    expect(notPrevented).toBe(true);
+  });
+
+  it('does not take ArrowUp from the input when there are no suggestions', async () => {
+    renderCard({ predictions: [], inputValue: 'zzz' });
+    const input = screen.getByRole('combobox');
+    await fireEvent.input(input, { target: { value: 'zzzz' } });
+
+    const notPrevented = await fireEvent.keyDown(input, { key: 'ArrowUp' });
+
+    expect(notPrevented).toBe(true);
+  });
+
+  it('points aria-controls at the listbox only while it is rendered', async () => {
+    const input = await openList();
+    expect(input).toHaveAttribute('aria-controls', screen.getByRole('listbox').id);
+
+    await fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(input).not.toHaveAttribute('aria-controls');
+  });
+
+  it('picks a suggestion on click even when no mousedown came first', async () => {
+    const { onAdd } = renderCard({
+      predictions: crowPredictions,
+      inputValue: 'american',
+      localizeLabel: undefined,
+    });
+    const input = screen.getByRole('combobox');
+    await fireEvent.focus(input);
+    const options = await screen.findAllByRole('option');
+
+    // Assistive technology and virtual cursors activate with a bare click
+    await fireEvent.click(options[1]);
+
+    expect(onAdd).toHaveBeenCalledWith('American Crow');
   });
 
   it('keeps the focus in the input when a suggestion is picked with the mouse', async () => {
@@ -362,6 +432,9 @@ describe('SpeciesListCard combobox keyboard highlight', () => {
     const notPrevented = await fireEvent.mouseDown(option);
 
     expect(notPrevented).toBe(false);
+    // The press alone picks nothing; the click that follows does
+    expect(onAdd).not.toHaveBeenCalled();
+    await fireEvent.click(option);
     expect(onAdd).toHaveBeenCalledWith('American Robin');
     expect(input).toHaveFocus();
   });

@@ -215,6 +215,14 @@
       : undefined
   );
 
+  // The highlight is an index, so it means another species once the suggestions change
+  // underneath it (new predictions from the parent while the list is open)
+  let suggestionsKey = $derived(filteredPredictions.map(prediction => prediction.value).join('\n'));
+  $effect.pre(() => {
+    void suggestionsKey;
+    selectedPredictionIndex = -1;
+  });
+
   function handleInputChange(e: Event) {
     const target = e.target as HTMLInputElement;
     inputValue = target.value;
@@ -270,20 +278,16 @@
       if (predictionsOpen) e.preventDefault();
       showPredictions = false;
       selectedPredictionIndex = -1;
-    } else if (e.key === 'ArrowDown' && showPredictions && filteredPredictions.length > 0) {
+    } else if (e.key === 'ArrowDown' && predictionsOpen) {
       e.preventDefault();
       selectedPredictionIndex = Math.min(
         selectedPredictionIndex + 1,
         filteredPredictions.length - 1
       );
       scrollToHighlighted();
-    } else if (e.key === 'ArrowUp' && showPredictions) {
+    } else if (e.key === 'ArrowUp' && predictionsOpen) {
       e.preventDefault();
-      // A highlight left beyond a shrunken list counts as being on the last option
-      selectedPredictionIndex = Math.max(
-        Math.min(selectedPredictionIndex, filteredPredictions.length) - 1,
-        -1
-      );
+      selectedPredictionIndex = Math.max(selectedPredictionIndex - 1, -1);
       scrollToHighlighted();
     }
   }
@@ -476,7 +480,7 @@
           data-form-type="other"
           role="combobox"
           aria-autocomplete="list"
-          aria-controls={listboxId}
+          aria-controls={predictionsOpen ? listboxId : undefined}
           aria-expanded={predictionsOpen}
           aria-activedescendant={activeDescendant}
           aria-haspopup="listbox"
@@ -506,8 +510,11 @@
           aria-label={t('settings.species.suggestions') || 'Species suggestions'}
         >
           {#each filteredPredictions as prediction, idx (`${prediction.value}_${idx}`)}
+            <!-- The press only keeps the focus in the input; the click picks the suggestion, so
+                 a click without a press (assistive technology) picks it too. -->
             <!-- Keyboard use goes through the combobox input (aria-activedescendant), so the
                  options are neither focusable nor given key handlers. -->
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
             <li
               id={optionId(listboxId, idx)}
               role="option"
@@ -515,11 +522,8 @@
               class="cursor-pointer px-3 py-2 text-sm transition-colors text-[var(--color-base-content)] {getOptionStateClasses(
                 { selected: false, highlighted: isOptionHighlighted(idx, selectedPredictionIndex) }
               )}"
-              onmousedown={event => {
-                // Keep the focus in the input
-                event.preventDefault();
-                selectPrediction(prediction);
-              }}
+              onmousedown={event => event.preventDefault()}
+              onclick={() => selectPrediction(prediction)}
             >
               {prediction.label}
             </li>
