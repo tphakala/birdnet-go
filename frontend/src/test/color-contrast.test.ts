@@ -1124,6 +1124,7 @@ describe('Custom scheme hover and pressed fills', () => {
       expect(body).toMatch(new RegExp(`${name}:[^;]*var\\(--custom-primary-shade`));
     }
     expect(body).toMatch(/--color-accent-hover:[^;]*var\(--custom-accent-shade/);
+    expect(body).toMatch(/--color-accent-active:[^;]*var\(--custom-accent-shade/);
     // No theme-specific override mixes toward a fixed colour regardless of the content
     expect(schemesCss).not.toContain("[data-theme='dark'][data-scheme='custom']");
   });
@@ -1163,6 +1164,34 @@ describe('Custom scheme hover and pressed fills', () => {
         `var(--custom-${kind}-shade, ${content === '#ffffff' ? 'black' : 'white'})`
       );
     }
+  });
+
+  /** The scheme block of the pre-paint script in index.html (the tag also holds other init code). */
+  function prePaintSchemeScript(): string {
+    const html = readFileSync(join(stylesDir, '..', '..', 'index.html'), 'utf8');
+    const start = html.indexOf('// Restore color scheme');
+    const end = html.indexOf('})();', start);
+    return start === -1 || end === -1 ? '' : html.slice(start, end + '})();'.length);
+  }
+
+  /** Runs a shipped inline script with the scheme stored JSON-encoded, as the app stores it. */
+  function schemeAfterRunning(script: string): string | null {
+    localStorage.setItem('color-scheme', JSON.stringify('amber'));
+    document.documentElement.removeAttribute('data-scheme');
+    new Function(script)();
+    localStorage.removeItem('color-scheme');
+    return document.documentElement.getAttribute('data-scheme');
+  }
+
+  it('the index.html pre-paint script restores a JSON-encoded scheme', () => {
+    const script = prePaintSchemeScript();
+    expect(script).not.toBe('');
+    expect(schemeAfterRunning(script)).toBe('amber');
+  });
+
+  it('the theme init script restores a JSON-encoded scheme', async () => {
+    const { getThemeInitScript } = await import('../lib/utils/theme-init');
+    expect(schemeAfterRunning(getThemeInitScript())).toBe('amber');
   });
 
   it('the scheme store sets a shade away from the content colour', async () => {

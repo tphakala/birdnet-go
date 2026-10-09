@@ -22,6 +22,10 @@
         try {
           var VALID = ['blue', 'forest', 'amber', 'violet', 'rose', 'custom'];
           var s = localStorage.getItem('color-scheme');
+          // The app stores the scheme JSON-encoded ("amber"); accept a plain value too
+          try {
+            s = JSON.parse(s);
+          } catch (e) {}
           if (s && VALID.indexOf(s) !== -1) {
             document.documentElement.setAttribute('data-scheme', s);
             if (s === 'custom') {

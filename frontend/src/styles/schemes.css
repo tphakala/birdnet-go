@@ -130,5 +130,10 @@
     var(--custom-accent, #0284c7) 85%,
     var(--custom-accent-shade, white)
   );
+  --color-accent-active: color-mix(
+    in srgb,
+    var(--custom-accent, #0284c7) 70%,
+    var(--custom-accent-shade, white)
+  );
   --color-accent-content: var(--custom-accent-content, #020617);
 }

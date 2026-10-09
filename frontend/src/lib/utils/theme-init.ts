@@ -26,6 +26,8 @@ export function getThemeInitScript(): string {
   (function() {
     try {
       var scheme = localStorage.getItem('color-scheme') || 'blue';
+      // Stored JSON-encoded ("amber") by the app; a plain value is accepted too
+      try { scheme = JSON.parse(scheme); } catch (e) {}
       var valid = ['blue','forest','amber','violet','rose','custom'];
       if (valid.indexOf(scheme) === -1) scheme = 'blue';
       document.documentElement.setAttribute('data-scheme', scheme);
