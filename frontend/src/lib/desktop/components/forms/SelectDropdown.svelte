@@ -116,9 +116,17 @@
     width: 0,
   });
 
+  // Dialog container that holds the trigger: where the popover is portaled and focus is contained
+  const DIALOG_SELECTOR = '[role="dialog"]';
+
+  // Elements that take focus (or whose click takes it elsewhere) when clicked. Safari does not
+  // focus a clicked button, so a click on one of these leaves focus on <body> as well.
+  const FOCUSABLE_CONTROL_SELECTOR =
+    'button, a[href], input, select, textarea, summary, [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])';
+
   // Portal target: nearest dialog ancestor (for focus containment) or body
   let portalTarget = $derived.by(
-    () => (buttonElement?.closest('[role="dialog"]') as HTMLElement | null) ?? document.body
+    () => buttonElement?.closest<HTMLElement>(DIALOG_SELECTOR) ?? document.body
   );
 
   // Trigger description: the help text (when shown) and any caller-provided ids. The displayed
@@ -278,24 +286,37 @@
   // Event handlers
   function toggleDropdown() {
     if (disabled) return;
-    isOpen = !isOpen;
 
     if (isOpen) {
-      externalLabelText = Array.from(buttonElement?.labels ?? [])
-        .map(associated => associated.textContent?.trim() ?? '')
-        .filter(Boolean)
-        .join(' ');
-      updateDropdownPosition();
-      if (searchable) {
-        setTimeout(() => inputElement?.focus(), 0);
-      }
+      // A click that took no focus (Safari) leaves it on <body>; closing must not strand it there
+      closeDropdown({ restoreFromBody: true });
+      return;
+    }
+
+    isOpen = true;
+    externalLabelText = Array.from(buttonElement?.labels ?? [])
+      .map(associated => associated.textContent?.trim() ?? '')
+      .filter(Boolean)
+      .join(' ');
+    updateDropdownPosition();
+    if (searchable) {
+      setTimeout(() => inputElement?.focus(), 0);
     }
   }
 
-  function closeDropdown() {
-    // The popover is removed on close; keep focus from falling to <body> when it was inside
-    if (dropdownElement?.contains(document.activeElement)) {
-      buttonElement?.focus();
+  // The one way the list closes, so every close resets the search text and the highlight.
+  // The popover is removed on close; keep focus from falling to <body> when it was inside.
+  // `restoreFromBody` also covers focus that is already on <body>, for a close the user caused
+  // with a click that took no focus (Safari).
+  function closeDropdown({ restoreFromBody = false }: { restoreFromBody?: boolean } = {}) {
+    const active = document.activeElement;
+    const focusInPopover = dropdownElement?.contains(active) ?? false;
+    const focusOnBody = restoreFromBody && (!active || active === document.body);
+    if (focusOnBody || focusInPopover) {
+      // From the popover the user was working at the trigger, so it scrolls into view. From body,
+      // the trigger is either in view (a click on it or on an option) or the click was elsewhere
+      // in the dialog (a background click); either way the dialog must not scroll
+      buttonElement?.focus({ preventScroll: !focusInPopover });
     }
     isOpen = false;
     searchQuery = '';
@@ -330,18 +351,28 @@
       value = option.value;
       onChange?.(option.value);
       // A click that took no focus (Safari) leaves it on <body>; keep it inside the dialog
-      if (document.activeElement === document.body) buttonElement?.focus();
-      closeDropdown();
+      closeDropdown({ restoreFromBody: true });
     }
   }
 
   function clearSelection() {
     if (disabled) return;
 
+    // The clear control sits inside the trigger and unmounts once the value is empty; keep focus
+    // on the trigger instead of letting it drop to body.
+    // A click that does not focus (Safari) leaves focus on body; treat it like a trigger click
+    const active = document.activeElement;
+    const restore =
+      !active || active === document.body || (buttonElement?.contains(active) ?? false);
     value = multiple ? [] : '';
     onChange?.(multiple ? [] : '');
     onClear?.();
     closeDropdown();
+    // A callback may have moved focus on purpose; only take it back from body or the trigger
+    const after = document.activeElement;
+    const stillLost =
+      !after || after === document.body || (buttonElement?.contains(after) ?? false);
+    if (restore && stillLost) buttonElement?.focus({ preventScroll: true });
   }
 
   function handleSearch(event: Event) {
@@ -418,18 +449,24 @@
         break;
 
       case 'Enter':
-      case ' ':
+      case ' ': {
+        // Always consumed: left alone, the browser clicks the focused button on top of this
+        event.preventDefault();
+        // A held key repeats keydown; only the first of the press acts, or the list would flicker
+        if (event.repeat) break;
         if (!isOpen) {
-          event.preventDefault();
           toggleDropdown();
-        } else if (highlightedIndex >= 0 && highlightedIndex < allOptions.length) {
-          event.preventDefault();
-          const selectedOption = safeArrayAccess(allOptions, highlightedIndex);
-          if (selectedOption) {
-            selectOption(selectedOption);
-          }
+          break;
+        }
+        const highlighted =
+          highlightedIndex >= 0 ? safeArrayAccess(allOptions, highlightedIndex) : null;
+        if (highlighted) {
+          selectOption(highlighted);
+        } else {
+          closeDropdown();
         }
         break;
+      }
 
       case 'ArrowDown':
         event.preventDefault();
@@ -476,8 +513,20 @@
   function handleClickOutside(event: MouseEvent) {
     const target = event.target as Node;
     if (!buttonElement?.contains(target) && !dropdownElement?.contains(target)) {
-      closeDropdown();
+      closeDropdown({ restoreFromBody: isBackgroundClickInOwnDialog(target) });
     }
+  }
+
+  // Whether a click landed on the plain background of the dialog that holds the trigger. Focus
+  // left on <body> there escapes the dialog's focus trap, so it goes back to the trigger. On a
+  // page, <body> after a background click is normal, and a click on a control, or inside another
+  // dialog (which owns focus while it is open), is where the user meant to go.
+  function isBackgroundClickInOwnDialog(target: Node): boolean {
+    const dialog = buttonElement?.closest(DIALOG_SELECTOR);
+    if (!dialog || !(target instanceof HTMLElement || target instanceof SVGElement)) return false;
+    if (target.closest(`${DIALOG_SELECTOR}, [aria-modal="true"]`) !== dialog) return false;
+    const control = target.closest(FOCUSABLE_CONTROL_SELECTOR);
+    return !(control && control !== dialog && dialog.contains(control));
   }
 
   // Capture-phase scroll handler: reposition when an outer/ancestor container
