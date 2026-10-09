@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -84,8 +85,10 @@ func (o *Orchestrator) clearProbedLatency(modelID string) {
 // run followed by cadenceProbeRuns timed runs, returning the median. Each run is
 // executed through lockRun so the caller controls which locks are held for that
 // one run only; lockRun returns false when it did not execute the run (for
-// example the entry was swapped), which aborts the probe. A failed or timed-out
-// run aborts the probe and the model is reported as unknown (ok == false).
+// example the entry was swapped), which aborts the probe. A run that fails
+// aborts the probe and the model is reported as unknown (ok == false). A run cut
+// off by the probe timeout is recorded as taking warmupTimeout, since it took at
+// least that long, so a model too slow for the hardware stays in the duty sum.
 //
 // The probe calls instance.Predict directly, never PredictModel, so it stays out
 // of the global inference counters, like warmup.
@@ -109,6 +112,12 @@ func (o *Orchestrator) probeLatency(modelID string, instance ModelInstance, lock
 		})
 		if !ran {
 			return 0, false
+		}
+		if errors.Is(runErr, context.DeadlineExceeded) {
+			// A run cut off by the probe timeout took at least that long. Count it as
+			// the timeout instead of dropping the model, which would lift the cap on
+			// exactly the slow hardware it exists for.
+			return warmupTimeout, true
 		}
 		if runErr != nil {
 			GetLogger().Debug("latency probe inference failed (non-fatal)",

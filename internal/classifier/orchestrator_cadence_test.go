@@ -154,3 +154,18 @@ func TestProbeLatency_ReleasesLockBetweenRuns(t *testing.T) {
 		assert.Equal(t, time.Second, acquiredAt[0], "waiter gets the lock after one run, not after the whole probe")
 	})
 }
+
+// TestProbeLatency_TimeoutCountsAsTimeout pins that a run cut off by the probe
+// timeout is recorded as taking the timeout, not dropped as unknown: the model is
+// too slow for the hardware and must stay in the duty sum.
+func TestProbeLatency_TimeoutCountsAsTimeout(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		o := &Orchestrator{}
+		slow := warmupTimeout + time.Minute
+		inst := newScripted(slow, slow, slow, slow)
+		got, ok := o.probeLatency("Probe_Model", inst, func(run func()) bool { run(); return true })
+		require.True(t, ok)
+		assert.Equal(t, warmupTimeout, got)
+	})
+}
