@@ -515,6 +515,12 @@
         "title": "{modelName}: katra analīze neizdodas",
         "message": "{modelName} ir ielādēts, bet tā pēdējās {failures} analīzes pēc kārtas neizdevās uz {runtime}: secināšana atgrieza kļūdu. Audio tiek ierakstīts, bet šis modelis neko nenosaka. Pārbaudiet modeli lapā Sistēma > MI Modeļi.",
         "nonFiniteMessage": "{modelName} ir ielādēts, bet tā pēdējās {failures} analīzes pēc kārtas neizdevās uz {runtime}: modelis atgrieza nederīgus rezultātus (NaN vai bezgalīgus). Audio tiek ierakstīts, bet šis modelis neko nenosaka. Pārbaudiet modeli lapā Sistēma > MI Modeļi."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Analīzes pārklāšanās ierobežota šai ierīcei",
+        "cadenceCappedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}} pie iestatītās {configured} s pārklāšanās, slodze pārsniedz šīs ierīces izmērīto jaudu, tāpēc audio tiek analizēts ar {effective} s pārklāšanos. Tāpēc viltus pozitīvo filtrs var prasīt mazāk apstiprinājumu. Jūsu saglabātie iestatījumi nemainās; skatiet Iestatījumi > Analīze.",
+        "cadenceOverloadedTitle": "Šī ierīce netiek līdzi audio analīzei",
+        "cadenceOverloadedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}}, slodze pārsniedz šīs ierīces izmērīto jaudu pat bez pārklāšanās, tāpēc analīze var atpalikt un noteikšanas var tikt izlaistas. Iespējojiet mazāk modeļu vai audio avotu vai izvēlieties ātrāku modeļa variantu."
       }
     },
     "loading": "Ielādē paziņojumus..."
@@ -2388,10 +2394,9 @@
             "lenient": "Zemas kvalitātes audio (RTSP kameras, tīmekļa kameru mikrofoni)",
             "moderate": "Sabalansēts tipiskām hobija ierīcēm",
             "balanced": "Oriģinālā uzvedība pirms 2025. gada septembra",
-            "strict": "Nepieciešams RPi 4+. Augstas kvalitātes mikrofoniem",
-            "maximum": "Nepieciešams RPi 4+. Profesionāla līmeņa mikrofoniem"
+            "strict": "Augstas kvalitātes mikrofoniem",
+            "maximum": "Profesionāla līmeņa mikrofoniem"
           },
-          "hardwareNote": "Stingrie un Maksimālie līmeņi prasa augstākus pārklāšanās iestatījumus un vairāk CPU resursu. Šiem līmeņiem nepieciešams RPi 4 vai labāka aparatūra.",
           "overlapAdjusted": "Pārklāšanās iestatījums automātiski pielāgots uz {overlap}s, lai izpildītu filtra prasības",
           "overlapReduced": "Pārklāšanās iestatījums samazināts uz {overlap}s, lai atbilstu filtra līmenim",
           "levelNames": {
@@ -2403,7 +2408,19 @@
             "maximum": "Maksimums",
             "unknown": "Nezināms"
           },
-          "warningOff": "Bez filtrēšanas jebkura noteikšana virs ticamības sliekšņa tiek pieņemta nekavējoties. Tas parasti rada vairākus viltus pozitīvos dienā. Pat zema filtrēšana ievērojami uzlabo rezultātu kvalitāti."
+          "warningOff": "Bez filtrēšanas jebkura noteikšana virs ticamības sliekšņa tiek pieņemta nekavējoties. Tas parasti rada vairākus viltus pozitīvos dienā. Pat zema filtrēšana ievērojami uzlabo rezultātu kvalitāti.",
+          "readoutTitle": "Pašlaik nepieciešamie apstiprinājumi",
+          "readoutPreviewTitle": "Nepieciešamie apstiprinājumi pēc saglabāšanas (aplēse)",
+          "readoutIntro": "Noteikšana tiek pieņemta, ja pietiekami daudz analīzes logu {seconds} sekunžu laikā sakrīt.",
+          "readoutLine": "{model}: {count} no {windows} logiem, jauns logs ik pēc {step} s",
+          "readoutPreview": "Aplēse pēc nesaglabātajām izmaiņām. Ierīces ierobežojums pēc saglabāšanas tiek pārbaudīts vēlreiz.",
+          "readoutPending": "Saglabātie iestatījumi tiek piemēroti. Līdz atjaunināto vērtību ielādei šīs vērtības ir aplēses.",
+          "capNoticeTitle": "Pārklāšanās ierobežota līdz šīs ierīces jaudai",
+          "capNotice": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}} pie iestatītās {configured} s pārklāšanās, slodze pārsniedz šīs ierīces izmērīto jaudu, tāpēc audio tiek analizēts ar {effective} s pārklāšanos. Tāpēc filtrs var prasīt mazāk apstiprinājumu. Jūsu saglabātie iestatījumi nemainās.",
+          "overloadedNoticeTitle": "Šī ierīce netiek līdzi analīzei",
+          "overloadedNotice": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}}, slodze pārsniedz šīs ierīces izmērīto jaudu pat bez pārklāšanās. Analīze var atpalikt, un noteikšanas var tikt izlaistas. Iespējojiet mazāk modeļu vai audio avotu vai izvēlieties ātrāku modeļa variantu.",
+          "unknownLatency": "Apstrādes laiku neizdevās izmērīt šiem modeļiem: {models}, tāpēc tas netiek ņemts vērā, ierobežojot pārklāšanos. Analīze joprojām var atpalikt.",
+          "cpuNote": "Lielāks stiprums biežāk analizē pārklājošos audio, kas patērē CPU laiku katram iespējotajam modelim un audio avotam. BirdNET-Go automātiski ierobežo pārklāšanos līdz tam, ko šī ierīce spēj apstrādāt."
         },
         "rangeFilter": {
           "title": "Areāla filtrs",

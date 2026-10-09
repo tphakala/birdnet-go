@@ -515,6 +515,12 @@
         "title": "{modelName} zlyháva pri každej analýze",
         "message": "{modelName} je načítaný, ale jeho posledných {failures} analýz za sebou zlyhalo na {runtime}: inferencia vrátila chybu. Zvuk sa zaznamenáva, ale tento model nič nedeteguje. Skontrolujte model na stránke Systém > Modely AI.",
         "nonFiniteMessage": "{modelName} je načítaný, ale jeho posledných {failures} analýz za sebou zlyhalo na {runtime}: model vrátil neplatné skóre (NaN alebo nekonečné). Zvuk sa zaznamenáva, ale tento model nič nedeteguje. Skontrolujte model na stránke Systém > Modely AI."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Prekrytie analýzy obmedzené pre toto zariadenie",
+        "cadenceCappedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} pri nastavenom prekrytí {configured} s prekračuje nameranú kapacitu tohto zariadenia, preto sa zvuk analyzuje s prekrytím {effective} s. Filter falošne pozitívnych výsledkov preto môže vyžadovať menej potvrdení. Vaše uložené nastavenia sa nemenia; pozrite Nastavenia > Analýza.",
+        "cadenceOverloadedTitle": "Toto zariadenie nestíha analýzu zvuku",
+        "cadenceOverloadedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} prekračuje nameranú kapacitu tohto zariadenia aj bez prekrytia, preto môže analýza zaostávať a detekcie môžu byť vynechané. Povoľte menej modelov alebo zvukových zdrojov, alebo zvoľte rýchlejší variant modelu."
       }
     },
     "loading": "Načítavam upozornenia..."
@@ -2388,10 +2394,9 @@
             "lenient": "Pre nízku kvalitu zvuku (RTSP kamery, mikrofóny webkamier)",
             "moderate": "Vyvážené pre typické hobby konfigurácie",
             "balanced": "Pôvodné správanie pred septembrom 2025",
-            "strict": "Vyžaduje sa RPi 4+. Pre vysokokvalitné mikrofóny",
-            "maximum": "Vyžaduje sa RPi 4+. Pre mikrofóny profesionálnej triedy"
+            "strict": "Pre vysokokvalitné mikrofóny",
+            "maximum": "Pre mikrofóny profesionálnej triedy"
           },
-          "hardwareNote": "Prísne a maximálne úrovne vyžadujú vyššie nastavenia prekrytia a viac prostriedkov CPU. Pre tieto úrovne sa vyžaduje hardvér RPi 4 alebo lepší.",
           "overlapAdjusted": "Nastavenie prekrytia bolo automaticky upravené na {overlap}s, aby spĺňalo požiadavky filtra",
           "overlapReduced": "Nastavenie prekrytia bolo znížené na {overlap}s, aby zodpovedalo úrovni filtra",
           "levelNames": {
@@ -2403,7 +2408,19 @@
             "maximum": "Maximum",
             "unknown": "Neznámy"
           },
-          "warningOff": "Bez filtrovania sa každá detekcia nad prahom spoľahlivosti ihneď akceptuje. To zvyčajne spôsobuje niekoľko falošných pozitív denne. Aj nízke filtrovanie výrazne zlepšuje kvalitu výsledkov."
+          "warningOff": "Bez filtrovania sa každá detekcia nad prahom spoľahlivosti ihneď akceptuje. To zvyčajne spôsobuje niekoľko falošných pozitív denne. Aj nízke filtrovanie výrazne zlepšuje kvalitu výsledkov.",
+          "readoutTitle": "Aktuálne požadované potvrdenia",
+          "readoutPreviewTitle": "Požadované potvrdenia po uložení (odhad)",
+          "readoutIntro": "Detekcia sa prijme, keď sa zhoduje dostatok analytických okien v rámci {seconds} sekúnd.",
+          "readoutLine": "{model}: {count} z {windows} okien, nové okno každých {step} s",
+          "readoutPreview": "Odhad podľa neuložených zmien. Limit zariadenia sa po uložení znova overí.",
+          "readoutPending": "Uložené nastavenia sa práve uplatňujú. Kým sa nenačítajú aktualizované počty, sú tieto hodnoty odhadom.",
+          "capNoticeTitle": "Prekrytie obmedzené na výkon tohto zariadenia",
+          "capNotice": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} pri nastavenom prekrytí {configured} s prekračuje nameranú kapacitu tohto zariadenia, preto sa zvuk analyzuje s prekrytím {effective} s. Filter preto môže vyžadovať menej potvrdení. Vaše uložené nastavenia sa nemenia.",
+          "overloadedNoticeTitle": "Toto zariadenie nestíha analýzu",
+          "overloadedNotice": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} prekračuje nameranú kapacitu tohto zariadenia aj bez prekrytia. Analýza môže zaostávať a detekcie môžu byť vynechané. Povoľte menej modelov alebo zvukových zdrojov, alebo zvoľte rýchlejší variant modelu.",
+          "unknownLatency": "Čas spracovania sa nepodarilo zmerať pre {models}, preto sa pri obmedzovaní prekrytia nezapočítava. Analýza môže napriek tomu zaostávať.",
+          "cpuNote": "Vyššia sila analyzuje prekrývajúci sa zvuk častejšie, čo stojí čas CPU pre každý povolený model a zvukový zdroj. BirdNET-Go automaticky obmedzí prekrytie na to, čo toto zariadenie dokáže spracovať."
         },
         "rangeFilter": {
           "title": "Filter rozsahu",

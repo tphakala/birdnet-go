@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 func cadenceModelInfo(id string) classifier.ModelInfo {
@@ -478,4 +479,51 @@ func TestReplanCadence_NoBackendIsNoOp(t *testing.T) {
 	p := &AudioPipelineService{restartChan: make(chan struct{}, 1)}
 	assert.NotPanics(t, p.replanCadence)
 	assert.Empty(t, p.restartChan)
+}
+
+func TestCadencePlanNeedsBroadcast(t *testing.T) {
+	t.Parallel()
+	base := cadence.Plan{
+		Status:                cadence.StatusCapped,
+		ConfiguredBaseOverlap: 2 * time.Second,
+		EffectiveBaseOverlap:  1500 * time.Millisecond,
+		SourceCount:           1,
+		ModelCount:            2,
+		DutyAtEffective:       0.5,
+	}
+
+	assert.True(t, cadencePlanNeedsBroadcast(nil, &base), "the first plan reaches open pages")
+
+	drift := base
+	drift.DutyAtEffective = 0.6
+	assert.False(t, cadencePlanNeedsBroadcast(&base, &drift), "a duty change alone is not announced")
+
+	overlap := base
+	overlap.ConfiguredBaseOverlap = 2500 * time.Millisecond
+	assert.True(t, cadencePlanNeedsBroadcast(&base, &overlap),
+		"a new configured overlap must reach the settings page even when the capped outcome is unchanged")
+
+	effective := base
+	effective.EffectiveBaseOverlap = time.Second
+	assert.True(t, cadencePlanNeedsBroadcast(&base, &effective))
+
+	status := base
+	status.Status = cadence.StatusOverloaded
+	assert.True(t, cadencePlanNeedsBroadcast(&base, &status))
+}
+
+// TestPublishCadencePlan_FeedsTheBellNotice pins that publishing a capped first
+// plan raises the bell notice.
+func TestPublishCadencePlan_FeedsTheBellNotice(t *testing.T) {
+	// Not parallel: conftest.SetTestSettings mutates package-global settings.
+	p, orch := cadenceService(t)
+	svc := newCadenceNoticeRecorder(t, 1, 0)
+	p.cadenceNotice.service = func() notification.NoticeService { return svc }
+
+	p.publishCadencePlan(orch, noticePlan(cadence.StatusCapped, 2800*time.Millisecond, 1800*time.Millisecond), "test")
+
+	created, _ := svc.counts()
+	assert.Equal(t, 1, created)
+	require.NotNil(t, svc.last())
+	assert.Equal(t, notification.MsgCadenceCappedTitle, svc.last().TitleKey)
 }

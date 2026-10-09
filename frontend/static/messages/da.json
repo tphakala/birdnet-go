@@ -515,6 +515,12 @@
         "title": "{modelName} fejler ved hver analyse",
         "message": "{modelName} er indlæst, men de seneste {failures} analyser i træk fejlede på {runtime}: inferensen returnerede en fejl. Lyd optages, men denne model registrerer intet. Tjek modellen på siden System > AI-modeller.",
         "nonFiniteMessage": "{modelName} er indlæst, men de seneste {failures} analyser i træk fejlede på {runtime}: modellen returnerede ugyldige scorer (NaN eller uendelige). Lyd optages, men denne model registrerer intet. Tjek modellen på siden System > AI-modeller."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Analyseoverlap begrænset for denne enhed",
+        "cadenceCappedMessage": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med det indstillede overlap på {configured} s overstiger denne enheds målte kapacitet, så lyden analyseres med {effective} s overlap. Falsk positiv-filteret kan derfor kræve færre bekræftelser. Dine gemte indstillinger er uændrede; se Indstillinger > Analyse.",
+        "cadenceOverloadedTitle": "Denne enhed kan ikke følge med lydanalysen",
+        "cadenceOverloadedMessage": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger denne enheds målte kapacitet selv uden overlap, så analysen kan komme bagud, og detektioner kan gå tabt. Aktivér færre modeller eller lydkilder, eller vælg en hurtigere modelvariant."
       }
     },
     "loading": "Indlæser notifikationer..."
@@ -2388,10 +2394,9 @@
             "lenient": "Til lav lydkvalitet (RTSP-kameraer, webcam-mikrofoner)",
             "moderate": "Balanceret til typiske hobbyopsætninger",
             "balanced": "Oprindelig adfærd fra før september 2025",
-            "strict": "Kræver RPi 4+. Til mikrofoner af høj kvalitet",
-            "maximum": "Kræver RPi 4+. Til mikrofoner af professionel kvalitet"
+            "strict": "Til mikrofoner af høj kvalitet",
+            "maximum": "Til mikrofoner af professionel kvalitet"
           },
-          "hardwareNote": "Streng og Maksimum niveauer kræver højere overlapindstillinger og flere CPU-ressourcer. RPi 4 eller bedre hardware er påkrævet til disse niveauer.",
           "overlapAdjusted": "Overlapindstilling automatisk justeret til {overlap}s for at opfylde filterkravene",
           "overlapReduced": "Overlapindstilling reduceret til {overlap}s for at matche filterniveauet",
           "levelNames": {
@@ -2403,7 +2408,19 @@
             "maximum": "Maksimum",
             "unknown": "Ukendt"
           },
-          "warningOff": "Uden filtrering accepteres enhver registrering over konfidenstærsklen med det samme. Dette giver typisk flere falske positiver om dagen. Selv mild filtrering forbedrer resultatkvaliteten markant."
+          "warningOff": "Uden filtrering accepteres enhver registrering over konfidenstærsklen med det samme. Dette giver typisk flere falske positiver om dagen. Selv mild filtrering forbedrer resultatkvaliteten markant.",
+          "readoutTitle": "Krævede bekræftelser nu",
+          "readoutPreviewTitle": "Krævede bekræftelser efter gemning (skøn)",
+          "readoutIntro": "En detektion accepteres, når nok analysevinduer inden for {seconds} sekunder er enige.",
+          "readoutLine": "{model}: {count} af {windows} vinduer, et nyt vindue hvert {step} s",
+          "readoutPreview": "Skønnet ud fra dine ugemte ændringer. Enhedens grænse kontrolleres igen efter gemning.",
+          "readoutPending": "De gemte indstillinger bliver anvendt. Værdierne er skøn, indtil de opdaterede antal er indlæst.",
+          "capNoticeTitle": "Overlap begrænset til, hvad denne enhed kan behandle",
+          "capNotice": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med det indstillede overlap på {configured} s overstiger denne enheds målte kapacitet, så lyden analyseres med {effective} s overlap. Filteret kan derfor kræve færre bekræftelser. Dine gemte indstillinger er uændrede.",
+          "overloadedNoticeTitle": "Denne enhed kan ikke følge med analysen",
+          "overloadedNotice": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger denne enheds målte kapacitet selv uden overlap. Analysen kan komme bagud, og detektioner kan gå tabt. Aktivér færre modeller eller lydkilder, eller vælg en hurtigere modelvariant.",
+          "unknownLatency": "Behandlingstiden kunne ikke måles for {models}, så den tælles ikke med, når overlappet begrænses. Analysen kan stadig komme bagud.",
+          "cpuNote": "En højere styrke analyserer overlappende lyd oftere, hvilket koster CPU-tid for hver aktiveret model og lydkilde. BirdNET-Go begrænser automatisk overlappet til, hvad denne enhed kan behandle."
         },
         "rangeFilter": {
           "title": "Områdefilter",

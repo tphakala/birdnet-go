@@ -299,6 +299,60 @@ export interface InferenceVAD {
   recentHits?: InferenceVADHit[];
 }
 
+/** Planned analysis cadence status (backend cadence.Status). */
+export type AnalysisCadenceStatus = 'ok' | 'capped' | 'overloaded' | 'filterOff';
+
+/** One model's cadence under the effective overlap (backend CadenceModelInfo). */
+export interface AnalysisCadenceModel {
+  /** Model registry ID. */
+  id: string;
+  /** Model display name. */
+  name: string;
+  /** Model clip length in milliseconds. */
+  clipMs: number;
+  /** How often a new analysis window is produced, in milliseconds. */
+  stepMs: number;
+  /** Measured inference latency the plan was solved with; absent when unknown. Not kept by the store. */
+  probeLatencyMs?: number;
+  /** Analysis windows within the reference window that must agree. */
+  confirmations: number;
+  /** Analysis windows that fit in the reference window (may be fractional). */
+  windowsInReference: number;
+}
+
+/**
+ * Planned analysis cadence (backend AnalysisCadenceInfo). The configured overlap
+ * (birdnet.overlap) is never modified; the effective overlap is what the analysis
+ * buffers use, held below the configured one when the false positive filter is
+ * on and the hardware cannot sustain it.
+ */
+export interface AnalysisCadenceInfo {
+  status: AnalysisCadenceStatus;
+  /**
+   * False positive filter level the bird models' confirmations were computed for
+   * (the bat model follows the bat filter level), read by the server at request
+   * time.
+   */
+  filterLevel: number;
+  /** birdnet.overlap in seconds on the 3 s base clip. */
+  configuredOverlapSec: number;
+  /** Overlap in use, in seconds on the 3 s base clip. */
+  effectiveOverlapSec: number;
+  /** Smallest sustainable base step in ms; 0 = unknown, not applicable or overloaded. */
+  minBaseStepMs: number;
+  /** Estimated inference duty at the configured overlap. Not kept by the store. */
+  estimatedDutyConfigured?: number;
+  /** Estimated inference duty at the effective overlap. Not kept by the store. */
+  estimatedDutyEffective?: number;
+  /** Duty the planner keeps the load under. Not kept by the store. */
+  dutyCeiling?: number;
+  sourceCount: number;
+  modelCount: number;
+  /** Models whose latency could not be measured; never null on the wire. */
+  unknownLatencyModels: string[];
+  models: AnalysisCadenceModel[];
+}
+
 /** Full inference status snapshot. `models` is the single source of truth. */
 export interface InferenceStatusResponse {
   hardware: InferenceHardware;
@@ -321,4 +375,6 @@ export interface InferenceStatusResponse {
    * "load_failed"); "" is the API-only "no verdict yet" sentinel.
    */
   acousticModelsState: AcousticModelsStateWire;
+  /** Planned analysis cadence; absent until the audio pipeline publishes a plan, and on older servers. */
+  analysisCadence?: AnalysisCadenceInfo;
 }

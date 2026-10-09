@@ -515,6 +515,12 @@
         "title": "{modelName} falla en cada análisis",
         "message": "{modelName} está cargado, pero sus últimos {failures} análisis seguidos fallaron en {runtime}: la inferencia devolvió un error. El audio se captura, pero este modelo no detecta nada. Compruebe el modelo en la página Sistema > Modelos de IA.",
         "nonFiniteMessage": "{modelName} está cargado, pero sus últimos {failures} análisis seguidos fallaron en {runtime}: el modelo devolvió puntuaciones no válidas (NaN o infinitas). El audio se captura, pero este modelo no detecta nada. Compruebe el modelo en la página Sistema > Modelos de IA."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Superposición del análisis limitada en este dispositivo",
+        "cadenceCappedMessage": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} con la superposición configurada de {configured} s supera la capacidad medida de este dispositivo, por lo que el audio se analiza con {effective} s de superposición. Por ello, el filtro de falsos positivos puede requerir menos confirmaciones. Sus ajustes guardados no cambian; consulte Configuración > Análisis.",
+        "cadenceOverloadedTitle": "Este dispositivo no puede seguir el ritmo del análisis de audio",
+        "cadenceOverloadedMessage": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} supera la capacidad medida de este dispositivo incluso sin superposición, por lo que el análisis puede retrasarse y pueden perderse detecciones. Active menos modelos o fuentes de audio, o elija una variante de modelo más rápida."
       }
     },
     "loading": "Cargando notificaciones..."
@@ -2388,10 +2394,9 @@
             "lenient": "Para audio de baja calidad (cámaras RTSP, micrófonos de webcam)",
             "moderate": "Equilibrado para configuraciones típicas de hobby",
             "balanced": "Comportamiento original anterior a septiembre de 2025",
-            "strict": "RPi 4+ necesario. Para micrófonos de alta calidad",
-            "maximum": "RPi 4+ necesario. Para micrófonos de grado profesional"
+            "strict": "Para micrófonos de alta calidad",
+            "maximum": "Para micrófonos de grado profesional"
           },
-          "hardwareNote": "Los niveles Estricto y Máximo requieren configuraciones de superposición más altas y más recursos de CPU. Se requiere RPi 4 o hardware superior para estos niveles.",
           "overlapAdjusted": "La configuración de superposición se ajustó automáticamente a {overlap}s para cumplir con los requisitos del filtro",
           "overlapReduced": "La configuración de superposición se redujo a {overlap}s para coincidir con el nivel del filtro",
           "levelNames": {
@@ -2403,7 +2408,19 @@
             "maximum": "Máximo",
             "unknown": "Desconocido"
           },
-          "warningOff": "Sin filtrado, cualquier detección por encima del umbral de confianza se acepta inmediatamente. Esto produce típicamente varios falsos positivos al día. Incluso un filtrado bajo mejora significativamente la calidad de los resultados."
+          "warningOff": "Sin filtrado, cualquier detección por encima del umbral de confianza se acepta inmediatamente. Esto produce típicamente varios falsos positivos al día. Incluso un filtrado bajo mejora significativamente la calidad de los resultados.",
+          "readoutTitle": "Confirmaciones requeridas ahora",
+          "readoutPreviewTitle": "Confirmaciones requeridas al guardar (estimación)",
+          "readoutIntro": "Una detección se acepta cuando suficientes ventanas de análisis dentro de {seconds} segundos coinciden.",
+          "readoutLine": "{model}: {count} de {windows} ventanas, una ventana nueva cada {step} s",
+          "readoutPreview": "Estimado a partir de sus cambios sin guardar. El límite del dispositivo se vuelve a comprobar al guardar.",
+          "readoutPending": "Se están aplicando los ajustes guardados. Estos valores son estimaciones hasta que se carguen los recuentos actualizados.",
+          "capNoticeTitle": "Superposición limitada a lo que este dispositivo puede procesar",
+          "capNotice": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} con la superposición configurada de {configured} s supera la capacidad medida de este dispositivo, por lo que el audio se analiza con {effective} s de superposición. Por ello, el filtro puede requerir menos confirmaciones. Sus ajustes guardados no cambian.",
+          "overloadedNoticeTitle": "Este dispositivo no puede seguir el ritmo del análisis",
+          "overloadedNotice": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} supera la capacidad medida de este dispositivo incluso sin superposición. El análisis puede retrasarse y pueden perderse detecciones. Active menos modelos o fuentes de audio, o elija una variante de modelo más rápida.",
+          "unknownLatency": "No se pudo medir el tiempo de procesamiento de {models}, por lo que no se tiene en cuenta al limitar la superposición. El análisis aún puede retrasarse.",
+          "cpuNote": "Una intensidad mayor analiza el audio superpuesto con más frecuencia, lo que consume tiempo de CPU por cada modelo y fuente de audio activados. BirdNET-Go limita automáticamente la superposición a lo que este dispositivo puede procesar."
         },
         "rangeFilter": {
           "title": "Filtro de rango",

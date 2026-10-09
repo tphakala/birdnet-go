@@ -1,10 +1,14 @@
 package processor
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -1223,4 +1227,34 @@ func TestProcessorEffectiveBaseOverlap_NilBnUsesConfigured(t *testing.T) {
 	s.BirdNET.Overlap = 2.4
 	p := &Processor{}
 	assert.Equal(t, 2400*time.Millisecond, p.effectiveBaseOverlap(s))
+}
+
+// TestMinDetections_ParityFixture pins the confirmation counts in the fixture
+// shared with the frontend (frontend fpCadence.test.ts reads the same file), so
+// the settings page's estimate before saving cannot drift from the backend.
+func TestMinDetections_ParityFixture(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile(filepath.Join("testdata", "fp_confirmations.json"))
+	require.NoError(t, err)
+	var rows []struct {
+		ModelID       string  `json:"modelId"`
+		ClipMs        int64   `json:"clipMs"`
+		OverlapSec    float64 `json:"overlapSec"`
+		Level         int     `json:"level"`
+		Confirmations int     `json:"confirmations"`
+	}
+	require.NoError(t, json.Unmarshal(data, &rows))
+	require.NotEmpty(t, rows)
+
+	for _, row := range rows {
+		info, ok := classifier.ModelRegistry[row.ModelID]
+		require.True(t, ok, row.ModelID)
+		assert.Equal(t, row.ClipMs, info.Spec.ClipLength.Milliseconds(), "fixture clip of %s", row.ModelID)
+		s := &conf.Settings{}
+		s.Realtime.FalsePositiveFilter.Level = row.Level
+		s.BirdNET.Overlap = row.OverlapSec
+		assert.Equal(t, row.Confirmations, MinDetectionsForModel(s, row.ModelID, classifier.ConfiguredBaseOverlap(s)),
+			"%s overlap %.1f level %d", row.ModelID, row.OverlapSec, row.Level)
+	}
 }

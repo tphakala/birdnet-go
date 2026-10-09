@@ -94,6 +94,10 @@ type AudioPipelineService struct {
 	// by removeAllSoundLevelConsumers.
 	soundLevelConsumers map[string]string
 
+	// cadenceNotice is the bell notice for a first cadence plan that is capped
+	// or overloaded (see publishCadencePlan).
+	cadenceNotice cadenceNotice
+
 	// routeFailedLastPass records source IDs whose buffer route failed to come up on
 	// the previous reconfigure pass. It implements the "survives a reconfigure"
 	// suppression for #4208 (see routeReportDecision): a transient AddRoute failure
@@ -460,6 +464,9 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 		p.ctrlMonitor.Stop()
 		p.ctrlMonitor = nil
 	}
+
+	// Stop the cadence bell notice so its retry timer cannot fire after shutdown.
+	p.cadenceNotice.stop()
 
 	// Stop analysis buffer monitors.
 	if p.bufferMgr != nil {

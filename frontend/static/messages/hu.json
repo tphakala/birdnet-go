@@ -515,6 +515,12 @@
         "title": "A(z) {modelName} minden elemzésnél hibázik",
         "message": "A(z) {modelName} be van töltve, de az utolsó {failures} egymást követő elemzése sikertelen volt ezen: {runtime}. A következtetés hibát adott. A rendszer rögzíti a hangot, de ez a modell semmit sem észlel. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon.",
         "nonFiniteMessage": "A(z) {modelName} be van töltve, de az utolsó {failures} egymást követő elemzése sikertelen volt ezen: {runtime}. A modell érvénytelen (NaN vagy végtelen) pontszámokat adott. A rendszer rögzíti a hangot, de ez a modell semmit sem észlel. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Az elemzési átfedés korlátozva ezen az eszközön",
+        "cadenceCappedMessage": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} a beállított {configured} s átfedéssel meghaladja az eszköz mért kapacitását, ezért a hang elemzése {effective} s átfedéssel történik. Emiatt a hamis pozitív szűrő kevesebb megerősítést kérhet. A mentett beállításai nem változnak; lásd Beállítások > Elemzés.",
+        "cadenceOverloadedTitle": "Az eszköz nem bírja a hangelemzést",
+        "cadenceOverloadedMessage": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását, ezért az elemzés lemaradhat, és detektálások maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást, vagy válasszon gyorsabb modellváltozatot."
       }
     },
     "loading": "Értesítések betöltése..."
@@ -2388,10 +2394,9 @@
             "lenient": "Gyenge minőségű hanghoz (RTSP kamerák, webkamera mikrofonok)",
             "moderate": "Kiegyensúlyozott tipikus hobbibeállításokhoz",
             "balanced": "Eredeti viselkedés 2025 szeptember előtt",
-            "strict": "RPi 4+ szükséges. Kiváló minőségű mikrofonokhoz",
-            "maximum": "RPi 4+ szükséges. Professzionális minőségű mikrofonokhoz"
+            "strict": "Kiváló minőségű mikrofonokhoz",
+            "maximum": "Professzionális minőségű mikrofonokhoz"
           },
-          "hardwareNote": "A szigorú és maximális szintek nagyobb átfedési beállításokat és több CPU erőforrást igényelnek. Ezekhez a szintekhez RPi 4 vagy jobb hardver szükséges.",
           "overlapAdjusted": "Az átfedési beállítás automatikusan {overlap}s-re állítva a szűrési követelményeknek megfelelően",
           "overlapReduced": "Az átfedési beállítás {overlap}s-re csökkentve a szűrési szintnek megfelelően",
           "levelNames": {
@@ -2403,7 +2408,19 @@
             "maximum": "Maximum",
             "unknown": "Ismeretlen"
           },
-          "warningOff": "Szűrés nélkül a megbízhatósági küszöb feletti minden észlelés azonnal elfogadásra kerül. Ez általában naponta több hamis pozitívat eredményez. Már az enyhe szűrés is jelentősen javítja az eredmények minőségét."
+          "warningOff": "Szűrés nélkül a megbízhatósági küszöb feletti minden észlelés azonnal elfogadásra kerül. Ez általában naponta több hamis pozitívat eredményez. Már az enyhe szűrés is jelentősen javítja az eredmények minőségét.",
+          "readoutTitle": "Jelenleg szükséges megerősítések",
+          "readoutPreviewTitle": "Mentés után szükséges megerősítések (becslés)",
+          "readoutIntro": "Egy detektálás akkor kerül elfogadásra, ha {seconds} másodpercen belül elég elemzési ablak egyezik.",
+          "readoutLine": "{model}: {count} / {windows} ablak, {step} s-ként új ablak",
+          "readoutPreview": "Becslés a nem mentett módosítások alapján. Az eszköz korlátját mentés után újra ellenőrizzük.",
+          "readoutPending": "A mentett beállítások alkalmazása folyamatban. A frissített értékek betöltéséig ezek becsült értékek.",
+          "capNoticeTitle": "Az átfedés az eszköz teljesítményére korlátozva",
+          "capNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} a beállított {configured} s átfedéssel meghaladja az eszköz mért kapacitását, ezért a hang elemzése {effective} s átfedéssel történik. Emiatt a szűrő kevesebb megerősítést kérhet. A mentett beállításai nem változnak.",
+          "overloadedNoticeTitle": "Az eszköz nem bírja az elemzést",
+          "overloadedNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását. Az elemzés lemaradhat, és detektálások maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást, vagy válasszon gyorsabb modellváltozatot.",
+          "unknownLatency": "A feldolgozási időt nem sikerült megmérni a következőknél: {models}, ezért az átfedés korlátozásakor nem számít bele. Az elemzés így is lemaradhat.",
+          "cpuNote": "A nagyobb erősség gyakrabban elemzi az átfedő hangot, ami minden engedélyezett modellnél és hangforrásnál CPU-időt igényel. A BirdNET-Go automatikusan arra korlátozza az átfedést, amit ez az eszköz fel tud dolgozni."
         },
         "rangeFilter": {
           "title": "Tartomány szűrő",

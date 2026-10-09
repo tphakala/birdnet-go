@@ -515,6 +515,12 @@
         "title": "{modelName} zawodzi przy każdej analizie",
         "message": "{modelName} jest załadowany, ale jego ostatnie {failures} analiz z rzędu nie powiodło się na {runtime}: wnioskowanie zwróciło błąd. Dźwięk jest przechwytywany, ale ten model niczego nie wykrywa. Sprawdź model na stronie System > Modele AI.",
         "nonFiniteMessage": "{modelName} jest załadowany, ale jego ostatnie {failures} analiz z rzędu nie powiodło się na {runtime}: model zwrócił nieprawidłowe wyniki (NaN lub nieskończone). Dźwięk jest przechwytywany, ale ten model niczego nie wykrywa. Sprawdź model na stronie System > Modele AI."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Nakładanie analizy ograniczone dla tego urządzenia",
+        "cadenceCappedMessage": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przy ustawionym nakładaniu {configured} s przekracza zmierzoną wydajność tego urządzenia, dlatego dźwięk jest analizowany z nakładaniem {effective} s. Filtr fałszywych pozytywów może więc wymagać mniej potwierdzeń. Zapisane ustawienia nie zmieniają się; zobacz Ustawienia > Analiza.",
+        "cadenceOverloadedTitle": "To urządzenie nie nadąża z analizą dźwięku",
+        "cadenceOverloadedMessage": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przekracza zmierzoną wydajność tego urządzenia nawet bez nakładania, dlatego analiza może się opóźniać, a wykrycia mogą zostać pominięte. Włącz mniej modeli lub źródeł dźwięku albo wybierz szybszy wariant modelu."
       }
     },
     "loading": "Ładowanie powiadomień..."
@@ -2388,10 +2394,9 @@
             "lenient": "Dla audio niskiej jakości (kamery RTSP, mikrofony kamer internetowych)",
             "moderate": "Zrównoważony dla typowych konfiguracji hobbystycznych",
             "balanced": "Oryginalne zachowanie sprzed września 2025",
-            "strict": "Wymagany RPi 4+. Dla mikrofonów wysokiej jakości",
-            "maximum": "Wymagany RPi 4+. Dla mikrofonów klasy profesjonalnej"
+            "strict": "Dla mikrofonów wysokiej jakości",
+            "maximum": "Dla mikrofonów klasy profesjonalnej"
           },
-          "hardwareNote": "Poziomy Ścisły i Maksymalny wymagają wyższych ustawień nakładania i większych zasobów CPU. Dla tych poziomów wymagany jest RPi 4 lub lepszy sprzęt.",
           "overlapAdjusted": "Ustawienie nakładania automatycznie dostosowane do {overlap}s, aby spełnić wymagania filtra",
           "overlapReduced": "Ustawienie nakładania zmniejszono do {overlap}s, aby dopasować do poziomu filtra",
           "levelNames": {
@@ -2403,7 +2408,19 @@
             "maximum": "Maksymalny",
             "unknown": "Nieznany"
           },
-          "warningOff": "Bez filtrowania każde wykrycie powyżej progu pewności jest natychmiast akceptowane. Zwykle powoduje to kilka fałszywych trafień dziennie. Nawet niskie filtrowanie znacznie poprawia jakość wyników."
+          "warningOff": "Bez filtrowania każde wykrycie powyżej progu pewności jest natychmiast akceptowane. Zwykle powoduje to kilka fałszywych trafień dziennie. Nawet niskie filtrowanie znacznie poprawia jakość wyników.",
+          "readoutTitle": "Wymagane potwierdzenia teraz",
+          "readoutPreviewTitle": "Wymagane potwierdzenia po zapisaniu (szacunek)",
+          "readoutIntro": "Wykrycie jest akceptowane, gdy wystarczająco wiele okien analizy w ciągu {seconds} sekund jest zgodnych.",
+          "readoutLine": "{model}: {count} z {windows} okien, nowe okno co {step} s",
+          "readoutPreview": "Szacunek na podstawie niezapisanych zmian. Limit urządzenia zostanie ponownie sprawdzony po zapisaniu.",
+          "readoutPending": "Zapisane ustawienia są stosowane. Do czasu wczytania zaktualizowanych wartości są one szacunkowe.",
+          "capNoticeTitle": "Nakładanie ograniczone do możliwości tego urządzenia",
+          "capNotice": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przy ustawionym nakładaniu {configured} s przekracza zmierzoną wydajność tego urządzenia, dlatego dźwięk jest analizowany z nakładaniem {effective} s. Filtr może więc wymagać mniej potwierdzeń. Zapisane ustawienia nie zmieniają się.",
+          "overloadedNoticeTitle": "To urządzenie nie nadąża z analizą",
+          "overloadedNotice": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przekracza zmierzoną wydajność tego urządzenia nawet bez nakładania. Analiza może się opóźniać, a wykrycia mogą zostać pominięte. Włącz mniej modeli lub źródeł dźwięku albo wybierz szybszy wariant modelu.",
+          "unknownLatency": "Nie udało się zmierzyć czasu przetwarzania dla {models}, więc nie jest on uwzględniany przy ograniczaniu nakładania. Analiza nadal może się opóźniać.",
+          "cpuNote": "Wyższa siła częściej analizuje nakładający się dźwięk, co kosztuje czas CPU dla każdego włączonego modelu i źródła dźwięku. BirdNET-Go automatycznie ogranicza nakładanie do tego, co to urządzenie jest w stanie przetworzyć."
         },
         "rangeFilter": {
           "title": "Filtr Zasięgu",

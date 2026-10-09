@@ -515,6 +515,12 @@
         "title": "{modelName} epäonnistuu jokaisessa analyysissä",
         "message": "{modelName} on ladattu, mutta sen viimeiset {failures} analyysiä peräkkäin epäonnistuivat taustajärjestelmällä {runtime}: päättely palautti virheen. Ääntä tallennetaan, mutta tämä malli ei tunnista mitään. Tarkista malli sivulla Järjestelmä > Tekoälymallit.",
         "nonFiniteMessage": "{modelName} on ladattu, mutta sen viimeiset {failures} analyysiä peräkkäin epäonnistuivat taustajärjestelmällä {runtime}: malli palautti virheellisiä pisteitä (NaN tai äärettömiä). Ääntä tallennetaan, mutta tämä malli ei tunnista mitään. Tarkista malli sivulla Järjestelmä > Tekoälymallit."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Analyysin päällekkäisyys rajoitettu tälle laitteelle",
+        "cadenceCappedMessage": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}} asetetulla {configured} s päällekkäisyydellä, kuormitus ylittää tämän laitteen mitatun kapasiteetin, joten ääni analysoidaan {effective} s päällekkäisyydellä. Siksi väärien positiivisten suodatin voi vaatia vähemmän vahvistuksia. Tallennetut asetuksesi eivät muutu; katso Asetukset > Analyysi.",
+        "cadenceOverloadedTitle": "Laite ei pysy äänianalyysin tahdissa",
+        "cadenceOverloadedMessage": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}}, kuormitus ylittää tämän laitteen mitatun kapasiteetin jopa ilman päällekkäisyyttä, joten analyysi voi jäädä jälkeen ja havaintoja voi jäädä saamatta. Ota käyttöön vähemmän malleja tai äänilähteitä, tai valitse nopeampi mallivariantti."
       }
     },
     "loading": "Ladataan ilmoituksia..."
@@ -2388,10 +2394,9 @@
             "lenient": "Heikkolaatuiselle äänelle (RTSP-kamerat, web-kameramikrofonit)",
             "moderate": "Tasapainoinen tyypillisille harrastusasetuksille",
             "balanced": "Alkuperäinen toiminta ennen syyskuuta 2025",
-            "strict": "RPi 4+ vaaditaan. Laadukkaille mikrofoneille",
-            "maximum": "RPi 4+ vaaditaan. Ammattitason mikrofoneille"
+            "strict": "Laadukkaille mikrofoneille",
+            "maximum": "Ammattitason mikrofoneille"
           },
-          "hardwareNote": "Tiukka- ja maksimitasot vaativat korkeampia päällekkäisyysasetuksia ja enemmän prosessoritehoa. RPi 4 tai parempi laitteisto vaaditaan näille tasoille.",
           "overlapAdjusted": "Päällekkäisyysasetus säädetty automaattisesti arvoon {overlap}s suodatinvaatimusten täyttämiseksi",
           "overlapReduced": "Päällekkäisyysasetus pienennetty arvoon {overlap}s vastaamaan suodatustasoa",
           "levelNames": {
@@ -2403,7 +2408,19 @@
             "maximum": "Maksimi",
             "unknown": "Tuntematon"
           },
-          "warningOff": "Ilman suodatusta jokainen luottamuskynnyksen ylittävä havainto hyväksytään välittömästi. Tämä tuottaa tyypillisesti useita vääriä positiivisia päivässä. Jo matala suodatus parantaa tulosten laatua merkittävästi."
+          "warningOff": "Ilman suodatusta jokainen luottamuskynnyksen ylittävä havainto hyväksytään välittömästi. Tämä tuottaa tyypillisesti useita vääriä positiivisia päivässä. Jo matala suodatus parantaa tulosten laatua merkittävästi.",
+          "readoutTitle": "Vaaditut vahvistukset nyt",
+          "readoutPreviewTitle": "Vaaditut vahvistukset tallennuksen jälkeen (arvio)",
+          "readoutIntro": "Havainto hyväksytään, kun riittävän moni analyysi-ikkuna {seconds} sekunnin jaksolla vahvistaa sen.",
+          "readoutLine": "{model}: {count}/{windows} ikkunaa, uusi ikkuna {step} s välein",
+          "readoutPreview": "Arvio tallentamattomien muutosten perusteella. Laitteen raja tarkistetaan uudelleen tallennuksen jälkeen.",
+          "readoutPending": "Tallennettuja asetuksia otetaan käyttöön. Arvot ovat arvioita, kunnes päivitetyt määrät on ladattu.",
+          "capNoticeTitle": "Päällekkäisyys rajoitettu laitteen suorituskykyyn",
+          "capNotice": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}} asetetulla {configured} s päällekkäisyydellä, kuormitus ylittää tämän laitteen mitatun kapasiteetin, joten ääni analysoidaan {effective} s päällekkäisyydellä. Siksi suodatin voi vaatia vähemmän vahvistuksia. Tallennetut asetuksesi eivät muutu.",
+          "overloadedNoticeTitle": "Laite ei pysy analyysin tahdissa",
+          "overloadedNotice": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}}, kuormitus ylittää tämän laitteen mitatun kapasiteetin jopa ilman päällekkäisyyttä. Analyysi voi jäädä jälkeen ja havaintoja voi jäädä saamatta. Ota käyttöön vähemmän malleja tai äänilähteitä, tai valitse nopeampi mallivariantti.",
+          "unknownLatency": "Käsittelyaikaa ei voitu mitata malleille {models}, joten sitä ei huomioida päällekkäisyyttä rajoitettaessa. Analyysi voi silti jäädä jälkeen.",
+          "cpuNote": "Voimakkaampi taso analysoi päällekkäistä ääntä useammin, mikä kuluttaa suoritinaikaa jokaista käytössä olevaa mallia ja äänilähdettä kohden. BirdNET-Go rajoittaa päällekkäisyyden automaattisesti siihen, minkä tämä laite pystyy käsittelemään."
         },
         "rangeFilter": {
           "title": "Aluesuodatin",

@@ -12,6 +12,10 @@ import (
 // inference failures, ONNX Runtime availability).
 const ComponentClassifier = "classifier"
 
+// ComponentAnalysis is the notification component for notices raised by the
+// audio analysis pipeline (the analysis cadence notice).
+const ComponentAnalysis = "analysis"
+
 // Persistent-notice retry bounds. A create can fail transiently, most often on
 // the shared notification rate limit (DefaultRateLimitMaxEvents per minute) at a
 // busy startup, so a failed raise is retried a bounded number of times with a
@@ -27,6 +31,17 @@ const (
 type NoticeService interface {
 	CreateWithMetadata(notif *Notification) error
 	Delete(id string) error
+}
+
+// DefaultNoticeService returns the process-wide notification service as a
+// NoticeService, or a nil interface while it is not initialized. Boxing a nil
+// *Service would yield a non-nil interface that defeats the caller's nil check
+// and panics on the first call.
+func DefaultNoticeService() NoticeService {
+	if svc := GetService(); svc != nil {
+		return svc
+	}
+	return nil
 }
 
 // PersistentNotice latches one persistent bell notice keyed by a signature: the

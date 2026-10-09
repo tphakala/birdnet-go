@@ -515,6 +515,12 @@
         "title": "{modelName} échoue à chaque analyse",
         "message": "{modelName} est chargé, mais ses {failures} dernières analyses consécutives ont échoué sur {runtime} : l'inférence a renvoyé une erreur. L'audio est capturé, mais ce modèle ne détecte rien. Vérifiez le modèle sur la page Système > Modèles IA.",
         "nonFiniteMessage": "{modelName} est chargé, mais ses {failures} dernières analyses consécutives ont échoué sur {runtime} : le modèle a renvoyé des scores invalides (NaN ou infinis). L'audio est capturé, mais ce modèle ne détecte rien. Vérifiez le modèle sur la page Système > Modèles IA."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Chevauchement d'analyse limité pour cet appareil",
+        "cadenceCappedMessage": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} avec le chevauchement configuré de {configured} s dépasse la capacité mesurée de cet appareil, l'audio est donc analysé avec un chevauchement de {effective} s. Le filtre de faux positifs peut donc exiger moins de confirmations. Vos paramètres enregistrés restent inchangés ; voir Paramètres > Analyse.",
+        "cadenceOverloadedTitle": "Cet appareil ne peut pas suivre l'analyse audio",
+        "cadenceOverloadedMessage": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} dépasse la capacité mesurée de cet appareil même sans chevauchement, l'analyse peut donc prendre du retard et des détections peuvent être manquées. Activez moins de modèles ou de sources audio, ou choisissez une variante de modèle plus rapide."
       }
     },
     "loading": "Chargement des notifications..."
@@ -2388,10 +2394,9 @@
             "lenient": "Pour audio de basse qualité (caméras RTSP, micros webcam)",
             "moderate": "Équilibré pour les configurations hobby typiques",
             "balanced": "Comportement original d'avant septembre 2025",
-            "strict": "RPi 4+ requis. Pour microphones de haute qualité",
-            "maximum": "RPi 4+ requis. Pour microphones de qualité professionnelle"
+            "strict": "Pour microphones de haute qualité",
+            "maximum": "Pour microphones de qualité professionnelle"
           },
-          "hardwareNote": "Les niveaux Strict et Maximum nécessitent des paramètres de chevauchement plus élevés et plus de ressources CPU. Un RPi 4 ou un matériel supérieur est requis pour ces niveaux.",
           "overlapAdjusted": "Le paramètre de chevauchement a été automatiquement ajusté à {overlap}s pour répondre aux exigences du filtre",
           "overlapReduced": "Le paramètre de chevauchement a été réduit à {overlap}s pour correspondre au niveau du filtre",
           "levelNames": {
@@ -2403,7 +2408,19 @@
             "maximum": "Maximum",
             "unknown": "Inconnu"
           },
-          "warningOff": "Sans filtrage, toute détection au-dessus du seuil de confiance est acceptée immédiatement. Cela produit typiquement plusieurs faux positifs par jour. Même un filtrage faible améliore considérablement la qualité des résultats."
+          "warningOff": "Sans filtrage, toute détection au-dessus du seuil de confiance est acceptée immédiatement. Cela produit typiquement plusieurs faux positifs par jour. Même un filtrage faible améliore considérablement la qualité des résultats.",
+          "readoutTitle": "Confirmations requises actuellement",
+          "readoutPreviewTitle": "Confirmations requises après l'enregistrement (estimation)",
+          "readoutIntro": "Une détection est acceptée lorsque suffisamment de fenêtres d'analyse sur {seconds} secondes concordent.",
+          "readoutLine": "{model} : {count} sur {windows} fenêtres, une nouvelle fenêtre toutes les {step} s",
+          "readoutPreview": "Estimation d'après vos modifications non enregistrées. La limite de l'appareil est vérifiée à nouveau après l'enregistrement.",
+          "readoutPending": "Les paramètres enregistrés sont en cours d'application. Ces valeurs sont des estimations jusqu'au chargement des valeurs mises à jour.",
+          "capNoticeTitle": "Chevauchement limité à ce que cet appareil peut traiter",
+          "capNotice": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} avec le chevauchement configuré de {configured} s dépasse la capacité mesurée de cet appareil, l'audio est donc analysé avec un chevauchement de {effective} s. Le filtre peut donc exiger moins de confirmations. Vos paramètres enregistrés restent inchangés.",
+          "overloadedNoticeTitle": "Cet appareil ne peut pas suivre l'analyse",
+          "overloadedNotice": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} dépasse la capacité mesurée de cet appareil même sans chevauchement. L'analyse peut prendre du retard et des détections peuvent être manquées. Activez moins de modèles ou de sources audio, ou choisissez une variante de modèle plus rapide.",
+          "unknownLatency": "Le temps de traitement n'a pas pu être mesuré pour {models}, il n'est donc pas pris en compte lors de la limitation du chevauchement. L'analyse peut tout de même prendre du retard.",
+          "cpuNote": "Une intensité plus élevée analyse plus souvent l'audio qui se chevauche, ce qui coûte du temps CPU pour chaque modèle et chaque source audio activés. BirdNET-Go limite automatiquement le chevauchement à ce que cet appareil peut traiter."
         },
         "rangeFilter": {
           "title": "Filtre de portée",

@@ -45,6 +45,7 @@ func TestBuildAnalysisCadence_UsesEffectiveOverlap(t *testing.T) {
 	got := buildAnalysisCadence(plan, infos, s)
 	require.NotNil(t, got)
 	assert.Equal(t, "capped", got.Status)
+	assert.Equal(t, 5, got.FilterLevel, "the level the confirmations were computed for")
 	assert.InDelta(t, 2.8, got.ConfiguredOverlapSec, 1e-9)
 	assert.InDelta(t, 1.8, got.EffectiveOverlapSec, 1e-9)
 	assert.Equal(t, int64(1200), got.MinBaseStepMs)
@@ -70,6 +71,7 @@ func TestBuildAnalysisCadence_UnknownLatencyMarshalsAsEmptyArray(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `"unknownLatencyModels":[]`)
 	assert.Contains(t, string(b), `"models":[]`)
+	assert.Contains(t, string(b), `"filterLevel":0`, "level 0 is sent, not omitted")
 }
 
 func TestBuildAnalysisCadence_ListsUnknownLatencyModels(t *testing.T) {
