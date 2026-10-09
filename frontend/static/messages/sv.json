@@ -1044,7 +1044,8 @@
       "error": "Fel vid laddning av detektering: {error}",
       "loadingResults": "Laddar {count} resultat...",
       "thumbnailLoading": "Laddar {species} miniatyrbild...",
-      "thumbnailLoaded": "Miniatyrbild av {species} laddad"
+      "thumbnailLoaded": "Miniatyrbild av {species} laddad",
+      "resultsPerPage": "Resultat per sida"
     },
     "errors": {
       "notFound": "Detekteringen hittades inte. Den kan ha tagits bort eller så är ID:t felaktigt.",
@@ -5198,7 +5199,27 @@
       "expandedMapLabel": "Helskärmskarta för att välja stationens plats",
       "zoomIn": "Zooma in",
       "zoomOut": "Zooma ut",
-      "expand": "Utöka kartan till helskärm"
+      "expand": "Utöka kartan till helskärm",
+      "search": {
+        "label": "Sök efter en plats",
+        "placeholder": "Ort eller adress",
+        "submit": "Sök",
+        "disclosure": "Sökningar skickas till Photon (photon.komoot.io), som använder OpenStreetMap-data.",
+        "openPhoton": "Öppna Photon i en ny flik",
+        "searching": "Söker...",
+        "results": "{count, plural, one {# plats hittades} other {# platser hittades}}",
+        "noResults": "Inga platser hittades. Prova ett annat namn eller klicka på kartan.",
+        "errorNetwork": "Platssökningen är inte tillgänglig. Kontrollera internetanslutningen. Du kan fortfarande klicka på kartan eller ange koordinater.",
+        "errorRateLimited": "För många sökningar. Vänta en stund och försök igen.",
+        "errorUnavailable": "Söktjänsten svarade inte. Du kan fortfarande klicka på kartan eller ange koordinater.",
+        "kind": {
+          "city": "Stad",
+          "town": "Tätort",
+          "village": "By",
+          "station": "Tågstation",
+          "airport": "Flygplats"
+        }
+      }
     }
   },
   "connectivity": {

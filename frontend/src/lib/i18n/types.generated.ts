@@ -830,6 +830,7 @@ export type TranslationKey =
   | 'detections.aria.loadingResults' // params: count
   | 'detections.aria.thumbnailLoading' // params: species
   | 'detections.aria.thumbnailLoaded' // params: species
+  | 'detections.aria.resultsPerPage'
   | 'detections.errors.notFound'
   | 'detections.errors.noPermission'
   | 'detections.errors.loginRequired'
@@ -3806,6 +3807,22 @@ export type TranslationKey =
   | 'components.locationMap.zoomIn'
   | 'components.locationMap.zoomOut'
   | 'components.locationMap.expand'
+  | 'components.locationMap.search.label'
+  | 'components.locationMap.search.placeholder'
+  | 'components.locationMap.search.submit'
+  | 'components.locationMap.search.disclosure'
+  | 'components.locationMap.search.openPhoton'
+  | 'components.locationMap.search.searching'
+  | 'components.locationMap.search.results' // params: count
+  | 'components.locationMap.search.noResults'
+  | 'components.locationMap.search.errorNetwork'
+  | 'components.locationMap.search.errorRateLimited'
+  | 'components.locationMap.search.errorUnavailable'
+  | 'components.locationMap.search.kind.city'
+  | 'components.locationMap.search.kind.town'
+  | 'components.locationMap.search.kind.village'
+  | 'components.locationMap.search.kind.station'
+  | 'components.locationMap.search.kind.airport'
   | 'connectivity.offline'
   | 'detection.actions.back'
   | 'detection.actions.review'
@@ -4764,6 +4781,7 @@ export type TranslationParams = {
   };
   'components.birdThumbnail.viewDetections': { name: string | number };
   'components.birdThumbnail.largeView': { name: string | number };
+  'components.locationMap.search.results': { count: string | number };
   'quietHours.indicator.tooltip': { count: string | number };
   'errors.detection.invalidDate': { paramName: string | number };
   'errors.backup.insufficientSpace': { needed: string | number; available: string | number };

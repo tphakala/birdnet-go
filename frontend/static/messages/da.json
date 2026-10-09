@@ -1044,7 +1044,8 @@
       "error": "Fejl ved indlæsning af registrering: {error}",
       "loadingResults": "Indlæser {count} resultater...",
       "thumbnailLoading": "Indlæser {species} miniaturebillede...",
-      "thumbnailLoaded": "Miniaturebillede af {species} indlæst"
+      "thumbnailLoaded": "Miniaturebillede af {species} indlæst",
+      "resultsPerPage": "Resultater pr. side"
     },
     "errors": {
       "notFound": "Registrering ikke fundet. Den kan være blevet slettet, eller ID'et er forkert.",
@@ -5198,7 +5199,27 @@
       "expandedMapLabel": "Fuldskærmskort til valg af stationsplacering",
       "zoomIn": "Zoom ind",
       "zoomOut": "Zoom ud",
-      "expand": "Udvid kortet til fuld skærm"
+      "expand": "Udvid kortet til fuld skærm",
+      "search": {
+        "label": "Søg efter et sted",
+        "placeholder": "By eller adresse",
+        "submit": "Søg",
+        "disclosure": "Søgninger sendes til Photon (photon.komoot.io), som bruger OpenStreetMap-data.",
+        "openPhoton": "Åbn Photon i et nyt faneblad",
+        "searching": "Søger...",
+        "results": "{count, plural, one {# sted fundet} other {# steder fundet}}",
+        "noResults": "Ingen steder fundet. Prøv et andet navn, eller klik på kortet.",
+        "errorNetwork": "Stedsøgning er ikke tilgængelig. Tjek internetforbindelsen. Du kan stadig klikke på kortet eller indtaste koordinater.",
+        "errorRateLimited": "For mange søgninger. Vent et øjeblik, og prøv igen.",
+        "errorUnavailable": "Søgetjenesten svarede ikke. Du kan stadig klikke på kortet eller indtaste koordinater.",
+        "kind": {
+          "city": "By",
+          "town": "Mindre by",
+          "village": "Landsby",
+          "station": "Banegård",
+          "airport": "Lufthavn"
+        }
+      }
     }
   },
   "connectivity": {

@@ -309,6 +309,32 @@ describe('SystemInference', () => {
       expect(badge.getAttribute('title')).toBe('system.inference.sourceNotRunningTooltip');
     });
 
+    it('keeps muted text out of the filled error badge of a not-running fallback source', async () => {
+      const model = makeModel({
+        sources: [
+          { id: 'mic1', name: 'Front Yard', type: 'soundcard', fallback: true, notRunning: true },
+          { id: 'mic2', name: 'Back Yard', type: 'rtsp', fallback: true },
+        ],
+      });
+      installApi(makeSnapshot([model]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Back Yard');
+      });
+
+      const [errorBadge] = notRunningBadges(container);
+      expect(errorBadge.textContent).toContain('system.inference.primaryFallback');
+      expect(errorBadge.querySelector('.text-muted')).toBeNull();
+
+      // The same fallback label stays muted on the ghost badge.
+      const ghostBadge = [...container.querySelectorAll('span')].find(
+        el => el.textContent.includes('Back Yard') && !el.className.includes('--color-error')
+      );
+      expect(ghostBadge?.querySelector('.text-muted')).not.toBeNull();
+    });
+
     it('omits the not-analyzing label and error styling when notRunning is ABSENT (omitempty contract)', async () => {
       // notRunning is omitted entirely, mirroring Go's json:"notRunning,omitempty".
       const model = makeModel({

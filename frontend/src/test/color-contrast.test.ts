@@ -3,7 +3,7 @@
  * Tests color combinations from the actual Tailwind v4 theme (src/styles/tailwind.css)
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
@@ -11,6 +11,20 @@ import {
   OPTION_HIGHLIGHT_BG_CLASS,
   OPTION_HIGHLIGHT_OUTLINE_CLASS,
 } from '../lib/desktop/components/forms/SelectDropdown.styles';
+import {
+  TOAST_ACTION_CLASS,
+  TOAST_CLOSE_CLASS,
+  TOAST_TYPE_CLASSES,
+} from '../lib/desktop/components/ui/NotificationToast.styles';
+import { confidenceColorClasses } from '../lib/desktop/features/dashboard/utils/confidenceColors';
+import {
+  PLACE_DISCLOSURE_CLASS,
+  PLACE_DISCLOSURE_ICON_CLASS,
+  PLACE_ERROR_CLASS,
+  PLACE_MESSAGE_CLASS,
+  PLACE_OPTION_CLASS,
+  PLACE_OPTION_DETAIL_CLASS,
+} from '../lib/desktop/components/forms/PlaceSearch.styles';
 
 // WCAG 2.1 Level AA contrast ratios
 const WCAG_AA_NORMAL = 4.5; // Normal text
@@ -104,15 +118,15 @@ describe('Color Contrast Tests', () => {
     primaryContent: '#ffffff', // --color-primary-content
     secondary: '#4b5563', // --color-secondary
     secondaryContent: '#ffffff', // --color-secondary-content
-    accent: '#0284c7', // --color-accent
+    accent: '#0369a1', // --color-accent
     neutral: '#1f2937', // --color-neutral
     info: '#0ea5e9', // --color-info
-    infoContent: '#ffffff', // --color-info-content
+    infoContent: '#020617', // --color-info-content
     success: '#22c55e', // --color-success
-    successContent: '#ffffff', // --color-success-content
+    successContent: '#020617', // --color-success-content
     warning: '#f59e0b', // --color-warning
-    warningContent: '#ffffff', // --color-warning-content
-    error: '#ef4444', // --color-error
+    warningContent: '#020617', // --color-warning-content
+    error: '#dc2626', // --color-error
     errorContent: '#ffffff', // --color-error-content
   };
 
@@ -131,12 +145,12 @@ describe('Color Contrast Tests', () => {
     accent: '#0369a1', // --color-accent
     neutral: '#d1d5db', // --color-neutral
     info: '#0284c7', // --color-info
-    infoContent: '#ffffff', // --color-info-content
+    infoContent: '#020617', // --color-info-content
     success: '#16a34a', // --color-success
-    successContent: '#ffffff', // --color-success-content
+    successContent: '#020617', // --color-success-content
     warning: '#d97706', // --color-warning
-    warningContent: '#ffffff', // --color-warning-content
-    error: '#dc2626', // --color-error
+    warningContent: '#020617', // --color-warning-content
+    error: '#ef4444', // --color-error
     errorContent: '#020617', // --color-error-content
   };
 
@@ -365,6 +379,141 @@ describe('Accessibility: error text token', () => {
   }
 });
 
+describe('Error text rules', () => {
+  const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
+  const css = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');
+
+  /**
+   * Bodies of every rule written as `selector { ... }` in `source`. A compound selector that ends
+   * in `selector` (`.a .text-error { ... }`) matches too.
+   */
+  function ruleBodies(source: string, selector: string): string[] {
+    const bodies: string[] = [];
+    const opener = `${selector} {`;
+    let from = 0;
+    for (;;) {
+      const start = source.indexOf(opener, from);
+      if (start < 0) {
+        return bodies;
+      }
+      const bodyStart = start + opener.length;
+      const end = source.indexOf('}', bodyStart);
+      if (end < 0) {
+        throw new Error(`rule "${selector}" has no closing brace`);
+      }
+      bodies.push(source.slice(bodyStart, end));
+      from = end;
+    }
+  }
+
+  for (const selector of ['.text-error', '.alert-error', '.badge-status-error']) {
+    it(`rule body of ${selector} is color: var(--text-error)`, () => {
+      const bodies = ruleBodies(css, selector);
+      expect(bodies.length, `${selector} rule found`).toBeGreaterThan(0);
+      for (const body of bodies) {
+        expect(body).toMatch(/(^|[\s;])color:\s*var\(--text-error\);/);
+        expect(body).not.toMatch(/(^|[\s;])color:\s*var\(--color-error\)/);
+      }
+    });
+  }
+
+  // The tint under .alert-error and .badge-status-error stays the fill token, at the share the
+  // contrast tests below assume.
+  for (const selector of ['.alert-error', '.badge-status-error']) {
+    it(`${selector} keeps its 15% --color-error tint`, () => {
+      const bodies = ruleBodies(css, selector);
+      expect(bodies.length).toBeGreaterThan(0);
+      for (const body of bodies) {
+        expect(body).toContain('color-mix(in srgb, var(--color-error) 15%, transparent)');
+      }
+    });
+  }
+
+  const desktopDir = join(stylesDir, '..', 'lib', 'desktop');
+  // Component styles with error text. `fills` names the selectors whose border or tint keeps the
+  // fill token, with the declaration text each must still hold.
+  const COMPONENTS_WITH_ERROR_TEXT = [
+    {
+      file: 'components/media/AudioToolbar.svelte',
+      fills: [
+        {
+          selector: '.toolbar-btn.error',
+          declaration: 'border-color: var(--color-error, #ef4444)',
+        },
+      ],
+    },
+    {
+      file: 'features/dashboard/components/PlayOverlay.svelte',
+      fills: [
+        { selector: '.error-indicator', declaration: 'color-mix(in srgb, var(--color-error) 10%' },
+      ],
+    },
+    {
+      file: 'views/Search.svelte',
+      fills: [
+        {
+          selector: '.review-dropdown-item.false-positive:hover',
+          declaration: 'color-mix(in srgb, var(--color-error) 15%',
+        },
+      ],
+    },
+  ];
+
+  /** Source text of a listed component; read inside each test so a moved file fails only its tests. */
+  function componentText(file: string): string {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from the fixed list above
+    return readFileSync(join(desktopDir, file), 'utf8');
+  }
+
+  for (const { file, fills } of COMPONENTS_WITH_ERROR_TEXT) {
+    it(`${file} has no plain color: var(--color-error) declaration`, () => {
+      const text = componentText(file);
+      // `color:` declarations only; border-color and background-color keep the fill token
+      expect(text).not.toMatch(/^\s*color:\s*var\(--color-error[,)]/m);
+      expect(text).toMatch(/^\s*color:\s*var\(--text-error\)/m);
+    });
+
+    for (const { selector } of fills) {
+      it(`${file} ${selector} colours its text with --text-error`, () => {
+        const bodies = ruleBodies(componentText(file), selector);
+        expect(bodies.length, `${selector} rule found`).toBeGreaterThan(0);
+        // At least the base rule sets the text token; a theme override may blend it further
+        expect(bodies.some(body => /(?:^|[;{\s])color:\s*var\(--text-error\)/.test(body))).toBe(
+          true
+        );
+      });
+    }
+
+    for (const { selector, declaration } of fills) {
+      it(`${file} ${selector} keeps the fill token for its border or tint`, () => {
+        const bodies = ruleBodies(componentText(file), selector);
+        expect(bodies.length, `${selector} rule found`).toBeGreaterThan(0);
+        expect(bodies.some(body => body.includes(declaration))).toBe(true);
+      });
+    }
+  }
+
+  const lightBase = blockBody(css, '@theme');
+  const darkBlock = blockBody(css, "[data-theme='dark']");
+
+  for (const [name, block, textBlock] of [
+    ['light', lightBase, blockBody(css, ":root,\n[data-theme='light']")],
+    ['dark', darkBlock, darkBlock],
+  ] as const) {
+    it(`--text-error passes AA on a 15% error tint over base-100 in the ${name} theme`, () => {
+      // .alert-error and .badge-status-error draw a 15% --color-error tint under --text-error
+      const tint = applyOpacity(
+        readVar(block, '--color-error'),
+        readVar(block, '--color-base-100'),
+        0.15
+      );
+      expect(getContrastRatio(readVar(textBlock, '--text-error'), tint)).toBeGreaterThanOrEqual(
+        WCAG_AA_NORMAL
+      );
+    });
+  }
+});
+
 describe('SelectDropdown option states in every color scheme', () => {
   const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
   const tailwindCss = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');
@@ -484,5 +633,574 @@ describe('SelectDropdown option states in every color scheme', () => {
         );
       }
     }
+  });
+});
+
+describe('PlaceSearch colors in light and dark themes', () => {
+  const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
+  const tailwindCss = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');
+  const lightBase = blockBody(tailwindCss, '@theme');
+  const lightText = blockBody(tailwindCss, ":root,\n[data-theme='light']");
+  const darkBase = blockBody(tailwindCss, "[data-theme='dark']");
+
+  /** Minimum ratio for an informative icon (WCAG 1.4.11). */
+  const ICON_MIN_RATIO = 3;
+
+  /** Custom property written as `text-[var(--token)]` in a class constant, without opacity. */
+  function textToken(classes: string): string {
+    const match = /(?:^|\s)text-\[var\((--[a-z0-9-]+)\)\](?!\/)/.exec(classes);
+    if (!match) {
+      throw new Error(`text color token not found in "${classes}"`);
+    }
+    return match[1];
+  }
+
+  /** Tint fraction written as `var(--token)_NN%` in a class constant. */
+  function highlightFraction(): number {
+    const match = /var\(--color-base-content\)_(\d+)%/.exec(OPTION_HIGHLIGHT_BG_CLASS);
+    if (!match) {
+      throw new Error('highlight tint not found');
+    }
+    return Number(match[1]) / 100;
+  }
+
+  for (const theme of ['light', 'dark'] as const) {
+    describe(`${theme} theme`, () => {
+      const base = theme === 'light' ? lightBase : darkBase;
+      const textBlock = theme === 'light' ? lightText : darkBase;
+      /** A token from the color block or, for the --text-* tokens, the theme's text block. */
+      const tokenValue = (token: string) => findVar(base, token) ?? readVar(textBlock, token);
+      const surface = readVar(base, '--color-base-100');
+      const content = readVar(base, '--color-base-content');
+      const highlightTint = applyOpacity(content, surface, highlightFraction());
+
+      it('option name and detail text meet AA on the surface and on the highlighted option', () => {
+        const name = tokenValue(textToken(PLACE_OPTION_CLASS));
+        const detail = tokenValue(textToken(PLACE_OPTION_DETAIL_CLASS));
+        for (const background of [surface, highlightTint]) {
+          expect(getContrastRatio(name, background)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+          expect(getContrastRatio(detail, background)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        }
+      });
+
+      it('uses the shared highlight outline and background', () => {
+        const outline = tokenValue(outlineToken(OPTION_HIGHLIGHT_OUTLINE_CLASS));
+        expect(getContrastRatio(outline, surface)).toBeGreaterThanOrEqual(ICON_MIN_RATIO);
+        expect(getContrastRatio(outline, highlightTint)).toBeGreaterThanOrEqual(ICON_MIN_RATIO);
+      });
+
+      it('disclosure text and its link icon meet AA', () => {
+        const text = tokenValue(textToken(PLACE_DISCLOSURE_CLASS));
+        const icon = tokenValue(textToken(PLACE_DISCLOSURE_ICON_CLASS));
+        expect(getContrastRatio(text, surface)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        expect(getContrastRatio(icon, surface)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      });
+
+      it('error and status line text meet AA', () => {
+        const error = tokenValue(textToken(PLACE_ERROR_CLASS));
+        const status = tokenValue(textToken(PLACE_MESSAGE_CLASS));
+        expect(getContrastRatio(error, surface)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        expect(getContrastRatio(status, surface)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      });
+    });
+  }
+
+  function outlineToken(classes: string): string {
+    const match = /outline-\[var\((--[a-z0-9-]+)\)\]/.exec(classes);
+    if (!match) {
+      throw new Error(`outline color not found in "${classes}"`);
+    }
+    return match[1];
+  }
+});
+
+describe('Status colors with their content color', () => {
+  const css = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'styles', 'tailwind.css'),
+    'utf8'
+  );
+
+  const STATUSES = ['info', 'success', 'warning', 'error'] as const;
+  const lightBase = blockBody(css, '@theme');
+  const darkBlock = blockBody(css, "[data-theme='dark']");
+
+  /** A status token in a theme. Each theme must define it explicitly, with no fallback to the other. */
+  function statusToken(theme: 'light' | 'dark', token: string): string {
+    return readVar(theme === 'light' ? lightBase : darkBlock, token);
+  }
+
+  it('defines every status, hover and content token in each theme block', () => {
+    for (const theme of ['light', 'dark'] as const) {
+      for (const status of STATUSES) {
+        for (const suffix of ['', '-hover', '-content']) {
+          expect(() => statusToken(theme, `--color-${status}${suffix}`)).not.toThrow();
+        }
+      }
+    }
+  });
+
+  for (const theme of ['light', 'dark'] as const) {
+    for (const status of STATUSES) {
+      const content = statusToken(theme, `--color-${status}-content`);
+
+      it(`${theme} ${status}: content text meets AA on the status fill`, () => {
+        const fill = statusToken(theme, `--color-${status}`);
+        expect(getContrastRatio(content, fill)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      });
+
+      it(`${theme} ${status}: content text meets AA on the hover fill`, () => {
+        const hover = statusToken(theme, `--color-${status}-hover`);
+        expect(getContrastRatio(content, hover)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      });
+    }
+  }
+
+  it('toast types pair each status fill with its content color', () => {
+    expect(Object.keys(TOAST_TYPE_CLASSES).sort()).toEqual([...STATUSES].sort());
+    for (const [status, classes] of Object.entries(TOAST_TYPE_CLASSES)) {
+      expect(classes).toContain(`bg-[var(--color-${status})]`);
+      expect(classes).toContain(`text-[var(--color-${status}-content)]`);
+    }
+  });
+
+  it('toast close button adds no background', () => {
+    const backgrounds = TOAST_CLOSE_CLASS.split(/\s+/).filter(token =>
+      token.slice(token.lastIndexOf(':') + 1).startsWith('bg-')
+    );
+    expect(backgrounds).toEqual([]);
+  });
+
+  it('toast action buttons add no background', () => {
+    // The utility name follows the last variant prefix, so `hover:bg-white/30` counts too.
+    const backgrounds = TOAST_ACTION_CLASS.split(/\s+/).filter(token =>
+      token.slice(token.lastIndexOf(':') + 1).startsWith('bg-')
+    );
+    expect(backgrounds).toEqual([]);
+  });
+
+  describe('confidence blends', () => {
+    /** Confidence percentages that select the two color-mix bands (see confidenceColors.ts). */
+    const BLENDS = [
+      { band: 'success and warning', percent: 80 },
+      { band: 'warning and error', percent: 40 },
+    ];
+
+    for (const { band, percent } of BLENDS) {
+      const classes = confidenceColorClasses(percent);
+
+      it(`${band} blend uses a content token, not white`, () => {
+        expect(classes).not.toContain('text-white');
+        expect(classes).toMatch(/text-\[var\(--color-[a-z]+-content\)\]/);
+      });
+
+      for (const theme of ['light', 'dark'] as const) {
+        it(`${band} blend keeps AA with its content color in the ${theme} theme`, () => {
+          const mix = /color-mix\(in_srgb,var\((--[a-z-]+)\)_(\d+)%,var\((--[a-z-]+)\)\)/.exec(
+            classes
+          );
+          expect(mix, `color-mix found in "${classes}"`).not.toBeNull();
+          const [, first, share, second] = mix ?? [];
+          const fill = applyOpacity(
+            statusToken(theme, first),
+            statusToken(theme, second),
+            Number(share) / 100
+          );
+          const contentToken = /text-\[var\((--[a-z-]+)\)\]/.exec(classes)?.[1] ?? '';
+          const content = statusToken(theme, contentToken);
+          expect(getContrastRatio(content, fill)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        });
+      }
+    }
+  });
+});
+
+describe('Components pair a status fill with its content color', () => {
+  const libDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'lib');
+  const sources = readdirSync(libDir, { recursive: true, encoding: 'utf8' })
+    .filter(file => file.endsWith('.svelte'))
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the component directory
+    .map(file => ({ file, text: readFileSync(join(libDir, file), 'utf8') }));
+
+  /** A status fill used in full, not as a translucent tint (`bg-[var(--color-error)]/10`). */
+  const SOLID_FILL = /bg-\[var\(--color-(?:info|success|warning|error)\)\](?![/\w])/g;
+  const QUOTES = ['"', "'", '`'];
+
+  /** The quoted string around `index`, which holds the whole class list of a Tailwind class string. */
+  function quotedAround(text: string, index: number): string {
+    const start = Math.max(...QUOTES.map(quote => text.lastIndexOf(quote, index)));
+    const ends = QUOTES.map(quote => text.indexOf(quote, index)).filter(end => end >= 0);
+    return text.slice(start + 1, Math.min(...ends));
+  }
+
+  it('scans the component sources', () => {
+    expect(sources.length).toBeGreaterThan(100);
+  });
+
+  it('no class string puts white text on a solid status token fill', () => {
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(SOLID_FILL)]
+        .filter(match => /(^|\s)text-white(\s|$)/.test(quotedAround(text, match.index)))
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('no class string fades a solid status token fill on hover', () => {
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(SOLID_FILL)]
+        .filter(match =>
+          /hover:bg-\[var\(--color-(?:info|success|warning|error)\)\]\//.test(
+            quotedAround(text, match.index)
+          )
+        )
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('no class string fades a solid status token fill with hover opacity', () => {
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(SOLID_FILL)]
+        .filter(match => /(^|\s)hover:opacity-/.test(quotedAround(text, match.index)))
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('no style rule puts white text on a literal status color fill', () => {
+    // The status token values of both themes, plus the emerald green the Search badges used.
+    const css = readFileSync(join(libDir, '..', 'styles', 'tailwind.css'), 'utf8');
+    const tokenBlocks = [blockBody(css, '@theme'), blockBody(css, "[data-theme='dark']")];
+    const literals = [
+      ...tokenBlocks.flatMap(block =>
+        ['info', 'success', 'warning', 'error'].flatMap(status => [
+          readVar(block, `--color-${status}`),
+          readVar(block, `--color-${status}-hover`),
+        ])
+      ),
+      '#10b981',
+    ].map(hex => hex.toLowerCase());
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(/\{[^{}]*\}/g)]
+        .filter(([rule]) => {
+          const fill = /background(?:-color)?:\s*(#[0-9a-fA-F]{6})\b/.exec(rule)?.[1];
+          return (
+            fill !== undefined &&
+            literals.includes(fill.toLowerCase()) &&
+            /(?<![-\w])color:\s*(?:white|#fff(?:fff)?)\s*;/i.test(rule)
+          );
+        })
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('no style rule puts white text on a status token fill', () => {
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(/\{[^{}]*\}/g)]
+        .filter(
+          ([rule]) =>
+            /background(?:-color)?:[^;]*var\(--color-(?:info|success|warning|error)\)/.test(rule) &&
+            /(?<![-\w])color:\s*(?:white|#fff(?:fff)?)\s*;/i.test(rule)
+        )
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('Primary and accent content in every color scheme', () => {
+  const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const stylesDir = join(srcDir, 'styles');
+  const tailwindCss = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');
+  const schemesCss = readFileSync(join(stylesDir, 'schemes.css'), 'utf8');
+
+  const FIXED_SCHEMES = ['blue', 'forest', 'amber', 'violet', 'rose'];
+  const KINDS = ['primary', 'accent'] as const;
+  type Theme = 'light' | 'dark';
+
+  const lightBlock = blockBody(tailwindCss, '@theme');
+  const darkBlock = blockBody(tailwindCss, "[data-theme='dark']");
+
+  /** Raw value (hex or color-mix) of custom property `name` in a block body, or null when unset. */
+  function rawVar(body: string, name: string): string | null {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- name is one of the fixed custom property names used by the callers
+    const match = new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6}|color-mix\\([^;]*\\))\\s*;`).exec(body);
+    return match?.[1] ?? null;
+  }
+
+  /** Scheme blocks as a lookup: the light-theme block and, when present, the dark-theme block. */
+  function schemeBlock(scheme: string, theme: Theme): string | null {
+    const selector =
+      theme === 'dark'
+        ? `[data-theme='dark'][data-scheme='${scheme}']`
+        : `\n[data-scheme='${scheme}']`;
+    return schemesCss.includes(`${selector} {`) ? blockBody(schemesCss, selector) : null;
+  }
+
+  /**
+   * Raw token value of a scheme in a theme, mirroring the cascade: the dark scheme block, then
+   * the scheme block, then the theme block, then @theme.
+   */
+  function tokenOf(scheme: string, theme: Theme, name: string): string {
+    const candidates = [
+      theme === 'dark' ? schemeBlock(scheme, 'dark') : null,
+      schemeBlock(scheme, 'light'),
+      theme === 'dark' ? darkBlock : null,
+      lightBlock,
+    ];
+    for (const block of candidates) {
+      const value = block === null ? null : rawVar(block, name);
+      if (value !== null) {
+        return value;
+      }
+    }
+    throw new Error(`${name} is not defined for ${scheme} ${theme}`);
+  }
+
+  /** Resolve a hex or `color-mix(in srgb, #hex NN%, black|white)` value to a hex colour. */
+  function resolve(value: string): string {
+    if (value.startsWith('#')) {
+      return value;
+    }
+    const match = /^color-mix\(in srgb,\s*(#[0-9a-fA-F]{6})\s+(\d+)%,\s*(black|white)\)$/.exec(
+      value
+    );
+    if (!match) {
+      throw new Error(`unsupported colour value "${value}"`);
+    }
+    return applyOpacity(
+      match[1],
+      match[3] === 'black' ? '#000000' : '#ffffff',
+      Number(match[2]) / 100
+    );
+  }
+
+  const colorOf = (scheme: string, theme: Theme, name: string) =>
+    resolve(tokenOf(scheme, theme, name));
+
+  for (const scheme of FIXED_SCHEMES) {
+    for (const theme of ['light', 'dark'] as const) {
+      for (const kind of KINDS) {
+        it(`${scheme} ${theme} ${kind}: content meets AA at rest`, () => {
+          const ratio = getContrastRatio(
+            colorOf(scheme, theme, `--color-${kind}-content`),
+            colorOf(scheme, theme, `--color-${kind}`)
+          );
+          expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        });
+
+        it(`${scheme} ${theme} ${kind}: content meets AA on the hover fill`, () => {
+          const ratio = getContrastRatio(
+            colorOf(scheme, theme, `--color-${kind}-content`),
+            colorOf(scheme, theme, `--color-${kind}-hover`)
+          );
+          expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        });
+      }
+    }
+  }
+
+  // Dark themes are not covered: dark violet primary is 4.22:1 as text on base-100 (#8b5cf6 on
+  // #0f172a), a known gap left for a follow-up because lifting it means changing the dark fill.
+  for (const scheme of FIXED_SCHEMES) {
+    it(`${scheme} light: primary as link text meets AA on base-100`, () => {
+      const surface = readVar(lightBlock, '--color-base-100');
+      const ratio = getContrastRatio(colorOf(scheme, 'light', '--color-primary'), surface);
+      expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+    });
+  }
+
+  it('resolves color-mix against black and white', () => {
+    expect(resolve('color-mix(in srgb, #ffffff 80%, black)')).toBe('#cccccc');
+    expect(resolve('color-mix(in srgb, #000000 80%, white)')).toBe('#333333');
+  });
+
+  describe('component sources', () => {
+    const libDir = join(srcDir, 'lib');
+    const sources = readdirSync(libDir, { recursive: true, encoding: 'utf8' })
+      .filter(file => file.endsWith('.svelte'))
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the component directory
+      .map(file => ({ file, text: readFileSync(join(libDir, file), 'utf8') }));
+
+    /** Hover opacity from this percentage up (and below 100) still reads as a button fill fade. */
+    const FILL_HOVER_MIN_PERCENT = 50;
+    const SOLID_SCHEME_FILL = /bg-\[var\(--color-(?:primary|accent)\)\](?![/\w])/g;
+    const QUOTES = ['"', "'", '`'];
+
+    /** The quoted string around `index`, which holds the whole class list of a Tailwind class string. */
+    function quotedAround(text: string, index: number): string {
+      const start = Math.max(...QUOTES.map(quote => text.lastIndexOf(quote, index)));
+      const ends = QUOTES.map(quote => text.indexOf(quote, index)).filter(end => end >= 0);
+      return text.slice(start + 1, Math.min(...ends));
+    }
+
+    it('primary buttons hover with the hover token, not a translucent fill', () => {
+      const offenders = sources.flatMap(({ file, text }) =>
+        [...text.matchAll(/hover:bg-\[var\(--color-(?:primary|accent)\)\]\/(\d+)/g)]
+          .filter(match => Number(match[1]) >= FILL_HOVER_MIN_PERCENT)
+          .map(match => `${file}: ${match[0]}`)
+      );
+      expect(offenders).toEqual([]);
+    });
+
+    it('solid primary and accent fills do not hover through an opacity fade', () => {
+      const offenders = sources.flatMap(({ file, text }) =>
+        [...text.matchAll(SOLID_SCHEME_FILL)]
+          .map(
+            match => /(^|\s)hover:opacity-(\d+)(\s|$)/.exec(quotedAround(text, match.index))?.[2]
+          )
+          .filter(percent => percent !== undefined)
+          .filter(percent => Number(percent) >= FILL_HOVER_MIN_PERCENT && Number(percent) < 100)
+          .map(percent => `${file}: hover:opacity-${percent}`)
+      );
+      expect(offenders).toEqual([]);
+    });
+
+    it('converted primary buttons with a disabled style apply the hover token only while enabled', () => {
+      // Files holding primary buttons that hover with --color-primary-hover and can be disabled.
+      // A class string that styles `disabled:` or `aria-disabled:` must write the hover token as
+      // `hover:not-disabled:` or `hover:not-aria-disabled:`, or override it with
+      // `aria-disabled:hover:bg-...`, so a disabled button keeps its fill.
+      const CONVERTED = [
+        'MigrationConfirmDialog.svelte',
+        'MigrationControlCard.svelte',
+        'OptimizeReviewDialog.svelte',
+        'AnalysisSettingsPage.svelte',
+        'NotificationsSettingsPage.svelte',
+        'EditorFooter.svelte',
+        'AlertRuleEditor.svelte',
+        'StreamCard.svelte',
+        'DashboardEditMode.svelte',
+        'SoundCardCard.svelte',
+      ];
+      const converted = sources.filter(({ file }) => CONVERTED.some(name => file.endsWith(name)));
+      expect(converted, 'every converted file is among the sources').toHaveLength(CONVERTED.length);
+      const offenders = converted.flatMap(({ file, text }) =>
+        [...text.matchAll(/hover:bg-\[var\(--color-primary-hover\)\]/g)]
+          .map(match => quotedAround(text, match.index))
+          .filter(
+            classes =>
+              /(^|\s)(?:aria-)?disabled:/.test(classes) && !/aria-disabled:hover:bg-/.test(classes)
+          )
+          .map(() => file)
+      );
+      expect(offenders).toEqual([]);
+    });
+
+    it('scheme picker swatches match each scheme light primary', () => {
+      const picker = sources.find(({ file }) => file.endsWith('ColorSchemePicker.svelte'));
+      expect(picker, 'ColorSchemePicker.svelte is among the sources').toBeDefined();
+      for (const scheme of FIXED_SCHEMES) {
+        // eslint-disable-next-line security/detect-non-literal-regexp -- scheme is one of the fixed scheme ids above
+        const swatch = new RegExp(`id: '${scheme}',[^}]*color: '(#[0-9a-fA-F]{6})'`).exec(
+          picker?.text ?? ''
+        )?.[1];
+        expect(swatch, `${scheme} swatch`).toBe(colorOf(scheme, 'light', '--color-primary'));
+      }
+    });
+  });
+});
+
+describe('Custom scheme hover and pressed fills', () => {
+  const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
+  const schemesCss = readFileSync(join(stylesDir, 'schemes.css'), 'utf8');
+
+  /** Same rule as the scheme store: dark text on light colours, white on dark ones. */
+  function contentFor(hex: string): string {
+    const n = parseInt(hex.slice(1), 16);
+    const lin = (v: number) => {
+      const s = v / 255;
+      return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    const l = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+    return l > 0.179 ? '#020617' : '#ffffff';
+  }
+
+  it('mixes hover and pressed fills toward the shade the scheme store sets', () => {
+    const body = blockBody(schemesCss, "\n[data-scheme='custom']");
+    for (const name of ['--color-primary-hover', '--color-primary-active']) {
+      // eslint-disable-next-line security/detect-non-literal-regexp -- fixed property names
+      expect(body).toMatch(new RegExp(`${name}:[^;]*var\\(--custom-primary-shade`));
+    }
+    expect(body).toMatch(/--color-accent-hover:[^;]*var\(--custom-accent-shade/);
+    expect(body).toMatch(/--color-accent-active:[^;]*var\(--custom-accent-shade/);
+    // No theme-specific override mixes toward a fixed colour regardless of the content
+    expect(schemesCss).not.toContain("[data-theme='dark'][data-scheme='custom']");
+  });
+
+  it('keeps at least the rest contrast on hover and pressed for any custom colour', () => {
+    const channel = ['00', '33', '66', '99', 'cc', 'ff'];
+    for (const r of channel) {
+      for (const g of channel) {
+        for (const b of channel) {
+          const primary = `#${r}${g}${b}`;
+          const content = contentFor(primary);
+          const shade = content === '#ffffff' ? '#000000' : '#ffffff';
+          const rest = getContrastRatio(content, primary);
+          const hover = getContrastRatio(content, applyOpacity(primary, shade, 0.85));
+          const active = getContrastRatio(content, applyOpacity(primary, shade, 0.7));
+          expect(hover, `${primary} hover`).toBeGreaterThanOrEqual(rest - 0.01);
+          expect(active, `${primary} pressed`).toBeGreaterThanOrEqual(rest - 0.01);
+        }
+      }
+    }
+  });
+
+  it('falls back to the content and shade the store derives for the default colours', () => {
+    // Before the store runs (custom selected, no stored colours) the CSS fallbacks apply; they
+    // must match what the store sets for its default colours, or the page flickers.
+    const body = blockBody(schemesCss, "\n[data-scheme='custom']");
+    for (const kind of ['primary', 'accent'] as const) {
+      // eslint-disable-next-line security/detect-non-literal-regexp -- fixed property names
+      const base = new RegExp(
+        `--color-${kind}:\\s*var\\(--custom-${kind},\\s*(#[0-9a-f]{6})\\)`
+      ).exec(body);
+      expect(base, `${kind} fallback`).not.toBeNull();
+      const fallback = base?.[1] ?? '';
+      const content = contentFor(fallback);
+      expect(body).toContain(`var(--custom-${kind}-content, ${content})`);
+      expect(body).toContain(
+        `var(--custom-${kind}-shade, ${content === '#ffffff' ? 'black' : 'white'})`
+      );
+    }
+  });
+
+  /** The scheme block of the pre-paint script in index.html (the tag also holds other init code). */
+  function prePaintSchemeScript(): string {
+    const html = readFileSync(join(stylesDir, '..', '..', 'index.html'), 'utf8');
+    const start = html.indexOf('// Restore color scheme');
+    const end = html.indexOf('})();', start);
+    return start === -1 || end === -1 ? '' : html.slice(start, end + '})();'.length);
+  }
+
+  /** Runs a shipped inline script with the scheme stored JSON-encoded, as the app stores it. */
+  function schemeAfterRunning(script: string): string | null {
+    localStorage.setItem('color-scheme', JSON.stringify('amber'));
+    document.documentElement.removeAttribute('data-scheme');
+    new Function(script)();
+    localStorage.removeItem('color-scheme');
+    return document.documentElement.getAttribute('data-scheme');
+  }
+
+  it('the index.html pre-paint script restores a JSON-encoded scheme', () => {
+    const script = prePaintSchemeScript();
+    expect(script).not.toBe('');
+    expect(schemeAfterRunning(script)).toBe('amber');
+  });
+
+  it('the theme init script restores a JSON-encoded scheme', async () => {
+    const { getThemeInitScript } = await import('../lib/utils/theme-init');
+    expect(schemeAfterRunning(getThemeInitScript())).toBe('amber');
+  });
+
+  it('the scheme store sets a shade away from the content colour', async () => {
+    const { scheme } = await import('../lib/stores/scheme');
+    scheme.setCustomColors({ primary: '#0d9488', accent: '#1e3a8a' });
+    const style = document.documentElement.style;
+    expect(style.getPropertyValue('--custom-primary-content')).toBe('#020617');
+    expect(style.getPropertyValue('--custom-primary-shade')).toBe('white');
+    expect(style.getPropertyValue('--custom-accent-content')).toBe('#ffffff');
+    expect(style.getPropertyValue('--custom-accent-shade')).toBe('black');
   });
 });

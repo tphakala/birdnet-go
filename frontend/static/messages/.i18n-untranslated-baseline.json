@@ -680,6 +680,7 @@
     "components.audioPlayer.clipExtraction.rangeLabel",
     "components.audioPlayer.processing.exportOriginal",
     "components.audioPlayer.processing.gain",
+    "components.locationMap.search.kind.village",
     "dashboard.banner.description",
     "dashboard.recentDetections.headers.actions",
     "dataDisplay.stats.max",

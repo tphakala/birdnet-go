@@ -178,7 +178,7 @@
               {#if check.severity === 'critical' && check.status === 'failed'}
                 <span
                   class="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded
-                         bg-[var(--color-error)] text-white"
+                         bg-[var(--color-error)] text-[var(--color-error-content)]"
                 >
                   {t('system.database.migration.prerequisites.critical')}
                 </span>

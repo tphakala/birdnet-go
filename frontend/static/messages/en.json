@@ -1044,7 +1044,8 @@
       "error": "Error loading detection: {error}",
       "loadingResults": "Loading {count} results...",
       "thumbnailLoading": "Loading {species} thumbnail...",
-      "thumbnailLoaded": "{species} thumbnail loaded"
+      "thumbnailLoaded": "{species} thumbnail loaded",
+      "resultsPerPage": "Results per page"
     },
     "errors": {
       "notFound": "Detection not found. It may have been deleted or the ID is incorrect.",
@@ -5198,7 +5199,27 @@
       "expandedMapLabel": "Full screen map for selecting station location",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
-      "expand": "Expand map to full screen"
+      "expand": "Expand map to full screen",
+      "search": {
+        "label": "Search for a place",
+        "placeholder": "Town or address",
+        "submit": "Search",
+        "disclosure": "Searches are sent to Photon (photon.komoot.io), which uses OpenStreetMap data.",
+        "openPhoton": "Open Photon in a new tab",
+        "searching": "Searching...",
+        "results": "{count, plural, one {# place found} other {# places found}}",
+        "noResults": "No places found. Try another name or click the map.",
+        "errorNetwork": "Place search is unavailable. Check the internet connection. You can still click the map or enter coordinates.",
+        "errorRateLimited": "Too many searches. Wait a moment and try again.",
+        "errorUnavailable": "The search service did not respond. You can still click the map or enter coordinates.",
+        "kind": {
+          "city": "City",
+          "town": "Town",
+          "village": "Village",
+          "station": "Station",
+          "airport": "Airport"
+        }
+      }
     }
   },
   "connectivity": {

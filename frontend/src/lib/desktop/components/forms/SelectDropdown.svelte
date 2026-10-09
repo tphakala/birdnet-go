@@ -9,6 +9,7 @@
   import { safeGet, safeArrayAccess, safeArraySpread } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { OPTION_BASE_CLASS, getOptionStateClasses } from './SelectDropdown.styles';
+  import { optionId, activeOptionId, isOptionHighlighted } from './SelectDropdown.highlight';
 
   interface Props {
     options: SelectOption[];
@@ -21,9 +22,20 @@
     required?: boolean;
     /** Optional id for the control element (for label association) */
     id?: string;
+    /**
+     * Visible label, rendered by the component. A trigger needs a name that does not depend on
+     * the selected value, because the displayed text is the combobox value, not its name: give
+     * `label`, `aria-label`, or an `id` that a `<label for>` points at.
+     */
     label?: string;
+    /**
+     * Accessible name for the trigger and the open listbox when there is no visible `label`
+     * prop. Use it so the name does not depend on the selected value. Ignored when `label`
+     * is set. Overrides a `<label for>` element associated through `id`.
+     */
+    'aria-label'?: string;
     helpText?: string;
-    /** Space-separated ids of extra elements that describe the trigger (in addition to helpText) */
+    /** Space-separated ids of extra elements that describe the trigger (in addition to helpText; the displayed value is the combobox value, not part of the description) */
     'aria-describedby'?: string;
     className?: string;
     dropdownClassName?: string;
@@ -60,6 +72,7 @@
     required = false,
     id,
     label,
+    'aria-label': ariaLabel,
     helpText,
     'aria-describedby': ariaDescribedBy,
     className = '',
@@ -103,19 +116,29 @@
     width: 0,
   });
 
+  // Dialog container that holds the trigger: where the popover is portaled and focus is contained
+  const DIALOG_SELECTOR = '[role="dialog"]';
+
+  // Elements that take focus (or whose click takes it elsewhere) when clicked. Safari does not
+  // focus a clicked button, so a click on one of these leaves focus on <body> as well.
+  const FOCUSABLE_CONTROL_SELECTOR =
+    'button, a[href], input, select, textarea, summary, [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])';
+
   // Portal target: nearest dialog ancestor (for focus containment) or body
   let portalTarget = $derived.by(
-    () => (buttonElement?.closest('[role="dialog"]') as HTMLElement | null) ?? document.body
+    () => buttonElement?.closest<HTMLElement>(DIALOG_SELECTOR) ?? document.body
   );
 
-  // Trigger description: the help text (when shown) followed by any caller-provided ids
+  // Trigger description: the help text (when shown) and any caller-provided ids. The displayed
+  // value is not listed: a role="combobox" button exposes its content as the combobox value, and
+  // naming it here too would make a screen reader announce it twice.
   let triggerDescribedBy = $derived(
     [helpText ? `${fieldId}-help` : undefined, ariaDescribedBy].filter(Boolean).join(' ') ||
       undefined
   );
 
-  // Accessible name for the open listbox when the `label` prop is not used: the text of
-  // the labels associated with the trigger, read when the list opens.
+  // Accessible name for the open listbox when the `label` prop is not used and no `aria-label`
+  // was given: the text of the labels associated with the trigger, read when the list opens.
   let externalLabelText = $state('');
 
   // Size classes for trigger (padding + font size)
@@ -216,6 +239,16 @@
   // navigation, ids and aria-activedescendant agree with what is on screen
   let renderedOptions = $derived(groupBy ? Object.values(groupedOptions).flat() : filteredOptions);
 
+  // Id of the highlighted option while the list is open, shared by the trigger and the search
+  // box (focus sits in one or the other); undefined when it would name a missing option
+  let activeDescendantId = $derived(
+    isOpen ? activeOptionId(fieldId, highlightedIndex, renderedOptions.length) : undefined
+  );
+
+  // With no options the listbox stays (the trigger and search box control it) but is empty; the
+  // empty-state text goes in a status region outside it, since a listbox may only hold options
+  let hasOptions = $derived(filteredOptions.length > 0);
+
   let canAddMore = $derived(
     !maxSelections ||
       !multiple ||
@@ -253,24 +286,37 @@
   // Event handlers
   function toggleDropdown() {
     if (disabled) return;
-    isOpen = !isOpen;
 
     if (isOpen) {
-      externalLabelText = Array.from(buttonElement?.labels ?? [])
-        .map(associated => associated.textContent?.trim() ?? '')
-        .filter(Boolean)
-        .join(' ');
-      updateDropdownPosition();
-      if (searchable) {
-        setTimeout(() => inputElement?.focus(), 0);
-      }
+      // A click that took no focus (Safari) leaves it on <body>; closing must not strand it there
+      closeDropdown({ restoreFromBody: true });
+      return;
+    }
+
+    isOpen = true;
+    externalLabelText = Array.from(buttonElement?.labels ?? [])
+      .map(associated => associated.textContent?.trim() ?? '')
+      .filter(Boolean)
+      .join(' ');
+    updateDropdownPosition();
+    if (searchable) {
+      setTimeout(() => inputElement?.focus(), 0);
     }
   }
 
-  function closeDropdown() {
-    // The popover is removed on close; keep focus from falling to <body> when it was inside
-    if (dropdownElement?.contains(document.activeElement)) {
-      buttonElement?.focus();
+  // The one way the list closes, so every close resets the search text and the highlight.
+  // The popover is removed on close; keep focus from falling to <body> when it was inside.
+  // `restoreFromBody` also covers focus that is already on <body>, for a close the user caused
+  // with a click that took no focus (Safari).
+  function closeDropdown({ restoreFromBody = false }: { restoreFromBody?: boolean } = {}) {
+    const active = document.activeElement;
+    const focusInPopover = dropdownElement?.contains(active) ?? false;
+    const focusOnBody = restoreFromBody && (!active || active === document.body);
+    if (focusOnBody || focusInPopover) {
+      // From the popover the user was working at the trigger, so it scrolls into view. From body,
+      // the trigger is either in view (a click on it or on an option) or the click was elsewhere
+      // in the dialog (a background click); either way the dialog must not scroll
+      buttonElement?.focus({ preventScroll: !focusInPopover });
     }
     isOpen = false;
     searchQuery = '';
@@ -305,18 +351,28 @@
       value = option.value;
       onChange?.(option.value);
       // A click that took no focus (Safari) leaves it on <body>; keep it inside the dialog
-      if (document.activeElement === document.body) buttonElement?.focus();
-      closeDropdown();
+      closeDropdown({ restoreFromBody: true });
     }
   }
 
   function clearSelection() {
     if (disabled) return;
 
+    // The clear control sits inside the trigger and unmounts once the value is empty; keep focus
+    // on the trigger instead of letting it drop to body.
+    // A click that does not focus (Safari) leaves focus on body; treat it like a trigger click
+    const active = document.activeElement;
+    const restore =
+      !active || active === document.body || (buttonElement?.contains(active) ?? false);
     value = multiple ? [] : '';
     onChange?.(multiple ? [] : '');
     onClear?.();
     closeDropdown();
+    // A callback may have moved focus on purpose; only take it back from body or the trigger
+    const after = document.activeElement;
+    const stillLost =
+      !after || after === document.body || (buttonElement?.contains(after) ?? false);
+    if (restore && stillLost) buttonElement?.focus({ preventScroll: true });
   }
 
   function handleSearch(event: Event) {
@@ -393,18 +449,24 @@
         break;
 
       case 'Enter':
-      case ' ':
+      case ' ': {
+        // Always consumed: left alone, the browser clicks the focused button on top of this
+        event.preventDefault();
+        // A held key repeats keydown; only the first of the press acts, or the list would flicker
+        if (event.repeat) break;
         if (!isOpen) {
-          event.preventDefault();
           toggleDropdown();
-        } else if (highlightedIndex >= 0 && highlightedIndex < allOptions.length) {
-          event.preventDefault();
-          const selectedOption = safeArrayAccess(allOptions, highlightedIndex);
-          if (selectedOption) {
-            selectOption(selectedOption);
-          }
+          break;
+        }
+        const highlighted =
+          highlightedIndex >= 0 ? safeArrayAccess(allOptions, highlightedIndex) : null;
+        if (highlighted) {
+          selectOption(highlighted);
+        } else {
+          closeDropdown();
         }
         break;
+      }
 
       case 'ArrowDown':
         event.preventDefault();
@@ -433,7 +495,7 @@
   function scrollToHighlighted() {
     if (highlightedIndex < 0 || !dropdownElement) return;
 
-    const highlighted = document.getElementById(`${fieldId}-option-${highlightedIndex}`);
+    const highlighted = document.getElementById(optionId(fieldId, highlightedIndex));
 
     if (highlighted instanceof HTMLElement) {
       highlighted.scrollIntoView({ block: 'nearest' });
@@ -451,8 +513,20 @@
   function handleClickOutside(event: MouseEvent) {
     const target = event.target as Node;
     if (!buttonElement?.contains(target) && !dropdownElement?.contains(target)) {
-      closeDropdown();
+      closeDropdown({ restoreFromBody: isBackgroundClickInOwnDialog(target) });
     }
+  }
+
+  // Whether a click landed on the plain background of the dialog that holds the trigger. Focus
+  // left on <body> there escapes the dialog's focus trap, so it goes back to the trigger. On a
+  // page, <body> after a background click is normal, and a click on a control, or inside another
+  // dialog (which owns focus while it is open), is where the user meant to go.
+  function isBackgroundClickInOwnDialog(target: Node): boolean {
+    const dialog = buttonElement?.closest(DIALOG_SELECTOR);
+    if (!dialog || !(target instanceof HTMLElement || target instanceof SVGElement)) return false;
+    if (target.closest(`${DIALOG_SELECTOR}, [aria-modal="true"]`) !== dialog) return false;
+    const control = target.closest(FOCUSABLE_CONTROL_SELECTOR);
+    return !(control && control !== dialog && dialog.contains(control));
   }
 
   // Capture-phase scroll handler: reposition when an outer/ancestor container
@@ -512,9 +586,14 @@
       {disabled}
       onclick={toggleDropdown}
       onkeydown={handleKeyDown}
+      role="combobox"
       aria-haspopup="listbox"
       aria-expanded={isOpen}
+      aria-required={required || undefined}
+      aria-controls={isOpen ? `${fieldId}-listbox` : undefined}
+      aria-activedescendant={activeDescendantId}
       aria-labelledby={label ? `${fieldId}-label` : undefined}
+      aria-label={label ? undefined : ariaLabel}
       aria-describedby={triggerDescribedBy}
     >
       <span class="flex items-center gap-2 truncate min-w-0">
@@ -596,28 +675,21 @@
               aria-label={t('components.forms.select.searchOptions')}
               role="searchbox"
               aria-controls="{fieldId}-listbox"
-              aria-activedescendant={highlightedIndex >= 0 &&
-              highlightedIndex < renderedOptions.length
-                ? `${fieldId}-option-${highlightedIndex}`
-                : undefined}
+              aria-activedescendant={activeDescendantId}
             />
           </div>
         {/if}
 
         <div
-          class="overflow-auto p-1"
+          class={cn('overflow-auto', hasOptions && 'p-1')}
           style:max-height="{searchable ? maxHeight - 60 : maxHeight}px"
           role="listbox"
           aria-multiselectable={multiple}
           id="{fieldId}-listbox"
           aria-labelledby={label ? `${fieldId}-label` : undefined}
-          aria-label={label ? undefined : externalLabelText || undefined}
+          aria-label={label ? undefined : ariaLabel || externalLabelText || undefined}
         >
-          {#if filteredOptions.length === 0}
-            <div class="p-4 text-center text-[var(--color-base-content)] opacity-60">
-              {t('components.forms.select.noOptions')}
-            </div>
-          {:else}
+          {#if hasOptions}
             {@const optionIndexMap = new Map(
               renderedOptions.map((option, index) => [option, index])
             )}
@@ -634,13 +706,13 @@
                 {@const flatIndex = optionIndexMap.get(option) ?? -1}
                 <button
                   type="button"
-                  id="{fieldId}-option-{flatIndex}"
+                  id={optionId(fieldId, flatIndex)}
                   class={cn(
                     OPTION_BASE_CLASS,
                     safeGet(menuSizeClasses, menuSize, ''),
                     getOptionStateClasses({
                       selected: isSelected(option),
-                      highlighted: highlightedIndex === flatIndex,
+                      highlighted: isOptionHighlighted(flatIndex, highlightedIndex),
                     }),
                     option.disabled && 'opacity-50 cursor-not-allowed'
                   )}
@@ -679,6 +751,17 @@
                 </button>
               {/each}
             {/each}
+          {/if}
+        </div>
+
+        <!-- Always rendered, so the text added when the list becomes empty is announced; it sits
+             outside the listbox because a listbox may only contain options -->
+        <div
+          role="status"
+          class={cn(!hasOptions && 'p-4 text-center text-[var(--color-base-content)] opacity-60')}
+        >
+          {#if !hasOptions}
+            {t('components.forms.select.noOptions')}
           {/if}
         </div>
 

@@ -1834,6 +1834,7 @@
                   </span>
                 </label>
                 <SelectDropdown
+                  id="yearly-reset-month"
                   value={String(
                     trackingSettings?.yearlyTracking?.resetMonth ??
                       TRACKING_DEFAULTS.yearlyTracking.resetMonth
@@ -1986,11 +1987,16 @@
                     <div class="grid grid-cols-2 gap-3 items-end">
                       <div>
                         <label class="flex items-center py-2" for={`${season}-start-month`}>
+                          <!-- The card heading names the season on screen; the name carries it too -->
+                          <span class="sr-only">
+                            {t(`settings.species.tracking.seasonal.seasons.${season}`)}
+                          </span>
                           <span class="text-sm font-medium">
                             {t('settings.species.tracking.seasonal.seasons.startMonth')}
                           </span>
                         </label>
                         <SelectDropdown
+                          id={`${season}-start-month`}
                           value={String(currentSeasonData?.startMonth ?? seasonDefaults.startMonth)}
                           options={monthOptions}
                           disabled={store.isLoading || store.isSaving}

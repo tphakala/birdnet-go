@@ -9,6 +9,38 @@
   color: var(--text-muted);
 }
 
+/* Edge shadows on a scrolling box that show only on a side with content out of view.
+   The two covering gradients scroll with the content (local) and hide the shadows at
+   the ends; the shadows stay fixed to the box edges (scroll). CSS only, no scroll listener. */
+@utility scroll-shadow-y {
+  background-color: var(--color-base-100);
+  background-image:
+    linear-gradient(var(--color-base-100) 30%, transparent),
+    linear-gradient(transparent, var(--color-base-100) 70%),
+    radial-gradient(
+      farthest-side at 50% 0,
+      color-mix(in srgb, var(--color-base-content) 22%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      farthest-side at 50% 100%,
+      color-mix(in srgb, var(--color-base-content) 22%, transparent),
+      transparent
+    );
+  background-position:
+    center top,
+    center bottom,
+    center top,
+    center bottom;
+  background-repeat: no-repeat;
+  background-size:
+    100% 2.5rem,
+    100% 2.5rem,
+    100% 0.75rem,
+    100% 0.75rem;
+  background-attachment: local, local, scroll, scroll;
+}
+
 /* Custom breakpoints and fonts */
 @theme {
   --breakpoint-*: initial;
@@ -32,15 +64,15 @@
   --grid-template-columns-12: repeat(12, minmax(0, 1fr));
   --grid-template-columns-4: repeat(4, minmax(0, 1fr));
 
-  /* Primary & accent — Blue scheme defaults.
+  /* Primary & accent: Blue scheme defaults.
      Other schemes override via [data-scheme] selectors in schemes.css. */
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-primary-active: #1e40af;
   --color-primary-content: #ffffff;
-  --color-accent: #0284c7;
-  --color-accent-hover: #0369a1;
-  --color-accent-active: #075985;
+  --color-accent: #0369a1;
+  --color-accent-hover: #075985;
+  --color-accent-active: #0c4a6e;
   --color-accent-content: #ffffff;
 
   /* Secondary/neutral */
@@ -58,18 +90,18 @@
   --color-base-300: #e5e7eb;
   --color-base-content: #1f2937;
 
-  /* Status colors — universal, not scheme-dependent */
+  /* Status colors: universal, not scheme-dependent */
   --color-info: #0ea5e9;
   --color-info-hover: #0284c7;
-  --color-info-content: #ffffff;
+  --color-info-content: #020617;
   --color-success: #22c55e;
   --color-success-hover: #16a34a;
-  --color-success-content: #ffffff;
+  --color-success-content: #020617;
   --color-warning: #f59e0b;
   --color-warning-hover: #d97706;
-  --color-warning-content: #ffffff;
-  --color-error: #ef4444;
-  --color-error-hover: #dc2626;
+  --color-warning-content: #020617;
+  --color-error: #dc2626;
+  --color-error-hover: #b91c1c;
   --color-error-content: #ffffff;
 }
 
@@ -132,8 +164,8 @@
 
   /* Accent colors */
   --color-accent: #0369a1;
-  --color-accent-hover: #0284c7;
-  --color-accent-active: #075985;
+  --color-accent-hover: #075985;
+  --color-accent-active: #0c4a6e;
   --color-accent-content: #ffffff;
 
   /* Neutral colors */
@@ -150,15 +182,15 @@
   /* Status colors */
   --color-info: #0284c7;
   --color-info-hover: #0ea5e9;
-  --color-info-content: #ffffff;
+  --color-info-content: #020617;
   --color-success: #16a34a;
   --color-success-hover: #22c55e;
-  --color-success-content: #ffffff;
+  --color-success-content: #020617;
   --color-warning: #d97706;
   --color-warning-hover: #f59e0b;
-  --color-warning-content: #ffffff;
-  --color-error: #dc2626;
-  --color-error-hover: #ef4444;
+  --color-warning-content: #020617;
+  --color-error: #ef4444;
+  --color-error-hover: #f87171;
   --color-error-content: #020617;
 
   /* Surface colors - matching mockup hierarchy */
@@ -440,7 +472,7 @@
 
   .badge-status-error {
     background: color-mix(in srgb, var(--color-error) 15%, transparent);
-    color: var(--color-error);
+    color: var(--text-error);
   }
 
   .badge-status-info {
@@ -1242,7 +1274,7 @@
 
   .alert-error {
     background-color: color-mix(in srgb, var(--color-error) 15%, transparent);
-    color: var(--color-error);
+    color: var(--text-error);
   }
 
   /* ----------------------------------------
@@ -2406,8 +2438,9 @@
     background-color: var(--color-error);
   }
 
+  /* Error text uses --text-error; --color-error is for fills and borders */
   .text-error {
-    color: var(--color-error);
+    color: var(--text-error);
   }
 
   .text-error-content {

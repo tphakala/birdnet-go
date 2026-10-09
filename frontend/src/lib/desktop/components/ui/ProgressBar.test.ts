@@ -106,7 +106,7 @@ describe('ProgressBar', () => {
       showLabel: true,
     });
 
-    expect(screen.getByText('75%')).toBeInTheDocument();
+    expect(screen.getAllByText('75%')[0]).toBeInTheDocument();
   });
 
   it('uses custom label format', () => {
@@ -120,7 +120,7 @@ describe('ProgressBar', () => {
     });
 
     expect(labelFormat).toHaveBeenCalledWith(30, 100);
-    expect(screen.getByText('30 of 100')).toBeInTheDocument();
+    expect(screen.getAllByText('30 of 100')[0]).toBeInTheDocument();
   });
 
   it('applies color thresholds', async () => {
@@ -271,22 +271,93 @@ describe('ProgressBar', () => {
     expect(progressbar).toHaveAttribute('aria-label', '75%');
   });
 
-  it('adjusts label color based on progress', () => {
+  describe('label over the fill and the track', () => {
+    /** The two copies of the label: the track copy and the fill copy. */
+    function labelCopies(container: HTMLElement) {
+      return {
+        track: container.querySelector<HTMLElement>('[data-label-part="track"]'),
+        fill: container.querySelector<HTMLElement>('[data-label-part="fill"]'),
+      };
+    }
+
+    it.each(['primary', 'success', 'warning', 'error'] as const)(
+      'draws a base-content copy on the track and a %s content copy on the fill',
+      variant => {
+        const { container } = progressTest.render({ value: 70, showLabel: true, variant });
+        const { track, fill } = labelCopies(container);
+
+        expect(track).toHaveTextContent('70%');
+        expect(track).toHaveClass('text-[var(--color-base-content)]');
+        expect(fill).toHaveTextContent('70%');
+        expect(fill).toHaveClass(`text-[var(--color-${variant}-content)]`);
+        expect(fill?.className).not.toContain('mix-blend');
+      }
+    );
+
+    it('hides only the fill copy from assistive technology', () => {
+      const { container } = progressTest.render({ value: 70, showLabel: true });
+      const { track, fill } = labelCopies(container);
+
+      expect(fill).toHaveAttribute('aria-hidden', 'true');
+      expect(track).not.toHaveAttribute('aria-hidden');
+    });
+
+    it.each([
+      [0, 'inset(0 100% 0 0)', 'inset(0 0 0 0%)'],
+      [30, 'inset(0 70% 0 0)', 'inset(0 0 0 30%)'],
+      [70, 'inset(0 30% 0 0)', 'inset(0 0 0 70%)'],
+      [100, 'inset(0 0% 0 0)', 'inset(0 0 0 100%)'],
+    ])('clips the two copies at the fill edge for value %i', (value, fillClip, trackClip) => {
+      const { container } = progressTest.render({ value, showLabel: true });
+      const { track, fill } = labelCopies(container);
+
+      expect(fill?.style.clipPath).toBe(fillClip);
+      expect(track?.style.clipPath).toBe(trackClip);
+    });
+
+    it('follows the threshold variant and the value range', () => {
+      const { container } = progressTest.render({
+        value: 45,
+        max: 50,
+        showLabel: true,
+        colorThresholds: [{ value: 80, variant: 'warning' }],
+      });
+      const { track, fill } = labelCopies(container);
+
+      expect(fill).toHaveClass('text-[var(--color-warning-content)]');
+      expect(fill?.style.clipPath).toBe('inset(0 10% 0 0)');
+      expect(track?.style.clipPath).toBe('inset(0 0 0 90%)');
+    });
+
+    it('renders no label copies when showLabel is false', () => {
+      const { container } = progressTest.render({ value: 70 });
+
+      expect(container.querySelector('[data-label-part]')).toBeNull();
+    });
+  });
+
+  it.each(['primary', 'secondary', 'accent', 'info', 'success', 'warning', 'error'] as const)(
+    'labels a mostly filled %s bar with the content color of its fill',
+    variant => {
+      const { container } = progressTest.render({ value: 70, showLabel: true, variant });
+
+      const bar = container.querySelector(`.bg-\\[var\\(--color-${variant}\\)\\]`);
+      expect(bar).toBeInTheDocument();
+      const label = container.querySelector(`.text-\\[var\\(--color-${variant}-content\\)\\]`);
+      expect(label).toBeInTheDocument();
+      expect(label?.className).not.toContain('mix-blend');
+    }
+  );
+
+  it('labels a mostly filled bar with the content color of the threshold variant', () => {
     const { container } = progressTest.render({
-      value: 30,
+      value: 90,
       showLabel: true,
+      colorThresholds: [{ value: 80, variant: 'warning' }],
     });
 
-    let label = container.querySelector('.text-\\[var\\(--color-base-content\\)\\]');
-    expect(label).toBeInTheDocument();
-
-    const { container: container2 } = progressTest.render({
-      value: 70,
-      showLabel: true,
-    });
-
-    label = container2.querySelector('.text-white');
-    expect(label).toBeInTheDocument();
-    expect(label).toHaveClass('mix-blend-difference');
+    expect(
+      container.querySelector('.text-\\[var\\(--color-warning-content\\)\\]')
+    ).toBeInTheDocument();
   });
 });

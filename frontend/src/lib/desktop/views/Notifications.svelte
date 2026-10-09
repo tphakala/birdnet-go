@@ -480,6 +480,7 @@
         <SelectDropdown
           options={statusOptions}
           bind:value={filters.status}
+          aria-label={t('notifications.aria.filterByStatus')}
           placeholder={t('notifications.filters.allStatus')}
           size="sm"
           menuSize="sm"
@@ -492,6 +493,7 @@
         <SelectDropdown
           options={typeOptions}
           bind:value={filters.type}
+          aria-label={t('notifications.aria.filterByType')}
           placeholder={t('notifications.filters.allTypes')}
           size="sm"
           menuSize="sm"
@@ -504,6 +506,7 @@
         <SelectDropdown
           options={priorityOptions}
           bind:value={filters.priority}
+          aria-label={t('notifications.aria.filterByPriority')}
           placeholder={t('notifications.filters.allPriorities')}
           size="sm"
           menuSize="sm"

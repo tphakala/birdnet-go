@@ -1044,7 +1044,8 @@
       "error": "Chyba při načítání detekce: {error}",
       "loadingResults": "Načítání {count} výsledků...",
       "thumbnailLoading": "Načítání náhledu {species}...",
-      "thumbnailLoaded": "Náhled {species} načten"
+      "thumbnailLoaded": "Náhled {species} načten",
+      "resultsPerPage": "Počet výsledků na stránku"
     },
     "errors": {
       "notFound": "Detekce nebyla nalezena. Možná byla odstraněna nebo je ID nesprávné.",
@@ -5198,7 +5199,27 @@
       "expandedMapLabel": "Mapa na celou obrazovku pro výběr polohy stanice",
       "zoomIn": "Přiblížit",
       "zoomOut": "Oddálit",
-      "expand": "Rozbalit mapu na celou obrazovku"
+      "expand": "Rozbalit mapu na celou obrazovku",
+      "search": {
+        "label": "Hledat místo",
+        "placeholder": "Město nebo adresa",
+        "submit": "Hledat",
+        "disclosure": "Hledání se odesílá službě Photon (photon.komoot.io), která používá data OpenStreetMap.",
+        "openPhoton": "Otevřít Photon na nové kartě",
+        "searching": "Hledání...",
+        "results": "{count, plural, one {Nalezeno # místo} few {Nalezena # místa} other {Nalezeno # míst}}",
+        "noResults": "Nic nenalezeno. Zkuste jiný název nebo klikněte na mapu.",
+        "errorNetwork": "Vyhledávání míst není dostupné. Zkontrolujte připojení k internetu. Stále můžete kliknout na mapu nebo zadat souřadnice.",
+        "errorRateLimited": "Příliš mnoho hledání. Chvíli počkejte a zkuste to znovu.",
+        "errorUnavailable": "Vyhledávací služba neodpověděla. Stále můžete kliknout na mapu nebo zadat souřadnice.",
+        "kind": {
+          "city": "Město",
+          "town": "Městečko",
+          "village": "Vesnice",
+          "station": "Nádraží",
+          "airport": "Letiště"
+        }
+      }
     }
   },
   "connectivity": {

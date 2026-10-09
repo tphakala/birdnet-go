@@ -64,9 +64,9 @@ describe('SpeciesFilterForm', () => {
       },
     });
 
-    // SelectDropdown renders as a button, not combobox
-    const timePeriodSelect = screen.getByRole('button', { name: /all time/i });
-    expect(timePeriodSelect).toBeInTheDocument();
+    // The trigger is named by its <label for>, and shows the selected option as its text
+    const timePeriodSelect = screen.getByRole('combobox', { name: 'Time Period' });
+    expect(timePeriodSelect).toHaveTextContent('All Time');
   });
 
   it('displays sort order options', () => {
@@ -81,10 +81,10 @@ describe('SpeciesFilterForm', () => {
       },
     });
 
-    // SelectDropdown renders as a button with the translated label
-    // Default sort order is count_desc -> "Most Detections"
-    const sortSelect = screen.getByRole('button', { name: /most detections/i });
-    expect(sortSelect).toBeInTheDocument();
+    // The trigger is named by its <label for>; the default sort order count_desc shows
+    // "Most Detections"
+    const sortSelect = screen.getByRole('combobox', { name: 'Sort By' });
+    expect(sortSelect).toHaveTextContent('Most Detections');
   });
 
   it('shows custom date fields when custom time period is selected', () => {

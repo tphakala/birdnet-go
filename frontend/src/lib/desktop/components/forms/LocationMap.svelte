@@ -8,12 +8,15 @@
   - Click the map or drag the pin to set the location (3 decimals)
   - Typed or detected coordinates move the map after a short delay, keeping the zoom
   - Zoom buttons, Ctrl/Cmd + wheel zoom and keyboard navigation
+  - Optional place search (the `placeSearch` prop) above the map and in the expanded
+    dialog: choosing a place sets the location like a map click and zooms in
   - Expand button opening a full screen map in a dialog that is portalled into
     the surrounding dialog (or the page body) and handles Escape and Tab itself
   - MapLibre is loaded on first use, with a loading overlay and an error placeholder
 
-  Only a user action (click, drag end) calls `onLocationChange`. Mounting,
-  changing the coordinate props and expanding the map never do.
+  Only a user action (click, drag end, choosing a searched place) calls
+  `onLocationChange`. Mounting, changing the coordinate props and expanding the
+  map never do.
 
   Props: see the Props interface; the defaults reproduce the settings page map.
   - latitude, longitude: current coordinates
@@ -26,6 +29,7 @@
   - pinchZoom: allow two-finger pinch zoom (rotation stays off)
   - doubleTapZoomKeepsPin: placing the pin waits for a possible double click or
     double tap, which then zooms without moving the pin
+  - placeSearch: show a place search box (PlaceSearch) above the map
   - startView: the start zoom is chosen when the inline map is created and depends on whether the coordinates are set (not 0,0): 11 when set, else 5 for `region` or 1 for `world`; the expanded map starts at the inline map's current zoom
 
   @component
@@ -45,10 +49,13 @@
   import { cn } from '$lib/utils/cn';
   import { createDebounce } from '$lib/utils/debounce';
   import { generateId } from '$lib/utils/uuid';
+  import { roundCoordinate } from '$lib/utils/geolocation';
+  import type { PlaceResult } from '$lib/utils/placeSearch';
   import { loggers } from '$lib/utils/logger';
   import { portal } from '$lib/utils/portal';
   import { toastActions } from '$lib/stores/toast';
   import { MAP_CONFIG } from '$lib/desktop/features/settings/utils/mapConfig';
+  import PlaceSearch from './PlaceSearch.svelte';
   import {
     COORDINATE_SYNC_DEBOUNCE_MS,
     COORDINATE_SYNC_DURATION_MS,
@@ -64,7 +71,7 @@
     longitude: number;
     /** The coordinates are a real location, so the pin is shown. */
     locationSet: boolean;
-    /** Called with the rounded coordinates after a click or pin drag. */
+    /** Called with the rounded coordinates after a click, a pin drag or a chosen place. */
     onLocationChange: (_latitude: number, _longitude: number) => void;
     /** Heading of the expanded map dialog. */
     title: string;
@@ -75,6 +82,8 @@
     pinchZoom?: boolean;
     doubleTapZoomKeepsPin?: boolean;
     startView?: LocationMapStartView;
+    /** Show a place search above the map and in the expanded dialog. */
+    placeSearch?: boolean;
     className?: string;
   }
 
@@ -90,6 +99,7 @@
     pinchZoom = false,
     doubleTapZoomKeepsPin = false,
     startView = 'region',
+    placeSearch = false,
     className = '',
   }: Props = $props();
 
@@ -229,6 +239,23 @@
       createMarker: true,
       duration: MAP_CONFIG.ANIMATION_DURATION,
     });
+  }
+
+  // A searched place is reported like a click, then both maps fly there. The
+  // flight must end before the coordinate sync above runs (it keeps whatever zoom
+  // the map has by then), so it uses the sync's duration.
+  function handlePlaceSelect(place: PlaceResult) {
+    if (destroyed) return;
+    const lat = roundCoordinate(place.latitude);
+    const lng = roundCoordinate(place.longitude);
+    onLocationChange(lat, lng);
+    for (const controller of [inline, expandedController]) {
+      controller?.showLocation(lat, lng, {
+        createMarker: true,
+        zoom: MAP_CONFIG.DEFAULT_ZOOM,
+        duration: COORDINATE_SYNC_DURATION_MS,
+      });
+    }
   }
 
   // The expanded map exists while the dialog is open.
@@ -386,6 +413,10 @@
 {/snippet}
 
 <div class={className}>
+  <!-- Shown only once the map can take a location: a disabled search box would have no visible reason -->
+  {#if placeSearch && ready}
+    <PlaceSearch className="mb-3" onSelect={handlePlaceSelect} />
+  {/if}
   {#if loadError}
     <div
       class={cn(
@@ -489,6 +520,10 @@
         </button>
       </div>
 
+      {#if placeSearch}
+        <PlaceSearch className="mb-4" onSelect={handlePlaceSelect} />
+      {/if}
+
       <div class="mb-4 p-3 bg-[var(--color-base-200)]/50 rounded-lg">
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
@@ -526,7 +561,7 @@
         </p>
         <button
           type="button"
-          class="inline-flex items-center justify-center h-10 px-4 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors"
+          class="inline-flex items-center justify-center h-10 px-4 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors"
           onclick={closeExpanded}
         >
           {t('common.done')}

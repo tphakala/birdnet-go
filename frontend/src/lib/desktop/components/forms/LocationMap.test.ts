@@ -827,6 +827,179 @@ describe('LocationMap', () => {
   });
 });
 
+describe('LocationMap place search', () => {
+  const SEARCH_LABEL = 'components.locationMap.search.label';
+  const originalFetch = globalThis.fetch;
+  let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchMock = vi.fn<typeof fetch>(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            type: 'FeatureCollection',
+            features: [
+              {
+                type: 'Feature',
+                properties: { osm_type: 'R', osm_id: 34914, name: 'Helsinki' },
+                geometry: { type: 'Point', coordinates: [24.9435408, 60.1666204] },
+              },
+            ],
+          }),
+          { status: 200 }
+        )
+      )
+    );
+    globalThis.fetch = fetchMock;
+  });
+
+  afterEach(() => {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  });
+
+  /** Type a query into the search box in `scope` and pick the first result. */
+  async function searchAndPick(scope: HTMLElement | undefined = undefined) {
+    const root = scope ?? document.body;
+    const box = within(root).getByRole('combobox', { name: SEARCH_LABEL });
+    box.focus();
+    await fireEvent.input(box, { target: { value: 'Helsinki' } });
+    await fireEvent.keyDown(box, { key: 'Enter' });
+    await fireEvent.click(await within(root).findByRole('option'));
+  }
+
+  it('shows no search unless placeSearch is set', async () => {
+    await mount();
+
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  });
+
+  it('shows the search only once the map is ready', async () => {
+    const props = createProps({ placeSearch: true, ready: false });
+    const result = testFactory.render(props);
+
+    expect(screen.queryByRole('combobox', { name: SEARCH_LABEL })).not.toBeInTheDocument();
+
+    await result.rerender({ ...props, ready: true });
+    expect(screen.getByRole('combobox', { name: SEARCH_LABEL })).toBeEnabled();
+  });
+
+  it('shows the search above the map when placeSearch is set', async () => {
+    await mount({ placeSearch: true });
+
+    const box = screen.getByRole('combobox', { name: SEARCH_LABEL });
+    const map = screen.getByRole('application', { name: MAP_LABEL });
+    expect(box.compareDocumentPosition(map) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(map).not.toContainElement(box);
+  });
+
+  it('a chosen place sets the pin, zooms in and reports rounded coordinates', async () => {
+    const { props } = await mount({
+      latitude: 0,
+      longitude: 0,
+      locationSet: false,
+      placeSearch: true,
+    });
+    const map = mapAt(0);
+    vi.mocked(map.easeTo).mockClear();
+
+    await searchAndPick();
+
+    expect(props.onLocationChange).toHaveBeenCalledExactlyOnceWith(60.167, 24.944);
+    expect(map.easeTo).toHaveBeenCalledExactlyOnceWith({
+      center: [24.944, 60.167],
+      zoom: 11,
+      duration: COORDINATE_SYNC_DURATION_MS,
+    });
+    expect(vi.mocked(Marker)).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the chosen zoom when the coordinates come back as props', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { props, rerender } = await mount({ placeSearch: true });
+      const map = mapAt(0);
+      // The mock map never animates, so let it report the zoom it was last asked for.
+      let zoom = 10;
+      vi.mocked(map.getZoom).mockImplementation(() => zoom);
+      vi.mocked(map.easeTo).mockImplementation(options => {
+        zoom = options.zoom ?? zoom;
+        return map;
+      });
+      vi.mocked(map.easeTo).mockClear();
+
+      await searchAndPick();
+      await rerender({ ...props, latitude: 60.167, longitude: 24.944 });
+      await vi.advanceTimersByTimeAsync(PAST_SYNC_MS);
+
+      // The sync that follows the parent update keeps the chosen zoom
+      expect(map.easeTo).toHaveBeenLastCalledWith({
+        center: [24.944, 60.167],
+        zoom: 11,
+        duration: COORDINATE_SYNC_DURATION_MS,
+      });
+      // The flight has to end before that sync reads the zoom
+      expect(COORDINATE_SYNC_DURATION_MS).toBeLessThan(COORDINATE_SYNC_DEBOUNCE_MS);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a place chosen in the expanded dialog moves both maps', async () => {
+    const user = userEvent.setup();
+    const { props } = await mount({ placeSearch: true });
+    const dialog = await openExpanded(user);
+    const [inlineMap, expandedMap] = [mapAt(0), mapAt(1)];
+    vi.mocked(inlineMap.easeTo).mockClear();
+    vi.mocked(expandedMap.easeTo).mockClear();
+
+    await searchAndPick(dialog);
+
+    expect(props.onLocationChange).toHaveBeenCalledExactlyOnceWith(60.167, 24.944);
+    for (const map of [inlineMap, expandedMap]) {
+      expect(map.easeTo).toHaveBeenCalledWith(
+        expect.objectContaining({ center: [24.944, 60.167], zoom: 11 })
+      );
+    }
+  });
+
+  it('Escape in the expanded search closes its list first and the map after that', async () => {
+    const user = userEvent.setup();
+    await mount({ placeSearch: true });
+    const dialog = await openExpanded(user);
+    const box = within(dialog).getByRole('combobox', { name: SEARCH_LABEL });
+    box.focus();
+    await fireEvent.input(box, { target: { value: 'Helsinki' } });
+    await fireEvent.keyDown(box, { key: 'Enter' });
+    await within(dialog).findByRole('listbox');
+
+    await fireEvent.keyDown(box, { key: 'Escape' });
+    expect(within(dialog).queryByRole('listbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: TITLE })).toBeInTheDocument();
+
+    await fireEvent.keyDown(box, { key: 'Escape' });
+    expect(box).toHaveValue('');
+    expect(screen.getByRole('dialog', { name: TITLE })).toBeInTheDocument();
+
+    await fireEvent.keyDown(box, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: TITLE })).not.toBeInTheDocument();
+  });
+
+  it('still offers the search when the map library fails to build the map', async () => {
+    vi.mocked(MapLibreMap).mockImplementationOnce(function () {
+      throw new Error('WebGL unavailable');
+    });
+    const props = createProps({ placeSearch: true });
+    testFactory.render(props);
+    await screen.findByText('settings.main.errors.mapUnavailable');
+
+    await searchAndPick();
+
+    expect(props.onLocationChange).toHaveBeenCalledExactlyOnceWith(60.167, 24.944);
+  });
+});
+
 describe('LocationMap Accessibility', () => {
   beforeEach(() => {
     vi.clearAllMocks();

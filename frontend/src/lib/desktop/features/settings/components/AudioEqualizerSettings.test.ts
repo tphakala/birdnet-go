@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import AudioEqualizerSettings from './AudioEqualizerSettings.svelte';
 
 // Mock dependencies
@@ -175,5 +176,46 @@ describe('AudioEqualizerSettings', () => {
     // Add Filter button should be disabled when component is disabled
     const addButton = screen.getByText('settings.audio.audioFilters.addFilter');
     expect(addButton).toBeDisabled();
+  });
+
+  describe('attenuation dropdown names', () => {
+    beforeEach(() => {
+      Element.prototype.scrollIntoView = vi.fn();
+    });
+
+    it('names the attenuation dropdown of an existing filter independently of its value', async () => {
+      render(AudioEqualizerSettings, {
+        props: {
+          equalizerSettings: {
+            enabled: true,
+            filters: [{ type: 'HighPass' as const, frequency: 100, passes: 2, q: 0.707 }],
+          },
+          disabled: false,
+          onUpdate: mockUpdateCallback,
+        },
+      });
+
+      const trigger = await screen.findByRole('combobox', { name: 'Attenuation' });
+      expect(trigger).toHaveTextContent('24dB');
+    });
+
+    it('names the attenuation dropdown of the new filter independently of its value', async () => {
+      const user = userEvent.setup();
+      render(AudioEqualizerSettings, {
+        props: {
+          equalizerSettings: defaultEqualizerSettings,
+          disabled: false,
+          onUpdate: mockUpdateCallback,
+        },
+      });
+
+      await user.click(
+        await screen.findByRole('combobox', { name: 'settings.audio.audioFilters.newFilterType' })
+      );
+      await user.click(await screen.findByRole('option', { name: /HighPass/ }));
+
+      const trigger = await screen.findByRole('combobox', { name: 'Attenuation' });
+      expect(trigger).toHaveTextContent('12dB');
+    });
   });
 });

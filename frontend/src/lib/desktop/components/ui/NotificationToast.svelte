@@ -5,8 +5,13 @@
   import { X, XCircle, TriangleAlert, Info, CircleCheck } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { safeGet } from '$lib/utils/security';
+  import type { ToastType } from '$lib/stores/toast';
+  import {
+    TOAST_TYPE_CLASSES,
+    TOAST_ACTION_CLASS,
+    TOAST_CLOSE_CLASS,
+  } from './NotificationToast.styles';
 
-  type ToastType = 'info' | 'success' | 'warning' | 'error';
   type ToastPosition =
     'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
 
@@ -41,14 +46,6 @@
 
   let isVisible = $state(true);
   let timeoutId: number | null = null;
-
-  // Native Tailwind classes for toast types - solid backgrounds for readability
-  const typeClasses: Record<ToastType, string> = {
-    info: 'bg-[var(--color-info)] text-[var(--color-info-content)]',
-    success: 'bg-[var(--color-success)] text-[var(--color-success-content)]',
-    warning: 'bg-[var(--color-warning)] text-[var(--color-warning-content)]',
-    error: 'bg-[var(--color-error)] text-[var(--color-error-content)]',
-  };
 
   // Position classes are intentionally left empty because all positioning styles
   // are applied by the ToastContainer component, which handles the absolute positioning,
@@ -100,7 +97,7 @@
     <div
       class={cn(
         'flex items-center gap-3 p-4 rounded-lg shadow-lg',
-        safeGet(typeClasses, type, typeClasses.info),
+        safeGet(TOAST_TYPE_CLASSES, type, TOAST_TYPE_CLASSES.info),
         className
       )}
       role="alert"
@@ -121,11 +118,7 @@
       {#if actions.length > 0}
         <div class="flex gap-2 shrink-0">
           {#each actions as action, index (index)}
-            <button
-              type="button"
-              class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded transition-colors bg-white/20 hover:bg-white/30"
-              onclick={action.onClick}
-            >
+            <button type="button" class={TOAST_ACTION_CLASS} onclick={action.onClick}>
               {action.label}
             </button>
           {/each}
@@ -134,7 +127,7 @@
 
       <button
         type="button"
-        class="inline-flex items-center justify-center p-1 rounded-full shrink-0 transition-colors hover:bg-white/20"
+        class={TOAST_CLOSE_CLASS}
         data-toast-close
         onclick={handleClose}
         aria-label={t('common.aria.closeNotification')}

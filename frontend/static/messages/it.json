@@ -1044,7 +1044,8 @@
       "error": "Errore caricamento rilevamento: {error}",
       "loadingResults": "Caricamento di {count} risultati...",
       "thumbnailLoading": "Caricamento miniatura di {species}...",
-      "thumbnailLoaded": "Miniatura di {species} caricata"
+      "thumbnailLoaded": "Miniatura di {species} caricata",
+      "resultsPerPage": "Risultati per pagina"
     },
     "errors": {
       "notFound": "Rilevamento non trovato. Potrebbe essere stato eliminato o l'ID non è corretto.",
@@ -5198,7 +5199,27 @@
       "expandedMapLabel": "Mappa a schermo intero per selezionare la posizione della stazione",
       "zoomIn": "Ingrandisci",
       "zoomOut": "Riduci",
-      "expand": "Espandi la mappa a schermo intero"
+      "expand": "Espandi la mappa a schermo intero",
+      "search": {
+        "label": "Cerca un luogo",
+        "placeholder": "Città o indirizzo",
+        "submit": "Cerca",
+        "disclosure": "Le ricerche vengono inviate a Photon (photon.komoot.io), che usa i dati di OpenStreetMap.",
+        "openPhoton": "Apri Photon in una nuova scheda",
+        "searching": "Ricerca in corso...",
+        "results": "{count, plural, one {# luogo trovato} other {# luoghi trovati}}",
+        "noResults": "Nessun luogo trovato. Prova con un altro nome o clicca sulla mappa.",
+        "errorNetwork": "La ricerca di luoghi non è disponibile. Controlla la connessione a internet. Puoi comunque cliccare sulla mappa o inserire le coordinate.",
+        "errorRateLimited": "Troppe ricerche. Attendi un momento e riprova.",
+        "errorUnavailable": "Il servizio di ricerca non ha risposto. Puoi comunque cliccare sulla mappa o inserire le coordinate.",
+        "kind": {
+          "city": "Città",
+          "town": "Cittadina",
+          "village": "Villaggio",
+          "station": "Stazione",
+          "airport": "Aeroporto"
+        }
+      }
     }
   },
   "connectivity": {

@@ -370,7 +370,7 @@
           </button>
           <button
             type="button"
-            class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:opacity-90 transition-colors"
+            class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:bg-[var(--color-error-hover)] transition-colors"
             onclick={executeDelete}
           >
             {t('common.delete')}
@@ -518,7 +518,7 @@
           </button>
           <button
             type="button"
-            class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={saveEdit}
             disabled={!editName.trim() || !editDevice}
           >
