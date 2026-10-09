@@ -2139,7 +2139,7 @@
           <button
             type="button"
             onclick={openOptimizeReview}
-            class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary)]/80"
+            class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary-hover)]"
           >
             {t('analysis.gallery.optimize.review')}
           </button>
@@ -2488,7 +2488,7 @@
                     'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors',
                     optimizePaused
                       ? 'cursor-not-allowed opacity-50'
-                      : 'hover:bg-[var(--color-primary)]/80'
+                      : 'hover:bg-[var(--color-primary-hover)]'
                   )}
                   aria-label="{t('analysis.gallery.optimize.swap')} {entry.name}"
                 >
@@ -2770,7 +2770,7 @@
           'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors',
           !entry.compatible || isInstalling || installPaused
             ? 'opacity-50'
-            : 'hover:bg-[var(--color-primary)]/80',
+            : 'hover:bg-[var(--color-primary-hover)]',
           installPaused && 'cursor-not-allowed'
         )}
         aria-label="{t('analysis.gallery.install')} {entry.name}"
@@ -3033,7 +3033,7 @@
           aria-disabled={installBlocked ? 'true' : undefined}
           aria-describedby={installBlocked ? INSTALL_BLOCKED_HELP_ID : undefined}
           title={installBlocked ? t('analysis.gallery.variants.incompatible') : undefined}
-          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-[var(--color-primary)]"
+          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary-hover)] transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-[var(--color-primary)]"
         >
           <Download class="size-4" />
           {t('analysis.gallery.license.acceptAndInstall')}

@@ -118,7 +118,7 @@ describe('Color Contrast Tests', () => {
     primaryContent: '#ffffff', // --color-primary-content
     secondary: '#4b5563', // --color-secondary
     secondaryContent: '#ffffff', // --color-secondary-content
-    accent: '#0284c7', // --color-accent
+    accent: '#0369a1', // --color-accent
     neutral: '#1f2937', // --color-neutral
     info: '#0ea5e9', // --color-info
     infoContent: '#020617', // --color-info-content
@@ -906,5 +906,145 @@ describe('Components pair a status fill with its content color', () => {
         .map(() => file)
     );
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('Primary and accent content in every color scheme', () => {
+  const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const stylesDir = join(srcDir, 'styles');
+  const tailwindCss = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');
+  const schemesCss = readFileSync(join(stylesDir, 'schemes.css'), 'utf8');
+
+  const FIXED_SCHEMES = ['blue', 'forest', 'amber', 'violet', 'rose'];
+  const KINDS = ['primary', 'accent'] as const;
+  type Theme = 'light' | 'dark';
+
+  const lightBlock = blockBody(tailwindCss, '@theme');
+  const darkBlock = blockBody(tailwindCss, "[data-theme='dark']");
+
+  /** Raw value (hex or color-mix) of custom property `name` in a block body, or null when unset. */
+  function rawVar(body: string, name: string): string | null {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- name is one of the fixed custom property names used by the callers
+    const match = new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6}|color-mix\\([^;]*\\))\\s*;`).exec(body);
+    return match?.[1] ?? null;
+  }
+
+  /** Scheme blocks as a lookup: the light-theme block and, when present, the dark-theme block. */
+  function schemeBlock(scheme: string, theme: Theme): string | null {
+    const selector =
+      theme === 'dark'
+        ? `[data-theme='dark'][data-scheme='${scheme}']`
+        : `\n[data-scheme='${scheme}']`;
+    return schemesCss.includes(`${selector} {`) ? blockBody(schemesCss, selector) : null;
+  }
+
+  /**
+   * Raw token value of a scheme in a theme, mirroring the cascade: the dark scheme block, then
+   * the scheme block, then the theme block, then @theme.
+   */
+  function tokenOf(scheme: string, theme: Theme, name: string): string {
+    const candidates = [
+      theme === 'dark' ? schemeBlock(scheme, 'dark') : null,
+      schemeBlock(scheme, 'light'),
+      theme === 'dark' ? darkBlock : null,
+      lightBlock,
+    ];
+    for (const block of candidates) {
+      const value = block === null ? null : rawVar(block, name);
+      if (value !== null) {
+        return value;
+      }
+    }
+    throw new Error(`${name} is not defined for ${scheme} ${theme}`);
+  }
+
+  /** Resolve a hex or `color-mix(in srgb, #hex NN%, black|white)` value to a hex colour. */
+  function resolve(value: string): string {
+    if (value.startsWith('#')) {
+      return value;
+    }
+    const match = /^color-mix\(in srgb,\s*(#[0-9a-fA-F]{6})\s+(\d+)%,\s*(black|white)\)$/.exec(
+      value
+    );
+    if (!match) {
+      throw new Error(`unsupported colour value "${value}"`);
+    }
+    return applyOpacity(
+      match[1],
+      match[3] === 'black' ? '#000000' : '#ffffff',
+      Number(match[2]) / 100
+    );
+  }
+
+  const colorOf = (scheme: string, theme: Theme, name: string) =>
+    resolve(tokenOf(scheme, theme, name));
+
+  for (const scheme of FIXED_SCHEMES) {
+    for (const theme of ['light', 'dark'] as const) {
+      for (const kind of KINDS) {
+        it(`${scheme} ${theme} ${kind}: content meets AA at rest`, () => {
+          const ratio = getContrastRatio(
+            colorOf(scheme, theme, `--color-${kind}-content`),
+            colorOf(scheme, theme, `--color-${kind}`)
+          );
+          expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        });
+
+        it(`${scheme} ${theme} ${kind}: content meets AA on the hover fill`, () => {
+          const ratio = getContrastRatio(
+            colorOf(scheme, theme, `--color-${kind}-content`),
+            colorOf(scheme, theme, `--color-${kind}-hover`)
+          );
+          expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        });
+      }
+    }
+  }
+
+  // Dark themes are not covered: dark violet primary is 4.22:1 as text on base-100 (#8b5cf6 on
+  // #0f172a), a known gap left for a follow-up because lifting it means changing the dark fill.
+  for (const scheme of FIXED_SCHEMES) {
+    it(`${scheme} light: primary as link text meets AA on base-100`, () => {
+      const surface = readVar(lightBlock, '--color-base-100');
+      const ratio = getContrastRatio(colorOf(scheme, 'light', '--color-primary'), surface);
+      expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+    });
+  }
+
+  it('resolves color-mix against black and white', () => {
+    expect(resolve('color-mix(in srgb, #ffffff 80%, black)')).toBe('#cccccc');
+    expect(resolve('color-mix(in srgb, #000000 80%, white)')).toBe('#333333');
+  });
+
+  describe('component sources', () => {
+    const libDir = join(srcDir, 'lib');
+    const sources = readdirSync(libDir, { recursive: true, encoding: 'utf8' })
+      .filter(file => file.endsWith('.svelte'))
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the component directory
+      .map(file => ({ file, text: readFileSync(join(libDir, file), 'utf8') }));
+
+    /** Hover opacity at or above this percentage still reads as a button fill, not a tint. */
+    const FILL_HOVER_MIN_PERCENT = 50;
+
+    it('primary buttons hover with the hover token, not an opacity fade', () => {
+      const offenders = sources.flatMap(({ file, text }) =>
+        [...text.matchAll(/hover:bg-\[var\(--color-(?:primary|accent)\)\]\/(\d+)/g)]
+          .filter(match => Number(match[1]) >= FILL_HOVER_MIN_PERCENT)
+          .map(match => `${file}: ${match[0]}`)
+      );
+      expect(offenders).toEqual([]);
+    });
+
+    it('scheme picker swatches match each scheme light primary', () => {
+      const picker = sources.find(({ file }) => file.endsWith('ColorSchemePicker.svelte'));
+      expect(picker, 'ColorSchemePicker.svelte is among the sources').toBeDefined();
+      for (const scheme of FIXED_SCHEMES) {
+        // eslint-disable-next-line security/detect-non-literal-regexp -- scheme is one of the fixed scheme ids above
+        const swatch = new RegExp(`id: '${scheme}',[^}]*color: '(#[0-9a-fA-F]{6})'`).exec(
+          picker?.text ?? ''
+        )?.[1];
+        expect(swatch, `${scheme} swatch`).toBe(colorOf(scheme, 'light', '--color-primary'));
+      }
+    });
   });
 });

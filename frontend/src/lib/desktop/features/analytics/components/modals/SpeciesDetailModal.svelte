@@ -127,7 +127,7 @@
     <button
       class="px-4 py-2 rounded-lg font-medium transition-colors w-full
              bg-[var(--color-primary)] text-[var(--color-primary-content)]
-             hover:bg-[var(--color-primary)]/90"
+             hover:bg-[var(--color-primary-hover)]"
       onclick={handleClose}
     >
       {t('common.close')}

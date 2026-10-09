@@ -70,9 +70,9 @@
   --color-primary-hover: #1d4ed8;
   --color-primary-active: #1e40af;
   --color-primary-content: #ffffff;
-  --color-accent: #0284c7;
-  --color-accent-hover: #0369a1;
-  --color-accent-active: #075985;
+  --color-accent: #0369a1;
+  --color-accent-hover: #075985;
+  --color-accent-active: #0c4a6e;
   --color-accent-content: #ffffff;
 
   /* Secondary/neutral */
@@ -164,8 +164,8 @@
 
   /* Accent colors */
   --color-accent: #0369a1;
-  --color-accent-hover: #0284c7;
-  --color-accent-active: #075985;
+  --color-accent-hover: #075985;
+  --color-accent-active: #0c4a6e;
   --color-accent-content: #ffffff;
 
   /* Neutral colors */
