@@ -358,10 +358,14 @@
   function clearSelection() {
     if (disabled) return;
 
+    // The clear control sits inside the trigger and unmounts once the value is empty; keep focus
+    // on the trigger instead of letting it drop to body
+    const clearHadFocus = buttonElement?.contains(document.activeElement) ?? false;
     value = multiple ? [] : '';
     onChange?.(multiple ? [] : '');
     onClear?.();
     closeDropdown();
+    if (clearHadFocus) buttonElement?.focus({ preventScroll: true });
   }
 
   function handleSearch(event: Event) {

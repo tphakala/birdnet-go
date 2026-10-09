@@ -371,6 +371,19 @@ describe('SelectDropdown', () => {
 
       expect(onChange).toHaveBeenCalledWith([]);
     });
+
+    it('keeps focus on the trigger after the focused clear control clears the value', async () => {
+      selectTest.render({
+        props: { options: basicOptions, value: 'apple', clearable: true },
+      });
+      const clear = screen.getByLabelText('Clear selection');
+      clear.focus();
+
+      await fireEvent.click(clear);
+
+      await waitFor(() => expect(screen.queryByLabelText('Clear selection')).toBeNull());
+      expect(screen.getByRole('combobox')).toHaveFocus();
+    });
   });
 
   describe('Grouped Options', () => {
