@@ -549,8 +549,8 @@
         <button
           class="inline-flex items-center justify-center gap-2 px-4 py-2
                  text-sm font-medium rounded-lg transition-colors
-                 bg-[var(--color-error)] text-white
-                 hover:bg-[var(--color-error)]/90
+                 bg-[var(--color-error)] text-[var(--color-error-content)]
+                 hover:bg-[var(--color-error-hover)]
                  disabled:opacity-50 disabled:cursor-not-allowed"
           onclick={handleCancel}
           disabled={actionLoading}

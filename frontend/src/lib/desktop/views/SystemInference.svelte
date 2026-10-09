@@ -1444,7 +1444,7 @@
                             >({source.type})</span
                           >
                         {/if}{#if source.fallback}
-                          <span class="text-muted ml-1">
+                          <span class={source.notRunning ? 'ml-1' : 'text-muted ml-1'}>
                             - {t('system.inference.primaryFallback')}
                           </span>
                         {/if}{#if source.notRunning}

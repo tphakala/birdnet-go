@@ -3,7 +3,7 @@
  * Tests color combinations from the actual Tailwind v4 theme (src/styles/tailwind.css)
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
@@ -11,6 +11,12 @@ import {
   OPTION_HIGHLIGHT_BG_CLASS,
   OPTION_HIGHLIGHT_OUTLINE_CLASS,
 } from '../lib/desktop/components/forms/SelectDropdown.styles';
+import {
+  TOAST_ACTION_CLASS,
+  TOAST_CLOSE_CLASS,
+  TOAST_TYPE_CLASSES,
+} from '../lib/desktop/components/ui/NotificationToast.styles';
+import { confidenceColorClasses } from '../lib/desktop/features/dashboard/utils/confidenceColors';
 import {
   PLACE_DISCLOSURE_CLASS,
   PLACE_DISCLOSURE_ICON_CLASS,
@@ -115,12 +121,12 @@ describe('Color Contrast Tests', () => {
     accent: '#0284c7', // --color-accent
     neutral: '#1f2937', // --color-neutral
     info: '#0ea5e9', // --color-info
-    infoContent: '#ffffff', // --color-info-content
+    infoContent: '#020617', // --color-info-content
     success: '#22c55e', // --color-success
-    successContent: '#ffffff', // --color-success-content
+    successContent: '#020617', // --color-success-content
     warning: '#f59e0b', // --color-warning
-    warningContent: '#ffffff', // --color-warning-content
-    error: '#ef4444', // --color-error
+    warningContent: '#020617', // --color-warning-content
+    error: '#dc2626', // --color-error
     errorContent: '#ffffff', // --color-error-content
   };
 
@@ -139,12 +145,12 @@ describe('Color Contrast Tests', () => {
     accent: '#0369a1', // --color-accent
     neutral: '#d1d5db', // --color-neutral
     info: '#0284c7', // --color-info
-    infoContent: '#ffffff', // --color-info-content
+    infoContent: '#020617', // --color-info-content
     success: '#16a34a', // --color-success
-    successContent: '#ffffff', // --color-success-content
+    successContent: '#020617', // --color-success-content
     warning: '#d97706', // --color-warning
-    warningContent: '#ffffff', // --color-warning-content
-    error: '#dc2626', // --color-error
+    warningContent: '#020617', // --color-warning-content
+    error: '#ef4444', // --color-error
     errorContent: '#020617', // --color-error-content
   };
 
@@ -571,4 +577,199 @@ describe('PlaceSearch colors in light and dark themes', () => {
     }
     return match[1];
   }
+});
+
+describe('Status colors with their content color', () => {
+  const css = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'styles', 'tailwind.css'),
+    'utf8'
+  );
+
+  const STATUSES = ['info', 'success', 'warning', 'error'] as const;
+  const lightBase = blockBody(css, '@theme');
+  const darkBlock = blockBody(css, "[data-theme='dark']");
+
+  /** A status token in a theme. Each theme must define it explicitly, with no fallback to the other. */
+  function statusToken(theme: 'light' | 'dark', token: string): string {
+    return readVar(theme === 'light' ? lightBase : darkBlock, token);
+  }
+
+  it('defines every status, hover and content token in each theme block', () => {
+    for (const theme of ['light', 'dark'] as const) {
+      for (const status of STATUSES) {
+        for (const suffix of ['', '-hover', '-content']) {
+          expect(() => statusToken(theme, `--color-${status}${suffix}`)).not.toThrow();
+        }
+      }
+    }
+  });
+
+  for (const theme of ['light', 'dark'] as const) {
+    for (const status of STATUSES) {
+      const content = statusToken(theme, `--color-${status}-content`);
+
+      it(`${theme} ${status}: content text meets AA on the status fill`, () => {
+        const fill = statusToken(theme, `--color-${status}`);
+        expect(getContrastRatio(content, fill)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      });
+
+      it(`${theme} ${status}: content text meets AA on the hover fill`, () => {
+        const hover = statusToken(theme, `--color-${status}-hover`);
+        expect(getContrastRatio(content, hover)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+      });
+    }
+  }
+
+  it('toast types pair each status fill with its content color', () => {
+    expect(Object.keys(TOAST_TYPE_CLASSES).sort()).toEqual([...STATUSES].sort());
+    for (const [status, classes] of Object.entries(TOAST_TYPE_CLASSES)) {
+      expect(classes).toContain(`bg-[var(--color-${status})]`);
+      expect(classes).toContain(`text-[var(--color-${status}-content)]`);
+    }
+  });
+
+  it('toast close button adds no background', () => {
+    const backgrounds = TOAST_CLOSE_CLASS.split(/\s+/).filter(token =>
+      token.slice(token.lastIndexOf(':') + 1).startsWith('bg-')
+    );
+    expect(backgrounds).toEqual([]);
+  });
+
+  it('toast action buttons add no background', () => {
+    // The utility name follows the last variant prefix, so `hover:bg-white/30` counts too.
+    const backgrounds = TOAST_ACTION_CLASS.split(/\s+/).filter(token =>
+      token.slice(token.lastIndexOf(':') + 1).startsWith('bg-')
+    );
+    expect(backgrounds).toEqual([]);
+  });
+
+  describe('confidence blends', () => {
+    /** Confidence percentages that select the two color-mix bands (see confidenceColors.ts). */
+    const BLENDS = [
+      { band: 'success and warning', percent: 80 },
+      { band: 'warning and error', percent: 40 },
+    ];
+
+    for (const { band, percent } of BLENDS) {
+      const classes = confidenceColorClasses(percent);
+
+      it(`${band} blend uses a content token, not white`, () => {
+        expect(classes).not.toContain('text-white');
+        expect(classes).toMatch(/text-\[var\(--color-[a-z]+-content\)\]/);
+      });
+
+      for (const theme of ['light', 'dark'] as const) {
+        it(`${band} blend keeps AA with its content color in the ${theme} theme`, () => {
+          const mix = /color-mix\(in_srgb,var\((--[a-z-]+)\)_(\d+)%,var\((--[a-z-]+)\)\)/.exec(
+            classes
+          );
+          expect(mix, `color-mix found in "${classes}"`).not.toBeNull();
+          const [, first, share, second] = mix ?? [];
+          const fill = applyOpacity(
+            statusToken(theme, first),
+            statusToken(theme, second),
+            Number(share) / 100
+          );
+          const contentToken = /text-\[var\((--[a-z-]+)\)\]/.exec(classes)?.[1] ?? '';
+          const content = statusToken(theme, contentToken);
+          expect(getContrastRatio(content, fill)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
+        });
+      }
+    }
+  });
+});
+
+describe('Components pair a status fill with its content color', () => {
+  const libDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'lib');
+  const sources = readdirSync(libDir, { recursive: true, encoding: 'utf8' })
+    .filter(file => file.endsWith('.svelte'))
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the component directory
+    .map(file => ({ file, text: readFileSync(join(libDir, file), 'utf8') }));
+
+  /** A status fill used in full, not as a translucent tint (`bg-[var(--color-error)]/10`). */
+  const SOLID_FILL = /bg-\[var\(--color-(?:info|success|warning|error)\)\](?![/\w])/g;
+  const QUOTES = ['"', "'", '`'];
+
+  /** The quoted string around `index`, which holds the whole class list of a Tailwind class string. */
+  function quotedAround(text: string, index: number): string {
+    const start = Math.max(...QUOTES.map(quote => text.lastIndexOf(quote, index)));
+    const ends = QUOTES.map(quote => text.indexOf(quote, index)).filter(end => end >= 0);
+    return text.slice(start + 1, Math.min(...ends));
+  }
+
+  it('scans the component sources', () => {
+    expect(sources.length).toBeGreaterThan(100);
+  });
+
+  it('no class string puts white text on a solid status token fill', () => {
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(SOLID_FILL)]
+        .filter(match => /(^|\s)text-white(\s|$)/.test(quotedAround(text, match.index)))
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('no class string fades a solid status token fill on hover', () => {
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(SOLID_FILL)]
+        .filter(match =>
+          /hover:bg-\[var\(--color-(?:info|success|warning|error)\)\]\//.test(
+            quotedAround(text, match.index)
+          )
+        )
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('no class string fades a solid status token fill with hover opacity', () => {
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(SOLID_FILL)]
+        .filter(match => /(^|\s)hover:opacity-/.test(quotedAround(text, match.index)))
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('no style rule puts white text on a literal status color fill', () => {
+    // The status token values of both themes, plus the emerald green the Search badges used.
+    const css = readFileSync(join(libDir, '..', 'styles', 'tailwind.css'), 'utf8');
+    const tokenBlocks = [blockBody(css, '@theme'), blockBody(css, "[data-theme='dark']")];
+    const literals = [
+      ...tokenBlocks.flatMap(block =>
+        ['info', 'success', 'warning', 'error'].flatMap(status => [
+          readVar(block, `--color-${status}`),
+          readVar(block, `--color-${status}-hover`),
+        ])
+      ),
+      '#10b981',
+    ].map(hex => hex.toLowerCase());
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(/\{[^{}]*\}/g)]
+        .filter(([rule]) => {
+          const fill = /background(?:-color)?:\s*(#[0-9a-fA-F]{6})\b/.exec(rule)?.[1];
+          return (
+            fill !== undefined &&
+            literals.includes(fill.toLowerCase()) &&
+            /(?<![-\w])color:\s*(?:white|#fff(?:fff)?)\s*;/i.test(rule)
+          );
+        })
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('no style rule puts white text on a status token fill', () => {
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(/\{[^{}]*\}/g)]
+        .filter(
+          ([rule]) =>
+            /background(?:-color)?:[^;]*var\(--color-(?:info|success|warning|error)\)/.test(rule) &&
+            /(?<![-\w])color:\s*(?:white|#fff(?:fff)?)\s*;/i.test(rule)
+        )
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
 });

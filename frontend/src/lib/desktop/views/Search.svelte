@@ -1423,13 +1423,13 @@
   }
 
   .status-badge.correct {
-    background-color: #10b981;
-    color: white;
+    background-color: var(--color-success);
+    color: var(--color-success-content);
   }
 
   .status-badge.false {
-    background-color: #ef4444;
-    color: white;
+    background-color: var(--color-error);
+    color: var(--color-error-content);
   }
 
   .status-badge.unverified {
@@ -1438,8 +1438,8 @@
   }
 
   .status-badge.locked {
-    background-color: #f59e0b;
-    color: white;
+    background-color: var(--color-warning);
+    color: var(--color-warning-content);
   }
 
   .expanded-row td {
