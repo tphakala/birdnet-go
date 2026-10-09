@@ -21,9 +21,10 @@ type AnalysisCadenceInfo struct {
 	// filter is disabled, so the configured overlap is used as-is).
 	Status string `json:"status"`
 	// FilterLevel is the false positive filter level (realtime.falsePositiveFilter.level)
-	// the per-model confirmations were computed for. It is read from the settings
-	// at request time, as the confirmations are, so a client can tell whether a
-	// snapshot reflects a level it has just saved.
+	// the bird models' confirmations were computed for (the bat model follows the
+	// bat filter level). It is read from the settings at request time, as the
+	// confirmations are, so a client can tell whether a snapshot reflects a level
+	// it has just saved.
 	FilterLevel int `json:"filterLevel"`
 	// ConfiguredOverlapSec is birdnet.overlap in seconds on the 3 s base clip.
 	ConfiguredOverlapSec float64 `json:"configuredOverlapSec"`

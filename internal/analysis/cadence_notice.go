@@ -68,7 +68,8 @@ func (n *cadenceNotice) retry() {
 }
 
 // reconcileLocked applies the due state to the latch. The caller holds n.mu.
-// Without a notification service nothing is applied; the next publish retries.
+// Without a notification service nothing is applied; the next publish of a
+// different plan retries.
 func (n *cadenceNotice) reconcileLocked() {
 	svc := n.noticeService()
 	if svc == nil {

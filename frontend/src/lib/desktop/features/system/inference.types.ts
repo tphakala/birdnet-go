@@ -329,8 +329,9 @@ export interface AnalysisCadenceModel {
 export interface AnalysisCadenceInfo {
   status: AnalysisCadenceStatus;
   /**
-   * False positive filter level the per-model confirmations were computed for,
-   * read by the server at request time.
+   * False positive filter level the bird models' confirmations were computed for
+   * (the bat model follows the bat filter level), read by the server at request
+   * time.
    */
   filterLevel: number;
   /** birdnet.overlap in seconds on the 3 s base clip. */
