@@ -196,7 +196,8 @@ describe('fpCadence', () => {
     });
 
     it('is true when the saved overlap differs from the plan', () => {
-      expect(planLagsSettings(cadence(), 2.4, 3)).toBe(true);
+      // Level 5 matches the fixture counts, so only the overlap differs.
+      expect(planLagsSettings(cadence(), 2.4, 5)).toBe(true);
     });
 
     it('is true when the server counts were computed for another level', () => {
@@ -227,7 +228,11 @@ describe('fpCadence', () => {
 
     it('is true when the saved level crosses the filter on/off line', () => {
       expect(planLagsSettings(cadence({ status: 'filterOff' }), 2.8, 5)).toBe(true);
-      expect(planLagsSettings(cadence(), 2.8, 0)).toBe(true);
+      // Counts of 1 match saved level 0, so only the on/off side differs.
+      const levelZeroCounts = cadence({
+        models: cadence().models.map(m => ({ ...m, confirmations: 1 })),
+      });
+      expect(planLagsSettings(levelZeroCounts, 2.8, 0)).toBe(true);
     });
   });
 });
