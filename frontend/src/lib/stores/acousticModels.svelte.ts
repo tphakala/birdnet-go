@@ -16,7 +16,8 @@
  *
  * There is no polling: state refreshes on (re)mount, on SSE (re)connect, on the
  * topology-changed event (debounced, since one change can announce itself more
- * than once) and on an explicit refresh or invalidate. The endpoint and the
+ * than once, and queued behind a request already running) and on an explicit
+ * refresh or invalidate. The endpoint and the
  * stream are auth-protected, so a guest viewer never calls them and the state
  * stays "unknown".
  */
@@ -337,12 +338,16 @@ function openTopologyStream(): void {
   });
 }
 
-/** Refreshes once a burst of topology-changed events has gone quiet. */
+/**
+ * Refreshes once a burst of topology-changed events has gone quiet. The event
+ * announces a server change that a request already running may predate, so the
+ * refresh queues behind it.
+ */
 function scheduleTopologyRefresh(): void {
   cancelTopologyRefresh();
   topologyRefreshTimer = setTimeout(() => {
     topologyRefreshTimer = null;
-    void refreshAcousticModels();
+    void invalidateAcousticModels();
   }, TOPOLOGY_REFRESH_DEBOUNCE_MS);
 }
 

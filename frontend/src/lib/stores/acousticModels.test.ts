@@ -531,6 +531,38 @@ describe('acousticModels store', () => {
       }
     });
 
+    it('queues the topology refresh behind a fetch that started before the event', async () => {
+      vi.useFakeTimers();
+      try {
+        apiGet.mockResolvedValueOnce(snapshot('none_installed'));
+        const unwatch = watchAcousticModels();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(apiGet).toHaveBeenCalledTimes(1);
+
+        // A fetch is running when the server announces a change it may not include.
+        let resolve!: (value: unknown) => void;
+        apiGet.mockImplementationOnce(() => new Promise(res => (resolve = res)));
+        void refreshAcousticModels();
+        expect(apiGet).toHaveBeenCalledTimes(2);
+
+        apiGet.mockResolvedValueOnce(snapshot('ok', ['BirdNET_V2.4']));
+        fire(0, TOPOLOGY_EVENT);
+        await vi.advanceTimersByTimeAsync(TOPOLOGY_REFRESH_DEBOUNCE_MS);
+        expect(apiGet).toHaveBeenCalledTimes(2);
+
+        resolve(snapshot('none_installed'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(apiGet).toHaveBeenCalledTimes(3);
+        expect(acousticModelAvailability()).toEqual({
+          kind: 'ready',
+          defaultTargets: ['BirdNET_V2.4'],
+        });
+        unwatch();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('drops a pending topology refresh when the last watcher leaves', async () => {
       vi.useFakeTimers();
       try {
