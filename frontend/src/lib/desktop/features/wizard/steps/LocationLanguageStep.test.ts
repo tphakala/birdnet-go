@@ -650,6 +650,29 @@ describe('LocationLanguageStep location', () => {
     ]);
   });
 
+  it('enables the browser location button again after a failed save, so it can be retried', async () => {
+    const { leave } = await renderLocationStep();
+    latestMapProps().onLocationChange(10, 20);
+    await flushAsync();
+    let failSave: (error: Error) => void = () => {};
+    vi.mocked(settingsActions.saveSection).mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          failSave = reject;
+        })
+    );
+
+    const leaving = leave();
+    await flushAsync();
+    expect(screen.getByRole('button', { name: BROWSER_BUTTON })).toBeDisabled();
+
+    failSave(new Error('save failed'));
+    await expect(leaving).rejects.toThrow('save failed');
+    await flushAsync();
+
+    expect(screen.getByRole('button', { name: BROWSER_BUTTON })).toBeEnabled();
+  });
+
   it('on an insecure origin the step offers no enabled browser location and says why before any click', async () => {
     vi.stubGlobal('isSecureContext', false);
     await renderLocationStep();
