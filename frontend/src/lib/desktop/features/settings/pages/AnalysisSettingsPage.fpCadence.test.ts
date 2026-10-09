@@ -456,8 +456,7 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
 
     const overloaded = screen.getByTestId('fp-cadence-overloaded');
     expect(overloaded).toHaveAttribute('role', 'alert');
-    // Screen readers announce an alert when it is inserted, not when an
-    // element already on screen changes its role.
+    // The alert is a new element, not the capped note with a changed role.
     expect(overloaded).not.toBe(capped);
     expect(capped).not.toBeInTheDocument();
   });
