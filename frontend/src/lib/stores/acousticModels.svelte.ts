@@ -67,6 +67,8 @@ let error = $state(false);
 let subscribers = 0;
 let watchers = 0;
 let inFlight: Promise<void> | null = null;
+/** One fetch queued behind inFlight, shared by every caller that arrives meanwhile. */
+let queued: Promise<void> | null = null;
 let topologySource: ReconnectingEventSource | null = null;
 
 export function acousticModelsState(): string | null {
@@ -233,12 +235,21 @@ async function fetchSnapshot(): Promise<void> {
 }
 
 /**
- * Re-read the verdict. Concurrent callers share one request; guests get a
- * resolved no-op because the endpoint would only answer 401.
+ * Re-read the verdict. A call while a fetch is running queues one more fetch
+ * after it, because the running request may predate the change the caller wants
+ * to see (a settings save the server has just applied); every caller that
+ * arrives meanwhile shares that queued fetch. Guests get a resolved no-op
+ * because the endpoint would only answer 401.
  */
 export function refreshAcousticModels(): Promise<void> {
   if (isGuestMode()) return Promise.resolve();
-  if (inFlight) return inFlight;
+  if (inFlight) {
+    queued ??= inFlight.then(() => {
+      queued = null;
+      return refreshAcousticModels();
+    });
+    return queued;
+  }
   const run = fetchSnapshot().finally(() => {
     if (inFlight === run) inFlight = null;
   });
@@ -336,4 +347,5 @@ export function resetAcousticModelsForTest(): void {
   subscribers = 0;
   watchers = 0;
   inFlight = null;
+  queued = null;
 }

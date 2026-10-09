@@ -372,22 +372,29 @@ describe('acousticModels store', () => {
       expect(acousticModelAvailability()).toEqual({ kind: 'unknown' });
     });
 
-    it('shares one request between concurrent callers', async () => {
+    it('queues one fetch behind a running one and shares it between later callers', async () => {
       let resolve!: (value: unknown) => void;
       apiGet.mockImplementationOnce(() => new Promise(res => (resolve = res)));
+      apiGet.mockResolvedValueOnce(snapshot('none_installed'));
 
       const first = refreshAcousticModels();
       const second = refreshAcousticModels();
-      expect(second).toBe(first);
+      const third = refreshAcousticModels();
+      expect(second).not.toBe(first);
+      expect(third).toBe(second);
       expect(apiGet).toHaveBeenCalledTimes(1);
 
+      // The running request was sent before the change the later callers want,
+      // so they get exactly one more request, and its answer wins.
       resolve(snapshot('ok'));
-      await first;
+      await second;
+      expect(apiGet).toHaveBeenCalledTimes(2);
+      expect(acousticModelsState()).toBe('none_installed');
 
-      // A later refresh is a new request again.
+      // Nothing stays queued: a later refresh is a single new request.
       apiGet.mockResolvedValueOnce(snapshot('ok'));
       await refreshAcousticModels();
-      expect(apiGet).toHaveBeenCalledTimes(2);
+      expect(apiGet).toHaveBeenCalledTimes(3);
     });
   });
 
