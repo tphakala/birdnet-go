@@ -22,8 +22,8 @@ const cadenceNoticeOverlapDecimals = 1
 // cadence plan is capped or overloaded, so a user upgrading onto hardware that
 // cannot sustain the configured overlap learns why the false positive filter
 // needs fewer confirmations than before. Plans published later only update or
-// clear it: a capped or overloaded plan replaces the notice when its status or
-// effective overlap changes, any other plan clears it for good. A cap the user
+// clear it: a capped or overloaded plan replaces the notice when its status or a
+// value its text states changes, any other plan clears it for good. A cap the user
 // causes at runtime is shown inline on the settings page they are editing, so it
 // raises no bell.
 //
@@ -87,8 +87,7 @@ func (n *cadenceNotice) reconcileLocked() {
 		if plan == nil {
 			return "", nil
 		}
-		sig := fmt.Sprintf("%s/%dms", plan.Status, plan.EffectiveBaseOverlap.Milliseconds())
-		return sig, func() *notification.Notification { return newCadenceNotification(plan) }
+		return cadenceNoticeSignature(plan), func() *notification.Notification { return newCadenceNotification(plan) }
 	}); err != nil {
 		GetLogger().Warn("failed to update analysis cadence notification", logger.Error(err))
 	}
@@ -104,6 +103,18 @@ func (n *cadenceNotice) noticeService() notification.NoticeService {
 		return svc
 	}
 	return nil
+}
+
+// cadenceNoticeSignature keys the notice on its status and the values its text
+// states, so a later plan that changes any of them replaces the notice and one
+// that changes none leaves it alone. The overloaded text states no overlap.
+func cadenceNoticeSignature(plan *cadence.Plan) string {
+	if plan.Status == cadence.StatusOverloaded {
+		return fmt.Sprintf("%s/%dm/%ds", plan.Status, plan.ModelCount, plan.SourceCount)
+	}
+	return fmt.Sprintf("%s/%dms/%dms/%dm/%ds", plan.Status,
+		plan.ConfiguredBaseOverlap.Milliseconds(), plan.EffectiveBaseOverlap.Milliseconds(),
+		plan.ModelCount, plan.SourceCount)
 }
 
 // cadenceNoticeDue reports whether a plan limits the analysis below the
