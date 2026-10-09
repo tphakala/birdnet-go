@@ -122,7 +122,10 @@ func getRecommendedLevelForOverlap(overlap float64) (level int, overlapSufficien
 // of the user-configurable BirdNET overlap, and read from a separate filter
 // config. For the 3s BirdNET model the bird path's step (3.0 - overlap) matches
 // the buffer's cadence, which now honors birdnet.overlap (issue #4096).
-func calculateMinDetectionsForModel(settings *conf.Settings, modelID string) int {
+//
+// baseOverlap is the effective base overlap (the published cadence plan's, else
+// the configured birdnet.overlap); see Processor.effectiveBaseOverlap.
+func calculateMinDetectionsForModel(settings *conf.Settings, modelID string, baseOverlap time.Duration) int {
 	if modelID == classifier.RegistryIDBat {
 		return calculateBatMinDetections(settings)
 	}
@@ -131,10 +134,17 @@ func calculateMinDetectionsForModel(settings *conf.Settings, modelID string) int
 	// confirmation window matches the buffer cadence. The 3s bird path (and its
 	// overlap-validation warnings) is preserved unchanged.
 	if info, ok := classifier.ModelRegistry[modelID]; ok && info.Spec.ClipLength > 0 && info.Spec.ClipLength != birdBaseClipLength {
-		step := info.Spec.BufferInterval(classifier.ResolveModelOverlap(modelID, info.Spec, settings)).Seconds()
+		step := info.Spec.BufferInterval(classifier.ResolveModelOverlap(modelID, info.Spec, baseOverlap)).Seconds()
 		return minDetectionsForSegment(step, settings.Realtime.FalsePositiveFilter.Level)
 	}
-	return calculateMinDetectionsFromSettings(settings)
+	return calculateMinDetectionsFromSettings(settings, baseOverlap)
+}
+
+// MinDetectionsForModel returns the confirmation count the false positive filter
+// requires for a model at the given effective base overlap. It is the exported
+// form of the count used at flush time, so API readouts match the filter.
+func MinDetectionsForModel(settings *conf.Settings, modelID string, baseOverlap time.Duration) int {
+	return calculateMinDetectionsForModel(settings, modelID, baseOverlap)
 }
 
 // Shared constants for the false-positive confirmation-count math.
@@ -142,6 +152,9 @@ const (
 	// fpReferenceWindowSeconds is the typical duration of a bird vocalization;
 	// minDetections is how many analysis windows within this window must confirm.
 	fpReferenceWindowSeconds = 6.0
+	// ReferenceWindowSeconds exports fpReferenceWindowSeconds for API readouts of
+	// how many analysis windows fall inside the confirmation window.
+	ReferenceWindowSeconds = fpReferenceWindowSeconds
 	// fpMinSegmentLength floors the analysis step to avoid dividing by ~0.
 	fpMinSegmentLength = 0.1
 	// fpEpsilon absorbs floating-point rounding before Ceil (e.g. 5.0000000003).
@@ -194,8 +207,8 @@ type visibilityThresholds map[string]int
 // precomputeVisibilityThresholds calculates visibility thresholds for bird and
 // bat models once per settings snapshot so callers can look up by model ID
 // without recomputing inside a loop or under a lock.
-func precomputeVisibilityThresholds(settings *conf.Settings) visibilityThresholds {
-	birdVis := CalculateVisibilityThreshold(calculateMinDetectionsFromSettings(settings))
+func precomputeVisibilityThresholds(settings *conf.Settings, baseOverlap time.Duration) visibilityThresholds {
+	birdVis := CalculateVisibilityThreshold(calculateMinDetectionsFromSettings(settings, baseOverlap))
 	batVis := CalculateVisibilityThreshold(calculateBatMinDetections(settings))
 	return visibilityThresholds{
 		"":                       birdVis, // default for unknown model IDs

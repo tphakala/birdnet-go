@@ -82,3 +82,27 @@ func TestAnalysisOverlapChanged(t *testing.T) {
 		})
 	}
 }
+
+func TestFalsePositiveFilterActiveChanged(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		from, to int
+		changed  bool
+	}{
+		{"off to on", 0, 3, true},
+		{"on to off", 2, 0, true},
+		{"on to on", 1, 5, false},
+		{"off to off", 0, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			oldS := apitest.NewValidTestSettings()
+			oldS.Realtime.FalsePositiveFilter.Level = tt.from
+			newS := conf.CloneSettings(oldS)
+			newS.Realtime.FalsePositiveFilter.Level = tt.to
+			assert.Equal(t, tt.changed, falsePositiveFilterActiveChanged(oldS, newS))
+		})
+	}
+}

@@ -430,6 +430,12 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		cm.notifyError("Failed to reload secondary models", err)
 	}
 
+	// A threads or backend change reloads the models and re-probes their latency,
+	// so re-plan the analysis cadence (restarts capture only if the step changes).
+	if cm.reconfigureSourcesFn != nil {
+		cm.reconfigureSourcesFn()
+	}
+
 	emitHotReload("birdnet_model")
 	// Signal the metrics SSE stream that the inference topology changed so the
 	// AI Models page re-fetches its snapshot.

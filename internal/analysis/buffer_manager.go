@@ -79,6 +79,7 @@ type classifierBackend interface {
 	DefaultTargets() []classifier.ModelInfo
 	PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error)
 	CurrentSettings() *conf.Settings
+	EffectiveBaseOverlap() time.Duration
 	ModelSpecFor(modelID string) (classifier.ModelSpec, bool)
 }
 

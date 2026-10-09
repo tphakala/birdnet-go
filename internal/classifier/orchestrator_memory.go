@@ -119,16 +119,43 @@ func (o *Orchestrator) warmupRegisteredModel(modelID string, before uint64) {
 		return
 	}
 
-	o.inferenceMu.Lock()
-	defer o.inferenceMu.Unlock()
+	instance := func() ModelInstance {
+		o.inferenceMu.Lock()
+		defer o.inferenceMu.Unlock()
 
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-	if entry.instance == nil {
+		entry.mu.Lock()
+		defer entry.mu.Unlock()
+		if entry.instance == nil {
+			return nil
+		}
+
+		o.warmupAndRecordRSS(modelID, before, entry.instance)
+		return entry.instance
+	}()
+	if instance == nil {
 		return
 	}
 
-	o.warmupAndRecordRSS(modelID, before, entry.instance)
+	// Probe outside the warm-up's locked section: probeLatency re-acquires the locks
+	// for each run, so live inference interleaves between runs. Each run re-checks
+	// that the entry still serves the same instance.
+	latency, ok := o.probeLatency(modelID, instance, func(run func()) bool {
+		o.inferenceMu.Lock()
+		defer o.inferenceMu.Unlock()
+		entry.mu.Lock()
+		defer entry.mu.Unlock()
+		if entry.instance != instance {
+			return false
+		}
+		run()
+		return true
+	})
+	entry.mu.Lock()
+	stillServing := entry.instance == instance
+	entry.mu.Unlock()
+	if stillServing {
+		o.storeProbedLatency(modelID, latency, ok)
+	}
 }
 
 // ModelRSS returns a copy of the per-model host-RSS deltas (bytes) and the

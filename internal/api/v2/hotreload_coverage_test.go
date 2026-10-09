@@ -174,7 +174,9 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.DynamicThreshold.ValidHours": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// -- FalsePositiveFilter --
-	"Realtime.FalsePositiveFilter": {categories: []hotReloadCategory{hotReloadFresh}},
+	// The level is read fresh per flush. Crossing between off and on re-plans the
+	// analysis cadence cap (falsePositiveFilterActiveChanged in the detector table).
+	"Realtime.FalsePositiveFilter": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_audio_sources"},
 
 	// -- Log (OBS) --
 	"Realtime.Log": {categories: []hotReloadCategory{hotReloadFresh}},

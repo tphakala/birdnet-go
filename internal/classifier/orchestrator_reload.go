@@ -146,6 +146,16 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 		}()
 	}
 
+	// 5b. Probe inference latency on the private instance (secondaries and the v2.4
+	//     anchor alike). Each run takes only inferenceMu: entry.mu guards the serving
+	//     instance and must not be held. The result is stored after the swap succeeds.
+	probed, probeOK := o.probeLatency(registryID, next, func(run func()) bool {
+		o.inferenceMu.Lock()
+		defer o.inferenceMu.Unlock()
+		run()
+		return true
+	})
+
 	// 6. Swap under entry.mu. Re-check the orphan guard: a Delete/Unload may have raced
 	//    the build/warm-up. Keeping the same *modelEntry preserves its mutex identity and
 	//    the globalInferenceCounters keying.
@@ -164,6 +174,7 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	}
 	entry.instance = next
 	entry.generation++
+	o.storeProbedLatency(registryID, probed, probeOK)
 	if opts.backend != nil {
 		entry.backend = *opts.backend
 	}

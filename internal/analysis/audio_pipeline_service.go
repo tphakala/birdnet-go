@@ -427,6 +427,10 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			case <-p.done:
 				return
 			case <-p.restartChan:
+				// Several queued restarts (overlap change, cadence re-plan, quiet
+				// hours) rebuild the same state, so run them as one. A token that
+				// arrives during the restart still triggers one more.
+				drainRestartSignals(p.restartChan)
 				p.restartAudioCapture()
 			}
 		}
@@ -632,6 +636,13 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 		return fmt.Errorf("restart source: config for %s no longer exists in settings", sourceID)
 	}
 
+	// The rebuilt config may carry a model assignment the published cadence plan
+	// has not seen. If the plan would change, the source stays removed and a full
+	// restart (queued here) re-adds every source from current settings.
+	if p.applyCadenceDecision(sourceConfigs, operationRestartSource) {
+		return nil
+	}
+
 	// 6. Re-add source via engine, using the registry-assigned ID it returns (the
 	// source may get a new ID).
 	newSourceID, err := p.engine.AddSource(targetConfig.config)
@@ -709,6 +720,12 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 	// pre-removal snapshot on a full restart so a probe failure does not collapse
 	// a high-rate source (#4350).
 	sourceConfigs := p.buildSourceConfigsWithModels(fallbackSources)
+
+	// Plan the analysis cadence from every desired source (not only the ones that
+	// AddSource succeeds for) and publish it before any buffer is allocated: this
+	// is a full rebuild, so every buffer is created with the published step.
+	p.planAndPublishCadence(sourceConfigs, operation)
+
 	sourceModelMap := make(map[string][]string, len(sourceConfigs))
 	var sourceIDs []string
 	for _, scm := range sourceConfigs {
@@ -1478,6 +1495,13 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
 		}
 		defaultIDs = defaultTargetIDs(p.bnAnalyzer.BirdNET())
+
+		// Re-plan the cadence for the desired sources. A different effective step
+		// cannot be applied to kept buffers, so request a full restart, which
+		// rebuilds everything from current settings; stop here in that case.
+		if p.applyCadenceDecision(desiredConfigs, operationReconfigureDiff) {
+			return
+		}
 	}
 	bufMgr := p.engine.BufferManager()
 
@@ -2203,6 +2227,23 @@ func deallocateStaleAnalysisBuffers(bufMgr *buffer.Manager, sourceID string, des
 // warning log, and reported to the caller through skipped so the omission can be
 // surfaced to the user instead of only reaching a log file.
 func resolveModelTargets(configModelIDs []string, loadedModels map[string]classifier.ModelInfo) (targets []classifier.ModelInfo, skipped []string) {
+	return matchModelTargets(configModelIDs, loadedModels, func(configID, registryID string, known bool) {
+		if !known {
+			GetLogger().Warn("unknown model ID in source config, skipping",
+				logger.String("config_id", configID))
+			return
+		}
+		GetLogger().Warn("model configured for source but not loaded",
+			logger.String("config_id", configID),
+			logger.String("registry_id", registryID))
+	})
+}
+
+// matchModelTargets is the pure matching behind resolveModelTargets. onSkip, when
+// non-nil, is called for each skipped config ID with its resolved registry ID and
+// whether the ID is a known model; the planner passes nil so planning does not
+// repeat the warnings.
+func matchModelTargets(configModelIDs []string, loadedModels map[string]classifier.ModelInfo, onSkip func(configID, registryID string, known bool)) (targets []classifier.ModelInfo, skipped []string) {
 	if len(configModelIDs) == 0 {
 		return nil, nil
 	}
@@ -2210,16 +2251,17 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 	for _, configID := range configModelIDs {
 		registryID, known := classifier.ResolveConfigModelID(configID)
 		if !known {
-			GetLogger().Warn("unknown model ID in source config, skipping",
-				logger.String("config_id", configID))
+			if onSkip != nil {
+				onSkip(configID, registryID, false)
+			}
 			skipped = append(skipped, configID)
 			continue
 		}
 		info, loaded := loadedModels[registryID]
 		if !loaded {
-			GetLogger().Warn("model configured for source but not loaded",
-				logger.String("config_id", configID),
-				logger.String("registry_id", registryID))
+			if onSkip != nil {
+				onSkip(configID, registryID, true)
+			}
 			skipped = append(skipped, configID)
 			continue
 		}

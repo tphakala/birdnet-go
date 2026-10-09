@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -120,4 +122,34 @@ func TestCalculateMinDetections_ReadsGlobalSettings(t *testing.T) {
 
 	assert.Greater(t, minDetStrict, 1, "strict filter should require multiple detections")
 	assert.Equal(t, 1, minDetDisabled, "disabled filter should require exactly 1 detection")
+}
+
+// TestCalculateMinDetections_LevelChangeWithFixedPlan pins that a level change
+// alters the count at the next read while the published cadence plan stays the
+// same, and that the count follows the plan's effective overlap rather than the
+// configured one.
+func TestCalculateMinDetections_LevelChangeWithFixedPlan(t *testing.T) {
+	conf.StoreSettings(nil)
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+
+	orch := &classifier.Orchestrator{}
+	orch.SetCadencePlan(&cadence.Plan{
+		ConfiguredBaseOverlap: 2800 * time.Millisecond,
+		EffectiveBaseOverlap:  1800 * time.Millisecond,
+	})
+	mk := func(level int) *conf.Settings {
+		return &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				FalsePositiveFilter: conf.FalsePositiveFilterSettings{Level: level},
+			},
+			BirdNET: conf.BirdNETConfig{Overlap: 2.8},
+		}
+	}
+	p := &Processor{Settings: mk(5), Bn: orch}
+
+	assert.Equal(t, 4, p.calculateMinDetections(), "level 5 at effective 1.8s: step 1.2s, 70% of 5 windows")
+
+	conf.StoreSettings(mk(2))
+	assert.Equal(t, 2, p.calculateMinDetections(), "level 2 at effective 1.8s: 30% of 5 windows, plan unchanged")
+	assert.Equal(t, 1800*time.Millisecond, orch.CadencePlan().EffectiveBaseOverlap)
 }

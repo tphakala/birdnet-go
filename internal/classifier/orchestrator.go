@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -187,6 +188,13 @@ type Orchestrator struct {
 	runtimeBaseline  int64
 	baselineCaptured bool
 
+	// cadencePlan is the published analysis cadence plan (see orchestrator_cadence.go).
+	// Nil until the audio pipeline publishes one. probedLatency holds the per-model
+	// probed inference latency, guarded by probeMu.
+	cadencePlan   atomic.Pointer[cadence.Plan]
+	probeMu       sync.Mutex
+	probedLatency map[string]time.Duration
+
 	// modelLoadFailures tracks how many times LoadModel has failed per registry
 	// ID. Uses sync.Map to avoid holding o.mu for reads (see LoadFailures).
 	// Values are *atomic.Int64.
@@ -275,6 +283,8 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		Settings: settings,
 		models:   map[string]*modelEntry{},
 		modelRSS: make(map[string]int64),
+
+		probedLatency: make(map[string]time.Duration),
 	}
 	o.settingsAtomic.Store(settings)
 
@@ -1790,6 +1800,7 @@ func (o *Orchestrator) Delete() {
 	o.rssMu.Lock()
 	o.modelRSS = make(map[string]int64)
 	o.rssMu.Unlock()
+	o.clearProbedLatency("")
 
 	for id, entry := range models {
 		entry.mu.Lock()
@@ -2323,6 +2334,7 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 		o.rssMu.Lock()
 		delete(o.modelRSS, registryID)
 		o.rssMu.Unlock()
+		o.clearProbedLatency(registryID)
 
 		if entry.instance != nil {
 			modelID := entry.instance.ModelID()
@@ -2571,10 +2583,10 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 	}
 	o.mu.RUnlock()
 
-	// Resolve overlap against the live settings snapshot (independently
-	// synchronized), so every returned ModelInfo carries the effective overlap
-	// used for buffer allocation and cadence.
-	settings := o.CurrentSettings()
+	// Resolve overlap against the published cadence plan (else the configured
+	// overlap), so every returned ModelInfo carries the effective overlap used for
+	// buffer allocation and cadence.
+	base := o.EffectiveBaseOverlap()
 
 	infos := make([]ModelInfo, 0, len(refs))
 	for _, ref := range refs {
@@ -2615,7 +2627,7 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		// carries the stock catalog count, so source it from the live instance to
 		// report what is actually loaded.
 		info.NumSpecies = instance.NumSpecies()
-		info.Overlap = ResolveModelOverlap(info.ID, info.Spec, settings)
+		info.Overlap = ResolveModelOverlap(info.ID, info.Spec, base)
 		infos = append(infos, info)
 	}
 	return infos

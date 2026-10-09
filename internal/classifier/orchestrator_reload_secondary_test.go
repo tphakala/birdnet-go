@@ -204,13 +204,15 @@ func TestReloadSecondaryModels_WarmupHoldsInferenceMu(t *testing.T) {
 
 	started := make(chan struct{})
 	release := make(chan struct{})
+	var startedOnce sync.Once
 	// A non-empty Spec makes the warm-up actually run Predict (sized from the spec);
 	// the blocking Predict lets us observe inferenceMu while the warm-up is in flight.
 	newInst := &mockModelInstance{
 		id:   testSecondaryID,
 		spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 		predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
-			close(started)
+			// The warm-up is followed by the latency probe, which calls Predict again.
+			startedOnce.Do(func() { close(started) })
 			<-release
 			return nil, nil
 		},
