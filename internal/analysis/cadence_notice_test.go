@@ -9,21 +9,32 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // fakeCadenceNoticeService records creates and deletes.
 type fakeCadenceNoticeService struct {
-	mu      sync.Mutex
-	created []*notification.Notification
-	deleted []string
+	mu        sync.Mutex
+	created   []*notification.Notification
+	deleted   []string
+	createErr error
 }
 
 func (f *fakeCadenceNoticeService) CreateWithMetadata(n *notification.Notification) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.createErr != nil {
+		return f.createErr
+	}
 	f.created = append(f.created, n)
 	return nil
+}
+
+func (f *fakeCadenceNoticeService) setCreateErr(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.createErr = err
 }
 
 func (f *fakeCadenceNoticeService) Delete(id string) error {
@@ -215,4 +226,21 @@ func TestCadenceNotice_OverloadedIgnoresConfiguredOverlap(t *testing.T) {
 	created, _ = svc.counts()
 	assert.Equal(t, 2, created, "a new model count the text states replaces the notice")
 	assert.Equal(t, 1, svc.last().MessageParams["models"])
+}
+
+func TestCadenceNotice_RetryRaisesAfterFailedCreate(t *testing.T) {
+	t.Parallel()
+	svc := &fakeCadenceNoticeService{}
+	svc.setCreateErr(errors.NewStd("rate limited"))
+	n := newTestCadenceNotice(svc)
+
+	n.observe(noticePlan(cadence.StatusCapped, 2800*time.Millisecond, 1800*time.Millisecond))
+	created, _ := svc.counts()
+	require.Zero(t, created, "the first create fails")
+
+	svc.setCreateErr(nil)
+	n.retry()
+	created, _ = svc.counts()
+	assert.Equal(t, 1, created, "the retry raises the notice for the first plan")
+	assert.NotEmpty(t, n.latch.ID())
 }

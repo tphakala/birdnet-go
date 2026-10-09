@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 func cadenceModelInfo(id string) classifier.ModelInfo {
@@ -499,4 +500,20 @@ func TestSameCadenceInputs(t *testing.T) {
 	models := base
 	models.ModelCount = 3
 	assert.False(t, sameCadenceInputs(&base, &models))
+}
+
+// TestPublishCadencePlan_FeedsTheBellNotice pins that publishing a capped first
+// plan raises the bell notice.
+func TestPublishCadencePlan_FeedsTheBellNotice(t *testing.T) {
+	// Not parallel: conftest.SetTestSettings mutates package-global settings.
+	p, orch := cadenceService(t)
+	svc := &fakeCadenceNoticeService{}
+	p.cadenceNotice.service = func() notification.NoticeService { return svc }
+
+	p.publishCadencePlan(orch, noticePlan(cadence.StatusCapped, 2800*time.Millisecond, 1800*time.Millisecond), "test")
+
+	created, _ := svc.counts()
+	assert.Equal(t, 1, created)
+	require.NotNil(t, svc.last())
+	assert.Equal(t, notification.MsgCadenceCappedTitle, svc.last().TitleKey)
 }
