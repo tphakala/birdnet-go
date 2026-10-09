@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Az elemzési átfedés korlátozva ezen az eszközön",
-        "cadenceCappedMessage": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} a beállított {configured} s átfedéssel meghaladja az eszköz mért kapacitását, ezért a hang elemzése {effective} s átfedéssel történik. Emiatt a hamis pozitív szűrő kevesebb megerősítést kér. A mentett beállításai nem változnak; lásd Beállítások > Elemzés.",
+        "cadenceCappedMessage": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} a beállított {configured} s átfedéssel meghaladja az eszköz mért kapacitását, ezért a hang elemzése {effective} s átfedéssel történik. Emiatt a hamis pozitív szűrő kevesebb megerősítést kérhet. A mentett beállításai nem változnak; lásd Beállítások > Elemzés.",
         "cadenceOverloadedTitle": "Az eszköz nem bírja a hangelemzést",
         "cadenceOverloadedMessage": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását, ezért az elemzés lemaradhat, és detektálások maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "Egy detektálás akkor kerül elfogadásra, ha {seconds} másodpercen belül elég elemzési ablak egyezik.",
           "readoutLine": "{model}: {count} / {windows} ablak, {step} s-ként új ablak",
           "readoutPreview": "Becslés a nem mentett módosítások alapján. Az eszköz korlátját mentés után újra ellenőrizzük.",
-          "readoutPending": "A mentett beállítások alkalmazása folyamatban. Az elemzés újraindulásáig ezek becsült értékek.",
+          "readoutPending": "A mentett beállítások alkalmazása folyamatban. A frissített értékek betöltéséig ezek becsült értékek.",
           "capNoticeTitle": "Az átfedés az eszköz teljesítményére korlátozva",
-          "capNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} a beállított {configured} s átfedéssel meghaladja az eszköz mért kapacitását, ezért a hang elemzése {effective} s átfedéssel történik. Emiatt a szűrő kevesebb megerősítést kér, mint {configured} s mellett. A mentett beállításai nem változnak.",
+          "capNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} a beállított {configured} s átfedéssel meghaladja az eszköz mért kapacitását, ezért a hang elemzése {effective} s átfedéssel történik. Emiatt a szűrő kevesebb megerősítést kérhet. A mentett beállításai nem változnak.",
           "overloadedNoticeTitle": "Az eszköz nem bírja az elemzést",
           "overloadedNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását. Az elemzés lemaradhat, és detektálások maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást.",
           "unknownLatency": "A feldolgozási időt nem sikerült megmérni a következőknél: {models}, ezért az átfedés korlátozásakor nem számít bele. Az elemzés így is lemaradhat.",

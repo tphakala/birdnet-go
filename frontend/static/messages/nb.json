@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Analyseoverlapp begrenset for denne enheten",
-        "cadenceCappedMessage": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med den innstilte overlappen på {configured} s overstiger den målte kapasiteten til denne enheten, så lyden analyseres med {effective} s overlapp. Falsk positiv-filteret krever derfor færre bekreftelser. De lagrede innstillingene dine er uendret; se Innstillinger > Analyse.",
+        "cadenceCappedMessage": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med den innstilte overlappen på {configured} s overstiger den målte kapasiteten til denne enheten, så lyden analyseres med {effective} s overlapp. Falsk positiv-filteret kan derfor kreve færre bekreftelser. De lagrede innstillingene dine er uendret; se Innstillinger > Analyse.",
         "cadenceOverloadedTitle": "Denne enheten klarer ikke å holde tritt med lydanalysen",
         "cadenceOverloadedMessage": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger den målte kapasiteten til denne enheten selv uten overlapp, så analysen kan komme på etterskudd, og deteksjoner kan gå tapt. Aktiver færre modeller eller lydkilder."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "En deteksjon godtas når nok analysevinduer innenfor {seconds} sekunder er enige.",
           "readoutLine": "{model}: {count} av {windows} vinduer, et nytt vindu hvert {step} s",
           "readoutPreview": "Anslått ut fra endringene du ikke har lagret. Grensen for enheten kontrolleres på nytt etter lagring.",
-          "readoutPending": "De lagrede innstillingene tas i bruk. Verdiene er anslag til analysen har startet på nytt.",
+          "readoutPending": "De lagrede innstillingene tas i bruk. Verdiene er anslag til de oppdaterte antallene er lastet inn.",
           "capNoticeTitle": "Overlapp begrenset til det denne enheten klarer",
-          "capNotice": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med den innstilte overlappen på {configured} s overstiger den målte kapasiteten til denne enheten, så lyden analyseres med {effective} s overlapp. Filteret krever derfor færre bekreftelser enn ved {configured} s. De lagrede innstillingene dine er uendret.",
+          "capNotice": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med den innstilte overlappen på {configured} s overstiger den målte kapasiteten til denne enheten, så lyden analyseres med {effective} s overlapp. Filteret kan derfor kreve færre bekreftelser. De lagrede innstillingene dine er uendret.",
           "overloadedNoticeTitle": "Denne enheten klarer ikke å holde tritt med analysen",
           "overloadedNotice": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger den målte kapasiteten til denne enheten selv uten overlapp. Analysen kan komme på etterskudd, og deteksjoner kan gå tapt. Aktiver færre modeller eller lydkilder.",
           "unknownLatency": "Behandlingstiden kunne ikke måles for {models}, så den regnes ikke med når overlappen begrenses. Analysen kan likevel komme på etterskudd.",

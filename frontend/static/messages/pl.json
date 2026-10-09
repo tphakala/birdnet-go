@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Nakładanie analizy ograniczone dla tego urządzenia",
-        "cadenceCappedMessage": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przy ustawionym nakładaniu {configured} s przekracza zmierzoną wydajność tego urządzenia, dlatego dźwięk jest analizowany z nakładaniem {effective} s. Filtr fałszywych pozytywów wymaga więc mniej potwierdzeń. Zapisane ustawienia nie zmieniają się; zobacz Ustawienia > Analiza.",
+        "cadenceCappedMessage": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przy ustawionym nakładaniu {configured} s przekracza zmierzoną wydajność tego urządzenia, dlatego dźwięk jest analizowany z nakładaniem {effective} s. Filtr fałszywych pozytywów może więc wymagać mniej potwierdzeń. Zapisane ustawienia nie zmieniają się; zobacz Ustawienia > Analiza.",
         "cadenceOverloadedTitle": "To urządzenie nie nadąża z analizą dźwięku",
         "cadenceOverloadedMessage": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przekracza zmierzoną wydajność tego urządzenia nawet bez nakładania, dlatego analiza może się opóźniać, a wykrycia mogą zostać pominięte. Włącz mniej modeli lub źródeł dźwięku."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "Wykrycie jest akceptowane, gdy wystarczająco wiele okien analizy w ciągu {seconds} sekund jest zgodnych.",
           "readoutLine": "{model}: {count} z {windows} okien, nowe okno co {step} s",
           "readoutPreview": "Szacunek na podstawie niezapisanych zmian. Limit urządzenia zostanie ponownie sprawdzony po zapisaniu.",
-          "readoutPending": "Zapisane ustawienia są stosowane. Do ponownego uruchomienia analizy te wartości są szacunkowe.",
+          "readoutPending": "Zapisane ustawienia są stosowane. Do czasu wczytania zaktualizowanych wartości są one szacunkowe.",
           "capNoticeTitle": "Nakładanie ograniczone do możliwości tego urządzenia",
-          "capNotice": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przy ustawionym nakładaniu {configured} s przekracza zmierzoną wydajność tego urządzenia, dlatego dźwięk jest analizowany z nakładaniem {effective} s. Filtr wymaga więc mniej potwierdzeń niż przy {configured} s. Zapisane ustawienia nie zmieniają się.",
+          "capNotice": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przy ustawionym nakładaniu {configured} s przekracza zmierzoną wydajność tego urządzenia, dlatego dźwięk jest analizowany z nakładaniem {effective} s. Filtr może więc wymagać mniej potwierdzeń. Zapisane ustawienia nie zmieniają się.",
           "overloadedNoticeTitle": "To urządzenie nie nadąża z analizą",
           "overloadedNotice": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przekracza zmierzoną wydajność tego urządzenia nawet bez nakładania. Analiza może się opóźniać, a wykrycia mogą zostać pominięte. Włącz mniej modeli lub źródeł dźwięku.",
           "unknownLatency": "Nie udało się zmierzyć czasu przetwarzania dla {models}, więc nie jest on uwzględniany przy ograniczaniu nakładania. Analiza nadal może się opóźniać.",

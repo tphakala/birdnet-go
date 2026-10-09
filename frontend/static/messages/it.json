@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Sovrapposizione dell'analisi limitata per questo dispositivo",
-        "cadenceCappedMessage": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} con la sovrapposizione configurata di {configured} s supera la capacità misurata di questo dispositivo, quindi l'audio viene analizzato con {effective} s di sovrapposizione. Per questo il filtro falsi positivi richiede meno conferme. Le impostazioni salvate non cambiano; vedi Impostazioni > Analisi.",
+        "cadenceCappedMessage": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} con la sovrapposizione configurata di {configured} s supera la capacità misurata di questo dispositivo, quindi l'audio viene analizzato con {effective} s di sovrapposizione. Per questo il filtro falsi positivi può richiedere meno conferme. Le impostazioni salvate non cambiano; vedi Impostazioni > Analisi.",
         "cadenceOverloadedTitle": "Questo dispositivo non riesce a tenere il passo con l'analisi audio",
         "cadenceOverloadedMessage": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} supera la capacità misurata di questo dispositivo anche senza sovrapposizione, quindi l'analisi può accumulare ritardo e alcuni rilevamenti possono andare persi. Attiva meno modelli o sorgenti audio."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "Un rilevamento viene accettato quando abbastanza finestre di analisi entro {seconds} secondi concordano.",
           "readoutLine": "{model}: {count} su {windows} finestre, una nuova finestra ogni {step} s",
           "readoutPreview": "Stima basata sulle modifiche non salvate. Il limite del dispositivo viene ricontrollato dopo il salvataggio.",
-          "readoutPending": "Le impostazioni salvate sono in fase di applicazione. Questi valori sono stime fino al riavvio dell'analisi.",
+          "readoutPending": "Le impostazioni salvate sono in fase di applicazione. Questi valori sono stime finché non vengono caricati i valori aggiornati.",
           "capNoticeTitle": "Sovrapposizione limitata a quanto questo dispositivo può elaborare",
-          "capNotice": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} con la sovrapposizione configurata di {configured} s supera la capacità misurata di questo dispositivo, quindi l'audio viene analizzato con {effective} s di sovrapposizione. Per questo il filtro richiede meno conferme che a {configured} s. Le impostazioni salvate non cambiano.",
+          "capNotice": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} con la sovrapposizione configurata di {configured} s supera la capacità misurata di questo dispositivo, quindi l'audio viene analizzato con {effective} s di sovrapposizione. Per questo il filtro può richiedere meno conferme. Le impostazioni salvate non cambiano.",
           "overloadedNoticeTitle": "Questo dispositivo non riesce a tenere il passo con l'analisi",
           "overloadedNotice": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} supera la capacità misurata di questo dispositivo anche senza sovrapposizione. L'analisi può accumulare ritardo e alcuni rilevamenti possono andare persi. Attiva meno modelli o sorgenti audio.",
           "unknownLatency": "Non è stato possibile misurare il tempo di elaborazione per {models}, quindi non viene considerato quando la sovrapposizione viene limitata. L'analisi può comunque accumulare ritardo.",

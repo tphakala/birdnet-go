@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Analīzes pārklāšanās ierobežota šai ierīcei",
-        "cadenceCappedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}} pie iestatītās {configured} s pārklāšanās, slodze pārsniedz šīs ierīces izmērīto jaudu, tāpēc audio tiek analizēts ar {effective} s pārklāšanos. Tāpēc viltus pozitīvo filtrs prasa mazāk apstiprinājumu. Jūsu saglabātie iestatījumi nemainās; skatiet Iestatījumi > Analīze.",
+        "cadenceCappedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}} pie iestatītās {configured} s pārklāšanās, slodze pārsniedz šīs ierīces izmērīto jaudu, tāpēc audio tiek analizēts ar {effective} s pārklāšanos. Tāpēc viltus pozitīvo filtrs var prasīt mazāk apstiprinājumu. Jūsu saglabātie iestatījumi nemainās; skatiet Iestatījumi > Analīze.",
         "cadenceOverloadedTitle": "Šī ierīce netiek līdzi audio analīzei",
         "cadenceOverloadedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}}, slodze pārsniedz šīs ierīces izmērīto jaudu pat bez pārklāšanās, tāpēc analīze var atpalikt un noteikšanas var tikt izlaistas. Iespējojiet mazāk modeļu vai audio avotu."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "Noteikšana tiek pieņemta, ja pietiekami daudz analīzes logu {seconds} sekunžu laikā sakrīt.",
           "readoutLine": "{model}: {count} no {windows} logiem, jauns logs ik pēc {step} s",
           "readoutPreview": "Aplēse pēc nesaglabātajām izmaiņām. Ierīces ierobežojums pēc saglabāšanas tiek pārbaudīts vēlreiz.",
-          "readoutPending": "Saglabātie iestatījumi tiek piemēroti. Līdz analīzes restartam šīs vērtības ir aplēses.",
+          "readoutPending": "Saglabātie iestatījumi tiek piemēroti. Līdz atjaunināto vērtību ielādei šīs vērtības ir aplēses.",
           "capNoticeTitle": "Pārklāšanās ierobežota līdz šīs ierīces jaudai",
-          "capNotice": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}} pie iestatītās {configured} s pārklāšanās, slodze pārsniedz šīs ierīces izmērīto jaudu, tāpēc audio tiek analizēts ar {effective} s pārklāšanos. Tāpēc filtrs prasa mazāk apstiprinājumu nekā pie {configured} s. Jūsu saglabātie iestatījumi nemainās.",
+          "capNotice": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}} pie iestatītās {configured} s pārklāšanās, slodze pārsniedz šīs ierīces izmērīto jaudu, tāpēc audio tiek analizēts ar {effective} s pārklāšanos. Tāpēc filtrs var prasīt mazāk apstiprinājumu. Jūsu saglabātie iestatījumi nemainās.",
           "overloadedNoticeTitle": "Šī ierīce netiek līdzi analīzei",
           "overloadedNotice": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}}, slodze pārsniedz šīs ierīces izmērīto jaudu pat bez pārklāšanās. Analīze var atpalikt, un noteikšanas var tikt izlaistas. Iespējojiet mazāk modeļu vai audio avotu.",
           "unknownLatency": "Apstrādes laiku neizdevās izmērīt šiem modeļiem: {models}, tāpēc tas netiek ņemts vērā, ierobežojot pārklāšanos. Analīze joprojām var atpalikt.",

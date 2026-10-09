@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Analyse-Überlappung für dieses Gerät begrenzt",
-        "cadenceCappedMessage": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt bei der eingestellten Überlappung von {configured} s die gemessene Kapazität dieses Geräts, daher wird mit {effective} s Überlappung analysiert. Der Falsch-Positiv-Filter verlangt dadurch weniger Bestätigungen. Ihre gespeicherten Einstellungen bleiben unverändert; siehe Einstellungen > Analyse.",
+        "cadenceCappedMessage": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt bei der eingestellten Überlappung von {configured} s die gemessene Kapazität dieses Geräts, daher wird mit {effective} s Überlappung analysiert. Der Falsch-Positiv-Filter kann dadurch weniger Bestätigungen verlangen. Ihre gespeicherten Einstellungen bleiben unverändert; siehe Einstellungen > Analyse.",
         "cadenceOverloadedTitle": "Dieses Gerät kommt mit der Audioanalyse nicht hinterher",
         "cadenceOverloadedMessage": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt die gemessene Kapazität dieses Geräts selbst ohne Überlappung, daher kann die Analyse in Verzug geraten und Erkennungen können verloren gehen. Aktivieren Sie weniger Modelle oder Audioquellen."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "Eine Erkennung wird akzeptiert, wenn genügend Analysefenster innerhalb von {seconds} Sekunden übereinstimmen.",
           "readoutLine": "{model}: {count} von {windows} Fenstern, alle {step} s ein neues Fenster",
           "readoutPreview": "Geschätzt aus Ihren ungespeicherten Änderungen. Die Gerätegrenze wird nach dem Speichern erneut geprüft.",
-          "readoutPending": "Die gespeicherten Einstellungen werden übernommen. Bis zum Neustart der Analyse sind diese Werte Schätzungen.",
+          "readoutPending": "Die gespeicherten Einstellungen werden übernommen. Bis die aktualisierten Werte geladen sind, sind dies Schätzungen.",
           "capNoticeTitle": "Überlappung auf die Leistung dieses Geräts begrenzt",
-          "capNotice": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt bei der eingestellten Überlappung von {configured} s die gemessene Kapazität dieses Geräts, daher wird mit {effective} s Überlappung analysiert. Der Filter verlangt deshalb weniger Bestätigungen als bei {configured} s. Ihre gespeicherten Einstellungen bleiben unverändert.",
+          "capNotice": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt bei der eingestellten Überlappung von {configured} s die gemessene Kapazität dieses Geräts, daher wird mit {effective} s Überlappung analysiert. Der Filter kann deshalb weniger Bestätigungen verlangen. Ihre gespeicherten Einstellungen bleiben unverändert.",
           "overloadedNoticeTitle": "Dieses Gerät kommt mit der Analyse nicht hinterher",
           "overloadedNotice": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt die gemessene Kapazität dieses Geräts selbst ohne Überlappung. Die Analyse kann in Verzug geraten und Erkennungen können verloren gehen. Aktivieren Sie weniger Modelle oder Audioquellen.",
           "unknownLatency": "Die Verarbeitungszeit konnte für {models} nicht gemessen werden und wird beim Begrenzen der Überlappung nicht berücksichtigt. Die Analyse kann dennoch in Verzug geraten.",

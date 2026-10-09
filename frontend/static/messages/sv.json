@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Analysöverlappning begränsad för den här enheten",
-        "cadenceCappedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} med den inställda överlappningen på {configured} s överskrider den här enhetens uppmätta kapacitet, så ljudet analyseras med {effective} s överlappning. Falskpositivfiltret kräver därför färre bekräftelser. Dina sparade inställningar är oförändrade; se Inställningar > Analys.",
+        "cadenceCappedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} med den inställda överlappningen på {configured} s överskrider den här enhetens uppmätta kapacitet, så ljudet analyseras med {effective} s överlappning. Falskpositivfiltret kan därför kräva färre bekräftelser. Dina sparade inställningar är oförändrade; se Inställningar > Analys.",
         "cadenceOverloadedTitle": "Den här enheten hinner inte med ljudanalysen",
         "cadenceOverloadedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning, så analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "En detektion godtas när tillräckligt många analysfönster inom {seconds} sekunder stämmer överens.",
           "readoutLine": "{model}: {count} av {windows} fönster, ett nytt fönster var {step} s",
           "readoutPreview": "Uppskattat utifrån dina osparade ändringar. Enhetens gräns kontrolleras igen efter sparande.",
-          "readoutPending": "De sparade inställningarna tillämpas. Värdena är uppskattningar tills analysen har startat om.",
+          "readoutPending": "De sparade inställningarna tillämpas. Värdena är uppskattningar tills de uppdaterade antalen har lästs in.",
           "capNoticeTitle": "Överlappning begränsad till vad den här enheten klarar",
-          "capNotice": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} med den inställda överlappningen på {configured} s överskrider den här enhetens uppmätta kapacitet, så ljudet analyseras med {effective} s överlappning. Filtret kräver därför färre bekräftelser än vid {configured} s. Dina sparade inställningar är oförändrade.",
+          "capNotice": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} med den inställda överlappningen på {configured} s överskrider den här enhetens uppmätta kapacitet, så ljudet analyseras med {effective} s överlappning. Filtret kan därför kräva färre bekräftelser. Dina sparade inställningar är oförändrade.",
           "overloadedNoticeTitle": "Den här enheten hinner inte med analysen",
           "overloadedNotice": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning. Analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor.",
           "unknownLatency": "Bearbetningstiden kunde inte mätas för {models}, så den räknas inte med när överlappningen begränsas. Analysen kan ändå hamna efter.",

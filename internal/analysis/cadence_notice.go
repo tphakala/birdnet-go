@@ -21,7 +21,7 @@ const cadenceNoticeOverlapDecimals = 1
 // cadenceNotice raises one bell notice per process when the first published
 // cadence plan is capped or overloaded, so a user upgrading onto hardware that
 // cannot sustain the configured overlap learns why the false positive filter
-// needs fewer confirmations than before. Plans published later only update or
+// can need fewer confirmations than before. Plans published later only update or
 // clear it: a capped or overloaded plan replaces the notice when its status or a
 // value its text states changes, any other plan clears it for good. A cap the user
 // causes at runtime is shown inline on the settings page they are editing, so it
@@ -166,7 +166,7 @@ func newCadenceNotification(plan *cadence.Plan) *notification.Notification {
 		notification.TypeWarning,
 		notification.PriorityMedium,
 		"Analysis overlap limited for this device",
-		fmt.Sprintf("Running %s on %s at the configured %s s overlap exceeds the measured capacity of this device, so audio is analyzed with %s s overlap. The false positive filter needs fewer confirmations as a result. Your saved settings are unchanged; see Settings > Analysis.", models, sources, params["configured"], params["effective"]),
+		fmt.Sprintf("Running %s on %s at the configured %s s overlap exceeds the measured capacity of this device, so audio is analyzed with %s s overlap. This can lower the number of confirmations the false positive filter requires. Your saved settings are unchanged; see Settings > Analysis.", models, sources, params["configured"], params["effective"]),
 	).
 		WithComponent(cadenceNoticeComponent).
 		WithTitleKey(notification.MsgCadenceCappedTitle, nil).

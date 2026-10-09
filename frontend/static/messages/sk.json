@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Prekrytie analýzy obmedzené pre toto zariadenie",
-        "cadenceCappedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} pri nastavenom prekrytí {configured} s prekračuje nameranú kapacitu tohto zariadenia, preto sa zvuk analyzuje s prekrytím {effective} s. Filter falošne pozitívnych výsledkov preto vyžaduje menej potvrdení. Vaše uložené nastavenia sa nemenia; pozrite Nastavenia > Analýza.",
+        "cadenceCappedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} pri nastavenom prekrytí {configured} s prekračuje nameranú kapacitu tohto zariadenia, preto sa zvuk analyzuje s prekrytím {effective} s. Filter falošne pozitívnych výsledkov preto môže vyžadovať menej potvrdení. Vaše uložené nastavenia sa nemenia; pozrite Nastavenia > Analýza.",
         "cadenceOverloadedTitle": "Toto zariadenie nestíha analýzu zvuku",
         "cadenceOverloadedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} prekračuje nameranú kapacitu tohto zariadenia aj bez prekrytia, preto môže analýza zaostávať a detekcie môžu byť vynechané. Povoľte menej modelov alebo zvukových zdrojov."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "Detekcia sa prijme, keď sa zhoduje dostatok analytických okien v rámci {seconds} sekúnd.",
           "readoutLine": "{model}: {count} z {windows} okien, nové okno každých {step} s",
           "readoutPreview": "Odhad podľa neuložených zmien. Limit zariadenia sa po uložení znova overí.",
-          "readoutPending": "Uložené nastavenia sa práve uplatňujú. Do reštartu analýzy sú tieto hodnoty odhadom.",
+          "readoutPending": "Uložené nastavenia sa práve uplatňujú. Kým sa nenačítajú aktualizované počty, sú tieto hodnoty odhadom.",
           "capNoticeTitle": "Prekrytie obmedzené na výkon tohto zariadenia",
-          "capNotice": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} pri nastavenom prekrytí {configured} s prekračuje nameranú kapacitu tohto zariadenia, preto sa zvuk analyzuje s prekrytím {effective} s. Filter preto vyžaduje menej potvrdení než pri {configured} s. Vaše uložené nastavenia sa nemenia.",
+          "capNotice": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} pri nastavenom prekrytí {configured} s prekračuje nameranú kapacitu tohto zariadenia, preto sa zvuk analyzuje s prekrytím {effective} s. Filter preto môže vyžadovať menej potvrdení. Vaše uložené nastavenia sa nemenia.",
           "overloadedNoticeTitle": "Toto zariadenie nestíha analýzu",
           "overloadedNotice": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} prekračuje nameranú kapacitu tohto zariadenia aj bez prekrytia. Analýza môže zaostávať a detekcie môžu byť vynechané. Povoľte menej modelov alebo zvukových zdrojov.",
           "unknownLatency": "Čas spracovania sa nepodarilo zmerať pre {models}, preto sa pri obmedzovaní prekrytia nezapočítava. Analýza môže napriek tomu zaostávať.",

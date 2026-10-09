@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Sobreposição da análise limitada neste dispositivo",
-        "cadenceCappedMessage": "Executar {models, plural, one {# modelo} other {# modelos}} em {sources, plural, one {# fonte de áudio} other {# fontes de áudio}} com a sobreposição configurada de {configured} s excede a capacidade medida deste dispositivo, pelo que o áudio é analisado com {effective} s de sobreposição. Por isso, o filtro de falsos positivos exige menos confirmações. As suas definições guardadas não mudam; consulte Configurações > Análise.",
+        "cadenceCappedMessage": "Executar {models, plural, one {# modelo} other {# modelos}} em {sources, plural, one {# fonte de áudio} other {# fontes de áudio}} com a sobreposição configurada de {configured} s excede a capacidade medida deste dispositivo, pelo que o áudio é analisado com {effective} s de sobreposição. Por isso, o filtro de falsos positivos pode exigir menos confirmações. As suas definições guardadas não mudam; consulte Configurações > Análise.",
         "cadenceOverloadedTitle": "Este dispositivo não consegue acompanhar a análise de áudio",
         "cadenceOverloadedMessage": "Executar {models, plural, one {# modelo} other {# modelos}} em {sources, plural, one {# fonte de áudio} other {# fontes de áudio}} excede a capacidade medida deste dispositivo mesmo sem sobreposição, pelo que a análise pode atrasar-se e podem perder-se deteções. Ative menos modelos ou fontes de áudio."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "Uma deteção é aceite quando janelas de análise suficientes em {seconds} segundos concordam.",
           "readoutLine": "{model}: {count} de {windows} janelas, uma nova janela a cada {step} s",
           "readoutPreview": "Estimativa com base nas alterações não guardadas. O limite do dispositivo é verificado novamente após guardar.",
-          "readoutPending": "As definições guardadas estão a ser aplicadas. Estes valores são estimativas até a análise reiniciar.",
+          "readoutPending": "As definições guardadas estão a ser aplicadas. Estes valores são estimativas até serem carregados os valores atualizados.",
           "capNoticeTitle": "Sobreposição limitada ao que este dispositivo consegue processar",
-          "capNotice": "Executar {models, plural, one {# modelo} other {# modelos}} em {sources, plural, one {# fonte de áudio} other {# fontes de áudio}} com a sobreposição configurada de {configured} s excede a capacidade medida deste dispositivo, pelo que o áudio é analisado com {effective} s de sobreposição. Por isso, o filtro exige menos confirmações do que com {configured} s. As suas definições guardadas não mudam.",
+          "capNotice": "Executar {models, plural, one {# modelo} other {# modelos}} em {sources, plural, one {# fonte de áudio} other {# fontes de áudio}} com a sobreposição configurada de {configured} s excede a capacidade medida deste dispositivo, pelo que o áudio é analisado com {effective} s de sobreposição. Por isso, o filtro pode exigir menos confirmações. As suas definições guardadas não mudam.",
           "overloadedNoticeTitle": "Este dispositivo não consegue acompanhar a análise",
           "overloadedNotice": "Executar {models, plural, one {# modelo} other {# modelos}} em {sources, plural, one {# fonte de áudio} other {# fontes de áudio}} excede a capacidade medida deste dispositivo mesmo sem sobreposição. A análise pode atrasar-se e podem perder-se deteções. Ative menos modelos ou fontes de áudio.",
           "unknownLatency": "Não foi possível medir o tempo de processamento de {models}, pelo que não é contabilizado ao limitar a sobreposição. A análise ainda pode atrasar-se.",

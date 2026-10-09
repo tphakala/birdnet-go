@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Superposición del análisis limitada en este dispositivo",
-        "cadenceCappedMessage": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} con la superposición configurada de {configured} s supera la capacidad medida de este dispositivo, por lo que el audio se analiza con {effective} s de superposición. Por ello, el filtro de falsos positivos requiere menos confirmaciones. Sus ajustes guardados no cambian; consulte Configuración > Análisis.",
+        "cadenceCappedMessage": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} con la superposición configurada de {configured} s supera la capacidad medida de este dispositivo, por lo que el audio se analiza con {effective} s de superposición. Por ello, el filtro de falsos positivos puede requerir menos confirmaciones. Sus ajustes guardados no cambian; consulte Configuración > Análisis.",
         "cadenceOverloadedTitle": "Este dispositivo no puede seguir el ritmo del análisis de audio",
         "cadenceOverloadedMessage": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} supera la capacidad medida de este dispositivo incluso sin superposición, por lo que el análisis puede retrasarse y pueden perderse detecciones. Active menos modelos o fuentes de audio."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "Una detección se acepta cuando suficientes ventanas de análisis dentro de {seconds} segundos coinciden.",
           "readoutLine": "{model}: {count} de {windows} ventanas, una ventana nueva cada {step} s",
           "readoutPreview": "Estimado a partir de sus cambios sin guardar. El límite del dispositivo se vuelve a comprobar al guardar.",
-          "readoutPending": "Se están aplicando los ajustes guardados. Estos valores son estimaciones hasta que se reinicie el análisis.",
+          "readoutPending": "Se están aplicando los ajustes guardados. Estos valores son estimaciones hasta que se carguen los recuentos actualizados.",
           "capNoticeTitle": "Superposición limitada a lo que este dispositivo puede procesar",
-          "capNotice": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} con la superposición configurada de {configured} s supera la capacidad medida de este dispositivo, por lo que el audio se analiza con {effective} s de superposición. Por ello, el filtro requiere menos confirmaciones que con {configured} s. Sus ajustes guardados no cambian.",
+          "capNotice": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} con la superposición configurada de {configured} s supera la capacidad medida de este dispositivo, por lo que el audio se analiza con {effective} s de superposición. Por ello, el filtro puede requerir menos confirmaciones. Sus ajustes guardados no cambian.",
           "overloadedNoticeTitle": "Este dispositivo no puede seguir el ritmo del análisis",
           "overloadedNotice": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} supera la capacidad medida de este dispositivo incluso sin superposición. El análisis puede retrasarse y pueden perderse detecciones. Active menos modelos o fuentes de audio.",
           "unknownLatency": "No se pudo medir el tiempo de procesamiento de {models}, por lo que no se tiene en cuenta al limitar la superposición. El análisis aún puede retrasarse.",

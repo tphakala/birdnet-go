@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Analyse-overlap beperkt voor dit apparaat",
-        "cadenceCappedMessage": "Het uitvoeren van {models, plural, one {# model} other {# modellen}} op {sources, plural, one {# audiobron} other {# audiobronnen}} met de ingestelde overlap van {configured} s overschrijdt de gemeten capaciteit van dit apparaat, dus audio wordt geanalyseerd met {effective} s overlap. Het Vals Positief Filter vereist daardoor minder bevestigingen. Uw opgeslagen instellingen blijven ongewijzigd; zie Instellingen > Analyse.",
+        "cadenceCappedMessage": "Het uitvoeren van {models, plural, one {# model} other {# modellen}} op {sources, plural, one {# audiobron} other {# audiobronnen}} met de ingestelde overlap van {configured} s overschrijdt de gemeten capaciteit van dit apparaat, dus audio wordt geanalyseerd met {effective} s overlap. Het Vals Positief Filter kan daardoor minder bevestigingen vereisen. Uw opgeslagen instellingen blijven ongewijzigd; zie Instellingen > Analyse.",
         "cadenceOverloadedTitle": "Dit apparaat kan de audioanalyse niet bijhouden",
         "cadenceOverloadedMessage": "Het uitvoeren van {models, plural, one {# model} other {# modellen}} op {sources, plural, one {# audiobron} other {# audiobronnen}} overschrijdt de gemeten capaciteit van dit apparaat, zelfs zonder overlap, dus de analyse kan achterlopen en detecties kunnen worden gemist. Schakel minder modellen of audiobronnen in."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "Een detectie wordt geaccepteerd wanneer genoeg analysevensters binnen {seconds} seconden overeenkomen.",
           "readoutLine": "{model}: {count} van {windows} vensters, elke {step} s een nieuw venster",
           "readoutPreview": "Geschat op basis van uw niet-opgeslagen wijzigingen. De limiet van het apparaat wordt na het opslaan opnieuw gecontroleerd.",
-          "readoutPending": "De opgeslagen instellingen worden toegepast. Tot de analyse opnieuw start, zijn deze waarden schattingen.",
+          "readoutPending": "De opgeslagen instellingen worden toegepast. Tot de bijgewerkte aantallen zijn geladen, zijn deze waarden schattingen.",
           "capNoticeTitle": "Overlap beperkt tot wat dit apparaat aankan",
-          "capNotice": "Het uitvoeren van {models, plural, one {# model} other {# modellen}} op {sources, plural, one {# audiobron} other {# audiobronnen}} met de ingestelde overlap van {configured} s overschrijdt de gemeten capaciteit van dit apparaat, dus audio wordt geanalyseerd met {effective} s overlap. Het filter vereist daardoor minder bevestigingen dan bij {configured} s. Uw opgeslagen instellingen blijven ongewijzigd.",
+          "capNotice": "Het uitvoeren van {models, plural, one {# model} other {# modellen}} op {sources, plural, one {# audiobron} other {# audiobronnen}} met de ingestelde overlap van {configured} s overschrijdt de gemeten capaciteit van dit apparaat, dus audio wordt geanalyseerd met {effective} s overlap. Het filter kan daardoor minder bevestigingen vereisen. Uw opgeslagen instellingen blijven ongewijzigd.",
           "overloadedNoticeTitle": "Dit apparaat kan de analyse niet bijhouden",
           "overloadedNotice": "Het uitvoeren van {models, plural, one {# model} other {# modellen}} op {sources, plural, one {# audiobron} other {# audiobronnen}} overschrijdt de gemeten capaciteit van dit apparaat, zelfs zonder overlap. De analyse kan achterlopen en detecties kunnen worden gemist. Schakel minder modellen of audiobronnen in.",
           "unknownLatency": "De verwerkingstijd kon niet worden gemeten voor {models}, dus die telt niet mee bij het beperken van de overlap. De analyse kan nog steeds achterlopen.",

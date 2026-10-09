@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Analysis overlap limited for this device",
-        "cadenceCappedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} at the configured {configured} s overlap exceeds the measured capacity of this device, so audio is analyzed with {effective} s overlap. The false positive filter needs fewer confirmations as a result. Your saved settings are unchanged; see Settings > Analysis.",
+        "cadenceCappedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} at the configured {configured} s overlap exceeds the measured capacity of this device, so audio is analyzed with {effective} s overlap. This can lower the number of confirmations the false positive filter requires. Your saved settings are unchanged; see Settings > Analysis.",
         "cadenceOverloadedTitle": "This device cannot keep up with audio analysis",
         "cadenceOverloadedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap, so analysis can fall behind and detections can be missed. Enable fewer models or audio sources."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "A detection is accepted when enough analysis windows within {seconds} seconds agree.",
           "readoutLine": "{model}: {count} of {windows} windows, a new window every {step} s",
           "readoutPreview": "Estimated from your unsaved changes. The device limit is checked again after saving.",
-          "readoutPending": "The saved settings are being applied. These values are estimates until analysis restarts.",
+          "readoutPending": "The saved settings are being applied. These values are estimates until the updated counts are loaded.",
           "capNoticeTitle": "Overlap limited to what this device can process",
-          "capNotice": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} at the configured {configured} s overlap exceeds the measured capacity of this device, so audio is analyzed with {effective} s overlap. The filter therefore needs fewer confirmations than at {configured} s. Your saved settings are unchanged.",
+          "capNotice": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} at the configured {configured} s overlap exceeds the measured capacity of this device, so audio is analyzed with {effective} s overlap. This can lower the number of confirmations the filter requires. Your saved settings are unchanged.",
           "overloadedNoticeTitle": "This device cannot keep up with analysis",
           "overloadedNotice": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap. Analysis can fall behind and detections can be missed. Enable fewer models or audio sources.",
           "unknownLatency": "Processing time could not be measured for {models}, so it is not counted when the overlap is limited. Analysis may still fall behind.",

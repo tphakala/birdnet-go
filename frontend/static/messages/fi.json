@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Analyysin päällekkäisyys rajoitettu tälle laitteelle",
-        "cadenceCappedMessage": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}} asetetulla {configured} s päällekkäisyydellä, kuormitus ylittää tämän laitteen mitatun kapasiteetin, joten ääni analysoidaan {effective} s päällekkäisyydellä. Siksi väärien positiivisten suodatin vaatii vähemmän vahvistuksia. Tallennetut asetuksesi eivät muutu; katso Asetukset > Analyysi.",
+        "cadenceCappedMessage": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}} asetetulla {configured} s päällekkäisyydellä, kuormitus ylittää tämän laitteen mitatun kapasiteetin, joten ääni analysoidaan {effective} s päällekkäisyydellä. Siksi väärien positiivisten suodatin voi vaatia vähemmän vahvistuksia. Tallennetut asetuksesi eivät muutu; katso Asetukset > Analyysi.",
         "cadenceOverloadedTitle": "Laite ei pysy äänianalyysin tahdissa",
         "cadenceOverloadedMessage": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}}, kuormitus ylittää tämän laitteen mitatun kapasiteetin jopa ilman päällekkäisyyttä, joten analyysi voi jäädä jälkeen ja havaintoja voi jäädä saamatta. Ota käyttöön vähemmän malleja tai äänilähteitä."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "Havainto hyväksytään, kun riittävän moni analyysi-ikkuna {seconds} sekunnin jaksolla vahvistaa sen.",
           "readoutLine": "{model}: {count}/{windows} ikkunaa, uusi ikkuna {step} s välein",
           "readoutPreview": "Arvio tallentamattomien muutosten perusteella. Laitteen raja tarkistetaan uudelleen tallennuksen jälkeen.",
-          "readoutPending": "Tallennettuja asetuksia otetaan käyttöön. Arvot ovat arvioita, kunnes analyysi on käynnistynyt uudelleen.",
+          "readoutPending": "Tallennettuja asetuksia otetaan käyttöön. Arvot ovat arvioita, kunnes päivitetyt määrät on ladattu.",
           "capNoticeTitle": "Päällekkäisyys rajoitettu laitteen suorituskykyyn",
-          "capNotice": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}} asetetulla {configured} s päällekkäisyydellä, kuormitus ylittää tämän laitteen mitatun kapasiteetin, joten ääni analysoidaan {effective} s päällekkäisyydellä. Siksi suodatin vaatii vähemmän vahvistuksia kuin {configured} s päällekkäisyydellä. Tallennetut asetuksesi eivät muutu.",
+          "capNotice": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}} asetetulla {configured} s päällekkäisyydellä, kuormitus ylittää tämän laitteen mitatun kapasiteetin, joten ääni analysoidaan {effective} s päällekkäisyydellä. Siksi suodatin voi vaatia vähemmän vahvistuksia. Tallennetut asetuksesi eivät muutu.",
           "overloadedNoticeTitle": "Laite ei pysy analyysin tahdissa",
           "overloadedNotice": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}}, kuormitus ylittää tämän laitteen mitatun kapasiteetin jopa ilman päällekkäisyyttä. Analyysi voi jäädä jälkeen ja havaintoja voi jäädä saamatta. Ota käyttöön vähemmän malleja tai äänilähteitä.",
           "unknownLatency": "Käsittelyaikaa ei voitu mitata malleille {models}, joten sitä ei huomioida päällekkäisyyttä rajoitettaessa. Analyysi voi silti jäädä jälkeen.",

@@ -518,7 +518,7 @@
       },
       "analysis": {
         "cadenceCappedTitle": "Chevauchement d'analyse limité pour cet appareil",
-        "cadenceCappedMessage": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} avec le chevauchement configuré de {configured} s dépasse la capacité mesurée de cet appareil, l'audio est donc analysé avec un chevauchement de {effective} s. Le filtre de faux positifs exige donc moins de confirmations. Vos paramètres enregistrés restent inchangés ; voir Paramètres > Analyse.",
+        "cadenceCappedMessage": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} avec le chevauchement configuré de {configured} s dépasse la capacité mesurée de cet appareil, l'audio est donc analysé avec un chevauchement de {effective} s. Le filtre de faux positifs peut donc exiger moins de confirmations. Vos paramètres enregistrés restent inchangés ; voir Paramètres > Analyse.",
         "cadenceOverloadedTitle": "Cet appareil ne peut pas suivre l'analyse audio",
         "cadenceOverloadedMessage": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} dépasse la capacité mesurée de cet appareil même sans chevauchement, l'analyse peut donc prendre du retard et des détections peuvent être manquées. Activez moins de modèles ou de sources audio."
       }
@@ -2414,9 +2414,9 @@
           "readoutIntro": "Une détection est acceptée lorsque suffisamment de fenêtres d'analyse sur {seconds} secondes concordent.",
           "readoutLine": "{model} : {count} sur {windows} fenêtres, une nouvelle fenêtre toutes les {step} s",
           "readoutPreview": "Estimation d'après vos modifications non enregistrées. La limite de l'appareil est vérifiée à nouveau après l'enregistrement.",
-          "readoutPending": "Les paramètres enregistrés sont en cours d'application. Ces valeurs sont des estimations jusqu'au redémarrage de l'analyse.",
+          "readoutPending": "Les paramètres enregistrés sont en cours d'application. Ces valeurs sont des estimations jusqu'au chargement des valeurs mises à jour.",
           "capNoticeTitle": "Chevauchement limité à ce que cet appareil peut traiter",
-          "capNotice": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} avec le chevauchement configuré de {configured} s dépasse la capacité mesurée de cet appareil, l'audio est donc analysé avec un chevauchement de {effective} s. Le filtre exige donc moins de confirmations qu'à {configured} s. Vos paramètres enregistrés restent inchangés.",
+          "capNotice": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} avec le chevauchement configuré de {configured} s dépasse la capacité mesurée de cet appareil, l'audio est donc analysé avec un chevauchement de {effective} s. Le filtre peut donc exiger moins de confirmations. Vos paramètres enregistrés restent inchangés.",
           "overloadedNoticeTitle": "Cet appareil ne peut pas suivre l'analyse",
           "overloadedNotice": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} dépasse la capacité mesurée de cet appareil même sans chevauchement. L'analyse peut prendre du retard et des détections peuvent être manquées. Activez moins de modèles ou de sources audio.",
           "unknownLatency": "Le temps de traitement n'a pas pu être mesuré pour {models}, il n'est donc pas pris en compte lors de la limitation du chevauchement. L'analyse peut tout de même prendre du retard.",
