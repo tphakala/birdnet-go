@@ -14,6 +14,7 @@ import {
   BAT_MODEL_ID,
   minDetectionsForStep,
   modelStepSeconds,
+  baseClipMinDetections,
   overlapSecondsToNs,
   planLagsSettings,
   previewEffectiveOverlapSeconds,
@@ -52,12 +53,10 @@ function loadFixture(): ParityRow[] {
 function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceInfo {
   return {
     status: 'capped',
+    filterLevel: 5,
     configuredOverlapSec: 2.8,
     effectiveOverlapSec: 1.8,
     minBaseStepMs: 1200,
-    estimatedDutyConfigured: 1.4,
-    estimatedDutyEffective: 0.58,
-    dutyCeiling: 0.75,
     sourceCount: 1,
     modelCount: 3,
     unknownLatencyModels: [],
@@ -191,48 +190,54 @@ describe('fpCadence', () => {
   });
 
   describe('planLagsSettings', () => {
-    it('is false when the plan matches the saved settings', () => {
+    it('is false when the snapshot matches the saved settings', () => {
       expect(planLagsSettings(cadence(), 2.8, 5)).toBe(false);
     });
 
     it('is true when the saved overlap differs from the plan', () => {
-      // Level 5 matches the fixture counts, so only the overlap differs.
       expect(planLagsSettings(cadence(), 2.4, 5)).toBe(true);
     });
 
-    it('is true when the server counts were computed for another level', () => {
-      // The fixture counts are level 5 (4 of 5, 3 of 3); level 3 needs 3 and 2.
+    it('is true when the counts were computed for another level', () => {
+      // The snapshot was fetched before level 3 was saved; both are on the
+      // filter-on side, so no re-plan follows, only the next fetch clears it.
       expect(planLagsSettings(cadence(), 2.8, 3)).toBe(true);
+      expect(planLagsSettings(cadence({ filterLevel: 3 }), 2.8, 3)).toBe(false);
     });
 
-    it('applies the 0.1 s step floor when checking the server counts', () => {
-      // Overlap 2.95 s: 120 windows, but the filter floors the step at 0.1 s,
-      // so level 5 needs ceil(60 * 0.7) = 42, not 84.
-      const fine = cadence({
-        status: 'ok',
-        configuredOverlapSec: 2.95,
-        effectiveOverlapSec: 2.95,
-        models: [
-          {
-            id: 'BirdNET_V2.4',
-            name: 'BirdNET v2.4',
-            clipMs: 3000,
-            stepMs: 50,
-            confirmations: 42,
-            windowsInReference: 120,
-          },
-        ],
-      });
-      expect(planLagsSettings(fine, 2.95, 5)).toBe(false);
-    });
-
-    it('is true when the saved level crosses the filter on/off line', () => {
+    it('is true when the plan is on the other side of the filter on/off line', () => {
+      // The snapshot already reads the saved level, but the re-plan is pending.
       expect(planLagsSettings(cadence({ status: 'filterOff' }), 2.8, 5)).toBe(true);
-      // Counts of 1 match saved level 0, so only the on/off side differs.
-      const levelZeroCounts = cadence({
-        models: cadence().models.map(m => ({ ...m, confirmations: 1 })),
-      });
-      expect(planLagsSettings(levelZeroCounts, 2.8, 0)).toBe(true);
+      expect(planLagsSettings(cadence({ filterLevel: 0 }), 2.8, 0)).toBe(true);
+      expect(planLagsSettings(cadence({ status: 'filterOff', filterLevel: 0 }), 2.8, 0)).toBe(
+        false
+      );
+    });
+  });
+
+  describe('baseClipMinDetections', () => {
+    // The count the level description stated before this module existed:
+    // max(0.1, 3 - overlap) seconds per window, ceil(6 / step * threshold).
+    const THRESHOLDS = [0, 0.2, 0.3, 0.5, 0.6, 0.7];
+    function previousCount(level: number, overlap: number): number {
+      if (level === 0) return 1;
+      const step = Math.max(0.1, 3 - overlap);
+      return Math.max(1, Math.ceil((6 / step) * (THRESHOLDS.at(level) ?? 0) - 1e-9));
+    }
+
+    it('matches the previous description count for every level and 0.01 s overlap', () => {
+      for (let level = 0; level <= 5; level++) {
+        for (let hundredths = 0; hundredths <= 290; hundredths++) {
+          const overlap = hundredths / 100;
+          expect(baseClipMinDetections(overlap, level), `level ${level}, ${overlap} s`).toBe(
+            previousCount(level, overlap)
+          );
+        }
+      }
+    });
+
+    it('needs 21 confirmations at level 5 and 2.8 s overlap', () => {
+      expect(baseClipMinDetections(2.8, 5)).toBe(21);
     });
   });
 });

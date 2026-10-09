@@ -10,7 +10,9 @@
  * from both sides.
  *
  * The saved state is never recomputed here: the readout for the running
- * configuration uses the counts the server reports in `analysisCadence`.
+ * configuration uses the counts the server reports in `analysisCadence`. This
+ * module is the frontend's only copy of the confirmation math and of the
+ * per-level thresholds.
  */
 import type {
   AnalysisCadenceInfo,
@@ -29,6 +31,7 @@ const MS_PER_SECOND = 1000;
 /** Clip length the base overlap (birdnet.overlap) is defined against (classifier.AnalysisBaseClipLength). */
 const BASE_CLIP_NS = 3 * NS_PER_SECOND;
 const BASE_CLIP_SECONDS = 3;
+const BASE_CLIP_MS = BASE_CLIP_SECONDS * MS_PER_SECOND;
 /** Smallest buffer step (classifier minAnalysisStep, 1 ms). */
 const MIN_ANALYSIS_STEP_NS = NS_PER_MS;
 /** Window within which confirmations are counted (processor.ReferenceWindowSeconds). */
@@ -85,6 +88,17 @@ export function modelStepSeconds(clipMs: number, baseOverlapNs: number): number 
   return durationSeconds(Math.max(clipNs - overlap, MIN_ANALYSIS_STEP_NS));
 }
 
+/**
+ * Confirmations for the 3 s base clip at a configured overlap: the count the
+ * level description states when the server has published no plan.
+ */
+export function baseClipMinDetections(overlapSeconds: number, level: number): number {
+  return minDetectionsForStep(
+    modelStepSeconds(BASE_CLIP_MS, overlapSecondsToNs(overlapSeconds)),
+    level
+  );
+}
+
 /** One model's line in the readout. */
 export interface CadenceReadoutRow {
   id: string;
@@ -106,7 +120,7 @@ function birdModels(cadence: AnalysisCadenceInfo): AnalysisCadenceModel[] {
 export function savedReadout(cadence: AnalysisCadenceInfo): CadenceReadoutRow[] {
   return birdModels(cadence).map(m => ({
     id: m.id,
-    name: m.name || m.id,
+    name: m.name,
     confirmations: m.confirmations,
     windows: m.windowsInReference,
     stepSeconds: m.stepMs / MS_PER_SECOND,
@@ -152,7 +166,7 @@ export function previewReadout(
     const stepSeconds = modelStepSeconds(m.clipMs, effectiveNs);
     return {
       id: m.id,
-      name: m.name || m.id,
+      name: m.name,
       confirmations: minDetectionsForStep(stepSeconds, level),
       windows: stepSeconds > 0 ? REFERENCE_WINDOW_SECONDS / stepSeconds : 0,
       stepSeconds,
@@ -166,12 +180,12 @@ export function sameOverlap(a: number, b: number): boolean {
 }
 
 /**
- * True when the snapshot does not yet reflect the saved settings: the saved
- * overlap differs from the plan's configured one, the saved level is on the
- * other side of the filter on/off line, or a bird model's confirmations were
- * computed for another level than the saved one (the server computes them per
- * request, so a level change that does not re-plan shows up only on the next
- * fetch). A fetch after the save clears it.
+ * True when the snapshot does not yet reflect the saved settings: its
+ * confirmations were computed for another level than the saved one (the server
+ * reads the level per request, so a fetch after the save clears it), the plan
+ * was solved for another overlap, or the plan is on the other side of the
+ * filter on/off line than the saved level (both clear once the server
+ * re-plans).
  */
 export function planLagsSettings(
   cadence: AnalysisCadenceInfo,
@@ -181,13 +195,8 @@ export function planLagsSettings(
   const planFilterOn = cadence.status !== 'filterOff';
   const savedFilterOn = savedLevel >= FILTER_ACTIVE_MIN_LEVEL;
   return (
+    cadence.filterLevel !== savedLevel ||
     !sameOverlap(savedOverlapSeconds, cadence.configuredOverlapSec) ||
-    planFilterOn !== savedFilterOn ||
-    birdModels(cadence).some(
-      m =>
-        m.windowsInReference > 0 &&
-        m.confirmations !==
-          minDetectionsForStep(REFERENCE_WINDOW_SECONDS / m.windowsInReference, savedLevel)
-    )
+    planFilterOn !== savedFilterOn
   );
 }

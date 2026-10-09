@@ -17,7 +17,7 @@ const { cadenceState, stores } = vi.hoisted(() => {
 
 vi.mock('$lib/stores/acousticModels.svelte', () => ({
   analysisCadence: () => cadenceState.value,
-  refreshAcousticModels: vi.fn().mockResolvedValue(undefined),
+  invalidateAcousticModels: vi.fn().mockResolvedValue(undefined),
   watchAcousticModels: vi.fn(() => () => {}),
 }));
 
@@ -83,19 +83,17 @@ vi.mock('$lib/utils/api', async () => {
 
 import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import { navigation } from '$lib/stores/navigation.svelte';
-import { refreshAcousticModels, watchAcousticModels } from '$lib/stores/acousticModels.svelte';
+import { invalidateAcousticModels, watchAcousticModels } from '$lib/stores/acousticModels.svelte';
 
 const FP = 'settings.main.sections.falsePositiveFilter';
 
 function cadence(overrides: Partial<AnalysisCadenceInfo> = {}): AnalysisCadenceInfo {
   return {
     status: 'capped',
+    filterLevel: 5,
     configuredOverlapSec: 2.8,
     effectiveOverlapSec: 1.8,
     minBaseStepMs: 1200,
-    estimatedDutyConfigured: 1.4,
-    estimatedDutyEffective: 0.58,
-    dutyCeiling: 0.75,
     sourceCount: 2,
     modelCount: 3,
     unknownLatencyModels: [],
@@ -360,6 +358,42 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
     expect(lines.some(p => p.count === 7 || p.count === 5)).toBe(false);
   });
 
+  it('marks the counts as estimates while the snapshot predates a saved level', () => {
+    // Level 4 was saved on the filter-on side, so no re-plan follows; the
+    // snapshot still carries the level 5 counts until the next fetch.
+    cadenceState.value = cadence();
+    setSettings({ level: 4, overlap: 2.8 });
+    render(AnalysisSettingsPage);
+
+    expect(screen.getByText(`${FP}.readoutPending`)).toBeInTheDocument();
+    const lines = paramsFor(`${FP}.readoutLine`);
+    // Level 4 at the device's 1.2 s step: ceil(5 * 0.6) = 3; v3.0 at 2.0 s: ceil(3 * 0.6) = 2.
+    expect(lines.map(p => [p.model, p.count])).toEqual(
+      expect.arrayContaining([
+        ['BirdNET v2.4', 3],
+        ['BirdNET v3.0', 2],
+      ])
+    );
+  });
+
+  it('shows the server counts once the snapshot reflects the saved level', () => {
+    cadenceState.value = cadence({ filterLevel: 4 });
+    setSettings({ level: 4, overlap: 2.8 });
+    render(AnalysisSettingsPage);
+
+    expect(screen.getByText(`${FP}.readoutTitle`)).toBeInTheDocument();
+    expect(screen.queryByText(`${FP}.readoutPending`)).not.toBeInTheDocument();
+  });
+
+  it('renders the capacity notices as notes, not alerts', () => {
+    cadenceState.value = cadence();
+    setSettings({ level: 5, overlap: 2.8 });
+    render(AnalysisSettingsPage);
+
+    expect(screen.getByTestId('fp-cadence-capped')).toHaveAttribute('role', 'note');
+    expect(screen.getByText(`${FP}.capNoticeTitle`)).toBeInTheDocument();
+  });
+
   it('watches the inference snapshot and refetches it after a saved level change', async () => {
     cadenceState.value = cadence();
     setSettings({ level: 5, overlap: 2.8 });
@@ -367,11 +401,11 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
     await tick();
 
     expect(vi.mocked(watchAcousticModels)).toHaveBeenCalled();
-    vi.mocked(refreshAcousticModels).mockClear();
+    vi.mocked(invalidateAcousticModels).mockClear();
 
     setSettings({ level: 4, overlap: 2.8 });
     await tick();
-    expect(vi.mocked(refreshAcousticModels)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(invalidateAcousticModels)).toHaveBeenCalledTimes(1);
   });
 
   it('never mentions the removed hardware note', () => {
