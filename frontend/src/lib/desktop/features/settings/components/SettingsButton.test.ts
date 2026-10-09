@@ -295,6 +295,16 @@ describe('SettingsButton', () => {
       expect(onclick).not.toHaveBeenCalled();
     });
 
+    it('suppresses clicks for a boolean aria-disabled too', async () => {
+      const onclick = vi.fn();
+      testFactory.render({ 'aria-disabled': true, onclick });
+
+      const button = screen.getByRole('button');
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      await fireEvent.click(button);
+      expect(onclick).not.toHaveBeenCalled();
+    });
+
     it('renders no aria-describedby or aria-disabled by default', () => {
       testFactory.render({});
 
