@@ -24,7 +24,8 @@ const (
 	// StatusCapped means the overlap was lowered to fit under the duty ceiling.
 	StatusCapped Status = "capped"
 	// StatusOverloaded means the load exceeds the ceiling even at the lowest
-	// overlap the solver may pick (zero overlap, or fixed load alone).
+	// overlap the solver may pick (zero overlap, or fixed load alone), or that
+	// the input leaves no step to pick (see Input.BaseClip).
 	StatusOverloaded Status = "overloaded"
 	// StatusFilterOff means the false positive filter is disabled, so the
 	// configured overlap is used as-is and no cap is applied.
@@ -65,7 +66,10 @@ type Input struct {
 	FilterActive bool
 	// ConfiguredBaseOverlap is birdnet.overlap on the base clip.
 	ConfiguredBaseOverlap time.Duration
-	// BaseClip is the clip length the base overlap is defined against.
+	// BaseClip is the clip length the base overlap is defined against. It must be
+	// positive, and BaseClip plus Grid must not overflow a Duration; otherwise,
+	// with the filter active, Solve reports overloaded with a zero effective
+	// overlap.
 	BaseClip time.Duration
 	// Grid is the step granularity the effective step is snapped up to. A
 	// non-positive grid is treated as one millisecond.
@@ -95,7 +99,7 @@ type Plan struct {
 	EffectiveBaseOverlap time.Duration
 	// MinBaseStep is the smallest grid base step meeting the ceiling; zero when
 	// unknown or not applicable, including when no load depends on the overlap
-	// and when even zero overlap exceeds the ceiling.
+	// and when the status is overloaded.
 	MinBaseStep time.Duration
 	// Status relates effective to configured.
 	Status Status
@@ -142,7 +146,7 @@ func Equal(a, b *Plan) bool {
 
 // Solve computes the plan. It is pure and deterministic: the result does not
 // depend on the order of Pairs. A configured overlap whose duty already fits under
-// the ceiling is never lowered.
+// the ceiling is never lowered, given a BaseClip that meets its doc.
 func Solve(in Input) Plan {
 	plan := Plan{
 		ConfiguredBaseOverlap: in.ConfiguredBaseOverlap,
