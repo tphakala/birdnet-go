@@ -248,10 +248,11 @@ var (
 // a proper shutdown path instead of running for the process lifetime.
 //
 // secureCookies controls the Secure attribute on the session/auth cookies,
-// except for clients that connect directly over plain HTTP, which never get it
-// (see requestSchemeSessionStore). The caller decides it from the effective
-// web-server TLS configuration (see api.Config.SessionCookiesSecure), since the
-// security package cannot import internal/api.
+// except for clients listed in Security.PlainHTTPSessionClients that connect
+// directly over plain HTTP (see plainHTTPClientSessionStore). The caller decides
+// it from the effective web-server TLS configuration (see
+// api.Config.SessionCookiesSecure), since the security package cannot import
+// internal/api.
 func NewOAuth2Server(ctx context.Context, secureCookies bool) *OAuth2Server {
 	// Re-enable OIDC discovery retries for this instance, clearing any disabled
 	// state a previous instance's shutdown left behind (sequential tests).
@@ -401,9 +402,10 @@ func (s *OAuth2Server) setupTokenPersistence() {
 }
 
 // InitializeGoth initializes social authentication providers. secureCookies sets
-// the Secure attribute on the session store's cookies, except for direct
-// plain-HTTP clients (see requestSchemeSessionStore); the caller derives it from
-// the effective web-server TLS configuration (api.Config.SessionCookiesSecure).
+// the Secure attribute on the session store's cookies, except for configured
+// plain-HTTP session clients (see plainHTTPClientSessionStore); the caller
+// derives it from the effective web-server TLS configuration
+// (api.Config.SessionCookiesSecure).
 func InitializeGoth(settings *conf.Settings, secureCookies bool) {
 	if settings == nil {
 		// settings is a required dependency: setupSessionStore and
@@ -423,8 +425,8 @@ func InitializeGoth(settings *conf.Settings, secureCookies bool) {
 // setupSessionStore configures the Gothic session store.
 // It attempts to use a filesystem store, falling back to an in-memory cookie store on failure.
 // secureCookies sets the Secure attribute on the session cookies, except for
-// direct plain-HTTP clients (see requestSchemeSessionStore); it is derived by the
-// caller from the effective web-server TLS configuration.
+// configured plain-HTTP session clients (see plainHTTPClientSessionStore); it is
+// derived by the caller from the effective web-server TLS configuration.
 func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 	secLog := GetLogger()
 
@@ -445,7 +447,7 @@ func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 	sessionPath, ok := getSessionPath()
 	if !ok {
 		// Fallback to in-memory store if config paths can't be retrieved
-		gothic.Store = requestSchemeSessionStore{Store: newCookieStoreFallback()}
+		gothic.Store = plainHTTPClientSessionStore{Store: newCookieStoreFallback(), settings: settings}
 		return
 	}
 
@@ -454,7 +456,7 @@ func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 	// Ensure directory exists
 	if err := os.MkdirAll(sessionPath, DirPermissions); err != nil {
 		secLog.Error("Failed to create session directory, falling back to in-memory cookie store", logger.Error(err))
-		gothic.Store = requestSchemeSessionStore{Store: newCookieStoreFallback()}
+		gothic.Store = plainHTTPClientSessionStore{Store: newCookieStoreFallback(), settings: settings}
 		return
 	}
 
@@ -467,7 +469,7 @@ func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 		authKey,
 		encKey,
 	)
-	gothic.Store = requestSchemeSessionStore{Store: store}
+	gothic.Store = plainHTTPClientSessionStore{Store: store, settings: settings}
 
 	// Configure session store options
 	store.Options = buildSessionOptions(secureCookies, maxAge)

@@ -1597,6 +1597,22 @@ type Security struct {
 	// CSRF cookie Secure flag, do not consult this list. Hot-reloadable.
 	TrustedProxies []string     `yaml:"trustedproxies" json:"trustedProxies"`
 	PublicAccess   PublicAccess `yaml:"publicaccess" json:"publicAccess"` // features accessible without authentication
+
+	// PlainHTTPSessionClients lists the IP addresses of clients that reach the
+	// app directly over plain HTTP, for example another container calling
+	// http://birdnet-go:8080 while browsers use an HTTPS reverse proxy. Session
+	// cookies issued to these clients omit the Secure attribute so the clients can
+	// send them back; every other client keeps Secure whenever HTTPS is
+	// configured. Only exact addresses are accepted, not ranges. The match uses
+	// the connection's peer address, never forwarded headers, and applies only to
+	// requests that arrive without TLS and without reverse-proxy headers. Never
+	// list the address a reverse proxy connects from (including a container
+	// network gateway when the proxy runs on the host), and give listed clients a
+	// fixed address so it cannot be reassigned: browser sessions through a proxy
+	// that terminates TLS without sending forwarding headers would otherwise lose
+	// Secure. Not shown in the web UI. Empty by default. Hot-reloadable.
+	PlainHTTPSessionClients []string `yaml:"plainhttpsessionclients" json:"plainHttpSessionClients"`
+
 	// PrivateMode, when true, requires the user to authenticate before any
 	// UI data is shown. Enforcement lives at the v2 API data layer, which
 	// returns 401 to unauthenticated requests; the public SPA shell is still
