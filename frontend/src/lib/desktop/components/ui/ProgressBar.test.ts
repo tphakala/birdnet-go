@@ -336,26 +336,6 @@ describe('ProgressBar', () => {
     });
   });
 
-  it('adjusts label color based on progress', () => {
-    const { container } = progressTest.render({
-      value: 30,
-      showLabel: true,
-    });
-
-    let label = container.querySelector('.text-\\[var\\(--color-base-content\\)\\]');
-    expect(label).toBeInTheDocument();
-
-    const { container: container2 } = progressTest.render({
-      value: 70,
-      showLabel: true,
-    });
-
-    label = container2.querySelector('.text-\\[var\\(--color-primary-content\\)\\]');
-    expect(label).toBeInTheDocument();
-    expect(label).not.toHaveClass('mix-blend-difference');
-    expect(label).not.toHaveClass('text-white');
-  });
-
   it.each(['primary', 'secondary', 'accent', 'info', 'success', 'warning', 'error'] as const)(
     'labels a mostly filled %s bar with the content color of its fill',
     variant => {
