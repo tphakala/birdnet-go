@@ -1701,8 +1701,8 @@
       {:else}
         {#if fpCadenceNotice}
           <!-- The overloaded notice is an error, so it is an alert. Keyed on the
-               type so a capped notice that turns overloaded is inserted anew:
-               screen readers announce an alert on insertion, not on a role change. -->
+               type so a capped notice that turns overloaded is inserted anew as
+               an alert instead of an element that only changes its role. -->
           {#key fpCadenceNotice.type}
             <ErrorAlert
               type={fpCadenceNotice.type}
