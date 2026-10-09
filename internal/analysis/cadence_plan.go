@@ -167,8 +167,12 @@ func (p *AudioPipelineService) publishCadencePlan(bn *classifier.Orchestrator, p
 }
 
 // cadencePlanNeedsBroadcast reports whether open UIs must refetch after plan
-// replaces prev: the outcome or the configured overlap changed. plan is non-nil.
+// replaces prev: the first plan, or the outcome or the configured overlap
+// changed. plan is non-nil.
 func cadencePlanNeedsBroadcast(prev, plan *cadence.Plan) bool {
+	if prev == nil {
+		return true
+	}
 	return !cadence.SameOutcome(prev, plan) || prev.ConfiguredBaseOverlap != plan.ConfiguredBaseOverlap
 }
 

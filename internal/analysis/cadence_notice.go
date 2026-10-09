@@ -41,6 +41,14 @@ type cadenceNotice struct {
 	plan *cadence.Plan // the plan the due notice describes; nil when none is due
 }
 
+// stop cancels a pending retry and keeps later plans from raising a notice, so
+// nothing fires after the pipeline shuts down. A notice already raised stays.
+func (n *cadenceNotice) stop() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.latch.Stop()
+}
+
 // observe records a newly published plan and brings the bell notice in line.
 func (n *cadenceNotice) observe(plan *cadence.Plan) {
 	if plan == nil {

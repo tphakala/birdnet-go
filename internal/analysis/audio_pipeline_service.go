@@ -465,6 +465,9 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 		p.ctrlMonitor = nil
 	}
 
+	// Stop the cadence bell notice so its retry timer cannot fire after shutdown.
+	p.cadenceNotice.stop()
+
 	// Stop analysis buffer monitors.
 	if p.bufferMgr != nil {
 		log.Info("stopping analysis buffer monitors",

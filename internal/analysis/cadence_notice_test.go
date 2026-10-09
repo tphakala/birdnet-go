@@ -275,3 +275,15 @@ func TestCadenceNotice_RetryRaisesAfterFailedCreate(t *testing.T) {
 	assert.Equal(t, 1, created, "the retry raises the notice for the first plan")
 	assert.NotEmpty(t, n.latch.ID())
 }
+
+func TestCadenceNotice_StopKeepsLaterPlansFromRaising(t *testing.T) {
+	t.Parallel()
+	svc := newCadenceNoticeRecorder(t, 0, 0)
+	n := newTestCadenceNotice(svc)
+
+	n.stop()
+	n.observe(noticePlan(cadence.StatusCapped, 2800*time.Millisecond, 1800*time.Millisecond))
+
+	created, _ := svc.counts()
+	assert.Zero(t, created, "a stopped notice raises nothing")
+}
