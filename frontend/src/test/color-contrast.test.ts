@@ -379,6 +379,76 @@ describe('Accessibility: error text token', () => {
   }
 });
 
+describe('Error text rules', () => {
+  const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
+  const css = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');
+
+  /** Bodies of every top-level-selector rule `selector { ... }` in `source`. */
+  function ruleBodies(source: string, selector: string): string[] {
+    const bodies: string[] = [];
+    const opener = `${selector} {`;
+    let from = 0;
+    for (;;) {
+      const start = source.indexOf(opener, from);
+      if (start < 0) {
+        return bodies;
+      }
+      const bodyStart = start + opener.length;
+      const end = source.indexOf('}', bodyStart);
+      bodies.push(source.slice(bodyStart, end));
+      from = end;
+    }
+  }
+
+  for (const selector of ['.text-error', '.alert-error', '.badge-status-error']) {
+    it(`rule body of ${selector} is color: var(--text-error)`, () => {
+      const bodies = ruleBodies(css, selector);
+      expect(bodies.length, `${selector} rule found`).toBeGreaterThan(0);
+      for (const body of bodies) {
+        expect(body).toMatch(/(^|[\s;])color:\s*var\(--text-error\);/);
+        expect(body).not.toMatch(/(^|[\s;])color:\s*var\(--color-error\)/);
+      }
+    });
+  }
+
+  const desktopDir = join(stylesDir, '..', 'lib', 'desktop');
+  const COMPONENTS_WITH_ERROR_TEXT = [
+    'components/media/AudioToolbar.svelte',
+    'features/dashboard/components/PlayOverlay.svelte',
+    'views/Search.svelte',
+  ];
+
+  for (const file of COMPONENTS_WITH_ERROR_TEXT) {
+    it(`${file} colours error text with --text-error`, () => {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from the fixed list above
+      const text = readFileSync(join(desktopDir, file), 'utf8');
+      // `color:` declarations only; border-color and background-color keep the fill token
+      expect(text).not.toMatch(/^\s*color:\s*var\(--color-error[,)]/m);
+      expect(text).toMatch(/^\s*color:\s*var\(--text-error\)/m);
+    });
+  }
+
+  const lightBase = blockBody(css, '@theme');
+  const darkBlock = blockBody(css, "[data-theme='dark']");
+
+  for (const [name, block, textBlock] of [
+    ['light', lightBase, blockBody(css, ":root,\n[data-theme='light']")],
+    ['dark', darkBlock, darkBlock],
+  ] as const) {
+    it(`--text-error passes AA on a 15% error tint over base-100 in the ${name} theme`, () => {
+      // .alert-error and .badge-status-error draw a 15% --color-error tint under --text-error
+      const tint = applyOpacity(
+        readVar(block, '--color-error'),
+        readVar(block, '--color-base-100'),
+        0.15
+      );
+      expect(getContrastRatio(readVar(textBlock, '--text-error'), tint)).toBeGreaterThanOrEqual(
+        WCAG_AA_NORMAL
+      );
+    });
+  }
+});
+
 describe('SelectDropdown option states in every color scheme', () => {
   const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
   const tailwindCss = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');

@@ -253,7 +253,8 @@ guessing:
 ```
 
 Theme colours are written as CSS variables in arbitrary values
-(`text-[var(--color-base-content)]`), not bare theme class names.
+(`text-[var(--color-base-content)]`), not bare theme class names. Error text
+uses `text-[var(--text-error)]`; `--color-error` is for fills and borders.
 
 ### General Rules
 

@@ -472,7 +472,7 @@
 
   .badge-status-error {
     background: color-mix(in srgb, var(--color-error) 15%, transparent);
-    color: var(--color-error);
+    color: var(--text-error);
   }
 
   .badge-status-info {
@@ -1274,7 +1274,7 @@
 
   .alert-error {
     background-color: color-mix(in srgb, var(--color-error) 15%, transparent);
-    color: var(--color-error);
+    color: var(--text-error);
   }
 
   /* ----------------------------------------
@@ -2438,8 +2438,9 @@
     background-color: var(--color-error);
   }
 
+  /* Error text uses --text-error; --color-error is for fills and borders */
   .text-error {
-    color: var(--color-error);
+    color: var(--text-error);
   }
 
   .text-error-content {
