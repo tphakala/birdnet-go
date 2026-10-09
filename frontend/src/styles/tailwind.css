@@ -9,6 +9,38 @@
   color: var(--text-muted);
 }
 
+/* Edge shadows on a scrolling box that show only on a side with content out of view.
+   The two covering gradients scroll with the content (local) and hide the shadows at
+   the ends; the shadows stay fixed to the box edges (scroll). CSS only, no scroll listener. */
+@utility scroll-shadow-y {
+  background-color: var(--color-base-100);
+  background-image:
+    linear-gradient(var(--color-base-100) 30%, transparent),
+    linear-gradient(transparent, var(--color-base-100) 70%),
+    radial-gradient(
+      farthest-side at 50% 0,
+      color-mix(in srgb, var(--color-base-content) 22%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      farthest-side at 50% 100%,
+      color-mix(in srgb, var(--color-base-content) 22%, transparent),
+      transparent
+    );
+  background-position:
+    center top,
+    center bottom,
+    center top,
+    center bottom;
+  background-repeat: no-repeat;
+  background-size:
+    100% 2.5rem,
+    100% 2.5rem,
+    100% 0.75rem,
+    100% 0.75rem;
+  background-attachment: local, local, scroll, scroll;
+}
+
 /* Custom breakpoints and fonts */
 @theme {
   --breakpoint-*: initial;
@@ -32,7 +64,7 @@
   --grid-template-columns-12: repeat(12, minmax(0, 1fr));
   --grid-template-columns-4: repeat(4, minmax(0, 1fr));
 
-  /* Primary & accent - Blue scheme defaults.
+  /* Primary & accent: Blue scheme defaults.
      Other schemes override via [data-scheme] selectors in schemes.css. */
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;

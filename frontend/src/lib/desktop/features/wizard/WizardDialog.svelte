@@ -22,6 +22,17 @@
   const LEAVE_TITLE_ID = generateId('wizard-leave-title');
   const LEAVE_DESC_ID = generateId('wizard-leave-desc');
 
+  // Dialog widths (Modal sizes): most steps are one column; a step with a map or a
+  // long list sets size 'wide' in the registry
+  const DEFAULT_STEP_SIZE = '2xl' as const;
+  const WIDE_STEP_SIZE = '4xl' as const;
+
+  // The step box takes its content height. The floor keeps the loading and failed
+  // states, and short steps, from collapsing the dialog to a strip and from moving
+  // Next far between steps. @container lets a step lay out by the dialog's width,
+  // not the viewport's.
+  const STEP_BODY_CLASS = '@container flex min-h-[20rem] flex-col focus:outline-none';
+
   let contentRef = $state<HTMLDivElement>();
   let loadedComponent = $state<Component<WizardStepProps> | null>(null);
   // Index of the step the rendered component was loaded for
@@ -63,6 +74,14 @@
     const gen = ++importGeneration;
     // A step change (or a relaunch) offers Retry again
     if (!isRetry) retriedIndex = -1;
+    // The dialog body is one element that scrolls for every step; a new step starts
+    // at its top. Read untracked so the step box mounting does not re-run this effect.
+    if (!isRetry && step) {
+      untrack(() => {
+        const body = contentRef?.parentElement;
+        if (body) body.scrollTop = 0;
+      });
+    }
     if (step?.type === 'component') {
       // A step move already starts as 'loading'; this also covers Retry
       untrack(() => wizardState.setStepStatus('loading', index));
@@ -197,6 +216,12 @@
     return undefined;
   });
 
+  let stepSize = $derived(
+    wizardState.currentStep?.type === 'component' && wizardState.currentStep.size === 'wide'
+      ? WIDE_STEP_SIZE
+      : DEFAULT_STEP_SIZE
+  );
+
   // Resolve step title: use i18n key if available, fall back to plain string
   let stepTitle = $derived.by(() => {
     const step = wizardState.currentStep;
@@ -209,8 +234,9 @@
 
 <Modal
   isOpen={wizardState.isActive}
-  size="2xl"
+  size={stepSize}
   className="w-full"
+  scrollBody
   showCloseButton={true}
   closeOnBackdrop={false}
   closeOnEsc={!leaveConfirmOpen}
@@ -218,7 +244,8 @@
   aria-labelledby={TITLE_ID}
 >
   {#snippet header()}
-    <div class="flex items-center justify-between">
+    <!-- pe-10 keeps the row clear of the close button, which sits in the panel corner -->
+    <div class="flex items-center justify-between pe-10">
       <h3 id={TITLE_ID} class="text-lg font-bold">{stepTitle}</h3>
       <WizardProgressBar
         currentStep={wizardState.currentStepIndex}
@@ -234,16 +261,16 @@
       tabindex="-1"
       inert={wizardState.isSaving}
       aria-busy={wizardState.isSaving ? 'true' : undefined}
-      class="h-[33rem] rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)]/30 px-4 py-3 focus:outline-none"
+      class={STEP_BODY_CLASS}
     >
       {#if isLoadingStep}
         <LoadingSpinner
           size="md"
           label={t('common.loading')}
-          class="flex h-full items-center justify-center"
+          class="flex flex-1 items-center justify-center"
         />
       {:else if wizardState.stepStatus === 'failed'}
-        <div class="flex h-full items-center justify-center">
+        <div class="flex flex-1 items-center justify-center">
           {#if retryExhausted}
             <Button variant="default" size="md" bind:ref={reloadButtonRef} onclick={reloadPage}>
               <RefreshCw class="size-4" />
@@ -266,71 +293,74 @@
         />
       {/if}
     </div>
-    <!-- The alert stays in the DOM as a live region but takes no space while it is
-         empty, so the dialog is no taller than it needs to be -->
-    <p
-      id={ALERT_ID}
-      role="alert"
-      class={alertText ? 'mt-2 text-sm text-[var(--text-error)]' : 'sr-only'}
-    >
-      {alertText}
-    </p>
     <span id={SAVING_STATUS_ID} role="status" class="sr-only"
       >{wizardState.isSaving ? t('wizard.status.saving') : ''}</span
     >
   {/snippet}
 
   {#snippet footer()}
-    <!-- One row: the reason sits beside the buttons and wraps in full rather than
-         being cut off, so a long translation can make the footer taller -->
-    <div class="flex w-full items-center gap-3">
-      <Button variant="ghost" size="md" className="shrink-0" onclick={() => wizardState.skip()}>
-        {t('wizard.skip')}
-      </Button>
+    <div class="flex w-full flex-col gap-2">
+      <!-- The alert sits in the footer, above the buttons, so scrolling the body never
+         hides it. It stays in the DOM as a live region but takes no space while it
+         is empty, so the dialog is no taller than it needs to be -->
       <p
-        id={NEXT_REASON_ID}
-        class="min-w-0 flex-1 text-right text-sm leading-tight text-[var(--color-base-content)] opacity-70"
-        title={nextReason || undefined}
+        id={ALERT_ID}
+        role="alert"
+        class={alertText ? 'text-sm text-[var(--text-error)]' : 'sr-only'}
       >
-        {nextReason}
+        {alertText}
       </p>
-      <div class="flex shrink-0 items-center gap-2">
-        {#if !wizardState.isFirstStep}
-          <Button
-            variant="default"
-            size="md"
-            bind:ref={backButtonRef}
-            onclick={() => void goBack()}
-            aria-disabled={!wizardState.canGoBack ? 'true' : undefined}
-            aria-describedby={backDescribedBy}
-          >
-            <ChevronLeft class="size-4" />
-            {t('wizard.back')}
-          </Button>
-        {/if}
-        <Button
-          variant="primary"
-          size="md"
-          bind:ref={primaryButtonRef}
-          onclick={() => (wizardState.isLastStep ? wizardState.complete() : wizardState.next())}
-          aria-disabled={!wizardState.canAdvance ? 'true' : undefined}
-          aria-describedby={nextDescribedBy}
-        >
-          {#if wizardState.isSaving}
-            <LoadingSpinner
-              size="sm"
-              color="text-[var(--color-primary-content)]"
-              aria-hidden="true"
-            />
-            {t('wizard.status.saving')}
-          {:else if wizardState.isLastStep}
-            <Check class="size-4" />
-            {t('wizard.done')}
-          {:else}
-            {t('wizard.next')}
-            <ChevronRight class="size-4" />
-          {/if}
+      <!-- One row: the reason sits beside the buttons and wraps in full rather than
+         being cut off, so a long translation can make the footer taller -->
+      <div class="flex w-full items-center gap-3">
+        <Button variant="ghost" size="md" className="shrink-0" onclick={() => wizardState.skip()}>
+          {t('wizard.skip')}
         </Button>
+        <p
+          id={NEXT_REASON_ID}
+          class="min-w-0 flex-1 text-right text-sm leading-tight text-[var(--color-base-content)] opacity-70"
+          title={nextReason || undefined}
+        >
+          {nextReason}
+        </p>
+        <div class="flex shrink-0 items-center gap-2">
+          {#if !wizardState.isFirstStep}
+            <Button
+              variant="default"
+              size="md"
+              bind:ref={backButtonRef}
+              onclick={() => void goBack()}
+              aria-disabled={!wizardState.canGoBack ? 'true' : undefined}
+              aria-describedby={backDescribedBy}
+            >
+              <ChevronLeft class="size-4" />
+              {t('wizard.back')}
+            </Button>
+          {/if}
+          <Button
+            variant="primary"
+            size="md"
+            bind:ref={primaryButtonRef}
+            onclick={() => (wizardState.isLastStep ? wizardState.complete() : wizardState.next())}
+            aria-disabled={!wizardState.canAdvance ? 'true' : undefined}
+            aria-describedby={nextDescribedBy}
+          >
+            {#if wizardState.isSaving}
+              <LoadingSpinner
+                size="sm"
+                color="text-[var(--color-primary-content)]"
+                aria-hidden="true"
+              />
+              {t('wizard.status.saving')}
+            {:else if wizardState.isLastStep}
+              <Check class="size-4" />
+              {t('wizard.done')}
+            {:else}
+              {t('wizard.next')}
+              <ChevronRight class="size-4" />
+            {/if}
+          </Button>
+        </div>
       </div>
     </div>
   {/snippet}

@@ -1,6 +1,6 @@
 import type { WizardFlow, WizardStep, WizardLaunchOptions } from './types';
 
-// Onboarding steps — static list, content added later
+// Onboarding steps, in the order they are shown
 const onboardingSteps: WizardStep[] = [
   {
     id: 'welcome',
@@ -13,6 +13,7 @@ const onboardingSteps: WizardStep[] = [
     type: 'component',
     titleKey: 'wizard.steps.locationLanguage.title',
     component: () => import('./steps/LocationLanguageStep.svelte'),
+    size: 'wide',
   },
   {
     id: 'audio-source',
@@ -41,7 +42,7 @@ const onboardingSteps: WizardStep[] = [
   },
 ];
 
-// Changelog registry — ordered from oldest to newest
+// Changelog registry, ordered from oldest to newest
 interface ChangelogEntry {
   version: string;
   title: string;
