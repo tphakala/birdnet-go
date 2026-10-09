@@ -1541,6 +1541,6 @@
 
   .review-dropdown-item.false-positive:hover {
     background-color: color-mix(in srgb, var(--color-error) 15%, transparent);
-    color: var(--color-error);
+    color: var(--text-error);
   }
 </style>

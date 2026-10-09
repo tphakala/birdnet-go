@@ -111,7 +111,7 @@
   let previousEffectiveSrc = audibleBatsSrc ?? audioUrl;
   let pendingFraction: number | null = null;
   // Whether playback should resume once the swapped-in source's metadata (and
-  // restored position) are ready — avoids a race where play() starts from 0
+  // restored position) are ready; avoids a race where play() starts from 0
   // before handleLoadedMetadata applies pendingFraction.
   let pendingAutoplayAfterSwap = false;
 
@@ -781,7 +781,7 @@
     left: 50%;
     transform: translateX(-50%);
     font-size: 0.75rem;
-    color: var(--color-error);
+    color: var(--text-error);
     background-color: color-mix(in srgb, var(--color-error) 10%, var(--color-base-100));
     padding: 0.125rem 0.5rem;
     border-radius: 0.25rem;

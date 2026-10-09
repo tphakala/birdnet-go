@@ -476,7 +476,7 @@
 
   .toolbar-btn.error {
     border-color: var(--color-error, #ef4444);
-    color: var(--color-error, #ef4444);
+    color: var(--text-error);
   }
 
   .toolbar-control {
@@ -582,7 +582,7 @@
 
   .export-error {
     font-size: 0.6875rem;
-    color: var(--color-error, #ef4444);
+    color: var(--text-error);
     max-width: 12rem;
     overflow: hidden;
     text-overflow: ellipsis;
