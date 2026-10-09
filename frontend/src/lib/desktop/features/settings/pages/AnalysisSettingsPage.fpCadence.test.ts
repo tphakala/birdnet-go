@@ -9,8 +9,10 @@ import type { AnalysisCadenceInfo } from '$lib/desktop/features/system/inference
 // shown for unsaved or not yet applied settings, and the fallback when the
 // server has published no plan.
 
-const { cadenceState, stores } = vi.hoisted(() => {
-  const cadenceState: { value: AnalysisCadenceInfo | null } = { value: null };
+// The cadence is $state, so a test can change the plan while the page is open.
+const { cadenceState, stores } = await vi.hoisted(async () => {
+  const { reactiveState } = await import('../../../../../test/reactive-state.svelte');
+  const cadenceState = reactiveState<{ value: AnalysisCadenceInfo | null }>({ value: null });
   const stores: Record<string, { set: (value: unknown) => void }> = {};
   return { cadenceState, stores };
 });
@@ -385,13 +387,46 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
     expect(screen.queryByText(`${FP}.readoutPending`)).not.toBeInTheDocument();
   });
 
-  it('renders the capacity notices as notes, not alerts', () => {
+  it('renders the capped notice as a note, not an alert', () => {
     cadenceState.value = cadence();
     setSettings({ level: 5, overlap: 2.8 });
     render(AnalysisSettingsPage);
 
     expect(screen.getByTestId('fp-cadence-capped')).toHaveAttribute('role', 'note');
     expect(screen.getByText(`${FP}.capNoticeTitle`)).toBeInTheDocument();
+  });
+
+  it('renders the overloaded notice as an alert', () => {
+    cadenceState.value = cadence({
+      status: 'overloaded',
+      effectiveOverlapSec: 0,
+      minBaseStepMs: 0,
+    });
+    setSettings({ level: 5, overlap: 2.8 });
+    render(AnalysisSettingsPage);
+
+    expect(screen.getByTestId('fp-cadence-overloaded')).toHaveAttribute('role', 'alert');
+  });
+
+  it('inserts a new alert element when a capped plan turns overloaded', async () => {
+    cadenceState.value = cadence();
+    setSettings({ level: 5, overlap: 2.8 });
+    render(AnalysisSettingsPage);
+    const capped = screen.getByTestId('fp-cadence-capped');
+
+    cadenceState.value = cadence({
+      status: 'overloaded',
+      effectiveOverlapSec: 0,
+      minBaseStepMs: 0,
+    });
+    await tick();
+
+    const overloaded = screen.getByTestId('fp-cadence-overloaded');
+    expect(overloaded).toHaveAttribute('role', 'alert');
+    // Screen readers announce an alert when it is inserted, not when an
+    // element already on screen changes its role.
+    expect(overloaded).not.toBe(capped);
+    expect(capped).not.toBeInTheDocument();
   });
 
   it('watches the inference snapshot and refetches it after a saved level change', async () => {

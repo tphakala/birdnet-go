@@ -1700,15 +1700,20 @@
         </SettingsNote>
       {:else}
         {#if fpCadenceNotice}
-          <ErrorAlert
-            type={fpCadenceNotice.type}
-            role="note"
-            className="mt-4"
-            data-testid={fpCadenceNotice.testId}
-          >
-            <span class="block font-medium">{fpCadenceNotice.title}</span>
-            <span class="mt-1 block">{fpCadenceNotice.body}</span>
-          </ErrorAlert>
+          <!-- The overloaded notice is an error, so it is an alert. Keyed on the
+               type so a capped notice that turns overloaded is inserted anew:
+               screen readers announce an alert on insertion, not on a role change. -->
+          {#key fpCadenceNotice.type}
+            <ErrorAlert
+              type={fpCadenceNotice.type}
+              role={fpCadenceNotice.type === 'error' ? 'alert' : 'note'}
+              className="mt-4"
+              data-testid={fpCadenceNotice.testId}
+            >
+              <span class="block font-medium">{fpCadenceNotice.title}</span>
+              <span class="mt-1 block">{fpCadenceNotice.body}</span>
+            </ErrorAlert>
+          {/key}
         {/if}
 
         <SettingsNote>
