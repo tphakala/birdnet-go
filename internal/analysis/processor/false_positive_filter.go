@@ -121,7 +121,7 @@ func getRecommendedLevelForOverlap(overlap float64) (level int, overlapSufficien
 // based on the model ID. Bat models use a fixed 50% overlap (1.5s step) instead
 // of the user-configurable BirdNET overlap, and read from a separate filter
 // config. For the 3s BirdNET model the bird path's step (3.0 - overlap) matches
-// the buffer's cadence, which now honors birdnet.overlap (issue #4096).
+// the buffer's cadence, which follows the effective base overlap (issue #4096).
 //
 // baseOverlap is the effective base overlap (the published cadence plan's, else
 // the configured birdnet.overlap); see Processor.effectiveBaseOverlap.
@@ -131,8 +131,8 @@ func calculateMinDetectionsForModel(settings *conf.Settings, modelID string, bas
 	}
 	// For a model whose analysis clip differs from the 3s BirdNET base (e.g. Perch
 	// 5s), derive the step from the model's own clip and effective overlap so the
-	// confirmation window matches the buffer cadence. The 3s bird path (and its
-	// overlap-validation warnings) is preserved unchanged.
+	// confirmation window matches the buffer cadence. The 3s bird path derives its
+	// step from the effective base overlap in calculateMinDetectionsFromSettings.
 	if info, ok := classifier.ModelRegistry[modelID]; ok && info.Spec.ClipLength > 0 && info.Spec.ClipLength != birdBaseClipLength {
 		step := info.Spec.BufferInterval(classifier.ResolveModelOverlap(modelID, info.Spec, baseOverlap)).Seconds()
 		return minDetectionsForSegment(step, settings.Realtime.FalsePositiveFilter.Level)

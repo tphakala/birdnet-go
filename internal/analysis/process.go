@@ -377,7 +377,7 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 
 	// Derive the analysis buffer interval from the model's spec and the
 	// effective overlap, so the overrun threshold matches the real cadence
-	// (which now honors birdnet.overlap; the bat model stays fixed at 50%).
+	// (which follows the effective base overlap; the bat model stays fixed at 50%).
 	// If inference exceeds this interval the pipeline falls behind real-time.
 	effectiveBufferDuration := bufferIntervalFor(bn, modelID)
 

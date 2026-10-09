@@ -1776,8 +1776,9 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 // buffer's real cadence.
 func calculateMinDetectionsFromSettings(settings *conf.Settings, baseOverlap time.Duration) int {
 	// BirdNET uses 3-second chunks for analysis. Since Option A (issue #4096) the
-	// realtime buffer honors birdnet.overlap, so the analysis step is
-	// chunkDurationSeconds - overlap, matching the buffer's BufferInterval.
+	// realtime buffer follows the effective base overlap (baseOverlap), so the
+	// analysis step is chunkDurationSeconds - overlap, matching the buffer's
+	// BufferInterval.
 	const chunkDurationSeconds = 3.0
 
 	// Get filtering level from settings

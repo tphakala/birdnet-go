@@ -55,7 +55,7 @@ type CadenceModelInfo struct {
 	// StepMs is how often a new analysis window is produced, in milliseconds.
 	StepMs int64 `json:"stepMs"`
 	// ProbeLatencyMs is the measured inference latency in milliseconds; omitted
-	// when it could not be measured.
+	// when it could not be measured or rounds down to 0 ms.
 	ProbeLatencyMs int64 `json:"probeLatencyMs,omitempty"`
 	// Confirmations is how many analysis windows within the reference window must
 	// agree for the false positive filter to accept a detection.
