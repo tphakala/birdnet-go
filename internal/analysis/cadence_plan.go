@@ -196,9 +196,7 @@ func (p *AudioPipelineService) applyCadenceDecision(bn *classifier.Orchestrator,
 
 // requestCaptureRestart queues a full capture restart without blocking. A full
 // channel already holds a pending restart, which re-plans when it runs, so a
-// dropped token is only logged. A pipeline without a restart channel (one not
-// built by NewAudioPipelineService) drops the token the same way, and the next
-// reconfigure detects the stale plan again.
+// dropped token is only logged.
 func (p *AudioPipelineService) requestCaptureRestart() {
 	ResetOverrunTrackers()
 	if !trySignalCaptureRestart(p.restartChan) {
