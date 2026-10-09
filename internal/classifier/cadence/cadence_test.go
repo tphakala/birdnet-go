@@ -95,6 +95,12 @@ func TestSolve_Examples(t *testing.T) {
 			ms(2500), StatusCapped, []string{},
 		},
 		{
+			// Configured step 50 ms, duty 5 ms / 50 ms = 0.1 fits; the 100 ms grid must not cut it.
+			"configured fits but is finer than the grid",
+			input(true, ms(2950), []Pair{v24}, map[string]time.Duration{"v24": ms(5)}),
+			ms(2950), StatusOK, []string{},
+		},
+		{
 			// K = 0.6 -> s_min = 0.8 s exactly, which must stay 0.8 s.
 			"exact grid value stays",
 			input(true, ms(2900), []Pair{v24}, map[string]time.Duration{"v24": ms(450)}),
@@ -109,6 +115,9 @@ func TestSolve_Examples(t *testing.T) {
 			assert.Equal(t, tt.wantStatus, got.Status)
 			assert.Equal(t, tt.wantUnknown, got.UnknownLatencyModels)
 			assert.Equal(t, tt.in.ConfiguredBaseOverlap, got.ConfiguredBaseOverlap)
+			if tt.wantStatus == StatusOK && len(tt.in.Pairs) > 0 && len(tt.wantUnknown) == 0 {
+				assert.Positive(t, got.MinBaseStep, "a plan with known load reports the smallest sustained step")
+			}
 		})
 	}
 }

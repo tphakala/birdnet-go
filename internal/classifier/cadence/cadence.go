@@ -139,7 +139,8 @@ func StepFor(clip, fixedStep, baseOverlap, baseClip time.Duration) time.Duration
 }
 
 // Solve computes the plan. It is pure and deterministic: the result does not
-// depend on the order of Pairs.
+// depend on the order of Pairs. A configured overlap whose duty already fits under
+// the ceiling is never lowered.
 func Solve(in Input) Plan {
 	plan := Plan{
 		ConfiguredBaseOverlap: in.ConfiguredBaseOverlap,
@@ -214,6 +215,12 @@ func Solve(in Input) Plan {
 		sMin = math.Ceil(sMin/grid-epsilon) * grid
 	}
 	plan.MinBaseStep = time.Duration(math.Round(sMin * float64(time.Second)))
+	if plan.DutyAtConfigured <= in.DutyCeiling+epsilon {
+		// The configured overlap already fits; snapping the minimum step up to the
+		// grid must not cut an overlap the hardware sustains. MinBaseStep stays set
+		// so the readout still shows the smallest step the hardware sustains.
+		return plan
+	}
 	ovMax := max(in.BaseClip-plan.MinBaseStep, 0)
 	plan.EffectiveBaseOverlap = min(in.ConfiguredBaseOverlap, ovMax)
 	plan.DutyAtEffective = duty(plan.EffectiveBaseOverlap)
