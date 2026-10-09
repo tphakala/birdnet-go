@@ -12,9 +12,11 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
@@ -312,6 +314,37 @@ func TestGetInferenceStatus_NoModelFieldsContract(t *testing.T) {
 	st, ok := raw["acousticModelsState"]
 	require.True(t, ok, "acousticModelsState must always be present")
 	assert.Equal(t, `""`, string(st), "acousticModelsState is empty with no orchestrator")
+}
+
+// TestGetInferenceStatus_AnalysisCadenceFromPublishedPlan pins the handler
+// wiring of analysisCadence: with an orchestrator attached, the response carries
+// the published plan's status and overlaps.
+func TestGetInferenceStatus_AnalysisCadenceFromPublishedPlan(t *testing.T) {
+	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
+	e := echo.New()
+	core := apitest.NewCore(t, apitest.WithEcho(e))
+	orch := &classifier.Orchestrator{}
+	orch.SetCadencePlan(&cadence.Plan{
+		ConfiguredBaseOverlap: 2800 * time.Millisecond,
+		EffectiveBaseOverlap:  1800 * time.Millisecond,
+		Status:                cadence.StatusCapped,
+	})
+	core.Processor = &processor.Processor{Bn: orch}
+	controller := &Handler{Core: core}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetInferenceStatus(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp InferenceStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.NotNil(t, resp.AnalysisCadence, "a published plan must be reported")
+	assert.Equal(t, "capped", resp.AnalysisCadence.Status)
+	assert.InDelta(t, 2.8, resp.AnalysisCadence.ConfiguredOverlapSec, 1e-9)
+	assert.InDelta(t, 1.8, resp.AnalysisCadence.EffectiveOverlapSec, 1e-9)
 }
 
 // eventInferenceTopologyChangedName is asserted against the package constant so
