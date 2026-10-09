@@ -22,10 +22,10 @@ const cadenceNoticeOverlapDecimals = 1
 // cadence plan is capped or overloaded, so a user upgrading onto hardware that
 // cannot sustain the configured overlap learns why the false positive filter
 // can need fewer confirmations than before. Plans published later only update or
-// clear it: a capped or overloaded plan replaces the notice when its status or a
-// value its text states changes, any other plan clears it for good. A cap the user
-// causes at runtime is shown inline on the settings page they are editing, so it
-// raises no bell.
+// clear it: a capped or overloaded plan replaces the notice (as a new, unread
+// one) when its status or a value its text states changes, any other plan clears
+// it for good. A cap that first appears after a startup plan that was not capped
+// or overloaded raises no bell; the settings page shows it inline.
 //
 // The zero value is ready to use; service defaults to the process-wide
 // notification service. It is safe for concurrent use.
