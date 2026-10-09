@@ -52,7 +52,7 @@ func TestWarmupAndRecordRSS_RecordsNonNegativeDelta(t *testing.T) {
 	if before == 0 {
 		t.Skip("process RSS unavailable on this platform")
 	}
-	o.warmupAndRecordRSS(inst.ModelID(), before, inst)
+	o.warmupAndRecordRSS(inst.ModelID(), before, inst, silentInput(inst.Spec()))
 
 	// Warm-up must size the dummy clip from the spec (48000 * 3s = 144000).
 	require.Equal(t, 144000, inst.predictedN, "warm-up dummy size")

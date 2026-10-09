@@ -1,18 +1,16 @@
 package classifier
 
 import (
-	"context"
 	"maps"
 	"slices"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
-	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // cadenceProbeRuns is the number of timed silent inferences whose median is the
-// model's probed latency. One further untimed run precedes them to absorb lazy
-// allocation that the load-time warm-up did not trigger.
+// model's probed latency. When no warm-up just ran on the instance, one further
+// untimed run precedes them to absorb lazy allocation.
 const cadenceProbeRuns = 3
 
 // SetCadencePlan publishes the analysis cadence plan. The plan is copied; a nil
@@ -69,58 +67,49 @@ func (o *Orchestrator) storeProbedLatency(modelID string, latency time.Duration,
 	o.probedLatency[modelID] = latency
 }
 
-// clearProbedLatency drops one model's probe, or all probes when modelID is empty.
-func (o *Orchestrator) clearProbedLatency(modelID string) {
+// clearProbedLatencies drops every model's probe.
+func (o *Orchestrator) clearProbedLatencies() {
 	o.probeMu.Lock()
 	defer o.probeMu.Unlock()
-	if modelID == "" {
-		o.probedLatency = make(map[string]time.Duration)
-		return
-	}
+	clear(o.probedLatency)
+}
+
+// dropProbedLatency drops one model's probe.
+func (o *Orchestrator) dropProbedLatency(modelID string) {
+	o.probeMu.Lock()
+	defer o.probeMu.Unlock()
 	delete(o.probedLatency, modelID)
 }
 
-// probeLatency measures a model's inference latency on silent input: one untimed
-// run followed by cadenceProbeRuns timed runs, returning the median. Each run is
-// executed through lockRun so the caller controls which locks are held for that
-// one run only; lockRun returns false when it did not execute the run (for
-// example the entry was swapped), which aborts the probe. A failed or timed-out
-// run aborts the probe and the model is reported as unknown (ok == false).
+// probeLatency measures a model's inference latency on input (silentInput):
+// cadenceProbeRuns timed runs, returning the median. Unless warmedUp reports that
+// a warm-up inference just ran on this instance, one untimed run precedes them to
+// absorb lazy allocation. Each run is executed through lockRun so the caller
+// controls which locks are held for that one run only; lockRun returns false when
+// it did not execute the run (for example the entry was swapped), which aborts
+// the probe. A nil input, or a failed or timed-out run, aborts the probe and the
+// model is reported as unknown (ok == false).
 //
 // The probe calls instance.Predict directly, never PredictModel, so it stays out
 // of the global inference counters, like warmup.
-func (o *Orchestrator) probeLatency(modelID string, instance ModelInstance, lockRun func(run func()) bool) (median time.Duration, ok bool) {
-	spec := instance.Spec()
-	n := int(float64(spec.SampleRate) * spec.ClipLength.Seconds())
-	if n <= 0 {
+func (o *Orchestrator) probeLatency(modelID string, instance ModelInstance, input [][]float32, warmedUp bool, lockRun func(run func()) bool) (median time.Duration, ok bool) {
+	if input == nil {
 		return 0, false
 	}
-	dummy := [][]float32{make([]float32, n)}
 
 	runOnce := func() (time.Duration, bool) {
 		var elapsed time.Duration
 		var runErr error
 		ran := lockRun(func() {
-			ctx, cancel := context.WithTimeout(context.Background(), warmupTimeout)
-			defer cancel()
-			start := time.Now()
-			_, runErr = instance.Predict(ctx, dummy)
-			elapsed = time.Since(start)
+			elapsed, runErr = predictOnce(modelID, instance, input, "latency probe inference failed (non-fatal)")
 		})
-		if !ran {
-			return 0, false
-		}
-		if runErr != nil {
-			GetLogger().Debug("latency probe inference failed (non-fatal)",
-				logger.String("model", modelID),
-				logger.Error(runErr))
-			return 0, false
-		}
-		return elapsed, true
+		return elapsed, ran && runErr == nil
 	}
 
-	if _, good := runOnce(); !good {
-		return 0, false
+	if !warmedUp {
+		if _, good := runOnce(); !good {
+			return 0, false
+		}
 	}
 	samples := make([]time.Duration, 0, cadenceProbeRuns)
 	for range cadenceProbeRuns {

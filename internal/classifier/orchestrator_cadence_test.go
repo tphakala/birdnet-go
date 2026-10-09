@@ -88,12 +88,26 @@ func TestProbeLatency_MedianOfRuns(t *testing.T) {
 		o := &Orchestrator{modelRSS: map[string]int64{"Probe_Model": 7}}
 		// First run is the untimed one (5s would dominate if it were counted).
 		inst := newScripted(4*time.Second, 300*time.Millisecond, 100*time.Millisecond, 200*time.Millisecond)
-		got, ok := o.probeLatency("Probe_Model", inst, func(run func()) bool { run(); return true })
+		got, ok := o.probeLatency("Probe_Model", inst, silentInput(inst.Spec()), false, func(run func()) bool { run(); return true })
 		require.True(t, ok)
 		assert.Equal(t, 200*time.Millisecond, got)
 		assert.Equal(t, 1+cadenceProbeRuns, inst.calls)
 		rss, _ := o.ModelRSS()
 		assert.Equal(t, map[string]int64{"Probe_Model": 7}, rss, "probe must not touch RSS accounting")
+	})
+}
+
+// TestProbeLatency_SkipsUntimedRunAfterWarmup pins that a probe following a
+// warm-up on the same instance times every run it makes.
+func TestProbeLatency_SkipsUntimedRunAfterWarmup(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		o := &Orchestrator{}
+		inst := newScripted(300*time.Millisecond, 100*time.Millisecond, 200*time.Millisecond)
+		got, ok := o.probeLatency("Probe_Model", inst, silentInput(inst.Spec()), true, func(run func()) bool { run(); return true })
+		require.True(t, ok)
+		assert.Equal(t, 200*time.Millisecond, got)
+		assert.Equal(t, cadenceProbeRuns, inst.calls)
 	})
 }
 
@@ -103,7 +117,7 @@ func TestProbeLatency_FailedRunMarksUnknown(t *testing.T) {
 		o := &Orchestrator{}
 		inst := newScripted(time.Millisecond, time.Millisecond, time.Millisecond, time.Millisecond)
 		inst.failOn = 3
-		_, ok := o.probeLatency("Probe_Model", inst, func(run func()) bool { run(); return true })
+		_, ok := o.probeLatency("Probe_Model", inst, silentInput(inst.Spec()), false, func(run func()) bool { run(); return true })
 		assert.False(t, ok)
 
 		o.storeProbedLatency("Probe_Model", time.Second, true)
@@ -117,7 +131,7 @@ func TestProbeLatency_AbortsWhenRunRefused(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		o := &Orchestrator{}
 		inst := newScripted()
-		_, ok := o.probeLatency("Probe_Model", inst, func(func()) bool { return false })
+		_, ok := o.probeLatency("Probe_Model", inst, silentInput(inst.Spec()), false, func(func()) bool { return false })
 		assert.False(t, ok)
 		assert.Zero(t, inst.calls)
 	})
@@ -151,7 +165,7 @@ func TestProbeLatency_ReleasesLockBetweenRuns(t *testing.T) {
 			acquiredAt = append(acquiredAt, time.Since(start))
 			<-sem
 		}()
-		_, ok := o.probeLatency("Probe_Model", inst, lockRun)
+		_, ok := o.probeLatency("Probe_Model", inst, silentInput(inst.Spec()), false, lockRun)
 		<-done
 		require.True(t, ok)
 		require.Len(t, acquiredAt, 1)
@@ -168,7 +182,7 @@ func TestRunPendingWarmups_StoresProbedLatency(t *testing.T) {
 		good.id = "Good_Model"
 		bad := newScripted(time.Second, time.Millisecond, time.Millisecond, time.Millisecond)
 		bad.id = "Bad_Model"
-		bad.failOn = 3 // warm-up is call 1, the untimed probe run call 2, the first timed run call 3
+		bad.failOn = 3 // warm-up is call 1, the timed probe runs calls 2 to 4
 
 		o := &Orchestrator{
 			models: map[string]*modelEntry{
@@ -220,7 +234,7 @@ func TestRunPendingWarmups_ProbeOfReplacedInstanceStoresNothing(t *testing.T) {
 		replacement := newScripted()
 		replacement.id = old.id
 		entry := &modelEntry{instance: old}
-		// The swap lands during the first timed probe run (call 3), as a reload would.
+		// The swap lands during the second timed probe run (call 3), as a reload would.
 		old.onCall = func(call int) {
 			if call == 3 {
 				entry.instance = replacement

@@ -138,18 +138,20 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	//    cold and left modelRSS[v24] at its startup value), so PR3 skips warm-up+RSS for
 	//    the v2.4 anchor to stay byte-identical. Secondaries warm up exactly as before,
 	//    serialized behind live inference on inferenceMu (bounded by warmupTimeout).
+	input := silentInput(next.Spec())
 	if recordRSS {
 		func() {
 			o.inferenceMu.Lock()
 			defer o.inferenceMu.Unlock()
-			o.warmupAndRecordRSS(registryID, before, next)
+			o.warmupAndRecordRSS(registryID, before, next, input)
 		}()
 	}
 
 	// 5b. Probe inference latency on the private instance (secondaries and the v2.4
 	//     anchor alike). Each run takes only inferenceMu: entry.mu guards the serving
 	//     instance and must not be held. The result is stored after the swap succeeds.
-	probed, probeOK := o.probeLatency(registryID, next, func(run func()) bool {
+	//     The anchor skipped the warm-up, so its probe starts with an untimed run.
+	probed, probeOK := o.probeLatency(registryID, next, input, recordRSS, func(run func()) bool {
 		o.inferenceMu.Lock()
 		defer o.inferenceMu.Unlock()
 		run()

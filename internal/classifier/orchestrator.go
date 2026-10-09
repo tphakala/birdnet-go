@@ -1800,7 +1800,7 @@ func (o *Orchestrator) Delete() {
 	o.rssMu.Lock()
 	o.modelRSS = make(map[string]int64)
 	o.rssMu.Unlock()
-	o.clearProbedLatency("")
+	o.clearProbedLatencies()
 
 	for id, entry := range models {
 		entry.mu.Lock()
@@ -2334,7 +2334,7 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 		o.rssMu.Lock()
 		delete(o.modelRSS, registryID)
 		o.rssMu.Unlock()
-		o.clearProbedLatency(registryID)
+		o.dropProbedLatency(registryID)
 
 		if entry.instance != nil {
 			modelID := entry.instance.ModelID()
