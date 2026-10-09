@@ -110,6 +110,7 @@ describe('SpeciesListCard value/display split', () => {
 
 describe('SpeciesListCard combobox keyboard highlight', () => {
   const crowPredictions = ['American Robin', 'American Crow', 'Blue Jay'];
+  const threeAmericans = ['American Robin', 'American Crow', 'American Wren'];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -130,13 +131,13 @@ describe('SpeciesListCard combobox keyboard highlight', () => {
     return input;
   }
 
-  async function openListWithRerender() {
+  async function openListWithRerender(predictions: string[] = crowPredictions) {
     const { rerender } = render(SpeciesListCard, {
       props: {
         title: 'Always Include',
         species: [],
         icon: CirclePlus,
-        predictions: crowPredictions,
+        predictions,
         inputValue: 'american',
         inputLabel: 'Add species',
         inputPlaceholder: '',
@@ -252,6 +253,24 @@ describe('SpeciesListCard combobox keyboard highlight', () => {
 
     const ids = [...lists.map(l => l.id), ...screen.getAllByRole('option').map(o => o.id)];
     expect(new Set(ids).size).toBe(ids.length);
+
+    // Each label and each aria-controls points at its own card's elements
+    const include = screen.getByRole('combobox', { name: 'Include species' });
+    const exclude = screen.getByRole('combobox', { name: 'Exclude species' });
+    expect(include.id).not.toBe(exclude.id);
+    expect(screen.getByText('Include species', { selector: 'label' })).toHaveAttribute(
+      'for',
+      include.id
+    );
+    expect(screen.getByText('Exclude species', { selector: 'label' })).toHaveAttribute(
+      'for',
+      exclude.id
+    );
+    for (const input of [include, exclude]) {
+      const controlled = document.getElementById(input.getAttribute('aria-controls') ?? '');
+      expect(controlled).not.toBeNull();
+      expect(input.closest('.relative')).toContainElement(controlled);
+    }
     first.unmount();
   });
 
@@ -263,18 +282,88 @@ describe('SpeciesListCard combobox keyboard highlight', () => {
     }
   });
 
-  it('never points at a missing option after typing narrows the list', async () => {
-    const input = await openList();
+  it('typing clears the highlight even when the same suggestions remain', async () => {
+    const { input } = await openListWithRerender(threeAmericans);
     await fireEvent.keyDown(input, { key: 'ArrowDown' });
     await fireEvent.keyDown(input, { key: 'ArrowDown' });
-    expect(screen.getAllByRole('option')).toHaveLength(2);
+    expect(input).toHaveAttribute('aria-activedescendant', screen.getAllByRole('option')[1].id);
 
-    await fireEvent.input(input, { target: { value: 'american c' } });
+    await fireEvent.input(input, { target: { value: 'americ' } });
+
+    expect(screen.getAllByRole('option')).toHaveLength(3);
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+    for (const option of screen.getAllByRole('option')) {
+      expect(option).toHaveAttribute('aria-selected', 'false');
+    }
+  });
+
+  it('keeps the highlight on the last suggestion when ArrowDown goes past it', async () => {
+    const input = await openList();
+    for (let press = 0; press < 4; press++) {
+      await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    }
 
     const options = screen.getAllByRole('option');
-    expect(options).toHaveLength(1);
-    const active = input.getAttribute('aria-activedescendant');
-    expect(active === null || document.getElementById(active) !== null).toBe(true);
+    expect(input).toHaveAttribute('aria-activedescendant', options[options.length - 1].id);
+  });
+
+  it('ArrowUp with nothing highlighted keeps nothing highlighted', async () => {
+    const input = await openList();
+
+    await fireEvent.keyDown(input, { key: 'ArrowUp' });
+
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+
+    // The index stays at -1, so the next ArrowDown reaches the first suggestion
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input).toHaveAttribute('aria-activedescendant', screen.getAllByRole('option')[0].id);
+  });
+
+  it('scrolls the highlighted suggestion into view on ArrowUp as well', async () => {
+    const input = await openList();
+    const scroll = vi.mocked(Element.prototype.scrollIntoView);
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    scroll.mockClear();
+
+    await fireEvent.keyDown(input, { key: 'ArrowUp' });
+
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(screen.getAllByRole('option')[0]);
+  });
+
+  it('ArrowUp after the list shrank below the highlight lands on the last suggestion', async () => {
+    const { input, rerender } = await openListWithRerender(threeAmericans);
+    for (let press = 0; press < 3; press++) {
+      await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    }
+    await rerender({ predictions: ['American Robin'] });
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+
+    await fireEvent.keyDown(input, { key: 'ArrowUp' });
+
+    expect(input).toHaveAttribute('aria-activedescendant', screen.getByRole('option').id);
+  });
+
+  it('keeps the focus in the input when a suggestion is picked with the mouse', async () => {
+    const { onAdd } = renderCard({
+      predictions: crowPredictions,
+      inputValue: 'american',
+      localizeLabel: undefined,
+    });
+    const input = screen.getByRole('combobox');
+    input.focus();
+    await fireEvent.focus(input);
+    const [option] = await screen.findAllByRole('option');
+
+    // fireEvent returns false when the event's default was prevented, which is what keeps
+    // the browser from moving the focus to the body
+    const notPrevented = await fireEvent.mouseDown(option);
+
+    expect(notPrevented).toBe(false);
+    expect(onAdd).toHaveBeenCalledWith('American Robin');
+    expect(input).toHaveFocus();
   });
 
   it('never points at a missing option when the predictions shrink without typing', async () => {
