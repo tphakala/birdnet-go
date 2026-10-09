@@ -30,7 +30,14 @@
   import { Trash2, Search, Plus, ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
+  import { generateId } from '$lib/utils/uuid';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
+  import { getOptionStateClasses } from '$lib/desktop/components/forms/SelectDropdown.styles';
+  import {
+    activeOptionId,
+    isOptionHighlighted,
+    optionId,
+  } from '$lib/desktop/components/forms/SelectDropdown.highlight';
   import { resolveSpeciesDisplayNames, type SpeciesNameMaps } from '$lib/utils/speciesNames';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
@@ -178,6 +185,10 @@
     }
   }
 
+  // Ids are per instance: two cards can share an iconColorClass
+  const inputId = generateId('species-list-input');
+  const listboxId = generateId('species-predictions');
+
   // Autocomplete state
   let showPredictions = $state(false);
   let selectedPredictionIndex = $state(-1);
@@ -195,6 +206,14 @@
       excludeValue: inputValue,
     });
   });
+
+  let predictionsOpen = $derived(showPredictions && filteredPredictions.length > 0);
+  // Never names an option that is not rendered, for example after the predictions shrank
+  let activeDescendant = $derived(
+    predictionsOpen
+      ? activeOptionId(listboxId, selectedPredictionIndex, filteredPredictions.length)
+      : undefined
+  );
 
   function handleInputChange(e: Event) {
     const target = e.target as HTMLInputElement;
@@ -247,6 +266,8 @@
         handleAdd();
       }
     } else if (e.key === 'Escape') {
+      // Closing an open list is Escape's whole job; a dialog around the card must not also close
+      if (predictionsOpen) e.preventDefault();
       showPredictions = false;
       selectedPredictionIndex = -1;
     } else if (e.key === 'ArrowDown' && showPredictions && filteredPredictions.length > 0) {
@@ -255,10 +276,22 @@
         selectedPredictionIndex + 1,
         filteredPredictions.length - 1
       );
+      scrollToHighlighted();
     } else if (e.key === 'ArrowUp' && showPredictions) {
       e.preventDefault();
-      selectedPredictionIndex = Math.max(selectedPredictionIndex - 1, -1);
+      // A highlight left beyond a shrunken list counts as being on the last option
+      selectedPredictionIndex = Math.max(
+        Math.min(selectedPredictionIndex, filteredPredictions.length) - 1,
+        -1
+      );
+      scrollToHighlighted();
     }
+  }
+
+  function scrollToHighlighted() {
+    if (selectedPredictionIndex < 0) return;
+    const option = document.getElementById(optionId(listboxId, selectedPredictionIndex));
+    if (option instanceof HTMLElement) option.scrollIntoView({ block: 'nearest' });
   }
 
   function handleBlur() {
@@ -418,7 +451,7 @@
   <!-- Add Species Input -->
   <div class="px-4 py-3 border-t border-[var(--border-100)]">
     <label
-      for="species-list-input-{iconColorClass}"
+      for={inputId}
       class="text-xs font-semibold uppercase tracking-wider text-muted mb-2 block"
     >
       {inputLabel}
@@ -426,7 +459,7 @@
     <div class="relative">
       <div class="flex gap-2">
         <input
-          id="species-list-input-{iconColorClass}"
+          id={inputId}
           type="text"
           value={inputValue}
           oninput={handleInputChange}
@@ -442,8 +475,10 @@
           data-lpignore="true"
           data-form-type="other"
           role="combobox"
-          aria-controls="species-predictions-{iconColorClass}"
-          aria-expanded={showPredictions && filteredPredictions.length > 0}
+          aria-autocomplete="list"
+          aria-controls={listboxId}
+          aria-expanded={predictionsOpen}
+          aria-activedescendant={activeDescendant}
           aria-haspopup="listbox"
           aria-label={inputLabel}
           class="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -461,9 +496,9 @@
       </div>
 
       <!-- Predictions Dropdown -->
-      {#if showPredictions && filteredPredictions.length > 0}
-        <div
-          id="species-predictions-{iconColorClass}"
+      {#if predictionsOpen}
+        <ul
+          id={listboxId}
           in:dropdown={{ y: -4, duration: 120 }}
           out:dropdown={{ y: -4, duration: 80 }}
           class="absolute left-0 right-0 top-full mt-1 bg-[var(--surface-100)] border border-[var(--border-100)] rounded-lg shadow-lg max-h-48 overflow-y-auto z-50"
@@ -471,20 +506,25 @@
           aria-label={t('settings.species.suggestions') || 'Species suggestions'}
         >
           {#each filteredPredictions as prediction, idx (`${prediction.value}_${idx}`)}
-            <button
-              type="button"
+            <!-- Keyboard use goes through the combobox input (aria-activedescendant), so the
+                 options are neither focusable nor given key handlers. -->
+            <li
+              id={optionId(listboxId, idx)}
               role="option"
-              aria-selected={idx === selectedPredictionIndex}
-              class="w-full text-left px-3 py-2 text-sm transition-colors cursor-pointer hover:bg-black/[0.04] dark:hover:bg-white/[0.04] {idx ===
-              selectedPredictionIndex
-                ? 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] text-[var(--color-info)]'
-                : ''}"
-              onmousedown={() => selectPrediction(prediction)}
+              aria-selected={isOptionHighlighted(idx, selectedPredictionIndex)}
+              class="cursor-pointer px-3 py-2 text-sm transition-colors text-[var(--color-base-content)] {getOptionStateClasses(
+                { selected: false, highlighted: isOptionHighlighted(idx, selectedPredictionIndex) }
+              )}"
+              onmousedown={event => {
+                // Keep the focus in the input
+                event.preventDefault();
+                selectPrediction(prediction);
+              }}
             >
               {prediction.label}
-            </button>
+            </li>
           {/each}
-        </div>
+        </ul>
       {/if}
     </div>
   </div>

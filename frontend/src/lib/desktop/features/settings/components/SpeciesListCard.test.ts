@@ -11,6 +11,7 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import { CirclePlus } from '@lucide/svelte';
 import SpeciesListCard from './SpeciesListCard.svelte';
 import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
+import { OPTION_HIGHLIGHT_OUTLINE_CLASS } from '$lib/desktop/components/forms/SelectDropdown.styles';
 
 // Stub the visitor dictionary store. localizeScientific feeds localizeSpeciesName
 // (list-row display); resolveCommonToScientificUnique is the stale-predictions
@@ -104,5 +105,229 @@ describe('SpeciesListCard value/display split', () => {
     expect(resolveCommonToScientificUnique).toHaveBeenCalledWith('Punarinta');
     expect(onAdd).toHaveBeenCalledWith('Turdus migratorius');
     expect(onAdd).not.toHaveBeenCalledWith('Punarinta');
+  });
+});
+
+describe('SpeciesListCard combobox keyboard highlight', () => {
+  const crowPredictions = ['American Robin', 'American Crow', 'Blue Jay'];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // jsdom does not implement scrollIntoView
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  async function openList(overrides: Record<string, unknown> = {}) {
+    renderCard({
+      predictions: crowPredictions,
+      inputValue: 'american',
+      localizeLabel: undefined,
+      ...overrides,
+    });
+    const input = screen.getByRole('combobox');
+    await fireEvent.focus(input);
+    await screen.findAllByRole('option');
+    return input;
+  }
+
+  async function openListWithRerender() {
+    const { rerender } = render(SpeciesListCard, {
+      props: {
+        title: 'Always Include',
+        species: [],
+        icon: CirclePlus,
+        predictions: crowPredictions,
+        inputValue: 'american',
+        inputLabel: 'Add species',
+        inputPlaceholder: '',
+        emptyMessage: '',
+        onAdd: vi.fn(),
+        onRemove: vi.fn(),
+        onInput: vi.fn(),
+      },
+    });
+    const input = screen.getByRole('combobox');
+    await fireEvent.focus(input);
+    await screen.findAllByRole('option');
+    return { input, rerender };
+  }
+
+  it('ArrowDown points aria-activedescendant at the first suggestion', async () => {
+    const input = await openList();
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+    const [first] = screen.getAllByRole('option');
+    expect(first.id).not.toBe('');
+    expect(input).toHaveAttribute('aria-activedescendant', first.id);
+    expect(first).toHaveAttribute('aria-selected', 'true');
+
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    const second = screen.getAllByRole('option')[1];
+    expect(input).toHaveAttribute('aria-activedescendant', second.id);
+    expect(first).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('ArrowUp from the first suggestion clears aria-activedescendant', async () => {
+    const input = await openList();
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input).toHaveAttribute('aria-activedescendant');
+
+    await fireEvent.keyDown(input, { key: 'ArrowUp' });
+
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+  });
+
+  it('Escape clears aria-activedescendant and is handled so a surrounding dialog keeps open', async () => {
+    const input = await openList();
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+    // fireEvent returns false when the event's default was prevented
+    const notPrevented = await fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(notPrevented).toBe(false);
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+  });
+
+  it('leaves Escape alone when no suggestion list is open', async () => {
+    renderCard({ predictions: [], inputValue: '' });
+    const input = screen.getByRole('combobox');
+
+    const notPrevented = await fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(notPrevented).toBe(true);
+  });
+
+  it('gives each suggestion a unique id that the combobox controls', async () => {
+    const input = await openList();
+    const options = screen.getAllByRole('option');
+    const ids = options.map(o => o.id);
+
+    expect(new Set(ids).size).toBe(options.length);
+    const listbox = screen.getByRole('listbox');
+    expect(input).toHaveAttribute('aria-controls', listbox.id);
+    for (const option of options) {
+      expect(listbox).toContainElement(option);
+    }
+  });
+
+  it('does not share listbox or option ids between two cards of the same color', async () => {
+    const first = render(SpeciesListCard, {
+      props: {
+        title: 'Include',
+        species: [],
+        icon: CirclePlus,
+        predictions: crowPredictions,
+        inputValue: 'american',
+        inputLabel: 'Include species',
+        inputPlaceholder: '',
+        emptyMessage: '',
+        onAdd: vi.fn(),
+        onRemove: vi.fn(),
+        onInput: vi.fn(),
+      },
+    });
+    render(SpeciesListCard, {
+      props: {
+        title: 'Exclude',
+        species: [],
+        icon: CirclePlus,
+        predictions: crowPredictions,
+        inputValue: 'american',
+        inputLabel: 'Exclude species',
+        inputPlaceholder: '',
+        emptyMessage: '',
+        onAdd: vi.fn(),
+        onRemove: vi.fn(),
+        onInput: vi.fn(),
+      },
+    });
+    await fireEvent.focus(screen.getByRole('combobox', { name: 'Include species' }));
+    await fireEvent.focus(screen.getByRole('combobox', { name: 'Exclude species' }));
+    const lists = await screen.findAllByRole('listbox');
+    expect(lists).toHaveLength(2);
+
+    const ids = [...lists.map(l => l.id), ...screen.getAllByRole('option').map(o => o.id)];
+    expect(new Set(ids).size).toBe(ids.length);
+    first.unmount();
+  });
+
+  it('keeps the suggestions out of the Tab order', async () => {
+    await openList();
+    for (const option of screen.getAllByRole('option')) {
+      expect(option.tagName).not.toBe('BUTTON');
+      expect(option).not.toHaveAttribute('tabindex');
+    }
+  });
+
+  it('never points at a missing option after typing narrows the list', async () => {
+    const input = await openList();
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(screen.getAllByRole('option')).toHaveLength(2);
+
+    await fireEvent.input(input, { target: { value: 'american c' } });
+
+    const options = screen.getAllByRole('option');
+    expect(options).toHaveLength(1);
+    const active = input.getAttribute('aria-activedescendant');
+    expect(active === null || document.getElementById(active) !== null).toBe(true);
+  });
+
+  it('never points at a missing option when the predictions shrink without typing', async () => {
+    const { input, rerender } = await openListWithRerender();
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input).toHaveAttribute('aria-activedescendant', screen.getAllByRole('option')[1].id);
+
+    await rerender({ predictions: ['American Robin'] });
+
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+  });
+
+  it('marks the highlighted suggestion with the shared outline and base text color', async () => {
+    const input = await openList();
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+    const [highlighted, other] = screen.getAllByRole('option');
+
+    for (const cls of OPTION_HIGHLIGHT_OUTLINE_CLASS.split(' ')) {
+      expect(highlighted.className).toContain(cls);
+      expect(other.className).not.toContain(cls);
+    }
+    expect(highlighted.className).toContain('text-[var(--color-base-content)]');
+    expect(highlighted.className).not.toContain('--color-info');
+  });
+
+  it('scrolls the highlighted suggestion into view', async () => {
+    const input = await openList();
+    const scroll = vi.mocked(Element.prototype.scrollIntoView);
+
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+    expect(scroll).toHaveBeenLastCalledWith({ block: 'nearest' });
+    expect(scroll.mock.contexts.at(-1)).toBe(screen.getAllByRole('option')[1]);
+  });
+
+  it('Enter adds the highlighted suggestion', async () => {
+    const { onAdd } = renderCard({
+      predictions: crowPredictions,
+      inputValue: 'american',
+      localizeLabel: undefined,
+    });
+    const input = screen.getByRole('combobox');
+    await fireEvent.focus(input);
+    await screen.findAllByRole('option');
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+    await fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onAdd).toHaveBeenCalledWith('American Crow');
   });
 });
