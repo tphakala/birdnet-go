@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 func cadenceModelInfo(id string) classifier.ModelInfo {
@@ -257,8 +258,10 @@ func TestPlanCadence_FilterOffKeepsConfigured(t *testing.T) {
 	assert.Less(t, on.EffectiveBaseOverlap, 2800*time.Millisecond)
 }
 
-// replanHarness replays the publish/restart decisions of the pipeline against the
-// pure planner, so the sequence of restarts can be asserted without audio hardware.
+// replanHarness replays the needsRestart decision against the pure planner, so a
+// sequence of plan changes can be asserted without audio hardware. It does not
+// call the pipeline; TestApplyCadenceDecision_* and
+// TestPlanAndPublishCadence_Publishes cover the pipeline methods.
 type replanHarness struct {
 	t         *testing.T
 	published *cadence.Plan
@@ -277,13 +280,13 @@ func (h *replanHarness) plan(level int, overlap float64, configs []sourceConfigW
 	return &plan
 }
 
-// setup mirrors setupAudioSources: publish unconditionally.
+// setup publishes unconditionally, as a full rebuild does.
 func (h *replanHarness) setup(p *cadence.Plan) {
 	h.published = p
 }
 
-// incremental mirrors reconfigureChangedSources and RestartSource: restart or
-// publish. It reports whether a restart was requested.
+// incremental applies needsRestart: count a restart or publish. It reports
+// whether a restart was requested.
 func (h *replanHarness) incremental(p *cadence.Plan) bool {
 	if needsRestart(h.published, p) {
 		h.restarts++
@@ -331,18 +334,13 @@ func TestCadenceReplanSequence(t *testing.T) {
 	assert.False(t, h.incremental(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat)))
 	assert.Equal(t, 1, h.restarts)
 
-	// 5. A source that would fail AddSource still counts (pairs come from configs):
-	// the same configs yield the same plan, so no restart.
-	assert.False(t, h.incremental(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat)))
-	assert.Equal(t, 1, h.restarts)
-
-	// 6. Overlap lowered below the cap but its restart signal was dropped: the
+	// 5. Overlap lowered below the cap but its restart signal was dropped: the
 	// reconfigure restarts on its own.
 	assert.True(t, h.incremental(h.plan(5, 1.0, explicit(t, v24, v3, perch), three, lat)))
 	assert.Equal(t, 2, h.restarts)
 	h.setup(h.plan(5, 1.0, explicit(t, v24, v3, perch), three, lat))
 
-	// 7. Level to 0 and back: crossing re-plans, same-side changes do not.
+	// 6. Level to 0 and back: crossing re-plans, same-side changes do not.
 	assert.False(t, h.incremental(h.plan(3, 1.0, explicit(t, v24, v3, perch), three, lat)), "level change on one side of 0")
 	h.setup(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat))
 	assert.True(t, h.incremental(h.plan(0, 2.8, explicit(t, v24, v3, perch), three, lat)), "level to 0 lifts the cap")
@@ -353,7 +351,7 @@ func TestCadenceReplanSequence(t *testing.T) {
 	assert.True(t, h.incremental(h.plan(4, 2.8, explicit(t, v24, v3, perch), three, lat)), "level back on re-applies the cap")
 	assert.Equal(t, before+1, h.restarts)
 
-	// 8. RestartSource after a model-assignment edit that adds a pair.
+	// 7. RestartSource after a model-assignment edit that adds a pair.
 	h.setup(h.plan(5, 2.8, explicit(t, v24), cadenceLoaded(v24, v3, perch), lat))
 	before = h.restarts
 	assert.True(t, h.incremental(h.plan(5, 2.8, explicit(t, v24, v3, perch), three, lat)))
@@ -391,4 +389,68 @@ func TestRequestCaptureRestart_DoesNotBlockWhenFull(t *testing.T) {
 	p.requestCaptureRestart()
 	p.requestCaptureRestart()
 	assert.Len(t, p.restartChan, 1)
+}
+
+// cadenceService returns a pipeline with a zero orchestrator and a one-slot
+// restart channel, under global settings at FP level 5 and overlap 2.8 s.
+func cadenceService(t *testing.T) (*AudioPipelineService, *classifier.Orchestrator) {
+	t.Helper()
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+	s := &conf.Settings{}
+	s.BirdNET.Overlap = 2.8
+	s.Realtime.FalsePositiveFilter.Level = 5
+	conftest.SetTestSettings(s)
+
+	orch := &classifier.Orchestrator{Settings: s}
+	return &AudioPipelineService{bnAnalyzer: &BirdNETAnalyzer{bn: orch}, restartChan: make(chan struct{}, 1)}, orch
+}
+
+// TestPlanAndPublishCadence_Publishes pins that a full rebuild publishes its plan
+// unconditionally, even when the step differs from the one published before,
+// where the incremental decision would queue a restart instead.
+func TestPlanAndPublishCadence_Publishes(t *testing.T) {
+	// Not parallel: conftest.SetTestSettings mutates package-global settings.
+	p, orch := cadenceService(t)
+	orch.SetCadencePlan(&cadence.Plan{
+		ConfiguredBaseOverlap: 2800 * time.Millisecond,
+		EffectiveBaseOverlap:  1800 * time.Millisecond,
+		Status:                cadence.StatusCapped,
+	})
+	p.planAndPublishCadence(nil, "test")
+	plan := orch.CadencePlan()
+	require.NotNil(t, plan)
+	assert.Equal(t, 2800*time.Millisecond, plan.EffectiveBaseOverlap, "no load, configured overlap kept")
+	assert.Empty(t, p.restartChan)
+}
+
+// TestApplyCadenceDecision_QueuesRestartAndKeepsPlan pins that a changed step
+// queues a full restart and leaves the published plan for the buffers in use.
+func TestApplyCadenceDecision_QueuesRestartAndKeepsPlan(t *testing.T) {
+	// Not parallel: conftest.SetTestSettings mutates package-global settings.
+	p, orch := cadenceService(t)
+	orch.SetCadencePlan(&cadence.Plan{
+		ConfiguredBaseOverlap: 2800 * time.Millisecond,
+		EffectiveBaseOverlap:  1800 * time.Millisecond,
+		Status:                cadence.StatusCapped,
+	})
+	p.applyCadenceDecision(orch, nil, nil, nil, "test")
+	assert.Len(t, p.restartChan, 1, "the step changes from 1.8 s to 2.8 s")
+	assert.Equal(t, 1800*time.Millisecond, orch.CadencePlan().EffectiveBaseOverlap, "the plan in use stays published")
+}
+
+// TestApplyCadenceDecision_PublishesWhenStepUnchanged pins that a plan with the
+// same step is published without a restart.
+func TestApplyCadenceDecision_PublishesWhenStepUnchanged(t *testing.T) {
+	// Not parallel: conftest.SetTestSettings mutates package-global settings.
+	p, orch := cadenceService(t)
+	orch.SetCadencePlan(&cadence.Plan{
+		ConfiguredBaseOverlap: 2800 * time.Millisecond,
+		EffectiveBaseOverlap:  2800 * time.Millisecond,
+		Status:                cadence.StatusOK,
+		SourceCount:           3,
+	})
+	p.applyCadenceDecision(orch, nil, nil, nil, "test")
+	assert.Empty(t, p.restartChan)
+	assert.Equal(t, 0, orch.CadencePlan().SourceCount, "the new plan is published")
 }
