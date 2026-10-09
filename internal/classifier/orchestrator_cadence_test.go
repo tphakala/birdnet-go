@@ -22,11 +22,15 @@ type scriptedInstance struct {
 	durations []time.Duration
 	failOn    int // 1-based call index that fails; 0 = never
 	calls     int
+	onCall    func(call int) // runs inside Predict, under whatever locks the caller holds
 }
 
 func (s *scriptedInstance) Predict(ctx context.Context, _ [][]float32) ([]datastore.Results, error) {
 	s.calls++
 	idx := s.calls
+	if s.onCall != nil {
+		s.onCall(idx)
+	}
 	if s.failOn == idx {
 		return nil, errors.NewStd("scripted failure")
 	}
@@ -203,4 +207,35 @@ func TestModelInfos_StampsEffectiveOverlap(t *testing.T) {
 	infos = o.ModelInfos()
 	require.Len(t, infos, 1)
 	assert.Equal(t, 1800*time.Millisecond, infos[0].Overlap, "published plan wins")
+}
+
+// TestRunPendingWarmups_ProbeOfReplacedInstanceStoresNothing pins that a probe
+// whose instance was swapped out mid-probe neither stores nor deletes a latency:
+// the replacement's fresher probe must survive.
+func TestRunPendingWarmups_ProbeOfReplacedInstanceStoresNothing(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		old := newScripted(time.Second, time.Second, time.Second, time.Second, time.Second)
+		old.id = "Swapped_Model"
+		replacement := newScripted()
+		replacement.id = old.id
+		entry := &modelEntry{instance: old}
+		// The swap lands during the first timed probe run (call 3), as a reload would.
+		old.onCall = func(call int) {
+			if call == 3 {
+				entry.instance = replacement
+			}
+		}
+
+		o := &Orchestrator{
+			models:   map[string]*modelEntry{old.id: entry},
+			modelRSS: make(map[string]int64),
+		}
+		const fresh = 7 * time.Second
+		o.storeProbedLatency(old.id, fresh, true) // what the reload of the replacement recorded
+		o.deferWarmup(old.id, 0)
+		o.runPendingWarmups()
+
+		assert.Equal(t, fresh, o.ProbedLatencies()[old.id], "the replacement's probe must not be overwritten or deleted")
+	})
 }
