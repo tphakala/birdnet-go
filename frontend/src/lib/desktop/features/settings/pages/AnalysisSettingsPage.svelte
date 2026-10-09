@@ -606,10 +606,12 @@
     const minDet = calculateMinDetections(level, overlap);
     const baseDescription = t(levelData.descriptionKey);
 
-    // With a published cadence plan the readout below the control states the
-    // real per-model counts, so the description must not repeat a count computed
-    // from the configured overlap, which the device may not be running.
-    if (level === 0 || cadence) return baseDescription;
+    // When the published plan has bird models, the readout below the control
+    // states their real counts, so the description must not repeat a count
+    // computed from the configured overlap, which the device may not be running.
+    if (level === 0 || (cadence !== null && savedReadout(cadence).length > 0)) {
+      return baseDescription;
+    }
 
     return t('settings.main.sections.falsePositiveFilter.detectionCount', {
       count: minDet.toString(),

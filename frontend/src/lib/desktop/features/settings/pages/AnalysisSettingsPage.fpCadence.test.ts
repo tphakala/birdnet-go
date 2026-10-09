@@ -249,6 +249,17 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
     expect(screen.getByText(`${FP}.cpuNote`)).toBeInTheDocument();
   });
 
+  it('keeps the count in the description when the plan has no bird models', () => {
+    cadenceState.value = cadence({
+      models: cadence().models.filter(m => m.id === 'Bat'),
+    });
+    setSettings({ level: 5, overlap: 2.8 });
+    render(AnalysisSettingsPage);
+
+    expect(screen.queryByTestId('fp-cadence-readout')).not.toBeInTheDocument();
+    expect(paramsFor(`${FP}.detectionCount`).at(-1)).toMatchObject({ count: '21' });
+  });
+
   it('shows only the filter-off warning when the filter is off', () => {
     cadenceState.value = cadence({ status: 'filterOff', configuredOverlapSec: 1.5 });
     setSettings({ level: 0, overlap: 1.5 });
