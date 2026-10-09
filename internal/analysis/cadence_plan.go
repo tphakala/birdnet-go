@@ -194,6 +194,22 @@ func (p *AudioPipelineService) applyCadenceDecision(bn *classifier.Orchestrator,
 	p.publishCadencePlan(bn, &plan, operation)
 }
 
+// replanCadence re-plans the analysis cadence for the configured sources without
+// probing streams or diffing sources. A BirdNET reload re-probes model latency
+// but leaves the sources as they are, so it needs only the plan; a full source
+// reconfigure would contact every stream and could restart a kept one. It
+// restarts capture only when the effective overlap changes.
+func (p *AudioPipelineService) replanCadence() {
+	bn := p.birdNET()
+	if bn == nil {
+		return
+	}
+	p.sourcesMu.Lock()
+	defer p.sourcesMu.Unlock()
+	configs := p.buildSourceConfigs(nil, false)
+	p.applyCadenceDecision(bn, configs, loadedModelMap(bn), bn.DefaultTargets(), operationReplanCadence)
+}
+
 // requestCaptureRestart queues a full capture restart without blocking. A full
 // channel already holds a pending restart, which re-plans when it runs, so a
 // dropped token is only logged.

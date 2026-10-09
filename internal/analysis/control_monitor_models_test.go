@@ -56,8 +56,8 @@ func TestHandleReloadBirdnet_V24NotLoaded_SkipsPrimaryReload(t *testing.T) {
 }
 
 // TestHandleReloadBirdnet_ReplansCadence pins that a BirdNET reload, which
-// re-probes model latency, re-plans the analysis cadence through the reconfigure
-// hook.
+// re-probes model latency, re-plans the analysis cadence through the re-plan
+// hook and does not run a full source reconfigure (which probes every stream).
 func TestHandleReloadBirdnet_ReplansCadence(t *testing.T) {
 	// Not parallel: NewOrchestrator publishes into the global settings snapshot.
 	settings := conftest.GetTestSettings()
@@ -69,8 +69,13 @@ func TestHandleReloadBirdnet_ReplansCadence(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(orch.Delete)
 
-	var replans int
-	cm := &ControlMonitor{bn: orch, reconfigureSourcesFn: func() { replans++ }}
+	var replans, reconfigures int
+	cm := &ControlMonitor{
+		bn:                   orch,
+		replanCadenceFn:      func() { replans++ },
+		reconfigureSourcesFn: func() { reconfigures++ },
+	}
 	cm.handleReloadBirdnet()
 	assert.Equal(t, 1, replans, "the reload must re-plan the cadence once")
+	assert.Zero(t, reconfigures, "the reload must not reconfigure (and probe) the sources")
 }

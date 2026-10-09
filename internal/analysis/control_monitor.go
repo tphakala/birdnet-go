@@ -58,6 +58,10 @@ type ControlMonitor struct {
 	// duplicating source setup logic.
 	reconfigureSourcesFn func()
 
+	// replanCadenceFn re-plans the analysis cadence without probing or diffing
+	// sources. Set by AudioPipelineService after construction; nil skips it.
+	replanCadenceFn func()
+
 	// reconfigureSoundLevelFn reconciles the sound level DSP pipeline (router
 	// routes, per-source Processor, bridge goroutines) with the current
 	// Realtime.Audio.SoundLevel.Enabled value. Provided by AudioPipelineService
@@ -430,10 +434,11 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		cm.notifyError("Failed to reload secondary models", err)
 	}
 
-	// A threads or backend change reloads the models and re-probes their latency,
+	// A thread or backend change reloads the models and re-probes their latency,
 	// so re-plan the analysis cadence (restarts capture only if the step changes).
-	if cm.reconfigureSourcesFn != nil {
-		cm.reconfigureSourcesFn()
+	// The sources did not change, so no stream is probed or reconfigured.
+	if cm.replanCadenceFn != nil {
+		cm.replanCadenceFn()
 	}
 
 	emitHotReload("birdnet_model")

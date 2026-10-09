@@ -415,6 +415,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	reconfigureMonitoringFn := p.apiService.ReconfigureMonitoring
 	apiController := p.apiService.APIController()
 	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine, reconfigureFn, reconfigureSoundLevelFn, reconfigureMonitoringFn)
+	p.ctrlMonitor.replanCadenceFn = p.replanCadence
 	p.ctrlMonitor.Start()
 
 	// Start restart loop goroutine.
@@ -1068,6 +1069,7 @@ const (
 	operationGainChange        = "gain_change"
 	operationModelChange       = "model_change"
 	operationRouteRetry        = "route_retry"
+	operationReplanCadence     = "replan_cadence"
 )
 
 // isReconfigureOperation reports whether a registerConsumersForSources pass was
@@ -1858,6 +1860,14 @@ func (p *AudioPipelineService) captureAllStreamFallbacks() map[string]streamFall
 // fallback; RestartSource removes the source before building, so it captures the
 // parameters first and passes them here.
 func (p *AudioPipelineService) buildSourceConfigsWithModels(fallbackSources map[string]streamFallback) []sourceConfigWithModels {
+	return p.buildSourceConfigs(fallbackSources, true)
+}
+
+// buildSourceConfigs builds the desired source configs. With probeStreams false it
+// skips the stream probes and the probe-failure logging: the configs then carry
+// the same sources and model assignments with fallback stream parameters, which
+// is all cadence planning reads, and no stream is contacted.
+func (p *AudioPipelineService) buildSourceConfigs(fallbackSources map[string]streamFallback, probeStreams bool) []sourceConfigWithModels {
 	settings := conf.Setting()
 	var result []sourceConfigWithModels
 
@@ -1873,7 +1883,10 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels(fallbackSources map[
 	// channel counts. This lets us skip FFmpeg resampling when the source
 	// already matches the target, detect sub-48 kHz sources that need
 	// upsampling, and pass channel info for the channel selection filter.
-	probeResults := p.probeAllStreams(enabledStreams)
+	var probeResults map[string]streamProbeResult
+	if probeStreams {
+		probeResults = p.probeAllStreams(enabledStreams)
+	}
 
 	// RTSP streams.
 	for _, stream := range enabledStreams {
@@ -1910,6 +1923,8 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels(fallbackSources map[
 		// retention warning. escalate requires no rate fallback, so it never
 		// coincides with a retained rate.
 		switch {
+		case !probeStreams:
+			// No probe ran, so a fallback is expected and nothing failed.
 		case escalate:
 			// Carry the channel-retention state even on the escalation path: the
 			// rate is lost, but a channel count may still have been recovered, and
@@ -1930,7 +1945,7 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels(fallbackSources map[
 				logger.Bool("channels_retained", channelsRetained),
 				logger.String("operation", "probe_stream"))
 		}
-		if isBat && sourceSampleRate > 0 && sourceSampleRate < ffmpeg.MinBatSampleRate {
+		if probeStreams && isBat && sourceSampleRate > 0 && sourceSampleRate < ffmpeg.MinBatSampleRate {
 			GetLogger().Warn("stream sample rate below bat model minimum",
 				logger.String("stream", stream.Name),
 				logger.Int("sample_rate", sourceSampleRate),

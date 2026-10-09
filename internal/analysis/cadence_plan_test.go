@@ -454,3 +454,28 @@ func TestApplyCadenceDecision_PublishesWhenStepUnchanged(t *testing.T) {
 	assert.Empty(t, p.restartChan)
 	assert.Equal(t, 0, orch.CadencePlan().SourceCount, "the new plan is published")
 }
+
+// TestReplanCadence_AppliesDecision pins that the reload re-plan runs the same
+// decision as the incremental paths: a step change queues a full restart and
+// keeps the plan in use published.
+func TestReplanCadence_AppliesDecision(t *testing.T) {
+	// Not parallel: conftest.SetTestSettings mutates package-global settings.
+	p, orch := cadenceService(t)
+	orch.SetCadencePlan(&cadence.Plan{
+		ConfiguredBaseOverlap: 2800 * time.Millisecond,
+		EffectiveBaseOverlap:  1800 * time.Millisecond,
+		Status:                cadence.StatusCapped,
+	})
+	p.replanCadence()
+	assert.Len(t, p.restartChan, 1, "no load now, so the step changes from 1.8 s to 2.8 s")
+	assert.Equal(t, 1800*time.Millisecond, orch.CadencePlan().EffectiveBaseOverlap)
+}
+
+// TestReplanCadence_NoBackendIsNoOp pins that the re-plan does nothing without a
+// classifier backend.
+func TestReplanCadence_NoBackendIsNoOp(t *testing.T) {
+	t.Parallel()
+	p := &AudioPipelineService{restartChan: make(chan struct{}, 1)}
+	assert.NotPanics(t, p.replanCadence)
+	assert.Empty(t, p.restartChan)
+}
