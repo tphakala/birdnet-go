@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
 	"github.com/stretchr/testify/assert"
@@ -33,6 +34,9 @@ func sessionCookieFromResponse(t *testing.T, rec *httptest.ResponseRecorder) *ht
 // configured Secure attribute.
 func TestSessionCookieSecure_DirectPlainHTTP(t *testing.T) {
 	// Not parallel: InitializeGoth mutates gothic.Store and the test config path.
+	prevStore := gothic.Store
+	t.Cleanup(func() { gothic.Store = prevStore })
+
 	tests := []struct {
 		name          string
 		secureCookies bool
@@ -81,4 +85,22 @@ func TestSessionCookieSecure_DirectPlainHTTP(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestConfigureLocalNetworkCookieStore_WrappedStore verifies that the local
+// network relaxation still reaches the store wrapped by
+// requestSchemeSessionStore.
+func TestConfigureLocalNetworkCookieStore_WrappedStore(t *testing.T) {
+	// Not parallel: mutates the global gothic.Store.
+	prevStore := gothic.Store
+	t.Cleanup(func() { gothic.Store = prevStore })
+
+	inner := sessions.NewFilesystemStore(t.TempDir(), []byte("test-secret"))
+	inner.Options = buildSessionOptions(true, DefaultSessionMaxAgeSeconds)
+	gothic.Store = requestSchemeSessionStore{Store: inner}
+
+	server := &OAuth2Server{settings: &conf.Settings{Security: conf.Security{SessionSecret: "test-secret"}}}
+	server.configureLocalNetworkCookieStore(server.settings)
+
+	assert.False(t, inner.Options.Secure, "Secure should be false on the wrapped store for local network")
 }

@@ -13,17 +13,18 @@ const (
 	headerCFConnectingIP = "CF-Connecting-IP"
 )
 
-// proxyHeaders are request headers set by reverse proxies. A request carrying
-// any of them did not come straight from the client.
+// proxyHeaders are request headers set by reverse proxies, in canonical form so
+// they can be looked up in http.Header directly. A request carrying any of them
+// did not come straight from the client.
 var proxyHeaders = []string{
-	headerForwarded,
-	echo.HeaderXForwardedFor,
-	echo.HeaderXForwardedProto,
-	echo.HeaderXForwardedProtocol,
-	echo.HeaderXForwardedSsl,
-	echo.HeaderXUrlScheme,
-	echo.HeaderXRealIP,
-	headerCFConnectingIP,
+	http.CanonicalHeaderKey(headerForwarded),
+	http.CanonicalHeaderKey(echo.HeaderXForwardedFor),
+	http.CanonicalHeaderKey(echo.HeaderXForwardedProto),
+	http.CanonicalHeaderKey(echo.HeaderXForwardedProtocol),
+	http.CanonicalHeaderKey(echo.HeaderXForwardedSsl),
+	http.CanonicalHeaderKey(echo.HeaderXUrlScheme),
+	http.CanonicalHeaderKey(echo.HeaderXRealIP),
+	http.CanonicalHeaderKey(headerCFConnectingIP),
 }
 
 // requestSchemeSessionStore wraps the session store so that a session loaded
@@ -33,9 +34,9 @@ var proxyHeaders = []string{
 // the cookie back. The store-wide options decide Secure for every other
 // request, including everything that arrives through a proxy.
 //
-// The cookie is written by Session.Save, which goes straight to the wrapped
-// store with the session's own copy of the options, so the adjustment is made
-// when the session is loaded in Get and New.
+// The adjustment is made when the session is loaded in Get and New, because
+// Session.Save writes the cookie through the wrapped store using the session's
+// own copy of the options.
 type requestSchemeSessionStore struct {
 	sessions.Store
 }
@@ -54,12 +55,6 @@ func (s requestSchemeSessionStore) New(r *http.Request, name string) (*sessions.
 	return session, err
 }
 
-// Save writes session for r with Secure adjusted to how r arrived.
-func (s requestSchemeSessionStore) Save(r *http.Request, w http.ResponseWriter, session *sessions.Session) error {
-	clearSecureForDirectPlainHTTP(r, session)
-	return s.Store.Save(r, w, session)
-}
-
 // clearSecureForDirectPlainHTTP drops the Secure attribute from session when r
 // reached the app over plain HTTP without passing through a proxy. Each session
 // holds its own copy of the store options, so other requests are not affected.
@@ -74,13 +69,16 @@ func clearSecureForDirectPlainHTTP(r *http.Request, session *sessions.Session) {
 }
 
 // isDirectPlainHTTPRequest reports whether r arrived over a plain-HTTP
-// connection and carries no reverse-proxy headers.
+// connection and carries no reverse-proxy headers. Unlike the scheme checks in
+// the API layer, it does not ask which peers are trusted to report the scheme:
+// any proxy header keeps the configured Secure attribute, so a proxy on an
+// untrusted address cannot cause Secure to be dropped for browsers behind it.
 func isDirectPlainHTTPRequest(r *http.Request) bool {
 	if r == nil || r.TLS != nil {
 		return false
 	}
 	for _, header := range proxyHeaders {
-		if r.Header.Get(header) != "" {
+		if values := r.Header[header]; len(values) > 0 && values[0] != "" {
 			return false
 		}
 	}
