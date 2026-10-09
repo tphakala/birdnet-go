@@ -211,6 +211,112 @@ describe('acousticModels store', () => {
       expect(analysisCadence()).toBeNull();
     });
 
+    const validCadence = () => ({
+      status: 'ok',
+      configuredOverlapSec: 2,
+      effectiveOverlapSec: 2,
+      minBaseStepMs: 0,
+      estimatedDutyConfigured: 0.2,
+      estimatedDutyEffective: 0.2,
+      dutyCeiling: 0.75,
+      sourceCount: 1,
+      modelCount: 1,
+      unknownLatencyModels: [],
+      models: [
+        {
+          id: 'BirdNET_V2.4',
+          name: 'BirdNET v2.4',
+          clipMs: 3000,
+          stepMs: 1000,
+          confirmations: 2,
+          windowsInReference: 6,
+        },
+      ],
+    });
+
+    it.each([
+      ['an unknown status', { status: 'sideways' }],
+      ['a missing configured overlap', { configuredOverlapSec: undefined }],
+      ['a non-finite effective overlap', { effectiveOverlapSec: Number.NaN }],
+      ['models that are not a list', { models: 'none' }],
+    ])('rejects a cadence with %s', async (_label, override) => {
+      apiGet.mockResolvedValueOnce({
+        ...snapshot('ok'),
+        analysisCadence: { ...validCadence(), ...override },
+      });
+      await refreshAcousticModels();
+      expect(analysisCadence()).toBeNull();
+    });
+
+    it.each([
+      ['id', { id: 7 }],
+      ['clipMs', { clipMs: '3000' }],
+      ['stepMs', { stepMs: undefined }],
+      ['confirmations', { confirmations: Number.POSITIVE_INFINITY }],
+      ['windowsInReference', { windowsInReference: null }],
+    ])('drops a cadence model with a bad %s', async (_field, override) => {
+      const cadence = validCadence();
+      const [model] = cadence.models;
+      apiGet.mockResolvedValueOnce({
+        ...snapshot('ok'),
+        analysisCadence: { ...cadence, models: [{ ...model, ...override }] },
+      });
+      await refreshAcousticModels();
+      expect(analysisCadence()?.models).toEqual([]);
+    });
+
+    it('clears a held cadence when the next snapshot has none', async () => {
+      apiGet.mockResolvedValueOnce({ ...snapshot('ok'), analysisCadence: validCadence() });
+      await refreshAcousticModels();
+      expect(analysisCadence()).not.toBeNull();
+
+      apiGet.mockResolvedValueOnce(snapshot('ok'));
+      await refreshAcousticModels();
+      expect(analysisCadence()).toBeNull();
+    });
+
+    it('defaults optional numbers that are null or not finite to zero', async () => {
+      apiGet.mockResolvedValueOnce({
+        ...snapshot('ok'),
+        analysisCadence: { ...validCadence(), dutyCeiling: null, minBaseStepMs: Number.NaN },
+      });
+      await refreshAcousticModels();
+      expect(analysisCadence()).toMatchObject({ dutyCeiling: 0, minBaseStepMs: 0 });
+    });
+
+    it('keeps only the string entries of unknownLatencyModels', async () => {
+      apiGet.mockResolvedValueOnce({
+        ...snapshot('ok'),
+        analysisCadence: { ...validCadence(), unknownLatencyModels: [7, 'Perch_V2', null] },
+      });
+      await refreshAcousticModels();
+      expect(analysisCadence()?.unknownLatencyModels).toEqual(['Perch_V2']);
+    });
+
+    it('defaults the optional numbers to zero', async () => {
+      const rest: Record<string, unknown> = validCadence();
+      for (const key of [
+        'minBaseStepMs',
+        'estimatedDutyConfigured',
+        'estimatedDutyEffective',
+        'dutyCeiling',
+        'sourceCount',
+        'modelCount',
+      ]) {
+        Reflect.deleteProperty(rest, key);
+      }
+      apiGet.mockResolvedValueOnce({ ...snapshot('ok'), analysisCadence: rest });
+      await refreshAcousticModels();
+      expect(analysisCadence()).toMatchObject({
+        minBaseStepMs: 0,
+        estimatedDutyConfigured: 0,
+        estimatedDutyEffective: 0,
+        dutyCeiling: 0,
+        sourceCount: 0,
+        modelCount: 0,
+      });
+    });
+
     it('drops malformed cadence model entries and a null unknown list', async () => {
       apiGet.mockResolvedValueOnce({
         ...snapshot('ok'),
