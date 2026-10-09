@@ -71,7 +71,8 @@ func planCadence(settings *conf.Settings, pairs []cadence.Pair, latencies map[st
 // candidate. Buffers keep the step of the plan that was published when they were
 // allocated, so a candidate with a different effective overlap needs a full
 // restart, which also re-plans. With nothing published yet the buffers use the
-// configured overlap, so only a capped candidate needs one. It does not rely on
+// configured overlap, so only a candidate below the configured overlap (capped
+// or overloaded) needs one. It does not rely on
 // the overlap-change restart signal: that signal is dropped when the restart
 // channel is full, and treating the plan as unchanged would then pin stale
 // buffers.
