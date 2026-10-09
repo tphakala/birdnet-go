@@ -383,7 +383,10 @@ describe('Error text rules', () => {
   const stylesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'styles');
   const css = readFileSync(join(stylesDir, 'tailwind.css'), 'utf8');
 
-  /** Bodies of every top-level-selector rule `selector { ... }` in `source`. */
+  /**
+   * Bodies of every rule written as `selector { ... }` in `source`. A compound selector that ends
+   * in `selector` (`.a .text-error { ... }`) matches too.
+   */
   function ruleBodies(source: string, selector: string): string[] {
     const bodies: string[] = [];
     const opener = `${selector} {`;
@@ -395,6 +398,9 @@ describe('Error text rules', () => {
       }
       const bodyStart = start + opener.length;
       const end = source.indexOf('}', bodyStart);
+      if (end < 0) {
+        throw new Error(`rule "${selector}" has no closing brace`);
+      }
       bodies.push(source.slice(bodyStart, end));
       from = end;
     }
@@ -411,21 +417,63 @@ describe('Error text rules', () => {
     });
   }
 
+  // The tint under .alert-error and .badge-status-error stays the fill token, at the share the
+  // contrast tests below assume.
+  for (const selector of ['.alert-error', '.badge-status-error']) {
+    it(`${selector} keeps its 15% --color-error tint`, () => {
+      for (const body of ruleBodies(css, selector)) {
+        expect(body).toContain('color-mix(in srgb, var(--color-error) 15%, transparent)');
+      }
+    });
+  }
+
   const desktopDir = join(stylesDir, '..', 'lib', 'desktop');
+  // Component styles with error text. `fills` names the selectors whose border or tint keeps the
+  // fill token, with the declaration text each must still hold.
   const COMPONENTS_WITH_ERROR_TEXT = [
-    'components/media/AudioToolbar.svelte',
-    'features/dashboard/components/PlayOverlay.svelte',
-    'views/Search.svelte',
+    {
+      file: 'components/media/AudioToolbar.svelte',
+      fills: [
+        {
+          selector: '.toolbar-btn.error',
+          declaration: 'border-color: var(--color-error, #ef4444)',
+        },
+      ],
+    },
+    {
+      file: 'features/dashboard/components/PlayOverlay.svelte',
+      fills: [
+        { selector: '.error-indicator', declaration: 'color-mix(in srgb, var(--color-error) 10%' },
+      ],
+    },
+    {
+      file: 'views/Search.svelte',
+      fills: [
+        {
+          selector: '.review-dropdown-item.false-positive:hover',
+          declaration: 'color-mix(in srgb, var(--color-error) 15%',
+        },
+      ],
+    },
   ];
 
-  for (const file of COMPONENTS_WITH_ERROR_TEXT) {
-    it(`${file} colours error text with --text-error`, () => {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from the fixed list above
-      const text = readFileSync(join(desktopDir, file), 'utf8');
+  for (const { file, fills } of COMPONENTS_WITH_ERROR_TEXT) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from the fixed list above
+    const text = readFileSync(join(desktopDir, file), 'utf8');
+
+    it(`${file} has no plain color: var(--color-error) declaration`, () => {
       // `color:` declarations only; border-color and background-color keep the fill token
       expect(text).not.toMatch(/^\s*color:\s*var\(--color-error[,)]/m);
       expect(text).toMatch(/^\s*color:\s*var\(--text-error\)/m);
     });
+
+    for (const { selector, declaration } of fills) {
+      it(`${file} ${selector} keeps the fill token for its border or tint`, () => {
+        const bodies = ruleBodies(text, selector);
+        expect(bodies.length, `${selector} rule found`).toBeGreaterThan(0);
+        expect(bodies.some(body => body.includes(declaration))).toBe(true);
+      });
+    }
   }
 
   const lightBase = blockBody(css, '@theme');
