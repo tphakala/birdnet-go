@@ -3198,6 +3198,15 @@
       },
       "errors": {
         "speciesLoadFailed": "Neizdevās ielādēt sugu sarakstu. Lūdzu, mēģiniet vēlreiz."
+      },
+      "firstDailyConsensus": {
+        "title": "Apstiprināšana ar diviem modeļiem",
+        "description": "Samazina kļūdainus jaunu sugu ierakstus, atmetot sugas pirmo noteikšanu dienā, ja vien arī otrs modelis to nenosaka tajā pašā noteikšanas laika logā. Kad suga tajā dienā ir reģistrēta, pietiek ar vienu modeli. Darbojas tikai tad, ja vismaz divi modeļi, kas analizē audio avotu, spēj noteikt šo sugu.",
+        "enable": "Pieprasīt, lai divi modeļi apstiprina sugas pirmo noteikšanu dienā",
+        "speciesListLabel": "Izņēmuma sugas",
+        "addSpeciesLabel": "Pievienot izņēmuma sugu",
+        "addSpeciesHelp": "Šeit norādītās sugas tiek noteiktas kā parasti ar vienu modeli. Izmantojiet to sugām, kuras droši dzird tikai viens no jūsu modeļiem.",
+        "disabledHelp": "Ieslēdziet apstiprināšanu ar diviem modeļiem, lai rediģētu izņēmuma sugas."
       }
     },
     "integration": {

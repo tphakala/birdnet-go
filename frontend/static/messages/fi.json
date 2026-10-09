@@ -3198,6 +3198,15 @@
       },
       "errors": {
         "speciesLoadFailed": "Lajiluettelon lataus epäonnistui. Yritä uudelleen."
+      },
+      "firstDailyConsensus": {
+        "title": "Kahden mallin vahvistus",
+        "description": "Vähentää virheellisiä uusien lajien kirjauksia hylkäämällä lajin päivän ensimmäisen havainnon, ellei toinenkin malli havaitse lajia saman havaintoikkunan aikana. Kun laji on kirjattu kyseisenä päivänä, yksi malli riittää. Koskee vain tilanteita, joissa vähintään kaksi äänilähdettä analysoivaa mallia pystyy tunnistamaan lajin.",
+        "enable": "Vaadi kahta mallia vahvistamaan lajin päivän ensimmäinen havainto",
+        "speciesListLabel": "Poikkeuslajit",
+        "addSpeciesLabel": "Lisää poikkeuslaji",
+        "addSpeciesHelp": "Tässä luetellut lajit havaitaan tavalliseen tapaan yhdellä mallilla. Käytä tätä lajeille, jotka vain yksi malleistasi kuulee luotettavasti.",
+        "disabledHelp": "Ota kahden mallin vahvistus käyttöön muokataksesi poikkeuslajeja."
       }
     },
     "integration": {

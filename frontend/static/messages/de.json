@@ -3198,6 +3198,15 @@
       },
       "errors": {
         "speciesLoadFailed": "Fehler beim Laden der Artenliste. Bitte versuchen Sie es erneut."
+      },
+      "firstDailyConsensus": {
+        "title": "Bestätigung durch zwei Modelle",
+        "description": "Verringert fälschliche Einträge neuer Arten, indem die erste Erkennung einer Art am Tag verworfen wird, sofern nicht auch ein zweites Modell sie innerhalb desselben Erkennungsfensters erkennt. Sobald die Art an diesem Tag erfasst wurde, genügt ein Modell. Gilt nur, wenn mindestens zwei Modelle, die die Audioquelle analysieren, die Art bestimmen können.",
+        "enable": "Erste Erkennung einer Art am Tag durch zwei Modelle bestätigen lassen",
+        "speciesListLabel": "Ausgenommene Arten",
+        "addSpeciesLabel": "Ausgenommene Art hinzufügen",
+        "addSpeciesHelp": "Hier aufgeführte Arten werden weiterhin wie gewohnt von einem einzelnen Modell erkannt. Verwenden Sie dies für Arten, die nur eines Ihrer Modelle zuverlässig hört.",
+        "disabledHelp": "Aktivieren Sie die Bestätigung durch zwei Modelle, um die ausgenommenen Arten zu bearbeiten."
       }
     },
     "integration": {

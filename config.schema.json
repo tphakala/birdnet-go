@@ -1035,6 +1035,24 @@
       "type": "object",
       "description": "FileOutput represents file logging configuration."
     },
+    "FirstDailyConsensusSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to require two models to confirm a species' first detection of the day"
+        },
+        "whitelist": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "species exempt from the rule, matched by common or scientific name"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "FirstDailyConsensusSettings configures the first-daily-detection consensus rule: a species' first detection of the day is discarded unless at least two models detected it in the same detection window."
+    },
     "HealthCheckConfig": {
       "properties": {
         "enabled": {
@@ -1973,6 +1991,10 @@
         "extendedcapture": {
           "$ref": "#/$defs/ExtendedCaptureSettings",
           "description": "Extended capture for long calling species"
+        },
+        "firstdailyconsensus": {
+          "$ref": "#/$defs/FirstDailyConsensusSettings",
+          "description": "Two-model confirmation of each species' first detection of the day"
         }
       },
       "additionalProperties": false,

@@ -3198,6 +3198,15 @@
       },
       "errors": {
         "speciesLoadFailed": "Nepodařilo se načíst seznam druhů. Zkuste to znovu."
+      },
+      "firstDailyConsensus": {
+        "title": "Potvrzení dvěma modely",
+        "description": "Omezuje chybné záznamy nových druhů tím, že zahodí první detekci druhu v daném dni, pokud jej v rámci téhož detekčního okna nedetekuje i druhý model. Jakmile je druh v daném dni zaznamenán, stačí jeden model. Platí pouze tehdy, když druh dokážou určit alespoň dva modely analyzující daný zvukový zdroj.",
+        "enable": "Vyžadovat potvrzení první detekce druhu v daném dni dvěma modely",
+        "speciesListLabel": "Vyjmuté druhy",
+        "addSpeciesLabel": "Přidat vyjmutý druh",
+        "addSpeciesHelp": "Uvedené druhy se nadále detekují jedním modelem jako obvykle. Použijte seznam pro druhy, které spolehlivě slyší jen jeden z vašich modelů.",
+        "disabledHelp": "Pro úpravu vyjmutých druhů zapněte potvrzení dvěma modely."
       }
     },
     "integration": {

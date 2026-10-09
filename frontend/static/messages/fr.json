@@ -3198,6 +3198,15 @@
       },
       "errors": {
         "speciesLoadFailed": "Échec du chargement de la liste des espèces. Veuillez réessayer."
+      },
+      "firstDailyConsensus": {
+        "title": "Confirmation par deux modèles",
+        "description": "Réduit les ajouts erronés de nouvelles espèces en rejetant la première détection d'une espèce chaque jour, à moins qu'un deuxième modèle ne la détecte également dans la même fenêtre de détection. Une fois l'espèce enregistrée ce jour-là, un seul modèle suffit. S'applique uniquement lorsqu'au moins deux modèles analysant la source audio peuvent identifier l'espèce.",
+        "enable": "Exiger que deux modèles confirment la première détection d'une espèce chaque jour",
+        "speciesListLabel": "Espèces exemptées",
+        "addSpeciesLabel": "Ajouter une espèce exemptée",
+        "addSpeciesHelp": "Les espèces listées ici restent détectées normalement par un seul modèle. Utilisez cette liste pour les espèces qu'un seul de vos modèles entend de façon fiable.",
+        "disabledHelp": "Activez la confirmation par deux modèles pour modifier les espèces exemptées."
       }
     },
     "integration": {

@@ -3198,6 +3198,15 @@
       },
       "errors": {
         "speciesLoadFailed": "Nie udało się załadować listy gatunków. Spróbuj ponownie."
+      },
+      "firstDailyConsensus": {
+        "title": "Potwierdzenie przez dwa modele",
+        "description": "Ogranicza błędne wpisy nowych gatunków, odrzucając pierwsze wykrycie gatunku w danym dniu, chyba że drugi model również wykryje go w tym samym oknie wykrywania. Gdy gatunek zostanie zarejestrowany danego dnia, wystarczy jeden model. Dotyczy tylko sytuacji, w których co najmniej dwa modele analizujące źródło dźwięku potrafią rozpoznać gatunek.",
+        "enable": "Wymagaj potwierdzenia pierwszego wykrycia gatunku w danym dniu przez dwa modele",
+        "speciesListLabel": "Gatunki wyłączone",
+        "addSpeciesLabel": "Dodaj gatunek wyłączony",
+        "addSpeciesHelp": "Wymienione tu gatunki są nadal wykrywane przez jeden model, jak zwykle. Używaj tego dla gatunków, które niezawodnie słyszy tylko jeden z twoich modeli.",
+        "disabledHelp": "Włącz potwierdzenie przez dwa modele, aby edytować gatunki wyłączone."
       }
     },
     "integration": {

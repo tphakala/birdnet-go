@@ -3198,6 +3198,15 @@
       },
       "errors": {
         "speciesLoadFailed": "Laden van soorten lijst mislukt. Probeer het opnieuw."
+      },
+      "firstDailyConsensus": {
+        "title": "Bevestiging door twee modellen",
+        "description": "Vermindert onterechte registraties van nieuwe soorten door de eerste detectie van een soort op een dag te verwerpen, tenzij een tweede model de soort ook binnen hetzelfde detectievenster detecteert. Zodra de soort die dag is vastgelegd, volstaat één model. Geldt alleen wanneer ten minste twee modellen die de audiobron analyseren de soort kunnen herkennen.",
+        "enable": "Vereis dat twee modellen de eerste detectie van een soort op een dag bevestigen",
+        "speciesListLabel": "Uitgezonderde soorten",
+        "addSpeciesLabel": "Uitgezonderde soort toevoegen",
+        "addSpeciesHelp": "Soorten in deze lijst worden gewoon door één model gedetecteerd. Gebruik dit voor soorten die maar één van uw modellen betrouwbaar hoort.",
+        "disabledHelp": "Schakel bevestiging door twee modellen in om de uitgezonderde soorten te bewerken."
       }
     },
     "integration": {
