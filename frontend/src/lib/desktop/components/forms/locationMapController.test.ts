@@ -569,5 +569,11 @@ describe('locationMapController', () => {
       expect(initialZoom(60, 24, 'world')).toBe(11);
       expect(initialZoom(0, 24, 'world')).toBe(11);
     });
+
+    it('a set location opens at 11 even at 0,0', () => {
+      expect(initialZoom(0, 0, 'world', true)).toBe(11);
+      expect(initialZoom(0, 0, 'region', true)).toBe(11);
+      expect(initialZoom(0, 0, 'world', false)).toBe(1);
+    });
   });
 });
