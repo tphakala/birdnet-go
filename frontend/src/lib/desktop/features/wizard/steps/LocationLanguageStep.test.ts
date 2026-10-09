@@ -507,6 +507,21 @@ describe('LocationLanguageStep location', () => {
     ]);
   });
 
+  it('a browser location on a never configured location shows the pin and is saved as configured', async () => {
+    setStoredSettings({ latitude: 0, longitude: 0 });
+    const { leave } = await renderLocationStep();
+
+    const respond = await startBrowserRequest();
+    respond(createPosition(60.12345, 24.98765));
+    await flushAsync();
+    expect(latestMapProps().locationSet).toBe(true);
+    await leave();
+
+    expect(sectionCalls()).toEqual([
+      ['birdnet', { latitude: 60.123, longitude: 24.988, locale: 'en', locationConfigured: true }],
+    ]);
+  });
+
   it('leaves a never configured location unconfigured when only the species language changes', async () => {
     setStoredSettings({ latitude: 0, longitude: 0 });
     const { leave } = await renderLocationStep();
