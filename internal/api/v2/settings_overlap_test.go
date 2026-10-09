@@ -106,3 +106,33 @@ func TestFalsePositiveFilterActiveChanged(t *testing.T) {
 		})
 	}
 }
+
+// TestFalsePositiveFilterCrossingDispatchesReconfigure guards the table row that
+// re-plans the analysis cadence when the false positive filter is switched on or
+// off: the cap applies only while the filter is on, so a 0 to >=1 save (and
+// back) must reach reconfigure_audio_sources, while a change that stays on one
+// side of 0 must not fire.
+func TestFalsePositiveFilterCrossingDispatchesReconfigure(t *testing.T) {
+	t.Parallel()
+
+	var entry *settingsChangeCheck
+	for i := range settingsChangeChecks {
+		if settingsChangeChecks[i].name == "FP filter cadence" {
+			entry = &settingsChangeChecks[i]
+			break
+		}
+	}
+	require.NotNil(t, entry, "settingsChangeChecks must contain the FP filter cadence detector")
+	assert.Equal(t, actionReconfigureAudioSources, entry.action,
+		"a filter on/off change must re-plan through reconfigure_audio_sources")
+
+	withLevel := func(level int) *conf.Settings {
+		s := apitest.NewValidTestSettings()
+		s.Realtime.FalsePositiveFilter.Level = level
+		return s
+	}
+	assert.True(t, entry.changed(withLevel(0), withLevel(1)), "0 to 1 turns the filter on")
+	assert.True(t, entry.changed(withLevel(3), withLevel(0)), "3 to 0 turns the filter off")
+	assert.False(t, entry.changed(withLevel(2), withLevel(4)), "2 to 4 keeps the filter on")
+	assert.False(t, entry.changed(withLevel(0), withLevel(0)), "0 to 0 keeps the filter off")
+}
