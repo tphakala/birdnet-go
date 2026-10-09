@@ -108,7 +108,7 @@
       class="inline-flex items-center justify-center gap-2 px-5 py-2.5
              text-sm font-medium rounded-lg transition-colors
              bg-[var(--color-primary)] text-[var(--color-primary-content)]
-             hover:bg-[var(--color-primary-hover)]
+             hover:not-disabled:bg-[var(--color-primary-hover)]
              disabled:opacity-50 disabled:cursor-not-allowed"
       onclick={handleConfirm}
       disabled={!confirmed || isLoading}

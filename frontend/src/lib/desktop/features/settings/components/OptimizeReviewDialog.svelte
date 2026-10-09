@@ -206,7 +206,7 @@
                       aria-disabled={inFlight ? 'true' : undefined}
                       aria-describedby={inFlight ? IN_FLIGHT_STATUS_ID : undefined}
                       title={inFlight ? t('analysis.gallery.actionInProgress') : undefined}
-                      class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary-hover)] aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                      class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors hover:not-aria-disabled:bg-[var(--color-primary-hover)] aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
                     >
                       {failed ? t('analysis.gallery.retry') : t('analysis.gallery.optimize.apply')}
                     </button>
@@ -250,7 +250,7 @@
           aria-disabled={inFlight ? 'true' : undefined}
           aria-describedby={inFlight ? IN_FLIGHT_STATUS_ID : undefined}
           title={inFlight ? t('analysis.gallery.actionInProgress') : undefined}
-          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary-hover)] transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:not-aria-disabled:bg-[var(--color-primary-hover)] transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
         >
           <Sparkles class="size-4" />
           {t('analysis.gallery.optimize.applyAll')}

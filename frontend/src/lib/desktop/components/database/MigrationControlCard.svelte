@@ -194,7 +194,7 @@
           class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5
                  text-sm font-medium rounded-lg transition-colors
                  bg-[var(--color-primary)] text-[var(--color-primary-content)]
-                 hover:bg-[var(--color-primary-hover)]
+                 hover:not-disabled:bg-[var(--color-primary-hover)]
                  disabled:opacity-50 disabled:cursor-not-allowed"
           onclick={onStart}
           disabled={!canStartMigration}
@@ -249,7 +249,7 @@
             class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2
                    text-sm font-medium rounded-lg transition-colors
                    bg-[var(--color-primary)] text-[var(--color-primary-content)]
-                   hover:bg-[var(--color-primary-hover)]
+                   hover:not-disabled:bg-[var(--color-primary-hover)]
                    disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={handleResume}
             disabled={!status.can_resume || actionLoading}
@@ -297,7 +297,7 @@
             class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2
                    text-sm font-medium rounded-lg transition-colors
                    bg-[var(--color-primary)] text-[var(--color-primary-content)]
-                   hover:bg-[var(--color-primary-hover)]
+                   hover:not-disabled:bg-[var(--color-primary-hover)]
                    disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={handleRetryValidation}
             disabled={!status.can_retry_validation || actionLoading}

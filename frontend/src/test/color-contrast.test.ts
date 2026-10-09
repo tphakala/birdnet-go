@@ -1023,14 +1023,67 @@ describe('Primary and accent content in every color scheme', () => {
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths come from listing the component directory
       .map(file => ({ file, text: readFileSync(join(libDir, file), 'utf8') }));
 
-    /** Hover opacity at or above this percentage still reads as a button fill, not a tint. */
+    /** Hover opacity from this percentage up (and below 100) still reads as a button fill fade. */
     const FILL_HOVER_MIN_PERCENT = 50;
+    const SOLID_SCHEME_FILL = /bg-\[var\(--color-(?:primary|accent)\)\](?![/\w])/g;
+    const QUOTES = ['"', "'", '`'];
 
-    it('primary buttons hover with the hover token, not an opacity fade', () => {
+    /** The quoted string around `index`, which holds the whole class list of a Tailwind class string. */
+    function quotedAround(text: string, index: number): string {
+      const start = Math.max(...QUOTES.map(quote => text.lastIndexOf(quote, index)));
+      const ends = QUOTES.map(quote => text.indexOf(quote, index)).filter(end => end >= 0);
+      return text.slice(start + 1, Math.min(...ends));
+    }
+
+    it('primary buttons hover with the hover token, not a translucent fill', () => {
       const offenders = sources.flatMap(({ file, text }) =>
         [...text.matchAll(/hover:bg-\[var\(--color-(?:primary|accent)\)\]\/(\d+)/g)]
           .filter(match => Number(match[1]) >= FILL_HOVER_MIN_PERCENT)
           .map(match => `${file}: ${match[0]}`)
+      );
+      expect(offenders).toEqual([]);
+    });
+
+    it('solid primary and accent fills do not hover through an opacity fade', () => {
+      const offenders = sources.flatMap(({ file, text }) =>
+        [...text.matchAll(SOLID_SCHEME_FILL)]
+          .map(
+            match => /(^|\s)hover:opacity-(\d+)(\s|$)/.exec(quotedAround(text, match.index))?.[2]
+          )
+          .filter(percent => percent !== undefined)
+          .filter(percent => Number(percent) >= FILL_HOVER_MIN_PERCENT && Number(percent) < 100)
+          .map(percent => `${file}: hover:opacity-${percent}`)
+      );
+      expect(offenders).toEqual([]);
+    });
+
+    it('converted primary buttons with a disabled style apply the hover token only while enabled', () => {
+      // Files holding primary buttons that hover with --color-primary-hover and can be disabled.
+      // A class string that styles `disabled:` or `aria-disabled:` must write the hover token as
+      // `hover:not-disabled:` or `hover:not-aria-disabled:`, or override it with
+      // `aria-disabled:hover:bg-...`, so a disabled button keeps its fill.
+      const CONVERTED = [
+        'MigrationConfirmDialog.svelte',
+        'MigrationControlCard.svelte',
+        'OptimizeReviewDialog.svelte',
+        'AnalysisSettingsPage.svelte',
+        'NotificationsSettingsPage.svelte',
+        'EditorFooter.svelte',
+        'AlertRuleEditor.svelte',
+        'StreamCard.svelte',
+        'DashboardEditMode.svelte',
+        'SoundCardCard.svelte',
+      ];
+      const converted = sources.filter(({ file }) => CONVERTED.some(name => file.endsWith(name)));
+      expect(converted, 'every converted file is among the sources').toHaveLength(CONVERTED.length);
+      const offenders = converted.flatMap(({ file, text }) =>
+        [...text.matchAll(/hover:bg-\[var\(--color-primary-hover\)\]/g)]
+          .map(match => quotedAround(text, match.index))
+          .filter(
+            classes =>
+              /(^|\s)(?:aria-)?disabled:/.test(classes) && !/aria-disabled:hover:bg-/.test(classes)
+          )
+          .map(() => file)
       );
       expect(offenders).toEqual([]);
     });
