@@ -25,7 +25,8 @@ type AnalysisCadenceInfo struct {
 	// EffectiveOverlapSec is the overlap in use, in seconds on the 3 s base clip.
 	EffectiveOverlapSec float64 `json:"effectiveOverlapSec"`
 	// MinBaseStepMs is the smallest base analysis step the hardware sustains, in
-	// milliseconds; 0 means unknown or not applicable.
+	// milliseconds; 0 means unknown or not applicable, including when even zero
+	// overlap exceeds the ceiling (status "overloaded").
 	MinBaseStepMs int64 `json:"minBaseStepMs"`
 	// EstimatedDutyConfigured is the estimated inference duty at the configured overlap.
 	EstimatedDutyConfigured float64 `json:"estimatedDutyConfigured"`
