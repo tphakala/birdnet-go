@@ -125,6 +125,13 @@ describe('LocationMap', () => {
       expect(mapOptionsAt(0).zoom).toBe(1);
     });
 
+    it('opens a set 0,0 location at the default zoom with its pin', async () => {
+      await mount({ latitude: 0, longitude: 0, locationSet: true, startView: 'world' });
+
+      expect(mapOptionsAt(0)).toMatchObject({ center: [0, 0], zoom: 11 });
+      expect(vi.mocked(Marker)).toHaveBeenCalledTimes(1);
+    });
+
     it('enables pinch zoom on both maps only when asked', async () => {
       const user = userEvent.setup();
       await mount({ pinchZoom: true });

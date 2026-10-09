@@ -147,8 +147,8 @@ const translations: Record<string, string> = {
     'Browser location detected.',
   'settings.main.sections.rangeFilter.stationLocation.geolocationUnsupported':
     'Device location is unsupported.',
-  'settings.main.sections.rangeFilter.stationLocation.geolocationRequiresHttps':
-    'Browser location requires HTTPS or localhost.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationInsecureHelp':
+    'Needs HTTPS or localhost. Search for a place or use the map instead.',
   'settings.main.sections.rangeFilter.stationLocation.geolocationDenied':
     'Location permission was denied.',
   'settings.main.sections.rangeFilter.stationLocation.geolocationUnavailable':

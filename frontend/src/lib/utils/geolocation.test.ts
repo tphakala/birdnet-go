@@ -7,51 +7,19 @@ import {
   roundCoordinate,
   type BrowserLocationResult,
 } from './geolocation';
+import {
+  clearGeolocationGlobals,
+  createPosition,
+  createPositionError,
+  setGeolocation,
+  setSecureContext,
+} from '../../test/geolocation-fixtures';
 
 const geolocationMock = {
   getCurrentPosition: vi.fn<Geolocation['getCurrentPosition']>(),
   watchPosition: vi.fn<Geolocation['watchPosition']>(),
   clearWatch: vi.fn<Geolocation['clearWatch']>(),
 };
-
-function setSecureContext(value: boolean) {
-  Object.defineProperty(window, 'isSecureContext', { configurable: true, value });
-}
-
-function setGeolocation(value: Geolocation | undefined) {
-  Object.defineProperty(navigator, 'geolocation', { configurable: true, value });
-}
-
-function createPosition(
-  latitude: number,
-  longitude: number,
-  accuracy: number
-): GeolocationPosition {
-  return {
-    coords: {
-      latitude,
-      longitude,
-      accuracy,
-      altitude: null,
-      altitudeAccuracy: null,
-      heading: null,
-      speed: null,
-      toJSON: () => ({}),
-    },
-    timestamp: Date.now(),
-    toJSON: () => ({}),
-  };
-}
-
-function createPositionError(code: number): GeolocationPositionError {
-  return {
-    code,
-    message: 'Test geolocation failure',
-    PERMISSION_DENIED: 1,
-    POSITION_UNAVAILABLE: 2,
-    TIMEOUT: 3,
-  };
-}
 
 /** Run a request and return the single result it reported. */
 function collect(): { results: BrowserLocationResult[]; request: () => void } {
@@ -109,8 +77,7 @@ describe('getBrowserLocationSupport', () => {
   });
 
   afterEach(() => {
-    Reflect.deleteProperty(navigator, 'geolocation');
-    Reflect.deleteProperty(window, 'isSecureContext');
+    clearGeolocationGlobals();
   });
 
   it('is available on a secure origin with the API', () => {
@@ -137,8 +104,7 @@ describe('requestBrowserLocation', () => {
   });
 
   afterEach(() => {
-    Reflect.deleteProperty(navigator, 'geolocation');
-    Reflect.deleteProperty(window, 'isSecureContext');
+    clearGeolocationGlobals();
   });
 
   it('reports an insecure origin synchronously without calling the API', () => {

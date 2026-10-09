@@ -3,37 +3,38 @@
   import { t, getLocale, setLocale } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import LanguageSelector from '$lib/desktop/components/ui/LanguageSelector.svelte';
-  import Button from '$lib/desktop/components/ui/Button.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
-  import LocationPickerMap from '../components/LocationPickerMap.svelte';
+  import LocationMap from '$lib/desktop/components/forms/LocationMap.svelte';
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
-  import { MapPin } from '@lucide/svelte';
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
+  import CurrentLocationButton from '$lib/desktop/features/settings/components/CurrentLocationButton.svelte';
   import type { WizardStepProps } from '../types';
-  import { getLogger } from '$lib/utils/logger';
-  import { toastActions } from '$lib/stores/toast';
   import { generateId } from '$lib/utils/uuid';
-
-  const logger = getLogger('LocationLanguageStep');
 
   const UI_LANGUAGE_HELP_ID = generateId('wizard-ui-language-help');
   const SPECIES_LANGUAGE_HELP_ID = generateId('wizard-species-language-help');
 
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
-  let latitude = $state(0);
-  let longitude = $state(0);
-  let speciesLocale = $state('en');
+  // Read at init (not in onMount) so the map is created with the stored
+  // coordinates and never shows a 0,0 first frame.
+  const storedBirdnet = get(settingsStore).formData?.birdnet;
+  let latitude = $state(storedBirdnet?.latitude ?? 0);
+  let longitude = $state(storedBirdnet?.longitude ?? 0);
+  let speciesLocale = $state(storedBirdnet?.locale ?? 'en');
+  // Like the settings page: any location the user sets, even 0,0, counts as configured
+  let locationConfigured = $state(storedBirdnet?.locationConfigured === true);
   let localesLoading = $state(true);
   let localesFailed = $state(false);
   let localeOptions = $state<Array<{ value: string; label: string }>>([]);
-  let geolocating = $state(false);
-  let hasGeolocation = $state(false);
   let dirty = $state(false);
+  // Bumped by map and place picks and by typing, never by a browser result, so
+  // a browser location that arrives after newer user intent is dropped.
+  let coordinateIntentVersion = $state(0);
 
   // Baseline the UI locale against the PERSISTED backend value (not the
   // runtime locale). This has three effects:
@@ -62,15 +63,6 @@
   });
 
   onMount(() => {
-    hasGeolocation = typeof navigator !== 'undefined' && !!navigator.geolocation;
-
-    const store = get(settingsStore);
-    if (store?.formData?.birdnet) {
-      latitude = store.formData.birdnet.latitude ?? 0;
-      longitude = store.formData.birdnet.longitude ?? 0;
-      speciesLocale = store.formData.birdnet.locale ?? 'en';
-    }
-
     api
       .get<Record<string, string>>('/api/v2/settings/locales')
       .then(data => {
@@ -88,39 +80,18 @@
       });
   });
 
-  function handleLocationChange(lat: number, lon: number) {
+  function setLocation(lat: number, lon: number) {
     latitude = lat;
     longitude = lon;
+    locationConfigured = true;
     dirty = true;
   }
 
-  function handleGeolocation() {
-    if (!hasGeolocation) return;
-
-    if (!window.isSecureContext) {
-      toastActions.warning(t('wizard.steps.locationLanguage.geolocationRequiresHttps'));
-      return;
-    }
-
-    geolocating = true;
-    navigator.geolocation.getCurrentPosition(
-      position => {
-        latitude = Math.round(position.coords.latitude * 1000) / 1000;
-        longitude = Math.round(position.coords.longitude * 1000) / 1000;
-        geolocating = false;
-        dirty = true;
-      },
-      error => {
-        logger.error('Geolocation failed', error);
-        geolocating = false;
-        if (error.code === error.PERMISSION_DENIED) {
-          toastActions.warning(t('wizard.steps.locationLanguage.geolocationDenied'));
-        } else {
-          toastActions.error(t('wizard.steps.locationLanguage.geolocationFailed'));
-        }
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+  // A map click, pin drag or chosen place. A browser result (setLocation
+  // directly) does not advance the intent version.
+  function handleLocationChange(lat: number, lon: number) {
+    coordinateIntentVersion += 1;
+    setLocation(lat, lon);
   }
 
   // The UI language applies, and is cached in localStorage, as soon as it is
@@ -129,7 +100,8 @@
   // If a save is still in flight, wait for it to settle first: a saved language
   // stays so the UI matches the backend, otherwise the old one comes back.
   let uiLocaleAtLastSave = getLocale();
-  let pendingSave: Promise<void> | null = null;
+  // Reactive so the browser location button is disabled while a save runs.
+  let pendingSave = $state.raw<Promise<void> | null>(null);
   // Set when the step unmounts, so a commit still in flight sends no further parts.
   let left = false;
   onDestroy(() => {
@@ -163,9 +135,8 @@
           latitude,
           longitude,
           locale: speciesLocale,
-          // Mirrors the server, which sets locationConfigured when either
-          // coordinate is non-zero, so the store matches config.yaml.
-          ...(latitude !== 0 || longitude !== 0 ? { locationConfigured: true } : {}),
+          // A stored or newly set location is configured; one never set stays unconfigured
+          ...(locationConfigured ? { locationConfigured: true } : {}),
         });
         dirty = false;
       }
@@ -265,39 +236,23 @@
 
     <div>
       <div class="mb-2">
-        <div class="flex items-start justify-between gap-4">
-          <span class="block text-sm font-medium text-[var(--color-base-content)]">
-            {t('wizard.steps.locationLanguage.locationLabel')}
-          </span>
-          {#if hasGeolocation}
-            <Button
-              variant="default"
-              size="sm"
-              className="shrink-0 whitespace-nowrap"
-              onclick={handleGeolocation}
-              disabled={geolocating}
-            >
-              <MapPin class="size-3.5" />
-              {t('wizard.steps.locationLanguage.useMyLocation')}
-            </Button>
-          {/if}
-        </div>
+        <span class="block text-sm font-medium text-[var(--color-base-content)]">
+          {t('wizard.steps.locationLanguage.locationLabel')}
+        </span>
         <p class="mt-1 text-sm text-[var(--color-base-content)] opacity-80">
           {t('wizard.steps.locationLanguage.locationHelp')}
         </p>
       </div>
 
-      <div class="mb-3 grid grid-cols-2 gap-3">
+      <!-- Typing is newer intent than a browser location still on its way -->
+      <div class="grid grid-cols-2 gap-3" oninput={() => (coordinateIntentVersion += 1)}>
         <NumberField
           label={t('wizard.steps.locationLanguage.latitudeLabel')}
           value={latitude}
           min={-90}
           max={90}
           step={0.001}
-          onUpdate={value => {
-            latitude = value;
-            dirty = true;
-          }}
+          onUpdate={value => setLocation(value, longitude)}
         />
         <NumberField
           label={t('wizard.steps.locationLanguage.longitudeLabel')}
@@ -305,17 +260,39 @@
           min={-180}
           max={180}
           step={0.001}
-          onUpdate={value => {
-            longitude = value;
-            dirty = true;
-          }}
+          onUpdate={value => setLocation(latitude, value)}
+        />
+      </div>
+
+      <div class="mt-3">
+        <!-- Disabled while the step saves, so a location that arrives then is dropped,
+             not shown as detected after the coordinates were already sent -->
+        <CurrentLocationButton
+          compact
+          disabled={pendingSave !== null}
+          {latitude}
+          {longitude}
+          {coordinateIntentVersion}
+          onLocation={setLocation}
         />
       </div>
     </div>
   </div>
 
-  <!-- The map fills the column's height, with a floor so it stays usable beside short fields -->
-  <div class="h-36 min-w-0 @2xl:h-auto @2xl:min-h-72">
-    <LocationPickerMap {latitude} {longitude} onLocationChange={handleLocationChange} />
+  <!-- Place search above a map of fixed height, in both layouts -->
+  <div class="min-w-0">
+    <LocationMap
+      {latitude}
+      {longitude}
+      locationSet={locationConfigured}
+      title={t('wizard.steps.locationLanguage.locationLabel')}
+      onLocationChange={handleLocationChange}
+      placeSearch
+      pinchZoom
+      doubleTapZoomKeepsPin
+      startView="world"
+      controls="overlay"
+      mapClass="h-[300px]"
+    />
   </div>
 </div>

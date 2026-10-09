@@ -53,19 +53,26 @@ function wrapLongitude(longitude: number): number {
 export type MapLibreModule = typeof import('maplibre-gl');
 
 /**
- * Which view the inline map is created in when the coordinates are not set
- * (0,0): `region` is the settings map (zoom 5), `world` shows the whole world
- * (zoom 1). With set coordinates both start at the default zoom. The expanded
- * map starts at the inline map's current zoom instead.
+ * Which view the inline map is created in when the location is not set:
+ * `region` is the settings map (zoom 5), `world` shows the whole world
+ * (zoom 1). A set location, or non-zero coordinates, start at the default zoom
+ * in both. The expanded map starts at the inline map's current zoom instead.
  */
 export type LocationMapStartView = 'region' | 'world';
 
-/** Zoom to open a map at for the given coordinates. */
+/**
+ * Zoom to open a map at for the given coordinates. `locationSet` marks a
+ * configured location, which opens at the default zoom even at 0,0.
+ */
 export function initialZoom(
   latitude: number,
   longitude: number,
-  startView: LocationMapStartView
+  startView: LocationMapStartView,
+  locationSet = false
 ): number {
+  if (locationSet) {
+    return MAP_CONFIG.DEFAULT_ZOOM;
+  }
   if (startView === 'region') {
     return getInitialZoom(latitude, longitude);
   }
