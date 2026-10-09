@@ -271,6 +271,23 @@ describe('acousticModels store', () => {
       });
       await refreshAcousticModels();
       expect(analysisCadence()).toBeNull();
+      // The snapshot itself still loads; only its cadence is dropped.
+      expect(acousticModelsLoaded()).toBe(true);
+      expect(acousticModelsError()).toBe(false);
+    });
+
+    it.each([
+      ['missing', { name: undefined }],
+      ['empty', { name: '' }],
+    ])('names a cadence model by its id when its name is %s', async (_label, override) => {
+      const cadence = validCadence();
+      const [model] = cadence.models;
+      apiGet.mockResolvedValueOnce({
+        ...snapshot('ok'),
+        analysisCadence: { ...cadence, models: [{ ...model, ...override }] },
+      });
+      await refreshAcousticModels();
+      expect(analysisCadence()?.models.map(m => m.name)).toEqual([model.id]);
     });
 
     it.each([
@@ -431,10 +448,20 @@ describe('acousticModels store', () => {
       expect(apiGet).toHaveBeenCalledTimes(2);
       expect(acousticModelsState()).toBe('none_installed');
 
-      // Nothing stays queued: a later invalidate is a single new request.
-      apiGet.mockResolvedValueOnce(snapshot('ok'));
-      await invalidateAcousticModels();
+      // Nothing stays queued: an invalidate during the next running request
+      // queues a fresh fetch behind it instead of reusing the settled one.
+      let resolveNext!: (value: unknown) => void;
+      apiGet.mockImplementationOnce(() => new Promise(res => (resolveNext = res)));
+      apiGet.mockResolvedValueOnce(snapshot('load_failed'));
+      void refreshAcousticModels();
+      const later = invalidateAcousticModels();
+      expect(later).not.toBe(second);
       expect(apiGet).toHaveBeenCalledTimes(3);
+
+      resolveNext(snapshot('ok'));
+      await later;
+      expect(apiGet).toHaveBeenCalledTimes(4);
+      expect(acousticModelsState()).toBe('load_failed');
     });
 
     it('never calls the auth-protected endpoint for a guest', async () => {
