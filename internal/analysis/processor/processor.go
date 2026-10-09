@@ -1572,7 +1572,7 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 
 // shouldDiscardDetection checks if a detection should be discarded based on various criteria.
 // The caller provides a settings snapshot and the precomputed minDetections (from
-// calculateMinDetectionsForModel) to avoid redundant settings fetches and ensure
+// MinDetectionsForModel) to avoid redundant settings fetches and ensure
 // consistency within a single flush cycle.
 func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
@@ -1779,7 +1779,7 @@ func calculateMinDetectionsFromSettings(settings *conf.Settings, baseOverlap tim
 	// realtime buffer follows the effective base overlap (baseOverlap), so the
 	// analysis step is chunkDurationSeconds - overlap, matching the buffer's
 	// BufferInterval.
-	const chunkDurationSeconds = 3.0
+	chunkDurationSeconds := classifier.AnalysisBaseClipLength.Seconds()
 
 	// Get filtering level from settings
 	level := settings.Realtime.FalsePositiveFilter.Level
@@ -1844,7 +1844,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 		}
 
 		speciesName := strings.ToLower(item.Detection.Result.Species.CommonName)
-		itemMinDetections := calculateMinDetectionsForModel(settings, item.BestModelID, baseOverlap)
+		itemMinDetections := MinDetectionsForModel(settings, item.BestModelID, baseOverlap)
 
 		if shouldDiscard, reason := p.shouldDiscardDetection(&item, settings, itemMinDetections); shouldDiscard {
 			// Aggregate daylight-filter discards into the periodic pipeline-stats

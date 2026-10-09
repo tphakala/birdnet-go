@@ -948,9 +948,9 @@ func TestCalculateBatMinDetections(t *testing.T) {
 	}
 }
 
-// TestCalculateMinDetectionsForModel verifies that the model-aware router
+// TestMinDetectionsForModel verifies that the model-aware router
 // dispatches to the correct calculation based on model ID.
-func TestCalculateMinDetectionsForModel(t *testing.T) {
+func TestMinDetectionsForModel(t *testing.T) {
 	t.Parallel()
 
 	settings := &conf.Settings{}
@@ -958,8 +958,8 @@ func TestCalculateMinDetectionsForModel(t *testing.T) {
 	settings.BirdNET.Overlap = 2.4
 	settings.Bat.FalsePositiveFilter.Level = 3
 
-	birdResult := calculateMinDetectionsForModel(settings, "BirdNET_V2.4", classifier.ConfiguredBaseOverlap(settings))
-	batResult := calculateMinDetectionsForModel(settings, "Bat", classifier.ConfiguredBaseOverlap(settings))
+	birdResult := MinDetectionsForModel(settings, "BirdNET_V2.4", classifier.ConfiguredBaseOverlap(settings))
+	batResult := MinDetectionsForModel(settings, "Bat", classifier.ConfiguredBaseOverlap(settings))
 
 	// Bird: level 3, overlap 2.4, step 0.6s, max 10, 50% = 5
 	assert.Equal(t, 5, birdResult, "BirdNET model should use bird FP filter calculation")
@@ -1152,12 +1152,12 @@ func TestCalculateBatMinDetections_AllLevels(t *testing.T) {
 	}
 }
 
-// TestCalculateMinDetectionsForModel_PerModelClip verifies that the runtime flush
-// path (calculateMinDetectionsForModel) aligns the FP confirmation window with the
+// TestMinDetectionsForModel_PerModelClip verifies that the runtime flush
+// path (MinDetectionsForModel) aligns the FP confirmation window with the
 // buffer cadence per model: BirdNET (3s) stays identical to the bird default,
 // while a 5s model (Perch) derives its step from its own clip and overlap so the
 // two subsystems agree (issue #4096).
-func TestCalculateMinDetectionsForModel_PerModelClip(t *testing.T) {
+func TestMinDetectionsForModel_PerModelClip(t *testing.T) {
 	t.Parallel()
 
 	for _, overlap := range []float64{0.0, 1.5, 2.4} {
@@ -1167,14 +1167,14 @@ func TestCalculateMinDetectionsForModel_PerModelClip(t *testing.T) {
 
 		// BirdNET 3s: routed path must equal the unchanged bird default.
 		assert.Equal(t, calculateMinDetectionsFromSettings(s, classifier.ConfiguredBaseOverlap(s)),
-			calculateMinDetectionsForModel(s, "BirdNET_V2.4", classifier.ConfiguredBaseOverlap(s)),
+			MinDetectionsForModel(s, "BirdNET_V2.4", classifier.ConfiguredBaseOverlap(s)),
 			"BirdNET routed minDetections must match the bird default (overlap %.1f)", overlap)
 
 		// Perch 5s: FP step must equal the model's buffer step (ratio-scaled overlap).
 		perchSpec := classifier.ModelRegistry[classifier.RegistryIDPerchV2].Spec
 		wantStep := perchSpec.BufferInterval(classifier.ResolveModelOverlap(classifier.RegistryIDPerchV2, perchSpec, classifier.ConfiguredBaseOverlap(s))).Seconds()
 		wantMin := minDetectionsForSegment(wantStep, 3)
-		assert.Equal(t, wantMin, calculateMinDetectionsForModel(s, classifier.RegistryIDPerchV2, classifier.ConfiguredBaseOverlap(s)),
+		assert.Equal(t, wantMin, MinDetectionsForModel(s, classifier.RegistryIDPerchV2, classifier.ConfiguredBaseOverlap(s)),
 			"Perch routed minDetections must derive from its 5s buffer step (overlap %.1f)", overlap)
 	}
 }
@@ -1203,7 +1203,7 @@ func TestMinDetections_UsesEffectiveBaseOverlap(t *testing.T) {
 			s := &conf.Settings{}
 			s.Realtime.FalsePositiveFilter.Level = tt.level
 			s.BirdNET.Overlap = tt.configure
-			assert.Equal(t, tt.want, calculateMinDetectionsForModel(s, tt.modelID, tt.effective))
+			assert.Equal(t, tt.want, MinDetectionsForModel(s, tt.modelID, tt.effective))
 		})
 	}
 
@@ -1211,8 +1211,8 @@ func TestMinDetections_UsesEffectiveBaseOverlap(t *testing.T) {
 		t.Parallel()
 		s := &conf.Settings{}
 		s.Bat.FalsePositiveFilter.Level = 4
-		a := calculateMinDetectionsForModel(s, classifier.RegistryIDBat, 0)
-		b := calculateMinDetectionsForModel(s, classifier.RegistryIDBat, 2800*time.Millisecond)
+		a := MinDetectionsForModel(s, classifier.RegistryIDBat, 0)
+		b := MinDetectionsForModel(s, classifier.RegistryIDBat, 2800*time.Millisecond)
 		assert.Equal(t, a, b)
 	})
 }

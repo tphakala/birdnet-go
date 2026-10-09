@@ -9,11 +9,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// birdBaseClipLength is the BirdNET reference analysis-clip length. Models with a
-// different clip (e.g. Perch 5s) derive their false-positive step from their own
-// clip instead of the 3s bird default.
-const birdBaseClipLength = 3 * time.Second
-
 // getMinimumOverlapForLevel returns the minimum overlap required for each filtering level.
 // Higher levels require higher overlap to generate more detections for filtering.
 //
@@ -117,44 +112,37 @@ func getRecommendedLevelForOverlap(overlap float64) (level int, overlapSufficien
 	return 0, true
 }
 
-// calculateMinDetectionsForModel routes to the correct minDetections calculation
-// based on the model ID. Bat models use a fixed 50% overlap (1.5s step) instead
+// MinDetectionsForModel returns the confirmation count the false positive filter
+// requires for a model at the given effective base overlap, routing to the
+// correct minDetections calculation based on the model ID. The flush path and the
+// API readouts both use it, so the readouts match the filter. Bat models use a fixed 50% overlap (1.5s step) instead
 // of the user-configurable BirdNET overlap, and read from a separate filter
 // config. For the 3s BirdNET model the bird path's step (3.0 - overlap) matches
 // the buffer's cadence, which follows the effective base overlap (issue #4096).
 //
 // baseOverlap is the effective base overlap (the published cadence plan's, else
 // the configured birdnet.overlap); see Processor.effectiveBaseOverlap.
-func calculateMinDetectionsForModel(settings *conf.Settings, modelID string, baseOverlap time.Duration) int {
+func MinDetectionsForModel(settings *conf.Settings, modelID string, baseOverlap time.Duration) int {
 	if modelID == classifier.RegistryIDBat {
 		return calculateBatMinDetections(settings)
 	}
-	// For a model whose analysis clip differs from the 3s BirdNET base (e.g. Perch
-	// 5s), derive the step from the model's own clip and effective overlap so the
-	// confirmation window matches the buffer cadence. The 3s bird path derives its
-	// step from the effective base overlap in calculateMinDetectionsFromSettings.
-	if info, ok := classifier.ModelRegistry[modelID]; ok && info.Spec.ClipLength > 0 && info.Spec.ClipLength != birdBaseClipLength {
+	// For a model whose analysis clip differs from the 3s BirdNET base clip (e.g.
+	// Perch 5s), derive the step from the model's own clip and effective overlap so
+	// the confirmation window matches the buffer cadence. The 3s bird path derives
+	// its step from the effective base overlap in calculateMinDetectionsFromSettings.
+	if info, ok := classifier.ModelRegistry[modelID]; ok && info.Spec.ClipLength > 0 && info.Spec.ClipLength != classifier.AnalysisBaseClipLength {
 		step := info.Spec.BufferInterval(classifier.ResolveModelOverlap(modelID, info.Spec, baseOverlap)).Seconds()
 		return minDetectionsForSegment(step, settings.Realtime.FalsePositiveFilter.Level)
 	}
 	return calculateMinDetectionsFromSettings(settings, baseOverlap)
 }
 
-// MinDetectionsForModel returns the confirmation count the false positive filter
-// requires for a model at the given effective base overlap. It is the exported
-// form of the count used at flush time, so API readouts match the filter.
-func MinDetectionsForModel(settings *conf.Settings, modelID string, baseOverlap time.Duration) int {
-	return calculateMinDetectionsForModel(settings, modelID, baseOverlap)
-}
-
 // Shared constants for the false-positive confirmation-count math.
 const (
-	// fpReferenceWindowSeconds is the typical duration of a bird vocalization;
+	// ReferenceWindowSeconds is the typical duration of a bird vocalization;
 	// minDetections is how many analysis windows within this window must confirm.
-	fpReferenceWindowSeconds = 6.0
-	// ReferenceWindowSeconds exports fpReferenceWindowSeconds for API readouts of
-	// how many analysis windows fall inside the confirmation window.
-	ReferenceWindowSeconds = fpReferenceWindowSeconds
+	// Exported for API readouts of how many analysis windows fall inside it.
+	ReferenceWindowSeconds = 6.0
 	// fpMinSegmentLength floors the analysis step to avoid dividing by ~0.
 	fpMinSegmentLength = 0.1
 	// fpEpsilon absorbs floating-point rounding before Ceil (e.g. 5.0000000003).
@@ -186,7 +174,7 @@ func minDetectionsForSegment(segmentSeconds float64, level int) int {
 	if segmentSeconds < fpMinSegmentLength {
 		segmentSeconds = fpMinSegmentLength
 	}
-	maxDetections := fpReferenceWindowSeconds / segmentSeconds
+	maxDetections := ReferenceWindowSeconds / segmentSeconds
 	required := maxDetections*getThresholdForLevel(level) - fpEpsilon
 	return int(math.Max(1, math.Ceil(required)))
 }
