@@ -421,7 +421,9 @@ describe('Error text rules', () => {
   // contrast tests below assume.
   for (const selector of ['.alert-error', '.badge-status-error']) {
     it(`${selector} keeps its 15% --color-error tint`, () => {
-      for (const body of ruleBodies(css, selector)) {
+      const bodies = ruleBodies(css, selector);
+      expect(bodies.length).toBeGreaterThan(0);
+      for (const body of bodies) {
         expect(body).toContain('color-mix(in srgb, var(--color-error) 15%, transparent)');
       }
     });

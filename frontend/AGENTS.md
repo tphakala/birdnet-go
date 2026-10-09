@@ -254,8 +254,9 @@ guessing:
 
 Theme colours are written as CSS variables in arbitrary values
 (`text-[var(--color-base-content)]`), not bare theme class names. Error text
-uses `text-[var(--text-error)]`, which is verified on the base surfaces only
-(check any tint yourself); `--color-error` is for fills and borders.
+uses `text-[var(--text-error)]`, which is verified on base-100 and on a 15%
+error tint over base-100 (check other surfaces yourself); `--color-error` is for
+fills and borders.
 
 ### General Rules
 

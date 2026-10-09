@@ -111,7 +111,7 @@
   let previousEffectiveSrc = audibleBatsSrc ?? audioUrl;
   let pendingFraction: number | null = null;
   // Whether playback should resume once the swapped-in source's metadata (and
-  // restored position) are ready — avoids a race where play() starts from 0
+  // restored position) are ready; avoids a race where play() starts from 0
   // before handleLoadedMetadata applies pendingFraction.
   let pendingAutoplayAfterSwap = false;
 
