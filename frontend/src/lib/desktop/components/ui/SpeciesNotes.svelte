@@ -216,7 +216,7 @@
   is what its button points `aria-describedby` at.
 -->
 {#snippet saveHelp(helpId: string, tooLong: boolean)}
-  <p id={helpId} class={tooLong ? 'text-xs text-[var(--color-error)] mt-1' : 'sr-only'}>
+  <p id={helpId} class={tooLong ? 'text-xs text-[var(--text-error)] mt-1' : 'sr-only'}>
     {saveBlockedReason(tooLong)}
   </p>
 {/snippet}
@@ -260,7 +260,7 @@
   {:else if loadFailed}
     <div
       role="alert"
-      class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] text-sm"
+      class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--text-error)] text-sm"
     >
       {t('analytics.species.notes.loadFailed')}
     </div>

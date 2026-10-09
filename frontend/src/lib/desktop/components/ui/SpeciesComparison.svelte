@@ -360,7 +360,7 @@
       {:else if loadFailed}
         <div
           role="alert"
-          class="p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)]"
+          class="p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--text-error)]"
         >
           {t('analytics.species.guide.loadFailed')}
         </div>

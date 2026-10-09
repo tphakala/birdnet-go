@@ -253,7 +253,7 @@
               {t('analytics.species.similar.cardNoGuide')}
             </p>
           {:else if selectedStatus === 'error'}
-            <p role="alert" class="text-sm text-[var(--color-error)]">
+            <p role="alert" class="text-sm text-[var(--text-error)]">
               {t('analytics.species.similar.cardError')}
             </p>
           {:else if visibleRows.length === 0}
