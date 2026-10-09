@@ -55,8 +55,9 @@ type CadenceModelInfo struct {
 	ClipMs int64 `json:"clipMs"`
 	// StepMs is how often a new analysis window is produced, in milliseconds.
 	StepMs int64 `json:"stepMs"`
-	// ProbeLatencyMs is the measured inference latency in milliseconds; omitted
-	// when it could not be measured or rounds down to 0 ms.
+	// ProbeLatencyMs is the measured inference latency the plan was solved with,
+	// in milliseconds; omitted when it could not be measured, when the model is in
+	// no source's plan, or when it rounds down to 0 ms.
 	ProbeLatencyMs int64 `json:"probeLatencyMs,omitempty"`
 	// Confirmations is how many analysis windows within the reference window must
 	// agree for the false positive filter to accept a detection.
