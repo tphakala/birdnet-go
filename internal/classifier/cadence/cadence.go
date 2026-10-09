@@ -217,9 +217,11 @@ func Solve(in Input) Plan {
 		plan.Status = StatusOverloaded
 		return plan
 	}
-	if duty(0) == duty(overlapAt(1)) {
+	if duty(0) == duty(overlapAt(1)) && duty(0) == duty(in.ConfiguredBaseOverlap) {
 		// No load depends on the overlap (no known latency, or fixed-cadence pairs
-		// only), so there is no smallest step to report and nothing to cap.
+		// only), so there is no smallest step to report and nothing to cap. The
+		// configured overlap is compared too: with a grid as coarse as the base
+		// clip, overlapAt(1) is already zero and the first test proves nothing.
 		return plan
 	}
 	lo, hi := 1, maxSteps // fits(hi) holds
@@ -231,7 +233,9 @@ func Solve(in Input) Plan {
 			lo = mid + 1
 		}
 	}
-	plan.MinBaseStep = time.Duration(lo) * grid
+	// A grid coarser than the base clip would otherwise report a step no buffer
+	// can use; the longest real step is the base clip itself (zero overlap).
+	plan.MinBaseStep = min(time.Duration(lo)*grid, in.BaseClip)
 	if plan.DutyAtConfigured <= in.DutyCeiling+epsilon {
 		// The configured overlap already fits; snapping the minimum step up to the
 		// grid must not cut an overlap the hardware sustains. MinBaseStep stays set

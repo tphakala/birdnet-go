@@ -136,6 +136,28 @@ func TestSolve_Examples(t *testing.T) {
 	}
 }
 
+// TestSolve_GridNotFinerThanBaseClip pins that a grid as coarse as the base clip
+// still caps a configured overlap over the ceiling: the only grid step is the
+// zero overlap, which fits.
+func TestSolve_GridNotFinerThanBaseClip(t *testing.T) {
+	t.Parallel()
+	in := input(true, ms(2000), []Pair{pair("s", "v24", 3*time.Second)}, map[string]time.Duration{"v24": time.Second})
+	in.Grid = testBaseClip
+
+	got := Solve(in)
+	assert.InDelta(t, 1.0, got.DutyAtConfigured, 1e-9, "1 s latency at a 1 s step")
+	assert.Equal(t, time.Duration(0), got.EffectiveBaseOverlap)
+	assert.Equal(t, StatusCapped, got.Status)
+	assert.Equal(t, testBaseClip, got.MinBaseStep)
+
+	// A grid longer than the base clip still reports the base clip as the
+	// smallest step, the longest step a buffer can use.
+	in.Grid = 5 * time.Second
+	got = Solve(in)
+	assert.Equal(t, StatusCapped, got.Status)
+	assert.Equal(t, testBaseClip, got.MinBaseStep)
+}
+
 func TestSolve_Bounds(t *testing.T) {
 	t.Parallel()
 	rng := rand.New(rand.NewPCG(1, 2))
