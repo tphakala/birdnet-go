@@ -26,6 +26,8 @@
   let latitude = $state(storedBirdnet?.latitude ?? 0);
   let longitude = $state(storedBirdnet?.longitude ?? 0);
   let speciesLocale = $state(storedBirdnet?.locale ?? 'en');
+  // A stored location counts as set when it was explicitly configured (even 0,0)
+  const storedLocationConfigured = storedBirdnet?.locationConfigured === true;
   let localesLoading = $state(true);
   let localesFailed = $state(false);
   let localeOptions = $state<Array<{ value: string; label: string }>>([]);
@@ -289,7 +291,7 @@
     <LocationMap
       {latitude}
       {longitude}
-      locationSet={latitude !== 0 || longitude !== 0}
+      locationSet={storedLocationConfigured || latitude !== 0 || longitude !== 0}
       title={t('wizard.steps.locationLanguage.locationLabel')}
       onLocationChange={handleLocationChange}
       placeSearch

@@ -431,8 +431,8 @@ describe('LocationLanguageStep location', () => {
     'settings.main.sections.rangeFilter.stationLocation.geolocationInsecureHelp';
   const getCurrentPosition = vi.fn<Geolocation['getCurrentPosition']>();
 
-  function setStoredCoordinates(latitude: number, longitude: number) {
-    const birdnet = { latitude, longitude, locale: 'en' };
+  function setStoredCoordinates(latitude: number, longitude: number, locationConfigured = false) {
+    const birdnet = { latitude, longitude, locale: 'en', locationConfigured };
     const realtime = { dashboard: { locale: 'en' } };
     settingsStore.set({
       isLoading: false,
@@ -526,6 +526,13 @@ describe('LocationLanguageStep location', () => {
       title: 'wizard.steps.locationLanguage.locationLabel',
     });
     expect(props.mapClass).toContain('h-[300px]');
+  });
+
+  it('shows the pin for a deliberately configured 0,0 location', async () => {
+    setStoredCoordinates(0, 0, true);
+    await renderLocationStep();
+
+    expect(latestMapProps()).toMatchObject({ latitude: 0, longitude: 0, locationSet: true });
   });
 
   it('marks the location unset when the stored coordinates are 0,0', async () => {
