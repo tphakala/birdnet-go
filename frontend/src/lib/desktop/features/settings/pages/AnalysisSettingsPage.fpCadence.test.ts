@@ -320,6 +320,39 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
     );
   });
 
+  // The plan matches the saved level 5 and overlap 2.8, so only the edit itself
+  // can turn the readout into an estimate.
+  it('estimates the counts when only the level is edited', () => {
+    cadenceState.value = cadence();
+    setSettings({ level: 5, overlap: 2.8 }, { level: 4, overlap: 2.8 });
+    render(AnalysisSettingsPage);
+
+    expect(screen.getByText(`${FP}.readoutPreviewTitle`)).toBeInTheDocument();
+    expect(screen.getByText(`${FP}.readoutPreview`)).toBeInTheDocument();
+  });
+
+  it('estimates the counts when only the overlap is edited', () => {
+    cadenceState.value = cadence();
+    setSettings({ level: 5, overlap: 2.8 }, { level: 5, overlap: 2.7 });
+    render(AnalysisSettingsPage);
+
+    expect(screen.getByText(`${FP}.readoutPreviewTitle`)).toBeInTheDocument();
+    expect(screen.getByText(`${FP}.readoutPreview`)).toBeInTheDocument();
+  });
+
+  it('drops the estimate label when the edit is reverted', async () => {
+    cadenceState.value = cadence();
+    setSettings({ level: 5, overlap: 2.8 }, { level: 3, overlap: 2.4 });
+    render(AnalysisSettingsPage);
+    expect(screen.getByText(`${FP}.readoutPreview`)).toBeInTheDocument();
+
+    setSettings({ level: 5, overlap: 2.8 });
+    await tick();
+
+    expect(screen.getByText(`${FP}.readoutTitle`)).toBeInTheDocument();
+    expect(screen.queryByText(`${FP}.readoutPreview`)).not.toBeInTheDocument();
+  });
+
   it('marks the counts as estimates while saved settings are not applied yet', () => {
     // The stale server counts (overlap 2.4 s) differ from the estimate for the
     // saved 2.8 s capped at the 1.2 s step (4 of 5, 3 of 3).
@@ -432,6 +465,7 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
   it('watches the inference snapshot and refetches it after a saved level change', async () => {
     cadenceState.value = cadence();
     setSettings({ level: 5, overlap: 2.8 });
+    vi.mocked(watchAcousticModels).mockClear();
     render(AnalysisSettingsPage);
     await tick();
 
@@ -441,6 +475,21 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
     setSettings({ level: 4, overlap: 2.8 });
     await tick();
     expect(vi.mocked(invalidateAcousticModels)).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops watching the inference snapshot when the page unmounts', async () => {
+    const unwatch = vi.fn();
+    vi.mocked(watchAcousticModels).mockClear();
+    vi.mocked(watchAcousticModels).mockReturnValue(unwatch);
+    cadenceState.value = cadence();
+    setSettings({ level: 5, overlap: 2.8 });
+    const { unmount } = render(AnalysisSettingsPage);
+    await tick();
+    expect(vi.mocked(watchAcousticModels)).toHaveBeenCalledTimes(1);
+    expect(unwatch).not.toHaveBeenCalled();
+
+    unmount();
+    expect(unwatch).toHaveBeenCalledTimes(1);
   });
 
   it('never mentions the removed hardware note', () => {
