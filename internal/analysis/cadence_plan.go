@@ -177,8 +177,10 @@ func (p *AudioPipelineService) planAndPublishCadence(configs []sourceConfigWithM
 }
 
 // applyCadenceDecision plans for the given configs and applies decideCadence for
-// an incremental path. It returns true when a full restart was requested and the
-// caller must stop its incremental work.
+// an incremental path. It returns true when a full restart was queued and the
+// caller must stop its incremental work; when the restart could not be queued it
+// returns false so the caller keeps its incremental path and the next reconfigure
+// detects the stale plan again.
 func (p *AudioPipelineService) applyCadenceDecision(configs []sourceConfigWithModels, operation string) bool {
 	plan, ok := p.planCadenceForConfigs(configs)
 	if !ok {
@@ -190,19 +192,21 @@ func (p *AudioPipelineService) applyCadenceDecision(configs []sourceConfigWithMo
 			logger.Float64("effective_overlap", plan.EffectiveBaseOverlap.Seconds()),
 			logger.String("status", string(plan.Status)),
 			logger.String("operation", operation))
-		p.requestCaptureRestart()
-		return true
+		return p.requestCaptureRestart()
 	}
 	p.publishCadencePlan(&plan, operation)
 	return false
 }
 
-// requestCaptureRestart queues a full capture restart without blocking.
-func (p *AudioPipelineService) requestCaptureRestart() {
+// requestCaptureRestart queues a full capture restart without blocking and
+// reports whether the request was queued.
+func (p *AudioPipelineService) requestCaptureRestart() bool {
 	ResetOverrunTrackers()
 	select {
 	case p.restartChan <- struct{}{}:
+		return true
 	default:
 		audiocore.GetLogger().Warn("restart channel full, could not signal capture restart for the cadence plan")
+		return false
 	}
 }
