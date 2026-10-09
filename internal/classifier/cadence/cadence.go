@@ -65,8 +65,7 @@ type Input struct {
 	ConfiguredBaseOverlap time.Duration
 	// BaseClip is the clip length the base overlap is defined against.
 	BaseClip time.Duration
-	// Grid is the step granularity the minimum sustained step is snapped up to.
-	// An overlap that already fits under the ceiling is kept as configured.
+	// Grid is the step granularity the effective step is snapped up to.
 	Grid time.Duration
 	// DutyCeiling is the highest acceptable inference duty (0..1).
 	DutyCeiling float64
@@ -93,9 +92,8 @@ type Plan struct {
 	ConfiguredBaseOverlap time.Duration
 	// EffectiveBaseOverlap is the overlap the pipeline must use.
 	EffectiveBaseOverlap time.Duration
-	// MinBaseStep is the smallest base step meeting the ceiling, rounded up to the
-	// grid; it can exceed the step in use when the configured step is finer than
-	// the grid and already fits. Zero when unknown or not applicable.
+	// MinBaseStep is the smallest base step meeting the ceiling; zero when
+	// unknown or not applicable.
 	MinBaseStep time.Duration
 	// Status relates effective to configured.
 	Status Status
@@ -224,7 +222,7 @@ func Solve(in Input) Plan {
 	if plan.DutyAtConfigured <= in.DutyCeiling+epsilon {
 		// The configured overlap already fits; snapping the minimum step up to the
 		// grid must not cut an overlap the hardware sustains. MinBaseStep stays set
-		// to the grid-rounded minimum, which can exceed the configured step.
+		// so the readout still shows the smallest step the hardware sustains.
 		return plan
 	}
 	ovMax := max(in.BaseClip-plan.MinBaseStep, 0)
