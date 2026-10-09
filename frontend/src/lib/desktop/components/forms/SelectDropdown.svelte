@@ -359,13 +359,16 @@
     if (disabled) return;
 
     // The clear control sits inside the trigger and unmounts once the value is empty; keep focus
-    // on the trigger instead of letting it drop to body
-    const clearHadFocus = buttonElement?.contains(document.activeElement) ?? false;
+    // on the trigger instead of letting it drop to body.
+    // A click that does not focus (Safari) leaves focus on body; treat it like a trigger click
+    const active = document.activeElement;
+    const restore =
+      !active || active === document.body || (buttonElement?.contains(active) ?? false);
     value = multiple ? [] : '';
     onChange?.(multiple ? [] : '');
     onClear?.();
     closeDropdown();
-    if (clearHadFocus) buttonElement?.focus({ preventScroll: true });
+    if (restore) buttonElement?.focus({ preventScroll: true });
   }
 
   function handleSearch(event: Event) {

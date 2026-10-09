@@ -384,6 +384,31 @@ describe('SelectDropdown', () => {
       await waitFor(() => expect(screen.queryByLabelText('Clear selection')).toBeNull());
       expect(screen.getByRole('combobox')).toHaveFocus();
     });
+
+    it('moves focus to the trigger when a clear click leaves focus on body', async () => {
+      selectTest.render({
+        props: { options: basicOptions, value: 'apple', clearable: true },
+      });
+      (document.activeElement as HTMLElement | null)?.blur();
+
+      await fireEvent.click(screen.getByLabelText('Clear selection'));
+
+      expect(screen.getByRole('combobox')).toHaveFocus();
+    });
+
+    it('leaves focus on another control when the clear click did not take it', async () => {
+      const other = document.createElement('input');
+      document.body.append(other);
+      selectTest.render({
+        props: { options: basicOptions, value: 'apple', clearable: true },
+      });
+      other.focus();
+
+      await fireEvent.click(screen.getByLabelText('Clear selection'));
+
+      expect(other).toHaveFocus();
+      other.remove();
+    });
   });
 
   describe('Grouped Options', () => {
