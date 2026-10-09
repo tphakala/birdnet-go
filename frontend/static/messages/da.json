@@ -520,7 +520,7 @@
         "cadenceCappedTitle": "Analyseoverlap begrænset for denne enhed",
         "cadenceCappedMessage": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med det indstillede overlap på {configured} s overstiger denne enheds målte kapacitet, så lyden analyseres med {effective} s overlap. Falsk positiv-filteret kan derfor kræve færre bekræftelser. Dine gemte indstillinger er uændrede; se Indstillinger > Analyse.",
         "cadenceOverloadedTitle": "Denne enhed kan ikke følge med lydanalysen",
-        "cadenceOverloadedMessage": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger denne enheds målte kapacitet selv uden overlap, så analysen kan komme bagud, og detektioner kan gå tabt. Aktivér færre modeller eller lydkilder."
+        "cadenceOverloadedMessage": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger denne enheds målte kapacitet selv uden overlap, så analysen kan komme bagud, og detektioner kan gå tabt. Aktivér færre modeller eller lydkilder, eller vælg en hurtigere modelvariant."
       }
     },
     "loading": "Indlæser notifikationer..."
@@ -2418,7 +2418,7 @@
           "capNoticeTitle": "Overlap begrænset til, hvad denne enhed kan behandle",
           "capNotice": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med det indstillede overlap på {configured} s overstiger denne enheds målte kapacitet, så lyden analyseres med {effective} s overlap. Filteret kan derfor kræve færre bekræftelser. Dine gemte indstillinger er uændrede.",
           "overloadedNoticeTitle": "Denne enhed kan ikke følge med analysen",
-          "overloadedNotice": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger denne enheds målte kapacitet selv uden overlap. Analysen kan komme bagud, og detektioner kan gå tabt. Aktivér færre modeller eller lydkilder.",
+          "overloadedNotice": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger denne enheds målte kapacitet selv uden overlap. Analysen kan komme bagud, og detektioner kan gå tabt. Aktivér færre modeller eller lydkilder, eller vælg en hurtigere modelvariant.",
           "unknownLatency": "Behandlingstiden kunne ikke måles for {models}, så den tælles ikke med, når overlappet begrænses. Analysen kan stadig komme bagud.",
           "cpuNote": "En højere styrke analyserer overlappende lyd oftere, hvilket koster CPU-tid for hver aktiveret model og lydkilde. BirdNET-Go begrænser automatisk overlappet til, hvad denne enhed kan behandle."
         },

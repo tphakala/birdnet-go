@@ -520,7 +520,7 @@
         "cadenceCappedTitle": "Analyysin päällekkäisyys rajoitettu tälle laitteelle",
         "cadenceCappedMessage": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}} asetetulla {configured} s päällekkäisyydellä, kuormitus ylittää tämän laitteen mitatun kapasiteetin, joten ääni analysoidaan {effective} s päällekkäisyydellä. Siksi väärien positiivisten suodatin voi vaatia vähemmän vahvistuksia. Tallennetut asetuksesi eivät muutu; katso Asetukset > Analyysi.",
         "cadenceOverloadedTitle": "Laite ei pysy äänianalyysin tahdissa",
-        "cadenceOverloadedMessage": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}}, kuormitus ylittää tämän laitteen mitatun kapasiteetin jopa ilman päällekkäisyyttä, joten analyysi voi jäädä jälkeen ja havaintoja voi jäädä saamatta. Ota käyttöön vähemmän malleja tai äänilähteitä."
+        "cadenceOverloadedMessage": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}}, kuormitus ylittää tämän laitteen mitatun kapasiteetin jopa ilman päällekkäisyyttä, joten analyysi voi jäädä jälkeen ja havaintoja voi jäädä saamatta. Ota käyttöön vähemmän malleja tai äänilähteitä, tai valitse nopeampi mallivariantti."
       }
     },
     "loading": "Ladataan ilmoituksia..."
@@ -2418,7 +2418,7 @@
           "capNoticeTitle": "Päällekkäisyys rajoitettu laitteen suorituskykyyn",
           "capNotice": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}} asetetulla {configured} s päällekkäisyydellä, kuormitus ylittää tämän laitteen mitatun kapasiteetin, joten ääni analysoidaan {effective} s päällekkäisyydellä. Siksi suodatin voi vaatia vähemmän vahvistuksia. Tallennetut asetuksesi eivät muutu.",
           "overloadedNoticeTitle": "Laite ei pysy analyysin tahdissa",
-          "overloadedNotice": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}}, kuormitus ylittää tämän laitteen mitatun kapasiteetin jopa ilman päällekkäisyyttä. Analyysi voi jäädä jälkeen ja havaintoja voi jäädä saamatta. Ota käyttöön vähemmän malleja tai äänilähteitä.",
+          "overloadedNotice": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}}, kuormitus ylittää tämän laitteen mitatun kapasiteetin jopa ilman päällekkäisyyttä. Analyysi voi jäädä jälkeen ja havaintoja voi jäädä saamatta. Ota käyttöön vähemmän malleja tai äänilähteitä, tai valitse nopeampi mallivariantti.",
           "unknownLatency": "Käsittelyaikaa ei voitu mitata malleille {models}, joten sitä ei huomioida päällekkäisyyttä rajoitettaessa. Analyysi voi silti jäädä jälkeen.",
           "cpuNote": "Voimakkaampi taso analysoi päällekkäistä ääntä useammin, mikä kuluttaa suoritinaikaa jokaista käytössä olevaa mallia ja äänilähdettä kohden. BirdNET-Go rajoittaa päällekkäisyyden automaattisesti siihen, minkä tämä laite pystyy käsittelemään."
         },

@@ -520,7 +520,7 @@
         "cadenceCappedTitle": "Prekrytie analýzy obmedzené pre toto zariadenie",
         "cadenceCappedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} pri nastavenom prekrytí {configured} s prekračuje nameranú kapacitu tohto zariadenia, preto sa zvuk analyzuje s prekrytím {effective} s. Filter falošne pozitívnych výsledkov preto môže vyžadovať menej potvrdení. Vaše uložené nastavenia sa nemenia; pozrite Nastavenia > Analýza.",
         "cadenceOverloadedTitle": "Toto zariadenie nestíha analýzu zvuku",
-        "cadenceOverloadedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} prekračuje nameranú kapacitu tohto zariadenia aj bez prekrytia, preto môže analýza zaostávať a detekcie môžu byť vynechané. Povoľte menej modelov alebo zvukových zdrojov."
+        "cadenceOverloadedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} prekračuje nameranú kapacitu tohto zariadenia aj bez prekrytia, preto môže analýza zaostávať a detekcie môžu byť vynechané. Povoľte menej modelov alebo zvukových zdrojov, alebo zvoľte rýchlejší variant modelu."
       }
     },
     "loading": "Načítavam upozornenia..."
@@ -2418,7 +2418,7 @@
           "capNoticeTitle": "Prekrytie obmedzené na výkon tohto zariadenia",
           "capNotice": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} pri nastavenom prekrytí {configured} s prekračuje nameranú kapacitu tohto zariadenia, preto sa zvuk analyzuje s prekrytím {effective} s. Filter preto môže vyžadovať menej potvrdení. Vaše uložené nastavenia sa nemenia.",
           "overloadedNoticeTitle": "Toto zariadenie nestíha analýzu",
-          "overloadedNotice": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} prekračuje nameranú kapacitu tohto zariadenia aj bez prekrytia. Analýza môže zaostávať a detekcie môžu byť vynechané. Povoľte menej modelov alebo zvukových zdrojov.",
+          "overloadedNotice": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} prekračuje nameranú kapacitu tohto zariadenia aj bez prekrytia. Analýza môže zaostávať a detekcie môžu byť vynechané. Povoľte menej modelov alebo zvukových zdrojov, alebo zvoľte rýchlejší variant modelu.",
           "unknownLatency": "Čas spracovania sa nepodarilo zmerať pre {models}, preto sa pri obmedzovaní prekrytia nezapočítava. Analýza môže napriek tomu zaostávať.",
           "cpuNote": "Vyššia sila analyzuje prekrývajúci sa zvuk častejšie, čo stojí čas CPU pre každý povolený model a zvukový zdroj. BirdNET-Go automaticky obmedzí prekrytie na to, čo toto zariadenie dokáže spracovať."
         },

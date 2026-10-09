@@ -520,7 +520,7 @@
         "cadenceCappedTitle": "Analysis overlap limited for this device",
         "cadenceCappedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} at the configured {configured} s overlap exceeds the measured capacity of this device, so audio is analyzed with {effective} s overlap. This can lower the number of confirmations the false positive filter requires. Your saved settings are unchanged; see Settings > Analysis.",
         "cadenceOverloadedTitle": "This device cannot keep up with audio analysis",
-        "cadenceOverloadedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap, so analysis can fall behind and detections can be missed. Enable fewer models or audio sources."
+        "cadenceOverloadedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap, so analysis can fall behind and detections can be missed. Enable fewer models or audio sources, or choose a faster model variant."
       }
     },
     "loading": "Loading notifications..."
@@ -2418,7 +2418,7 @@
           "capNoticeTitle": "Overlap limited to what this device can process",
           "capNotice": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} at the configured {configured} s overlap exceeds the measured capacity of this device, so audio is analyzed with {effective} s overlap. This can lower the number of confirmations the filter requires. Your saved settings are unchanged.",
           "overloadedNoticeTitle": "This device cannot keep up with analysis",
-          "overloadedNotice": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap. Analysis can fall behind and detections can be missed. Enable fewer models or audio sources.",
+          "overloadedNotice": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap. Analysis can fall behind and detections can be missed. Enable fewer models or audio sources, or choose a faster model variant.",
           "unknownLatency": "Processing time could not be measured for {models}, so it is not counted when the overlap is limited. Analysis may still fall behind.",
           "cpuNote": "A higher strength analyzes overlapping audio more often, which costs CPU time for every enabled model and audio source. BirdNET-Go limits the overlap automatically to what this device can process."
         },

@@ -520,7 +520,7 @@
         "cadenceCappedTitle": "Analysöverlappning begränsad för den här enheten",
         "cadenceCappedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} med den inställda överlappningen på {configured} s överskrider den här enhetens uppmätta kapacitet, så ljudet analyseras med {effective} s överlappning. Falskpositivfiltret kan därför kräva färre bekräftelser. Dina sparade inställningar är oförändrade; se Inställningar > Analys.",
         "cadenceOverloadedTitle": "Den här enheten hinner inte med ljudanalysen",
-        "cadenceOverloadedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning, så analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor."
+        "cadenceOverloadedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning, så analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor, eller välj en snabbare modellvariant."
       }
     },
     "loading": "Laddar aviseringar..."
@@ -2418,7 +2418,7 @@
           "capNoticeTitle": "Överlappning begränsad till vad den här enheten klarar",
           "capNotice": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} med den inställda överlappningen på {configured} s överskrider den här enhetens uppmätta kapacitet, så ljudet analyseras med {effective} s överlappning. Filtret kan därför kräva färre bekräftelser. Dina sparade inställningar är oförändrade.",
           "overloadedNoticeTitle": "Den här enheten hinner inte med analysen",
-          "overloadedNotice": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning. Analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor.",
+          "overloadedNotice": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning. Analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor, eller välj en snabbare modellvariant.",
           "unknownLatency": "Bearbetningstiden kunde inte mätas för {models}, så den räknas inte med när överlappningen begränsas. Analysen kan ändå hamna efter.",
           "cpuNote": "En högre styrka analyserar överlappande ljud oftare, vilket kostar CPU-tid för varje aktiverad modell och ljudkälla. BirdNET-Go begränsar överlappningen automatiskt till vad den här enheten klarar att bearbeta."
         },

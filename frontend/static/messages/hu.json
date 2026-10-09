@@ -520,7 +520,7 @@
         "cadenceCappedTitle": "Az elemzési átfedés korlátozva ezen az eszközön",
         "cadenceCappedMessage": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} a beállított {configured} s átfedéssel meghaladja az eszköz mért kapacitását, ezért a hang elemzése {effective} s átfedéssel történik. Emiatt a hamis pozitív szűrő kevesebb megerősítést kérhet. A mentett beállításai nem változnak; lásd Beállítások > Elemzés.",
         "cadenceOverloadedTitle": "Az eszköz nem bírja a hangelemzést",
-        "cadenceOverloadedMessage": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását, ezért az elemzés lemaradhat, és detektálások maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást."
+        "cadenceOverloadedMessage": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását, ezért az elemzés lemaradhat, és detektálások maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást, vagy válasszon gyorsabb modellváltozatot."
       }
     },
     "loading": "Értesítések betöltése..."
@@ -2418,7 +2418,7 @@
           "capNoticeTitle": "Az átfedés az eszköz teljesítményére korlátozva",
           "capNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} a beállított {configured} s átfedéssel meghaladja az eszköz mért kapacitását, ezért a hang elemzése {effective} s átfedéssel történik. Emiatt a szűrő kevesebb megerősítést kérhet. A mentett beállításai nem változnak.",
           "overloadedNoticeTitle": "Az eszköz nem bírja az elemzést",
-          "overloadedNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását. Az elemzés lemaradhat, és detektálások maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást.",
+          "overloadedNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását. Az elemzés lemaradhat, és detektálások maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást, vagy válasszon gyorsabb modellváltozatot.",
           "unknownLatency": "A feldolgozási időt nem sikerült megmérni a következőknél: {models}, ezért az átfedés korlátozásakor nem számít bele. Az elemzés így is lemaradhat.",
           "cpuNote": "A nagyobb erősség gyakrabban elemzi az átfedő hangot, ami minden engedélyezett modellnél és hangforrásnál CPU-időt igényel. A BirdNET-Go automatikusan arra korlátozza az átfedést, amit ez az eszköz fel tud dolgozni."
         },

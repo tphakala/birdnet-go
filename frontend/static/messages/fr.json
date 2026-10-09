@@ -520,7 +520,7 @@
         "cadenceCappedTitle": "Chevauchement d'analyse limité pour cet appareil",
         "cadenceCappedMessage": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} avec le chevauchement configuré de {configured} s dépasse la capacité mesurée de cet appareil, l'audio est donc analysé avec un chevauchement de {effective} s. Le filtre de faux positifs peut donc exiger moins de confirmations. Vos paramètres enregistrés restent inchangés ; voir Paramètres > Analyse.",
         "cadenceOverloadedTitle": "Cet appareil ne peut pas suivre l'analyse audio",
-        "cadenceOverloadedMessage": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} dépasse la capacité mesurée de cet appareil même sans chevauchement, l'analyse peut donc prendre du retard et des détections peuvent être manquées. Activez moins de modèles ou de sources audio."
+        "cadenceOverloadedMessage": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} dépasse la capacité mesurée de cet appareil même sans chevauchement, l'analyse peut donc prendre du retard et des détections peuvent être manquées. Activez moins de modèles ou de sources audio, ou choisissez une variante de modèle plus rapide."
       }
     },
     "loading": "Chargement des notifications..."
@@ -2418,7 +2418,7 @@
           "capNoticeTitle": "Chevauchement limité à ce que cet appareil peut traiter",
           "capNotice": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} avec le chevauchement configuré de {configured} s dépasse la capacité mesurée de cet appareil, l'audio est donc analysé avec un chevauchement de {effective} s. Le filtre peut donc exiger moins de confirmations. Vos paramètres enregistrés restent inchangés.",
           "overloadedNoticeTitle": "Cet appareil ne peut pas suivre l'analyse",
-          "overloadedNotice": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} dépasse la capacité mesurée de cet appareil même sans chevauchement. L'analyse peut prendre du retard et des détections peuvent être manquées. Activez moins de modèles ou de sources audio.",
+          "overloadedNotice": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} dépasse la capacité mesurée de cet appareil même sans chevauchement. L'analyse peut prendre du retard et des détections peuvent être manquées. Activez moins de modèles ou de sources audio, ou choisissez une variante de modèle plus rapide.",
           "unknownLatency": "Le temps de traitement n'a pas pu être mesuré pour {models}, il n'est donc pas pris en compte lors de la limitation du chevauchement. L'analyse peut tout de même prendre du retard.",
           "cpuNote": "Une intensité plus élevée analyse plus souvent l'audio qui se chevauche, ce qui coûte du temps CPU pour chaque modèle et chaque source audio activés. BirdNET-Go limite automatiquement le chevauchement à ce que cet appareil peut traiter."
         },

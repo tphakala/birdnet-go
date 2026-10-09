@@ -520,7 +520,7 @@
         "cadenceCappedTitle": "Analīzes pārklāšanās ierobežota šai ierīcei",
         "cadenceCappedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}} pie iestatītās {configured} s pārklāšanās, slodze pārsniedz šīs ierīces izmērīto jaudu, tāpēc audio tiek analizēts ar {effective} s pārklāšanos. Tāpēc viltus pozitīvo filtrs var prasīt mazāk apstiprinājumu. Jūsu saglabātie iestatījumi nemainās; skatiet Iestatījumi > Analīze.",
         "cadenceOverloadedTitle": "Šī ierīce netiek līdzi audio analīzei",
-        "cadenceOverloadedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}}, slodze pārsniedz šīs ierīces izmērīto jaudu pat bez pārklāšanās, tāpēc analīze var atpalikt un noteikšanas var tikt izlaistas. Iespējojiet mazāk modeļu vai audio avotu."
+        "cadenceOverloadedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}}, slodze pārsniedz šīs ierīces izmērīto jaudu pat bez pārklāšanās, tāpēc analīze var atpalikt un noteikšanas var tikt izlaistas. Iespējojiet mazāk modeļu vai audio avotu vai izvēlieties ātrāku modeļa variantu."
       }
     },
     "loading": "Ielādē paziņojumus..."
@@ -2418,7 +2418,7 @@
           "capNoticeTitle": "Pārklāšanās ierobežota līdz šīs ierīces jaudai",
           "capNotice": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}} pie iestatītās {configured} s pārklāšanās, slodze pārsniedz šīs ierīces izmērīto jaudu, tāpēc audio tiek analizēts ar {effective} s pārklāšanos. Tāpēc filtrs var prasīt mazāk apstiprinājumu. Jūsu saglabātie iestatījumi nemainās.",
           "overloadedNoticeTitle": "Šī ierīce netiek līdzi analīzei",
-          "overloadedNotice": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}}, slodze pārsniedz šīs ierīces izmērīto jaudu pat bez pārklāšanās. Analīze var atpalikt, un noteikšanas var tikt izlaistas. Iespējojiet mazāk modeļu vai audio avotu.",
+          "overloadedNotice": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}}, slodze pārsniedz šīs ierīces izmērīto jaudu pat bez pārklāšanās. Analīze var atpalikt, un noteikšanas var tikt izlaistas. Iespējojiet mazāk modeļu vai audio avotu vai izvēlieties ātrāku modeļa variantu.",
           "unknownLatency": "Apstrādes laiku neizdevās izmērīt šiem modeļiem: {models}, tāpēc tas netiek ņemts vērā, ierobežojot pārklāšanos. Analīze joprojām var atpalikt.",
           "cpuNote": "Lielāks stiprums biežāk analizē pārklājošos audio, kas patērē CPU laiku katram iespējotajam modelim un audio avotam. BirdNET-Go automātiski ierobežo pārklāšanos līdz tam, ko šī ierīce spēj apstrādāt."
         },

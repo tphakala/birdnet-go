@@ -154,7 +154,7 @@ func newCadenceNotification(plan *cadence.Plan) *notification.Notification {
 			notification.TypeWarning,
 			notification.PriorityHigh,
 			"This device cannot keep up with audio analysis",
-			fmt.Sprintf("Running %s on %s exceeds the measured capacity of this device even without overlap, so analysis can fall behind and detections can be missed. Enable fewer models or audio sources.", models, sources),
+			fmt.Sprintf("Running %s on %s exceeds the measured capacity of this device even without overlap, so analysis can fall behind and detections can be missed. Enable fewer models or audio sources, or choose a faster model variant.", models, sources),
 		).
 			WithComponent(cadenceNoticeComponent).
 			WithTitleKey(notification.MsgCadenceOverloadedTitle, nil).
