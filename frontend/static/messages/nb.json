@@ -2418,7 +2418,6 @@
             "accuracy": "Anslått nøyaktighet: innenfor {accuracy} m",
             "locationDetected": "Nettleserens posisjon ble funnet.",
             "geolocationUnsupported": "Denne nettleseren støtter ikke enhetsposisjon. Skriv inn koordinater manuelt eller bruk kartet.",
-            "geolocationRequiresHttps": "Nettleserposisjon krever HTTPS eller localhost. Skriv inn koordinater manuelt eller bruk kartet.",
             "geolocationInsecureHelp": "Krever HTTPS eller localhost. Søk etter et sted eller bruk kartet i stedet.",
             "geolocationDenied": "Posisjonstillatelse ble avvist. Skriv inn koordinater manuelt eller bruk kartet.",
             "geolocationUnavailable": "Enheten kunne ikke bestemme posisjonen sin. Skriv inn koordinater manuelt eller bruk kartet.",

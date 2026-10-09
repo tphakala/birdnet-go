@@ -2418,7 +2418,6 @@
             "accuracy": "Precisão estimada: num raio de {accuracy} m",
             "locationDetected": "Localização do navegador detetada.",
             "geolocationUnsupported": "Este navegador não suporta a localização do dispositivo. Introduza as coordenadas manualmente ou use o mapa.",
-            "geolocationRequiresHttps": "A localização do navegador requer HTTPS ou localhost. Introduza as coordenadas manualmente ou use o mapa.",
             "geolocationInsecureHelp": "Requer HTTPS ou localhost. Em alternativa, pesquise um local ou use o mapa.",
             "geolocationDenied": "A permissão de localização foi negada. Introduza as coordenadas manualmente ou use o mapa.",
             "geolocationUnavailable": "O dispositivo não conseguiu determinar a localização. Introduza as coordenadas manualmente ou use o mapa.",

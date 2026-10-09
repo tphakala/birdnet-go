@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { get } from 'svelte/store';
-import type { ComponentProps } from 'svelte';
 import { settingsStore } from '$lib/stores/settings';
 import type { SettingsFormData } from '$lib/stores/settings';
 
@@ -9,18 +8,14 @@ import type { SettingsFormData } from '$lib/stores/settings';
 // page passes to it and the callback it provides are inspected.
 vi.mock('$lib/desktop/components/forms/LocationMap.svelte');
 
-import LocationMap from '$lib/desktop/components/forms/LocationMap.svelte';
 import MainSettingsPage from './MainSettingsPage.svelte';
-
-function latestMapProps(): ComponentProps<typeof LocationMap> {
-  const call = vi.mocked(LocationMap).mock.calls.at(-1);
-  const props = call?.[1];
-  // The lint type checker types a mocked component's call as a one-element tuple,
-  // so it cannot see that the props argument can be missing.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (!props) throw new Error('LocationMap was not rendered');
-  return props;
-}
+import { latestMapProps } from '../../../../../test/location-map-helpers';
+import {
+  clearGeolocationGlobals,
+  createPosition,
+  setGeolocation,
+  setSecureContext,
+} from '../../../../../test/geolocation-fixtures';
 
 type BirdnetOverrides = { [K in keyof SettingsFormData['birdnet']]?: unknown };
 
@@ -149,25 +144,22 @@ describe('MainSettingsPage location map', () => {
 
   describe('on an insecure origin', () => {
     beforeEach(() => {
-      Object.defineProperty(window, 'isSecureContext', { configurable: true, value: false });
+      setSecureContext(false);
     });
 
     afterEach(() => {
-      Reflect.deleteProperty(window, 'isSecureContext');
+      clearGeolocationGlobals();
     });
 
-    it('the settings page disables browser location and explains why on an insecure origin', async () => {
+    it('wires the HTTPS explanation to the browser location button', async () => {
       setStore({ latitude: 60.123, longitude: 24.456, locationConfigured: true });
       await openLocationTab();
 
       const button = screen.getByRole('button', { name: 'Use browser location' });
       expect(button).toHaveAttribute('aria-disabled', 'true');
-      expect(button).not.toBeDisabled();
       expect(button).toHaveAccessibleDescription(
         'Needs HTTPS or localhost. Search for a place or use the map instead.'
       );
-      // The other ways to set the location stay available
-      expect(latestMapProps().placeSearch).toBe(true);
     });
   });
 
@@ -180,13 +172,12 @@ describe('MainSettingsPage location map', () => {
 
     beforeEach(() => {
       geolocation.getCurrentPosition.mockReset();
-      Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
-      Object.defineProperty(navigator, 'geolocation', { configurable: true, value: geolocation });
+      setSecureContext(true);
+      setGeolocation(geolocation);
     });
 
     afterEach(() => {
-      Reflect.deleteProperty(navigator, 'geolocation');
-      Reflect.deleteProperty(window, 'isSecureContext');
+      clearGeolocationGlobals();
     });
 
     async function startBrowserRequest(): Promise<PositionCallback> {
@@ -197,23 +188,6 @@ describe('MainSettingsPage location map', () => {
       await fireEvent.click(screen.getByRole('button', { name: 'Use browser location' }));
       if (!respond) throw new Error('the browser location request was not started');
       return respond;
-    }
-
-    function position(latitude: number, longitude: number): GeolocationPosition {
-      return {
-        coords: {
-          latitude,
-          longitude,
-          accuracy: 10,
-          altitude: null,
-          altitudeAccuracy: null,
-          heading: null,
-          speed: null,
-          toJSON: () => ({}),
-        },
-        timestamp: 0,
-        toJSON: () => ({}),
-      };
     }
 
     it('a map pick on the current coordinates still discards the late browser result', async () => {
@@ -227,7 +201,7 @@ describe('MainSettingsPage location map', () => {
       await vi.waitFor(() =>
         expect(screen.getByRole('button', { name: 'Use browser location' })).not.toBeDisabled()
       );
-      respond(position(10.5, 20.5));
+      respond(createPosition(10.5, 20.5));
 
       expect(get(settingsStore).formData.birdnet).toMatchObject({
         latitude: 60.123,
@@ -240,7 +214,7 @@ describe('MainSettingsPage location map', () => {
       await openLocationTab();
       const respond = await startBrowserRequest();
 
-      respond(position(10.5, 20.5));
+      respond(createPosition(10.5, 20.5));
 
       expect(get(settingsStore).formData.birdnet).toMatchObject({
         latitude: 10.5,

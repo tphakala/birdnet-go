@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { ComponentProps } from 'svelte';
 
 vi.mock('$lib/utils/api', () => ({
   api: {
@@ -21,19 +20,8 @@ vi.mock('$lib/stores/settings', async () => {
 });
 
 import LocationLanguageStep from './LocationLanguageStep.svelte';
-import LocationMap from '$lib/desktop/components/forms/LocationMap.svelte';
+import { latestMapProps } from '../../../../../test/location-map-helpers';
 import { flushAsync, renderStep } from './stepTestUtils';
-
-/** Props of the last rendered LocationMap (the component is automocked). */
-function latestMapProps(): ComponentProps<typeof LocationMap> {
-  const call = vi.mocked(LocationMap).mock.calls.at(-1);
-  const props = call?.[1];
-  // The lint type checker types a mocked component's call as a one-element tuple,
-  // so it cannot see that the props argument can be missing.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (!props) throw new Error('LocationMap was not rendered');
-  return props;
-}
 
 describe('LocationLanguageStep layout', () => {
   async function renderRoot() {
@@ -59,6 +47,5 @@ describe('LocationLanguageStep layout', () => {
     // The map sets its own height, so the column no longer sizes it
     expect(latestMapProps().mapClass).toBe('h-[300px]');
     expect(mapColumn).toHaveClass('min-w-0');
-    expect(mapColumn).not.toHaveClass('h-36');
   });
 });

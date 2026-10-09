@@ -2418,7 +2418,6 @@
             "accuracy": "Arvioitu tarkkuus: {accuracy} m:n sisällä",
             "locationDetected": "Selaimen sijainti havaittu.",
             "geolocationUnsupported": "Tämä selain ei tue laitteen paikannusta. Anna koordinaatit manuaalisesti tai käytä karttaa.",
-            "geolocationRequiresHttps": "Selaimen paikannus vaatii HTTPS-yhteyden tai localhostin. Anna koordinaatit manuaalisesti tai käytä karttaa.",
             "geolocationInsecureHelp": "Vaatii HTTPS-yhteyden tai localhostin. Hae paikkaa tai käytä karttaa.",
             "geolocationDenied": "Sijaintilupa evättiin. Anna koordinaatit manuaalisesti tai käytä karttaa.",
             "geolocationUnavailable": "Laite ei pystynyt määrittämään sijaintiaan. Anna koordinaatit manuaalisesti tai käytä karttaa.",

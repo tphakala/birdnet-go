@@ -169,16 +169,9 @@
   }
 
   function useCurrentLocation() {
-    const support = getBrowserLocationSupport();
-    // Fallback only: an insecure origin known at render time already makes
-    // the button unavailable and explains why.
-    if (support === 'insecure') {
-      toastActions.warning(
-        t('settings.main.sections.rangeFilter.stationLocation.geolocationRequiresHttps')
-      );
-      return;
-    }
-    if (support === 'unsupported') {
+    // An insecure origin never gets here: the button is aria-disabled from the
+    // first render, and a document's secure context does not change.
+    if (getBrowserLocationSupport() !== 'available') {
       toastActions.error(
         t('settings.main.sections.rangeFilter.stationLocation.geolocationUnsupported')
       );
@@ -212,7 +205,7 @@
     <SettingsButton
       onclick={useCurrentLocation}
       {disabled}
-      aria-disabled={insecureOrigin}
+      aria-disabled={insecureOrigin ? 'true' : undefined}
       aria-describedby={insecureOrigin ? insecureHelpId : undefined}
       loading={locating}
       loadingText={t('settings.main.sections.rangeFilter.stationLocation.locating')}

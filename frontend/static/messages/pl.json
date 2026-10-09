@@ -2418,7 +2418,6 @@
             "accuracy": "Szacowana dokładność: w promieniu {accuracy} m",
             "locationDetected": "Ustalono lokalizację przeglądarki.",
             "geolocationUnsupported": "Ta przeglądarka nie obsługuje lokalizacji urządzenia. Wprowadź współrzędne ręcznie lub użyj mapy.",
-            "geolocationRequiresHttps": "Lokalizacja przeglądarki wymaga HTTPS lub localhost. Wprowadź współrzędne ręcznie lub użyj mapy.",
             "geolocationInsecureHelp": "Wymaga HTTPS lub localhost. Zamiast tego wyszukaj miejsce lub użyj mapy.",
             "geolocationDenied": "Odmówiono dostępu do lokalizacji. Wprowadź współrzędne ręcznie lub użyj mapy.",
             "geolocationUnavailable": "Urządzenie nie mogło określić swojej lokalizacji. Wprowadź współrzędne ręcznie lub użyj mapy.",

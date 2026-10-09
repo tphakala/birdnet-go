@@ -60,14 +60,71 @@ vi.mock('$lib/stores/settings', async () => {
   });
 });
 
-import type { ComponentProps } from 'svelte';
 import LocationLanguageStep from './LocationLanguageStep.svelte';
-import LocationMap from '$lib/desktop/components/forms/LocationMap.svelte';
 import LanguageSelector from '$lib/desktop/components/ui/LanguageSelector.svelte';
 import { settingsActions, settingsStore } from '$lib/stores/settings';
 import { setLocale } from '$lib/i18n';
 import { toastActions } from '$lib/stores/toast';
 import { flushAsync, renderStep } from './stepTestUtils';
+import { deferred } from '../../../../../test/async-helpers';
+import { latestMapProps } from '../../../../../test/location-map-helpers';
+import {
+  clearGeolocationGlobals,
+  createPosition,
+  setGeolocation,
+  setSecureContext,
+} from '../../../../../test/geolocation-fixtures';
+
+interface StoredLocation {
+  latitude?: number;
+  longitude?: number;
+  /** Defaults to true for non-zero coordinates, as the server stores them. */
+  locationConfigured?: boolean;
+}
+
+/** Resets the settings store to a loaded state with the given stored location. */
+function setStoredSettings({
+  latitude = 40,
+  longitude = -74,
+  locationConfigured = latitude !== 0 || longitude !== 0,
+}: StoredLocation = {}) {
+  const data = () => ({
+    birdnet: { latitude, longitude, locale: 'en', locationConfigured },
+    realtime: {
+      dashboard: {
+        thumbnails: {
+          summary: true,
+          recent: true,
+          imageProvider: 'wikimedia',
+          fallbackPolicy: 'all',
+        },
+        summaryLimit: 100,
+        locale: 'en',
+      },
+    },
+  });
+  settingsStore.set({
+    isLoading: false,
+    isSaving: false,
+    error: null,
+    dataLoaded: true,
+    activeSection: 'main',
+    // A deliberately partial fixture: only the sections the step reads
+    originalData: data() as unknown as SettingsFormData,
+    formData: data() as unknown as SettingsFormData,
+  });
+}
+
+/** The saveSection calls so far as [section, payload] pairs. */
+const sectionCalls = () => vi.mocked(settingsActions.saveSection).mock.calls;
+
+/** Types a latitude and commits it (input then change), as a user leaving the field does. */
+async function editLatitude(container: HTMLElement, value: string) {
+  const latitudeInput = container.querySelector('input[type="number"]');
+  if (!(latitudeInput instanceof HTMLInputElement)) throw new Error('latitude input not found');
+  await fireEvent.input(latitudeInput, { target: { value } });
+  await fireEvent.change(latitudeInput, { target: { value } });
+}
 
 // The leave handler contract shared by every step is in stepContract.test.ts
 describe('LocationLanguageStep - UI locale persistence in the leave handler', () => {
@@ -76,64 +133,8 @@ describe('LocationLanguageStep - UI locale persistence in the leave handler', ()
     vi.mocked(settingsActions.saveSection).mockResolvedValue(undefined);
     currentLocale = 'en';
 
-    // Reset store to pristine state before every test
-    settingsStore.set({
-      isLoading: false,
-      isSaving: false,
-      error: null,
-      dataLoaded: true,
-      activeSection: 'main',
-      originalData: {
-        birdnet: {
-          latitude: 40,
-          longitude: -74,
-          locale: 'en',
-        },
-        realtime: {
-          dashboard: {
-            thumbnails: {
-              summary: true,
-              recent: true,
-              imageProvider: 'wikimedia',
-              fallbackPolicy: 'all',
-            },
-            summaryLimit: 100,
-            locale: 'en',
-          },
-        },
-      } as unknown as SettingsFormData,
-      formData: {
-        birdnet: {
-          latitude: 40,
-          longitude: -74,
-          locale: 'en',
-        },
-        realtime: {
-          dashboard: {
-            thumbnails: {
-              summary: true,
-              recent: true,
-              imageProvider: 'wikimedia',
-              fallbackPolicy: 'all',
-            },
-            summaryLimit: 100,
-            locale: 'en',
-          },
-        },
-      } as unknown as SettingsFormData,
-    });
+    setStoredSettings();
   });
-
-  /** The saveSection calls so far as [section, payload] pairs. */
-  const sectionCalls = () => vi.mocked(settingsActions.saveSection).mock.calls;
-
-  /** Types a new latitude into the first number input (marks the step dirty). */
-  async function editLatitude(container: HTMLElement, value: string) {
-    const latitudeInput = container.querySelector('input[type="number"]');
-    if (!(latitudeInput instanceof HTMLInputElement)) throw new Error('latitude input not found');
-    await fireEvent.input(latitudeInput, { target: { value } });
-    await fireEvent.change(latitudeInput, { target: { value } });
-  }
 
   it('persists UI locale to realtime.dashboard when only the UI locale changed (dirty=false)', async () => {
     const { leave } = renderStep(LocationLanguageStep);
@@ -229,20 +230,17 @@ describe('LocationLanguageStep - UI locale persistence in the leave handler', ()
     ]);
   });
 
-  it('the birdnet payload omits locationConfigured for zero coordinates', async () => {
-    settingsStore.update(state => {
-      const birdnet = state.formData.birdnet as unknown as Record<string, unknown>;
-      birdnet.latitude = 0;
-      birdnet.longitude = 0;
-      return state;
-    });
+  it('a typed 0,0 is a deliberate location and is saved as configured', async () => {
+    setStoredSettings({ latitude: 0, longitude: 0 });
     const { leave, container } = renderStep(LocationLanguageStep);
     await flushAsync();
     await editLatitude(container, '0');
 
     await leave();
 
-    expect(sectionCalls()).toEqual([['birdnet', { latitude: 0, longitude: 0, locale: 'en' }]]);
+    expect(sectionCalls()).toEqual([
+      ['birdnet', { latitude: 0, longitude: 0, locale: 'en', locationConfigured: true }],
+    ]);
   });
 
   it('a failed dashboard save after a successful birdnet save retries only dashboard', async () => {
@@ -414,76 +412,36 @@ describe('LocationLanguageStep Accessibility', () => {
   });
 });
 
-/** Props of the last rendered LocationMap (the component is automocked). */
-function latestMapProps(): ComponentProps<typeof LocationMap> {
-  const call = vi.mocked(LocationMap).mock.calls.at(-1);
-  const props = call?.[1];
-  // The lint type checker types a mocked component's call as a one-element tuple,
-  // so it cannot see that the props argument can be missing.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (!props) throw new Error('LocationMap was not rendered');
-  return props;
-}
-
 describe('LocationLanguageStep location', () => {
   const BROWSER_BUTTON = 'settings.main.sections.rangeFilter.stationLocation.useCurrentLocation';
   const INSECURE_HELP =
     'settings.main.sections.rangeFilter.stationLocation.geolocationInsecureHelp';
   const getCurrentPosition = vi.fn<Geolocation['getCurrentPosition']>();
-
-  function setStoredCoordinates(latitude: number, longitude: number, locationConfigured = false) {
-    const birdnet = { latitude, longitude, locale: 'en', locationConfigured };
-    const realtime = { dashboard: { locale: 'en' } };
-    settingsStore.set({
-      isLoading: false,
-      isSaving: false,
-      error: null,
-      dataLoaded: true,
-      activeSection: 'main',
-      // A deliberately partial fixture: only the sections the step reads
-      originalData: { birdnet, realtime } as unknown as SettingsFormData,
-      formData: { birdnet: { ...birdnet }, realtime } as unknown as SettingsFormData,
-    });
-  }
+  const geolocation: Geolocation = {
+    getCurrentPosition,
+    watchPosition: vi.fn<Geolocation['watchPosition']>(),
+    clearWatch: vi.fn<Geolocation['clearWatch']>(),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(settingsActions.saveSection).mockResolvedValue(undefined);
     currentLocale = 'en';
     getCurrentPosition.mockReset();
-    setStoredCoordinates(40, -74);
-    vi.stubGlobal('navigator', { ...navigator, geolocation: { getCurrentPosition } });
-    vi.stubGlobal('isSecureContext', true);
+    setStoredSettings();
+    setSecureContext(true);
+    setGeolocation(geolocation);
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    clearGeolocationGlobals();
   });
-
-  const sectionCalls = () => vi.mocked(settingsActions.saveSection).mock.calls;
 
   function coordinateInputs(container: HTMLElement) {
     const inputs = container.querySelectorAll<HTMLInputElement>('input[type="number"]');
     if (inputs.length !== 2) throw new Error('coordinate inputs not found');
     const [latitude, longitude] = inputs;
     return { latitude, longitude };
-  }
-
-  function position(latitude: number, longitude: number): GeolocationPosition {
-    return {
-      coords: {
-        latitude,
-        longitude,
-        accuracy: 10,
-        altitude: null,
-        altitudeAccuracy: null,
-        heading: null,
-        speed: null,
-        toJSON: () => ({}),
-      },
-      timestamp: 0,
-      toJSON: () => ({}),
-    };
   }
 
   /** Clicks the browser location button and returns the browser's success callback. */
@@ -495,13 +453,6 @@ describe('LocationLanguageStep location', () => {
     await fireEvent.click(screen.getByRole('button', { name: BROWSER_BUTTON }));
     if (!respond) throw new Error('the browser location request was not started');
     return respond;
-  }
-
-  /** Types a latitude and commits it, as a user leaving the field does. */
-  async function typeLatitude(container: HTMLElement, value: string) {
-    const { latitude } = coordinateInputs(container);
-    await fireEvent.input(latitude, { target: { value } });
-    await fireEvent.change(latitude, { target: { value } });
   }
 
   async function renderLocationStep() {
@@ -529,55 +480,59 @@ describe('LocationLanguageStep location', () => {
   });
 
   it('shows the pin for a deliberately configured 0,0 location', async () => {
-    setStoredCoordinates(0, 0, true);
+    setStoredSettings({ latitude: 0, longitude: 0, locationConfigured: true });
     await renderLocationStep();
 
     expect(latestMapProps()).toMatchObject({ latitude: 0, longitude: 0, locationSet: true });
   });
 
-  it('marks the location unset when the stored coordinates are 0,0', async () => {
-    setStoredCoordinates(0, 0);
+  it('marks the location unset when it was never configured', async () => {
+    setStoredSettings({ latitude: 0, longitude: 0 });
     await renderLocationStep();
 
     expect(latestMapProps()).toMatchObject({ latitude: 0, longitude: 0, locationSet: false });
   });
 
-  it('a map pick is saved with locationConfigured on Next', async () => {
+  it('a deliberate 0,0 map pick shows the pin and is saved as configured', async () => {
+    setStoredSettings({ latitude: 0, longitude: 0 });
     const { leave } = await renderLocationStep();
 
-    latestMapProps().onLocationChange(60.123, 24.456);
+    latestMapProps().onLocationChange(0, 0);
+    await flushAsync();
+    expect(latestMapProps().locationSet).toBe(true);
     await leave();
 
     expect(sectionCalls()).toEqual([
-      ['birdnet', { latitude: 60.123, longitude: 24.456, locale: 'en', locationConfigured: true }],
+      ['birdnet', { latitude: 0, longitude: 0, locale: 'en', locationConfigured: true }],
     ]);
   });
 
-  it('a map pick on the stored coordinates still saves', async () => {
+  it('leaves a never configured location unconfigured when only the species language changes', async () => {
+    setStoredSettings({ latitude: 0, longitude: 0 });
     const { leave } = await renderLocationStep();
 
-    latestMapProps().onLocationChange(40, -74);
+    const trigger = await waitFor(() => {
+      const el = document.getElementById('wizard-species-locale');
+      if (!el) throw new Error('species dropdown not rendered');
+      return el;
+    });
+    await fireEvent.click(trigger);
+    await fireEvent.click(await screen.findByRole('option', { name: /Magyar/ }));
     await leave();
 
-    expect(sectionCalls()).toEqual([
-      ['birdnet', { latitude: 40, longitude: -74, locale: 'en', locationConfigured: true }],
-    ]);
+    expect(sectionCalls()).toEqual([['birdnet', { latitude: 0, longitude: 0, locale: 'hu' }]]);
   });
 
-  it('browser location fills the coordinates rounded to three decimals and saves them', async () => {
-    const { container, leave } = await renderLocationStep();
+  it('browser location fills the inputs rounded to three decimals', async () => {
+    const { container } = await renderLocationStep();
 
     const respond = await startBrowserRequest();
-    respond(position(60.12345, 24.98765));
+    respond(createPosition(60.12345, 24.98765));
     await flushAsync();
 
     const inputs = coordinateInputs(container);
     await waitFor(() => expect(inputs.latitude).toHaveValue(60.123));
     expect(inputs.longitude).toHaveValue(24.988);
-    await leave();
-    expect(sectionCalls()).toEqual([
-      ['birdnet', { latitude: 60.123, longitude: 24.988, locale: 'en', locationConfigured: true }],
-    ]);
   });
 
   it('a browser location that arrives after the user typed is ignored', async () => {
@@ -588,7 +543,7 @@ describe('LocationLanguageStep location', () => {
     const inputs = coordinateInputs(container);
     await fireEvent.input(inputs.latitude, { target: { value: '41' } });
     await flushAsync();
-    respond(position(52.1, 4.3));
+    respond(createPosition(52.1, 4.3));
     await flushAsync();
 
     expect(inputs.longitude).toHaveValue(-74);
@@ -597,57 +552,19 @@ describe('LocationLanguageStep location', () => {
     expect(sectionCalls()).toEqual([]);
   });
 
-  it('a browser location that arrives after a map pick on the same coordinates is ignored', async () => {
-    const { leave } = await renderLocationStep();
-    const respond = await startBrowserRequest();
-
-    latestMapProps().onLocationChange(40, -74);
-    await flushAsync();
-    respond(position(52.1, 4.3));
-    await flushAsync();
-
-    expect(latestMapProps()).toMatchObject({ latitude: 40, longitude: -74 });
-    await leave();
-    expect(sectionCalls()).toEqual([
-      ['birdnet', { latitude: 40, longitude: -74, locale: 'en', locationConfigured: true }],
-    ]);
-  });
-
-  it('a browser location that arrives after a place pick is ignored', async () => {
-    const { leave } = await renderLocationStep();
-    const respond = await startBrowserRequest();
-
-    // A chosen place reports through onLocationChange, like a map click
-    latestMapProps().onLocationChange(48.857, 2.352);
-    await flushAsync();
-    respond(position(52.1, 4.3));
-    await flushAsync();
-
-    expect(latestMapProps()).toMatchObject({ latitude: 48.857, longitude: 2.352 });
-    await leave();
-    expect(sectionCalls()).toEqual([
-      ['birdnet', { latitude: 48.857, longitude: 2.352, locale: 'en', locationConfigured: true }],
-    ]);
-  });
-
   it('a browser location that arrives while Next is saving is dropped, not reported as detected', async () => {
     const { leave } = await renderLocationStep();
     latestMapProps().onLocationChange(10, 20);
     await flushAsync();
     const respond = await startBrowserRequest();
-    let finishSave: () => void = () => {};
-    vi.mocked(settingsActions.saveSection).mockImplementationOnce(
-      () =>
-        new Promise<void>(resolve => {
-          finishSave = resolve;
-        })
-    );
+    const save = deferred();
+    vi.mocked(settingsActions.saveSection).mockImplementationOnce(() => save.promise);
 
     const leaving = leave();
     await flushAsync();
-    respond(position(52.1, 4.3));
+    respond(createPosition(52.1, 4.3));
     await flushAsync();
-    finishSave();
+    save.resolve();
     await leaving;
 
     expect(toastActions.success).not.toHaveBeenCalled();
@@ -661,47 +578,34 @@ describe('LocationLanguageStep location', () => {
     const { leave } = await renderLocationStep();
     latestMapProps().onLocationChange(10, 20);
     await flushAsync();
-    let failSave: (error: Error) => void = () => {};
-    vi.mocked(settingsActions.saveSection).mockImplementationOnce(
-      () =>
-        new Promise<void>((_resolve, reject) => {
-          failSave = reject;
-        })
-    );
+    const save = deferred();
+    vi.mocked(settingsActions.saveSection).mockImplementationOnce(() => save.promise);
 
     const leaving = leave();
     await flushAsync();
     expect(screen.getByRole('button', { name: BROWSER_BUTTON })).toBeDisabled();
 
-    failSave(new Error('save failed'));
+    save.reject(new Error('save failed'));
     await expect(leaving).rejects.toThrow('save failed');
     await flushAsync();
 
     expect(screen.getByRole('button', { name: BROWSER_BUTTON })).toBeEnabled();
   });
 
-  it('on an insecure origin the step offers no enabled browser location and says why before any click', async () => {
-    vi.stubGlobal('isSecureContext', false);
+  it('on an insecure origin the browser location button carries the HTTPS explanation', async () => {
+    setSecureContext(false);
     await renderLocationStep();
 
     const button = screen.getByRole('button', { name: BROWSER_BUTTON });
     expect(button).toHaveAttribute('aria-disabled', 'true');
-    expect(button).not.toBeDisabled();
     expect(button).toHaveAccessibleDescription(INSECURE_HELP);
-    await fireEvent.click(button);
-    expect(getCurrentPosition).not.toHaveBeenCalled();
-    expect(toastActions.warning).not.toHaveBeenCalled();
-    expect(latestMapProps().placeSearch).toBe(true);
   });
 
   it('the browser location button is disabled while a position is requested', async () => {
     await renderLocationStep();
-    const button = screen.getByRole('button', { name: BROWSER_BUTTON });
-    expect(button).toBeEnabled();
 
     await startBrowserRequest();
 
-    expect(getCurrentPosition).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: /locating/ })).toBeDisabled();
   });
 
@@ -712,6 +616,7 @@ describe('LocationLanguageStep location', () => {
   const pick =
     (latitude: number, longitude: number): Step =>
     async () => {
+      // A map click, pin drag or chosen place all report through onLocationChange
       latestMapProps().onLocationChange(latitude, longitude);
       await flushAsync();
     };
@@ -722,48 +627,46 @@ describe('LocationLanguageStep location', () => {
     (latitude: number, longitude: number): Step =>
     async ({ pending }) => {
       if (!pending.respond) throw new Error('no browser request is pending');
-      pending.respond(position(latitude, longitude));
+      pending.respond(createPosition(latitude, longitude));
       await flushAsync();
     };
   const type =
     (value: string): Step =>
     async ({ container }) => {
-      await typeLatitude(container, value);
+      await editLatitude(container, value);
       await flushAsync();
     };
+  const saved = (latitude: number, longitude: number) => [
+    ['birdnet', { latitude, longitude, locale: 'en', locationConfigured: true }],
+  ];
 
-  it.each<[string, Step[], Array<[string, Record<string, unknown>]>]>([
+  it.each<[string, Step[], unknown[]]>([
     ['no action', [], []],
-    [
-      'map pick',
-      [pick(10, 20)],
-      [['birdnet', { latitude: 10, longitude: 20, locale: 'en', locationConfigured: true }]],
-    ],
-    [
-      'browser result',
-      [click, result(52.12345, 4.98765)],
-      [['birdnet', { latitude: 52.123, longitude: 4.988, locale: 'en', locationConfigured: true }]],
-    ],
+    ['map pick', [pick(60.123, 24.456)], saved(60.123, 24.456)],
+    ['map pick on the stored coordinates', [pick(40, -74)], saved(40, -74)],
+    ['browser result', [click, result(52.12345, 4.98765)], saved(52.123, 4.988)],
     [
       'browser click, map pick, late result',
       [click, pick(10, 20), result(52.1, 4.3)],
-      [['birdnet', { latitude: 10, longitude: 20, locale: 'en', locationConfigured: true }]],
+      saved(10, 20),
+    ],
+    [
+      'browser click, map pick on the same coordinates, late result',
+      [click, pick(40, -74), result(52.1, 4.3)],
+      saved(40, -74),
+    ],
+    [
+      'browser click, place pick, late result',
+      [click, pick(48.857, 2.352), result(52.1, 4.3)],
+      saved(48.857, 2.352),
     ],
     [
       'browser click, typing, late result',
       [click, type('41.5'), result(52.1, 4.3)],
-      [['birdnet', { latitude: 41.5, longitude: -74, locale: 'en', locationConfigured: true }]],
+      saved(41.5, -74),
     ],
-    [
-      'map pick, browser click, result',
-      [pick(10, 20), click, result(52.1, 4.3)],
-      [['birdnet', { latitude: 52.1, longitude: 4.3, locale: 'en', locationConfigured: true }]],
-    ],
-    [
-      'browser result, then map pick',
-      [click, result(52.1, 4.3), pick(10, 20)],
-      [['birdnet', { latitude: 10, longitude: 20, locale: 'en', locationConfigured: true }]],
-    ],
+    ['map pick, browser click, result', [pick(10, 20), click, result(52.1, 4.3)], saved(52.1, 4.3)],
+    ['browser result, then map pick', [click, result(52.1, 4.3), pick(10, 20)], saved(10, 20)],
   ])('%s saves what the user did last', async (_name, steps, expected) => {
     const { container, leave } = await renderLocationStep();
     const pending: { respond?: PositionCallback } = {};

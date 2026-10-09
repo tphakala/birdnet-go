@@ -2418,7 +2418,6 @@
             "accuracy": "Uppskattad noggrannhet: inom {accuracy} m",
             "locationDetected": "Webbläsarens plats hittades.",
             "geolocationUnsupported": "Den här webbläsaren stöder inte enhetspositionering. Ange koordinater manuellt eller använd kartan.",
-            "geolocationRequiresHttps": "Webbläsarens platsbestämning kräver HTTPS eller localhost. Ange koordinater manuellt eller använd kartan.",
             "geolocationInsecureHelp": "Kräver HTTPS eller localhost. Sök efter en plats eller använd kartan i stället.",
             "geolocationDenied": "Platsbehörighet nekades. Ange koordinater manuellt eller använd kartan.",
             "geolocationUnavailable": "Enheten kunde inte fastställa sin plats. Ange koordinater manuellt eller använd kartan.",

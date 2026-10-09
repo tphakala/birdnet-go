@@ -2418,7 +2418,6 @@
             "accuracy": "Aptuvenā precizitāte: {accuracy} m robežās",
             "locationDetected": "Pārlūkprogrammas atrašanās vieta noteikta.",
             "geolocationUnsupported": "Šī pārlūkprogramma neatbalsta ierīces atrašanās vietas noteikšanu. Ievadiet koordinātas manuāli vai izmantojiet karti.",
-            "geolocationRequiresHttps": "Pārlūkprogrammas atrašanās vietas noteikšanai nepieciešams HTTPS vai localhost. Ievadiet koordinātas manuāli vai izmantojiet karti.",
             "geolocationInsecureHelp": "Nepieciešams HTTPS vai localhost. Tā vietā meklējiet vietu vai izmantojiet karti.",
             "geolocationDenied": "Atrašanās vietas atļauja tika liegta. Ievadiet koordinātas manuāli vai izmantojiet karti.",
             "geolocationUnavailable": "Ierīce nevarēja noteikt savu atrašanās vietu. Ievadiet koordinātas manuāli vai izmantojiet karti.",

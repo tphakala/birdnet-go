@@ -2418,7 +2418,6 @@
             "accuracy": "Anslået nøjagtighed: inden for {accuracy} m",
             "locationDetected": "Browserens placering blev fundet.",
             "geolocationUnsupported": "Denne browser understøtter ikke enhedsplacering. Indtast koordinater manuelt, eller brug kortet.",
-            "geolocationRequiresHttps": "Browserplacering kræver HTTPS eller localhost. Indtast koordinater manuelt, eller brug kortet.",
             "geolocationInsecureHelp": "Kræver HTTPS eller localhost. Søg efter et sted, eller brug kortet i stedet.",
             "geolocationDenied": "Placeringstilladelse blev afvist. Indtast koordinater manuelt, eller brug kortet.",
             "geolocationUnavailable": "Enheden kunne ikke bestemme sin placering. Indtast koordinater manuelt, eller brug kortet.",

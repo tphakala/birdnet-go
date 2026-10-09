@@ -2418,7 +2418,6 @@
             "accuracy": "Précision estimée : dans un rayon de {accuracy} m",
             "locationDetected": "Position du navigateur détectée.",
             "geolocationUnsupported": "Ce navigateur ne prend pas en charge la localisation de l'appareil. Saisissez les coordonnées manuellement ou utilisez la carte.",
-            "geolocationRequiresHttps": "La localisation du navigateur nécessite HTTPS ou localhost. Saisissez les coordonnées manuellement ou utilisez la carte.",
             "geolocationInsecureHelp": "Nécessite HTTPS ou localhost. Recherchez plutôt un lieu ou utilisez la carte.",
             "geolocationDenied": "L'autorisation d'accès à la position a été refusée. Saisissez les coordonnées manuellement ou utilisez la carte.",
             "geolocationUnavailable": "Votre appareil n'a pas pu déterminer sa position. Saisissez les coordonnées manuellement ou utilisez la carte.",

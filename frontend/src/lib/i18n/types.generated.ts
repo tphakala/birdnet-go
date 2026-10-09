@@ -1864,7 +1864,6 @@ export type TranslationKey =
   | 'settings.main.sections.rangeFilter.stationLocation.accuracy' // params: accuracy
   | 'settings.main.sections.rangeFilter.stationLocation.locationDetected'
   | 'settings.main.sections.rangeFilter.stationLocation.geolocationUnsupported'
-  | 'settings.main.sections.rangeFilter.stationLocation.geolocationRequiresHttps'
   | 'settings.main.sections.rangeFilter.stationLocation.geolocationInsecureHelp'
   | 'settings.main.sections.rangeFilter.stationLocation.geolocationDenied'
   | 'settings.main.sections.rangeFilter.stationLocation.geolocationUnavailable'

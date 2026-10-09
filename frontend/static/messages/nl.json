@@ -2418,7 +2418,6 @@
             "accuracy": "Geschatte nauwkeurigheid: binnen {accuracy} m",
             "locationDetected": "Browserlocatie bepaald.",
             "geolocationUnsupported": "Deze browser ondersteunt apparaatlocatie niet. Voer coördinaten handmatig in of gebruik de kaart.",
-            "geolocationRequiresHttps": "Browserlocatie vereist HTTPS of localhost. Voer coördinaten handmatig in of gebruik de kaart.",
             "geolocationInsecureHelp": "Vereist HTTPS of localhost. Zoek in plaats daarvan een plaats of gebruik de kaart.",
             "geolocationDenied": "Toestemming voor locatie is geweigerd. Voer coördinaten handmatig in of gebruik de kaart.",
             "geolocationUnavailable": "Uw apparaat kon de locatie niet bepalen. Voer coördinaten handmatig in of gebruik de kaart.",

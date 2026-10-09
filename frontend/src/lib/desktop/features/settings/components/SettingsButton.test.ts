@@ -270,7 +270,7 @@ describe('SettingsButton', () => {
       expect(button).toHaveAttribute('aria-busy', 'false');
     });
 
-    it('passes aria-describedby to the button', () => {
+    it('passes other button attributes such as aria-describedby through', () => {
       testFactory.render({
         'aria-describedby': 'settings-button-help',
       });
@@ -283,7 +283,7 @@ describe('SettingsButton', () => {
 
     it('marks the button aria-disabled, keeps it focusable and suppresses clicks', async () => {
       const onclick = vi.fn();
-      testFactory.render({ 'aria-disabled': true, onclick });
+      testFactory.render({ 'aria-disabled': 'true', onclick });
 
       const button = screen.getByRole('button');
       expect(button).toHaveAttribute('aria-disabled', 'true');
@@ -295,16 +295,12 @@ describe('SettingsButton', () => {
       expect(onclick).not.toHaveBeenCalled();
     });
 
-    it('renders no aria-disabled by default', () => {
+    it('renders no aria-describedby or aria-disabled by default', () => {
       testFactory.render({});
 
-      expect(screen.getByRole('button')).not.toHaveAttribute('aria-disabled');
-    });
-
-    it('renders no aria-describedby by default', () => {
-      testFactory.render({});
-
-      expect(screen.getByRole('button')).not.toHaveAttribute('aria-describedby');
+      const button = screen.getByRole('button');
+      expect(button).not.toHaveAttribute('aria-describedby');
+      expect(button).not.toHaveAttribute('aria-disabled');
     });
 
     it('maintains focus state', () => {

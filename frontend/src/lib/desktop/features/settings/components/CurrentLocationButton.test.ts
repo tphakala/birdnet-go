@@ -4,6 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { createComponentTestFactory } from '../../../../../test/render-helpers';
 import CurrentLocationButton from './CurrentLocationButton.svelte';
 import { toastActions } from '$lib/stores/toast';
+import {
+  clearGeolocationGlobals,
+  createPosition,
+  createPositionError,
+  setGeolocation,
+  setSecureContext,
+} from '../../../../../test/geolocation-fixtures';
 
 const geolocationMock = {
   getCurrentPosition: vi.fn<Geolocation['getCurrentPosition']>(),
@@ -17,51 +24,6 @@ const testFactory = createComponentTestFactory(CurrentLocationButton, {
   onLocation: vi.fn(),
 });
 
-function setSecureContext(value: boolean) {
-  Object.defineProperty(window, 'isSecureContext', {
-    configurable: true,
-    value,
-  });
-}
-
-function setGeolocation(value: Geolocation | undefined) {
-  Object.defineProperty(navigator, 'geolocation', {
-    configurable: true,
-    value,
-  });
-}
-
-function createPosition(
-  latitude: number,
-  longitude: number,
-  accuracy: number
-): GeolocationPosition {
-  return {
-    coords: {
-      latitude,
-      longitude,
-      accuracy,
-      altitude: null,
-      altitudeAccuracy: null,
-      heading: null,
-      speed: null,
-      toJSON: () => ({}),
-    },
-    timestamp: Date.now(),
-    toJSON: () => ({}),
-  };
-}
-
-function createPositionError(code: number): GeolocationPositionError {
-  return {
-    code,
-    message: 'Test geolocation failure',
-    PERMISSION_DENIED: 1,
-    POSITION_UNAVAILABLE: 2,
-    TIMEOUT: 3,
-  };
-}
-
 describe('CurrentLocationButton', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,8 +36,7 @@ describe('CurrentLocationButton', () => {
 
   afterEach(() => {
     cleanup();
-    Reflect.deleteProperty(navigator, 'geolocation');
-    Reflect.deleteProperty(window, 'isSecureContext');
+    clearGeolocationGlobals();
   });
 
   it('reports rounded coordinates and accuracy that includes rounding displacement', async () => {
@@ -315,20 +276,6 @@ describe('CurrentLocationButton', () => {
       expect(button).toHaveAttribute('aria-disabled', 'true');
       expect(button).toHaveAccessibleDescription(insecureHelp);
       expect(screen.queryByText('Automatic location')).not.toBeInTheDocument();
-    });
-
-    it('keeps the HTTPS warning toast as a fallback when the origin turns insecure after rendering', async () => {
-      const onLocation = vi.fn();
-      testFactory.render({ onLocation });
-      setSecureContext(false);
-
-      await fireEvent.click(screen.getByRole('button', { name: 'Use browser location' }));
-
-      expect(toastActions.warning).toHaveBeenCalledWith(
-        'Browser location requires HTTPS or localhost.'
-      );
-      expect(geolocationMock.getCurrentPosition).not.toHaveBeenCalled();
-      expect(onLocation).not.toHaveBeenCalled();
     });
 
     it('shows no HTTPS explanation on a secure origin', () => {

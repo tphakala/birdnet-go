@@ -26,8 +26,8 @@
   let latitude = $state(storedBirdnet?.latitude ?? 0);
   let longitude = $state(storedBirdnet?.longitude ?? 0);
   let speciesLocale = $state(storedBirdnet?.locale ?? 'en');
-  // A stored location counts as set when it was explicitly configured (even 0,0)
-  const storedLocationConfigured = storedBirdnet?.locationConfigured === true;
+  // Like the settings page: any location the user sets, even 0,0, counts as configured
+  let locationConfigured = $state(storedBirdnet?.locationConfigured === true);
   let localesLoading = $state(true);
   let localesFailed = $state(false);
   let localeOptions = $state<Array<{ value: string; label: string }>>([]);
@@ -80,18 +80,18 @@
       });
   });
 
-  // A map click, pin drag or chosen place
-  function handleLocationChange(lat: number, lon: number) {
-    coordinateIntentVersion += 1;
+  function setLocation(lat: number, lon: number) {
     latitude = lat;
     longitude = lon;
+    locationConfigured = true;
     dirty = true;
   }
 
-  function handleBrowserLocation(lat: number, lon: number) {
-    latitude = lat;
-    longitude = lon;
-    dirty = true;
+  // A map click, pin drag or chosen place. A browser result (setLocation
+  // directly) does not advance the intent version.
+  function handleLocationChange(lat: number, lon: number) {
+    coordinateIntentVersion += 1;
+    setLocation(lat, lon);
   }
 
   // The UI language applies, and is cached in localStorage, as soon as it is
@@ -135,9 +135,8 @@
           latitude,
           longitude,
           locale: speciesLocale,
-          // Mirrors the server, which sets locationConfigured when either
-          // coordinate is non-zero, so the store matches config.yaml.
-          ...(latitude !== 0 || longitude !== 0 ? { locationConfigured: true } : {}),
+          // A stored or newly set location is configured; one never set stays unconfigured
+          ...(locationConfigured ? { locationConfigured: true } : {}),
         });
         dirty = false;
       }
@@ -253,10 +252,7 @@
           min={-90}
           max={90}
           step={0.001}
-          onUpdate={value => {
-            latitude = value;
-            dirty = true;
-          }}
+          onUpdate={value => setLocation(value, longitude)}
         />
         <NumberField
           label={t('wizard.steps.locationLanguage.longitudeLabel')}
@@ -264,10 +260,7 @@
           min={-180}
           max={180}
           step={0.001}
-          onUpdate={value => {
-            longitude = value;
-            dirty = true;
-          }}
+          onUpdate={value => setLocation(latitude, value)}
         />
       </div>
 
@@ -280,7 +273,7 @@
           {latitude}
           {longitude}
           {coordinateIntentVersion}
-          onLocation={handleBrowserLocation}
+          onLocation={setLocation}
         />
       </div>
     </div>
@@ -291,7 +284,7 @@
     <LocationMap
       {latitude}
       {longitude}
-      locationSet={storedLocationConfigured || latitude !== 0 || longitude !== 0}
+      locationSet={locationConfigured}
       title={t('wizard.steps.locationLanguage.locationLabel')}
       onLocationChange={handleLocationChange}
       placeSearch

@@ -2418,7 +2418,6 @@
             "accuracy": "Odhadovaná presnosť: do {accuracy} m",
             "locationDetected": "Poloha prehliadača bola zistená.",
             "geolocationUnsupported": "Tento prehliadač nepodporuje určovanie polohy zariadenia. Zadajte súradnice ručne alebo použite mapu.",
-            "geolocationRequiresHttps": "Určovanie polohy prehliadača vyžaduje HTTPS alebo localhost. Zadajte súradnice ručne alebo použite mapu.",
             "geolocationInsecureHelp": "Vyžaduje HTTPS alebo localhost. Namiesto toho vyhľadajte miesto alebo použite mapu.",
             "geolocationDenied": "Prístup k polohe bol zamietnutý. Zadajte súradnice ručne alebo použite mapu.",
             "geolocationUnavailable": "Zariadenie nedokázalo určiť svoju polohu. Zadajte súradnice ručne alebo použite mapu.",

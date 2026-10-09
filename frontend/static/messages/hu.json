@@ -2418,7 +2418,6 @@
             "accuracy": "Becsült pontosság: {accuracy} m-en belül",
             "locationDetected": "A böngésző helye meghatározva.",
             "geolocationUnsupported": "Ez a böngésző nem támogatja az eszköz helymeghatározását. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
-            "geolocationRequiresHttps": "A böngésző helymeghatározásához HTTPS vagy localhost szükséges. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
             "geolocationInsecureHelp": "HTTPS vagy localhost szükséges hozzá. Inkább keressen egy helyet, vagy használja a térképet.",
             "geolocationDenied": "A helyhozzáférési engedély meg lett tagadva. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
             "geolocationUnavailable": "Az eszköz nem tudta meghatározni a helyét. Adja meg kézzel a koordinátákat, vagy használja a térképet.",

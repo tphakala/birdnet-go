@@ -19,29 +19,31 @@
   - loadingText: Text to show when loading (default: from translation)
   - variant: Button style variant (primary, secondary, ghost)
   - className: Additional CSS classes
-  - aria-describedby: ID of an element that describes the button (for example
-    the reason it is unavailable)
-  - aria-disabled: Mark the button unavailable but keep it in the tab order, so
-    its description is still announced; clicks, Enter and Space do nothing
   - children: Button content snippet
+  - any other button attribute (aria-describedby, aria-label, ...) is passed
+    through to the button. aria-disabled marks it unavailable but keeps it in
+    the tab order, so its description is still announced; clicks, Enter and
+    Space then do nothing.
 
   @component
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
+  import type { HTMLButtonAttributes } from 'svelte/elements';
 
   type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 
-  interface Props {
+  interface Props extends Omit<
+    HTMLButtonAttributes,
+    'onclick' | 'disabled' | 'class' | 'type' | 'children' | 'aria-busy'
+  > {
     onclick?: () => void;
     disabled?: boolean;
     loading?: boolean;
     loadingText?: string;
     variant?: ButtonVariant;
     className?: string;
-    'aria-describedby'?: string;
-    'aria-disabled'?: boolean;
     children?: import('svelte').Snippet;
   }
 
@@ -52,10 +54,12 @@
     loadingText,
     variant = 'primary',
     className = '',
-    'aria-describedby': ariaDescribedBy,
-    'aria-disabled': ariaDisabled = false,
     children,
+    ...rest
   }: Props = $props();
+
+  // An aria-disabled button stays focusable, so it must ignore activation itself
+  let ariaDisabled = $derived(rest['aria-disabled'] === true || rest['aria-disabled'] === 'true');
 
   // PERFORMANCE OPTIMIZATION: Use $derived for reactive default loading text
   let defaultLoadingText = $derived(loadingText || t('common.loading'));
@@ -79,6 +83,7 @@
 </script>
 
 <button
+  {...rest}
   type="button"
   class={cn(
     'btn btn-sm gap-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-75',
@@ -87,9 +92,7 @@
   )}
   onclick={() => !isDisabled && !ariaDisabled && onclick?.()}
   disabled={isDisabled}
-  aria-disabled={ariaDisabled ? 'true' : undefined}
   aria-busy={loading}
-  aria-describedby={ariaDescribedBy}
 >
   {#if loading}
     <span class="loading loading-spinner loading-xs"></span>
