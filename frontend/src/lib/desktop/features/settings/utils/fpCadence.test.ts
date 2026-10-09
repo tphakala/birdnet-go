@@ -142,6 +142,18 @@ describe('fpCadence', () => {
       expect(previewEffectiveOverlapSeconds(cadence(), 2.8, 4)).toBe(1.8);
     });
 
+    it('keeps an off-grid configured overlap that fits when only the level changes', () => {
+      // The plan keeps 2.25 s (its duty fits) but reports the 0.8 s grid step;
+      // capping at 3 - 0.8 = 2.2 s would understate the overlap in use.
+      const offGrid = cadence({
+        status: 'ok',
+        configuredOverlapSec: 2.25,
+        effectiveOverlapSec: 2.25,
+        minBaseStepMs: 800,
+      });
+      expect(previewEffectiveOverlapSeconds(offGrid, 2.25, 4)).toBe(2.25);
+    });
+
     it('caps a changed overlap at the smallest sustainable step', () => {
       expect(previewEffectiveOverlapSeconds(cadence(), 2.4, 3)).toBeCloseTo(1.8, 9);
       expect(previewEffectiveOverlapSeconds(cadence(), 1.5, 3)).toBe(1.5);
