@@ -435,7 +435,12 @@ func TestDefaultNoticeService_NilWhenUninitialized(t *testing.T) {
 		mu.Unlock()
 	})
 
-	assert.Nil(t, DefaultNoticeService())
+	got := DefaultNoticeService()
+	assert.Nil(t, got)
+	// assert.Nil also passes for an interface holding a nil *Service, which a
+	// caller's nil check would not catch; the type assertion tells them apart.
+	_, boxed := got.(*Service)
+	assert.False(t, boxed, "an uninitialized service must not be returned as a boxed nil *Service")
 
 	svc := NewService(DefaultServiceConfig())
 	t.Cleanup(svc.Stop)
