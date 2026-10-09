@@ -66,6 +66,7 @@ import LocationMap from '$lib/desktop/components/forms/LocationMap.svelte';
 import LanguageSelector from '$lib/desktop/components/ui/LanguageSelector.svelte';
 import { settingsActions, settingsStore } from '$lib/stores/settings';
 import { setLocale } from '$lib/i18n';
+import { toastActions } from '$lib/stores/toast';
 import { flushAsync, renderStep } from './stepTestUtils';
 
 // The leave handler contract shared by every step is in stepContract.test.ts
@@ -619,6 +620,33 @@ describe('LocationLanguageStep location', () => {
     await leave();
     expect(sectionCalls()).toEqual([
       ['birdnet', { latitude: 48.857, longitude: 2.352, locale: 'en', locationConfigured: true }],
+    ]);
+  });
+
+  it('a browser location that arrives while Next is saving is dropped, not reported as detected', async () => {
+    const { leave } = await renderLocationStep();
+    latestMapProps().onLocationChange(10, 20);
+    await flushAsync();
+    const respond = await startBrowserRequest();
+    let finishSave: () => void = () => {};
+    vi.mocked(settingsActions.saveSection).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          finishSave = resolve;
+        })
+    );
+
+    const leaving = leave();
+    await flushAsync();
+    respond(position(52.1, 4.3));
+    await flushAsync();
+    finishSave();
+    await leaving;
+
+    expect(toastActions.success).not.toHaveBeenCalled();
+    expect(latestMapProps()).toMatchObject({ latitude: 10, longitude: 20 });
+    expect(sectionCalls()).toEqual([
+      ['birdnet', { latitude: 10, longitude: 20, locale: 'en', locationConfigured: true }],
     ]);
   });
 

@@ -98,7 +98,8 @@
   // If a save is still in flight, wait for it to settle first: a saved language
   // stays so the UI matches the backend, otherwise the old one comes back.
   let uiLocaleAtLastSave = getLocale();
-  let pendingSave: Promise<void> | null = null;
+  // Reactive so the browser location button is disabled while a save runs.
+  let pendingSave = $state.raw<Promise<void> | null>(null);
   // Set when the step unmounts, so a commit still in flight sends no further parts.
   let left = false;
   onDestroy(() => {
@@ -269,8 +270,11 @@
       </div>
 
       <div class="mt-3">
+        <!-- Disabled while the step saves, so a location that arrives then is dropped,
+             not shown as detected after the coordinates were already sent -->
         <CurrentLocationButton
           compact
+          disabled={pendingSave !== null}
           {latitude}
           {longitude}
           {coordinateIntentVersion}
