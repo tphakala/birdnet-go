@@ -6,51 +6,59 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/notification/mocks"
 )
 
-// fakeCadenceNoticeService records creates and deletes.
-type fakeCadenceNoticeService struct {
+// cadenceNoticeRecorder wraps the generated NoticeService mock and records the
+// notices created and deleted through it.
+type cadenceNoticeRecorder struct {
+	*mocks.MockNoticeService
 	mu        sync.Mutex
 	created   []*notification.Notification
 	deleted   []string
 	createErr error
 }
 
-func (f *fakeCadenceNoticeService) CreateWithMetadata(n *notification.Notification) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.createErr != nil {
-		return f.createErr
-	}
-	f.created = append(f.created, n)
-	return nil
+func newCadenceNoticeRecorder(t *testing.T) *cadenceNoticeRecorder {
+	t.Helper()
+	f := &cadenceNoticeRecorder{MockNoticeService: mocks.NewMockNoticeService(t)}
+	f.EXPECT().CreateWithMetadata(mock.Anything).RunAndReturn(func(n *notification.Notification) error {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.createErr != nil {
+			return f.createErr
+		}
+		f.created = append(f.created, n)
+		return nil
+	}).Maybe()
+	f.EXPECT().Delete(mock.Anything).RunAndReturn(func(id string) error {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.deleted = append(f.deleted, id)
+		return nil
+	}).Maybe()
+	return f
 }
 
-func (f *fakeCadenceNoticeService) setCreateErr(err error) {
+func (f *cadenceNoticeRecorder) setCreateErr(err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.createErr = err
 }
 
-func (f *fakeCadenceNoticeService) Delete(id string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.deleted = append(f.deleted, id)
-	return nil
-}
-
-func (f *fakeCadenceNoticeService) counts() (created, deleted int) {
+func (f *cadenceNoticeRecorder) counts() (created, deleted int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.created), len(f.deleted)
 }
 
-func (f *fakeCadenceNoticeService) last() *notification.Notification {
+func (f *cadenceNoticeRecorder) last() *notification.Notification {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if len(f.created) == 0 {
@@ -76,7 +84,7 @@ func newTestCadenceNotice(svc notification.NoticeService) *cadenceNotice {
 
 func TestCadenceNotice_FirstPlanCappedRaisesOnce(t *testing.T) {
 	t.Parallel()
-	svc := &fakeCadenceNoticeService{}
+	svc := newCadenceNoticeRecorder(t)
 	n := newTestCadenceNotice(svc)
 
 	capped := noticePlan(cadence.StatusCapped, 2800*time.Millisecond, 1800*time.Millisecond)
@@ -102,7 +110,7 @@ func TestCadenceNotice_FirstPlanCappedRaisesOnce(t *testing.T) {
 
 func TestCadenceNotice_ChangedEffectiveReplaces(t *testing.T) {
 	t.Parallel()
-	svc := &fakeCadenceNoticeService{}
+	svc := newCadenceNoticeRecorder(t)
 	n := newTestCadenceNotice(svc)
 
 	n.observe(noticePlan(cadence.StatusCapped, 2800*time.Millisecond, 1800*time.Millisecond))
@@ -116,7 +124,7 @@ func TestCadenceNotice_ChangedEffectiveReplaces(t *testing.T) {
 
 func TestCadenceNotice_OverloadedUsesOverloadedKeys(t *testing.T) {
 	t.Parallel()
-	svc := &fakeCadenceNoticeService{}
+	svc := newCadenceNoticeRecorder(t)
 	n := newTestCadenceNotice(svc)
 
 	n.observe(noticePlan(cadence.StatusOverloaded, 2800*time.Millisecond, 0))
@@ -131,7 +139,7 @@ func TestCadenceNotice_OverloadedUsesOverloadedKeys(t *testing.T) {
 func TestCadenceNotice_FirstPlanOKNeverRaises(t *testing.T) {
 	t.Parallel()
 	for _, first := range []cadence.Status{cadence.StatusOK, cadence.StatusFilterOff} {
-		svc := &fakeCadenceNoticeService{}
+		svc := newCadenceNoticeRecorder(t)
 		n := newTestCadenceNotice(svc)
 
 		n.observe(noticePlan(first, 2000*time.Millisecond, 2000*time.Millisecond))
@@ -147,7 +155,7 @@ func TestCadenceNotice_FirstPlanOKNeverRaises(t *testing.T) {
 
 func TestCadenceNotice_ResolvedClearsAndNeverReraises(t *testing.T) {
 	t.Parallel()
-	svc := &fakeCadenceNoticeService{}
+	svc := newCadenceNoticeRecorder(t)
 	n := newTestCadenceNotice(svc)
 
 	n.observe(noticePlan(cadence.StatusCapped, 2800*time.Millisecond, 1800*time.Millisecond))
@@ -164,7 +172,7 @@ func TestCadenceNotice_ResolvedClearsAndNeverReraises(t *testing.T) {
 
 func TestCadenceNotice_NoServiceRaisesOnNextPlan(t *testing.T) {
 	t.Parallel()
-	svc := &fakeCadenceNoticeService{}
+	svc := newCadenceNoticeRecorder(t)
 	var current notification.NoticeService
 	n := &cadenceNotice{service: func() notification.NoticeService { return current }}
 
@@ -179,7 +187,7 @@ func TestCadenceNotice_NoServiceRaisesOnNextPlan(t *testing.T) {
 
 func TestCadenceNotice_NilPlanIgnored(t *testing.T) {
 	t.Parallel()
-	svc := &fakeCadenceNoticeService{}
+	svc := newCadenceNoticeRecorder(t)
 	n := newTestCadenceNotice(svc)
 
 	n.observe(nil)
@@ -191,7 +199,7 @@ func TestCadenceNotice_NilPlanIgnored(t *testing.T) {
 
 func TestCadenceNotice_ChangedInputsReplace(t *testing.T) {
 	t.Parallel()
-	svc := &fakeCadenceNoticeService{}
+	svc := newCadenceNoticeRecorder(t)
 	n := newTestCadenceNotice(svc)
 
 	n.observe(noticePlan(cadence.StatusCapped, 2800*time.Millisecond, 1800*time.Millisecond))
@@ -211,7 +219,7 @@ func TestCadenceNotice_ChangedInputsReplace(t *testing.T) {
 
 func TestCadenceNotice_OverloadedIgnoresConfiguredOverlap(t *testing.T) {
 	t.Parallel()
-	svc := &fakeCadenceNoticeService{}
+	svc := newCadenceNoticeRecorder(t)
 	n := newTestCadenceNotice(svc)
 
 	n.observe(noticePlan(cadence.StatusOverloaded, 2800*time.Millisecond, 0))
@@ -230,7 +238,7 @@ func TestCadenceNotice_OverloadedIgnoresConfiguredOverlap(t *testing.T) {
 
 func TestCadenceNotice_RetryRaisesAfterFailedCreate(t *testing.T) {
 	t.Parallel()
-	svc := &fakeCadenceNoticeService{}
+	svc := newCadenceNoticeRecorder(t)
 	svc.setCreateErr(errors.NewStd("rate limited"))
 	n := newTestCadenceNotice(svc)
 

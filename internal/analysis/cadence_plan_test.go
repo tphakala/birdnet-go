@@ -507,7 +507,7 @@ func TestSameCadenceInputs(t *testing.T) {
 func TestPublishCadencePlan_FeedsTheBellNotice(t *testing.T) {
 	// Not parallel: conftest.SetTestSettings mutates package-global settings.
 	p, orch := cadenceService(t)
-	svc := &fakeCadenceNoticeService{}
+	svc := newCadenceNoticeRecorder(t)
 	p.cadenceNotice.service = func() notification.NoticeService { return svc }
 
 	p.publishCadencePlan(orch, noticePlan(cadence.StatusCapped, 2800*time.Millisecond, 1800*time.Millisecond), "test")
