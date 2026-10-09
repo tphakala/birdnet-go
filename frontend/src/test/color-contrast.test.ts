@@ -708,6 +708,15 @@ describe('Components pair a status fill with its content color', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('no class string fades a solid status token fill with hover opacity', () => {
+    const offenders = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(SOLID_FILL)]
+        .filter(match => /(^|\s)hover:opacity-/.test(quotedAround(text, match.index)))
+        .map(() => file)
+    );
+    expect(offenders).toEqual([]);
+  });
+
   it('no style rule puts white text on a status token fill', () => {
     const offenders = sources.flatMap(({ file, text }) =>
       [...text.matchAll(/\{[^{}]*\}/g)]
