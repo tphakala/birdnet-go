@@ -442,7 +442,7 @@ func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 	sessionPath, ok := getSessionPath()
 	if !ok {
 		// Fallback to in-memory store if config paths can't be retrieved
-		gothic.Store = newCookieStoreFallback()
+		gothic.Store = requestSchemeSessionStore{Store: newCookieStoreFallback()}
 		return
 	}
 
@@ -451,7 +451,7 @@ func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 	// Ensure directory exists
 	if err := os.MkdirAll(sessionPath, DirPermissions); err != nil {
 		secLog.Error("Failed to create session directory, falling back to in-memory cookie store", logger.Error(err))
-		gothic.Store = newCookieStoreFallback()
+		gothic.Store = requestSchemeSessionStore{Store: newCookieStoreFallback()}
 		return
 	}
 
@@ -459,14 +459,14 @@ func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 	authKey := createSessionKey(settings.Security.SessionSecret)
 	encKey := createSessionKey(settings.Security.SessionSecret + "encryption")
 
-	gothic.Store = sessions.NewFilesystemStore(
+	store := sessions.NewFilesystemStore(
 		sessionPath,
 		authKey,
 		encKey,
 	)
+	gothic.Store = requestSchemeSessionStore{Store: store}
 
 	// Configure session store options
-	store := gothic.Store.(*sessions.FilesystemStore)
 	store.Options = buildSessionOptions(secureCookies, maxAge)
 	secLog.Info("Filesystem session store configured", logger.Int("max_age_seconds", maxAge), logger.Bool("secure", secureCookies))
 
