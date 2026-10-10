@@ -74,9 +74,8 @@ var cloudflareEdgeCIDRs = []string{
 	"2c0f:f248::/32",
 }
 
-// cloudflareEdgeNets is cloudflareEdgeCIDRs parsed once. AuthClientIP uses it to
-// honor CF-Connecting-IP only from a real Cloudflare edge peer, which always
-// overwrites that header.
+// cloudflareEdgeNets is cloudflareEdgeCIDRs parsed once, shared by every
+// checker built with the "cloudflare" preset.
 var cloudflareEdgeNets = parseCIDRs(cloudflareEdgeCIDRs)
 
 // Checker decides whether a peer address is a trusted reverse proxy whose
@@ -229,17 +228,16 @@ func (tc *Checker) ClientIPFromXFF(xff string) string {
 //     the client (a direct browser, or a browser on the proxy host itself).
 //   - A peer that is not a configured proxy but sends a client-IP header was
 //     either proxied (the peer is the proxy, not the client) or forged the
-//     header, so the result is nil. This also keeps an unconfigured local
-//     reverse proxy from turning every client it forwards into a loopback
-//     client.
-//   - From a configured proxy the client comes from CF-Connecting-IP when the
-//     peer is a Cloudflare edge address (Cloudflare overwrites that header),
-//     otherwise from X-Forwarded-For (every header line, walked from the right
-//     so the hop the proxy appended wins), otherwise from X-Real-IP.
-//     CF-Connecting-IP from any other proxy is ignored, because a proxy that
-//     does not set it passes a client's forged copy through untouched.
+//     header, so the result is nil. This keeps an unconfigured local reverse
+//     proxy that sends one of the headers in clientIPHeaders from turning every
+//     client it forwards into a loopback client; a proxy that sends none of
+//     them is indistinguishable from a direct client.
+//   - From a configured proxy, the client-IP headers present must agree on one
+//     client (see forwardedClientIP for the exceptions). X-Forwarded-For is
+//     walked from the right across every header line, skipping configured
+//     hops.
 //
-// A header value is used only when it is a single, plain address, and a
+// Each address must be plain (a zone only on IPv6 link-local), and a
 // header-derived loopback address is refused: loopback describes the
 // connection, so only a direct loopback peer may claim it.
 func (tc *Checker) AuthClientIP(req *http.Request) net.IP {
@@ -254,25 +252,76 @@ func (tc *Checker) AuthClientIP(req *http.Request) net.IP {
 		return nil
 	}
 
-	ip := tc.forwardedClientIP(req.Header, peerIP)
+	ip := tc.forwardedClientIP(req.Header)
 	if ip == nil || ip.IsLoopback() {
 		return nil
 	}
 	return ip
 }
 
-// forwardedClientIP picks the client address a configured proxy reported, in
-// the order AuthClientIP documents, or nil when none is usable.
-func (tc *Checker) forwardedClientIP(h http.Header, peerIP net.IP) net.IP {
-	if isCloudflareEdge(peerIP) {
-		if ip := singleHeaderIP(h, HeaderCFConnectingIP); ip != nil {
-			return ip
+// singleValueClientIPHeaders are the client-IP headers that carry one address.
+// X-Forwarded-For carries a hop chain and Forwarded is not parsed, so both are
+// handled separately.
+var singleValueClientIPHeaders = []string{
+	HeaderCFConnectingIP,
+	headerXRealIP,
+	headerTrueClientIP,
+}
+
+// forwardedClientIP returns the client address a configured proxy reported, or
+// nil when it cannot be verified. A proxy writes some client-IP headers and
+// passes the client's copies of the others through untouched, and which ones it
+// writes is not known here. So the headers present must agree on one client: a
+// forged copy that differs from what the proxy wrote makes the result nil.
+//
+// Two exceptions. X-Real-IP naming a configured proxy is taken to describe the
+// hop in front of a local proxy (for example the Cloudflare edge seen by
+// nginx), not the client, and is skipped. That holds only while the configured
+// ranges contain proxies and no clients, which security.trustedproxies
+// documents. CF-Connecting-IP and True-Client-IP are never
+// skipped, even when they name a configured range: Cloudflare sets them to an
+// address inside its own ranges for Worker subrequests, and skipping them would
+// let the X-Forwarded-For walk, which skips configured hops, reach a forged
+// entry unopposed. A repeated or malformed header, or a Forwarded header (not
+// parsed), makes the result nil.
+func (tc *Checker) forwardedClientIP(h http.Header) net.IP {
+	if len(h.Values(headerForwarded)) > 0 {
+		return nil
+	}
+
+	var client net.IP
+	agree := func(ip net.IP) bool {
+		if client == nil {
+			client = ip
+			return true
+		}
+		return client.Equal(ip)
+	}
+
+	for _, name := range singleValueClientIPHeaders {
+		values := h.Values(name)
+		if len(values) == 0 {
+			continue
+		}
+		ip := singleHeaderIP(values)
+		if ip == nil {
+			return nil
+		}
+		if name == headerXRealIP && tc.IsConfiguredProxy(ip) {
+			continue
+		}
+		if !agree(ip) {
+			return nil
 		}
 	}
+
 	if xff := h.Values(headerXForwardedFor); len(xff) > 0 {
-		return tc.strictClientFromXFF(strings.Join(xff, ","))
+		ip := tc.strictClientFromXFF(strings.Join(xff, ","))
+		if ip == nil || !agree(ip) {
+			return nil
+		}
 	}
-	return singleHeaderIP(h, headerXRealIP)
+	return client
 }
 
 // strictClientFromXFF walks an X-Forwarded-For chain from the right, skipping
@@ -293,10 +342,9 @@ func (tc *Checker) strictClientFromXFF(xff string) net.IP {
 	return nil
 }
 
-// singleHeaderIP parses header name as one strict address, returning nil when
-// it is absent, repeated, or not a plain address.
-func singleHeaderIP(h http.Header, name string) net.IP {
-	values := h.Values(name)
+// singleHeaderIP parses the values of a single-value header as one strict
+// address, returning nil when the header is repeated or not a plain address.
+func singleHeaderIP(values []string) net.IP {
 	if len(values) != 1 {
 		return nil
 	}
@@ -322,16 +370,6 @@ func parseStrictIP(s string) net.IP {
 func hasClientIPHeader(h http.Header) bool {
 	for _, name := range clientIPHeaders {
 		if len(h.Values(name)) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// isCloudflareEdge reports whether ip is inside Cloudflare's published ranges.
-func isCloudflareEdge(ip net.IP) bool {
-	for _, network := range cloudflareEdgeNets {
-		if network.Contains(ip) {
 			return true
 		}
 	}

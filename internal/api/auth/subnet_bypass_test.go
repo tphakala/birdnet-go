@@ -68,7 +68,11 @@ func TestSubnetBypassIgnoresForgedClientIPHeaders(t *testing.T) {
 		remoteAddr     string
 		header         string
 		value          string
-		wantStatus     int
+		// forgedHeader and forgedValue add a second header the client forged,
+		// passed through by a proxy that does not write it.
+		forgedHeader string
+		forgedValue  string
+		wantStatus   int
 	}{
 		{name: "no forged header", remoteAddr: lanPeer, wantStatus: http.StatusUnauthorized},
 		{name: "forged XFF inside bypass subnet", remoteAddr: lanPeer, header: "X-Forwarded-For", value: insideBypassSubnet, wantStatus: http.StatusUnauthorized},
@@ -79,6 +83,7 @@ func TestSubnetBypassIgnoresForgedClientIPHeaders(t *testing.T) {
 		{name: "direct client inside bypass subnet", remoteAddr: insideBypassSubnet + ":40000", wantStatus: http.StatusOK},
 		{name: "direct loopback client", remoteAddr: "127.0.0.1:40000", wantStatus: http.StatusOK},
 		{name: "configured proxy forwarding a bypass client", trustedProxies: []string{configuredProxy}, remoteAddr: configuredProxy + ":40000", header: "X-Forwarded-For", value: insideBypassSubnet, wantStatus: http.StatusOK},
+		{name: "X-Real-IP-only proxy passing a forged XFF", trustedProxies: []string{configuredProxy}, remoteAddr: configuredProxy + ":40000", header: echo.HeaderXRealIP, value: "198.51.100.9", forgedHeader: echo.HeaderXForwardedFor, forgedValue: insideBypassSubnet, wantStatus: http.StatusUnauthorized},
 		{name: "configured proxy forwarding an outside client", trustedProxies: []string{configuredProxy}, remoteAddr: configuredProxy + ":40000", header: "X-Forwarded-For", value: "198.51.100.9", wantStatus: http.StatusUnauthorized},
 	}
 
@@ -93,6 +98,9 @@ func TestSubnetBypassIgnoresForgedClientIPHeaders(t *testing.T) {
 				req.RemoteAddr = tt.remoteAddr
 				if tt.header != "" {
 					req.Header.Set(tt.header, tt.value)
+				}
+				if tt.forgedHeader != "" {
+					req.Header.Set(tt.forgedHeader, tt.forgedValue)
 				}
 				rec := httptest.NewRecorder()
 				c := e.NewContext(req, rec)
