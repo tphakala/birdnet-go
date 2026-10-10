@@ -2113,3 +2113,27 @@ func TestListedProxyUnverifiedHeadersAreReported(t *testing.T) {
 	server.mutex.RUnlock()
 	assert.True(t, noted, "a listed proxy whose headers cannot be verified must be reported")
 }
+
+// TestListedProxyNoticeSkipsUnlistedPeers verifies the listed-proxy notice
+// stays silent for a peer that is not a trusted proxy, private or public, so a
+// forged request from a scanner is never reported as a trusted proxy failure.
+func TestListedProxyNoticeSkipsUnlistedPeers(t *testing.T) {
+	settings := &conf.Settings{}
+	settings.Security.BasicAuth.Enabled = true
+	settings.Security.AllowSubnetBypass.Enabled = true
+	settings.Security.AllowSubnetBypass.Subnet = "192.168.1.0/24"
+	settings.Security.TrustedProxies = []string{"10.0.0.2"}
+	server := newOAuth2ServerForTesting(t, settings)
+
+	for _, peer := range []string{"172.25.5.9:40000", "198.51.100.9:40000"} {
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.RemoteAddr = peer
+		req.Header.Set("Forwarded", "for=192.168.1.20")
+		assert.False(t, server.IsRequestFromAllowedSubnet(req), "an unverifiable forwarded address gets no bypass")
+	}
+
+	server.mutex.RLock()
+	_, noted := server.throttledMessages[listedProxyUnverifiedLogKey]
+	server.mutex.RUnlock()
+	assert.False(t, noted, "an unlisted peer must not be reported as a trusted proxy")
+}
