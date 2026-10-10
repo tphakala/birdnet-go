@@ -1594,7 +1594,15 @@ type Security struct {
 	// is honored when deciding whether to send the HSTS header, so a proxy on a
 	// public or 100.64.0.0/10 (CGNAT, Tailscale IPv4) address must be listed here
 	// for HSTS to be sent. Other HTTPS checks, such as the COOP header and the
-	// CSRF cookie Secure flag, do not consult this list. Hot-reloadable.
+	// CSRF cookie Secure flag, do not consult this list. The subnet bypass
+	// (AllowSubnetBypass) is stricter: it honors a forwarded client address only
+	// from a proxy listed here, even one on a private or loopback address, and a
+	// request that carries any client-IP header (CF-Connecting-IP, X-Forwarded-For, X-Real-IP, True-Client-IP or Forwarded) from any other peer gets no bypass.
+	// For the bypass, list each proxy's own address rather than a range that also
+	// holds clients: a client inside a listed range is trusted as a proxy, so its
+	// own forwarded headers can name any address. Have the proxy append X-Forwarded-For or overwrite
+	// X-Real-IP; the client-IP headers it forwards must all name the same client,
+	// and a Forwarded header is not accepted. Hot-reloadable.
 	TrustedProxies []string     `yaml:"trustedproxies" json:"trustedProxies"`
 	PublicAccess   PublicAccess `yaml:"publicaccess" json:"publicAccess"` // features accessible without authentication
 	// PrivateMode, when true, requires the user to authenticate before any
