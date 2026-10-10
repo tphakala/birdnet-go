@@ -154,8 +154,8 @@ func TestOAuth2Server(t *testing.T) {
 				}
 				conftest.SetTestSettings(s.settings)
 
-				assert.True(t, s.IsRequestFromAllowedSubnet("192.168.1.100"), "expected IP to be allowed")
-				assert.False(t, s.IsRequestFromAllowedSubnet("10.0.0.1"), "expected IP to be denied")
+				assert.True(t, s.isAllowedSubnetIP("192.168.1.100"), "expected IP to be allowed")
+				assert.False(t, s.isAllowedSubnetIP("10.0.0.1"), "expected IP to be denied")
 			},
 		},
 	}
@@ -707,7 +707,7 @@ func TestIsAuthenticationEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := newOAuth2ServerForTesting(t, tt.settings)
-			result := server.IsAuthenticationEnabled(tt.ip)
+			result := server.isAuthenticationEnabledFor(tt.ip)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -830,7 +830,7 @@ func TestIsRequestFromAllowedSubnet(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := newOAuth2ServerForTesting(t, tt.settings)
-			result := server.IsRequestFromAllowedSubnet(tt.ip)
+			result := server.isAllowedSubnetIP(tt.ip)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -1835,11 +1835,10 @@ func TestUnverifiedBypassPeer(t *testing.T) {
 		trustedProxies []string
 		remoteAddr     string
 		header         string
-		wantPeer       string
-		wantOK         bool
+		wantPeer       string // "" means no notice
 	}{
-		{name: "bypass enabled, header from unlisted peer", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor, wantPeer: "172.25.5.9", wantOK: true},
-		{name: "bypass enabled, empty header still counts", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXRealIP, wantPeer: "172.25.5.9", wantOK: true},
+		{name: "bypass enabled, header from unlisted peer", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor, wantPeer: "172.25.5.9"},
+		{name: "bypass enabled, empty header still counts", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXRealIP, wantPeer: "172.25.5.9"},
 		{name: "bypass disabled", settings: disabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor},
 		{name: "nil settings", remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor},
 		{name: "no client-IP header", settings: enabled, remoteAddr: "172.25.5.9:40000"},
@@ -1857,13 +1856,13 @@ func TestUnverifiedBypassPeer(t *testing.T) {
 				req.Header[http.CanonicalHeaderKey(tt.header)] = []string{""}
 			}
 			peer, ok := unverifiedBypassPeer(tt.settings, proxytrust.NewChecker(tt.trustedProxies), req)
-			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantPeer != "", ok)
 			assert.Equal(t, tt.wantPeer, peer)
 		})
 	}
 }
 
-// TestAuthClientIPReportsUnverifiedPeerThrottled verifies AuthClientIP records
+// TestAuthClientIPReportsUnverifiedPeerThrottled verifies authClientIP records
 // the unverified forwarded address notice through the throttle, once per
 // interval, and records nothing when the address is verified or the bypass is
 // off.
@@ -1880,44 +1879,42 @@ func TestAuthClientIPReportsUnverifiedPeerThrottled(t *testing.T) {
 	direct := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	direct.RemoteAddr = "172.25.5.9:40000"
 
-	noted := func() (time.Time, bool) {
-		server.mutex.Lock()
-		defer server.mutex.Unlock()
-		at, ok := server.throttledMessages[unverifiedClientIPLogKey]
+	noted := func(s *OAuth2Server) (time.Time, bool) {
+		s.mutex.RLock()
+		defer s.mutex.RUnlock()
+		at, ok := s.throttledMessages[unverifiedClientIPLogKey]
 		return at, ok
 	}
 
-	assert.Equal(t, "172.25.5.9", server.AuthClientIP(direct))
-	_, ok := noted()
+	assert.Equal(t, "172.25.5.9", server.authClientIP(direct).String())
+	_, ok := noted(server)
 	assert.False(t, ok, "a verified address must not be reported")
 
-	assert.Empty(t, server.AuthClientIP(forged))
-	first, ok := noted()
+	assert.Nil(t, server.authClientIP(forged))
+	first, ok := noted(server)
 	require.True(t, ok, "an unverifiable forwarded address must be reported")
 
-	assert.Empty(t, server.AuthClientIP(forged))
-	second, _ := noted()
+	assert.Nil(t, server.authClientIP(forged))
+	second, _ := noted(server)
 	assert.Equal(t, first, second, "a repeat inside the interval must be throttled")
 
 	// Past the interval the notice is logged again and the timestamp moves on.
 	server.mutex.Lock()
 	server.throttledMessages[unverifiedClientIPLogKey] = first.Add(-2 * unverifiedClientIPLogInterval)
 	server.mutex.Unlock()
-	assert.Empty(t, server.AuthClientIP(forged))
-	third, _ := noted()
+	assert.Nil(t, server.authClientIP(forged))
+	third, _ := noted(server)
 	assert.True(t, third.After(first.Add(-2*unverifiedClientIPLogInterval)), "an expired throttle must log again")
 
 	// With the bypass off nothing is reported.
 	off := &conf.Settings{}
 	offServer := newOAuth2ServerForTesting(t, off)
-	assert.Empty(t, offServer.AuthClientIP(forged))
-	offServer.mutex.Lock()
-	_, ok = offServer.throttledMessages[unverifiedClientIPLogKey]
-	offServer.mutex.Unlock()
+	assert.Nil(t, offServer.authClientIP(forged))
+	_, ok = noted(offServer)
 	assert.False(t, ok, "nothing is reported with the subnet bypass disabled")
 }
 
-// TestAuthClientIPHotReloadsTrustedProxies verifies OAuth2Server.AuthClientIP
+// TestAuthClientIPHotReloadsTrustedProxies verifies OAuth2Server.authClientIP
 // reads security.trustedproxies from the live settings snapshot on every
 // request, so adding or removing a proxy in the UI takes effect without a
 // restart.
@@ -1929,13 +1926,79 @@ func TestAuthClientIPHotReloadsTrustedProxies(t *testing.T) {
 	req.RemoteAddr = "10.0.0.2:40000"
 	req.Header.Set(echo.HeaderXForwardedFor, "192.168.1.20")
 
-	assert.Empty(t, server.AuthClientIP(req), "an unlisted proxy is not trusted")
+	assert.Nil(t, server.authClientIP(req), "an unlisted proxy is not trusted")
 
 	listed := &conf.Settings{}
 	listed.Security.TrustedProxies = []string{"10.0.0.2"}
 	conf.StoreSettings(listed)
-	assert.Equal(t, "192.168.1.20", server.AuthClientIP(req), "a proxy added at runtime is trusted at once")
+	assert.Equal(t, "192.168.1.20", server.authClientIP(req).String(), "a proxy added at runtime is trusted at once")
 
 	conf.StoreSettings(&conf.Settings{})
-	assert.Empty(t, server.AuthClientIP(req), "a proxy removed at runtime is distrusted at once")
+	assert.Nil(t, server.authClientIP(req), "a proxy removed at runtime is distrusted at once")
+}
+
+// TestRequestBypassPredicates verifies IsRequestFromAllowedSubnet and
+// IsAuthenticationEnabled decide the subnet bypass on the verified client
+// address of the request: a direct client inside the subnet bypasses, a forged
+// forwarded header from a private peer does not, and nothing bypasses while the
+// subnet bypass is disabled.
+func TestRequestBypassPredicates(t *testing.T) {
+	newRequest := func(remoteAddr, forwardedFor string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.RemoteAddr = remoteAddr
+		if forwardedFor != "" {
+			req.Header.Set(echo.HeaderXForwardedFor, forwardedFor)
+		}
+		return req
+	}
+
+	tests := []struct {
+		name          string
+		bypassEnabled bool
+		req           *http.Request
+		wantBypass    bool
+	}{
+		{name: "direct client inside the subnet", bypassEnabled: true, req: newRequest("203.0.113.7:40000", ""), wantBypass: true},
+		{name: "direct client outside the subnet", bypassEnabled: true, req: newRequest("172.25.5.9:40000", "")},
+		{name: "forged forwarded header from a private peer", bypassEnabled: true, req: newRequest("172.25.5.9:40000", "203.0.113.7")},
+		{name: "bypass disabled", req: newRequest("203.0.113.7:40000", "")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := &conf.Settings{}
+			settings.Security.BasicAuth.Enabled = true
+			settings.Security.AllowSubnetBypass.Enabled = tt.bypassEnabled
+			settings.Security.AllowSubnetBypass.Subnet = "203.0.113.0/24"
+			server := newOAuth2ServerForTesting(t, settings)
+
+			assert.Equal(t, tt.wantBypass, server.IsRequestFromAllowedSubnet(tt.req), "IsRequestFromAllowedSubnet")
+			assert.Equal(t, !tt.wantBypass, server.IsAuthenticationEnabled(tt.req), "IsAuthenticationEnabled")
+		})
+	}
+}
+
+// TestShouldLogThrottledConcurrent verifies concurrent callers racing past the
+// read-locked check log exactly once per interval.
+func TestShouldLogThrottledConcurrent(t *testing.T) {
+	t.Parallel()
+
+	server := &OAuth2Server{}
+	const callers = 64
+	var logged atomic.Int32
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for range callers {
+		wg.Go(func() {
+			<-start
+			if server.shouldLogThrottled("concurrent", time.Hour) {
+				logged.Add(1)
+			}
+		})
+	}
+	close(start)
+	wg.Wait()
+
+	assert.Equal(t, int32(1), logged.Load(), "exactly one caller may log")
+	assert.False(t, server.shouldLogThrottled("concurrent", time.Hour), "a later caller inside the interval is throttled")
 }

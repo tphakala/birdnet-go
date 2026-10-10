@@ -111,9 +111,10 @@ func TestSubnetBypassIgnoresForgedClientIPHeaders(t *testing.T) {
 					return c.NoContent(http.StatusOK)
 				})(c)
 
+				bypassed := tt.wantStatus == http.StatusOK
 				require.NoError(t, err)
 				assert.Equal(t, tt.wantStatus, rec.Code)
-				assert.Equal(t, tt.wantStatus == http.StatusOK, handlerRan, "protected handler ran")
+				assert.Equal(t, bypassed, handlerRan, "protected handler ran")
 
 				// The adapter's other bypass readers must agree with the middleware.
 				// A fresh context keeps GetAuthMethod from returning the method the
@@ -121,7 +122,6 @@ func TestSubnetBypassIgnoresForgedClientIPHeaders(t *testing.T) {
 				adapter, ok := m.AuthService.(*SecurityAdapter)
 				require.True(t, ok, "middleware must use the security adapter")
 				fresh := e.NewContext(req, httptest.NewRecorder())
-				bypassed := tt.wantStatus == http.StatusOK
 				assert.Equal(t, !bypassed, adapter.IsAuthRequired(fresh), "IsAuthRequired")
 				assert.Equal(t, bypassed, adapter.GetAuthMethod(fresh) == AuthMethodLocalSubnet, "GetAuthMethod reports the subnet bypass")
 			})

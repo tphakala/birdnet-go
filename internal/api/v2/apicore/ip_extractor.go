@@ -19,15 +19,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
-// headerCFConnectingIP is Cloudflare's client-IP header.
-const headerCFConnectingIP = proxytrust.HeaderCFConnectingIP
-
 // Canonical map keys for the forwarded headers. http.Header stores keys in
 // canonical MIME form, so direct map lookups (used on the per-request untrusted
 // path) must use the canonical spelling. "CF-Connecting-IP" is not already
 // canonical, so precomputing it avoids re-canonicalizing on every request.
 var (
-	canonicalCFConnectingIP = http.CanonicalHeaderKey(headerCFConnectingIP)
+	canonicalCFConnectingIP = http.CanonicalHeaderKey(proxytrust.HeaderCFConnectingIP)
 	canonicalXForwardedFor  = http.CanonicalHeaderKey(echo.HeaderXForwardedFor)
 	canonicalXRealIP        = http.CanonicalHeaderKey(echo.HeaderXRealIP)
 )
@@ -35,13 +32,11 @@ var (
 // resolveTrustedProxyChecker returns the checker for the current configuration
 // from cache, rebuilding it only when the Security.TrustedProxies list changes.
 func resolveTrustedProxyChecker(cache *proxytrust.Cache, getSettings func() *conf.Settings) *proxytrust.Checker {
-	var trustedProxies []string
+	var settings *conf.Settings
 	if getSettings != nil {
-		if settings := getSettings(); settings != nil {
-			trustedProxies = settings.Security.TrustedProxies
-		}
+		settings = getSettings()
 	}
-	return cache.Resolve(trustedProxies)
+	return cache.ResolveSettings(settings)
 }
 
 // newTrustedProxyIPExtractor returns an Echo IPExtractor that honors proxy
@@ -56,7 +51,7 @@ func newTrustedProxyIPExtractor(getSettings func() *conf.Settings) echo.IPExtrac
 
 		// Only honor forwarded client-IP headers from a trusted proxy peer.
 		if checker := resolveTrustedProxyChecker(&cache, getSettings); checker.TrustsPeer(peerIP) {
-			if ip := proxytrust.ParseHeaderIP(req.Header.Get(headerCFConnectingIP)); ip != "" {
+			if ip := proxytrust.ParseHeaderIP(req.Header.Get(proxytrust.HeaderCFConnectingIP)); ip != "" {
 				return ip
 			}
 			if ip := checker.ClientIPFromXFF(req.Header.Get(echo.HeaderXForwardedFor)); ip != "" {
@@ -99,7 +94,7 @@ func logIgnoredForwardedHeader(req *http.Request, peerHost string) {
 	}
 	present := make([]string, 0, 3)
 	if cfPresent {
-		present = append(present, headerCFConnectingIP)
+		present = append(present, proxytrust.HeaderCFConnectingIP)
 	}
 	if xffPresent {
 		present = append(present, echo.HeaderXForwardedFor)

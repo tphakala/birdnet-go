@@ -70,7 +70,7 @@ func (c *Core) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 			// sending forwarded headers from an untrusted address.
 			if peerIP, _ := proxytrust.PeerAddr(req); peerIP != nil && peerIP.String() != ctx.RealIP() {
 				switch {
-				case req.Header.Get(headerCFConnectingIP) != "":
+				case req.Header.Get(proxytrust.HeaderCFConnectingIP) != "":
 					tunneled = true
 					provider = "cloudflare"
 				case req.Header.Get(echo.HeaderXForwardedFor) != "" || req.Header.Get(echo.HeaderXRealIP) != "":

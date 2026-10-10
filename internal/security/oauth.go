@@ -238,8 +238,8 @@ func (s *OAuth2Server) CurrentSettings() *conf.Settings {
 	return s.currentSettings()
 }
 
-// AuthClientIP returns the client address to use for authentication decisions,
-// such as the allowed-subnet bypass, or "" when it cannot be verified (callers
+// authClientIP returns the client address to use for authentication decisions,
+// such as the allowed-subnet bypass, or nil when it cannot be verified (callers
 // must then grant no address-based access). Unlike echo.Context.RealIP, which
 // serves attribution and honors forwarded headers from any private peer, it
 // honors them only from proxies listed in Security.TrustedProxies; see
@@ -248,22 +248,31 @@ func (s *OAuth2Server) CurrentSettings() *conf.Settings {
 // authentication provider is configured, and forwarded headers from an unlisted
 // peer are the reason no address was found, it logs a throttled Info notice
 // naming that peer.
-func (s *OAuth2Server) AuthClientIP(r *http.Request) string {
+func (s *OAuth2Server) authClientIP(r *http.Request) net.IP {
 	settings := s.currentSettings()
-	var trustedProxies []string
-	if settings != nil {
-		trustedProxies = settings.Security.TrustedProxies
-	}
-	checker := s.proxyTrust.Resolve(trustedProxies)
+	checker := s.proxyTrust.ResolveSettings(settings)
 	if ip := checker.AuthClientIP(r); ip != nil {
-		return ip.String()
+		return ip
 	}
 	if peer, ok := unverifiedBypassPeer(settings, checker, r); ok {
 		s.logThrottledInfo(unverifiedClientIPLogKey,
 			"Subnet bypass skipped: forwarded client-IP headers came from a peer not listed in security.trustedproxies; if this peer is your reverse proxy, add it there",
 			unverifiedClientIPLogInterval, logger.String("peer", peer))
 	}
-	return ""
+	return nil
+}
+
+// isLocalSubnetBypass reports whether the automatic local-network check grants
+// r access: the subnet bypass is enabled and the verified client address (never
+// the attribution address, so a forged forwarded header cannot place a client
+// on the host's network) is on a network of this host. It also returns that
+// address for logging.
+func (s *OAuth2Server) isLocalSubnetBypass(r *http.Request) (net.IP, bool) {
+	if !s.currentSettings().Security.AllowSubnetBypass.Enabled {
+		return nil, false
+	}
+	ip := s.authClientIP(r)
+	return ip, IsInLocalSubnet(ip)
 }
 
 // unverifiedClientIPLogKey throttles the unverified forwarded address notice.
@@ -280,7 +289,7 @@ const unverifiedClientIPLogInterval = 10 * time.Minute
 // requires the subnet bypass to be enabled, an authentication provider to be
 // configured (otherwise no login is asked for anyway), a client-IP header to be
 // present, and a parseable peer that checker does not list. Callers use it only
-// after AuthClientIP found no verifiable address.
+// after authClientIP found no verifiable address.
 func unverifiedBypassPeer(settings *conf.Settings, checker *proxytrust.Checker, r *http.Request) (string, bool) {
 	if settings == nil || !settings.Security.AllowSubnetBypass.Enabled || !settings.IsAuthProviderConfigured() {
 		return "", false
@@ -744,19 +753,13 @@ func SetTestConfigPath(path string) {
 
 // IsUserAuthenticated checks if the user is authenticated
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
-	settings := s.currentSettings()
 	secLog := GetLogger().With(logger.String("client_ip", c.RealIP()))
 	secLog.Debug("Checking user authentication status")
 
-	// The automatic local-network check uses the strict client address, never
-	// the attribution address, so a forged forwarded header cannot place a
-	// client on the host's network.
-	if settings.Security.AllowSubnetBypass.Enabled {
-		if authIP := s.AuthClientIP(c.Request()); IsInLocalSubnet(parseIPWithZone(authIP)) {
-			secLog.Info("User authenticated: request from local subnet (subnet bypass enabled)",
-				logger.String("auth_ip", authIP))
-			return true
-		}
+	if authIP, ok := s.isLocalSubnetBypass(c.Request()); ok {
+		secLog.Info("User authenticated: request from local subnet (subnet bypass enabled)",
+			logger.String("auth_ip", authIP.String()))
+		return true
 	}
 
 	if s.checkBasicAuthToken(c.Request(), secLog) {
@@ -1022,12 +1025,22 @@ func (s *OAuth2Server) ValidateAccessToken(token string) error {
 	return nil // Return nil on success
 }
 
-// IsAuthenticationEnabled checks if any authentication method is enabled
-func (s *OAuth2Server) IsAuthenticationEnabled(ip string) bool {
+// IsAuthenticationEnabled reports whether r must authenticate: an
+// authentication provider is configured and r does not qualify for the
+// allowed-subnet bypass. It takes the request rather than an address so the
+// bypass is always decided on the verified client address (authClientIP), never
+// on a caller-supplied one such as echo.Context.RealIP.
+func (s *OAuth2Server) IsAuthenticationEnabled(r *http.Request) bool {
+	return s.isAuthenticationEnabledFor(s.bypassClientIP(r))
+}
+
+// isAuthenticationEnabledFor is IsAuthenticationEnabled for an already
+// resolved client address ("" when there is none).
+func (s *OAuth2Server) isAuthenticationEnabledFor(ip string) bool {
 	settings := s.currentSettings()
 	authLog := GetLogger().With(logger.String("ip", ip))
 	authLog.Debug("Checking if authentication is enabled for IP")
-	if s.IsRequestFromAllowedSubnet(ip) {
+	if s.isAllowedSubnetIP(ip) {
 		authLog.Info("Authentication bypassed: request from allowed subnet")
 		return false // Authentication not required for allowed subnets
 	}
@@ -1052,8 +1065,30 @@ func (s *OAuth2Server) IsAuthenticationEnabled(ip string) bool {
 	return false
 }
 
-// IsRequestFromAllowedSubnet checks if the request IP is within allowed subnets
-func (s *OAuth2Server) IsRequestFromAllowedSubnet(ipStr string) bool {
+// IsRequestFromAllowedSubnet reports whether r qualifies for the allowed-subnet
+// bypass: the bypass is enabled and the verified client address (authClientIP)
+// is loopback or inside a configured subnet. Like IsAuthenticationEnabled it
+// takes the request so no caller can decide the bypass on an unverified address.
+func (s *OAuth2Server) IsRequestFromAllowedSubnet(r *http.Request) bool {
+	return s.isAllowedSubnetIP(s.bypassClientIP(r))
+}
+
+// bypassClientIP returns the verified client address as a string for the
+// allowed-subnet check, or "" when the bypass is disabled (the address is then
+// never needed, so it is not resolved) or no address could be verified.
+func (s *OAuth2Server) bypassClientIP(r *http.Request) string {
+	if !s.currentSettings().Security.AllowSubnetBypass.Enabled {
+		return ""
+	}
+	if ip := s.authClientIP(r); ip != nil {
+		return ip.String()
+	}
+	return ""
+}
+
+// isAllowedSubnetIP checks whether an already resolved client address is
+// within the allowed subnets.
+func (s *OAuth2Server) isAllowedSubnetIP(ipStr string) bool {
 	authLog := GetLogger().With(logger.String("ip", ipStr))
 	authLog.Debug("Checking if IP is in allowed subnet")
 
@@ -1332,43 +1367,41 @@ func (s *OAuth2Server) cleanupExpired() {
 	}
 }
 
-// logThrottledInfo logs msg at Info level at most once per interval for key,
-// sharing the throttle map with logThrottledError.
-func (s *OAuth2Server) logThrottledInfo(key, msg string, interval time.Duration, fields ...logger.Field) {
-	s.mutex.Lock()
-	if s.throttledMessages == nil {
-		s.throttledMessages = make(map[string]time.Time)
+// logThrottledError logs an error message, but only once per specified interval for a given key
+func (s *OAuth2Server) logThrottledError(key, msg string, err error, interval time.Duration) {
+	if s.shouldLogThrottled(key, interval) {
+		GetLogger().Error(msg, logger.String("key", key), logger.Error(err))
 	}
-	lastLogTime, exists := s.throttledMessages[key]
-	shouldLog := !exists || time.Since(lastLogTime) > interval
-	if shouldLog {
-		s.throttledMessages[key] = time.Now()
-	}
-	s.mutex.Unlock()
+}
 
-	if shouldLog {
+// logThrottledInfo logs msg at Info level at most once per interval for key.
+func (s *OAuth2Server) logThrottledInfo(key, msg string, interval time.Duration, fields ...logger.Field) {
+	if s.shouldLogThrottled(key, interval) {
 		GetLogger().Info(msg, fields...)
 	}
 }
 
-// logThrottledError logs an error message, but only once per specified interval for a given key
-func (s *OAuth2Server) logThrottledError(key, msg string, err error, interval time.Duration) {
-	shouldLog := false
+// shouldLogThrottled reports whether a message for key may be logged now, and
+// if so records the time. A read-locked check comes first so a throttled caller
+// on a request path does not take the write lock that also guards tokens.
+func (s *OAuth2Server) shouldLogThrottled(key string, interval time.Duration) bool {
+	s.mutex.RLock()
+	lastLogTime, exists := s.throttledMessages[key]
+	s.mutex.RUnlock()
+	if exists && time.Since(lastLogTime) <= interval {
+		return false
+	}
 
 	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	if s.throttledMessages == nil {
 		s.throttledMessages = make(map[string]time.Time)
 	}
-	lastLogTime, exists := s.throttledMessages[key]
-	if !exists || time.Since(lastLogTime) > interval {
-		// Update timestamp while holding lock to prevent race condition
-		s.throttledMessages[key] = time.Now()
-		shouldLog = true
+	// Re-check under the write lock so concurrent callers log once.
+	lastLogTime, exists = s.throttledMessages[key]
+	if exists && time.Since(lastLogTime) <= interval {
+		return false
 	}
-	s.mutex.Unlock()
-
-	// Log outside the lock to avoid blocking other operations
-	if shouldLog {
-		GetLogger().Error(msg, logger.String("key", key), logger.Error(err))
-	}
+	s.throttledMessages[key] = time.Now()
+	return true
 }

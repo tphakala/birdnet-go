@@ -10,6 +10,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
 // TestTunnelDetectionMiddleware verifies a request is labeled tunneled only when
@@ -26,7 +28,7 @@ func TestTunnelDetectionMiddleware(t *testing.T) {
 		wantTunneled bool
 		wantProvider string
 	}{
-		{name: "trusted peer with CF-Connecting-IP", remoteAddr: "127.0.0.1:40000", header: headerCFConnectingIP, value: "198.51.100.9", wantTunneled: true, wantProvider: "cloudflare"},
+		{name: "trusted peer with CF-Connecting-IP", remoteAddr: "127.0.0.1:40000", header: proxytrust.HeaderCFConnectingIP, value: "198.51.100.9", wantTunneled: true, wantProvider: "cloudflare"},
 		{name: "trusted peer with XFF", remoteAddr: "192.168.1.10:40000", header: echo.HeaderXForwardedFor, value: "198.51.100.9", wantTunneled: true, wantProvider: "generic"},
 		{name: "untrusted peer with XFF", remoteAddr: testPublicPeerAddr, header: echo.HeaderXForwardedFor, value: "198.51.100.9", wantTunneled: false},
 		{name: "direct client", remoteAddr: "192.168.1.10:40000", wantTunneled: false},

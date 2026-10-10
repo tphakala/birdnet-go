@@ -90,7 +90,7 @@ func TestParseProxyCIDR(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			network, ok := ParseProxyCIDR(tt.entry)
+			network, ok := parseProxyCIDR(tt.entry)
 			require.Equal(t, tt.ok, ok)
 			if !tt.ok {
 				return
@@ -367,4 +367,17 @@ func FuzzChecker_AuthClientIP(f *testing.F) {
 		}
 		assert.True(t, named, "the result must be an address named in a header")
 	})
+}
+
+// TestCache_ResolveSettings verifies the settings entry point reads
+// Security.TrustedProxies and treats nil settings as an empty list.
+func TestCache_ResolveSettings(t *testing.T) {
+	t.Parallel()
+
+	var cache Cache
+	assert.False(t, cache.ResolveSettings(nil).IsConfiguredProxy(mustParseIP(t, "10.0.0.2")), "nil settings trust no proxy")
+
+	settings := &conf.Settings{}
+	settings.Security.TrustedProxies = []string{"10.0.0.2"}
+	assert.True(t, cache.ResolveSettings(settings).IsConfiguredProxy(mustParseIP(t, "10.0.0.2")), "configured proxy is trusted")
 }

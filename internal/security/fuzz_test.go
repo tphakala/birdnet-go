@@ -459,7 +459,7 @@ func FuzzIsRequestFromAllowedSubnet(f *testing.F) {
 		server := &OAuth2Server{settings: settings}
 
 		// Should never panic
-		result := server.IsRequestFromAllowedSubnet(ipStr)
+		result := server.isAllowedSubnetIP(ipStr)
 
 		// If disabled, result must be false (unless loopback)
 		if !enabled {
@@ -478,7 +478,7 @@ func FuzzIsRequestFromAllowedSubnet(f *testing.F) {
 		}
 
 		// Consistency check
-		result2 := server.IsRequestFromAllowedSubnet(ipStr)
+		result2 := server.isAllowedSubnetIP(ipStr)
 		assert.Equal(t, result, result2, "Inconsistent results")
 	})
 }
