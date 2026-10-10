@@ -83,7 +83,7 @@ func buildSessionOptions(secure bool, maxAge int) *sessions.Options {
 func (s *OAuth2Server) configureLocalNetworkCookieStore(settings *conf.Settings) {
 	GetLogger().Info("Configuring cookie store for local network access (allowing non-HTTPS cookies)")
 	// Configure session options based on store type
-	switch store := gothic.Store.(type) {
+	switch store := unwrapSessionStore(gothic.Store).(type) {
 	case *sessions.CookieStore:
 		// For CookieStore, use default session duration (session cookie if 0)
 		store.Options = buildSessionOptions(false, 0)
