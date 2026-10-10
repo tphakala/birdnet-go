@@ -367,6 +367,35 @@ func BenchmarkSettingsBuilder_Build(b *testing.B) {
 	}
 }
 
+// TestSettingsBuilder_WithSpeciesGuide verifies the builder seeds the whole
+// species guide config, not just the two fields it takes. The builder bypasses
+// viper, so anything it leaves at the Go zero value silently inverts the
+// production defaults: every Show* toggle and PreFetchEnabled default ON.
+func TestSettingsBuilder_WithSpeciesGuide(t *testing.T) {
+	t.Parallel()
+
+	for _, enableWikipedia := range []bool{false, true} {
+		t.Run(map[bool]string{false: "wikipedia off", true: "wikipedia on"}[enableWikipedia], func(t *testing.T) {
+			t.Parallel()
+			got := NewTestSettings().WithSpeciesGuide(enableWikipedia).Build().Realtime.Dashboard.SpeciesGuide
+
+			want := conf.DefaultSpeciesGuideConfig()
+			want.Enabled = true
+			want.EnableWikipedia = enableWikipedia
+			assert.Equal(t, want, got, "builder must differ from the production defaults only in the fields it takes")
+
+			// Spelled out so the intent survives a refactor of the defaults.
+			assert.True(t, got.Enabled, "WithSpeciesGuide enables the guide")
+			assert.True(t, got.ShowNotes)
+			assert.True(t, got.ShowEnrichments)
+			assert.True(t, got.ShowSimilarSpecies)
+			assert.True(t, got.ShowTaxonomy)
+			assert.True(t, got.PreFetchEnabled)
+			assert.Positive(t, got.WarmTopN)
+		})
+	}
+}
+
 // BenchmarkSettingsBuilder_FullChain benchmarks a complete builder chain.
 func BenchmarkSettingsBuilder_FullChain(b *testing.B) {
 	b.ReportAllocs()
