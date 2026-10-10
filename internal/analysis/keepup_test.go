@@ -166,17 +166,20 @@ func TestKeepUpState_BufferSwapRebases(t *testing.T) {
 	d := newKeepUpDriver(t)
 	d.lossy(1)
 
-	// A reallocated buffer starts counting from zero. Mid-window, that is a rebase,
-	// not a negative delta.
+	// A reallocated buffer starts counting from zero, but its counters can also
+	// already exceed the old base. Either way the swap rebases, so the new
+	// buffer's history is not billed to the old window.
 	d.buf = newKeepUpTestBuffer(t)
-	d.stats = buffer.AnalysisBufferStats{WrittenBytes: 10}
+	d.stats.WrittenBytes += 10 * keepUpTestWritten
+	d.stats.LostBytes += 10 * keepUpTestWritten
 	d.now = d.now.Add(keepUpWindow / 2)
 	res, closed, tr := d.state.observe(d.buf, d.stats, d.now)
 	assert.False(t, closed)
 	assert.Equal(t, keepUpNone, tr)
 	assert.Zero(t, res)
 
-	// The rebased window runs a full keepUpWindow from the swap.
+	// The rebased window runs a full keepUpWindow from the swap and judges only
+	// what the new buffer wrote since.
 	d.now = d.now.Add(keepUpWindow - time.Second)
 	_, closed, _ = d.state.observe(d.buf, d.stats, d.now)
 	assert.False(t, closed)
@@ -184,7 +187,8 @@ func TestKeepUpState_BufferSwapRebases(t *testing.T) {
 	d.now = d.now.Add(time.Second)
 	res, closed, _ = d.state.observe(d.buf, d.stats, d.now)
 	require.True(t, closed)
-	assert.GreaterOrEqual(t, res.lostFraction, 0.0)
+	assert.Equal(t, int64(keepUpTestWritten), res.written)
+	assert.Zero(t, res.lost)
 }
 
 func TestKeepUpState_SwapWhileLaggingThenCleanRecovers(t *testing.T) {
@@ -192,8 +196,11 @@ func TestKeepUpState_SwapWhileLaggingThenCleanRecovers(t *testing.T) {
 	d := newKeepUpDriver(t)
 	assert.Equal(t, keepUpStarted, d.lossy(3)[2])
 
+	// The new buffer's counters already exceed the old base, so only the pointer
+	// check can tell it is a different buffer.
 	d.buf = newKeepUpTestBuffer(t)
-	d.stats = buffer.AnalysisBufferStats{}
+	d.stats.WrittenBytes += 10 * keepUpTestWritten
+	d.stats.LostBytes += 10 * keepUpTestWritten
 	d.now = d.now.Add(time.Second)
 	_, closed, tr := d.state.observe(d.buf, d.stats, d.now)
 	require.False(t, closed)
@@ -302,4 +309,32 @@ func TestProcessMonitorTick_WarnsOnceWhenAnalysisFallsBehind(t *testing.T) {
 	}
 	assert.Equal(t, 1, strings.Count(logBuf.String(), "analysis is not keeping up with incoming audio"))
 	assert.Equal(t, 1, strings.Count(logBuf.String(), "analysis caught up with incoming audio"))
+}
+
+// TestProcessMonitorTick_EvaluatesKeepUpEachTick verifies the monitor tick feeds
+// the buffer to the keep-up evaluator before it reads the window.
+func TestProcessMonitorTick_EvaluatesKeepUpEachTick(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID = "keepup-tick-src"
+		modelID  = classifier.RegistryIDBirdNETV24
+		readSize = 480
+	)
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, readSize, 0, readSize))
+	ab, err := mgr.AnalysisBuffer(sourceID, modelID)
+	require.NoError(t, err)
+
+	bm := &BufferManager{
+		bn:        &scriptedModelState{loaded: []bool{true}, active: false},
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC),
+	}
+	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, readSize: readSize}
+	state := &monitorTickState{}
+	require.Nil(t, state.keepUp.buf)
+
+	require.True(t, bm.processMonitorTick(make(chan struct{}), cfg, readSize, 0, state, 1))
+	assert.Same(t, ab, state.keepUp.buf, "the tick must hand the buffer to the keep-up evaluator")
 }

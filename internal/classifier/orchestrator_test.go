@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1200,10 +1201,17 @@ const predictTimingHold = 50 * time.Millisecond
 // TestOrchestrator_PredictModelTimed_ReportsLockWaitSeparately verifies that time
 // spent waiting for the shared inference lock lands in LockWait and not in Predict.
 func TestOrchestrator_PredictModelTimed_ReportsLockWaitSeparately(t *testing.T) {
-	t.Parallel()
+	// Not parallel: the stack probe below looks at every goroutine, so no other
+	// test may be inside PredictModelTimed while it runs.
 
 	o := newTestOrchestrator(t, &mockModelInstance{id: "m1"})
 	o.inferenceMu.Lock()
+	released := false
+	t.Cleanup(func() {
+		if !released {
+			o.inferenceMu.Unlock() // lets the goroutine below finish if the probe fails
+		}
+	})
 
 	type outcome struct {
 		timing PredictTiming
@@ -1215,13 +1223,39 @@ func TestOrchestrator_PredictModelTimed_ReportsLockWaitSeparately(t *testing.T) 
 		done <- outcome{timing, err}
 	}()
 
+	waitUntilBlockedInPredictModelTimed(t)
 	time.Sleep(predictTimingHold)
+	released = true
 	o.inferenceMu.Unlock()
 
 	got := <-done
 	require.NoError(t, got.err)
 	assert.GreaterOrEqual(t, got.timing.LockWait, predictTimingHold)
-	assert.Less(t, got.timing.Predict, predictTimingHold)
+	assert.Less(t, got.timing.Predict, got.timing.LockWait)
+}
+
+// waitUntilBlockedInPredictModelTimed returns once a goroutine is parked on a
+// mutex inside PredictModelTimed, so a hold measured from here is a lower bound
+// of that call's lock wait whatever the scheduler does.
+func waitUntilBlockedInPredictModelTimed(t *testing.T) {
+	t.Helper()
+	const (
+		stackBufBytes = 1 << 20
+		probeInterval = time.Millisecond
+		probeTimeout  = 10 * time.Second
+	)
+	deadline := time.Now().Add(probeTimeout)
+	buf := make([]byte, stackBufBytes)
+	for time.Now().Before(deadline) {
+		stacks := string(buf[:runtime.Stack(buf, true)])
+		for g := range strings.SplitSeq(stacks, "\n\n") {
+			if strings.Contains(g, "PredictModelTimed") && strings.Contains(g, "sync.(*Mutex).Lock") {
+				return
+			}
+		}
+		time.Sleep(probeInterval)
+	}
+	t.Fatal("no goroutine blocked on the inference lock inside PredictModelTimed")
 }
 
 // TestOrchestrator_PredictModelTimed_PredictMatchesModelTime verifies that Predict
@@ -1256,9 +1290,9 @@ func TestOrchestrator_PredictModelTimed_NotLoadedHasZeroTiming(t *testing.T) {
 	assert.Equal(t, PredictTiming{}, timing)
 }
 
-// TestOrchestrator_PredictModelTimed_ClosedModelStillReportsLockWait verifies a
-// closed model fails with its lock wait reported and no inference time.
-func TestOrchestrator_PredictModelTimed_ClosedModelStillReportsLockWait(t *testing.T) {
+// TestOrchestrator_PredictModelTimed_ClosedModelHasZeroPredict verifies a closed
+// model fails and reports no inference time.
+func TestOrchestrator_PredictModelTimed_ClosedModelHasZeroPredict(t *testing.T) {
 	t.Parallel()
 
 	o := newTestOrchestrator(t, &mockModelInstance{id: "m1"})

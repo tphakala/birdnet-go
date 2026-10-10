@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -35,11 +36,12 @@ type timedBackend struct {
 	classifierBackend
 	wallWait time.Duration
 	timing   classifier.PredictTiming
+	err      error // returned from PredictModelTimed alongside the timing
 }
 
 func (b timedBackend) PredictModelTimed(_ context.Context, _ string, _ [][]float32) ([]datastore.Results, classifier.PredictTiming, error) {
 	time.Sleep(b.wallWait)
-	return nil, b.timing, nil
+	return nil, b.timing, b.err
 }
 
 func (b timedBackend) EffectiveBaseOverlap() time.Duration { return overrunTestEffectiveOverlap }
@@ -53,11 +55,21 @@ func (b timedBackend) ModelSpecFor(id string) (classifier.ModelSpec, bool) {
 // metrics registry installed, and returns the registry and the overrun count.
 func runOverrunCase(t *testing.T, source string, backend timedBackend) (reg *prometheus.Registry, overruns int64) {
 	t.Helper()
+	reg, err := runProcessData(t, source, backend)
+	require.NoError(t, err)
+	return reg, overrunCount(source)
+}
+
+// runProcessData runs one ProcessData call with a fresh metrics registry
+// installed and returns the registry and ProcessData's error. Results sent to
+// the queue stay there until the test ends.
+func runProcessData(t *testing.T, source string, backend timedBackend) (*prometheus.Registry, error) {
+	t.Helper()
 	// Not parallel: package-global overrunTrackers, processMetrics, ResultsQueue.
 	conftest.SetTestSettings(conftest.GetTestSettings())
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
-	reg = prometheus.NewRegistry()
+	reg := prometheus.NewRegistry()
 	m, err := metrics.NewMyAudioMetrics(reg)
 	require.NoError(t, err)
 	prev := processMetrics.Swap(m)
@@ -81,12 +93,15 @@ func runOverrunCase(t *testing.T, source string, backend timedBackend) (reg *pro
 		Source:          source,
 		ModelID:         classifier.RegistryIDBirdNETV24,
 	})
-	require.NoError(t, err)
+	return reg, err
+}
 
+// overrunCount returns the overrun tracker count for source and the BirdNET model.
+func overrunCount(source string) int64 {
 	tracker := getOverrunTracker(source, classifier.RegistryIDBirdNETV24)
 	tracker.mu.Lock()
 	defer tracker.mu.Unlock()
-	return reg, tracker.overrunCount
+	return tracker.overrunCount
 }
 
 // histogramSum returns the sample sum of the named histogram for source, or 0.
@@ -164,4 +179,33 @@ func TestProcessData_InferenceDurationMetricExcludesLockWait(t *testing.T) {
 
 	assert.Less(t, histogramSum(t, reg, "myaudio_audio_inference_duration_seconds", source), overrunTestInterval.Seconds())
 	assert.GreaterOrEqual(t, histogramSum(t, reg, "myaudio_audio_inference_lock_wait_seconds", source), overrunTestSlow.Seconds())
+}
+
+func TestProcessData_ModelErrorStillRecordsTimingMetrics(t *testing.T) {
+	const source = "overrun-error-src"
+	reg, err := runProcessData(t, source, timedBackend{
+		wallWait: overrunTestSlow,
+		timing:   classifier.PredictTiming{LockWait: overrunTestSlow, Predict: overrunTestFast},
+		err:      errors.NewStd("predict failed"),
+	})
+
+	require.Error(t, err)
+	assert.GreaterOrEqual(t, histogramSum(t, reg, "myaudio_audio_inference_lock_wait_seconds", source), overrunTestSlow.Seconds())
+	assert.Positive(t, histogramSum(t, reg, "myaudio_audio_inference_duration_seconds", source))
+}
+
+func TestProcessData_StoredElapsedTimeIncludesLockWait(t *testing.T) {
+	const source = "overrun-elapsed-src"
+	_, err := runProcessData(t, source, timedBackend{
+		wallWait: overrunTestSlow,
+		timing:   classifier.PredictTiming{LockWait: overrunTestSlow, Predict: overrunTestFast},
+	})
+	require.NoError(t, err)
+
+	select {
+	case res := <-classifier.ResultsQueue:
+		assert.GreaterOrEqual(t, res.ElapsedTime, overrunTestSlow, "the stored processing time is wall time")
+	default:
+		t.Fatal("ProcessData queued no result")
+	}
 }

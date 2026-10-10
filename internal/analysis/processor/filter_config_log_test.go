@@ -40,6 +40,9 @@ func TestValidateAndLogFilterConfig_NoFixedHardwareClaims(t *testing.T) {
 		{4, 2.8},
 		{5, 2.7},
 		{5, 2.8},
+		// Below the level's minimum overlap: the warning branch.
+		{4, 2.0},
+		{5, 2.0},
 	}
 	for _, tc := range cases {
 		buf.Reset()
@@ -51,6 +54,9 @@ func TestValidateAndLogFilterConfig_NoFixedHardwareClaims(t *testing.T) {
 
 		out := buf.String()
 		require.NotEmpty(t, out, "level %d overlap %.1f should log its configuration", tc.level, tc.overlap)
+		if tc.overlap < getMinimumOverlapForLevel(tc.level) {
+			assert.Contains(t, out, "Overlap below recommended minimum", "level %d overlap %.1f takes the warning branch", tc.level, tc.overlap)
+		}
 		assert.NotContains(t, out, "requires fast hardware", "level %d overlap %.1f", tc.level, tc.overlap)
 		assert.NotContains(t, out, "RPi", "level %d overlap %.1f", tc.level, tc.overlap)
 		assert.NotContains(t, out, "hardware_req", "level %d overlap %.1f", tc.level, tc.overlap)
