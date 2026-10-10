@@ -1815,9 +1815,10 @@ func TestIsUserAuthenticatedSubnetBypassIgnoresForgedHeader(t *testing.T) {
 
 // TestUnverifiedBypassPeer pins when an unverifiable forwarded address is
 // reported: only with the subnet bypass enabled, an authentication provider
-// configured, a client-IP header present, and a parseable peer that is not
-// already a trusted proxy, so an operator behind an unlisted proxy learns which
-// peer to add to security.trustedproxies.
+// configured, a client-IP header present, and a loopback, link-local, private
+// or CGNAT peer that is not already a trusted proxy and whose headers listing it
+// would verify, so an operator behind an unlisted proxy learns which peer to
+// add to security.trustedproxies and a public scanner is never named.
 func TestUnverifiedBypassPeer(t *testing.T) {
 	t.Parallel()
 
@@ -1835,16 +1836,21 @@ func TestUnverifiedBypassPeer(t *testing.T) {
 		trustedProxies []string
 		remoteAddr     string
 		header         string
+		value          string
 		wantPeer       string // "" means no notice
 	}{
-		{name: "bypass enabled, header from unlisted peer", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor, wantPeer: "172.25.5.9"},
-		{name: "bypass enabled, empty header still counts", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXRealIP, wantPeer: "172.25.5.9"},
-		{name: "bypass disabled", settings: disabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor},
-		{name: "nil settings", remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor},
+		{name: "bypass enabled, header from unlisted peer", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor, value: "192.168.1.20", wantPeer: "172.25.5.9"},
+		{name: "unlisted peer sending X-Real-IP", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXRealIP, value: "192.168.1.20", wantPeer: "172.25.5.9"},
+		{name: "unlisted CGNAT peer", settings: enabled, remoteAddr: "100.64.1.2:40000", header: echo.HeaderXForwardedFor, value: "192.168.1.20", wantPeer: "100.64.1.2"},
+		{name: "unlisted public peer", settings: enabled, remoteAddr: "198.51.100.9:40000", header: echo.HeaderXForwardedFor, value: "192.168.1.20"},
+		{name: "empty header that listing could not verify", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXRealIP},
+		{name: "unlisted peer sending only Forwarded", settings: enabled, remoteAddr: "172.25.5.9:40000", header: "Forwarded", value: "for=192.168.1.20"},
+		{name: "bypass disabled", settings: disabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor, value: "192.168.1.20"},
+		{name: "nil settings", remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor, value: "192.168.1.20"},
 		{name: "no client-IP header", settings: enabled, remoteAddr: "172.25.5.9:40000"},
-		{name: "unparseable peer", settings: enabled, remoteAddr: "@", header: echo.HeaderXForwardedFor},
-		{name: "no authentication provider configured", settings: noAuth, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor},
-		{name: "peer already listed as a trusted proxy", settings: enabled, trustedProxies: []string{"172.25.5.9"}, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor},
+		{name: "unparseable peer", settings: enabled, remoteAddr: "@", header: echo.HeaderXForwardedFor, value: "192.168.1.20"},
+		{name: "no authentication provider configured", settings: noAuth, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor, value: "192.168.1.20"},
+		{name: "peer already listed as a trusted proxy", settings: enabled, trustedProxies: []string{"172.25.5.9"}, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor, value: "192.168.1.20"},
 	}
 
 	for _, tt := range tests {
@@ -1853,7 +1859,7 @@ func TestUnverifiedBypassPeer(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req.RemoteAddr = tt.remoteAddr
 			if tt.header != "" {
-				req.Header[http.CanonicalHeaderKey(tt.header)] = []string{""}
+				req.Header[http.CanonicalHeaderKey(tt.header)] = []string{tt.value}
 			}
 			peer, ok := unverifiedBypassPeer(tt.settings, proxytrust.NewChecker(tt.trustedProxies), req)
 			assert.Equal(t, tt.wantPeer != "", ok)
@@ -2080,4 +2086,29 @@ func TestBypassPredicatesNilRequest(t *testing.T) {
 	assert.NotPanics(t, func() {
 		assert.True(t, server.IsAuthenticationEnabled(nil), "a nil request must authenticate")
 	})
+}
+
+// TestListedProxyUnverifiedHeadersAreReported verifies that a listed proxy whose
+// forwarded headers cannot be verified (here it sends Forwarded) gets its own
+// throttled notice, since the unlisted-proxy notice no longer applies to it.
+func TestListedProxyUnverifiedHeadersAreReported(t *testing.T) {
+	const listedProxyNoticeKey = "subnet-bypass-listed-proxy-unverified"
+
+	settings := &conf.Settings{}
+	settings.Security.BasicAuth.Enabled = true
+	settings.Security.AllowSubnetBypass.Enabled = true
+	settings.Security.AllowSubnetBypass.Subnet = "192.168.1.0/24"
+	settings.Security.TrustedProxies = []string{"10.0.0.2"}
+	server := newOAuth2ServerForTesting(t, settings)
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.RemoteAddr = "10.0.0.2:40000"
+	req.Header.Set("Forwarded", "for=192.168.1.20")
+
+	assert.False(t, server.IsRequestFromAllowedSubnet(req), "an unverifiable forwarded address gets no bypass")
+
+	server.mutex.RLock()
+	_, noted := server.throttledMessages[listedProxyNoticeKey]
+	server.mutex.RUnlock()
+	assert.True(t, noted, "a listed proxy whose headers cannot be verified must be reported")
 }

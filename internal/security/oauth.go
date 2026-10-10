@@ -246,9 +246,11 @@ func (s *OAuth2Server) CurrentSettings() *conf.Settings {
 // proxytrust.Checker.AuthClientIP. Callers pass the snapshot they loaded once
 // for the whole decision, so changes take effect on the next request without a
 // restart and one decision never mixes two configurations. When the subnet
-// bypass is enabled, an authentication provider is configured, and forwarded
-// headers from an unlisted peer are the reason no address was found, it logs a
-// throttled Info notice naming that peer. A nil request has no verifiable
+// bypass is enabled and an authentication provider is configured, it logs a
+// throttled Info notice naming the peer when forwarded headers kept it from
+// finding an address: one for an unlisted proxy that listing would fix
+// (unverifiedBypassPeer), another for a listed proxy whose headers cannot be
+// verified (unverifiedListedProxy). A nil request has no verifiable
 // address.
 func (s *OAuth2Server) authClientIP(settings *conf.Settings, r *http.Request) net.IP {
 	if r == nil {
@@ -261,6 +263,11 @@ func (s *OAuth2Server) authClientIP(settings *conf.Settings, r *http.Request) ne
 	if peer, ok := unverifiedBypassPeer(settings, checker, r); ok {
 		s.logThrottledInfo(unverifiedClientIPLogKey,
 			"Subnet bypass skipped: forwarded client-IP headers came from a peer not listed in security.trustedproxies; if this peer is your reverse proxy, add it there",
+			unverifiedClientIPLogInterval, logger.String("peer", peer))
+	}
+	if peer, ok := unverifiedListedProxy(settings, checker, r); ok {
+		s.logThrottledInfo(listedProxyUnverifiedLogKey,
+			"Subnet bypass skipped: forwarded client-IP headers from a trusted proxy could not be verified: they disagree, repeat a single-value header, carry a malformed or loopback address or a Forwarded header, or every forwarded hop is itself listed in security.trustedproxies",
 			unverifiedClientIPLogInterval, logger.String("peer", peer))
 	}
 	return nil
@@ -284,6 +291,24 @@ func (s *OAuth2Server) isLocalSubnetBypass(settings *conf.Settings, r *http.Requ
 // One key for all peers keeps the throttle map bounded.
 const unverifiedClientIPLogKey = "subnet-bypass-unverified-client-ip"
 
+// listedProxyUnverifiedLogKey throttles the notice for a listed proxy whose
+// forwarded headers could not be verified, separately from the unlisted-peer
+// notice so one cannot hide the other.
+const listedProxyUnverifiedLogKey = "subnet-bypass-listed-proxy-unverified"
+
+// cgnatCIDR is the shared address space of RFC 6598, used by carrier NAT and
+// Tailscale, where a reverse proxy in front of LAN clients can also sit.
+const cgnatCIDR = "100.64.0.0/10"
+
+// cgnatRange is cgnatCIDR parsed once.
+var cgnatRange = func() *net.IPNet {
+	_, network, err := net.ParseCIDR(cgnatCIDR)
+	if err != nil {
+		panic(err)
+	}
+	return network
+}()
+
 // unverifiedClientIPLogInterval is the minimum time between two unverified
 // forwarded address notices.
 const unverifiedClientIPLogInterval = 10 * time.Minute
@@ -291,22 +316,54 @@ const unverifiedClientIPLogInterval = 10 * time.Minute
 // unverifiedBypassPeer returns the connection peer when its forwarded client-IP
 // headers were ignored only because it is not a configured proxy, which is the
 // one case where adding it to security.trustedproxies is the right advice. It
-// requires the subnet bypass to be enabled, an authentication provider to be
-// configured (otherwise no login is asked for anyway), a client-IP header to be
-// present, and a parseable peer that checker does not list. Callers use it only
-// after authClientIP found no verifiable address.
+// requires the conditions of bypassNoticePeer, a peer that checker does not
+// list, a loopback, link-local, private or CGNAT peer (where a reverse proxy in
+// front of bypass clients sits; never a public scanner), and headers that a
+// checker also listing the peer would verify. Callers use it only after
+// authClientIP found no verifiable address.
 func unverifiedBypassPeer(settings *conf.Settings, checker *proxytrust.Checker, r *http.Request) (string, bool) {
-	if settings == nil || !settings.Security.AllowSubnetBypass.Enabled || !settings.IsAuthProviderConfigured() {
-		return "", false
-	}
-	if !proxytrust.HasClientIPHeader(r.Header) {
-		return "", false
-	}
-	peerIP, _ := proxytrust.PeerAddr(r)
+	peerIP := bypassNoticePeer(settings, r)
 	if peerIP == nil || checker.IsConfiguredProxy(peerIP) {
 		return "", false
 	}
+	if !peerIP.IsLoopback() && !peerIP.IsLinkLocalUnicast() && !peerIP.IsPrivate() && !cgnatRange.Contains(peerIP) {
+		return "", false
+	}
+	listed := append(slices.Clone(settings.Security.TrustedProxies), peerIP.String())
+	if proxytrust.NewChecker(listed).AuthClientIP(r) == nil {
+		return "", false
+	}
 	return peerIP.String(), true
+}
+
+// unverifiedListedProxy returns the connection peer when it is a configured
+// proxy whose forwarded headers could not be verified (they disagree, repeat a
+// single-value header, are malformed, name loopback, include Forwarded, or
+// every hop is itself a configured proxy), which a client may also cause by
+// sending forged copies through a correctly configured proxy,
+// under the conditions of bypassNoticePeer. Callers use it only after
+// authClientIP found no verifiable address.
+func unverifiedListedProxy(settings *conf.Settings, checker *proxytrust.Checker, r *http.Request) (string, bool) {
+	peerIP := bypassNoticePeer(settings, r)
+	if peerIP == nil || !checker.IsConfiguredProxy(peerIP) {
+		return "", false
+	}
+	return peerIP.String(), true
+}
+
+// bypassNoticePeer returns the parseable connection peer of r when a subnet
+// bypass notice can apply: the bypass is enabled, an authentication provider is
+// configured (otherwise no login is asked for anyway) and r carries a
+// client-IP header. Otherwise it returns nil.
+func bypassNoticePeer(settings *conf.Settings, r *http.Request) net.IP {
+	if settings == nil || !settings.Security.AllowSubnetBypass.Enabled || !settings.IsAuthProviderConfigured() {
+		return nil
+	}
+	if !proxytrust.HasClientIPHeader(r.Header) {
+		return nil
+	}
+	peerIP, _ := proxytrust.PeerAddr(r)
+	return peerIP
 }
 
 // For testing purposes
