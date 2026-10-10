@@ -415,8 +415,10 @@ security:
   # skipped when resolving the real client; otherwise the request is attributed
   # to the nearest unlisted hop.
   # Subnet bypass (allowsubnetbypass) honors a forwarded client address only from
-  # a proxy listed here, even a local or private one: list your reverse proxy if
-  # clients reach BirdNET-Go through it and should skip login.
+  # a proxy listed here, even a local or private one: list your reverse proxy's
+  # own address (not a range that also holds clients) if clients reach
+  # BirdNET-Go through it and should skip login. The proxy must append
+  # X-Forwarded-For or overwrite X-Real-IP.
   trustedproxies: []         # e.g. ["cloudflare"], ["203.0.113.0/24"] or a bare IP ["203.0.113.5"]
   basicauth:
     enabled: false           # true to enable basic auth

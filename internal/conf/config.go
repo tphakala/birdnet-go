@@ -1560,9 +1560,12 @@ type Security struct {
 	// for HSTS to be sent. Other HTTPS checks, such as the COOP header and the
 	// CSRF cookie Secure flag, do not consult this list. The subnet bypass
 	// (AllowSubnetBypass) is stricter: it honors a forwarded client address only
-	// from a proxy listed here, so a reverse proxy in front of clients that should
-	// bypass login must be listed even when it is on a private or loopback
-	// address, and must send X-Forwarded-For or X-Real-IP. Hot-reloadable.
+	// from a proxy listed here, even one on a private or loopback address, and a
+	// request that carries client-IP headers from any other peer gets no bypass.
+	// For the bypass, list each proxy's own address rather than a range that also
+	// holds clients, and have the proxy append X-Forwarded-For or overwrite
+	// X-Real-IP; the client-IP headers it forwards must all name the same client,
+	// and a Forwarded header is not accepted. Hot-reloadable.
 	TrustedProxies []string     `yaml:"trustedproxies" json:"trustedProxies"`
 	PublicAccess   PublicAccess `yaml:"publicaccess" json:"publicAccess"` // features accessible without authentication
 	// PrivateMode, when true, requires the user to authenticate before any

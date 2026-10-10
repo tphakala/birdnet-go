@@ -1,13 +1,13 @@
 // Package proxytrust decides which reverse proxies may vouch for the client
 // address of an HTTP request, and resolves that address.
 //
-// Two resolutions are offered. The lenient one, used for attribution (logs,
-// tunnel detection), honors forwarded client-IP headers from any loopback,
-// link-local or private peer so home-LAN proxies work without configuration.
-// The strict one, AuthClientIP, is for authentication decisions such as the
-// subnet bypass: it honors forwarded headers only from operator-configured
-// proxies and refuses to guess when a request carries forwarded headers it
-// cannot verify.
+// It serves two callers. The attribution extractor in internal/api/v2/apicore
+// (logs, rate limiting, tunnel detection) composes TrustsPeer, ClientIPFromXFF
+// and ParseHeaderIP, which honor forwarded client-IP headers from any loopback,
+// link-local or private peer, and from configured proxies, so home-LAN proxies
+// work without configuration. Authentication decisions such as the subnet bypass
+// use AuthClientIP, which honors forwarded headers only from operator-configured
+// proxies and returns no address when it cannot verify them.
 package proxytrust
 
 import (
@@ -20,11 +20,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// HeaderCFConnectingIP is Cloudflare's client-IP header. Echo has no constant
-// for it (it only defines X-Forwarded-For and X-Real-IP), so it is named here.
+// HeaderCFConnectingIP is Cloudflare's client-IP header.
 const HeaderCFConnectingIP = "CF-Connecting-IP"
 
-// Client-IP header names that are not in Echo's constant set.
+// Other client-IP header names, defined here so the package does not depend on
+// Echo.
 const (
 	headerXForwardedFor = "X-Forwarded-For"
 	headerXRealIP       = "X-Real-IP"
@@ -45,8 +45,8 @@ var clientIPHeaders = []string{
 
 // cloudflareEdgeCIDRs lists Cloudflare's published proxy IP ranges
 // (https://www.cloudflare.com/ips/). These ranges are stable and change rarely;
-// kept in sync manually. Expanded from the Security.TrustedProxies "cloudflare"
-// preset (conf.TrustedProxyCloudflarePreset).
+// kept in sync manually. The Security.TrustedProxies "cloudflare" preset
+// (conf.TrustedProxyCloudflarePreset) expands to these ranges.
 var cloudflareEdgeCIDRs = []string{
 	// IPv4
 	"173.245.48.0/20",
