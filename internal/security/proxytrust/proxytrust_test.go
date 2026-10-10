@@ -162,8 +162,13 @@ func TestParseHeaderIP(t *testing.T) {
 	}
 }
 
-// cloudflareEdgePeer is an address inside Cloudflare's published edge ranges.
-const cloudflareEdgePeer = "173.245.48.10:443"
+const (
+	// cloudflareEdgePeer is an address inside Cloudflare's published edge ranges.
+	cloudflareEdgePeer = "173.245.48.10:443"
+	// cloudflareWorkerEgress is the CF-Connecting-IP Cloudflare sets for a
+	// Worker subrequest; it lies inside the preset's 2a06:98c0::/29 range.
+	cloudflareWorkerEgress = "2a06:98c0:3600::103"
+)
 
 // TestChecker_AuthClientIP pins the strict client address used for
 // authentication decisions. Every forged-header case must resolve to nil (no
@@ -206,12 +211,29 @@ func TestChecker_AuthClientIP(t *testing.T) {
 		{name: "configured proxy forwarding loopback via XFF", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"127.0.0.1"}}, want: ""},
 		{name: "configured proxy sending X-Real-IP only", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Real-IP": {"192.168.1.20"}}, want: "192.168.1.20"},
 		{name: "configured proxy with repeated X-Real-IP", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Real-IP": {"192.168.1.20", "198.51.100.9"}}, want: ""},
-		{name: "configured proxy XFF wins over X-Real-IP", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"198.51.100.9"}, "X-Real-IP": {"192.168.1.20"}}, want: "198.51.100.9"},
-		{name: "configured non-Cloudflare proxy passing CF-Connecting-IP", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"CF-Connecting-IP": {"192.168.1.20"}, "X-Forwarded-For": {"198.51.100.9"}}, want: "198.51.100.9"},
-		{name: "configured non-Cloudflare proxy with only CF-Connecting-IP", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"CF-Connecting-IP": {"192.168.1.20"}}, want: ""},
+		// Agreement: every client-IP header from a configured proxy must name the
+		// same client, so a forged copy of a header the proxy does not write
+		// cannot override the one it does.
+		{name: "X-Real-IP-only proxy passing a forged XFF", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Real-IP": {"198.51.100.9"}, "X-Forwarded-For": {"192.168.1.20"}}, want: ""},
+		{name: "XFF-appending proxy passing a forged X-Real-IP", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"198.51.100.9"}, "X-Real-IP": {"192.168.1.20"}}, want: ""},
+		{name: "XFF-appending proxy passing a forged CF-Connecting-IP", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"CF-Connecting-IP": {"192.168.1.20"}, "X-Forwarded-For": {"198.51.100.9"}}, want: ""},
+		{name: "XFF-appending proxy passing a forged True-Client-IP", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"True-Client-IP": {"192.168.1.20"}, "X-Forwarded-For": {"198.51.100.9"}}, want: ""},
+		{name: "proxy setting X-Real-IP and appending XFF in agreement", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Real-IP": {"192.168.1.20"}, "X-Forwarded-For": {"203.0.113.1, 192.168.1.20"}}, want: "192.168.1.20"},
+		{name: "configured proxy with only CF-Connecting-IP", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"CF-Connecting-IP": {"192.168.1.20"}}, want: "192.168.1.20"},
+		{name: "configured proxy with only True-Client-IP", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"True-Client-IP": {"192.168.1.20"}}, want: "192.168.1.20"},
+		{name: "configured proxy sending Forwarded", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"Forwarded": {"for=192.168.1.20"}, "X-Real-IP": {"192.168.1.20"}}, want: ""},
+		{name: "X-Real-IP naming a configured proxy is skipped", trustedProxies: []string{"10.0.0.2", "10.0.0.3"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Real-IP": {"10.0.0.3"}, "X-Forwarded-For": {"198.51.100.9, 10.0.0.3"}}, want: "198.51.100.9"},
+		{name: "only a header naming a configured proxy", trustedProxies: []string{"10.0.0.2", "10.0.0.3"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Real-IP": {"10.0.0.3"}}, want: ""},
 		{name: "browser on configured proxy host without headers", trustedProxies: []string{"127.0.0.1"}, remoteAddr: "127.0.0.1:5000", want: "127.0.0.1"},
-		{name: "Cloudflare edge with preset honors CF-Connecting-IP", trustedProxies: []string{conf.TrustedProxyCloudflarePreset}, remoteAddr: cloudflareEdgePeer, headers: map[string][]string{"CF-Connecting-IP": {"198.51.100.9"}, "X-Forwarded-For": {"192.168.1.20"}}, want: "198.51.100.9"},
-		{name: "Cloudflare edge with repeated CF-Connecting-IP falls back to XFF", trustedProxies: []string{conf.TrustedProxyCloudflarePreset}, remoteAddr: cloudflareEdgePeer, headers: map[string][]string{"CF-Connecting-IP": {"192.168.1.20", "198.51.100.9"}, "X-Forwarded-For": {"198.51.100.10"}}, want: "198.51.100.10"},
+		{name: "Cloudflare edge with CF-Connecting-IP matching the appended XFF hop", trustedProxies: []string{conf.TrustedProxyCloudflarePreset}, remoteAddr: cloudflareEdgePeer, headers: map[string][]string{"CF-Connecting-IP": {"198.51.100.9"}, "X-Forwarded-For": {"192.168.1.20, 198.51.100.9"}}, want: "198.51.100.9"},
+		{name: "Cloudflare edge passing a forged X-Real-IP", trustedProxies: []string{conf.TrustedProxyCloudflarePreset}, remoteAddr: cloudflareEdgePeer, headers: map[string][]string{"CF-Connecting-IP": {"198.51.100.9"}, "X-Real-IP": {"192.168.1.20"}}, want: ""},
+		{name: "Cloudflare edge with repeated CF-Connecting-IP", trustedProxies: []string{conf.TrustedProxyCloudflarePreset}, remoteAddr: cloudflareEdgePeer, headers: map[string][]string{"CF-Connecting-IP": {"192.168.1.20", "198.51.100.9"}, "X-Forwarded-For": {"198.51.100.10"}}, want: ""},
+		{name: "local proxy behind Cloudflare: X-Real-IP naming the edge is skipped", trustedProxies: []string{conf.TrustedProxyCloudflarePreset, "127.0.0.1"}, remoteAddr: "127.0.0.1:5000", headers: map[string][]string{"CF-Connecting-IP": {"198.51.100.9"}, "X-Forwarded-For": {"198.51.100.9, 173.245.48.10"}, "X-Real-IP": {"173.245.48.10"}}, want: "198.51.100.9"},
+		{name: "local proxy behind Cloudflare passing a forged True-Client-IP", trustedProxies: []string{conf.TrustedProxyCloudflarePreset, "127.0.0.1"}, remoteAddr: "127.0.0.1:5000", headers: map[string][]string{"CF-Connecting-IP": {"198.51.100.9"}, "X-Forwarded-For": {"198.51.100.9, 173.245.48.10"}, "True-Client-IP": {"192.168.1.20"}}, want: ""},
+		{name: "Cloudflare Worker egress with a forged XFF entry", trustedProxies: []string{conf.TrustedProxyCloudflarePreset}, remoteAddr: cloudflareEdgePeer, headers: map[string][]string{"CF-Connecting-IP": {cloudflareWorkerEgress}, "X-Forwarded-For": {"192.168.1.20, " + cloudflareWorkerEgress}}, want: ""},
+		{name: "local proxy behind Cloudflare with Worker egress and a forged XFF entry", trustedProxies: []string{conf.TrustedProxyCloudflarePreset, "127.0.0.1"}, remoteAddr: "127.0.0.1:5000", headers: map[string][]string{"CF-Connecting-IP": {cloudflareWorkerEgress}, "X-Forwarded-For": {"192.168.1.20, " + cloudflareWorkerEgress + ", 173.245.48.10"}, "X-Real-IP": {"173.245.48.10"}}, want: ""},
+		{name: "configured proxy with malformed X-Real-IP and agreeing XFF", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Real-IP": {"nonsense"}, "X-Forwarded-For": {"198.51.100.9"}}, want: ""},
+		{name: "configured proxy with repeated X-Real-IP and XFF", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Real-IP": {"198.51.100.9", "198.51.100.9"}, "X-Forwarded-For": {"198.51.100.9"}}, want: ""},
 		{name: "Cloudflare edge without preset is unconfigured", remoteAddr: cloudflareEdgePeer, headers: map[string][]string{"CF-Connecting-IP": {"192.168.1.20"}}, want: ""},
 	}
 
