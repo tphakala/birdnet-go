@@ -2,6 +2,8 @@ package security
 
 import (
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
 // =============================================================================
@@ -458,27 +461,29 @@ func FuzzIsRequestFromAllowedSubnet(f *testing.F) {
 
 		server := &OAuth2Server{settings: settings}
 
-		// Should never panic
-		result := server.isAllowedSubnetIP(ipStr)
+		// The fuzzed value is the connection peer of a request without
+		// forwarded headers, so it is the address the bypass decides on.
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.RemoteAddr = ipStr
 
-		// If disabled, result must be false (unless loopback)
+		// Should never panic
+		result := server.IsRequestFromAllowedSubnet(req)
+
+		// If disabled, result must be false
 		if !enabled {
-			parsedIP := parseIPWithZone(ipStr)
-			if parsedIP == nil || !parsedIP.IsLoopback() {
-				assert.False(t, result, "Disabled subnet bypass should return false")
-			}
+			assert.False(t, result, "Disabled subnet bypass should return false")
 		}
 
-		// If IP is empty or invalid, result must be false
+		// If the peer is empty or invalid, result must be false
 		if ipStr == "" {
 			assert.False(t, result, "Empty IP should return false")
 		}
-		if parseIPWithZone(ipStr) == nil {
+		if peerIP, _ := proxytrust.PeerAddr(req); peerIP == nil {
 			assert.False(t, result, "Invalid IP should return false")
 		}
 
 		// Consistency check
-		result2 := server.isAllowedSubnetIP(ipStr)
+		result2 := server.IsRequestFromAllowedSubnet(req)
 		assert.Equal(t, result, result2, "Inconsistent results")
 	})
 }

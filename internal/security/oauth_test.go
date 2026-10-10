@@ -154,8 +154,8 @@ func TestOAuth2Server(t *testing.T) {
 				}
 				conftest.SetTestSettings(s.settings)
 
-				assert.True(t, s.isAllowedSubnetIP("192.168.1.100"), "expected IP to be allowed")
-				assert.False(t, s.isAllowedSubnetIP("10.0.0.1"), "expected IP to be denied")
+				assert.True(t, s.IsRequestFromAllowedSubnet(requestFrom("192.168.1.100")), "expected IP to be allowed")
+				assert.False(t, s.IsRequestFromAllowedSubnet(requestFrom("10.0.0.1")), "expected IP to be denied")
 			},
 		},
 	}
@@ -707,7 +707,7 @@ func TestIsAuthenticationEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := newOAuth2ServerForTesting(t, tt.settings)
-			result := server.isAuthenticationEnabledFor(tt.ip)
+			result := server.IsAuthenticationEnabled(requestFrom(tt.ip))
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -830,7 +830,7 @@ func TestIsRequestFromAllowedSubnet(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := newOAuth2ServerForTesting(t, tt.settings)
-			result := server.isAllowedSubnetIP(tt.ip)
+			result := server.IsRequestFromAllowedSubnet(requestFrom(tt.ip))
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -1868,6 +1868,7 @@ func TestUnverifiedBypassPeer(t *testing.T) {
 func TestAuthClientIPReportsUnverifiedPeerThrottled(t *testing.T) {
 	settings := &conf.Settings{}
 	settings.Security.AllowSubnetBypass.Enabled = true
+	settings.Security.AllowSubnetBypass.Subnet = "172.25.0.0/16"
 	settings.Security.BasicAuth.Enabled = true
 	server := newOAuth2ServerForTesting(t, settings)
 
@@ -1885,15 +1886,15 @@ func TestAuthClientIPReportsUnverifiedPeerThrottled(t *testing.T) {
 		return at, ok
 	}
 
-	assert.Equal(t, "172.25.5.9", server.authClientIP(direct).String())
+	assert.True(t, server.IsRequestFromAllowedSubnet(direct), "a direct client is verified and inside the subnet")
 	_, ok := noted(server)
 	assert.False(t, ok, "a verified address must not be reported")
 
-	assert.Nil(t, server.authClientIP(forged))
+	assert.False(t, server.IsRequestFromAllowedSubnet(forged))
 	first, ok := noted(server)
 	require.True(t, ok, "an unverifiable forwarded address must be reported")
 
-	assert.Nil(t, server.authClientIP(forged))
+	assert.False(t, server.IsRequestFromAllowedSubnet(forged))
 	second, _ := noted(server)
 	assert.Equal(t, first, second, "a repeat inside the interval must be throttled")
 
@@ -1901,14 +1902,14 @@ func TestAuthClientIPReportsUnverifiedPeerThrottled(t *testing.T) {
 	server.mutex.Lock()
 	server.throttledMessages[unverifiedClientIPLogKey] = first.Add(-2 * unverifiedClientIPLogInterval)
 	server.mutex.Unlock()
-	assert.Nil(t, server.authClientIP(forged))
+	assert.False(t, server.IsRequestFromAllowedSubnet(forged))
 	third, _ := noted(server)
 	assert.True(t, third.After(first.Add(-2*unverifiedClientIPLogInterval)), "an expired throttle must log again")
 
 	// With the bypass off nothing is reported.
 	off := &conf.Settings{}
 	offServer := newOAuth2ServerForTesting(t, off)
-	assert.Nil(t, offServer.authClientIP(forged))
+	assert.False(t, offServer.IsRequestFromAllowedSubnet(forged))
 	_, ok = noted(offServer)
 	assert.False(t, ok, "nothing is reported with the subnet bypass disabled")
 }
@@ -1919,21 +1920,23 @@ func TestAuthClientIPReportsUnverifiedPeerThrottled(t *testing.T) {
 // restart.
 func TestAuthClientIPHotReloadsTrustedProxies(t *testing.T) {
 	startup := &conf.Settings{}
+	startup.Security.AllowSubnetBypass.Enabled = true
+	startup.Security.AllowSubnetBypass.Subnet = "192.168.1.0/24"
 	server := newOAuth2ServerForTesting(t, startup)
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.RemoteAddr = "10.0.0.2:40000"
 	req.Header.Set(echo.HeaderXForwardedFor, "192.168.1.20")
 
-	assert.Nil(t, server.authClientIP(req), "an unlisted proxy is not trusted")
+	assert.False(t, server.IsRequestFromAllowedSubnet(req), "an unlisted proxy is not trusted")
 
-	listed := &conf.Settings{}
+	listed := conf.CloneSettings(startup)
 	listed.Security.TrustedProxies = []string{"10.0.0.2"}
 	conf.StoreSettings(listed)
-	assert.Equal(t, "192.168.1.20", server.authClientIP(req).String(), "a proxy added at runtime is trusted at once")
+	assert.True(t, server.IsRequestFromAllowedSubnet(req), "a proxy added at runtime is trusted at once")
 
-	conf.StoreSettings(&conf.Settings{})
-	assert.Nil(t, server.authClientIP(req), "a proxy removed at runtime is distrusted at once")
+	conf.StoreSettings(startup)
+	assert.False(t, server.IsRequestFromAllowedSubnet(req), "a proxy removed at runtime is distrusted at once")
 }
 
 // TestRequestBypassPredicates verifies IsRequestFromAllowedSubnet and
@@ -2000,4 +2003,63 @@ func TestShouldLogThrottledConcurrent(t *testing.T) {
 
 	assert.Equal(t, int32(1), logged.Load(), "exactly one caller may log")
 	assert.False(t, server.shouldLogThrottled("concurrent", time.Hour), "a later caller inside the interval is throttled")
+}
+
+// TestBypassDecisionUsesOneSettingsSnapshot verifies one subnet bypass decision
+// reads one settings snapshot. Under snapshot A the proxy is trusted but no
+// subnet is allowed; under snapshot B the subnet is allowed but the proxy is not
+// trusted. Neither grants the bypass to a client forwarded by that proxy, so a
+// grant while the two are swapped concurrently means the decision mixed them.
+func TestBypassDecisionUsesOneSettingsSnapshot(t *testing.T) {
+	trustedNoSubnet := &conf.Settings{}
+	trustedNoSubnet.Security.AllowSubnetBypass.Enabled = true
+	trustedNoSubnet.Security.TrustedProxies = []string{"10.0.0.2"}
+
+	subnetUntrusted := &conf.Settings{}
+	subnetUntrusted.Security.AllowSubnetBypass.Enabled = true
+	subnetUntrusted.Security.AllowSubnetBypass.Subnet = "192.168.1.0/24"
+
+	server := newOAuth2ServerForTesting(t, trustedNoSubnet)
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.RemoteAddr = "10.0.0.2:40000"
+	req.Header.Set(echo.HeaderXForwardedFor, "192.168.1.20")
+
+	require.False(t, server.IsRequestFromAllowedSubnet(req), "snapshot A alone grants nothing")
+	conf.StoreSettings(subnetUntrusted)
+	require.False(t, server.IsRequestFromAllowedSubnet(req), "snapshot B alone grants nothing")
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				conf.StoreSettings(trustedNoSubnet)
+				conf.StoreSettings(subnetUntrusted)
+			}
+		}
+	})
+
+	const attempts = 20000
+	granted := 0
+	for range attempts {
+		if server.IsRequestFromAllowedSubnet(req) {
+			granted++
+		}
+	}
+	close(stop)
+	wg.Wait()
+
+	assert.Zero(t, granted, "a decision mixing two settings snapshots granted the bypass")
+}
+
+// requestFrom returns a request whose connection peer is remoteAddr, with no
+// forwarded headers.
+func requestFrom(remoteAddr string) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.RemoteAddr = remoteAddr
+	return req
 }
