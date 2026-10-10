@@ -16,17 +16,18 @@ const (
 
 	// keepUpLostFractionThreshold is the share of written audio a window may lose
 	// before it counts as lossy. It sits above the loss a healthy pipeline has at
-	// overlap 0 with small write chunks: the ring holds exactly one clip and the
-	// monitor polls every 100 ms, so writes between a full ring and the next poll
-	// overwrite the oldest bytes (about 1.7 percent on average with chunks of
-	// about 20 ms). A write that crosses a full ring also overwrites up to one
-	// chunk, and BufferConsumer.Write passes whole source frames (32 KiB ffmpeg
-	// reads, more after resampling), so a healthy overlap-0 pipeline fed large
-	// frames can lose more than this threshold; that loss comes from the ring
-	// holding only one clip, not from analysis falling behind.
-	// A one-off 3 s stall costs at most about 5 percent of a minute, so the
-	// keepUpLossyToWarn rule, not this threshold alone, keeps it from warning.
-	keepUpLostFractionThreshold = 0.05
+	// overlap 0: the ring holds exactly one clip and the monitor polls every 100
+	// ms, so writes between a full ring and the next poll overwrite the oldest
+	// bytes. With small write chunks that is under 2 percent; BufferConsumer.Write
+	// passes whole source frames (up to one 32 KiB ffmpeg read), and a write that
+	// crosses a full ring overwrites up to one frame, which reaches just under 10
+	// percent on a 3 s clip (6 percent on a 5 s clip). That loss comes from the
+	// ring holding only one clip, not from analysis falling behind. Real
+	// saturation loses far more: a pipeline that achieves two thirds of its
+	// planned rate loses about a third. A one-off 3 s stall costs at most about 5
+	// percent of a minute, so the keepUpLossyToWarn rule, not this threshold
+	// alone, keeps it from warning.
+	keepUpLostFractionThreshold = 0.15
 
 	// keepUpEvalWindows is how many of the latest windows with audio are judged.
 	keepUpEvalWindows = 5

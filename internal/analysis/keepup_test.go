@@ -224,36 +224,55 @@ func TestKeepUpState_WindowsCloserThanKeepUpWindowNeverClose(t *testing.T) {
 }
 
 // TestAnalysisBuffer_ZeroOverlapPollGapIsBelowKeepUpThreshold drives the real
-// ring with capacity == readSize (overlap 0), 20 ms-ish writes and a 100 ms poll,
-// and asserts the resulting loss stays under the keep-up threshold. It pins the
-// assumption behind keepUpLostFractionThreshold.
+// ring with capacity == readSize (overlap 0) and a 100 ms poll, for small writes
+// and for whole 32 KiB source frames, and asserts the resulting loss stays under
+// the keep-up threshold. It pins the assumption behind keepUpLostFractionThreshold.
 func TestAnalysisBuffer_ZeroOverlapPollGapIsBelowKeepUpThreshold(t *testing.T) {
 	t.Parallel()
 
 	const (
-		capacity     = 288_000 // 3 s of 48 kHz 16-bit mono
-		chunk        = 1_900   // just under 20 ms; deliberately not a divisor of capacity
-		chunksPerMin = 3_000
-		pollEvery    = 5 // 100 ms
+		capacity    = 288_000   // 3 s of 48 kHz 16-bit mono
+		bytesPerMin = 5_760_000 // one minute at 96000 B/s
+		pollBytes   = 9_600     // 100 ms of audio between monitor polls
 	)
-	ab, err := buffer.NewAnalysisBuffer(capacity, 0, capacity, "poll-gap", logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC), nil)
-	require.NoError(t, err)
-
-	payload := make([]byte, chunk)
-	for i := 1; i <= chunksPerMin; i++ {
-		require.NoError(t, ab.Write(payload))
-		if i%pollEvery == 0 {
-			_, release, readErr := ab.Read()
-			require.NoError(t, readErr)
-			release()
-		}
+	tests := []struct {
+		name  string
+		chunk int
+	}{
+		{name: "small writes", chunk: 1_900}, // just under 20 ms; not a divisor of capacity
+		{name: "32 KiB source frames", chunk: 32_768},
+		// The worst case found sweeping frame sizes up to one 32 KiB ffmpeg read
+		// against a 3 s clip: just under 10 percent lost.
+		{name: "worst frame size under 32 KiB", chunk: 31_936},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	st := ab.Stats()
-	require.Positive(t, st.WindowsRead)
-	fraction := float64(st.LostBytes) / float64(st.WrittenBytes)
-	assert.Positive(t, st.LostBytes, "the poll gap loses some audio at overlap 0")
-	assert.Less(t, fraction, keepUpLostFractionThreshold)
+			ab, err := buffer.NewAnalysisBuffer(capacity, 0, capacity, "poll-gap", logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC), nil)
+			require.NoError(t, err)
+
+			payload := make([]byte, tt.chunk)
+			written, nextPoll := 0, pollBytes
+			for written < bytesPerMin {
+				require.NoError(t, ab.Write(payload))
+				written += tt.chunk
+				// Poll once per 100 ms of audio that has arrived; a poll finds
+				// a window only when the ring holds a full clip.
+				for ; nextPoll <= written; nextPoll += pollBytes {
+					if _, release, readErr := ab.Read(); readErr == nil {
+						release()
+					}
+				}
+			}
+
+			st := ab.Stats()
+			require.Positive(t, st.WindowsRead)
+			fraction := float64(st.LostBytes) / float64(st.WrittenBytes)
+			assert.Positive(t, st.LostBytes, "the poll gap loses some audio at overlap 0")
+			assert.Less(t, fraction, keepUpLostFractionThreshold)
+		})
+	}
 }
 
 // TestProcessMonitorTick_WarnsOnceWhenAnalysisFallsBehind drives observeKeepUp
