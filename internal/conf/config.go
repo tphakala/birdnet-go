@@ -1599,7 +1599,8 @@ type Security struct {
 	// from a proxy listed here, even one on a private or loopback address, and a
 	// request that carries any client-IP header (CF-Connecting-IP, X-Forwarded-For, X-Real-IP, True-Client-IP or Forwarded) from any other peer gets no bypass.
 	// For the bypass, list each proxy's own address rather than a range that also
-	// holds clients, and have the proxy append X-Forwarded-For or overwrite
+	// holds clients: a client inside a listed range is trusted as a proxy, so its
+	// own forwarded headers can name any address. Have the proxy append X-Forwarded-For or overwrite
 	// X-Real-IP; the client-IP headers it forwards must all name the same client,
 	// and a Forwarded header is not accepted. Hot-reloadable.
 	TrustedProxies []string     `yaml:"trustedproxies" json:"trustedProxies"`
