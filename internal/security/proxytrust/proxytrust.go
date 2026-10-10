@@ -137,6 +137,12 @@ func parseCIDRs(entries []string) []*net.IPNet {
 	return nets
 }
 
+// Address widths in bits, used for the single-host mask of a bare IP entry.
+const (
+	ipv4Bits = 32
+	ipv6Bits = 128
+)
+
 // parseProxyCIDR parses a trusted-proxy entry as either a CIDR or a bare IP
 // (treated as a single host: /32 for IPv4, /128 for IPv6). Returns false if the
 // entry is neither.
@@ -153,9 +159,9 @@ func parseProxyCIDR(entry string) (*net.IPNet, bool) {
 	}
 	if ip := net.ParseIP(entry); ip != nil {
 		if v4 := ip.To4(); v4 != nil {
-			return &net.IPNet{IP: v4, Mask: net.CIDRMask(32, 32)}, true
+			return &net.IPNet{IP: v4, Mask: net.CIDRMask(ipv4Bits, ipv4Bits)}, true
 		}
-		return &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}, true
+		return &net.IPNet{IP: ip, Mask: net.CIDRMask(ipv6Bits, ipv6Bits)}, true
 	}
 	return nil, false
 }
