@@ -44,7 +44,7 @@ func (a *SecurityAdapter) CheckAccess(c echo.Context) error {
 
 // IsAuthRequired checks if authentication is required for this request
 func (a *SecurityAdapter) IsAuthRequired(c echo.Context) bool {
-	return a.OAuth2Server.IsAuthenticationEnabled(c.RealIP())
+	return a.OAuth2Server.IsAuthenticationEnabled(a.OAuth2Server.AuthClientIP(c.Request()))
 }
 
 // GetUsername retrieves the username of the authenticated user (if available)
@@ -103,7 +103,7 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 	}
 
 	// 2. Check subnet bypass (if context wasn't set or middleware didn't handle)
-	if a.OAuth2Server.IsRequestFromAllowedSubnet(c.RealIP()) {
+	if a.OAuth2Server.IsRequestFromAllowedSubnet(a.OAuth2Server.AuthClientIP(c.Request())) {
 		return AuthMethodLocalSubnet // Changed from AuthMethodUnknown
 	}
 
