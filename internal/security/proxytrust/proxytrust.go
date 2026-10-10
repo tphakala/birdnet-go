@@ -282,8 +282,9 @@ var singleValueClientIPHeaders = []string{
 // skipped, even when they name a configured range: Cloudflare sets them to an
 // address inside its own ranges for Worker subrequests, and skipping them would
 // let the X-Forwarded-For walk, which skips configured hops, reach a forged
-// entry unopposed. A repeated or malformed header, or a Forwarded header (not
-// parsed), makes the result nil.
+// entry unopposed. A repeated single-value header, a malformed value, or a
+// Forwarded header (not parsed) makes the result nil; several X-Forwarded-For
+// lines are joined into one chain.
 func (tc *Checker) forwardedClientIP(h http.Header) net.IP {
 	if len(h.Values(headerForwarded)) > 0 {
 		return nil

@@ -21,7 +21,7 @@ The security package follows a layered approach to authentication, determining i
      - Checks if the client IP is in the same /24 subnet as any of the server's network interfaces
      - Has special handling for containerized environments using `IsInHostSubnet()`
 
-   - The client address for this check, and for the allowed subnet check below, comes from `OAuth2Server.AuthClientIP`, not from the logged client IP. It is the connection peer when the request carries no forwarded client-IP header, or the address a proxy listed in `security.trustedproxies` reported. Forwarded headers from any other peer give no address, so no bypass.
+   - The client address for this check, and for the allowed subnet check below, comes from `OAuth2Server.AuthClientIP`, not from the logged client IP. It is the connection peer when the request carries no forwarded client-IP header, or the address a proxy listed in `security.trustedproxies` reported, provided its forwarded client-IP headers agree, none is a `Forwarded` header, and the address is not loopback. Forwarded headers from any other peer give no address, so no bypass.
 
 2. **Allowed Subnet Check**
    - If local subnet bypass is not applicable, the system checks if the client IP is in a list of explicitly allowed subnets

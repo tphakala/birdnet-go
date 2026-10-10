@@ -1793,6 +1793,8 @@ func TestIsUserAuthenticatedSubnetBypassIgnoresForgedHeader(t *testing.T) {
 	}
 
 	server := newOAuth2ServerForTesting(t, settings)
+	previousStore := gothic.Store
+	t.Cleanup(func() { gothic.Store = previousStore })
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
