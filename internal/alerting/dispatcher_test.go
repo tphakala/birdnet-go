@@ -552,70 +552,133 @@ func TestDispatcher_DefaultTemplate_DetectionMessage(t *testing.T) {
 	assert.Contains(t, call.message, "92")
 }
 
-func TestDispatcher_DefaultTemplate_ErrorMessage_Classified(t *testing.T) {
-	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
-
-	rule := &entities.AlertRule{
-		ID:      1,
-		Name:    "Audio stream error",
-		NameKey: RuleKeyStreamErrorName,
-		Actions: []entities.AlertAction{
-			{Target: TargetBell},
+// TestDispatcher_DefaultTemplate_ErrorMessage covers how an error event picks
+// its message key. An event that names the failing stream or device renders
+// through the MsgAlertErrorWithSource wrapper, carrying any classified
+// explanation as the nested error_key param the frontend resolves into the
+// {error} placeholder. An event that cannot name a source keeps the bare
+// classified key, or the generic one, so the message never renders with an
+// empty "{source_name}: " prefix.
+func TestDispatcher_DefaultTemplate_ErrorMessage(t *testing.T) {
+	tests := []struct {
+		name             string
+		ruleName         string
+		ruleNameKey      string
+		objectType       string
+		eventName        string
+		properties       map[string]any
+		wantMessageKey   string
+		wantParams       map[string]any
+		wantParamsAbsent []string
+		wantInMessage    []string
+		wantNotInMessage []string
+	}{
+		{
+			name:        "classified error with source",
+			ruleName:    "Audio stream error",
+			ruleNameKey: RuleKeyStreamErrorName,
+			objectType:  ObjectTypeStream,
+			eventName:   EventStreamError,
+			properties: map[string]any{
+				PropertyStreamName: "backyard-cam",
+				PropertyError:      "connection timeout",
+			},
+			// "connection timeout" classifies as "timeout", carried as the nested
+			// error_key rather than as the message key itself.
+			wantMessageKey: MsgAlertErrorWithSource,
+			wantParams: map[string]any{
+				"error_key":   MsgAlertErrorPrefix + ".timeout",
+				"source_name": "backyard-cam",
+				"error":       "connection timeout",
+			},
+			wantInMessage: []string{"backyard-cam"},
+			// Fallback uses the friendly message, not the raw error.
+			wantNotInMessage: []string{"connection timeout"},
+		},
+		{
+			name:        "classified error without source",
+			ruleName:    "BirdWeather upload failed",
+			ruleNameKey: RuleKeyBirdWeatherName,
+			objectType:  ObjectTypeIntegration,
+			eventName:   EventBirdWeatherFailed,
+			properties: map[string]any{
+				PropertyError: "connection timeout",
+			},
+			wantMessageKey:   MsgAlertErrorPrefix + ".timeout",
+			wantParams:       map[string]any{"source_name": ""},
+			wantParamsAbsent: []string{"error_key"},
+		},
+		{
+			// The raw FFmpeg read errors from #3953 fall into this case.
+			name:        "unclassified error with source",
+			ruleName:    "Audio stream error",
+			ruleNameKey: RuleKeyStreamErrorName,
+			objectType:  ObjectTypeStream,
+			eventName:   EventStreamError,
+			properties: map[string]any{
+				PropertyStreamName: "Backyard feeder",
+				PropertyError:      "error reading from FFmpeg: stream ended without producing data",
+			},
+			wantMessageKey:   MsgAlertErrorWithSource,
+			wantParams:       map[string]any{"source_name": "Backyard feeder"},
+			wantParamsAbsent: []string{"error_key"},
+			wantInMessage:    []string{"Backyard feeder", "stream ended without producing data"},
+		},
+		{
+			name:        "unclassified error without source",
+			ruleName:    "BirdWeather upload failed",
+			ruleNameKey: RuleKeyBirdWeatherName,
+			objectType:  ObjectTypeIntegration,
+			eventName:   EventBirdWeatherFailed,
+			properties: map[string]any{
+				PropertyError: "species not in taxonomy",
+			},
+			wantMessageKey: MsgAlertErrorOccurred,
+			wantParams:     map[string]any{"error": "species not in taxonomy"},
+			wantInMessage:  []string{"species not in taxonomy"},
 		},
 	}
-	event := &AlertEvent{
-		ObjectType: ObjectTypeStream,
-		EventName:  EventStreamError,
-		Properties: map[string]any{
-			PropertyStreamName: "backyard-cam",
-			PropertyError:      "connection timeout",
-		},
-		Timestamp: time.Now(),
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockNotifCreator{}
+			dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+			rule := &entities.AlertRule{
+				ID:      1,
+				Name:    tt.ruleName,
+				NameKey: tt.ruleNameKey,
+				Actions: []entities.AlertAction{
+					{Target: TargetBell},
+				},
+			}
+			event := &AlertEvent{
+				ObjectType: tt.objectType,
+				EventName:  tt.eventName,
+				Properties: tt.properties,
+				Timestamp:  time.Now(),
+			}
+
+			dispatcher.Dispatch(rule, event)
+
+			require.Len(t, mock.keyCalls, 1)
+			call := mock.keyCalls[0]
+			assert.Equal(t, tt.wantMessageKey, call.messageKey)
+			for param, want := range tt.wantParams {
+				assert.Equal(t, want, call.messageParams[param], "message param %q", param)
+			}
+			for _, param := range tt.wantParamsAbsent {
+				assert.NotContains(t, call.messageParams, param,
+					"message param %q must not be set", param)
+			}
+			for _, want := range tt.wantInMessage {
+				assert.Contains(t, call.message, want)
+			}
+			for _, notWant := range tt.wantNotInMessage {
+				assert.NotContains(t, call.message, notWant)
+			}
+		})
 	}
-
-	dispatcher.Dispatch(rule, event)
-
-	require.Len(t, mock.keyCalls, 1)
-	call := mock.keyCalls[0]
-	// "connection timeout" classifies as "timeout"
-	assert.Equal(t, MsgAlertErrorPrefix+".timeout", call.messageKey)
-	assert.Equal(t, "backyard-cam", call.messageParams["source_name"])
-	assert.Equal(t, "connection timeout", call.messageParams["error"])
-	// Fallback uses the friendly message, not the raw error
-	assert.Contains(t, call.message, "backyard-cam")
-	assert.NotContains(t, call.message, "connection timeout", "should use friendly message, not raw error")
-}
-
-func TestDispatcher_DefaultTemplate_ErrorMessage_Unclassified(t *testing.T) {
-	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
-
-	rule := &entities.AlertRule{
-		ID:      1,
-		Name:    "BirdWeather upload failed",
-		NameKey: RuleKeyBirdWeatherName,
-		Actions: []entities.AlertAction{
-			{Target: TargetBell},
-		},
-	}
-	event := &AlertEvent{
-		ObjectType: ObjectTypeIntegration,
-		EventName:  EventBirdWeatherFailed,
-		Properties: map[string]any{
-			PropertyError: "species not in taxonomy",
-		},
-		Timestamp: time.Now(),
-	}
-
-	dispatcher.Dispatch(rule, event)
-
-	require.Len(t, mock.keyCalls, 1)
-	call := mock.keyCalls[0]
-	// Unrecognized error falls back to generic key with raw error
-	assert.Equal(t, MsgAlertErrorOccurred, call.messageKey)
-	assert.Equal(t, "species not in taxonomy", call.messageParams["error"])
-	assert.Contains(t, call.message, "species not in taxonomy")
 }
 
 func TestDispatcher_DefaultTemplate_DisconnectMessage(t *testing.T) {
