@@ -171,6 +171,13 @@ type SpeciesTracker struct {
 	currentSeason   string
 	seasons         map[string]seasonDates // season name -> start dates
 
+	// Season carry-over: species detected within the seasonal window before
+	// seasonCarryoverStart. They were already present when the season began, so
+	// they are not "new this season". seasonCarryoverStart is the (date-only)
+	// start of the season the set describes; zero until first computed.
+	seasonCarryover      map[string]struct{}
+	seasonCarryoverStart time.Time
+
 	// Configuration
 	ds                 SpeciesDatastore
 	lastSyncTime       time.Time

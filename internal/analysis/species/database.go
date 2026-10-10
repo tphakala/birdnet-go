@@ -78,6 +78,12 @@ func (t *SpeciesTracker) initFromDatabaseContext(ctx context.Context) error {
 				Context("current_season", t.currentSeason).
 				Build()
 		}
+		if err := t.loadSeasonCarryoverFromDatabase(ctx, now); err != nil {
+			getLog().Error("Failed to load season carry-over species from database",
+				logger.Error(err),
+				logger.String("operation", "load_season_carryover"),
+				logger.String("impact", "Species present before the season began may show as new this season"))
+		}
 	}
 
 	// Step 4: Load notification history (BG-17 fix)
@@ -514,6 +520,59 @@ func (t *SpeciesTracker) loadSeasonalDataFromDatabase(ctx context.Context, now t
 	}
 
 	t.speciesBySeason = newSeasonData
+	return nil
+}
+
+// loadSeasonCarryoverFromDatabase records the species detected within the
+// seasonal window before the current season began, so they are not reported
+// as new this season after a restart. It needs only the set of species, so it
+// queries one row per species rather than one per species per day, which a
+// wide seasonal window on a busy station could truncate at the query limit.
+func (t *SpeciesTracker) loadSeasonCarryoverFromDatabase(ctx context.Context, now time.Time) error {
+	seasonStart, ok := t.seasonStartDate(t.getCurrentSeason(now), now)
+	if !ok {
+		return nil
+	}
+
+	startDate := t.seasonCarryoverLookbackStart(seasonStart).Format(time.DateOnly)
+	endDate := seasonStart.AddDate(0, 0, -1).Format(time.DateOnly)
+	detections, err := t.ds.GetSpeciesFirstDetectionInPeriod(ctx, startDate, endDate, defaultDBQueryLimit, 0)
+	if err != nil {
+		return errors.Newf("failed to load season carry-over species from database: %w", err).
+			Component("new-species-tracker").
+			Category(errors.CategoryDatabase).
+			Context("operation", "load_season_carryover").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
+	}
+
+	// An empty result for a season boundary we've already recorded carry-over
+	// data for is more likely a transient read (this runs on every periodic
+	// sync, not just startup) than a genuine "nothing was heard before this
+	// season" - keep the existing set rather than wiping it, matching the
+	// other loaders' empty-result handling.
+	hasExistingData := len(t.seasonCarryover) > 0 && sameTrackerDate(t.seasonCarryoverStart, seasonStart)
+	if len(detections) == 0 && hasExistingData {
+		getLog().Debug("No season carry-over detections returned, preserving existing tracking data",
+			logger.String("season_start", seasonStart.Format(time.DateOnly)),
+			logger.Int("existing_species", len(t.seasonCarryover)))
+		return nil
+	}
+
+	carryover := make(map[string]struct{}, len(detections))
+	for _, detection := range detections {
+		if detection.ScientificName != "" {
+			carryover[canonicalSpeciesName(detection.ScientificName)] = struct{}{}
+		}
+	}
+	t.seasonCarryover = carryover
+	t.seasonCarryoverStart = seasonStart
+
+	getLog().Debug("Loaded season carry-over species from database",
+		logger.String("season_start", seasonStart.Format(time.DateOnly)),
+		logger.Int("species", len(carryover)))
+
 	return nil
 }
 
