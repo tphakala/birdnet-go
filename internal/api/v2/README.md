@@ -137,7 +137,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | ------ | ----------------------------- | ------------------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
 | GET    | `/detections`                 | `GetDetections`          | ❌   | List bird detections; `source` (id from `/analytics/sources`, display name, node name or URI) restricts to an audio source |
 | GET    | `/detections/:id`             | `GetDetection`           | ❌   | Get specific detection                                                                                                     |
-| GET    | `/detections/recent`          | `GetRecentDetections`    | ❌   | Recent detections                                                                                                          |
+| GET    | `/detections/recent`          | `GetRecentDetections`    | ❌   | Recent detections; `limit` defaults to 10 and is capped at 1000                                                            |
 | GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay`  | ❌   | Detection time context                                                                                                     |
 | DELETE | `/detections/:id`             | `DeleteDetection`        | ✅   | Delete detection record                                                                                                    |
 | POST   | `/detections/:id/review`      | `ReviewDetection`        | ✅   | Review/verify detection                                                                                                    |
