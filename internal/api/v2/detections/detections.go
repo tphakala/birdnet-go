@@ -1241,12 +1241,15 @@ func (c *Handler) GetDetection(ctx echo.Context) error {
 
 // GetRecentDetections returns the most recent detections
 // Query parameters:
-// - limit: number of detections to return (default: 10)
+// - limit: number of detections to return (default: 10, maximum: maxNumResults; larger values are clamped)
 // - includeWeather: whether to include weather data (default: false)
 func (c *Handler) GetRecentDetections(ctx echo.Context) error {
 	limit, _ := strconv.Atoi(ctx.QueryParam("limit"))
 	if limit <= 0 {
 		limit = 10
+	}
+	if limit > maxNumResults {
+		limit = maxNumResults
 	}
 
 	// Check if weather data should be included
