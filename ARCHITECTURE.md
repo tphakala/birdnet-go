@@ -1976,7 +1976,7 @@ BirdNET-Go uses a **binary authentication model** (authenticated or not) rather 
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
     // 1. Check local subnet bypass on the verified client address
     //    (authClientIP), never on the logged c.RealIP()
-    if _, ok := s.isLocalSubnetBypass(c.Request()); ok {
+    if _, ok := s.isLocalSubnetBypass(s.currentSettings(), c.Request()); ok {
         return true
     }
 

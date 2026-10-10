@@ -242,14 +242,14 @@ func (s *OAuth2Server) CurrentSettings() *conf.Settings {
 // such as the allowed-subnet bypass, or nil when it cannot be verified (callers
 // must then grant no address-based access). Unlike echo.Context.RealIP, which
 // serves attribution and honors forwarded headers from any private peer, it
-// honors them only from proxies listed in Security.TrustedProxies; see
-// proxytrust.Checker.AuthClientIP. The list is read per request, so changes take
-// effect without a restart. When the subnet bypass is enabled, an
-// authentication provider is configured, and forwarded headers from an unlisted
-// peer are the reason no address was found, it logs a throttled Info notice
-// naming that peer.
-func (s *OAuth2Server) authClientIP(r *http.Request) net.IP {
-	settings := s.currentSettings()
+// honors them only from proxies listed in settings' Security.TrustedProxies; see
+// proxytrust.Checker.AuthClientIP. Callers pass the snapshot they loaded once
+// for the whole decision, so changes take effect on the next request without a
+// restart and one decision never mixes two configurations. When the subnet
+// bypass is enabled, an authentication provider is configured, and forwarded
+// headers from an unlisted peer are the reason no address was found, it logs a
+// throttled Info notice naming that peer.
+func (s *OAuth2Server) authClientIP(settings *conf.Settings, r *http.Request) net.IP {
 	checker := s.proxyTrust.ResolveSettings(settings)
 	if ip := checker.AuthClientIP(r); ip != nil {
 		return ip
@@ -263,15 +263,16 @@ func (s *OAuth2Server) authClientIP(r *http.Request) net.IP {
 }
 
 // isLocalSubnetBypass reports whether the automatic local-network check grants
-// r access: the subnet bypass is enabled and the verified client address (never
-// the attribution address, so a forged forwarded header cannot place a client
-// on the host's network) is on a network of this host. It also returns that
-// address for logging.
-func (s *OAuth2Server) isLocalSubnetBypass(r *http.Request) (net.IP, bool) {
-	if !s.currentSettings().Security.AllowSubnetBypass.Enabled {
+// r access: the subnet bypass is enabled in settings and the verified client
+// address (never the attribution address, so a forged forwarded header cannot
+// place a client on the host's network) is on a network of this host. Both are
+// read from the one snapshot the caller passes. It also returns that address
+// for logging.
+func (s *OAuth2Server) isLocalSubnetBypass(settings *conf.Settings, r *http.Request) (net.IP, bool) {
+	if !settings.Security.AllowSubnetBypass.Enabled {
 		return nil, false
 	}
-	ip := s.authClientIP(r)
+	ip := s.authClientIP(settings, r)
 	return ip, IsInLocalSubnet(ip)
 }
 
@@ -756,7 +757,7 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 	secLog := GetLogger().With(logger.String("client_ip", c.RealIP()))
 	secLog.Debug("Checking user authentication status")
 
-	if authIP, ok := s.isLocalSubnetBypass(c.Request()); ok {
+	if authIP, ok := s.isLocalSubnetBypass(s.currentSettings(), c.Request()); ok {
 		secLog.Info("User authenticated: request from local subnet (subnet bypass enabled)",
 			logger.String("auth_ip", authIP.String()))
 		return true
@@ -1031,16 +1032,16 @@ func (s *OAuth2Server) ValidateAccessToken(token string) error {
 // bypass is always decided on the verified client address (authClientIP), never
 // on a caller-supplied one such as echo.Context.RealIP.
 func (s *OAuth2Server) IsAuthenticationEnabled(r *http.Request) bool {
-	return s.isAuthenticationEnabledFor(s.bypassClientIP(r))
+	settings := s.currentSettings()
+	return s.isAuthenticationEnabledFor(settings, s.bypassClientIP(settings, r))
 }
 
 // isAuthenticationEnabledFor is IsAuthenticationEnabled for an already
-// resolved client address ("" when there is none).
-func (s *OAuth2Server) isAuthenticationEnabledFor(ip string) bool {
-	settings := s.currentSettings()
+// resolved client address ("" when there is none), decided on settings.
+func (s *OAuth2Server) isAuthenticationEnabledFor(settings *conf.Settings, ip string) bool {
 	authLog := GetLogger().With(logger.String("ip", ip))
 	authLog.Debug("Checking if authentication is enabled for IP")
-	if s.isAllowedSubnetIP(ip) {
+	if s.isAllowedSubnetIP(settings, ip) {
 		authLog.Info("Authentication bypassed: request from allowed subnet")
 		return false // Authentication not required for allowed subnets
 	}
@@ -1070,30 +1071,30 @@ func (s *OAuth2Server) isAuthenticationEnabledFor(ip string) bool {
 // is loopback or inside a configured subnet. Like IsAuthenticationEnabled it
 // takes the request so no caller can decide the bypass on an unverified address.
 func (s *OAuth2Server) IsRequestFromAllowedSubnet(r *http.Request) bool {
-	return s.isAllowedSubnetIP(s.bypassClientIP(r))
+	settings := s.currentSettings()
+	return s.isAllowedSubnetIP(settings, s.bypassClientIP(settings, r))
 }
 
 // bypassClientIP returns the verified client address as a string for the
 // allowed-subnet check, or "" when the bypass is disabled (the address is then
 // never needed, so it is not resolved) or no address could be verified.
-func (s *OAuth2Server) bypassClientIP(r *http.Request) string {
-	if !s.currentSettings().Security.AllowSubnetBypass.Enabled {
+func (s *OAuth2Server) bypassClientIP(settings *conf.Settings, r *http.Request) string {
+	if !settings.Security.AllowSubnetBypass.Enabled {
 		return ""
 	}
-	if ip := s.authClientIP(r); ip != nil {
+	if ip := s.authClientIP(settings, r); ip != nil {
 		return ip.String()
 	}
 	return ""
 }
 
 // isAllowedSubnetIP checks whether an already resolved client address is
-// within the allowed subnets.
-func (s *OAuth2Server) isAllowedSubnetIP(ipStr string) bool {
+// within the allowed subnets of settings.
+func (s *OAuth2Server) isAllowedSubnetIP(settings *conf.Settings, ipStr string) bool {
 	authLog := GetLogger().With(logger.String("ip", ipStr))
 	authLog.Debug("Checking if IP is in allowed subnet")
 
 	// Check if subnet bypass is enabled first
-	settings := s.currentSettings()
 	if !settings.Security.AllowSubnetBypass.Enabled {
 		authLog.Debug("Allowed subnet check: subnet bypass is disabled in settings")
 		return false
