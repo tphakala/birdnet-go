@@ -1955,9 +1955,8 @@ BirdNET-Go uses a **binary authentication model** (authenticated or not) rather 
 ```go
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
     // 1. Check local subnet bypass on the verified client address
-    //    (AuthClientIP), never on the logged c.RealIP()
-    if s.currentSettings().Security.AllowSubnetBypass.Enabled &&
-        IsInLocalSubnet(parseIPWithZone(s.AuthClientIP(c.Request()))) {
+    //    (authClientIP), never on the logged c.RealIP()
+    if _, ok := s.isLocalSubnetBypass(c.Request()); ok {
         return true
     }
 

@@ -32,16 +32,31 @@ const (
 	headerTrueClientIP  = "True-Client-IP"
 )
 
-// clientIPHeaders lists every header a proxy may use to carry the original
-// client address. AuthClientIP treats the presence of any of them on a request
-// from an unconfigured peer as "proxied or forged, client unknown".
-var clientIPHeaders = []string{
-	HeaderCFConnectingIP,
-	headerXForwardedFor,
-	headerXRealIP,
-	headerForwarded,
-	headerTrueClientIP,
+// Canonical forms of the client-IP header names. http.Header stores keys in
+// canonical form, so reading the map directly with these avoids canonicalizing
+// (and allocating) on every request, as Header.Values would.
+var (
+	canonicalCFConnectingIP = http.CanonicalHeaderKey(HeaderCFConnectingIP)
+	canonicalXForwardedFor  = http.CanonicalHeaderKey(headerXForwardedFor)
+	canonicalXRealIP        = http.CanonicalHeaderKey(headerXRealIP)
+	canonicalForwarded      = http.CanonicalHeaderKey(headerForwarded)
+	canonicalTrueClientIP   = http.CanonicalHeaderKey(headerTrueClientIP)
+)
+
+// singleValueClientIPHeaders are the client-IP headers that carry one address,
+// as canonical keys. X-Forwarded-For carries a hop chain and Forwarded is not
+// parsed, so both are handled separately.
+var singleValueClientIPHeaders = []string{
+	canonicalCFConnectingIP,
+	canonicalXRealIP,
+	canonicalTrueClientIP,
 }
+
+// clientIPHeaders lists every header a proxy may use to carry the original
+// client address, as canonical keys. AuthClientIP treats the presence of any of
+// them on a request from an unconfigured peer as "proxied or forged, client
+// unknown".
+var clientIPHeaders = append(slices.Clone(singleValueClientIPHeaders), canonicalXForwardedFor, canonicalForwarded)
 
 // cloudflareEdgeCIDRs lists Cloudflare's published proxy IP ranges
 // (https://www.cloudflare.com/ips/). These ranges are stable and change rarely;
@@ -103,7 +118,7 @@ func NewChecker(trustedProxies []string) *Checker {
 		case strings.EqualFold(trimmed, conf.TrustedProxyCloudflarePreset):
 			tc.ranges = append(tc.ranges, cloudflareEdgeNets...)
 		default:
-			if network, ok := ParseProxyCIDR(trimmed); ok {
+			if network, ok := parseProxyCIDR(trimmed); ok {
 				tc.ranges = append(tc.ranges, network)
 			}
 		}
@@ -111,18 +126,18 @@ func NewChecker(trustedProxies []string) *Checker {
 	return tc
 }
 
-// parseCIDRs parses entries with ParseProxyCIDR, skipping any that fail.
+// parseCIDRs parses entries with parseProxyCIDR, skipping any that fail.
 func parseCIDRs(entries []string) []*net.IPNet {
 	nets := make([]*net.IPNet, 0, len(entries))
 	for _, entry := range entries {
-		if network, ok := ParseProxyCIDR(entry); ok {
+		if network, ok := parseProxyCIDR(entry); ok {
 			nets = append(nets, network)
 		}
 	}
 	return nets
 }
 
-// ParseProxyCIDR parses a trusted-proxy entry as either a CIDR or a bare IP
+// parseProxyCIDR parses a trusted-proxy entry as either a CIDR or a bare IP
 // (treated as a single host: /32 for IPv4, /128 for IPv6). Returns false if the
 // entry is neither.
 //
@@ -131,7 +146,7 @@ func parseCIDRs(entries []string) []*net.IPNet {
 // "::ffff:192.0.2.1") has a non-nil To4(), so a naive "/32" suffix would make
 // net.ParseCIDR read it as a 128-bit address with a 32-bit mask, trusting a /32
 // IPv6 range (2^96 hosts) instead of one host. Using To4() yields a true /32.
-func ParseProxyCIDR(entry string) (*net.IPNet, bool) {
+func parseProxyCIDR(entry string) (*net.IPNet, bool) {
 	entry = strings.TrimSpace(entry)
 	if _, network, err := net.ParseCIDR(entry); err == nil {
 		return network, true
@@ -259,15 +274,6 @@ func (tc *Checker) AuthClientIP(req *http.Request) net.IP {
 	return ip
 }
 
-// singleValueClientIPHeaders are the client-IP headers that carry one address.
-// X-Forwarded-For carries a hop chain and Forwarded is not parsed, so both are
-// handled separately.
-var singleValueClientIPHeaders = []string{
-	HeaderCFConnectingIP,
-	headerXRealIP,
-	headerTrueClientIP,
-}
-
 // forwardedClientIP returns the client address a configured proxy reported, or
 // nil when it cannot be verified. A proxy writes some client-IP headers and
 // passes the client's copies of the others through untouched, and which ones it
@@ -286,21 +292,13 @@ var singleValueClientIPHeaders = []string{
 // Forwarded header (not parsed) makes the result nil; several X-Forwarded-For
 // lines are joined into one chain.
 func (tc *Checker) forwardedClientIP(h http.Header) net.IP {
-	if len(h.Values(headerForwarded)) > 0 {
+	if len(h[canonicalForwarded]) > 0 {
 		return nil
 	}
 
 	var client net.IP
-	agree := func(ip net.IP) bool {
-		if client == nil {
-			client = ip
-			return true
-		}
-		return client.Equal(ip)
-	}
-
-	for _, name := range singleValueClientIPHeaders {
-		values := h.Values(name)
+	for _, key := range singleValueClientIPHeaders {
+		values := h[key]
 		if len(values) == 0 {
 			continue
 		}
@@ -308,19 +306,21 @@ func (tc *Checker) forwardedClientIP(h http.Header) net.IP {
 		if ip == nil {
 			return nil
 		}
-		if name == headerXRealIP && tc.IsConfiguredProxy(ip) {
+		if key == canonicalXRealIP && tc.IsConfiguredProxy(ip) {
 			continue
 		}
-		if !agree(ip) {
+		if client != nil && !client.Equal(ip) {
 			return nil
 		}
+		client = ip
 	}
 
-	if xff := h.Values(headerXForwardedFor); len(xff) > 0 {
+	if xff := h[canonicalXForwardedFor]; len(xff) > 0 {
 		ip := tc.strictClientFromXFF(strings.Join(xff, ","))
-		if ip == nil || !agree(ip) {
+		if ip == nil || (client != nil && !client.Equal(ip)) {
 			return nil
 		}
+		client = ip
 	}
 	return client
 }
@@ -369,8 +369,8 @@ func parseStrictIP(s string) net.IP {
 
 // HasClientIPHeader reports whether any client-IP header is present, even empty.
 func HasClientIPHeader(h http.Header) bool {
-	for _, name := range clientIPHeaders {
-		if len(h.Values(name)) > 0 {
+	for _, key := range clientIPHeaders {
+		if len(h[key]) > 0 {
 			return true
 		}
 	}
@@ -394,6 +394,16 @@ func (c *Cache) Resolve(trustedProxies []string) *Checker {
 	checker := NewChecker(trustedProxies)
 	c.current.Store(checker)
 	return checker
+}
+
+// ResolveSettings returns the checker for settings' Security.TrustedProxies,
+// treating nil settings as an empty list.
+func (c *Cache) ResolveSettings(settings *conf.Settings) *Checker {
+	var trustedProxies []string
+	if settings != nil {
+		trustedProxies = settings.Security.TrustedProxies
+	}
+	return c.Resolve(trustedProxies)
 }
 
 // PeerAddr extracts the immediate peer address from req.RemoteAddr, returning
