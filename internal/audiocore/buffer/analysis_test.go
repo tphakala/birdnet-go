@@ -463,6 +463,31 @@ func mustNewEmptyStatsBuffer(t *testing.T) *buffer.AnalysisBuffer {
 	return ab
 }
 
+// TestAnalysisBuffer_OversizeWriteIsRejectedAndCountedLost verifies a write
+// larger than the ring is refused whole, counted as written and lost, and
+// leaves the buffered audio readable.
+func TestAnalysisBuffer_OversizeWriteIsRejectedAndCountedLost(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 10
+		readSize = 4
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "oversize-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	buffered := []byte{1, 2, 3, 4}
+	require.NoError(t, ab.Write(buffered))
+
+	require.Error(t, ab.Write(make([]byte, capacity+5)))
+	assert.Equal(t, buffer.AnalysisBufferStats{WrittenBytes: 4 + capacity + 5, LostBytes: capacity + 5}, ab.Stats())
+
+	window, release, err := ab.Read()
+	require.NoError(t, err)
+	defer release()
+	assert.Equal(t, buffered, window)
+}
+
 // TestAnalysisBuffer_ResetKeepsCumulativeStats verifies Reset leaves the
 // cumulative counters alone, so a delta against an earlier snapshot stays valid.
 func TestAnalysisBuffer_ResetKeepsCumulativeStats(t *testing.T) {

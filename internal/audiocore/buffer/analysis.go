@@ -19,8 +19,9 @@ func noopRelease() {}
 type AnalysisBufferStats struct {
 	// WrittenBytes is the total number of bytes passed to Write.
 	WrittenBytes int64
-	// LostBytes is the total number of bytes discarded unread by overwrite mode
-	// to make room for newer audio.
+	// LostBytes is the total number of bytes that never reach a reader: buffered
+	// bytes discarded by overwrite mode to make room for newer audio, plus every
+	// byte of a write refused for being larger than the ring.
 	LostBytes int64
 	// WindowsRead is the total number of full windows returned by Read.
 	WindowsRead int64
@@ -136,17 +137,26 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 
 // Write appends data to the ring buffer. When the ring is full, the oldest
 // bytes are overwritten (overwrite mode), and the cumulative written and lost
-// byte counters (see Stats) are advanced.
+// byte counters (see Stats) are advanced. A write larger than the ring is
+// refused whole and counted as lost, leaving the buffered audio untouched.
 //
 // Write is safe for concurrent use.
 func (ab *AnalysisBuffer) Write(data []byte) error {
 	ab.mu.Lock()
-	// In overwrite mode the ring advances its read pointer by len(data) minus
-	// the free space, so that many of the oldest bytes are discarded unread.
-	lost := max(len(data)-ab.ring.Free(), 0)
-	_, err := ab.ring.Write(data)
 	ab.writtenBytes += int64(len(data))
-	ab.lostBytes += int64(lost)
+	var err error
+	if len(data) > ab.ring.Capacity() {
+		// The ring cannot hold the write, and in overwrite mode it would move
+		// its read pointer past the buffered audio, so refuse it.
+		ab.lostBytes += int64(len(data))
+		err = ringbuffer.ErrTooMuchDataToWrite
+	} else {
+		// In overwrite mode the ring advances its read pointer by len(data)
+		// minus the free space, so that many of the oldest bytes are discarded
+		// unread.
+		ab.lostBytes += int64(max(len(data)-ab.ring.Free(), 0))
+		_, err = ab.ring.Write(data)
+	}
 	ab.mu.Unlock()
 
 	if err != nil {
