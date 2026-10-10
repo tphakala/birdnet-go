@@ -244,16 +244,55 @@ func (s *OAuth2Server) CurrentSettings() *conf.Settings {
 // serves attribution and honors forwarded headers from any private peer, it
 // honors them only from proxies listed in Security.TrustedProxies; see
 // proxytrust.Checker.AuthClientIP. The list is read per request, so changes take
-// effect without a restart.
+// effect without a restart. When the subnet bypass is enabled, an
+// authentication provider is configured, and forwarded headers from an unlisted
+// peer are the reason no address was found, it logs a throttled Info notice
+// naming that peer.
 func (s *OAuth2Server) AuthClientIP(r *http.Request) string {
+	settings := s.currentSettings()
 	var trustedProxies []string
-	if settings := s.currentSettings(); settings != nil {
+	if settings != nil {
 		trustedProxies = settings.Security.TrustedProxies
 	}
-	if ip := s.proxyTrust.Resolve(trustedProxies).AuthClientIP(r); ip != nil {
+	checker := s.proxyTrust.Resolve(trustedProxies)
+	if ip := checker.AuthClientIP(r); ip != nil {
 		return ip.String()
 	}
+	if peer, ok := unverifiedBypassPeer(settings, checker, r); ok {
+		s.logThrottledInfo(unverifiedClientIPLogKey,
+			"Subnet bypass not applied: forwarded client-IP headers came from a peer that is not a trusted proxy; if this peer is your reverse proxy, add it to security.trustedproxies",
+			unverifiedClientIPLogInterval, logger.String("peer", peer))
+	}
 	return ""
+}
+
+// unverifiedClientIPLogKey throttles the unverified forwarded address notice.
+// One key for all peers keeps the throttle map bounded.
+const unverifiedClientIPLogKey = "subnet-bypass-unverified-client-ip"
+
+// unverifiedClientIPLogInterval is the minimum time between two unverified
+// forwarded address notices.
+const unverifiedClientIPLogInterval = 10 * time.Minute
+
+// unverifiedBypassPeer returns the connection peer when its forwarded client-IP
+// headers were ignored only because it is not a configured proxy, which is the
+// one case where adding it to security.trustedproxies is the right advice. It
+// requires the subnet bypass to be enabled, an authentication provider to be
+// configured (otherwise no login is asked for anyway), a client-IP header to be
+// present, and a parseable peer that checker does not list. Callers use it only
+// after AuthClientIP found no verifiable address.
+func unverifiedBypassPeer(settings *conf.Settings, checker *proxytrust.Checker, r *http.Request) (string, bool) {
+	if settings == nil || !settings.Security.AllowSubnetBypass.Enabled || !settings.IsAuthProviderConfigured() {
+		return "", false
+	}
+	if !proxytrust.HasClientIPHeader(r.Header) {
+		return "", false
+	}
+	peerIP, _ := proxytrust.PeerAddr(r)
+	if peerIP == nil || checker.IsConfiguredProxy(peerIP) {
+		return "", false
+	}
+	return peerIP.String(), true
 }
 
 // For testing purposes
@@ -712,9 +751,12 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 	// The automatic local-network check uses the strict client address, never
 	// the attribution address, so a forged forwarded header cannot place a
 	// client on the host's network.
-	if settings.Security.AllowSubnetBypass.Enabled && IsInLocalSubnet(parseIPWithZone(s.AuthClientIP(c.Request()))) {
-		secLog.Info("User authenticated: request from local subnet (subnet bypass enabled)")
-		return true
+	if settings.Security.AllowSubnetBypass.Enabled {
+		if authIP := s.AuthClientIP(c.Request()); IsInLocalSubnet(parseIPWithZone(authIP)) {
+			secLog.Info("User authenticated: request from local subnet (subnet bypass enabled)",
+				logger.String("auth_ip", authIP))
+			return true
+		}
 	}
 
 	if s.checkBasicAuthToken(c.Request(), secLog) {
@@ -1287,6 +1329,25 @@ func (s *OAuth2Server) cleanupExpired() {
 		}
 	} else {
 		secLog.Debug("No expired entries found during cleanup")
+	}
+}
+
+// logThrottledInfo logs msg at Info level at most once per interval for key,
+// sharing the throttle map with logThrottledError.
+func (s *OAuth2Server) logThrottledInfo(key, msg string, interval time.Duration, fields ...logger.Field) {
+	s.mutex.Lock()
+	if s.throttledMessages == nil {
+		s.throttledMessages = make(map[string]time.Time)
+	}
+	lastLogTime, exists := s.throttledMessages[key]
+	shouldLog := !exists || time.Since(lastLogTime) > interval
+	if shouldLog {
+		s.throttledMessages[key] = time.Now()
+	}
+	s.mutex.Unlock()
+
+	if shouldLog {
+		GetLogger().Info(msg, fields...)
 	}
 }
 

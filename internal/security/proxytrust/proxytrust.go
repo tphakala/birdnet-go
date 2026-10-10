@@ -245,7 +245,7 @@ func (tc *Checker) AuthClientIP(req *http.Request) net.IP {
 	if peerIP == nil {
 		return nil
 	}
-	if !hasClientIPHeader(req.Header) {
+	if !HasClientIPHeader(req.Header) {
 		return peerIP
 	}
 	if !tc.IsConfiguredProxy(peerIP) {
@@ -366,8 +366,8 @@ func parseStrictIP(s string) net.IP {
 	return ip
 }
 
-// hasClientIPHeader reports whether any client-IP header is present, even empty.
-func hasClientIPHeader(h http.Header) bool {
+// HasClientIPHeader reports whether any client-IP header is present, even empty.
+func HasClientIPHeader(h http.Header) bool {
 	for _, name := range clientIPHeaders {
 		if len(h.Values(name)) > 0 {
 			return true
