@@ -19,7 +19,7 @@ EOF
 
 
 # Default version (will be set by parse_arguments function)
-BIRDNET_GO_VERSION="nightly"
+BIRDNET_GO_VERSION="main"
 BIRDNET_GO_IMAGE=""
 
 # Silent mode for non-interactive installation (set via --silent flag)
