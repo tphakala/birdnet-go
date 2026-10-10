@@ -8,8 +8,8 @@ import (
 )
 
 // Keep-up evaluation constants. The evaluator judges whether analysis consumes
-// audio as fast as it arrives, using the bytes the analysis ring discarded
-// unread. That measure is independent of how the load is split across models.
+// audio as fast as it arrives, using the bytes that never reached analysis (see
+// buffer.AnalysisBufferStats.LostBytes). That measure is independent of how the load is split across models.
 const (
 	// keepUpWindow is the length of one evaluation window.
 	keepUpWindow = time.Minute
@@ -59,7 +59,7 @@ const (
 type keepUpWindowResult struct {
 	start, end   time.Time
 	written      int64   // bytes written to the ring in the window
-	lost         int64   // bytes overwritten unread in the window
+	lost         int64   // bytes that never reached analysis in the window
 	lostFraction float64 // lost / written; 0 when nothing was written
 	hasAudio     bool    // false when no audio arrived, so the window is no evidence
 	lossy        bool    // lostFraction reached keepUpLostFractionThreshold
