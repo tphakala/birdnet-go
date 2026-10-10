@@ -1841,6 +1841,8 @@ func TestUnverifiedBypassPeer(t *testing.T) {
 	}{
 		{name: "bypass enabled, header from unlisted peer", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor, value: "192.168.1.20", wantPeer: "172.25.5.9"},
 		{name: "unlisted peer sending X-Real-IP", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXRealIP, value: "192.168.1.20", wantPeer: "172.25.5.9"},
+		{name: "unlisted loopback peer", settings: enabled, remoteAddr: "127.0.0.1:40000", header: echo.HeaderXForwardedFor, value: "192.168.1.20", wantPeer: "127.0.0.1"},
+		{name: "unlisted IPv6 link-local peer", settings: enabled, remoteAddr: "[fe80::2]:40000", header: echo.HeaderXForwardedFor, value: "192.168.1.20", wantPeer: "fe80::2"},
 		{name: "unlisted CGNAT peer", settings: enabled, remoteAddr: "100.64.1.2:40000", header: echo.HeaderXForwardedFor, value: "192.168.1.20", wantPeer: "100.64.1.2"},
 		{name: "unlisted public peer", settings: enabled, remoteAddr: "198.51.100.9:40000", header: echo.HeaderXForwardedFor, value: "192.168.1.20"},
 		{name: "empty header that listing could not verify", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXRealIP},
