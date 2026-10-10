@@ -209,3 +209,46 @@ func TestNewGuardedHTTPClient_BlocksMetadataLiteral(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrBlockedTarget), "expected ErrBlockedTarget, got %v", err)
 }
+
+func TestIsBlockedStreamTarget(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		ip      string
+		blocked bool
+	}{
+		{"loopback v4", "127.0.0.1", true},
+		{"loopback v4 other", "127.1.2.3", true},
+		{"loopback v6", "::1", true},
+		{"ipv4-mapped loopback", "::ffff:127.0.0.1", true},
+		{"ipv4-compatible loopback", "::127.0.0.1", true},
+		{"nat64 loopback", "64:ff9b::7f00:1", true},
+		{"unspecified v4", "0.0.0.0", true},
+		{"unspecified v6", "::", true},
+		{"metadata link-local", "169.254.169.254", true},
+		{"alibaba metadata", "100.100.100.200", true},
+		{"aws imds ipv6", "fd00:ec2::254", true},
+		{"zoned link-local", "fe80::1%eth0", true},
+		{"rfc1918 192.168", "192.168.1.10", false},
+		{"rfc1918 10", "10.0.0.5", false},
+		{"rfc1918 172.16", "172.16.4.2", false},
+		{"ula", "fd12:3456:789a::1", false},
+		{"ipv4-mapped rfc1918", "::ffff:192.168.1.10", false},
+		{"multicast", "224.1.1.1", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ip, err := netip.ParseAddr(tt.ip)
+			require.NoError(t, err)
+			assert.Equal(t, tt.blocked, IsBlockedStreamTarget(ip))
+		})
+	}
+
+	t.Run("invalid address fails closed", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, IsBlockedStreamTarget(netip.Addr{}))
+	})
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 func TestValidateStreamTestURL(t *testing.T) {
@@ -50,7 +52,7 @@ func TestValidateStreamTestURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			vErr := validateStreamTestURL(tt.url)
+			vErr := validateStreamTestURL(t.Context(), tt.url, stubLookup("192.168.1.50"))
 			if !tt.wantErr {
 				assert.Nil(t, vErr)
 				return
@@ -90,7 +92,7 @@ func TestTestStreamHandler_ValidationErrors(t *testing.T) {
 			rec := httptest.NewRecorder()
 			ctx := e.NewContext(req, rec)
 
-			ctrl := &Handler{Core: &apicore.Core{}}
+			ctrl := &Handler{Core: &apicore.Core{}, lookupStreamHost: stubLookup("192.168.1.50")}
 			ctrl.Settings.Store(&conf.Settings{})
 			err := ctrl.TestStream(ctx)
 			require.NoError(t, err)
@@ -114,7 +116,7 @@ func TestTestStreamHandler_NoAudioStreamError(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
-	ctrl := &Handler{Core: &apicore.Core{}, probeStreamInfo: func(_ context.Context, _ string) (*ffmpeg.StreamInfo, error) {
+	ctrl := &Handler{Core: &apicore.Core{}, lookupStreamHost: stubLookup("192.168.1.50"), probeStreamInfo: func(_ context.Context, _ string) (*ffmpeg.StreamInfo, error) {
 		return nil, ffmpeg.ErrNoAudioStreamsFound
 	}}
 	ctrl.Settings.Store(&conf.Settings{})
@@ -127,4 +129,203 @@ func TestTestStreamHandler_NoAudioStreamError(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
 	assert.Equal(t, "errors.streams.test.noAudioTrack", resp.ErrorKey)
 	assert.Equal(t, "stream has no audio track", resp.Message)
+}
+
+// stubLookup returns a resolver that answers every host with the given
+// addresses, so tests never touch real DNS.
+func stubLookup(addrs ...string) lookupHostFunc {
+	return func(context.Context, string) ([]netip.Addr, error) {
+		out := make([]netip.Addr, 0, len(addrs))
+		for _, a := range addrs {
+			out = append(out, netip.MustParseAddr(a))
+		}
+		return out, nil
+	}
+}
+
+func TestValidateStreamTestURL_NonCanonicalHosts(t *testing.T) {
+	t.Parallel()
+
+	hostMap := func(m map[string][]string) lookupHostFunc {
+		return func(_ context.Context, host string) ([]netip.Addr, error) {
+			raw, ok := m[host]
+			if !ok {
+				return nil, errors.NewStd("no such host")
+			}
+			out := make([]netip.Addr, 0, len(raw))
+			for _, a := range raw {
+				out = append(out, netip.MustParseAddr(a))
+			}
+			return out, nil
+		}
+	}
+	lookup := hostMap(map[string][]string{
+		"cam.example":     {"127.0.0.1"},
+		"mixed.example":   {"192.168.1.10", "127.0.0.1"},
+		"v6loop.example":  {"::ffff:127.0.0.1"},
+		"cam.local":       {"192.168.1.10"},
+		"ula.local":       {"fd12:3456:789a::1"},
+		"meta.example":    {"169.254.169.254"},
+		"alibaba.example": {"100.100.100.200"},
+		"cafe1.local":     {"192.168.1.20"},
+	})
+
+	tests := []struct {
+		name    string
+		url     string
+		blocked bool
+	}{
+		{"decimal integer", "http://2130706433/", true},
+		{"hex integer", "http://0x7f000001/", true},
+		{"octal dotted", "http://0177.0.0.1/", true},
+		{"short dotted", "http://127.1/", true},
+		{"zero", "http://0/", true},
+		{"decimal metadata", "http://2852039166/", true},
+		{"rtsp decimal integer", "rtsp://2130706433:554/stream", true},
+		{"localhost trailing dot", "http://localhost./", true},
+		{"localhost upper trailing dot", "http://LOCALHOST./", true},
+		{"ip6-localhost", "http://ip6-localhost/", true},
+		{"localhost subdomain", "http://cam.localhost/", true},
+		{"metadata hostname trailing dot", "http://metadata.google.internal./", true},
+		{"ipv4-mapped loopback", "http://[::ffff:127.0.0.1]/", true},
+		{"ipv4-compatible loopback", "http://[::127.0.0.1]/", true},
+		{"alibaba metadata", "http://100.100.100.200/", true},
+		{"aws imds ipv6", "http://[fd00:ec2::254]/", true},
+		{"name resolving to loopback", "http://cam.example/", true},
+		{"name resolving to loopback and LAN", "rtsp://mixed.example/", true},
+		{"name resolving to mapped loopback", "http://v6loop.example/", true},
+		{"name resolving to metadata", "http://meta.example/", true},
+		{"name resolving to alibaba metadata", "http://alibaba.example/", true},
+		{"lan name allowed", "rtsp://cam.local/stream", false},
+		{"ula name allowed", "rtsp://ula.local/stream", false},
+		{"rfc1918 192.168 allowed", "rtsp://192.168.1.10/stream", false},
+		{"rfc1918 10 allowed", "rtsp://10.0.0.5/stream", false},
+		{"ula literal allowed", "rtsp://[fd12:3456:789a::1]/stream", false},
+		{"hex-looking hostname allowed", "http://cafe1.local/", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			vErr := validateStreamTestURL(t.Context(), tt.url, lookup)
+			if !tt.blocked {
+				assert.Nil(t, vErr)
+				return
+			}
+			require.NotNil(t, vErr)
+			assert.Equal(t, http.StatusForbidden, vErr.status)
+			assert.Equal(t, "errors.streams.test.blockedDestination", vErr.errorKey)
+		})
+	}
+
+	t.Run("resolution failure is a connection failure, not blocked", func(t *testing.T) {
+		t.Parallel()
+		vErr := validateStreamTestURL(t.Context(), "http://nxdomain.example/", lookup)
+		require.NotNil(t, vErr)
+		assert.Equal(t, http.StatusBadGateway, vErr.status)
+		assert.Equal(t, "errors.streams.test.connectionFailed", vErr.errorKey)
+	})
+
+	t.Run("literal hosts are not resolved", func(t *testing.T) {
+		t.Parallel()
+		failing := func(context.Context, string) ([]netip.Addr, error) {
+			return nil, errors.NewStd("resolver must not be called")
+		}
+		assert.Nil(t, validateStreamTestURL(t.Context(), "rtsp://192.168.1.10/s", failing))
+		assert.NotNil(t, validateStreamTestURL(t.Context(), "http://2130706433/", failing))
+	})
+}
+
+func TestTestStreamHandler_BlockedHostSkipsProbe(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	urls := []string{
+		`{"url":"http://2130706433/"}`,
+		`{"url":"http://0x7f000001/"}`,
+		`{"url":"http://cam.example/"}`,
+		`{"url":"http://localhost./"}`,
+	}
+	for _, body := range urls {
+		t.Run(body, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/streams/test", strings.NewReader(body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+
+			probed := false
+			ctrl := &Handler{
+				Core:             &apicore.Core{},
+				lookupStreamHost: stubLookup("127.0.0.1"),
+				probeStreamInfo: func(context.Context, string) (*ffmpeg.StreamInfo, error) {
+					probed = true
+					return &ffmpeg.StreamInfo{}, nil
+				},
+			}
+			ctrl.Settings.Store(&conf.Settings{})
+			require.NoError(t, ctrl.TestStream(ctx))
+
+			assert.False(t, probed, "probe must not run for a blocked host")
+			assert.Equal(t, http.StatusForbidden, rec.Code)
+			var resp apicore.ErrorResponse
+			require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+			assert.Equal(t, "errors.streams.test.blockedDestination", resp.ErrorKey)
+		})
+	}
+}
+
+func TestIsNumericHostForm(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		host string
+		want bool
+	}{
+		{"2130706433", true},
+		{"0x7f000001", true},
+		{"0X7F.0.0.1", true},
+		{"0177.0.0.1", true},
+		{"127.1", true},
+		{"", false},
+		{"1..2", false},
+		{"0xzz", false},
+		{"0x", false},
+		{"cafe1.local", false},
+		{"cam1", false},
+		{"1.2.cam", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.host, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isNumericHostForm(tt.host))
+		})
+	}
+}
+
+func TestValidateStreamTestURL_EmptyHost(t *testing.T) {
+	t.Parallel()
+	vErr := validateStreamTestURL(t.Context(), "rtsp:///stream", stubLookup("192.168.1.50"))
+	require.NotNil(t, vErr)
+	assert.Equal(t, http.StatusBadRequest, vErr.status)
+	assert.Equal(t, "errors.streams.test.invalidUrl", vErr.errorKey)
+}
+
+func TestAnalyzeChannelsHandler_BlockedHost(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/streams/analyze-channels",
+		strings.NewReader(`{"url":"http://2130706433/"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	ctx := echo.New().NewContext(req, rec)
+
+	ctrl := &Handler{Core: &apicore.Core{}, lookupStreamHost: stubLookup("192.168.1.50")}
+	ctrl.Settings.Store(&conf.Settings{})
+	require.NoError(t, ctrl.AnalyzeChannels(ctx))
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	var resp apicore.ErrorResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	assert.Equal(t, "errors.streams.test.blockedDestination", resp.ErrorKey)
 }
