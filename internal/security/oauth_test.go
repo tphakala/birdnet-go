@@ -2094,7 +2094,7 @@ func TestBypassPredicatesNilRequest(t *testing.T) {
 
 // TestListedProxyUnverifiedHeadersAreReported verifies that a listed proxy whose
 // forwarded headers cannot be verified (here it sends Forwarded) gets its own
-// throttled notice, since the unlisted-proxy notice no longer applies to it.
+// throttled notice, since the unlisted-proxy notice does not apply to it.
 func TestListedProxyUnverifiedHeadersAreReported(t *testing.T) {
 	settings := &conf.Settings{}
 	settings.Security.BasicAuth.Enabled = true
