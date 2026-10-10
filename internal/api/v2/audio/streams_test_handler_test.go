@@ -329,3 +329,43 @@ func TestAnalyzeChannelsHandler_BlockedHost(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
 	assert.Equal(t, "errors.streams.test.blockedDestination", resp.ErrorKey)
 }
+
+// TestValidateStreamTestURL_ResolvesHostAsWritten pins that the resolver gets
+// the host the probe will dial, trailing dot included, so a search domain
+// cannot make the check resolve a different name, and that a resolver failure
+// is kept as the cause.
+func TestValidateStreamTestURL_ResolvesHostAsWritten(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		url      string
+		wantHost string
+	}{
+		{name: "absolute name keeps its trailing dot", url: "rtsp://cam.example.:554/live", wantHost: "cam.example."},
+		{name: "relative name is passed unchanged", url: "rtsp://cam.example:554/live", wantHost: "cam.example"},
+		{name: "host is lowercased", url: "rtsp://Cam.Example.:554/live", wantHost: "cam.example."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var got string
+			lookup := func(_ context.Context, host string) ([]netip.Addr, error) {
+				got = host
+				return []netip.Addr{netip.MustParseAddr("192.168.1.10")}, nil
+			}
+			assert.Nil(t, validateStreamTestURL(t.Context(), tt.url, lookup))
+			assert.Equal(t, tt.wantHost, got)
+		})
+	}
+
+	t.Run("resolver failure is kept as the cause", func(t *testing.T) {
+		t.Parallel()
+		resolveErr := errors.NewStd("no such host")
+		lookup := func(context.Context, string) ([]netip.Addr, error) { return nil, resolveErr }
+		vErr := validateStreamTestURL(t.Context(), "rtsp://cam.example:554/live", lookup)
+		require.NotNil(t, vErr)
+		assert.Equal(t, http.StatusBadGateway, vErr.status)
+		assert.ErrorIs(t, vErr.err, resolveErr)
+	})
+}
