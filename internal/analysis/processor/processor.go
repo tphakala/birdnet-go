@@ -308,7 +308,6 @@ func validateOverlapForLevel(level int, overlap, minOverlap float64, minDetectio
 			logger.Float64("min_overlap", minOverlap),
 			logger.Float64("configured_overlap", overlap),
 			logger.Int("configured_min_detections", minDetections),
-			logger.String("hardware_req", getHardwareRequirementForLevel(level)),
 			logger.Int("recommended_level_for_overlap", recommendedForCurrent),
 			logger.String("operation", "false_positive_filter_config"))
 
@@ -327,29 +326,7 @@ func validateOverlapForLevel(level int, overlap, minOverlap float64, minDetectio
 			logger.Float64("overlap", overlap),
 			logger.Float64("min_overlap", minOverlap),
 			logger.Int("configured_min_detections", minDetections),
-			logger.String("hardware_req", getHardwareRequirementForLevel(level)),
 			logger.String("operation", "false_positive_filter_config"))
-	}
-}
-
-// warnAboutHardwareRequirements checks if high filter levels (4-5) have
-// sufficient hardware performance based on overlap settings and inference time.
-func warnAboutHardwareRequirements(level int, overlap float64) {
-	if level >= 4 {
-		// Check if overlap is within valid range for calculation
-		if overlap >= 3.0 {
-			GetLogger().Warn("Overlap value too high for hardware calculation",
-				logger.Float64("overlap", overlap),
-				logger.Float64("max_valid", 2.9),
-				logger.String("operation", "false_positive_filter_config"))
-		} else {
-			stepSize := 3.0 - overlap
-			maxInferenceTime := stepSize * 1000 // Convert to ms
-			GetLogger().Warn("High filtering level requires fast hardware",
-				logger.Int("level", level),
-				logger.Float64("required_inference_ms", maxInferenceTime),
-				logger.String("operation", "false_positive_filter_config"))
-		}
 	}
 }
 
@@ -379,9 +356,10 @@ func validateAndLogFilterConfig(settings *conf.Settings) {
 		// Smart migration: suggest a level based on current overlap
 		suggestLevelForDisabledFilter(overlap)
 	} else {
-		// Filtering is enabled - validate overlap and warn about hardware if needed
+		// Filtering is enabled - validate the configured overlap against the level.
+		// Whether the hardware sustains that overlap is decided by the analysis
+		// cadence cap, which logs the cadence it plans.
 		validateOverlapForLevel(level, overlap, minOverlap, minDetections)
-		warnAboutHardwareRequirements(level, overlap)
 	}
 }
 
@@ -1760,8 +1738,8 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 //	Level 1: Lenient (20% threshold, ~2 detections)
 //	Level 2: Moderate (30% threshold, ~3 detections)
 //	Level 3: Balanced (50% threshold, ~5 detections - original pre-Sept 2025 behavior)
-//	Level 4: Strict (60% threshold, ~12 detections - requires RPi 4+)
-//	Level 5: Maximum (70% threshold, ~21 detections - requires RPi 4+)
+//	Level 4: Strict (60% threshold, ~12 detections)
+//	Level 5: Maximum (70% threshold, ~21 detections)
 //
 // Note: Audio clip length (captureLength/preCapture) does NOT affect this calculation.
 // Those settings control saved audio length, not detection sensitivity.

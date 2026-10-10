@@ -571,8 +571,8 @@ sudo journalctl -fu birdnet-go
    - Check if audio device is working properly: `arecord -d 5 -f S16_LE -r 48000 test.wav`
    - Adjust sensitivity and threshold settings in the configuration file
 
-5. **Constant 'WARNING: BirdNET processing time exceeded buffer length' messages:**
-   - If you have enabled Deep Detection (by setting a high `birdnet.overlap` value, e.g., 2.7), your system might not be powerful enough to keep up with the increased analysis rate. Consider reducing the `birdnet.overlap` value or using more powerful hardware (RPi 4/5 or better recommended for Deep Detection).
+5. **'processing time exceeded buffer interval' or 'analysis is not keeping up with incoming audio' warnings:**
+   - The first warning means one model's own inference takes longer than its analysis step. The second means audio is being dropped before it is analyzed, often because several models or several audio sources share the CPU. Consider reducing the `birdnet.overlap` value, disabling extra models, or using more powerful hardware.
 
 #### Updating a Docker Installation (`install.sh` method)
 
@@ -1575,7 +1575,7 @@ graph TD
 
 - **CPU Load**: Significantly increases processing requirements due to higher analysis frequency
 - **Recommended Hardware**: Raspberry Pi 4/5 or more powerful systems
-- **Performance Monitoring**: Watch for `WARNING: BirdNET processing time exceeded buffer length` messages indicating the system cannot keep up
+- **Performance Monitoring**: Watch for `processing time exceeded buffer interval` (one model is too slow for its step) and `analysis is not keeping up with incoming audio` (audio is being lost) warnings
 
 #### Configuration
 

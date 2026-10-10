@@ -706,14 +706,36 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 	return "", "", ""
 }
 
-// PredictModel runs inference on a specific model identified by modelID.
+// PredictTiming splits the wall time of one PredictModelTimed call into the part
+// spent waiting for locks and the part spent in the model itself.
+type PredictTiming struct {
+	// LockWait is the time from before inferenceMu.Lock to after entry.mu.Lock:
+	// waiting for other inferences (other models, or other sources running this
+	// model) and for lifecycle work on this model.
+	LockWait time.Duration
+	// Predict is the model's own inference time, the same value recorded in the
+	// per-model inference counters.
+	Predict time.Duration
+}
+
+// PredictModel runs inference on a specific model identified by modelID and
+// discards the timing breakdown; see PredictModelTimed.
+func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error) {
+	results, _, err := o.PredictModelTimed(ctx, modelID, sample)
+	return results, err
+}
+
+// PredictModelTimed runs inference on a specific model identified by modelID and
+// reports how long the call waited for locks and how long the model itself ran.
+// The timing is zero when the model is not loaded.
 // It uses a three-level locking protocol: a read lock on the models map to
 // fetch the entry (fast), then inferenceMu to serialize inference across all
 // models (only one model runs at a time), then entry.mu for instance lifecycle.
 // The map lock is released before acquiring inference/model locks to prevent
 // deadlocks with ReloadModel and Delete.
-func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error) {
+func (o *Orchestrator) PredictModelTimed(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, PredictTiming, error) {
 	log := GetLogger()
+	var timing PredictTiming
 
 	o.mu.RLock()
 	entry, ok := o.models[modelID]
@@ -724,20 +746,22 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 		log.Error("PredictModel model not loaded",
 			logger.String("model_id", modelID),
 			logger.String("reason", reason))
-		return nil, errors.Newf("%w: %s (%s)", ErrModelNotLoaded, modelID, reason).
+		return nil, timing, errors.Newf("%w: %s (%s)", ErrModelNotLoaded, modelID, reason).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
 			Context("model_id", modelID).
 			Build()
 	}
 
+	waitStart := time.Now()
 	o.inferenceMu.Lock()
 	defer o.inferenceMu.Unlock()
 
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
+	timing.LockWait = time.Since(waitStart)
 	if entry.instance == nil {
-		return nil, errors.Newf("model %s has been closed", modelID).
+		return nil, timing, errors.Newf("model %s has been closed", modelID).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
 			Context("model_id", modelID).
@@ -757,6 +781,7 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 	results, err := entry.instance.Predict(ctx, sample)
 	end := time.Now()
 	duration := end.Sub(start)
+	timing.Predict = duration
 
 	switch {
 	case err != nil && isCancellation(ctx, err):
@@ -793,10 +818,11 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 		log.Debug("PredictModel complete",
 			logger.String("model_id", modelID),
 			logger.Int("result_count", len(results)),
-			logger.Duration("duration", duration))
+			logger.Duration("duration", duration),
+			logger.Duration("lock_wait", timing.LockWait))
 	}
 
-	return results, err
+	return results, timing, err
 }
 
 // ResolveName walks the resolver chain and returns the first non-empty

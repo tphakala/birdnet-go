@@ -230,27 +230,6 @@ func TestHelperFunctions(t *testing.T) {
 		}
 	})
 
-	t.Run("getHardwareRequirementForLevel", func(t *testing.T) {
-		tests := []struct {
-			level    int
-			hardware string
-		}{
-			{0, "Any (RPi 3B or better)"},
-			{1, "Any (RPi 3B or better)"},
-			{2, "Any (RPi 3B or better)"},
-			{3, "Any (RPi 3B or better)"},
-			{4, "RPi 4 or better required"},
-			{5, "RPi 4 or better required"},
-			{99, "Unknown"}, // Invalid level should return "Unknown"
-			{-1, "Unknown"}, // Invalid level should return "Unknown"
-		}
-
-		for _, tt := range tests {
-			result := getHardwareRequirementForLevel(tt.level)
-			assert.Equal(t, tt.hardware, result, "Level %d", tt.level)
-		}
-	})
-
 	t.Run("getLevelDescription", func(t *testing.T) {
 		tests := []struct {
 			level         int
@@ -260,8 +239,8 @@ func TestHelperFunctions(t *testing.T) {
 			{1, []string{"Lenient", "2 confirmations", "RTSP", "surveillance"}},
 			{2, []string{"Moderate", "3 confirmations", "Balanced", "hobby"}},
 			{3, []string{"Balanced", "5 confirmations", "Original", "pre-September"}},
-			{4, []string{"Strict", "12 confirmations", "RPi 4+", "high-quality"}},
-			{5, []string{"Maximum", "21 confirmations", "RPi 4+", "professional-grade"}},
+			{4, []string{"Strict", "12 confirmations", "high-quality"}},
+			{5, []string{"Maximum", "21 confirmations", "professional-grade"}},
 		}
 
 		for _, tt := range tests {
@@ -271,6 +250,11 @@ func TestHelperFunctions(t *testing.T) {
 			for _, phrase := range tt.shouldContain {
 				assert.Contains(t, result, phrase, "Level %d: description missing expected phrase", tt.level)
 			}
+		}
+
+		// No description makes a fixed hardware claim.
+		for level := 0; level <= 5; level++ {
+			assert.NotContains(t, getLevelDescription(level), "RPi", "Level %d", level)
 		}
 
 		// Test invalid level
@@ -700,111 +684,6 @@ func TestValidateOverlapForLevel(t *testing.T) {
 	}
 }
 
-// TestWarnAboutHardwareRequirements verifies hardware warning logic for high filter levels.
-func TestWarnAboutHardwareRequirements(t *testing.T) {
-	tests := []struct {
-		name          string
-		level         int
-		overlap       float64
-		expectWarning bool
-		description   string
-	}{
-		{
-			name:          "level_0_no_warning",
-			level:         0,
-			overlap:       2.0,
-			expectWarning: false,
-			description:   "Level 0 should not trigger hardware warnings",
-		},
-		{
-			name:          "level_1_no_warning",
-			level:         1,
-			overlap:       2.0,
-			expectWarning: false,
-			description:   "Level 1 should not trigger hardware warnings",
-		},
-		{
-			name:          "level_2_no_warning",
-			level:         2,
-			overlap:       2.2,
-			expectWarning: false,
-			description:   "Level 2 should not trigger hardware warnings",
-		},
-		{
-			name:          "level_3_no_warning",
-			level:         3,
-			overlap:       2.4,
-			expectWarning: false,
-			description:   "Level 3 should not trigger hardware warnings",
-		},
-		{
-			name:          "level_4_valid_overlap",
-			level:         4,
-			overlap:       2.7,
-			expectWarning: true,
-			description:   "Level 4 should warn about hardware requirements",
-		},
-		{
-			name:          "level_5_valid_overlap",
-			level:         5,
-			overlap:       2.8,
-			expectWarning: true,
-			description:   "Level 5 should warn about hardware requirements",
-		},
-		{
-			name:          "level_4_overlap_too_high",
-			level:         4,
-			overlap:       3.0,
-			expectWarning: true,
-			description:   "Level 4 with overlap >= 3.0 should warn about invalid calculation",
-		},
-		{
-			name:          "level_5_overlap_too_high",
-			level:         5,
-			overlap:       3.1,
-			expectWarning: true,
-			description:   "Level 5 with overlap >= 3.0 should warn about invalid calculation",
-		},
-		{
-			name:          "level_4_overlap_2.5",
-			level:         4,
-			overlap:       2.5,
-			expectWarning: true,
-			description:   "Level 4 with overlap 2.5 should calculate 500ms max inference time",
-		},
-		{
-			name:          "level_5_overlap_2.9",
-			level:         5,
-			overlap:       2.9,
-			expectWarning: true,
-			description:   "Level 5 with overlap 2.9 should calculate 100ms max inference time",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Call the function - it will log but we mainly verify it doesn't panic
-			warnAboutHardwareRequirements(tt.level, tt.overlap)
-
-			// Verify the warning condition
-			shouldWarn := tt.level >= 4
-			assert.Equal(t, tt.expectWarning, shouldWarn,
-				"%s: level=%d", tt.description, tt.level)
-
-			// For high levels with valid overlap, verify inference time calculation logic
-			if tt.level >= 4 && tt.overlap < 3.0 {
-				stepSize := 3.0 - tt.overlap
-				maxInferenceTime := stepSize * 1000
-				t.Logf("Level %d with overlap %.1f requires inference < %.0fms",
-					tt.level, tt.overlap, maxInferenceTime)
-
-				// Sanity check the calculation
-				assert.Greater(t, maxInferenceTime, 0.0, "Invalid max inference time calculation: %.0fms", maxInferenceTime)
-			}
-		})
-	}
-}
-
 // TestValidateAndLogFilterConfig_Integration verifies the main validation function
 // correctly delegates to helper functions based on filter level configuration.
 func TestValidateAndLogFilterConfig_Integration(t *testing.T) {
@@ -833,16 +712,16 @@ func TestValidateAndLogFilterConfig_Integration(t *testing.T) {
 			description: "Level 3 should call validateOverlapForLevel",
 		},
 		{
-			name:        "level_4_calls_validate_and_warn",
+			name:        "level_4_calls_validate",
 			level:       4,
 			overlap:     2.7,
-			description: "Level 4 should call both validateOverlapForLevel and warnAboutHardwareRequirements",
+			description: "Level 4 should call validateOverlapForLevel",
 		},
 		{
-			name:        "level_5_calls_validate_and_warn",
+			name:        "level_5_calls_validate",
 			level:       5,
 			overlap:     2.8,
-			description: "Level 5 should call both validateOverlapForLevel and warnAboutHardwareRequirements",
+			description: "Level 5 should call validateOverlapForLevel",
 		},
 	}
 
