@@ -242,8 +242,8 @@ player or download.
 | GET    | `/range/species/count`  | `GetRangeFilterSpeciesCount`  | ❌   | Species count with range filter                                                                                                                                                                      |
 | GET    | `/range/species/list`   | `GetRangeFilterSpeciesList`   | ❌   | Species list with taxonomy groups                                                                                                                                                                    |
 | GET    | `/range/species/csv`    | `GetRangeFilterSpeciesCSV`    | ❌   | Export species as CSV; with custom params includes always-active secondary models (matches the test endpoint); no-param export returns the persisted filter                                          |
-| POST   | `/range/species/test`   | `TestRangeFilter`             | ❌   | Test range filter; returns the active set (range-filtered birds plus always-active secondary models), `filterActive` (false at N=0, where the species list is empty), and never a null species array |
-| POST   | `/range/rebuild`        | `RebuildRangeFilter`          | ❌   | Rebuild range filter data                                                                                                                                                                            |
+| POST   | `/range/species/test`   | `TestRangeFilter`             | ✅   | Test range filter; returns the active set (range-filtered birds plus always-active secondary models), `filterActive` (false at N=0, where the species list is empty), and never a null species array |
+| POST   | `/range/rebuild`        | `RebuildRangeFilter`          | ✅   | Rebuild range filter data                                                                                                                                                                            |
 
 ### Search (`detections/search.go`)
 
