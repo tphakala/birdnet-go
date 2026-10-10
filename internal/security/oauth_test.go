@@ -1915,9 +1915,12 @@ func TestAuthClientIPReportsUnverifiedPeerThrottled(t *testing.T) {
 	assert.True(t, third.After(first.Add(-2*unverifiedClientIPLogInterval)), "an expired throttle must log again")
 
 	// With the bypass off nothing is reported.
+	// The exported predicates skip address resolution while the bypass is off,
+	// so call authClientIP directly to reach its notice path.
 	off := &conf.Settings{}
+	off.Security.BasicAuth.Enabled = true
 	offServer := newOAuth2ServerForTesting(t, off)
-	assert.False(t, offServer.IsRequestFromAllowedSubnet(forged))
+	assert.Nil(t, offServer.authClientIP(off, forged))
 	_, ok = noted(offServer)
 	assert.False(t, ok, "nothing is reported with the subnet bypass disabled")
 }
