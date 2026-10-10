@@ -60,7 +60,6 @@ type keepUpWindowResult struct {
 	start, end   time.Time
 	written      int64   // bytes written to the ring in the window
 	lost         int64   // bytes overwritten unread in the window
-	windowsRead  int64   // analysis windows read in the window
 	lostFraction float64 // lost / written; 0 when nothing was written
 	hasAudio     bool    // false when no audio arrived, so the window is no evidence
 	lossy        bool    // lostFraction reached keepUpLostFractionThreshold
@@ -88,7 +87,7 @@ type keepUpState struct {
 // reallocation is no evidence either way, and the episode and history carry over.
 func (s *keepUpState) observe(ab *buffer.AnalysisBuffer, st buffer.AnalysisBufferStats, now time.Time) (res keepUpWindowResult, closed bool, tr keepUpTransition) {
 	if s.buf == nil || ab != s.buf ||
-		st.WrittenBytes < s.base.WrittenBytes || st.LostBytes < s.base.LostBytes || st.WindowsRead < s.base.WindowsRead {
+		st.WrittenBytes < s.base.WrittenBytes || st.LostBytes < s.base.LostBytes {
 		s.buf = ab
 		s.base = st
 		s.windowStart = now
@@ -99,12 +98,11 @@ func (s *keepUpState) observe(ab *buffer.AnalysisBuffer, st buffer.AnalysisBuffe
 	}
 
 	res = keepUpWindowResult{
-		start:       s.windowStart,
-		end:         now,
-		written:     st.WrittenBytes - s.base.WrittenBytes,
-		lost:        st.LostBytes - s.base.LostBytes,
-		windowsRead: st.WindowsRead - s.base.WindowsRead,
-		hasAudio:    st.WrittenBytes > s.base.WrittenBytes,
+		start:    s.windowStart,
+		end:      now,
+		written:  st.WrittenBytes - s.base.WrittenBytes,
+		lost:     st.LostBytes - s.base.LostBytes,
+		hasAudio: st.WrittenBytes > s.base.WrittenBytes,
 	}
 	s.windowStart = now
 	s.base = st
@@ -157,8 +155,13 @@ func (s *keepUpState) lossyCount() int {
 }
 
 // observeKeepUp evaluates the buffer's counters at now and logs episode
-// transitions. It runs on every monitor tick, before the window is read.
+// transitions. It runs on every monitor tick, before the window is read. A tick
+// that cannot close the window skips the stats snapshot, which takes the
+// buffer lock.
 func (m *BufferManager) observeKeepUp(cfg *monitorConfig, ab *buffer.AnalysisBuffer, state *keepUpState, now time.Time) {
+	if ab == state.buf && now.Sub(state.windowStart) < keepUpWindow {
+		return
+	}
 	res, closed, tr := state.observe(ab, ab.Stats(), now)
 	if !closed {
 		return

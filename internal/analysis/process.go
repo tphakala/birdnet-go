@@ -348,7 +348,7 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 		logger.Int("sample_bytes", len(data)))
 
 	// Wall time including the wait for the shared inference lock; stored as the
-	// detection's processing time. The overrun check uses windowProcessingTime.
+	// detection's processing time. The overrun check below uses the window's own work.
 	elapsedTime := time.Since(predictStart)
 
 	// Record result count metric
@@ -388,7 +388,8 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 	// contention between models, which the keep-up monitor judges by lost audio.
 	effectiveBufferDuration := bufferIntervalFor(bn, modelID)
 
-	processingTime := windowProcessingTime(conversionDuration, timing)
+	// The window's own work: PCM conversion plus the model's inference time.
+	processingTime := conversionDuration + timing.Predict
 	if processingTime > effectiveBufferDuration {
 		log.Warn("processing time exceeded buffer interval",
 			logger.Duration("processing_time", processingTime),
@@ -530,12 +531,6 @@ func convert16BitToFloat32WithPool(bufMgr *buffer.Manager, sample []byte) []floa
 		float32Data[i] = float32(s) / divisor
 	}
 	return float32Data
-}
-
-// windowProcessingTime returns the window's own work: PCM conversion plus the
-// model's inference time, excluding the wait for the shared inference lock.
-func windowProcessingTime(conversion time.Duration, timing classifier.PredictTiming) time.Duration {
-	return conversion + timing.Predict
 }
 
 // bufferIntervalFor returns the analysis buffer interval for a model under the

@@ -2,19 +2,10 @@ package buffer
 
 import (
 	"sync"
-	"time"
 
 	"github.com/smallnest/ringbuffer"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-)
-
-// Overwrite monitoring constants.
-const (
-	analysisOverwriteWindowDuration = 5 * time.Minute // sliding window for rate calculation
-	analysisOverwriteRateThreshold  = 10              // percentage threshold to trigger warning
-	analysisOverwriteMinWrites      = 50              // minimum writes before checking rate
-	analysisOverwriteNotifyCooldown = 1 * time.Hour   // minimum time between warnings per source
 )
 
 // noopRelease is returned from Read when no pool is in use or when there was
@@ -33,8 +24,6 @@ type AnalysisBufferStats struct {
 	LostBytes int64
 	// WindowsRead is the total number of full windows returned by Read.
 	WindowsRead int64
-	// ReadSize is the number of fresh bytes consumed per window.
-	ReadSize int
 }
 
 // AnalysisBuffer is a lock-protected ring buffer designed for audio analysis.
@@ -50,7 +39,6 @@ type AnalysisBuffer struct {
 	readSize    int    // number of bytes to read from the ring per call
 	windowSize  int    // overlapSize + readSize, cached for pool lookups
 	sourceID    string // identifier used in log messages
-	tracker     *OverwriteTracker
 	mu          sync.Mutex
 	log         logger.Logger
 	windowPool  *BytePool // nil when unpooled; sized to windowSize when set
@@ -129,14 +117,6 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 	}
 	ring.SetOverwrite(true)
 
-	trackerOpts := OverwriteTrackerOpts{
-		WindowDuration: analysisOverwriteWindowDuration,
-		RateThreshold:  analysisOverwriteRateThreshold,
-		MinWrites:      analysisOverwriteMinWrites,
-		NotifyCooldown: analysisOverwriteNotifyCooldown,
-		Logger:         log,
-	}
-
 	windowSize := overlapSize + readSize
 	var windowPool *BytePool
 	if bufMgr != nil {
@@ -149,16 +129,14 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 		readSize:    readSize,
 		windowSize:  windowSize,
 		sourceID:    sourceID,
-		tracker:     NewOverwriteTracker(trackerOpts),
 		log:         log,
 		windowPool:  windowPool,
 	}, nil
 }
 
 // Write appends data to the ring buffer. When the ring is full, the oldest
-// bytes are overwritten (overwrite mode). The overwrite tracker is updated on
-// every call so that the rate monitor has an accurate picture of backpressure,
-// and the cumulative written and lost byte counters (see Stats) are advanced.
+// bytes are overwritten (overwrite mode), and the cumulative written and lost
+// byte counters (see Stats) are advanced.
 //
 // Write is safe for concurrent use.
 func (ab *AnalysisBuffer) Write(data []byte) error {
@@ -166,17 +144,10 @@ func (ab *AnalysisBuffer) Write(data []byte) error {
 	// In overwrite mode the ring advances its read pointer by len(data) minus
 	// the free space, so that many of the oldest bytes are discarded unread.
 	lost := max(len(data)-ab.ring.Free(), 0)
-	willOverwrite := lost > 0
 	_, err := ab.ring.Write(data)
 	ab.writtenBytes += int64(len(data))
 	ab.lostBytes += int64(lost)
 	ab.mu.Unlock()
-
-	ab.tracker.RecordWrite()
-	if willOverwrite {
-		ab.tracker.RecordOverwrite()
-	}
-	ab.tracker.CheckAndNotify(ab.sourceID)
 
 	if err != nil {
 		return errors.New(err).
@@ -271,15 +242,6 @@ func (ab *AnalysisBuffer) Read() (window []byte, release func(), err error) {
 	return window, release, nil
 }
 
-// OverwriteCount returns the number of overwrite events recorded in the
-// current tracking window. This is useful in tests to assert that the
-// overwrite path was exercised.
-func (ab *AnalysisBuffer) OverwriteCount() int64 {
-	ab.tracker.mu.Lock()
-	defer ab.tracker.mu.Unlock()
-	return ab.tracker.overwriteCount
-}
-
 // WindowSize returns the total window size (overlapSize + readSize) in bytes.
 // This is the length of the slice returned by Read().
 func (ab *AnalysisBuffer) WindowSize() int {
@@ -295,11 +257,10 @@ func (ab *AnalysisBuffer) Stats() AnalysisBufferStats {
 		WrittenBytes: ab.writtenBytes,
 		LostBytes:    ab.lostBytes,
 		WindowsRead:  ab.windowsRead,
-		ReadSize:     ab.readSize,
 	}
 }
 
-// Reset clears the ring buffer and resets all overlap and tracking state.
+// Reset clears the ring buffer and the overlap state.
 // Useful for testing or restarting a source. The cumulative counters reported
 // by Stats are not reset.
 func (ab *AnalysisBuffer) Reset() {
@@ -307,5 +268,4 @@ func (ab *AnalysisBuffer) Reset() {
 	ab.ring.Reset()
 	ab.prevData = nil
 	ab.mu.Unlock()
-	ab.tracker.Reset()
 }
