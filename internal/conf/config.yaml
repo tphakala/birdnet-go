@@ -417,7 +417,7 @@ security:
   # CIDR ranges of reverse proxies whose forwarded client-IP headers
   # (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) may be trusted. Loopback,
   # link-local, and private addresses are always trusted, so a local cloudflared
-  # or same-host reverse proxy needs no entry here. Add a proxy that connects
+  # or same-host reverse proxy needs no entry here (subnet bypass is stricter, see below). Add a proxy that connects
   # from a PUBLIC IP (e.g. Cloudflare's edge in front of a directly-exposed
   # instance, or an external load balancer) so its headers are honored. The
   # special value "cloudflare" expands to Cloudflare's published edge ranges.
@@ -430,7 +430,7 @@ security:
   # a proxy listed here, even a local or private one: list your reverse proxy's
   # own address (not a range that also holds clients) if clients reach
   # BirdNET-Go through it and should skip login. The proxy must append
-  # X-Forwarded-For or overwrite X-Real-IP, all client-IP headers it forwards
+  # X-Forwarded-For or overwrite X-Real-IP, all client-IP headers it forwards (including True-Client-IP)
   # must name the same client, and a Forwarded header is not accepted.
   trustedproxies: []         # e.g. ["cloudflare"], ["203.0.113.0/24"] or a bare IP ["203.0.113.5"]
   basicauth:
