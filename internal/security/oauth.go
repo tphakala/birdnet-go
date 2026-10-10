@@ -248,8 +248,12 @@ func (s *OAuth2Server) CurrentSettings() *conf.Settings {
 // restart and one decision never mixes two configurations. When the subnet
 // bypass is enabled, an authentication provider is configured, and forwarded
 // headers from an unlisted peer are the reason no address was found, it logs a
-// throttled Info notice naming that peer.
+// throttled Info notice naming that peer. A nil request has no verifiable
+// address.
 func (s *OAuth2Server) authClientIP(settings *conf.Settings, r *http.Request) net.IP {
+	if r == nil {
+		return nil
+	}
 	checker := s.proxyTrust.ResolveSettings(settings)
 	if ip := checker.AuthClientIP(r); ip != nil {
 		return ip
