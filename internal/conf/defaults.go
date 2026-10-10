@@ -217,7 +217,7 @@ func setDefaultConfig() {
 	// False positive filter configuration
 	// Level 0 = Off (no filtering, backward compatible default)
 	// Level 1 = Lenient, Level 2 = Moderate, Level 3 = Balanced (original behavior)
-	// Level 4 = Strict (RPi 4+ required), Level 5 = Maximum (RPi 4+ required)
+	// Level 4 = Strict, Level 5 = Maximum
 	viper.SetDefault("realtime.falsepositivefilter.level", 0)
 
 	// Log configuration

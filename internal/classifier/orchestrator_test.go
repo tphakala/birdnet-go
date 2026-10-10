@@ -1191,3 +1191,81 @@ func TestOrchestrator_SuccessfulReload_ClearsStaleFailureError(t *testing.T) {
 	assert.NotContains(t, err.Error(), "failed to load",
 		"a model that recovered from an earlier failure and was then unloaded must report unloaded, not the stale failure")
 }
+
+// predictTimingHold is how long the lock-wait test holds inferenceMu, and the
+// per-call model time of the predict-time test. Assertions use lower bounds only
+// so they stay stable under -race and loaded CI machines.
+const predictTimingHold = 50 * time.Millisecond
+
+// TestOrchestrator_PredictModelTimed_ReportsLockWaitSeparately verifies that time
+// spent waiting for the shared inference lock lands in LockWait and not in Predict.
+func TestOrchestrator_PredictModelTimed_ReportsLockWaitSeparately(t *testing.T) {
+	t.Parallel()
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: "m1"})
+	o.inferenceMu.Lock()
+
+	type outcome struct {
+		timing PredictTiming
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		_, timing, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+		done <- outcome{timing, err}
+	}()
+
+	time.Sleep(predictTimingHold)
+	o.inferenceMu.Unlock()
+
+	got := <-done
+	require.NoError(t, got.err)
+	assert.GreaterOrEqual(t, got.timing.LockWait, predictTimingHold)
+	assert.Less(t, got.timing.Predict, predictTimingHold)
+}
+
+// TestOrchestrator_PredictModelTimed_PredictMatchesModelTime verifies that Predict
+// reports the model's own inference time.
+func TestOrchestrator_PredictModelTimed_PredictMatchesModelTime(t *testing.T) {
+	t.Parallel()
+
+	const modelTime = 30 * time.Millisecond
+	o := newTestOrchestrator(t, &mockModelInstance{
+		id: "m1",
+		predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			time.Sleep(modelTime)
+			return []datastore.Results{{Species: "Turdus merula", Confidence: 0.9}}, nil
+		},
+	})
+
+	results, timing, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.GreaterOrEqual(t, timing.Predict, modelTime)
+}
+
+// TestOrchestrator_PredictModelTimed_NotLoadedHasZeroTiming verifies the not-loaded
+// early return reports a zero timing.
+func TestOrchestrator_PredictModelTimed_NotLoadedHasZeroTiming(t *testing.T) {
+	t.Parallel()
+
+	o := newTestOrchestrator(t)
+	results, timing, err := o.PredictModelTimed(t.Context(), "nonexistent", [][]float32{{0.1}})
+	require.ErrorIs(t, err, ErrModelNotLoaded)
+	assert.Nil(t, results)
+	assert.Equal(t, PredictTiming{}, timing)
+}
+
+// TestOrchestrator_PredictModelTimed_ClosedModelStillReportsLockWait verifies a
+// closed model fails with its lock wait reported and no inference time.
+func TestOrchestrator_PredictModelTimed_ClosedModelStillReportsLockWait(t *testing.T) {
+	t.Parallel()
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: "m1"})
+	o.models["m1"].instance = nil
+
+	results, timing, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+	require.Error(t, err)
+	assert.Nil(t, results)
+	assert.Zero(t, timing.Predict)
+}

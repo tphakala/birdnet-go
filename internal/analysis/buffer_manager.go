@@ -62,6 +62,9 @@ type monitorTickState struct {
 	// the buffer is found again. hasReadBuffer flips when AnalysisBuffer first
 	// succeeds (the buffer is found), before any window is read.
 	notFoundTicks int
+	// keepUp evaluates whether analysis keeps up with the audio arriving in the
+	// analysis buffer (see keepUpState).
+	keepUp keepUpState
 }
 
 // classifierBackend is the analysis package's view of *classifier.Orchestrator:
@@ -77,7 +80,7 @@ type classifierBackend interface {
 	IsModelActive(modelID string) bool
 	ModelInfos() []classifier.ModelInfo
 	DefaultTargets() []classifier.ModelInfo
-	PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error)
+	PredictModelTimed(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, classifier.PredictTiming, error)
 	CurrentSettings() *conf.Settings
 	EffectiveBaseOverlap() time.Duration
 	ModelSpecFor(modelID string) (classifier.ModelSpec, bool)
@@ -545,6 +548,10 @@ func (m *BufferManager) processMonitorTick(
 	}
 	state.hasReadBuffer = true
 	state.notFoundTicks = 0
+
+	// Judge keep-up on every tick, including not-loaded, inactive and partial
+	// window ticks, so lost audio is seen whatever the tick does afterwards.
+	m.observeKeepUp(cfg, ab, &state.keepUp, time.Now())
 
 	data, release, readErr := ab.Read()
 	defer release()

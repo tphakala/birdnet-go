@@ -12,10 +12,9 @@ import (
 // getMinimumOverlapForLevel returns the minimum overlap required for each filtering level.
 // Higher levels require higher overlap to generate more detections for filtering.
 //
-// Hardware limits:
-//   - RPi 3B/Zero 2: ~541ms inference time, max overlap 2.4 (600ms steps)
-//   - RPi 4: ~166ms inference time, max overlap 2.8 (200ms steps)
-//   - RPi 5: ~100ms inference time, max overlap 2.9+ (100ms steps)
+// Whether the hardware sustains the overlap a level asks for is not decided
+// here: the analysis cadence cap holds the effective overlap within what the
+// hardware sustains.
 func getMinimumOverlapForLevel(level int) float64 {
 	switch level {
 	case 0:
@@ -25,11 +24,11 @@ func getMinimumOverlapForLevel(level int) float64 {
 	case 2:
 		return 2.2 // Moderate (800ms steps)
 	case 3:
-		return 2.4 // Balanced (600ms steps) - RPi 3B max
+		return 2.4 // Balanced (600ms steps)
 	case 4:
-		return 2.7 // Strict (300ms steps) - RPi 4 required
+		return 2.7 // Strict (300ms steps)
 	case 5:
-		return 2.8 // Maximum (200ms steps) - RPi 4 required
+		return 2.8 // Maximum (200ms steps)
 	default:
 		return 2.2 // Default to Moderate
 	}
@@ -56,19 +55,6 @@ func getThresholdForLevel(level int) float64 {
 		return 0.70 // 70% of 6s window
 	default:
 		return 0.30 // Default to Moderate
-	}
-}
-
-// getHardwareRequirementForLevel returns a human-readable description of
-// the hardware requirements for each filtering level.
-func getHardwareRequirementForLevel(level int) string {
-	switch level {
-	case 0, 1, 2, 3:
-		return "Any (RPi 3B or better)"
-	case 4, 5:
-		return "RPi 4 or better required"
-	default:
-		return "Unknown"
 	}
 }
 
@@ -225,9 +211,9 @@ func getLevelDescription(level int) string {
 	case 3:
 		return "Balanced filtering - requires 5 confirmations. Original pre-September 2025 behavior, good for quality USB mics in average conditions."
 	case 4:
-		return "Strict filtering - requires 12 confirmations. Needs RPi 4+. For high-quality microphones capturing lots of environmental detail."
+		return "Strict filtering - requires 12 confirmations. For high-quality microphones capturing lots of environmental detail."
 	case 5:
-		return "Maximum filtering - requires 21 confirmations. Needs RPi 4+. For professional-grade microphones with high sensitivity that capture everything including wind, leaves, and distant sounds."
+		return "Maximum filtering - requires 21 confirmations. For professional-grade microphones with high sensitivity that capture everything including wind, leaves, and distant sounds."
 	default:
 		return "Unknown filtering level"
 	}

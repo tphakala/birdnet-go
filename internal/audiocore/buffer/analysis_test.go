@@ -449,3 +449,64 @@ func BenchmarkAnalysisBuffer_Read(b *testing.B) {
 		release()
 	}
 }
+
+// TestAnalysisBuffer_StatsCountWrittenAndLostBytes pins the exact cumulative
+// counters: bytes written, bytes discarded by overwrite, and windows read.
+func TestAnalysisBuffer_StatsCountWrittenAndLostBytes(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 10
+		readSize = 4
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "stats-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	require.NoError(t, ab.Write(make([]byte, 8)))
+	assert.Equal(t, buffer.AnalysisBufferStats{WrittenBytes: 8, ReadSize: readSize}, ab.Stats())
+
+	// 2 bytes free, so 4 of the 6 are made room for by discarding old audio.
+	require.NoError(t, ab.Write(make([]byte, 6)))
+	assert.Equal(t, buffer.AnalysisBufferStats{WrittenBytes: 14, LostBytes: 4, ReadSize: readSize}, ab.Stats())
+
+	window, release, err := ab.Read()
+	require.NoError(t, err)
+	require.NotNil(t, window)
+	release()
+	assert.Equal(t, buffer.AnalysisBufferStats{WrittenBytes: 14, LostBytes: 4, WindowsRead: 1, ReadSize: readSize}, ab.Stats())
+
+	// A read that returns nothing is not a window.
+	empty := mustNewEmptyStatsBuffer(t)
+	_, release, err = empty.Read()
+	require.NoError(t, err)
+	release()
+	assert.Zero(t, empty.Stats().WindowsRead)
+
+	// 4 bytes are free after the read (6 buffered of 10), so 9 bytes lose 5.
+	require.NoError(t, ab.Write(make([]byte, 9)))
+	assert.Equal(t, buffer.AnalysisBufferStats{WrittenBytes: 23, LostBytes: 9, WindowsRead: 1, ReadSize: readSize}, ab.Stats())
+}
+
+func mustNewEmptyStatsBuffer(t *testing.T) *buffer.AnalysisBuffer {
+	t.Helper()
+	ab, err := buffer.NewAnalysisBuffer(10, 0, 4, "empty-stats-source", newTestLogger(), nil)
+	require.NoError(t, err)
+	return ab
+}
+
+// TestAnalysisBuffer_ResetKeepsCumulativeStats verifies Reset leaves the
+// cumulative counters alone, so a delta against an earlier snapshot stays valid.
+func TestAnalysisBuffer_ResetKeepsCumulativeStats(t *testing.T) {
+	t.Parallel()
+
+	ab, err := buffer.NewAnalysisBuffer(10, 0, 4, "reset-stats-source", newTestLogger(), nil)
+	require.NoError(t, err)
+	require.NoError(t, ab.Write(make([]byte, 10)))
+	require.NoError(t, ab.Write(make([]byte, 2)))
+	before := ab.Stats()
+	require.Equal(t, int64(12), before.WrittenBytes)
+	require.Equal(t, int64(2), before.LostBytes)
+
+	ab.Reset()
+	assert.Equal(t, before, ab.Stats())
+}

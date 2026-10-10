@@ -41,6 +41,8 @@ const (
 
 // bufferOverrunTracker tracks BirdNET processing buffer overruns using a tumbling window.
 // When the window expires and enough overruns have accumulated, a single Sentry event is sent.
+// maxElapsed is the longest window processing time (PCM conversion plus inference,
+// excluding the wait for the shared inference lock) seen in the window.
 type bufferOverrunTracker struct {
 	mu           sync.Mutex
 	source       string
@@ -175,7 +177,8 @@ func recordResultsQueueDropHealth(source string) {
 }
 
 // recordBufferOverrun records a buffer overrun event and reports to Sentry
-// when the tumbling window expires with enough accumulated overruns.
+// when the tumbling window expires with enough accumulated overruns. elapsed is
+// the window's own processing time, excluding the wait for the shared inference lock.
 func recordBufferOverrun(tracker *bufferOverrunTracker, elapsed, bufferLen time.Duration) {
 	tracker.mu.Lock()
 	defer tracker.mu.Unlock()
@@ -291,6 +294,7 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 
 	// convert audio data to float32
 	sampleData, err := convertToFloat32WithPool(bufMgr, data, conf.BitDepth)
+	conversionDuration := time.Since(predictStart)
 	if err != nil {
 		return errors.New(err).
 			Component("analysis").
@@ -300,11 +304,11 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 			Build()
 	}
 
-	// Defer pool return so the buffer is reclaimed even if PredictModel panics.
+	// Defer pool return so the buffer is reclaimed even if PredictModelTimed panics.
 	// The Manager's lazy per-size pool map routes the slice back to the pool
 	// sized for its actual length, so non-standard sizes are handled too.
 	//
-	// INVARIANT: bn.PredictModel must copy the samples into the model's
+	// INVARIANT: bn.PredictModelTimed must copy the samples into the model's
 	// input tensor before returning; it must not retain a reference to
 	// sampleData past Predict. The pool may hand the same backing array to
 	// another caller as soon as Put returns, so any retained reference
@@ -318,14 +322,13 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 	}
 
 	// Run inference on the specified model via the Orchestrator.
-	inferenceStart := time.Now()
-	results, err := bn.PredictModel(ctx, modelID, sampleData)
-	inferenceDuration := time.Since(inferenceStart)
+	results, timing, err := bn.PredictModelTimed(ctx, modelID, sampleData)
 
-	// Record inference duration metric (always, even on error)
+	// Record inference duration and lock wait metrics (always, even on error)
 	pm := processMetrics.Load()
 	if pm != nil {
-		pm.RecordAudioInferenceDuration(source, inferenceDuration.Seconds())
+		pm.RecordAudioInferenceDuration(source, timing.Predict.Seconds())
+		pm.RecordAudioInferenceLockWait(source, timing.LockWait.Seconds())
 	}
 
 	if err != nil {
@@ -340,10 +343,12 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 		logger.String("source", source),
 		logger.String("model_id", modelID),
 		logger.Int("result_count", len(results)),
-		logger.Duration("inference_duration", inferenceDuration),
+		logger.Duration("inference_duration", timing.Predict),
+		logger.Duration("lock_wait", timing.LockWait),
 		logger.Int("sample_bytes", len(data)))
 
-	// get elapsed time (includes conversion + inference for overrun check)
+	// Wall time including the wait for the shared inference lock; stored as the
+	// detection's processing time. The overrun check uses windowProcessingTime.
 	elapsedTime := time.Since(predictStart)
 
 	// Record result count metric
@@ -378,20 +383,25 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 	// Derive the analysis buffer interval from the model's spec and the
 	// effective overlap, so the overrun threshold matches the real cadence
 	// (which follows the effective base overlap; the bat model stays fixed at 50%).
-	// If inference exceeds this interval the pipeline falls behind real-time.
+	// If this window's own work exceeds this interval, the model cannot keep up on
+	// its own. Waiting for the shared inference lock is excluded: that is
+	// contention between models, which the keep-up monitor judges by lost audio.
 	effectiveBufferDuration := bufferIntervalFor(bn, modelID)
 
-	if elapsedTime > effectiveBufferDuration {
+	processingTime := windowProcessingTime(conversionDuration, timing)
+	if processingTime > effectiveBufferDuration {
 		log.Warn("processing time exceeded buffer interval",
+			logger.Duration("processing_time", processingTime),
+			logger.Duration("lock_wait", timing.LockWait),
 			logger.Duration("elapsed_time", elapsedTime),
 			logger.Duration("buffer_interval", effectiveBufferDuration),
 			logger.String("model_id", modelID),
 			logger.String("source", source))
-		recordBufferOverrun(getOverrunTracker(source, modelID), elapsedTime, effectiveBufferDuration)
+		recordBufferOverrun(getOverrunTracker(source, modelID), processingTime, effectiveBufferDuration)
 
 		m := processMetrics.Load()
 		if m != nil {
-			m.RecordBirdNETProcessingOverrun(source, elapsedTime.Seconds(), effectiveBufferDuration.Seconds())
+			m.RecordBirdNETProcessingOverrun(source, processingTime.Seconds(), effectiveBufferDuration.Seconds())
 		}
 	}
 
@@ -520,6 +530,12 @@ func convert16BitToFloat32WithPool(bufMgr *buffer.Manager, sample []byte) []floa
 		float32Data[i] = float32(s) / divisor
 	}
 	return float32Data
+}
+
+// windowProcessingTime returns the window's own work: PCM conversion plus the
+// model's inference time, excluding the wait for the shared inference lock.
+func windowProcessingTime(conversion time.Duration, timing classifier.PredictTiming) time.Duration {
+	return conversion + timing.Predict
 }
 
 // bufferIntervalFor returns the analysis buffer interval for a model under the
