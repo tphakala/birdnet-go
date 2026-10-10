@@ -402,11 +402,14 @@ const newSpeciesImageWait = 3 * time.Second
 // warmSpeciesImage resolves this detection's species image, waiting at most
 // newSpeciesImageWait, so that the caller's subsequent GetCached lookup can succeed.
 //
-// This is the one image lookup that is still allowed to wait, and only for a new
-// species. Every other path in this file and its siblings is cached-only, because a
-// cold species can otherwise occupy the provider chain for minutes. A new species is
-// rare by construction (once per species, ever) and is precisely the detection whose
-// notification an image matters most for.
+// This is the one image lookup that is still allowed to wait, and only for the two
+// detections that surface as their own notification card: a new species and a lifer.
+// Every other path in this file and its siblings is cached-only, because a cold
+// species can otherwise occupy the provider chain for minutes. Both callers are rare
+// by construction — a new species fires once per species ever, and a lifer only when
+// shouldNotifyLifer reports the fixed re-alert window has elapsed — so the wait is
+// bounded even for a species the provider has no image for (nothing is cached on
+// failure, so such a species re-waits at most once per window).
 func (a *DatabaseAction) warmSpeciesImage(ctx context.Context) {
 	if a.processor == nil || a.processor.BirdImageCache == nil {
 		return
@@ -472,6 +475,15 @@ func (a *DatabaseAction) publishDetectionEvent(ctx context.Context, isNewSpecies
 		}
 		// Suppressed new species still gets published as an ordinary detection
 		// so that detection.occurred alert rules fire for every detection.
+	}
+
+	// A lifer that is not new to this install (detected before the life list was
+	// imported, so isNewSpecies is false) reaches the bus here rather than through
+	// the branch above, but still renders as a detection card that wants a
+	// thumbnail. isLifer is already suppression-aware, so this waits at most once
+	// per re-alert window rather than on every repeat detection.
+	if isLifer {
+		a.warmSpeciesImage(ctx)
 	}
 
 	detectionEvent := a.createDetectionEvent(false, daysSinceFirstSeen)
