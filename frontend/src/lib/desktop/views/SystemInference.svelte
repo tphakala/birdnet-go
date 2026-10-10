@@ -34,6 +34,7 @@
   import {
     Brain,
     Binary,
+    CircleX,
     CircuitBoard,
     Container,
     Cpu,
@@ -49,6 +50,10 @@
     TriangleAlert,
   } from '@lucide/svelte';
   import { isContainerEnvironment } from '$lib/desktop/features/system/environment';
+  import {
+    ERROR_CLASS_NON_FINITE,
+    MODEL_HEALTH_FAILING,
+  } from '$lib/desktop/features/system/inference.types';
   import type {
     InferenceStatusResponse,
     InferenceModel,
@@ -436,6 +441,18 @@
     return (hz / HZ_PER_KHZ).toFixed(hz % HZ_PER_KHZ === 0 ? 0 : 1);
   }
 
+  /**
+   * The visible explanation for a failing model: why its analyses fail (from the
+   * backend error class) and what to try next.
+   */
+  function modelFailingHelp(model: InferenceModel): string {
+    const reason =
+      model.health?.errorClass === ERROR_CLASS_NON_FINITE
+        ? t('system.inference.modelFailingReasonNonFinite')
+        : t('system.inference.modelFailingReasonError');
+    return t('system.inference.modelFailingHelp', { reason });
+  }
+
   // RTF is absent or meaningless when there are no invocations.
   function rtfDisplay(model: InferenceModel): string {
     const { invocations, rtf } = model.stats;
@@ -476,7 +493,7 @@
   }
 
   // Plain-English explanation of the current VAD gate state, so a disabled / no-model
-  // / idle indicator is never ambiguous (frontend/CLAUDE.md: never ship ambiguous states).
+  // / idle indicator is never ambiguous (frontend/AGENTS.md: never ship ambiguous states).
   function vadStateHelp(v: InferenceVAD): string {
     if (!v.enabled) return t('system.inference.vad.disabledHelp');
     if (!v.available) return t('system.inference.vad.unavailableHelp');
@@ -862,7 +879,7 @@
                 <span class="text-xs text-muted">{t('system.inference.vad.disabled')}</span>
               {:else if !vad.available}
                 <TriangleAlert class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
-                <span class="text-xs text-amber-600 dark:text-amber-400"
+                <span class="text-xs text-amber-700 dark:text-amber-400"
                   >{t('system.inference.vad.unavailable')}</span
                 >
               {:else if vad.loaded}
@@ -1011,9 +1028,11 @@
             {@const throughputLatest =
               throughputSeries.length > 0 ? throughputSeries[throughputSeries.length - 1] : 0}
             {@const isActive = throughputSeries.length > 0 && throughputLatest > 0}
-            {@const anySourceDown = model.sources.some(s => s.notRunning)}
-            {@const allSourcesDown =
-              model.sources.length > 0 && model.sources.every(s => s.notRunning)}
+            {@const downCount = model.sources.filter(s => s.notRunning).length}
+            {@const anySourceDown = downCount > 0}
+            {@const allSourcesDown = model.sources.length > 0 && downCount === model.sources.length}
+            {@const isFailing = model.health?.state === MODEL_HEALTH_FAILING}
+            {@const failingHelp = isFailing ? modelFailingHelp(model) : ''}
             <div
               class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
             >
@@ -1033,7 +1052,49 @@
                     title={t('system.inference.deviceHelp')}
                   />
                 {/if}
-                {#if model.paused}
+                {#if anySourceDown && !allSourcesDown}
+                  <!-- Partial degradation: at least one assigned source is down but not all,
+                       so the model still analyzes through its healthy source(s). Surface it in
+                       the header with a persistent amber chip driven purely by source health
+                       (not throughput/isActive), so it does not flap between silence and
+                       detections the way the old "any source down" alarm did (#4209). Mutually
+                       exclusive with the red not-analyzing state below, which requires ALL
+                       sources down. This chip lives outside the ml-auto activity slot so the
+                       live Active/Idle status still shows on the right; the specific down source
+                       and its remedy are in the per-source list further down. No aria-label, so
+                       screen readers announce the visible count rather than a generic label. -->
+                  <span
+                    class="flex items-center gap-1.5"
+                    role="status"
+                    title={t('system.inference.sourcesDegradedTooltip')}
+                  >
+                    <TriangleAlert class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
+                    <span class="text-xs font-medium text-amber-700 dark:text-amber-400">
+                      {t('system.inference.sourcesDegraded', {
+                        count: downCount,
+                        total: model.sources.length,
+                      })}
+                    </span>
+                  </span>
+                {/if}
+                {#if isFailing}
+                  <!-- Every recent analysis window of this model failed (a broken backend or
+                       precision, e.g. non-finite scores): it is loaded but detects nothing.
+                       Takes the dominant header slot ahead of paused, since a paused model
+                       keeps the verdict of its last window. -->
+                  <span
+                    class="ml-auto flex items-center gap-1.5"
+                    role="status"
+                    data-testid="model-failing"
+                    title={failingHelp}
+                    aria-describedby={`model-failing-help-${model.id}`}
+                  >
+                    <CircleX class="w-3 h-3 shrink-0 text-red-500" aria-hidden="true" />
+                    <span class="text-xs font-medium text-red-600 dark:text-red-400"
+                      >{t('system.inference.modelFailing')}</span
+                    >
+                  </span>
+                {:else if model.paused}
                   <!-- Schedule-gated model that is currently off-schedule: explain the
                        flat latency line instead of showing a bare "idle" dash. -->
                   <span
@@ -1043,7 +1104,7 @@
                     title={t('system.inference.pausedScheduleHelp')}
                   >
                     <Pause class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
-                    <span class="text-xs text-amber-600 dark:text-amber-400">
+                    <span class="text-xs text-amber-700 dark:text-amber-400">
                       {t('system.inference.paused')}{#if model.scheduleLabel}<span
                           class="text-muted">&nbsp;({model.scheduleLabel})</span
                         >{/if}
@@ -1057,7 +1118,7 @@
                        one healthy source out of this alarm: during silence it reads "idle"
                        instead of flapping to "not analyzing" and back when a bird sings, and
                        the specific down source is still flagged by its badge below.
-                       Precedence: paused > not-analyzing > active > idle. -->
+                       Precedence: failing > paused > not-analyzing > active > idle. -->
                   <span
                     class="ml-auto flex items-center gap-1.5"
                     role="status"
@@ -1095,6 +1156,18 @@
                   </span>
                 {/if}
               </div>
+
+              {#if isFailing}
+                <!-- Visible remedy for the failing chip: a title tooltip never shows on
+                     a touch device, so the reason and the next step are spelled out. -->
+                <p
+                  id={`model-failing-help-${model.id}`}
+                  class="text-xs text-red-600 dark:text-red-400"
+                  data-testid="model-failing-help"
+                >
+                  {failingHelp}
+                </p>
+              {/if}
 
               <!-- Spec line -->
               <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
@@ -1162,6 +1235,16 @@
                     t('system.inference.errorRateHelp'),
                     Math.round(model.stats.errorRate * 100) + '%',
                     `help-error-rate-${model.id}`
+                  )}
+                {/if}
+                {#if model.health && model.health.inferenceCount > 0}
+                  {@render stat(
+                    t('system.inference.lastSuccess'),
+                    t('system.inference.lastSuccessHelp'),
+                    model.health.lastSuccessAtUnix
+                      ? formatLocalDateTime(new Date(model.health.lastSuccessAtUnix * 1000))
+                      : t('system.inference.lastSuccessNever'),
+                    `help-last-success-${model.id}`
                   )}
                 {/if}
                 {#if model.stats.loadFailures !== undefined && model.stats.loadFailures > 0}
@@ -1361,7 +1444,7 @@
                             >({source.type})</span
                           >
                         {/if}{#if source.fallback}
-                          <span class="text-muted ml-1">
+                          <span class={source.notRunning ? 'ml-1' : 'text-muted ml-1'}>
                             - {t('system.inference.primaryFallback')}
                           </span>
                         {/if}{#if source.notRunning}
@@ -1373,7 +1456,7 @@
                     {/each}
                   </div>
                   <!-- Persistent, visible reason so keyboard and touch users get the
-                       cause without a hover (frontend/CLAUDE.md: no ambiguous states).
+                       cause without a hover (frontend/AGENTS.md: no ambiguous states).
                        Each not-analyzing badge references it via aria-describedby for
                        screen readers. Gated on anySourceDown (not the header's
                        allSourcesDown) so a single down source among healthy ones still

@@ -243,16 +243,17 @@ func (p *StreamPublisher) Stderr() string {
 	return p.stderr.String()
 }
 
-// ExitError returns the process exit error once the publisher has exited. The
-// boolean is false while it is still running (the error is not yet known).
-func (p *StreamPublisher) ExitError() (error, bool) {
+// ExitError reports whether the publisher has exited and, if so, its process
+// exit error. exited is false while the process is still running (its exit
+// error is not known yet) or when it was never started.
+func (p *StreamPublisher) ExitError() (exited bool, err error) {
 	if p.done == nil {
-		return nil, false
+		return false, nil
 	}
 	select {
 	case <-p.done:
-		return p.waitErr, true
+		return true, p.waitErr
 	default:
-		return nil, false
+		return false, nil
 	}
 }

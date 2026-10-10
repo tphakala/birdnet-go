@@ -725,3 +725,68 @@ Error opening input files: Input/output error`
 	// Should also extract the port.
 	assert.Equal(t, 8554, ctx.TargetPort)
 }
+
+func TestExtractErrorContext_DNSResolutionFailed_LocalHost(t *testing.T) {
+	stderrOutput := `[tcp @ 0x563f02f73b40] Failed to resolve hostname remote-mic.local: Name or service not known
+[in#0 @ 0x563f02f706c0] Error opening input: Input/output error
+Error opening input file rtsp://remote-mic.local:8554/mic.
+Error opening input files: Input/output error`
+
+	ctx := ExtractErrorContext(stderrOutput)
+
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "dns_resolution_failed", ctx.ErrorType)
+	assert.Equal(t, "remote-mic.local", ctx.TargetHost)
+	assert.True(t, ctx.ShouldOpenCircuit(), "DNS resolution failure should open circuit breaker")
+	assert.False(t, ctx.ShouldRestart(), "DNS resolution failure should not trigger restart")
+}
+
+func TestExtractErrorContext_DNSResolutionFailed_HTTPLocalHost(t *testing.T) {
+	stderrOutput := `[tcp @ 0x55d0c1e3a280] Failed to resolve hostname mic.local: Name or service not known
+[in#0 @ 0x55d0c1e1f6c0] Error opening input: Input/output error
+Error opening input file http://mic.local:8000/stream.
+Error opening input files: Input/output error`
+
+	ctx := ExtractErrorContext(stderrOutput)
+
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "dns_resolution_failed", ctx.ErrorType)
+	assert.Equal(t, "mic.local", ctx.TargetHost)
+}
+
+func TestBuildDNSErrorMessage_LocalHostInContainerWithoutSocket(t *testing.T) {
+	// Not parallel: detectEnv is a package-level seam.
+	orig := detectEnv
+	detectEnv = func() mdnsEnv { return mdnsEnv{inContainer: true} }
+	t.Cleanup(func() { detectEnv = orig })
+
+	ctx := &audiocore.StreamErrorContext{ErrorType: audiocore.ErrTypeDNSResolutionFailed}
+	extractDNSError(ctx, `[tcp @ 0x563f02f73b40] Failed to resolve hostname remote-mic.local: Name or service not known
+Error opening input file rtsp://remote-mic.local:8554/mic.`)
+	require.Equal(t, "remote-mic.local", ctx.TargetHost)
+
+	buildDNSErrorMessage(ctx)
+
+	joined := strings.Join(ctx.TroubleShooting, "\n")
+	assert.Contains(t, joined, "/run/avahi-daemon:/run/avahi-daemon:ro")
+	assert.Contains(t, joined, "ping remote-mic.local")
+	assert.NotContains(t, joined, "nslookup")
+	assert.Equal(t, audiocore.ErrTypeDNSResolutionFailed, ctx.ErrorType)
+}
+
+func TestBuildDNSErrorMessage_NonLocalHostUnchanged(t *testing.T) {
+	ctx := &audiocore.StreamErrorContext{TargetHost: "cam.example.com"}
+
+	buildDNSErrorMessage(ctx)
+
+	assert.Equal(t, []string{
+		"Double-check the hostname for typos (common with FQDNs)",
+		"Verify the hostname is correct and exists",
+		"Test DNS resolution: nslookup cam.example.com",
+		"Try ping: ping cam.example.com",
+		"Check your DNS server configuration (/etc/resolv.conf)",
+		"Verify network connectivity is working",
+		"Try using IP address instead of hostname as a workaround",
+		"Check if the domain name is registered and active",
+	}, ctx.TroubleShooting)
+}

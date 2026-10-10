@@ -24,16 +24,16 @@
   import { cn } from '$lib/utils/cn';
   import type { Component } from 'svelte';
   import { Lightbulb } from '@lucide/svelte';
-  import type { IconProps } from '@lucide/svelte';
+  import type { LucideProps } from '@lucide/svelte';
 
   interface ActionConfig {
     label: string;
-    icon?: Component<IconProps>;
+    icon?: Component<LucideProps>;
     onclick: () => void;
   }
 
   interface Props {
-    icon: Component<IconProps>;
+    icon: Component<LucideProps>;
     title: string;
     description: string;
     hints?: string[];

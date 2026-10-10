@@ -112,7 +112,7 @@ func ReconfigureFromSettings(settings *conf.Settings) error {
 		globalPushDispatcher = nil
 	}
 
-	// Call initializePushDispatcher directly — we already hold the lock,
+	// Call initializePushDispatcher directly; we already hold the lock,
 	// so going through dispatcherOnce.Do is unnecessary and avoids the
 	// anti-pattern of resetting sync.Once by value assignment.
 	return initializePushDispatcher(settings, existingMetrics)
@@ -610,9 +610,8 @@ func (d *pushDispatcher) logCircuitBreakerOpen(providerName, notifID string) {
 
 // shouldRetry determines if an attempt should be retried.
 func (d *pushDispatcher) shouldRetry(err error, attempts int, providerName string) bool {
-	var perr *providerError
 	retryable := true
-	if errors.As(err, &perr) {
+	if perr, ok := errors.AsType[*providerError](err); ok {
 		retryable = perr.Retryable
 	}
 

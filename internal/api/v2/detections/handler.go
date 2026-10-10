@@ -137,8 +137,8 @@ func (c *Handler) RegisterDetectionRoutes(g *echo.Group) {
 		return
 	}
 
-	// DetectionCache is already initialized by the constructor (NewWithOptions); do not
-	// re-create it here, which would orphan the constructor's cache (and its janitor).
+	// DetectionCache is initialized by the constructor (NewWithOptions); do not
+	// re-create it here, which would split invalidation between two caches.
 
 	// Detection endpoints - publicly accessible
 	//

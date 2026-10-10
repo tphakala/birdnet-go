@@ -148,6 +148,187 @@ func TestProcessMonitorTick_ResumesWhenModelReloads(t *testing.T) {
 		"the resume log fires once, not on every subsequent tick")
 }
 
+// TestProcessMonitorTick_ToleratesBufferAllocationRace verifies the startup grace
+// that keeps a monitor alive while its analysis buffer is still being allocated. The
+// stream-reset callback starts a monitor the moment StartStream fires, before
+// registerConsumersForSources allocates the source's analysis buffers, so a monitor
+// must poll through a bounded grace instead of dying on the first missing-buffer tick
+// (which would leave a legitimate target with no monitor: a silent analysis stop).
+func TestProcessMonitorTick_ToleratesBufferAllocationRace(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID = "src"
+		modelID  = "BirdNET_V2.4"
+		readSize = 480
+	)
+
+	// A buffer manager with NO analysis buffer allocated yet for (sourceID, modelID).
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	bm := &BufferManager{
+		bn:        &classifier.Orchestrator{},
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC),
+	}
+	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, readSize: readSize}
+	quit := make(chan struct{})
+	state := &monitorTickState{}
+
+	// While the buffer is missing and has never been read, the monitor keeps running
+	// for the whole grace window instead of stopping.
+	for tick := int64(1); tick <= bufferAllocGraceTicks; tick++ {
+		require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, tick),
+			"monitor must keep polling while its buffer is still being allocated (tick %d)", tick)
+	}
+	require.False(t, state.hasReadBuffer, "no buffer has been read yet")
+
+	// The buffer now appears (registerConsumersForSources finished) and receives a
+	// full analysis window: the monitor reads it and continues, and the not-found
+	// counter resets. IsModelLoaded is false on the empty orchestrator, so the tick
+	// stops before inference; the point is only that the monitor survived the race.
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, readSize*2, 0, readSize))
+	ab, err := mgr.AnalysisBuffer(sourceID, modelID)
+	require.NoError(t, err)
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, bufferAllocGraceTicks+1),
+		"monitor must survive once its buffer is allocated")
+	assert.True(t, state.hasReadBuffer, "buffer has now been read")
+	assert.Zero(t, state.notFoundTicks, "the not-found counter resets once the buffer reads")
+}
+
+// TestProcessMonitorTick_StopsWhenBufferNeverAllocated verifies the other side of the
+// grace: a monitor started for a model that is not a target for the source (its buffer
+// is never allocated) stops once the grace elapses rather than polling forever.
+func TestProcessMonitorTick_StopsWhenBufferNeverAllocated(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID = "src"
+		modelID  = "Perch_V2"
+		readSize = 480
+	)
+
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	var logBuf bytes.Buffer
+	bm := &BufferManager{
+		bn:        &classifier.Orchestrator{},
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(&logBuf, logger.LogLevelDebug, time.UTC),
+	}
+	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, readSize: readSize}
+	quit := make(chan struct{})
+	state := &monitorTickState{}
+
+	// Every tick within the grace keeps the monitor running.
+	for tick := int64(1); tick <= bufferAllocGraceTicks; tick++ {
+		require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, tick))
+	}
+	// The tick past the grace stops the monitor and warns once.
+	require.False(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, bufferAllocGraceTicks+1),
+		"monitor must stop once the allocation grace elapses without a buffer")
+	assert.Contains(t, logBuf.String(), "analysis buffer not found for monitor after allocation grace, stopping")
+}
+
+// TestProcessMonitorTick_ToleratesReconfigureBufferReallocation guards the fix for the
+// kept-source reconfigure race: ReconfigureSource deallocates the analysis buffer and
+// registerConsumersForSources reallocates it a few steps later. A monitor that had
+// already read the old buffer must poll through the grace across that gap and resume on
+// the reallocated buffer, not stop and get silently dropped.
+func TestProcessMonitorTick_ToleratesReconfigureBufferReallocation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID = "src"
+		modelID  = "BirdNET_V2.4"
+		readSize = 480
+	)
+
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, readSize*2, 0, readSize))
+	ab, err := mgr.AnalysisBuffer(sourceID, modelID)
+	require.NoError(t, err)
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+
+	bm := &BufferManager{
+		bn:        &classifier.Orchestrator{},
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC),
+	}
+	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, readSize: readSize}
+	quit := make(chan struct{})
+	state := &monitorTickState{}
+
+	// Tick 1: the buffer exists and is read once (hasReadBuffer flips to true).
+	require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, 1))
+	require.True(t, state.hasReadBuffer, "the buffer was read once")
+
+	// ReconfigureSource deallocates the analysis buffer.
+	mgr.DeallocateSource(sourceID)
+
+	// The monitor keeps polling across the whole reallocation window instead of
+	// stopping, even though it had already read the buffer.
+	for tick := int64(2); tick <= bufferAllocGraceTicks+1; tick++ {
+		require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, tick),
+			"a monitor whose buffer a reconfigure deallocated must keep polling (tick %d)", tick)
+	}
+
+	// registerConsumersForSources reallocates the buffer; the monitor resumes and the
+	// grace counter resets.
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, readSize*2, 0, readSize))
+	ab2, err := mgr.AnalysisBuffer(sourceID, modelID)
+	require.NoError(t, err)
+	require.NoError(t, ab2.Write(make([]byte, readSize)))
+	require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, bufferAllocGraceTicks+2),
+		"the monitor must resume once the buffer is reallocated")
+	assert.Zero(t, state.notFoundTicks, "the grace counter resets once the buffer is found again")
+}
+
+// TestProcessMonitorTick_StopsWhenRemovedBufferNeverReturns verifies the safety net: if
+// a monitor's buffer is removed after a read and never reallocated (and its quit channel
+// is never closed either), the monitor stops once the grace elapses rather than polling
+// forever. In production a genuine removal closes the quit channel and analysisBufferMonitor's
+// outer select exits first; this covers the buffer-map path directly.
+func TestProcessMonitorTick_StopsWhenRemovedBufferNeverReturns(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID = "src"
+		modelID  = "BirdNET_V2.4"
+		readSize = 480
+	)
+
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, readSize*2, 0, readSize))
+	ab, err := mgr.AnalysisBuffer(sourceID, modelID)
+	require.NoError(t, err)
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+
+	var logBuf bytes.Buffer
+	bm := &BufferManager{
+		bn:        &classifier.Orchestrator{},
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(&logBuf, logger.LogLevelDebug, time.UTC),
+	}
+	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, readSize: readSize}
+	quit := make(chan struct{})
+	state := &monitorTickState{}
+
+	// Tick 1: read once, then the buffer is deallocated and never comes back.
+	require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, 1))
+	require.True(t, state.hasReadBuffer)
+	mgr.DeallocateSource(sourceID)
+
+	// Every tick within the grace keeps the monitor polling.
+	for tick := int64(2); tick <= bufferAllocGraceTicks+1; tick++ {
+		require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, tick))
+	}
+	// The tick past the grace stops the monitor, logging the removed-not-reallocated case.
+	logBuf.Reset()
+	require.False(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, bufferAllocGraceTicks+2),
+		"a removed buffer that never returns must stop the monitor once the grace elapses")
+	assert.Contains(t, logBuf.String(), "analysis buffer removed and not reallocated within grace, stopping monitor")
+}
+
 func TestMonitorConfig_ReadSize(t *testing.T) {
 	t.Parallel()
 

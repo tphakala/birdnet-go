@@ -22,9 +22,9 @@ var _ ModelInstance = (*Bat)(nil)
 // instance falls back to reading the fields directly, publishIdentity captures a
 // snapshot read lock-free, and a subsequent bn.ModelInfo write WITHOUT republish
 // does not change the getters. That last property is the race fix: the lock-free
-// getters only ever observe a committed snapshot, never reloadModelInternal's
-// in-flight write to bn.ModelInfo / bn.modelVersion. Republish (reload commit /
-// rollback) then advances the snapshot.
+// getters only ever observe a committed snapshot, never a concurrent in-place
+// write to bn.ModelInfo / bn.modelVersion. Republish (reload commit / rollback)
+// then advances the snapshot.
 func TestBirdNET_Identity_PublishAndSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -45,7 +45,7 @@ func TestBirdNET_Identity_PublishAndSnapshot(t *testing.T) {
 
 	// A bn.ModelInfo / bn.modelVersion write WITHOUT republish must NOT change the
 	// getters: this is what decouples the lock-free getters from a concurrent
-	// reloadModelInternal write to those fields.
+	// in-place write to those fields.
 	bn.ModelInfo = ModelInfo{ID: "OTHER", Name: "Other", Spec: ModelSpec{SampleRate: 32000}}
 	bn.modelVersion = "other"
 	assert.Equal(t, "BirdNET_V2.4", bn.ModelID(), "getter must read the published snapshot, not the unpublished field write")
@@ -65,9 +65,9 @@ func TestBirdNET_Identity_PublishAndSnapshot(t *testing.T) {
 // mechanism behind RuntimeInfo(): an unpublished instance reports the not-loaded
 // triplet, setRuntimeInfo publishes a self-consistent triplet read lock-free, and
 // storing a snapshotted pointer restores it. The store-snapshot step is exactly
-// what reloadModelInternal's rollback performs on a failed reload, so this covers
-// the rollback restoration without needing a native backend to drive the full
-// reload path.
+// what the former in-place reload's rollback performs on a failed reload, so
+// this covers the rollback restoration without needing a native backend to
+// drive the full reload path.
 func TestBirdNET_RuntimeInfo_PublishAndRestore(t *testing.T) {
 	t.Parallel()
 
@@ -90,7 +90,7 @@ func TestBirdNET_RuntimeInfo_PublishAndRestore(t *testing.T) {
 	assert.Equal(t, BackendOpenVINO, backend)
 	assert.Equal(t, string(QuantizationFP16), precision)
 
-	// Roll back to the snapshot, exactly as reloadModelInternal does on failure.
+	// Roll back to the snapshot, exactly as the former in-place reload does on failure.
 	bn.runtime.Store(snapshot)
 	device, backend, precision = bn.RuntimeInfo()
 	assert.Equal(t, deviceCPU, device, "rollback must restore the previous device")

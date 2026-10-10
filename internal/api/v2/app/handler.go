@@ -14,11 +14,16 @@
 //     trigger-notification and status handlers.
 //   - appMetadataRepo: the app-metadata repository, initialized lazily in
 //     RegisterAppRoutes from the V2Manager and read by the wizard-state helpers.
+//     RegisterAppRoutes also records at startup whether a fresh install still
+//     needs onboarding (see recordOnboardingState).
+//   - isEnhancedDatabase: reports whether the v2 database is authoritative, which
+//     gates that startup record.
 package app
 
 import (
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -45,16 +50,25 @@ type Handler struct {
 	// lazily in RegisterAppRoutes from the V2Manager (nil when no V2 manager is
 	// wired); the wizard-state helpers read it nil-guarded.
 	appMetadataRepo repository.AppMetadataRepository
+
+	// isEnhancedDatabase reports whether the v2 database is the authoritative
+	// store (fresh v2 install or post-migration v2-only mode). New sets it to
+	// datastoreV2.IsEnhancedDatabase; tests inject a stub so they need not touch
+	// the process-wide mode. When nil the database is treated as not enhanced,
+	// so no onboarding state is recorded.
+	isEnhancedDatabase func() bool
 }
 
 // New constructs the app/debug domain handler around the shared core and the
-// facade-injected auth and notification services. The app-metadata repository is
-// created lazily in RegisterAppRoutes.
+// facade-injected auth and notification services, with the database-mode check
+// bound to datastoreV2.IsEnhancedDatabase. The app-metadata repository is created
+// lazily in RegisterAppRoutes.
 func New(core *apicore.Core, authService auth.Service, notificationService *notification.Service) *Handler {
 	return &Handler{
 		Core:                core,
 		authService:         authService,
 		notificationService: notificationService,
+		isEnhancedDatabase:  datastoreV2.IsEnhancedDatabase,
 	}
 }
 

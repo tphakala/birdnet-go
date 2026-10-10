@@ -17,7 +17,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import prettier from 'prettier';
-import { parse as parseICU } from '@formatjs/icu-messageformat-parser';
+import { extractICUParameters } from './icuMessage.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -80,59 +80,14 @@ function generateTypeFromObject(obj: TranslationObject, prefix = ''): string {
  * Extracts parameter names from a translation string, in order of appearance.
  * e.g., "Hello {name}, you have {count} messages" -> ['name', 'count']
  *
- * Uses the ICU message parser (like validateTranslations.ts) so plural/select
- * parameters such as "{count, plural, ...}" are captured, which the previous
- * simple-brace regex missed. Falls back to that regex for strings the ICU
- * parser rejects. Order is preserved (Set iteration is insertion order) rather
- * than sorted, so the generated `// params:` annotations stay stable.
+ * Uses the shared ICU helper (the same one validateTranslations.ts uses) so
+ * plural/select parameters such as "{count, plural, ...}" and parameters
+ * inside HTML tags such as `<a href="{url}">` are captured. Order is
+ * preserved rather than sorted, so the generated `// params:` annotations
+ * stay stable.
  */
 function extractParameters(str: string): string[] {
-  const params = new Set<string>();
-
-  try {
-    extractParamsFromAST(parseICU(str), params);
-  } catch {
-    const regex = /\{(\w+)\}/g;
-    let match;
-    while ((match = regex.exec(str)) !== null) {
-      params.add(match[1]);
-    }
-  }
-
-  return [...params];
-}
-
-/**
- * Walks an ICU AST collecting parameter names, recursing into plural/select
- * option branches. Types 1-6 are the parameter-bearing argument nodes
- * (argument, number, date, time, select, plural); each carries the parameter
- * name in `value`. Literal (0), pound (7), and tag (8) carry no parameter name.
- */
-function extractParamsFromAST(elements: ReturnType<typeof parseICU>, params: Set<string>): void {
-  for (const element of elements) {
-    const node = element as unknown as Record<string, unknown>;
-
-    if (
-      'type' in node &&
-      typeof node.type === 'number' &&
-      node.type >= 1 &&
-      node.type <= 6 &&
-      typeof node.value === 'string'
-    ) {
-      params.add(node.value);
-    }
-
-    if ('options' in node && typeof node.options === 'object' && node.options !== null) {
-      for (const option of Object.values(node.options as Record<string, unknown>)) {
-        if (option && typeof option === 'object' && 'value' in option) {
-          const optionValue = (option as Record<string, unknown>).value;
-          if (Array.isArray(optionValue)) {
-            extractParamsFromAST(optionValue as ReturnType<typeof parseICU>, params);
-          }
-        }
-      }
-    }
-  }
+  return extractICUParameters(str);
 }
 
 /**

@@ -37,6 +37,12 @@ services:
     volumes:
       - ./config:/config
       - ./data:/data
+      # Host mounts for .local names and DNS-SD discovery (read-only, never :z or :Z).
+      # Rootless Docker without avahi/D-Bus: remove these lines. Opt out of D-Bus: remove its line.
+      # Remove the D-Bus line when BIRDNET_UID=0: uid 0 on the system bus is host root.
+      # See doc/wiki/rtsp-troubleshooting.md (Using .local (mDNS) hostnames in containers).
+      - /run/avahi-daemon:/run/avahi-daemon:ro
+      - /run/dbus:/run/dbus:ro
       # External media (USB / SD / fileshare) for Import and Backup. Optional, opt-in.
       # One-time host setup before uncommenting:
       #   sudo mkdir -p /mnt/birdnet-go/external

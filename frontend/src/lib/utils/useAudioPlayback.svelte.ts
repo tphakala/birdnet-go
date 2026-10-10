@@ -239,7 +239,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       audioContextAvailable = audioNodes !== null && audioContext.state === 'running';
       return true;
     } catch (err) {
-      logger.warn('AudioContext initialization failed', err as Error);
+      logger.warn('AudioContext initialization failed', err);
       audioContextAvailable = false;
       return false;
     } finally {
@@ -284,7 +284,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
           playRequestedAfterRetry = true;
           return;
         }
-        logger.error('Playback failed', err as Error);
+        logger.error('Playback failed', err);
         error = t('media.audio.playError');
       }
     } else {

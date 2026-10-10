@@ -26,9 +26,9 @@ var updateGoldenFiles = flag.Bool("update", false, "update golden files")
 // Test constants
 const (
 	// Test durations
-	testDuration24Hours = 24 * time.Hour
-	testDuration1Hour   = 1 * time.Hour
-	testDuration1Minute = 1 * time.Minute
+	testWindowDaily  = 24 * time.Hour
+	testWindowHourly = 1 * time.Hour
+	testWindowBrief  = 1 * time.Minute
 
 	// Test sizes in bytes
 	testSize10MB = 10 * 1024 * 1024
@@ -784,7 +784,7 @@ func TestCollector_collectJournalLogs(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 		defer cancel()
 		diagnostics := &LogSourceDiagnostics{PathsSearched: []SearchedPath{}, Details: make(map[string]any)}
-		logs, err := c.collectJournalLogs(ctx, testDuration1Hour, false, diagnostics)
+		logs, err := c.collectJournalLogs(ctx, testWindowHourly, false, diagnostics)
 
 		// If journalctl is not available or service doesn't exist, we should get our sentinel error
 		if err != nil {
@@ -828,7 +828,7 @@ func TestCollectionDiagnostics_Population(t *testing.T) {
 						Summary: DiagnosticSummary{
 							TotalEntries: 10,
 							TimeRange: TimeRange{
-								From: time.Now().Add(-testDuration24Hours),
+								From: time.Now().Add(-testWindowDaily),
 								To:   time.Now(),
 							},
 						},
@@ -919,7 +919,7 @@ func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
 	}{
 		{
 			name:     "successful log collection",
-			duration: testDuration24Hours,
+			duration: testWindowDaily,
 			validate: func(t *testing.T, acc *logScanAccum, diag *LogSourceDiagnostics) {
 				t.Helper()
 				// Check that paths were searched
@@ -935,7 +935,7 @@ func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
 		},
 		{
 			name:     "old logs filtered by duration",
-			duration: testDuration1Minute, // Very short duration to filter out test log
+			duration: testWindowBrief, // Very short duration to filter out test log
 			validate: func(t *testing.T, acc *logScanAccum, diag *LogSourceDiagnostics) {
 				t.Helper()
 				// Paths should still be searched
@@ -977,7 +977,7 @@ func TestCollector_Collect_AlwaysIncludesDiagnostics(t *testing.T) {
 		IncludeLogs:       true,  // Enable logs to avoid validation error
 		IncludeConfig:     false, // Disable config
 		IncludeSystemInfo: false, // Disable system info
-		LogDuration:       testDuration1Hour,
+		LogDuration:       testWindowHourly,
 		MaxLogSize:        testSize1KB,
 	}
 
@@ -999,7 +999,7 @@ func TestCollector_Collect_AlwaysIncludesDiagnostics(t *testing.T) {
 		IncludeLogs:       true,
 		IncludeConfig:     true,
 		IncludeSystemInfo: true,
-		LogDuration:       testDuration1Hour,
+		LogDuration:       testWindowHourly,
 		MaxLogSize:        testSize1KB,
 	}
 

@@ -90,7 +90,6 @@ func engineReconfigureCase(t *testing.T, ffmpegPath string, fixture streamtest.F
 		LogLevel:   "error",
 	}, nil)
 	t.Cleanup(eng.Stop)
-	eng.SetPrimaryModel(testModelID, testClipBytes, testOverlapBytes, testReadSize)
 
 	const sourceID = "engine-reconf"
 	baseCfg := func(mediaMode string) *audiocore.SourceConfig {
@@ -107,7 +106,8 @@ func engineReconfigureCase(t *testing.T, ffmpegPath string, fixture streamtest.F
 		}
 	}
 
-	require.NoError(t, eng.AddSource(baseCfg("auto")))
+	_, err := eng.AddSource(baseCfg("auto"))
+	require.NoError(t, err)
 	require.Eventually(t, func() bool { return engineStreamHealthy(eng, sourceID) },
 		engineHealthyBudget, enginePollInterval, "stream should become healthy after AddSource")
 

@@ -43,7 +43,7 @@ func TestRebuildNameResolver_OpenFaunaOverridesLabel(t *testing.T) {
 
 func TestRebuildNameResolver_EmptyWorkingSetDoesNotPanic(t *testing.T) {
 	o := newResolverTestOrchestrator(t, "Turdus merula_x")
-	o.primary = nil // exercise the empty-working-set guard without a model
+	// Exercise the empty-working-set guard without a model.
 	assert.NoError(t, o.RebuildNameResolver(nil))
 }
 

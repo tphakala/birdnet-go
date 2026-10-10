@@ -3,8 +3,12 @@ package inference
 import (
 	"context"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -12,9 +16,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 
 	ov "github.com/tphakala/birdnet-go/internal/inference/openvino"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // ovProbeHelperEnv marks a test-binary re-invocation as the probe child
@@ -287,12 +291,12 @@ func TestOpenVINOHasDeviceDoesNotBlockOnInFlightProbe(t *testing.T) {
 	if !ov.Supported {
 		t.Skip("probe short-circuits without the openvino build tag")
 	}
-	calls := fakeOVProbeChild(t, "hang")
-	shortenOVProbeTimeout(t, 2*time.Second)
-
 	// If an assertion below fails before <-done, the probe goroutine (and its
 	// child) would outlive the test; make that a reported leak, not a silent one.
-	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	testutil.VerifyNoLeaks(t)
+
+	calls := fakeOVProbeChild(t, "hang")
+	shortenOVProbeTimeout(t, 2*time.Second)
 
 	done := make(chan struct{})
 	go func() {
@@ -313,4 +317,112 @@ func TestOpenVINOHasDeviceDoesNotBlockOnInFlightProbe(t *testing.T) {
 
 	<-done
 	assert.Equal(t, 1, calls.count())
+}
+
+// markOVCoreLoadedForTest makes the package believe InitOpenVINO loaded the core
+// from libraryPath (loaded=true) or that no core is loaded (loaded=false),
+// restoring the previous state at cleanup. No real library is loaded.
+func markOVCoreLoadedForTest(t *testing.T, loaded bool, libraryPath string) {
+	t.Helper()
+	ovInitMu.Lock()
+	prevInit, prevPath := ovInitialized, ovInitPath
+	ovInitialized, ovInitPath = loaded, libraryPath
+	ovInitMu.Unlock()
+	t.Cleanup(func() {
+		ovInitMu.Lock()
+		ovInitialized, ovInitPath = prevInit, prevPath
+		ovInitMu.Unlock()
+	})
+}
+
+// TestOpenVINOHasDeviceNeverProbesOrEnumeratesBeforeProbe pins that a status
+// reader on a host whose core is loaded but never probed (the explicit-CPU plan
+// path) answers false without launching a probe child: it must neither block on
+// a child nor fall back to the in-process driver walk (issue #4236).
+func TestOpenVINOHasDeviceNeverProbesOrEnumeratesBeforeProbe(t *testing.T) {
+	calls := fakeOVProbeChild(t, "ok")
+	markOVCoreLoadedForTest(t, true, "libopenvino_c.so")
+
+	assert.False(t, OpenVINOHasDevice("GPU"))
+	assert.False(t, OpenVINOHasDevice("CPU"))
+	assert.Equal(t, 0, calls.count(), "a status reader must not launch the probe child")
+}
+
+// ovInProcessEnumerationAllowed names the only function in this package allowed
+// to call ov.AvailableDevices: the probe child, which enumerates in a separate
+// process precisely so a driver fault cannot abort BirdNET-Go (issue #4236).
+const ovInProcessEnumerationAllowed = "RunOVProbeChild"
+
+// TestOnlyProbeChildEnumeratesInProcess is the structural guard for #4236: a
+// behavioural test cannot tell an in-process ov.AvailableDevices call apart
+// from "no device" without a real OpenVINO core, so this parses the package's
+// non-test sources and fails if any function other than the probe child calls
+// it.
+func TestOnlyProbeChildEnumeratesInProcess(t *testing.T) {
+	t.Parallel()
+	fset := token.NewFileSet()
+	files, err := filepath.Glob("*.go")
+	require.NoError(t, err)
+
+	var callers []string
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		require.NoError(t, err)
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				sel, ok := n.(*ast.SelectorExpr)
+				if ok && sel.Sel.Name == "AvailableDevices" {
+					if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "ov" {
+						callers = append(callers, name+":"+fn.Name.Name)
+					}
+				}
+				return true
+			})
+		}
+	}
+	require.NotEmpty(t, callers, "the probe child must still enumerate (guards against a vacuous scan)")
+	for _, c := range callers {
+		assert.True(t, strings.HasSuffix(c, ":"+ovInProcessEnumerationAllowed),
+			"%s enumerates OpenVINO devices in-process; only the probe child may (issue #4236)", c)
+	}
+}
+
+// TestEnsureOpenVINOProbeRunsChildOnce pins that EnsureOpenVINOProbe probes the
+// library the core was loaded from, out of process and once, after which status
+// readers answer from the probe.
+func TestEnsureOpenVINOProbeRunsChildOnce(t *testing.T) {
+	calls := fakeOVProbeChild(t, "ok")
+	markOVCoreLoadedForTest(t, true, "/opt/custom/libopenvino_c.so")
+
+	EnsureOpenVINOProbe()
+	EnsureOpenVINOProbe()
+
+	if !ov.Supported {
+		assert.Equal(t, 0, calls.count(), "without the openvino build tag there is nothing to probe")
+		return
+	}
+	assert.Equal(t, 1, calls.count(), "the verdict is cached, so a second call launches no child")
+	ovProbe.mu.Lock()
+	_, probedLoadedPath := ovProbe.results["/opt/custom/libopenvino_c.so"]
+	ovProbe.mu.Unlock()
+	assert.True(t, probedLoadedPath, "the probe must target the library the core was loaded from")
+	assert.True(t, OpenVINOHasDevice("GPU"), "readers answer from the probe once it has run")
+}
+
+// TestEnsureOpenVINOProbeNoopWithoutCore pins that a host with no OpenVINO core
+// loaded never launches a probe child.
+func TestEnsureOpenVINOProbeNoopWithoutCore(t *testing.T) {
+	calls := fakeOVProbeChild(t, "ok")
+	markOVCoreLoadedForTest(t, false, "")
+
+	EnsureOpenVINOProbe()
+
+	assert.Equal(t, 0, calls.count())
 }

@@ -1,14 +1,14 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import { generateId } from '$lib/utils/uuid';
-  import type { HTMLAttributes } from 'svelte/elements';
+  import type { HTMLAttributes, HTMLInputAttributes } from 'svelte/elements';
   import { Eye, EyeOff, Pencil, X, TriangleAlert } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
   /** The redacted placeholder the backend sends for configured secrets. */
   const REDACTED_VALUE = '**********';
 
-  interface Props extends HTMLAttributes<HTMLDivElement> {
+  interface Props extends Omit<HTMLAttributes<HTMLDivElement>, 'onblur'> {
     label: string;
     name?: string;
     value: string;
@@ -22,6 +22,12 @@
     showStrength?: boolean;
     allowReveal?: boolean;
     autocomplete?: 'current-password' | 'new-password' | 'off';
+    /** Id of an element that describes the input; joined with the error text id when error is set. */
+    'aria-describedby'?: string;
+    /** Marks the input invalid and gives it the error border, also without an error message. */
+    'aria-invalid'?: HTMLInputAttributes['aria-invalid'];
+    /** Called with the current value when the input loses focus. */
+    onblur?: (_value: string) => void;
   }
 
   let {
@@ -38,11 +44,22 @@
     showStrength = false,
     allowReveal = true,
     autocomplete = 'current-password',
+    'aria-describedby': ariaDescribedby,
+    'aria-invalid': ariaInvalid,
+    onblur,
     ...rest
   }: Props = $props();
 
   const generatedFieldId = generateId('password-field');
   const fieldId = $derived(name || generatedFieldId);
+  const errorId = $derived(`${fieldId}-error`);
+  const describedBy = $derived(
+    [ariaDescribedby, error ? errorId : undefined].filter(Boolean).join(' ') || undefined
+  );
+  const isInvalid = $derived(
+    Boolean(error) ||
+      (ariaInvalid !== undefined && ariaInvalid !== false && ariaInvalid !== 'false')
+  );
 
   let showPassword = $state(false);
 
@@ -62,7 +79,7 @@
 
   function startEditing() {
     isEditing = true;
-    // Only clear the local display — don't propagate to the parent store
+    // Only clear the local display; don't propagate to the parent store
     // until the user actually types a new value via the input handler.
     value = '';
   }
@@ -154,7 +171,7 @@
     </label>
   {/if}
 
-  <!-- Redacted "secret is set" display — shown when value is the redacted placeholder and user is not editing -->
+  <!-- Redacted "secret is set" display: shown when value is the redacted placeholder and user is not editing -->
   {#if isRedacted && !isEditing}
     <div class="relative flex items-center gap-2">
       <div
@@ -200,14 +217,17 @@
           {disabled}
           {autocomplete}
           oninput={e => handleChange(e.currentTarget.value)}
-          class={cn('input input-sm w-full pr-10', error ? 'input-error' : '')}
+          onblur={e => onblur?.(e.currentTarget.value)}
+          aria-describedby={describedBy}
+          aria-invalid={error ? 'true' : ariaInvalid}
+          class={cn('input input-sm w-full pr-10', isInvalid ? 'input-error' : '')}
         />
 
         <!-- Password reveal toggle - vertically centered on input -->
         {#if allowReveal}
           <button
             type="button"
-            class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-sm text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] transition-colors disabled:opacity-50"
+            class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-sm text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 disabled:opacity-50"
             onclick={togglePasswordVisibility}
             {disabled}
             aria-label={showPassword
@@ -289,10 +309,14 @@
     </div>
   {/if}
 
-  <!-- Error display -->
-  {#if error}
-    <div class="label">
-      <span class="label-text-alt text-[var(--color-error)]">{error}</span>
-    </div>
-  {/if}
+  <!-- Error display: an always-present alert region whose text changes, so an error that
+       appears is announced. It is not a .label-text-alt, whose opacity lowers the contrast. While
+       empty, -mt-1 cancels the .form-control flex gap (custom.css) so it adds no height. -->
+  <div
+    id={errorId}
+    role="alert"
+    class={error ? 'py-1 text-xs leading-4 text-[var(--text-error)]' : '-mt-1'}
+  >
+    {error ?? ''}
+  </div>
 </div>

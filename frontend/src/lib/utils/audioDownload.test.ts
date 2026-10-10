@@ -9,9 +9,14 @@ function makeDetection(overrides: Partial<Detection>): Detection {
     scientificName: 'Passer domesticus',
     date: '2026-06-22',
     time: '14:30:05',
+    beginTime: '2026-06-22T14:30:05',
+    endTime: '2026-06-22T14:30:08',
+    speciesCode: 'houspa',
     confidence: 0.9,
+    verified: 'unverified',
+    locked: false,
     ...overrides,
-  } as Detection;
+  };
 }
 
 describe('buildDetectionAudioFilename', () => {

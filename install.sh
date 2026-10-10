@@ -19,7 +19,7 @@ EOF
 
 
 # Default version (will be set by parse_arguments function)
-BIRDNET_GO_VERSION="nightly"
+BIRDNET_GO_VERSION="latest"
 BIRDNET_GO_IMAGE=""
 
 # Silent mode for non-interactive installation (set via --silent flag)
@@ -4168,7 +4168,7 @@ _valid_iana_tz() {
 
 # Resolve the host timezone using a single, validated detection chain.
 # Shared by configure_timezone() and generate_systemd_service_content() so the two
-# cannot drift apart (Forgejo #877). Tries, in order: an optional preferred candidate
+# cannot drift apart. Tries, in order: an optional preferred candidate
 # (e.g. a previously configured zone), timedatectl, the /etc/localtime symlink, and
 # finally /etc/timezone. Each source is validated against the zoneinfo database
 # independently and skipped on failure, so a stale or invalid earlier source no longer
@@ -4251,7 +4251,7 @@ configure_timezone() {
     local system_tz=""
     local detected_tz=""
     
-    # Detect and validate the system timezone via the shared resolver (Forgejo #877)
+    # Detect and validate the system timezone via the shared resolver
     system_tz=$(resolve_host_timezone "")
 
     # Default to UTC if we couldn't detect
@@ -5151,14 +5151,10 @@ configure_metrics_exposure() {
 
 # Generate systemd service content
 generate_systemd_service_content() {
-    # Use configured timezone if available, otherwise fall back to system timezone.
-    # Mirror the multi-method detection from configure_timezone() so newer
-    # systemd distributions without /etc/timezone (e.g. Debian 13) still resolve
-    # the host zone instead of silently defaulting to UTC.
-    # Resolve the host timezone via the shared resolver (Forgejo #877), preferring any
-    # zone the user already configured. Falls back to UTC only when nothing valid can be
-    # detected, so newer systemd distributions without /etc/timezone (e.g. Debian 13)
-    # still resolve the host zone instead of silently defaulting to UTC.
+    # Resolve the host timezone via the shared resolver, preferring any zone the
+    # user already configured. Falls back to UTC only when nothing valid can be
+    # detected, so newer systemd distributions without /etc/timezone (e.g.
+    # Debian 13) still resolve the host zone instead of silently defaulting to UTC.
     local TZ
     TZ=$(resolve_host_timezone "$CONFIGURED_TZ")
     if [ -z "$TZ" ]; then
@@ -5192,6 +5188,22 @@ generate_systemd_service_content() {
     local thermal_volume_line=""
     if check_directory_exists "/sys/class/thermal"; then
         thermal_volume_line="-v /sys/class/thermal:/sys/class/thermal"
+    fi
+
+    # Host mDNS sockets, mounted read-only so the container's libnss-mdns can resolve
+    # .local names (Avahi socket) and DNS-SD discovery can use Avahi's D-Bus API (system
+    # bus). Each mount is the socket's directory, not the socket file: restarting the
+    # owning service creates a new socket inode that a file bind mount would never
+    # follow. Always :ro and never :z or :Z, which would relabel the host's directory.
+    # Gated per socket so a missing source never gets created as a root-owned directory,
+    # and re-detected on every regenerate. See doc/wiki/rtsp-troubleshooting.md.
+    local avahi_volume_line dbus_volume_line
+    avahi_volume_line=$(host_socket_mount /run/avahi-daemon/socket)
+    dbus_volume_line=$(host_socket_mount /run/dbus/system_bus_socket)
+    # D-Bus authenticates by peer uid, and uid 0 on the system bus is host root (it can
+    # start host services and commands), so a root install never gets the bus.
+    if [ "$HOST_UID" = "0" ]; then
+        dbus_volume_line=""
     fi
 
     # External media mount: host /mnt/birdnet-go/external -> container /external
@@ -5270,6 +5282,8 @@ ${audio_env_line:+    ${audio_env_line} \\
 }    -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
 ${thermal_volume_line:+    ${thermal_volume_line} \\
+}${avahi_volume_line:+    ${avahi_volume_line} \\
+}${dbus_volume_line:+    ${dbus_volume_line} \\
 }    ${external_media_line} \\
     ${BIRDNET_GO_IMAGE}
 # Cleanup tasks on stop
@@ -5302,6 +5316,13 @@ _extract_bind_addr() {
 # It must be called before check_systemd_service / add_systemd_config on the
 # update and reconfigure paths. Sets globals WEB_PORT, BIND_TLS_PORTS, BIND_METRICS_PORT,
 # and CONFIGURED_TZ.
+#
+# The read-only Avahi and D-Bus mounts (-v /run/avahi-daemon:/run/avahi-daemon:ro and
+# -v /run/dbus:/run/dbus:ro) are deliberately not parsed or restored: they are
+# re-detected from host state (host_socket_mount) on every
+# regenerate. The first update after the mount was introduced therefore rewrites the unit
+# once to add it (same one-time exception as the 443:8443 mapping above); later updates
+# on an unchanged host are byte-identical again.
 
 # Read a systemd unit file, falling back to sudo when the file exists but is not readable
 # by the invoking user (root-owned mode 600 units, GitHub #3950 - a silent read failure
@@ -6229,7 +6250,7 @@ start_birdnet_go() {
         fi
 
         # If no known pattern matched, still capture the most relevant log line so the
-        # report is actionable instead of a bare "unknown" (Forgejo #350).
+        # report is actionable instead of a bare "unknown".
         if [ "$error_type" = "unknown" ]; then
             error_detail=$(echo "$service_logs" | grep -oiE '(error|fatal|panic|failed)[^;]*' | tail -1 | sed 's/"/\\"/g' | head -c 200)
             [ -z "$error_detail" ] && error_detail="No recognized error pattern; see the service logs below"
@@ -6364,7 +6385,7 @@ start_birdnet_go() {
         send_telemetry_event "error" "Service startup failed: $error_type" "error" "step=start_birdnet_go,error_type=$error_type" "$diagnostic_json"
         print_message "❌ Failed to start BirdNET-Go service" "$RED"
 
-        # Surface a concrete summary even when the error type is unknown (Forgejo #350): the
+        # Surface a concrete summary even when the error type is unknown: the
         # detected cause and the container exit code are the most actionable details and
         # should never be omitted just because no known pattern matched.
         print_message "   Detected cause: $error_type" "$YELLOW"
@@ -6543,6 +6564,18 @@ has_intel_gpu() {
     return 1  # False - no Intel render node
 }
 
+# Print "-v DIR:DIR:ro" for the directory holding the given host socket, or nothing
+# when the socket does not exist. Gate on the socket (-S), not the directory, so a
+# leftover empty directory does not count. Always returns 0 (safe under set -e).
+host_socket_mount() {
+    local socket="$1" dir
+    dir=$(dirname "$socket")
+    if [ -S "$socket" ]; then
+        printf -- '-v %s:%s:ro' "$dir" "$dir"
+    fi
+    return 0
+}
+
 # Function to check if system is a Raspberry Pi
 is_raspberry_pi() {
     if [ -f /proc/device-tree/model ]; then
@@ -6695,8 +6728,8 @@ show_usage() {
     echo ""
     echo "OPTIONS:"
     echo "  -v, --version VERSION    Specify container image version (tag or hash)"
-    echo "                          Default: nightly"
-    echo "                          Examples: latest, v1.2.3, nightly, sha256:abc123..."
+    echo "                          Default: latest"
+    echo "                          Examples: latest, nightly, 20260716 (a dated release), sha256:abc123..."
     echo "  --silent                Non-interactive install using environment variables"
     echo "  --migrate               Migrate an existing install from another host over SSH"
     echo "  --migrate-from <host>   Migrate source (user@host or ssh alias); add --silent to avoid prompts"
@@ -6717,10 +6750,10 @@ show_usage() {
     echo "  BIRDNET_ENABLE_METRICS  Publish Prometheus metrics on port 8090: true/false (default: false)"
     echo ""
     echo "EXAMPLES:"
-    echo "  $0                      # Install using nightly version (default)"
-    echo "  $0 -v latest           # Install using latest stable version"
-    echo "  $0 -v v1.2.3           # Install specific version tag"
-    echo "  $0 --version nightly   # Explicitly use nightly version"
+    echo "  $0                      # Install using latest stable version (default)"
+    echo "  $0 -v nightly          # Install using nightly version"
+    echo "  $0 -v 20260716         # Install a specific dated release (YYYYMMDD tag)"
+    echo "  $0 --version latest    # Explicitly use latest stable version"
     echo "  BIRDNET_RTSP_URL=rtsp://cam:8554/live BIRDNET_LATITUDE=60.17 \\"
     echo "    BIRDNET_LONGITUDE=24.94 $0 --silent  # Silent RTSP install"
     echo ""
@@ -7836,6 +7869,14 @@ if check_mdns; then
     print_message "🐦 Also available at http://${HOSTNAME}.local:${WEB_PORT}" "$GREEN"
 else
     log_message "INFO" "mDNS not available"
+fi
+
+# Container mDNS mounts follow the same host state, so log them as part of the mDNS status
+if [ -z "$(host_socket_mount /run/avahi-daemon/socket)" ]; then
+    log_message "INFO" "Host avahi-daemon socket not found: the container resolves .local stream URLs only through unicast DNS until avahi-daemon is installed and the install/update is re-run"
+fi
+if [ -z "$(host_socket_mount /run/dbus/system_bus_socket)" ]; then
+    log_message "INFO" "Host system D-Bus socket not found: DNS-SD service discovery will not work inside the container"
 fi
 
 # Show service diagnostics

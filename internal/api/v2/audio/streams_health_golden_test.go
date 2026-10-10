@@ -90,7 +90,7 @@ func TestRemovedStreamHealth_ByteIdentity(t *testing.T) {
 // additive keys the real ffmpeg.GetHealth emits (engine, transport). This runs a
 // real ffmpeg.Stream's GetHealth through the converter and asserts engine and
 // transport are the ONLY additions over the same health with those two fields
-// cleared (Forgejo #1648).
+// cleared.
 func TestConvertStreamHealthToResponse_RealFFmpegGetHealth(t *testing.T) {
 	t.Parallel()
 

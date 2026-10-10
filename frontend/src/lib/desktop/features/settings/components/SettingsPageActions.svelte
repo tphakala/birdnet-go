@@ -11,7 +11,8 @@
   - Accessible with proper ARIA attributes
   - Consistent DaisyUI 5 styling
 
-  Props: None - Uses global settings stores
+  Props:
+  - onReset: Optional callback after all settings are reset
 
   @component
 -->
@@ -28,6 +29,12 @@
   import { loggers } from '$lib/utils/logger';
 
   const logger = loggers.settings;
+
+  interface Props {
+    onReset?: () => void;
+  }
+
+  let { onReset }: Props = $props();
 
   let store = $derived($settingsStore);
   let unsavedChanges = $derived($hasUnsavedChanges);
@@ -56,6 +63,7 @@
     }
 
     settingsActions.resetAllSettings();
+    onReset?.();
   }
 </script>
 

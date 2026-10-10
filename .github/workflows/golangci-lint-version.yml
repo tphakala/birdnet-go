@@ -1,0 +1,71 @@
+name: golangci-lint version pins
+
+# The golangci-lint version is written out in four places. GOLANGCI_LINT_VERSION
+# in Taskfile.yml is the reference; this job fails when any other copy differs.
+# It triggers on the files holding a copy, so a pin-only change is checked in
+# its own PR instead of surfacing later on an unrelated Go change.
+
+on:
+  pull_request:
+    paths:
+      - 'Taskfile.yml'
+      - '.husky/pre-commit'
+      - '.devcontainer/postCreateCommand.sh'
+      - '.github/workflows/golangci-lint.yml'
+      - '.github/workflows/golangci-lint-version.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'Taskfile.yml'
+      - '.husky/pre-commit'
+      - '.devcontainer/postCreateCommand.sh'
+      - '.github/workflows/golangci-lint.yml'
+      - '.github/workflows/golangci-lint-version.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  pins:
+    name: check
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check golangci-lint version pins
+        run: |
+          want=$(sed -n "s/^  GOLANGCI_LINT_VERSION: '\(.*\)'$/\1/p" Taskfile.yml)
+          if [ -z "$want" ]; then
+            echo "::error file=Taskfile.yml::GOLANGCI_LINT_VERSION not found"
+            exit 1
+          fi
+          fail=0
+          # check FILE PATTERN: every line matching PATTERN (the pin's shape,
+          # any version) must carry exactly the reference version.
+          check() {
+            found=$(grep -Eo "$2" "$1" || true)
+            if [ -z "$found" ]; then
+              echo "::error file=$1::no golangci-lint version pin found"
+              fail=1
+              return
+            fi
+            while IFS= read -r line; do
+              got=$(printf '%s' "$line" | sed -E 's/.*v([0-9.]+)$/\1/')
+              if [ "$got" != "$want" ]; then
+                echo "::error file=$1::$line does not match GOLANGCI_LINT_VERSION ($want) in Taskfile.yml"
+                fail=1
+              fi
+            done <<< "$found"
+          }
+          check .github/workflows/golangci-lint.yml '^ +version: v[0-9.]+$'
+          check .devcontainer/postCreateCommand.sh 'golangci-lint@v[0-9.]+$'
+          hook=$(sed -n 's/^  GOLANGCI_LINT_VERSION="\(.*\)"$/\1/p' .husky/pre-commit)
+          if [ "$hook" != "$want" ]; then
+            echo "::error file=.husky/pre-commit::GOLANGCI_LINT_VERSION=\"$hook\" does not match $want in Taskfile.yml"
+            fail=1
+          fi
+          exit "$fail"

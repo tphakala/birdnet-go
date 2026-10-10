@@ -6,47 +6,58 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDivideThreads_EqualSplit(t *testing.T) {
-	t.Parallel()
-	result := divideThreads(8, []string{"model-a", "model-b"}, "model-a")
-	assert.Equal(t, 4, result["model-a"])
-	assert.Equal(t, 4, result["model-b"])
-}
-
-func TestDivideThreads_RemainderToPrimary(t *testing.T) {
-	t.Parallel()
-	result := divideThreads(7, []string{"model-a", "model-b"}, "model-a")
-	assert.Equal(t, 4, result["model-a"])
-	assert.Equal(t, 3, result["model-b"])
-}
-
-func TestDivideThreads_MinimumOnePerModel(t *testing.T) {
-	t.Parallel()
-	result := divideThreads(2, []string{"a", "b", "c"}, "a")
-	assert.Equal(t, 1, result["a"])
-	assert.Equal(t, 1, result["b"])
-	assert.Equal(t, 1, result["c"])
-}
-
-func TestDivideThreads_SingleModel(t *testing.T) {
-	t.Parallel()
-	result := divideThreads(4, []string{"only"}, "only")
-	assert.Equal(t, 4, result["only"])
-}
-
-func TestDivideThreads_TwoModels_RealIDs(t *testing.T) {
+func TestDivideThreads(t *testing.T) {
 	t.Parallel()
 
-	result := divideThreads(4, []string{"BirdNET_V2.4", "Perch_V2"}, "BirdNET_V2.4")
+	tests := []struct {
+		name    string
+		threads int
+		models  []string
+		want    map[string]int
+	}{
+		{
+			name:    "equal split",
+			threads: 8,
+			models:  []string{"model-a", "model-b"},
+			want:    map[string]int{"model-a": 4, "model-b": 4},
+		},
+		{
+			name:    "remainder goes to the first model",
+			threads: 7,
+			models:  []string{"model-a", "model-b"},
+			want:    map[string]int{"model-a": 4, "model-b": 3},
+		},
+		{
+			name:    "minimum one thread per model",
+			threads: 2,
+			models:  []string{"a", "b", "c"},
+			want:    map[string]int{"a": 1, "b": 1, "c": 1},
+		},
+		{
+			name:    "single model gets all threads",
+			threads: 4,
+			models:  []string{"only"},
+			want:    map[string]int{"only": 4},
+		},
+		{
+			name:    "two models with real registry IDs",
+			threads: 4,
+			models:  []string{RegistryIDBirdNETV24, RegistryIDPerchV2},
+			want:    map[string]int{RegistryIDBirdNETV24: 2, RegistryIDPerchV2: 2},
+		},
+		{
+			name:    "single model with a real registry ID",
+			threads: 4,
+			models:  []string{RegistryIDBirdNETV24},
+			want:    map[string]int{RegistryIDBirdNETV24: 4},
+		},
+	}
 
-	assert.Equal(t, 2, result["BirdNET_V2.4"], "4/2 = 2 base threads each, 0 remainder")
-	assert.Equal(t, 2, result["Perch_V2"], "4/2 = 2 base threads each")
-}
-
-func TestDivideThreads_SingleModel_RealID(t *testing.T) {
-	t.Parallel()
-
-	result := divideThreads(4, []string{"BirdNET_V2.4"}, "BirdNET_V2.4")
-
-	assert.Equal(t, 4, result["BirdNET_V2.4"], "single model gets all threads")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := divideThreads(tt.threads, tt.models)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

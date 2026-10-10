@@ -235,15 +235,10 @@ func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 
 	// Build DSN with recommended SQLite pragmas.
 	// All pragmas are set via DSN query parameters so they apply to every
-	// connection created by the pool, not just the first one.
-	// Use safe separator in case dbPath already contains query parameters
-	// (e.g., "file::memory:?cache=shared" in tests).
+	// connection created by the pool, not just the first one. dsnAppendParams uses a safe
+	// separator in case dbPath already contains query parameters (e.g. "file::memory:?cache=shared").
 	pragmas := fmt.Sprintf("_journal_mode=WAL&_busy_timeout=%d&_foreign_keys=ON&_synchronous=NORMAL&_cache_size=-16000", sqliteBusyTimeoutMs)
-	sep := "?"
-	if strings.Contains(dbPath, "?") {
-		sep = "&"
-	}
-	dsn := dbPath + sep + pragmas
+	dsn := dsnAppendParams(dbPath, pragmas)
 
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormLogger,

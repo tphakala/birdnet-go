@@ -56,3 +56,26 @@ func TestGetNoteClipReferences(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+// TestDataStore_RetainNoteSpectrogramsByClipNames_FallsBackToClear pins that the
+// legacy store has no spectrogram link column and clears clip_name like
+// ClearNoteClipPathsByNames.
+func TestDataStore_RetainNoteSpectrogramsByClipNames_FallsBackToClear(t *testing.T) {
+	ds := setupTestDB(t)
+
+	notes := []Note{
+		{ID: 1, Date: "2024-01-15", Time: "08:30:00", ClipName: "2024/01/a.wav"},
+		{ID: 2, Date: "2024-01-15", Time: "09:15:00", ClipName: "2024/01/b.wav"},
+	}
+	require.NoError(t, ds.DB.Create(&notes).Error)
+
+	affected, err := ds.RetainNoteSpectrogramsByClipNames([]string{"2024/01/a.wav"})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), affected)
+
+	var a, b Note
+	require.NoError(t, ds.DB.First(&a, 1).Error)
+	require.NoError(t, ds.DB.First(&b, 2).Error)
+	assert.Empty(t, a.ClipName)
+	assert.Equal(t, "2024/01/b.wav", b.ClipName)
+}

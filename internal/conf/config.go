@@ -43,16 +43,17 @@ type EqualizerSettings struct {
 }
 
 type ExportSettings struct {
-	Debug         bool                  `yaml:"debug" json:"debug" mapstructure:"debug"`                         // true to enable audio export debug
-	Enabled       bool                  `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                   // export audio clips containing indentified bird calls
-	Path          string                `yaml:"path" json:"path" mapstructure:"path"`                            // path to audio clip export directory
-	Type          string                `yaml:"type" json:"type" mapstructure:"type"`                            // audio file type, wav, mp3 or flac
-	Bitrate       string                `yaml:"bitrate,omitempty" json:"bitrate" mapstructure:"bitrate"`         // bitrate for audio export
-	Retention     RetentionSettings     `yaml:"retention" json:"retention" mapstructure:"retention"`             // retention settings
-	Length        int                   `yaml:"length" json:"length" mapstructure:"length"`                      // audio capture length in seconds
-	PreCapture    int                   `yaml:"precapture" json:"preCapture" mapstructure:"preCapture"`          // pre-capture in seconds
-	Gain          float64               `yaml:"gain" json:"gain" mapstructure:"gain"`                            // gain in dB for audio capture
-	Normalization NormalizationSettings `yaml:"normalization" json:"normalization" mapstructure:"normalization"` // audio normalization settings (EBU R128)
+	Debug          bool                  `yaml:"debug" json:"debug" mapstructure:"debug"`                            // true to enable audio export debug
+	Enabled        bool                  `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                      // export audio clips containing indentified bird calls
+	Path           string                `yaml:"path" json:"path" mapstructure:"path"`                               // path to audio clip export directory
+	Type           string                `yaml:"type" json:"type" mapstructure:"type"`                               // audio file type: wav, flac, aac, opus or mp3
+	UltrasonicType string                `yaml:"ultrasonictype" json:"ultrasonicType" mapstructure:"ultrasonicType"` // wav or flac only; used for bat/ultrasonic captures above 48 kHz
+	Bitrate        string                `yaml:"bitrate,omitempty" json:"bitrate" mapstructure:"bitrate"`            // bitrate for audio export
+	Retention      RetentionSettings     `yaml:"retention" json:"retention" mapstructure:"retention"`                // retention settings
+	Length         int                   `yaml:"length" json:"length" mapstructure:"length"`                         // audio capture length in seconds
+	PreCapture     int                   `yaml:"precapture" json:"preCapture" mapstructure:"preCapture"`             // pre-capture in seconds
+	Gain           float64               `yaml:"gain" json:"gain" mapstructure:"gain"`                               // gain in dB for audio capture
+	Normalization  NormalizationSettings `yaml:"normalization" json:"normalization" mapstructure:"normalization"`    // audio normalization settings (EBU R128)
 }
 
 // NormalizationSettings contains audio normalization configuration based on EBU R128 standard.
@@ -359,11 +360,12 @@ type EBirdSettings struct {
 
 // WeatherSettings contains all weather-related settings
 type WeatherSettings struct {
-	Provider     string               `yaml:"provider" json:"provider"`         // "none", "yrno", "openweather", or "wunderground"
-	PollInterval int                  `yaml:"pollinterval" json:"pollInterval"` // weather data polling interval in minutes
-	Debug        bool                 `yaml:"debug" json:"debug"`               // true to enable debug mode
-	OpenWeather  OpenWeatherSettings  `yaml:"openweather" json:"openWeather"`   // OpenWeather integration settings
-	Wunderground WundergroundSettings `yaml:"wunderground" json:"wunderground"` // WeatherUnderground integration settings
+	Provider      string                `yaml:"provider" json:"provider"`           // "none", "yrno", "openweather", "wunderground", or "pirateweather"
+	PollInterval  int                   `yaml:"pollinterval" json:"pollInterval"`   // weather data polling interval in minutes
+	Debug         bool                  `yaml:"debug" json:"debug"`                 // true to enable debug mode
+	OpenWeather   OpenWeatherSettings   `yaml:"openweather" json:"openWeather"`     // OpenWeather integration settings
+	Wunderground  WundergroundSettings  `yaml:"wunderground" json:"wunderground"`   // WeatherUnderground integration settings
+	PirateWeather PirateWeatherSettings `yaml:"pirateweather" json:"pirateWeather"` // Pirate Weather integration settings
 }
 
 // ---------------- Notification push configuration -----------------
@@ -499,6 +501,15 @@ type OpenWeatherSettings struct {
 	Endpoint string `yaml:"endpoint" json:"endpoint"` // OpenWeather API endpoint
 	Units    string `yaml:"units" json:"units"`       // units of measurement: standard, metric, or imperial
 	Language string `yaml:"language" json:"language"` // language code for the response
+}
+
+// PirateWeatherSettings contains settings for Pirate Weather integration.
+// Pirate Weather is a Dark Sky-API-compatible drop-in service; only an API
+// key and an optional endpoint override are needed (unlike OpenWeather it has
+// no units/language options here; the provider always requests SI units).
+type PirateWeatherSettings struct {
+	APIKey   string `yaml:"apikey" json:"apiKey"`     // Pirate Weather API key
+	Endpoint string `yaml:"endpoint" json:"endpoint"` // Pirate Weather API endpoint
 }
 
 // PrivacyFilterSettings contains settings for the privacy filter.
@@ -677,9 +688,9 @@ func (s *StreamConfig) IsEnabled() bool {
 // RTSPSettings contains settings for audio streaming (supports multiple protocols).
 // Note: Struct name kept for backward compatibility with existing code.
 type RTSPSettings struct {
-	Streams          []StreamConfig     `yaml:"streams" json:"streams" mapstructure:"streams"`                            // Stream configurations
-	URLs             []string           `yaml:"urls,omitempty" json:"urls,omitempty" mapstructure:"urls"`                 // Legacy: accepts old format, migrated on load
-	Transport        string             `yaml:"transport,omitempty" json:"transport,omitempty" mapstructure:"transport"`  // Legacy: global default, migrated on load
+	Streams          []StreamConfig     `yaml:"streams" json:"streams" mapstructure:"streams"`                            // Streams to analyze. Each entry has name (required, unique), url (required), enabled, type (rtsp, http, hls, rtmp or udp), transport (tcp or udp, RTSP and RTMP only; empty uses the global transport), mediaMode (auto, audio-only or full-stream, RTSP only; default full-stream), channelMode (downmix, left or right; default downmix) and gain (dB)
+	URLs             []string           `yaml:"urls,omitempty" json:"urls,omitempty" mapstructure:"urls"`                 // Legacy: a urls list in an older config is converted to streams on startup and saved; not read once streams has entries
+	Transport        string             `yaml:"transport,omitempty" json:"transport,omitempty" mapstructure:"transport"`  // Global default transport (tcp or udp): read as the engine-wide default and copied into streams that set none; kept after the urls migration
 	Health           RTSPHealthSettings `yaml:"health" json:"health" mapstructure:"health"`                               // Health monitoring settings
 	FFmpegParameters []string           `yaml:"ffmpegParameters" json:"ffmpegParameters" mapstructure:"ffmpegParameters"` // Custom FFmpeg parameters
 }
@@ -1443,7 +1454,12 @@ type BSGConfig struct {
 type ModelsConfig struct {
 	Enabled   []string `yaml:"enabled" json:"enabled"`                         // list of model IDs to load (e.g., "birdnet", "perch_v2")
 	Directory string   `yaml:"directory,omitempty" json:"directory,omitempty"` // base directory for downloaded model files
-	Installed []string `yaml:"installed,omitempty" json:"installed,omitempty"` // list of installed model IDs managed by the model gallery
+	// AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy
+	// model auto-enable has run for this config file, so it never re-runs. Do not edit by hand;
+	// a managed read-only config may set it true (with configversion: 2) to keep an explicit
+	// models.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the
+	// companion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go.
+	AutoEnableMigrated bool `yaml:"autoenablemigrated,omitempty" json:"-"`
 }
 
 // Low-memory mode constants for the manual override.
@@ -1591,7 +1607,20 @@ type Security struct {
 	// immediate peer is not trusted, forwarded headers are ignored and the real
 	// connection address is used, preventing source-IP spoofing on a directly
 	// exposed instance. The reserved value "cloudflare" (TrustedProxyCloudflarePreset)
-	// expands to Cloudflare's published edge ranges. Hot-reloadable.
+	// expands to Cloudflare's published edge ranges. The same trust decides whether
+	// X-Forwarded-Proto (and X-Forwarded-Ssl, X-Forwarded-Protocol, X-Url-Scheme)
+	// is honored when deciding whether to send the HSTS header, so a proxy on a
+	// public or 100.64.0.0/10 (CGNAT, Tailscale IPv4) address must be listed here
+	// for HSTS to be sent. Other HTTPS checks, such as the COOP header and the
+	// CSRF cookie Secure flag, do not consult this list. The subnet bypass
+	// (AllowSubnetBypass) is stricter: it honors a forwarded client address only
+	// from a proxy listed here, even one on a private or loopback address, and a
+	// request that carries any client-IP header (CF-Connecting-IP, X-Forwarded-For, X-Real-IP, True-Client-IP or Forwarded) from any other peer gets no bypass.
+	// For the bypass, list each proxy's own address rather than a range that also
+	// holds clients: a client inside a listed range is trusted as a proxy, so its
+	// own forwarded headers can name any address. Have the proxy append X-Forwarded-For or overwrite
+	// X-Real-IP; the client-IP headers it forwards must all name the same client,
+	// and a Forwarded header is not accepted. Hot-reloadable.
 	TrustedProxies []string     `yaml:"trustedproxies" json:"trustedProxies"`
 	PublicAccess   PublicAccess `yaml:"publicaccess" json:"publicAccess"` // features accessible without authentication
 	// PrivateMode, when true, requires the user to authenticate before any
@@ -1871,6 +1900,13 @@ type DiagnosticsConfig struct {
 type Settings struct {
 	Debug bool `yaml:"debug" json:"debug"` // true to enable debug mode
 
+	// ConfigVersion records the newest one-shot config migration applied to this file.
+	// It is managed automatically by config loading and should not be edited by hand;
+	// it lets a migration whose precondition cannot be recovered from the data itself
+	// run exactly once (see MigrateSourceTargetDefaults). Hidden from the settings API
+	// and preserved across saves by CloneSettings, so writers never drop it.
+	ConfigVersion int `yaml:"configversion,omitempty" json:"-"`
+
 	// Runtime values, not stored in config file
 	Version            string   `yaml:"-" json:"version,omitempty"`            // Version from build
 	BuildDate          string   `yaml:"-" json:"buildDate,omitempty"`          // Build date from build
@@ -1934,6 +1970,43 @@ type Settings struct {
 	Notification NotificationConfig `yaml:"notification" json:"notification"` // Configuration for push notifications
 
 	Alerting AlertSettings `yaml:"alerting" json:"alerting"` // Alerting rules engine settings
+}
+
+// RangeFilterConfig returns a pointer to the range filter settings block. The block
+// is stored under birdnet.rangefilter for historical reasons; callers use this
+// accessor rather than naming BirdNET.RangeFilter directly so the storage location
+// can move in a later phase without touching them. It returns nil for a nil
+// receiver. The pointer aliases the receiver's own field, so a write through it
+// mutates that Settings value; callers that must not disturb the published snapshot
+// take the accessor on a clone (clone-mutate-publish).
+func (s *Settings) RangeFilterConfig() *RangeFilterSettings {
+	if s == nil {
+		return nil
+	}
+	return &s.BirdNET.RangeFilter
+}
+
+// Location returns the configured recording coordinates and whether the user has
+// explicitly configured a location. It reads BirdNET.Latitude, BirdNET.Longitude and
+// BirdNET.LocationConfigured through one accessor so their storage location can change
+// without updating every caller. It returns (0, 0, false) for a nil receiver.
+func (s *Settings) Location() (lat, lon float64, configured bool) {
+	if s == nil {
+		return 0, 0, false
+	}
+	return s.BirdNET.Latitude, s.BirdNET.Longitude, s.BirdNET.LocationConfigured
+}
+
+// LiveLocation returns a function that reports the station coordinates from the current
+// settings snapshot each time it is called, falling back to fallback when no snapshot has been
+// published. Long-lived consumers (such as suncalc.NewSunCalcWithSource) use it so a location
+// changed in the settings takes effect without a restart. A nil fallback reports (0, 0) until a
+// snapshot is published, so pass the settings the caller was constructed with.
+func LiveLocation(fallback *Settings) func() (latitude, longitude float64) {
+	return func() (latitude, longitude float64) {
+		latitude, longitude, _ = CurrentOrFallback(fallback).Location()
+		return latitude, longitude
+	}
 }
 
 // ResolveEQOverride returns the per-source or per-stream EQ override for the
@@ -2016,10 +2089,11 @@ func GenerateRandomSecret() (string, error) {
 type WeatherProvider string
 
 const (
-	WeatherNone         WeatherProvider = "none"
-	WeatherYrNo         WeatherProvider = "yrno"
-	WeatherOpenWeather  WeatherProvider = "openweather"
-	WeatherWunderground WeatherProvider = "wunderground"
+	WeatherNone          WeatherProvider = "none"
+	WeatherYrNo          WeatherProvider = "yrno"
+	WeatherOpenWeather   WeatherProvider = "openweather"
+	WeatherWunderground  WeatherProvider = "wunderground"
+	WeatherPirateWeather WeatherProvider = "pirateweather"
 )
 
 // Prefer explicit settings return to avoid confusion at call sites.
@@ -2030,6 +2104,8 @@ func (s *Settings) GetWeatherProvider() (provider WeatherProvider, settings any)
 		return WeatherOpenWeather, s.Realtime.Weather.OpenWeather
 	case string(WeatherWunderground):
 		return WeatherWunderground, s.Realtime.Weather.Wunderground
+	case string(WeatherPirateWeather):
+		return WeatherPirateWeather, s.Realtime.Weather.PirateWeather
 	case string(WeatherYrNo), string(WeatherNone):
 		return WeatherProvider(p), nil
 	default:
@@ -2049,6 +2125,14 @@ func (w *WundergroundSettings) ValidateWunderground() error {
 	}
 	if w.StationID == "" {
 		return fmt.Errorf("wunderground.stationId is required when provider is wunderground")
+	}
+	return nil
+}
+
+// ValidatePirateWeather validates Pirate Weather settings when the provider is "pirateweather"
+func (p *PirateWeatherSettings) ValidatePirateWeather() error {
+	if p.APIKey == "" {
+		return fmt.Errorf("pirateweather.apiKey is required when provider is pirateweather")
 	}
 	return nil
 }

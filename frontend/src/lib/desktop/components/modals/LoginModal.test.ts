@@ -85,7 +85,7 @@ describe('LoginModal', () => {
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Redirect URL Validation', () => {
@@ -97,7 +97,7 @@ describe('LoginModal', () => {
       });
 
       // Check that the hidden input contains the valid redirect URL
-      const redirectInput = screen.getByDisplayValue('/ui/dashboard') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/dashboard');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/dashboard');
       expect(redirectInput.name).toBe('redirect');
@@ -111,7 +111,7 @@ describe('LoginModal', () => {
       });
 
       // Should fallback to the detected base path (/ui/)
-      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/');
     });
@@ -124,7 +124,7 @@ describe('LoginModal', () => {
       });
 
       // Browsers normalize '/\' to '//', so this must fall back to the base path.
-      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/');
     });
@@ -137,7 +137,7 @@ describe('LoginModal', () => {
       });
 
       // Should fallback to the detected base path
-      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/');
     });
@@ -150,7 +150,7 @@ describe('LoginModal', () => {
       });
 
       // Should fallback to the detected base path
-      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/');
     });
@@ -164,7 +164,7 @@ describe('LoginModal', () => {
       });
 
       // Should fallback to the detected base path
-      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/');
     });
@@ -181,7 +181,7 @@ describe('LoginModal', () => {
 
       // Fallback must include the reverse-proxy prefix (via the shared
       // getUiBasePath helper), not a hand-rolled, prefix-unaware guess.
-      const redirectInput = screen.getByDisplayValue('/proxy/birdnet/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/proxy/birdnet/ui/');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/proxy/birdnet/ui/');
     });
@@ -197,9 +197,9 @@ describe('LoginModal', () => {
         redirectUrl: '/ui/detections?queryType=search&q=a..b//c',
       });
 
-      const redirectInput = screen.getByDisplayValue(
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>(
         '/ui/detections?queryType=search&q=a..b//c'
-      ) as HTMLInputElement;
+      );
       expect(redirectInput.value).toBe('/ui/detections?queryType=search&q=a..b//c');
     });
 
@@ -215,9 +215,9 @@ describe('LoginModal', () => {
         redirectUrl: '/ui/detections?q=javascript:tutorial',
       });
 
-      const redirectInput = screen.getByDisplayValue(
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>(
         '/ui/detections?q=javascript:tutorial'
-      ) as HTMLInputElement;
+      );
       expect(redirectInput.value).toBe('/ui/detections?q=javascript:tutorial');
     });
 
@@ -231,7 +231,7 @@ describe('LoginModal', () => {
       });
 
       // A dangerous scheme at the start of the PATH must still fall back.
-      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/');
       expect(redirectInput.value).toBe('/ui/');
     });
 
@@ -246,9 +246,9 @@ describe('LoginModal', () => {
         redirectUrl: '/ui/help/javascript:basics',
       });
 
-      const redirectInput = screen.getByDisplayValue(
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>(
         '/ui/help/javascript:basics'
-      ) as HTMLInputElement;
+      );
       expect(redirectInput.value).toBe('/ui/help/javascript:basics');
     });
 
@@ -262,7 +262,7 @@ describe('LoginModal', () => {
         onClose: vi.fn(),
       });
 
-      const redirectInput = screen.getByDisplayValue('/proxy/birdnet/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/proxy/birdnet/ui/');
       expect(redirectInput.value).toBe('/proxy/birdnet/ui/');
     });
   });

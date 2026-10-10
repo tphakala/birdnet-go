@@ -69,8 +69,10 @@ func TestModelsLoadedCheck_NoModels(t *testing.T) {
 
 	results := check.RunMulti(t.Context())
 	require.Len(t, results, 1)
-	assert.Equal(t, health.StatusCritical, results[0].Status)
-	assert.Contains(t, results[0].Message, "No analysis models loaded")
+	// N = 0 is a valid state (model de-privilege epic, Phase 4): this check stands down
+	// to Skipped and the acoustic_models check owns the no-model verdict.
+	assert.Equal(t, health.StatusSkipped, results[0].Status)
+	assert.Contains(t, results[0].Message, "see acoustic_models")
 }
 
 func TestModelsLoadedCheck_NilProvider(t *testing.T) {

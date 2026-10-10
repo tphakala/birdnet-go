@@ -64,18 +64,10 @@ func TestMain(m *testing.M) {
 	// Check for goroutine leaks after ALL tests have completed.
 	// This avoids the issue of one test detecting another test's goroutines.
 	if testResult == 0 {
-		opts := []goleak.Option{
-			// Ignore the test-framework goroutines (these are not leaks).
-			goleak.IgnoreTopFunction("testing.(*T).Run"),
-			goleak.IgnoreTopFunction("testing.(*T).Parallel"),
-			// Ignore background goroutines from third-party dependencies that run
-			// for the lifetime of the process and are not leaks we can stop:
-			// the go-cache janitor and the lumberjack log-rotation worker.
-			goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		}
-
-		if err := goleak.Find(opts...); err != nil {
+		// goleak already filters the test runner's own goroutines. The gate runs
+		// with no ignores: no component started by the test core owns a goroutine
+		// that it cannot stop.
+		if err := goleak.Find(); err != nil {
 			// Report the leak as a test failure
 			fmt.Fprintf(os.Stderr, "FAIL: Goroutine leak detected after all tests:\n%v\n", err)
 			os.Exit(1)

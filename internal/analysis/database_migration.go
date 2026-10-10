@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // migrationSetupConfig holds configuration for migration infrastructure setup.
@@ -255,7 +256,7 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 	v2Path := datastoreV2.V2MigrationPathFromConfigured(settings.Output.SQLite.Path)
 	if err := initializeV2WithSelfHealing(v2Manager, v2Path, log); err != nil {
 		if errors.Is(err, datastoreV2.ErrV2SchemaCorrupted) {
-			// Self-healing failed or was not safe — close and return.
+			// Self-healing failed or was not safe: close and return.
 			if closeErr := v2Manager.Close(); closeErr != nil {
 				log.Warn("failed to close v2 manager after self-healing failure",
 					logger.Error(closeErr),
@@ -267,7 +268,7 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 				Context("operation", "initialize_v2_database").
 				Build()
 		}
-		// Non-corruption error — close and return.
+		// Non-corruption error: close and return.
 		if closeErr := v2Manager.Close(); closeErr != nil {
 			log.Warn("failed to close v2 manager after initialization failure",
 				logger.Error(closeErr),
@@ -527,6 +528,9 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 		Timezone:       time.Local,
 		Labels:         settings.BirdNET.Labels, // For common<->scientific name-map resolution
 		SpeciesCodeMap: scientificIndex,
+		// Sun calculator for civil dawn (dawn-chorus onset) and time-of-day classification,
+		// matching the legacy datastore.New wiring. It follows the live station location.
+		SunCalc: suncalc.NewSunCalcWithSource(conf.LiveLocation(settings)),
 	})
 	if err != nil {
 		_ = v2Manager.Close()

@@ -150,10 +150,7 @@
     value: unknown
   ): value is { key: string; params?: Record<string, unknown> } {
     return (
-      typeof value === 'object' &&
-      value !== null &&
-      'key' in value &&
-      typeof (value as any).key === 'string'
+      typeof value === 'object' && value !== null && 'key' in value && typeof value.key === 'string'
     );
   }
 

@@ -66,9 +66,9 @@ describe('DesktopSidebar - post-login redirect wiring (#3306)', () => {
     // LoginModal renders a hidden <input name="redirect"> bound to the redirect target.
     // It must carry the FULL current URL, query string included (the #3306 fix).
     await waitFor(() => {
-      const redirectInput = screen.getByDisplayValue(
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>(
         '/ui/detections?queryType=species&species=Phoenicurus+phoenicurus&date=2026-06-02'
-      ) as HTMLInputElement;
+      );
       expect(redirectInput.name).toBe('redirect');
     });
   });
@@ -86,7 +86,7 @@ describe('DesktopSidebar - post-login redirect wiring (#3306)', () => {
     await fireEvent.click(loginButton);
 
     await waitFor(() => {
-      const redirectInput = screen.getByDisplayValue('/ui/dashboard') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/dashboard');
       expect(redirectInput.name).toBe('redirect');
     });
   });
@@ -275,5 +275,70 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     onNavigate.mockClear();
     await fireEvent.click(getBtn('navigation.dashboard'));
     expect(onNavigate).toHaveBeenCalledWith('/');
+  });
+});
+
+describe('DesktopSidebar - collapsed footer auth button focus tooltips (#1282)', () => {
+  const sidebarTest = createComponentTestFactory(DesktopSidebar);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // LoginModal (rendered in the logged-out case) reads layout/styles; stub for jsdom.
+    Object.defineProperty(window, 'getComputedStyle', {
+      value: vi.fn(() => ({
+        getPropertyValue: vi.fn(() => ''),
+        visibility: 'visible',
+        display: 'block',
+      })),
+      writable: true,
+    });
+    Object.defineProperty(HTMLElement.prototype, 'focus', { value: vi.fn(), writable: true });
+    // Collapsed mode is the only state that shows tooltips; opt in explicitly.
+    sidebar.collapse();
+  });
+
+  afterEach(() => {
+    sidebar.expand();
+  });
+
+  it('shows and hides the logout tooltip on keyboard focus/blur when collapsed', async () => {
+    const { container } = sidebarTest.render({
+      currentRoute: '/ui/dashboard',
+      securityEnabled: true,
+      accessAllowed: true, // logged in -> the logout button is shown
+    });
+
+    const logoutButton = screen.getByRole('button', { name: 'auth.logout' });
+    expect(container.querySelector('.sidebar-tooltip')).toBeNull();
+
+    // Keyboard focus must surface the tooltip; without onfocus this stays null.
+    await fireEvent.focus(logoutButton);
+    const tooltip = container.querySelector('.sidebar-tooltip');
+    expect(tooltip).not.toBeNull();
+    expect(tooltip).toHaveTextContent('auth.logout');
+
+    await fireEvent.blur(logoutButton);
+    expect(container.querySelector('.sidebar-tooltip')).toBeNull();
+  });
+
+  it('shows and hides the login tooltip on keyboard focus/blur, matching its aria-label', async () => {
+    const { container } = sidebarTest.render({
+      currentRoute: '/ui/dashboard',
+      securityEnabled: true,
+      accessAllowed: false, // logged out -> the login button is shown
+      authConfig: { basicEnabled: true, enabledProviders: [] },
+    });
+
+    const loginButton = screen.getByRole('button', { name: 'auth.openLoginModal' });
+    expect(container.querySelector('.sidebar-tooltip')).toBeNull();
+
+    await fireEvent.focus(loginButton);
+    const tooltip = container.querySelector('.sidebar-tooltip');
+    expect(tooltip).not.toBeNull();
+    // The tooltip text equals the accessible name so keyboard and screen-reader agree.
+    expect(tooltip).toHaveTextContent('auth.openLoginModal');
+
+    await fireEvent.blur(loginButton);
+    expect(container.querySelector('.sidebar-tooltip')).toBeNull();
   });
 });

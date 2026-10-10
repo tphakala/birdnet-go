@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // clearExcludedSpeciesList resets the species exclude list for a clean test start.
@@ -32,10 +33,9 @@ const (
 // name, mirroring the detection-side localized-name tests.
 func installExcludeTestResolver(t *testing.T, c *Controller) {
 	t.Helper()
-	c.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+	seedNames(t, c, &analyticsBatchFakeResolver{batch: map[string]string{
 		testExcludeScientificName: testExcludeLocalizedName,
-	}})
-	c.UpdateCommonNameMap([]string{testExcludeScientificName})
+	}}, []string{testExcludeScientificName})
 }
 
 // patchSection drives UpdateSectionSettings for an arbitrary section. It asserts
@@ -43,6 +43,16 @@ func installExcludeTestResolver(t *testing.T, c *Controller) {
 // rejected save would otherwise pass require.NoError and surface only as a
 // confusing downstream mismatch.
 func patchSection(t *testing.T, e *echo.Echo, c *Controller, section string, payload any) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := sendSectionPatch(t, e, c, section, payload)
+	require.Equal(t, http.StatusOK, rec.Code, "section save must succeed; body: %s", rec.Body.String())
+	return rec
+}
+
+// sendSectionPatch drives UpdateSectionSettings for an arbitrary section and
+// returns the response without asserting its status, for tests that expect a
+// rejection.
+func sendSectionPatch(t *testing.T, e *echo.Echo, c *Controller, section string, payload any) *httptest.ResponseRecorder {
 	t.Helper()
 	data, err := json.Marshal(payload)
 	require.NoError(t, err)
@@ -53,7 +63,6 @@ func patchSection(t *testing.T, e *echo.Echo, c *Controller, section string, pay
 	ctx.SetParamNames("section")
 	ctx.SetParamValues(section)
 	require.NoError(t, c.UpdateSectionSettings(ctx))
-	require.Equal(t, http.StatusOK, rec.Code, "section save must succeed; body: %s", rec.Body.String())
 	return rec
 }
 
@@ -78,6 +87,7 @@ func TestCanonicalizeExcludeList(t *testing.T) {
 	t.Parallel()
 
 	c := &Controller{Core: &apicore.Core{}}
+	c.names = speciesindex.New(nil)
 	installExcludeTestResolver(t, c)
 
 	tests := []struct {

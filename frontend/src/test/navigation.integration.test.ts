@@ -148,7 +148,7 @@ describe('Detection Navigation', () => {
 
     let clickableElement: HTMLElement | null = null;
     for (const selector of selectors) {
-      clickableElement = document.querySelector(selector) as HTMLElement;
+      clickableElement = document.querySelector(selector);
       if (clickableElement) break;
     }
 
@@ -284,7 +284,7 @@ describe('Dashboard Detection Navigation', () => {
 
     let detectionCard: HTMLElement | null = null;
     for (const selector of detectionSelectors) {
-      detectionCard = document.querySelector(selector) as HTMLElement;
+      detectionCard = document.querySelector(selector);
       if (detectionCard) break;
     }
 
@@ -382,7 +382,7 @@ describe('Search Navigation', () => {
 
     let resultLink: HTMLElement | null = null;
     for (const selector of resultSelectors) {
-      resultLink = document.querySelector(selector) as HTMLElement;
+      resultLink = document.querySelector(selector);
       if (resultLink) break;
     }
 

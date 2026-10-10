@@ -119,7 +119,7 @@ sentry:
 
 If running BirdNET-Go in Docker, telemetry settings are managed the same way:
 
-1. Access the web interface through your mapped port
+1. Access the web interface through its port (the mapped host port with bridge networking, `WEB_PORT` with host networking)
 2. Navigate to Settings → Support
 3. Enable telemetry as described above
 4. Settings persist in your mounted config volume

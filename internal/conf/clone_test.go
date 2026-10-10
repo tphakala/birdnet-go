@@ -69,7 +69,6 @@ func newPopulatedSettings() *Settings {
 	s.BirdNET.RangeFilter.Species = []string{"Turdus merula", "Parus major"}
 
 	s.Models.Enabled = []string{"birdnet", "perch_v2"}
-	s.Models.Installed = []string{"birdnet", "perch_v3"}
 
 	s.Realtime.Audio.Sources = []AudioSourceConfig{
 		{
@@ -207,8 +206,6 @@ func mutateCloneEverywhere(dst *Settings) {
 	dst.BirdNET.RangeFilter.Species = append(dst.BirdNET.RangeFilter.Species, "Corvus corax")
 
 	dst.Models.Enabled[0] = mutated
-	dst.Models.Installed[0] = mutated
-	dst.Models.Installed = append(dst.Models.Installed, "added-model")
 
 	dst.Realtime.Audio.Sources[0].Name = mutated
 	dst.Realtime.Audio.Sources[0].Models[0] = mutated
@@ -330,7 +327,6 @@ func assertSourceUnchanged(t *testing.T, src *Settings) {
 	assert.Equal(t, []string{"Turdus merula", "Parus major"}, src.BirdNET.RangeFilter.Species)
 
 	assert.Equal(t, []string{"birdnet", "perch_v2"}, src.Models.Enabled)
-	assert.Equal(t, []string{"birdnet", "perch_v3"}, src.Models.Installed)
 
 	require.Len(t, src.Realtime.Audio.Sources, 1)
 	assert.Equal(t, "front", src.Realtime.Audio.Sources[0].Name)

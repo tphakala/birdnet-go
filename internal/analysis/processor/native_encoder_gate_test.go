@@ -279,11 +279,11 @@ func flacSampleRate(t *testing.T, path string) int {
 }
 
 // Ultrasonic capture for bat detection runs at 96 kHz, 192 kHz and above. Those
-// clips are exported as WAV or FLAC (needsBatFormatFallback forces WAV for the
-// lossy formats, which cannot carry the rate), so the lossy-format gates must
-// not disturb them at any capture rate. Asserting only that the export succeeds
-// would not catch a writer that clamped or dropped the rate, so the rate is read
-// back out of the written file.
+// clips are stored as WAV or FLAC (the ultrasonic export format), the two
+// containers that carry any rate, so the lossy-format gates must not disturb them
+// at any capture rate. Asserting only that the export succeeds would not catch a
+// writer that clamped or dropped the rate, so the rate is read back out of the
+// written file.
 func TestEncodeClip_UltrasonicRatesUnaffectedByLossyGates(t *testing.T) {
 	// Not parallel: t.Setenv.
 	t.Setenv(conf.EnvNativeAACEncoder, "native")
@@ -370,10 +370,11 @@ func TestEncodeClip_UltrasonicRatesWithNormalization(t *testing.T) {
 // A clip with no encoder left still falls back to WAV so the recording survives.
 // A non-bat sub-48k clip now resamples to 48k instead of stranding (see
 // TestResolveExportParams_SubRateResamplesForNativeEncoder), so the remaining
-// strand cases are a bat clip (never resampled: ultrasonic handling is out of
-// scope) whose format cannot carry its rate. The format must resolve to WAV, and
-// the clip path must be corrected with it so the file on disk matches the name
-// recorded in the database.
+// strand case is a bat clip BELOW the analysis rate (never resampled) whose lossy
+// format cannot carry its rate; a bat clip above the analysis rate is stored in
+// the lossless ultrasonic format and never strands. The format must resolve to
+// WAV, and the clip path must be corrected with it so the file on disk matches the
+// name recorded in the database.
 func TestResolveExportParams_StrandedClipFallsBackToWAV(t *testing.T) {
 	// Not parallel: t.Setenv.
 	tests := []struct {

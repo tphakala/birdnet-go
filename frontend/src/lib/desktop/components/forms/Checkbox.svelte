@@ -11,6 +11,8 @@
     label?: string;
     id?: string;
     className?: string;
+    /** Classes for the inner label; replaces the default `py-1` padding when set. */
+    labelClassName?: string;
     size?: 'xs' | 'sm' | 'md' | 'lg';
     variant?: 'default' | 'primary' | 'secondary' | 'accent';
     helpText?: string;
@@ -26,6 +28,7 @@
     label,
     id,
     className = '',
+    labelClassName,
     size = 'xs',
     variant = 'primary',
     helpText,
@@ -95,7 +98,10 @@
 </script>
 
 <div class={cn('relative min-w-0', className)} {...rest}>
-  <label class="flex items-center cursor-pointer justify-start py-1" for={id}>
+  <label
+    class={cn('flex items-center cursor-pointer justify-start', labelClassName || 'py-1')}
+    for={id}
+  >
     <!-- Hidden native checkbox for accessibility -->
     <input
       type="checkbox"
@@ -112,8 +118,9 @@
     <!-- Custom checkbox visual -->
     <span
       class={cn(
-        'relative inline-flex items-center justify-center mr-2 shrink-0 border-2 rounded transition-all',
-        'border-[var(--border-200)] bg-[var(--color-base-100)]',
+        'relative inline-flex items-center justify-center mr-2 shrink-0 border-2 rounded transition-[color,background-color,border-color] motion-reduce:transition-none',
+        // At least 3:1 against the page in both themes (WCAG 1.4.11)
+        'border-[var(--color-base-content)]/60 bg-[var(--color-base-100)]',
         'peer-focus-visible:outline-2 peer-focus-visible:outline-[var(--color-primary)] peer-focus-visible:outline-offset-2',
         'peer-disabled:opacity-50 peer-disabled:cursor-not-allowed',
         safeGet(sizeClasses, size, ''),

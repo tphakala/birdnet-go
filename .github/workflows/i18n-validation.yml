@@ -61,20 +61,35 @@ jobs:
         id: validate-files
         working-directory: frontend
         run: |
-          # Run validation and capture JSON output (stderr goes to stderr naturally)
-          npx tsx src/lib/i18n/validateTranslations.ts --json --strict --min-coverage 100 --fail-on-warnings > validation-report.json || true
+          # Run validation and capture JSON output (stderr goes to stderr naturally).
+          # --fail-on-untranslated fails on a NEW English placeholder (a key back-filled
+          # by i18n:sync and not translated) that is not grandfathered in
+          # static/messages/.i18n-untranslated-baseline.json.
+          npx tsx src/lib/i18n/validateTranslations.ts --json --strict --min-coverage 100 --fail-on-warnings --fail-on-untranslated > validation-report.json || true
 
           # Verify JSON is valid and handle errors gracefully
           if [ ! -f validation-report.json ]; then
-            echo '{"success":false,"error":"validation-report.json not created"}' > validation-report.json
+            echo '{"success":false,"error":"validation-report.json not created","summary":{"totalErrors":0,"totalWarnings":0,"passedLocales":0,"totalLocales":0},"errors":[],"warnings":[]}' > validation-report.json
             echo "validation_failed=true" >> $GITHUB_OUTPUT
             echo "### ❌ Translation File Validation Failed" >> $GITHUB_STEP_SUMMARY
             echo "Error: Report file was not created" >> $GITHUB_STEP_SUMMARY
           elif ! jq empty validation-report.json 2>/dev/null; then
             echo "Invalid JSON in validation-report.json:" >> $GITHUB_STEP_SUMMARY
             cat validation-report.json >> $GITHUB_STEP_SUMMARY
-            echo '{"success":false,"error":"Invalid JSON in validation report"}' > validation-report.json
+            echo '{"success":false,"error":"Invalid JSON in validation report","summary":{"totalErrors":0,"totalWarnings":0,"passedLocales":0,"totalLocales":0},"errors":[],"warnings":[]}' > validation-report.json
             echo "validation_failed=true" >> $GITHUB_OUTPUT
+          elif [ ! -s validation-report.json ] || ! jq -e '(.success|type)=="boolean" and (.summary|type)=="object" and (.errors|type)=="array" and (.warnings|type)=="array"' validation-report.json > /dev/null 2>&1; then
+            # Empty (0-byte) file passes `jq empty` (exit 0), so guard against a
+            # report that the validator never finished writing, e.g. it crashed
+            # before emitting JSON. Without this, `.success == false` is not true,
+            # the check falls through to the pass branch, and the job goes green
+            # on a run that never validated anything. Write a complete failure
+            # report so the "Comment on PR" step can always parse it (it reads
+            # .summary.* and .errors without guarding against a partial object).
+            echo '{"success":false,"error":"Empty or incomplete validation report (validator likely crashed before emitting JSON)","summary":{"totalErrors":0,"totalWarnings":0,"passedLocales":0,"totalLocales":0},"errors":[],"warnings":[]}' > validation-report.json
+            echo "validation_failed=true" >> $GITHUB_OUTPUT
+            echo "### ❌ Translation File Validation Failed" >> $GITHUB_STEP_SUMMARY
+            echo "The validation report is empty or missing the \`success\` field (the validator likely crashed before emitting JSON)." >> $GITHUB_STEP_SUMMARY
           elif jq -e '.success == false' validation-report.json > /dev/null; then
             echo "validation_failed=true" >> $GITHUB_OUTPUT
             echo "### ❌ Translation File Validation Failed" >> $GITHUB_STEP_SUMMARY
@@ -131,8 +146,10 @@ jobs:
         if: steps.validate-files.outputs.validation_failed == 'true'
         working-directory: frontend
         run: |
-          # Run with || true to ignore exit code since we know validation failed
-          # Redirect only stdout to capture markdown, let stderr go to logs
+          # Run with || true to ignore exit code since we know validation failed.
+          # 2>&1 folds stderr into the report so the ACTION REQUIRED notice (which
+          # --report emits on stderr) is captured in the step summary alongside the
+          # markdown report.
           npx tsx src/lib/i18n/validateTranslations.ts --report --format=markdown > translation-report.md 2>&1 || true
 
           # Only append if file has content
@@ -172,7 +189,9 @@ jobs:
               jsonReport = {
                 success: false,
                 error: 'Failed to parse validation-report.json: ' + e.message,
-                summary: { totalErrors: 0, totalWarnings: 0, passedLocales: 0, totalLocales: 0 }
+                summary: { totalErrors: 0, totalWarnings: 0, passedLocales: 0, totalLocales: 0 },
+                errors: [],
+                warnings: []
               };
               report += `⚠️ **Error reading validation report:** ${e.message}\n\n`;
             }

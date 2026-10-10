@@ -95,7 +95,7 @@ type ovProbeCacheStatus int
 
 const (
 	// ovProbeNotRun means no probe has been attempted (or a transient failure
-	// left nothing cached); callers may use their pre-probe behavior.
+	// left nothing cached); callers must still not enumerate in-process.
 	ovProbeNotRun ovProbeCacheStatus = iota
 	// ovProbeInFlight means a probe child is currently running; callers should
 	// not touch the in-process driver stack until it reports.

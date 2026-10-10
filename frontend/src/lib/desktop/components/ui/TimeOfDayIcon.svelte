@@ -1,10 +1,27 @@
+<script lang="ts" module>
+  export type TimeOfDay = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
+
+  const TIME_OF_DAY_VALUES: ReadonlySet<string> = new Set<TimeOfDay>([
+    'day',
+    'night',
+    'sunrise',
+    'sunset',
+    'dawn',
+    'dusk',
+  ]);
+
+  /** Whether a value, such as a time of day string from the API, is a known TimeOfDay. */
+  export function isTimeOfDay(value: unknown): value is TimeOfDay {
+    return typeof value === 'string' && TIME_OF_DAY_VALUES.has(value);
+  }
+</script>
+
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { safeGet } from '$lib/utils/security';
   import { Clock } from '@lucide/svelte';
   import { parseLocalDateString } from '$lib/utils/date';
 
-  type TimeOfDay = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
   type IconSize = 'sm' | 'md' | 'lg' | 'xl';
 
   interface Props {

@@ -5,7 +5,6 @@ package detections
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // executeNoteCommentsHandler simulates the handler behavior for getting comments.
@@ -129,10 +129,6 @@ func getConcurrencyLevel() int {
 
 // TestGetDetections tests the GetDetections endpoint with various query types
 func TestGetDetections(t *testing.T) {
-	// Setup
-	e, mockDS, controller := setupTestEnvironment(t)
-	controller.RegisterDetectionRoutes(controller.Group) // Ensure routes are registered on the test echo instance
-
 	// Create mock data
 	mockNotes := []datastore.Note{
 		{
@@ -542,8 +538,10 @@ func TestGetDetections(t *testing.T) {
 	for _, tc := range testCases {
 		localTC := tc // Capture range variable
 		t.Run(localTC.name, func(t *testing.T) {
-			// Setup mock expectations
-			mockDS.ExpectedCalls = nil
+			// Each subtest gets its own handler and cache, so a cached page from one
+			// case can never answer another.
+			e, mockDS, controller := setupTestEnvironment(t)
+			controller.RegisterDetectionRoutes(controller.Group) // Ensure routes are registered on the test echo instance
 			localTC.mockSetup(&mockDS.Mock)
 
 			// Create request with query parameters
@@ -644,7 +642,7 @@ func TestGetDetection(t *testing.T) {
 			name:        "Detection not found",
 			detectionID: "999",
 			mockSetup: func(m *mock.Mock) {
-				m.On("Get", "999").Return(datastore.Note{}, errors.New("record not found"))
+				m.On("Get", "999").Return(datastore.Note{}, errors.NewStd("record not found"))
 			},
 			expectedStatus: http.StatusNotFound,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
@@ -1000,10 +998,64 @@ func TestGetRecentDetections(t *testing.T) {
 			expectedCount:  2,
 		},
 		{
+			name:  "Huge limit is clamped",
+			limit: "999999999",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetections", maxNumResults).Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
+			name:  "Limit at the maximum",
+			limit: "1000",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetections", maxNumResults).Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
+			name:  "Limit above the maximum is clamped",
+			limit: "1001",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetections", maxNumResults).Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
+			name:  "Frontend maximum limit",
+			limit: "48",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetections", 48).Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
+			name:  "Negative limit uses default",
+			limit: "-5",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetections", 10).Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
+			name:  "Non-numeric limit uses default",
+			limit: "abc",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetections", 10).Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
 			name:  "Database error",
 			limit: "5",
 			mockSetup: func(m *mock.Mock) {
-				m.On("GetLastDetections", 5).Return([]datastore.Note{}, errors.New("database error"))
+				m.On("GetLastDetections", 5).Return([]datastore.Note{}, errors.NewStd("database error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedCount:  0,
@@ -1090,7 +1142,7 @@ func TestDeleteDetection(t *testing.T) {
 			name:        "Detection not found",
 			detectionID: "999",
 			mockSetup: func(m *mock.Mock) {
-				m.On("Get", "999").Return(datastore.Note{}, errors.New("record not found"))
+				m.On("Get", "999").Return(datastore.Note{}, errors.NewStd("record not found"))
 			},
 			expectedStatus: http.StatusNotFound,
 		},
@@ -1099,7 +1151,7 @@ func TestDeleteDetection(t *testing.T) {
 			detectionID: "3",
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "3").Return(datastore.Note{ID: 3, Locked: false}, nil)
-				m.On("Delete", "3").Return(errors.New("database error"))
+				m.On("Delete", "3").Return(errors.NewStd("database error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
 		},
@@ -2156,7 +2208,7 @@ func TestAddCommentMethod(t *testing.T) {
 			noteID:      1,
 			commentText: "This is a test comment",
 			mockSetup: func(m *mock.Mock) {
-				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(errors.New("database error"))
+				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(errors.NewStd("database error"))
 			},
 			expectError: true,
 		},
@@ -2344,7 +2396,7 @@ func TestGetNoteCommentsWithHandler(t *testing.T) {
 			name:        "Detection not found",
 			detectionID: "999",
 			mockSetup: func(m *mock.Mock) {
-				m.On("GetNoteComments", "999").Return([]datastore.NoteComment{}, errors.New("record not found"))
+				m.On("GetNoteComments", "999").Return([]datastore.NoteComment{}, errors.NewStd("record not found"))
 			},
 			expectedStatus: http.StatusNotFound,
 			expectedCount:  0,

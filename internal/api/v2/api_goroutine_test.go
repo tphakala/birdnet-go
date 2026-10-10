@@ -15,7 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
-	"go.uber.org/goleak"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // TestControllerShutdownCleansUpGoroutines verifies that background goroutines
@@ -24,17 +24,8 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 	// Snapshot existing goroutines now (test start) and verify no leaks at the
 	// end. Captured here so a leftover transport-dial goroutine from a
 	// previously-run test (shuffle order) is ignored, not attributed to this
-	// test; see verifyNoLeaks for the full rationale.
-	verifyNoLeaks(t,
-		// Ignore goroutines from testing framework and other standard libraries
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
-		// Ignore the go-cache janitor which we can't control
-		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-		// Ignore lumberjack logger goroutines
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-	)
+	// test; see testutil.VerifyNoLeaks for the full rationale.
+	testutil.VerifyNoLeaks(t)
 
 	// Create Echo instance
 	e := echo.New()
@@ -134,19 +125,10 @@ func TestSendReconfigActionsRecoverOnClosedChannel(t *testing.T) {
 // TestGoroutineCleanupWithoutRoutes verifies that creating a controller without
 // routes doesn't start unnecessary goroutines
 func TestGoroutineCleanupWithoutRoutes(t *testing.T) {
-	// Snapshot existing goroutines at test start (see verifyNoLeaks) so a
-	// leftover transport-dial goroutine from a previously-run test under
+	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks)
+	// so a leftover transport-dial goroutine from a previously-run test under
 	// -shuffle is ignored rather than wrongly attributed here.
-	verifyNoLeaks(t,
-		// Ignore goroutines from testing framework and other standard libraries
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
-		// Ignore the go-cache janitor which we can't control
-		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-		// Ignore lumberjack logger goroutines
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-	)
+	testutil.VerifyNoLeaks(t)
 
 	// Setup test environment (which uses NewWithOptions with initializeRoutes=false)
 	_, _, controller := setupTestEnvironment(t)

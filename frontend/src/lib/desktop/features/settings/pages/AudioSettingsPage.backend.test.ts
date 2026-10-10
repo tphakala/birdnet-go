@@ -11,14 +11,18 @@ import {
 vi.mock('$lib/i18n', () => ({
   t: (key: string, params?: Record<string, unknown>) => {
     // Simple mock translation that returns the key or a default value
-    const translations: Record<string, string> = {
-      'settings.audio.audioExport.bitrateHelp':
+    const translations = new Map([
+      [
+        'settings.audio.audioExport.bitrateHelp',
         'Audio compression bitrate for lossy formats. Range: {min}-{max} kbps.',
-      'settings.audio.audioClipRetention.maxUsageHelp':
+      ],
+      [
+        'settings.audio.audioClipRetention.maxUsageHelp',
         'Delete oldest clips when the audio directory uses more than this percentage of available disk space.',
-    };
+      ],
+    ]);
 
-    const translation = key in translations ? translations[key as keyof typeof translations] : key;
+    const translation = translations.get(key) ?? key;
     if (params) {
       // Process parameter replacements safely
       return Object.entries(params).reduce((result, [paramKey, value]) => {

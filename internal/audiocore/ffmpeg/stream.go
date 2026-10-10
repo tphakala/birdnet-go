@@ -225,6 +225,12 @@ type StreamConfig struct {
 	// discovered by probing. Zero means unknown (probe failed or local source).
 	SourceSampleRate int
 
+	// SourceSampleRateEstimated marks SourceSampleRate as a fallback estimate
+	// reused after a failed probe rather than a fresh probe result. When true,
+	// output resampling is forced so FFmpeg always emits SampleRate even if the
+	// live source rate has drifted from the estimate (#4350).
+	SourceSampleRateEstimated bool
+
 	// BitDepth in bits (e.g., 16).
 	BitDepth int
 
@@ -307,6 +313,11 @@ func (c *StreamConfig) sourceType() audiocore.SourceType {
 // expected rate.
 func (c *StreamConfig) needsOutputResampling() bool {
 	if c.SourceSampleRate == 0 {
+		return true
+	}
+	// A fallback estimate may no longer match the live source rate, so force
+	// resampling to guarantee the pipeline receives exactly SampleRate (#4350).
+	if c.SourceSampleRateEstimated {
 		return true
 	}
 	return c.SourceSampleRate != c.SampleRate
@@ -1374,11 +1385,11 @@ const opSilenceTimeout = "silence_timeout"
 // its operation=silence_timeout context rather than a substring of its message.
 // It walks the whole chain of EnhancedError values so classification still holds
 // if the silence error is ever wrapped inside another EnhancedError with a
-// different operation (errors.As alone would stop at the outer one).
+// different operation (a single errors.AsType would stop at the outer one).
 func isSilenceTimeoutError(err error) bool {
 	for err != nil {
-		var ee *errors.EnhancedError
-		if !errors.As(err, &ee) {
+		ee, ok := errors.AsType[*errors.EnhancedError](err)
+		if !ok {
 			return false
 		}
 		if op, _ := ee.GetContext()["operation"].(string); op == opSilenceTimeout {

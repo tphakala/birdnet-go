@@ -31,13 +31,10 @@ export async function runAxeTest(
 ): Promise<AxeResults> {
   const axe = await initAxe();
 
-  const defaultOptions = {
-    // Focus on high-impact rules by default
-    tags: ['wcag2a', 'wcag2aa', 'best-practice'],
-    ...options,
-  } as RunOptions;
+  // Copy so axe never mutates the caller's options
+  const runOptions: RunOptions = { ...options };
 
-  return axe.run(element, defaultOptions);
+  return axe.run(element, runOptions);
 }
 
 /**
@@ -116,12 +113,13 @@ export async function getA11yReport(
 }
 
 /**
- * Default configuration for common accessibility tests
+ * Default configuration for common accessibility tests. Only `rules` is set:
+ * axe-core ignores a `tags` key, and switching to `runOnly` would change which
+ * rules run.
  */
-export const A11Y_CONFIGS = {
+export const A11Y_CONFIGS: Readonly<Record<'strict' | 'lenient' | 'forms', RunOptions>> = {
   // Strict configuration for critical accessibility
   strict: {
-    tags: ['wcag2a', 'wcag2aa', 'best-practice'],
     rules: {
       'color-contrast': { enabled: true },
       'aria-valid-attr': { enabled: true },
@@ -131,26 +129,24 @@ export const A11Y_CONFIGS = {
       'heading-order': { enabled: true },
       'landmark-unique': { enabled: true },
     },
-  } as RunOptions,
+  },
 
   // Lenient configuration for development
   lenient: {
-    tags: ['wcag2a'],
     rules: {
       'color-contrast': { enabled: false }, // Often fails in dev
       'aria-valid-attr': { enabled: true },
       label: { enabled: true },
     },
-  } as RunOptions,
+  },
 
   // Form-specific accessibility tests
   forms: {
-    tags: ['wcag2a', 'wcag2aa'],
     rules: {
       label: { enabled: true },
       'aria-valid-attr': { enabled: true },
       'aria-required-attr': { enabled: true },
       'form-field-multiple-labels': { enabled: true },
     },
-  } as RunOptions,
-} as const;
+  },
+};

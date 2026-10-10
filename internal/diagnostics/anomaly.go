@@ -40,13 +40,16 @@ var mountWatchedDests = []string{"/data", "/config"}
 
 // versionDatePattern extracts the YYYYMMDD component of a release or
 // nightly version string (formats observed in git tags: "20260716",
-// "nightly-20260615").
+// "nightly-20260615") or of a dev build string from scripts/build-version.sh
+// ("20260927-g5dc2ab881-dev"; the date leads the string, so the first match is
+// the commit date rather than digits inside the hash).
 var versionDatePattern = regexp.MustCompile(`(20\d{6})`)
 
 // compareVersionDates compares two version strings by their embedded
-// YYYYMMDD date. Returns -1 / 0 / 1 like strings.Compare. When either
-// version lacks a date component (dev builds, empty strings), it returns 0
-// (incomparable, never an anomaly): the robust fallback.
+// YYYYMMDD date. Returns -1 / 0 / 1 like strings.Compare. Dev builds carry
+// their commit date, so they compare like releases. When either version lacks
+// a date component ("unknown", "Development Build", empty strings), it returns
+// 0 (incomparable, never an anomaly): the robust fallback.
 func compareVersionDates(a, b string) int {
 	da, oka := extractVersionDate(a)
 	db, okb := extractVersionDate(b)

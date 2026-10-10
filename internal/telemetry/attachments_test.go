@@ -59,7 +59,7 @@ func TestExtractTraceID_NoCollisionWithStringKeys(t *testing.T) {
 
 	// Using a plain string key should NOT extract the value
 	// This ensures we don't have key collisions with other packages
-	//nolint:staticcheck // SA1029: intentionally using string key to test collision avoidance
+	//nolint:staticcheck,revive // SA1029/context-keys-type: intentionally using string key to test collision avoidance
 	ctx := context.WithValue(t.Context(), "trace-id", "should-not-match")
 
 	result := extractTraceID(ctx)

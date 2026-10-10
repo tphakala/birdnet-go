@@ -41,7 +41,8 @@ function makeFakeContext(state: AudioContextState) {
   return ctx as unknown as AudioContext & { createMediaElementSource: ReturnType<typeof vi.fn> };
 }
 
-const fakeElement = {} as HTMLAudioElement;
+// Placeholder element: the fake context never reads it
+const fakeElement = {} as unknown as HTMLAudioElement;
 
 describe('attachAudioGraphWhenRunning', () => {
   it('builds and returns the graph when the context is running', () => {

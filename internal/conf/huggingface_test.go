@@ -270,8 +270,8 @@ func TestNormalizeHuggingFaceEndpoint_ErrorsNeverEchoCredentials(t *testing.T) {
 			// The error context is reported to telemetry, so it is a second sink
 			// and needs its own assertion; asserting on the message alone let a
 			// context-scrubbing regression survive.
-			var enhanced *errors.EnhancedError
-			require.True(t, errors.As(err, &enhanced), "endpoint errors must be enhanced errors")
+			enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+			require.True(t, ok, "endpoint errors must be enhanced errors")
 			for k, v := range enhanced.GetContext() {
 				if s, ok := v.(string); ok {
 					assert.NotContains(t, s, password,

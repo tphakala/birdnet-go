@@ -2,7 +2,6 @@ package spectrogram
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
 	"runtime"
@@ -12,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperrors "github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 func TestSizeToPixels(t *testing.T) {
@@ -438,10 +437,10 @@ func TestIsOperationalError_HonorsPriorityLow(t *testing.T) {
 	t.Parallel()
 
 	// A Windows-style "exit status 1" tagged PriorityLow by the generator.
-	lowPriorityErr := apperrors.Newf("exit status 1").
+	lowPriorityErr := errors.Newf("exit status 1").
 		Component("spectrogram").
-		Category(apperrors.CategorySystem).
-		Priority(apperrors.PriorityLow).
+		Category(errors.CategorySystem).
+		Priority(errors.PriorityLow).
 		Build()
 	assert.True(t, IsOperationalError(lowPriorityErr),
 		"a CategorySystem error carrying PriorityLow should be classified as operational")
@@ -453,9 +452,9 @@ func TestIsOperationalError_HonorsPriorityLow(t *testing.T) {
 
 	// The same surface error without an explicit priority is a genuine failure and
 	// must still surface as a notification.
-	genuineErr := apperrors.Newf("exit status 1").
+	genuineErr := errors.Newf("exit status 1").
 		Component("spectrogram").
-		Category(apperrors.CategorySystem).
+		Category(errors.CategorySystem).
 		Build()
 	assert.False(t, IsOperationalError(genuineErr),
 		"an enhanced error without PriorityLow should not be classified as operational")
@@ -463,10 +462,10 @@ func TestIsOperationalError_HonorsPriorityLow(t *testing.T) {
 	// PriorityLow alone is not sufficient: a low-priority error in a category other
 	// than the CategorySystem the generator pairs with interruptions must not be
 	// misread as operational.
-	otherCategoryLowErr := apperrors.Newf("non-fatal validation issue").
+	otherCategoryLowErr := errors.Newf("non-fatal validation issue").
 		Component("spectrogram").
-		Category(apperrors.CategoryValidation).
-		Priority(apperrors.PriorityLow).
+		Category(errors.CategoryValidation).
+		Priority(errors.PriorityLow).
 		Build()
 	assert.False(t, IsOperationalError(otherCategoryLowErr),
 		"a PriorityLow error in a non-system category should not be classified as operational")

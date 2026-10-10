@@ -2,7 +2,6 @@ package notification
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 func TestCircuitBreaker_ClosedState(t *testing.T) {
@@ -36,7 +36,7 @@ func TestCircuitBreaker_TransitionToOpen(t *testing.T) {
 	config := DefaultCircuitBreakerTestConfig()
 	cb := newTestCircuitBreaker(t, config)
 
-	testErr := errors.New("test error")
+	testErr := errors.NewStd("test error")
 
 	// Make failures up to threshold - 1
 	for i := range config.MaxFailures - 1 {
@@ -113,7 +113,7 @@ func TestCircuitBreaker_HalfOpenFailure(t *testing.T) {
 		cb := NewPushCircuitBreaker(config, nil, "test-provider")
 		require.NotNil(t, cb, "NewPushCircuitBreaker should return non-nil")
 
-		testErr := errors.New("test error")
+		testErr := errors.NewStd("test error")
 
 		// Open the circuit
 		ctx := t.Context()
@@ -148,7 +148,7 @@ func TestCircuitBreaker_HalfOpenMaxRequests(t *testing.T) {
 		cb := NewPushCircuitBreaker(config, nil, "test-provider")
 		require.NotNil(t, cb, "NewPushCircuitBreaker should return non-nil")
 
-		testErr := errors.New("test error")
+		testErr := errors.NewStd("test error")
 
 		// Open the circuit
 		ctx := t.Context()
@@ -280,7 +280,7 @@ func TestCircuitBreaker_GetStats(t *testing.T) {
 
 	cb := newTestCircuitBreaker(t, DefaultCircuitBreakerTestConfig())
 
-	testErr := errors.New("test error")
+	testErr := errors.NewStd("test error")
 
 	// Make some failures
 	for range 2 {

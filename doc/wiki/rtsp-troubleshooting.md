@@ -5,6 +5,7 @@ This guide covers common RTSP streaming issues and their solutions in BirdNET-Go
 ## Table of Contents
 
 - [Common RTSP Issues](#common-rtsp-issues)
+- [Using `.local` (mDNS) hostnames in containers](#using-local-mdns-hostnames-in-containers)
 - [Health Monitoring Configuration](#health-monitoring-configuration)
 - [Advanced FFmpeg Parameters](#advanced-ffmpeg-parameters)
 - [Camera-Specific Issues](#camera-specific-issues)
@@ -41,6 +42,39 @@ Network issues, authentication problems, or incompatible camera settings causing
 
 **Solution:**
 Check network connectivity, verify RTSP credentials, and adjust health monitoring thresholds.
+
+## Using `.local` (mDNS) hostnames in containers
+
+A camera or microphone addressed as `rtsp://cam.local/...` is resolved by multicast DNS, which a container cannot do itself. The image resolves `.local` names through the host's avahi-daemon, so two read-only host directories are mounted into the container:
+
+| Mount                                       | Purpose                                                                                                                                                                             |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-v /run/avahi-daemon:/run/avahi-daemon:ro` | Avahi's simple socket: `.local` name resolution (FFmpeg, MQTT, webhooks, native ingest).                                                                                            |
+| `-v /run/dbus:/run/dbus:ro`                 | The host's system D-Bus: DNS-SD service discovery (browsing `_rtsp._tcp` services and reading their TXT records) through Avahi's D-Bus API, which the simple socket does not offer. |
+
+Rules that apply to both:
+
+- Mount the **directory**, not the socket file. Restarting avahi-daemon or dbus creates a new socket inode that a file bind mount never follows.
+- Always `:ro`, and never add `:z` or `:Z`: they relabel the host's directory and can stop avahi-daemon or dbus from using it.
+- Without avahi-daemon on the host, `.local` names cannot be resolved in the container, even if the host does it through systemd-resolved (`MulticastDNS=yes`), because the container cannot reach resolved's stub. Install `avahi-daemon` (and set `MulticastDNS=no` in resolved to avoid two responders), or use the device's IP address or a router DNS name with a DHCP reservation. Names that unicast DNS already resolves keep working either way.
+
+How each deployment gets the mounts:
+
+- **Docker (`install.sh`):** the Avahi mount is added to the unit on install and update when `/run/avahi-daemon/socket` exists; the D-Bus mount when `/run/dbus/system_bus_socket` exists and the app is not uid 0. Re-run the update after installing avahi.
+- **Docker compose and Portainer (bridge files):** enabled by default in the compose files. Rootful Docker creates a missing directory (harmless); rootless Docker without avahi or D-Bus must remove the line, or the container will not start.
+- **Podman:** the quadlet files mount Avahi through a per-unit path that an `ExecStartPre` links to `/run/avahi-daemon` when its socket exists and points at an empty directory otherwise, so the unit starts even if avahi is later removed (restart the unit, not just the container, after installing avahi or when the unit started before avahi created its socket at boot; for the unit `podman-install.sh` installs: `systemctl --user restart birdnet-go`). The D-Bus mount is shipped commented out in the quadlet files, and both mounts are commented out in the compose files, because Podman refuses to start a container whose bind source is missing. `podman-install.sh` enables the D-Bus line when its socket exists. D-Bus authenticates by uid, so under rootless Podman it only works with `UserNS=keep-id` (`userns_mode: keep-id` in compose). Without keep-id the client fails with `Failed to create client object: An unexpected D-Bus error occurred`; `podman-install.sh` therefore enables the D-Bus line only together with keep-id and a non-root uid.
+- **Host networking:** the host compose file (`Docker/docker-compose.host.yml`), the Portainer host template and the Unraid host template mount only `/run/avahi-daemon`, which is what `.local` name resolution uses. D-Bus is not mounted: with host networking multicast reaches the container directly, so no D-Bus path is needed.
+- **Unraid:** the two advanced path settings in the template (Avahi and D-Bus). The host networking template (`Unraid/birdnet-go-host.xml`) has the Avahi path only. Both Unraid templates are untested on real Unraid; see the [Unraid README](../../Unraid/README.md).
+
+Security trade-off of the D-Bus mount: the container can talk to any system bus service its uid is allowed to call by D-Bus policy and polkit, as a uid with no active session. That is more exposure than the Avahi socket alone. When the app runs as uid 0 (`install.sh --force-root`, `BIRDNET_UID=0`), D-Bus sees host root, which can start host services and commands, so `install.sh` and `podman-install.sh` leave the D-Bus mount out for root and compose users running as uid 0 must remove the line. To opt out, remove the `/run/dbus` line; `.local` name resolution does not depend on it. SELinux-enforcing hosts (Fedora, RHEL) are expected to deny the container access to both sockets; the options are `SecurityLabelDisable=true` (drops SELinux separation for the container, at your own risk), a local policy module, or IP addresses.
+
+Check from the host:
+
+```bash
+docker exec birdnet-go getent hosts cam.local
+```
+
+If it prints nothing, FFmpeg streams show a DNS failure with a `.local` specific hint in the stream health view and the log. Restart the container if the host's directory was recreated (for example after reinstalling avahi); under Podman quadlets restart the unit instead.
 
 ## Health Monitoring Configuration
 
@@ -324,7 +358,11 @@ Look for these patterns in logs:
 ```yaml
 realtime:
   rtsp:
-    transport: tcp # Try: tcp, udp, udp_multicast, http
+    streams:
+      - name: Front Yard
+        url: rtsp://admin:password@192.168.1.100:554/stream1
+        type: rtsp
+        transport: tcp # Try: tcp or udp
 ```
 
 ### 5. Enable Debug Logging
@@ -346,10 +384,15 @@ realtime:
 ```yaml
 realtime:
   rtsp:
-    urls:
-      - "rtsp://admin:password@192.168.1.100:554/stream1"
-      - "rtsp://admin:password@192.168.1.101:554/stream1"
-    transport: tcp
+    streams:
+      - name: Front Yard
+        url: "rtsp://admin:password@192.168.1.100:554/stream1"
+        type: rtsp
+        transport: tcp
+      - name: Back Yard
+        url: "rtsp://admin:password@192.168.1.101:554/stream1"
+        type: rtsp
+        transport: tcp
     health:
       healthydatathreshold: 90 # Allow 90 seconds without data
       monitoringinterval: 30 # Check every 30 seconds
@@ -373,9 +416,11 @@ realtime:
 ```yaml
 realtime:
   rtsp:
-    urls:
-      - "rtsp://admin:password@192.168.1.100:554/stream1"
-    transport: tcp
+    streams:
+      - name: Front Yard
+        url: "rtsp://admin:password@192.168.1.100:554/stream1"
+        type: rtsp
+        transport: tcp
     health:
       healthydatathreshold: 60
       monitoringinterval: 30
@@ -387,9 +432,11 @@ realtime:
 ```yaml
 realtime:
   rtsp:
-    urls:
-      - "rtsp://admin:password@192.168.1.100:554/stream1"
-    transport: tcp
+    streams:
+      - name: Front Yard
+        url: "rtsp://admin:password@192.168.1.100:554/stream1"
+        type: rtsp
+        transport: tcp
     health:
       healthydatathreshold: 30 # Quick failure detection
       monitoringinterval: 15 # Frequent health checks

@@ -15,17 +15,18 @@ import (
 )
 
 // TestOrchestrator_AccessorsNilPrimary_NoPanic verifies the teardown contract:
-// after Delete() clears o.primary, every primary-delegating accessor must return
-// its zero value instead of dereferencing a nil o.primary and panicking. A
-// minimal Orchestrator with no primary reproduces the post-Delete state exactly.
+// when no v2.4 model is loaded (as after Delete() clears o.models), every
+// anchor-gated accessor must return its zero value instead of panicking. A minimal
+// Orchestrator with no models reproduces that state exactly.
 func TestOrchestrator_AccessorsNilPrimary_NoPanic(t *testing.T) {
 	t.Parallel()
 
 	settings := conftest.GetTestSettings()
 	o := &Orchestrator{Settings: settings}
 
-	assert.Equal(t, 0, o.NumSpecies())
-	assert.Nil(t, o.Labels())
+	assert.Nil(t, o.AllLabels())
+	assert.Nil(t, o.DefaultTargets())
+	assert.Empty(t, o.ModelInfos())
 
 	code, ok := o.GetSpeciesCode("Turdus merula_Common Blackbird")
 	assert.Empty(t, code)
@@ -46,17 +47,18 @@ func TestOrchestrator_AccessorsNilPrimary_NoPanic(t *testing.T) {
 	assert.NotPanics(t, func() { o.RunFilterProcess(time.Now().Format(time.DateOnly), 0) })
 	assert.NotPanics(t, func() { o.Debug("noop %d", 1) })
 
-	// BuildRangeFilter snapshots the primary and returns a typed error rather than
-	// panicking when there is no primary.
+	// BuildRangeFilter returns a typed error rather than panicking when the range
+	// filter service is absent (a bare orchestrator with no rangeFilter). Readiness is
+	// keyed on the service, not on BirdNET v2.4, since the range filter is decoupled.
 	err = BuildRangeFilter(o)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no primary model")
+	assert.Contains(t, err.Error(), "no range filter service")
 }
 
 // TestOrchestrator_AccessorsConcurrentWithPrimaryClear_NoRace is the regression
-// guard for the accessor-vs-Delete() data race: Delete() sets o.primary = nil
-// under o.mu.Lock(), while the accessors used to read o.primary with no lock.
-// A writer toggles o.primary under o.mu.Lock() (mirroring Delete's write) while
+// guard for the accessor-vs-Delete() data race: Delete() clears o.models
+// under o.mu.Lock(), while accessors read under o.mu.RLock().
+// A writer toggles the v2.4 model under o.mu.Lock() (mirroring Delete's write) while
 // readers hammer the accessors; the snapshot-under-RLock fix must make this
 // race-free and panic-free. Must be run with -race.
 func TestOrchestrator_AccessorsConcurrentWithPrimaryClear_NoRace(t *testing.T) {
@@ -66,17 +68,14 @@ func TestOrchestrator_AccessorsConcurrentWithPrimaryClear_NoRace(t *testing.T) {
 	settings.BirdNET.Labels = []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
 
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
+		Settings: settings,
 	}
-	bn.ModelInfo = ModelInfo{ID: "BirdNET_V3", Name: "BirdNET v3.0"}
+	bn.ModelInfo = ModelInfo{ID: RegistryIDBirdNETV24, Name: "BirdNET v2.4"}
 
 	o := &Orchestrator{
-		Settings:  settings,
-		ModelInfo: bn.ModelInfo,
-		primary:   bn,
-		models:    map[string]*modelEntry{"BirdNET_V3": {instance: bn}},
+		Settings: settings,
 	}
+	registerTestV24(o, bn)
 
 	const readsPerGoroutine = 300
 	const readerCount = 4
@@ -85,7 +84,7 @@ func TestOrchestrator_AccessorsConcurrentWithPrimaryClear_NoRace(t *testing.T) {
 	var readersDone atomic.Bool
 	start := make(chan struct{})
 
-	// Writer: flip o.primary between bn and nil under o.mu.Lock(), the exact write
+	// Writer: flip v2.4 entry between bn and nil under o.mu.Lock(), mirroring the write
 	// Delete() performs. Spins until the readers finish so the write window always
 	// overlaps the reads.
 	writerDone := make(chan struct{})
@@ -96,17 +95,17 @@ func TestOrchestrator_AccessorsConcurrentWithPrimaryClear_NoRace(t *testing.T) {
 		for !readersDone.Load() {
 			o.mu.Lock()
 			if cleared {
-				o.primary = nil
+				delete(o.models, RegistryIDBirdNETV24)
 			} else {
-				o.primary = bn
+				registerTestV24(o, bn)
 			}
 			cleared = !cleared
 			o.mu.Unlock()
 			runtime.Gosched() // yield so the spin does not starve readers on a busy CI core
 		}
-		// Leave the primary restored so any trailing read sees a valid instance.
+		// Leave the model restored so any trailing read sees a valid instance.
 		o.mu.Lock()
-		o.primary = bn
+		registerTestV24(o, bn)
 		o.mu.Unlock()
 	}()
 
@@ -114,8 +113,8 @@ func TestOrchestrator_AccessorsConcurrentWithPrimaryClear_NoRace(t *testing.T) {
 		readerWg.Go(func() {
 			<-start
 			for range readsPerGoroutine {
-				_ = o.NumSpecies()
-				_ = o.Labels()
+				_ = o.DefaultTargets()
+				_ = o.AllLabels()
 			}
 		})
 	}
@@ -126,16 +125,15 @@ func TestOrchestrator_AccessorsConcurrentWithPrimaryClear_NoRace(t *testing.T) {
 	<-writerDone
 }
 
-// TestBirdNET_SetModelsDirConcurrentWithCoverage_NoRace is the regression guard
-// for the bn.modelsDir data race: SetModelsDir wrote bn.modelsDir with no lock
-// while PrimaryRangeFilterCoverage read it after releasing bn.mu. The write is
-// now guarded and the read is snapshotted under bn.mu. Must be run with -race.
+// TestOrchestrator_SetModelsDirConcurrentWithCoverage_NoRace is the regression guard
+// for the modelsDir data race: SetModelsDir writes o.modelsDir under o.mu.Lock()
+// while RangeFilterStatus reads it under o.mu.RLock(). Must be run with -race.
 //
-// Not parallel: PrimaryRangeFilterCoverage resolves its settings through
+// Not parallel: RangeFilterStatus resolves its settings through
 // conf.CurrentOrFallback, which prefers the global settings instance, so the
 // test sets a global v3 range-filter config (the branch that reads modelsDir)
 // and restores a clean default on cleanup.
-func TestBirdNET_SetModelsDirConcurrentWithCoverage_NoRace(t *testing.T) {
+func TestOrchestrator_SetModelsDirConcurrentWithCoverage_NoRace(t *testing.T) {
 	v3 := conftest.GetTestSettings()
 	v3.BirdNET.RangeFilter.Model = "v3"
 	v3.BirdNET.Labels = []string{"Turdus merula_Common Blackbird"}
@@ -149,10 +147,16 @@ func TestBirdNET_SetModelsDirConcurrentWithCoverage_NoRace(t *testing.T) {
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	bn := &BirdNET{
-		Settings:     v3,
-		speciesCache: make(map[string]*speciesCacheEntry),
+		Settings:  v3,
+		ModelInfo: ModelInfo{ID: RegistryIDBirdNETV24, Name: "BirdNET v2.4"},
 	}
-	bn.ModelInfo = ModelInfo{ID: "BirdNET_V3", Name: "BirdNET v3.0"}
+	bn.settingsAtomic.Store(v3)
+
+	o := &Orchestrator{
+		Settings: v3,
+	}
+	registerTestV24(o, bn)
+	o.settingsAtomic.Store(v3)
 
 	const iterations = 300
 	start := make(chan struct{})
@@ -160,13 +164,13 @@ func TestBirdNET_SetModelsDirConcurrentWithCoverage_NoRace(t *testing.T) {
 	wg.Go(func() {
 		<-start
 		for i := range iterations {
-			bn.SetModelsDir(fmt.Sprintf("/models/%d", i))
+			o.SetModelsDir(fmt.Sprintf("/models/%d", i))
 		}
 	})
 	wg.Go(func() {
 		<-start
 		for range iterations {
-			_, _, _, _ = bn.PrimaryRangeFilterCoverage()
+			_ = o.RangeFilterStatus()
 		}
 	})
 	close(start)

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getStepsForFlow } from './wizardRegistry';
 
-describe('wizardRegistry — getStepsForFlow()', () => {
+describe('wizardRegistry: getStepsForFlow()', () => {
   describe('onboarding flow', () => {
     it('returns 6 steps for onboarding flow', () => {
       const steps = getStepsForFlow('onboarding');
@@ -24,6 +24,20 @@ describe('wizardRegistry — getStepsForFlow()', () => {
     it('first onboarding step is welcome', () => {
       const steps = getStepsForFlow('onboarding');
       expect(steps[0].id).toBe('welcome');
+    });
+
+    it('gives the audio source step its own unfinished save message', () => {
+      const steps = getStepsForFlow('onboarding');
+      expect(steps.find(step => step.id === 'audio-source')).toMatchObject({
+        unfinishedSaveKey: 'wizard.errors.audioSourceSaveUnfinished',
+      });
+    });
+
+    it('only the location step uses the wide width', () => {
+      const steps = getStepsForFlow('onboarding');
+      expect(steps.filter(s => s.type === 'component' && s.size === 'wide').map(s => s.id)).toEqual(
+        ['location-language']
+      );
     });
 
     it('last onboarding step is responsible-use', () => {

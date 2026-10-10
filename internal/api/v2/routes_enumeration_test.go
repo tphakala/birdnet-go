@@ -20,7 +20,7 @@ import (
 // for the internal/api/v2 package split: every phase that moves handlers must
 // keep this set byte-identical. The entries include echo's auto-generated
 // route-not-found stubs for group prefixes, and the greedy GET /api/v2/audio/:id
-// route registered directly on the Echo instance (see internal/api/v2/CLAUDE.md).
+// route registered directly on the Echo instance (see internal/api/v2/AGENTS.md).
 //
 // To regenerate after an INTENTIONAL route change: run the test, take the sorted
 // list it prints on failure, and replace this slice.

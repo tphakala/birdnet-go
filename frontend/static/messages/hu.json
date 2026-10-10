@@ -109,6 +109,14 @@
       "closeModal": "Ablak bezárása",
       "dismissAlert": "Értesítés elutasítása",
       "closeNotification": "Értesítés bezárása",
+      "toastRegion": {
+        "topLeft": "Értesítések, bal felül",
+        "topCenter": "Értesítések, középen felül",
+        "topRight": "Értesítések, jobb felül",
+        "bottomLeft": "Értesítések, bal alul",
+        "bottomCenter": "Értesítések, középen alul",
+        "bottomRight": "Értesítések, jobb alul"
+      },
       "toggleDropdown": "Legördülő menü kapcsolása",
       "sortAscending": "Növekvő rendezés",
       "selectLanguage": "Nyelv kiválasztása",
@@ -130,7 +138,6 @@
       "selectToday": "Ma kiválasztása",
       "dateSelected": "Kiválasztott dátum: {date}",
       "calendarNavigation": "A naptárban a nyílbillentyűkkel navigálhat, Enter a kiválasztáshoz, Escape a bezáráshoz",
-      "downloadCsv": "Fajlista letöltése CSV formátumban",
       "visitEbirdLink": "eBird.org megnyitása új lapon",
       "learnEbirdTaxonomyLink": "eBird taxonómia megnyitása új lapon",
       "resizeHandle": "Húzza az átméretezéshez",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Hang elemzés túlterhelve",
-        "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a ''{sourceName}'' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
+        "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a '{sourceName}' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
       },
       "ort": {
         "unavailableTitle": "Az ONNX Runtime nem elérhető",
@@ -474,6 +481,16 @@
         "notRegisteredTitle": "Egyetlen modell sem elemzi a következőt: {sourceName}",
         "notRegisteredMessage": "Nem jut el hang a(z) {models} számára a(z) \"{sourceName}\" hangforráson, így nem jönnek létre detektálások. Nyissa meg a Rendszer > AI Modellek menüpontot a forrásonkénti állapot ellenőrzéséhez, és győződjön meg róla, hogy a hangforrás csatlakoztatva van és hangot küld."
       },
+      "acousticModels": {
+        "noneTitle": "Nincs engedélyezve akusztikai modell",
+        "noneMessage": "Nincs betöltve akusztikai modell, így a rendszer rögzíti a hangot, de nem elemzi. Engedélyezzen egy modellt a Beállítások > Elemzés menüpontban, vagy telepítsen egyet a modellgalériából.",
+        "loadFailedTitle": "Az akusztikai modellt nem sikerült betölteni",
+        "loadFailedMessage": "Egy engedélyezett akusztikai modellt nem sikerült betölteni, így a rendszer rögzíti a hangot, de nem elemzi. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modellnek van jobb változata ehhez a rendszerhez} other {# modellnek van jobb változata ehhez a rendszerhez}}",
+        "message": "A rendszer hardveréhez vagy helyéhez jobban illő változat érhető el a következőkhöz: {models}. Nyissa meg a Beállítások > Elemzés > Modellek oldalt, és váltson az Optimalizálás gombbal."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Jelenlegi érték: {value}% (küszöbérték: {threshold}%)",
@@ -493,6 +510,17 @@
           "diskFull": "A lemez megtelt - szabadítson fel helyet",
           "permissionDenied": "Engedély megtagadva - ellenőrizze a fájl vagy szolgáltatás engedélyeit"
         }
+      },
+      "inferenceFailing": {
+        "title": "A(z) {modelName} minden elemzésnél hibázik",
+        "message": "A(z) {modelName} be van töltve, de az utolsó {failures} egymást követő elemzése sikertelen volt ezen: {runtime}. A következtetés hibát adott. A rendszer rögzíti a hangot, de ez a modell semmit sem észlel. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon.",
+        "nonFiniteMessage": "A(z) {modelName} be van töltve, de az utolsó {failures} egymást követő elemzése sikertelen volt ezen: {runtime}. A modell érvénytelen (NaN vagy végtelen) pontszámokat adott. A rendszer rögzíti a hangot, de ez a modell semmit sem észlel. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Az elemzési átfedés korlátozva ezen az eszközön",
+        "cadenceCappedMessage": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} a beállított {configured} s átfedéssel meghaladja az eszköz mért kapacitását, ezért a hang elemzése {effective} s átfedéssel történik. Emiatt a hamis pozitív szűrő kevesebb megerősítést kérhet. A mentett beállításai nem változnak; lásd Beállítások > Elemzés.",
+        "cadenceOverloadedTitle": "Az eszköz nem bírja a hangelemzést",
+        "cadenceOverloadedMessage": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását, ezért az elemzés lemaradhat, és detektálások maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást, vagy válasszon gyorsabb modellváltozatot."
       }
     },
     "loading": "Értesítések betöltése..."
@@ -749,6 +777,16 @@
       "recentDetectionsFetch": "A legutóbbi detektálások betöltése sikertelen: {status}",
       "recentDetectionsLoad": "A legutóbbi detektálások betöltése sikertelen",
       "configFetch": "Az irányítópult konfigurációjának betöltése sikertelen: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Nincs engedélyezve akusztikai modell",
+      "noneMessage": "A hang rögzítése folyamatban van, de nincs elemezve. Engedélyezzen egy modellt a modellgalériában a fajok detektálásának megkezdéséhez.",
+      "noneAction": "Modellgaléria megnyitása",
+      "loadFailedTitle": "Az akusztikai modellt nem sikerült betölteni",
+      "loadFailedMessage": "Egy engedélyezett modellt nem sikerült betölteni, így a hang nincs elemezve. Az AI Modellek oldal mutatja, hogy melyik modell hibásodott meg és miért.",
+      "loadFailedAction": "AI Modellek állapotának megtekintése",
+      "failingTitle": "{count, plural, one {Egy modell minden elemzésnél hibázik} other {# modell minden elemzésnél hibázik}}",
+      "failingMessage": "{count, plural, one {A(z) {models} be van töltve, de minden elemzés sikertelen, így semmit sem észlel.} other {A(z) {models} be vannak töltve, de minden elemzés sikertelen, így semmit sem észlelnek.}} Az AI Modellek oldal mutatja a háttérrendszert és a hibát."
     },
     "banner": {
       "title": "Cím",
@@ -1011,7 +1049,8 @@
       "error": "Hiba a detektálás betöltésekor: {error}",
       "loadingResults": "{count} eredmény betöltése...",
       "thumbnailLoading": "{species} bélyegkép betöltése...",
-      "thumbnailLoaded": "{species} bélyegkép betöltve"
+      "thumbnailLoaded": "{species} bélyegkép betöltve",
+      "resultsPerPage": "Találatok oldalanként"
     },
     "errors": {
       "notFound": "A detektálás nem található. Lehet, hogy törölték vagy az ID hibás.",
@@ -1781,6 +1820,8 @@
       "sourceNotRunning": "nem elemzi",
       "sourceNotRunningTooltip": "Ez a forrás hozzá van rendelve a modellhez a beállításokban, de a hangja nem jut el a modellhez, így nem készít észleléseket. Ellenőrizze, hogy a hangforrás csatlakoztatva van-e és hangot küld-e.",
       "modelNotAnalyzingTooltip": "Egy vagy több, ehhez a modellhez hozzárendelt hangforrás nem küld neki hangot, így nem készít észleléseket. Lásd az alább felsorolt forrásokat.",
+      "sourcesDegraded": "{count}/{total} forrás leállt",
+      "sourcesDegradedTooltip": "A modell hangforrásai közül néhány leállt, de nem mindegyik, így a működő forrásokon keresztül továbbra is elemez. A konkrét leállt forrás és a hiba elhárításának módja az alábbiakban van felsorolva.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -1822,7 +1863,14 @@
       "fp16Help": "16-bites lebegőpontos számok. Kisebb memóriát és gyorsabb futást eredményezhet.",
       "invocationsHelp": "Összes elemzett szegmens indítás óta.",
       "noModelsHint": "Még nincs beállítva hangforrás?",
-      "noModelsHintLink": "Hangforrások beállítása"
+      "noModelsHintLink": "Hangforrások beállítása",
+      "modelFailing": "minden elemzés sikertelen",
+      "lastSuccess": "Utolsó sikeres elemzés",
+      "lastSuccessHelp": "Mikor elemzett ez a modell utoljára hiba nélkül hangot.",
+      "lastSuccessNever": "Nincs a modell betöltése óta",
+      "modelFailingHelp": "{reason} Próbálja ki a modell egy másik változatát a Beállítások > Elemzés > Modellek oldalon, vagy ellenőrizze a fent látható háttérrendszert és pontosságot.",
+      "modelFailingReasonNonFinite": "Minden legutóbbi elemzés sikertelen volt, mert a modell érvénytelen (NaN vagy végtelen) pontszámokat adott, így semmit sem észlel.",
+      "modelFailingReasonError": "Minden legutóbbi elemzés sikertelen volt, mert a következtetés hibát adott, így a modell semmit sem észlel."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2338,7 +2386,7 @@
           "title": "Hamis pozitív szűrő",
           "description": "Csökkenti a hamis detektálásokat több megerősítést követelve az átfedő hangszegmensekben",
           "level": {
-            "label": "Szűrési szint"
+            "label": "Hamis pozitív szűrő erőssége"
           },
           "detectionCount": "{count} megerősítés szükséges. {description}",
           "levels": {
@@ -2346,10 +2394,9 @@
             "lenient": "Gyenge minőségű hanghoz (RTSP kamerák, webkamera mikrofonok)",
             "moderate": "Kiegyensúlyozott tipikus hobbibeállításokhoz",
             "balanced": "Eredeti viselkedés 2025 szeptember előtt",
-            "strict": "RPi 4+ szükséges. Kiváló minőségű mikrofonokhoz",
-            "maximum": "RPi 4+ szükséges. Professzionális minőségű mikrofonokhoz"
+            "strict": "Kiváló minőségű mikrofonokhoz",
+            "maximum": "Professzionális minőségű mikrofonokhoz"
           },
-          "hardwareNote": "A szigorú és maximális szintek nagyobb átfedési beállításokat és több CPU erőforrást igényelnek. Ezekhez a szintekhez RPi 4 vagy jobb hardver szükséges.",
           "overlapAdjusted": "Az átfedési beállítás automatikusan {overlap}s-re állítva a szűrési követelményeknek megfelelően",
           "overlapReduced": "Az átfedési beállítás {overlap}s-re csökkentve a szűrési szintnek megfelelően",
           "levelNames": {
@@ -2361,14 +2408,38 @@
             "maximum": "Maximum",
             "unknown": "Ismeretlen"
           },
-          "warningOff": "Szűrés nélkül a megbízhatósági küszöb feletti minden észlelés azonnal elfogadásra kerül. Ez általában naponta több hamis pozitívat eredményez. Már az enyhe szűrés is jelentősen javítja az eredmények minőségét."
+          "warningOff": "Szűrés nélkül a megbízhatósági küszöb feletti minden észlelés azonnal elfogadásra kerül. Ez általában naponta több hamis pozitívat eredményez. Már az enyhe szűrés is jelentősen javítja az eredmények minőségét.",
+          "readoutTitle": "Jelenleg szükséges megerősítések",
+          "readoutPreviewTitle": "Mentés után szükséges megerősítések (becslés)",
+          "readoutIntro": "Egy detektálás akkor kerül elfogadásra, ha {seconds} másodpercen belül elég elemzési ablak egyezik.",
+          "readoutLine": "{model}: {count} / {windows} ablak, {step} s-ként új ablak",
+          "readoutPreview": "Becslés a nem mentett módosítások alapján. Az eszköz korlátját mentés után újra ellenőrizzük.",
+          "readoutPending": "A mentett beállítások alkalmazása folyamatban. A frissített értékek betöltéséig ezek becsült értékek.",
+          "capNoticeTitle": "Az átfedés az eszköz teljesítményére korlátozva",
+          "capNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} a beállított {configured} s átfedéssel meghaladja az eszköz mért kapacitását, ezért a hang elemzése {effective} s átfedéssel történik. Emiatt a szűrő kevesebb megerősítést kérhet. A mentett beállításai nem változnak.",
+          "overloadedNoticeTitle": "Az eszköz nem bírja az elemzést",
+          "overloadedNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását. Az elemzés lemaradhat, és detektálások maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást, vagy válasszon gyorsabb modellváltozatot.",
+          "unknownLatency": "A feldolgozási időt nem sikerült megmérni a következőknél: {models}, ezért az átfedés korlátozásakor nem számít bele. Az elemzés így is lemaradhat.",
+          "cpuNote": "A nagyobb erősség gyakrabban elemzi az átfedő hangot, ami minden engedélyezett modellnél és hangforrásnál CPU-időt igényel. A BirdNET-Go automatikusan arra korlátozza az átfedést, amit ez az eszköz fel tud dolgozni."
         },
         "rangeFilter": {
           "title": "Tartomány szűrő",
           "description": "A detektálást a földrajzi régióban valószínű fajokra korlátozza",
           "stationLocation": {
             "label": "Állomás helyszín",
-            "helpText": "Állomás helyszín, az időjárási adatokhoz és a madárfajoknak a régióban való valószínűségére való korlátozáshoz használva."
+            "helpText": "Állomás helyszín, az időjárási adatokhoz és a madárfajoknak a régióban való valószínűségére való korlátozáshoz használva.",
+            "automaticLocation": "Automatikus helymeghatározás",
+            "useCurrentLocation": "A böngésző helyének használata",
+            "locationHelp": "Kitölti a koordinátákat a böngésző helye alapján.",
+            "locating": "Helymeghatározás...",
+            "accuracy": "Becsült pontosság: {accuracy} m-en belül",
+            "locationDetected": "A böngésző helye meghatározva.",
+            "geolocationUnsupported": "Ez a böngésző nem támogatja az eszköz helymeghatározását. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationInsecureHelp": "HTTPS vagy localhost szükséges hozzá. Inkább keressen egy helyet, vagy használja a térképet.",
+            "geolocationDenied": "A helyhozzáférési engedély meg lett tagadva. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationUnavailable": "Az eszköz nem tudta meghatározni a helyét. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationTimedOut": "A helymeghatározási kérés túllépte az időkorlátot. Próbálja újra, adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationFailed": "Nem sikerült meghatározni az eszköz helyét. Adja meg kézzel a koordinátákat, vagy használja a térképet."
           },
           "latitude": {
             "label": "Szélesség",
@@ -3157,7 +3228,11 @@
         "enable": "BirdWeather feltöltések engedélyezése",
         "token": {
           "label": "BirdWeather token",
-          "helpText": "Az Ön egyedi BirdWeather token-je."
+          "helpText": "Az Ön egyedi BirdWeather token-je.",
+          "errors": {
+            "required": "Adja meg a BirdWeather-tokent, vagy kapcsolja ki a BirdWeathert.",
+            "format": "A BirdWeather-token 24 betűből és számjegyből áll."
+          }
         },
         "threshold": {
           "label": "Feltöltési küszöbérték",
@@ -3233,7 +3308,7 @@
             "label": "Eszköz név",
             "helpText": "Az alap nevet az eszközökhöz, ahogy megjelennek a Home Assistant-ban. Minden hang forrásnak saját eszköze lesz, amely ehhez a fő BirdNET-Go eszközhöz lesz kapcsolva."
           },
-          "sensorsNote": "<strong>Létrehozott érzékelők:</strong> Minden hang forráshoz a Home Assistant megkapja: Utolsó faj, Megbízhatóság, Tudományos név és Hangszint (ha engedélyezve van). A bridge eszköz tartalmazza az online/offline elérhetőségi állapotot.",
+          "sensorsNote": "<strong>Létrehozott érzékelők:</strong> Minden hang forráshoz a Home Assistant megkapja: Utolsó faj, Megbízhatóság, Tudományos név és Hangszint (ha engedélyezve van). A bridge eszköz tartalmazza az online/offline elérhetőségi állapotot. Az egyes források észlelési érzékelői az adott forrás saját MQTT témáját olvassák, &lt;base_topic&gt;/sources/&lt;source_id&gt;, és annak Hangszint érzékelője a &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel altémát olvassa, így az egyik forrás észlelése soha nem állítja vissza egy másik forrás érzékelőit.",
           "discovery": {
             "button": "Felfedezés küldése",
             "success": "Felfedezés üzenetek elküldve a Home Assistant-nak",
@@ -3279,7 +3354,8 @@
             "none": "Nincs",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3300,6 +3376,16 @@
             "helpText": "Válassza ki a hőmérséklet és szélsebesség egységeit (m = Metrikus, e = Imperiális, h = UK hibrid)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API kulcs",
+            "helpText": "Adja meg a Pirate Weather API kulcsát. Az időjárási adatokhoz szükséges."
+          },
+          "endpoint": {
+            "label": "API végpont",
+            "helpText": "Felülbírálhatja az alapértelmezett Pirate Weather API végpontot, ha szükséges. Ha üresen hagyja, az alapértelmezett https://api.pirateweather.net/forecast."
+          }
+        },
         "notes": {
           "none": "Nem lesz időjárási adat lekérve.",
           "yrno": {
@@ -3307,7 +3393,8 @@
             "freeService": "Az Yr egy ingyenes időjárás adat szolgáltatás. További információkért látogasson el a <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a> oldalra."
           },
           "openweather": "Az OpenWeather használatához API kulcs szükséges, regisztráljon ingyenes API kulcsért a <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a> oldalon.",
-          "wunderground": "Weather Underground API kulcs és érvényes PWS állomás ID szükséges. Lásd <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> részletekért."
+          "wunderground": "Weather Underground API kulcs és érvényes PWS állomás ID szükséges. Lásd <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> részletekért.",
+          "pirateweather": "A Pirate Weather használatához API kulcs szükséges, regisztráljon a <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a> oldalon."
         },
         "apiKey": {
           "label": "API kulcs",
@@ -3680,6 +3767,7 @@
         "dataOutputTitle": "Hangszint adat kimenet",
         "dataOutputDescription": "Ha engedélyezve van, a hangszint mérések publikálásra kerülnek:",
         "mqttTopic": "MQTT téma:",
+        "mqttSourceTopic": "Forrásonkénti MQTT téma (Home Assistant discovery esetén):",
         "sseEndpoint": "SSE végpont:",
         "prometheusMetrics": "Prometheus metrikák:"
       },
@@ -3741,6 +3829,8 @@
         "pathHelp": "A könyvtár, ahová a hang klipek mentésre kerülnek. A relatív útvonalak az alkalmazás könyvtárból számítódnak. Példa: 'clips/' vagy '/var/audio/birds/'",
         "typeLabel": "Hang formátum",
         "typeHelp": "Hang formátum a mentett klipekhez. A WAV és FLAC veszteségmentes (legjobb minőség, nagyobb fájlok). Az MP3, AAC és Opus veszteséges (kisebb fájlok, enyhe minőségvesztés).",
+        "ultrasonicTypeLabel": "Ultrahang formátum",
+        "ultrasonicTypeHelp": "Veszteségmentes formátum (WAV vagy FLAC), amely kizárólag a 48 kHz feletti denevér- és ultrahang-felvételekhez használatos. Ezek a fenti formátum helyett a teljes forrás mintavételezési frekvenciájukkal kerülnek mentésre, így az ultrahangos részletek nem vesznek el.",
         "bitrateLabel": "Bitráta",
         "bitrateHelp": "Hang tömörítési bitráta a veszteséges formátumokhoz. Tartomány: {min}-{max} kbps. A magasabb értékek jobb minőséget, de nagyobb fájlokat eredményeznek.",
         "losslessBitrateValue": "N/A - Veszteségmentes",
@@ -3809,7 +3899,17 @@
       },
       "models": {
         "recommendBoth": "A legjobb fajészlelési lefedettség érdekében javasolt a BirdNET és a Perch modellek együttes futtatása.",
-        "perchOnlyWarning": "A Perch önmagában kevesebb észlelést produkál. Az érdemi eredményekhez csökkentse a megbízhatósági küszöböt 0.50-re, vagy aktiválja a BirdNET-et is a jobb lefedettség érdekében."
+        "perchOnlyWarning": "A Perch önmagában kevesebb észlelést produkál. Az érdemi eredményekhez csökkentse a megbízhatósági küszöböt 0.50-re, vagy aktiválja a BirdNET-et is a jobb lefedettség érdekében.",
+        "loading": "Detekciós modellek betöltése...",
+        "noneEnabledTitle": "Nincs engedélyezve detekciós modell.",
+        "noneEnabledHelp": "Ezt a forrást továbbra is mentheti. A hangját az alapértelmezett modellek elemzik, amint egyet engedélyeznek.",
+        "noneEnabledLink": "Modellgaléria megnyitása",
+        "noneAvailable": "Ezen a szerveren nincsenek engedélyezve detekciós modellek.",
+        "loadFailedWarning": "Egy detekciós modellt nem sikerült betölteni, ezért ez a forrás nem lesz elemezve, amíg helyre nem áll.",
+        "loadFailedLink": "AI Modellek állapotának megtekintése",
+        "defaultBadge": "{models} (alapértelmezett)",
+        "defaultPendingBadge": "Alapértelmezett modellek",
+        "noneBadge": "Nincs betöltve modell"
       }
     },
     "security": {
@@ -4379,7 +4479,7 @@
       "dynamicThreshold": {
         "tabLabel": "Tanult",
         "title": "Tanult küszöbértékek",
-        "description": "Ez az oldal a Dinamikus küszöbérték futásidejű adatait mutatja. Ha engedélyezve van a Fő beállítások → Detektálás menüpontban, a küszöbértékek több magas megbízhatóságú detektálás alapján automatikusan kerülnek beállításra. Az itt látható fajok feltételezhetően léteznek ezen a helyszínen.",
+        "description": "Ez az oldal a Dinamikus küszöbérték futásidejű adatait mutatja. Ha engedélyezve van, a küszöbértékek több magas megbízhatóságú detektálás alapján automatikusan kerülnek beállításra. Az itt látható fajok feltételezhetően léteznek ezen a helyszínen.",
         "stats": {
           "active": "Aktív",
           "atMinimum": "Minimumon",
@@ -5031,6 +5131,33 @@
       "viewDetections": "{name} észleléseinek megtekintése",
       "largeView": "{name} nagy nézete",
       "clickToView": "Kattints az észlelések megtekintéséhez"
+    },
+    "locationMap": {
+      "mapLabel": "Térkép az állomás helyszínének kiválasztásához",
+      "expandedMapLabel": "Teljes képernyős térkép az állomás helyszínének kiválasztásához",
+      "zoomIn": "Nagyítás",
+      "zoomOut": "Kicsinyítés",
+      "expand": "Térkép megnyitása teljes képernyőn",
+      "search": {
+        "label": "Hely keresése",
+        "placeholder": "Település vagy cím",
+        "submit": "Keresés",
+        "disclosure": "A keresések a Photon szolgáltatáshoz (photon.komoot.io) kerülnek elküldésre, amely OpenStreetMap-adatokat használ.",
+        "openPhoton": "Photon megnyitása új lapon",
+        "searching": "Keresés...",
+        "results": "{count, plural, one {# hely található} other {# hely található}}",
+        "noResults": "Nem található hely. Próbáljon másik nevet, vagy kattintson a térképre.",
+        "errorNetwork": "A helykeresés nem érhető el. Ellenőrizze az internetkapcsolatot. A térképre továbbra is kattinthat, vagy megadhatja a koordinátákat.",
+        "errorRateLimited": "Túl sok keresés. Várjon egy kicsit, majd próbálja újra.",
+        "errorUnavailable": "A keresőszolgáltatás nem válaszolt. A térképre továbbra is kattinthat, vagy megadhatja a koordinátákat.",
+        "kind": {
+          "city": "Város",
+          "town": "Kisváros",
+          "village": "Falu",
+          "station": "Állomás",
+          "airport": "Repülőtér"
+        }
+      }
     }
   },
   "connectivity": {
@@ -5117,6 +5244,7 @@
       "birdweatherClientFailed": "A BirdWeather kliens létrehozása sikertelen",
       "noWeatherProvider": "Nincs időjárás szolgáltató kiválasztva",
       "openWeatherKeyRequired": "Az OpenWeather API kulcs kötelező",
+      "pirateWeatherKeyRequired": "A Pirate Weather API kulcs kötelező",
       "processorUnavailable": "A processzor nem elérhető",
       "discoveryFailed": "A Home Assistant felfedezés indítása sikertelen"
     },
@@ -5181,12 +5309,37 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Oldal újratöltése"
+    },
     "skip": "Kihagyás",
     "back": "Vissza",
     "next": "Tovább",
     "done": "Kész",
     "progress": "{current}. lépés / {total}",
     "progressLabel": "Varázsló előrehaladása",
+    "status": {
+      "saving": "Mentés...",
+      "loadingStep": "Lépés betöltése..."
+    },
+    "errors": {
+      "saveFailed": "Ezt a lépést nem sikerült menteni. Ellenőrizze a kapcsolatot, és próbálja újra, vagy hagyja ki a beállítást, és módosítsa később a Beállításokban.",
+      "saveRejected": "A lépés beállításait nem fogadta el a rendszer. Ellenőrizze az értékeket, és próbálja újra, vagy hagyja ki a beállítást, és módosítsa később a Beállításokban.",
+      "stepLoadFailed": "Ezt a lépést nem sikerült betölteni. Nyomja meg az Újra gombot, vagy töltse újra az oldalt.",
+      "stepLoadFailedReload": "Ezt a lépést továbbra sem sikerült betölteni. Töltse újra az oldalt az újrapróbálkozáshoz; a korábbi lépésekben mentett választások megmaradnak.",
+      "audioSourceSaveUnfinished": "A hangforrás módosítása nem fejeződött be. Ellenőrizze a hangforrásokat a Beállítások > Hang menüpontban.",
+      "saveUnfinished": "A beállítás során végzett néhány módosítás nem lett mentve. Ellenőrizze őket a Beállításokban."
+    },
+    "reasons": {
+      "completeStep": "A folytatáshoz fejezze be ezt a lépést."
+    },
+    "leaveConfirm": {
+      "title": "Kilép a beállításból?",
+      "message": "A beállítás nem nyílik meg újra. A korábbi lépésekben mentett választások megmaradnak; az ebben a lépésben végzett módosítások nem kerülnek mentésre. Mindent módosíthat később a Beállításokban.",
+      "messageSaving": "A beállítás nem nyílik meg újra. A korábbi lépésekben mentett választások megmaradnak. Ez a lépés még mentés alatt van, és a módosítások egy része vagy mindegyike elveszhet. Mindent módosíthat később a Beállításokban.",
+      "stay": "Beállítás folytatása",
+      "leave": "Kilépés a beállításból"
+    },
     "whatsNew": {
       "title": "Újdonságok a {version} verzióban"
     },
@@ -5209,13 +5362,6 @@
         "locationHelp": "Az Ön helyszíne segít szűrni a fajokat az Ön környékén valószínűek szerint",
         "latitudeLabel": "Szélesség",
         "longitudeLabel": "Hosszúság",
-        "useMyLocation": "Helyszínem használata",
-        "locationDetected": "Helyszín észlelve",
-        "locationError": "A helyszín nem észlelhető. Kérjük, adja meg manuálisan a koordinátákat.",
-        "locationDenied": "A helyszín hozzáférés megtagadva. Kérjük, adja meg manuálisan a koordinátákat.",
-        "geolocationRequiresHttps": "A böngésző helymeghatározáshoz HTTPS szükséges. Adja meg a koordinátákat kézzel, vagy használja a térképet.",
-        "geolocationDenied": "A helymeghatározási engedély megtagadva. Adja meg a koordinátákat kézzel, vagy használja a térképet.",
-        "geolocationFailed": "Nem sikerült meghatározni a tartózkodási helyét. Adja meg a koordinátákat kézzel, vagy használja a térképet.",
         "localesLoading": "Nyelvek betöltése...",
         "localesLoadFailed": "A nyelvi lehetőségek betöltése sikertelen. Az angol lett kiválasztva alapértelmezettként."
       },
@@ -5231,7 +5377,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Adja meg az RTSP audio stream URL-jét",
         "additionalSourcesHint": "Később további hang forrásokat adhat hozzá a Beállításokban.",
-        "configureLater": "Kihagyás - beállítás később"
+        "devicesLoadFailed": "Nem sikerült listázni a rendszer hangeszközeit.",
+        "useStreamInstead": "RTSP stream használata helyette",
+        "setUpLater": "Hang beállítása később",
+        "setUpLaterChosen": "A hang most nem lesz beállítva. Hangkártyát vagy streamet később adhat hozzá a Beállításokban.",
+        "streamReplacesSoundCards": "A hangkártyák nem rögzítenek tovább, ha streamet használ. A Beállításokban újra hozzáadhatja őket.",
+        "soundCardReplacesStream": "A stream opciónál látható stream kikapcsol, ha hangkártyát használ. A Beállításokban újra bekapcsolhatja.",
+        "reasons": {
+          "chooseDevice": "Válasszon hangeszközt, vagy állítsa be a hangot később.",
+          "devicesFailed": "A hangeszközöket nem sikerült listázni. Próbálja újra, használjon streamet, vagy állítsa be a hangot később.",
+          "noDevices": "Nem található hangeszköz. Használjon streamet, vagy állítsa be a hangot később.",
+          "enterUrl": "Adja meg a stream URL-jét, vagy állítsa be a hangot később.",
+          "urlScheme": "Adjon meg egy teljes stream URL-t, amely rtsp:// vagy rtsps:// előtaggal kezdődik, és nem tartalmaz szóközt."
+        }
       },
       "detection": {
         "title": "Detektálási küszöbérték",
@@ -5243,6 +5401,7 @@
         "highAccuracyDesc": "Kevesebb hamis pozitív, néhány madarat nem találhat meg",
         "highSensitivity": "Magas érzékenység",
         "highSensitivityDesc": "Több detektálás, több hamis pozitív",
+        "descriptionStored": "Válassza ki, mennyire szigorú legyen a madár azonosítás. Jelenlegi: {threshold}, nincs egyezés.",
         "threshold": "Megbízhatósági küszöbérték",
         "fpFilterNote": "Miután a rendszere működik és bevált, engedélyezheti a hamis pozitív szűrőt a Beállításokban a hibás detektálások további csökkentéséhez."
       },
@@ -5252,10 +5411,12 @@
         "privacyFilterHelp": "Kiszűri a detektálásokat, amikor emberi hangok észlelhetők a mikrofon közelében",
         "birdweatherLabel": "Detektálások megosztása a BirdWeather-rel",
         "birdweatherHelp": " Ossza meg madár detektálásait a BirdWeather közösségi hálózattal",
-        "birdweatherIdLabel": "BirdWeather állomás ID",
-        "birdweatherIdPlaceholder": "Adja meg a BirdWeather állomás ID-jét",
         "errorReportingLabel": "Névtelen hiba jelentések küldése",
-        "errorReportingHelp": "Segítsen fejleszteni a BirdNET-Go-t névtelen hiba jelentések küldésével, amikor valami hibásan működik"
+        "errorReportingHelp": "Segítsen fejleszteni a BirdNET-Go-t névtelen hiba jelentések küldésével, amikor valami hibásan működik",
+        "reasons": {
+          "enterToken": "Adja meg a BirdWeather-tokent, vagy kapcsolja ki a megosztást a BirdWeatherrel.",
+          "tokenFormat": "A BirdWeather-token 24 betűből és számjegyből áll."
+        }
       },
       "responsibleUse": {
         "title": "A BirdNET-Go felelős használata",
@@ -5494,6 +5655,8 @@
         "catalogLoadFailed": "Nem sikerült betölteni a modellkatalógust",
         "installFailed": "Nem sikerült elindítani a modell telepítését",
         "removeFailed": "Nem sikerült eltávolítani a modellt",
+        "removeHasDependents": "{name} szükséges a következő modellekhez: {models}. Először távolítsa el ezeket a modelleket.",
+        "operationInProgress": "Már folyamatban van egy modell telepítése, újratelepítése vagy eltávolítása ({name}). Próbáld újra, ha befejeződött.",
         "actionFailed": "Probléma történt a következővel: {name}",
         "downloadSourceHint": "Ha a huggingface.co blokkolva van vagy lassú a hálózatán, állítson be egy tükörszervert az alábbi Letöltési forrás szakaszban.",
         "goToDownloadSource": "Ugrás a Letöltési forráshoz",

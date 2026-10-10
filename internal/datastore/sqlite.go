@@ -39,7 +39,7 @@ type SQLiteStore struct {
 
 	// dbstatAvailable caches whether the dbstat virtual table exists.
 	// 0 = unchecked, 1 = available, -1 = not available.
-	dbstatAvailable int32
+	dbstatAvailable atomic.Int32
 
 	// Guards to prevent starting monitoring loops more than once.
 	integrityOnce     sync.Once
@@ -51,12 +51,6 @@ type SQLiteStore struct {
 // blank, since that default only applies at fresh config bootstrap and can be
 // overwritten with an empty string by a later settings save.
 const defaultSQLitePath = "birdnet.db"
-
-func validateSQLiteConfig() error {
-	// Add validation logic for SQLite configuration
-	// Return an error if the configuration is invalid
-	return nil
-}
 
 // resolveSQLitePath returns the configured SQLite database path, falling back to
 // defaultSQLitePath when the configured value is blank. A blank path would

@@ -71,8 +71,9 @@ func WithSkipLabelValidation() ClassifierOption {
 }
 
 // WithSessionOptions provides a callback to configure the ONNX Runtime session options.
-// The callback receives the options after defaults (IntraOpNumThreads=1, InterOpNumThreads=1)
-// have been set, allowing the caller to override or add execution providers.
+// The callback receives the options after defaults (IntraOpNumThreads=1, InterOpNumThreads=1,
+// thread-pool spinning disabled) have been set, allowing the caller to override or add
+// execution providers.
 func WithSessionOptions(fn func(*ort.SessionOptions)) ClassifierOption {
 	return func(c *classifierConfig) { c.sessionOptsFn = fn }
 }
@@ -205,6 +206,49 @@ func validateLabelCount(modelCfg *ModelConfig, outputInfos []ort.InputOutputInfo
 	return nil
 }
 
+// sessionOptionSetter is the subset of *ort.SessionOptions that
+// applySessionDefaults configures, so the defaults can be tested without
+// loading the ONNX Runtime library.
+type sessionOptionSetter interface {
+	SetIntraOpNumThreads(n int) error
+	SetInterOpNumThreads(n int) error
+	AddSessionConfigEntry(key, value string) error
+}
+
+// ONNX Runtime session config keys (onnxruntime_session_options_config_keys.h)
+// that control whether idle thread-pool workers spin-wait for work or block.
+const (
+	ortConfigAllowIntraOpSpinning = "session.intra_op.allow_spinning"
+	ortConfigAllowInterOpSpinning = "session.inter_op.allow_spinning"
+	ortConfigValueDisabled        = "0"
+)
+
+// applySessionDefaults sets the session options every classifier session
+// starts from, before the caller's WithSessionOptions callback runs.
+//
+// Thread-pool spinning is disabled: ONNX Runtime spins by default, which keeps
+// every pool worker busy-waiting between ops and after each run. Real-time
+// analysis runs one short inference every second or so, so spinning burns
+// several times the CPU of the inference itself for little or no latency gain.
+// The entries have no effect at the single-thread default set here; they matter
+// because WithSessionOptions callbacks raise the thread count afterwards
+// (NewONNXClassifier uses runtime.NumCPU), and config entries survive that.
+func applySessionDefaults(so sessionOptionSetter) error {
+	if err := so.SetIntraOpNumThreads(1); err != nil {
+		return fmt.Errorf("birdnet: failed to set intra-op threads: %w", err)
+	}
+	if err := so.SetInterOpNumThreads(1); err != nil {
+		return fmt.Errorf("birdnet: failed to set inter-op threads: %w", err)
+	}
+	if err := so.AddSessionConfigEntry(ortConfigAllowIntraOpSpinning, ortConfigValueDisabled); err != nil {
+		return fmt.Errorf("birdnet: failed to disable intra-op spinning: %w", err)
+	}
+	if err := so.AddSessionConfigEntry(ortConfigAllowInterOpSpinning, ortConfigValueDisabled); err != nil {
+		return fmt.Errorf("birdnet: failed to disable inter-op spinning: %w", err)
+	}
+	return nil
+}
+
 // createSession builds an ONNX Runtime session with default options.
 func createSession(modelPath string, inputNames, outputNames []string, sessionOptsFn func(*ort.SessionOptions)) (*ort.DynamicAdvancedSession, error) {
 	sessOpts, err := ort.NewSessionOptions()
@@ -213,11 +257,8 @@ func createSession(modelPath string, inputNames, outputNames []string, sessionOp
 	}
 	defer func() { _ = sessOpts.Destroy() }()
 
-	if err := sessOpts.SetIntraOpNumThreads(1); err != nil {
-		return nil, fmt.Errorf("birdnet: failed to set intra-op threads: %w", err)
-	}
-	if err := sessOpts.SetInterOpNumThreads(1); err != nil {
-		return nil, fmt.Errorf("birdnet: failed to set inter-op threads: %w", err)
+	if err := applySessionDefaults(sessOpts); err != nil {
+		return nil, err
 	}
 
 	if sessionOptsFn != nil {

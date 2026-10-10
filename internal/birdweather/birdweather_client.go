@@ -26,8 +26,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
-
-	"golang.org/x/net/http2"
 )
 
 // GetLogger returns the birdweather package logger
@@ -51,14 +49,14 @@ const (
 	// in a background worker, so a slow encode never blocks the analysis pipeline or UI.
 	encodingTimeout = 60 * time.Second
 
-	// http2ReadIdleTimeout and http2PingTimeout enable HTTP/2 connection health
+	// http2SendPingTimeout and http2PingTimeout enable HTTP/2 connection health
 	// checks on the upload client. The BirdWeather API sits behind a CDN that
 	// silently drops idle connections; reusing a half-open pooled connection
 	// surfaces as "http2: client connection force closed via ClientConn.Close".
 	// With these set, the transport sends a PING on an idle connection after
-	// http2ReadIdleTimeout and discards it if no PONG arrives within
+	// http2SendPingTimeout and discards it if no PONG arrives within
 	// http2PingTimeout, so a dead connection is never reused for an upload.
-	http2ReadIdleTimeout = 15 * time.Second
+	http2SendPingTimeout = 15 * time.Second
 	http2PingTimeout     = 5 * time.Second
 
 	// detectionDurationSeconds is the duration added to timestamp for end time
@@ -213,14 +211,14 @@ type Interface interface {
 // fail with "http2: client connection force closed via ClientConn.Close").
 func newUploadHTTPClient() *http.Client {
 	transport := httpclient.CloneDefaultTransport()
-	if h2, err := http2.ConfigureTransports(transport); err == nil {
-		h2.ReadIdleTimeout = http2ReadIdleTimeout
-		h2.PingTimeout = http2PingTimeout
-	} else {
-		// Non-fatal: without explicit HTTP/2 configuration the transport still
-		// negotiates HTTP/2 via ALPN, just without the proactive idle PINGs.
-		GetLogger().Warn("Failed to configure HTTP/2 health checks for BirdWeather uploads",
-			logger.Error(err))
+	// The cloned DefaultTransport has ForceAttemptHTTP2 set, so HTTP/2 is
+	// negotiated via ALPN. Give it a dedicated HTTP2Config (stdlib bundled HTTP/2,
+	// Go 1.24+) so the transport sends proactive idle health-check PINGs; this
+	// replaces the deprecated golang.org/x/net/http2.ConfigureTransports path. A
+	// fresh config keeps these timeouts off the shared http.DefaultTransport.
+	transport.HTTP2 = &http.HTTP2Config{
+		SendPingTimeout: http2SendPingTimeout,
+		PingTimeout:     http2PingTimeout,
 	}
 	return &http.Client{
 		Timeout:   httpClientTimeout,
@@ -243,7 +241,7 @@ func New(settings *conf.Settings) (*BwClient, error) {
 		HTTPClient:    newUploadHTTPClient(),
 	}
 
-	// Attach the circuit breaker. Metrics are intentionally nil for now — the
+	// Attach the circuit breaker. Metrics are intentionally nil for now; the
 	// BirdWeather integration is not wired into the notification Prometheus
 	// registry and we want to avoid reaching across package boundaries just to
 	// surface state transitions. The breaker degrades gracefully when metrics
@@ -300,8 +298,7 @@ func handleNetworkError(err error, url string, timeout time.Duration, operation 
 			Category(errors.CategoryGeneric).
 			Build()
 	}
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
+	if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
 		// Create descriptive error message with operation context
 		descriptiveErr := fmt.Errorf("BirdWeather %s timeout: %w", operation, err)
 		log.Warn("Network request timed out",
@@ -315,10 +312,8 @@ func handleNetworkError(err error, url string, timeout time.Duration, operation 
 			Context("operation", operation).
 			Build()
 	}
-	var urlErr *neturl.Error
-	if errors.As(err, &urlErr) {
-		var dnsErr *net.DNSError
-		if errors.As(urlErr.Err, &dnsErr) {
+	if urlErr, ok := errors.AsType[*neturl.Error](err); ok {
+		if _, ok := errors.AsType[*net.DNSError](urlErr.Err); ok {
 			descriptiveErr := fmt.Errorf("BirdWeather %s DNS resolution failed: %w", operation, err)
 			// DNS failures are transient infrastructure issues, not code bugs
 			log.Warn("DNS resolution failed",
@@ -581,12 +576,12 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 		if httpErr != nil {
 			// handleNetworkError logs at Warn with classified details
 			// (timeout/DNS/connection), and the caller (Publish) logs the
-			// final outcome — so no extra log.Error here.
+			// final outcome, so no extra log.Error here.
 			return handleNetworkError(httpErr, maskedURL, httpClientTimeout, "soundscape upload")
 		}
 		if resp == nil {
 			// Defensive: Go's http.Client should not return nil resp with nil
-			// err. If it happens, let the caller handle it — don't double-log.
+			// err. If it happens, let the caller handle it; don't double-log.
 			return errors.Newf("received nil response from soundscape upload").
 				Component("birdweather").
 				Category(errors.CategoryNetwork).
@@ -611,7 +606,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 
 		// Validate the response inside the closure so that malformed bodies
 		// (HTML with 201, invalid JSON, success:false payloads) count as
-		// failures against the circuit breaker — otherwise a degraded
+		// failures against the circuit breaker; otherwise a degraded
 		// upstream could silently pass the closure and never trip the
 		// breaker.
 		id, parseErr := parseSoundscapeResponse(body, maskedURL, resp.StatusCode)
@@ -744,7 +739,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 		logger.String("soundscape_id", soundscapeID),
 		logger.String("scientific_name", scientificName))
 	// nonTransientErr carries business-logic errors (e.g. CategoryNotFound
-	// species validation 422s from the detection post — the common case for
+	// species validation 422s from the detection post; the common case for
 	// non-bird species) out of the breaker closure without tripping it.
 	var nonTransientErr error
 	cbErr := b.callWithCircuitBreaker(context.Background(), func(ctx context.Context) error {
@@ -783,8 +778,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 		_, handleErr := handleHTTPResponse(resp, http.StatusCreated, "detection post", maskedDetectionURL)
 		if handleErr != nil {
 			// Add detection-specific context regardless of classification.
-			var enhancedErr *errors.EnhancedError
-			if errors.As(handleErr, &enhancedErr) {
+			if enhancedErr, ok := errors.AsType[*errors.EnhancedError](handleErr); ok {
 				enhancedErr.Context["soundscape_id"] = soundscapeID
 				enhancedErr.Context["scientific_name"] = scientificName
 			}
@@ -890,7 +884,7 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 	if err != nil {
 		switch {
 		case isCircuitBreakerOpen(err):
-			// Breaker is open — the upstream BirdWeather API is still considered
+			// Breaker is open; the upstream BirdWeather API is still considered
 			// unhealthy. This is an operational throttling state, not a code bug,
 			// so we log at debug level and skip alerting (which would otherwise
 			// fire once per detection during extended outages).
@@ -932,7 +926,7 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 		switch {
 		case errors.IsNotFound(err):
 			// CategoryNotFound (e.g., invalid species on Birdweather)
-			// Expected — not all BirdNET species exist in BirdWeather. Skip without error.
+			// Expected: not all BirdNET species exist in BirdWeather. Skip without error.
 			log.Debug("Publish skipped: species not recognized by Birdweather",
 				logger.String("soundscape_id", soundscapeID),
 				logger.String("common_name", note.CommonName),
@@ -940,7 +934,7 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 				logger.Error(err))
 			return nil
 		case isCircuitBreakerOpen(err):
-			// Breaker is open — treat as a short-circuited skip. No alerting,
+			// Breaker is open; treat as a short-circuited skip. No alerting,
 			// no Sentry noise (handled by shouldReportToSentry), debug-level log.
 			log.Debug("BirdWeather detection post skipped: circuit breaker open",
 				logger.String("soundscape_id", soundscapeID),
@@ -1145,8 +1139,7 @@ func trackOperationTiming(errPtr *error, operation string, startTime time.Time, 
 				return
 			}
 			// Add timing context to error
-			var enhancedErr *errors.EnhancedError
-			if errors.As(*errPtr, &enhancedErr) {
+			if enhancedErr, ok := errors.AsType[*errors.EnhancedError](*errPtr); ok {
 				// Initialize Context map if nil to prevent panic
 				if enhancedErr.Context == nil {
 					enhancedErr.Context = make(map[string]any)

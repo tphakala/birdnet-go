@@ -76,7 +76,7 @@ const MOCK_FI_BAT_DICT: Record<string, string> = {
 };
 
 function mockApiGet(dict: Record<string, string>): void {
-  vi.mocked(api.get).mockResolvedValue(dict as unknown);
+  vi.mocked(api.get).mockResolvedValue(dict);
 }
 
 describe('per-visitor species locale gate', () => {
@@ -146,7 +146,7 @@ describe('speciesDictionary store', () => {
     await loadDictionary('fi');
     expect(localizeScientific('Turdus merula')).toBe('Mustarastas');
 
-    vi.mocked(api.get).mockResolvedValue(MOCK_FR_DICT as unknown);
+    vi.mocked(api.get).mockResolvedValue(MOCK_FR_DICT);
     await loadDictionary('fr');
     expect(localizeScientific('Turdus merula')).toBe('Merle noir');
   });
@@ -180,11 +180,11 @@ describe('speciesDictionary store', () => {
     const esPromise = new Promise(resolve => {
       resolveEs = resolve;
     });
-    vi.mocked(api.get).mockImplementationOnce(() => esPromise as Promise<unknown>);
+    vi.mocked(api.get).mockImplementationOnce(() => esPromise);
     const esLoad = loadDictionary('es');
 
     // 'fr' fetch starts and resolves quickly - this becomes the "current" locale
-    vi.mocked(api.get).mockResolvedValueOnce(FR_DICT_RACE as unknown);
+    vi.mocked(api.get).mockResolvedValueOnce(FR_DICT_RACE);
     await loadDictionary('fr');
     expect(localizeScientific('Turdus merula')).toBe('Merle noir race');
 
@@ -209,7 +209,7 @@ describe('speciesDictionary store', () => {
     const esPromise = new Promise(resolve => {
       resolveEs = resolve;
     });
-    vi.mocked(api.get).mockImplementationOnce(() => esPromise as Promise<unknown>);
+    vi.mocked(api.get).mockImplementationOnce(() => esPromise);
     const esLoad = loadDictionary('es');
 
     // Load the already-cached 'fr'. The cache-hit path must bump the sequence
@@ -308,7 +308,7 @@ describe('speciesDictionary store', () => {
     mockApiGet(MOCK_FI_DICT);
     await loadDictionary('fi');
 
-    const url = vi.mocked(api.get).mock.calls[0][0] as string;
+    const url = vi.mocked(api.get).mock.calls[0][0];
     expect(url).toContain('?v=2024-abc');
   });
 
@@ -317,7 +317,7 @@ describe('speciesDictionary store', () => {
     mockApiGet(MOCK_FI_DICT);
     await loadDictionary('fi');
 
-    const url = vi.mocked(api.get).mock.calls[0][0] as string;
+    const url = vi.mocked(api.get).mock.calls[0][0];
     expect(url).not.toContain('?v=');
   });
 

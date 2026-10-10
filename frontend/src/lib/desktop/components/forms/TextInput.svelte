@@ -1,6 +1,8 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import { safeGet } from '$lib/utils/security';
+  import { generateId } from '$lib/utils/uuid';
+  import type { HTMLInputAttributes } from 'svelte/elements';
 
   interface Props {
     value: string;
@@ -19,10 +21,28 @@
     className?: string;
     size?: 'xs' | 'sm' | 'md' | 'lg';
     validationMessage?: string;
+    /** Browser autofill hint for the native input; omitted when unset. */
+    autocomplete?: HTMLInputAttributes['autocomplete'];
+    /**
+     * Error text from the caller, shown in a role="alert" region below the input. It also
+     * marks the input invalid and adds the error text id to aria-describedby. Without it
+     * (and without reserveErrorSpace) no alert region is rendered.
+     */
+    error?: string;
+    /**
+     * Keeps an always-present alert region two lines tall (text-sm) whether or not an error is
+     * shown, so the controls below do not move when an error appears and an error that
+     * appears is announced. Only the caller-supplied error uses it, not validationMessage.
+     */
+    reserveErrorSpace?: boolean;
     /** Links the input to an external description element for screen readers. */
     'aria-describedby'?: string;
+    /** Marks the native input invalid for assistive technology; omitted when unset. */
+    'aria-invalid'?: HTMLInputAttributes['aria-invalid'];
     onchange?: (_value: string) => void;
     oninput?: (_value: string) => void;
+    /** Called when the input loses focus, with the current value. */
+    onblur?: (_value: string) => void;
   }
 
   let {
@@ -42,9 +62,14 @@
     className = '',
     size = 'sm',
     validationMessage,
+    autocomplete,
+    error,
+    reserveErrorSpace = false,
     'aria-describedby': ariaDescribedBy,
+    'aria-invalid': ariaInvalid,
     onchange,
     oninput,
+    onblur,
     ...rest
   }: Props = $props();
 
@@ -61,6 +86,19 @@
     return inputElement.validity.valid;
   });
 
+  // Callers that validate in JS mark the field with aria-invalid or pass error; show the
+  // error border too
+  let isMarkedInvalid = $derived(Boolean(error) || ariaInvalid === true || ariaInvalid === 'true');
+
+  const generatedErrorBaseId = generateId('text-input');
+  const errorId = $derived(`${id ?? generatedErrorBaseId}-error`);
+  const describedBy = $derived(
+    [ariaDescribedBy, error ? errorId : undefined].filter(Boolean).join(' ') || undefined
+  );
+  const showAlertRegion = $derived(reserveErrorSpace || Boolean(error));
+  const RESERVED_ALERT_CLASS = 'min-h-10 text-sm text-[var(--text-error)]';
+  const ERROR_ALERT_CLASS = 'py-1 text-xs leading-4 text-[var(--text-error)]';
+
   function handleChange(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
     value = target.value;
@@ -76,6 +114,7 @@
 
   function handleBlur() {
     touched = true;
+    onblur?.(value);
   }
 
   function handleInvalid() {
@@ -129,8 +168,14 @@
     {pattern}
     {minlength}
     {maxlength}
-    aria-describedby={ariaDescribedBy}
-    class={cn('input  w-full', safeGet(sizeClasses, size, ''), !isValid && 'input-error')}
+    {autocomplete}
+    aria-describedby={describedBy}
+    aria-invalid={error ? 'true' : ariaInvalid}
+    class={cn(
+      'input  w-full',
+      safeGet(sizeClasses, size, ''),
+      (!isValid || isMarkedInvalid) && 'input-error'
+    )}
     onchange={handleChange}
     oninput={handleInput}
     onblur={handleBlur}
@@ -145,6 +190,18 @@
 
   {#if helpText}
     <span class="help-text">{helpText}</span>
+  {/if}
+
+  <!-- With reserveErrorSpace the region is always present and only its text changes, so an
+       error that appears is announced -->
+  {#if showAlertRegion}
+    <div
+      id={errorId}
+      role="alert"
+      class={reserveErrorSpace ? RESERVED_ALERT_CLASS : ERROR_ALERT_CLASS}
+    >
+      {error ?? ''}
+    </div>
   {/if}
 
   {#if tooltip && showTooltip}

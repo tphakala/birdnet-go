@@ -31,7 +31,12 @@
     deviceLabel,
     type AudioDevice,
   } from '$lib/utils/audioDevices';
-  import { getAvailableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
+  import { getAvailableModels, fetchModels, modelsLoading } from '$lib/stores/models.svelte';
+  import {
+    acousticModelAvailability,
+    subscribeAcousticModels,
+  } from '$lib/stores/acousticModels.svelte';
+  import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import SoundCardCard from './SoundCardCard.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import TextInput from './TextInput.svelte';
@@ -69,16 +74,20 @@
   const logger = loggers.audio;
 
   const availableModels = $derived(getAvailableModels());
+  const acousticAvailability = $derived(acousticModelAvailability());
 
+  // Pre-selection for a source without an explicit list: the classifier's
+  // default targets when known, nothing at N=0, the legacy BirdNET pick otherwise.
   function getDefaultModels(): string[] {
-    if (availableModels.some(m => m.id === DEFAULT_MODEL_ID)) {
-      return [DEFAULT_MODEL_ID];
-    }
-    return availableModels.length > 0 ? [availableModels[0].id] : [DEFAULT_MODEL_ID];
+    return defaultModelSelection(acousticAvailability, availableModels);
   }
 
   $effect(() => {
     return fetchModels();
+  });
+
+  $effect(() => {
+    return subscribeAcousticModels();
   });
 
   const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: m.name })));
@@ -226,7 +235,7 @@
     resetAddForm();
   }
 
-  // Update source — returns boolean for success
+  // Update source; returns boolean for success
   function updateSource(index: number, updatedSource: AudioSourceConfig): boolean {
     const updatedSources = [...sources];
     if (index >= 0 && index < updatedSources.length) {
@@ -481,6 +490,8 @@
               models={availableModels}
               selectedModels={newModels}
               sourceSampleRate={newSampleRate}
+              loading={modelsLoading()}
+              availability={acousticAvailability}
               {disabled}
               onToggle={models => (newModels = models)}
             />

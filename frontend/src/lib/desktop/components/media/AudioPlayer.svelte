@@ -180,7 +180,7 @@
   // Cache key for forcing spectrogram reload via Svelte reactivity (instead of direct DOM manipulation)
   let spectrogramCacheKey = $state(0);
 
-  // Audio load retry state — handles race condition where detection DB record
+  // Audio load retry state: handles race condition where detection DB record
   // exists but audio file is still being encoded by FFmpeg (backend returns 503)
   let audioRetryCount = 0;
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -228,7 +228,7 @@
   }> = [];
 
   // Control state
-  // Read persistent default from settings store (one-time, not reactive —
+  // Read persistent default from settings store (one-time, not reactive:
   // changing the setting while a player is mounted should not cause gain to jump)
   const defaultGainDb = get(dashboardSettings)?.defaultAudioGain ?? 0;
   let gainValue = $state(defaultGainDb); // dB
@@ -283,7 +283,7 @@
   // once the new source's metadata (and therefore its duration) is available.
   let audibleBatsPendingFraction: number | null = null;
   // Whether playback should resume once the swapped-in source's metadata (and
-  // restored position) are ready — avoids a race where play() starts from 0
+  // restored position) are ready, which avoids a race where play() starts from 0
   // before handleLoadedMetadata applies audibleBatsPendingFraction.
   let audibleBatsPendingAutoplay = false;
 
@@ -363,11 +363,11 @@
   };
 
   // Selection interaction constants
-  const MIN_DRAG_DISTANCE = 5; // Pixels — distinguishes click from drag
-  const MOUSE_HANDLE_THRESHOLD = 16; // Pixels — snap zone for mouse handle grab
-  const TOUCH_HANDLE_THRESHOLD = 24; // Pixels — larger snap zone for touch
-  const MIN_SELECTION_DURATION = 0.05; // Seconds — minimum useful selection
-  const ARROW_KEY_STEP = 0.1; // Seconds — keyboard handle adjustment
+  const MIN_DRAG_DISTANCE = 5; // Pixels: distinguishes click from drag
+  const MOUSE_HANDLE_THRESHOLD = 16; // Pixels: snap zone for mouse handle grab
+  const TOUCH_HANDLE_THRESHOLD = 24; // Pixels: larger snap zone for touch
+  const MIN_SELECTION_DURATION = 0.05; // Seconds: minimum useful selection
+  const ARROW_KEY_STEP = 0.1; // Seconds: keyboard handle adjustment
   const PROCESS_DEBOUNCE_MS = 300; // Debounce delay for server-side processing requests
   const INTERACTIVE_ELEMENTS_SELECTOR =
     'button, select, input, label, a, [role="button"], [role="dialog"]';
@@ -428,7 +428,7 @@
       return;
     }
 
-    // Check if clicking inside existing selection — start scrubbing
+    // Check if clicking inside existing selection: start scrubbing
     const clickTime = xToTime(e.clientX);
     if (isInsideSelection(clickTime) && selectionStartSec !== null && selectionEndSec !== null) {
       isScrubbing = true;
@@ -439,7 +439,7 @@
       return;
     }
 
-    // Don't start selection yet — wait for mousemove to confirm it's a drag.
+    // Don't start selection yet; wait for mousemove to confirm it's a drag.
     // Single click will seek the playhead in mouseUp handler.
     e.preventDefault();
   };
@@ -528,7 +528,7 @@
       return;
     }
 
-    // Single click (no drag) — seek or clear selection
+    // Single click (no drag): seek or clear selection
     // Only if the mousedown originated within the spectrogram container
     if (wasInPlayer && Math.abs(e.clientX - dragOriginX) < MIN_DRAG_DISTANCE) {
       const clickTime = xToTime(e.clientX);
@@ -578,7 +578,7 @@
       return;
     }
 
-    // Check if touching inside existing selection — start scrubbing
+    // Check if touching inside existing selection: start scrubbing
     const clickTime = xToTime(touch.clientX);
     if (isInsideSelection(clickTime) && selectionStartSec !== null && selectionEndSec !== null) {
       isScrubbing = true;
@@ -790,7 +790,7 @@
     }
 
     if (!processingDenoise && !processingNormalize) {
-      // No server-side processing needed — revert to original audio and spectrogram
+      // No server-side processing needed; revert to original audio and spectrogram
       if (processedAudioUrl) {
         URL.revokeObjectURL(processedAudioUrl);
         processedAudioUrl = null;
@@ -944,7 +944,7 @@
 
   function handleToolbarExport(format: string) {
     if (format === 'original') {
-      // Download original file directly — empty download attribute lets the
+      // Download original file directly; an empty download attribute lets the
       // browser use the server's Content-Disposition filename
       const a = document.createElement('a');
       a.href = audioUrl;
@@ -957,7 +957,7 @@
 
     extractionFormat = format;
     if (selectionStartSec === null || selectionEndSec === null) {
-      // No selection — export full file (guard against unloaded metadata)
+      // No selection: export full file (guard against unloaded metadata)
       if (!isFinite(duration) || duration <= 0) return;
       extractClip(0, duration);
     } else {
@@ -1646,7 +1646,7 @@
       });
 
       addTrackedEventListener(audioElement, 'ended', () => {
-        // When playing a selection, scheduleSelectionEnd handles looping — ignore ended event
+        // When playing a selection, scheduleSelectionEnd handles looping, so ignore ended event
         if (isPlayingSelection) return;
 
         if (loopEnabled && audioElement) {
@@ -1708,7 +1708,7 @@
           canplayTimeoutId = undefined;
         }
 
-        // Retry loading if under the retry limit — the audio file may still
+        // Retry loading if under the retry limit; the audio file may still
         // be encoding (backend returns 503 which the browser treats as a load error)
         if (audioRetryCount < MAX_AUDIO_LOAD_RETRIES) {
           if (audioRetryTimer) {
@@ -1719,7 +1719,7 @@
           debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
           audioRetryTimer = setTimeout(() => {
             if (audioElement) {
-              // Retry against whichever source is currently active — reverting
+              // Retry against whichever source is currently active; reverting
               // to the original audioUrl here would silently drop out of an
               // active audible-bats or processed-audio derived clip while
               // leaving its state flagged as still active.
@@ -2224,8 +2224,7 @@
               e.preventDefault();
               const rect = progressBar.getBoundingClientRect();
               const centerX = rect.left + rect.width / 2;
-              const mockEvent = { clientX: centerX } as MouseEvent;
-              handleProgressClick(mockEvent);
+              handleProgressClick(new MouseEvent('click', { clientX: centerX }));
             }
           }}
         >

@@ -23,14 +23,6 @@ func TestBirdNETV24EmbeddedLabelsResolve(t *testing.T) {
 	assert.NotEmpty(t, fn, "label filename must not be empty")
 }
 
-// TestIsBirdNETV24Family verifies that isBirdNETV24Family returns true only for
-// the canonical BirdNET v2.4 registry ID, and false for unrelated IDs.
-func TestIsBirdNETV24Family(t *testing.T) {
-	t.Parallel()
-	assert.True(t, isBirdNETV24Family(DefaultModelVersion))
-	assert.False(t, isBirdNETV24Family("Perch_V2"))
-}
-
 // TestDetermineModelInfo_V24TFLiteStaysTFLite is the reverse guard: a v2.4 TFLite
 // filename must resolve to the TFLite v2.4 entry, never the INT8 ONNX entry.
 func TestDetermineModelInfo_V24TFLiteStaysTFLite(t *testing.T) {

@@ -11,7 +11,7 @@
  * Fix: Critical fallbacks provide essential translations immediately
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -195,5 +195,111 @@ describe('i18n store - localStorage cache', () => {
     // Should use fresh translations, not stale cache
     const result = t('common.loading');
     expect(result).toBe('Loading...');
+  });
+});
+
+describe('i18n store - blocked storage', () => {
+  // When site data is blocked, merely reading window.localStorage throws a
+  // SecurityError. The store reads it at module init, so a fresh import must
+  // survive that and fall back to a valid locale.
+  const originalDescriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+
+  afterEach(() => {
+    if (originalDescriptor) {
+      Object.defineProperty(window, 'localStorage', originalDescriptor);
+    }
+    vi.resetModules();
+  });
+
+  it('should initialize and switch locale without throwing when storage access throws', async () => {
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('The operation is insecure.', 'SecurityError');
+      },
+    });
+    vi.resetModules();
+
+    const store = await import('./store.svelte');
+    const { isValidLocale } = await import('./config');
+
+    expect(isValidLocale(store.getLocale())).toBe(true);
+    expect(() => store.setLocale('fi')).not.toThrow();
+    expect(store.getLocale()).toBe('fi');
+  });
+});
+
+describe('i18n store - document language', () => {
+  const originalFetch = vi.mocked(globalThis.fetch).getMockImplementation();
+
+  afterEach(() => {
+    vi.mocked(globalThis.fetch).mockReset();
+    if (originalFetch) vi.mocked(globalThis.fetch).mockImplementation(originalFetch);
+    localStorage.removeItem('birdnet-locale');
+    document.documentElement.lang = 'en';
+    vi.resetModules();
+  });
+
+  /** Makes requests for one locale's message file fail; everything else is served as usual. */
+  function failMessagesFor(...locales: string[]) {
+    vi.mocked(globalThis.fetch).mockImplementation(
+      (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (locales.some(locale => url.includes(`/ui/assets/messages/${locale}.json`))) {
+          return Promise.resolve(new Response('not found', { status: 404 }));
+        }
+        if (!originalFetch) throw new Error('fetch mock has no implementation');
+        return originalFetch(input, init);
+      }
+    );
+  }
+
+  it('sets the html lang attribute once the new locale messages have loaded', async () => {
+    const store = await import('./store.svelte');
+    await store.waitForTranslations();
+
+    store.setLocale('de');
+    await vi.waitFor(() => expect(store.isLoading()).toBe(false));
+    expect(document.documentElement.lang).toBe('de');
+
+    store.setLocale('fi');
+    await vi.waitFor(() => expect(store.isLoading()).toBe(false));
+    expect(document.documentElement.lang).toBe('fi');
+  });
+
+  it('marks the page English when the locale fails to load and English is shown instead', async () => {
+    const store = await import('./store.svelte');
+    await store.waitForTranslations();
+    store.setLocale('fi');
+    await vi.waitFor(() => expect(store.isLoading()).toBe(false));
+    failMessagesFor('de');
+
+    store.setLocale('de');
+    await vi.waitFor(() => expect(store.isLoading()).toBe(false));
+
+    expect(document.documentElement.lang).toBe('en');
+  });
+
+  it('keeps the previous language when both the locale and the English fallback fail', async () => {
+    const store = await import('./store.svelte');
+    await store.waitForTranslations();
+    store.setLocale('fi');
+    await vi.waitFor(() => expect(store.isLoading()).toBe(false));
+    failMessagesFor('de', 'en');
+
+    store.setLocale('de');
+    await vi.waitFor(() => expect(store.isLoading()).toBe(false));
+
+    expect(document.documentElement.lang).toBe('fi');
+  });
+
+  it('sets the html lang attribute from the initial locale on load', async () => {
+    localStorage.setItem('birdnet-locale', 'sv');
+    vi.resetModules();
+
+    const store = await import('./store.svelte');
+
+    expect(store.getLocale()).toBe('sv');
+    expect(document.documentElement.lang).toBe('sv');
   });
 });

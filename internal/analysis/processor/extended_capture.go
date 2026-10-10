@@ -263,10 +263,11 @@ func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
 				durationSeconds,
 				item.Detection.Result.Timestamp,
 			)
-			// Reapply the bat WAV fallback so a bat detection above 48kHz keeps the
-			// .wav extension the exporter writes, instead of the configured
-			// MP3/Opus/AAC extension (matches createDetection's resolveClipName).
-			item.Detection.Result.ClipName = p.applyBatFormatFallback(
+			// Reapply the export-format extension so the stored ClipName matches the
+			// container the exporter writes: a bat/ultrasonic detection above the
+			// analysis rate is stored in UltrasonicType, not the configured
+			// Export.Type (matches createDetection's resolveClipName).
+			item.Detection.Result.ClipName = p.applyExportFormatExtension(
 				settings, clipName, item.BestModelID, datastore.AudioSource{ID: item.Source})
 		}
 	} else {

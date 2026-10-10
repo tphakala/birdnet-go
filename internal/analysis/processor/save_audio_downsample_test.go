@@ -1,7 +1,7 @@
 package processor
 
 import (
-	"encoding/binary"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,15 +19,6 @@ import (
 func makeSilentPCM16(t *testing.T, sampleCount int) []byte {
 	t.Helper()
 	return make([]byte, sampleCount*2)
-}
-
-// readWAVSampleRate parses the sample rate from a WAV file header (bytes 24-27).
-func readWAVSampleRate(t *testing.T, path string) int {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(data), 28, "WAV file too short to contain sample rate field")
-	return int(binary.LittleEndian.Uint32(data[24:28]))
 }
 
 // TestSaveAudioAction_BirdDownsampledTo48kHz verifies that bird detections
@@ -56,48 +47,20 @@ func TestSaveAudioAction_BirdDownsampledTo48kHz(t *testing.T) {
 	require.NoError(t, action.Execute(t.Context(), nil))
 
 	outputPath := filepath.Join(tmpDir, "bird-192k.wav")
-	rate := readWAVSampleRate(t, outputPath)
+	rate := wavSampleRate(t, outputPath)
 	assert.Equal(t, conf.SampleRate, rate, "bird audio should be downsampled to 48kHz")
 }
 
-// TestSaveAudioAction_BatPreservesNativeRate verifies that bat detections
-// at high sample rates export at the native rate without downsampling.
-func TestSaveAudioAction_BatPreservesNativeRate(t *testing.T) {
+// TestSaveAudioAction_BatUltrasonicStoredAsFLAC verifies that a bat detection
+// above 48kHz configured with a lossy Export.Type is stored losslessly in the
+// dedicated ultrasonic format (FLAC by default) at its full source rate, replacing
+// the previous forced-WAV downgrade.
+func TestSaveAudioAction_BatUltrasonicStoredAsFLAC(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	settings := conftest.NewTestSettings().
-		WithAudioExport(tmpDir, "wav", "192k").
-		Build()
-
-	const sourceRate = 256000
-	const durationSamples = sourceRate * 3
-	pcm := makeSilentPCM16(t, durationSamples)
-
-	action := &SaveAudioAction{
-		Settings:         settings,
-		ClipName:         "bat-256k.wav",
-		pcmData:          pcm,
-		sourceSampleRate: sourceRate,
-		modelName:        "BattyBirdNET",
-		CorrelationID:    "test-bat-native",
-	}
-
-	require.NoError(t, action.Execute(t.Context(), nil))
-
-	outputPath := filepath.Join(tmpDir, "bat-256k.wav")
-	rate := readWAVSampleRate(t, outputPath)
-	assert.Equal(t, sourceRate, rate, "bat audio should stay at 256kHz")
-}
-
-// TestSaveAudioAction_BatMP3FallsBackToWAV verifies that bat detections
-// configured with MP3 (which caps at 48kHz) silently fall back to WAV.
-func TestSaveAudioAction_BatMP3FallsBackToWAV(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	settings := conftest.NewTestSettings().
-		WithAudioExport(tmpDir, "mp3", "192k").
+		WithAudioExport(tmpDir, "mp3", "192k"). // WithAudioExport defaults UltrasonicType to flac
 		Build()
 
 	const sourceRate = 256000
@@ -110,20 +73,59 @@ func TestSaveAudioAction_BatMP3FallsBackToWAV(t *testing.T) {
 		pcmData:          pcm,
 		sourceSampleRate: sourceRate,
 		modelName:        "BattyBirdNET",
-		CorrelationID:    "test-bat-mp3-fallback",
+		CorrelationID:    "test-bat-ultrasonic-flac",
 	}
 
 	require.NoError(t, action.Execute(t.Context(), nil))
 
-	// MP3 file should NOT exist
+	// The configured (lossy) MP3 file must NOT be created.
 	mp3Path := filepath.Join(tmpDir, "bat-256k.mp3")
 	_, err := os.Stat(mp3Path)
-	assert.True(t, os.IsNotExist(err), "MP3 file should not be created for bat audio at high rates")
+	assert.True(t, os.IsNotExist(err), "MP3 file must not be created for a bat capture above 48kHz")
 
-	// WAV file SHOULD exist
+	// A FLAC file at the full source rate SHOULD exist.
+	flacPath := filepath.Join(tmpDir, "bat-256k.flac")
+	rate := flacSampleRate(t, flacPath)
+	assert.Equal(t, sourceRate, rate, "ultrasonic FLAC should preserve the native 256kHz rate")
+}
+
+// TestSaveAudioAction_BatUltrasonicStoredAsWAV verifies that the ultrasonic export
+// format is configurable: with UltrasonicType set to WAV, a bat detection above
+// 48kHz is stored as WAV at its full source rate regardless of the lossy
+// Export.Type.
+func TestSaveAudioAction_BatUltrasonicStoredAsWAV(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	settings := conftest.NewTestSettings().
+		WithAudioExport(tmpDir, "opus", "128k").
+		WithUltrasonicExportType("wav").
+		Build()
+
+	const sourceRate = 256000
+	const durationSamples = sourceRate * 3
+	pcm := makeSilentPCM16(t, durationSamples)
+
+	action := &SaveAudioAction{
+		Settings:         settings,
+		ClipName:         "bat-256k.opus",
+		pcmData:          pcm,
+		sourceSampleRate: sourceRate,
+		modelName:        "BattyBirdNET",
+		CorrelationID:    "test-bat-ultrasonic-wav",
+	}
+
+	require.NoError(t, action.Execute(t.Context(), nil))
+
+	// The configured (lossy) Opus file must NOT be created.
+	opusPath := filepath.Join(tmpDir, "bat-256k.opus")
+	_, err := os.Stat(opusPath)
+	assert.True(t, os.IsNotExist(err), "Opus file must not be created for a bat capture above 48kHz")
+
+	// A WAV file at the full source rate SHOULD exist.
 	wavPath := filepath.Join(tmpDir, "bat-256k.wav")
-	rate := readWAVSampleRate(t, wavPath)
-	assert.Equal(t, sourceRate, rate, "fallback WAV should preserve native 256kHz rate")
+	rate := wavSampleRate(t, wavPath)
+	assert.Equal(t, sourceRate, rate, "ultrasonic WAV should preserve the native 256kHz rate")
 }
 
 // TestSaveAudioAction_BirdAt48kHzNoResample verifies that bird audio already
@@ -152,75 +154,63 @@ func TestSaveAudioAction_BirdAt48kHzNoResample(t *testing.T) {
 	require.NoError(t, action.Execute(t.Context(), nil))
 
 	outputPath := filepath.Join(tmpDir, "bird-48k.wav")
-	rate := readWAVSampleRate(t, outputPath)
+	rate := wavSampleRate(t, outputPath)
 	assert.Equal(t, sourceRate, rate, "bird audio at 48kHz should not be resampled")
 }
 
-// TestSaveAudioAction_BatOpusFallsBackToWAV verifies that Opus format also
-// falls back to WAV for bat audio at high sample rates.
-func TestSaveAudioAction_BatOpusFallsBackToWAV(t *testing.T) {
+// TestResolveExportFormat verifies the single source of truth shared by the
+// encoder and the DB clip-name path: a bat/ultrasonic capture above the analysis
+// rate resolves to Export.UltrasonicType; every other case (including a non-bat
+// capture above the analysis rate, which resolveExportParams downsamples) resolves
+// to Export.Type.
+func TestResolveExportFormat(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	settings := conftest.NewTestSettings().
-		WithAudioExport(tmpDir, "opus", "128k").
-		Build()
-
-	const sourceRate = 256000
-	const durationSamples = sourceRate * 3
-	pcm := makeSilentPCM16(t, durationSamples)
-
-	action := &SaveAudioAction{
-		Settings:         settings,
-		ClipName:         "bat-256k.opus",
-		pcmData:          pcm,
-		sourceSampleRate: sourceRate,
-		modelName:        "BattyBirdNET",
-		CorrelationID:    "test-bat-opus-fallback",
+	exports := []*conf.ExportSettings{
+		{Type: "mp3", UltrasonicType: "flac"},
+		{Type: "wav", UltrasonicType: "wav"},
+		{Type: "opus", UltrasonicType: "flac"},
+		{Type: "flac", UltrasonicType: "wav"},
 	}
+	rates := []int{8000, 16000, 22050, 32000, 44100, 48000, 96000, 192000, 256000, 384000}
 
-	require.NoError(t, action.Execute(t.Context(), nil))
+	for _, export := range exports {
+		for _, rate := range rates {
+			name := fmt.Sprintf("type=%s_ultra=%s_%dHz", export.Type, export.UltrasonicType, rate)
 
-	// Opus file should NOT exist
-	opusPath := filepath.Join(tmpDir, "bat-256k.opus")
-	_, err := os.Stat(opusPath)
-	assert.True(t, os.IsNotExist(err), "Opus file should not be created for bat audio at high rates")
+			t.Run("bat_"+name, func(t *testing.T) {
+				t.Parallel()
+				want := export.Type
+				if rate > conf.SampleRate {
+					want = export.UltrasonicType
+				}
+				assert.Equal(t, want, resolveExportFormat(true, rate, export),
+					"a bat capture above the analysis rate uses UltrasonicType, otherwise Export.Type")
+			})
 
-	// WAV file SHOULD exist
-	wavPath := filepath.Join(tmpDir, "bat-256k.wav")
-	rate := readWAVSampleRate(t, wavPath)
-	assert.Equal(t, sourceRate, rate, "fallback WAV should preserve native 256kHz rate")
+			t.Run("nonbat_"+name, func(t *testing.T) {
+				t.Parallel()
+				assert.Equal(t, export.Type, resolveExportFormat(false, rate, export),
+					"a non-bat capture always uses Export.Type regardless of source rate")
+			})
+		}
+	}
 }
 
-// TestNeedsBatFormatFallback verifies the bat format fallback logic using
-// model name, source rate, and export format.
-func TestNeedsBatFormatFallback(t *testing.T) {
+// TestResolveExportFormat_Boundary pins the analysis-rate boundary with hardcoded
+// expectations, independent of the re-derived table above, so an off-by-one in the
+// production `sourceRate > conf.SampleRate` comparison is caught.
+func TestResolveExportFormat_Boundary(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		model    string
-		rate     int
-		format   string
-		expected bool
-	}{
-		{"bat_high_rate_mp3", "BattyBirdNET", 256000, "mp3", true},
-		{"bat_high_rate_opus", "BattyBirdNET", 256000, "opus", true},
-		{"bat_high_rate_aac", "BattyBirdNET", 256000, "aac", true},
-		{"bat_high_rate_wav", "BattyBirdNET", 256000, "wav", false},
-		{"bat_high_rate_flac", "BattyBirdNET", 256000, "flac", false},
-		{"bat_low_rate_mp3", "BattyBirdNET", 48000, "mp3", false},
-		{"bird_high_rate_mp3", "BirdNET", 192000, "mp3", false},
-		{"bird_low_rate_wav", "BirdNET", 48000, "wav", false},
-		{"unknown_model", "Unknown", 256000, "mp3", false},
-	}
+	export := &conf.ExportSettings{Type: "mp3", UltrasonicType: "flac"}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.expected, needsBatFormatFallback(tt.model, "", tt.rate, tt.format))
-		})
-	}
+	assert.Equal(t, "mp3", resolveExportFormat(true, conf.SampleRate, export),
+		"a bat capture at exactly the analysis rate uses Export.Type (not ultrasonic)")
+	assert.Equal(t, "flac", resolveExportFormat(true, conf.SampleRate+1, export),
+		"a bat capture just above the analysis rate uses UltrasonicType")
+	assert.Equal(t, "mp3", resolveExportFormat(false, 384000, export),
+		"a non-bat capture never uses UltrasonicType, whatever the rate")
 }
 
 // TestReplaceExtension verifies the file extension replacement helper.

@@ -4,7 +4,6 @@ package mqtt
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net"
@@ -21,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -45,7 +45,7 @@ func getBrokerAddress() string {
 	if isLocalBrokerAvailable() {
 		return localTestBroker
 	}
-	return "" // No broker available — use integration tests with testcontainer instead
+	return "" // No broker available: use integration tests with testcontainer instead
 }
 
 // isLocalBrokerAvailable checks if a local MQTT broker is available
@@ -218,10 +218,9 @@ func verifyDNSError(t *testing.T, err error) {
 // verifyNetworkError verifies that the error is either a DNS or net.Error
 func verifyNetworkError(t *testing.T, err error) {
 	t.Helper()
-	var dnsErr *net.DNSError
-	var netErr net.Error
-	//nolint:gocritic // OR condition with different error types - AsType would require two separate calls
-	assert.True(t, errors.As(err, &dnsErr) || errors.As(err, &netErr),
+	_, isDNSErr := errors.AsType[*net.DNSError](err)
+	_, isNetErr := errors.AsType[net.Error](err)
+	assert.True(t, isDNSErr || isNetErr,
 		"Expected either a DNS error or a net.Error, got: %v", err)
 }
 
@@ -636,6 +635,41 @@ func createTestClient(t *testing.T, broker string) (Client, *observability.Metri
 	require.NoError(t, err, "Failed to create MQTT client")
 
 	return client, metrics
+}
+
+// TestNewClient_LWTTopicUsesStatusTopic verifies that the Last Will topic is
+// built through StatusTopic, so a trailing-slash base topic yields
+// "birdnet/status" and matches the availability topic HA sensors read. LWT and
+// the discovered availability topics must be identical or HA never sees the node
+// go offline.
+func TestNewClient_LWTTopicUsesStatusTopic(t *testing.T) {
+	t.Parallel()
+
+	const base = "birdnet/"
+	testSettings := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			MQTT: conf.MQTTSettings{
+				Broker: "tcp://localhost:1883",
+				Topic:  base,
+			},
+		},
+	}
+	testSettings.Main.Name = sanitizeClientID(t.Name())
+	testSettings.Realtime.MQTT.HomeAssistant.Enabled = true
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err, "Failed to create metrics")
+
+	c, err := NewClient(testSettings, metrics)
+	require.NoError(t, err, "Failed to create MQTT client")
+
+	impl, ok := c.(*client)
+	require.True(t, ok, "NewClient must return *client")
+	assert.True(t, impl.config.LWT.Enabled, "LWT must be enabled when HA discovery is on")
+	assert.Equal(t, StatusTopic(base), impl.config.LWT.Topic,
+		"LWT topic must equal StatusTopic(base)")
+	assert.Equal(t, "birdnet/status", impl.config.LWT.Topic,
+		"trailing-slash base must not leave an empty topic level")
 }
 
 // TestExtractBrokerHostname verifies the TLS ServerName hostname extraction
@@ -1375,7 +1409,7 @@ func TestHandleReconnectFailureErrorSuppression(t *testing.T) {
 		logger.String("broker", config.Broker),
 		logger.String("client_id", config.ClientID))
 
-	testErr := errors.New("connection refused")
+	testErr := errors.NewStd("connection refused")
 
 	// First failure should set state
 	c.handleReconnectFailure(testLog, testErr)
@@ -1396,7 +1430,7 @@ func TestHandleReconnectFailureErrorSuppression(t *testing.T) {
 	c.mu.RUnlock()
 
 	// Failure with different error should reset suppression state
-	differentErr := errors.New("no route to host")
+	differentErr := errors.NewStd("no route to host")
 	c.handleReconnectFailure(testLog, differentErr)
 
 	c.mu.RLock()
@@ -1571,7 +1605,7 @@ func TestPublishSuppressionWhileDisconnected(t *testing.T) {
 		}
 
 		// Simulate connection loss
-		tc.onConnectionLost(nil, errors.New("connection refused"))
+		tc.onConnectionLost(nil, errors.NewStd("connection refused"))
 
 		tc.mu.RLock()
 		assert.True(t, tc.disconnected, "Should set disconnected flag")

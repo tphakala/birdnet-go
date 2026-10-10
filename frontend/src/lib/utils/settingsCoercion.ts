@@ -178,7 +178,7 @@ export function coerceObject<T extends Record<string, unknown>>(
 }
 
 function coerceStreamConfig(stream: unknown): UnknownSettings {
-  const rawStream = coerceObject(stream, {} as UnknownSettings);
+  const rawStream = coerceObject<UnknownSettings>(stream, {});
 
   const coercedStream: UnknownSettings = {
     ...rawStream,
@@ -209,7 +209,7 @@ function coerceStreamConfig(stream: unknown): UnknownSettings {
 }
 
 function coerceRTSPSettings(settings: unknown): UnknownSettings {
-  const rawRtsp = coerceObject(settings, {} as UnknownSettings);
+  const rawRtsp = coerceObject<UnknownSettings>(settings, {});
 
   return {
     ...rawRtsp,
@@ -380,6 +380,14 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
     // Always coerce enabled to boolean to ensure stable type
     coercedExport.enabled = coerceBoolean(exp.enabled, false);
 
+    // Backfill the ultrasonic export format for configs saved before this setting
+    // existed (or with an out-of-range value), so the WAV/FLAC dropdown always has
+    // a valid lossless value rather than rendering blank. The backend is the
+    // source of truth and re-validates on save.
+    if (coercedExport.ultrasonicType !== 'wav' && coercedExport.ultrasonicType !== 'flac') {
+      coercedExport.ultrasonicType = 'flac';
+    }
+
     // Clamp capture length between 10 and 60 seconds (backend validation)
     if ('length' in exp) {
       coercedExport.length = coerceNumber(exp.length, 10, 60, 15);
@@ -491,10 +499,7 @@ export function coerceSpeciesSettings(
   const coerced: PartialSpeciesSettings = {
     include: coerceArray<string>(safeSettings.include, []),
     exclude: coerceArray<string>(safeSettings.exclude, []),
-    config: coerceObject<Record<string, SpeciesConfig>>(
-      safeSettings.config as UnknownSettings,
-      {} as Record<string, SpeciesConfig>
-    ),
+    config: coerceObject<Record<string, SpeciesConfig>>(safeSettings.config, {}),
   };
 
   // Validate and clean species config
@@ -833,9 +838,9 @@ export function coercePrivacyFilterSettings(
 export function coerceSettings(section: string, data: UnknownSettings): UnknownSettings {
   switch (section) {
     case 'birdnet':
-      return coerceBirdNetSettings(data as PartialBirdNetSettings);
+      return coerceBirdNetSettings(data);
     case 'audio':
-      return coerceAudioSettings(data as PartialAudioSettings);
+      return coerceAudioSettings(data);
     case 'realtime': {
       // Handle realtime nested structures
       const coercedRealtime: UnknownSettings = { ...data };
@@ -889,13 +894,13 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
       return coercedRealtime;
     }
     case 'security':
-      return coerceSecuritySettings(data as PartialSecuritySettings);
+      return coerceSecuritySettings(data);
     case 'species':
-      return coerceSpeciesSettings(data as PartialSpeciesSettings);
+      return coerceSpeciesSettings(data);
     case 'mqtt':
-      return coerceMQTTSettings(data as PartialMQTTSettings);
+      return coerceMQTTSettings(data);
     case 'notification':
-      return coerceNotificationSettings(data as PartialNotificationSettings);
+      return coerceNotificationSettings(data);
     default:
       return data;
   }

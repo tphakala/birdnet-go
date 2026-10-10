@@ -308,3 +308,21 @@ func TestNightFilterExcludesSunriseSunsetWindows(t *testing.T) {
 	t.Log("Before fix: Incorrectly included sunrise/sunset/day detections")
 	t.Log("After fix: Correctly returns only true night detections")
 }
+
+// TestClassifyTimeOfDayMatchesDatastoreConstants guards against drift between the
+// string values returned by suncalc.ClassifyTimeOfDay and the datastore.TimeOfDay*
+// constants. suncalc is a leaf package and cannot import datastore, so the two
+// sets of string literals are kept in lockstep by this assertion rather than a
+// shared symbol.
+func TestClassifyTimeOfDayMatchesDatastoreConstants(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2025, 7, 15, 0, 0, 0, 0, time.UTC)
+	sun := &suncalc.SunEventTimes{
+		Sunrise: base.Add(6 * time.Hour),
+		Sunset:  base.Add(21 * time.Hour),
+	}
+	assert.Equal(t, TimeOfDaySunrise, suncalc.ClassifyTimeOfDay(base.Add(6*time.Hour), sun))
+	assert.Equal(t, TimeOfDaySunset, suncalc.ClassifyTimeOfDay(base.Add(21*time.Hour), sun))
+	assert.Equal(t, TimeOfDayDay, suncalc.ClassifyTimeOfDay(base.Add(12*time.Hour), sun))
+	assert.Equal(t, TimeOfDayNight, suncalc.ClassifyTimeOfDay(base.Add(2*time.Hour), sun))
+}

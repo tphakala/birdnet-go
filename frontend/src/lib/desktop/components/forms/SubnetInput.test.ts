@@ -95,7 +95,7 @@ describe('SubnetInput', () => {
       },
     });
 
-    const input = screen.getByPlaceholderText('192.168.1.0/24') as HTMLInputElement;
+    const input = screen.getByPlaceholderText<HTMLInputElement>('192.168.1.0/24');
     const addButton = screen.getByRole('button', { name: 'Add subnet' });
 
     await fireEvent.input(input, { target: { value: '172.16.0.0/12' } });

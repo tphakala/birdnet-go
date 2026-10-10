@@ -10,6 +10,10 @@
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import { t } from '$lib/i18n';
   import { formatBytes } from '$lib/utils/formatters';
+  import { generateId } from '$lib/utils/uuid';
+
+  // Describe the dialog by the message only: the body also holds the checkbox label.
+  const messageId = generateId('confirm-message');
 
   interface Props {
     open: boolean;
@@ -40,10 +44,11 @@
   closeOnEsc={!isLoading}
   showCloseButton={false}
   loading={isLoading}
+  aria-describedby={messageId}
   onClose={onCancel}
 >
   {#snippet children()}
-    <p class="text-[var(--color-base-content)]/80">
+    <p id={messageId} class="text-[var(--color-base-content)]/80">
       {t('system.database.legacy.cleanup.confirmMessage', { size: formatBytes(sizeBytes) })}
     </p>
 
@@ -77,8 +82,8 @@
     </button>
     <button
       class="px-4 py-2 rounded-lg font-medium transition-colors
-             bg-[var(--color-error)] text-white
-             hover:bg-[var(--color-error)]/90
+             bg-[var(--color-error)] text-[var(--color-error-content)]
+             hover:bg-[var(--color-error-hover)]
              disabled:opacity-50 disabled:cursor-not-allowed
              inline-flex items-center gap-2"
       onclick={onConfirm}

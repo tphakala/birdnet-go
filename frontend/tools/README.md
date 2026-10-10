@@ -8,8 +8,10 @@ Automated screenshot capture using Playwright for testing and documentation.
 
 ### Prerequisites
 
+`playwright` is already a devDependency, so `npm install` in `frontend/` provides
+it. Only the browser needs installing:
+
 ```bash
-npm install playwright
 npx playwright install chromium
 ```
 
@@ -17,13 +19,13 @@ npx playwright install chromium
 
 ```bash
 # Take screenshot of dashboard
-node screenshot.js http://192.168.4.152:8080/ui/dashboard
+node screenshot.js http://localhost:8080/ui/dashboard
 
 # Take screenshot with custom filename
-node screenshot.js http://192.168.4.152:8080/ui/analytics --output analytics-page.png
+node screenshot.js http://localhost:8080/ui/analytics --output analytics-page.png
 
 # Take screenshot with custom viewport
-node screenshot.js http://192.168.4.152:8080/ui/settings --width 1920 --height 1080
+node screenshot.js http://localhost:8080/ui/settings --width 1920 --height 1080
 ```
 
 ### Command Line Options
@@ -45,32 +47,31 @@ node screenshot.js http://192.168.4.152:8080/ui/settings --width 1920 --height 1
 
 ```bash
 # Desktop (default)
-node screenshot.js http://192.168.4.152:8080/ui/dashboard
+node screenshot.js http://localhost:8080/ui/dashboard
 
 # Large desktop
-node screenshot.js http://192.168.4.152:8080/ui/dashboard -w 1920 -h 1080 -o desktop-large.png
+node screenshot.js http://localhost:8080/ui/dashboard -w 1920 -h 1080 -o desktop-large.png
 
 # Tablet
-node screenshot.js http://192.168.4.152:8080/ui/dashboard -w 768 -h 1024 -o tablet.png
-
-# Mobile
-node screenshot.js http://192.168.4.152:8080/ui/dashboard -w 390 -h 844 -o mobile.png
+node screenshot.js http://localhost:8080/ui/dashboard -w 768 -h 1024 -o tablet.png
 ```
+
+The desktop UI targets tablet and desktop only, so there is no phone viewport.
 
 #### Testing Different Pages
 
 ```bash
 # Dashboard
-node screenshot.js http://192.168.4.152:8080/ui/dashboard -o dashboard.png
+node screenshot.js http://localhost:8080/ui/dashboard -o dashboard.png
 
 # Analytics
-node screenshot.js http://192.168.4.152:8080/ui/analytics -o analytics.png
+node screenshot.js http://localhost:8080/ui/analytics -o analytics.png
 
 # Settings
-node screenshot.js http://192.168.4.152:8080/ui/settings -o settings.png
+node screenshot.js http://localhost:8080/ui/settings -o settings.png
 
 # Search results
-node screenshot.js "http://192.168.4.152:8080/ui/search?query=bird" -o search-results.png
+node screenshot.js "http://localhost:8080/ui/search?query=bird" -o search-results.png
 ```
 
 ### Output
@@ -109,9 +110,9 @@ The screenshot tool can be integrated into automated testing workflows:
 ```bash
 #!/bin/bash
 # Test all main pages
-node screenshot.js http://192.168.4.152:8080/ui/dashboard -o test-dashboard.png
-node screenshot.js http://192.168.4.152:8080/ui/analytics -o test-analytics.png
-node screenshot.js http://192.168.4.152:8080/ui/settings -o test-settings.png
+node screenshot.js http://localhost:8080/ui/dashboard -o test-dashboard.png
+node screenshot.js http://localhost:8080/ui/analytics -o test-analytics.png
+node screenshot.js http://localhost:8080/ui/settings -o test-settings.png
 ```
 
 For more tools and debugging scripts, see the existing files in this directory.

@@ -270,6 +270,49 @@ describe('SettingsButton', () => {
       expect(button).toHaveAttribute('aria-busy', 'false');
     });
 
+    it('passes other button attributes such as aria-describedby through', () => {
+      testFactory.render({
+        'aria-describedby': 'settings-button-help',
+      });
+
+      expect(screen.getByRole('button')).toHaveAttribute(
+        'aria-describedby',
+        'settings-button-help'
+      );
+    });
+
+    it('marks the button aria-disabled, keeps it focusable and suppresses clicks', async () => {
+      const onclick = vi.fn();
+      testFactory.render({ 'aria-disabled': 'true', onclick });
+
+      const button = screen.getByRole('button');
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      expect(button).not.toBeDisabled();
+      button.focus();
+      expect(document.activeElement).toBe(button);
+
+      await fireEvent.click(button);
+      expect(onclick).not.toHaveBeenCalled();
+    });
+
+    it('suppresses clicks for a boolean aria-disabled too', async () => {
+      const onclick = vi.fn();
+      testFactory.render({ 'aria-disabled': true, onclick });
+
+      const button = screen.getByRole('button');
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      await fireEvent.click(button);
+      expect(onclick).not.toHaveBeenCalled();
+    });
+
+    it('renders no aria-describedby or aria-disabled by default', () => {
+      testFactory.render({});
+
+      const button = screen.getByRole('button');
+      expect(button).not.toHaveAttribute('aria-describedby');
+      expect(button).not.toHaveAttribute('aria-disabled');
+    });
+
     it('maintains focus state', () => {
       wrapperFactory.render({
         childContent: 'Focusable',

@@ -24,22 +24,19 @@ export interface ExportTypeConfig {
   bitrateRange: { min: number; max: number } | null;
 }
 
+const BITRATE_CONFIGS: ReadonlyMap<string, BitrateConfig> = new Map([
+  ['mp3', { min: 32, max: 320, step: 32, default: 128 }],
+  ['aac', { min: 32, max: 320, step: 32, default: 96 }],
+  ['opus', { min: 32, max: 256, step: 32, default: 96 }], // Opus typically maxes at 256k
+]);
+
 /**
  * Get bitrate configuration for a given audio format
  * @param format Audio format (mp3, aac, opus, wav, flac)
  * @returns Bitrate configuration or null for lossless formats
  */
 export function getBitrateConfig(format: string): BitrateConfig | null {
-  const configs: Record<string, BitrateConfig> = {
-    mp3: { min: 32, max: 320, step: 32, default: 128 },
-    aac: { min: 32, max: 320, step: 32, default: 96 },
-    opus: { min: 32, max: 256, step: 32, default: 96 }, // Opus typically maxes at 256k
-  };
-
-  if (format in configs) {
-    return configs[format as keyof typeof configs];
-  }
-  return null;
+  return BITRATE_CONFIGS.get(format) ?? null;
 }
 
 /**

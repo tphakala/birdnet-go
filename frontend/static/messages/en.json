@@ -109,6 +109,14 @@
       "closeModal": "Close modal",
       "dismissAlert": "Dismiss alert",
       "closeNotification": "Close notification",
+      "toastRegion": {
+        "topLeft": "Notifications, top left",
+        "topCenter": "Notifications, top center",
+        "topRight": "Notifications, top right",
+        "bottomLeft": "Notifications, bottom left",
+        "bottomCenter": "Notifications, bottom center",
+        "bottomRight": "Notifications, bottom right"
+      },
       "toggleDropdown": "Toggle dropdown",
       "sortAscending": "Sort ascending",
       "selectLanguage": "Select language",
@@ -130,7 +138,6 @@
       "selectToday": "Select today",
       "dateSelected": "Date selected: {date}",
       "calendarNavigation": "Use arrow keys to navigate calendar, Enter to select, Escape to close",
-      "downloadCsv": "Download species list as CSV",
       "visitEbirdLink": "Open eBird.org in a new tab",
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in a new tab",
       "resizeHandle": "Drag to resize",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Audio Analysis Overloaded",
-        "overloadMessage": "Your system is dropping {dropRate}% of audio samples for source ''{sourceName}'' because it cannot keep up with analysis. Reduce the BirdNET overlap value in detection settings or consider upgrading to a faster CPU."
+        "overloadMessage": "Your system is dropping {dropRate}% of audio samples for source '{sourceName}' because it cannot keep up with analysis. Reduce the BirdNET overlap value in detection settings or consider upgrading to a faster CPU."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime Not Available",
@@ -474,6 +481,16 @@
         "notRegisteredTitle": "No model is analyzing {sourceName}",
         "notRegisteredMessage": "No audio is reaching {models} on audio source \"{sourceName}\", so no detections are produced. Open System > AI Models to check its per-source status, and confirm the audio source is connected and sending audio."
       },
+      "acousticModels": {
+        "noneTitle": "No acoustic model enabled",
+        "noneMessage": "No acoustic model is loaded, so audio is captured but not analyzed. Enable a model in Settings > Analysis, or install one from the model gallery.",
+        "loadFailedTitle": "Acoustic model failed to load",
+        "loadFailedMessage": "An enabled acoustic model failed to load, so audio is captured but not analyzed. Check the model on the System > AI Models page."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# model has a better build for this system} other {# models have better builds for this system}}",
+        "message": "A build better matched to this system's hardware or location is available for: {models}. Open Settings > Analysis > Models and choose Optimize to switch."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
@@ -493,6 +510,17 @@
           "diskFull": "Disk is full - free some space",
           "permissionDenied": "Permission denied - check file or service permissions"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} fails every analysis",
+        "message": "{modelName} is loaded, but its last {failures} analyses in a row failed on {runtime}: inference returned an error. Audio is captured but this model detects nothing. Check the model on the System > AI Models page.",
+        "nonFiniteMessage": "{modelName} is loaded, but its last {failures} analyses in a row failed on {runtime}: the model returned invalid (NaN or infinite) scores. Audio is captured but this model detects nothing. Check the model on the System > AI Models page."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Analysis overlap limited for this device",
+        "cadenceCappedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} at the configured {configured} s overlap exceeds the measured capacity of this device, so audio is analyzed with {effective} s overlap. This can lower the number of confirmations the false positive filter requires. Your saved settings are unchanged; see Settings > Analysis.",
+        "cadenceOverloadedTitle": "This device cannot keep up with audio analysis",
+        "cadenceOverloadedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap, so analysis can fall behind and detections can be missed. Enable fewer models or audio sources, or choose a faster model variant."
       }
     },
     "loading": "Loading notifications..."
@@ -749,6 +777,16 @@
       "recentDetectionsFetch": "Failed to fetch recent detections: {status}",
       "recentDetectionsLoad": "Failed to load recent detections",
       "configFetch": "Failed to fetch dashboard config: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "No acoustic model enabled",
+      "noneMessage": "Audio is being captured but not analyzed. Enable a model in the gallery to start detecting species.",
+      "noneAction": "Open model gallery",
+      "loadFailedTitle": "Acoustic model failed to load",
+      "loadFailedMessage": "An enabled model could not be loaded, so no audio is being analyzed. The AI Models page shows which model failed and why.",
+      "loadFailedAction": "View AI Models status",
+      "failingTitle": "{count, plural, one {A model fails every analysis} other {# models fail every analysis}}",
+      "failingMessage": "{count, plural, one {{models} is loaded, but every analysis fails, so it detects nothing.} other {{models} are loaded, but every analysis fails, so they detect nothing.}} The AI Models page shows the backend and the error."
     },
     "banner": {
       "title": "Title",
@@ -1011,7 +1049,8 @@
       "error": "Error loading detection: {error}",
       "loadingResults": "Loading {count} results...",
       "thumbnailLoading": "Loading {species} thumbnail...",
-      "thumbnailLoaded": "{species} thumbnail loaded"
+      "thumbnailLoaded": "{species} thumbnail loaded",
+      "resultsPerPage": "Results per page"
     },
     "errors": {
       "notFound": "Detection not found. It may have been deleted or the ID is incorrect.",
@@ -1781,6 +1820,8 @@
       "sourceNotRunning": "not analyzing",
       "sourceNotRunningTooltip": "This source is assigned to the model in settings, but its audio is not reaching the model, so it produces no detections. Check that the audio source is connected and sending audio.",
       "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
+      "sourcesDegraded": "{count} of {total} sources down",
+      "sourcesDegradedTooltip": "Some but not all of this model's audio sources are down, so it still analyzes through the healthy ones. The specific down source and how to fix it are listed below.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -1822,7 +1863,14 @@
       "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources"
+      "noModelsHintLink": "Configure audio sources",
+      "modelFailing": "every analysis fails",
+      "lastSuccess": "Last success",
+      "lastSuccessHelp": "When this model last analyzed audio without an error.",
+      "lastSuccessNever": "None since the model loaded",
+      "modelFailingHelp": "{reason} Try another build of this model in Settings > Analysis > Models, or check the backend and precision shown above.",
+      "modelFailingReasonNonFinite": "Every recent analysis failed because the model returned invalid (NaN or infinite) scores, so it detects nothing.",
+      "modelFailingReasonError": "Every recent analysis failed because inference returned an error, so it detects nothing."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2338,7 +2386,7 @@
           "title": "False Positive Filter",
           "description": "Reduce false detections by requiring multiple confirmations across overlapping audio segments",
           "level": {
-            "label": "Filter Level"
+            "label": "False Positive Filter Strength"
           },
           "detectionCount": "{count} confirmations required. {description}",
           "levels": {
@@ -2346,10 +2394,9 @@
             "lenient": "For low-quality audio (RTSP cameras, webcam mics)",
             "moderate": "Balanced for typical hobby setups",
             "balanced": "Original pre-Sept 2025 behavior",
-            "strict": "RPi 4+ needed. For high-quality microphones",
-            "maximum": "RPi 4+ needed. For professional-grade microphones"
+            "strict": "For high-quality microphones",
+            "maximum": "For professional-grade microphones"
           },
-          "hardwareNote": "Strict and Maximum levels require higher overlap settings and more CPU resources. RPi 4 or better hardware is required for these levels.",
           "overlapAdjusted": "Overlap setting automatically adjusted to {overlap}s to meet filter requirements",
           "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level",
           "levelNames": {
@@ -2361,14 +2408,38 @@
             "maximum": "Maximum",
             "unknown": "Unknown"
           },
-          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
+          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality.",
+          "readoutTitle": "Confirmations required now",
+          "readoutPreviewTitle": "Confirmations required after saving (estimate)",
+          "readoutIntro": "A detection is accepted when enough analysis windows within {seconds} seconds agree.",
+          "readoutLine": "{model}: {count} of {windows} windows, a new window every {step} s",
+          "readoutPreview": "Estimated from your unsaved changes. The device limit is checked again after saving.",
+          "readoutPending": "The saved settings are being applied. These values are estimates until the updated counts are loaded.",
+          "capNoticeTitle": "Overlap limited to what this device can process",
+          "capNotice": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} at the configured {configured} s overlap exceeds the measured capacity of this device, so audio is analyzed with {effective} s overlap. This can lower the number of confirmations the filter requires. Your saved settings are unchanged.",
+          "overloadedNoticeTitle": "This device cannot keep up with analysis",
+          "overloadedNotice": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap. Analysis can fall behind and detections can be missed. Enable fewer models or audio sources, or choose a faster model variant.",
+          "unknownLatency": "Processing time could not be measured for {models}, so it is not counted when the overlap is limited. Analysis may still fall behind.",
+          "cpuNote": "A higher strength analyzes overlapping audio more often, which costs CPU time for every enabled model and audio source. BirdNET-Go limits the overlap automatically to what this device can process."
         },
         "rangeFilter": {
           "title": "Range Filter",
           "description": "Limit detection to species probable in your geographic region",
           "stationLocation": {
             "label": "Station Location",
-            "helpText": "Station location, used for weather data and to limit bird species to those probable in the region."
+            "helpText": "Station location, used for weather data and to limit bird species to those probable in the region.",
+            "automaticLocation": "Automatic location",
+            "useCurrentLocation": "Use browser location",
+            "locationHelp": "Fills the coordinates using this browser's location.",
+            "locating": "Locating...",
+            "accuracy": "Estimated accuracy: within {accuracy} m",
+            "locationDetected": "Browser location detected.",
+            "geolocationUnsupported": "This browser does not support device location. Enter coordinates manually or use the map.",
+            "geolocationInsecureHelp": "Needs HTTPS or localhost. Search for a place or use the map instead.",
+            "geolocationDenied": "Location permission was denied. Enter coordinates manually or use the map.",
+            "geolocationUnavailable": "Your device could not determine its location. Enter coordinates manually or use the map.",
+            "geolocationTimedOut": "The location request timed out. Try again, enter coordinates manually, or use the map.",
+            "geolocationFailed": "Could not determine your device location. Enter coordinates manually or use the map."
           },
           "latitude": {
             "label": "Latitude",
@@ -3157,7 +3228,11 @@
         "enable": "Enable BirdWeather Uploads",
         "token": {
           "label": "BirdWeather token",
-          "helpText": "Your unique BirdWeather token."
+          "helpText": "Your unique BirdWeather token.",
+          "errors": {
+            "required": "Enter your BirdWeather token, or turn BirdWeather off.",
+            "format": "A BirdWeather token is 24 letters and digits."
+          }
         },
         "threshold": {
           "label": "Upload Threshold",
@@ -3233,7 +3308,7 @@
             "label": "Device Name",
             "helpText": "The base name for devices as they appear in Home Assistant. Each audio source will have its own device linked to this main BirdNET-Go device."
           },
-          "sensorsNote": "<strong>Sensors Created:</strong> For each audio source, Home Assistant will receive: Last Species, Confidence, Scientific Name, and Sound Level (if enabled). The bridge device includes online/offline availability status.",
+          "sensorsNote": "<strong>Sensors Created:</strong> For each audio source, Home Assistant will receive: Last Species, Confidence, Scientific Name, and Sound Level (if enabled). The bridge device includes online/offline availability status. Each source's detection sensors read that source's own MQTT topic, &lt;base_topic&gt;/sources/&lt;source_id&gt;, and its Sound Level sensor reads the &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel subtopic, so a detection from one source never resets another source's sensors.",
           "discovery": {
             "button": "Send Discovery",
             "success": "Discovery messages sent to Home Assistant",
@@ -3279,7 +3354,8 @@
             "none": "None",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3300,6 +3376,16 @@
             "helpText": "Select units for temperature and wind speed (m = Metric, e = Imperial, h = UK Hybrid)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API Key",
+            "helpText": "Enter your Pirate Weather API key. Required for weather data."
+          },
+          "endpoint": {
+            "label": "API Endpoint",
+            "helpText": "Override the default Pirate Weather API endpoint if needed. Defaults to https://api.pirateweather.net/forecast if left empty."
+          }
+        },
         "notes": {
           "none": "No weather data will be retrieved.",
           "yrno": {
@@ -3307,7 +3393,8 @@
             "freeService": "Yr is a free weather data service. For more information, visit <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Use of OpenWeather requires an API key, sign up for a free API key at <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Requires a Weather Underground API key and a valid PWS station ID. See <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for details."
+          "wunderground": "Requires a Weather Underground API key and a valid PWS station ID. See <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for details.",
+          "pirateweather": "Use of Pirate Weather requires an API key, sign up at <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API Key",
@@ -3680,6 +3767,7 @@
         "dataOutputTitle": "Sound Level Data Output",
         "dataOutputDescription": "When enabled, sound level measurements are published via:",
         "mqttTopic": "MQTT topic:",
+        "mqttSourceTopic": "Per-source MQTT topic (with Home Assistant discovery):",
         "sseEndpoint": "SSE endpoint:",
         "prometheusMetrics": "Prometheus metrics:"
       },
@@ -3741,6 +3829,8 @@
         "pathHelp": "Directory where audio clips will be saved. Relative paths are from the application directory. Example: 'clips/' or '/var/audio/birds/'",
         "typeLabel": "Audio Format",
         "typeHelp": "Audio format for saved clips. WAV and FLAC are lossless (best quality, larger files). MP3, AAC, and Opus are lossy (smaller files, slight quality loss).",
+        "ultrasonicTypeLabel": "Ultrasonic Format",
+        "ultrasonicTypeHelp": "Lossless format (WAV or FLAC) used only for bat and ultrasonic captures above 48 kHz. These are stored at their full source rate instead of the format above, so no ultrasonic detail is lost.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files.",
         "losslessBitrateValue": "N/A - Lossless",
@@ -3809,7 +3899,17 @@
       },
       "models": {
         "recommendBoth": "Running both BirdNET and Perch together is recommended for best species detection coverage.",
-        "perchOnlyWarning": "Perch alone produces fewer detections. Lower the confidence threshold to 0.50 for meaningful results, or enable BirdNET alongside for best coverage."
+        "perchOnlyWarning": "Perch alone produces fewer detections. Lower the confidence threshold to 0.50 for meaningful results, or enable BirdNET alongside for best coverage.",
+        "loading": "Loading detection models...",
+        "noneEnabledTitle": "No detection model enabled.",
+        "noneEnabledHelp": "You can still save this source. Its audio is analyzed by the default models as soon as one is enabled.",
+        "noneEnabledLink": "Open model gallery",
+        "noneAvailable": "No detection models are enabled on this server.",
+        "loadFailedWarning": "A detection model failed to load, so this source is not being analyzed until it recovers.",
+        "loadFailedLink": "View AI Models status",
+        "defaultBadge": "{models} (default)",
+        "defaultPendingBadge": "Default models",
+        "noneBadge": "No model loaded"
       }
     },
     "security": {
@@ -4379,7 +4479,7 @@
       "dynamicThreshold": {
         "tabLabel": "Learned",
         "title": "Learned Thresholds",
-        "description": "This page shows Dynamic Threshold runtime data. When enabled in Main Settings → Detection, thresholds are automatically adjusted by multiple high-confidence detections. Species shown here are assumed to exist at this location.",
+        "description": "This page shows Dynamic Threshold runtime data. When enabled, thresholds are automatically adjusted by multiple high-confidence detections. Species shown here are assumed to exist at this location.",
         "stats": {
           "active": "Active",
           "atMinimum": "At Minimum",
@@ -5031,6 +5131,33 @@
       "viewDetections": "View {name} detections",
       "largeView": "Large view of {name}",
       "clickToView": "Click to view detections"
+    },
+    "locationMap": {
+      "mapLabel": "Map for selecting station location",
+      "expandedMapLabel": "Full screen map for selecting station location",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "expand": "Expand map to full screen",
+      "search": {
+        "label": "Search for a place",
+        "placeholder": "Town or address",
+        "submit": "Search",
+        "disclosure": "Searches are sent to Photon (photon.komoot.io), which uses OpenStreetMap data.",
+        "openPhoton": "Open Photon in a new tab",
+        "searching": "Searching...",
+        "results": "{count, plural, one {# place found} other {# places found}}",
+        "noResults": "No places found. Try another name or click the map.",
+        "errorNetwork": "Place search is unavailable. Check the internet connection. You can still click the map or enter coordinates.",
+        "errorRateLimited": "Too many searches. Wait a moment and try again.",
+        "errorUnavailable": "The search service did not respond. You can still click the map or enter coordinates.",
+        "kind": {
+          "city": "City",
+          "town": "Town",
+          "village": "Village",
+          "station": "Station",
+          "airport": "Airport"
+        }
+      }
     }
   },
   "connectivity": {
@@ -5117,6 +5244,7 @@
       "birdweatherClientFailed": "Failed to create BirdWeather client",
       "noWeatherProvider": "No weather provider selected",
       "openWeatherKeyRequired": "OpenWeather API key is required",
+      "pirateWeatherKeyRequired": "Pirate Weather API key is required",
       "processorUnavailable": "Processor not available",
       "discoveryFailed": "Failed to trigger Home Assistant discovery"
     },
@@ -5181,12 +5309,37 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Reload page"
+    },
     "skip": "Skip",
     "back": "Back",
     "next": "Next",
     "done": "Done",
     "progress": "Step {current} of {total}",
     "progressLabel": "Wizard progress",
+    "status": {
+      "saving": "Saving...",
+      "loadingStep": "Loading step..."
+    },
+    "errors": {
+      "saveFailed": "Could not save this step. Check the connection and try again, or skip setup and change this later in Settings.",
+      "saveRejected": "The settings on this step were not accepted. Check the values and try again, or skip setup and change this later in Settings.",
+      "stepLoadFailed": "This step could not be loaded. Press Retry, or reload the page.",
+      "stepLoadFailedReload": "This step still could not be loaded. Reload the page to try again; choices saved on earlier steps are kept.",
+      "audioSourceSaveUnfinished": "The audio source change did not finish. Check the audio sources in Settings > Audio.",
+      "saveUnfinished": "Some changes from setup were not saved. Check them in Settings."
+    },
+    "reasons": {
+      "completeStep": "Complete this step to continue."
+    },
+    "leaveConfirm": {
+      "title": "Leave setup?",
+      "message": "Setup will not open again. Choices saved on earlier steps are kept; changes on this step are not saved. You can change everything later in Settings.",
+      "messageSaving": "Setup will not open again. Choices saved on earlier steps are kept. This step is still saving, and some or all of its changes may not be kept. You can change everything later in Settings.",
+      "stay": "Keep setting up",
+      "leave": "Leave setup"
+    },
     "whatsNew": {
       "title": "What's New in {version}"
     },
@@ -5209,13 +5362,6 @@
         "locationHelp": "Your location helps filter species to those likely in your area",
         "latitudeLabel": "Latitude",
         "longitudeLabel": "Longitude",
-        "useMyLocation": "Use my location",
-        "locationDetected": "Location detected",
-        "locationError": "Could not detect location. Please enter coordinates manually.",
-        "locationDenied": "Location access denied. Please enter coordinates manually.",
-        "geolocationRequiresHttps": "Browser location requires HTTPS. Please enter coordinates manually or use the map.",
-        "geolocationDenied": "Location permission was denied. Please enter coordinates manually or use the map.",
-        "geolocationFailed": "Could not determine your location. Please enter coordinates manually or use the map.",
         "localesLoading": "Loading languages...",
         "localesLoadFailed": "Could not load language options. English has been selected as default."
       },
@@ -5231,7 +5377,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
         "additionalSourcesHint": "You can add more audio sources later in Settings.",
-        "configureLater": "Skip - configure later"
+        "devicesLoadFailed": "Could not list the audio devices on this system.",
+        "useStreamInstead": "Use an RTSP stream instead",
+        "setUpLater": "Set up audio later",
+        "setUpLaterChosen": "Audio will not be set up now. Add a sound card or stream later in Settings.",
+        "streamReplacesSoundCards": "Sound cards stop capturing when you use a stream. You can add them again in Settings.",
+        "soundCardReplacesStream": "The stream shown on the stream option is turned off when you use a sound card. You can turn it on again in Settings.",
+        "reasons": {
+          "chooseDevice": "Choose an audio device, or set up audio later.",
+          "devicesFailed": "Audio devices could not be listed. Retry, use a stream, or set up audio later.",
+          "noDevices": "No audio device found. Use a stream, or set up audio later.",
+          "enterUrl": "Enter the stream URL, or set up audio later.",
+          "urlScheme": "Enter a complete stream URL that starts with rtsp:// or rtsps:// and has no spaces."
+        }
       },
       "detection": {
         "title": "Detection Threshold",
@@ -5243,6 +5401,7 @@
         "highAccuracyDesc": "Fewer false positives, may miss some birds",
         "highSensitivity": "High Sensitivity",
         "highSensitivityDesc": "More detections, more false positives",
+        "descriptionStored": "Choose how strict the bird identification should be. Current: {threshold}, matches no preset.",
         "threshold": "Confidence threshold",
         "fpFilterNote": "Once your system is running and proven, you can enable the false positive filter in Settings to further reduce incorrect detections."
       },
@@ -5252,10 +5411,12 @@
         "privacyFilterHelp": "Filters out detections when human voices are detected near the microphone",
         "birdweatherLabel": "Share detections with BirdWeather",
         "birdweatherHelp": "Contribute your bird detections to the BirdWeather community network",
-        "birdweatherIdLabel": "BirdWeather Station ID",
-        "birdweatherIdPlaceholder": "Enter your BirdWeather station ID",
         "errorReportingLabel": "Send anonymous error reports",
-        "errorReportingHelp": "Help improve BirdNET-Go by sending anonymous error reports when something goes wrong"
+        "errorReportingHelp": "Help improve BirdNET-Go by sending anonymous error reports when something goes wrong",
+        "reasons": {
+          "enterToken": "Enter your BirdWeather token, or turn off sharing with BirdWeather.",
+          "tokenFormat": "A BirdWeather token is 24 letters and digits."
+        }
       },
       "responsibleUse": {
         "title": "Using BirdNET-Go Responsibly",
@@ -5494,6 +5655,8 @@
         "catalogLoadFailed": "Failed to load model catalog",
         "installFailed": "Failed to start model installation",
         "removeFailed": "Failed to remove model",
+        "removeHasDependents": "{name} is needed by {models}. Remove those models first.",
+        "operationInProgress": "A model install, reinstall, or remove is already in progress ({name}). Try again when it finishes.",
         "actionFailed": "There was a problem with {name}",
         "downloadSourceHint": "If huggingface.co is blocked or slow on your network, set a mirror in the Download Source section below.",
         "goToDownloadSource": "Go to Download Source",

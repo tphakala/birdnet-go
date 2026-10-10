@@ -32,7 +32,7 @@ func TestBuildAcousticSuccession_SumsAndOrders(t *testing.T) {
 		3: hours([2]int{23, 1}),                              // total 1
 	}
 
-	got := buildAcousticSuccession(top, hourlyByLabel)
+	got := buildAcousticSuccession(top, hourlyByLabel, sciAsCommon)
 	require.Len(t, got, 3)
 
 	// Order preserved (descending volume from GetTopSpecies).
@@ -73,7 +73,7 @@ func TestBuildAcousticSuccession_MergesLabelsSharingName(t *testing.T) {
 		3: hours([2]int{12, 2}), // Erithacus rubecula
 	}
 
-	got := buildAcousticSuccession(top, hourlyByLabel)
+	got := buildAcousticSuccession(top, hourlyByLabel, sciAsCommon)
 	require.Len(t, got, 2) // two distinct species, not three label rows
 
 	assert.Equal(t, "Turdus merula", got[0].ScientificName)
@@ -97,7 +97,7 @@ func TestBuildAcousticSuccession_DropsZeroTotalSpecies(t *testing.T) {
 		1: hours([2]int{8, 5}),
 	}
 
-	got := buildAcousticSuccession(top, hourlyByLabel)
+	got := buildAcousticSuccession(top, hourlyByLabel, sciAsCommon)
 	require.Len(t, got, 1)
 	assert.Equal(t, "Turdus merula", got[0].ScientificName)
 }
@@ -105,12 +105,13 @@ func TestBuildAcousticSuccession_DropsZeroTotalSpecies(t *testing.T) {
 func TestBuildAcousticSuccession_Empty(t *testing.T) {
 	t.Parallel()
 
-	assert.Empty(t, buildAcousticSuccession(nil, nil))
+	assert.Empty(t, buildAcousticSuccession(nil, nil, sciAsCommon))
 
 	// Non-empty top but no hourly data -> every species drops out, never nil.
 	got := buildAcousticSuccession(
 		[]repository.SpeciesCount{{LabelID: 1, ScientificName: "Turdus merula", Count: 5}},
 		map[uint][24]int{},
+		sciAsCommon,
 	)
 	assert.Empty(t, got)
 	assert.NotNil(t, got)

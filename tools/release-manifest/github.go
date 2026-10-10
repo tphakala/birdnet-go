@@ -49,7 +49,14 @@ const (
 	apiAcceptHeader = "application/vnd.github+json"
 	apiVersion      = "2022-11-28"
 	maxAssetBytes   = 1 << 20 // 1 MiB cap for checksum file downloads
-	maxReleasesBody = 8 << 20 // 8 MiB cap for the releases listing response
+	maxReleasesBody = 8 << 20 // 8 MiB cap for each releases listing page
+	// releasesPerPage is the page size requested from the releases API, its
+	// documented maximum.
+	releasesPerPage = 100
+	// maxReleasePages bounds the listing so a misbehaving API cannot loop
+	// forever. A last page that is still full fails the listing, so up to
+	// maxReleasePages*releasesPerPage-1 releases are read.
+	maxReleasePages = 50
 	// userAgent is sent on every request; the GitHub REST API requires a
 	// User-Agent header and returns 403 without one.
 	userAgent = "birdnet-go-release-manifest"
@@ -79,25 +86,39 @@ func (c *githubClient) newRequest(ctx context.Context, url string) (*http.Reques
 	return req, nil
 }
 
-// ListReleases fetches the first page (up to 100) of releases. GitHub returns
-// releases newest-first, and the manifest only needs the latest release on each
-// channel, so a single page is sufficient as long as fewer than 100 releases
-// are newer than each channel's latest (always true while nightlies are pruned
-// to 14). Pagination is intentionally omitted.
+// ListReleases fetches every release, following pages until one comes back
+// short. The generator checks every published release, so the listing must be
+// complete; it fails rather than returning a partial list.
 func (c *githubClient) ListReleases(ctx context.Context, repo string) ([]ghRelease, error) {
-	url := fmt.Sprintf("%s/repos/%s/releases?per_page=100", c.baseURL, repo)
+	var releases []ghRelease
+	for page := 1; page <= maxReleasePages; page++ {
+		batch, err := c.listReleasesPage(ctx, repo, page)
+		if err != nil {
+			return nil, fmt.Errorf("page %d: %w", page, err)
+		}
+		releases = append(releases, batch...)
+		if len(batch) < releasesPerPage {
+			return releases, nil
+		}
+	}
+	return nil, fmt.Errorf("more than %d pages", maxReleasePages)
+}
+
+// listReleasesPage fetches one page of the releases listing.
+func (c *githubClient) listReleasesPage(ctx context.Context, repo string, page int) ([]ghRelease, error) {
+	url := fmt.Sprintf("%s/repos/%s/releases?per_page=%d&page=%d", c.baseURL, repo, releasesPerPage, page)
 	req, err := c.newRequest(ctx, url)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("list releases: %w", err)
+		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxAssetBytes))
-		return nil, fmt.Errorf("list releases: unexpected status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 	var releases []ghRelease
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxReleasesBody)).Decode(&releases); err != nil {

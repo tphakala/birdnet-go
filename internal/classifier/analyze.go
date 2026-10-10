@@ -24,7 +24,7 @@ type DetectionsMap map[string][]datastore.Results
 // Implements ModelInstance.
 func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
 	// Capture the model ID once via the lock-free identity snapshot, reused below, so
-	// this hot path never reads bn.ModelInfo directly (reloadModelInternal writes it).
+	// this hot path never reads bn.ModelInfo directly (it is written at construction).
 	modelID := bn.ModelID()
 	span, _ := startPredictSpan(ctx, modelID, sample)
 	defer span.Finish()
@@ -33,7 +33,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	start := time.Now()
 
 	// This decoration runs BEFORE bn.mu is taken, so it must not read
-	// bn.primaryPath (written under bn.mu by reloadModelInternal). It reads the
+	// bn.primaryPath (written by NewBirdNET at construction). It reads the
 	// RESOLVED path lock-free from the published identity snapshot via
 	// bn.resolvedModelPath(), so after a stale-path recovery it names the file the
 	// instance is actually running rather than settings.BirdNET.ModelPath, which
@@ -150,6 +150,21 @@ func firstNonFinite(scores []float32) int {
 	return noNonFiniteScore
 }
 
+// ErrNonFiniteScore matches (errors.Is) the error every ModelInstance.Predict
+// returns when its backend produced a NaN or Inf score.
+var ErrNonFiniteScore = errors.NewStd("non-finite classifier output")
+
+// nonFiniteScoreError carries the non-finite score message unchanged (so log and
+// telemetry grouping by message are unaffected) while matching ErrNonFiniteScore.
+// Only the telemetry error_type tag, taken from the wrapped error's type, differs.
+type nonFiniteScoreError string
+
+// Error returns the message.
+func (e nonFiniteScoreError) Error() string { return string(e) }
+
+// Is reports whether target is ErrNonFiniteScore.
+func (e nonFiniteScoreError) Is(target error) bool { return target == ErrNonFiniteScore }
+
 // nonFiniteScore locates the offending value for newNonFiniteScoreError.
 type nonFiniteScore struct {
 	modelID string // registry ID of the classifier that produced the score
@@ -163,10 +178,11 @@ type nonFiniteScore struct {
 // alone it is promoted to a detection instead of being dropped. runtimeInfo is
 // the model's RuntimeInfo method, so the error names the backend, device and
 // precision that produced the value (the OpenVINO f16 GPU path is the known
-// offender).
+// offender). The error matches ErrNonFiniteScore under errors.Is, which is how
+// PredictModel classifies the failure; its message is the plain text above.
 func newNonFiniteScoreError(score nonFiniteScore, runtimeInfo func() (device, backend, precision string)) error {
 	device, backend, precision := runtimeInfo()
-	return errors.Newf("%s classifier returned a non-finite score (index %d of %d)", score.modelID, score.index, score.count).
+	return errors.New(nonFiniteScoreError(fmt.Sprintf("%s classifier returned a non-finite score (index %d of %d)", score.modelID, score.index, score.count))).
 		Category(errors.CategoryAudioAnalysis).
 		Context("model", score.modelID).
 		Context("backend", backend).

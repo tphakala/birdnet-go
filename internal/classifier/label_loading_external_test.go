@@ -21,9 +21,8 @@ func newExternalLabelBirdNET(labelPath string) *BirdNET {
 	settings := &conf.Settings{}
 	settings.BirdNET.LabelPath = labelPath
 	return &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
-		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
+		Settings:  settings,
+		ModelInfo: ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
 	}
 }
 
@@ -103,8 +102,8 @@ func TestLoadExternalLabels_MissingPathReportsExpandedPath(t *testing.T) {
 // cached ModelInfo.NumSpecies to the actual loaded label count, so a stock count
 // seeded from the registry template that no longer matches the loaded labels (a
 // custom or regionally-sliced label file) is corrected, and leaves it untouched
-// when loading fails. This keeps o.ModelInfo / PrimaryModelInfo() reporting the
-// live count.
+// when loading fails. This keeps the cached ModelInfo, surfaced through ModelInfos(),
+// reporting the live count.
 func TestLoadLabels_RefreshesModelInfoNumSpecies(t *testing.T) {
 	t.Parallel()
 

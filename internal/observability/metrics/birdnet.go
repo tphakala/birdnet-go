@@ -306,8 +306,7 @@ func categorizeError(err error) string {
 	}
 
 	// Check for enhanced errors with categories
-	var enhancedErr *errors.EnhancedError
-	if errors.As(err, &enhancedErr) {
+	if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
 		switch enhancedErr.GetCategory() {
 		case string(errors.CategoryModelInit), string(errors.CategoryModelLoad):
 			return "model_error"

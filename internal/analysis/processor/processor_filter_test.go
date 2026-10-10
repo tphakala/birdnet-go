@@ -63,10 +63,10 @@ func TestShouldApplyRangeFilter(t *testing.T) {
 			expected:           false,
 		},
 		{
-			name:               "unknown model ID defaults to BirdNET via DetectionModelInfoForID",
+			name:               "unknown/custom model ID is not range-filtered",
 			modelID:            "SomeUnknownModel",
 			locationConfigured: true,
-			expected:           true,
+			expected:           false,
 		},
 	}
 

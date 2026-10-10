@@ -24,9 +24,12 @@ import (
 // intentionally not adopted: every caller resolves the single configured
 // home coordinate at startup or reconfigure, so there is never more than
 // one distinct key in flight and a write lock held across an unrelated
-// key's miss cannot occur. Revisit only if a call site begins resolving
-// non-home or per-request coordinates, or if tzMu shows up in contention
-// profiles.
+// key's miss cannot occur. After a location change a SunCalc with a
+// coordinate source (NewSunCalcWithSource) resolves the new key lazily on
+// its first call, so that one call, on whatever path makes it, pays the
+// miss; later calls and other instances hit the cache. Revisit only if a
+// call site begins resolving non-home or per-request coordinates, or if
+// tzMu shows up in contention profiles.
 var (
 	tzMu    sync.RWMutex
 	tzCache = make(map[string]*time.Location)

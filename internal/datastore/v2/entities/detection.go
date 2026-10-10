@@ -24,6 +24,8 @@ type Detection struct {
 
 	// Audio clip reference
 	ClipName *string `gorm:"type:varchar(500)"`
+	// SpectrogramClipName is the clip_name a detection had when retention deleted its audio while a spectrogram render of it was kept on disk. Spectrogram filenames derive from it. Mutually exclusive with ClipName.
+	SpectrogramClipName *string `gorm:"type:varchar(500)"`
 
 	// Processing metadata
 	ProcessingTimeMs *int64 // Milliseconds

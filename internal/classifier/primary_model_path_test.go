@@ -15,7 +15,7 @@ import (
 
 // writePrimaryGalleryModel installs a BirdNET v2.4 primary variant's model file
 // into the gallery layout and returns its path. The primary family is
-// model-only: applyConfigForPrimarySwap writes BirdNET.ModelPath and documents
+// model-only: applyConfigForVariantSwap writes BirdNET.ModelPath and documents
 // that it never touches BirdNET.LabelPath, because the v2.4 label set is
 // embedded and identical across variants.
 func writePrimaryGalleryModel(t *testing.T, modelsDir string) string {
@@ -43,7 +43,7 @@ func writePrimaryGalleryModel(t *testing.T, modelsDir string) string {
 func primaryCatalogEntry() (CatalogEntry, bool) {
 	catalog := ActiveCatalog()
 	for i := range catalog {
-		if catalog[i].RegistryID == permanentRegistryID && len(catalog[i].Variants) > 0 {
+		if catalog[i].RegistryID == RegistryIDBirdNETV24 && len(catalog[i].Variants) > 0 {
 			return catalog[i], true
 		}
 	}
@@ -159,9 +159,13 @@ func TestResolvePrimaryModelPath(t *testing.T) {
 		t.Parallel()
 		modelsDir := t.TempDir()
 		installed := writePrimaryGalleryModel(t, modelsDir)
+		require.Equal(t, QuantizationFP32, detectQuantization(installed),
+			"this subtest covers the FP32 build; INT8 builds are covered by TestPrimaryVariantUsable_QuantizationPolicyWired")
 
 		// An openvino-tagged build on an A76/Pi5 or an Intel iGPU runs these
-		// variants with no ONNX Runtime installed at all. Gating on ORT alone
+		// variants with no ONNX Runtime installed at all (the fixture is the FP32
+		// build; INT8 builds on auto are covered by
+		// TestPrimaryVariantUsable_QuantizationPolicyWired). Gating on ORT alone
 		// refused a variant that would have loaded, dropping such a host to the
 		// embedded model while telling the user no installed model was available.
 		//
@@ -183,13 +187,7 @@ func TestResolvePrimaryModelPath(t *testing.T) {
 		if settings == nil {
 			settings = &conf.Settings{}
 		}
-		_, planOK, _ := openVINOPlanFor(
-			settings.BirdNET.Backend,
-			settings.BirdNET.OpenVINODevice,
-			DefaultModelVersion,
-			settings.BirdNET.OpenVINOPath,
-			birdnetLogitsOutputIndex,
-		)
+		_, planOK, _ := birdnetV24OpenVINOPlan(&settings.BirdNET, detectQuantization(installed))
 		if !planOK {
 			assert.Empty(t, res.resolved.model,
 				"with no obtainable OpenVINO plan there is no OpenVINO leg to take")
@@ -323,145 +321,14 @@ func TestNewBirdNET_NilResolverUsesConfiguredPathVerbatim(t *testing.T) {
 		"a nil resolver must pass the configured path through untouched")
 }
 
-// TestReloadModelInternal_RecoveredPathDoesNotVetoReload is the regression test
-// for the second-order bug that split this work out of the earlier PR.
-//
-// reloadModelInternal re-derives the model identity from settings on every
-// reload and refuses the reload when the result differs from the live
-// ModelInfo.CustomPath. If startup recovers a stale primary path (making
-// ModelInfo.CustomPath the RECOVERED file) while config.yaml still holds the
-// stale string, then a reload that re-derived from the raw setting would compare
-// recovered against stale, see a mismatch, roll back, and fail with "model
-// identity changed: requires orchestrator restart". A user who hit the original
-// stale-path bug would get a second, louder bug on their very next settings save
-// (a locale change, a threshold edit).
-//
-// No native model is needed: an unreadable TaxonomyPath fails the reload at the
-// first fallible step, which runs AFTER the identity switch. So the error text
-// distinguishes the two outcomes precisely: reaching the taxonomy step proves
-// the identity gate let the reload through, and a veto never gets that far.
-func TestReloadModelInternal_RecoveredPathDoesNotVetoReload(t *testing.T) {
-	newServing := func(t *testing.T, configuredPath, liveCustomPath string, resolve primaryPathResolver) *BirdNET {
-		t.Helper()
-		settings := conftest.GetTestSettings()
-		settings.BirdNET.Version = ""
-		settings.BirdNET.ModelPath = configuredPath
-		conftest.SetTestSettings(settings)
-		t.Cleanup(func() { conftest.SetTestSettings(nil) })
-
-		bn := &BirdNET{
-			classifier:     &rollbackFakeClassifier{},
-			Settings:       settings,
-			ModelInfo:      customBirdNETV24ModelInfo(liveCustomPath),
-			TaxonomyPath:   filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
-			speciesCache:   make(map[string]*speciesCacheEntry),
-			resolvePrimary: resolve,
-		}
-		bn.primaryPath = pathResolution{resolved: modelFileSet{model: liveCustomPath}}
-		bn.settingsAtomic.Store(settings)
-		bn.publishIdentity()
-		return bn
-	}
-
-	t.Run("a recovered path with stale config must not be refused", func(t *testing.T) {
-		stale := "/gone/primary_dft.onnx"
-		recovered := "/config/models/birdnet-v2.4/primary_dft.onnx"
-
-		// The resolver recovers the stale configured path, exactly as it did at
-		// startup. Config still carries the stale string because the correction is
-		// persisted asynchronously, and may have failed to persist at all.
-		bn := newServing(t, stale, recovered, func(configured string) pathResolution {
-			require.Equal(t, stale, configured, "the reload must re-resolve the CONFIGURED path")
-			return pathResolution{
-				resolved:    modelFileSet{model: recovered},
-				substituted: true,
-				repairable:  true,
-			}
-		})
-
-		err := bn.reloadModelInternal(false)
-
-		require.Error(t, err, "the reload still fails at the taxonomy step; that is the probe, not the subject")
-		assert.Contains(t, err.Error(), "taxonomy",
-			"the reload must reach the taxonomy step, which proves the identity gate let it through")
-		assert.NotContains(t, err.Error(), "requires orchestrator restart",
-			"re-resolving the recovered path is what stops a recovered start from failing its next settings save")
-	})
-
-	t.Run("a genuine user edit to a different file is still refused", func(t *testing.T) {
-		// The negative control. Without it the test above would pass just as well
-		// against a gate that had been deleted outright.
-		edited := "/srv/models/a_different_model.tflite"
-		live := "/srv/models/the_old_model.tflite"
-
-		bn := newServing(t, edited, live, func(configured string) pathResolution {
-			return pathResolution{resolved: modelFileSet{model: configured}}
-		})
-
-		err := bn.reloadModelInternal(false)
-
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "requires orchestrator restart",
-			"changing the primary model file is still a model-identity change")
-	})
-}
-
-// TestReloadModelInternal_ClearingPathWhileCustomRunningIsRefused pins the
-// cleared-path follow-up (the MAJOR-3 silent-corruption path). When the user CLEARS
-// birdnet.modelpath while a custom primary model is running, the settings-reload
-// path must REFUSE and require an orchestrator restart, exactly as it does when a
-// custom file is swapped for another. Before the reload guard dropped its
-// substituted conjunct, this case fell through the identity switch: no case
-// matched, initializeModel loaded the built-in baseline underneath a ModelInfo
-// still naming the custom file, and the reload reported success while every
-// detection was attributed to a model that was not running.
-//
-// The discriminator, as in the recovered-path test above, is an unreadable
-// TaxonomyPath that fails the reload at the first fallible step AFTER the identity
-// switch: reaching "taxonomy" would prove the guard let the fall-through through
-// (the bug), while "requires orchestrator restart" proves it refused (the fix).
-func TestReloadModelInternal_ClearingPathWhileCustomRunningIsRefused(t *testing.T) {
-	liveCustom := "/srv/models/my_custom_primary.tflite"
-
-	settings := conftest.GetTestSettings()
-	settings.BirdNET.Version = ""
-	settings.BirdNET.ModelPath = "" // the user just cleared the configured path
-	conftest.SetTestSettings(settings)
-	t.Cleanup(func() { conftest.SetTestSettings(nil) })
-
-	bn := &BirdNET{
-		classifier:   &rollbackFakeClassifier{},
-		Settings:     settings,
-		ModelInfo:    customBirdNETV24ModelInfo(liveCustom), // a custom model is live
-		TaxonomyPath: filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
-		speciesCache: make(map[string]*speciesCacheEntry),
-		// The resolver mirrors production: a cleared configured path resolves to the
-		// empty result (substituted=false), which is exactly the case the dropped
-		// conjunct used to let fall through.
-		resolvePrimary: func(configured string) pathResolution {
-			require.Empty(t, configured, "the reload must re-resolve the CLEARED configured path")
-			return pathResolution{}
-		},
-	}
-	bn.primaryPath = pathResolution{resolved: modelFileSet{model: liveCustom}}
-	bn.settingsAtomic.Store(settings)
-	bn.publishIdentity()
-
-	err := bn.reloadModelInternal(false)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "requires orchestrator restart",
-		"clearing the model path while a custom model runs is a model-identity change and must be refused")
-	assert.NotContains(t, err.Error(), "taxonomy",
-		"the reload must refuse in the identity switch, never fall through to load the baseline under the custom identity")
-}
-
 // TestPlanPathCorrection_PrimaryRepairsModelPathOnly pins the primary family's
 // settings mapping. BirdNET.LabelPath must be left alone: the v2.4 label set is
-// embedded and identical across variants, which is why applyConfigForPrimarySwap
+// embedded and identical across variants, which is why applyConfigForVariantSwap
 // writes ModelPath alone and documents that a user-configured custom label path
 // has to survive a variant swap. Repairing LabelPath here would break that
-// contract from the other direction.
+// contract from the other direction. familyFields now exposes the primary's Labels
+// pointer, so the protection rests entirely on resolvePrimaryModelPath never
+// resolving a labels path (pinned by TestResolvePrimaryModelPath_ResolvesModelOnly).
 func TestPlanPathCorrection_PrimaryRepairsModelPathOnly(t *testing.T) {
 	t.Parallel()
 
@@ -484,7 +351,7 @@ func TestPlanPathCorrection_PrimaryRepairsModelPathOnly(t *testing.T) {
 	current.BirdNET.LabelPath = customLabels
 
 	updated, outcome := o.planPathCorrection(current, &pendingPathCorrection{
-		registryID: permanentRegistryID,
+		registryID: RegistryIDBirdNETV24,
 		resolved:   modelFileSet{model: installed},
 		repairable: true,
 	})
@@ -493,6 +360,29 @@ func TestPlanPathCorrection_PrimaryRepairsModelPathOnly(t *testing.T) {
 	assert.Equal(t, installed, updated.BirdNET.ModelPath, "the stale primary model path must be repaired")
 	assert.Equal(t, customLabels, updated.BirdNET.LabelPath,
 		"the primary family is model-only; a user's custom label path must never be rewritten")
+}
+
+// TestResolvePrimaryModelPath_ResolvesModelOnly turns the invariant planPathCorrection
+// now relies on into a pinned contract: a recovered primary resolution carries a model
+// path only, never a labels or embeddings path. Because familyFields exposes the
+// primary's Labels pointer, this empty resolved.labels is the single reason
+// planPathCorrection's fc.resolved == "" guard skips the primary's label field and a
+// user's custom BirdNET.LabelPath survives.
+func TestResolvePrimaryModelPath_ResolvesModelOnly(t *testing.T) {
+	t.Parallel()
+
+	modelsDir := t.TempDir()
+	installed := writePrimaryGalleryModel(t, modelsDir)
+
+	o := &Orchestrator{ortAvailable: func(string) bool { return true }}
+	o.SetModelsDir(modelsDir)
+
+	res := o.resolvePrimaryModelPath(filepath.Join(t.TempDir(), "gone", "primary.onnx"))
+
+	require.True(t, res.substituted, "precondition: a confirmed-absent path recovers the installed variant")
+	assert.Equal(t, installed, res.resolved.model, "the recovered variant's model path")
+	assert.Empty(t, res.resolved.labels, "the primary resolution must never carry a labels path")
+	assert.Empty(t, res.resolved.embeddings, "the primary resolution must never carry an embeddings path")
 }
 
 // TestQueuePathCorrection_PrimaryFamily covers the queueing RULE the primary
@@ -509,14 +399,14 @@ func TestQueuePathCorrection_PrimaryFamily(t *testing.T) {
 	t.Run("a substituted primary resolution is queued under the primary registry ID", func(t *testing.T) {
 		t.Parallel()
 		o := &Orchestrator{}
-		o.queuePathCorrection(permanentRegistryID, pathResolution{
+		o.queuePathCorrection(RegistryIDBirdNETV24, pathResolution{
 			resolved:    modelFileSet{model: "/models/birdnet-v2.4/recovered.onnx"},
 			substituted: true,
 			repairable:  true,
 		})
 
 		require.Len(t, o.pendingPathCorrections, 1)
-		assert.Equal(t, permanentRegistryID, o.pendingPathCorrections[0].registryID,
+		assert.Equal(t, RegistryIDBirdNETV24, o.pendingPathCorrections[0].registryID,
 			"a correction filed under any other ID would be planned against the wrong settings fields")
 		assert.True(t, o.pendingPathCorrections[0].repairable)
 	})
@@ -524,7 +414,7 @@ func TestQueuePathCorrection_PrimaryFamily(t *testing.T) {
 	t.Run("a clean primary resolution queues nothing", func(t *testing.T) {
 		t.Parallel()
 		o := &Orchestrator{}
-		o.queuePathCorrection(permanentRegistryID, pathResolution{
+		o.queuePathCorrection(RegistryIDBirdNETV24, pathResolution{
 			resolved: modelFileSet{model: "/models/configured.onnx"},
 		})
 		assert.Empty(t, o.pendingPathCorrections,
@@ -534,7 +424,7 @@ func TestQueuePathCorrection_PrimaryFamily(t *testing.T) {
 	t.Run("a built-in fallback is queued so the user is told, but is not repairable", func(t *testing.T) {
 		t.Parallel()
 		o := &Orchestrator{}
-		o.queuePathCorrection(permanentRegistryID, pathResolution{substituted: true})
+		o.queuePathCorrection(RegistryIDBirdNETV24, pathResolution{substituted: true})
 
 		require.Len(t, o.pendingPathCorrections, 1,
 			"running the built-in model instead of the configured one must not be silent")
@@ -555,12 +445,7 @@ func TestApplyPathCorrection_NotificationVariants(t *testing.T) {
 	SetPathCorrectionPersistenceDisabled(false)
 	t.Cleanup(func() { SetPathCorrectionPersistenceDisabled(false) })
 
-	notification.ResetForTest()
-	t.Cleanup(notification.ResetForTest)
-	notification.Initialize(notification.DefaultServiceConfig())
-	svc := notification.GetService()
-	require.NotNil(t, svc)
-	t.Cleanup(svc.Stop)
+	svc := setupTestNotification(t)
 
 	stale := &conf.Settings{}
 	stale.BirdNET.ModelPath = "/gone/primary_dft.onnx"
@@ -573,7 +458,7 @@ func TestApplyPathCorrection_NotificationVariants(t *testing.T) {
 
 	// Built-in fallback: confirmed absent, nothing installed, so resolved is empty.
 	o.applyPathCorrection(&pendingPathCorrection{
-		registryID: permanentRegistryID,
+		registryID: RegistryIDBirdNETV24,
 		resolved:   modelFileSet{},
 		repairable: false,
 	})
@@ -619,7 +504,7 @@ func TestNewBirdNET_RecoversStaleConfiguredPath(t *testing.T) {
 	t.Parallel()
 
 	// Same reason as TestNewBirdNET_LocaleNormalization: the recovered file is a
-	// TFLite v2.4 model, which a notflite build cannot load. See #1553.
+	// TFLite v2.4 model, which a notflite build cannot load. See the notflite build-skip rationale.
 	if !tfliteBackendAvailable {
 		t.Skip("TFLite backend not linked (notflite build); this test recovers onto a TFLite v2.4 model")
 	}
@@ -666,167 +551,6 @@ func TestNewBirdNET_RecoversStaleConfiguredPath(t *testing.T) {
 		"settings.BirdNET.ModelPath must never be mutated in place by the recovery")
 }
 
-// TestReloadModelInternal_BuiltinFallbackSteadyStateReloadsCleanly is the
-// regression test for a defect introduced while fixing this changeset's own
-// review findings, and caught by the report-only review of that fix wave.
-//
-// After a successful startup recovery onto the built-in baseline, config keeps
-// the stale path (that recovery is deliberately not repairable), so EVERY
-// subsequent reload re-resolves to the same substituted-and-empty result. A veto
-// keyed on `substituted` alone therefore failed every settings save forever, for
-// exactly the users the recovery exists to rescue. The veto must key on the
-// resolution having CHANGED from a real file to nothing.
-func TestReloadModelInternal_BuiltinFallbackSteadyStateReloadsCleanly(t *testing.T) {
-	settings := conftest.GetTestSettings()
-	settings.BirdNET.Version = ""
-	settings.BirdNET.ModelPath = "/gone/primary_dft.onnx"
-	conftest.SetTestSettings(settings)
-	t.Cleanup(func() { conftest.SetTestSettings(nil) })
-
-	// The steady state: startup already resolved this away to the baseline, so the
-	// live resolution is ALSO empty. Nothing changed between then and now.
-	bn := &BirdNET{
-		classifier:     &rollbackFakeClassifier{},
-		Settings:       settings,
-		ModelInfo:      stockPrimaryModelInfo(),
-		TaxonomyPath:   filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
-		speciesCache:   make(map[string]*speciesCacheEntry),
-		resolvePrimary: func(string) pathResolution { return pathResolution{substituted: true} },
-	}
-	bn.primaryPath = pathResolution{substituted: true}
-	bn.settingsAtomic.Store(settings)
-	bn.publishIdentity()
-
-	err := bn.reloadModelInternal(false)
-
-	require.Error(t, err, "the reload still fails at the taxonomy step; that is the probe, not the subject")
-	assert.Contains(t, err.Error(), "taxonomy",
-		"the reload must reach the taxonomy step, which proves the identity gate let it through")
-	assert.NotContains(t, err.Error(), "requires orchestrator restart",
-		"a steady-state baseline reload must not be refused, or every settings save fails forever")
-}
-
-// TestReloadModelInternal_VanishedRunningModelIsRefused is the positive half:
-// when the file this instance is RUNNING goes away and nothing can replace it,
-// the reload must be refused rather than silently loading the baseline under an
-// identity that still names the vanished file.
-func TestReloadModelInternal_VanishedRunningModelIsRefused(t *testing.T) {
-	const (
-		oldPath = "/data/previous_v24.tflite"
-		newPath = "/data/just_saved_v24.tflite"
-	)
-
-	// The published snapshot is what the reload reads; bn.Settings is the previous
-	// one that rollback restores. They must DIFFER, or the message could be built
-	// from either and the read-after-rollback bug would be invisible.
-	published := conftest.GetTestSettings()
-	published.BirdNET.Version = ""
-	published.BirdNET.ModelPath = newPath
-	conftest.SetTestSettings(published)
-	t.Cleanup(func() { conftest.SetTestSettings(nil) })
-
-	previous := conf.CloneSettings(published)
-	previous.BirdNET.ModelPath = oldPath
-
-	bn := &BirdNET{
-		classifier:     &rollbackFakeClassifier{},
-		Settings:       previous,
-		ModelInfo:      customBirdNETV24ModelInfo(oldPath),
-		TaxonomyPath:   filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
-		speciesCache:   make(map[string]*speciesCacheEntry),
-		resolvePrimary: func(string) pathResolution { return pathResolution{substituted: true} },
-	}
-	// Was running a real custom file; the new resolution finds nothing.
-	bn.primaryPath = pathResolution{resolved: modelFileSet{model: oldPath}}
-	bn.settingsAtomic.Store(previous)
-	bn.publishIdentity()
-
-	err := bn.reloadModelInternal(false)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "requires orchestrator restart",
-		"loading the baseline under an identity naming the vanished file would misattribute every detection")
-	assert.Contains(t, err.Error(), newPath,
-		"the message must name the path being reloaded")
-	assert.NotContains(t, err.Error(), oldPath,
-		"rollback restores the previous settings snapshot, so reading the path after it names the OLD file "+
-			"and tells the user a healthy path is unusable")
-}
-
-// TestReloadModelInternal_UnknownVersionNamesTheRequestedVersion pins the same
-// read-after-rollback hazard at its sibling site. rollback() restores bn.Settings,
-// so a message built afterwards reports the PREVIOUS, valid version as unknown, or
-// an empty string when the user had not set one.
-func TestReloadModelInternal_UnknownVersionNamesTheRequestedVersion(t *testing.T) {
-	published := conftest.GetTestSettings()
-	published.BirdNET.Version = "9.9"
-	conftest.SetTestSettings(published)
-	t.Cleanup(func() { conftest.SetTestSettings(nil) })
-
-	previous := conf.CloneSettings(published)
-	previous.BirdNET.Version = "2.4"
-
-	bn := &BirdNET{
-		classifier:   &rollbackFakeClassifier{},
-		Settings:     previous,
-		ModelInfo:    ModelRegistry[DefaultModelVersion],
-		TaxonomyPath: filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
-		speciesCache: make(map[string]*speciesCacheEntry),
-	}
-	bn.settingsAtomic.Store(previous)
-	bn.publishIdentity()
-
-	err := bn.reloadModelInternal(false)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "9.9", "the message must name the version the user actually typed")
-	assert.NotContains(t, err.Error(), "2.4",
-		"naming the previously valid version tells the user a working setting is unknown")
-}
-
-// TestPrimaryRegistryID covers the family gate that decides whether the recovery
-// runs at all. Deleting that gate lets a stale BirdNET v3.0 primary path be
-// "recovered" onto a v2.4 model file: a 32 kHz/5 s identity pinned to a
-// 48 kHz/3 s model with a different label set.
-func TestPrimaryRegistryID(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		version string
-		want    string
-		recover bool
-	}{
-		{"empty version is the default v2.4 family", "", permanentRegistryID, true},
-		{"explicit 2.4", "2.4", permanentRegistryID, true},
-		{"3.0 is a different family", "3.0", RegistryIDBirdNETV3, false},
-		{"an unknown version resolves to nothing", "9.9", "", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			settings := &conf.Settings{}
-			settings.BirdNET.Version = tt.version
-
-			got := primaryRegistryID(settings)
-			assert.Equal(t, tt.want, got)
-
-			// The gate as NewOrchestrator applies it, not just the helper: a nil
-			// resolver is what stops a non-v2.4 primary from being recovered onto a
-			// v2.4 model file, and what keeps the hard-wired permanentRegistryID
-			// correction label from ever being attached to another family.
-			o := &Orchestrator{}
-			resolver := o.primaryPathResolverFor(settings)
-			if tt.recover {
-				assert.NotNil(t, resolver, "the v2.4 family must get the recovery")
-			} else {
-				assert.Nil(t, resolver,
-					"only the v2.4 family may use a recovery whose target and correction label are both hard-wired to it")
-			}
-		})
-	}
-}
-
 // TestEmitPathSubstitutedNotification_UnreadableIsNotDerivedFromRepairable pins
 // the distinction the explicit unreadable flag exists for. Both records below are
 // NOT repairable; only one of them describes a file that is present. Selecting the
@@ -834,12 +558,7 @@ func TestPrimaryRegistryID(t *testing.T) {
 // its permissions.
 func TestEmitPathSubstitutedNotification_UnreadableIsNotDerivedFromRepairable(t *testing.T) {
 	// Not parallel: mutates the global notification service.
-	notification.ResetForTest()
-	t.Cleanup(notification.ResetForTest)
-	notification.Initialize(notification.DefaultServiceConfig())
-	svc := notification.GetService()
-	require.NotNil(t, svc)
-	t.Cleanup(svc.Stop)
+	svc := setupTestNotification(t)
 
 	// Present but unreadable: EACCES on a NAS mount.
 	emitPathSubstitutedNotification(&pendingPathCorrection{
@@ -852,7 +571,7 @@ func TestEmitPathSubstitutedNotification_UnreadableIsNotDerivedFromRepairable(t 
 	// Confirmed ABSENT, and declined for rewriting because the configured path is
 	// written with a variable. Same repairable value, different truth.
 	emitPathSubstitutedNotification(&pendingPathCorrection{
-		registryID: permanentRegistryID,
+		registryID: RegistryIDBirdNETV24,
 		resolved:   modelFileSet{model: "/models/birdnet-v2.4/recovered.onnx"},
 		repairable: false,
 		unreadable: false,

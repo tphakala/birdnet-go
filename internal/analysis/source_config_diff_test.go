@@ -23,6 +23,11 @@ const (
 func TestSourceNeedsReconfigure(t *testing.T) {
 	t.Parallel()
 
+	// estimateTestRate is the high (bat) source rate shared by the estimated-marker
+	// cases below; a named constant keeps the running and desired fixtures from
+	// diverging.
+	const estimateTestRate = 250000
+
 	tests := []struct {
 		name     string
 		running  *audiocore.AudioSource
@@ -40,6 +45,47 @@ func TestSourceNeedsReconfigure(t *testing.T) {
 				SampleRate: 48000,
 				BitDepth:   16,
 				Channels:   1,
+			},
+			expected: false,
+		},
+		{
+			// A fresh probe confirming the rate clears the estimate marker, so the
+			// same-rate estimated->fresh transition must reconfigure to stop the
+			// forced resampling (#4350).
+			name: "estimate confirmed by fresh same-rate probe reconfigures",
+			running: &audiocore.AudioSource{
+				SampleRate: estimateTestRate, SourceSampleRate: estimateTestRate, SourceSampleRateEstimated: true,
+				BitDepth: 16, Channels: 1,
+			},
+			desired: &audiocore.SourceConfig{
+				SampleRate: estimateTestRate, SourceSampleRate: estimateTestRate, SourceSampleRateEstimated: false,
+				BitDepth: 16, Channels: 1,
+			},
+			expected: true,
+		},
+		{
+			// A probe blipping during an unrelated hot-reload must NOT restart a
+			// healthy stream just to enter estimated mode (avoids reconfigure churn).
+			name: "same-rate probe blip re-estimating does not reconfigure",
+			running: &audiocore.AudioSource{
+				SampleRate: estimateTestRate, SourceSampleRate: estimateTestRate, SourceSampleRateEstimated: false,
+				BitDepth: 16, Channels: 1,
+			},
+			desired: &audiocore.SourceConfig{
+				SampleRate: estimateTestRate, SourceSampleRate: estimateTestRate, SourceSampleRateEstimated: true,
+				BitDepth: 16, Channels: 1,
+			},
+			expected: false,
+		},
+		{
+			name: "same-rate both estimated is a no-op",
+			running: &audiocore.AudioSource{
+				SampleRate: estimateTestRate, SourceSampleRate: estimateTestRate, SourceSampleRateEstimated: true,
+				BitDepth: 16, Channels: 1,
+			},
+			desired: &audiocore.SourceConfig{
+				SampleRate: estimateTestRate, SourceSampleRate: estimateTestRate, SourceSampleRateEstimated: true,
+				BitDepth: 16, Channels: 1,
 			},
 			expected: false,
 		},
@@ -215,10 +261,9 @@ func TestSourceModelsChanged(t *testing.T) {
 	t.Parallel()
 
 	const (
-		src            = "rtsp_abc123"
-		birdnetID      = "BirdNET_V2.4"
-		perchID        = "Perch_V2"
-		primaryModelID = birdnetID
+		src       = "rtsp_abc123"
+		birdnetID = "BirdNET_V2.4"
+		perchID   = "Perch_V2"
 	)
 
 	loaded := map[string]classifier.ModelInfo{
@@ -230,54 +275,103 @@ func TestSourceModelsChanged(t *testing.T) {
 		name             string
 		currentModels    [][2]string // (sourceID, modelID) pairs for buffer allocation
 		desiredConfigIDs []string
+		defaultIDs       []string // DefaultTargets() IDs a fallback source resolves to
 		expected         bool
 	}{
 		{
 			name:             "no change, single model",
 			currentModels:    [][2]string{{src, birdnetID}},
 			desiredConfigIDs: []string{"birdnet"},
+			defaultIDs:       []string{birdnetID},
 			expected:         false,
 		},
 		{
 			name:             "no change, both models",
 			currentModels:    [][2]string{{src, birdnetID}, {src, perchID}},
 			desiredConfigIDs: []string{"birdnet", "perch_v2"},
+			defaultIDs:       []string{birdnetID},
 			expected:         false,
 		},
 		{
 			name:             "perch added",
 			currentModels:    [][2]string{{src, birdnetID}},
 			desiredConfigIDs: []string{"birdnet", "perch_v2"},
+			defaultIDs:       []string{birdnetID},
 			expected:         true,
 		},
 		{
 			name:             "perch removed",
 			currentModels:    [][2]string{{src, birdnetID}, {src, perchID}},
 			desiredConfigIDs: []string{"birdnet"},
+			defaultIDs:       []string{birdnetID},
 			expected:         true,
 		},
 		{
 			name:             "model swapped",
 			currentModels:    [][2]string{{src, birdnetID}},
 			desiredConfigIDs: []string{"perch_v2"},
+			defaultIDs:       []string{birdnetID},
 			expected:         true,
 		},
 		{
-			name:             "empty desired falls back to primary, no change",
+			name:             "empty desired falls back to defaults, no change",
 			currentModels:    [][2]string{{src, birdnetID}},
 			desiredConfigIDs: []string{},
+			defaultIDs:       []string{birdnetID},
 			expected:         false,
 		},
 		{
-			name:             "empty desired falls back to primary, perch stale",
+			name:             "empty desired falls back to defaults, perch stale",
 			currentModels:    [][2]string{{src, birdnetID}, {src, perchID}},
 			desiredConfigIDs: []string{},
+			defaultIDs:       []string{birdnetID},
 			expected:         true,
 		},
 		{
 			name:             "unknown config ID ignored, no effective change",
 			currentModels:    [][2]string{{src, birdnetID}},
 			desiredConfigIDs: []string{"birdnet", "unknown_model"},
+			defaultIDs:       []string{birdnetID},
+			expected:         false,
+		},
+		{
+			// Multi-model defaults (Phase 4): a fallback source resolves to every
+			// default target, so both default buffers present is unchanged. Before
+			// PR 1 this would have stormed (defaults were a single model).
+			name:             "multi-model defaults, both default buffers present, no change",
+			currentModels:    [][2]string{{src, birdnetID}, {src, perchID}},
+			desiredConfigIDs: nil,
+			defaultIDs:       []string{birdnetID, perchID},
+			expected:         false,
+		},
+		{
+			name:             "multi-model defaults, one default buffer missing, changed",
+			currentModels:    [][2]string{{src, birdnetID}},
+			desiredConfigIDs: nil,
+			defaultIDs:       []string{birdnetID, perchID},
+			expected:         true,
+		},
+		{
+			// Phase 4 preserves I1: an unresolvable non-empty list falls back to the
+			// first default only (v2.4), never fanning out to a loaded secondary.
+			name:             "unresolvable list falls back to v2.4 only, matching a v2.4 source",
+			currentModels:    [][2]string{{src, birdnetID}},
+			desiredConfigIDs: []string{"unknown_model"},
+			defaultIDs:       []string{birdnetID, perchID},
+			expected:         false,
+		},
+		{
+			name:             "unresolvable list does not fan out; the stale perch buffer is a change",
+			currentModels:    [][2]string{{src, birdnetID}, {src, perchID}},
+			desiredConfigIDs: []string{"unknown_model"},
+			defaultIDs:       []string{birdnetID, perchID},
+			expected:         true,
+		},
+		{
+			name:             "no defaults and no buffers, no change",
+			currentModels:    nil,
+			desiredConfigIDs: nil,
+			defaultIDs:       nil,
 			expected:         false,
 		},
 	}
@@ -286,7 +380,7 @@ func TestSourceModelsChanged(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			mgr := newModelTestBufferManager(t, tt.currentModels)
-			result := sourceModelsChanged(mgr, src, tt.desiredConfigIDs, loaded, primaryModelID)
+			result := sourceModelsChanged(mgr, src, tt.desiredConfigIDs, loaded, tt.defaultIDs)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -299,10 +393,11 @@ func TestResolveDesiredModelSet(t *testing.T) {
 		"BirdNET_V2.4": {ID: "BirdNET_V2.4"},
 		"Perch_V2":     {ID: "Perch_V2"},
 	}
+	defaults := []string{"BirdNET_V2.4"}
 
 	t.Run("resolves known loaded models", func(t *testing.T) {
 		t.Parallel()
-		set := resolveDesiredModelSet([]string{"birdnet", "perch_v2"}, loaded, "BirdNET_V2.4")
+		set := resolveDesiredModelSet([]string{"birdnet", "perch_v2"}, loaded, defaults)
 		assert.True(t, set["BirdNET_V2.4"])
 		assert.True(t, set["Perch_V2"])
 		assert.Len(t, set, 2)
@@ -310,7 +405,7 @@ func TestResolveDesiredModelSet(t *testing.T) {
 
 	t.Run("skips unknown config IDs", func(t *testing.T) {
 		t.Parallel()
-		set := resolveDesiredModelSet([]string{"birdnet", "unknown"}, loaded, "BirdNET_V2.4")
+		set := resolveDesiredModelSet([]string{"birdnet", "unknown"}, loaded, defaults)
 		assert.True(t, set["BirdNET_V2.4"])
 		assert.Len(t, set, 1)
 	})
@@ -320,16 +415,39 @@ func TestResolveDesiredModelSet(t *testing.T) {
 		onlyBirdnet := map[string]classifier.ModelInfo{
 			"BirdNET_V2.4": {ID: "BirdNET_V2.4"},
 		}
-		set := resolveDesiredModelSet([]string{"birdnet", "perch_v2"}, onlyBirdnet, "BirdNET_V2.4")
+		set := resolveDesiredModelSet([]string{"birdnet", "perch_v2"}, onlyBirdnet, defaults)
 		assert.True(t, set["BirdNET_V2.4"])
 		assert.Len(t, set, 1)
 	})
 
-	t.Run("empty config falls back to primary", func(t *testing.T) {
+	t.Run("empty config falls back to a single default", func(t *testing.T) {
 		t.Parallel()
-		set := resolveDesiredModelSet(nil, loaded, "BirdNET_V2.4")
+		set := resolveDesiredModelSet(nil, loaded, defaults)
 		assert.True(t, set["BirdNET_V2.4"])
 		assert.Len(t, set, 1)
+	})
+
+	t.Run("empty config falls back to every default target", func(t *testing.T) {
+		t.Parallel()
+		set := resolveDesiredModelSet(nil, loaded, []string{"BirdNET_V2.4", "Perch_V2"})
+		assert.True(t, set["BirdNET_V2.4"])
+		assert.True(t, set["Perch_V2"])
+		assert.Len(t, set, 2)
+	})
+
+	t.Run("unresolvable non-empty list falls back to the first default only", func(t *testing.T) {
+		t.Parallel()
+		set := resolveDesiredModelSet([]string{"unknown"}, loaded, []string{"BirdNET_V2.4", "Perch_V2"})
+		assert.True(t, set["BirdNET_V2.4"])
+		assert.False(t, set["Perch_V2"], "an unresolvable list must not gain a secondary (I1)")
+		assert.Len(t, set, 1)
+	})
+
+	t.Run("empty config with no defaults yields an empty set with no phantom key", func(t *testing.T) {
+		t.Parallel()
+		set := resolveDesiredModelSet(nil, loaded, nil)
+		assert.Empty(t, set)
+		assert.NotContains(t, set, "")
 	})
 }
 
@@ -347,6 +465,6 @@ func TestSourceModelsChanged_UnloadedModelIgnored(t *testing.T) {
 
 	// Config requests perch_v2 but it's not loaded: should NOT report a
 	// change so we avoid a spurious rebuild on every hot-reload tick.
-	changed := sourceModelsChanged(mgr, src, []string{"birdnet", "perch_v2"}, loadedOnlyBirdnet, "BirdNET_V2.4")
+	changed := sourceModelsChanged(mgr, src, []string{"birdnet", "perch_v2"}, loadedOnlyBirdnet, []string{"BirdNET_V2.4"})
 	assert.False(t, changed, "unloaded model in desired config should be ignored")
 }

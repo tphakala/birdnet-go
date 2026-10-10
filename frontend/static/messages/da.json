@@ -109,6 +109,14 @@
       "closeModal": "Luk dialogboks",
       "dismissAlert": "Afvis advarsel",
       "closeNotification": "Luk notifikation",
+      "toastRegion": {
+        "topLeft": "Notifikationer, øverst til venstre",
+        "topCenter": "Notifikationer, øverst i midten",
+        "topRight": "Notifikationer, øverst til højre",
+        "bottomLeft": "Notifikationer, nederst til venstre",
+        "bottomCenter": "Notifikationer, nederst i midten",
+        "bottomRight": "Notifikationer, nederst til højre"
+      },
       "toggleDropdown": "Skift rullemenu",
       "sortAscending": "Sortér stigende",
       "selectLanguage": "Vælg sprog",
@@ -130,7 +138,6 @@
       "selectToday": "Vælg i dag",
       "dateSelected": "Dato valgt: {date}",
       "calendarNavigation": "Brug piletaster til at navigere i kalenderen, Enter for at vælge, Escape for at lukke",
-      "downloadCsv": "Download artsliste som CSV",
       "visitEbirdLink": "Åbn eBird.org i en ny fane",
       "learnEbirdTaxonomyLink": "Åbn eBird Taxonomy i en ny fane",
       "resizeHandle": "Træk for at ændre størrelse",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Lydanalyse overbelastet",
-        "overloadMessage": "Dit system dropper {dropRate}% af lydprøverne for kilden ''{sourceName}'', fordi det ikke kan følge med analysen. Reducer BirdNET-overlapværdien i detektionsindstillingerne eller overvej at opgradere til en hurtigere CPU."
+        "overloadMessage": "Dit system dropper {dropRate}% af lydprøverne for kilden '{sourceName}', fordi det ikke kan følge med analysen. Reducer BirdNET-overlapværdien i detektionsindstillingerne eller overvej at opgradere til en hurtigere CPU."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime ikke tilgængelig",
@@ -474,6 +481,16 @@
         "notRegisteredTitle": "Ingen model analyserer {sourceName}",
         "notRegisteredMessage": "Ingen lyd når {models} på lydkilden \"{sourceName}\", så der produceres ingen detektioner. Åbn System > AI-modeller for at tjekke dens status for hver kilde, og bekræft, at lydkilden er forbundet og sender lyd."
       },
+      "acousticModels": {
+        "noneTitle": "Ingen akustisk model aktiveret",
+        "noneMessage": "Ingen akustisk model er indlæst, så lyd optages, men analyseres ikke. Aktiver en model i Indstillinger > Analyse, eller installer en fra modelgalleriet.",
+        "loadFailedTitle": "Akustisk model kunne ikke indlæses",
+        "loadFailedMessage": "En aktiveret akustisk model kunne ikke indlæses, så lyd optages, men analyseres ikke. Tjek modellen på siden System > AI-modeller."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# model har en bedre version til dette system} other {# modeller har bedre versioner til dette system}}",
+        "message": "En version, der passer bedre til systemets hardware eller placering, er tilgængelig for: {models}. Åbn Indstillinger > Analyse > Modeller, og vælg Optimer for at skifte."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuel værdi: {value}% (grænse: {threshold}%)",
@@ -493,6 +510,17 @@
           "diskFull": "Disk er fuld - frigør noget plads",
           "permissionDenied": "Adgang nægtet - kontrollér fil- eller tjenestetilladelser"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} fejler ved hver analyse",
+        "message": "{modelName} er indlæst, men de seneste {failures} analyser i træk fejlede på {runtime}: inferensen returnerede en fejl. Lyd optages, men denne model registrerer intet. Tjek modellen på siden System > AI-modeller.",
+        "nonFiniteMessage": "{modelName} er indlæst, men de seneste {failures} analyser i træk fejlede på {runtime}: modellen returnerede ugyldige scorer (NaN eller uendelige). Lyd optages, men denne model registrerer intet. Tjek modellen på siden System > AI-modeller."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Analyseoverlap begrænset for denne enhed",
+        "cadenceCappedMessage": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med det indstillede overlap på {configured} s overstiger denne enheds målte kapacitet, så lyden analyseres med {effective} s overlap. Falsk positiv-filteret kan derfor kræve færre bekræftelser. Dine gemte indstillinger er uændrede; se Indstillinger > Analyse.",
+        "cadenceOverloadedTitle": "Denne enhed kan ikke følge med lydanalysen",
+        "cadenceOverloadedMessage": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger denne enheds målte kapacitet selv uden overlap, så analysen kan komme bagud, og detektioner kan gå tabt. Aktivér færre modeller eller lydkilder, eller vælg en hurtigere modelvariant."
       }
     },
     "loading": "Indlæser notifikationer..."
@@ -749,6 +777,16 @@
       "recentDetectionsFetch": "Kunne ikke hente seneste registreringer: {status}",
       "recentDetectionsLoad": "Kunne ikke indlæse seneste registreringer",
       "configFetch": "Kunne ikke hente instrumentpanelkonfiguration: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Ingen akustisk model aktiveret",
+      "noneMessage": "Lyd optages, men analyseres ikke. Aktivér en model i modelgalleriet for at begynde at detektere arter.",
+      "noneAction": "Åbn modelgalleri",
+      "loadFailedTitle": "Akustisk model kunne ikke indlæses",
+      "loadFailedMessage": "En aktiveret model kunne ikke indlæses, så der analyseres ingen lyd. Siden AI-modeller viser, hvilken model der fejlede og hvorfor.",
+      "loadFailedAction": "Vis status for AI-modeller",
+      "failingTitle": "{count, plural, one {En model fejler ved hver analyse} other {# modeller fejler ved hver analyse}}",
+      "failingMessage": "{count, plural, one {{models} er indlæst, men hver analyse fejler, så den registrerer intet.} other {{models} er indlæst, men hver analyse fejler, så de registrerer intet.}} Siden AI-modeller viser backend og fejlen."
     },
     "banner": {
       "title": "Titel",
@@ -1011,7 +1049,8 @@
       "error": "Fejl ved indlæsning af registrering: {error}",
       "loadingResults": "Indlæser {count} resultater...",
       "thumbnailLoading": "Indlæser {species} miniaturebillede...",
-      "thumbnailLoaded": "Miniaturebillede af {species} indlæst"
+      "thumbnailLoaded": "Miniaturebillede af {species} indlæst",
+      "resultsPerPage": "Resultater pr. side"
     },
     "errors": {
       "notFound": "Registrering ikke fundet. Den kan være blevet slettet, eller ID'et er forkert.",
@@ -1781,6 +1820,8 @@
       "sourceNotRunning": "analyserer ikke",
       "sourceNotRunningTooltip": "Denne kilde er tildelt modellen i indstillingerne, men dens lyd når ikke modellen, så den producerer ingen detektioner. Kontrollér, at lydkilden er forbundet og sender lyd.",
       "modelNotAnalyzingTooltip": "En eller flere lydkilder tildelt denne model sender ikke lyd til den, så den producerer ingen detektioner. Se kilderne anført nedenfor.",
+      "sourcesDegraded": "{count} af {total} kilder nede",
+      "sourcesDegradedTooltip": "Nogle, men ikke alle af denne models lydkilder er nede, så den analyserer stadig via de fungerende. Den specifikke kilde, der er nede, og hvordan det løses, er anført nedenfor.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -1822,7 +1863,14 @@
       "fp16Help": "16-bit flydende kommatal. Hardware, der understøtter det, kan køre nogle modeller hurtigere og med mindre hukommelse.",
       "invocationsHelp": "Totalt antal lydsegmenter denne model har analyseret siden opstart.",
       "noModelsHint": "Ingen lydkilde konfigureret endnu?",
-      "noModelsHintLink": "Konfigurer lydkilder"
+      "noModelsHintLink": "Konfigurer lydkilder",
+      "modelFailing": "hver analyse fejler",
+      "lastSuccess": "Seneste succes",
+      "lastSuccessHelp": "Hvornår denne model sidst analyserede lyd uden fejl.",
+      "lastSuccessNever": "Ingen siden modellen blev indlæst",
+      "modelFailingHelp": "{reason} Prøv en anden version af denne model under Indstillinger > Analyse > Modeller, eller tjek den backend og præcision, der vises ovenfor.",
+      "modelFailingReasonNonFinite": "Alle de seneste analyser fejlede, fordi modellen returnerede ugyldige scorer (NaN eller uendelige), så den registrerer intet.",
+      "modelFailingReasonError": "Alle de seneste analyser fejlede, fordi inferensen returnerede en fejl, så modellen registrerer intet."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2338,7 +2386,7 @@
           "title": "Falsk positiv-filter",
           "description": "Reducer falske detektioner ved at kræve flere bekræftelser på tværs af overlappende lydsegmenter",
           "level": {
-            "label": "Filterniveau"
+            "label": "Styrke for falsk positiv-filter"
           },
           "detectionCount": "{count} bekræftelser krævet. {description}",
           "levels": {
@@ -2346,10 +2394,9 @@
             "lenient": "Til lav lydkvalitet (RTSP-kameraer, webcam-mikrofoner)",
             "moderate": "Balanceret til typiske hobbyopsætninger",
             "balanced": "Oprindelig adfærd fra før september 2025",
-            "strict": "Kræver RPi 4+. Til mikrofoner af høj kvalitet",
-            "maximum": "Kræver RPi 4+. Til mikrofoner af professionel kvalitet"
+            "strict": "Til mikrofoner af høj kvalitet",
+            "maximum": "Til mikrofoner af professionel kvalitet"
           },
-          "hardwareNote": "Streng og Maksimum niveauer kræver højere overlapindstillinger og flere CPU-ressourcer. RPi 4 eller bedre hardware er påkrævet til disse niveauer.",
           "overlapAdjusted": "Overlapindstilling automatisk justeret til {overlap}s for at opfylde filterkravene",
           "overlapReduced": "Overlapindstilling reduceret til {overlap}s for at matche filterniveauet",
           "levelNames": {
@@ -2361,14 +2408,38 @@
             "maximum": "Maksimum",
             "unknown": "Ukendt"
           },
-          "warningOff": "Uden filtrering accepteres enhver registrering over konfidenstærsklen med det samme. Dette giver typisk flere falske positiver om dagen. Selv mild filtrering forbedrer resultatkvaliteten markant."
+          "warningOff": "Uden filtrering accepteres enhver registrering over konfidenstærsklen med det samme. Dette giver typisk flere falske positiver om dagen. Selv mild filtrering forbedrer resultatkvaliteten markant.",
+          "readoutTitle": "Krævede bekræftelser nu",
+          "readoutPreviewTitle": "Krævede bekræftelser efter gemning (skøn)",
+          "readoutIntro": "En detektion accepteres, når nok analysevinduer inden for {seconds} sekunder er enige.",
+          "readoutLine": "{model}: {count} af {windows} vinduer, et nyt vindue hvert {step} s",
+          "readoutPreview": "Skønnet ud fra dine ugemte ændringer. Enhedens grænse kontrolleres igen efter gemning.",
+          "readoutPending": "De gemte indstillinger bliver anvendt. Værdierne er skøn, indtil de opdaterede antal er indlæst.",
+          "capNoticeTitle": "Overlap begrænset til, hvad denne enhed kan behandle",
+          "capNotice": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med det indstillede overlap på {configured} s overstiger denne enheds målte kapacitet, så lyden analyseres med {effective} s overlap. Filteret kan derfor kræve færre bekræftelser. Dine gemte indstillinger er uændrede.",
+          "overloadedNoticeTitle": "Denne enhed kan ikke følge med analysen",
+          "overloadedNotice": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger denne enheds målte kapacitet selv uden overlap. Analysen kan komme bagud, og detektioner kan gå tabt. Aktivér færre modeller eller lydkilder, eller vælg en hurtigere modelvariant.",
+          "unknownLatency": "Behandlingstiden kunne ikke måles for {models}, så den tælles ikke med, når overlappet begrænses. Analysen kan stadig komme bagud.",
+          "cpuNote": "En højere styrke analyserer overlappende lyd oftere, hvilket koster CPU-tid for hver aktiveret model og lydkilde. BirdNET-Go begrænser automatisk overlappet til, hvad denne enhed kan behandle."
         },
         "rangeFilter": {
           "title": "Områdefilter",
           "description": "Begræns detektion til arter, der er sandsynlige i dit geografiske område",
           "stationLocation": {
             "label": "Stationsplacering",
-            "helpText": "Stationsplacering, bruges til vejrdata og til at begrænse fuglearter til dem, der er sandsynlige i området."
+            "helpText": "Stationsplacering, bruges til vejrdata og til at begrænse fuglearter til dem, der er sandsynlige i området.",
+            "automaticLocation": "Automatisk placering",
+            "useCurrentLocation": "Brug browserplacering",
+            "locationHelp": "Udfylder koordinaterne ved hjælp af denne browsers placering.",
+            "locating": "Finder placering...",
+            "accuracy": "Anslået nøjagtighed: inden for {accuracy} m",
+            "locationDetected": "Browserens placering blev fundet.",
+            "geolocationUnsupported": "Denne browser understøtter ikke enhedsplacering. Indtast koordinater manuelt, eller brug kortet.",
+            "geolocationInsecureHelp": "Kræver HTTPS eller localhost. Søg efter et sted, eller brug kortet i stedet.",
+            "geolocationDenied": "Placeringstilladelse blev afvist. Indtast koordinater manuelt, eller brug kortet.",
+            "geolocationUnavailable": "Enheden kunne ikke bestemme sin placering. Indtast koordinater manuelt, eller brug kortet.",
+            "geolocationTimedOut": "Placeringsanmodningen fik timeout. Prøv igen, indtast koordinater manuelt, eller brug kortet.",
+            "geolocationFailed": "Enhedens placering kunne ikke bestemmes. Indtast koordinater manuelt, eller brug kortet."
           },
           "latitude": {
             "label": "Breddegrad",
@@ -3157,7 +3228,11 @@
         "enable": "Aktivér BirdWeather-uploads",
         "token": {
           "label": "BirdWeather-token",
-          "helpText": "Dit unikke BirdWeather-token."
+          "helpText": "Dit unikke BirdWeather-token.",
+          "errors": {
+            "required": "Indtast dit BirdWeather-token, eller slå BirdWeather fra.",
+            "format": "Et BirdWeather-token består af 24 bogstaver og cifre."
+          }
         },
         "threshold": {
           "label": "Uploadtærskel",
@@ -3233,7 +3308,7 @@
             "label": "Enhedsnavn",
             "helpText": "Basisnavnet for enheder som de vises i Home Assistant. Hver lydkilde vil have sin egen enhed knyttet til denne hoved BirdNET-Go-enhed."
           },
-          "sensorsNote": "<strong>Sensorer oprettet:</strong> For hver lydkilde modtager Home Assistant: Seneste art, Konfidens, Videnskabeligt navn og Lydniveau (hvis aktiveret). Bridge-enheden inkluderer online/offline-tilgængelighedsstatus.",
+          "sensorsNote": "<strong>Sensorer oprettet:</strong> For hver lydkilde modtager Home Assistant: Seneste art, Konfidens, Videnskabeligt navn og Lydniveau (hvis aktiveret). Bridge-enheden inkluderer online/offline-tilgængelighedsstatus. Hver kildes detektionssensorer læser kildens eget MQTT-emne, &lt;base_topic&gt;/sources/&lt;source_id&gt;, og dens Lydniveau-sensor læser underemnet &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, så en registrering fra én kilde aldrig nulstiller en anden kildes sensorer.",
           "discovery": {
             "button": "Send Discovery",
             "success": "Discovery-beskeder sendt til Home Assistant",
@@ -3279,7 +3354,8 @@
             "none": "Ingen",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3300,6 +3376,16 @@
             "helpText": "Vælg enheder for temperatur og vindhastighed (m = metrisk, e = imperial, h = UK-hybrid)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API-nøgle",
+            "helpText": "Angiv din Pirate Weather API-nøgle. Påkrævet til vejrdata."
+          },
+          "endpoint": {
+            "label": "API-endpoint",
+            "helpText": "Tilsidesæt standard Pirate Weather API-endpointet om nødvendigt. Standard er https://api.pirateweather.net/forecast hvis feltet er tomt."
+          }
+        },
         "notes": {
           "none": "Ingen vejrdata hentes.",
           "yrno": {
@@ -3307,7 +3393,8 @@
             "freeService": "Yr er en gratis vejrdatatjeneste. For mere information, besøg <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Brug af OpenWeather kræver en API-nøgle. Tilmeld dig en gratis API-nøgle på <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Kræver en Weather Underground API-nøgle og et gyldigt PWS stations-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for detaljer."
+          "wunderground": "Kræver en Weather Underground API-nøgle og et gyldigt PWS stations-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for detaljer.",
+          "pirateweather": "Brug af Pirate Weather kræver en API-nøgle, tilmeld dig på <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API-nøgle",
@@ -3680,6 +3767,7 @@
         "dataOutputTitle": "Output af lydniveaudata",
         "dataOutputDescription": "Når aktiveret, publiceres lydniveaumålinger via:",
         "mqttTopic": "MQTT-emne:",
+        "mqttSourceTopic": "MQTT-emne pr. kilde (med Home Assistant discovery):",
         "sseEndpoint": "SSE-endepunkt:",
         "prometheusMetrics": "Prometheus-metrikker:"
       },
@@ -3741,6 +3829,8 @@
         "pathHelp": "Mappe, hvor lydklip gemmes. Relative stier er fra applikationsmappen. Eksempel: 'clips/' eller '/var/audio/birds/'",
         "typeLabel": "Lydformat",
         "typeHelp": "Lydformat for gemte klip. WAV og FLAC er tabsfri (bedste kvalitet, større filer). MP3, AAC og Opus er tabsgivende (mindre filer, let kvalitetstab).",
+        "ultrasonicTypeLabel": "Ultralydsformat",
+        "ultrasonicTypeHelp": "Tabsfri format (WAV eller FLAC), der kun bruges til flagermus- og ultralydsoptagelser over 48 kHz. Disse gemmes med deres fulde kilderate i stedet for formatet ovenfor, så ingen ultralyddetaljer går tabt.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Lydkomprimerings-bitrate for tabsgivende formater. Interval: {min}-{max} kbps. Højere værdier giver bedre kvalitet, men større filer.",
         "losslessBitrateValue": "Ikke relevant - Tabsfri",
@@ -3809,7 +3899,17 @@
       },
       "models": {
         "recommendBoth": "For bedste artsdækning anbefales det at køre både BirdNET og Perch sammen.",
-        "perchOnlyWarning": "Perch alene producerer færre detektioner. Sænk konfidenstærsklen til 0.50 for meningsfulde resultater, eller aktiver BirdNET ved siden af for bedste dækning."
+        "perchOnlyWarning": "Perch alene producerer færre detektioner. Sænk konfidenstærsklen til 0.50 for meningsfulde resultater, eller aktiver BirdNET ved siden af for bedste dækning.",
+        "loading": "Indlæser detektionsmodeller...",
+        "noneEnabledTitle": "Ingen detektionsmodel aktiveret.",
+        "noneEnabledHelp": "Du kan stadig gemme denne kilde. Dens lyd analyseres af standardmodellerne, så snart en er aktiveret.",
+        "noneEnabledLink": "Åbn modelgalleri",
+        "noneAvailable": "Ingen detektionsmodeller er aktiveret på denne server.",
+        "loadFailedWarning": "En detektionsmodel kunne ikke indlæses, så denne kilde analyseres ikke, før den kommer sig.",
+        "loadFailedLink": "Vis status for AI-modeller",
+        "defaultBadge": "{models} (standard)",
+        "defaultPendingBadge": "Standardmodeller",
+        "noneBadge": "Ingen model indlæst"
       }
     },
     "security": {
@@ -4379,7 +4479,7 @@
       "dynamicThreshold": {
         "tabLabel": "Indlærte",
         "title": "Indlærte tærskler",
-        "description": "Denne side viser kørselstidsdata for dynamiske tærskler. Når det er aktiveret under Hovedindstillinger → Registrering, justeres tærskler automatisk ved flere registreringer med høj tillid. Arter vist her antages at forekomme på denne placering.",
+        "description": "Denne side viser kørselstidsdata for dynamiske tærskler. Når det er aktiveret, justeres tærskler automatisk ved flere registreringer med høj tillid. Arter vist her antages at forekomme på denne placering.",
         "stats": {
           "active": "Aktive",
           "atMinimum": "Ved minimum",
@@ -5031,6 +5131,33 @@
       "viewDetections": "Se {name} detektioner",
       "largeView": "Stor visning af {name}",
       "clickToView": "Klik for at se detektioner"
+    },
+    "locationMap": {
+      "mapLabel": "Kort til valg af stationsplacering",
+      "expandedMapLabel": "Fuldskærmskort til valg af stationsplacering",
+      "zoomIn": "Zoom ind",
+      "zoomOut": "Zoom ud",
+      "expand": "Udvid kortet til fuld skærm",
+      "search": {
+        "label": "Søg efter et sted",
+        "placeholder": "By eller adresse",
+        "submit": "Søg",
+        "disclosure": "Søgninger sendes til Photon (photon.komoot.io), som bruger OpenStreetMap-data.",
+        "openPhoton": "Åbn Photon i et nyt faneblad",
+        "searching": "Søger...",
+        "results": "{count, plural, one {# sted fundet} other {# steder fundet}}",
+        "noResults": "Ingen steder fundet. Prøv et andet navn, eller klik på kortet.",
+        "errorNetwork": "Stedsøgning er ikke tilgængelig. Tjek internetforbindelsen. Du kan stadig klikke på kortet eller indtaste koordinater.",
+        "errorRateLimited": "For mange søgninger. Vent et øjeblik, og prøv igen.",
+        "errorUnavailable": "Søgetjenesten svarede ikke. Du kan stadig klikke på kortet eller indtaste koordinater.",
+        "kind": {
+          "city": "By",
+          "town": "Mindre by",
+          "village": "Landsby",
+          "station": "Banegård",
+          "airport": "Lufthavn"
+        }
+      }
     }
   },
   "connectivity": {
@@ -5117,6 +5244,7 @@
       "birdweatherClientFailed": "Kunne ikke oprette BirdWeather-klient",
       "noWeatherProvider": "Ingen vejrudbyder valgt",
       "openWeatherKeyRequired": "OpenWeather API-nøgle er påkrævet",
+      "pirateWeatherKeyRequired": "Pirate Weather API-nøgle er påkrævet",
       "processorUnavailable": "Processor ikke tilgængelig",
       "discoveryFailed": "Kunne ikke udløse Home Assistant-opdagelse"
     },
@@ -5181,12 +5309,37 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Genindlæs siden"
+    },
     "skip": "Spring over",
     "back": "Tilbage",
     "next": "Næste",
     "done": "Færdig",
     "progress": "Trin {current} af {total}",
     "progressLabel": "Guideforløb",
+    "status": {
+      "saving": "Gemmer...",
+      "loadingStep": "Indlæser trin..."
+    },
+    "errors": {
+      "saveFailed": "Dette trin kunne ikke gemmes. Kontroller forbindelsen og prøv igen, eller spring opsætningen over og ændr det senere i Indstillinger.",
+      "saveRejected": "Indstillingerne i dette trin blev ikke accepteret. Kontroller værdierne og prøv igen, eller spring opsætningen over og ændr det senere i Indstillinger.",
+      "stepLoadFailed": "Dette trin kunne ikke indlæses. Tryk på Prøv igen, eller genindlæs siden.",
+      "stepLoadFailedReload": "Dette trin kunne stadig ikke indlæses. Genindlæs siden for at prøve igen; valg gemt i tidligere trin bevares.",
+      "audioSourceSaveUnfinished": "Ændringen af lydkilden blev ikke gennemført. Tjek lydkilderne under Indstillinger > Lyd.",
+      "saveUnfinished": "Nogle ændringer fra opsætningen blev ikke gemt. Tjek dem i Indstillinger."
+    },
+    "reasons": {
+      "completeStep": "Fuldfør dette trin for at fortsætte."
+    },
+    "leaveConfirm": {
+      "title": "Forlad opsætningen?",
+      "message": "Opsætningen åbner ikke igen. Valg gemt i tidligere trin bevares; ændringer i dette trin gemmes ikke. Du kan ændre alt senere i Indstillinger.",
+      "messageSaving": "Opsætningen åbner ikke igen. Valg gemt i tidligere trin bevares. Dette trin er stadig ved at blive gemt, og nogle af eller alle dets ændringer bevares muligvis ikke. Du kan ændre alt senere i Indstillinger.",
+      "stay": "Fortsæt opsætningen",
+      "leave": "Forlad opsætningen"
+    },
     "whatsNew": {
       "title": "Nyheder i {version}"
     },
@@ -5209,13 +5362,6 @@
         "locationHelp": "Din placering hjælper med at filtrere arter til dem, der sandsynligvis findes i dit område",
         "latitudeLabel": "Breddegrad",
         "longitudeLabel": "Længdegrad",
-        "useMyLocation": "Brug min placering",
-        "locationDetected": "Placering registreret",
-        "locationError": "Kunne ikke registrere placering. Indtast venligst koordinater manuelt.",
-        "locationDenied": "Adgang til placering nægtet. Indtast venligst koordinater manuelt.",
-        "geolocationRequiresHttps": "Browserplacering kræver HTTPS. Indtast koordinaterne manuelt eller brug kortet.",
-        "geolocationDenied": "Placeringstilladelse blev nægtet. Indtast koordinaterne manuelt eller brug kortet.",
-        "geolocationFailed": "Din placering kunne ikke bestemmes. Indtast koordinaterne manuelt eller brug kortet.",
         "localesLoading": "Indlæser sprog...",
         "localesLoadFailed": "Kunne ikke indlæse sprogmuligheder. Engelsk er valgt som standard."
       },
@@ -5231,7 +5377,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Indtast URL'en til din RTSP-lydstream",
         "additionalSourcesHint": "Du kan tilføje flere lydkilder senere under Indstillinger.",
-        "configureLater": "Spring over - konfigurér senere"
+        "devicesLoadFailed": "Lydenhederne på dette system kunne ikke vises.",
+        "useStreamInstead": "Brug en RTSP-stream i stedet",
+        "setUpLater": "Konfigurér lyd senere",
+        "setUpLaterChosen": "Lyd bliver ikke konfigureret nu. Tilføj et lydkort eller en stream senere i Indstillinger.",
+        "streamReplacesSoundCards": "Lydkort holder op med at optage, når du bruger en stream. Du kan tilføje dem igen i Indstillinger.",
+        "soundCardReplacesStream": "Streamen, der vises ved stream-valget, slås fra, når du bruger et lydkort. Du kan slå den til igen i Indstillinger.",
+        "reasons": {
+          "chooseDevice": "Vælg en lydenhed, eller konfigurér lyd senere.",
+          "devicesFailed": "Lydenhederne kunne ikke vises. Prøv igen, brug en stream, eller konfigurér lyd senere.",
+          "noDevices": "Ingen lydenhed fundet. Brug en stream, eller konfigurér lyd senere.",
+          "enterUrl": "Indtast stream-URL'en, eller konfigurér lyd senere.",
+          "urlScheme": "Angiv en komplet stream-URL, der starter med rtsp:// eller rtsps:// og ikke indeholder mellemrum."
+        }
       },
       "detection": {
         "title": "Detekteringsgrænse",
@@ -5243,6 +5401,7 @@
         "highAccuracyDesc": "Færre falske positiver, kan overse nogle fugle",
         "highSensitivity": "Høj følsomhed",
         "highSensitivityDesc": "Flere detekteringer, flere falske positiver",
+        "descriptionStored": "Vælg hvor streng fugleidentifikationen skal være. Nuværende: {threshold}, ingen forudindstilling.",
         "threshold": "Konfidensgrænse",
         "fpFilterNote": "Når dit system kører og er afprøvet, kan du aktivere filteret for falske positiver under Indstillinger for yderligere at reducere forkerte detekteringer."
       },
@@ -5252,10 +5411,12 @@
         "privacyFilterHelp": "Filtrerer detekteringer fra, når menneskestemmer registreres nær mikrofonen",
         "birdweatherLabel": "Del detekteringer med BirdWeather",
         "birdweatherHelp": "Bidrag med dine fugledetekteringer til BirdWeather-fællesskabsnetværket",
-        "birdweatherIdLabel": "BirdWeather stations-ID",
-        "birdweatherIdPlaceholder": "Indtast dit BirdWeather stations-ID",
         "errorReportingLabel": "Send anonyme fejlrapporter",
-        "errorReportingHelp": "Hjælp med at forbedre BirdNET-Go ved at sende anonyme fejlrapporter, når noget går galt"
+        "errorReportingHelp": "Hjælp med at forbedre BirdNET-Go ved at sende anonyme fejlrapporter, når noget går galt",
+        "reasons": {
+          "enterToken": "Indtast dit BirdWeather-token, eller slå deling med BirdWeather fra.",
+          "tokenFormat": "Et BirdWeather-token består af 24 bogstaver og cifre."
+        }
       },
       "responsibleUse": {
         "title": "Ansvarlig brug af BirdNET-Go",
@@ -5494,6 +5655,8 @@
         "catalogLoadFailed": "Kunne ikke indlæse modelkatalog",
         "installFailed": "Kunne ikke starte modelinstallation",
         "removeFailed": "Kunne ikke fjerne model",
+        "removeHasDependents": "{name} bruges af {models}. Fjern disse modeller først.",
+        "operationInProgress": "En installation, geninstallation eller fjernelse af en model er allerede i gang ({name}). Prøv igen, når den er færdig.",
         "actionFailed": "Der opstod et problem med {name}",
         "downloadSourceHint": "Hvis huggingface.co er blokeret eller langsomt på dit netværk, kan du indstille en spejlserver i sektionen Downloadkilde nedenfor.",
         "goToDownloadSource": "Gå til Downloadkilde",

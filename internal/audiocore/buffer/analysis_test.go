@@ -84,7 +84,7 @@ func TestAnalysisBuffer_Overwrite(t *testing.T) {
 	for range 20 {
 		writeErr := ab.Write(chunk)
 		require.NoError(t, writeErr)
-		if ab.OverwriteCount() > 0 {
+		if ab.Stats().LostBytes > 0 {
 			overwriteSeen = true
 			break
 		}
@@ -230,37 +230,6 @@ func TestAnalysisBuffer_OverlapRead(t *testing.T) {
 	}
 	firstRelease()
 	t.Fatal("second read did not return data in time")
-}
-
-// TestOverwriteTracker_RateCalculation verifies that the overwrite rate is
-// correctly computed within the sliding window.
-func TestOverwriteTracker_RateCalculation(t *testing.T) {
-	t.Parallel()
-
-	opts := buffer.OverwriteTrackerOpts{
-		WindowDuration: 5 * time.Minute,
-		RateThreshold:  10,
-		MinWrites:      50,
-		NotifyCooldown: 1 * time.Hour,
-		Logger:         newTestLogger(),
-	}
-	tracker := buffer.NewOverwriteTracker(opts)
-
-	// Record 100 writes with 20 overwrites → 20% rate.
-	for range 80 {
-		tracker.RecordWrite()
-	}
-	for range 20 {
-		tracker.RecordWrite()
-		tracker.RecordOverwrite()
-	}
-
-	rate := tracker.OverwriteRate()
-	assert.InDelta(t, 20.0, rate, 0.01, "overwrite rate should be approximately 20%")
-
-	// After Reset, rate should be zero.
-	tracker.Reset()
-	assert.InDelta(t, 0.0, tracker.OverwriteRate(), 0.01, "rate should be zero after Reset")
 }
 
 // TestAnalysisBuffer_Read_ContentParity asserts that consecutive Read calls
@@ -448,4 +417,90 @@ func BenchmarkAnalysisBuffer_Read(b *testing.B) {
 		}
 		release()
 	}
+}
+
+// TestAnalysisBuffer_StatsCountWrittenAndLostBytes pins the exact cumulative
+// counters: bytes written, bytes discarded by overwrite, and windows read.
+func TestAnalysisBuffer_StatsCountWrittenAndLostBytes(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 10
+		readSize = 4
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "stats-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	require.NoError(t, ab.Write(make([]byte, 8)))
+	assert.Equal(t, buffer.AnalysisBufferStats{WrittenBytes: 8}, ab.Stats())
+
+	// 2 bytes free, so 4 of the 6 are made room for by discarding old audio.
+	require.NoError(t, ab.Write(make([]byte, 6)))
+	assert.Equal(t, buffer.AnalysisBufferStats{WrittenBytes: 14, LostBytes: 4}, ab.Stats())
+
+	window, release, err := ab.Read()
+	require.NoError(t, err)
+	require.NotNil(t, window)
+	release()
+	assert.Equal(t, buffer.AnalysisBufferStats{WrittenBytes: 14, LostBytes: 4, WindowsRead: 1}, ab.Stats())
+
+	// A read that returns nothing is not a window.
+	empty := mustNewEmptyStatsBuffer(t)
+	_, release, err = empty.Read()
+	require.NoError(t, err)
+	release()
+	assert.Zero(t, empty.Stats().WindowsRead)
+
+	// 4 bytes are free after the read (6 buffered of 10), so 9 bytes lose 5.
+	require.NoError(t, ab.Write(make([]byte, 9)))
+	assert.Equal(t, buffer.AnalysisBufferStats{WrittenBytes: 23, LostBytes: 9, WindowsRead: 1}, ab.Stats())
+}
+
+func mustNewEmptyStatsBuffer(t *testing.T) *buffer.AnalysisBuffer {
+	t.Helper()
+	ab, err := buffer.NewAnalysisBuffer(10, 0, 4, "empty-stats-source", newTestLogger(), nil)
+	require.NoError(t, err)
+	return ab
+}
+
+// TestAnalysisBuffer_OversizeWriteIsRejectedAndCountedLost verifies a write
+// larger than the ring is refused whole, counted as written and lost, and
+// leaves the buffered audio readable.
+func TestAnalysisBuffer_OversizeWriteIsRejectedAndCountedLost(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 10
+		readSize = 4
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "oversize-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	buffered := []byte{1, 2, 3, 4}
+	require.NoError(t, ab.Write(buffered))
+
+	require.Error(t, ab.Write(make([]byte, capacity+5)))
+	assert.Equal(t, buffer.AnalysisBufferStats{WrittenBytes: 4 + capacity + 5, LostBytes: capacity + 5}, ab.Stats())
+
+	window, release, err := ab.Read()
+	require.NoError(t, err)
+	defer release()
+	assert.Equal(t, buffered, window)
+}
+
+// TestAnalysisBuffer_ResetKeepsCumulativeStats verifies Reset leaves the
+// cumulative counters alone, so a delta against an earlier snapshot stays valid.
+func TestAnalysisBuffer_ResetKeepsCumulativeStats(t *testing.T) {
+	t.Parallel()
+
+	ab, err := buffer.NewAnalysisBuffer(10, 0, 4, "reset-stats-source", newTestLogger(), nil)
+	require.NoError(t, err)
+	require.NoError(t, ab.Write(make([]byte, 10)))
+	require.NoError(t, ab.Write(make([]byte, 2)))
+	before := ab.Stats()
+	require.Equal(t, int64(12), before.WrittenBytes)
+	require.Equal(t, int64(2), before.LostBytes)
+
+	ab.Reset()
+	assert.Equal(t, before, ab.Stats())
 }

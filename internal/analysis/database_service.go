@@ -125,7 +125,7 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	hasUnmigrated := datastoreV2.HasUnmigratedLegacyRecords(settings, datastoreLog)
 
 	// Check for and perform database consolidation if needed (SQLite only)
-	// Skip consolidation when unmigrated records found — let the worker tail-sync them first
+	// Skip consolidation when unmigrated records found; let the worker tail-sync them first
 	if settings.Output.SQLite.Enabled && !hasUnmigrated {
 		consolidated, err := datastoreV2.CheckAndConsolidateAtStartup(settings.Output.SQLite.Path, datastoreLog)
 		if err != nil {
@@ -388,7 +388,7 @@ func (d *DatabaseService) Stop(_ context.Context) error {
 }
 
 // closeDataStore performs a WAL checkpoint and closes the primary datastore.
-// Safe to call multiple times — nils out the reference after close.
+// Safe to call multiple times: nils out the reference after close.
 func (d *DatabaseService) closeDataStore(log logger.Logger) {
 	store := d.dataStore
 	d.dataStore = nil
@@ -437,13 +437,15 @@ const v2SchemaResetMarker = ".v2_schema_reset"
 // file (plus WAL/SHM) is deleted so the caller can recreate the manager and
 // retry. A marker file prevents infinite crash loops.
 //
-// Returns nil when the database was successfully deleted (caller must recreate
-// the manager and call Initialize again), or the original/wrapped error when
-// self-healing is not possible.
+// Returns nil when Initialize succeeded or when the database was deleted (in
+// the second case the caller must recreate the manager and call Initialize
+// again; it tells the cases apart by whether v2Path still exists), or the
+// original/wrapped error when self-healing is not possible.
 func initializeV2WithSelfHealing(manager datastoreV2.Manager, v2Path string, log logger.Logger) error {
 	// Attempt normal initialization.
-	if err := manager.Initialize(); err == nil {
-		// Success — clean up any stale marker from a previous recovery.
+	err := manager.Initialize()
+	if err == nil {
+		// Success: clean up any stale marker from a previous recovery.
 		markerPath := filepath.Join(filepath.Dir(v2Path), v2SchemaResetMarker)
 		if removeErr := os.Remove(markerPath); removeErr != nil && !os.IsNotExist(removeErr) {
 			log.Warn("failed to remove stale schema reset marker",
@@ -451,15 +453,15 @@ func initializeV2WithSelfHealing(manager datastoreV2.Manager, v2Path string, log
 				logger.String("marker", markerPath))
 		}
 		return nil
-	} else if !errors.Is(err, datastoreV2.ErrV2SchemaCorrupted) {
-		// Not a schema corruption error — return as-is.
-		return err
-	} else {
-		// Schema corrupted — attempt self-healing below.
-		log.Warn("v2 schema corruption detected, evaluating self-healing",
-			logger.Error(err),
-			logger.String("path", v2Path))
 	}
+	if !errors.Is(err, datastoreV2.ErrV2SchemaCorrupted) {
+		// Not a schema corruption error: return as-is.
+		return err
+	}
+	// Schema corrupted: attempt self-healing below.
+	log.Warn("v2 schema corruption detected, evaluating self-healing",
+		logger.Error(err),
+		logger.String("path", v2Path))
 
 	// Guard: if the marker already exists, a previous reset did not help.
 	markerPath := filepath.Join(filepath.Dir(v2Path), v2SchemaResetMarker)
@@ -494,14 +496,14 @@ func initializeV2WithSelfHealing(manager datastoreV2.Manager, v2Path string, log
 	}
 
 	// Delete the database file and its WAL/SHM companions.
-	// The main database file MUST be removed — if it fails, return an error
+	// The main database file MUST be removed: if it fails, return an error
 	// because the manager is already closed and the caller would proceed
 	// with a closed manager.
 	for _, suffix := range []string{"", "-wal", "-shm"} {
 		path := v2Path + suffix
 		if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
 			if suffix == "" {
-				// Main database file removal failed — this is fatal for self-healing
+				// Main database file removal failed: this is fatal for self-healing
 				return fmt.Errorf("failed to remove corrupt v2 database file %s: %w", path, removeErr)
 			}
 			log.Warn("failed to remove v2 companion file during self-healing",
@@ -549,14 +551,14 @@ func isV2DatabaseSafeToDelete(dbPath string, log logger.Logger) bool {
 		var exists int64
 		// Check if the table exists before querying it.
 		if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&exists).Error; err != nil || exists == 0 {
-			continue // Table doesn't exist — OK.
+			continue // Table doesn't exist, OK.
 		}
 		var rowCount int64
 		if err := db.Raw("SELECT COUNT(*) FROM `" + table + "`").Scan(&rowCount).Error; err != nil {
 			log.Warn("failed to count rows in table during safety check",
 				logger.Error(err),
 				logger.String("table", table))
-			return false // Cannot confirm empty — be safe.
+			return false // Cannot confirm empty, be safe.
 		}
 		if rowCount > 0 {
 			log.Warn("v2 database has user data, not safe to delete",
@@ -593,7 +595,7 @@ func isV2DatabaseSafeToDelete(dbPath string, log logger.Logger) bool {
 }
 
 // closeV2Database performs a WAL checkpoint and closes the v2 database.
-// Safe to call multiple times — nils out the reference after close.
+// Safe to call multiple times: nils out the reference after close.
 func (d *DatabaseService) closeV2Database(log logger.Logger) {
 	manager := d.v2Manager
 	d.v2Manager = nil

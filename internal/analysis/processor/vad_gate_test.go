@@ -98,7 +98,9 @@ func TestResolveVADModel(t *testing.T) {
 	assert.Empty(t, cfg.ModelData)
 	assert.Equal(t, "/lib.so", cfg.LibraryPath)
 
-	// No path: fall back to the embedded model (present in the default build).
+	// No path: fall back to the embedded model (compiled into every build). The
+	// else branch is now unreachable (HasEmbeddedModel is always true) but kept as
+	// defensive coverage in case the embed is ever made conditional again.
 	cfg, key = resolveVADModel(&conf.VADSettings{}, "")
 	if vad.HasEmbeddedModel() {
 		assert.Equal(t, "embedded", key)

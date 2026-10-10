@@ -5,7 +5,6 @@ package analytics
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -212,7 +212,7 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Setup mock to return a database error (like the SQL aggregate error)
-	dbError := errors.New("Error 1140 (42000): In aggregated query without GROUP BY, expression #3 of SELECT list contains nonaggregated column 'datastore.notes.species_code'")
+	dbError := errors.NewStd("Error 1140 (42000): In aggregated query without GROUP BY, expression #3 of SELECT list contains nonaggregated column 'datastore.notes.species_code'")
 	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{}, dbError)
 
 	// Create a request
@@ -1037,12 +1037,12 @@ func TestGetDailySpeciesSummary_ThumbnailDefersToProxy(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// TestGetSpeciesSummary_ThumbnailDefersToProxy is a regression test for Forgejo #1311.
-// The species summary endpoint must emit the media-proxy URL for every species,
-// independent of the image cache, so the proxy resolves images through the single-item
-// fallback chain instead of showing a placeholder when the primary provider has a
-// negative cache entry. A nil BirdImageCache proves the thumbnail URL no longer depends
-// on the (negative-blind) batch cache lookup.
+// TestGetSpeciesSummary_ThumbnailDefersToProxy is a regression test for thumbnails that
+// bypassed the media proxy. The species summary endpoint must emit the media-proxy URL
+// for every species, independent of the image cache, so the proxy resolves images
+// through the single-item fallback chain instead of showing a placeholder when the
+// primary provider has a negative cache entry. A nil BirdImageCache proves the thumbnail
+// URL no longer depends on the (negative-blind) batch cache lookup.
 func TestGetSpeciesSummary_ThumbnailDefersToProxy(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "analytics")
@@ -1080,9 +1080,10 @@ func TestGetSpeciesSummary_ThumbnailDefersToProxy(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// TestGetNewSpeciesDetections_ThumbnailDefersToProxy is a regression test for Forgejo
-// #1311. Like the species summary, the new-species endpoint must emit the media-proxy
-// URL for every species independent of the image cache.
+// TestGetNewSpeciesDetections_ThumbnailDefersToProxy is a regression test for
+// thumbnails that bypassed the media proxy. Like the species summary, the new-species
+// endpoint must emit the media-proxy URL for every species independent of the image
+// cache.
 func TestGetNewSpeciesDetections_ThumbnailDefersToProxy(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "analytics")
@@ -1121,10 +1122,11 @@ func TestGetNewSpeciesDetections_ThumbnailDefersToProxy(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// TestGetSpeciesThumbnails_DefersToProxy is a regression test for Forgejo #1311. The
-// batch thumbnails endpoint previously returned the static placeholder for a species
-// with no positive cache entry (masking a fallback image); it must now emit the
-// media-proxy URL for every requested species, independent of the image cache.
+// TestGetSpeciesThumbnails_DefersToProxy is a regression test for thumbnails that
+// bypassed the media proxy. The batch thumbnails endpoint previously returned the static
+// placeholder for a species with no positive cache entry (masking a fallback image); it
+// must now emit the media-proxy URL for every requested species, independent of the
+// image cache.
 func TestGetSpeciesThumbnails_DefersToProxy(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "analytics")
@@ -1541,7 +1543,7 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Override the GetTopBirdsData function to return an error
-	mockDS.On("GetTopBirdsData", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, errors.New("database connection error"))
+	mockDS.On("GetTopBirdsData", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, errors.NewStd("database connection error"))
 
 	// Create a request with the date we want to test
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
@@ -1589,7 +1591,7 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 
 	// Mock GetBatchHourlyOccurrences to return an error
 	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, testDate, testDate, mock.Anything, 0.0).Return(
-		map[string][24]int{}, errors.New("batch query failed: connection timeout"))
+		map[string][24]int{}, errors.NewStd("batch query failed: connection timeout"))
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date="+testDate, http.NoBody)

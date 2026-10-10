@@ -217,5 +217,5 @@ export function getAllProviders(): AuthProvider[] {
  */
 export function getProvider(id: string): AuthProvider | undefined {
   // eslint-disable-next-line security/detect-object-injection
-  return AUTH_PROVIDERS[id] as AuthProvider | undefined;
+  return AUTH_PROVIDERS[id];
 }

@@ -6,8 +6,9 @@ on:
     # build is what attaches the assets, so it never needs a body edit to run,
     # and listening on 'edited' meant any later change to the release (fixing
     # the notes, toggling latest) re-ran the entire multi-platform build. To
-    # rebuild on demand, use the workflow_dispatch entry below or re-run the
-    # failed run; do not re-add 'edited'.
+    # rebuild on demand, run the workflow_dispatch entry below from the release
+    # tag (a branch ref is refused) or re-run the failed run; do not re-add
+    # 'edited'.
     types: [created]
   workflow_dispatch:
 
@@ -48,8 +49,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Determine build version
         id: ver
@@ -58,18 +57,30 @@ jobs:
           # inject shell (defense in depth against the template-injection class).
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          # On a release event the ref is the release tag. On a manual dispatch
-          # from a branch, resolve the latest stable tag instead, so the binaries
-          # are versioned and attached to that release rather than the branch
-          # name (e.g. "main"). This matches the release the artifacts attach to
-          # below and keeps BUILD_VERSION, the tarball name, and the attach
-          # target consistent.
+          # The version is always the ref name: on a release event that is the
+          # release tag, and a manual dispatch must be started from a tag ref
+          # so the binaries are versioned and attached to that release. A
+          # dispatch from a branch would otherwise build branch code under an
+          # old release version.
           if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
-            VERSION=$(git describe --tags --abbrev=0 --match 'v*')
-          else
-            VERSION="${REF_NAME}"
+            if [ "${REF_TYPE}" != "tag" ]; then
+              echo "::error::workflow_dispatch must be run from a release tag ref, not ${REF_TYPE} '${REF_NAME}'"
+              exit 1
+            fi
+            # "manifest" carries the auto-update manifest, not a release
+            # (NON_RELEASE_TAGS in scripts/build-version.sh), and any other tag
+            # must already have a published (non-draft) GitHub release to attach
+            # the assets to.
+            if [ "${REF_NAME}" = "manifest" ] || [ "$(gh release view "${REF_NAME}" --repo "${REPO}" --json isDraft -q .isDraft 2>/dev/null)" != "false" ]; then
+              echo "::error::workflow_dispatch tag '${REF_NAME}' is not a published release"
+              exit 1
+            fi
           fi
+          VERSION="${REF_NAME}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Building release version: ${VERSION}"
 
@@ -89,8 +100,8 @@ jobs:
         with:
           files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ steps.ver.outputs.version }}.tar.gz
           # Release event: attach to the triggering release (empty tag_name).
-          # Dispatch: attach to the resolved latest stable tag.
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && steps.ver.outputs.version || '' }}
+          # Dispatch: attach to the release of the tag the run was started from.
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
@@ -101,8 +112,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v8
@@ -119,21 +128,13 @@ jobs:
           done | sort > checksums.txt
           cat checksums.txt
 
-      - name: Get latest release tag
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          # Restrict to stable release tags; the auto-update "manifest"
-          # prerelease tag would otherwise be picked as the nearest ancestor.
-          LATEST_TAG=$(git describe --tags --abbrev=0 --match 'v*')
-          echo "LATEST_TAG=${LATEST_TAG}" >> "${GITHUB_ENV}"
-
       - name: Add checksums to GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: checksums.txt
           # For release events, attach to the triggering release; for
-          # workflow_dispatch, attach to the latest release tag.
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && env.LATEST_TAG || '' }}
+          # workflow_dispatch, attach to the release of the dispatched tag ref.
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -145,8 +146,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Get version
         id: get_version
@@ -155,19 +154,28 @@ jobs:
           # inject shell (matches the build job's hardening).
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          # On a release event the tag IS the version (a date-based 20260712 or
-          # a stable v1.2.3), so use it directly. Only fall back to git describe
-          # on a manual dispatch from a non-tagged ref, restricting to stable
-          # tags so it does not resolve the "manifest" prerelease tag.
-          if [ "${EVENT_NAME}" = "release" ]; then
-            VERSION="${REF_NAME}"
-          else
-            # Match the build and checksums jobs exactly (--abbrev=0), so a
-            # workflow_dispatch run versions the binaries and the container
-            # images with the identical clean tag rather than a describe suffix.
-            VERSION=$(git describe --tags --abbrev=0 --match 'v*')
+          # The tag is the version: on a release event it is the release tag
+          # (a date-based 20260712 or a stable v1.2.3), and a manual dispatch
+          # must be started from a tag ref, matching the build job.
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ "${REF_TYPE}" != "tag" ]; then
+              echo "::error::workflow_dispatch must be run from a release tag ref, not ${REF_TYPE} '${REF_NAME}'"
+              exit 1
+            fi
+            # "manifest" carries the auto-update manifest, not a release
+            # (NON_RELEASE_TAGS in scripts/build-version.sh), and any other tag
+            # must already have a published (non-draft) GitHub release to attach
+            # the assets to.
+            if [ "${REF_NAME}" = "manifest" ] || [ "$(gh release view "${REF_NAME}" --repo "${REPO}" --json isDraft -q .isDraft 2>/dev/null)" != "false" ]; then
+              echo "::error::workflow_dispatch tag '${REF_NAME}' is not a published release"
+              exit 1
+            fi
           fi
+          VERSION="${REF_NAME}"
           echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
 

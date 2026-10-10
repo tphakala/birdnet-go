@@ -76,6 +76,7 @@ type MyAudioMetrics struct {
 	audioConversionDuration *prometheus.HistogramVec
 	audioConversionErrors   *prometheus.CounterVec
 	audioInferenceDuration  *prometheus.HistogramVec
+	audioInferenceLockWait  *prometheus.HistogramVec
 	audioDataSizeTotal      *prometheus.CounterVec
 	audioSampleCountTotal   *prometheus.CounterVec
 	birdnetResultsTotal     *prometheus.CounterVec
@@ -391,7 +392,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 	m.birdnetProcessingOverrunsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "myaudio_birdnet_processing_overruns_total",
-			Help: "Total number of BirdNET processing buffer overruns (inference exceeded effective buffer duration)",
+			Help: "Total number of BirdNET processing buffer overruns (PCM conversion plus inference, excluding the inference lock wait, exceeded effective buffer duration)",
 		},
 		[]string{labelSource},
 	)
@@ -399,7 +400,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 	m.birdnetProcessingOverrunDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "myaudio_birdnet_processing_overrun_duration_seconds",
-			Help:    "Elapsed processing time when a buffer overrun occurred",
+			Help:    "Processing time (PCM conversion plus inference, excluding the inference lock wait) when a buffer overrun occurred",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
 		},
 		[]string{labelSource},
@@ -408,7 +409,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 	m.birdnetProcessingOverrunRatio = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "myaudio_birdnet_processing_overrun_ratio",
-			Help:    "Ratio of elapsed processing time to effective buffer duration (>1.0 means overrun)",
+			Help:    "Ratio of processing time (PCM conversion plus inference, excluding the inference lock wait) to effective buffer duration (>1.0 means overrun)",
 			Buckets: BirdNETOverrunRatioBuckets,
 		},
 		[]string{labelSource},
@@ -468,7 +469,16 @@ func (m *MyAudioMetrics) initMetrics() error {
 	m.audioInferenceDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "myaudio_audio_inference_duration_seconds",
-			Help:    "Time taken for BirdNET inference operations",
+			Help:    "Model inference time for one analysis window, excluding the wait for the shared inference lock",
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
+		},
+		[]string{labelSource},
+	)
+
+	m.audioInferenceLockWait = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "myaudio_audio_inference_lock_wait_seconds",
+			Help:    "Time one analysis window waited for the shared inference lock before its model ran",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
 		},
 		[]string{labelSource},
@@ -552,6 +562,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 		m.audioConversionDuration,
 		m.audioConversionErrors,
 		m.audioInferenceDuration,
+		m.audioInferenceLockWait,
 		m.audioDataSizeTotal,
 		m.audioSampleCountTotal,
 		m.birdnetResultsTotal,
@@ -696,7 +707,8 @@ func (m *MyAudioMetrics) RecordBufferWraparound(bufferType, source string) {
 // BirdNET processing buffer overrun recording methods
 
 // RecordBirdNETProcessingOverrun records a BirdNET processing buffer overrun event.
-// elapsed is the actual processing duration in seconds.
+// elapsedSeconds is the window's own processing duration (PCM conversion plus
+// inference, excluding the wait for the shared inference lock) in seconds.
 // bufferLen is the effective buffer duration in seconds.
 func (m *MyAudioMetrics) RecordBirdNETProcessingOverrun(source string, elapsedSeconds, bufferLenSeconds float64) {
 	m.birdnetProcessingOverrunsTotal.WithLabelValues(source).Inc()
@@ -819,9 +831,16 @@ func (m *MyAudioMetrics) RecordAudioConversionError(conversionType string, bitDe
 	m.audioConversionErrors.WithLabelValues(conversionType, strconv.Itoa(bitDepth), errorType).Inc()
 }
 
-// RecordAudioInferenceDuration records the duration of BirdNET inference
+// RecordAudioInferenceDuration records the model's own inference time for one
+// analysis window, excluding the wait for the shared inference lock.
 func (m *MyAudioMetrics) RecordAudioInferenceDuration(source string, duration float64) {
 	m.audioInferenceDuration.WithLabelValues(source).Observe(duration)
+}
+
+// RecordAudioInferenceLockWait records how long one analysis window waited for
+// the shared inference lock before its model ran.
+func (m *MyAudioMetrics) RecordAudioInferenceLockWait(source string, seconds float64) {
+	m.audioInferenceLockWait.WithLabelValues(source).Observe(seconds)
 }
 
 // RecordAudioDataSize records the size of audio data processed

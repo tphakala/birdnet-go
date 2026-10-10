@@ -2,13 +2,13 @@
 package audio
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Test error type constant for connection timeout scenarios
@@ -441,7 +441,7 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 	})
 
 	t.Run("handle error present", func(t *testing.T) {
-		testError := errors.New("connection timeout")
+		testError := errors.NewStd("connection timeout")
 		health := &audiocore.StreamHealth{
 			IsHealthy:          false,
 			State:              audiocore.StreamStateReconnecting,

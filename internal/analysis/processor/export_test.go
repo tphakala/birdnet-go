@@ -29,12 +29,6 @@ func resetNativeSkipOnce() {
 	nativeEncoderSkipLogged.seen.Clear()
 }
 
-// resetBatFormatDowngradeOnce re-arms the ultrasonic WAV-downgrade log guard for
-// the same reason as resetNativeSkipOnce. Test-only.
-func resetBatFormatDowngradeOnce() {
-	batFormatDowngradeLogged.seen.Clear()
-}
-
 // resetStrandedFormatOnce re-arms the no-encoder-left WAV-fallback log guard.
 // Test-only, same rationale as the two above.
 func resetStrandedFormatOnce() {

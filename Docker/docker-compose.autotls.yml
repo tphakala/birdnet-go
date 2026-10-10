@@ -24,6 +24,12 @@ services:
       # so they persist across restarts via this bind mount.
       - ./config:/config
       - ./data:/data
+      # Host mounts for .local names and DNS-SD discovery (read-only, never :z or :Z).
+      # Rootless Docker without avahi/D-Bus: remove these lines. Opt out of D-Bus: remove its line.
+      # Remove the D-Bus line when BIRDNET_UID=0: uid 0 on the system bus is host root.
+      # See doc/wiki/rtsp-troubleshooting.md (Using .local (mDNS) hostnames in containers).
+      - /run/avahi-daemon:/run/avahi-daemon:ro
+      - /run/dbus:/run/dbus:ro
     # Mount HLS stream segment files directory as tmpfs (RAM disk)
     tmpfs:
       - /config/hls:exec,size=50M,uid=${BIRDNET_UID:-1000},gid=${BIRDNET_GID:-1000},mode=0755

@@ -39,7 +39,7 @@ async function getCsrf(): Promise<{ token: string; cookie: string } | null> {
       }
     }
   } catch {
-    // CSRF fetch failed — proceed without it
+    // CSRF fetch failed, proceed without it
   }
   return null;
 }
@@ -146,7 +146,7 @@ export const TestDataManager = {
       return {
         id: 'test-user-1',
         username: options.username ?? 'testuser',
-        role: options.role ?? ('user' as 'admin' | 'user'),
+        role: options.role ?? 'user',
       };
     }
   },

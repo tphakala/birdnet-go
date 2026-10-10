@@ -138,15 +138,16 @@ func backoffDuration(attempt int) time.Duration {
 func (t *LocalTarget) withRetry(op func() error) error {
 	var lastErr error
 	for i := range DefaultMaxRetries {
-		if err := op(); err == nil {
+		err := op()
+		if err == nil {
 			return nil
-		} else if !isTransientError(err) {
+		}
+		if !isTransientError(err) {
 			return err
-		} else {
-			lastErr = err
-			if t.debug {
-				t.log.Info(fmt.Sprintf("Retrying operation after error: %v (attempt %d/%d)", err, i+1, DefaultMaxRetries))
-			}
+		}
+		lastErr = err
+		if t.debug {
+			t.log.Info(fmt.Sprintf("Retrying operation after error: %v (attempt %d/%d)", err, i+1, DefaultMaxRetries))
 		}
 		time.Sleep(backoffDuration(i))
 	}

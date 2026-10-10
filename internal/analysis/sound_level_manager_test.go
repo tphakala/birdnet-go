@@ -112,7 +112,7 @@ func TestSoundLevelManagerChannelCommunication(t *testing.T) {
 
 // TestHotReloadIntegrationBasic provides a basic integration test framework.
 // Uses testing/synctest so the wg.Wait completion is deterministic rather
-// than racing a 2s wall-clock timeout on loaded CI runners (Forgejo #459).
+// than racing a 2s wall-clock timeout on loaded CI runners.
 func TestHotReloadIntegrationBasic(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		soundLevelChan := make(chan soundlevel.SoundLevelData, 100)

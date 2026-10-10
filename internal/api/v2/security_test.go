@@ -5,7 +5,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -15,12 +14,17 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// concurrencyWaitTimeout bounds how long a test waits for its concurrent
+// callers to reach the expected state. It is generous so a loaded CI runner
+// under -race does not fail the test; a correct run finishes in milliseconds.
+const concurrencyWaitTimeout = time.Minute
 
 // searchNotesEmptyMock returns a mockSetup function that configures empty search results.
 // Use this to reduce duplication in tests that mock SearchNotes.
@@ -227,7 +231,7 @@ func TestInputValidation(t *testing.T) {
 			},
 			mockSetup: func(m *mock.Mock) {
 				// Setup all possible method calls
-				m.On("Get", mock.Anything).Return(datastore.Note{}, errors.New("not found"))
+				m.On("Get", mock.Anything).Return(datastore.Note{}, errors.NewStd("not found"))
 			},
 			expectedStatus: http.StatusNotFound,
 			expectedError:  "Detection not found",
@@ -268,7 +272,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				// Simulate validation failure via HandleError
 				return controller.HandleError(c,
-					errors.New("invalid characters detected in start_date"),
+					errors.NewStd("invalid characters detected in start_date"),
 					"invalid characters detected in start_date",
 					http.StatusBadRequest,
 				)
@@ -317,7 +321,7 @@ func TestInputValidation(t *testing.T) {
 			},
 			handler: func(c echo.Context) error {
 				return controller.HandleError(c,
-					errors.New("invalid characters detected in start_date"),
+					errors.NewStd("invalid characters detected in start_date"),
 					"invalid characters detected in start_date",
 					http.StatusBadRequest,
 				)
@@ -615,19 +619,24 @@ func TestDDoSProtection(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupTestEnvironment(t)
 
-	// Initialize the detection cache manually since routes aren't initialized in test environment
-	controller.DetectionCache = cache.New(5*time.Minute, 10*time.Minute)
-
 	// Number of concurrent requests to simulate
 	concurrentRequests := 50
 
-	// Setup mock expectations - with caching enabled and concurrent requests,
-	// multiple requests may check the cache before the first one populates it.
-	// Use Maybe() to allow for race conditions in concurrent testing.
+	// Concurrent identical requests share one datastore load: a caller either
+	// joins the load in flight or hits the cache once it is stored, so the
+	// datastore is queried exactly once.
+	// The datastore call blocks until every caller has missed the cache, so the
+	// requests overlap instead of running one after another.
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
 	mockDS.EXPECT().
 		SearchNotes(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.Note{}, int64(0), nil).
-		Maybe() // Multiple requests may call before cache is populated
+		RunAndReturn(func(string, bool, int, int) ([]datastore.Note, int64, error) {
+			<-release
+			return []datastore.Note{}, 0, nil
+		}).
+		Once()
 
 	// Create a wait group to synchronize goroutines
 	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
@@ -636,6 +645,7 @@ func TestDDoSProtection(t *testing.T) {
 	// Create channels to collect results
 	responseTimesChan := make(chan time.Duration, concurrentRequests)
 	statusCodesChan := make(chan int, concurrentRequests)
+	handlerErrsChan := make(chan error, concurrentRequests)
 
 	// Launch concurrent requests using Go 1.25 WaitGroup.Go() pattern
 	for range concurrentRequests {
@@ -650,9 +660,7 @@ func TestDDoSProtection(t *testing.T) {
 			startTime := time.Now()
 
 			// Call handler
-			if err := controller.detections.GetDetections(c); err != nil {
-				assert.NoError(t, err, "GetDetections failed")
-			}
+			handlerErrsChan <- controller.detections.GetDetections(c)
 
 			// Record response time
 			responseTime := time.Since(startTime)
@@ -661,19 +669,26 @@ func TestDDoSProtection(t *testing.T) {
 		})
 	}
 
+	require.Eventually(t, func() bool { return controller.DetectionCache.Stats().Misses == uint64(concurrentRequests) },
+		concurrencyWaitTimeout, time.Millisecond, "every request reaches the cache before the load finishes")
+	releaseOnce.Do(func() { close(release) })
+
 	// Wait for all requests to complete
 	wg.Wait()
 	close(responseTimesChan)
 	close(statusCodesChan)
+	close(handlerErrsChan)
+
+	for err := range handlerErrsChan {
+		require.NoError(t, err, "GetDetections failed")
+	}
 
 	// Collect results
 	var totalResponseTime time.Duration
 	successCount := 0
 	rateLimitedCount := 0
-	totalRequests := 0
 
 	for code := range statusCodesChan {
-		totalRequests++
 		switch code {
 		case http.StatusOK:
 			successCount++
@@ -704,8 +719,9 @@ func TestDDoSProtection(t *testing.T) {
 		t.Log("Note: Rate limiting should be verified in production environment")
 	}
 
-	// Verify all requests were handled (either successfully or rate-limited)
-	assert.Equal(t, concurrentRequests, totalRequests, "Not all requests were processed")
+	// Every request must be answered with success or a rate-limit response: the
+	// cache never turns a request away with any other status.
+	assert.Equal(t, concurrentRequests, successCount+rateLimitedCount, "Not all requests were served or rate limited")
 }
 
 // TestRateLimiting tests API rate limiting functionality

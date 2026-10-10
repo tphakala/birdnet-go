@@ -417,8 +417,7 @@ func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		if err != nil {
 			// The jlaffaye/ftp library returns *textproto.Error for protocol errors.
 			// FTP 550 (StatusFileUnavailable) indicates the directory does not exist.
-			var protoErr *textproto.Error
-			if errors.As(err, &protoErr) && protoErr.Code == ftp.StatusFileUnavailable {
+			if protoErr, ok := errors.AsType[*textproto.Error](err); ok && protoErr.Code == ftp.StatusFileUnavailable {
 				return nil
 			}
 			return backup.NewError(backup.ErrIO, "ftp: failed to list backups", err)

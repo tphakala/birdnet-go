@@ -320,7 +320,7 @@ describe('formatters', () => {
 
       const parsedDate = parseISODate(dateString);
       expect(parsedDate).not.toBeNull();
-      const formattedBack = formatDateForInput(parsedDate as Date);
+      const formattedBack = formatDateForInput(parsedDate);
 
       expect(formattedBack).toBe(dateString);
     });

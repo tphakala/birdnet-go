@@ -23,7 +23,6 @@ func (a *notificationAdapter) CreateAndBroadcast(target string, notifType notifi
 	if svc == nil {
 		return nil // notification service not yet initialized
 	}
-	title, message = applyDetectionTemplates(notifType, title, message, eventProps)
 	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message).
 		WithDeliveryTarget(target)
 	notif = enrichFromEventProps(notif, notifType, eventProps)

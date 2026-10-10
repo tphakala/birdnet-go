@@ -463,6 +463,7 @@
                   <SelectDropdown
                     value={String(filter.passes ?? param.Default ?? 1)}
                     options={attenuationOptions}
+                    aria-label={param.Label}
                     onChange={value =>
                       updateFilterParameter(index, param.Name, parseInt(value as string))}
                     {disabled}
@@ -574,6 +575,7 @@
                   <SelectDropdown
                     value={String(newFilter.passes ?? 1)}
                     options={attenuationOptions}
+                    aria-label={param.Label}
                     onChange={value => {
                       newFilter = { ...newFilter, passes: parseInt(value as string, 10) };
                     }}

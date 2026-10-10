@@ -169,12 +169,10 @@ func isMediaError(err error) bool {
 	}
 
 	// Check for specific error types that indicate media issues
-	var pathErr *os.PathError
-	if errors.As(err, &pathErr) {
+	if pathErr, ok := errors.AsType[*os.PathError](err); ok {
 		// Platform-specific error detection
 		if runtime.GOOS == "windows" {
-			var errno syscall.Errno
-			if errors.As(pathErr.Err, &errno) {
+			if errno, ok := errors.AsType[syscall.Errno](pathErr.Err); ok {
 				// Windows error codes from syscall/types_windows.go
 				const (
 					ERROR_NOT_READY      syscall.Errno = 21
@@ -197,8 +195,7 @@ func isMediaError(err error) bool {
 			}
 		} else {
 			// Unix-like systems (Linux, macOS)
-			var errno syscall.Errno
-			if errors.As(pathErr.Err, &errno) {
+			if errno, ok := errors.AsType[syscall.Errno](pathErr.Err); ok {
 				switch errno {
 				case syscall.EIO, // I/O error
 					syscall.ENOSPC, // No space left on device
@@ -364,13 +361,12 @@ func (s *SQLiteSource) validatePageCount(total, sourcePages int) (totalPages, re
 		// If total is 0 but we have pages in source, try using source page count
 		if sourcePages > 0 {
 			return sourcePages, sourcePages, nil
-		} else {
-			return 0, 0, errors.Newf("invalid page count").
-				Component("backup").
-				Category(errors.CategoryDatabase).
-				Context("operation", "validate_page_count").
-				Build()
 		}
+		return 0, 0, errors.Newf("invalid page count").
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "validate_page_count").
+			Build()
 	}
 
 	return total, total, nil

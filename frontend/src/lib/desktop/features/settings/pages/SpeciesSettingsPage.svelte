@@ -42,7 +42,7 @@
     lifeListSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import type { SpeciesConfig, SpeciesSettings } from '$lib/stores/settings';
+  import type { SpeciesSettings } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -57,7 +57,14 @@
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { SETTINGS_ROUTES } from '$lib/utils/settingsRoutes';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { getLocalDateString } from '$lib/utils/date';
+  import {
+    compareActiveSpeciesForExport,
+    resolveActiveSpeciesScores,
+  } from '$lib/utils/speciesScores';
   import {
     buildSpeciesNameMaps,
     isSpeciesInList,
@@ -167,11 +174,11 @@
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
-    (() => {
-      const base = $speciesSettings ?? {
-        include: [] as string[],
-        exclude: [] as string[],
-        config: {} as Record<string, SpeciesConfig>,
+    ((): SpeciesSettings => {
+      const base: SpeciesSettings = $speciesSettings ?? {
+        include: [],
+        exclude: [],
+        config: {},
       };
 
       // Ensure config is always a valid object to prevent Object.keys() errors
@@ -179,7 +186,7 @@
         include: base.include ?? [],
         exclude: base.exclude ?? [],
         config: isPlainObject(base.config) ? base.config : {},
-      } as SpeciesSettings;
+      };
     })()
   );
 
@@ -204,6 +211,8 @@
     commonName: string;
     scientificName: string;
     score: number;
+    exportScore: number;
+    exportOrder: number;
     isManuallyIncluded: boolean;
     hasCustomConfig: boolean;
   }
@@ -718,6 +727,7 @@
           scientificName: string;
           commonName: string;
           score: number;
+          rangeScore?: number;
           isManuallyIncluded?: boolean;
           hasCustomConfig?: boolean;
         }>;
@@ -753,21 +763,32 @@
       const includeSet = new Set((currentInclude ?? []).map(s => normalizeForLookup(s)));
       const configKeys = new Set(Object.keys(currentConfig ?? {}).map(s => normalizeForLookup(s)));
 
+      // Newer backends carry override provenance after resolving aliases against
+      // the actual model labels. Fall back to literal matching for compatibility
+      // with older API responses that do not include the flag.
+      const isManuallyIncluded = (species: (typeof response.species)[number]): boolean =>
+        species.isManuallyIncluded ??
+        isInNameSet(includeSet, species.commonName, species.scientificName);
+      const hasCustomConfig = (species: (typeof response.species)[number]): boolean =>
+        species.hasCustomConfig ??
+        isInNameSet(configKeys, species.commonName, species.scientificName);
+
+      // Filter species that pass the threshold OR are manually included
+      // Go serializes a nil slice as JSON null, so guard before iterating.
       const mappedSpecies: ActiveSpecies[] = (response.species ?? [])
-        .filter(
-          s =>
-            s.score >= threshold ||
-            (s.isManuallyIncluded ?? isInNameSet(includeSet, s.commonName, s.scientificName))
-        )
-        .map(s => ({
-          commonName: s.commonName,
-          scientificName: s.scientificName,
-          score: s.score,
-          isManuallyIncluded:
-            s.isManuallyIncluded ?? isInNameSet(includeSet, s.commonName, s.scientificName),
-          hasCustomConfig:
-            s.hasCustomConfig ?? isInNameSet(configKeys, s.commonName, s.scientificName),
-        }));
+        .filter(s => s.score >= threshold || isManuallyIncluded(s))
+        .map((s, exportOrder) => {
+          const scores = resolveActiveSpeciesScores(s.score, s.rangeScore);
+          return {
+            commonName: s.commonName,
+            scientificName: s.scientificName,
+            score: scores.displayScore,
+            exportScore: scores.exportScore,
+            exportOrder,
+            isManuallyIncluded: isManuallyIncluded(s),
+            hasCustomConfig: hasCustomConfig(s),
+          };
+        });
 
       // Sort by score descending
       mappedSpecies.sort((a, b) => b.score - a.score);
@@ -958,13 +979,15 @@
     if (!activeSpeciesState.data?.species.length) return;
 
     const headers = ['Common Name', 'Scientific Name', 'Score', 'Included', 'Configured'];
-    const rows = activeSpeciesState.data.species.map(s => [
-      escapeCsvField(s.commonName),
-      escapeCsvField(s.scientificName),
-      escapeCsvField(s.score.toFixed(4)),
-      escapeCsvField(s.isManuallyIncluded ? 'Yes' : 'No'),
-      escapeCsvField(s.hasCustomConfig ? 'Yes' : 'No'),
-    ]);
+    const rows = [...activeSpeciesState.data.species]
+      .sort(compareActiveSpeciesForExport)
+      .map(s => [
+        escapeCsvField(s.commonName),
+        escapeCsvField(s.scientificName),
+        escapeCsvField(s.exportScore.toFixed(4)),
+        escapeCsvField(s.isManuallyIncluded ? 'Yes' : 'No'),
+        escapeCsvField(s.hasCustomConfig ? 'Yes' : 'No'),
+      ]);
 
     const csvContent = [headers.map(escapeCsvField).join(','), ...rows.map(r => r.join(','))].join(
       '\n'
@@ -1478,7 +1501,8 @@
                   'Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.'}
               </p>
               <a
-                href="/ui/settings/main"
+                href={buildAppUrl(SETTINGS_ROUTES.mainLocation)}
+                onclick={handleAppLinkClick}
                 class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-warning)] text-[var(--color-warning-content)] hover:bg-[var(--color-warning-hover)] transition-colors mt-3"
               >
                 {t('settings.species.activeSpecies.locationNotConfigured.action') ||
@@ -1855,6 +1879,7 @@
                   </span>
                 </label>
                 <SelectDropdown
+                  id="yearly-reset-month"
                   value={String(
                     trackingSettings?.yearlyTracking?.resetMonth ??
                       TRACKING_DEFAULTS.yearlyTracking.resetMonth
@@ -2007,11 +2032,16 @@
                     <div class="grid grid-cols-2 gap-3 items-end">
                       <div>
                         <label class="flex items-center py-2" for={`${season}-start-month`}>
+                          <!-- The card heading names the season on screen; the name carries it too -->
+                          <span class="sr-only">
+                            {t(`settings.species.tracking.seasonal.seasons.${season}`)}
+                          </span>
                           <span class="text-sm font-medium">
                             {t('settings.species.tracking.seasonal.seasons.startMonth')}
                           </span>
                         </label>
                         <SelectDropdown
+                          id={`${season}-start-month`}
                           value={String(currentSeasonData?.startMonth ?? seasonDefaults.startMonth)}
                           options={monthOptions}
                           disabled={store.isLoading || store.isSaving}

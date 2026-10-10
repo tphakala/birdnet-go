@@ -485,12 +485,7 @@ func TestApplyPathCorrection_UnreadableNotifiesWithoutRewriting(t *testing.T) {
 	SetPathCorrectionPersistenceDisabled(false)
 	t.Cleanup(func() { SetPathCorrectionPersistenceDisabled(false) })
 
-	notification.ResetForTest()
-	t.Cleanup(notification.ResetForTest)
-	notification.Initialize(notification.DefaultServiceConfig())
-	svc := notification.GetService()
-	require.NotNil(t, svc)
-	t.Cleanup(svc.Stop)
+	svc := setupTestNotification(t)
 
 	entry, ok := GetCatalogEntry("perch-v2")
 	require.True(t, ok)
@@ -628,12 +623,7 @@ func TestPathCorrection_QueuedThenDrainedRepairsConfig(t *testing.T) {
 	// case was asserted, in TestApplyPathCorrection_UserOwnedSubstitutionNotifies).
 	//
 	// This assertion pins the emitter, not the whole delivery pipeline.
-	notification.ResetForTest()
-	t.Cleanup(notification.ResetForTest)
-	notification.Initialize(notification.DefaultServiceConfig())
-	svc := notification.GetService()
-	require.NotNil(t, svc)
-	t.Cleanup(svc.Stop)
+	svc := setupTestNotification(t)
 
 	entry, ok := GetCatalogEntry("perch-v2")
 	require.True(t, ok)
@@ -1282,12 +1272,7 @@ func TestApplyPathCorrection_UserOwnedSubstitutionNotifies(t *testing.T) {
 
 	SetPathCorrectionPersistenceDisabled(false)
 
-	notification.ResetForTest()
-	t.Cleanup(notification.ResetForTest)
-	notification.Initialize(notification.DefaultServiceConfig())
-	svc := notification.GetService()
-	require.NotNil(t, svc)
-	t.Cleanup(svc.Stop)
+	svc := setupTestNotification(t)
 
 	modelsDir := filepath.Join(t.TempDir(), "models")
 	o := &Orchestrator{}

@@ -27,6 +27,15 @@ func (m *MockInterface) GetLockedNotesClipPaths() ([]string, error) {
 	return nil, args.Error(1)
 }
 
+// RetainNoteSpectrogramsByClipNames mocks the RetainNoteSpectrogramsByClipNames method
+func (m *MockInterface) RetainNoteSpectrogramsByClipNames(clipNames []string) (int64, error) {
+	args := m.Called(clipNames)
+	if count, ok := args.Get(0).(int64); ok {
+		return count, args.Error(1)
+	}
+	return 0, args.Error(1)
+}
+
 // ClearNoteClipPathsByNames mocks the ClearNoteClipPathsByNames method
 func (m *MockInterface) ClearNoteClipPathsByNames(clipNames []string) (int64, error) {
 	args := m.Called(clipNames)

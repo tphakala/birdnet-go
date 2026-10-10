@@ -4,18 +4,18 @@ The HookRelay logger package is a production-ready, structured logging system bu
 
 ## 🚀 Quick Links
 
-| Document | Purpose | Time to Read |
-|----------|---------|--------------|
-| [Quick Reference](LOGGING_QUICK_REFERENCE.md) | Syntax and examples | 5 min |
-| [Implementation Guide](LOGGING_IMPLEMENTATION_GUIDE.md) | Complete usage guide | 30 min |
-| [Extraction Guide](LOGGER_EXTRACTION_GUIDE.md) | How to reuse in other projects | 15 min |
-| [Extraction Script](scripts/extract-logger.sh) | Automated extraction tool | 2 min |
+| Document                                                | Purpose                        | Time to Read |
+| ------------------------------------------------------- | ------------------------------ | ------------ |
+| [Quick Reference](LOGGING_QUICK_REFERENCE.md)           | Syntax and examples            | 5 min        |
+| [Implementation Guide](LOGGING_IMPLEMENTATION_GUIDE.md) | Complete usage guide           | 30 min       |
+| [Extraction Guide](LOGGER_EXTRACTION_GUIDE.md)          | How to reuse in other projects | 15 min       |
+| [Extraction Script](scripts/extract-logger.sh)          | Automated extraction tool      | 2 min        |
 
 ---
 
 ## ✨ Features
 
-- ✅ **Zero Dependencies** - Only uses Go standard library
+- ✅ **Lightweight** - Built on `log/slog`; only the GORM and Echo adapters import third-party packages
 - ✅ **Module-Aware** - Scope loggers to components (`storage`, `auth`, `api`)
 - ✅ **Structured Logging** - Type-safe field constructors
 - ✅ **Flexible Routing** - Console, files, or per-module files
@@ -169,13 +169,13 @@ logger.Any(key string, value any) Field
 
 ```yaml
 logging:
-  default_level: "info"  # trace, debug, info, warn, error
+  default_level: "info" # trace, debug, info, warn, error
   timezone: "UTC"
 
   console:
     enabled: true
     level: "info"
-    pretty: false  # true for dev, false for production
+    pretty: false # true for dev, false for production
 
   file_output:
     enabled: true
@@ -183,13 +183,13 @@ logging:
     level: "debug"
 
   module_levels:
-    storage: "debug"  # Override level per module
+    storage: "debug" # Override level per module
     auth: "info"
 
   modules:
     auth:
       enabled: true
-      file_path: "logs/auth.log"  # Dedicated file
+      file_path: "logs/auth.log" # Dedicated file
       level: "info"
       console_also: false
 ```
@@ -400,25 +400,27 @@ if cfg.Debug {
 
 ## 🌟 Comparison with Other Loggers
 
-| Feature | HookRelay Logger | logrus | zap | zerolog |
-|---------|-----------------|--------|-----|---------|
-| Dependencies | 0 (stdlib only) | 3+ | 2+ | 0 |
-| Based on | log/slog | Custom | Custom | Custom |
-| Module routing | ✅ Built-in | ❌ | ❌ | ❌ |
-| Context tracing | ✅ Auto | ⚠️ Manual | ⚠️ Manual | ⚠️ Manual |
-| YAML config | ✅ Full | ⚠️ Partial | ⚠️ Partial | ❌ |
-| Per-module files | ✅ | ❌ | ❌ | ❌ |
-| Learning curve | Low | Medium | High | Medium |
-| Performance | Good | Good | Excellent | Excellent |
-| Stdlib-aligned | ✅ (slog) | ❌ | ❌ | ❌ |
+| Feature          | HookRelay Logger                      | logrus     | zap        | zerolog   |
+| ---------------- | ------------------------------------- | ---------- | ---------- | --------- |
+| Dependencies     | slog (GORM and Echo adapters add two) | 3+         | 2+         | 0         |
+| Based on         | log/slog                              | Custom     | Custom     | Custom    |
+| Module routing   | ✅ Built-in                           | ❌         | ❌         | ❌        |
+| Context tracing  | ✅ Auto                               | ⚠️ Manual  | ⚠️ Manual  | ⚠️ Manual |
+| YAML config      | ✅ Full                               | ⚠️ Partial | ⚠️ Partial | ❌        |
+| Per-module files | ✅                                    | ❌         | ❌         | ❌        |
+| Learning curve   | Low                                   | Medium     | High       | Medium    |
+| Performance      | Good                                  | Good       | Excellent  | Excellent |
+| Stdlib-aligned   | ✅ (slog)                             | ❌         | ❌         | ❌        |
 
 **Best for:**
-- ✅ Projects wanting stdlib-only dependencies
+
+- ✅ Projects wanting an slog-based logger without a third-party logging library
 - ✅ Microservices with module-based logging
 - ✅ Teams wanting easy configuration
 - ✅ Projects requiring per-component log routing
 
 **Not ideal for:**
+
 - ❌ Maximum performance critical paths (use zap/zerolog)
 - ❌ Projects already using another logger (migration overhead)
 
@@ -474,6 +476,7 @@ To improve the logger:
 The logger package is part of HookRelay and inherits its license.
 
 When extracting to your project, you can:
+
 - ✅ Use freely (MIT-style)
 - ✅ Modify as needed
 - ✅ Include in commercial projects
@@ -485,7 +488,7 @@ When extracting to your project, you can:
 
 The HookRelay logger package is:
 
-- **Portable**: Zero dependencies, copy anywhere
+- **Lightweight**: Built on `log/slog`, with third-party imports only in the GORM and Echo adapters
 - **Powerful**: Module routing, context tracing, flexible configuration
 - **Production-Ready**: Used in HookRelay, well-tested, documented
 - **Easy**: 2-minute extraction, 5-minute integration
@@ -498,11 +501,13 @@ The HookRelay logger package is:
 ## 📞 Questions?
 
 See the documentation:
+
 - [Quick Reference](LOGGING_QUICK_REFERENCE.md) - Syntax and examples
 - [Implementation Guide](LOGGING_IMPLEMENTATION_GUIDE.md) - Complete guide
 - [Extraction Guide](LOGGER_EXTRACTION_GUIDE.md) - Reuse in other projects
 
 Or run the extraction script:
+
 ```bash
 ./scripts/extract-logger.sh /path/to/project github.com/org/project
 ```

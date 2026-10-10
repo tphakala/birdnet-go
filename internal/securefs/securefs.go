@@ -1,7 +1,6 @@
 package securefs
 
 import (
-	stdErrors "errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -602,7 +601,7 @@ func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, stri
 	if err != nil {
 		// File-not-found is expected during the race window between detection
 		// DB commit and audio export completion — log at debug, not error.
-		if stdErrors.Is(err, fs.ErrNotExist) {
+		if errors.Is(err, fs.ErrNotExist) {
 			GetLogger().Debug("File not found via opener",
 				logger.String("path", effectivePath))
 		} else {
@@ -672,7 +671,7 @@ func (sfs *SecureFS) ServeFile(c echo.Context, path string) error {
 			// DB commit and audio export completion. The API layer handles this
 			// gracefully (handleAudio404WithWait). Use plain error wrapping to
 			// avoid triggering telemetry hooks and creating noise notifications.
-			if stdErrors.Is(err, fs.ErrNotExist) {
+			if errors.Is(err, fs.ErrNotExist) {
 				return nil, relPath, fmt.Errorf("openat %s: %w", relPath, err)
 			}
 			// Wrap operational errors for context
@@ -702,7 +701,7 @@ func (sfs *SecureFS) ServeRelativeFile(c echo.Context, relPath string) error {
 			// DB commit and audio export completion. The API layer handles this
 			// gracefully (handleAudio404WithWait). Use plain error wrapping to
 			// avoid triggering telemetry hooks and creating noise notifications.
-			if stdErrors.Is(err, fs.ErrNotExist) {
+			if errors.Is(err, fs.ErrNotExist) {
 				return nil, validatedRelPath, fmt.Errorf("openat %s: %w", validatedRelPath, err)
 			}
 			// Wrap operational errors for context

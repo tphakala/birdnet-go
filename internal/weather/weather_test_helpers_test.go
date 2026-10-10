@@ -35,6 +35,10 @@ func createTestSettings(t *testing.T, provider string, opts ...func(*conf.Settin
 					Endpoint:  "https://api.weather.com/v2/pws/observations/current",
 					Units:     "m",
 				},
+				PirateWeather: conf.PirateWeatherSettings{
+					APIKey:   "test-api-key",
+					Endpoint: "https://api.pirateweather.net/forecast",
+				},
 			},
 		},
 	}
@@ -212,6 +216,35 @@ func wundergroundTestErrorResponse(code, message string) string {
 }`
 }
 
+// pirateWeatherSuccessResponse returns a valid Pirate Weather API response JSON string.
+func pirateWeatherSuccessResponse() string {
+	return `{
+  "latitude": 60.1699,
+  "longitude": 24.9384,
+  "timezone": "Europe/Helsinki",
+  "currently": {
+    "time": 1736769600,
+    "summary": "Partly Cloudy",
+    "icon": "partly-cloudy-day",
+    "precipIntensity": 0.0,
+    "precipProbability": 0.0,
+    "precipType": "none",
+    "temperature": 14.55,
+    "apparentTemperature": 13.88,
+    "dewPoint": 9.2,
+    "humidity": 0.72,
+    "pressure": 1014.0,
+    "windSpeed": 4.12,
+    "windGust": 7.5,
+    "windBearing": 240,
+    "cloudCover": 0.75,
+    "uvIndex": 1.2,
+    "visibility": 10.0,
+    "ozone": 320.0
+  }
+}`
+}
+
 // registerYrNoResponder registers a mock responder for Yr.no API.
 func registerYrNoResponder(t *testing.T, statusCode int, body string, headers map[string]string) {
 	t.Helper()
@@ -241,6 +274,16 @@ func registerWundergroundResponder(t *testing.T, statusCode int, body string) {
 	t.Helper()
 
 	httpmock.RegisterResponder("GET", `=~^https://api\.weather\.com/v2/pws/observations/current`,
+		httpmock.NewStringResponder(statusCode, body))
+}
+
+// registerPirateWeatherResponder registers a mock responder for the Pirate
+// Weather API. The URL includes the API key and coordinates in the path, so
+// the regex only anchors on the fixed "/forecast/" prefix.
+func registerPirateWeatherResponder(t *testing.T, statusCode int, body string) {
+	t.Helper()
+
+	httpmock.RegisterResponder("GET", `=~^https://api\.pirateweather\.net/forecast/`,
 		httpmock.NewStringResponder(statusCode, body))
 }
 

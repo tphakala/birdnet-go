@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // analyticsBatchFakeResolver is a test resolver that satisfies SpeciesNameResolver
@@ -34,20 +35,21 @@ func (a *analyticsBatchFakeResolver) ResolveLocalizedBatch(names []string) map[s
 	return out
 }
 
-// TestUpdateCommonNameMap_PopulatesAllMaps verifies that UpdateCommonNameMap
-// populates the display, folded-search, and exact-resolution maps from the same
-// label input, keeping them consistent.
-func TestUpdateCommonNameMap_PopulatesAllMaps(t *testing.T) {
+// TestNameMaps_PopulatesAllMaps verifies that a rebuild populates the display,
+// folded-search, and exact-resolution maps from the same label input, keeping them
+// consistent.
+func TestNameMaps_PopulatesAllMaps(t *testing.T) {
 	t.Parallel()
 
 	e := echo.New()
 	c := &Controller{Core: &apicore.Core{Group: e.Group("/api/v2")}}
+	c.names = speciesindex.New(nil)
 
 	labels := []string{
 		"Strix aluco_Tawny Owl",
 		"Parus major_Great Tit",
 	}
-	c.UpdateCommonNameMap(labels)
+	seedNames(t, c, nil, labels)
 
 	// Verify the scientific-to-common map (used by insights endpoints).
 	sciToCommon := c.loadCommonNameMap()
@@ -68,70 +70,14 @@ func TestUpdateCommonNameMap_PopulatesAllMaps(t *testing.T) {
 	assert.Equal(t, "Parus major", commonToSci["great tit"])
 }
 
-// TestBuildNameMaps_AmbiguousCommonName verifies that a common name mapped
-// by two different scientific names is removed from commonToSci so the
-// search resolver passes ambiguous queries through untranslated.
-func TestBuildNameMaps_AmbiguousCommonName(t *testing.T) {
-	t.Parallel()
-
-	nm := buildNameMaps([]string{
-		"Strix aluco_Owl",
-		"Bubo bubo_Owl",
-		"Parus major_Great Tit",
-	}, nil)
-	require.NotNil(t, nm)
-
-	// sciToCommon keeps both species; scientific names are always unique.
-	assert.Equal(t, "Owl", nm.sciToCommon["Strix aluco"])
-	assert.Equal(t, "Owl", nm.sciToCommon["Bubo bubo"])
-
-	// commonToSci must NOT contain the ambiguous key.
-	_, ok := nm.commonToSci["owl"]
-	assert.False(t, ok, "ambiguous common-name key should be removed")
-
-	// A third label that repeats an already-ambiguous key should not
-	// accidentally restore the key.
-	nm = buildNameMaps([]string{
-		"Strix aluco_Owl",
-		"Bubo bubo_Owl",
-		"Tyto alba_Owl",
-	}, nil)
-	_, ok = nm.commonToSci["owl"]
-	assert.False(t, ok)
-
-	// Non-ambiguous names remain.
-	nm = buildNameMaps([]string{
-		"Strix aluco_Owl",
-		"Bubo bubo_Owl",
-		"Parus major_Great Tit",
-	}, nil)
-	assert.Equal(t, "Parus major", nm.commonToSci["great tit"])
-}
-
-// TestBuildNameMaps_MalformedLabels verifies that labels missing a scientific
-// name, a common name, or the separator are silently skipped rather than
-// producing empty keys.
-func TestBuildNameMaps_MalformedLabels(t *testing.T) {
-	t.Parallel()
-
-	nm := buildNameMaps([]string{
-		"Strix aluco_Tawny Owl",
-		"_MissingScientific",
-		"MissingCommon_",
-		"NoSeparatorAtAll",
-		"",
-		"   _   ",
-	}, nil)
-	require.NotNil(t, nm)
-	assert.Len(t, nm.sciToCommon, 1)
-	assert.Len(t, nm.commonToSci, 1)
-	assert.Equal(t, "Tawny Owl", nm.sciToCommon["Strix aluco"])
-	assert.Equal(t, "Strix aluco", nm.commonToSci["tawny owl"])
-}
+// Note: the ambiguous-common-name drop and malformed-label skipping previously
+// exercised here through buildNameMaps directly are now golden-tested in
+// internal/speciesindex, which owns the shared builder.
 
 // TestLoadNameMaps_CalledBeforeInit verifies that the load helpers return
-// non-nil empty maps when the Controller has not yet seeded nameMaps, so
-// callers can index without nil checks during the startup window.
+// non-nil empty maps (speciesindex.Empty semantics) when the Controller's name
+// index has not been seeded yet, so callers can index without nil checks during
+// the startup window.
 func TestLoadNameMaps_CalledBeforeInit(t *testing.T) {
 	t.Parallel()
 
@@ -165,14 +111,12 @@ func TestHandleSearch_LocalizedCommonName_SecondaryModelSpecies(t *testing.T) {
 
 	// Wire a batch-capable resolver so the scientific-only bat label
 	// "Barbastella barbastellus" (no underscore-separated common name in the
-	// label string) gets a Finnish localized name via the batch path.
-	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+	// label string) gets a Finnish localized name via the batch path. Feeding the
+	// scientific-only label triggers the batchLocalizer path and populates
+	// commonToSci with "mopsilepakko" -> "Barbastella barbastellus".
+	seedNames(t, controller, &analyticsBatchFakeResolver{batch: map[string]string{
 		"Barbastella barbastellus": "mopsilepakko",
-	}})
-	// Feed the scientific-only label so UpdateCommonNameMap triggers the
-	// batchLocalizer path and populates commonToSci with
-	// "mopsilepakko" -> "Barbastella barbastellus".
-	controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+	}}, []string{"Barbastella barbastellus"})
 
 	// Capture the SearchFilters that reach the datastore.
 	var captured *datastore.SearchFilters
@@ -213,7 +157,7 @@ func TestHandleSearch_ExactCommonNamePreservesSubstringUnion(t *testing.T) {
 	t.Attr("feature", "common-name-substring-union")
 
 	e, mockDS, controller := setupTestEnvironment(t)
-	controller.UpdateCommonNameMap([]string{
+	seedNames(t, controller, nil, []string{
 		"Tyto alba_Barn Owl",
 		"Tyto furcata_American Barn Owl",
 	})

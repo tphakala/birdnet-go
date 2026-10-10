@@ -3,9 +3,10 @@
 package sysinfo
 
 import (
-	"errors"
 	"io"
 	"os"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // realMountProber is the Windows stub of MountProber. On Windows there is no

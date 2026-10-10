@@ -128,7 +128,7 @@ func TestingContext(m dsl.Matcher) {
 //	func TestFoo(t *testing.T) {
 //	    dir := t.ArtifactDir()
 //	    // write test artifacts to dir
-//	    // directory persists after test for inspection
+//	    // kept for inspection only when go test runs with -artifacts
 //	}
 //
 // Benefits:

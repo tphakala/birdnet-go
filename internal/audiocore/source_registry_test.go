@@ -478,8 +478,9 @@ func TestSourceRegistry_SyncReconfiguredParams(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// New mode/transport plus non-zero shape overwrites all fields.
-	ok := r.SyncReconfiguredParams(src.ID, "left", "full-stream", transportUDP, 44100, 1)
+	// New mode/transport plus non-zero shape overwrites all fields, including the
+	// estimated marker, which tracks the rate it describes (#4350).
+	ok := r.SyncReconfiguredParams(src.ID, "left", "full-stream", transportUDP, 44100, 1, true)
 	require.True(t, ok)
 
 	got, ok := r.Get(src.ID)
@@ -489,10 +490,13 @@ func TestSourceRegistry_SyncReconfiguredParams(t *testing.T) {
 	assert.Equal(t, transportUDP, got.Transport, "transport must be written back so a later reload does not re-trigger reconfigure")
 	assert.Equal(t, 44100, got.SourceSampleRate, "non-zero source sample rate must be written back")
 	assert.Equal(t, 1, got.SourceChannels, "non-zero source channels must be written back")
+	assert.True(t, got.SourceSampleRateEstimated, "estimated marker must be written back with a non-zero rate")
 
 	// Zero-valued shape must NOT clobber the known values (mirrors the
-	// "desired != 0" guard in sourceNeedsReconfigure); modes/transport are always written.
-	ok = r.SyncReconfiguredParams(src.ID, "right", "audio-only", transportTCP, 0, 0)
+	// "desired != 0" guard in sourceNeedsReconfigure); modes/transport are always
+	// written. The estimated marker must not be cleared either, since it belongs to
+	// the retained rate.
+	ok = r.SyncReconfiguredParams(src.ID, "right", "audio-only", transportTCP, 0, 0, false)
 	require.True(t, ok)
 
 	got, ok = r.Get(src.ID)
@@ -502,6 +506,17 @@ func TestSourceRegistry_SyncReconfiguredParams(t *testing.T) {
 	assert.Equal(t, transportTCP, got.Transport)
 	assert.Equal(t, 44100, got.SourceSampleRate, "zero source sample rate must not clobber the known value")
 	assert.Equal(t, 1, got.SourceChannels, "zero source channels must not clobber the known value")
+	assert.True(t, got.SourceSampleRateEstimated, "estimated marker must not be cleared when the rate is not rewritten")
+
+	// A subsequent successful re-probe (non-zero rate, estimated=false) must clear
+	// the marker, so a recovered source stops force-resampling.
+	ok = r.SyncReconfiguredParams(src.ID, "right", "audio-only", transportTCP, 96000, 2, false)
+	require.True(t, ok)
+
+	got, ok = r.Get(src.ID)
+	require.True(t, ok)
+	assert.Equal(t, 96000, got.SourceSampleRate, "successful re-probe must write the new rate")
+	assert.False(t, got.SourceSampleRateEstimated, "successful re-probe must clear the estimated marker")
 }
 
 // TestSourceRegistry_SyncReconfiguredParams_NotFound verifies the write-back
@@ -510,5 +525,5 @@ func TestSourceRegistry_SyncReconfiguredParams_NotFound(t *testing.T) {
 	t.Parallel()
 	r := newTestRegistry(t)
 
-	assert.False(t, r.SyncReconfiguredParams("nonexistent-id", "left", "full-stream", transportTCP, 48000, 1))
+	assert.False(t, r.SyncReconfiguredParams("nonexistent-id", "left", "full-stream", transportTCP, 48000, 1, false))
 }

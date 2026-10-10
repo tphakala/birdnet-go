@@ -13,7 +13,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	internalerrors "github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -892,12 +892,12 @@ func normalizeDirectCaptureErrorType(scrubbedMsg string) string {
 		if idx := strings.Index(trimmed, "]"); idx > 1 {
 			category := trimmed[1:idx]
 			rest := strings.TrimSpace(trimmed[idx+1:])
-			normalizedType := internalerrors.NormalizeErrorType(strings.ToLower(rest))
+			normalizedType := errors.NormalizeErrorType(strings.ToLower(rest))
 			return category + ":" + normalizedType
 		}
 	}
 
-	return internalerrors.NormalizeErrorType(strings.ToLower(scrubbedMsg))
+	return errors.NormalizeErrorType(strings.ToLower(scrubbedMsg))
 }
 
 // CaptureError captures an error with privacy-compliant context

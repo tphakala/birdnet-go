@@ -277,8 +277,7 @@ func isTimeoutError(err error) bool {
 
 	// Check for net.Error interface which has a Timeout() method.
 	// Most Go standard library timeout errors implement this interface.
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
+	if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
 		return true
 	}
 

@@ -144,8 +144,10 @@ func (c *Handler) registerHealthChecks() {
 		checks.NewCaptureBufferCheck(c.buildCaptureBufferHealthProvider()),
 
 		// Analysis checks (multi-model aware)
+		checks.NewAcousticModelsCheck(c.buildAcousticModelsProvider()),
 		checks.NewModelsLoadedCheck(c.buildModelLoadInfoProvider()),
 		checks.NewPerModelInferenceLatencyCheck(c.buildPerModelInferenceProvider()),
+		checks.NewInferenceFailuresCheck(c.buildInferenceFailuresProvider()),
 		checks.NewDetectionRateCheck(func(ctx context.Context, hours int) (int, error) {
 			ds := c.DS
 			if ds == nil {
@@ -174,6 +176,7 @@ func (c *Handler) registerHealthChecks() {
 			}
 			st := orch.RangeFilterStatus()
 			return checks.RangeFilterStatusInfo{
+				ParticipantsLoaded: st.ParticipantsLoaded,
 				LocationConfigured: st.LocationConfigured,
 				Active:             st.Active,
 				FellBack:           st.FellBack,
@@ -342,6 +345,71 @@ func (c *Handler) buildModelLoadInfoProvider() func() []checks.ModelLoadInfo {
 			})
 		}
 		return result
+	}
+}
+
+// buildAcousticModelsProvider returns a closure that reports the aggregate acoustic-model
+// state for the acoustic_models health check (model de-privilege epic, Phase 4). A nil
+// Processor or orchestrator yields an empty State, which the check reports as Unknown
+// (matching how models_loaded treats a nil provider).
+func (c *Handler) buildAcousticModelsProvider() func() checks.AcousticModelsInfo {
+	return func() checks.AcousticModelsInfo {
+		p := c.Processor
+		if p == nil {
+			return checks.AcousticModelsInfo{}
+		}
+		bn := p.GetBirdNET()
+		if bn == nil {
+			return checks.AcousticModelsInfo{}
+		}
+		// Count distinct enabled models that resolve to a known registry ID, deduping
+		// case variants (["perch_v2","PERCH_V2"]) the way computeThreadAllocation does, so
+		// EnabledCount matches the loaded-model set rather than raw config entries. Guard the
+		// settings snapshot (nil in isolated tests / early init) as the sibling providers do.
+		var enabled []string
+		if s := c.CurrentSettings(); s != nil {
+			enabled = s.Models.Enabled
+		}
+		seen := make(map[string]bool, len(enabled))
+		for _, id := range enabled {
+			if registryID, known := classifier.ResolveConfigModelID(id); known {
+				seen[registryID] = true
+			}
+		}
+		return checks.AcousticModelsInfo{
+			State:        string(bn.AcousticModelsState()),
+			LoadedCount:  len(bn.ModelInfos()),
+			EnabledCount: len(seen),
+			LoadFailures: len(bn.LoadErrors()),
+		}
+	}
+}
+
+// buildInferenceFailuresProvider returns a closure reporting each loaded model's
+// failure run from the classifier's per-model inference health. It returns nil
+// (no loaded model) while no orchestrator is wired.
+func (c *Handler) buildInferenceFailuresProvider() func() []checks.ModelInferenceFailureInfo {
+	return func() []checks.ModelInferenceFailureInfo {
+		p := c.Processor
+		if p == nil {
+			return nil
+		}
+		bn := p.GetBirdNET()
+		if bn == nil {
+			return nil
+		}
+		models := bn.InferenceHealth()
+		out := make([]checks.ModelInferenceFailureInfo, 0, len(models))
+		for i := range models {
+			out = append(out, checks.ModelInferenceFailureInfo{
+				ModelID:             models[i].ModelID,
+				ModelName:           models[i].ModelName,
+				ConsecutiveFailures: models[i].ConsecutiveFailures,
+				Failing:             models[i].Failing,
+				ErrorClass:          models[i].ErrorClass,
+			})
+		}
+		return out
 	}
 }
 

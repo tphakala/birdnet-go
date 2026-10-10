@@ -109,6 +109,14 @@
       "closeModal": "Zavřít modální okno",
       "dismissAlert": "Zavřít upozornění",
       "closeNotification": "Zavřít oznámení",
+      "toastRegion": {
+        "topLeft": "Oznámení, vlevo nahoře",
+        "topCenter": "Oznámení, uprostřed nahoře",
+        "topRight": "Oznámení, vpravo nahoře",
+        "bottomLeft": "Oznámení, vlevo dole",
+        "bottomCenter": "Oznámení, uprostřed dole",
+        "bottomRight": "Oznámení, vpravo dole"
+      },
       "toggleDropdown": "Přepnout rozbalovací nabídku",
       "sortAscending": "Seřadit vzestupně",
       "selectLanguage": "Vybrat jazyk",
@@ -130,7 +138,6 @@
       "selectToday": "Vybrat dnešek",
       "dateSelected": "Vybrané datum: {date}",
       "calendarNavigation": "Pro pohyb v kalendáři použijte šipky, Enter pro výběr, Escape pro zavření",
-      "downloadCsv": "Stáhnout seznam druhů jako CSV",
       "visitEbirdLink": "Otevřít eBird.org v nové kartě",
       "learnEbirdTaxonomyLink": "Otevřít taxonomii eBird v nové kartě",
       "resizeHandle": "Tažením změníte velikost",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Analýza zvuku přetížena",
-        "overloadMessage": "Váš systém zahazuje {dropRate} % zvukových vzorků ze zdroje ''{sourceName}'', protože nestíhá analýzu. Snižte hodnotu překryvu BirdNET v nastavení detekce nebo zvažte výkonnější procesor."
+        "overloadMessage": "Váš systém zahazuje {dropRate} % zvukových vzorků ze zdroje '{sourceName}', protože nestíhá analýzu. Snižte hodnotu překryvu BirdNET v nastavení detekce nebo zvažte výkonnější procesor."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime není k dispozici",
@@ -474,6 +481,16 @@
         "notRegisteredTitle": "Žádný model neanalyzuje {sourceName}",
         "notRegisteredMessage": "K {models} na zdroji zvuku \"{sourceName}\" se nedostává žádný zvuk, takže se nevytvářejí žádné detekce. Otevřete Systém > Modely AI, zkontrolujte jeho stav pro jednotlivé zdroje a ověřte, že je zdroj zvuku připojen a odesílá zvuk."
       },
+      "acousticModels": {
+        "noneTitle": "Není povolen žádný akustický model",
+        "noneMessage": "Není načten žádný akustický model, takže zvuk je zachycován, ale není analyzován. Povolte model v Nastavení > Analýza, nebo nějaký nainstalujte z galerie modelů.",
+        "loadFailedTitle": "Akustický model se nepodařilo načíst",
+        "loadFailedMessage": "Povolený akustický model se nepodařilo načíst, takže zvuk je zachycován, ale není analyzován. Zkontrolujte model na stránce Systém > Modely AI."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# model má lepší sestavení pro tento systém} few {# modely mají lepší sestavení pro tento systém} many {# modelů má lepší sestavení pro tento systém} other {# modelů má lepší sestavení pro tento systém}}",
+        "message": "Sestavení lépe odpovídající hardwaru nebo poloze tohoto systému je k dispozici pro: {models}. Otevřete Nastavení > Analýza > Modely a zvolte Optimalizovat."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuální hodnota: {value} % (práh: {threshold} %)",
@@ -493,6 +510,17 @@
           "diskFull": "Disk je plný - uvolněte místo",
           "permissionDenied": "Přístup odepřen - zkontrolujte oprávnění souboru nebo služby"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} selhává při každé analýze",
+        "message": "{modelName} je načten, ale posledních {failures} analýz za sebou selhalo na {runtime}: inference vrátila chybu. Zvuk je zachycován, ale tento model nic nedetekuje. Zkontrolujte model na stránce Systém > Modely AI.",
+        "nonFiniteMessage": "{modelName} je načten, ale posledních {failures} analýz za sebou selhalo na {runtime}: model vrátil neplatné skóre (NaN nebo nekonečné). Zvuk je zachycován, ale tento model nic nedetekuje. Zkontrolujte model na stránce Systém > Modely AI."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Překryv analýzy omezen pro toto zařízení",
+        "cadenceCappedMessage": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} při nastaveném překryvu {configured} s překračuje změřenou kapacitu tohoto zařízení, proto se zvuk analyzuje s překryvem {effective} s. Filtr falešně pozitivních detekcí proto může vyžadovat méně potvrzení. Vaše uložená nastavení se nemění; viz Nastavení > Analýza.",
+        "cadenceOverloadedTitle": "Toto zařízení nestíhá analýzu zvuku",
+        "cadenceOverloadedMessage": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} překračuje změřenou kapacitu tohoto zařízení i bez překryvu, proto se analýza může zpožďovat a detekce mohou být vynechány. Povolte méně modelů nebo zvukových zdrojů, nebo zvolte rychlejší variantu modelu."
       }
     },
     "loading": "Načítání oznámení…"
@@ -749,6 +777,16 @@
       "recentDetectionsFetch": "Nepodařilo se získat nedávné detekce: {status}",
       "recentDetectionsLoad": "Nepodařilo se načíst nedávné detekce",
       "configFetch": "Nepodařilo se získat konfiguraci dashboardu: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Není povolen žádný akustický model",
+      "noneMessage": "Zvuk se zaznamenává, ale není analyzován. Povolte model v galerii modelů a začněte detekovat druhy.",
+      "noneAction": "Otevřít galerii modelů",
+      "loadFailedTitle": "Akustický model se nepodařilo načíst",
+      "loadFailedMessage": "Povolený model se nepodařilo načíst, takže se neanalyzuje žádný zvuk. Stránka Modely AI ukazuje, který model selhal a proč.",
+      "loadFailedAction": "Zobrazit stav Modely AI",
+      "failingTitle": "{count, plural, one {Model selhává při každé analýze} few {# modely selhávají při každé analýze} many {# modelů selhává při každé analýze} other {# modelů selhává při každé analýze}}",
+      "failingMessage": "{count, plural, one {{models} je načten, ale každá analýza selhává, takže nic nedetekuje.} few {{models} jsou načteny, ale každá analýza selhává, takže nic nedetekují.} many {{models} jsou načteny, ale každá analýza selhává, takže nic nedetekují.} other {{models} jsou načteny, ale každá analýza selhává, takže nic nedetekují.}} Stránka Modely AI ukazuje backend a chybu."
     },
     "banner": {
       "title": "Název",
@@ -1011,7 +1049,8 @@
       "error": "Chyba při načítání detekce: {error}",
       "loadingResults": "Načítání {count} výsledků...",
       "thumbnailLoading": "Načítání náhledu {species}...",
-      "thumbnailLoaded": "Náhled {species} načten"
+      "thumbnailLoaded": "Náhled {species} načten",
+      "resultsPerPage": "Počet výsledků na stránku"
     },
     "errors": {
       "notFound": "Detekce nebyla nalezena. Možná byla odstraněna nebo je ID nesprávné.",
@@ -1781,6 +1820,8 @@
       "sourceNotRunning": "neanalyzuje",
       "sourceNotRunningTooltip": "Tento zdroj je v nastavení přiřazen k modelu, ale jeho zvuk se k modelu nedostává, takže nevytváří žádné detekce. Zkontrolujte, zda je zdroj zvuku připojen a odesílá zvuk.",
       "modelNotAnalyzingTooltip": "Jeden nebo více zdrojů zvuku přiřazených k tomuto modelu mu neposílá zvuk, takže nevytváří žádné detekce. Viz níže uvedené zdroje.",
+      "sourcesDegraded": "{count} z {total} zdrojů mimo provoz",
+      "sourcesDegradedTooltip": "Některé, ale ne všechny zdroje zvuku tohoto modelu jsou mimo provoz, takže model stále analyzuje prostřednictvím těch funkčních. Konkrétní zdroj mimo provoz a způsob, jak jej opravit, jsou uvedeny níže.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -1822,7 +1863,14 @@
       "fp16Help": "16bitová čísla s plovoucí desetinnou čárkou. Hardware s podporou může být rychlejší a spotřebuje méně paměti.",
       "invocationsHelp": "Celkový počet analyzovaných segmentů od spuštění.",
       "noModelsHint": "Zatím žádný zdroj zvuku?",
-      "noModelsHintLink": "Nakonfigurovat zdroje zvuku"
+      "noModelsHintLink": "Nakonfigurovat zdroje zvuku",
+      "modelFailing": "každá analýza selhává",
+      "lastSuccess": "Poslední úspěch",
+      "lastSuccessHelp": "Kdy tento model naposledy analyzoval zvuk bez chyby.",
+      "lastSuccessNever": "Od načtení modelu žádný",
+      "modelFailingHelp": "{reason} Zkuste jiné sestavení tohoto modelu v Nastavení > Analýza > Modely nebo zkontrolujte backend a přesnost uvedené výše.",
+      "modelFailingReasonNonFinite": "Všechny nedávné analýzy selhaly, protože model vrátil neplatné skóre (NaN nebo nekonečné), takže nic nedetekuje.",
+      "modelFailingReasonError": "Všechny nedávné analýzy selhaly, protože inference vrátila chybu, takže model nic nedetekuje."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2338,7 +2386,7 @@
           "title": "Filtr falešně pozitivních detekcí",
           "description": "Sníží počet falešných detekcí vyžadováním více potvrzení napříč překrývajícími se zvukovými segmenty",
           "level": {
-            "label": "Úroveň filtru"
+            "label": "Síla filtru falešně pozitivních detekcí"
           },
           "detectionCount": "Vyžadováno {count} potvrzení. {description}",
           "levels": {
@@ -2346,10 +2394,9 @@
             "lenient": "Pro nekvalitní zvuk (RTSP kamery, mikrofony webkamer)",
             "moderate": "Vyvážené pro typické hobby konfigurace",
             "balanced": "Původní chování před zářím 2025",
-            "strict": "Vyžaduje RPi 4+. Pro kvalitní mikrofony",
-            "maximum": "Vyžaduje RPi 4+. Pro mikrofony profesionální třídy"
+            "strict": "Pro kvalitní mikrofony",
+            "maximum": "Pro mikrofony profesionální třídy"
           },
-          "hardwareNote": "Úrovně Přísný a Maximální vyžadují vyšší nastavení překryvu a více CPU prostředků. Pro tyto úrovně je nutný hardware RPi 4 nebo lepší.",
           "overlapAdjusted": "Nastavení překryvu bylo automaticky upraveno na {overlap}s, aby splnilo požadavky filtru",
           "overlapReduced": "Nastavení překryvu bylo sníženo na {overlap}s, aby odpovídalo úrovni filtru",
           "levelNames": {
@@ -2361,14 +2408,38 @@
             "maximum": "Maximální",
             "unknown": "Neznámý"
           },
-          "warningOff": "Při vypnutém filtrování je každá detekce nad prahem spolehlivosti okamžitě přijata. To obvykle vede k několika falešným detekcím denně. I mírné filtrování výrazně zlepšuje kvalitu výsledků."
+          "warningOff": "Při vypnutém filtrování je každá detekce nad prahem spolehlivosti okamžitě přijata. To obvykle vede k několika falešným detekcím denně. I mírné filtrování výrazně zlepšuje kvalitu výsledků.",
+          "readoutTitle": "Aktuálně požadovaná potvrzení",
+          "readoutPreviewTitle": "Požadovaná potvrzení po uložení (odhad)",
+          "readoutIntro": "Detekce je přijata, když se shodne dostatek analyzačních oken v rámci {seconds} sekund.",
+          "readoutLine": "{model}: {count} z {windows} oken, nové okno každých {step} s",
+          "readoutPreview": "Odhad podle neuložených změn. Limit zařízení se po uložení znovu ověří.",
+          "readoutPending": "Uložená nastavení se právě uplatňují. Dokud se nenačtou aktualizované počty, jsou tyto hodnoty odhadem.",
+          "capNoticeTitle": "Překryv omezen na výkon tohoto zařízení",
+          "capNotice": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} při nastaveném překryvu {configured} s překračuje změřenou kapacitu tohoto zařízení, proto se zvuk analyzuje s překryvem {effective} s. Filtr proto může vyžadovat méně potvrzení. Vaše uložená nastavení se nemění.",
+          "overloadedNoticeTitle": "Toto zařízení nestíhá analýzu",
+          "overloadedNotice": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} překračuje změřenou kapacitu tohoto zařízení i bez překryvu. Analýza se může zpožďovat a detekce mohou být vynechány. Povolte méně modelů nebo zvukových zdrojů, nebo zvolte rychlejší variantu modelu.",
+          "unknownLatency": "Dobu zpracování se nepodařilo změřit pro {models}, proto se při omezování překryvu nezapočítává. Analýza se přesto může zpožďovat.",
+          "cpuNote": "Vyšší síla analyzuje překrývající se zvuk častěji, což stojí čas CPU pro každý povolený model a zvukový zdroj. BirdNET-Go automaticky omezí překryv na to, co toto zařízení zvládne zpracovat."
         },
         "rangeFilter": {
           "title": "Filtr výskytu",
           "description": "Omezit detekci na druhy pravděpodobné ve vašem geografickém regionu",
           "stationLocation": {
             "label": "Poloha stanice",
-            "helpText": "Poloha stanice, používaná pro data o počasí a k omezení druhů ptáků na ty, které jsou v regionu pravděpodobné."
+            "helpText": "Poloha stanice, používaná pro data o počasí a k omezení druhů ptáků na ty, které jsou v regionu pravděpodobné.",
+            "automaticLocation": "Automatické určení polohy",
+            "useCurrentLocation": "Použít polohu prohlížeče",
+            "locationHelp": "Vyplní souřadnice pomocí polohy tohoto prohlížeče.",
+            "locating": "Zjišťování polohy...",
+            "accuracy": "Odhadovaná přesnost: do {accuracy} m",
+            "locationDetected": "Poloha prohlížeče byla zjištěna.",
+            "geolocationUnsupported": "Tento prohlížeč nepodporuje určování polohy zařízení. Zadejte souřadnice ručně nebo použijte mapu.",
+            "geolocationInsecureHelp": "Vyžaduje HTTPS nebo localhost. Vyhledejte místo nebo použijte mapu.",
+            "geolocationDenied": "Přístup k poloze byl zamítnut. Zadejte souřadnice ručně nebo použijte mapu.",
+            "geolocationUnavailable": "Zařízení nedokázalo určit svou polohu. Zadejte souřadnice ručně nebo použijte mapu.",
+            "geolocationTimedOut": "Vypršel časový limit požadavku na polohu. Zkuste to znovu, zadejte souřadnice ručně nebo použijte mapu.",
+            "geolocationFailed": "Polohu zařízení se nepodařilo určit. Zadejte souřadnice ručně nebo použijte mapu."
           },
           "latitude": {
             "label": "Zeměpisná šířka",
@@ -3157,7 +3228,11 @@
         "enable": "Povolit nahrávání do BirdWeather",
         "token": {
           "label": "Token BirdWeather",
-          "helpText": "Váš jedinečný token BirdWeather."
+          "helpText": "Váš jedinečný token BirdWeather.",
+          "errors": {
+            "required": "Zadejte token BirdWeather, nebo BirdWeather vypněte.",
+            "format": "Token BirdWeather má 24 písmen a číslic."
+          }
         },
         "threshold": {
           "label": "Práh nahrávání",
@@ -3233,7 +3308,7 @@
             "label": "Název zařízení",
             "helpText": "Základní název zařízení, jak se zobrazují v Home Assistant. Každý zdroj zvuku bude mít své vlastní zařízení propojené s tímto hlavním zařízením BirdNET-Go."
           },
-          "sensorsNote": "<strong>Vytvořené senzory:</strong> Pro každý zdroj zvuku Home Assistant obdrží: Poslední druh, Jistotu, Vědecký název a Úroveň zvuku (pokud je povolena). Můstkové zařízení obsahuje stav dostupnosti online/offline.",
+          "sensorsNote": "<strong>Vytvořené senzory:</strong> Pro každý zdroj zvuku Home Assistant obdrží: Poslední druh, Jistotu, Vědecký název a Úroveň zvuku (pokud je povolena). Můstkové zařízení obsahuje stav dostupnosti online/offline. Detekční senzory každého zdroje čtou vlastní MQTT téma daného zdroje, &lt;base_topic&gt;/sources/&lt;source_id&gt;, a jeho senzor Úroveň zvuku čte podtéma &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, takže detekce z jednoho zdroje nikdy neresetuje senzory jiného zdroje.",
           "discovery": {
             "button": "Odeslat zjišťování",
             "success": "Zprávy o zjišťování byly odeslány do Home Assistant",
@@ -3279,7 +3354,8 @@
             "none": "Žádný",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3300,6 +3376,16 @@
             "helpText": "Vyberte jednotky pro teplotu a rychlost větru (m = metrické, e = imperiální, h = UK hybridní)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "API klíč Pirate Weather",
+            "helpText": "Zadejte svůj API klíč Pirate Weather. Vyžaduje se pro data o počasí."
+          },
+          "endpoint": {
+            "label": "API endpoint",
+            "helpText": "V případě potřeby přepište výchozí endpoint API Pirate Weather. Pokud zůstane prázdný, použije se ve výchozím nastavení https://api.pirateweather.net/forecast."
+          }
+        },
         "notes": {
           "none": "Nebudou získávána žádná data o počasí.",
           "yrno": {
@@ -3307,7 +3393,8 @@
             "freeService": "Yr je bezplatná služba dat o počasí. Pro více informací navštivte <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Použití OpenWeather vyžaduje API klíč, zaregistrujte se pro bezplatný API klíč na <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Vyžaduje API klíč Weather Underground a platné ID stanice PWS. Podrobnosti najdete na <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>."
+          "wunderground": "Vyžaduje API klíč Weather Underground a platné ID stanice PWS. Podrobnosti najdete na <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>.",
+          "pirateweather": "Použití Pirate Weather vyžaduje API klíč, zaregistrujte se na <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API klíč",
@@ -3680,6 +3767,7 @@
         "dataOutputTitle": "Výstup dat o úrovni zvuku",
         "dataOutputDescription": "Pokud je povoleno, měření úrovně zvuku jsou zveřejňována prostřednictvím:",
         "mqttTopic": "MQTT téma:",
+        "mqttSourceTopic": "MQTT téma pro jednotlivé zdroje (s Home Assistant discovery):",
         "sseEndpoint": "Koncový bod SSE:",
         "prometheusMetrics": "Metriky Prometheus:"
       },
@@ -3741,6 +3829,8 @@
         "pathHelp": "Adresář, kam se budou ukládat zvukové klipy. Relativní cesty jsou vůči adresáři aplikace. Příklad: 'clips/' nebo '/var/audio/birds/'",
         "typeLabel": "Formát zvuku",
         "typeHelp": "Formát zvuku pro uložené klipy. WAV a FLAC jsou bezeztrátové (nejlepší kvalita, větší soubory). MP3, AAC a Opus jsou ztrátové (menší soubory, mírná ztráta kvality).",
+        "ultrasonicTypeLabel": "Ultrazvukový formát",
+        "ultrasonicTypeHelp": "Bezeztrátový formát (WAV nebo FLAC) používaný pouze pro záznamy netopýrů a ultrazvuku nad 48 kHz. Ty se ukládají v plné zdrojové vzorkovací frekvenci namísto výše uvedeného formátu, takže nedochází ke ztrátě ultrazvukových detailů.",
         "bitrateLabel": "Datový tok",
         "bitrateHelp": "Datový tok komprese zvuku pro ztrátové formáty. Rozsah: {min}-{max} kbps. Vyšší hodnoty poskytují lepší kvalitu, ale větší soubory.",
         "losslessBitrateValue": "N/A - Bez ztráty kvality",
@@ -3809,7 +3899,17 @@
       },
       "models": {
         "recommendBoth": "Pro nejlepší pokrytí detekce druhů se doporučuje spustit oba modely BirdNET a Perch společně.",
-        "perchOnlyWarning": "Samotný Perch produkuje méně detekcí. Pro smysluplné výsledky snižte práh spolehlivosti na 0.50, nebo pro lepší pokrytí aktivujte i BirdNET."
+        "perchOnlyWarning": "Samotný Perch produkuje méně detekcí. Pro smysluplné výsledky snižte práh spolehlivosti na 0.50, nebo pro lepší pokrytí aktivujte i BirdNET.",
+        "loading": "Načítání detekčních modelů...",
+        "noneEnabledTitle": "Není povolen žádný detekční model.",
+        "noneEnabledHelp": "Tento zdroj můžete stále uložit. Jeho zvuk bude analyzován výchozími modely, jakmile bude některý povolen.",
+        "noneEnabledLink": "Otevřít galerii modelů",
+        "noneAvailable": "Na tomto serveru nejsou povoleny žádné detekční modely.",
+        "loadFailedWarning": "Detekční model se nepodařilo načíst, takže se tento zdroj nebude analyzovat, dokud se neobnoví.",
+        "loadFailedLink": "Zobrazit stav Modely AI",
+        "defaultBadge": "{models} (výchozí)",
+        "defaultPendingBadge": "Výchozí modely",
+        "noneBadge": "Není načten žádný model"
       }
     },
     "security": {
@@ -4379,7 +4479,7 @@
       "dynamicThreshold": {
         "tabLabel": "Naučené",
         "title": "Naučené prahy",
-        "description": "Tato stránka zobrazuje runtime data dynamického prahu. Pokud je povolen v Hlavních nastaveních → Detekce, prahy se automaticky upravují na základě více detekcí s vysokou spolehlivostí. Druhy zde zobrazené se považují za existující na tomto místě.",
+        "description": "Tato stránka zobrazuje runtime data dynamického prahu. Pokud je povolen, prahy se automaticky upravují na základě více detekcí s vysokou spolehlivostí. Druhy zde zobrazené se považují za existující na tomto místě.",
         "stats": {
           "active": "Aktivní",
           "atMinimum": "Na minimu",
@@ -5031,6 +5131,33 @@
       "viewDetections": "Zobrazit detekce druhu {name}",
       "largeView": "Velké zobrazení druhu {name}",
       "clickToView": "Klikněte pro zobrazení detekcí"
+    },
+    "locationMap": {
+      "mapLabel": "Mapa pro výběr polohy stanice",
+      "expandedMapLabel": "Mapa na celou obrazovku pro výběr polohy stanice",
+      "zoomIn": "Přiblížit",
+      "zoomOut": "Oddálit",
+      "expand": "Rozbalit mapu na celou obrazovku",
+      "search": {
+        "label": "Hledat místo",
+        "placeholder": "Město nebo adresa",
+        "submit": "Hledat",
+        "disclosure": "Hledání se odesílá službě Photon (photon.komoot.io), která používá data OpenStreetMap.",
+        "openPhoton": "Otevřít Photon na nové kartě",
+        "searching": "Hledání...",
+        "results": "{count, plural, one {Nalezeno # místo} few {Nalezena # místa} other {Nalezeno # míst}}",
+        "noResults": "Nic nenalezeno. Zkuste jiný název nebo klikněte na mapu.",
+        "errorNetwork": "Vyhledávání míst není dostupné. Zkontrolujte připojení k internetu. Stále můžete kliknout na mapu nebo zadat souřadnice.",
+        "errorRateLimited": "Příliš mnoho hledání. Chvíli počkejte a zkuste to znovu.",
+        "errorUnavailable": "Vyhledávací služba neodpověděla. Stále můžete kliknout na mapu nebo zadat souřadnice.",
+        "kind": {
+          "city": "Město",
+          "town": "Městečko",
+          "village": "Vesnice",
+          "station": "Nádraží",
+          "airport": "Letiště"
+        }
+      }
     }
   },
   "connectivity": {
@@ -5117,6 +5244,7 @@
       "birdweatherClientFailed": "BirdWeather klienta se nepodařilo vytvořit",
       "noWeatherProvider": "Není vybrán žádný poskytovatel počasí",
       "openWeatherKeyRequired": "API klíč OpenWeather je povinný",
+      "pirateWeatherKeyRequired": "Je vyžadován API klíč Pirate Weather",
       "processorUnavailable": "Procesor není k dispozici",
       "discoveryFailed": "Objevování zařízení Home Assistant se nepodařilo spustit"
     },
@@ -5181,12 +5309,37 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Obnovit stránku"
+    },
     "skip": "Přeskočit",
     "back": "Zpět",
     "next": "Další",
     "done": "Hotovo",
     "progress": "Krok {current} z {total}",
     "progressLabel": "Průběh průvodce",
+    "status": {
+      "saving": "Ukládání...",
+      "loadingStep": "Načítání kroku..."
+    },
+    "errors": {
+      "saveFailed": "Tento krok se nepodařilo uložit. Zkontrolujte připojení a zkuste to znovu, nebo přeskočte nastavení a změňte to později v Nastavení.",
+      "saveRejected": "Nastavení v tomto kroku nebylo přijato. Zkontrolujte hodnoty a zkuste to znovu, nebo přeskočte nastavení a změňte to později v Nastavení.",
+      "stepLoadFailed": "Tento krok se nepodařilo načíst. Stiskněte Zkusit znovu, nebo obnovte stránku.",
+      "stepLoadFailedReload": "Tento krok se stále nepodařilo načíst. Obnovte stránku a zkuste to znovu; volby uložené v předchozích krocích zůstanou zachovány.",
+      "audioSourceSaveUnfinished": "Změna zdroje zvuku nebyla dokončena. Zkontrolujte zdroje zvuku v sekci Nastavení > Zvuk.",
+      "saveUnfinished": "Některé změny z nastavení se neuložily. Zkontrolujte je v Nastavení."
+    },
+    "reasons": {
+      "completeStep": "Pro pokračování dokončete tento krok."
+    },
+    "leaveConfirm": {
+      "title": "Opustit nastavení?",
+      "message": "Nastavení se znovu neotevře. Volby uložené v předchozích krocích zůstanou zachovány; změny v tomto kroku se neuloží. Vše můžete později změnit v Nastavení.",
+      "messageSaving": "Nastavení se znovu neotevře. Volby uložené v předchozích krocích zůstanou zachovány. Tento krok se stále ukládá a některé nebo všechny jeho změny se nemusí zachovat. Vše můžete později změnit v Nastavení.",
+      "stay": "Pokračovat v nastavení",
+      "leave": "Opustit nastavení"
+    },
     "whatsNew": {
       "title": "Co je nového ve verzi {version}"
     },
@@ -5209,13 +5362,6 @@
         "locationHelp": "Vaše poloha pomáhá filtrovat druhy na ty, které jsou ve vaší oblasti pravděpodobné",
         "latitudeLabel": "Zeměpisná šířka",
         "longitudeLabel": "Zeměpisná délka",
-        "useMyLocation": "Použít moji polohu",
-        "locationDetected": "Poloha zjištěna",
-        "locationError": "Polohu se nepodařilo zjistit. Zadejte prosím souřadnice ručně.",
-        "locationDenied": "Přístup k poloze byl odepřen. Zadejte prosím souřadnice ručně.",
-        "geolocationRequiresHttps": "Poloha v prohlížeči vyžaduje HTTPS. Zadejte prosím souřadnice ručně nebo použijte mapu.",
-        "geolocationDenied": "Oprávnění k poloze bylo odepřeno. Zadejte prosím souřadnice ručně nebo použijte mapu.",
-        "geolocationFailed": "Vaši polohu se nepodařilo určit. Zadejte prosím souřadnice ručně nebo použijte mapu.",
         "localesLoading": "Načítání jazyků…",
         "localesLoadFailed": "Nepodařilo se načíst jazykové možnosti. Jako výchozí byla zvolena angličtina."
       },
@@ -5231,7 +5377,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Zadejte URL vašeho RTSP audio streamu",
         "additionalSourcesHint": "Další zvukové zdroje můžete přidat později v Nastavení.",
-        "configureLater": "Přeskočit - nastavit později"
+        "devicesLoadFailed": "Zvuková zařízení v tomto systému se nepodařilo vypsat.",
+        "useStreamInstead": "Použít místo toho RTSP stream",
+        "setUpLater": "Nastavit zvuk později",
+        "setUpLaterChosen": "Zvuk teď nebude nastaven. Zvukovou kartu nebo stream můžete přidat později v Nastavení.",
+        "streamReplacesSoundCards": "Zvukové karty přestanou zachytávat, když použijete stream. Můžete je znovu přidat v Nastavení.",
+        "soundCardReplacesStream": "Stream zobrazený u volby streamu se vypne, když použijete zvukovou kartu. Můžete jej znovu zapnout v Nastavení.",
+        "reasons": {
+          "chooseDevice": "Vyberte zvukové zařízení, nebo nastavte zvuk později.",
+          "devicesFailed": "Zvuková zařízení se nepodařilo vypsat. Zkuste to znovu, použijte stream, nebo nastavte zvuk později.",
+          "noDevices": "Nebylo nalezeno žádné zvukové zařízení. Použijte stream, nebo nastavte zvuk později.",
+          "enterUrl": "Zadejte URL streamu, nebo nastavte zvuk později.",
+          "urlScheme": "Zadejte úplnou URL streamu, která začíná rtsp:// nebo rtsps:// a neobsahuje mezery."
+        }
       },
       "detection": {
         "title": "Práh detekce",
@@ -5243,6 +5401,7 @@
         "highAccuracyDesc": "Méně falešně pozitivních, ale může některé ptáky minout",
         "highSensitivity": "Vysoká citlivost",
         "highSensitivityDesc": "Více detekcí, ale i více falešně pozitivních",
+        "descriptionStored": "Vyberte, jak přísná má identifikace ptáků být. Aktuálně: {threshold}, žádná předvolba.",
         "threshold": "Práh spolehlivosti",
         "fpFilterNote": "Až bude váš systém běžet a osvědčí se, můžete v Nastavení povolit filtr falešně pozitivních detekcí pro další snížení nesprávných detekcí."
       },
@@ -5252,10 +5411,12 @@
         "privacyFilterHelp": "Odfiltruje detekce, když jsou v blízkosti mikrofonu zachyceny lidské hlasy",
         "birdweatherLabel": "Sdílet detekce se službou BirdWeather",
         "birdweatherHelp": "Přispějte svými detekcemi ptáků do komunitní sítě BirdWeather",
-        "birdweatherIdLabel": "ID stanice BirdWeather",
-        "birdweatherIdPlaceholder": "Zadejte ID vaší stanice BirdWeather",
         "errorReportingLabel": "Odesílat anonymní hlášení chyb",
-        "errorReportingHelp": "Pomozte vylepšit BirdNET-Go odesíláním anonymních hlášení chyb, když něco selže"
+        "errorReportingHelp": "Pomozte vylepšit BirdNET-Go odesíláním anonymních hlášení chyb, když něco selže",
+        "reasons": {
+          "enterToken": "Zadejte token BirdWeather, nebo vypněte sdílení s BirdWeather.",
+          "tokenFormat": "Token BirdWeather má 24 písmen a číslic."
+        }
       },
       "responsibleUse": {
         "title": "Zodpovědné používání BirdNET-Go",
@@ -5494,6 +5655,8 @@
         "catalogLoadFailed": "Nepodařilo se načíst katalog modelů",
         "installFailed": "Nepodařilo se spustit instalaci modelu",
         "removeFailed": "Nepodařilo se odstranit model",
+        "removeHasDependents": "{name} je vyžadován modely {models}. Nejprve tyto modely odeberte.",
+        "operationInProgress": "Již probíhá instalace, přeinstalace nebo odstranění modelu ({name}). Zkuste to znovu po jejím dokončení.",
         "actionFailed": "Došlo k problému s {name}",
         "downloadSourceHint": "Pokud je huggingface.co ve vaší síti blokováno nebo pomalé, nastavte zrcadlový server v sekci Zdroj stahování níže.",
         "goToDownloadSource": "Přejít na Zdroj stahování",

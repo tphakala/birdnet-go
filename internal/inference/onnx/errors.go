@@ -1,15 +1,16 @@
 package onnx
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 var (
-	ErrModelPathRequired = errors.New("birdnet: model path is required")
-	ErrLabelsRequired    = errors.New("birdnet: labels are required")
-	ErrEmptyBatch        = errors.New("birdnet: batch must contain at least one segment")
-	ErrSessionClosed     = errors.New("birdnet: session is closed")
+	ErrModelPathRequired = errors.NewStd("birdnet: model path is required")
+	ErrLabelsRequired    = errors.NewStd("birdnet: labels are required")
+	ErrEmptyBatch        = errors.NewStd("birdnet: batch must contain at least one segment")
+	ErrSessionClosed     = errors.NewStd("birdnet: session is closed")
 )
 
 type InputSizeError struct {
@@ -87,7 +88,7 @@ func (e *InvalidDateError) Error() string {
 }
 
 // ErrEmptyRangeFilterBatch is returned when PredictBatchRaw receives zero inputs.
-var ErrEmptyRangeFilterBatch = errors.New("birdnet: range filter batch must contain at least one input")
+var ErrEmptyRangeFilterBatch = errors.NewStd("birdnet: range filter batch must contain at least one input")
 
 // RangeFilterBatchInputError is returned when the input slice length doesn't match batchSize * 3.
 type RangeFilterBatchInputError struct {

@@ -46,6 +46,10 @@ sudo rm -rf /root/birdnet-go-app
 
 No. DietPi packaging is maintained by the DietPi project, not here.
 
+### Should my Docker Compose, Portainer or Unraid install use host or bridge networking?
+
+For a new Linux install that does not use `install.sh`, use host networking (`Docker/docker-compose.host.yml`, the Portainer host network template, the Unraid host template (best effort, untested on real Unraid), or `docker run --network host`): multicast reaches the app directly, with no host socket mounts needed. Bridge networking remains supported, and existing installs are never switched automatically. `install.sh` keeps using bridge networking. Details, caveats and an optional migration checklist are in the [Docker Compose Guide](docker_compose_guide.md#choosing-a-network-mode).
+
 ### Why are my times shown in UTC (or the wrong timezone)?
 
 BirdNET-Go displays times in the timezone of the server/container it runs in, not your browser's. The `install.sh` setup sets this for you; for manual Docker or Docker Compose deployments you need to set `TZ` yourself (e.g. `TZ=America/New_York` in the container environment). On a native/systemd install, set the host timezone with `sudo timedatectl set-timezone Area/City`. There is no per-viewer browser conversion, so a UTC container shows UTC to everyone.
@@ -246,7 +250,7 @@ Run the `reset_auth.sh` script from the repo against your `config.yaml`; it back
 
 ### How do I get rid of the `:8080` in the URL?
 
-Put a reverse proxy in front (it can serve on port 80/443 and proxy to 8080). install.sh binds port 80 for AutoTLS renewal, so you can't simply move the web port to 80 without conflict.
+Put a reverse proxy in front (it can serve on port 80/443 and proxy to 8080). install.sh binds port 80 for AutoTLS renewal, so you can't simply move the web port to 80 without conflict. With host networking (Docker Compose, Portainer, Unraid or `docker run --network host`), the app runs as a non-root user and cannot listen on port 80 at all, so a proxy on the same host forwards to `localhost:<WEB_PORT>` instead.
 
 ## Integrations and notifications
 

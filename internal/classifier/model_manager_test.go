@@ -549,9 +549,7 @@ func TestModelManager_ReinstallStaleVariantValidatesBeforeUnload(t *testing.T) {
 	// model is never stranded.
 	primaryBN := &BirdNET{ModelInfo: ModelInfo{ID: entry.RegistryID}}
 	orch := &Orchestrator{
-		ModelInfo: primaryBN.ModelInfo,
-		models:    map[string]*modelEntry{entry.RegistryID: {instance: primaryBN}},
-		primary:   primaryBN,
+		models: map[string]*modelEntry{entry.RegistryID: {instance: primaryBN}},
 	}
 	mm := NewModelManager(t.TempDir(), orch, nil)
 	// Simulate an install whose variant was later dropped from the catalog.
@@ -640,7 +638,7 @@ func TestModelManager_UninstallRejectsPermanent(t *testing.T) {
 	// variant may be swapped, never removed.
 	entry, ok := GetCatalogEntry("birdnet-v2.4")
 	require.True(t, ok, "birdnet-v2.4 must be present in the catalog")
-	require.Equal(t, permanentRegistryID, entry.RegistryID, "birdnet-v2.4 must carry the permanent registry id")
+	require.Equal(t, RegistryIDBirdNETV24, entry.RegistryID, "birdnet-v2.4 must carry the permanent registry id")
 
 	mm := NewModelManager(t.TempDir(), nil, nil)
 	mm.ScanInstalled()
@@ -1080,6 +1078,15 @@ func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
 	}
 }
 
+// errInjectedUnloadFailure is the injected unload error the tests feed through the
+// ModelManager.unloadFn seam to force the unload-failure rollback branches of
+// Uninstall, Reinstall, and replaceVariant (unreachable after Phase 3 removed the
+// primary-model unload refusal, but still reachable in production via a concurrent
+// unload/delete racing the loaded-check). Its text is deliberately distinct from the
+// callers' "model still in use" wrapper so a test asserting that phrase proves the
+// caller built its own abort error rather than returning this verbatim.
+var errInjectedUnloadFailure = errors.Newf("injected unload failure").Build()
+
 func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 	t.Parallel()
 
@@ -1102,19 +1109,17 @@ func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("data"), 0o644))
 	}
 
-	// Orchestrator with the model present in the models map AND set as
-	// primary. IsModelLoaded returns true, but UnloadModel refuses to
-	// unload the primary model, simulating a "model still in use" failure.
-	primaryBN := &BirdNET{ModelInfo: ModelInfo{ID: entry.RegistryID}}
+	// The model is present in the orchestrator's map so IsModelLoaded returns true and
+	// Uninstall enters its unload step; the injected seam then fails that unload,
+	// exercising the abort branch.
 	orch := &Orchestrator{
-		ModelInfo: primaryBN.ModelInfo, // mirror the primary, as NewOrchestrator does
 		models: map[string]*modelEntry{
-			entry.RegistryID: {instance: primaryBN},
+			entry.RegistryID: {},
 		},
-		primary: primaryBN,
 	}
 
 	mm := NewModelManager(modelsDir, orch, nil)
+	mm.unloadFn = func(_ string) error { return errInjectedUnloadFailure }
 	mm.ScanInstalled()
 	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before uninstall attempt")
 
@@ -1205,13 +1210,12 @@ func TestModelManager_UninstallDeregistersWhenFileDeletionFails(t *testing.T) {
 		"model must be de-registered even when some files could not be deleted")
 }
 
-// TestModelManager_ReinstallRefusesLoadedPrimary documents and guards the
-// behavior of the new pre-overwrite unload step in Reinstall: when the target
-// is the loaded primary model (which UnloadModel refuses to unload), Reinstall
-// aborts with "model still in use" before touching any files, and the model
-// stays installed. This is a deliberate behavior change from the prior code,
-// which overwrote files in place even while the primary was loaded.
-func TestModelManager_ReinstallRefusesLoadedPrimary(t *testing.T) {
+// TestModelManager_ReinstallAbortsOnUnloadFailure documents and guards the
+// pre-overwrite unload step in Reinstall: when the loaded model cannot be unloaded,
+// Reinstall aborts with "model still in use" before touching any files, and the
+// model stays installed. The unload failure is injected via the unloadFn seam
+// (production reaches this only via a concurrent unload/delete race).
+func TestModelManager_ReinstallAbortsOnUnloadFailure(t *testing.T) {
 	t.Parallel()
 
 	entry, ok := GetCatalogEntry("perch-v2")
@@ -1232,25 +1236,23 @@ func TestModelManager_ReinstallRefusesLoadedPrimary(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("data"), 0o644))
 	}
 
-	// Model loaded AND set as primary: UnloadModel refuses the primary, so the
-	// new pre-overwrite guard must abort the reinstall.
-	primaryBN := &BirdNET{ModelInfo: ModelInfo{ID: entry.RegistryID}}
+	// The model is loaded (present in the orchestrator map) so Reinstall enters its
+	// pre-overwrite unload step; the injected seam then fails it.
 	orch := &Orchestrator{
-		ModelInfo: primaryBN.ModelInfo, // mirror the primary, as NewOrchestrator does
 		models: map[string]*modelEntry{
-			entry.RegistryID: {instance: primaryBN},
+			entry.RegistryID: {},
 		},
-		primary: primaryBN,
 	}
 
 	mm := NewModelManager(modelsDir, orch, nil)
+	mm.unloadFn = func(_ string) error { return errInjectedUnloadFailure }
 	mm.ScanInstalled()
 	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before reinstall attempt")
 
 	entryCopy := entry
 	// baseURL is never reached: the unload guard aborts before any download.
 	err := mm.Reinstall(t.Context(), &entryCopy, "http://unused.invalid", nil)
-	require.Error(t, err, "Reinstall must abort when the loaded primary cannot be unloaded")
+	require.Error(t, err, "Reinstall must abort when the loaded model cannot be unloaded")
 	assert.Contains(t, err.Error(), "model still in use")
 	assert.True(t, mm.IsInstalled(entry.ID), "model must remain installed after a refused reinstall")
 }
@@ -1681,6 +1683,64 @@ func TestHasGeomodelFiles(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tt.want, HasGeomodelFiles(&tt.entry))
+		})
+	}
+}
+
+func TestHasGeomodelTuple(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, hasGeomodelTuple(nil), "a nil entry carries no tuple")
+
+	tests := []struct {
+		name  string
+		entry CatalogEntry
+		want  bool
+	}{
+		{
+			name:  "no files",
+			entry: CatalogEntry{Files: nil},
+			want:  false,
+		},
+		{
+			name: "geomodel model role only",
+			entry: CatalogEntry{Files: []CatalogFile{
+				{Role: RoleModel},
+				{Role: RoleGeomodelModel},
+			}},
+			want: false,
+		},
+		{
+			name: "geomodel labels role only",
+			entry: CatalogEntry{Files: []CatalogFile{
+				{Role: RoleGeomodelLabels},
+			}},
+			want: false,
+		},
+		{
+			name: "both geomodel roles",
+			entry: CatalogEntry{Files: []CatalogFile{
+				{Role: RoleGeomodelModel},
+				{Role: RoleGeomodelLabels},
+			}},
+			want: true,
+		},
+		{
+			name: "both geomodel roles plus unrelated files",
+			entry: CatalogEntry{Files: []CatalogFile{
+				{Role: RoleModel},
+				{Role: RoleGeomodelLabels},
+				{Role: RoleLabels},
+				{Role: RoleGeomodelModel},
+			}},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, hasGeomodelTuple(&tt.entry))
 		})
 	}
 }

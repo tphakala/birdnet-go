@@ -15,10 +15,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// expectedRegionCount is the number of tiles each family publishes; the dropdown
-// union carries exactly this many because families share a slug set.
-const expectedRegionCount = 40
-
 // getRegions calls GetModelRegions directly and decodes the response.
 func getRegions(t *testing.T, mutate func(*conf.Settings)) ModelRegionsResponse {
 	t.Helper()
@@ -62,7 +58,11 @@ func TestGetModelRegions_AutoResolves(t *testing.T) {
 	assert.True(t, resp.LocationConfigured)
 	assert.Equal(t, "andes", resp.Resolved.Slug, "Bogota resolves to andes")
 	assert.Equal(t, string(region.SourceAuto), resp.Resolved.Source)
-	assert.Len(t, resp.Regions, expectedRegionCount, "dropdown union covers every tile")
+	// Families share one slug set, so the dropdown union carries exactly the
+	// tiles of any one family's embedded table.
+	perchTable, ok := region.TableForRepo("tphakala/Perch-v2-Models")
+	require.True(t, ok, "perch region table must be embedded")
+	assert.Len(t, resp.Regions, len(perchTable.Regions), "dropdown union covers every tile")
 
 	// The options are sorted and each carries display metadata.
 	for _, o := range resp.Regions {
@@ -275,33 +275,6 @@ func TestGetRegionCoverageMap_NotFound(t *testing.T) {
 	for _, slug := range []string{"does-not-exist", "../secret", "Nordic", "a/b"} {
 		rec := coverageMapReq(t, slug, "")
 		assert.Equalf(t, http.StatusNotFound, rec.Code, "slug %q must 404", slug)
-	}
-}
-
-// TestIfNoneMatch covers the conditional-request matcher directly, including the
-// wildcard, comma-separated lists, and the weak-validator form a proxy may send.
-func TestIfNoneMatch(t *testing.T) {
-	t.Parallel()
-	const etag = `"abc123"`
-	cases := []struct {
-		name   string
-		header string
-		want   bool
-	}{
-		{"empty header", "", false},
-		{"exact strong match", `"abc123"`, true},
-		{"wildcard", "*", true},
-		{"weak-validator form", `W/"abc123"`, true},
-		{"comma list contains match", `"nope", "abc123"`, true},
-		{"comma list contains weak match", `W/"x", W/"abc123"`, true},
-		{"no match", `"different"`, false},
-		{"prefix-only, not a real tag", `"abc"`, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tc.want, ifNoneMatch(tc.header, etag), "header %q", tc.header)
-		})
 	}
 }
 

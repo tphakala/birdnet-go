@@ -270,8 +270,7 @@ func runExportFFmpeg(ctx context.Context, opts *ExportOptions, tempPath, audioFi
 		}
 
 		exitCode := -1
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			exitCode = exitErr.ExitCode()
 		}
 
@@ -555,8 +554,7 @@ func ExportAudioToBuffer(ctx context.Context, pcmData []byte, ffmpegPath string,
 		}
 
 		exitCode := -1
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			exitCode = exitErr.ExitCode()
 		}
 

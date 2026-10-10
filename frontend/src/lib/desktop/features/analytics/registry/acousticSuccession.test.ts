@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { CHART_REGISTRY } from './charts';
-import type { AnalyticsParams, ChartPropsContext } from './types';
+import { makeAnalyticsParams, makeChartCtx, stubFetchJson } from './__tests__/registryFixtures';
 
 // Verifies the acoustic-succession registry entry: its placement/flags, the default (array-length)
 // data-point count, the fetcher's defensive coercion of the array payload, and the common-name
@@ -20,26 +20,6 @@ interface SuccessionRow {
   commonName: string;
   counts: number[];
   total: number;
-}
-
-function makeParams(species: string[] = ['Turdus merula']): AnalyticsParams {
-  return {
-    range: 'month',
-    start: '2026-03-01',
-    end: '2026-03-31',
-    species,
-    source: '',
-    startDate: new Date('2026-03-01T00:00:00'),
-    endDate: new Date('2026-03-31T00:00:00'),
-  };
-}
-
-function makeCtx(names: Record<string, string>): ChartPropsContext {
-  return {
-    options: {},
-    onParamsChange: vi.fn(),
-    speciesNames: new Map(Object.entries(names)),
-  };
 }
 
 describe('acoustic-succession chart def', () => {
@@ -67,18 +47,12 @@ describe('acoustic-succession chart def', () => {
   });
 
   it('forwards a non-empty species selection and skips the request when empty', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: () => Promise.resolve([]),
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    const fetchMock = stubFetchJson([]);
 
     // Selection present: each selected scientific name is sent as a repeated species param, and the
     // limit equals the selection size so every selected band is returned rather than the lowest-volume
     // picks being pushed off a fixed top-N.
-    await chartDef.fetch(makeParams(['Turdus merula', 'Apus apus']));
+    await chartDef.fetch(makeAnalyticsParams({ species: ['Turdus merula', 'Apus apus'] }));
     const withSel = fetchMock.mock.calls[0][0] as string;
     expect(withSel).toContain('species=Turdus+merula');
     expect(withSel).toContain('species=Apus+apus');
@@ -86,7 +60,7 @@ describe('acoustic-succession chart def', () => {
 
     // Empty selection: the chart honors the selection at all times, so it returns [] without a request
     // (the card then shows its "pick species" empty state) rather than falling back to a top-N default.
-    const empty = await chartDef.fetch(makeParams([]));
+    const empty = await chartDef.fetch(makeAnalyticsParams({ species: [] }));
     expect(empty).toEqual([]);
     expect(fetchMock).toHaveBeenCalledOnce();
   });
@@ -96,6 +70,7 @@ describe('acoustic-succession chart def', () => {
     const payload = [
       {
         scientificName: 'Turdus merula',
+        commonName: 'Eurasian Blackbird',
         counts: [...Array.from({ length: 6 }, () => 0), 30, ...Array.from({ length: 17 }, () => 0)],
         total: 30,
       },
@@ -104,19 +79,15 @@ describe('acoustic-succession chart def', () => {
       { scientificName: 'Apus apus', counts: overlong, total: 'x' }, // non-finite total -> 0; counts truncated
       { scientificName: 'Strix aluco', counts: [-5, 'bad', 4], total: 4 }, // negative/non-finite -> 0
     ];
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: () => Promise.resolve(payload),
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    const fetchMock = stubFetchJson(payload);
 
-    const result = (await chartDef.fetch(makeParams())) as SuccessionRow[];
+    const result = (await chartDef.fetch(
+      makeAnalyticsParams({ species: ['Turdus merula'] })
+    )) as SuccessionRow[];
     expect(fetchMock).toHaveBeenCalledOnce();
     const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain('/api/v2/analytics/time/succession');
-    // The selection in makeParams() is forwarded as a species filter; the limit equals the one-species
+    // The selection in makeAnalyticsParams({ species: ['Turdus merula'] }) is forwarded as a species filter; the limit equals the one-species
     // selection so exactly that species is returned.
     expect(url).toContain('species=Turdus+merula');
     expect(url).toContain('limit=1');
@@ -128,6 +99,9 @@ describe('acoustic-succession chart def', () => {
       expect(row.counts.every(c => Number.isFinite(c) && c >= 0)).toBe(true);
     }
     expect(result[0].scientificName).toBe('Turdus merula');
+    expect(result[0].commonName).toBe('Eurasian Blackbird');
+    // No commonName in the payload -> falls back to the scientific name.
+    expect(result[1].commonName).toBe('Apus apus');
     expect(result[0].counts[6]).toBe(30);
     // Non-finite total coerces to 0; over-long counts are truncated to 24.
     const apus = result.find(r => r.scientificName === 'Apus apus');
@@ -141,40 +115,37 @@ describe('acoustic-succession chart def', () => {
   });
 
   it('throws when the payload is not an array', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: () => Promise.resolve({ not: 'an array' }),
-      })
-    );
-    await expect(chartDef.fetch(makeParams())).rejects.toThrow();
+    stubFetchJson({ not: 'an array' });
+    await expect(
+      chartDef.fetch(makeAnalyticsParams({ species: ['Turdus merula'] }))
+    ).rejects.toThrow();
   });
 
-  it('enriches the series with the resolved common name, falling back to the scientific name', () => {
+  it('uses the payload common name even when the hub species map is empty (#4459)', () => {
     expect(chartDef.mapProps).toBeDefined();
     const raw: SuccessionRow[] = [
       {
         scientificName: 'Turdus merula',
-        commonName: '',
+        commonName: 'Eurasian Blackbird',
         counts: Array.from({ length: 24 }, () => 1),
         total: 24,
       },
       {
         scientificName: 'Apus apus',
-        commonName: '',
+        commonName: 'Apus apus',
         counts: Array.from({ length: 24 }, () => 2),
         total: 48,
       },
     ];
-    const ctx = makeCtx({ 'Turdus merula': 'Eurasian Blackbird' });
-    const props = chartDef.mapProps?.(raw, makeParams(['Turdus merula']), ctx) ?? {};
+    const props =
+      chartDef.mapProps?.(
+        raw,
+        makeAnalyticsParams({ species: ['Turdus merula'] }),
+        makeChartCtx({})
+      ) ?? {};
     const series = props.series as SuccessionRow[];
     expect(series).toHaveLength(2);
     expect(series[0].commonName).toBe('Eurasian Blackbird');
-    // No mapping -> falls back to the scientific name.
     expect(series[1].commonName).toBe('Apus apus');
   });
 });

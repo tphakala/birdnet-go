@@ -62,11 +62,14 @@ func (c *ModelsLoadedCheck) RunMulti(_ context.Context) []health.Result {
 
 	models := c.getModels()
 	if len(models) == 0 {
+		// N = 0 (no acoustic model) is a valid runtime state (model de-privilege epic,
+		// Phase 4). The acoustic_models check owns the aggregate no-model verdict, so
+		// this per-model check stands down to Skipped: one cause yields one alarm.
 		return []health.Result{{
 			Name:       c.Name(),
 			Category:   c.Category(),
-			Status:     health.StatusCritical,
-			Message:    "No analysis models loaded",
+			Status:     health.StatusSkipped,
+			Message:    "No acoustic models loaded (see acoustic_models)",
 			DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 			Timestamp:  time.Now(),
 		}}

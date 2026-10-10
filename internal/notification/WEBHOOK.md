@@ -352,6 +352,7 @@ Go templates used in webhook providers follow these rules:
 - **Nil safety**: Missing metadata keys return empty values
 
 **Best Practices**:
+
 ```yaml
 # Always use conditionals for optional fields
 {{if .Metadata.bg_latitude}}
@@ -368,6 +369,7 @@ Go templates used in webhook providers follow these rules:
 ```
 
 **Testing Templates**: Test your templates with various scenarios:
+
 - Detections with GPS configured
 - Detections without GPS (bg_latitude/bg_longitude will be 0)
 - Different confidence levels
@@ -375,22 +377,23 @@ Go templates used in webhook providers follow these rules:
 
 ### Available Metadata Fields
 
-| Field | Type | Example | Description |
-|-------|------|---------|-------------|
-| `{{.Metadata.bg_detection_url}}` | string | `http://host/ui/detections/123` | Link to detection details page |
-| `{{.Metadata.bg_image_url}}` | string | `http://host/api/v2/media/...` | Species image URL |
-| `{{.Metadata.bg_confidence_percent}}` | string | "95" | Confidence percentage (without % sign) |
-| `{{.Metadata.bg_detection_time}}` | string | "15:04:05" | Time of detection (24h or 12h format) |
-| `{{.Metadata.bg_detection_date}}` | string | "2025-10-27" | Date of detection (YYYY-MM-DD) |
-| `{{.Metadata.bg_latitude}}` | float64 | 45.123456 | GPS latitude (0 if not configured) |
-| `{{.Metadata.bg_longitude}}` | float64 | -122.987654 | GPS longitude (0 if not configured) |
-| `{{.Metadata.bg_location}}` | string | "backyard-camera" | Audio input source name |
+| Field                                 | Type    | Example                         | Description                            |
+| ------------------------------------- | ------- | ------------------------------- | -------------------------------------- |
+| `{{.Metadata.bg_detection_url}}`      | string  | `http://host/ui/detections/123` | Link to detection details page         |
+| `{{.Metadata.bg_image_url}}`          | string  | `http://host/api/v2/media/...`  | Species image URL                      |
+| `{{.Metadata.bg_confidence_percent}}` | string  | "95"                            | Confidence percentage (without % sign) |
+| `{{.Metadata.bg_detection_time}}`     | string  | "15:04:05"                      | Time of detection (24h or 12h format)  |
+| `{{.Metadata.bg_detection_date}}`     | string  | "2025-10-27"                    | Date of detection (YYYY-MM-DD)         |
+| `{{.Metadata.bg_latitude}}`           | float64 | 45.123456                       | GPS latitude (0 if not configured)     |
+| `{{.Metadata.bg_longitude}}`          | float64 | -122.987654                     | GPS longitude (0 if not configured)    |
+| `{{.Metadata.bg_location}}`           | string  | "backyard-camera"               | Audio input source name                |
 
 ### Type Safety in Templates
 
 Metadata fields are stored in a `map[string]interface{}` and require type awareness when used in templates:
 
 **Important Type Information:**
+
 - `bg_latitude` and `bg_longitude` are `float64` (numeric values)
 - `bg_confidence_percent` is `string` (pre-formatted percentage like "95", not decimal 0.95)
 - All other `bg_*` fields are strings
@@ -444,19 +447,22 @@ template: |
 - **Species Data**: What birds were detected and when
 
 **Recommendations**:
+
 - Use external webhooks only with trusted services
 - Prefer self-hosted or local services for sensitive deployments
 - Consider using VPN or SSH tunnels for external webhooks
 - Review what data is exposed in your custom templates
 
 **Setting Host URLs**: Configure proper base URLs to avoid exposing `localhost`:
+
 ```yaml
 # In config.yaml
 security:
-  host: "birdnet.example.com"  # Your public or VPN hostname
+  host: "birdnet.example.com" # Your public or VPN hostname
 ```
 
 Or set environment variable:
+
 ```bash
 export BIRDNET_HOST="birdnet.example.com"
 ```
@@ -513,7 +519,8 @@ providers:
 
 ### Use Case 3: Slack/Discord Integration
 
-**Note**: Discord embed color `5814783` is green (hex `0x58B05F`). Adjust for your needs:
+**Note**: Discord embed color `5814783` is light blue (hex `0x58B9FF`). Adjust for your needs:
+
 - Red: `15158332` (0xE74C3C)
 - Blue: `3447003` (0x3498DB)
 - Yellow: `16776960` (0xFFFF00)
@@ -760,10 +767,10 @@ Potential features for future releases:
 
 When modifying the webhook provider:
 
-1. **Run tests**: `go test -v -race ./internal/notification/push_webhook_test.go`
-2. **Run linter**: `golangci-lint run ./internal/notification/push_webhook.go`
+1. **Run tests**: `go test -race -run Webhook ./internal/notification/`
+2. **Run linter**: `task lint` (whole module, from the repository root)
 3. **Update docs**: Keep this file and code comments in sync
-4. **Follow patterns**: Use existing Go 1.24/1.25 patterns in the code
+4. **Follow patterns**: Use the existing patterns in the code (the Go version is set in `go.mod`)
 
 ## References
 

@@ -158,7 +158,8 @@ var procCardHeaderRe = regexp.MustCompile(`^\s*(\d+)\s+\[`)
 //	0 [Device         ]: USB-Audio - USB Audio Device
 //	                     C-Media ... USB Audio Device at usb-xhci-hcd.0-1, full speed
 //
-// The bus path is the token between " at " and the next "," on the detail line;
+// The bus path follows the last " at " on the detail line and runs to the next
+// "," or the end of the line (see extractBusPathFromDetail);
 // only paths beginning with "usb-" are recorded (and mark the card as USB).
 func parseProcAsoundCards(content string) map[int]procCardEntry {
 	result := make(map[int]procCardEntry)
@@ -189,16 +190,16 @@ func parseProcAsoundCards(content string) map[int]procCardEntry {
 
 // extractBusPathFromDetail returns the bus path from a /proc/asound/cards detail
 // line such as "... at usb-0000:00:14.0-3, high speed" -> "usb-0000:00:14.0-3".
-// Returns "" when the line has no " at <path>," segment. It anchors on the LAST
-// " at " so a device name that itself contains " at " does not mis-split the
-// trailing bus-path segment.
+// Returns "" when the line has no " at " separator; the path runs to the next
+// comma or to the end of the line. It anchors on the LAST " at " so a device
+// name that itself contains " at " does not mis-split the trailing bus-path
+// segment.
 func extractBusPathFromDetail(line string) string {
 	const sep = " at "
-	idx := strings.LastIndex(line, sep)
-	if idx < 0 {
+	_, rest, found := strings.CutLast(line, sep)
+	if !found {
 		return ""
 	}
-	rest := line[idx+len(sep):]
 	if comma := strings.IndexByte(rest, ','); comma >= 0 {
 		rest = rest[:comma]
 	}

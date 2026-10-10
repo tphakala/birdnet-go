@@ -73,6 +73,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
+          # "manifest" is a rolling asset holder, not a release: keep it in
+          # NON_RELEASE_TAGS in scripts/build-version.sh so builds never
+          # report it as their version.
           TAG=manifest
           # The manifest release is marked prerelease so it never occupies the
           # "Latest" slot or the /releases/latest endpoint, which must keep

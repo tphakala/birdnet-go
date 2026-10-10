@@ -108,6 +108,31 @@ describe('Checkbox', () => {
     expect(visualCheckbox).toHaveClass('w-6', 'h-6');
   });
 
+  it('draws the unchecked box border with at least 3:1 contrast', () => {
+    const { container } = render(Checkbox, {
+      props: { checked: false, label: 'Test checkbox' },
+    });
+
+    // WCAG 1.4.11: the box outline is the only cue for an unchecked checkbox
+    const visualCheckbox = container.querySelector('span.relative');
+    expect(visualCheckbox).toHaveClass('border-[var(--color-base-content)]/60');
+    expect(visualCheckbox).not.toHaveClass('border-[var(--border-200)]');
+  });
+
+  it('transitions only colours on the box and drops the transition under reduced motion', () => {
+    const { container } = render(Checkbox, {
+      props: { checked: false, label: 'Test checkbox' },
+    });
+
+    // transition-all would also fade the focus ring in from the text colour
+    const visualCheckbox = container.querySelector('span.relative');
+    expect(visualCheckbox).toHaveClass(
+      'transition-[color,background-color,border-color]',
+      'motion-reduce:transition-none'
+    );
+    expect(visualCheckbox).not.toHaveClass('transition-all');
+  });
+
   it('applies variant classes correctly when checked', () => {
     const { container } = render(Checkbox, {
       props: {
@@ -180,5 +205,29 @@ describe('Checkbox', () => {
 
     const checkbox = screen.getByRole('checkbox');
     expect(checkbox).toHaveAttribute('id', 'test-checkbox');
+  });
+
+  it('keeps py-1 on the label without labelClassName', () => {
+    render(Checkbox, { props: { checked: false, label: 'Test checkbox' } });
+
+    expect(screen.getByRole('checkbox').closest('label')).toHaveClass('py-1');
+  });
+
+  it('labelClassName replaces the default label padding and keeps the label the click target', async () => {
+    render(Checkbox, {
+      props: { checked: false, label: 'Test checkbox', labelClassName: 'w-full p-4' },
+    });
+
+    const checkbox = screen.getByRole('checkbox');
+    const label = checkbox.closest('label');
+    if (!(label instanceof HTMLLabelElement)) throw new Error('checkbox is not inside a label');
+    expect(label).toHaveClass('w-full', 'p-4', 'flex', 'cursor-pointer');
+    expect(label).not.toHaveClass('py-1');
+    // The classes go on the label only, not on the outer wrapper
+    expect(label.parentElement).not.toHaveClass('w-full');
+    expect(label.parentElement).not.toHaveClass('p-4');
+
+    await fireEvent.click(label);
+    expect(checkbox).toBeChecked();
   });
 });

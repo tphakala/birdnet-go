@@ -152,6 +152,7 @@
     </span>
     <SelectDropdown
       options={colorMapOptions}
+      aria-label={t('spectrogram.controls.colorMap')}
       value={colorMap}
       variant="select"
       size="xs"

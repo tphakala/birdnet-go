@@ -137,7 +137,8 @@ func ReadFiles(paths []string, opts *ReadOptions) ([]LogEntry, error) {
 
 // FindLogFiles finds the active log file and any rotated files that
 // could contain entries for the target date (based on file naming convention).
-// Rotated files follow the lumberjack pattern: <basename>-<timestamp>.<ext>
+// Rotated files use the naming from RotationManager.rotatedFilePath in
+// internal/logger: <basename>-<timestamp>.<ext>
 // (e.g., actions-2024-01-15T10-30-00Z.log). Compressed (.gz) files are excluded
 // since they require decompression.
 func FindLogFiles(basePath string) ([]string, error) {

@@ -2,7 +2,6 @@ package weather
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"sync"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // mockProvider is a test double for the Provider interface.
@@ -36,6 +36,7 @@ func TestNewService(t *testing.T) {
 		{"yrno_provider", "yrno", false},
 		{"openweather_provider", "openweather", false},
 		{"wunderground_provider", "wunderground", false},
+		{"pirateweather_provider", string(conf.WeatherPirateWeather), false},
 		{"invalid_provider_disabled", "invalid", true},
 		{"empty_provider_defaults_to_yrno", "", false},
 		{"none_provider_disabled", "none", true},
@@ -208,7 +209,7 @@ func TestWeatherDataCreation(t *testing.T) {
 
 // TestSettingsCreation tests the creation of test settings.
 func TestSettingsCreation(t *testing.T) {
-	providers := []string{"yrno", "openweather", "wunderground"}
+	providers := []string{"yrno", "openweather", "wunderground", string(conf.WeatherPirateWeather)}
 
 	for _, provider := range providers {
 		t.Run(provider, func(t *testing.T) {
@@ -293,7 +294,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 		})
 
 		// SaveDailyEvents fails (e.g., SQLITE_BUSY)
-		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.NewStd("database is locked")).Once()
 
 		// Fallback: GetDailyEvents returns existing row
 		existingID := uint(42)
@@ -337,11 +338,11 @@ func TestService_SaveWeatherData(t *testing.T) {
 		})
 
 		// First SaveDailyEvents fails (e.g., SQLITE_BUSY)
-		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.NewStd("database is locked")).Once()
 
 		// GetDailyEvents also fails: no existing row
 		localDate := fixedTime.UTC().In(time.Local).Format(time.DateOnly)
-		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, errors.New("no rows")).Once()
+		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, errors.NewStd("no rows")).Once()
 
 		// Retry SaveDailyEvents succeeds
 		mockDB.On("SaveDailyEvents", mock.Anything).Run(func(args mock.Arguments) {
@@ -381,14 +382,14 @@ func TestService_SaveWeatherData(t *testing.T) {
 		})
 
 		// First SaveDailyEvents fails
-		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.NewStd("database is locked")).Once()
 
 		// GetDailyEvents also fails: no existing row
 		localDate := fixedTime.UTC().In(time.Local).Format(time.DateOnly)
-		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, errors.New("no rows")).Once()
+		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, errors.NewStd("no rows")).Once()
 
 		// Retry SaveDailyEvents also fails
-		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.NewStd("database is locked")).Once()
 
 		err := service.saveWeatherData(testData)
 
@@ -416,7 +417,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 		})
 
 		// First SaveDailyEvents fails
-		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.NewStd("database is locked")).Once()
 
 		// GetDailyEvents returns empty row with nil error (v1 legacy "not found" contract)
 		localDate := fixedTime.UTC().In(time.Local).Format(time.DateOnly)
@@ -463,7 +464,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 		}).Return(nil).Once()
 
 		// SaveHourlyWeather fails
-		mockDB.On("SaveHourlyWeather", mock.Anything).Return(errors.New("disk full")).Once()
+		mockDB.On("SaveHourlyWeather", mock.Anything).Return(errors.NewStd("disk full")).Once()
 
 		err := service.saveWeatherData(testData)
 
@@ -1013,7 +1014,7 @@ func TestFetchAndSave_GeneralFailureBackoff(t *testing.T) {
 	provider := &mockProvider{
 		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
 			callCount++
-			return nil, errors.New("network timeout")
+			return nil, errors.NewStd("network timeout")
 		},
 	}
 
@@ -1046,7 +1047,7 @@ func TestFetchAndSave_SuccessResetsBackoff(t *testing.T) {
 		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
 			if failOnFirst {
 				failOnFirst = false
-				return nil, errors.New("transient error")
+				return nil, errors.NewStd("transient error")
 			}
 			return createTestWeatherData(t), nil
 		},
@@ -1113,7 +1114,7 @@ func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
 		fetchFunc: func(settings *conf.Settings) (*WeatherData, error) {
 			observedLat = settings.BirdNET.Latitude
 			observedLon = settings.BirdNET.Longitude
-			return nil, errors.New("short-circuit after observing coords")
+			return nil, errors.NewStd("short-circuit after observing coords")
 		},
 	}
 
@@ -1151,13 +1152,11 @@ func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
 		"fetch should pick up updated longitude from global settings")
 }
 
-// TestNewService_PinsProviderName verifies that the Service pins the
-// provider name at construction based on the actual provider implementation
-// it selected. This matters because fetchAndSave uses s.providerName in logs
-// and metrics, and reading the name from the (hot-reloadable) settings
-// snapshot instead could misreport a later UI change while s.provider still
-// points at the original implementation.
-func TestNewService_PinsProviderName(t *testing.T) {
+// TestNewService_SelectsProviderName verifies that NewService selects the
+// providerName that matches the actual provider implementation constructed
+// for the configured setting (including the "" -> yr.no default), which
+// fetchAndSave/Status report in logs and metrics.
+func TestNewService_SelectsProviderName(t *testing.T) {
 	tests := []struct {
 		configured string
 		want       string
@@ -1173,10 +1172,45 @@ func TestNewService_PinsProviderName(t *testing.T) {
 			svc, err := NewService(settings, nil, nil)
 			require.NoError(t, err)
 			require.NotNil(t, svc)
-			assert.Equal(t, tt.want, svc.providerName,
-				"providerName should reflect the actual provider implementation, not be re-read from settings")
+			assert.Equal(t, tt.want, svc.activeProviderName(),
+				"providerName should reflect the actual provider implementation selected")
 		})
 	}
+}
+
+// TestReconcileConfig_HotReloadsProvider verifies that a provider change in
+// settings takes effect on the next fetch cycle without a service restart.
+func TestReconcileConfig_HotReloadsProvider(t *testing.T) {
+	settings := createTestSettings(t, yrNoProviderName)
+	svc, err := NewService(settings, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, yrNoProviderName, svc.activeProviderName())
+
+	changed := createTestSettings(t, openWeatherProviderName, func(s *conf.Settings) {
+		s.Realtime.Weather.OpenWeather.APIKey = "test-key"
+	})
+	svc.reconcileConfig(changed)
+
+	assert.Equal(t, openWeatherProviderName, svc.activeProviderName(),
+		"reconcileConfig should switch the active provider on a settings change")
+	provider, _ := svc.activeProvider()
+	_, ok := provider.(*OpenWeatherProvider)
+	assert.True(t, ok, "active provider should be rebuilt as the newly configured implementation")
+}
+
+// TestReconcileConfig_KeepsPreviousProviderOnUnsupportedValue verifies that an
+// unrecognized/"none" provider value in settings does not tear down a working
+// provider; disabling weather entirely goes through stopping the service.
+func TestReconcileConfig_KeepsPreviousProviderOnUnsupportedValue(t *testing.T) {
+	settings := createTestSettings(t, yrNoProviderName)
+	svc, err := NewService(settings, nil, nil)
+	require.NoError(t, err)
+
+	changed := createTestSettings(t, "not-a-real-provider")
+	svc.reconcileConfig(changed)
+
+	assert.Equal(t, yrNoProviderName, svc.activeProviderName(),
+		"an unsupported configured provider should keep the previous provider active")
 }
 
 // TestWundergroundProvider_HTTP204_NoContent tests that Wunderground returns

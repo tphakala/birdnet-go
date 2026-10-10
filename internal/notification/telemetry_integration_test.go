@@ -2,7 +2,6 @@ package notification
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 	"testing/synctest"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // mockTelemetryReporter is a test implementation that records events
@@ -801,57 +801,57 @@ func TestIsConnectionError(t *testing.T) {
 		},
 		{
 			name:     "connection refused",
-			err:      errors.New("dial tcp 192.168.1.100:443: connect: connection refused"),
+			err:      errors.NewStd("dial tcp 192.168.1.100:443: connect: connection refused"),
 			expected: true,
 		},
 		{
 			name:     "connection reset",
-			err:      errors.New("read tcp: connection reset by peer"),
+			err:      errors.NewStd("read tcp: connection reset by peer"),
 			expected: true,
 		},
 		{
 			name:     "no route to host",
-			err:      errors.New("dial tcp 10.0.0.1:8080: connect: no route to host"),
+			err:      errors.NewStd("dial tcp 10.0.0.1:8080: connect: no route to host"),
 			expected: true,
 		},
 		{
 			name:     "network unreachable",
-			err:      errors.New("dial tcp: network is unreachable"),
+			err:      errors.NewStd("dial tcp: network is unreachable"),
 			expected: true,
 		},
 		{
 			name:     "DNS no such host",
-			err:      errors.New("dial tcp: lookup homeassistant.local: no such host"),
+			err:      errors.NewStd("dial tcp: lookup homeassistant.local: no such host"),
 			expected: true,
 		},
 		{
 			name:     "DNS lookup failure",
-			err:      errors.New("lookup myserver.local on 192.168.1.1:53: server misbehaving"),
+			err:      errors.NewStd("lookup myserver.local on 192.168.1.1:53: server misbehaving"),
 			expected: true,
 		},
 		{
 			name:     "i/o timeout",
-			err:      errors.New("dial tcp 192.168.1.100:443: i/o timeout"),
+			err:      errors.NewStd("dial tcp 192.168.1.100:443: i/o timeout"),
 			expected: true,
 		},
 		{
 			name:     "broken pipe",
-			err:      errors.New("write tcp: broken pipe"),
+			err:      errors.NewStd("write tcp: broken pipe"),
 			expected: true,
 		},
 		{
 			name:     "HTTP 500 error - not connection error",
-			err:      errors.New("server returned 500: internal server error"),
+			err:      errors.NewStd("server returned 500: internal server error"),
 			expected: false,
 		},
 		{
 			name:     "authentication error - not connection error",
-			err:      errors.New("401 unauthorized"),
+			err:      errors.NewStd("401 unauthorized"),
 			expected: false,
 		},
 		{
 			name:     "generic error - not connection error",
-			err:      errors.New("something went wrong"),
+			err:      errors.NewStd("something went wrong"),
 			expected: false,
 		},
 	}
@@ -873,7 +873,7 @@ func TestWebhookRequestError_ConnectionErrorsNotReported(t *testing.T) {
 	// Test connection refused - should NOT be reported
 	telemetry.WebhookRequestError(
 		"homeassistant",
-		errors.New("dial tcp 192.168.1.100:443: connect: connection refused"),
+		errors.NewStd("dial tcp 192.168.1.100:443: connect: connection refused"),
 		0, // no status code for connection errors
 		"https://homeassistant.local/api/webhook/xyz",
 		"POST",
@@ -888,7 +888,7 @@ func TestWebhookRequestError_ConnectionErrorsNotReported(t *testing.T) {
 	// Test DNS error - should NOT be reported
 	telemetry.WebhookRequestError(
 		"homeassistant",
-		errors.New("dial tcp: lookup homeassistant.local: no such host"),
+		errors.NewStd("dial tcp: lookup homeassistant.local: no such host"),
 		0,
 		"https://homeassistant.local/api/webhook/xyz",
 		"POST",
@@ -902,7 +902,7 @@ func TestWebhookRequestError_ConnectionErrorsNotReported(t *testing.T) {
 	// Test network unreachable - should NOT be reported
 	telemetry.WebhookRequestError(
 		"homeassistant",
-		errors.New("dial tcp 10.0.0.1:443: network is unreachable"),
+		errors.NewStd("dial tcp 10.0.0.1:443: network is unreachable"),
 		0,
 		"https://10.0.0.1/api/webhook/xyz",
 		"POST",
@@ -928,7 +928,7 @@ func TestWebhookRequestError_ConnectionErrorDoesNotSuppressSubsequentErrors(t *t
 	// Step 1: Send a connection error (should NOT be reported to telemetry)
 	telemetry.WebhookRequestError(
 		"webhook-test",
-		errors.New("dial tcp 192.168.1.100:443: connect: connection refused"),
+		errors.NewStd("dial tcp 192.168.1.100:443: connect: connection refused"),
 		0,
 		"https://example.com/webhook",
 		"POST",
@@ -941,7 +941,7 @@ func TestWebhookRequestError_ConnectionErrorDoesNotSuppressSubsequentErrors(t *t
 	// Step 2: Send a non-connection error (SHOULD be reported — this is the first real error)
 	telemetry.WebhookRequestError(
 		"webhook-test",
-		errors.New("server returned 500: internal server error"),
+		errors.NewStd("server returned 500: internal server error"),
 		500,
 		"https://example.com/webhook",
 		"POST",
@@ -968,7 +968,7 @@ func TestWebhookRequestError_ServerErrorsStillReported(t *testing.T) {
 	// Test HTTP 500 error - SHOULD be reported (server-side issue, potential code problem)
 	telemetry.WebhookRequestError(
 		"webhook-test",
-		errors.New("server returned 500: internal server error"),
+		errors.NewStd("server returned 500: internal server error"),
 		500,
 		"https://example.com/webhook",
 		"POST",

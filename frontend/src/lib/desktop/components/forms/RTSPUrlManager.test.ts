@@ -341,8 +341,8 @@ describe('RTSPUrlManager', () => {
       },
     });
 
-    const nameInput = screen.getByLabelText(/Stream Name.*\*/) as HTMLInputElement;
-    const urlInput = screen.getByLabelText(/RTSP URL.*\*/) as HTMLInputElement;
+    const nameInput = screen.getByLabelText<HTMLInputElement>(/Stream Name.*\*/);
+    const urlInput = screen.getByLabelText<HTMLInputElement>(/RTSP URL.*\*/);
     const addButton = screen.getByRole('button', { name: 'Add RTSP URL' });
 
     await fireEvent.input(nameInput, { target: { value: 'Test Camera' } });

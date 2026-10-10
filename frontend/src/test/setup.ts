@@ -136,6 +136,27 @@ const translations: Record<string, string> = {
   'settings.species.customConfiguration.title': 'Custom Configuration',
   'settings.species.customConfiguration.description': 'Configure custom settings for species',
   'common.ui.loading': 'Loading...',
+  'settings.main.sections.rangeFilter.stationLocation.useCurrentLocation': 'Use browser location',
+  'settings.main.sections.rangeFilter.stationLocation.automaticLocation': 'Automatic location',
+  'settings.main.sections.rangeFilter.stationLocation.locationHelp':
+    "Fills the coordinates using this browser's location.",
+  'settings.main.sections.rangeFilter.stationLocation.locating': 'Locating...',
+  'settings.main.sections.rangeFilter.stationLocation.accuracy':
+    'Estimated accuracy: within {accuracy} m',
+  'settings.main.sections.rangeFilter.stationLocation.locationDetected':
+    'Browser location detected.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationUnsupported':
+    'Device location is unsupported.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationInsecureHelp':
+    'Needs HTTPS or localhost. Search for a place or use the map instead.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationDenied':
+    'Location permission was denied.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationUnavailable':
+    'The device could not determine its location.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationTimedOut':
+    'The location request timed out.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationFailed':
+    'Could not determine the device location.',
   'common.close': 'Close',
   'common.confirm': 'Confirm',
   'common.cancel': 'Cancel',
@@ -408,6 +429,7 @@ vi.mock('$lib/utils/settingsApi.js', () => {
     settingsAPI: {
       load: vi.fn().mockResolvedValue(defaultSettings),
       save: vi.fn().mockResolvedValue({ success: true }),
+      patchSection: vi.fn().mockResolvedValue({}),
       test: {
         birdweather: vi.fn().mockResolvedValue({ success: true, message: 'Test successful' }),
         mqtt: vi.fn().mockResolvedValue({ success: true, message: 'Test successful' }),
@@ -479,40 +501,53 @@ vi.mock('$app/stores', () => ({
 
 // Mock MapLibre GL - provide both default and named exports
 vi.mock('maplibre-gl', () => {
-  const MockMap = vi.fn(() => ({
-    // Add methods that are used in the components
-    getZoom: vi.fn(() => 10),
-    setZoom: vi.fn(),
-    getCenter: vi.fn(() => ({ lng: 0, lat: 0 })),
-    setCenter: vi.fn(),
-    easeTo: vi.fn(),
-    flyTo: vi.fn(),
-    remove: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
-    once: vi.fn(),
-    addControl: vi.fn(),
-    removeControl: vi.fn(),
-    resize: vi.fn(),
-    getBounds: vi.fn(),
-    fitBounds: vi.fn(),
-    setPadding: vi.fn(),
-    project: vi.fn(),
-    unproject: vi.fn(),
-  }));
+  // `function` implementations, not arrows: `new MockMap()` runs the
+  // implementation with Reflect.construct, which rejects arrow functions.
+  const MockMap = vi.fn(function () {
+    return {
+      // Add methods that are used in the components
+      getZoom: vi.fn(() => 10),
+      setZoom: vi.fn(),
+      getCenter: vi.fn(() => ({ lng: 0, lat: 0 })),
+      setCenter: vi.fn(),
+      easeTo: vi.fn(),
+      flyTo: vi.fn(),
+      remove: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      once: vi.fn(),
+      addControl: vi.fn(),
+      removeControl: vi.fn(),
+      resize: vi.fn(),
+      getBounds: vi.fn(),
+      fitBounds: vi.fn(),
+      setPadding: vi.fn(),
+      project: vi.fn(),
+      unproject: vi.fn(),
+      zoomIn: vi.fn(),
+      zoomOut: vi.fn(),
+      scrollZoom: { enable: vi.fn(), disable: vi.fn() },
+      touchZoomRotate: { enable: vi.fn(), disable: vi.fn(), disableRotation: vi.fn() },
+      doubleClickZoom: { enable: vi.fn(), disable: vi.fn() },
+    };
+  });
 
-  const MockMarker = vi.fn(() => ({
-    setLngLat: vi.fn().mockReturnThis(),
-    addTo: vi.fn().mockReturnThis(),
-    remove: vi.fn().mockReturnThis(),
-    getLngLat: vi.fn(() => ({ lng: 0, lat: 0 })),
-    setPopup: vi.fn().mockReturnThis(),
-    togglePopup: vi.fn().mockReturnThis(),
-    getPopup: vi.fn(),
-    setDraggable: vi.fn().mockReturnThis(),
-    isDraggable: vi.fn(() => false),
-    getElement: vi.fn(() => document.createElement('div')),
-  }));
+  const MockMarker = vi.fn(function () {
+    return {
+      on: vi.fn().mockReturnThis(),
+      off: vi.fn().mockReturnThis(),
+      setLngLat: vi.fn().mockReturnThis(),
+      addTo: vi.fn().mockReturnThis(),
+      remove: vi.fn().mockReturnThis(),
+      getLngLat: vi.fn(() => ({ lng: 0, lat: 0 })),
+      setPopup: vi.fn().mockReturnThis(),
+      togglePopup: vi.fn().mockReturnThis(),
+      getPopup: vi.fn(),
+      setDraggable: vi.fn().mockReturnThis(),
+      isDraggable: vi.fn(() => false),
+      getElement: vi.fn(() => document.createElement('div')),
+    };
+  });
 
   return {
     default: {
@@ -585,7 +620,7 @@ class MockResizeObserver {
   unobserve = vi.fn();
   disconnect = vi.fn();
 }
-globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver = MockResizeObserver;
 
 // Mock HTMLCanvasElement.getContext for axe-core accessibility tests
 HTMLCanvasElement.prototype.getContext = vi.fn().mockImplementation(function (contextType: string) {
@@ -641,7 +676,7 @@ window.getComputedStyle = vi.fn().mockImplementation(function () {
   const style = {
     ...DEFAULT_COMPUTED_STYLES,
     getPropertyValue: vi.fn().mockImplementation(function (property: string) {
-      const computedStyle = { ...DEFAULT_COMPUTED_STYLES } as Record<string, string>;
+      const computedStyle: Record<string, string> = { ...DEFAULT_COMPUTED_STYLES };
       return (
         // eslint-disable-next-line security/detect-object-injection -- intentional property access in test mock
         computedStyle[property] ||
@@ -733,7 +768,10 @@ Object.defineProperty(window, 'location', {
 });
 
 // Mock security utilities - consolidated mock for consistent test behavior
-vi.mock('$lib/utils/security', () => ({
+// Real exports pass through (isPlainObject, maskUrlCredentials, ...); only the
+// functions below are overridden.
+vi.mock('$lib/utils/security', async importOriginal => ({
+  ...(await importOriginal<typeof import('$lib/utils/security')>()),
   safeGet: vi.fn(
     (
       obj: Record<string, unknown> | null | undefined,
@@ -767,15 +805,12 @@ vi.mock('$lib/utils/security', () => ({
   // Mock safeSpread to just spread objects without security validation for tests
   safeSpread: vi.fn(
     (...objects: Array<Record<string, unknown> | null | undefined>): Record<string, unknown> => {
-      return objects.reduce(
-        (result: Record<string, unknown>, obj) => {
-          if (obj != null && typeof obj === 'object') {
-            return { ...result, ...obj };
-          }
-          return result;
-        },
-        {} as Record<string, unknown>
-      );
+      return objects.reduce<Record<string, unknown>>((result, obj) => {
+        if (obj != null && typeof obj === 'object') {
+          return { ...result, ...obj };
+        }
+        return result;
+      }, {});
     }
   ),
   // Mock URL validation for RTSP and other protocols
@@ -924,8 +959,8 @@ vi.mock('$lib/utils/security', () => ({
 
 // Global test utilities
 export const testUtils = {
-  // Helper to reset all mocked functions
-  resetAllMocks: () => {
+  // Clears call history only (vi.clearAllMocks); mock implementations are kept
+  clearAllMocks: () => {
     vi.clearAllMocks();
   },
 

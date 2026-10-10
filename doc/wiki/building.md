@@ -98,6 +98,17 @@ Navigate to the cloned BirdNET-Go project directory in your terminal.
   task clean
   ```
 
+### Version string
+
+Every build gets its version string from `scripts/build-version.sh`, which Task, `air` and the container build all use:
+
+- If `BUILD_VERSION` is set, it is used as is.
+- If a release tag points at the checked-out commit, the tag is the version, for example `20260823`.
+- Any other build, including `main`, a branch or a clone without tags, gets `<commit date in UTC>-g<9-character hash>-dev`, for example `20260927-g5dc2ab881-dev`.
+- If git is missing or the source tree has no git metadata of its own (a source tarball, or a copy nested inside another repository), the version is `unknown`.
+
+Uncommitted changes do not change the string. The container build cannot read git metadata (`.git` is excluded from the build context), so for a local `docker build` pass the version in yourself: `--build-arg BUILD_VERSION="$(sh scripts/build-version.sh)"`.
+
 ### 4. Run Tests
 
 - **Run all tests:**

@@ -58,7 +58,13 @@
   import { getLocale } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { getBitrateConfig, formatBitrate, parseNumericBitrate } from '$lib/utils/audioValidation';
-  import { chooseBitrateForFormat, isExportFormat, type ExportFormat } from './audioExportFormat';
+  import {
+    chooseBitrateForFormat,
+    isExportFormat,
+    isLosslessExportFormat,
+    type ExportFormat,
+    type LosslessExportFormat,
+  } from './audioExportFormat';
   import {
     Volume2,
     Radio,
@@ -92,6 +98,18 @@
       { value: 'aac', label: t('settings.audio.formats.aac') },
       { value: 'opus', label: t('settings.audio.formats.opus') },
       { value: 'mp3', label: t('settings.audio.formats.mp3') },
+    ];
+  });
+
+  // Ultrasonic export is restricted to the two lossless containers (WAV/FLAC)
+  // that carry any sample rate natively, so a bat capture above the analysis rate
+  // is preserved losslessly at its full source rate.
+  const ultrasonicExportFormatOptions = $derived.by(() => {
+    // By accessing getLocale(), this will only recompute when locale changes
+    getLocale();
+    return [
+      { value: 'flac', label: t('settings.audio.formats.flac') },
+      { value: 'wav', label: t('settings.audio.formats.wav') },
     ];
   });
 
@@ -133,6 +151,7 @@
           enabled: false,
           path: 'clips/',
           type: 'wav' as const,
+          ultrasonicType: 'flac' as const,
           bitrate: '96k',
           retention: {
             policy: 'none',
@@ -244,11 +263,13 @@
       {
         path: store.originalData.realtime?.audio?.export?.path,
         type: store.originalData.realtime?.audio?.export?.type,
+        ultrasonicType: store.originalData.realtime?.audio?.export?.ultrasonicType,
         bitrate: store.originalData.realtime?.audio?.export?.bitrate,
       },
       {
         path: store.formData.realtime?.audio?.export?.path,
         type: store.formData.realtime?.audio?.export?.type,
+        ultrasonicType: store.formData.realtime?.audio?.export?.ultrasonicType,
         bitrate: store.formData.realtime?.audio?.export?.bitrate,
       }
     )
@@ -443,7 +464,7 @@
       });
     }
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, sources },
+      audio: { ...settings.audio, sources },
     });
   }
 
@@ -461,7 +482,7 @@
 
   function updateExportEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, export: { ...settings.audio.export, enabled } },
+      audio: { ...settings.audio, export: { ...settings.audio.export, enabled } },
     });
   }
 
@@ -469,8 +490,17 @@
     const nextBitrate = chooseBitrateForFormat(type, settings.audio.export.bitrate ?? '');
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: { ...settings.audio.export, type, bitrate: nextBitrate },
+      },
+    });
+  }
+
+  function updateUltrasonicExportFormat(ultrasonicType: LosslessExportFormat) {
+    settingsActions.updateSection('realtime', {
+      audio: {
+        ...settings.audio,
+        export: { ...settings.audio.export, ultrasonicType },
       },
     });
   }
@@ -480,7 +510,7 @@
 
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: { ...settings.audio.export, bitrate: formattedBitrate },
       },
     });
@@ -490,7 +520,7 @@
   function updateRetentionPolicy(policy: string) {
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, policy },
@@ -502,7 +532,7 @@
   function updateRetentionMaxAge(maxAge: string) {
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, maxAge },
@@ -514,7 +544,7 @@
   function updateRetentionMaxUsage(maxUsage: string) {
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, maxUsage },
@@ -526,7 +556,7 @@
   function updateRetentionMinClips(minClips: number) {
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, minClips },
@@ -538,7 +568,7 @@
   function updateRetentionKeepSpectrograms(keepSpectrograms: boolean) {
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, keepSpectrograms },
@@ -611,7 +641,7 @@
 
     settingsActions.updateSection('realtime', {
       audio: {
-        ...$audioSettings!,
+        ...settings.audio,
         equalizer: transformedSettings,
       },
     });
@@ -780,7 +810,7 @@
             onchange={() =>
               settingsActions.updateSection('realtime', {
                 audio: {
-                  ...$audioSettings!,
+                  ...settings.audio,
                   export: {
                     ...settings.audio.export,
                     normalization: {
@@ -818,7 +848,7 @@
                   onUpdate={value =>
                     settingsActions.updateSection('realtime', {
                       audio: {
-                        ...$audioSettings!,
+                        ...settings.audio,
                         export: {
                           ...settings.audio.export,
                           normalization: {
@@ -856,7 +886,7 @@
                   onUpdate={value =>
                     settingsActions.updateSection('realtime', {
                       audio: {
-                        ...$audioSettings!,
+                        ...settings.audio,
                         export: {
                           ...settings.audio.export,
                           normalization: {
@@ -922,7 +952,7 @@
           onchange={enabled =>
             settingsActions.updateSection('realtime', {
               audio: {
-                ...$audioSettings!,
+                ...settings.audio,
                 soundLevel: {
                   ...settings.audio.soundLevel,
                   enabled,
@@ -953,7 +983,7 @@
                 onUpdate={value =>
                   settingsActions.updateSection('realtime', {
                     audio: {
-                      ...$audioSettings!,
+                      ...settings.audio,
                       soundLevel: { ...settings.audio.soundLevel, interval: value },
                     },
                   })}
@@ -979,6 +1009,10 @@
                 <li>
                   {t('settings.audio.soundLevelMonitoring.mqttTopic')}
                   <code>{'{base_topic}'}/soundlevel</code>
+                </li>
+                <li>
+                  {t('settings.audio.soundLevelMonitoring.mqttSourceTopic')}
+                  <code>{'{base_topic}'}/sources/{'{source_id}'}/soundlevel</code>
                 </li>
                 <li>
                   {t('settings.audio.soundLevelMonitoring.sseEndpoint')}
@@ -1053,7 +1087,7 @@
                   if (settings.audio.export.preCapture > maxPreCapture) {
                     settingsActions.updateSection('realtime', {
                       audio: {
-                        ...$audioSettings!,
+                        ...settings.audio,
                         export: {
                           ...settings.audio.export,
                           length: value,
@@ -1064,7 +1098,7 @@
                   } else {
                     settingsActions.updateSection('realtime', {
                       audio: {
-                        ...$audioSettings!,
+                        ...settings.audio,
                         export: { ...settings.audio.export, length: value },
                       },
                     });
@@ -1087,7 +1121,7 @@
                 onUpdate={value =>
                   settingsActions.updateSection('realtime', {
                     audio: {
-                      ...$audioSettings!,
+                      ...settings.audio,
                       export: { ...settings.audio.export, preCapture: value },
                     },
                   })}
@@ -1110,7 +1144,7 @@
                 onUpdate={value =>
                   settingsActions.updateSection('realtime', {
                     audio: {
-                      ...$audioSettings!,
+                      ...settings.audio,
                       export: { ...settings.audio.export, gain: value },
                     },
                   })}
@@ -1219,11 +1253,13 @@
       originalData={{
         path: store.originalData.realtime?.audio?.export?.path,
         type: store.originalData.realtime?.audio?.export?.type,
+        ultrasonicType: store.originalData.realtime?.audio?.export?.ultrasonicType,
         bitrate: store.originalData.realtime?.audio?.export?.bitrate,
       }}
       currentData={{
         path: store.formData.realtime?.audio?.export?.path,
         type: store.formData.realtime?.audio?.export?.type,
+        ultrasonicType: store.formData.realtime?.audio?.export?.ultrasonicType,
         bitrate: store.formData.realtime?.audio?.export?.bitrate,
       }}
     >
@@ -1253,7 +1289,7 @@
               onchange={() =>
                 settingsActions.updateSection('realtime', {
                   audio: {
-                    ...$audioSettings!,
+                    ...settings.audio,
                     export: { ...settings.audio.export, path: settings.audio.export.path },
                   },
                 })}
@@ -1272,6 +1308,27 @@
                   updateExportFormat(candidate);
                 } else {
                   logger.warn('Ignoring unknown audio export format candidate', {
+                    candidate,
+                  });
+                }
+              }}
+              groupBy={false}
+              menuSize="sm"
+            />
+
+            <!-- Ultrasonic Export Type (bat/ultrasonic captures above 48 kHz) -->
+            <SelectDropdown
+              value={settings.audio.export.ultrasonicType}
+              label={t('settings.audio.fileSettings.ultrasonicTypeLabel')}
+              helpText={t('settings.audio.fileSettings.ultrasonicTypeHelp')}
+              options={ultrasonicExportFormatOptions}
+              disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
+              onChange={value => {
+                const candidate = Array.isArray(value) ? value[0] : value;
+                if (isLosslessExportFormat(candidate)) {
+                  updateUltrasonicExportFormat(candidate);
+                } else {
+                  logger.warn('Ignoring unknown ultrasonic export format candidate', {
                     candidate,
                   });
                 }

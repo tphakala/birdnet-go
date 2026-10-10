@@ -144,21 +144,7 @@ func (ds *Datastore) GetTableStats() ([]datastore.TableStats, error) {
 // to row-count proportional estimation. Caches dbstat availability to avoid
 // repeated WARN logs when the virtual table is not compiled in.
 func (ds *Datastore) getSQLiteTableStats() ([]datastore.TableStats, error) {
-	cached := ds.dbstatAvailable.Load()
-	if cached == -1 {
-		// Already known to be unavailable — skip directly to estimation
-		return ds.getSQLiteTableStatsEstimated()
-	}
-
-	stats, err := ds.getSQLiteTableStatsViaDBStat()
-	if err == nil {
-		ds.dbstatAvailable.Store(1)
-		return stats, nil
-	}
-
-	// Mark as unavailable so we don't retry on every refresh
-	ds.dbstatAvailable.Store(-1)
-	return ds.getSQLiteTableStatsEstimated()
+	return datastore.ResolveCachedTableStats(&ds.dbstatAvailable, ds.getSQLiteTableStatsViaDBStat, ds.getSQLiteTableStatsEstimated)
 }
 
 // getSQLiteTableStatsViaDBStat uses the dbstat virtual table.

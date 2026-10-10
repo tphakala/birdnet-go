@@ -208,7 +208,7 @@
     <button
       onclick={saveLayout}
       disabled={isSaving}
-      class="flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-sm font-medium text-[var(--color-primary-content)] transition-colors hover:opacity-90 disabled:opacity-50"
+      class="flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-sm font-medium text-[var(--color-primary-content)] transition-colors hover:not-disabled:bg-[var(--color-primary-hover)] disabled:opacity-50"
     >
       <Save class="size-3.5" />
       {isSaving ? t('dashboard.editMode.saving') : t('dashboard.editMode.save')}

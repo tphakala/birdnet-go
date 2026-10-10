@@ -109,7 +109,7 @@ describe('excludedSpecies store', () => {
 
   it('tolerates a malformed response without throwing', async () => {
     // species missing entirely
-    mockGet.mockResolvedValue({ count: 0 } as unknown as { species: string[]; count: number });
+    mockGet.mockResolvedValue({ count: 0 });
     await expect(hydrateExcludedSpecies()).resolves.toBeUndefined();
     expect(isExcluded('anything')).toBe(false);
   });

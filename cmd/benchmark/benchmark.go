@@ -117,7 +117,7 @@ func runInferenceBenchmark(settings *conf.Settings, results *benchmarkResults) e
 
 	for time.Since(startTime) < duration {
 		inferenceStart := time.Now()
-		_, err := bn.Predict(context.Background(), [][]float32{silentChunk})
+		_, err := bn.PredictModel(context.Background(), classifier.RegistryIDBirdNETV24, [][]float32{silentChunk})
 		if err != nil {
 			return fmt.Errorf("prediction failed: %w", err)
 		}

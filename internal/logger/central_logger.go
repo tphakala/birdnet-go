@@ -3,7 +3,6 @@ package logger
 import (
 	"context"
 	"encoding/json"
-	stderrors "errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -780,7 +779,7 @@ func sanitizeAny(v any) any {
 	// both more informative and safe to format. Unsupported *types* (chan/func)
 	// are left untouched and render as before.
 	if _, err := json.Marshal(san); err != nil {
-		if _, ok := stderrors.AsType[*json.UnsupportedValueError](err); ok {
+		if _, ok := errors.AsType[*json.UnsupportedValueError](err); ok {
 			return fmt.Sprintf("%+v", san)
 		}
 	}

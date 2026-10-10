@@ -35,11 +35,12 @@ func FuzzNewSunCalc(f *testing.F) {
 		require.NotNil(t, sc, "NewSunCalc returned nil")
 
 		// Verify coordinates are stored correctly
-		assert.InDelta(t, lat, sc.observer.Latitude, 0.0001, "latitude not stored correctly")
-		assert.InDelta(t, lon, sc.observer.Longitude, 0.0001, "longitude not stored correctly")
+		st := sc.current()
+		assert.InDelta(t, lat, st.observer.Latitude, 0.0001, "latitude not stored correctly")
+		assert.InDelta(t, lon, st.observer.Longitude, 0.0001, "longitude not stored correctly")
 
 		// Verify location is always set (never nil)
-		require.NotNil(t, sc.location, "SunCalc.location is nil")
+		require.NotNil(t, st.location, "sunState.location is nil")
 
 		// For invalid coordinates, GetSunEventTimes should either error or return reasonable values
 		date := midsummerDate()

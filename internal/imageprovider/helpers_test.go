@@ -19,9 +19,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
-// TestIsCacheEntryStale tests the TTL logic for cache entries.
+// TestIsCacheEntryStale tests the TTL logic for cache entries against a fixed
+// instant, so the boundary cases do not depend on the wall clock.
 func TestIsCacheEntryStale(t *testing.T) {
 	t.Parallel()
+
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
 		name       string
@@ -31,44 +34,62 @@ func TestIsCacheEntryStale(t *testing.T) {
 	}{
 		{
 			name:       "fresh positive entry",
-			cachedAt:   time.Now().Add(-1 * time.Hour),
+			cachedAt:   now.Add(-1 * time.Hour),
 			isNegative: false,
 			wantStale:  false,
 		},
 		{
 			name:       "stale positive entry (older than 30 days)",
-			cachedAt:   time.Now().Add(-31 * 24 * time.Hour),
+			cachedAt:   now.Add(-31 * 24 * time.Hour),
 			isNegative: false,
 			wantStale:  true,
 		},
 		{
 			name:       "positive entry just before TTL boundary",
-			cachedAt:   time.Now().Add(-30*24*time.Hour + 1*time.Second), // 1 second fresher than TTL
+			cachedAt:   now.Add(-defaultCacheTTL + time.Nanosecond),
 			isNegative: false,
 			wantStale:  false,
 		},
 		{
+			name:       "positive entry exactly at TTL boundary",
+			cachedAt:   now.Add(-defaultCacheTTL),
+			isNegative: false,
+			wantStale:  false,
+		},
+		{
+			name:       "positive entry just past TTL boundary",
+			cachedAt:   now.Add(-defaultCacheTTL - time.Nanosecond),
+			isNegative: false,
+			wantStale:  true,
+		},
+		{
 			name:       "fresh negative entry",
-			cachedAt:   time.Now().Add(-5 * time.Minute),
+			cachedAt:   now.Add(-5 * time.Minute),
 			isNegative: true,
 			wantStale:  false,
 		},
 		{
 			name:       "stale negative entry (older than 15 minutes)",
-			cachedAt:   time.Now().Add(-20 * time.Minute),
+			cachedAt:   now.Add(-20 * time.Minute),
 			isNegative: true,
 			wantStale:  true,
 		},
 		{
 			name:       "negative entry just before TTL boundary",
-			cachedAt:   time.Now().Add(-15*time.Minute + 1*time.Second), // 1 second fresher than TTL
+			cachedAt:   now.Add(-negativeCacheTTL + time.Nanosecond),
 			isNegative: true,
 			wantStale:  false,
 		},
 		{
-			name:       "very old positive entry",
-			cachedAt:   time.Now().Add(-30 * 24 * time.Hour),
-			isNegative: false,
+			name:       "negative entry exactly at TTL boundary",
+			cachedAt:   now.Add(-negativeCacheTTL),
+			isNegative: true,
+			wantStale:  false,
+		},
+		{
+			name:       "negative entry just past TTL boundary",
+			cachedAt:   now.Add(-negativeCacheTTL - time.Nanosecond),
+			isNegative: true,
 			wantStale:  true,
 		},
 		{
@@ -82,10 +103,22 @@ func TestIsCacheEntryStale(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := isCacheEntryStale(tt.cachedAt, tt.isNegative)
-			assert.Equal(t, tt.wantStale, got, "isCacheEntryStale(%v, %v)", tt.cachedAt, tt.isNegative)
+			got := isCacheEntryStaleAt(tt.cachedAt, tt.isNegative, now)
+			assert.Equal(t, tt.wantStale, got, "isCacheEntryStaleAt(%v, %v, %v)", tt.cachedAt, tt.isNegative, now)
 		})
 	}
+}
+
+// TestIsCacheEntryStaleUsesWallClock checks that isCacheEntryStale applies the
+// TTL against the current time. The margins are hours and days, far larger
+// than any scheduler or timer jitter.
+func TestIsCacheEntryStaleUsesWallClock(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, isCacheEntryStale(time.Now().Add(-time.Hour), false))
+	assert.True(t, isCacheEntryStale(time.Now().Add(-defaultCacheTTL-time.Hour), false))
+	assert.False(t, isCacheEntryStale(time.Now().Add(-time.Minute), true))
+	assert.True(t, isCacheEntryStale(time.Now().Add(-negativeCacheTTL-time.Hour), true))
 }
 
 func TestFindStaleEntriesSkipsNegativeEntries(t *testing.T) {

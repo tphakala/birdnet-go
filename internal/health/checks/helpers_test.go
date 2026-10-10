@@ -425,3 +425,26 @@ func TestEvalWindowedStats_SeverityMatrix(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractMetricType(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		prefix string
+		want   string
+	}{
+		{"production prefix", observability.MetricPrefixAudioDrops, observability.MetricTypeAudioDrops},
+		{"splits on the last dot", "a.b.c.", "c"},
+		{"leading dot", ".drops", "drops"},
+		{"no dot", "nodot", "nodot"},
+		{"only trailing dot", "nodot.", "nodot"},
+		{"single dot", ".", ""},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, extractMetricType(tt.prefix))
+		})
+	}
+}

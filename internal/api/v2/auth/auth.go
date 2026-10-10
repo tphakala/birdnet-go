@@ -21,7 +21,6 @@ package authapi
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -34,6 +33,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/security"
@@ -198,7 +198,7 @@ func (c *Handler) Login(ctx echo.Context) error {
 			logger.String("path", ctx.Request().URL.Path),
 		)
 		// Return a generic error, perhaps indicating auth isn't enabled
-		return c.HandleErrorWithKey(ctx, errors.New("authentication not configured"),
+		return c.HandleErrorWithKey(ctx, errors.NewStd("authentication not configured"),
 			"Authentication service unavailable", http.StatusInternalServerError, notification.MsgErrAuthServiceUnavailable, nil)
 	}
 

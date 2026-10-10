@@ -17,7 +17,7 @@ import (
 // effectively frozen because changing it would invalidate existing on-disk caches.
 
 // TestLoadCachedImagesWarmupPopulatesMemory is a regression test for the
-// loadCachedImages double-pointer bug (Forgejo #1311): the warmup loop stored
+// loadCachedImages double-pointer bug: the warmup loop stored
 // &birdImage (a **BirdImage) instead of the *BirdImage, so every reader's
 // value.(*BirdImage) assertion failed and the whole startup warmup was dead.
 //

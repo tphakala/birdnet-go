@@ -11,6 +11,10 @@ import (
 // It is populated from the classifier's range-filter status so the health package does
 // not depend on classifier internals.
 type RangeFilterStatusInfo struct {
+	// ParticipantsLoaded reports whether any loaded acoustic model participates in range
+	// filtering (BirdNET v2.4, v3.0, Perch). When false there is nothing to range-filter,
+	// so a missing backend is "not applicable" rather than a fault.
+	ParticipantsLoaded bool
 	// LocationConfigured reports whether a location is set; range filtering only filters
 	// by location, so without one it is not applicable.
 	LocationConfigured bool
@@ -59,6 +63,11 @@ func (c *RangeFilterCheck) Run(_ context.Context) health.Result {
 	status := health.StatusHealthy
 	message := "Range filter active"
 	switch {
+	case !s.ParticipantsLoaded:
+		// No loaded model participates in range filtering (e.g. a Bat-only or BSG-only
+		// install): there is nothing to filter by location, so a missing backend is not
+		// a fault. Checked before Active so this does not report a spurious Critical.
+		message = "Range filtering not applicable (no loaded model participates in range filtering)"
 	case !s.LocationConfigured:
 		// Range filtering only filters by location; without one it is not applicable.
 		message = "Range filtering not applicable (no location configured)"
@@ -83,6 +92,7 @@ func (c *RangeFilterCheck) Run(_ context.Context) health.Result {
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
 		Details: map[string]any{
+			"participants_loaded": s.ParticipantsLoaded,
 			"location_configured": s.LocationConfigured,
 			"active":              s.Active,
 			"fell_back":           s.FellBack,

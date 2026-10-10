@@ -3,6 +3,7 @@ package classifier
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -83,11 +84,11 @@ func TestGetSpeciesOccurrence(t *testing.T) {
 				},
 			}
 
-			bn := &BirdNET{
-				Settings: settings,
-			}
-
-			occurrence := bn.GetSpeciesOccurrence(tt.species)
+			// The range filter is owned by the orchestrator's service since Phase 2b.
+			// With no backend loaded, occurrenceAtTime short-circuits to 0, matching the
+			// former bn.GetSpeciesOccurrence nil-range-filter fast path these cases hit.
+			rfs := newTestRangeFilterService(nil)
+			occurrence := rfs.occurrenceAtTime(tt.species, time.Now(), settings)
 			assert.InDelta(t, tt.expected, occurrence, 0.001, tt.description)
 		})
 	}

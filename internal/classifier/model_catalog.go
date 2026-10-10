@@ -91,6 +91,19 @@ type CatalogEntry struct {
 	// on-disk JSON of existing single-variant entries byte-identical, so adding
 	// this field does not shift catalogChecksum or force a schema-version bump.
 	Variants []CatalogVariant `json:"variants,omitempty"`
+	// DependsOn lists the catalog IDs of entries whose files are installed together
+	// with this one, for every variant (the embedded baseline included). A dependency is a flat, shared-only entry that declares no
+	// dependencies of its own (depth one; catalog validation enforces it). The
+	// dependency's files are resolved through EffectiveFiles, so one install fetches
+	// them, the gallery sizes them, and an uninstall of the dependency is refused while
+	// this entry is installed or downloading. omitempty keeps the on-disk JSON of every
+	// entry without dependencies byte-identical, so adding this field does not shift
+	// catalogChecksum or force a schema-version bump.
+	DependsOn []string `json:"depends_on,omitempty"`
+	// Component marks a hidden support entry (for example a taxonomy file) that is never
+	// a classifier. It is removed automatically when an uninstall leaves nothing
+	// installed or actively downloading that depends on it. omitempty as above.
+	Component bool `json:"component,omitempty"`
 }
 
 // CatalogVariant describes one hardware or regional variant of a model: a
@@ -149,7 +162,7 @@ type Benchmark struct {
 type CatalogFile struct {
 	RemotePath      string `json:"remote_path"`       // path within the HuggingFace repo
 	LocalName       string `json:"local_name"`        // filename to use on disk
-	Role            string `json:"role"`              // file role: "model", "labels", "embeddings", "geomodel_model", "geomodel_labels", or "data"
+	Role            string `json:"role"`              // file role: "model", "labels", "embeddings", "geomodel_model", "geomodel_labels", "taxonomy", or "data"
 	SHA256          string `json:"sha256"`            // hex-encoded SHA-256 checksum
 	SizeBytes       int64  `json:"size_bytes"`        // file size in bytes
 	HuggingFaceRepo string `json:"hugging_face_repo"` // override entry-level HuggingFace repo for this file (empty = use entry repo)
@@ -169,7 +182,7 @@ var EmbeddedCatalog = []CatalogEntry{
 	// integrity-checked like every other entry. Now visible in the gallery: the
 	// hardware recommender (internal/classifier/recommend) plus the per-variant
 	// MinRAMMB floors below keep the heavy global fp32 (557 MB) and fp16 (279 MB)
-	// builds off hosts that cannot run them. The two global variants plus the 39
+	// builds off hosts that cannot run them. The two global variants plus the
 	// regional tiles appended by birdnetV30RegionalVariants ship today. The entry stays
 	// labelled a developer preview so users know it is not the GA build. The
 	// backend loader is fully functional and v3.0 can also be enabled via config
@@ -371,9 +384,9 @@ var EmbeddedCatalog = []CatalogEntry{
 	// The entry is visible so the gallery can offer an in-place "optimize" swap between
 	// the builtin baseline and a compatible DFT-truncated build. The primary BirdNET
 	// v2.4 classifier is resolved at startup from config and the standard model paths
-	// (see NewBirdNET), NOT from a generic gallery loader, so the swap runs through a
-	// dedicated primary-reload path (ModelManager.replacePrimaryVariant ->
-	// Orchestrator.ReloadPrimaryForVariantSwap), not the generic replaceVariant flow.
+	// (see NewBirdNET). Its within-model variant swap runs through the unified
+	// ModelManager.replaceVariant like every other family, activating the always-loaded
+	// anchor gaplessly via Orchestrator.ReloadForVariantSwap.
 	// RegistryID is the permanent BirdNET v2.4 ID: the model is always installed (the
 	// BuiltIn baseline needs no files), it is never hot-loaded by loadInstalledModels
 	// (there is no secondary loader for the primary), and Uninstall refuses the entry
@@ -390,7 +403,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Region:        "",
 		SpeciesCount:  birdnetV24SpeciesCount,
 		Version:       "2.4",
-		RegistryID:    permanentRegistryID,
+		RegistryID:    RegistryIDBirdNETV24,
 		Hidden:        false,
 		// RequiresONNX is now per-variant: the BuiltIn baseline runs on the embedded
 		// TFLite model (no ONNX Runtime needed); the DFT-truncated builds are ONNX
@@ -640,6 +653,30 @@ func HasGeomodelFiles(entry *CatalogEntry) bool {
 	return false
 }
 
+// hasGeomodelTuple reports whether a catalog entry carries BOTH geomodel role files (model
+// and labels), i.e. a complete geomodel range-filter tuple. HasGeomodelFiles is satisfied by
+// either role alone; a range-filter survivor needs both, because the config sets ModelPath
+// and LabelsPath independently and a half-tuple survivor would leave the other path pointing
+// at an uninstalled entry's absent file.
+func hasGeomodelTuple(entry *CatalogEntry) bool {
+	if entry == nil {
+		return false
+	}
+	var hasModel, hasLabels bool
+	for _, f := range entry.Files {
+		switch f.Role {
+		case RoleGeomodelModel:
+			hasModel = true
+		case RoleGeomodelLabels:
+			hasLabels = true
+		}
+		if hasModel && hasLabels {
+			return true
+		}
+	}
+	return false
+}
+
 // HasEmbeddingsFiles reports whether a catalog entry includes shared embeddings files.
 func HasEmbeddingsFiles(entry *CatalogEntry) bool {
 	if entry == nil {
@@ -788,10 +825,10 @@ func VariantSelectable(entry *CatalogEntry, variantID string) bool {
 
 // IsPermanentEntry reports whether entry is the permanent built-in BirdNET v2.4
 // classifier. The permanent entry is always installed, can only have its variant
-// swapped (never uninstalled), and swaps through the dedicated primary-reload path
-// rather than the generic variant-replace flow.
+// swapped (never uninstalled), and swaps through the unified variant-replace path
+// (ReloadForVariantSwap on the always-loaded anchor) like every other family.
 func IsPermanentEntry(entry *CatalogEntry) bool {
-	return entry != nil && entry.RegistryID == permanentRegistryID
+	return entry != nil && entry.RegistryID == RegistryIDBirdNETV24
 }
 
 // builtInVariant returns the entry's BuiltIn baseline variant (the embedded

@@ -151,6 +151,31 @@ func TestOpenWeatherProvider_FetchWeather_Unauthorized_ReturnsSentinel(t *testin
 	assert.Equal(t, 1, callCount, "a 401 must not be retried")
 }
 
+// TestOpenWeatherProvider_FetchWeather_Forbidden_ReturnsSentinel guards the 403
+// classification: some providers signal an invalid/restricted key with 403
+// rather than 401, so it must also map to ErrWeatherAuthFailed and must NOT be
+// retried, matching the 401 behavior above.
+func TestOpenWeatherProvider_FetchWeather_Forbidden_ReturnsSentinel(t *testing.T) {
+	setupHTTPMock(t)
+
+	callCount := 0
+	httpmock.RegisterResponder("GET", `=~^https://api\.openweathermap\.org/data/2\.5/weather`,
+		func(_ *http.Request) (*http.Response, error) {
+			callCount++
+			return httpmock.NewStringResponse(http.StatusForbidden, `{"cod":403,"message":"Forbidden"}`), nil
+		})
+
+	provider := NewOpenWeatherProvider(nil)
+	settings := createTestSettings(t, "openweather")
+
+	data, err := provider.FetchWeather(t.Context(), settings)
+
+	require.Error(t, err)
+	assert.Nil(t, data)
+	require.ErrorIs(t, err, ErrWeatherAuthFailed, "403 must map to the auth-failed sentinel")
+	assert.Equal(t, 1, callCount, "a 403 must not be retried")
+}
+
 func TestOpenWeatherProvider_FetchWeather_InvalidJSON(t *testing.T) {
 	setupHTTPMock(t)
 

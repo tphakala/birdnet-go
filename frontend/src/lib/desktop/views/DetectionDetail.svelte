@@ -18,6 +18,7 @@
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import WeatherDetails from '$lib/desktop/components/data/WeatherDetails.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
+  import SpectrogramImage from '$lib/desktop/components/media/SpectrogramImage.svelte';
   import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
@@ -46,8 +47,12 @@
     status: string;
     score: number;
     location_based: boolean;
-    latitude: number;
-    longitude: number;
+    // Optional: the API omits these when no location is configured (they are *float64
+    // with omitempty server-side). The backend sends them whenever location_based is
+    // true, but callers must still guard before toFixed() as defense in depth against
+    // a contract violation.
+    latitude?: number;
+    longitude?: number;
   }
 
   interface SpeciesInfo {
@@ -719,7 +724,7 @@
               {(speciesInfo.rarity.score * 100).toFixed(0)}%
             </span>
           </div>
-          {#if speciesInfo.rarity.location_based}
+          {#if speciesInfo.rarity.location_based && speciesInfo.rarity.latitude != null && speciesInfo.rarity.longitude != null}
             <p class="text-xs text-[var(--color-base-content)]/40">
               {t('species.rarity.basedOnLocation', {
                 latitude: speciesInfo.rarity.latitude.toFixed(2),
@@ -888,14 +893,15 @@
     <!-- Hero Section -->
     {@render heroSection(detection)}
 
-    <!-- Media Section (shown only when this detection has a clip) -->
-    {#if detection.clipName}
+    <!-- Media Section (shown when this detection has a clip, or a kept spectrogram image
+         after retention removed its audio) -->
+    {#if detection.clipName || detection.spectrogramOnly}
       <section class="surface-card" aria-labelledby="media-heading">
         <div class="p-5 md:p-6">
           <h2 id="media-heading" class="section-heading !mb-0">
             {t('detections.media.title')}
           </h2>
-          {#if clipExtractionEnabled}
+          {#if clipExtractionEnabled && detection.clipName}
             <p class="text-sm text-[var(--color-base-content)]/60 mt-0.5 mb-4">
               {t('detections.media.clipHint')}
             </p>
@@ -904,23 +910,36 @@
           {/if}
           <div
             role="region"
-            aria-label={t('detections.detail.aria.audioRecordingFor', {
-              name: localizeSpeciesName(detection.scientificName, detection.commonName),
-            })}
+            aria-label={detection.clipName
+              ? t('detections.detail.aria.audioRecordingFor', {
+                  name: localizeSpeciesName(detection.scientificName, detection.commonName),
+                })
+              : t('components.audio.spectrogramForSpecies', {
+                  species: localizeSpeciesName(detection.scientificName, detection.commonName),
+                })}
           >
             <div class="detail-audio-container">
-              <AudioPlayer
-                audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
-                detectionId={detection.id.toString()}
-                showSpectrogram={true}
-                spectrogramSize="lg"
-                spectrogramRaw={false}
-                responsive={true}
-                className="w-full"
-                enableClipExtraction={clipExtractionEnabled}
-                clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
-                modelType={detection.modelType}
-              />
+              {#if detection.clipName}
+                <AudioPlayer
+                  audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
+                  detectionId={detection.id.toString()}
+                  showSpectrogram={true}
+                  spectrogramSize="lg"
+                  spectrogramRaw={false}
+                  responsive={true}
+                  className="w-full"
+                  enableClipExtraction={clipExtractionEnabled}
+                  clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
+                  modelType={detection.modelType}
+                />
+              {:else}
+                <SpectrogramImage
+                  detectionId={detection.id.toString()}
+                  size="lg"
+                  raw={false}
+                  className="w-full"
+                />
+              {/if}
             </div>
           </div>
         </div>
@@ -936,6 +955,7 @@
         <div class="tab-nav" role="tablist" aria-label={t('detections.detail.aria.tabList')}>
           {#each ['overview', 'history', 'notes'] as tab (tab)}
             <button
+              type="button"
               id="tab-{tab}"
               role="tab"
               class="tab-button"
@@ -951,6 +971,7 @@
           {/each}
           {#if canReview}
             <button
+              type="button"
               id="tab-review"
               role="tab"
               class="tab-button"

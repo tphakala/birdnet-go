@@ -2,12 +2,13 @@ package logger
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Default buffer size for file writes (32KB provides good batching without excessive memory)

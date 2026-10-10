@@ -129,22 +129,23 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 	}
 
 	src := &AudioSource{
-		ID:               id,
-		DisplayName:      displayName,
-		Type:             cfg.Type,
-		SafeString:       safeStr,
-		SampleRate:       cfg.SampleRate,
-		SourceSampleRate: cfg.SourceSampleRate,
-		BitDepth:         cfg.BitDepth,
-		Channels:         cfg.Channels,
-		SourceChannels:   cfg.SourceChannels,
-		ChannelMode:      cfg.ChannelMode,
-		MediaMode:        cfg.MediaMode,
-		Transport:        cfg.Transport,
-		Gain:             cfg.Gain,
-		State:            SourceInactive,
-		RegisteredAt:     time.Now(),
-		LastSeen:         time.Now(),
+		ID:                        id,
+		DisplayName:               displayName,
+		Type:                      cfg.Type,
+		SafeString:                safeStr,
+		SampleRate:                cfg.SampleRate,
+		SourceSampleRate:          cfg.SourceSampleRate,
+		SourceSampleRateEstimated: cfg.SourceSampleRateEstimated,
+		BitDepth:                  cfg.BitDepth,
+		Channels:                  cfg.Channels,
+		SourceChannels:            cfg.SourceChannels,
+		ChannelMode:               cfg.ChannelMode,
+		MediaMode:                 cfg.MediaMode,
+		Transport:                 cfg.Transport,
+		Gain:                      cfg.Gain,
+		State:                     SourceInactive,
+		RegisteredAt:              time.Now(),
+		LastSeen:                  time.Now(),
 	}
 	src.SetConnectionString(connStr)
 
@@ -333,7 +334,7 @@ func (r *SourceRegistry) UpdateAudioParams(sourceID string, sampleRate, bitDepth
 // "desired != 0" guard in sourceNeedsReconfigure. It does not notify; the caller's following
 // UpdateAudioParams emits the SourceReconfigured event with the fully updated
 // snapshot.
-func (r *SourceRegistry) SyncReconfiguredParams(sourceID, channelMode, mediaMode, transport string, sourceSampleRate, sourceChannels int) bool {
+func (r *SourceRegistry) SyncReconfiguredParams(sourceID, channelMode, mediaMode, transport string, sourceSampleRate, sourceChannels int, sourceSampleRateEstimated bool) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	src, ok := r.sources[sourceID]
@@ -345,6 +346,10 @@ func (r *SourceRegistry) SyncReconfiguredParams(sourceID, channelMode, mediaMode
 	src.Transport = transport
 	if sourceSampleRate != 0 {
 		src.SourceSampleRate = sourceSampleRate
+		// Keep the estimated marker in step with the rate it describes, so a later
+		// stop/resume that rebuilds the stream from the registry still forces
+		// resampling for a fallback estimate (#4350).
+		src.SourceSampleRateEstimated = sourceSampleRateEstimated
 	}
 	if sourceChannels != 0 {
 		src.SourceChannels = sourceChannels

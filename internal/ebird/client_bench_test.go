@@ -5,7 +5,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
 func BenchmarkBuildFamilyTree(b *testing.B) {
@@ -95,26 +94,26 @@ func BenchmarkGetTaxonomyWithCache(b *testing.B) {
 }
 
 func BenchmarkCacheLookup(b *testing.B) {
-	// Create a minimal test server for client initialization
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"sciName": "Test", "comName": "Test", "speciesCode": "test"}]`))
 	}))
 	defer server.Close()
 
 	client := setupTestClient(b, server)
 	disableLogging(b)
+	ctx := b.Context()
 
-	// Pre-populate cache with various keys
-	for i := range 100 {
-		key := "taxonomy:" + string(rune('a'+i%26))
-		client.cache.Set(key, []TaxonomyEntry{{ScientificName: "Test"}}, 1*time.Hour)
+	// Prime the cache once through the public API.
+	if _, err := client.GetTaxonomy(ctx, "m"); err != nil {
+		b.Fatal(err)
 	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, found := client.cache.Get("taxonomy:m"); !found {
-			b.Fatal("Cache lookup failed")
+		if _, err := client.GetTaxonomy(ctx, "m"); err != nil {
+			b.Fatal(err)
 		}
 	}
 }

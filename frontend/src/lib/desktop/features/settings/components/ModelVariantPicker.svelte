@@ -248,7 +248,7 @@
          Native disabled is kept only for the whole-picker in-flight case. Clicks and
          the Space key are suppressed; arrow-key navigation can transiently check a
          blocked radio before onchange fires, so onchange reverts it. Documented
-         a11y tradeoff (frontend/CLAUDE.md: prefer aria-disabled + suppressed click). -->
+         a11y tradeoff (frontend/AGENTS.md: prefer aria-disabled + suppressed click). -->
     <input
       id={inputId}
       type="radio"

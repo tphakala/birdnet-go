@@ -109,6 +109,14 @@
       "closeModal": "Chiudi modale",
       "dismissAlert": "Ignora avviso",
       "closeNotification": "Chiudi notifica",
+      "toastRegion": {
+        "topLeft": "Notifiche, in alto a sinistra",
+        "topCenter": "Notifiche, in alto al centro",
+        "topRight": "Notifiche, in alto a destra",
+        "bottomLeft": "Notifiche, in basso a sinistra",
+        "bottomCenter": "Notifiche, in basso al centro",
+        "bottomRight": "Notifiche, in basso a destra"
+      },
       "toggleDropdown": "Attiva/disattiva menu a discesa",
       "sortAscending": "Ordina in modo crescente",
       "selectLanguage": "Seleziona lingua",
@@ -130,7 +138,6 @@
       "selectToday": "Seleziona oggi",
       "dateSelected": "Data selezionata: {date}",
       "calendarNavigation": "Usa le frecce per navigare nel calendario, Invio per selezionare, Esc per chiudere",
-      "downloadCsv": "Scarica elenco specie come CSV",
       "visitEbirdLink": "Apri eBird.org in una nuova scheda",
       "learnEbirdTaxonomyLink": "Apri Tassonomia eBird in una nuova scheda",
       "resizeHandle": "Trascina per ridimensionare",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Analisi audio sovraccaricata",
-        "overloadMessage": "Il sistema sta scartando il {dropRate} % dei campioni audio della sorgente ''{sourceName}'' perché non riesce a tenere il passo con l'analisi. Riduci il valore di sovrapposizione BirdNET nelle impostazioni di rilevamento o considera l'aggiornamento a una CPU più veloce."
+        "overloadMessage": "Il sistema sta scartando il {dropRate} % dei campioni audio della sorgente '{sourceName}' perché non riesce a tenere il passo con l'analisi. Riduci il valore di sovrapposizione BirdNET nelle impostazioni di rilevamento o considera l'aggiornamento a una CPU più veloce."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime non disponibile",
@@ -474,6 +481,16 @@
         "notRegisteredTitle": "Nessun modello sta analizzando {sourceName}",
         "notRegisteredMessage": "Nessun audio raggiunge {models} sulla sorgente audio \"{sourceName}\", quindi non vengono prodotti rilevamenti. Apri Sistema > Modelli IA per verificarne lo stato per sorgente e confermare che la sorgente audio sia connessa e invii audio."
       },
+      "acousticModels": {
+        "noneTitle": "Nessun modello acustico abilitato",
+        "noneMessage": "Nessun modello acustico è caricato, quindi l'audio viene acquisito ma non analizzato. Abilita un modello in Impostazioni > Analisi, o installane uno dalla galleria modelli.",
+        "loadFailedTitle": "Impossibile caricare il modello acustico",
+        "loadFailedMessage": "Un modello acustico abilitato non è stato caricato, quindi l'audio viene acquisito ma non analizzato. Controlla il modello nella pagina Sistema > Modelli IA."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modello ha una build migliore per questo sistema} other {# modelli hanno build migliori per questo sistema}}",
+        "message": "È disponibile una build più adatta all'hardware o alla posizione di questo sistema per: {models}. Apri Impostazioni > Analisi > Modelli e scegli Ottimizza per passare."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valore attuale: {value}% (soglia: {threshold}%)",
@@ -493,6 +510,17 @@
           "diskFull": "Disco pieno - libera spazio",
           "permissionDenied": "Permesso negato - controlla i permessi del file o del servizio"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} fallisce ogni analisi",
+        "message": "{modelName} è caricato, ma le sue ultime {failures} analisi consecutive sono fallite su {runtime}: l'inferenza ha restituito un errore. L'audio viene acquisito, ma questo modello non rileva nulla. Controlla il modello nella pagina Sistema > Modelli IA.",
+        "nonFiniteMessage": "{modelName} è caricato, ma le sue ultime {failures} analisi consecutive sono fallite su {runtime}: il modello ha restituito punteggi non validi (NaN o infiniti). L'audio viene acquisito, ma questo modello non rileva nulla. Controlla il modello nella pagina Sistema > Modelli IA."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Sovrapposizione dell'analisi limitata per questo dispositivo",
+        "cadenceCappedMessage": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} con la sovrapposizione configurata di {configured} s supera la capacità misurata di questo dispositivo, quindi l'audio viene analizzato con {effective} s di sovrapposizione. Per questo il filtro falsi positivi può richiedere meno conferme. Le impostazioni salvate non cambiano; vedi Impostazioni > Analisi.",
+        "cadenceOverloadedTitle": "Questo dispositivo non riesce a tenere il passo con l'analisi audio",
+        "cadenceOverloadedMessage": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} supera la capacità misurata di questo dispositivo anche senza sovrapposizione, quindi l'analisi può accumulare ritardo e alcuni rilevamenti possono andare persi. Attiva meno modelli o sorgenti audio, oppure scegli una variante del modello più veloce."
       }
     },
     "loading": "Caricamento notifiche..."
@@ -749,6 +777,16 @@
       "recentDetectionsFetch": "Impossibile recuperare i rilevamenti recenti: {status}",
       "recentDetectionsLoad": "Impossibile caricare i rilevamenti recenti",
       "configFetch": "Impossibile recuperare la configurazione della dashboard: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Nessun modello acustico abilitato",
+      "noneMessage": "L'audio viene acquisito ma non analizzato. Abilita un modello nella galleria modelli per iniziare a rilevare le specie.",
+      "noneAction": "Apri galleria modelli",
+      "loadFailedTitle": "Impossibile caricare il modello acustico",
+      "loadFailedMessage": "Impossibile caricare un modello abilitato, quindi nessun audio viene analizzato. La pagina Modelli IA mostra quale modello ha fallito e perché.",
+      "loadFailedAction": "Visualizza stato Modelli IA",
+      "failingTitle": "{count, plural, one {Un modello fallisce ogni analisi} other {# modelli falliscono ogni analisi}}",
+      "failingMessage": "{count, plural, one {{models} è caricato, ma ogni analisi fallisce, quindi non rileva nulla.} other {{models} sono caricati, ma ogni analisi fallisce, quindi non rilevano nulla.}} La pagina Modelli IA mostra il backend e l'errore."
     },
     "banner": {
       "title": "Titolo",
@@ -1011,7 +1049,8 @@
       "error": "Errore caricamento rilevamento: {error}",
       "loadingResults": "Caricamento di {count} risultati...",
       "thumbnailLoading": "Caricamento miniatura di {species}...",
-      "thumbnailLoaded": "Miniatura di {species} caricata"
+      "thumbnailLoaded": "Miniatura di {species} caricata",
+      "resultsPerPage": "Risultati per pagina"
     },
     "errors": {
       "notFound": "Rilevamento non trovato. Potrebbe essere stato eliminato o l'ID non è corretto.",
@@ -1781,6 +1820,8 @@
       "sourceNotRunning": "non sta analizzando",
       "sourceNotRunningTooltip": "Questa sorgente è assegnata al modello nelle impostazioni, ma il suo audio non raggiunge il modello, quindi non produce rilevamenti. Verifica che la sorgente audio sia connessa e invii audio.",
       "modelNotAnalyzingTooltip": "Una o più sorgenti audio assegnate a questo modello non gli inviano audio, quindi non produce rilevamenti. Vedi le sorgenti elencate qui sotto.",
+      "sourcesDegraded": "{count} su {total} sorgenti non disponibili",
+      "sourcesDegradedTooltip": "Alcune sorgenti audio di questo modello, ma non tutte, non sono disponibili, quindi continua ad analizzare tramite quelle funzionanti. La sorgente non disponibile specifica e le indicazioni per risolvere il problema sono elencate qui sotto.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -1822,7 +1863,14 @@
       "fp16Help": "Virgola mobile a 16 bit. L'hardware che lo supporta può eseguire alcuni modelli più velocemente e con meno memoria.",
       "invocationsHelp": "Totale dei segmenti audio che questo modello ha analizzato dall'avvio.",
       "noModelsHint": "Nessuna sorgente audio configurata ancora?",
-      "noModelsHintLink": "Configura sorgenti audio"
+      "noModelsHintLink": "Configura sorgenti audio",
+      "modelFailing": "ogni analisi fallisce",
+      "lastSuccess": "Ultimo successo",
+      "lastSuccessHelp": "Quando questo modello ha analizzato l'audio senza errori l'ultima volta.",
+      "lastSuccessNever": "Nessuno dal caricamento del modello",
+      "modelFailingHelp": "{reason} Prova un'altra versione di questo modello in Impostazioni > Analisi > Modelli, oppure controlla il backend e la precisione mostrati sopra.",
+      "modelFailingReasonNonFinite": "Tutte le analisi recenti sono fallite perché il modello ha restituito punteggi non validi (NaN o infiniti), quindi non rileva nulla.",
+      "modelFailingReasonError": "Tutte le analisi recenti sono fallite perché l'inferenza ha restituito un errore, quindi il modello non rileva nulla."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2338,7 +2386,7 @@
           "title": "Filtro Falsi Positivi",
           "description": "Riduce i falsi rilevamenti richiedendo conferme multiple su segmenti audio sovrapposti",
           "level": {
-            "label": "Livello Filtro"
+            "label": "Intensità del Filtro Falsi Positivi"
           },
           "detectionCount": "{count} conferme richieste. {description}",
           "levels": {
@@ -2346,10 +2394,9 @@
             "lenient": "Per audio di bassa qualità (telecamere RTSP, microfoni webcam)",
             "moderate": "Equilibrato per configurazioni hobby tipiche",
             "balanced": "Comportamento originale pre-settembre 2025",
-            "strict": "RPi 4+ necessario. Per microfoni di alta qualità",
-            "maximum": "RPi 4+ necessario. Per microfoni di grado professionale"
+            "strict": "Per microfoni di alta qualità",
+            "maximum": "Per microfoni di grado professionale"
           },
-          "hardwareNote": "I livelli Rigoroso e Massimo richiedono impostazioni di sovrapposizione più alte e più risorse CPU. Hardware RPi 4 o migliore è richiesto per questi livelli.",
           "overlapAdjusted": "Impostazione sovrapposizione regolata automaticamente a {overlap}s per soddisfare i requisiti del filtro",
           "overlapReduced": "Impostazione sovrapposizione ridotta a {overlap}s per corrispondere al livello del filtro",
           "levelNames": {
@@ -2361,14 +2408,38 @@
             "maximum": "Massimo",
             "unknown": "Sconosciuto"
           },
-          "warningOff": "Senza filtraggio, qualsiasi rilevamento sopra la soglia di confidenza viene accettato immediatamente. Questo produce tipicamente diversi falsi positivi al giorno. Anche un filtraggio basso migliora significativamente la qualità dei risultati."
+          "warningOff": "Senza filtraggio, qualsiasi rilevamento sopra la soglia di confidenza viene accettato immediatamente. Questo produce tipicamente diversi falsi positivi al giorno. Anche un filtraggio basso migliora significativamente la qualità dei risultati.",
+          "readoutTitle": "Conferme richieste ora",
+          "readoutPreviewTitle": "Conferme richieste dopo il salvataggio (stima)",
+          "readoutIntro": "Un rilevamento viene accettato quando abbastanza finestre di analisi entro {seconds} secondi concordano.",
+          "readoutLine": "{model}: {count} su {windows} finestre, una nuova finestra ogni {step} s",
+          "readoutPreview": "Stima basata sulle modifiche non salvate. Il limite del dispositivo viene ricontrollato dopo il salvataggio.",
+          "readoutPending": "Le impostazioni salvate sono in fase di applicazione. Questi valori sono stime finché non vengono caricati i valori aggiornati.",
+          "capNoticeTitle": "Sovrapposizione limitata a quanto questo dispositivo può elaborare",
+          "capNotice": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} con la sovrapposizione configurata di {configured} s supera la capacità misurata di questo dispositivo, quindi l'audio viene analizzato con {effective} s di sovrapposizione. Per questo il filtro può richiedere meno conferme. Le impostazioni salvate non cambiano.",
+          "overloadedNoticeTitle": "Questo dispositivo non riesce a tenere il passo con l'analisi",
+          "overloadedNotice": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} supera la capacità misurata di questo dispositivo anche senza sovrapposizione. L'analisi può accumulare ritardo e alcuni rilevamenti possono andare persi. Attiva meno modelli o sorgenti audio, oppure scegli una variante del modello più veloce.",
+          "unknownLatency": "Non è stato possibile misurare il tempo di elaborazione per {models}, quindi non viene considerato quando la sovrapposizione viene limitata. L'analisi può comunque accumulare ritardo.",
+          "cpuNote": "Un'intensità maggiore analizza più spesso l'audio sovrapposto, il che costa tempo di CPU per ogni modello e sorgente audio attivi. BirdNET-Go limita automaticamente la sovrapposizione a quanto questo dispositivo può elaborare."
         },
         "rangeFilter": {
           "title": "Filtro Intervallo",
           "description": "Limita il rilevamento alle specie probabili nella tua regione geografica",
           "stationLocation": {
             "label": "Posizione Stazione",
-            "helpText": "Posizione della stazione, usata per dati meteo e per limitare le specie di uccelli a quelle probabili nella regione."
+            "helpText": "Posizione della stazione, usata per dati meteo e per limitare le specie di uccelli a quelle probabili nella regione.",
+            "automaticLocation": "Posizione automatica",
+            "useCurrentLocation": "Usa la posizione del browser",
+            "locationHelp": "Compila le coordinate usando la posizione di questo browser.",
+            "locating": "Localizzazione in corso...",
+            "accuracy": "Precisione stimata: entro {accuracy} m",
+            "locationDetected": "Posizione del browser rilevata.",
+            "geolocationUnsupported": "Questo browser non supporta la posizione del dispositivo. Inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationInsecureHelp": "Richiede HTTPS o localhost. Cerca invece un luogo o usa la mappa.",
+            "geolocationDenied": "L'autorizzazione alla posizione è stata negata. Inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationUnavailable": "Il dispositivo non ha potuto determinare la propria posizione. Inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationTimedOut": "La richiesta di posizione è scaduta. Riprova, inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationFailed": "Impossibile determinare la posizione del dispositivo. Inserisci le coordinate manualmente o usa la mappa."
           },
           "latitude": {
             "label": "Latitudine",
@@ -3157,7 +3228,11 @@
         "enable": "Abilita Caricamenti BirdWeather",
         "token": {
           "label": "Token BirdWeather",
-          "helpText": "Il tuo token BirdWeather univoco."
+          "helpText": "Il tuo token BirdWeather univoco.",
+          "errors": {
+            "required": "Inserisci il tuo token BirdWeather oppure disattiva BirdWeather.",
+            "format": "Un token BirdWeather è composto da 24 lettere e cifre."
+          }
         },
         "threshold": {
           "label": "Soglia Caricamento",
@@ -3233,7 +3308,7 @@
             "label": "Nome Dispositivo",
             "helpText": "Il nome base per i dispositivi come appaiono in Home Assistant. Ogni sorgente audio avrà il proprio dispositivo collegato a questo dispositivo principale BirdNET-Go."
           },
-          "sensorsNote": "<strong>Sensori Creati:</strong> Per ogni sorgente audio, Home Assistant riceverà: Ultima Specie, Confidenza, Nome Scientifico e Livello Sonoro (se abilitato). Il dispositivo bridge include stato disponibilità online/offline.",
+          "sensorsNote": "<strong>Sensori Creati:</strong> Per ogni sorgente audio, Home Assistant riceverà: Ultima Specie, Confidenza, Nome Scientifico e Livello Sonoro (se abilitato). Il dispositivo bridge include stato disponibilità online/offline. I sensori di rilevamento di ogni sorgente leggono il topic MQTT proprio di quella sorgente, &lt;base_topic&gt;/sources/&lt;source_id&gt;, e il suo sensore Livello Sonoro legge il sotto-topic &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, in modo che un rilevamento da una sorgente non azzeri mai i sensori di un'altra sorgente.",
           "discovery": {
             "button": "Invia Discovery",
             "success": "Messaggi discovery inviati a Home Assistant",
@@ -3279,7 +3354,8 @@
             "none": "Nessuno",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3300,6 +3376,16 @@
             "helpText": "Seleziona unità per temperatura e velocità vento (m = Metrico, e = Imperiale, h = Ibrido UK)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Chiave API Pirate Weather",
+            "helpText": "Inserisci la tua chiave API Pirate Weather. Richiesta per dati meteo."
+          },
+          "endpoint": {
+            "label": "Endpoint API",
+            "helpText": "Sovrascrivi l'endpoint API predefinito di Pirate Weather se necessario. Predefinito https://api.pirateweather.net/forecast se lasciato vuoto."
+          }
+        },
         "notes": {
           "none": "Nessun dato meteo verrà recuperato.",
           "yrno": {
@@ -3307,7 +3393,8 @@
             "freeService": "Yr è un servizio dati meteo gratuito. Per maggiori informazioni, visita <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "L'uso di OpenWeather richiede una chiave API, registrati per una chiave API gratuita su <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Richiede una chiave API Weather Underground e un ID stazione PWS valido. Vedi <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> per dettagli."
+          "wunderground": "Richiede una chiave API Weather Underground e un ID stazione PWS valido. Vedi <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> per dettagli.",
+          "pirateweather": "L'uso di Pirate Weather richiede una chiave API, registrati su <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "Chiave API",
@@ -3680,6 +3767,7 @@
         "dataOutputTitle": "Output Dati Livello Sonoro",
         "dataOutputDescription": "Quando abilitato, misurazioni livello sonoro vengono pubblicate via:",
         "mqttTopic": "Topic MQTT:",
+        "mqttSourceTopic": "Topic MQTT per sorgente (con Home Assistant discovery):",
         "sseEndpoint": "Endpoint SSE:",
         "prometheusMetrics": "Metriche Prometheus:"
       },
@@ -3741,6 +3829,8 @@
         "pathHelp": "Directory dove clip audio saranno salvate. Percorsi relativi sono dalla directory applicazione. Esempio: 'clips/' o '/var/audio/birds/'",
         "typeLabel": "Formato Audio",
         "typeHelp": "Formato audio per clip salvate. WAV e FLAC sono lossless (migliore qualità, file più grandi). MP3, AAC e Opus sono lossy (file più piccoli, leggera perdita qualità).",
+        "ultrasonicTypeLabel": "Formato Ultrasonico",
+        "ultrasonicTypeHelp": "Formato lossless (WAV o FLAC) utilizzato solo per catture di pipistrelli e ultrasoniche sopra i 48 kHz. Queste vengono salvate alla frequenza di campionamento originale completa anziché nel formato sopra indicato, così da non perdere alcun dettaglio ultrasonico.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Bitrate compressione audio per formati lossy. Intervallo: {min}-{max} kbps. Valori più alti forniscono migliore qualità ma file più grandi.",
         "losslessBitrateValue": "N/D - Senza perdita",
@@ -3809,7 +3899,17 @@
       },
       "models": {
         "recommendBoth": "Per la migliore copertura di rilevamento delle specie, si consiglia di eseguire insieme sia BirdNET che Perch.",
-        "perchOnlyWarning": "Perch da solo produce meno rilevamenti. Abbassare la soglia di confidenza a 0.50 per risultati significativi, oppure attivare BirdNET per una migliore copertura."
+        "perchOnlyWarning": "Perch da solo produce meno rilevamenti. Abbassare la soglia di confidenza a 0.50 per risultati significativi, oppure attivare BirdNET per una migliore copertura.",
+        "loading": "Caricamento modelli di rilevamento...",
+        "noneEnabledTitle": "Nessun modello di rilevamento abilitato.",
+        "noneEnabledHelp": "Puoi ancora salvare questa fonte. Il suo audio verrà analizzato dai modelli predefiniti non appena ne verrà abilitato uno.",
+        "noneEnabledLink": "Apri galleria modelli",
+        "noneAvailable": "Nessun modello di rilevamento è abilitato su questo server.",
+        "loadFailedWarning": "Impossibile caricare un modello di rilevamento, quindi questa fonte non verrà analizzata finché il modello non sarà ripristinato.",
+        "loadFailedLink": "Visualizza stato Modelli IA",
+        "defaultBadge": "{models} (predefinito)",
+        "defaultPendingBadge": "Modelli predefiniti",
+        "noneBadge": "Nessun modello caricato"
       }
     },
     "security": {
@@ -4379,7 +4479,7 @@
       "dynamicThreshold": {
         "tabLabel": "Appreso",
         "title": "Soglie Apprese",
-        "description": "Questa pagina mostra dati runtime Soglia Dinamica. Quando abilitata in Impostazioni Principali → Rilevamento, soglie vengono regolate automaticamente da rilevamenti multipli alta confidenza. Specie mostrate qui si assume esistano in questa posizione.",
+        "description": "Questa pagina mostra dati runtime Soglia Dinamica. Quando abilitata, soglie vengono regolate automaticamente da rilevamenti multipli alta confidenza. Specie mostrate qui si assume esistano in questa posizione.",
         "stats": {
           "active": "Attivo",
           "atMinimum": "Al Minimo",
@@ -5031,6 +5131,33 @@
       "viewDetections": "Visualizza rilevamenti di {name}",
       "largeView": "Vista ingrandita di {name}",
       "clickToView": "Fai clic per visualizzare i rilevamenti"
+    },
+    "locationMap": {
+      "mapLabel": "Mappa per selezionare la posizione della stazione",
+      "expandedMapLabel": "Mappa a schermo intero per selezionare la posizione della stazione",
+      "zoomIn": "Ingrandisci",
+      "zoomOut": "Riduci",
+      "expand": "Espandi la mappa a schermo intero",
+      "search": {
+        "label": "Cerca un luogo",
+        "placeholder": "Città o indirizzo",
+        "submit": "Cerca",
+        "disclosure": "Le ricerche vengono inviate a Photon (photon.komoot.io), che usa i dati di OpenStreetMap.",
+        "openPhoton": "Apri Photon in una nuova scheda",
+        "searching": "Ricerca in corso...",
+        "results": "{count, plural, one {# luogo trovato} other {# luoghi trovati}}",
+        "noResults": "Nessun luogo trovato. Prova con un altro nome o clicca sulla mappa.",
+        "errorNetwork": "La ricerca di luoghi non è disponibile. Controlla la connessione a internet. Puoi comunque cliccare sulla mappa o inserire le coordinate.",
+        "errorRateLimited": "Troppe ricerche. Attendi un momento e riprova.",
+        "errorUnavailable": "Il servizio di ricerca non ha risposto. Puoi comunque cliccare sulla mappa o inserire le coordinate.",
+        "kind": {
+          "city": "Città",
+          "town": "Cittadina",
+          "village": "Villaggio",
+          "station": "Stazione",
+          "airport": "Aeroporto"
+        }
+      }
     }
   },
   "connectivity": {
@@ -5117,6 +5244,7 @@
       "birdweatherClientFailed": "Impossibile creare il client BirdWeather",
       "noWeatherProvider": "Nessun fornitore meteo selezionato",
       "openWeatherKeyRequired": "La chiave API di OpenWeather è obbligatoria",
+      "pirateWeatherKeyRequired": "La chiave API di Pirate Weather è obbligatoria",
       "processorUnavailable": "Processore non disponibile",
       "discoveryFailed": "Impossibile avviare il rilevamento di Home Assistant"
     },
@@ -5181,12 +5309,37 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Ricarica la pagina"
+    },
     "skip": "Salta",
     "back": "Indietro",
     "next": "Avanti",
     "done": "Fine",
     "progress": "Passo {current} di {total}",
     "progressLabel": "Avanzamento procedura guidata",
+    "status": {
+      "saving": "Salvataggio...",
+      "loadingStep": "Caricamento del passaggio..."
+    },
+    "errors": {
+      "saveFailed": "Impossibile salvare questo passaggio. Controlla la connessione e riprova, oppure salta la configurazione e modificalo più tardi nelle Impostazioni.",
+      "saveRejected": "Le impostazioni di questo passaggio non sono state accettate. Controlla i valori e riprova, oppure salta la configurazione e modificalo più tardi nelle Impostazioni.",
+      "stepLoadFailed": "Impossibile caricare questo passaggio. Premi Riprova o ricarica la pagina.",
+      "stepLoadFailedReload": "Ancora impossibile caricare questo passaggio. Ricarica la pagina per riprovare; le scelte salvate nei passaggi precedenti vengono mantenute.",
+      "audioSourceSaveUnfinished": "La modifica della sorgente audio non è stata completata. Controlla le sorgenti audio in Impostazioni > Audio.",
+      "saveUnfinished": "Alcune modifiche della configurazione non sono state salvate. Controllale nelle Impostazioni."
+    },
+    "reasons": {
+      "completeStep": "Completa questo passaggio per continuare."
+    },
+    "leaveConfirm": {
+      "title": "Uscire dalla configurazione?",
+      "message": "La configurazione non verrà riaperta. Le scelte salvate nei passaggi precedenti vengono mantenute; le modifiche di questo passaggio non vengono salvate. Potrai cambiare tutto più tardi nelle Impostazioni.",
+      "messageSaving": "La configurazione non verrà riaperta. Le scelte salvate nei passaggi precedenti vengono mantenute. Questo passaggio è ancora in fase di salvataggio e alcune o tutte le sue modifiche potrebbero non essere mantenute. Potrai cambiare tutto più tardi nelle Impostazioni.",
+      "stay": "Continua la configurazione",
+      "leave": "Esci dalla configurazione"
+    },
     "whatsNew": {
       "title": "Novità nella {version}"
     },
@@ -5209,13 +5362,6 @@
         "locationHelp": "La tua posizione aiuta a filtrare le specie probabili nella tua zona",
         "latitudeLabel": "Latitudine",
         "longitudeLabel": "Longitudine",
-        "useMyLocation": "Usa la mia posizione",
-        "locationDetected": "Posizione rilevata",
-        "locationError": "Impossibile rilevare la posizione. Inserisci le coordinate manualmente.",
-        "locationDenied": "Accesso alla posizione negato. Inserisci le coordinate manualmente.",
-        "geolocationRequiresHttps": "La posizione del browser richiede HTTPS. Inserisci le coordinate manualmente o usa la mappa.",
-        "geolocationDenied": "L'autorizzazione alla posizione è stata negata. Inserisci le coordinate manualmente o usa la mappa.",
-        "geolocationFailed": "Impossibile determinare la tua posizione. Inserisci le coordinate manualmente o usa la mappa.",
         "localesLoading": "Caricamento lingue...",
         "localesLoadFailed": "Impossibile caricare le opzioni di lingua. L'inglese è stato selezionato come predefinito."
       },
@@ -5231,7 +5377,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Inserisci l'URL del tuo stream audio RTSP",
         "additionalSourcesHint": "Puoi aggiungere altre sorgenti audio successivamente nelle Impostazioni.",
-        "configureLater": "Salta - configura più tardi"
+        "devicesLoadFailed": "Impossibile elencare i dispositivi audio di questo sistema.",
+        "useStreamInstead": "Usa invece uno stream RTSP",
+        "setUpLater": "Configura l'audio più tardi",
+        "setUpLaterChosen": "L'audio non verrà configurato ora. Aggiungi una scheda audio o uno stream più tardi nelle Impostazioni.",
+        "streamReplacesSoundCards": "Le schede audio smettono di acquisire quando usi uno stream. Puoi aggiungerle di nuovo nelle Impostazioni.",
+        "soundCardReplacesStream": "Lo stream mostrato nell'opzione stream viene disattivato quando usi una scheda audio. Puoi riattivarlo nelle Impostazioni.",
+        "reasons": {
+          "chooseDevice": "Scegli un dispositivo audio oppure configura l'audio più tardi.",
+          "devicesFailed": "Impossibile elencare i dispositivi audio. Riprova, usa uno stream oppure configura l'audio più tardi.",
+          "noDevices": "Nessun dispositivo audio trovato. Usa uno stream oppure configura l'audio più tardi.",
+          "enterUrl": "Inserisci l'URL dello stream oppure configura l'audio più tardi.",
+          "urlScheme": "Inserisci un URL dello stream completo che inizi con rtsp:// o rtsps:// e non contenga spazi."
+        }
       },
       "detection": {
         "title": "Soglia di rilevamento",
@@ -5243,6 +5401,7 @@
         "highAccuracyDesc": "Meno falsi positivi, potrebbe non rilevare alcuni uccelli",
         "highSensitivity": "Alta sensibilità",
         "highSensitivityDesc": "Più rilevamenti, più falsi positivi",
+        "descriptionStored": "Scegli quanto deve essere rigorosa l'identificazione degli uccelli. Attuale: {threshold}, nessun preset.",
         "threshold": "Soglia di confidenza",
         "fpFilterNote": "Una volta che il tuo sistema è funzionante e collaudato, puoi abilitare il filtro dei falsi positivi nelle Impostazioni per ridurre ulteriormente i rilevamenti errati."
       },
@@ -5252,10 +5411,12 @@
         "privacyFilterHelp": "Filtra i rilevamenti quando vengono rilevate voci umane vicino al microfono",
         "birdweatherLabel": "Condividi rilevamenti con BirdWeather",
         "birdweatherHelp": "Contribuisci con i tuoi rilevamenti alla rete comunitaria BirdWeather",
-        "birdweatherIdLabel": "ID stazione BirdWeather",
-        "birdweatherIdPlaceholder": "Inserisci l'ID della tua stazione BirdWeather",
         "errorReportingLabel": "Invia segnalazioni di errore anonime",
-        "errorReportingHelp": "Aiuta a migliorare BirdNET-Go inviando segnalazioni di errore anonime quando qualcosa va storto"
+        "errorReportingHelp": "Aiuta a migliorare BirdNET-Go inviando segnalazioni di errore anonime quando qualcosa va storto",
+        "reasons": {
+          "enterToken": "Inserisci il tuo token BirdWeather oppure disattiva la condivisione con BirdWeather.",
+          "tokenFormat": "Un token BirdWeather è composto da 24 lettere e cifre."
+        }
       },
       "responsibleUse": {
         "title": "Usare BirdNET-Go in modo responsabile",
@@ -5494,6 +5655,8 @@
         "catalogLoadFailed": "Impossibile caricare il catalogo dei modelli",
         "installFailed": "Impossibile avviare l'installazione del modello",
         "removeFailed": "Impossibile rimuovere il modello",
+        "removeHasDependents": "{name} è richiesto da {models}. Rimuovi prima questi modelli.",
+        "operationInProgress": "È già in corso un'installazione, reinstallazione o rimozione di un modello ({name}). Riprova al termine.",
         "actionFailed": "Si è verificato un problema con {name}",
         "downloadSourceHint": "Se huggingface.co è bloccato o lento sulla tua rete, imposta un mirror nella sezione Sorgente di download sottostante.",
         "goToDownloadSource": "Vai a Sorgente di download",

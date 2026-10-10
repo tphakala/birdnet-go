@@ -11,22 +11,22 @@ vi.mock('$lib/utils/modelsApi');
 // depend on the runtime Intl.DisplayNames / ICU data available in CI.
 vi.mock('$lib/utils/countryNames', () => ({
   localizedCountryNames: (codes: string[] | null | undefined) => {
-    const names: Record<string, string> = {
-      ES: 'Spain',
-      PT: 'Portugal',
-      FR: 'France',
-      FI: 'Finland',
-      SE: 'Sweden',
-      NO: 'Norway',
-      DK: 'Denmark',
-      IS: 'Iceland',
-      EE: 'Estonia',
-      CO: 'Colombia',
-      EC: 'Ecuador',
-      PE: 'Peru',
-      RE: 'Réunion',
-    };
-    return (codes ?? []).map(c => names[c] ?? c);
+    const names = new Map<string, string>([
+      ['ES', 'Spain'],
+      ['PT', 'Portugal'],
+      ['FR', 'France'],
+      ['FI', 'Finland'],
+      ['SE', 'Sweden'],
+      ['NO', 'Norway'],
+      ['DK', 'Denmark'],
+      ['IS', 'Iceland'],
+      ['EE', 'Estonia'],
+      ['CO', 'Colombia'],
+      ['EC', 'Ecuador'],
+      ['PE', 'Peru'],
+      ['RE', 'Réunion'],
+    ]);
+    return (codes ?? []).map(c => names.get(c) ?? c);
   },
 }));
 

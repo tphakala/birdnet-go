@@ -138,8 +138,7 @@ func (c *Core) handleErrorInternal(ctx echo.Context, err error, message string, 
 func (c *Core) reportErrorToTelemetry(ctx echo.Context, err error, message string, code int) {
 	// Skip if the underlying error was already reported by a lower layer.
 	if err != nil {
-		var ee *errors.EnhancedError
-		if errors.As(err, &ee) && ee.IsReported() {
+		if ee, ok := errors.AsType[*errors.EnhancedError](err); ok && ee.IsReported() {
 			return
 		}
 	}
@@ -194,8 +193,7 @@ func (c *Core) HandleErrorWithKey(ctx echo.Context, err error, message string, c
 // If the error is an EnhancedError with CategoryNotFound, returns a 404.
 // Otherwise returns a 500 internal server error.
 func (c *Core) HandleErrorWithNotFound(ctx echo.Context, err error, notFoundMsg, fallbackMsg string) error {
-	var enhancedErr *errors.EnhancedError
-	if errors.As(err, &enhancedErr) && enhancedErr.Category == errors.CategoryNotFound {
+	if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok && enhancedErr.Category == errors.CategoryNotFound {
 		return c.HandleError(ctx, err, notFoundMsg, http.StatusNotFound)
 	}
 	return c.HandleError(ctx, err, fallbackMsg, http.StatusInternalServerError)
