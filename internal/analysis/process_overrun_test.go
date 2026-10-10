@@ -192,21 +192,33 @@ func TestProcessData_LockWaitAloneIsNotAnOverrun(t *testing.T) {
 }
 
 func TestProcessData_SlowPredictIsAnOverrun(t *testing.T) {
-	const source = "overrun-slowpredict-src"
-	// No wall wait, so the wall time is zero, and a scripted lock wait as long
-	// as the model time, so these values rule out wall time and own work plus
-	// lock wait. Lock wait alone is ruled out by the lock-wait-only test.
-	reg, err := runProcessData(t, source, timedBackend{
-		timing: classifier.PredictTiming{LockWait: overrunTestSlow, Predict: overrunTestSlow},
-	})
-	require.NoError(t, err)
+	// No wall wait, so the wall time is zero. With no lock wait this is the
+	// single-model case; with a lock wait as long as the model time these
+	// values also rule out own work plus lock wait. Lock wait alone is ruled
+	// out by the lock-wait-only test.
+	cases := []struct {
+		name     string
+		lockWait time.Duration
+	}{
+		{name: "no lock wait", lockWait: 0},
+		{name: "lock wait as long as the model time", lockWait: overrunTestSlow},
+	}
+	for i, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			source := fmt.Sprintf("overrun-slowpredict-src-%d", i)
+			reg, err := runProcessData(t, source, timedBackend{
+				timing: classifier.PredictTiming{LockWait: tt.lockWait, Predict: overrunTestSlow},
+			})
+			require.NoError(t, err)
 
-	overruns, maxElapsed := overrunTrackerState(source)
-	assert.Equal(t, int64(1), overruns)
-	assert.Equal(t, overrunTestSlow, maxElapsed)
-	assert.InDelta(t, 1.0, counterValue(t, reg, "myaudio_birdnet_processing_overruns_total", source), 0.001)
-	assert.InDelta(t, overrunTestSlow.Seconds(), histogramSum(t, reg, "myaudio_birdnet_processing_overrun_duration_seconds", source), 1e-9)
-	assert.InDelta(t, overrunTestSlow.Seconds()/overrunTestInterval.Seconds(), histogramSum(t, reg, "myaudio_birdnet_processing_overrun_ratio", source), 1e-9)
+			overruns, maxElapsed := overrunTrackerState(source)
+			assert.Equal(t, int64(1), overruns)
+			assert.Equal(t, overrunTestSlow, maxElapsed)
+			assert.InDelta(t, 1.0, counterValue(t, reg, "myaudio_birdnet_processing_overruns_total", source), 0.001)
+			assert.InDelta(t, overrunTestSlow.Seconds(), histogramSum(t, reg, "myaudio_birdnet_processing_overrun_duration_seconds", source), 1e-9)
+			assert.InDelta(t, overrunTestSlow.Seconds()/overrunTestInterval.Seconds(), histogramSum(t, reg, "myaudio_birdnet_processing_overrun_ratio", source), 1e-9)
+		})
+	}
 }
 
 func TestProcessData_InferenceDurationMetricExcludesLockWait(t *testing.T) {
