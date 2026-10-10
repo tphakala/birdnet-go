@@ -102,6 +102,34 @@ func TestKeepUpState_PollGapLossNeverWarns(t *testing.T) {
 	}
 }
 
+// TestKeepUpState_LossyThresholdIsFifteenPercentInclusive pins the lossy
+// threshold and its inclusive boundary with exact byte counts.
+func TestKeepUpState_LossyThresholdIsFifteenPercentInclusive(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		lost      int64 // of 1000 written bytes
+		wantLossy bool
+	}{
+		{name: "just below 15 percent", lost: 149, wantLossy: false},
+		{name: "exactly 15 percent", lost: 150, wantLossy: true},
+		{name: "20 percent", lost: 200, wantLossy: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			d := newKeepUpDriver(t)
+			d.stats.WrittenBytes += 1000
+			d.stats.LostBytes += tt.lost
+			d.now = d.now.Add(keepUpWindow)
+			res, closed, _ := d.state.observe(d.buf, d.stats, d.now)
+			require.True(t, closed)
+			assert.Equal(t, tt.wantLossy, res.lossy)
+		})
+	}
+}
+
 func TestKeepUpState_ShortStallDoesNotWarn(t *testing.T) {
 	t.Parallel()
 	d := newKeepUpDriver(t)
