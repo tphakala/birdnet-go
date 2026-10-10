@@ -19,7 +19,7 @@ EOF
 
 
 # Default version (will be set by parse_arguments function)
-BIRDNET_GO_VERSION="main"
+BIRDNET_GO_VERSION="latest"
 BIRDNET_GO_IMAGE=""
 
 # Silent mode for non-interactive installation (set via --silent flag)
@@ -6728,7 +6728,7 @@ show_usage() {
     echo ""
     echo "OPTIONS:"
     echo "  -v, --version VERSION    Specify container image version (tag or hash)"
-    echo "                          Default: nightly"
+    echo "                          Default: latest"
     echo "                          Examples: latest, nightly, 20260716 (a dated release), sha256:abc123..."
     echo "  --silent                Non-interactive install using environment variables"
     echo "  --migrate               Migrate an existing install from another host over SSH"
@@ -6750,10 +6750,10 @@ show_usage() {
     echo "  BIRDNET_ENABLE_METRICS  Publish Prometheus metrics on port 8090: true/false (default: false)"
     echo ""
     echo "EXAMPLES:"
-    echo "  $0                      # Install using nightly version (default)"
-    echo "  $0 -v latest           # Install using latest stable version"
+    echo "  $0                      # Install using latest stable version (default)"
+    echo "  $0 -v nightly          # Install using nightly version"
     echo "  $0 -v 20260716         # Install a specific dated release (YYYYMMDD tag)"
-    echo "  $0 --version nightly   # Explicitly use nightly version"
+    echo "  $0 --version latest    # Explicitly use latest stable version"
     echo "  BIRDNET_RTSP_URL=rtsp://cam:8554/live BIRDNET_LATITUDE=60.17 \\"
     echo "    BIRDNET_LONGITUDE=24.94 $0 --silent  # Silent RTSP install"
     echo ""
