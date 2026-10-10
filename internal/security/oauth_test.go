@@ -2093,8 +2093,6 @@ func TestBypassPredicatesNilRequest(t *testing.T) {
 // forwarded headers cannot be verified (here it sends Forwarded) gets its own
 // throttled notice, since the unlisted-proxy notice no longer applies to it.
 func TestListedProxyUnverifiedHeadersAreReported(t *testing.T) {
-	const listedProxyNoticeKey = "subnet-bypass-listed-proxy-unverified"
-
 	settings := &conf.Settings{}
 	settings.Security.BasicAuth.Enabled = true
 	settings.Security.AllowSubnetBypass.Enabled = true
@@ -2109,7 +2107,7 @@ func TestListedProxyUnverifiedHeadersAreReported(t *testing.T) {
 	assert.False(t, server.IsRequestFromAllowedSubnet(req), "an unverifiable forwarded address gets no bypass")
 
 	server.mutex.RLock()
-	_, noted := server.throttledMessages[listedProxyNoticeKey]
+	_, noted := server.throttledMessages[listedProxyUnverifiedLogKey]
 	server.mutex.RUnlock()
 	assert.True(t, noted, "a listed proxy whose headers cannot be verified must be reported")
 }
