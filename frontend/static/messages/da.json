@@ -712,7 +712,33 @@
         "error": "Kunne ikke indlæse data",
         "complete": "Data indlæst"
       },
-      "noSpecies": "Ingen arter registreret på denne dato"
+      "noSpecies": "Ingen arter registreret på denne dato",
+      "phone": {
+        "columns": {
+          "conf": "Sikk.",
+          "count": "Antal"
+        },
+        "columnNames": {
+          "name": "artsnavn",
+          "conf": "sikkerhed",
+          "count": "antal registreringer",
+          "latest": "senest hørt"
+        },
+        "sortBy": "Sortér efter {column}",
+        "sortedAscending": "Sorteret efter {column}, stigende. Tryk for at vende rækkefølgen.",
+        "sortedDescending": "Sorteret efter {column}, faldende. Tryk for at vende rækkefølgen.",
+        "rowLabel": "{name}: {count, plural, one {# registrering} other {# registreringer}}, {confidence} % sikkerhed, højdepunkt kl. {peak}. Tryk for detaljer.",
+        "taxon": {
+          "all": "Alle",
+          "bird": "Fugle",
+          "bat": "Flagermus",
+          "other": "Andre"
+        },
+        "peakAt": "Højdepunkt kl. {time}",
+        "firstHeard": "Første gang hørt kl. {time}",
+        "lastHeard": "Sidst hørt kl. {time}",
+        "history": "Historik"
+      }
     },
     "recentDetections": {
       "title": "Seneste registreringer",

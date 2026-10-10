@@ -712,7 +712,33 @@
         "error": "Fehler beim Laden der Daten",
         "complete": "Daten erfolgreich geladen"
       },
-      "noSpecies": "Keine Arten an diesem Datum erkannt"
+      "noSpecies": "Keine Arten an diesem Datum erkannt",
+      "phone": {
+        "columns": {
+          "conf": "Konf.",
+          "count": "Anzahl"
+        },
+        "columnNames": {
+          "name": "Artname",
+          "conf": "Konfidenz",
+          "count": "Anzahl der Erkennungen",
+          "latest": "zuletzt gehört"
+        },
+        "sortBy": "Nach {column} sortieren",
+        "sortedAscending": "Nach {column} aufsteigend sortiert. Tippen, um die Reihenfolge umzukehren.",
+        "sortedDescending": "Nach {column} absteigend sortiert. Tippen, um die Reihenfolge umzukehren.",
+        "rowLabel": "{name}: {count, plural, one {# Erkennung} other {# Erkennungen}}, {confidence} % Konfidenz, Höhepunkt um {peak}. Für Details tippen.",
+        "taxon": {
+          "all": "Alle",
+          "bird": "Vögel",
+          "bat": "Fledermäuse",
+          "other": "Andere"
+        },
+        "peakAt": "Höhepunkt um {time}",
+        "firstHeard": "Erstmals gehört um {time}",
+        "lastHeard": "Zuletzt gehört um {time}",
+        "history": "Verlauf"
+      }
     },
     "recentDetections": {
       "title": "Aktuelle Erkennungen",

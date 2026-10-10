@@ -712,7 +712,33 @@
         "error": "Nie udało się załadować danych",
         "complete": "Dane załadowane pomyślnie"
       },
-      "noSpecies": "Nie wykryto gatunków w tym dniu"
+      "noSpecies": "Nie wykryto gatunków w tym dniu",
+      "phone": {
+        "columns": {
+          "conf": "Pewn.",
+          "count": "Liczba"
+        },
+        "columnNames": {
+          "name": "nazwy gatunku",
+          "conf": "pewności",
+          "count": "liczby detekcji",
+          "latest": "czasu ostatniego usłyszenia"
+        },
+        "sortBy": "Sortuj według: {column}",
+        "sortedAscending": "Posortowano według: {column}, rosnąco. Dotknij, aby odwrócić kolejność.",
+        "sortedDescending": "Posortowano według: {column}, malejąco. Dotknij, aby odwrócić kolejność.",
+        "rowLabel": "{name}: {count, plural, one {# detekcja} few {# detekcje} many {# detekcji} other {# detekcji}}, pewność {confidence}%, szczyt o {peak}. Dotknij, aby zobaczyć szczegóły.",
+        "taxon": {
+          "all": "Wszystkie",
+          "bird": "Ptaki",
+          "bat": "Nietoperze",
+          "other": "Inne"
+        },
+        "peakAt": "Szczyt o {time}",
+        "firstHeard": "Pierwszy raz usłyszano o {time}",
+        "lastHeard": "Ostatni raz usłyszano o {time}",
+        "history": "Historia"
+      }
     },
     "recentDetections": {
       "title": "Ostatnie Detekcje",

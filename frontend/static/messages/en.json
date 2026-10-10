@@ -712,7 +712,33 @@
         "error": "Failed to load data",
         "complete": "Data loaded successfully"
       },
-      "noSpecies": "No species detected on this date"
+      "noSpecies": "No species detected on this date",
+      "phone": {
+        "columns": {
+          "conf": "Conf.",
+          "count": "Count"
+        },
+        "columnNames": {
+          "name": "species name",
+          "conf": "confidence",
+          "count": "detection count",
+          "latest": "last heard"
+        },
+        "sortBy": "Sort by {column}",
+        "sortedAscending": "Sorted by {column}, ascending. Tap to reverse.",
+        "sortedDescending": "Sorted by {column}, descending. Tap to reverse.",
+        "rowLabel": "{name}: {count, plural, one {# detection} other {# detections}}, {confidence}% confidence, peak at {peak}. Tap for details.",
+        "taxon": {
+          "all": "All",
+          "bird": "Birds",
+          "bat": "Bats",
+          "other": "Other"
+        },
+        "peakAt": "Peak at {time}",
+        "firstHeard": "First heard {time}",
+        "lastHeard": "Last heard {time}",
+        "history": "History"
+      }
     },
     "recentDetections": {
       "title": "Recent Detections",

@@ -712,7 +712,33 @@
         "error": "Kunde inte ladda data",
         "complete": "Data har laddats"
       },
-      "noSpecies": "Inga arter detekterade detta datum"
+      "noSpecies": "Inga arter detekterade detta datum",
+      "phone": {
+        "columns": {
+          "conf": "Säkerh.",
+          "count": "Antal"
+        },
+        "columnNames": {
+          "name": "artnamn",
+          "conf": "säkerhet",
+          "count": "antal detekteringar",
+          "latest": "senast hörd"
+        },
+        "sortBy": "Sortera efter {column}",
+        "sortedAscending": "Sorterad efter {column}, stigande. Tryck för att vända ordningen.",
+        "sortedDescending": "Sorterad efter {column}, fallande. Tryck för att vända ordningen.",
+        "rowLabel": "{name}: {count, plural, one {# detektering} other {# detekteringar}}, {confidence} % säkerhet, topp kl. {peak}. Tryck för detaljer.",
+        "taxon": {
+          "all": "Alla",
+          "bird": "Fåglar",
+          "bat": "Fladdermöss",
+          "other": "Andra"
+        },
+        "peakAt": "Topp kl. {time}",
+        "firstHeard": "Först hörd kl. {time}",
+        "lastHeard": "Senast hörd kl. {time}",
+        "history": "Historik"
+      }
     },
     "recentDetections": {
       "title": "Senaste detekteringar",
