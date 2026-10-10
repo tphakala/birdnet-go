@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
 // TestIsUserAuthenticatedValidAccessToken tests the IsUserAuthenticated function with a valid access token
@@ -1808,4 +1809,108 @@ func TestIsUserAuthenticatedSubnetBypassIgnoresForgedHeader(t *testing.T) {
 	direct.RemoteAddr = net.JoinHostPort(localIP, "12345")
 	assert.True(t, server.IsUserAuthenticated(e.NewContext(direct, httptest.NewRecorder())),
 		"a direct client on the local network is still auto-authenticated")
+}
+
+// TestUnverifiedBypassPeer pins when an unverifiable forwarded address is
+// reported: only with the subnet bypass enabled, an authentication provider
+// configured, a client-IP header present, and a parseable peer that is not
+// already a trusted proxy, so an operator behind an unlisted proxy learns which
+// peer to add to security.trustedproxies.
+func TestUnverifiedBypassPeer(t *testing.T) {
+	t.Parallel()
+
+	enabled := &conf.Settings{}
+	enabled.Security.AllowSubnetBypass.Enabled = true
+	enabled.Security.BasicAuth.Enabled = true
+	disabled := &conf.Settings{}
+	disabled.Security.BasicAuth.Enabled = true
+	noAuth := &conf.Settings{}
+	noAuth.Security.AllowSubnetBypass.Enabled = true
+
+	tests := []struct {
+		name           string
+		settings       *conf.Settings
+		trustedProxies []string
+		remoteAddr     string
+		header         string
+		wantPeer       string
+		wantOK         bool
+	}{
+		{name: "bypass enabled, header from unlisted peer", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor, wantPeer: "172.25.5.9", wantOK: true},
+		{name: "bypass enabled, empty header still counts", settings: enabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXRealIP, wantPeer: "172.25.5.9", wantOK: true},
+		{name: "bypass disabled", settings: disabled, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor},
+		{name: "nil settings", remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor},
+		{name: "no client-IP header", settings: enabled, remoteAddr: "172.25.5.9:40000"},
+		{name: "unparseable peer", settings: enabled, remoteAddr: "@", header: echo.HeaderXForwardedFor},
+		{name: "no authentication provider configured", settings: noAuth, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor},
+		{name: "peer already listed as a trusted proxy", settings: enabled, trustedProxies: []string{"172.25.5.9"}, remoteAddr: "172.25.5.9:40000", header: echo.HeaderXForwardedFor},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			req.RemoteAddr = tt.remoteAddr
+			if tt.header != "" {
+				req.Header[http.CanonicalHeaderKey(tt.header)] = []string{""}
+			}
+			peer, ok := unverifiedBypassPeer(tt.settings, proxytrust.NewChecker(tt.trustedProxies), req)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantPeer, peer)
+		})
+	}
+}
+
+// TestAuthClientIPReportsUnverifiedPeerThrottled verifies AuthClientIP records
+// the unverified forwarded address notice through the throttle, once per
+// interval, and records nothing when the address is verified or the bypass is
+// off.
+func TestAuthClientIPReportsUnverifiedPeerThrottled(t *testing.T) {
+	settings := &conf.Settings{}
+	settings.Security.AllowSubnetBypass.Enabled = true
+	settings.Security.BasicAuth.Enabled = true
+	server := newOAuth2ServerForTesting(t, settings)
+
+	forged := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	forged.RemoteAddr = "172.25.5.9:40000"
+	forged.Header.Set(echo.HeaderXForwardedFor, "203.0.113.7")
+
+	direct := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	direct.RemoteAddr = "172.25.5.9:40000"
+
+	noted := func() (time.Time, bool) {
+		server.mutex.Lock()
+		defer server.mutex.Unlock()
+		at, ok := server.throttledMessages[unverifiedClientIPLogKey]
+		return at, ok
+	}
+
+	assert.Equal(t, "172.25.5.9", server.AuthClientIP(direct))
+	_, ok := noted()
+	assert.False(t, ok, "a verified address must not be reported")
+
+	assert.Empty(t, server.AuthClientIP(forged))
+	first, ok := noted()
+	require.True(t, ok, "an unverifiable forwarded address must be reported")
+
+	assert.Empty(t, server.AuthClientIP(forged))
+	second, _ := noted()
+	assert.Equal(t, first, second, "a repeat inside the interval must be throttled")
+
+	// Past the interval the notice is logged again and the timestamp moves on.
+	server.mutex.Lock()
+	server.throttledMessages[unverifiedClientIPLogKey] = first.Add(-2 * unverifiedClientIPLogInterval)
+	server.mutex.Unlock()
+	assert.Empty(t, server.AuthClientIP(forged))
+	third, _ := noted()
+	assert.True(t, third.After(first.Add(-2*unverifiedClientIPLogInterval)), "an expired throttle must log again")
+
+	// With the bypass off nothing is reported.
+	off := &conf.Settings{}
+	offServer := newOAuth2ServerForTesting(t, off)
+	assert.Empty(t, offServer.AuthClientIP(forged))
+	offServer.mutex.Lock()
+	_, ok = offServer.throttledMessages[unverifiedClientIPLogKey]
+	offServer.mutex.Unlock()
+	assert.False(t, ok, "nothing is reported with the subnet bypass disabled")
 }
