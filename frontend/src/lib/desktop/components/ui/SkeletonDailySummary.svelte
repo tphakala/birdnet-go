@@ -4,7 +4,7 @@ SkeletonDailySummary.svelte - Loading skeleton for the daily species summary tab
 Purpose:
 - Provides visual placeholder during daily summary data loading
 - Maintains consistent layout structure to prevent layout shift
-- Supports responsive breakpoints for hourly/bi-hourly/six-hourly views
+- Supports responsive breakpoints for hourly/bi-hourly/six-hourly/single-daypart views
 - Generates realistic skeleton patterns for improved perceived performance
 
 Usage:
@@ -115,6 +115,12 @@ Features:
                 ></div>
               </th>
             {/each}
+            <!-- Single daypart header skeleton (phone) -->
+            <th class="px-0 hour-header daypart-count text-center" role="columnheader">
+              <div
+                class="h-4 bg-[var(--color-base-300)] rounded-sm w-6 mx-auto animate-pulse"
+              ></div>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -171,6 +177,11 @@ Features:
                   <span class="opacity-30">-</span>
                 </td>
               {/each}
+
+              <!-- Single daypart count skeleton (phone) -->
+              <td class="hour-data daypart-count text-center py-0 px-0 heatmap-color-0" role="cell">
+                <span class="opacity-30">-</span>
+              </td>
             </tr>
           {/each}
         </tbody>
@@ -180,52 +191,53 @@ Features:
 </section>
 
 <style>
-  /* Ensure skeleton follows the same responsive patterns as the real table */
-  @media (min-width: 1400px) {
+  /* Mirror the real table's breakpoints: exactly one column granularity is
+     visible at any width, so the skeleton and the loaded card agree on the
+     column count and the data landing does not shift the layout. */
+  :global(.bi-hourly-count),
+  :global(.six-hourly-count),
+  :global(.daypart-count) {
+    display: none;
+  }
+
+  /* Desktop (>=1024px): 24 hourly columns. */
+  @media (min-width: 1024px) {
     :global(.hourly-count) {
       display: table-cell;
     }
   }
 
-  @media (min-width: 1200px) and (max-width: 1399px) {
-    :global(.hourly-count) {
-      display: table-cell;
-    }
-  }
-
-  @media (min-width: 1024px) and (max-width: 1199px) {
-    :global(.hourly-count) {
-      display: table-cell;
-    }
-  }
-
+  /* Tablet (768-1023px): 12 bi-hourly columns. */
   @media (min-width: 768px) and (max-width: 1023px) {
-    :global(.bi-hourly-count) {
-      display: table-cell;
-    }
-
     :global(.hourly-count) {
       display: none;
     }
-  }
 
-  @media (max-width: 767px) {
     :global(.bi-hourly-count) {
       display: table-cell;
     }
+  }
 
+  /* Large phone / small tablet (480-767px): 4 six-hour columns. */
+  @media (min-width: 480px) and (max-width: 767px) {
     :global(.hourly-count) {
       display: none;
     }
-  }
 
-  @media (max-width: 479px) {
     :global(.six-hourly-count) {
       display: table-cell;
     }
+  }
 
-    :global(.bi-hourly-count) {
+  /* Phone (<480px): the real card shows one switchable daypart, so the
+     skeleton reserves a single column rather than four. */
+  @media (max-width: 479px) {
+    :global(.hourly-count) {
       display: none;
+    }
+
+    :global(.daypart-count) {
+      display: table-cell;
     }
   }
 </style>
