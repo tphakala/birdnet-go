@@ -194,8 +194,8 @@ func TestProcessData_LockWaitAloneIsNotAnOverrun(t *testing.T) {
 func TestProcessData_SlowPredictIsAnOverrun(t *testing.T) {
 	const source = "overrun-slowpredict-src"
 	// No wall wait, so the wall time is zero, and a scripted lock wait as long
-	// as the model time: only the window's own work (the scripted Predict) can
-	// produce these values, not wall time and not own work plus lock wait.
+	// as the model time, so these values rule out wall time and own work plus
+	// lock wait. Lock wait alone is ruled out by the lock-wait-only test.
 	reg, err := runProcessData(t, source, timedBackend{
 		timing: classifier.PredictTiming{LockWait: overrunTestSlow, Predict: overrunTestSlow},
 	})
