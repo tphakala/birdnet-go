@@ -311,7 +311,7 @@ func TestIsUserAuthenticatedSubnetBypassDisabled(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	// No token or session — only subnet would grant access
+	// No token or session; only subnet would grant access
 	result := server.IsUserAuthenticated(c)
 	assert.False(t, result, "local subnet client must NOT be auto-authenticated when AllowSubnetBypass.Enabled is false")
 }
@@ -1470,7 +1470,7 @@ func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
 		},
 	}
 
-	// Should not panic — just log error and skip
+	// Should not panic; just log error and skip
 	initializeProviders(settings)
 
 	providers := goth.GetProviders()
@@ -1652,14 +1652,14 @@ func TestStartOIDCRetry_CanceledByContext(t *testing.T) {
 
 	done := startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid"})
 
-	// Cancel immediately — goroutine is waiting in time.After(5s) and will
+	// Cancel immediately; goroutine is waiting in time.After(5s) and will
 	// see ctx.Done() on the next select iteration without ever attempting discovery
 	cancel()
 
 	// Wait deterministically for the goroutine to exit
 	select {
 	case <-done:
-		// Goroutine exited — safe to read goth's map without races
+		// Goroutine exited; safe to read goth's map without races
 	case <-time.After(5 * time.Second):
 		t.Fatal("OIDC retry goroutine did not exit after context cancellation")
 	}
@@ -1765,4 +1765,47 @@ func TestOIDCRetry_DisabledAfterShutdown(t *testing.T) {
 	_, cancel3 := context.WithCancel(t.Context())
 	t.Cleanup(cancel3)
 	require.True(t, setOIDCRetryCancel(issuer, cancel3), "retry should register again after re-enable")
+}
+
+// TestIsUserAuthenticatedSubnetBypassIgnoresForgedHeader verifies the automatic
+// local-network check runs on the verified client address: a private peer that
+// is not on the host's network cannot claim a local address through a
+// forwarded header, even though Echo's default extractor honors that header
+// from a private peer.
+func TestIsUserAuthenticatedSubnetBypassIgnoresForgedHeader(t *testing.T) {
+	localIP := pickLocalSubnetIPv4(t)
+	if localIP == "" {
+		t.Skip("Skipping: no non-loopback IPv4 interface found for subnet bypass test")
+	}
+	const remotePeer = "10.255.255.9"
+	if IsInLocalSubnet(net.ParseIP(remotePeer)) {
+		t.Skipf("Skipping: %s is on a local network of this host", remotePeer)
+	}
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			SessionSecret: "test-secret-32-bytes-minimum-len",
+			AllowSubnetBypass: conf.AllowSubnetBypass{
+				Enabled: true,
+				Subnet:  "192.0.2.0/24",
+			},
+		},
+	}
+
+	server := newOAuth2ServerForTesting(t, settings)
+	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+
+	e := echo.New()
+	e.IPExtractor = echo.ExtractIPFromXFFHeader()
+
+	forged := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	forged.RemoteAddr = net.JoinHostPort(remotePeer, "12345")
+	forged.Header.Set(echo.HeaderXForwardedFor, localIP)
+	assert.False(t, server.IsUserAuthenticated(e.NewContext(forged, httptest.NewRecorder())),
+		"a forged forwarded header must not place a client on the local network")
+
+	direct := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	direct.RemoteAddr = net.JoinHostPort(localIP, "12345")
+	assert.True(t, server.IsUserAuthenticated(e.NewContext(direct, httptest.NewRecorder())),
+		"a direct client on the local network is still auto-authenticated")
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
 var (
@@ -218,6 +219,10 @@ type OAuth2Server struct {
 
 	// Throttling
 	throttledMessages map[string]time.Time
+
+	// proxyTrust caches the parsed Security.TrustedProxies list for
+	// AuthClientIP, rebuilt only when the list changes.
+	proxyTrust proxytrust.Cache
 }
 
 // currentSettings returns the latest settings snapshot so security
@@ -231,6 +236,24 @@ func (s *OAuth2Server) currentSettings() *conf.Settings {
 // instead of the construction-time pointer. See currentSettings.
 func (s *OAuth2Server) CurrentSettings() *conf.Settings {
 	return s.currentSettings()
+}
+
+// AuthClientIP returns the client address to use for authentication decisions,
+// such as the allowed-subnet bypass, or "" when it cannot be verified (callers
+// must then grant no address-based access). Unlike echo.Context.RealIP, which
+// serves attribution and honors forwarded headers from any private peer, it
+// honors them only from proxies listed in Security.TrustedProxies; see
+// proxytrust.Checker.AuthClientIP. The list is read per request, so changes take
+// effect without a restart.
+func (s *OAuth2Server) AuthClientIP(r *http.Request) string {
+	var trustedProxies []string
+	if settings := s.currentSettings(); settings != nil {
+		trustedProxies = settings.Security.TrustedProxies
+	}
+	if ip := s.proxyTrust.Resolve(trustedProxies).AuthClientIP(r); ip != nil {
+		return ip.String()
+	}
+	return ""
 }
 
 // For testing purposes
@@ -683,11 +706,13 @@ func SetTestConfigPath(path string) {
 // IsUserAuthenticated checks if the user is authenticated
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 	settings := s.currentSettings()
-	clientIP := parseIPWithZone(c.RealIP())
 	secLog := GetLogger().With(logger.String("client_ip", c.RealIP()))
 	secLog.Debug("Checking user authentication status")
 
-	if settings.Security.AllowSubnetBypass.Enabled && IsInLocalSubnet(clientIP) {
+	// The automatic local-network check uses the strict client address, never
+	// the attribution address, so a forged forwarded header cannot place a
+	// client on the host's network.
+	if settings.Security.AllowSubnetBypass.Enabled && IsInLocalSubnet(parseIPWithZone(s.AuthClientIP(c.Request()))) {
 		secLog.Info("User authenticated: request from local subnet (subnet bypass enabled)")
 		return true
 	}
