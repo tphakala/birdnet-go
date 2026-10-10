@@ -1243,8 +1243,13 @@ func TestOrchestrator_PredictModelTimed_ReportsLockWaitSeparately(t *testing.T) 
 // GOTRACEBACK=system or crash the rest of the header line names the goroutine's
 // current M, which differs once it is parked.
 func currentGoroutineHeader() string {
-	const goroutinePrefix = "goroutine "
-	buf := make([]byte, 64)
+	const (
+		goroutinePrefix = "goroutine "
+		// headerBufBytes holds "goroutine " plus any goroutine id and the rest
+		// of the first header line; only the id is kept.
+		headerBufBytes = 64
+	)
+	buf := make([]byte, headerBufBytes)
 	rest := strings.TrimPrefix(string(buf[:runtime.Stack(buf, false)]), goroutinePrefix)
 	id, _, _ := strings.Cut(rest, " ")
 	return goroutinePrefix + id + " "
