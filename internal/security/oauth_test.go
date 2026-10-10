@@ -1914,3 +1914,26 @@ func TestAuthClientIPReportsUnverifiedPeerThrottled(t *testing.T) {
 	offServer.mutex.Unlock()
 	assert.False(t, ok, "nothing is reported with the subnet bypass disabled")
 }
+
+// TestAuthClientIPHotReloadsTrustedProxies verifies OAuth2Server.AuthClientIP
+// reads security.trustedproxies from the live settings snapshot on every
+// request, so adding or removing a proxy in the UI takes effect without a
+// restart.
+func TestAuthClientIPHotReloadsTrustedProxies(t *testing.T) {
+	startup := &conf.Settings{}
+	server := newOAuth2ServerForTesting(t, startup)
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.RemoteAddr = "10.0.0.2:40000"
+	req.Header.Set(echo.HeaderXForwardedFor, "192.168.1.20")
+
+	assert.Empty(t, server.AuthClientIP(req), "an unlisted proxy is not trusted")
+
+	listed := &conf.Settings{}
+	listed.Security.TrustedProxies = []string{"10.0.0.2"}
+	conf.StoreSettings(listed)
+	assert.Equal(t, "192.168.1.20", server.AuthClientIP(req), "a proxy added at runtime is trusted at once")
+
+	conf.StoreSettings(&conf.Settings{})
+	assert.Empty(t, server.AuthClientIP(req), "a proxy removed at runtime is distrusted at once")
+}
