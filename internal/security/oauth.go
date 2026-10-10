@@ -260,7 +260,7 @@ func (s *OAuth2Server) AuthClientIP(r *http.Request) string {
 	}
 	if peer, ok := unverifiedBypassPeer(settings, checker, r); ok {
 		s.logThrottledInfo(unverifiedClientIPLogKey,
-			"Subnet bypass not applied: forwarded client-IP headers came from a peer that is not a trusted proxy; if this peer is your reverse proxy, add it to security.trustedproxies",
+			"Subnet bypass skipped: forwarded client-IP headers came from a peer not listed in security.trustedproxies; if this peer is your reverse proxy, add it there",
 			unverifiedClientIPLogInterval, logger.String("peer", peer))
 	}
 	return ""

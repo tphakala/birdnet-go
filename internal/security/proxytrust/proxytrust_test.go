@@ -209,6 +209,7 @@ func TestChecker_AuthClientIP(t *testing.T) {
 		// Configured proxies.
 		{name: "configured proxy single-hop XFF", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"192.168.1.20"}}, want: "192.168.1.20"},
 		{name: "configured proxy appended hop beats forged prefix", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"192.168.1.20, 198.51.100.9"}}, want: "198.51.100.9"},
+		{name: "configured proxy chain split across XFF lines", trustedProxies: []string{"10.0.0.0/24"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"198.51.100.9", "10.0.0.3"}}, want: "198.51.100.9"},
 		{name: "configured proxy appending a separate XFF line", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"192.168.1.20", "198.51.100.9"}}, want: "198.51.100.9"},
 		{name: "configured proxy chain skips configured hops", trustedProxies: []string{"10.0.0.0/24"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"198.51.100.9, 10.0.0.3"}}, want: "198.51.100.9"},
 		{name: "configured proxy chain of only configured hops", trustedProxies: []string{"10.0.0.0/24"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"10.0.0.7, 10.0.0.3"}}, want: ""},
@@ -303,24 +304,39 @@ func TestChecker_ClientIPFromXFF(t *testing.T) {
 // FuzzChecker_AuthClientIP checks the strict resolver's invariants on arbitrary
 // header values and peers: an unconfigured peer that sends a client-IP header
 // never yields an address, a result is either the peer (no headers) or an
-// address named in a header, a header-derived result is never loopback, and
-// nothing panics.
+// address named in a header, a header-derived result is never loopback, an
+// X-Real-IP naming an unconfigured address must equal any result, a Forwarded
+// header always yields nil from a configured proxy, and nothing panics.
 func FuzzChecker_AuthClientIP(f *testing.F) {
-	f.Add("172.25.5.9:5000", "203.0.113.7", "", "", true)
-	f.Add("10.0.0.2:5000", "192.168.1.20, 198.51.100.9", "198.51.100.9", "", true)
-	f.Add("10.0.0.2:5000", "", "127.0.0.1", "", true)
-	f.Add(cloudflareEdgePeer, "198.51.100.9", "", "198.51.100.9", false)
-	f.Add("[fe80::1%eth0]:5000", "fe80::2%eth0", "", "", true)
+	f.Add("172.25.5.9:5000", "203.0.113.7", "", "", "", uint8(0b0001))
+	f.Add("10.0.0.2:5000", "192.168.1.20, 198.51.100.9", "198.51.100.9", "", "", uint8(0b0011))
+	f.Add("10.0.0.2:5000", "", "127.0.0.1", "", "", uint8(0b0010))
+	f.Add(cloudflareEdgePeer, "198.51.100.9", "", "198.51.100.9", "", uint8(0b0101))
+	f.Add("10.0.0.2:5000", "198.51.100.9", "", "", "192.168.1.20", uint8(0b1001))
+	f.Add("10.0.0.2:5000", "198.51.100.9", "", "", "", uint8(0b10001))
+	f.Add("[fe80::1%eth0]:5000", "fe80::2%eth0", "", "", "", uint8(0b0001))
 
 	checker := NewChecker([]string{"10.0.0.2", conf.TrustedProxyCloudflarePreset})
 
-	f.Fuzz(func(t *testing.T, remoteAddr, xff, realIP, cfIP string, withHeaders bool) {
+	f.Fuzz(func(t *testing.T, remoteAddr, xff, realIP, cfIP, trueClientIP string, present uint8) {
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.RemoteAddr = remoteAddr
-		if withHeaders {
-			req.Header.Set(headerXForwardedFor, xff)
-			req.Header.Set(headerXRealIP, realIP)
-			req.Header.Set(HeaderCFConnectingIP, cfIP)
+		headers := []struct {
+			name  string
+			value string
+		}{
+			{headerXForwardedFor, xff},
+			{headerXRealIP, realIP},
+			{HeaderCFConnectingIP, cfIP},
+			{headerTrueClientIP, trueClientIP},
+			{headerForwarded, "for=" + xff},
+		}
+		var sent []string
+		for i, h := range headers {
+			if present&(1<<i) != 0 {
+				req.Header.Set(h.name, h.value)
+				sent = append(sent, h.value)
+			}
 		}
 
 		got := checker.AuthClientIP(req)
@@ -329,14 +345,20 @@ func FuzzChecker_AuthClientIP(f *testing.F) {
 		}
 
 		peerIP, _ := PeerAddr(req)
-		if !withHeaders {
+		if len(sent) == 0 {
 			require.True(t, got.Equal(peerIP), "without headers the result must be the peer")
 			return
 		}
 		require.True(t, checker.IsConfiguredProxy(peerIP), "an unconfigured peer with headers must yield nil")
+		require.Zero(t, present&(1<<4), "a Forwarded header from a configured proxy must yield nil")
 		assert.False(t, got.IsLoopback(), "a header-derived address must never be loopback")
+		if present&(1<<1) != 0 {
+			if ip := parseStrictIP(strings.TrimSpace(realIP)); ip != nil && !checker.IsConfiguredProxy(ip) {
+				assert.True(t, got.Equal(ip), "the result must agree with an X-Real-IP naming a client")
+			}
+		}
 		named := false
-		for _, v := range []string{xff, realIP, cfIP} {
+		for _, v := range sent {
 			for part := range strings.SplitSeq(v, ",") {
 				if ip := net.ParseIP(stripZone(strings.TrimSpace(part))); ip != nil && ip.Equal(got) {
 					named = true

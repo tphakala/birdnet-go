@@ -984,6 +984,9 @@ func TestHandleBasicAuthTokenLocalCookieRelaxationUsesVerifiedAddress(t *testing
 		accessTokens: make(map[string]AccessToken),
 	}
 
+	previousStore := gothic.Store
+	t.Cleanup(func() { gothic.Store = previousStore })
+
 	run := func(remoteAddr, forwardedFor string) *sessions.Options {
 		store := sessions.NewCookieStore([]byte("secret-key"))
 		original := store.Options
