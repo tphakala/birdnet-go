@@ -139,7 +139,7 @@ Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
 
-License: https://github.com/googleapis/gax-go/blob/v2.26.2/v2/LICENSE
+License: https://github.com/googleapis/gax-go/blob/v2.26.2/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gorilla/mux
@@ -524,7 +524,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.59.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.60.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
