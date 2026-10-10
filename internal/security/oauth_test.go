@@ -2063,3 +2063,20 @@ func requestFrom(remoteAddr string) *http.Request {
 	req.RemoteAddr = remoteAddr
 	return req
 }
+
+// TestBypassPredicatesNilRequest verifies the exported bypass predicates treat
+// a nil request as one with no verifiable address instead of panicking.
+func TestBypassPredicatesNilRequest(t *testing.T) {
+	settings := &conf.Settings{}
+	settings.Security.BasicAuth.Enabled = true
+	settings.Security.AllowSubnetBypass.Enabled = true
+	settings.Security.AllowSubnetBypass.Subnet = "192.168.1.0/24"
+	server := newOAuth2ServerForTesting(t, settings)
+
+	assert.NotPanics(t, func() {
+		assert.False(t, server.IsRequestFromAllowedSubnet(nil), "a nil request gets no bypass")
+	})
+	assert.NotPanics(t, func() {
+		assert.True(t, server.IsAuthenticationEnabled(nil), "a nil request must authenticate")
+	})
+}

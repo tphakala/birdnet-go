@@ -382,3 +382,13 @@ func TestCache_ResolveSettings(t *testing.T) {
 	settings.Security.TrustedProxies = []string{"10.0.0.2"}
 	assert.True(t, cache.ResolveSettings(settings).IsConfiguredProxy(mustParseIP(t, "10.0.0.2")), "configured proxy is trusted")
 }
+
+// TestChecker_AuthClientIPNilRequest verifies a nil request yields no
+// verifiable address instead of panicking.
+func TestChecker_AuthClientIPNilRequest(t *testing.T) {
+	t.Parallel()
+
+	assert.NotPanics(t, func() {
+		assert.Nil(t, NewChecker([]string{"10.0.0.2"}).AuthClientIP(nil))
+	})
+}

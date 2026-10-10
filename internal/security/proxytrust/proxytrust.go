@@ -258,10 +258,15 @@ func (tc *Checker) ClientIPFromXFF(xff string) string {
 //     walked from the right across every header line, skipping configured
 //     hops.
 //
+// A nil request has no verifiable address.
+//
 // Each address must be plain (a zone only on IPv6 link-local), and a
 // header-derived loopback address is refused: loopback describes the
 // connection, so only a direct loopback peer may claim it.
 func (tc *Checker) AuthClientIP(req *http.Request) net.IP {
+	if req == nil {
+		return nil
+	}
 	peerIP, _ := PeerAddr(req)
 	if peerIP == nil {
 		return nil
