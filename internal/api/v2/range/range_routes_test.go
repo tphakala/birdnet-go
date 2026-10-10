@@ -103,6 +103,8 @@ func TestRangeReadRoutesStayPublic(t *testing.T) {
 		"/api/v2/range/status",
 		"/api/v2/range/species/count",
 		"/api/v2/range/species/list",
+		"/api/v2/range/species/scores",
+		"/api/v2/range/species/csv",
 	}
 	for _, path := range paths {
 		t.Run(path+" public", func(t *testing.T) {
