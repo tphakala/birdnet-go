@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -199,6 +200,12 @@ func TestChecker_AuthClientIP(t *testing.T) {
 		{name: "unconfigured local proxy does not make clients loopback", remoteAddr: "127.0.0.1:5000", headers: map[string][]string{"X-Forwarded-For": {"198.51.100.9"}}, want: ""},
 		{name: "public peer forging XFF", remoteAddr: "198.51.100.9:5000", headers: map[string][]string{"X-Forwarded-For": {"192.168.1.20"}}, want: ""},
 
+		{name: "private peer forging True-Client-IP", remoteAddr: "172.25.5.9:5000", headers: map[string][]string{"True-Client-IP": {"203.0.113.7"}}, want: ""},
+		{name: "direct client on an IPv4-mapped address", remoteAddr: "[::ffff:192.168.1.20]:5000", want: "192.168.1.20"},
+		{name: "unix socket peer", remoteAddr: "@", want: ""},
+		{name: "empty RemoteAddr", remoteAddr: "", want: ""},
+		{name: "unix socket path peer", remoteAddr: "/run/birdnet.sock", want: ""},
+
 		// Configured proxies.
 		{name: "configured proxy single-hop XFF", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"192.168.1.20"}}, want: "192.168.1.20"},
 		{name: "configured proxy appended hop beats forged prefix", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"192.168.1.20, 198.51.100.9"}}, want: "198.51.100.9"},
@@ -208,6 +215,12 @@ func TestChecker_AuthClientIP(t *testing.T) {
 		{name: "configured proxy with malformed XFF", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"nonsense"}}, want: ""},
 		{name: "configured proxy with zone on IPv4 hop", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"192.168.1.20%x"}}, want: ""},
 		{name: "configured proxy with link-local zone hop", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"fe80::1%eth0"}}, want: "fe80::1"},
+		{name: "configured proxy on an IPv4-mapped address", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "[::ffff:10.0.0.2]:5000", headers: map[string][]string{"X-Forwarded-For": {"192.168.1.20"}}, want: "192.168.1.20"},
+		{name: "configured proxy with zone on a global IPv6 hop", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"2001:db8::1%eth0"}}, want: ""},
+		{name: "configured proxy with an empty zone", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"fe80::1%"}}, want: ""},
+		{name: "configured proxy forwarding IPv4-mapped loopback via X-Real-IP", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Real-IP": {"::ffff:127.0.0.1"}}, want: ""},
+		{name: "configured proxy with an empty XFF", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {""}}, want: ""},
+		{name: "configured proxy with a trailing comma in XFF", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"192.168.1.20,"}}, want: ""},
 		{name: "configured proxy forwarding loopback via XFF", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Forwarded-For": {"127.0.0.1"}}, want: ""},
 		{name: "configured proxy sending X-Real-IP only", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Real-IP": {"192.168.1.20"}}, want: "192.168.1.20"},
 		{name: "configured proxy with repeated X-Real-IP", trustedProxies: []string{"10.0.0.2"}, remoteAddr: "10.0.0.2:5000", headers: map[string][]string{"X-Real-IP": {"192.168.1.20", "198.51.100.9"}}, want: ""},
@@ -285,4 +298,51 @@ func TestChecker_ClientIPFromXFF(t *testing.T) {
 			assert.Equal(t, tt.want, checker.ClientIPFromXFF(tt.xff))
 		})
 	}
+}
+
+// FuzzChecker_AuthClientIP checks the strict resolver's invariants on arbitrary
+// header values and peers: an unconfigured peer that sends a client-IP header
+// never yields an address, a result is either the peer (no headers) or an
+// address named in a header, a header-derived result is never loopback, and
+// nothing panics.
+func FuzzChecker_AuthClientIP(f *testing.F) {
+	f.Add("172.25.5.9:5000", "203.0.113.7", "", "", true)
+	f.Add("10.0.0.2:5000", "192.168.1.20, 198.51.100.9", "198.51.100.9", "", true)
+	f.Add("10.0.0.2:5000", "", "127.0.0.1", "", true)
+	f.Add(cloudflareEdgePeer, "198.51.100.9", "", "198.51.100.9", false)
+	f.Add("[fe80::1%eth0]:5000", "fe80::2%eth0", "", "", true)
+
+	checker := NewChecker([]string{"10.0.0.2", conf.TrustedProxyCloudflarePreset})
+
+	f.Fuzz(func(t *testing.T, remoteAddr, xff, realIP, cfIP string, withHeaders bool) {
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.RemoteAddr = remoteAddr
+		if withHeaders {
+			req.Header.Set(headerXForwardedFor, xff)
+			req.Header.Set(headerXRealIP, realIP)
+			req.Header.Set(HeaderCFConnectingIP, cfIP)
+		}
+
+		got := checker.AuthClientIP(req)
+		if got == nil {
+			return
+		}
+
+		peerIP, _ := PeerAddr(req)
+		if !withHeaders {
+			require.True(t, got.Equal(peerIP), "without headers the result must be the peer")
+			return
+		}
+		require.True(t, checker.IsConfiguredProxy(peerIP), "an unconfigured peer with headers must yield nil")
+		assert.False(t, got.IsLoopback(), "a header-derived address must never be loopback")
+		named := false
+		for _, v := range []string{xff, realIP, cfIP} {
+			for part := range strings.SplitSeq(v, ",") {
+				if ip := net.ParseIP(stripZone(strings.TrimSpace(part))); ip != nil && ip.Equal(got) {
+					named = true
+				}
+			}
+		}
+		assert.True(t, named, "the result must be an address named in a header")
+	})
 }
