@@ -13,7 +13,7 @@ import (
 // Higher levels require higher overlap to generate more detections for filtering.
 //
 // Whether the hardware sustains the overlap a level asks for is not decided
-// here: the analysis cadence cap holds the effective overlap within what the
+// here: the analysis cadence cap lowers the effective overlap toward what the
 // hardware sustains.
 func getMinimumOverlapForLevel(level int) float64 {
 	switch level {

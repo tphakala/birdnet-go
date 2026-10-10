@@ -385,7 +385,7 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 	// (which follows the effective base overlap; the bat model stays fixed at 50%).
 	// If this window's own work exceeds this interval, the model cannot keep up on
 	// its own. Waiting for the shared inference lock is excluded: that is
-	// contention between models, which the keep-up monitor judges by lost audio.
+	// contention for the shared lock, which the keep-up monitor judges by lost audio.
 	effectiveBufferDuration := bufferIntervalFor(bn, modelID)
 
 	// The window's own work: PCM conversion plus the model's inference time.

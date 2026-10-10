@@ -710,7 +710,8 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 // spent waiting for locks and the part spent in the model itself.
 type PredictTiming struct {
 	// LockWait is the time from before inferenceMu.Lock to after entry.mu.Lock:
-	// waiting for other models' inferences and for lifecycle work on this model.
+	// waiting for other inferences (other models, or other sources running this
+	// model) and for lifecycle work on this model.
 	LockWait time.Duration
 	// Predict is the model's own inference time, the same value recorded in the
 	// per-model inference counters.
