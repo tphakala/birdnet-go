@@ -5,6 +5,7 @@
 package auth
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/security/securitytest"
 )
 
@@ -73,8 +75,12 @@ func TestSubnetBypassIgnoresForgedClientIPHeaders(t *testing.T) {
 		forgedHeader string
 		forgedValue  string
 		wantStatus   int
+		// peerMayBeLocal marks a case that relies on the peer being off the
+		// test host's networks: a direct client on them is admitted by the
+		// automatic local-network check, which is not what the case tests.
+		peerMayBeLocal bool
 	}{
-		{name: "no forged header", remoteAddr: lanPeer, wantStatus: http.StatusUnauthorized},
+		{name: "no forged header", remoteAddr: lanPeer, wantStatus: http.StatusUnauthorized, peerMayBeLocal: true},
 		{name: "forged XFF inside bypass subnet", remoteAddr: lanPeer, header: "X-Forwarded-For", value: insideBypassSubnet, wantStatus: http.StatusUnauthorized},
 		{name: "forged X-Real-IP inside bypass subnet", remoteAddr: lanPeer, header: "X-Real-IP", value: insideBypassSubnet, wantStatus: http.StatusUnauthorized},
 		{name: "forged XFF loopback", remoteAddr: lanPeer, header: "X-Forwarded-For", value: "127.0.0.1", wantStatus: http.StatusUnauthorized},
@@ -90,6 +96,11 @@ func TestSubnetBypassIgnoresForgedClientIPHeaders(t *testing.T) {
 	for extractorName, extractor := range extractors {
 		for _, tt := range tests {
 			t.Run(extractorName+" extractor/"+tt.name, func(t *testing.T) {
+				if tt.peerMayBeLocal {
+					if peer, _, err := net.SplitHostPort(tt.remoteAddr); err == nil && security.IsInLocalSubnet(net.ParseIP(peer)) {
+						t.Skipf("peer %s is on a network of this test host", peer)
+					}
+				}
 				m := newSubnetBypassMiddleware(t, tt.trustedProxies...)
 
 				e := echo.New()
