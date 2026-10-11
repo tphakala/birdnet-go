@@ -101,6 +101,7 @@ func TestClipVendor(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, branding.Name()+" unknown", clipVendor(nil))
 	assert.Equal(t, branding.Name()+" unknown", clipVendor(&conf.Settings{}))
+	assert.Equal(t, branding.Name()+" unknown", clipVendor(&conf.Settings{Version: "  "}))
 	assert.Equal(t, branding.Name()+" 1.2.3", clipVendor(&conf.Settings{Version: "1.2.3"}))
 }
 

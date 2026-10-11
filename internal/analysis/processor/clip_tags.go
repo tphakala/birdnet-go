@@ -64,11 +64,13 @@ func newClipTagMeta(r *detection.Result) clipTagMeta {
 }
 
 // clipVendor returns the VORBIS_COMMENT vendor string: the application name and
-// the running version, or "unknown" when the version is not available.
+// the running version, or "unknown" when the version is empty or blank.
 func clipVendor(settings *conf.Settings) string {
 	version := clipTagUnknownVersion
-	if settings != nil && settings.Version != "" {
-		version = settings.Version
+	if settings != nil {
+		if v := strings.TrimSpace(settings.Version); v != "" {
+			version = v
+		}
 	}
 	return branding.Name() + " " + version
 }
