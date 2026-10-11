@@ -5,6 +5,7 @@ import (
 	"crypto/md5" //nolint:gosec // FLAC STREAMINFO uses MD5 as a content digest, not for security
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,9 +31,17 @@ func TestEncodePCMToBuffer_LeavesMD5Unknown(t *testing.T) {
 }
 
 // TestEncodePCM_WritesRealMD5 pins that the file path records the real MD5 of
-// the PCM, including when it reuses a pooled encoder that last served the
-// in-memory path. Not parallel: it exercises the shared pool in sequence.
+// the PCM when it reuses the encoder that last served the in-memory path. The
+// pool is replaced by one that always hands out the same encoder, so the reuse
+// does not depend on sync.Pool keeping the Put. Not parallel: it replaces the
+// package-level pool.
 func TestEncodePCM_WritesRealMD5(t *testing.T) {
+	shared := new(goflac.Encoder)
+	encoderPool = sync.Pool{New: func() any { return shared }}
+	t.Cleanup(func() {
+		encoderPool = sync.Pool{New: func() any { return new(goflac.Encoder) }}
+	})
+
 	pcm := makeTestPCM(20000)
 	want := md5.Sum(pcm) //nolint:gosec // content digest, see import
 	path := filepath.Join(t.TempDir(), "clip.flac")
