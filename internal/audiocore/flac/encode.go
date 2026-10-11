@@ -324,10 +324,10 @@ type BufferOptions struct {
 // so no SEEKTABLE is emitted. The STREAMINFO total-samples field is finalized
 // up front from the PCM length (go-flac verifies it against the samples actually
 // written on Close), so consumers that read the sample count for duration get a
-// correct value without a seekable sink. The MD5 field is the spec-legal all-zero
-// "unknown" sentinel, and the encoder skips computing it (go-flac SkipMD5)
-// because a non-seekable sink could never record it. A non-zero GainDB is
-// applied in Go before encoding; opts.PCMData itself is never modified.
+// correct value without a seekable sink. The MD5 field is left at the spec-legal
+// all-zero "unknown" sentinel and is not computed: recording it on a
+// non-seekable sink would need the whole gained PCM hashed up front. A non-zero
+// GainDB is applied in Go before encoding; opts.PCMData itself is never modified.
 func EncodePCMToBuffer(ctx context.Context, opts *BufferOptions) (*bytes.Buffer, error) {
 	if opts == nil {
 		return nil, errors.Newf("flac encode: nil options").
@@ -350,18 +350,7 @@ func EncodePCMToBuffer(ctx context.Context, opts *BufferOptions) (*bytes.Buffer,
 	bytesPerFrame := (opts.BitDepth / 8) * opts.Channels
 	totalSamples := uint64(len(opts.PCMData) / bytesPerFrame)
 
-	cfg := bufferEncodeConfig(opts, totalSamples)
-
-	buf := new(bytes.Buffer)
-	if encErr := encodeToWriter(ctx, buf, &cfg, opts.PCMData, opts.GainDB); encErr != nil {
-		return nil, encErr
-	}
-	return buf, nil
-}
-
-// bufferEncodeConfig builds the go-flac config for the in-memory export path.
-func bufferEncodeConfig(opts *BufferOptions, totalSamples uint64) goflac.Config {
-	return goflac.Config{
+	cfg := goflac.Config{
 		SampleRate:       opts.SampleRate,
 		BitDepth:         opts.BitDepth,
 		Channels:         opts.Channels,
@@ -370,12 +359,17 @@ func bufferEncodeConfig(opts *BufferOptions, totalSamples uint64) goflac.Config 
 		// seek-back, so a bytes.Buffer sink still reports the correct duration.
 		// go-flac verifies it against the samples written on Close.
 		TotalSamples: totalSamples,
-		// A bytes.Buffer is not an io.WriteSeeker, so go-flac never patches the
-		// MD5 at Close and it stays the all-zero "unknown" sentinel. Hashing every
-		// frame would be wasted work; SkipMD5 leaves the output byte-identical.
+		// go-flac cannot patch the MD5 into a non-seekable sink at Close, so
+		// hashing every frame would be wasted work; the output is unchanged.
 		SkipMD5: true,
 		// No SeekTableInterval: a bytes.Buffer is not an io.WriteSeeker, and
 		// go-flac rejects a seektable on a non-seekable sink. Short upload clips
 		// do not need one.
 	}
+
+	buf := new(bytes.Buffer)
+	if encErr := encodeToWriter(ctx, buf, &cfg, opts.PCMData, opts.GainDB); encErr != nil {
+		return nil, encErr
+	}
+	return buf, nil
 }
