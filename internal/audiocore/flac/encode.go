@@ -93,13 +93,13 @@ type Options struct {
 	BitDepth int
 	// GainDB is the volume adjustment in dB (0 = no change).
 	GainDB float64
-	// Tags are written in order to a VORBIS_COMMENT block. Nil, or empty after
-	// sanitization, writes no block, so the output is byte-identical to an
-	// untagged encode. Invalid tags are dropped or repaired; tags never cause an
-	// encode error. At most 64 tags are kept.
+	// Tags are written in order to a VORBIS_COMMENT block. Nil Tags (or none left
+	// after sanitization) together with an empty Vendor write no block, so the
+	// output is byte-identical to an untagged encode. Invalid tags are dropped or
+	// repaired; tags never cause an encode error. At most 64 tags are kept.
 	Tags []Tag
 	// Vendor is the optional VORBIS_COMMENT vendor string, sanitized like a tag
-	// value.
+	// value. A non-empty Vendor writes the block even when no tag survives.
 	Vendor string
 }
 
@@ -285,11 +285,7 @@ func encodeToWriter(ctx context.Context, w io.Writer, cfg *goflac.Config, pcmDat
 	// Tags and Vendor are cleared too: a pooled encoder must not pin the previous
 	// clip's tag strings, and the discard stream needs no comment block.
 	defer func() {
-		depinCfg := *cfg
-		depinCfg.SeekTableInterval = 0
-		depinCfg.Tags = nil
-		depinCfg.Vendor = ""
-		if enc.Reset(io.Discard, depinCfg) == nil {
+		if enc.Reset(io.Discard, depinConfig(cfg)) == nil {
 			encoderPool.Put(enc)
 		}
 	}()
@@ -306,6 +302,16 @@ func encodeToWriter(ctx context.Context, w io.Writer, cfg *goflac.Config, pcmDat
 			Build()
 	}
 	return nil
+}
+
+// depinConfig returns the config for the re-Reset that releases a pooled
+// encoder's writer: a copy of cfg with the seek table, tags and vendor cleared.
+func depinConfig(cfg *goflac.Config) goflac.Config {
+	depinCfg := *cfg
+	depinCfg.SeekTableInterval = 0
+	depinCfg.Tags = nil
+	depinCfg.Vendor = ""
+	return depinCfg
 }
 
 // encodeSamples writes pcmData to enc, applying gain when requested. With no gain

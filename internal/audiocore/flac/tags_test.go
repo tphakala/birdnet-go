@@ -212,7 +212,28 @@ func TestSanitizeTagText(t *testing.T) {
 	})
 }
 
-// Not parallel: it relies on sequential pool reuse on one goroutine.
+// TestDepinConfig_ClearsTagsVendorAndSeekTable pins what a pooled encoder is
+// re-Reset with: no tag or vendor strings from the finished clip, and no seek
+// table (the discard sink is not seekable). The input config is left untouched.
+func TestDepinConfig_ClearsTagsVendorAndSeekTable(t *testing.T) {
+	t.Parallel()
+	tags := []goflacmeta.Tag{{Name: "TITLE", Value: "x"}}
+	cfg := goflac.Config{
+		SampleRate: testSampleRate, BitDepth: testBitDepth, Channels: testChannels,
+		SeekTableInterval: testSampleRate, Tags: tags, Vendor: "v",
+	}
+	got := depinConfig(&cfg)
+	assert.Nil(t, got.Tags)
+	assert.Empty(t, got.Vendor)
+	assert.Zero(t, got.SeekTableInterval)
+	assert.Equal(t, testSampleRate, got.SampleRate)
+	assert.Equal(t, tags, cfg.Tags, "the caller's config must not be modified")
+	assert.Equal(t, "v", cfg.Vendor)
+}
+
+// Not parallel. sync.Pool may drop an item (it does at random under -race), so
+// reuse is likely but not guaranteed; the test is correct either way, and the
+// depin clearing itself is pinned by TestDepinConfig_ClearsTagsVendorAndSeekTable.
 func TestEncoderPool_TagsDoNotLeakAcrossExports(t *testing.T) {
 	pcm := makeTestPCM(8000)
 	tagsA := []Tag{{Name: "TITLE", Value: "A"}}
