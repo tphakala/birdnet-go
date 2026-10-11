@@ -139,7 +139,7 @@ Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
 
-License: https://github.com/googleapis/gax-go/blob/v2.26.2/LICENSE
+License: https://github.com/googleapis/gax-go/blob/v2.26.2/v2/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gorilla/mux
@@ -424,7 +424,7 @@ Source: MIT
 
 ### github.com/tphakala/go-flac
 
-License: https://github.com/tphakala/go-flac/blob/v1.1.0/LICENSE
+License: https://github.com/tphakala/go-flac/blob/v1.2.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-hls
@@ -539,7 +539,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.48.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.49.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
