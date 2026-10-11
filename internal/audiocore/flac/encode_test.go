@@ -350,27 +350,10 @@ func TestEncodePCM_EmitsSeekTable(t *testing.T) {
 	assert.True(t, hasSeekTable(data), "native FLAC should emit a SEEKTABLE for player parity with FFmpeg")
 }
 
-// hasSeekTable walks the FLAC metadata blocks and reports whether a SEEKTABLE
-// (block type 3) is present.
+// hasSeekTable reports whether a SEEKTABLE (block type 3) is present.
 func hasSeekTable(data []byte) bool {
 	const seekTableBlockType = 3
-	if len(data) < 4 || string(data[:4]) != "fLaC" {
-		return false
-	}
-	for off := 4; off+4 <= len(data); {
-		header := data[off]
-		last := header&0x80 != 0
-		btype := header & 0x7f
-		length := int(data[off+1])<<16 | int(data[off+2])<<8 | int(data[off+3])
-		if btype == seekTableBlockType {
-			return true
-		}
-		off += 4 + length
-		if last {
-			break
-		}
-	}
-	return false
+	return hasMetadataBlock(data, seekTableBlockType)
 }
 
 func TestSupportedBitDepth(t *testing.T) {

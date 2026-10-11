@@ -930,6 +930,8 @@ func (a *SaveAudioAction) runEncoder(ctx context.Context, encoder string, export
 
 	case clipenc.NativeFLAC:
 		// FLAC always encodes natively via go-flac; FFmpeg is never used for FLAC.
+		// The detection's safe metadata is embedded as VORBIS_COMMENT tags.
+		vendor := clipVendor(a.Settings)
 		return flac.EncodePCM(ctx, &flac.Options{
 			PCMData:    a.pcmData,
 			OutputPath: outputPath,
@@ -937,6 +939,8 @@ func (a *SaveAudioAction) runEncoder(ctx context.Context, encoder string, export
 			Channels:   conf.NumChannels,
 			BitDepth:   conf.BitDepth,
 			GainDB:     gainDB,
+			Tags:       buildClipTags(a.clipTags, a.modelName, a.modelVersion, vendor),
+			Vendor:     vendor,
 		})
 
 	case clipenc.NativeAAC:
