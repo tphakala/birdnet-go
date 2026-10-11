@@ -47,18 +47,21 @@ func hasMetadataBlock(data []byte, blockType byte) bool {
 	return false
 }
 
-func encodeTagged(t *testing.T, pcm []byte, tags []Tag, vendor string) (path string, data []byte) {
+// encodeTagged encodes pcm with tags and vendor to a temp file and returns the
+// file contents.
+func encodeTagged(t *testing.T, pcm []byte, tags []Tag, vendor string) []byte {
 	t.Helper()
-	path = filepath.Join(t.TempDir(), "clip.flac")
+	path := filepath.Join(t.TempDir(), "clip.flac")
 	opts := baseOpts(path, pcm)
 	opts.Tags = tags
 	opts.Vendor = vendor
 	require.NoError(t, EncodePCM(t.Context(), opts))
 	data, err := os.ReadFile(path) //nolint:gosec // test-controlled path
 	require.NoError(t, err)
-	return path, data
+	return data
 }
 
+// decodeTags decodes a FLAC byte stream and returns its tags, vendor and PCM.
 func decodeTags(t *testing.T, data []byte) (tags []goflacmeta.Tag, vendor string, pcm []byte) {
 	t.Helper()
 	dec, err := goflac.NewDecoder(bytes.NewReader(data))
@@ -76,7 +79,7 @@ func TestEncodePCM_EmbedsTagsAndVendor(t *testing.T) {
 		{Name: "BIRDNET_CONFIDENCE", Value: "0.95"},
 		{Name: "DATE", Value: "2026-05-31T08:38:28+03:00"},
 	}
-	_, data := encodeTagged(t, pcm, tags, "BirdNET-Go 1.2.3")
+	data := encodeTagged(t, pcm, tags, "BirdNET-Go 1.2.3")
 
 	gotTags, gotVendor, gotPCM := decodeTags(t, data)
 	assert.Equal(t, []goflacmeta.Tag{
@@ -95,8 +98,8 @@ func TestEncodePCM_EmbedsTagsAndVendor(t *testing.T) {
 func TestEncodePCM_NoTagsWritesNoVorbisComment(t *testing.T) {
 	t.Parallel()
 	pcm := makeTestPCM(20000)
-	_, plain := encodeTagged(t, pcm, nil, "")
-	_, sanitizedAway := encodeTagged(t, pcm, []Tag{
+	plain := encodeTagged(t, pcm, nil, "")
+	sanitizedAway := encodeTagged(t, pcm, []Tag{
 		{Name: "", Value: "x"},
 		{Name: "OK", Value: "   "},
 	}, "")
@@ -111,24 +114,35 @@ func TestEncodePCM_InvalidTagInputStillExports(t *testing.T) {
 	for i := range many {
 		many[i] = Tag{Name: "T", Value: "v"}
 	}
+	noTags := []goflacmeta.Tag{}
 	tests := []struct {
 		name   string
 		tags   []Tag
 		vendor string
+		// wantTags, when non-nil, is the exact decoded tag list (empty: no tags).
+		wantTags []goflacmeta.Tag
 	}{
-		{"invalid utf8 value", []Tag{{Name: "TITLE", Value: "\xff\xfeBird"}}, ""},
-		{"name with equals", []Tag{{Name: "A=B", Value: "x"}}, ""},
-		{"non-ascii name", []Tag{{Name: "ÄÖ", Value: "x"}}, ""},
-		{"control char name", []Tag{{Name: "\x01", Value: "x"}}, ""},
-		{"huge value", []Tag{{Name: "TITLE", Value: strings.Repeat("ä", 1<<20)}}, ""},
-		{"too many tags", many, ""},
-		{"invalid utf8 vendor", nil, "\xc3"},
+		{
+			"invalid utf8 value", []Tag{{Name: "TITLE", Value: "\xff\xfeBird"}}, "",
+			[]goflacmeta.Tag{{Name: "TITLE", Value: tagInvalidUTF8Replacement + "Bird"}},
+		},
+		{"name with equals", []Tag{{Name: "A=B", Value: "x"}}, "", noTags},
+		{"non-ascii name", []Tag{{Name: "ÄÖ", Value: "x"}}, "", noTags},
+		{"control char name", []Tag{{Name: "\x01", Value: "x"}}, "", noTags},
+		{
+			"invalid names dropped, valid kept",
+			[]Tag{{Name: "A=B", Value: "x"}, {Name: "ÄÖ", Value: "x"}, {Name: "GOOD", Value: "y"}}, "",
+			[]goflacmeta.Tag{{Name: "GOOD", Value: "y"}},
+		},
+		{"huge value", []Tag{{Name: "TITLE", Value: strings.Repeat("ä", 1<<20)}}, "", nil},
+		{"too many tags", many, "", nil},
+		{"invalid utf8 vendor", nil, "\xc3", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			pcm := makeTestPCM(8000)
-			_, data := encodeTagged(t, pcm, tt.tags, tt.vendor)
+			data := encodeTagged(t, pcm, tt.tags, tt.vendor)
 			gotTags, gotVendor, gotPCM := decodeTags(t, data)
 			assert.Equal(t, pcm, gotPCM)
 			assert.LessOrEqual(t, len(gotTags), maxTagCount)
@@ -138,25 +152,15 @@ func TestEncodePCM_InvalidTagInputStillExports(t *testing.T) {
 				assert.True(t, utf8.ValidString(tag.Value))
 				assert.LessOrEqual(t, len(tag.Value), maxTagValueBytes)
 			}
+			switch {
+			case tt.wantTags == nil:
+			case len(tt.wantTags) == 0:
+				assert.Empty(t, gotTags)
+			default:
+				assert.Equal(t, tt.wantTags, gotTags)
+			}
 		})
 	}
-
-	t.Run("invalid bytes become U+FFFD", func(t *testing.T) {
-		t.Parallel()
-		_, data := encodeTagged(t, makeTestPCM(8000), []Tag{{Name: "TITLE", Value: "\xff\xfeBird"}}, "")
-		gotTags, _, _ := decodeTags(t, data)
-		require.Len(t, gotTags, 1)
-		assert.Contains(t, gotTags[0].Value, "�")
-		assert.Contains(t, gotTags[0].Value, "Bird")
-	})
-	t.Run("invalid names are dropped", func(t *testing.T) {
-		t.Parallel()
-		_, data := encodeTagged(t, makeTestPCM(8000), []Tag{
-			{Name: "A=B", Value: "x"}, {Name: "ÄÖ", Value: "x"}, {Name: "GOOD", Value: "y"},
-		}, "")
-		gotTags, _, _ := decodeTags(t, data)
-		assert.Equal(t, []goflacmeta.Tag{{Name: "GOOD", Value: "y"}}, gotTags)
-	})
 }
 
 func FuzzSanitizeTags(f *testing.F) {
@@ -188,7 +192,7 @@ func TestSanitizeTagText(t *testing.T) {
 	}{
 		{"valid passthrough", "Närhi", "Närhi"},
 		{"trim", "  x \n", "x"},
-		{"invalid bytes replaced", "a\xffb", "a�b"},
+		{"invalid bytes replaced", "a\xffb", "a" + tagInvalidUTF8Replacement + "b"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -239,13 +243,13 @@ func TestEncoderPool_TagsDoNotLeakAcrossExports(t *testing.T) {
 	tagsA := []Tag{{Name: "TITLE", Value: "A"}}
 	tagsB := []Tag{{Name: "TITLE", Value: "B"}}
 
-	_, first := encodeTagged(t, pcm, tagsA, "va")
+	first := encodeTagged(t, pcm, tagsA, "va")
 	assert.True(t, hasMetadataBlock(first, vorbisCommentBlockType))
 
-	_, second := encodeTagged(t, pcm, nil, "")
+	second := encodeTagged(t, pcm, nil, "")
 	assert.False(t, hasMetadataBlock(second, vorbisCommentBlockType), "untagged export must not inherit tags")
 
-	_, third := encodeTagged(t, pcm, tagsB, "vb")
+	third := encodeTagged(t, pcm, tagsB, "vb")
 	gotTags, gotVendor, _ := decodeTags(t, third)
 	assert.Equal(t, []goflacmeta.Tag{{Name: "TITLE", Value: "B"}}, gotTags)
 	assert.Equal(t, "vb", gotVendor)

@@ -287,42 +287,6 @@ func saveAudioBranchCases(sourceID string, newDetection func(begin, end time.Tim
 	}
 }
 
-func TestBuildSaveAudioAction_CarriesClipTagMetaOnEveryBranch(t *testing.T) {
-	const sourceID = "test-source"
-	ts := time.Date(2026, 5, 31, 8, 38, 28, 0, time.FixedZone("EEST", 3*3600))
-	want := clipTagMeta{
-		commonName:     "Eurasian Wren",
-		scientificName: "Troglodytes troglodytes",
-		confidence:     0.87,
-		detectedAt:     ts,
-	}
-	newDetection := func(begin, end time.Time) *Detections {
-		return &Detections{
-			CorrelationID: "build-tags-test",
-			Result: detection.Result{
-				Species:     detection.Species{CommonName: "Eurasian Wren", ScientificName: "Troglodytes troglodytes"},
-				Confidence:  0.87,
-				Timestamp:   ts,
-				ClipName:    "2026/07/clip.wav",
-				BeginTime:   begin,
-				EndTime:     end,
-				AudioSource: detection.AudioSource{ID: sourceID, SampleRate: conf.SampleRate},
-			},
-		}
-	}
-	for _, tt := range saveAudioBranchCases(sourceID, newDetection) {
-		t.Run(tt.name, func(t *testing.T) {
-			p, det := tt.build(t)
-			action := p.buildSaveAudioAction(det, &DetectionContext{})
-			require.NotNil(t, action)
-			assert.Equal(t, want, action.clipTags,
-				"every branch must carry the tag metadata in its original case")
-			assert.NotEqual(t, action.species, action.clipTags.commonName,
-				"species is lowercased for aggregation; the tag keeps the original case")
-		})
-	}
-}
-
 // buildSpeciesTestSettings is the minimal settings object buildSaveAudioAction
 // needs: an enabled export with a real directory.
 func buildSpeciesTestSettings(t *testing.T) *conf.Settings {

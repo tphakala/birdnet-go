@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -476,7 +475,7 @@ func TestEncodeClipFLACEmbedsDetectionTags(t *testing.T) {
 		commonName:     "Eurasian Wren",
 		scientificName: "Troglodytes troglodytes",
 		confidence:     0.87,
-		detectedAt:     time.Date(2026, 5, 31, 8, 38, 28, 0, time.FixedZone("EEST", 3*3600)),
+		detectedAt:     testClipTime,
 	}
 	a := &SaveAudioAction{
 		Settings: s, pcmData: sinePCMBytes(800, 1.0, 1000), CorrelationID: "test",
@@ -516,7 +515,7 @@ func TestEncodeClipFLACNonUTF8SpeciesStillExports(t *testing.T) {
 			got = tag.Value
 		}
 	}
-	assert.Contains(t, got, "\uFFFD")
+	assert.Equal(t, "Bad\uFFFDName", got)
 }
 
 func openFLACDecoder(t *testing.T, path string) *goflac.Decoder {

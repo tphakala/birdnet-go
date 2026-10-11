@@ -366,11 +366,8 @@ func TestSupportedBitDepth(t *testing.T) {
 // decodeFLACBytes reads a FLAC byte stream back to interleaved little-endian PCM.
 func decodeFLACBytes(t *testing.T, data []byte) []byte {
 	t.Helper()
-	dec, err := goflac.NewDecoder(bytes.NewReader(data))
-	require.NoError(t, err)
-	out, err := io.ReadAll(dec)
-	require.NoError(t, err)
-	return out
+	_, _, pcm := decodeTags(t, data)
+	return pcm
 }
 
 func bufferBaseOpts(pcm []byte) *BufferOptions {

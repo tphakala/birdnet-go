@@ -15,13 +15,26 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
+// testClipTime is a detection time with a non-UTC offset, so DATE must carry it.
+var testClipTime = time.Date(2026, 5, 31, 8, 38, 28, 0, time.FixedZone("EEST", int((3*time.Hour).Seconds())))
+
+// tagValue returns the value of the tag called name.
+func tagValue(tags []flac.Tag, name string) (string, bool) {
+	for _, tag := range tags {
+		if tag.Name == name {
+			return tag.Value, true
+		}
+	}
+	return "", false
+}
+
 func TestBuildClipTags_FullFieldSetInOrder(t *testing.T) {
 	t.Parallel()
 	meta := clipTagMeta{
 		commonName:     "Eurasian Wren",
 		scientificName: "Troglodytes troglodytes",
 		confidence:     0.95,
-		detectedAt:     time.Date(2026, 5, 31, 8, 38, 28, 0, time.FixedZone("EEST", 3*3600)),
+		detectedAt:     testClipTime,
 	}
 	got := buildClipTags(meta, "BirdNET", "2.4", "BirdNET-Go 1.2.3")
 	assert.Equal(t, []flac.Tag{
@@ -41,9 +54,12 @@ func TestBuildClipTags_OmitsEmptyFields(t *testing.T) {
 	got := buildClipTags(clipTagMeta{confidence: math.NaN()}, "", "", "BirdNET-Go unknown")
 	assert.Equal(t, []flac.Tag{{Name: "ENCODER", Value: "BirdNET-Go unknown"}}, got)
 
-	for _, tag := range buildClipTags(clipTagMeta{commonName: "Wren"}, "", "", "") {
-		assert.NotEmpty(t, tag.Value, tag.Name)
-	}
+	got = buildClipTags(clipTagMeta{commonName: "Wren"}, "", "", "")
+	assert.Equal(t, []flac.Tag{
+		{Name: clipTagTitle, Value: "Wren"},
+		{Name: clipTagCommonName, Value: "Wren"},
+		{Name: clipTagConfidence, Value: "0.00"},
+	}, got)
 }
 
 func TestBuildClipTags_Title(t *testing.T) {
@@ -68,21 +84,13 @@ func TestBuildClipTags_Title(t *testing.T) {
 
 func TestBuildClipTags_Confidence(t *testing.T) {
 	t.Parallel()
-	find := func(tags []flac.Tag) (string, bool) {
-		for _, tag := range tags {
-			if tag.Name == "BIRDNET_CONFIDENCE" {
-				return tag.Value, true
-			}
-		}
-		return "", false
-	}
 	for conf, want := range map[float64]string{0.95: "0.95", 1: "1.00", 0.5: "0.50"} {
-		got, ok := find(buildClipTags(clipTagMeta{confidence: conf}, "", "", ""))
+		got, ok := tagValue(buildClipTags(clipTagMeta{confidence: conf}, "", "", ""), clipTagConfidence)
 		assert.True(t, ok)
 		assert.Equal(t, want, got)
 	}
 	for _, bad := range []float64{math.NaN(), math.Inf(1)} {
-		_, ok := find(buildClipTags(clipTagMeta{confidence: bad}, "", "", ""))
+		_, ok := tagValue(buildClipTags(clipTagMeta{confidence: bad}, "", "", ""), clipTagConfidence)
 		assert.False(t, ok, "confidence %v must be omitted", bad)
 	}
 }
@@ -94,9 +102,10 @@ func TestClipVendor(t *testing.T) {
 	assert.Equal(t, branding.Name()+" 1.2.3", clipVendor(&conf.Settings{Version: "1.2.3"}))
 }
 
-// TestClipTags_ExcludeLocationSourceAndStation drives the real plumbing: values
-// that must never reach a published clip are set on the detection, and none may
-// appear in any tag.
+// TestClipTags_ExcludeLocationSourceAndStation drives the real plumbing on every
+// buildSaveAudioAction branch: the action carries the tag-safe metadata, and
+// values that must never reach a published clip are set on the detection and
+// may not appear in any tag.
 func TestClipTags_ExcludeLocationSourceAndStation(t *testing.T) {
 	const lat, lon = 60.123456, 24.654321
 	const sourceID = "rtsp://user:pass@cam.example/stream"
@@ -137,6 +146,14 @@ func TestClipTags_ExcludeLocationSourceAndStation(t *testing.T) {
 			p, det := tt.build(t)
 			action := p.buildSaveAudioAction(det, &DetectionContext{})
 			require.NotNil(t, action)
+			// Every branch carries exactly the tag-safe fields, in original case
+			// (species is lowercased for aggregation; the tag is not).
+			assert.Equal(t, clipTagMeta{
+				commonName:     "Eurasian Wren",
+				scientificName: "Troglodytes troglodytes",
+				confidence:     0.87,
+				detectedAt:     det.Result.Timestamp,
+			}, action.clipTags)
 			tags := buildClipTags(action.clipTags, action.modelName, action.modelVersion, clipVendor(action.Settings))
 			require.NotEmpty(t, tags)
 			for _, tag := range tags {
