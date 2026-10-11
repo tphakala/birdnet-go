@@ -183,11 +183,42 @@ func TestBuildSaveAudioAction_PopulatesLowercasedSpeciesOnEveryBranch(t *testing
 		}
 	}
 
-	tests := []struct {
-		name      string
-		build     func(t *testing.T) (*Processor, *Detections)
-		wantEager bool
-	}{
+	tests := saveAudioBranchCases(sourceID, newDetection)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, det := tt.build(t)
+
+			action := p.buildSaveAudioAction(det, &DetectionContext{})
+
+			require.NotNil(t, action)
+			// Pin WHICH branch ran. Without this the eager row silently fell back
+			// to the deferred branch and the eager return site, the one most
+			// production exports take, was never executed at all.
+			if tt.wantEager {
+				require.NotEmpty(t, action.pcmData, "the eager branch pre-reads the PCM")
+				require.Nil(t, action.bufferMgr, "the eager branch does not defer")
+			} else {
+				require.Empty(t, action.pcmData, "only the eager branch pre-reads the PCM")
+			}
+			assert.Equal(t, wantSpecies, action.species,
+				"every construction branch must carry the species, lowercased to match approve_detection")
+		})
+	}
+}
+
+// saveAudioBranchCase is one buildSaveAudioAction construction branch.
+type saveAudioBranchCase struct {
+	name      string
+	build     func(t *testing.T) (*Processor, *Detections)
+	wantEager bool
+}
+
+// saveAudioBranchCases returns one case per buildSaveAudioAction branch
+// (deferred read, capture read error, eager read). newDetection builds the
+// detection for a capture window.
+func saveAudioBranchCases(sourceID string, newDetection func(begin, end time.Time) *Detections) []saveAudioBranchCase {
+	return []saveAudioBranchCase{
 		{
 			// Extended Capture: the tail is still being written, so the action
 			// carries buffer coordinates and reads later.
@@ -253,27 +284,6 @@ func TestBuildSaveAudioAction_PopulatesLowercasedSpeciesOnEveryBranch(t *testing
 			// pre-reads PCM and leaves bufferMgr unset.
 			wantEager: true,
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p, det := tt.build(t)
-
-			action := p.buildSaveAudioAction(det, &DetectionContext{})
-
-			require.NotNil(t, action)
-			// Pin WHICH branch ran. Without this the eager row silently fell back
-			// to the deferred branch and the eager return site, the one most
-			// production exports take, was never executed at all.
-			if tt.wantEager {
-				require.NotEmpty(t, action.pcmData, "the eager branch pre-reads the PCM")
-				require.Nil(t, action.bufferMgr, "the eager branch does not defer")
-			} else {
-				require.Empty(t, action.pcmData, "only the eager branch pre-reads the PCM")
-			}
-			assert.Equal(t, wantSpecies, action.species,
-				"every construction branch must carry the species, lowercased to match approve_detection")
-		})
 	}
 }
 

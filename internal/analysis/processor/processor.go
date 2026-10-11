@@ -2360,6 +2360,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 			modelName:        det.Result.Model.Name,
 			modelVersion:     det.Result.Model.Version,
 			species:          strings.ToLower(det.Result.Species.CommonName),
+			clipTags:         newClipTagMeta(&det.Result),
 			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 			PreRenderer:      p.preRenderer,
 			DetectionCtx:     detectionCtx,

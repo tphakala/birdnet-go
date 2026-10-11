@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	flacmeta "github.com/tphakala/go-flac"
 	goflac "github.com/tphakala/go-flac/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
@@ -20,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
+	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -460,6 +462,69 @@ func TestEncodeClipFLACWithoutNormalization(t *testing.T) {
 	got := measureLUFS(t, decoded)
 	assert.InDelta(t, inputLUFS+staticGainDB, got, 1.0,
 		"static Export.Gain must be applied on the no-normalization FLAC path")
+}
+
+// TestEncodeClipFLACEmbedsDetectionTags proves the saved FLAC clip carries the
+// detection's VORBIS_COMMENT tags and the app vendor string.
+func TestEncodeClipFLACEmbedsDetectionTags(t *testing.T) {
+	t.Parallel()
+
+	s := &conf.Settings{Version: "9.9.9"}
+	s.Realtime.Audio.Export.Normalization.Enabled = false
+	meta := clipTagMeta{
+		commonName:     "Eurasian Wren",
+		scientificName: "Troglodytes troglodytes",
+		confidence:     0.87,
+		detectedAt:     testClipTime,
+	}
+	a := &SaveAudioAction{
+		Settings: s, pcmData: sinePCMBytes(800, 1.0, 1000), CorrelationID: "test",
+		clipTags: meta, modelName: "BirdNET", modelVersion: "2.4",
+	}
+	out := filepath.Join(t.TempDir(), "clip.flac")
+	_, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
+	require.NoError(t, err)
+
+	dec := openFLACDecoder(t, out)
+	wantVendor := branding.Name() + " 9.9.9"
+	assert.Equal(t, wantVendor, dec.Vendor())
+	wantTags := buildClipTags(meta, "BirdNET", "2.4", wantVendor)
+	want := make([]flacmeta.Tag, 0, len(wantTags))
+	for _, tag := range wantTags {
+		want = append(want, flacmeta.Tag{Name: tag.Name, Value: tag.Value})
+	}
+	assert.Equal(t, want, dec.Tags())
+}
+
+// TestEncodeClipFLACNonUTF8SpeciesStillExports pins that a label which is not
+// valid UTF-8 can never fail the clip export.
+func TestEncodeClipFLACNonUTF8SpeciesStillExports(t *testing.T) {
+	t.Parallel()
+
+	a := &SaveAudioAction{
+		Settings: &conf.Settings{}, pcmData: sinePCMBytes(800, 1.0, 1000), CorrelationID: "test",
+		clipTags: clipTagMeta{commonName: "Bad\xffName"},
+	}
+	out := filepath.Join(t.TempDir(), "clip.flac")
+	_, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
+	require.NoError(t, err)
+
+	var got string
+	for _, tag := range openFLACDecoder(t, out).Tags() {
+		if tag.Name == clipTagCommonName {
+			got = tag.Value
+		}
+	}
+	assert.Equal(t, "Bad\uFFFDName", got)
+}
+
+func openFLACDecoder(t *testing.T, path string) *goflac.Decoder {
+	t.Helper()
+	data, err := os.ReadFile(path) //nolint:gosec // test-controlled temp path
+	require.NoError(t, err)
+	dec, err := goflac.NewDecoder(bytes.NewReader(data))
+	require.NoError(t, err)
+	return dec
 }
 
 // TestEncodeClipFLACNormalizationSkipped drives the defensive branch inside the

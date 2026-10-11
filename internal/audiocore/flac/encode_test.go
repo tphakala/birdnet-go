@@ -350,27 +350,10 @@ func TestEncodePCM_EmitsSeekTable(t *testing.T) {
 	assert.True(t, hasSeekTable(data), "native FLAC should emit a SEEKTABLE for player parity with FFmpeg")
 }
 
-// hasSeekTable walks the FLAC metadata blocks and reports whether a SEEKTABLE
-// (block type 3) is present.
+// hasSeekTable reports whether a SEEKTABLE (block type 3) is present.
 func hasSeekTable(data []byte) bool {
 	const seekTableBlockType = 3
-	if len(data) < 4 || string(data[:4]) != "fLaC" {
-		return false
-	}
-	for off := 4; off+4 <= len(data); {
-		header := data[off]
-		last := header&0x80 != 0
-		btype := header & 0x7f
-		length := int(data[off+1])<<16 | int(data[off+2])<<8 | int(data[off+3])
-		if btype == seekTableBlockType {
-			return true
-		}
-		off += 4 + length
-		if last {
-			break
-		}
-	}
-	return false
+	return hasMetadataBlock(data, seekTableBlockType)
 }
 
 func TestSupportedBitDepth(t *testing.T) {
@@ -383,11 +366,8 @@ func TestSupportedBitDepth(t *testing.T) {
 // decodeFLACBytes reads a FLAC byte stream back to interleaved little-endian PCM.
 func decodeFLACBytes(t *testing.T, data []byte) []byte {
 	t.Helper()
-	dec, err := goflac.NewDecoder(bytes.NewReader(data))
-	require.NoError(t, err)
-	out, err := io.ReadAll(dec)
-	require.NoError(t, err)
-	return out
+	_, _, pcm := decodeTags(t, data)
+	return pcm
 }
 
 func bufferBaseOpts(pcm []byte) *BufferOptions {
@@ -494,16 +474,13 @@ func TestEncodePCMToBuffer_FinalizesBlockSize(t *testing.T) {
 func streamInfoBlockSizes(t *testing.T, flacBytes []byte) (minBlock, maxBlock int) {
 	t.Helper()
 	const (
-		markerLen           = 4 // "fLaC"
-		metaBlockHeaderLen  = 4 // 1 type/last-flag byte + 3 length bytes
-		metaBlockTypeMask   = 0x7f
 		streamInfoBlockType = 0                              // STREAMINFO must be the first metadata block
 		minBlockOffset      = markerLen + metaBlockHeaderLen // STREAMINFO body byte 0
 		maxBlockOffset      = minBlockOffset + 2             // STREAMINFO body byte 2
 		minLen              = maxBlockOffset + 2             // must reach through the max-block field
 	)
 	require.GreaterOrEqual(t, len(flacBytes), minLen, "FLAC stream too short to hold STREAMINFO block sizes")
-	require.Equal(t, "fLaC", string(flacBytes[:markerLen]), "missing fLaC stream marker")
+	require.Equal(t, flacMarker, string(flacBytes[:markerLen]), "missing fLaC stream marker")
 	require.Equal(t, byte(streamInfoBlockType), flacBytes[markerLen]&metaBlockTypeMask, "first FLAC metadata block must be STREAMINFO")
 	return int(binary.BigEndian.Uint16(flacBytes[minBlockOffset:])), int(binary.BigEndian.Uint16(flacBytes[maxBlockOffset:]))
 }
