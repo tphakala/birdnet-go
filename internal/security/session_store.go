@@ -16,6 +16,7 @@ import (
 const (
 	headerForwarded      = "Forwarded" // RFC 7239
 	headerCFConnectingIP = "CF-Connecting-IP"
+	headerTrueClientIP   = "True-Client-IP" // Akamai, Cloudflare Enterprise
 )
 
 // proxyHeaders are request headers set by reverse proxies, in canonical form so
@@ -30,6 +31,7 @@ var proxyHeaders = []string{
 	http.CanonicalHeaderKey(echo.HeaderXUrlScheme),
 	http.CanonicalHeaderKey(echo.HeaderXRealIP),
 	http.CanonicalHeaderKey(headerCFConnectingIP),
+	http.CanonicalHeaderKey(headerTrueClientIP),
 }
 
 // plainHTTPClientSessionStore wraps the session store so that a session loaded

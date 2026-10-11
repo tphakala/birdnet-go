@@ -167,6 +167,12 @@ func TestSessionCookieSecure_PlainHTTPSessionClients(t *testing.T) {
 			wantSecure: true,
 		},
 		{
+			name:          "forwarded with True-Client-IP only from a listed address",
+			secureCookies: true, clients: []string{testProxyAddr}, remoteAddr: testProxyAddr + testRemotePort,
+			header: headerTrueClientIP, headerValue: testExternalAddr,
+			wantSecure: true,
+		},
+		{
 			name:          "unlisted peer claiming a listed address in X-Real-Ip",
 			secureCookies: true, clients: []string{testInternalClientAddr}, remoteAddr: testExternalAddr + testRemotePort,
 			header: echo.HeaderXRealIP, headerValue: testInternalClientAddr,
