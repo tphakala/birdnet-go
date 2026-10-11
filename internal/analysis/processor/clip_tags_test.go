@@ -91,7 +91,7 @@ func TestBuildClipTags_Confidence(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, want, got)
 	}
-	for _, bad := range []float64{math.NaN(), math.Inf(1)} {
+	for _, bad := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
 		_, ok := tagValue(buildClipTags(clipTagMeta{confidence: bad}, "", "", ""), clipTagConfidence)
 		assert.False(t, ok, "confidence %v must be omitted", bad)
 	}
