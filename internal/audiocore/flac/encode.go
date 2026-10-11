@@ -76,6 +76,8 @@ func SupportedBitDepth(bitDepth int) bool { return bitDepth == bitDepth16 }
 // atomic: data is encoded to a unique per-export temp file and renamed on
 // success, with the temp file removed on any failure. A non-zero GainDB is
 // applied in Go before encoding; opts.PCMData itself is never modified.
+// STREAMINFO carries the real MD5 of the encoded PCM, patched at Close via the
+// seekable temp file.
 func EncodePCM(ctx context.Context, opts *Options) (err error) {
 	if opts == nil {
 		return errors.Newf("flac encode: nil options").
@@ -322,9 +324,10 @@ type BufferOptions struct {
 // so no SEEKTABLE is emitted. The STREAMINFO total-samples field is finalized
 // up front from the PCM length (go-flac verifies it against the samples actually
 // written on Close), so consumers that read the sample count for duration get a
-// correct value without a seekable sink; the MD5 field is left at its spec-legal
-// "unknown" sentinel for this streaming path. A non-zero GainDB is applied in Go
-// before encoding; opts.PCMData itself is never modified.
+// correct value without a seekable sink. The MD5 field is the spec-legal all-zero
+// "unknown" sentinel, and the encoder skips computing it (go-flac SkipMD5)
+// because a non-seekable sink could never record it. A non-zero GainDB is
+// applied in Go before encoding; opts.PCMData itself is never modified.
 func EncodePCMToBuffer(ctx context.Context, opts *BufferOptions) (*bytes.Buffer, error) {
 	if opts == nil {
 		return nil, errors.Newf("flac encode: nil options").
@@ -347,7 +350,18 @@ func EncodePCMToBuffer(ctx context.Context, opts *BufferOptions) (*bytes.Buffer,
 	bytesPerFrame := (opts.BitDepth / 8) * opts.Channels
 	totalSamples := uint64(len(opts.PCMData) / bytesPerFrame)
 
-	cfg := goflac.Config{
+	cfg := bufferEncodeConfig(opts, totalSamples)
+
+	buf := new(bytes.Buffer)
+	if encErr := encodeToWriter(ctx, buf, &cfg, opts.PCMData, opts.GainDB); encErr != nil {
+		return nil, encErr
+	}
+	return buf, nil
+}
+
+// bufferEncodeConfig builds the go-flac config for the in-memory export path.
+func bufferEncodeConfig(opts *BufferOptions, totalSamples uint64) goflac.Config {
+	return goflac.Config{
 		SampleRate:       opts.SampleRate,
 		BitDepth:         opts.BitDepth,
 		Channels:         opts.Channels,
@@ -356,14 +370,12 @@ func EncodePCMToBuffer(ctx context.Context, opts *BufferOptions) (*bytes.Buffer,
 		// seek-back, so a bytes.Buffer sink still reports the correct duration.
 		// go-flac verifies it against the samples written on Close.
 		TotalSamples: totalSamples,
+		// A bytes.Buffer is not an io.WriteSeeker, so go-flac never patches the
+		// MD5 at Close and it stays the all-zero "unknown" sentinel. Hashing every
+		// frame would be wasted work; SkipMD5 leaves the output byte-identical.
+		SkipMD5: true,
 		// No SeekTableInterval: a bytes.Buffer is not an io.WriteSeeker, and
 		// go-flac rejects a seektable on a non-seekable sink. Short upload clips
 		// do not need one.
 	}
-
-	buf := new(bytes.Buffer)
-	if encErr := encodeToWriter(ctx, buf, &cfg, opts.PCMData, opts.GainDB); encErr != nil {
-		return nil, encErr
-	}
-	return buf, nil
 }
