@@ -144,7 +144,7 @@ func EncodePCM(ctx context.Context, opts *Options) (err error) {
 		SeekTableInterval: opts.SampleRate,
 	}
 
-	if encErr := encodeToWriter(ctx, f, cfg, opts.PCMData, opts.GainDB); encErr != nil {
+	if encErr := encodeToWriter(ctx, f, &cfg, opts.PCMData, opts.GainDB); encErr != nil {
 		return encErr
 	}
 
@@ -220,9 +220,9 @@ func validateEncodeInput(pcmData []byte, bitDepth, channels int) error {
 // samples, and closes the encoder (which patches STREAMINFO/SEEKTABLE when w is
 // an io.WriteSeeker), but does not close w itself. Used by both the file and
 // in-memory buffer entry points.
-func encodeToWriter(ctx context.Context, w io.Writer, cfg goflac.Config, pcmData []byte, gainDB float64) error {
+func encodeToWriter(ctx context.Context, w io.Writer, cfg *goflac.Config, pcmData []byte, gainDB float64) error {
 	enc := encoderPool.Get().(*goflac.Encoder)
-	if resetErr := enc.Reset(w, cfg); resetErr != nil {
+	if resetErr := enc.Reset(w, *cfg); resetErr != nil {
 		// A failed Reset may leave the encoder half-initialized; go-flac's
 		// contract says it must not be reused, so drop it (do not Put it back)
 		// and let the pool allocate a fresh one next time.
@@ -241,7 +241,7 @@ func encodeToWriter(ctx context.Context, w io.Writer, cfg goflac.Config, pcmData
 	// This also re-primes the encoder, so it is pooled only if the re-Reset
 	// succeeds (a failed one drops the encoder, matching the failed-Reset path).
 	defer func() {
-		depinCfg := cfg
+		depinCfg := *cfg
 		depinCfg.SeekTableInterval = 0
 		if enc.Reset(io.Discard, depinCfg) == nil {
 			encoderPool.Put(enc)
@@ -362,7 +362,7 @@ func EncodePCMToBuffer(ctx context.Context, opts *BufferOptions) (*bytes.Buffer,
 	}
 
 	buf := new(bytes.Buffer)
-	if encErr := encodeToWriter(ctx, buf, cfg, opts.PCMData, opts.GainDB); encErr != nil {
+	if encErr := encodeToWriter(ctx, buf, &cfg, opts.PCMData, opts.GainDB); encErr != nil {
 		return nil, encErr
 	}
 	return buf, nil

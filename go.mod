@@ -40,7 +40,7 @@ require (
 	github.com/tphakala/go-aac v0.7.0
 	github.com/tphakala/go-audio-resampler v1.7.0
 	github.com/tphakala/go-audio-stream v0.6.0
-	github.com/tphakala/go-flac v1.1.0
+	github.com/tphakala/go-flac v1.2.0
 	github.com/tphakala/go-hls v0.1.0
 	github.com/tphakala/go-m4a v0.5.0
 	github.com/tphakala/go-mp3 v0.1.0
@@ -54,7 +54,7 @@ require (
 	golang.org/x/net v0.60.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.23.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.42.0
 	golang.org/x/time v0.16.0
 	google.golang.org/api v0.300.0

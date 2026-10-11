@@ -286,8 +286,8 @@ github.com/tphakala/go-audio-resampler v1.7.0 h1:Nqr1zNRlow28EjlQKS/SSmhqSa6qHRZ
 github.com/tphakala/go-audio-resampler v1.7.0/go.mod h1:h/j0tsie+Jv7qVEytRZ4KrxfO//zxO3RAbesX+1ZEo4=
 github.com/tphakala/go-audio-stream v0.6.0 h1:aVMV95cgqpn3fOELIBVDSs9nKuYPLYts1ouQh7ooCfU=
 github.com/tphakala/go-audio-stream v0.6.0/go.mod h1:W9be1o1XSqEkSAG81yHOV6+G9odYbpWJlmL5DBEhfgM=
-github.com/tphakala/go-flac v1.1.0 h1:dyVNPFW+MVLzPvw1n3dEvBHPtKUMbQ5PHWvW/pxQMv0=
-github.com/tphakala/go-flac v1.1.0/go.mod h1:9MM9hnsIryw1BbD/e3iZgKMx3s34VCMlxzhSIP8gpEA=
+github.com/tphakala/go-flac v1.2.0 h1:7gxJqLdTW90dm0fzHnhA0zCLK8kxdUPyjvToyNAewV0=
+github.com/tphakala/go-flac v1.2.0/go.mod h1:Gbxnbiu0Jo42/1n/gMaQgug+wFybvxmK7qNNSkKMPc0=
 github.com/tphakala/go-hls v0.1.0 h1:bLJMJYV1b4FGXsjkQXdtsU9CWHEjdaON5dGLZeqWebc=
 github.com/tphakala/go-hls v0.1.0/go.mod h1:/s06WIf8A9M0xVcCf92276IuMBYvLIX+ljtTfjQ5OyU=
 github.com/tphakala/go-m4a v0.5.0 h1:MsGA8OutWHaxZGV6H7oEbvOiCCKAmmxTG3P3+hjF6UY=
@@ -355,8 +355,8 @@ golang.org/x/sys v0.0.0-20201204225414-ed752295db88/go.mod h1:h1NjWce9XRLGQEsW7w
 golang.org/x/sys v0.0.0-20210616094352-59db8d763f22/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.1.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.8.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.48.0 h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
-golang.org/x/sys v0.48.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
+golang.org/x/sys v0.49.0 h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
+golang.org/x/sys v0.49.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
 golang.org/x/term v0.46.0 h1:3+OXuTbaKDgwk8jTi3aSLHRlmWqHEUDUtxnbFigO4YE=
 golang.org/x/term v0.46.0/go.mod h1:+K02xbkittuwc0Am4abfA3Fc+XRGXkvBXNO88NCXPoc=
 golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
