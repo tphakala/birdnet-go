@@ -18,6 +18,11 @@ const (
 	// frame size 6, sample rate/channels/bit depth/total samples 8).
 	streamInfoMD5Offset = 4 + 4 + 18
 	streamInfoMD5Len    = 16
+
+	// poolReuseIterations is how many buffer-then-file export pairs the pool test runs.
+	poolReuseIterations = 4
+	// benchSeconds is the PCM length, in seconds, the benchmark encodes.
+	benchSeconds = 15
 )
 
 // streamInfoMD5 returns the STREAMINFO MD5 field of a FLAC stream.
@@ -91,7 +96,7 @@ func TestEncoderPool_SkipMD5DoesNotLeakIntoFilePath(t *testing.T) {
 	pcm := makeTestPCM(20000)
 	sum := md5.Sum(pcm) //nolint:gosec // content digest, see import
 	dir := t.TempDir()
-	for i := range 4 {
+	for i := range poolReuseIterations {
 		buf, err := EncodePCMToBuffer(t.Context(), bufferBaseOpts(pcm))
 		require.NoError(t, err)
 		assert.Equal(t, make([]byte, streamInfoMD5Len), streamInfoMD5(t, buf.Bytes()), "iteration %d buffer", i)
@@ -108,14 +113,14 @@ func TestEncoderPool_SkipMD5DoesNotLeakIntoFilePath(t *testing.T) {
 // BenchmarkEncodePCMToBuffer compares the buffer encode with and without the
 // MD5 pass on 15 s of 48 kHz mono PCM.
 func BenchmarkEncodePCMToBuffer(b *testing.B) {
-	pcm := makeTestPCM(15 * testSampleRate)
+	pcm := makeTestPCM(benchSeconds * testSampleRate)
 	opts := bufferBaseOpts(pcm)
 	for _, bc := range []struct {
 		name    string
 		skipMD5 bool
 	}{{"hash", false}, {"skip", true}} {
 		b.Run(bc.name, func(b *testing.B) {
-			cfg := bufferEncodeConfig(opts, uint64(len(pcm)/2))
+			cfg := bufferEncodeConfig(opts, uint64(len(pcm)/(testBitDepth/8*testChannels)))
 			cfg.SkipMD5 = bc.skipMD5
 			b.SetBytes(int64(len(pcm)))
 			b.ReportAllocs()
