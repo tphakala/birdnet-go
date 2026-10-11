@@ -71,6 +71,8 @@ func TestBuildClipTags_Title(t *testing.T) {
 		{"common only", "Wren", "", "Wren"},
 		{"scientific only", "", "T. troglodytes", "T. troglodytes"},
 		{"equal", "Same", "Same", "Same"},
+		{"blank common", "   ", "T. troglodytes", "T. troglodytes"},
+		{"padded equal", " Same ", "Same", "Same"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

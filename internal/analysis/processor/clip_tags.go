@@ -3,6 +3,7 @@ package processor
 import (
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
@@ -73,7 +74,8 @@ func clipVendor(settings *conf.Settings) string {
 }
 
 // buildClipTags returns the tags for one clip in a fixed order, omitting every
-// field whose value is empty. It is a pure function of its arguments.
+// field whose value is empty; species names are trimmed first. It is a pure
+// function of its arguments.
 func buildClipTags(meta clipTagMeta, modelName, modelVersion, encoder string) []flac.Tag {
 	var tags []flac.Tag
 	add := func(name, value string) {
@@ -82,13 +84,17 @@ func buildClipTags(meta clipTagMeta, modelName, modelVersion, encoder string) []
 		}
 	}
 
-	add(clipTagTitle, clipTitle(meta.commonName, meta.scientificName))
+	// Trim once so the title and the name tags agree on blank or padded names.
+	common := strings.TrimSpace(meta.commonName)
+	scientific := strings.TrimSpace(meta.scientificName)
+
+	add(clipTagTitle, clipTitle(common, scientific))
 	if !meta.detectedAt.IsZero() {
 		add(clipTagDate, meta.detectedAt.Format(time.RFC3339))
 	}
 	add(clipTagEncoder, encoder)
-	add(clipTagCommonName, meta.commonName)
-	add(clipTagScientificName, meta.scientificName)
+	add(clipTagCommonName, common)
+	add(clipTagScientificName, scientific)
 	if !math.IsNaN(meta.confidence) && !math.IsInf(meta.confidence, 0) {
 		add(clipTagConfidence, strconv.FormatFloat(meta.confidence, 'f', clipTagConfidenceDecimals, 64))
 	}
