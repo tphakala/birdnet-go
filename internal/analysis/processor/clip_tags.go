@@ -17,8 +17,8 @@ import (
 // ffprobe display. The BIRDNET_ fields carry the same facts in a stable,
 // machine-readable form; the prefix is fixed (not branding.Name()) so tag names
 // do not change for rebranded builds. DATE is the detection time
-// (Result.Timestamp) in local time with its UTC offset, matching the wall clock
-// the UI and the clip file name show.
+// (Result.Timestamp) in that timestamp's own location, normally local time,
+// with its UTC offset.
 //
 // Clips are served by the media API and may be downloaded and shared, so the
 // set is deliberately closed. Never add: latitude or longitude, the audio
