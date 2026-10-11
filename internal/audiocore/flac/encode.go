@@ -99,7 +99,8 @@ type Options struct {
 	// repaired; tags never cause an encode error. At most 64 tags are kept.
 	Tags []Tag
 	// Vendor is the optional VORBIS_COMMENT vendor string, sanitized like a tag
-	// value. A non-empty Vendor writes the block even when no tag survives.
+	// value. A Vendor that is still non-empty after sanitization writes the
+	// block even when no tag survives.
 	Vendor string
 }
 
