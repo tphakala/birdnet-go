@@ -474,16 +474,13 @@ func TestEncodePCMToBuffer_FinalizesBlockSize(t *testing.T) {
 func streamInfoBlockSizes(t *testing.T, flacBytes []byte) (minBlock, maxBlock int) {
 	t.Helper()
 	const (
-		markerLen           = 4 // "fLaC"
-		metaBlockHeaderLen  = 4 // 1 type/last-flag byte + 3 length bytes
-		metaBlockTypeMask   = 0x7f
 		streamInfoBlockType = 0                              // STREAMINFO must be the first metadata block
 		minBlockOffset      = markerLen + metaBlockHeaderLen // STREAMINFO body byte 0
 		maxBlockOffset      = minBlockOffset + 2             // STREAMINFO body byte 2
 		minLen              = maxBlockOffset + 2             // must reach through the max-block field
 	)
 	require.GreaterOrEqual(t, len(flacBytes), minLen, "FLAC stream too short to hold STREAMINFO block sizes")
-	require.Equal(t, "fLaC", string(flacBytes[:markerLen]), "missing fLaC stream marker")
+	require.Equal(t, flacMarker, string(flacBytes[:markerLen]), "missing fLaC stream marker")
 	require.Equal(t, byte(streamInfoBlockType), flacBytes[markerLen]&metaBlockTypeMask, "first FLAC metadata block must be STREAMINFO")
 	return int(binary.BigEndian.Uint16(flacBytes[minBlockOffset:])), int(binary.BigEndian.Uint16(flacBytes[maxBlockOffset:]))
 }

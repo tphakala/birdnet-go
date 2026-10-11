@@ -16,30 +16,38 @@ import (
 	goflac "github.com/tphakala/go-flac/pcm"
 )
 
+// FLAC stream layout shared by the test helpers that parse encoder output.
 const (
+	flacMarker         = "fLaC"
+	markerLen          = len(flacMarker)
+	metaBlockHeaderLen = 4    // 1 type/last-flag byte + 3 length bytes
+	metaBlockLastFlag  = 0x80 // set on the final metadata block header
+	metaBlockTypeMask  = 0x7f
+
 	vorbisCommentBlockType = 4
-	// streamInfoMD5Offset is the byte offset of the STREAMINFO MD5 in a file:
-	// "fLaC" marker (4) + metadata block header (4) + 18 bytes of STREAMINFO
-	// fields before the 16-byte MD5.
-	streamInfoMD5Offset = 4 + 4 + 18
+	// streamInfoFieldsBeforeMD5 is the byte count of the STREAMINFO fields that
+	// precede its 16-byte MD5.
+	streamInfoFieldsBeforeMD5 = 18
+	// streamInfoMD5Offset is the byte offset of the STREAMINFO MD5 in a file.
+	streamInfoMD5Offset = markerLen + metaBlockHeaderLen + streamInfoFieldsBeforeMD5
 	md5Len              = 16
 )
 
 // hasMetadataBlock walks the FLAC metadata blocks and reports whether a block of
 // blockType is present.
 func hasMetadataBlock(data []byte, blockType byte) bool {
-	if len(data) < 4 || string(data[:4]) != "fLaC" {
+	if len(data) < markerLen || string(data[:markerLen]) != flacMarker {
 		return false
 	}
-	for off := 4; off+4 <= len(data); {
+	for off := markerLen; off+metaBlockHeaderLen <= len(data); {
 		header := data[off]
-		last := header&0x80 != 0
-		btype := header & 0x7f
+		last := header&metaBlockLastFlag != 0
+		btype := header & metaBlockTypeMask
 		length := int(data[off+1])<<16 | int(data[off+2])<<8 | int(data[off+3])
 		if btype == blockType {
 			return true
 		}
-		off += 4 + length
+		off += metaBlockHeaderLen + length
 		if last {
 			break
 		}
