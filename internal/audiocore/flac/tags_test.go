@@ -193,6 +193,11 @@ func TestSanitizeTagText(t *testing.T) {
 		{"valid passthrough", "Närhi", "Närhi"},
 		{"trim", "  x \n", "x"},
 		{"invalid bytes replaced", "a\xffb", "a" + tagInvalidUTF8Replacement + "b"},
+		{
+			"space at the truncation point is trimmed",
+			strings.Repeat("a", maxTagValueBytes-1) + " b",
+			strings.Repeat("a", maxTagValueBytes-1),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

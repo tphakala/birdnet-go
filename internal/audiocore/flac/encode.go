@@ -447,8 +447,9 @@ func validTagName(name string) bool {
 func sanitizeTagText(s string) string {
 	s = strings.TrimSpace(strings.ToValidUTF8(s, tagInvalidUTF8Replacement))
 	if len(s) > maxTagValueBytes {
-		// Cutting mid-rune leaves a trailing partial rune; drop it.
-		s = strings.ToValidUTF8(s[:maxTagValueBytes], "")
+		// Cutting mid-rune leaves a trailing partial rune; drop it, and trim
+		// any space the cut exposed.
+		s = strings.TrimSpace(strings.ToValidUTF8(s[:maxTagValueBytes], ""))
 	}
 	return s
 }
