@@ -423,7 +423,7 @@ func TestCacheStats(t *testing.T) {
 			status: http.StatusOK,
 			body:   `[{"sciName": "Test species", "comName": "Test", "speciesCode": "x"}]`,
 		},
-		"/v2/data/obs/geo/recent?lat=60.1700&lng=24.9400&back=14&maxResults=200": {
+		"/data/obs/geo/recent?lat=60.1700&lng=24.9400&back=14&maxResults=200": {
 			status: http.StatusOK,
 			body:   `[]`,
 		},
