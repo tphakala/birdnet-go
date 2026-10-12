@@ -62,6 +62,56 @@ func TestLoad_DottedModuleNamesAreKeptInModuleOutputs(t *testing.T) {
 		"the analysis module's defaults must survive the re-decode")
 }
 
+// TestLoad_PartialDottedModuleEntryKeepsDefaults pins the second half of the
+// dotted-key contract: a partial dotted entry must honor the fields the user
+// set while keeping the built-in defaults for every field they did not.
+// Before this was fixed, "analysis.processor: {console_also: false}" decoded
+// over a zero-value base and came out Enabled=false with an empty FilePath,
+// which silently stopped the module's log file from being written - and
+// because the key now existed, applyConfigDefaults could not repair it.
+func TestLoad_PartialDottedModuleEntryKeepsDefaults(t *testing.T) {
+	cfg := `
+security:
+  sessionsecret: "0123456789abcdef0123456789abcdef"
+logging:
+  modules:
+    analysis.processor:
+      console_also: false
+`
+	settings, _ := loadConfigFromYAML(t, cfg)
+
+	out := settings.Logging.ModuleOutputs
+	require.Contains(t, out, "analysis.processor",
+		"the dotted module name must survive config loading intact")
+	// The field the user set must be honored.
+	assert.False(t, out["analysis.processor"].ConsoleAlso,
+		"console_also: false must be honored, not replaced by the module default true")
+	// The fields the user did not set must keep the module's defaults.
+	assert.True(t, out["analysis.processor"].Enabled,
+		"a partial entry must not disable the module's log file")
+	assert.Equal(t, "logs/actions.log", out["analysis.processor"].FilePath,
+		"a partial entry must keep the module's default log file path")
+
+	// Same contract for a second dotted module seeded from a different
+	// default file, set only through module_levels this time - the maps are
+	// independent, so a module missing from logging.modules keeps the
+	// defaults applyConfigDefaults gives it.
+	cfg2 := `
+security:
+  sessionsecret: "0123456789abcdef0123456789abcdef"
+logging:
+  modules:
+    audio.ffmpeg:
+      enabled: true
+`
+	settings2, _ := loadConfigFromYAML(t, cfg2)
+	out2 := settings2.Logging.ModuleOutputs
+	require.Contains(t, out2, "audio.ffmpeg")
+	assert.True(t, out2["audio.ffmpeg"].Enabled)
+	assert.Equal(t, "logs/audio.log", out2["audio.ffmpeg"].FilePath,
+		"a partial entry must keep the audio module's default log file path")
+}
+
 // TestLoad_DottedModuleNamesAreKeptInModuleLevels pins the startup failure: a
 // dotted key in module_levels previously made Unmarshal return a decode
 // error, which Load treats as fatal. It must instead load, with the level
