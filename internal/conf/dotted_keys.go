@@ -108,6 +108,16 @@ func DottedKeyDecodeHook() mapstructure.DecodeHookFunc {
 		switch to.Elem().Kind() {
 		case reflect.Interface, reflect.Map, reflect.Struct, reflect.Slice:
 			return data, nil
+		case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16,
+			reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8,
+			reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+			reflect.Float32, reflect.Float64, reflect.String:
+			// scalar-valued maps: a nested map value is unambiguous
+			// evidence of a key viper split on ".".
+		default:
+			// remaining kinds (Invalid, Chan, Func, Complex, Array,
+			// UnsafePointer, Pointer) never appear as config targets.
+			return data, nil
 		}
 		source, ok := data.(map[string]any)
 		if !ok {
@@ -168,7 +178,7 @@ func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 	for name, rawValue := range rawModules {
 		entry, hasBase := settings.Logging.ModuleOutputs[name]
 		if !hasBase {
-			entry, hasBase = logger.DefaultModuleOutput(name)
+			entry, _ = logger.DefaultModuleOutput(name)
 		}
 		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result:           &entry,
