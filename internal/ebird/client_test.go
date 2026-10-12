@@ -642,7 +642,7 @@ const (
 	testTaxonomyPath   = "/ref/taxonomy/ebird?fmt=json"
 	testSpeciesPath    = "/ref/taxonomy/ebird/x?fmt=json"
 	testSpeciesPathFi  = "/ref/taxonomy/ebird/x?fmt=json&locale=fi"
-	testObservationURL = "/v2/data/obs/geo/recent?lat=60.1700&lng=24.9400&back=14&maxResults=200"
+	testObservationURL = "/data/obs/geo/recent?lat=60.1700&lng=24.9400&back=14&maxResults=200"
 	testTaxonomyBody   = `[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1", "familySciName": "Testidae"}]`
 )
 
