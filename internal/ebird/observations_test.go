@@ -27,7 +27,7 @@ func TestGetRecentObservations(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "GET", r.Method)
-		assert.Contains(t, r.URL.Path, "/data/obs/geo/recent")
+		assert.Equal(t, "/data/obs/geo/recent", r.URL.Path)
 		assert.Equal(t, "test-key", r.Header.Get("X-eBirdApiToken"))
 
 		w.Header().Set("Content-Type", "application/json")
