@@ -131,3 +131,31 @@ func DurationDecodeHook() mapstructure.DecodeHookFunc {
 		mapstructure.StringToSliceHookFunc(","),
 	)
 }
+
+// tolerantDecodeHook wraps DurationDecodeHook with a narrowly scoped guard
+// that keeps a dotted logging module name from aborting the whole config
+// unmarshal. Viper's key delimiter splits `module_levels: {analysis.processor:
+// warn}` into a nested analysis -> processor map, and mapstructure then refuses
+// to decode that map into the target string field, so a hand-edited config
+// stopped the app from booting (#4523).
+//
+// The guard cannot see which Settings field it is decoding for, so it fires
+// for every map-to-string conversion. That is safe for two reasons: the
+// placeholder it returns ("") is only a decodable stand-in, and
+// restoreDottedLoggingKeys re-decodes the only two maps whose keys are
+// free-form enough to contain dots (logging.modules and
+// logging.module_levels) from the raw config tree right after the unmarshal.
+// Every other map in Settings decodes through the standard hooks unchanged.
+func tolerantDecodeHook() mapstructure.DecodeHookFunc {
+	return mapstructure.ComposeDecodeHookFunc(
+		mapstructure.DecodeHookFuncType(func(from, to reflect.Type, data any) (any, error) {
+			if from.Kind() == reflect.Map && to.Kind() == reflect.String {
+				// Dotted-key artifact: return a placeholder that decodes cleanly;
+				// restoreDottedLoggingKeys replaces it with the real value.
+				return "", nil
+			}
+			return data, nil
+		}),
+		DurationDecodeHook(),
+	)
+}

@@ -73,13 +73,18 @@ func Load() (*Settings, error) {
 	streamEnabledMigrated := migrateStreamEnabledDefaults()
 
 	// Unmarshal the config into settings, with custom Duration decode hook
-	if err := viper.Unmarshal(settings, viper.DecodeHook(DurationDecodeHook())); err != nil {
+	if err := viper.Unmarshal(settings, viper.DecodeHook(tolerantDecodeHook())); err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryConfiguration).
 			Context("operation", "unmarshal-config").
 			Build()
 	}
 
+	// Re-decode the logging module maps from viper's raw tree so module names
+	// containing a dot (e.g. "analysis.processor") survive the load (#4523).
+	// The tolerant hook above keeps the unmarshal itself from failing on a
+	// dotted module_levels entry while this pass restores the correct values.
+	restoreDottedLoggingKeys(viper.GetViper(), settings)
 	// Normalize species config keys to lowercase for case-insensitive matching
 	// This ensures that config keys like "American Robin" are converted to "american robin"
 	// to match the lowercase species names used in detection lookup (fixes #1701)
