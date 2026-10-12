@@ -150,7 +150,13 @@ func reDecodeLoggingConfig(settings *Settings) error {
 // logging section. For every flat module key the raw section carries - dotted
 // or not - the entry produced by Unmarshal is used as the base and the raw
 // value is decoded over it, so fields the file does not set keep their
-// Unmarshal-time defaults.
+// Unmarshal-time defaults. When Unmarshal produced no entry for the name
+// (which is exactly what happens to dotted names, since viper split them and
+// mapstructure never saw a key for the module), the base is the logger's
+// built-in default for that module instead of a zero value, so a partial
+// entry like "analysis.processor: {console_also: false}" keeps Enabled=true
+// and its default file path rather than silently disabling the module's log
+// file.
 func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 	rawModules, ok := section["modules"].(map[string]any)
 	if !ok {
@@ -160,7 +166,10 @@ func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 		settings.Logging.ModuleOutputs = make(map[string]logger.ModuleOutput, len(rawModules))
 	}
 	for name, rawValue := range rawModules {
-		entry := settings.Logging.ModuleOutputs[name]
+		entry, hasBase := settings.Logging.ModuleOutputs[name]
+		if !hasBase {
+			entry, hasBase = logger.DefaultModuleOutput(name)
+		}
 		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result:           &entry,
 			WeaklyTypedInput: true,
