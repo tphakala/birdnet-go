@@ -3856,7 +3856,7 @@
         "policyLabel": "Megőrzési szabály",
         "policyHelp": "Válassza ki, hogyan törlődnek automatikusan a hangminták. Nincs: minden minta megtartása. Kor: régi minták törlése. Használat: legrégebbi minták törlése, ha a lemez használat meghaladja a korlátot.",
         "maxAgeLabel": "Maximális kor",
-        "maxAgeHelp": "Törölje a megadott korú hangmintákat. Formátum: szám + egység (h=óra, d=nap, h=hét, m=hónap). Példák: '7d' 7 nap, '4w' 4 hét.",
+        "maxAgeHelp": "Törölje a megadott korú hangmintákat. Formátum: szám + egység (h=óra, d=nap, w=hét, m=hónap). Példák: '7d' 7 nap, '4w' 4 hét.",
         "maxUsageLabel": "Maximális lemez használat",
         "maxUsageHelp": "Törölje a legrégibb klipeket, ha a hang könyvtár a rendelkezésre álló lemezterület nagyobb százalékát használja.",
         "minClipsLabel": "Minimális mintaszám fajonként",
