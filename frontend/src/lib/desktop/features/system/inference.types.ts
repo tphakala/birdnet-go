@@ -69,7 +69,7 @@ export interface InferenceHardware {
   fp16: boolean;
   board?: InferenceBoard;
   accelerators?: InferenceAccelerator[];
-  /** Effective memory ceiling: host RAM clamped by any cgroup limit. */
+  /** Effective memory ceiling: host RAM clamped by any cgroup limit. Omitted when the limit could not be read. */
   totalRamBytes?: number;
   physicalCores?: number;
   /**

@@ -38,10 +38,11 @@ const cgroupV1UnlimitedThreshold int64 = 1 << 62
 // inside containers (e.g. Docker --memory=512m), where host RAM reporting would
 // otherwise mask the real limit.
 //
-// exact is true when every cgroup file that exists was readable and valid; bytes
-// is then the effective ceiling, or 0 if host RAM is unknown. When exact is
-// false a cgroup limit exists or may exist but could not be read, and bytes is
-// only an upper bound: host RAM clamped by any cgroup level that could be read.
+// exact is true when every cgroup file consulted was readable and valid; bytes
+// is then the effective ceiling, or 0 if neither host RAM nor a cap is known.
+// When exact is false a cgroup limit exists or may exist but could not be read,
+// and bytes is only an upper bound: host RAM clamped by any cgroup level that
+// could be read.
 func DetectTotalMemory() (bytes int64, exact bool) {
 	return DetectTotalMemoryAt("/")
 }
