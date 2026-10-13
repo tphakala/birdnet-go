@@ -35,6 +35,7 @@
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
   import { t } from '$lib/i18n';
+  import QuickReviewActions from '$lib/desktop/components/ui/QuickReviewActions.svelte';
 
   // Configuration constants - use helper to read current default gain at call time
   // (cards are recycled via keyed {#each}, so a one-time const would go stale)
@@ -295,6 +296,13 @@
     <!-- Bottom Species Info Bar -->
     <SpeciesInfoBar {detection} />
   </div>
+
+  <QuickReviewActions
+    {detection}
+    onAccept={onMarkCorrect}
+    onReject={onMarkFalsePositive}
+    {onDelete}
+  />
 
   <!-- Top-Right Controls - OUTSIDE overflow-hidden container -->
   <div class="absolute top-2 right-2 z-50 flex items-center gap-1.5">

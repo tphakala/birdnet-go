@@ -34,6 +34,7 @@
   import SpectrogramPlayer from '$lib/desktop/components/media/SpectrogramPlayer.svelte';
   import SpectrogramImage from '$lib/desktop/components/media/SpectrogramImage.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
+  import QuickReviewActions from '$lib/desktop/components/ui/QuickReviewActions.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
@@ -318,6 +319,13 @@
 
 <!-- Action Menu -->
 <td onclick={e => e.stopPropagation()}>
+  <QuickReviewActions
+    {detection}
+    onAccept={onMarkCorrect}
+    onReject={onMarkFalsePositive}
+    {onDelete}
+    compact
+  />
   <ActionMenu
     {detection}
     {isExcluded}
