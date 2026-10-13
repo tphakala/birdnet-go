@@ -92,7 +92,7 @@ func effectiveTotal(host, cgroup int64) int64 {
 // readable upper bound, or 0 when nothing readable capped the process.
 //
 // It resolves the process's own cgroup subtree from /proc/self/cgroup and reads
-// the limit there before falling back to the cgroup mount root. The subtree path
+// the limit there as well as at the cgroup mount root. The subtree path
 // matters when the container does not have a private cgroup namespace (e.g.
 // Docker --cgroupns=host, or cgroup v1), where the mount root holds the host's
 // unlimited value and the real per-container cap lives in a subtree. When
@@ -164,9 +164,11 @@ func cgroupV2Limit(root, sub string) (limit int64, found, exact bool) {
 }
 
 // cgroupV1Limit reads the cgroup v1 memory limit from the process's memory
-// controller subtree, falling back to the controller mount root. The limit is 0
-// when none is found (also the path for non-v1 systems, where the files are
-// absent). exact is false when a file was unreadable or held unparseable content.
+// controller subtree and from the controller mount root, and returns the
+// smaller positive one. Only those two files are read, not the cgroups between
+// them. The limit is 0 when none is found (also the path for non-v1 systems,
+// where the files are absent). exact is false when either file was unreadable or
+// held unparseable content.
 func cgroupV1Limit(root, sub string) (limit int64, exact bool) {
 	exact = true
 	for _, rel := range distinctPaths(
@@ -181,11 +183,11 @@ func cgroupV1Limit(root, sub string) (limit int64, exact bool) {
 		switch {
 		case err != nil || !ok:
 			exact = false
-		case v > 0:
-			return v, exact
+		case v > 0 && (limit == 0 || v < limit):
+			limit = v
 		}
 	}
-	return 0, exact
+	return limit, exact
 }
 
 // cgroupSubPaths parses /proc/self/cgroup for the process's cgroup path under the
