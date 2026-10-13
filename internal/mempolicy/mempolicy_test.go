@@ -41,6 +41,10 @@ func TestNormalizeMode(t *testing.T) {
 func TestDecideInexactMemory(t *testing.T) {
 	t.Parallel()
 
+	// upperBoundText is matched literally so the assertions read the log text a
+	// user sees, not a constant that could change with the code under test.
+	const upperBoundText = "upper bound"
+
 	t.Run("exact small auto matches Decide with no note", func(t *testing.T) {
 		t.Parallel()
 		got := decide(512*mib, true, testNumCPU, ModeAuto)
@@ -55,6 +59,7 @@ func TestDecideInexactMemory(t *testing.T) {
 		assert.Equal(t, deriveGoMemLimit(1*gib), got.GoMemLimitBytes)
 		assert.Equal(t, arenaMaxFor(testNumCPU), got.ArenaMax)
 		assert.Contains(t, got.Reason, memoryInexactNote)
+		assert.Contains(t, got.Reason, upperBoundText)
 	})
 
 	t.Run("inexact large host auto stays inactive", func(t *testing.T) {
@@ -62,6 +67,7 @@ func TestDecideInexactMemory(t *testing.T) {
 		got := decide(8*gib, false, testNumCPU, ModeAuto)
 		assert.False(t, got.Active)
 		assert.Contains(t, got.Reason, memoryInexactNote)
+		assert.Contains(t, got.Reason, upperBoundText)
 	})
 
 	t.Run("inexact unknown host auto", func(t *testing.T) {
@@ -70,6 +76,12 @@ func TestDecideInexactMemory(t *testing.T) {
 		assert.False(t, got.Active)
 		assert.Contains(t, got.Reason, "system memory unknown")
 		assert.Contains(t, got.Reason, memoryInexactNote)
+	})
+
+	t.Run("inexact unknown memory does not claim an upper bound", func(t *testing.T) {
+		t.Parallel()
+		got := decide(0, false, testNumCPU, ModeAuto)
+		assert.NotContains(t, got.Reason, upperBoundText)
 	})
 
 	t.Run("inexact forced on", func(t *testing.T) {

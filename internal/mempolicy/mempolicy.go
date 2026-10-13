@@ -58,7 +58,11 @@ const (
 
 	// memoryInexactNote is appended to Decision.Reason when the cgroup memory
 	// limit could not be read.
-	memoryInexactNote = "cgroup memory limit could not be read; detected memory is an upper bound and the real limit may be lower"
+	memoryInexactNote = "cgroup memory limit could not be read"
+
+	// memoryUpperBoundNote follows memoryInexactNote when a memory figure was
+	// still detected, since that figure is then only an upper bound.
+	memoryUpperBoundNote = "detected memory is an upper bound and the real limit may be lower"
 )
 
 // Decision is the pure result of evaluating the policy. It carries no side
@@ -106,13 +110,17 @@ func Decide(totalRAMBytes int64, numCPU int, mode string) Decision {
 	return d
 }
 
-// decide is Decide plus an annotation: when exact is false the detected memory
-// is only an upper bound, and Reason says so. The thresholds still use the
-// upper bound, which is sound for "at most N" checks.
+// decide is Decide plus an annotation: when exact is false Reason says the
+// cgroup limit could not be read and, when a figure was detected, that it is
+// only an upper bound. The thresholds still use that bound, which is sound for
+// "at most N" checks.
 func decide(totalRAMBytes int64, exact bool, numCPU int, mode string) Decision {
 	d := Decide(totalRAMBytes, numCPU, mode)
 	if !exact {
 		d.Reason += "; " + memoryInexactNote
+		if totalRAMBytes > 0 {
+			d.Reason += "; " + memoryUpperBoundNote
+		}
 	}
 	return d
 }
