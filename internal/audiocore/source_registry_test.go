@@ -537,11 +537,13 @@ func TestSourceRegistry_TransitionState(t *testing.T) {
 		name      string
 		current   SourceState
 		from      SourceState
+		to        SourceState
 		wantOK    bool
 		wantState SourceState
 	}{
-		{"matching from applies", SourceStarting, SourceStarting, true, SourceRunning},
-		{"non-matching from is ignored", SourceStopped, SourceStarting, false, SourceStopped},
+		{"matching from applies", SourceStarting, SourceStarting, SourceRunning, true, SourceRunning},
+		{"to is honoured", SourceRunning, SourceRunning, SourceStopped, true, SourceStopped},
+		{"non-matching from is ignored", SourceStopped, SourceStarting, SourceRunning, false, SourceStopped},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -563,7 +565,7 @@ func TestSourceRegistry_TransitionState(t *testing.T) {
 			received = received[:0]
 			mu.Unlock()
 
-			assert.Equal(t, tt.wantOK, r.TransitionState(src.ID, tt.from, SourceRunning))
+			assert.Equal(t, tt.wantOK, r.TransitionState(src.ID, tt.from, tt.to))
 
 			got, ok := r.Get(src.ID)
 			require.True(t, ok)

@@ -15,6 +15,10 @@ const (
 	stateTestRTSPURL     = "rtsp://192.168.1.60/state"
 	stateTestFileURL     = "/tmp/state-test.wav"
 	stateTestMissingCard = "no-such-audio-device-for-state-test"
+
+	stateTestSampleRate = 48000
+	stateTestBitDepth   = 16
+	stateTestChannels   = 1
 )
 
 // hookStreamManager wraps the engine's real StreamManager and lets a test run
@@ -54,9 +58,9 @@ func stateTestRTSPConfig() *audiocore.SourceConfig {
 		DisplayName:      "State Test RTSP",
 		Type:             audiocore.SourceTypeRTSP,
 		ConnectionString: stateTestRTSPURL,
-		SampleRate:       48000,
-		BitDepth:         16,
-		Channels:         1,
+		SampleRate:       stateTestSampleRate,
+		BitDepth:         stateTestBitDepth,
+		Channels:         stateTestChannels,
 	}
 }
 
@@ -150,9 +154,9 @@ func TestEngine_AddSource_FileSourceStaysInactive(t *testing.T) {
 				DisplayName:      "State Test File",
 				Type:             audiocore.SourceTypeFile,
 				ConnectionString: stateTestFileURL,
-				SampleRate:       48000,
-				BitDepth:         16,
-				Channels:         1,
+				SampleRate:       stateTestSampleRate,
+				BitDepth:         stateTestBitDepth,
+				Channels:         stateTestChannels,
 			}
 			if tt.stale != nil {
 				pre, err := eng.Registry().Register(cfg)
@@ -240,9 +244,9 @@ func TestEngine_ReconfigureSource_AudioCardFailureSetsError(t *testing.T) {
 		DisplayName:      "State Test Card",
 		Type:             audiocore.SourceTypeAudioCard,
 		ConnectionString: stateTestMissingCard,
-		SampleRate:       48000,
-		BitDepth:         16,
-		Channels:         1,
+		SampleRate:       stateTestSampleRate,
+		BitDepth:         stateTestBitDepth,
+		Channels:         stateTestChannels,
 	}
 	src, err := eng.Registry().Register(cfg)
 	require.NoError(t, err)
@@ -250,4 +254,65 @@ func TestEngine_ReconfigureSource_AudioCardFailureSetsError(t *testing.T) {
 
 	require.Error(t, eng.ReconfigureSource(src.ID, cfg))
 	requireState(t, eng, src.ID, audiocore.SourceError)
+}
+
+func TestEngine_StartStream_StateLifecycle(t *testing.T) {
+	t.Parallel()
+
+	newStopped := func(t *testing.T) (*AudioEngine, *hookStreamManager, string) {
+		t.Helper()
+		eng := newTestEngine(t)
+		h := installStartHook(eng, nil)
+		id, err := eng.AddSource(stateTestRTSPConfig())
+		require.NoError(t, err)
+		require.NoError(t, eng.StopStream(id))
+		return eng, h, id
+	}
+
+	t.Run("starting while the stream starts", func(t *testing.T) {
+		t.Parallel()
+		eng, h, id := newStopped(t)
+		var during audiocore.SourceState
+		h.onStart = func(spec *audiocore.StreamSpec) error {
+			src, ok := eng.Registry().Get(spec.SourceID)
+			require.True(t, ok)
+			during = src.State
+			return nil
+		}
+		require.NoError(t, eng.StartStream(id, stateTestRTSPURL, ""))
+		assert.Equal(t, audiocore.SourceStarting, during)
+		requireState(t, eng, id, audiocore.SourceRunning)
+	})
+
+	t.Run("failed start sets error", func(t *testing.T) {
+		t.Parallel()
+		eng, h, id := newStopped(t)
+		h.onStart = func(*audiocore.StreamSpec) error { return errors.NewStd("start refused") }
+		require.Error(t, eng.StartStream(id, stateTestRTSPURL, ""))
+		requireState(t, eng, id, audiocore.SourceError)
+	})
+
+	t.Run("stop during start keeps stopped", func(t *testing.T) {
+		t.Parallel()
+		eng, h, id := newStopped(t)
+		h.afterStart = func(spec *audiocore.StreamSpec) {
+			assert.NoError(t, eng.StopStream(spec.SourceID))
+		}
+		require.NoError(t, eng.StartStream(id, stateTestRTSPURL, ""))
+		requireState(t, eng, id, audiocore.SourceStopped)
+	})
+}
+
+func TestEngine_ReconfigureSource_StopDuringStartKeepsStopped(t *testing.T) {
+	t.Parallel()
+	eng := newTestEngine(t)
+	h := installStartHook(eng, nil)
+	id, err := eng.AddSource(stateTestRTSPConfig())
+	require.NoError(t, err)
+
+	h.afterStart = func(spec *audiocore.StreamSpec) {
+		assert.NoError(t, eng.StopStream(spec.SourceID))
+	}
+	require.NoError(t, eng.ReconfigureSource(id, stateTestRTSPConfig()))
+	requireState(t, eng, id, audiocore.SourceStopped)
 }
