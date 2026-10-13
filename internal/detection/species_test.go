@@ -226,6 +226,9 @@ func TestSpecies_StoredLabel(t *testing.T) {
 		{"BirdNET two parts", Species{ScientificName: "Turdus merula", CommonName: "Common Blackbird"}, "Turdus merula_Common Blackbird"},
 		{"BirdNET with code", Species{ScientificName: "Turdus merula", CommonName: "Common Blackbird", Code: "eurbla"}, "Turdus merula_Common Blackbird_eurbla"},
 		{"Perch multi-word class", Species{ScientificName: "Domestic_sounds_and_home_sounds", CommonName: "Domestic sounds and home sounds"}, "Domestic_sounds_and_home_sounds"},
+		{"Perch class with placeholder code", Species{ScientificName: "Domestic_sounds_and_home_sounds", CommonName: "Domestic sounds and home sounds", Code: "DO1a2b3c"}, "Domestic_sounds_and_home_sounds"},
+		{"Perch class with localized common name", Species{ScientificName: "Power_tool", CommonName: "Sähkötyökalu"}, "Power_tool"},
+		{"Perch class with empty common name", Species{ScientificName: "Power_tool"}, "Power_tool"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
