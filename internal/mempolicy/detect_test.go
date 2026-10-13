@@ -231,6 +231,25 @@ func TestDetectCgroupLimit(t *testing.T) {
 			wantLimit: limit256, wantExact: true,
 		},
 		{
+			name: "v1 own cgroup with use_hierarchy 0 keeps its limit",
+			files: map[string]string{
+				procSelfCgroup: "7:memory:/pod/container\n",
+				filepath.Join(cgroupV1MemBase, "pod", "container", cgroupV1File):             "134217728\n",
+				filepath.Join(cgroupV1MemBase, "pod", "container", cgroupV1UseHierarchyFile): "0\n",
+				filepath.Join(cgroupV1MemBase, "pod", cgroupV1File):                          v1Sent,
+			},
+			wantLimit: limit128, wantExact: true,
+		},
+		{
+			name: "v1 mount root reached through absent levels keeps its limit under use_hierarchy 0",
+			files: map[string]string{
+				procSelfCgroup:  "7:memory:/docker/abc123\n",
+				cgroupV1MaxPath: "134217728\n",
+				filepath.Join(cgroupV1MemBase, cgroupV1UseHierarchyFile): "0\n",
+			},
+			wantLimit: limit128, wantExact: true,
+		},
+		{
 			name: "v1 ancestor with use_hierarchy 1 caps the subtree",
 			files: map[string]string{
 				procSelfCgroup: "7:memory:/pod/container\n",
