@@ -292,6 +292,19 @@ func TestEngine_StartStream_StateLifecycle(t *testing.T) {
 		requireState(t, eng, id, audiocore.SourceError)
 	})
 
+	t.Run("stop during failed start keeps stopped", func(t *testing.T) {
+		t.Parallel()
+		eng, h, id := newStopped(t)
+		// A quiet-hours stop records stopped while the start is in flight,
+		// then the start fails.
+		h.onStart = func(spec *audiocore.StreamSpec) error {
+			require.NoError(t, eng.Registry().UpdateState(spec.SourceID, audiocore.SourceStopped))
+			return errors.NewStd("start refused")
+		}
+		require.Error(t, eng.StartStream(id, stateTestRTSPURL, ""))
+		requireState(t, eng, id, audiocore.SourceStopped)
+	})
+
 	t.Run("stop during start keeps stopped", func(t *testing.T) {
 		t.Parallel()
 		eng, h, id := newStopped(t)
@@ -314,6 +327,21 @@ func TestEngine_ReconfigureSource_StopDuringStartKeepsStopped(t *testing.T) {
 		assert.NoError(t, eng.StopStream(spec.SourceID))
 	}
 	require.NoError(t, eng.ReconfigureSource(id, stateTestRTSPConfig()))
+	requireState(t, eng, id, audiocore.SourceStopped)
+}
+
+func TestEngine_ReconfigureSource_StopDuringFailedStartKeepsStopped(t *testing.T) {
+	t.Parallel()
+	eng := newTestEngine(t)
+	h := installStartHook(eng, nil)
+	id, err := eng.AddSource(stateTestRTSPConfig())
+	require.NoError(t, err)
+
+	h.onStart = func(spec *audiocore.StreamSpec) error {
+		require.NoError(t, eng.Registry().UpdateState(spec.SourceID, audiocore.SourceStopped))
+		return errors.NewStd("start refused")
+	}
+	require.Error(t, eng.ReconfigureSource(id, stateTestRTSPConfig()))
 	requireState(t, eng, id, audiocore.SourceStopped)
 }
 
