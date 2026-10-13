@@ -17,7 +17,8 @@ import (
 // (cgroup limit unreadable) still gets the ram.insufficient blocker when its
 // upper bound is below the variant's floor.
 func TestRankCatalogUsesRAMUpperBound(t *testing.T) {
-	t.Parallel()
+	// apitest.NewCore publishes the process-global settings snapshot, so this
+	// test must not run in parallel.
 
 	const (
 		catalogID    = "ram-upper-bound"
