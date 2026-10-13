@@ -117,6 +117,24 @@ func TestProfileCapabilities(t *testing.T) {
 			want: []string{CapAArch64, CapTFLite},
 		},
 		{
+			name: "unknown exact RAM with a small upper bound is low-ram",
+			profile: Profile{
+				Arch:               archARM64,
+				RAMUpperBoundBytes: 1024 * 1024 * 1024,
+				Backends:           Backends{TFLite: BackendStatus{Available: true}},
+			},
+			want: []string{CapAArch64, CapTFLite, CapLowRAM},
+		},
+		{
+			name: "unknown exact RAM with a large upper bound is not low-ram",
+			profile: Profile{
+				Arch:               archARM64,
+				RAMUpperBoundBytes: 8 * 1024 * 1024 * 1024,
+				Backends:           Backends{TFLite: BackendStatus{Available: true}},
+			},
+			want: []string{CapAArch64, CapTFLite},
+		},
+		{
 			name: "intel gpu generation token is emitted even when the gpu is unusable",
 			profile: Profile{
 				Arch:     archAMD64,

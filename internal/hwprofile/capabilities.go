@@ -51,12 +51,24 @@ const lowRAMThresholdBytes int64 = 2 * 1024 * 1024 * 1024
 // device enumeration.
 const deviceGPU = "GPU"
 
+// RAMUpperBound returns the tightest known upper bound on the memory ceiling:
+// TotalRAMBytes when it is known, else RAMUpperBoundBytes. 0 means nothing is
+// known. It suits "is the host at most N" checks only.
+func (p *Profile) RAMUpperBound() int64 {
+	if p.TotalRAMBytes > 0 {
+		return p.TotalRAMBytes
+	}
+	return p.RAMUpperBoundBytes
+}
+
 // Capabilities returns the capability tokens for this profile. It is pure: it
 // derives everything from the already-probed Profile and performs no I/O, so
 // the same profile always yields the same tokens.
 //
 // Order is stable (architecture, backends, modifiers) and duplicates are
-// removed, so the result can be compared or logged directly.
+// removed, so the result can be compared or logged directly. CapLowRAM is
+// derived from RAMUpperBound, so it is also emitted when the exact ceiling is
+// unknown but the upper bound is below the threshold.
 //
 // The value receiver is the contract, not an oversight: the method is
 // documented as pure, and a pointer receiver would let it mutate a profile that
@@ -96,7 +108,7 @@ func (p Profile) Capabilities() []string {
 		}
 	}
 
-	if p.TotalRAMBytes > 0 && p.TotalRAMBytes < lowRAMThresholdBytes {
+	if ub := p.RAMUpperBound(); ub > 0 && ub < lowRAMThresholdBytes {
 		caps = append(caps, CapLowRAM)
 	}
 	if p.HasNativeF16 {
