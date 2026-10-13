@@ -166,6 +166,11 @@ func TestDetectCgroupLimit(t *testing.T) {
 			files:     map[string]string{procSelfCgroup: "7:memory:/docker/abc123\n", v1Docker: "268435456\n", cgroupV1MaxPath: "134217728\n"},
 			wantLimit: limit128, wantExact: true,
 		},
+		{
+			name:      "v1 subtree cap below the root cap wins",
+			files:     map[string]string{procSelfCgroup: "7:memory:/docker/abc123\n", v1Docker: "134217728\n", cgroupV1MaxPath: "268435456\n"},
+			wantLimit: limit128, wantExact: true,
+		},
 		{name: "v1 garbage", files: map[string]string{cgroupV1MaxPath: "garbage"}, wantExact: false},
 		{name: "proc self cgroup unreadable", dirs: []string{procSelfCgroup}, wantExact: false},
 		{
