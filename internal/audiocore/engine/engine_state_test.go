@@ -316,3 +316,30 @@ func TestEngine_ReconfigureSource_StopDuringStartKeepsStopped(t *testing.T) {
 	require.NoError(t, eng.ReconfigureSource(id, stateTestRTSPConfig()))
 	requireState(t, eng, id, audiocore.SourceStopped)
 }
+
+func TestEngine_ReconfigureSource_TypeResolution(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		newType   audiocore.SourceType
+		wantState audiocore.SourceState
+	}{
+		{"empty type keeps the stream type", "", audiocore.SourceRunning},
+		{"unknown type keeps the stream type", audiocore.SourceTypeUnknown, audiocore.SourceRunning},
+		{"stream to file is inactive", audiocore.SourceTypeFile, audiocore.SourceInactive},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			eng := newTestEngine(t)
+			id, err := eng.AddSource(stateTestRTSPConfig())
+			require.NoError(t, err)
+
+			newCfg := stateTestRTSPConfig()
+			newCfg.Type = tt.newType
+			require.NoError(t, eng.ReconfigureSource(id, newCfg))
+			requireState(t, eng, id, tt.wantState)
+		})
+	}
+}
