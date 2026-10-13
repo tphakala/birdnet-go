@@ -298,7 +298,6 @@ func probeHardware(root string) Profile {
 	p.Environment, _ = sysinfo.GetEnvironment()
 
 	total, exact := mempolicy.DetectTotalMemoryAt(root)
-	total = max(total, 0)
 	p.RAMUpperBoundBytes = total
 	switch {
 	case !exact:

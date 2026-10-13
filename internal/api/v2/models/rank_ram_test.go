@@ -1,6 +1,7 @@
 package models
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,10 +46,7 @@ func TestRankCatalogUsesRAMUpperBound(t *testing.T) {
 	byVariant, _, _ := h.rankCatalog([]classifier.CatalogEntry{entry}, inference.ORTStatus{})
 	rec, ok := byVariant[catalogID][variantID]
 	require.True(t, ok)
-	require.NotEmpty(t, rec.Blockers)
-	codes := make([]string, 0, len(rec.Blockers))
-	for _, b := range rec.Blockers {
-		codes = append(codes, b.Code)
-	}
-	assert.Contains(t, codes, recommend.BlockerRAMInsufficient)
+	assert.True(t, slices.ContainsFunc(rec.Blockers, func(b recommend.Reason) bool {
+		return b.Code == recommend.BlockerRAMInsufficient
+	}), "blockers: %v", rec.Blockers)
 }

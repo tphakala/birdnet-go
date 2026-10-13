@@ -134,7 +134,7 @@ func TestProbeUnreadableCgroupReportsUnknownRAM(t *testing.T) {
 	assert.Contains(t, p.Issues, Issue{Probe: ProbeMemory, Reason: ReasonReadFailed})
 	assert.Equal(t, hostRAM, p.RAMUpperBoundBytes)
 	assert.Equal(t, hostRAM < lowRAMThresholdBytes,
-		slices.Contains(p.WithBackends(probeBackends()).Capabilities(), CapLowRAM))
+		slices.Contains(p.Capabilities(), CapLowRAM))
 }
 
 // TestProbeAgainstLiveHost runs the probe against the real filesystem. Fixture

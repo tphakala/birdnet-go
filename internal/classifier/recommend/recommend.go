@@ -229,7 +229,8 @@ type Input struct {
 	// Capabilities are the host capability tokens (hwprofile.Profile.Capabilities()).
 	Capabilities []string
 	// TotalRAMBytes is an upper bound on the memory ceiling (the exact ceiling
-	// when it is known), 0 when unknown.
+	// when it is known), 0 when unknown. Because it may be only a bound, use it
+	// for "at most N" checks, never to prove a host has at least N.
 	TotalRAMBytes int64
 	// DeviceClass is the benchmark device identifier for this host, "" when the
 	// host maps to no benchmarked class.

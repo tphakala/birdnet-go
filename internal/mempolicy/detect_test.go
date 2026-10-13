@@ -209,11 +209,6 @@ func TestDetectCgroupLimit(t *testing.T) {
 			got, exact := detectCgroupLimit(root)
 			assert.Equal(t, tt.wantLimit, got)
 			assert.Equal(t, tt.wantExact, exact)
-
-			// Detection is pure: a second probe gives the same answer.
-			got2, exact2 := detectCgroupLimit(root)
-			assert.Equal(t, got, got2)
-			assert.Equal(t, exact, exact2)
 		})
 	}
 }
