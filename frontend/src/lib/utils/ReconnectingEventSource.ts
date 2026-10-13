@@ -36,6 +36,11 @@ export interface ReconnectingEventSourceInit {
    * Override to supply a polyfill or a test double.
    */
   eventSourceClass?: typeof EventSource;
+  /**
+   * Automatically disconnect when document is hidden and reconnect when visible.
+   * Defaults to true in browser environments to conserve HTTP/1.1 connections.
+   */
+  pauseOnHidden?: boolean;
 }
 
 type EventListenerFn = (event: Event) => void;
@@ -77,6 +82,35 @@ export class ReconnectingEventSource {
   // opt-in onreconnectfailed escalation hook. Reset in handleOpen.
   private failuresSinceOpen = 0;
   private closed = false;
+  private readonly pauseOnHidden: boolean;
+  private pausedByVisibility = false;
+
+  private readonly handleVisibilityChange = (): void => {
+    if (this.closed) return;
+    if (typeof document === 'undefined') return;
+
+    if (document.hidden) {
+      if (!this.pausedByVisibility) {
+        this.pausedByVisibility = true;
+        if (this.reconnectTimer !== null) {
+          clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = null;
+        }
+        if (this.eventSource) {
+          this.eventSource.close();
+          this.eventSource = null;
+        }
+        this.readyState = ReconnectingEventSource.CONNECTING;
+      }
+    } else {
+      if (this.pausedByVisibility) {
+        this.pausedByVisibility = false;
+        this.retryDelay = INITIAL_RETRY_TIME_MS;
+        this.failuresSinceOpen = 0;
+        this.connect();
+      }
+    }
+  };
 
   // A single bound forwarder so add/removeEventListener on the native source use
   // a stable reference and unsubscribe correctly.
@@ -96,7 +130,17 @@ export class ReconnectingEventSource {
     this.eventSourceClass = EventSourceImpl;
     this.init = { withCredentials: this.withCredentials };
 
-    this.connect();
+    this.pauseOnHidden = init.pauseOnHidden ?? false;
+    if (this.pauseOnHidden && typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
+      if (document.hidden) {
+        this.pausedByVisibility = true;
+      }
+    }
+
+    if (!this.pausedByVisibility) {
+      this.connect();
+    }
   }
 
   private connect(): void {
@@ -143,7 +187,7 @@ export class ReconnectingEventSource {
   }
 
   private scheduleReconnect(): void {
-    if (this.closed) {
+    if (this.closed || this.pausedByVisibility) {
       return;
     }
     // Full-jitter exponential backoff, capped at maxRetryTime.
@@ -193,6 +237,9 @@ export class ReconnectingEventSource {
 
   close(): void {
     this.closed = true;
+    if (this.pauseOnHidden && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    }
     if (this.reconnectTimer !== null) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
