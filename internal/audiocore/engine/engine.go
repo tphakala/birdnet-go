@@ -526,11 +526,12 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) (sourceID string, e
 		}
 	}
 	// File-type sources: registered + capture buffer allocated, but no long-running capture.
-	e.markStarted(sourceID, cfg.Type)
 
 	// 5. Sync defaulted audio params back to registry so downstream consumers
 	// see the effective values (not the raw config which may have been zero).
+	// The state change follows, so its event carries the synced params.
 	e.registry.UpdateAudioParams(sourceID, sampleRate, bitDepth, channels)
+	e.markStarted(sourceID, cfg.Type)
 
 	e.logger.Info("source added",
 		logger.String("source_id", sourceID),
@@ -587,8 +588,8 @@ func (e *AudioEngine) RemoveSource(sourceID string) error {
 // DeallocateSource) and does not recreate them: the pipeline's
 // registerConsumersForSources must run after a successful reconfigure to
 // reallocate the analysis buffers, mirroring AddSource.
-// The registry state moves to starting, then running (inactive for file
-// sources) on success, or error on failure.
+// For capture sources the registry state moves to starting, then running on
+// success; a file source ends inactive. A failure sets error.
 func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.SourceConfig) error {
 	src, ok := e.registry.Get(sourceID)
 	if !ok {
@@ -698,8 +699,6 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		}
 	}
 
-	e.markStarted(sourceID, newType)
-
 	// 7. Update registry so downstream consumers see the new audio params. Sync the
 	// mode and source-shape fields first (ReconfigureSource does not re-register, so
 	// the registry otherwise keeps the values from add time), then UpdateAudioParams
@@ -720,6 +719,8 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			logger.Bool("synced_params", syncedParams),
 			logger.String("operation", "reconfigure_source"))
 	}
+	// After the write-back, so the state event carries the new params.
+	e.markStarted(sourceID, newType)
 
 	e.logger.Info("source reconfigured",
 		logger.String("source_id", sourceID),
