@@ -11,7 +11,7 @@
  * Fix: Critical fallbacks provide essential translations immediately
  */
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -301,5 +301,75 @@ describe('i18n store - document language', () => {
 
     expect(store.getLocale()).toBe('sv');
     expect(document.documentElement.lang).toBe('sv');
+  });
+});
+
+describe('i18n store - locale fallback', () => {
+  const originalFetch = vi.mocked(globalThis.fetch).getMockImplementation();
+  const englishMessages = {
+    common: { loading: 'Loading...' },
+    detections: '{count, plural, one {# detection} other {# detections}}',
+  };
+
+  afterEach(() => {
+    vi.mocked(globalThis.fetch).mockReset();
+    if (originalFetch) vi.mocked(globalThis.fetch).mockImplementation(originalFetch);
+    localStorage.clear();
+    document.documentElement.lang = 'en';
+    vi.resetModules();
+  });
+
+  /** Serves English messages and fails the message files of the given locales. */
+  function serveEnglishFailing(...locales: string[]) {
+    vi.mocked(globalThis.fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (locales.some(locale => url.includes(`/ui/assets/messages/${locale}.json`))) {
+        return Promise.resolve(new Response('unavailable', { status: 503 }));
+      }
+      if (url.includes('/ui/assets/messages/en.json')) {
+        return Promise.resolve(Response.json(englishMessages));
+      }
+      return Promise.reject(new Error(`Unmocked fetch call to: ${url}`));
+    });
+  }
+
+  beforeEach(() => {
+    // Earlier tests in this file leave cached messages behind
+    localStorage.clear();
+  });
+
+  it('does not cache the English fallback under the locale that failed to load at startup', async () => {
+    serveEnglishFailing('fi');
+    localStorage.setItem('birdnet-locale', 'fi');
+    vi.resetModules();
+
+    const store = await import('./store.svelte');
+    await store.waitForTranslations();
+    await vi.waitFor(() => expect(store.isLoading()).toBe(false));
+
+    expect(store.t('common.loading')).toBe('Loading...');
+    const finnishCacheKeys = Object.keys(localStorage).filter(key =>
+      key.startsWith('birdnet-messages-fi-')
+    );
+    expect(finnishCacheKeys).toEqual([]);
+    const englishCacheKeys = Object.keys(localStorage).filter(key =>
+      key.startsWith('birdnet-messages-en-')
+    );
+    expect(englishCacheKeys).toHaveLength(1);
+  });
+
+  it('applies the plural rules of the English fallback when the selected locale fails to load', async () => {
+    // French treats 0 as singular, English does not
+    serveEnglishFailing('fr');
+    localStorage.setItem('birdnet-locale', 'fr');
+    vi.resetModules();
+
+    const store = await import('./store.svelte');
+    await store.waitForTranslations();
+    await vi.waitFor(() => expect(store.isLoading()).toBe(false));
+
+    expect(store.getLocale()).toBe('fr');
+    expect(store.t('detections', { count: 0 })).toBe('0 detections');
+    expect(store.t('detections', { count: 1 })).toBe('1 detection');
   });
 });

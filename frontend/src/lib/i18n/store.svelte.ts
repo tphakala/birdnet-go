@@ -60,11 +60,12 @@ function applyDocumentLanguage(locale: Locale): void {
 }
 
 // State management with Svelte 5 runes
-let currentLocale = $state<Locale>(getInitialLocale());
+const initialLocale = getInitialLocale();
+let currentLocale = $state<Locale>(initialLocale);
 let messages = $state<Record<string, string>>({});
 // Locale of the messages currently shown, which lags currentLocale while a
 // switch is loading and stays on the old one when the switch fails.
-let messagesLocale: Locale = currentLocale;
+let messagesLocale: Locale = initialLocale;
 let loading = $state(false);
 // Keep previous messages while loading new ones
 let previousMessages = $state<Record<string, string>>({});
@@ -285,28 +286,9 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
  * @returns The translated string
  */
 export function t(key: string, params?: Record<string, unknown>): string {
-  // If messages haven't loaded yet, check previousMessages first
+  // Before the first messages load, serve the critical fallbacks for the
+  // loading and error screens so they never show raw keys
   if (Object.keys(messages).length === 0) {
-    // Check if we have the key in previousMessages
-    if (Object.keys(previousMessages).length > 0) {
-      const prevValue = getNestedValue(previousMessages, key);
-      if (typeof prevValue === 'string') {
-        // Process the message with params if needed
-        if (!params) {
-          return prevValue;
-        }
-        // Apply parameter interpolation to previous message
-        let result = prevValue;
-        result = result.replace(/\{(\w+)\}/g, (_, param) => {
-          // eslint-disable-next-line security/detect-object-injection
-          return params[param]?.toString() ?? `{${param}}`;
-        });
-        return result;
-      }
-    }
-
-    // Check critical fallbacks for essential UI strings (loading/error screens)
-    // This prevents showing raw keys during initial render before translations load
     if (key in CRITICAL_FALLBACKS) {
       // eslint-disable-next-line security/detect-object-injection
       return CRITICAL_FALLBACKS[key];
@@ -323,8 +305,10 @@ export function t(key: string, params?: Record<string, unknown>): string {
     return message;
   }
 
-  // Handle ICU MessageFormat plural syntax using extracted parser
-  let result = parsePlural(message, params, currentLocale);
+  // Handle ICU MessageFormat plural syntax using extracted parser, with the
+  // plural rules of the language the messages are in: while a switch loads,
+  // or after it falls back to English, that is not currentLocale
+  let result = parsePlural(message, params, messagesLocale);
 
   // Simple interpolation: {name} -> value
   result = result.replace(/\{(\w+)\}/g, (_, param) => {
@@ -369,17 +353,9 @@ if (typeof window !== 'undefined') {
     }
   }
 
-  // Always load fresh messages asynchronously
-  loadMessages(locale).then(() => {
-    // Cache messages for next time
-    if (Object.keys(messages).length > 0) {
-      try {
-        localStorage.setItem(cacheKey(locale), JSON.stringify(messages));
-      } catch {
-        // Ignore storage errors
-      }
-    }
-  });
+  // Always load fresh messages asynchronously; loadMessages caches what it
+  // shows under the locale it actually loaded
+  loadMessages(locale);
 }
 
 /**
