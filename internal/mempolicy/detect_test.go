@@ -76,6 +76,7 @@ func TestDetectCgroupLimit(t *testing.T) {
 	v2Docker := filepath.Join(cgroupV2Base, "docker", "abc123", cgroupV2File)
 	v2DockerParent := filepath.Join(cgroupV2Base, "docker", cgroupV2File)
 	v1Docker := filepath.Join(cgroupV1MemBase, "docker", "abc123", cgroupV1File)
+	v1PodUseHierarchy := filepath.Join(cgroupV1MemBase, "pod", "memory.use_hierarchy")
 
 	tests := []struct {
 		name      string
@@ -170,6 +171,56 @@ func TestDetectCgroupLimit(t *testing.T) {
 			name:      "v1 subtree cap below the root cap wins",
 			files:     map[string]string{procSelfCgroup: "7:memory:/docker/abc123\n", v1Docker: "134217728\n", cgroupV1MaxPath: "268435456\n"},
 			wantLimit: limit128, wantExact: true,
+		},
+		{
+			name: "v1 intermediate ancestor limit is honoured",
+			files: map[string]string{
+				procSelfCgroup: "7:memory:/pod/container\n",
+				filepath.Join(cgroupV1MemBase, "pod", "container", cgroupV1File): v1Sent,
+				filepath.Join(cgroupV1MemBase, "pod", cgroupV1File):              "268435456\n",
+				cgroupV1MaxPath: v1Sent,
+			},
+			wantLimit: limit256, wantExact: true,
+		},
+		{
+			name: "v1 ancestor with use_hierarchy 0 does not cap the subtree",
+			files: map[string]string{
+				procSelfCgroup: "7:memory:/pod/container\n",
+				filepath.Join(cgroupV1MemBase, "pod", "container", cgroupV1File): "268435456\n",
+				filepath.Join(cgroupV1MemBase, "pod", cgroupV1File):              "134217728\n",
+				v1PodUseHierarchy: "0\n",
+			},
+			wantLimit: limit256, wantExact: true,
+		},
+		{
+			name: "v1 ancestor with use_hierarchy 1 caps the subtree",
+			files: map[string]string{
+				procSelfCgroup: "7:memory:/pod/container\n",
+				filepath.Join(cgroupV1MemBase, "pod", "container", cgroupV1File): "268435456\n",
+				filepath.Join(cgroupV1MemBase, "pod", cgroupV1File):              "134217728\n",
+				v1PodUseHierarchy: "1\n",
+			},
+			wantLimit: limit128, wantExact: true,
+		},
+		{
+			name: "v1 ancestor with invalid use_hierarchy is skipped and inexact",
+			files: map[string]string{
+				procSelfCgroup: "7:memory:/pod/container\n",
+				filepath.Join(cgroupV1MemBase, "pod", "container", cgroupV1File): "268435456\n",
+				filepath.Join(cgroupV1MemBase, "pod", cgroupV1File):              "134217728\n",
+				v1PodUseHierarchy: "garbage\n",
+			},
+			wantLimit: limit256, wantExact: false,
+		},
+		{
+			name: "v1 ancestor with unreadable use_hierarchy is skipped and inexact",
+			files: map[string]string{
+				procSelfCgroup: "7:memory:/pod/container\n",
+				filepath.Join(cgroupV1MemBase, "pod", "container", cgroupV1File): "268435456\n",
+				filepath.Join(cgroupV1MemBase, "pod", cgroupV1File):              "134217728\n",
+			},
+			dirs:      []string{v1PodUseHierarchy},
+			wantLimit: limit256, wantExact: false,
 		},
 		{name: "v1 garbage", files: map[string]string{cgroupV1MaxPath: "garbage"}, wantExact: false},
 		{name: "proc self cgroup unreadable", dirs: []string{procSelfCgroup}, wantExact: false},

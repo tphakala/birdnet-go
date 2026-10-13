@@ -25,7 +25,11 @@ const (
 	cgroupV1MemBase = "sys/fs/cgroup/memory" // v1 memory controller mount
 	cgroupV2File    = "memory.max"
 	cgroupV1File    = "memory.limit_in_bytes"
-	procSelfCgroup  = "proc/self/cgroup"
+
+	// cgroupV1UseHierarchyFile says whether a v1 memory cgroup's limit also
+	// covers its descendants.
+	cgroupV1UseHierarchyFile = "memory.use_hierarchy"
+	procSelfCgroup           = "proc/self/cgroup"
 )
 
 // cgroupV1UnlimitedThreshold guards against the cgroup v1 "unlimited" sentinel,
@@ -164,31 +168,71 @@ func cgroupV2Limit(root, sub string) (limit int64, found, exact bool) {
 	return limit, found, exact
 }
 
-// cgroupV1Limit reads the cgroup v1 memory limit from the process's memory
-// controller subtree and from the controller mount root, and returns the
-// smaller positive one. Only those two files are read, not the cgroups between
-// them. The limit is 0 when none is found (also the path for non-v1 systems,
-// where the files are absent). exact is false when either file was unreadable or
-// held unparseable content.
+// cgroupV1Limit returns the effective cgroup v1 memory limit by walking the
+// process's memory controller cgroup up through its ancestors to the controller
+// mount root and taking the smallest positive limit, as cgroupV2Limit does. An
+// ancestor above the deepest present level caps the process only when its
+// memory.use_hierarchy is "1" or absent; "0" means its limit does not cover
+// descendants. The limit is 0 when none is found (also the path for non-v1
+// systems, where the files are absent). exact is false when a limit file was
+// unreadable or held unparseable content, or when an ancestor's use_hierarchy
+// could not be read, in which case that ancestor's limit is left out so the
+// result stays an upper bound.
 func cgroupV1Limit(root, sub string) (limit int64, exact bool) {
+	// Same normalisation as cgroupV2Limit: the walk ends on "/", so a relative
+	// path would never reach it.
+	if sub == "" || !strings.HasPrefix(sub, "/") {
+		sub = "/"
+	}
 	exact = true
-	for _, rel := range distinctPaths(
-		filepath.Join(cgroupV1MemBase, sub, cgroupV1File),
-		cgroupV1MaxPath,
-	) {
-		data, present, err := readCgroupFile(filepath.Join(root, rel))
-		if !present {
-			continue
+	seen := false // a limit file was present at a deeper level
+	for {
+		data, present, err := readCgroupFile(filepath.Join(root, cgroupV1MemBase, sub, cgroupV1File))
+		if present {
+			applies, hierExact := true, true
+			if seen {
+				applies, hierExact = cgroupV1Hierarchical(root, sub)
+			}
+			seen = true
+			v, ok := parseCgroupV1Limit(data)
+			switch {
+			case !hierExact:
+				exact = false
+			case err != nil || !ok:
+				exact = false
+			case applies && v > 0 && (limit == 0 || v < limit):
+				limit = v
+			}
 		}
-		v, ok := parseCgroupV1Limit(data)
-		switch {
-		case err != nil || !ok:
-			exact = false
-		case v > 0 && (limit == 0 || v < limit):
-			limit = v
+		if sub == "/" {
+			break
 		}
+		sub = path.Dir(sub) // cgroup paths are always slash-separated
 	}
 	return limit, exact
+}
+
+// cgroupV1Hierarchical reports whether a v1 memory cgroup's limit covers its
+// descendants, from its memory.use_hierarchy file: absent or "1" means it does,
+// "0" means it does not. exact is false when the file exists but cannot be
+// read or holds anything else; applies is then false too, so the caller leaves
+// that limit out and keeps an upper bound.
+func cgroupV1Hierarchical(root, sub string) (applies, exact bool) {
+	data, present, err := readCgroupFile(filepath.Join(root, cgroupV1MemBase, sub, cgroupV1UseHierarchyFile))
+	switch {
+	case !present:
+		return true, true
+	case err != nil:
+		return false, false
+	}
+	switch strings.TrimSpace(data) {
+	case "1":
+		return true, true
+	case "0":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 // cgroupSubPaths parses /proc/self/cgroup for the process's cgroup path under the
@@ -221,21 +265,6 @@ func cgroupSubPaths(root string) (v2Sub, v1Sub string, exact bool) {
 		}
 	}
 	return v2Sub, v1Sub, true
-}
-
-// distinctPaths returns the inputs with duplicates removed, preserving order. A
-// subtree path of "/" or "" cleans to the same path as the mount root, so this
-// avoids reading the same file twice.
-func distinctPaths(paths ...string) []string {
-	out := make([]string, 0, len(paths))
-	seen := make(map[string]bool, len(paths))
-	for _, p := range paths {
-		if !seen[p] {
-			seen[p] = true
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 // parseCgroupV2Max parses memory.max: a byte count, or "max" for unlimited. ok
