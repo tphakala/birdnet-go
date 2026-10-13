@@ -626,7 +626,9 @@ func (c *Handler) recommendationsAllowed(ctx echo.Context) bool {
 
 // rankCatalog computes the per-host variant recommendations for the visible
 // catalog, indexed by catalog ID then variant ID, plus the recommended variant
-// per entry.
+// per entry. The RAM floor check uses the profile's RAM upper bound, so a host
+// whose cgroup limit was unreadable is still blocked when even the upper bound
+// is below a variant's floor.
 func (c *Handler) rankCatalog(entries []classifier.CatalogEntry, ort inference.ORTStatus) (byVariant map[string]map[string]recommend.Recommendation, recommended map[string]string, hostArch string) {
 	profileFn := c.hardwareProfile
 	if profileFn == nil {
@@ -636,7 +638,7 @@ func (c *Handler) rankCatalog(entries []classifier.CatalogEntry, ort inference.O
 	hostArch = profile.Arch
 	recs := recommend.Rank(&recommend.Input{
 		Capabilities:   profile.Capabilities(),
-		TotalRAMBytes:  profile.TotalRAMBytes,
+		TotalRAMBytes:  profile.RAMUpperBound(),
 		DeviceClass:    recommend.DeviceClass(profile.Board.Tier, profile.Arch),
 		ResolvedRegion: c.resolveRecommendRegion(),
 		Entries:        entries,
