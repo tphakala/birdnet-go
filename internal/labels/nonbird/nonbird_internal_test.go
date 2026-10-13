@@ -54,3 +54,30 @@ func TestClassesGuard(t *testing.T) {
 		assert.True(t, validCategories[cat], "classes[%q] has unknown category %q", k, cat)
 	}
 }
+
+// TestMultiWordLabelNames_AllMultiWordKeys pins that every multi-word class key
+// is recognised, keeps its identity, and gets a distinct display name.
+func TestMultiWordLabelNames_AllMultiWordKeys(t *testing.T) {
+	t.Parallel()
+
+	displays := make(map[string]string)
+	matched := 0
+	for k := range classes {
+		if !strings.Contains(k, "_") {
+			id, disp, ok := MultiWordLabelNames(k)
+			assert.False(t, ok, "single-token key %q must not match", k)
+			assert.Empty(t, id)
+			assert.Empty(t, disp)
+			continue
+		}
+		matched++
+		id, disp, ok := MultiWordLabelNames(k)
+		require.True(t, ok, "multi-word key %q must match", k)
+		assert.Equal(t, k, id)
+		assert.NotContains(t, disp, "_")
+		prev, dup := displays[disp]
+		assert.Falsef(t, dup, "display %q shared by %q and %q", disp, prev, k)
+		displays[disp] = k
+	}
+	assert.Len(t, displays, matched)
+}

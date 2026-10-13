@@ -6,6 +6,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
@@ -110,6 +111,8 @@ func (p *Processor) isExtendedCaptureSpecies(scientificName string) bool {
 }
 
 // resolveSpeciesFilter resolves the config species list into a set of scientific names.
+// A Perch multi-word sound class is keyed by its full lowercased label and can be
+// referenced by that label or by its spaced name.
 // Returns (isAll, resolvedSet) where isAll=true means all species qualify.
 // taxonomyDB may be nil if taxonomy is unavailable.
 func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier.TaxonomyDatabase, locale, operationName string) (isAll bool, resolvedSet map[string]bool) {
@@ -123,7 +126,12 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 	commonToScientific := make(map[string]string)
 	scientificNames := make(map[string]bool)
 	for _, label := range labels {
-		if sci, common, found := strings.Cut(label, "_"); found {
+		if id, display, ok := nonbird.MultiWordLabelNames(label); ok {
+			// Perch v2 multi-word sound class: the whole label is the scientific key.
+			idLower := strings.ToLower(id)
+			commonToScientific[strings.ToLower(display)] = idLower
+			scientificNames[idLower] = true
+		} else if sci, common, found := strings.Cut(label, "_"); found {
 			sciLower := strings.ToLower(sci)
 			commonLower := strings.ToLower(common)
 			commonToScientific[commonLower] = sciLower
