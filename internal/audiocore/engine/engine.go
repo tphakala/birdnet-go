@@ -334,6 +334,8 @@ func (e *AudioEngine) resolveTransport(streamTransport string) string {
 
 // StartStream restarts a quiet-hours-suppressed FFmpeg stream under its
 // existing runtime sourceID.
+// The registry state moves to starting, then running once the stream has
+// started (unless a stop landed meanwhile), or error if the start fails.
 func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 	src, ok := e.registry.Get(sourceID)
 	if !ok {
@@ -367,12 +369,42 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 		MediaMode:                 src.MediaMode,
 		Transport:                 transport,
 	})
+	e.markStarting(sourceID, src.Type)
 	if err := e.streamMgr.StartStream(spec); err != nil {
 		_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 		return err
 	}
-	_ = e.registry.UpdateState(sourceID, audiocore.SourceRunning)
+	e.markStarted(sourceID, src.Type)
 	return nil
+}
+
+// startsCapture reports whether sources of type t run a long-lived capture
+// (an FFmpeg or native stream, or an audio card). File sources do not.
+func startsCapture(t audiocore.SourceType) bool {
+	return isStreamType(t) || t == audiocore.SourceTypeAudioCard
+}
+
+// markStarting records that capture is being opened for a capture-type source.
+// It is a no-op for other types.
+func (e *AudioEngine) markStarting(sourceID string, t audiocore.SourceType) {
+	if startsCapture(t) {
+		_ = e.registry.UpdateState(sourceID, audiocore.SourceStarting)
+	}
+}
+
+// markStarted records the state after a successful start. A capture-type
+// source moves from starting to running only if it is still starting, so a
+// stop that landed during the start (quiet hours) is not overwritten. Other
+// types never capture and are reported inactive, clearing any stale state.
+func (e *AudioEngine) markStarted(sourceID string, t audiocore.SourceType) {
+	if !startsCapture(t) {
+		_ = e.registry.UpdateState(sourceID, audiocore.SourceInactive)
+		return
+	}
+	if !e.registry.TransitionState(sourceID, audiocore.SourceStarting, audiocore.SourceRunning) {
+		e.logger.Debug("source state changed during start, keeping it",
+			logger.String("source_id", sourceID))
+	}
 }
 
 // AddSource registers a new audio source, allocates its capture buffer, and returns
@@ -382,6 +414,10 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 // For stream-type sources (RTSP, HTTP, HLS, RTMP, UDP), the FFmpeg manager
 // is started. For audio card sources, the device manager begins capture.
 // File-type sources are registered but no long-running capture is started.
+// The registry state follows the start: starting before capture is opened,
+// then running once it has been started (inactive for file sources),
+// overwriting any state left on a reused entry. A failed add unregisters the
+// entry.
 func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) (sourceID string, err error) {
 	// 1. Register the source.
 	src, err := e.registry.Register(cfg)
@@ -435,6 +471,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) (sourceID string, e
 	}
 
 	// 4. Start capture based on source type.
+	e.markStarting(sourceID, cfg.Type)
 	if isStreamType(cfg.Type) {
 		spec := e.buildStreamSpec(&audiocore.StreamSpec{
 			SourceID:                  sourceID,
@@ -489,6 +526,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) (sourceID string, e
 		}
 	}
 	// File-type sources: registered + capture buffer allocated, but no long-running capture.
+	e.markStarted(sourceID, cfg.Type)
 
 	// 5. Sync defaulted audio params back to registry so downstream consumers
 	// see the effective values (not the raw config which may have been zero).
@@ -549,6 +587,8 @@ func (e *AudioEngine) RemoveSource(sourceID string) error {
 // DeallocateSource) and does not recreate them: the pipeline's
 // registerConsumersForSources must run after a successful reconfigure to
 // reallocate the analysis buffers, mirroring AddSource.
+// The registry state moves to starting, then running (inactive for file
+// sources) on success, or error on failure.
 func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.SourceConfig) error {
 	src, ok := e.registry.Get(sourceID)
 	if !ok {
@@ -561,6 +601,12 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		logger.Int("sample_rate", newCfg.SampleRate),
 		logger.Int("bit_depth", newCfg.BitDepth),
 		logger.Int("channels", newCfg.Channels))
+
+	newType := newCfg.Type
+	if newType == "" || newType == audiocore.SourceTypeUnknown {
+		newType = src.Type
+	}
+	e.markStarting(sourceID, newType)
 
 	// 1. Stop existing capture.
 	if isStreamType(src.Type) {
@@ -608,11 +654,6 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	}
 
 	// 6. Restart capture with new config.
-	newType := newCfg.Type
-	if newType == "" || newType == audiocore.SourceTypeUnknown {
-		newType = src.Type
-	}
-
 	if isStreamType(newType) {
 		spec := e.buildStreamSpec(&audiocore.StreamSpec{
 			SourceID:                  sourceID,
@@ -656,6 +697,8 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 				Build()
 		}
 	}
+
+	e.markStarted(sourceID, newType)
 
 	// 7. Update registry so downstream consumers see the new audio params. Sync the
 	// mode and source-shape fields first (ReconfigureSource does not re-register, so

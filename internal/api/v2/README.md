@@ -352,7 +352,7 @@ Both verbs report identically under the `skippedFields` response key: it lists o
 }
 ```
 
-Returns an empty `sources` array when no sources are configured. The `type` field is one of: `rtsp`, `http`, `hls`, `rtmp`, `udp`, `audio_card`, `file`. The `state` field is one of: `inactive`, `starting`, `running`, `error`, `stopped`. The `/streams/sources` endpoint returns only stream types (excludes `audio_card` and `file`).
+Returns an empty `sources` array when no sources are configured. The `type` field is one of: `rtsp`, `http`, `hls`, `rtmp`, `udp`, `audio_card`, `file`. The `state` field is one of: `inactive`, `starting`, `running`, `error`, `stopped`; for stream sources `running` means capture has started, and connection health is on the stream health endpoints. The `/streams/sources` endpoint returns only stream types (excludes `audio_card` and `file`).
 
 ### HLS Streaming (`audio/audio_hls.go`)
 

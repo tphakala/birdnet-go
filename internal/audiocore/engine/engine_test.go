@@ -285,6 +285,7 @@ func TestEngine_AddSource_Device(t *testing.T) {
 	src, ok := eng.Registry().Get("test_audio_001")
 	require.True(t, ok)
 	assert.Equal(t, audiocore.SourceTypeAudioCard, src.Type)
+	assert.Equal(t, audiocore.SourceRunning, src.State)
 
 	// Clean up the capture.
 	require.NoError(t, eng.RemoveSource("test_audio_001"))
