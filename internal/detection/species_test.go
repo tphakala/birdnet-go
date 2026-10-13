@@ -215,3 +215,26 @@ func TestParseSpeciesString_PerchSoundClass(t *testing.T) {
 		})
 	}
 }
+
+func TestSpecies_StoredLabel(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   Species
+		want string
+	}{
+		{"BirdNET two parts", Species{ScientificName: "Turdus merula", CommonName: "Common Blackbird"}, "Turdus merula_Common Blackbird"},
+		{"BirdNET with code", Species{ScientificName: "Turdus merula", CommonName: "Common Blackbird", Code: "eurbla"}, "Turdus merula_Common Blackbird_eurbla"},
+		{"Perch multi-word class", Species{ScientificName: "Domestic_sounds_and_home_sounds", CommonName: "Domestic sounds and home sounds"}, "Domestic_sounds_and_home_sounds"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := tt.in.StoredLabel()
+			assert.Equal(t, tt.want, got)
+			// The stored form must parse back to the same identity.
+			assert.Equal(t, tt.in.ScientificName, ParseSpeciesString(got).ScientificName)
+			assert.Equal(t, tt.in.ScientificName, ExtractScientificName(got))
+		})
+	}
+}

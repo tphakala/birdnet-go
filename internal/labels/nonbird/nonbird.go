@@ -89,6 +89,18 @@ func MultiWordLabelNames(label string) (identity, display string, ok bool) {
 	return label, strings.ReplaceAll(label, labelWordSeparator, displayWordSeparator), true
 }
 
+// IsMultiWordClassPrefix reports whether name is a known non-bird class that is
+// also the first token of a longer multi-word class (for example "car", which
+// begins "car_passing_by"). Case-insensitive.
+func IsMultiWordClassPrefix(name string) bool {
+	lower := strings.ToLower(name)
+	if _, ok := classes[lower]; !ok {
+		return false
+	}
+	_, ok := firstTokenSet[lower]
+	return ok
+}
+
 // IsNonBirdName reports whether name is a non-bird class, matching EITHER the full
 // label OR the first token of a multi-word (underscore-joined) class. New detections
 // carry the full label; the first-token match remains for names stored before

@@ -104,6 +104,22 @@ func ExtractScientificName(label string) string {
 	return label
 }
 
+// StoredLabel returns the label string used to persist the species in a result
+// row: "ScientificName_CommonName[_Code]" for BirdNET-style species, or the whole
+// label for a Perch multi-word sound class (see ParseSpeciesString). The result
+// parses back to the same ScientificName through ParseSpeciesString and
+// ExtractScientificName.
+func (s Species) StoredLabel() string {
+	if id, display, ok := nonbird.MultiWordLabelNames(s.ScientificName); ok && s.CommonName == display && s.Code == "" {
+		return id
+	}
+	label := s.ScientificName + "_" + s.CommonName
+	if s.Code != "" {
+		label += "_" + s.Code
+	}
+	return label
+}
+
 // String returns a formatted string representation of the species.
 // Uses CommonName if available, falls back to ScientificName.
 func (s Species) String() string {

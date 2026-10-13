@@ -95,10 +95,7 @@ func EntityToResult(e *entities.NoteEntity, tz *time.Location) (*detection.Resul
 // AdditionalResultToEntity converts a domain AdditionalResult to a database ResultsEntity.
 func AdditionalResultToEntity(ar *detection.AdditionalResult, noteID uint) *entities.ResultsEntity {
 	// Combine scientific and common name in the format expected by legacy code
-	speciesStr := ar.Species.ScientificName + "_" + ar.Species.CommonName
-	if ar.Species.Code != "" {
-		speciesStr += "_" + ar.Species.Code
-	}
+	speciesStr := ar.Species.StoredLabel()
 
 	return &entities.ResultsEntity{
 		NoteID:     noteID,

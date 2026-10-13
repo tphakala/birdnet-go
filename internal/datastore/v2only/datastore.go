@@ -3232,11 +3232,13 @@ var scientificNameLikeEscaper = strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `
 // as "ScientificName_CommonName". The "!_%" suffix is "literal underscore
 // separator, then anything" ('!_' is an escaped underscore, '%' is the
 // wildcard), mirroring how such labels are split on the first underscore (see
-// detection.ExtractScientificName). A known non-bird sound class never had a
-// concatenated form, so it matches exactly; otherwise "Car" would also match
-// the distinct class "Car_passing_by".
+// detection.ExtractScientificName). A class name that is also the first token of
+// a longer class matches exactly, because otherwise "Car" would also match the
+// distinct class "Car_passing_by"; the legacy concatenated form of such a name
+// is no longer matched. Every other name, including a single-token class like
+// "Dog" that BirdNET also emits as "Dog_Dog", keeps the prefix match.
 func labelIDsForScientificName(tablePrefix, scientificName string) (clause string, args []any) {
-	if nonbird.IsNonSpeciesLabel(scientificName) {
+	if nonbird.IsMultiWordClassPrefix(scientificName) {
 		return fmt.Sprintf("d.label_id IN (SELECT id FROM %slabels WHERE scientific_name = ?)", tablePrefix), []any{scientificName}
 	}
 	// Escape LIKE metacharacters with '!' (see scientificNameLikeEscaper).

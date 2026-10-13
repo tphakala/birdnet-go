@@ -75,9 +75,8 @@ func TestMultiWordLabelNames_AllMultiWordKeys(t *testing.T) {
 		require.True(t, ok, "multi-word key %q must match", k)
 		assert.Equal(t, k, id)
 		assert.NotContains(t, disp, "_")
-		if prev, dup := displays[disp]; dup {
-			t.Errorf("display %q shared by %q and %q", disp, prev, k)
-		}
+		prev, dup := displays[disp]
+		assert.Falsef(t, dup, "display %q shared by %q and %q", disp, prev, k)
 		displays[disp] = k
 	}
 	assert.Len(t, displays, matched)

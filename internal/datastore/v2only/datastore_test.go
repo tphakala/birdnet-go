@@ -245,6 +245,14 @@ func TestV2OnlyDatastore_GetSpeciesLastDetectionDateBefore(t *testing.T) {
 		assert.Equal(t, "2024-06-12", got)
 	})
 
+	t.Run("single-token class without a longer sibling keeps the legacy prefix match", func(t *testing.T) {
+		seedDetection(t, ds, "Dog_Dog", day(8))
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Dog", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-08", got)
+	})
+
 	t.Run("returns empty for an unknown species", func(t *testing.T) {
 		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Nonexistent species", cutoff)
 		require.NoError(t, err)
@@ -351,6 +359,16 @@ func TestV2OnlyDatastore_GetSpeciesFirstAndLastDetectionTimeBefore(t *testing.T)
 		require.NotNil(t, last)
 		assert.Equal(t, day(12, 7), *first)
 		assert.Equal(t, day(12, 7), *last)
+	})
+
+	t.Run("single-token class without a longer sibling keeps the legacy prefix match", func(t *testing.T) {
+		seedDetection(t, ds, "Dog_Dog", day(8, 7))
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Dog", before)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		require.NotNil(t, last)
+		assert.Equal(t, day(8, 7), *first)
 	})
 
 	t.Run("returns nils for an unknown species", func(t *testing.T) {

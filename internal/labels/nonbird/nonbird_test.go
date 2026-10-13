@@ -136,6 +136,30 @@ func TestCategories(t *testing.T) {
 	}
 }
 
+func TestIsMultiWordClassPrefix(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"class with longer sibling", "Car", true},
+		{"lowercase", "engine", true},
+		{"class without longer sibling", "Dog", false},
+		{"multi-word class", "Car_passing_by", false},
+		{"first token that is not a class", "Domestic", false},
+		{"bird", "Turdus merula", false},
+		{"empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, nonbird.IsMultiWordClassPrefix(tt.input))
+		})
+	}
+}
+
 func TestMultiWordLabelNames(t *testing.T) {
 	t.Parallel()
 
