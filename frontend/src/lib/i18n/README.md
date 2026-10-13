@@ -84,20 +84,7 @@ and the source of truth.
 
 ## Performance Optimizations
 
-### 1. Double-Buffering Strategy
-
-To prevent UI flickering when loading translations:
-
-```typescript
-let messages = $state<Record<string, string>>({});
-let previousMessages = $state<Record<string, string>>({});
-```
-
-- Current messages are copied to `previousMessages` before loading new ones
-- If new messages fail to load, previous messages are restored
-- UI always has valid translations to display
-
-### 2. localStorage Caching
+### 1. localStorage Caching
 
 Translations are persisted to localStorage for instant loading on app startup:
 
@@ -132,7 +119,7 @@ try {
 - Provides offline capability
 - Fresh translations are still fetched asynchronously in background
 
-### 3. Fallback Chain
+### 2. Fallback Chain
 
 Multiple fallback mechanisms keep the UI from showing raw keys:
 

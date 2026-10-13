@@ -229,8 +229,13 @@ describe('i18n store - blocked storage', () => {
   });
 });
 
-describe('i18n store - document language', () => {
+describe('i18n store - locale loading', () => {
   const originalFetch = vi.mocked(globalThis.fetch).getMockImplementation();
+
+  beforeEach(() => {
+    // Earlier tests in this file leave cached messages behind
+    localStorage.clear();
+  });
 
   afterEach(() => {
     vi.mocked(globalThis.fetch).mockReset();
@@ -240,13 +245,20 @@ describe('i18n store - document language', () => {
     vi.resetModules();
   });
 
-  /** Makes requests for one locale's message file fail; everything else is served as usual. */
-  function failMessagesFor(...locales: string[]) {
+  /**
+   * Makes requests for the given locales' message files fail and, when english
+   * is given, serves it as the English message file; everything else is served
+   * as usual.
+   */
+  function mockMessageFetch(failing: string[], english?: Record<string, unknown>) {
     vi.mocked(globalThis.fetch).mockImplementation(
       (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
-        if (locales.some(locale => url.includes(`/ui/assets/messages/${locale}.json`))) {
+        if (failing.some(locale => url.includes(`/ui/assets/messages/${locale}.json`))) {
           return Promise.resolve(new Response('not found', { status: 404 }));
+        }
+        if (english && url.includes('/ui/assets/messages/en.json')) {
+          return Promise.resolve(Response.json(english));
         }
         if (!originalFetch) throw new Error('fetch mock has no implementation');
         return originalFetch(input, init);
@@ -272,7 +284,7 @@ describe('i18n store - document language', () => {
     await store.waitForTranslations();
     store.setLocale('fi');
     await vi.waitFor(() => expect(store.isLoading()).toBe(false));
-    failMessagesFor('de');
+    mockMessageFetch(['de']);
 
     store.setLocale('de');
     await vi.waitFor(() => expect(store.isLoading()).toBe(false));
@@ -285,7 +297,7 @@ describe('i18n store - document language', () => {
     await store.waitForTranslations();
     store.setLocale('fi');
     await vi.waitFor(() => expect(store.isLoading()).toBe(false));
-    failMessagesFor('de', 'en');
+    mockMessageFetch(['de', 'en']);
 
     store.setLocale('de');
     await vi.waitFor(() => expect(store.isLoading()).toBe(false));
@@ -302,67 +314,27 @@ describe('i18n store - document language', () => {
     expect(store.getLocale()).toBe('sv');
     expect(document.documentElement.lang).toBe('sv');
   });
-});
-
-describe('i18n store - locale fallback', () => {
-  const originalFetch = vi.mocked(globalThis.fetch).getMockImplementation();
-  const englishMessages = {
-    common: { loading: 'Loading...' },
-    detections: '{count, plural, one {# detection} other {# detections}}',
-  };
-
-  afterEach(() => {
-    vi.mocked(globalThis.fetch).mockReset();
-    if (originalFetch) vi.mocked(globalThis.fetch).mockImplementation(originalFetch);
-    localStorage.clear();
-    document.documentElement.lang = 'en';
-    vi.resetModules();
-  });
-
-  /** Serves English messages and fails the message files of the given locales. */
-  function serveEnglishFailing(...locales: string[]) {
-    vi.mocked(globalThis.fetch).mockImplementation((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (locales.some(locale => url.includes(`/ui/assets/messages/${locale}.json`))) {
-        return Promise.resolve(new Response('unavailable', { status: 503 }));
-      }
-      if (url.includes('/ui/assets/messages/en.json')) {
-        return Promise.resolve(Response.json(englishMessages));
-      }
-      return Promise.reject(new Error(`Unmocked fetch call to: ${url}`));
-    });
-  }
-
-  beforeEach(() => {
-    // Earlier tests in this file leave cached messages behind
-    localStorage.clear();
-  });
 
   it('does not cache the English fallback under the locale that failed to load at startup', async () => {
-    serveEnglishFailing('fi');
+    mockMessageFetch(['fi']);
     localStorage.setItem('birdnet-locale', 'fi');
-    vi.resetModules();
 
     const store = await import('./store.svelte');
     await store.waitForTranslations();
     await vi.waitFor(() => expect(store.isLoading()).toBe(false));
 
     expect(store.t('common.loading')).toBe('Loading...');
-    const finnishCacheKeys = Object.keys(localStorage).filter(key =>
-      key.startsWith('birdnet-messages-fi-')
-    );
-    expect(finnishCacheKeys).toEqual([]);
-    const englishCacheKeys = Object.keys(localStorage).filter(key =>
-      key.startsWith('birdnet-messages-en-')
-    );
-    expect(englishCacheKeys).toHaveLength(1);
+    const cacheKeys = Object.keys(localStorage).filter(key => key.startsWith('birdnet-messages-'));
+    expect(cacheKeys).toHaveLength(1);
+    expect(cacheKeys[0]).toMatch(/^birdnet-messages-en-/);
   });
 
   it('applies the plural rules of the English fallback when the selected locale fails to load', async () => {
     // French treats 0 as singular, English does not
-    serveEnglishFailing('fr');
+    mockMessageFetch(['fr'], {
+      detections: '{count, plural, one {# detection} other {# detections}}',
+    });
     localStorage.setItem('birdnet-locale', 'fr');
-    vi.resetModules();
 
     const store = await import('./store.svelte');
     await store.waitForTranslations();
