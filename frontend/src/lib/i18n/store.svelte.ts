@@ -64,7 +64,8 @@ const initialLocale = getInitialLocale();
 let currentLocale = $state<Locale>(initialLocale);
 let messages = $state<Record<string, string>>({});
 // Locale of the messages currently shown, which lags currentLocale while a
-// switch is loading and stays on the old one when the switch fails.
+// switch is loading, is DEFAULT_LOCALE while the English fallback is shown,
+// and stays on the old one when the English fallback fails too.
 let messagesLocale: Locale = initialLocale;
 let loading = $state(false);
 // Track if initial translation load has completed (for first load only)
@@ -162,8 +163,8 @@ function showMessages(data: Record<string, string>, locale: Locale, persist: boo
 }
 
 // Message loading with English fallback and race condition protection.
-// Messages are replaced only after a load succeeds, so a failed load keeps
-// what the page already shows.
+// Messages are replaced only after a load succeeds, so when the locale and
+// the English fallback both fail the page keeps what it already shows.
 async function loadMessages(locale: Locale): Promise<void> {
   const currentSequence = ++loadSequence;
   // A newer loadMessages call supersedes this one; its results are discarded

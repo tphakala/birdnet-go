@@ -195,24 +195,20 @@ The flickering prevention works through several coordinated mechanisms:
 2. **Navigation**:
    - Translations remain in memory
    - No re-fetching on route changes
-   - Memoization serves repeated translations instantly
 
 3. **Locale Changes**:
    - Previous translations stay visible during loading
    - New translations replace old ones atomically
-   - Cache is preserved until new data is ready
 
 4. **Error Handling**:
-   - Failed loads don't clear existing translations
-   - Fallback to previous messages prevents blank UI
+   - A locale that fails to load is replaced by English
+   - When English fails too, the translations on screen stay
    - Multiple fallback layers ensure robustness
 
 ## Performance Benefits
 
 - **Zero flickering** - Translations are always available
 - **Instant startup** - localStorage cache eliminates initial load time
-- **Reduced re-renders** - Memoization prevents unnecessary computations
-- **Smooth transitions** - Double-buffering ensures seamless locale changes
 - **Memory efficient** - Single shared store for all components
 - **Network efficient** - Translations cached across sessions
 
@@ -479,7 +475,6 @@ try {
 
 - **Initial load**: < 1ms (from localStorage)
 - **Locale switch**: ~50-200ms (network dependent)
-- **Translation lookup**: < 0.1ms (memoized)
 - **Memory usage**: ~200KB per locale
 
 ### Browser Support
@@ -695,7 +690,6 @@ When working with this i18n system:
 2. **Use dot notation for nested keys** - More efficient than separate objects
 3. **Batch related translations** - Group by feature/component
 4. **Trust the type system** - Generated types are always accurate
-5. **Don't worry about performance** - Memoization handles repeated calls
 
 ### For Human Developers
 
