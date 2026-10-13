@@ -29,7 +29,12 @@ const (
 	// cgroupV1UseHierarchyFile says whether a v1 memory cgroup's limit also
 	// covers its descendants.
 	cgroupV1UseHierarchyFile = "memory.use_hierarchy"
-	procSelfCgroup           = "proc/self/cgroup"
+	// Values of memory.use_hierarchy: "1" means the cgroup's limit covers its
+	// descendants, "0" means it covers only its own tasks.
+	cgroupV1HierarchyOn  = "1"
+	cgroupV1HierarchyOff = "0"
+
+	procSelfCgroup = "proc/self/cgroup"
 )
 
 // cgroupV1UnlimitedThreshold guards against the cgroup v1 "unlimited" sentinel,
@@ -226,9 +231,9 @@ func cgroupV1Hierarchical(root, sub string) (applies, exact bool) {
 		return false, false
 	}
 	switch strings.TrimSpace(data) {
-	case "1":
+	case cgroupV1HierarchyOn:
 		return true, true
-	case "0":
+	case cgroupV1HierarchyOff:
 		return false, true
 	default:
 		return false, false

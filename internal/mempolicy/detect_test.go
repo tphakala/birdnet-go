@@ -76,7 +76,7 @@ func TestDetectCgroupLimit(t *testing.T) {
 	v2Docker := filepath.Join(cgroupV2Base, "docker", "abc123", cgroupV2File)
 	v2DockerParent := filepath.Join(cgroupV2Base, "docker", cgroupV2File)
 	v1Docker := filepath.Join(cgroupV1MemBase, "docker", "abc123", cgroupV1File)
-	v1PodUseHierarchy := filepath.Join(cgroupV1MemBase, "pod", "memory.use_hierarchy")
+	v1PodUseHierarchy := filepath.Join(cgroupV1MemBase, "pod", cgroupV1UseHierarchyFile)
 
 	tests := []struct {
 		name      string
