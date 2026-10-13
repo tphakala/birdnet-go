@@ -124,6 +124,44 @@ func TestDetectCgroupLimit(t *testing.T) {
 			wantLimit: limit256, wantExact: true,
 		},
 		{
+			name: "v2 numeric leaf under a max ancestor keeps the leaf limit",
+			files: map[string]string{
+				procSelfCgroup: "0::/pod/container\n",
+				filepath.Join(cgroupV2Base, "pod", "container", cgroupV2File): "268435456\n",
+				filepath.Join(cgroupV2Base, "pod", cgroupV2File):              "max\n",
+			},
+			wantLimit: limit256, wantExact: true,
+		},
+		{
+			name: "v2 smaller leaf under a larger ancestor",
+			files: map[string]string{
+				procSelfCgroup: "0::/pod/container\n",
+				filepath.Join(cgroupV2Base, "pod", "container", cgroupV2File): "134217728\n",
+				filepath.Join(cgroupV2Base, "pod", cgroupV2File):              "268435456\n",
+			},
+			wantLimit: limit128, wantExact: true,
+		},
+		{
+			name: "v2 larger leaf under a smaller ancestor",
+			files: map[string]string{
+				procSelfCgroup: "0::/pod/container\n",
+				filepath.Join(cgroupV2Base, "pod", "container", cgroupV2File): "268435456\n",
+				filepath.Join(cgroupV2Base, "pod", cgroupV2File):              "134217728\n",
+			},
+			wantLimit: limit128, wantExact: true,
+		},
+		{
+			name:      "v2 unreadable leaf under a numeric ancestor keeps walking",
+			files:     map[string]string{procSelfCgroup: "0::/docker/abc123\n", v2DockerParent: "268435456\n"},
+			dirs:      []string{v2Docker},
+			wantLimit: limit256, wantExact: false,
+		},
+		{
+			name:      "v1 numeric subtree under a sentinel root keeps the subtree limit",
+			files:     map[string]string{procSelfCgroup: "7:memory:/docker/abc123\n", v1Docker: "134217728\n", cgroupV1MaxPath: v1Sent},
+			wantLimit: limit128, wantExact: true,
+		},
+		{
 			name:      "v2 unreadable leaf",
 			files:     map[string]string{procSelfCgroup: "0::/docker/abc123\n"},
 			dirs:      []string{v2Docker},
