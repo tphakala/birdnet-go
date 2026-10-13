@@ -891,7 +891,8 @@ func (o *Orchestrator) RebuildNameResolver(includedSpecies []string) error {
 }
 
 // scientificNamesFromLabels extracts the scientific-name portion of each
-// "Scientific_Common" label (Perch labels are scientific-only and pass through).
+// "Scientific_Common" label (Perch binomial labels are scientific-only and pass
+// through; a Perch multi-word sound class is kept whole, see SplitSpeciesName).
 func scientificNamesFromLabels(labels []string) []string {
 	out := make([]string, 0, len(labels))
 	for _, label := range labels {

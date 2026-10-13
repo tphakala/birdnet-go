@@ -232,6 +232,19 @@ func TestV2OnlyDatastore_GetSpeciesLastDetectionDateBefore(t *testing.T) {
 		assert.Empty(t, got)
 	})
 
+	t.Run("sound class name does not prefix-match a longer class", func(t *testing.T) {
+		seedDetection(t, ds, "Car", day(9))
+		seedDetection(t, ds, "Car_passing_by", day(12))
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Car", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-09", got)
+
+		got, err = ds.GetSpeciesLastDetectionDateBefore(ctx, "Car_passing_by", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-12", got)
+	})
+
 	t.Run("returns empty for an unknown species", func(t *testing.T) {
 		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Nonexistent species", cutoff)
 		require.NoError(t, err)
@@ -319,6 +332,25 @@ func TestV2OnlyDatastore_GetSpeciesFirstAndLastDetectionTimeBefore(t *testing.T)
 		require.NoError(t, err)
 		assert.Nil(t, first)
 		assert.Nil(t, last)
+	})
+
+	t.Run("sound class name does not prefix-match a longer class", func(t *testing.T) {
+		seedDetection(t, ds, "Car", day(9, 7))
+		seedDetection(t, ds, "Car_passing_by", day(12, 7))
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Car", before)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		require.NotNil(t, last)
+		assert.Equal(t, day(9, 7), *first)
+		assert.Equal(t, day(9, 7), *last)
+
+		first, last, err = ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Car_passing_by", before)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		require.NotNil(t, last)
+		assert.Equal(t, day(12, 7), *first)
+		assert.Equal(t, day(12, 7), *last)
 	})
 
 	t.Run("returns nils for an unknown species", func(t *testing.T) {
