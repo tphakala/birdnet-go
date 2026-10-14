@@ -449,7 +449,7 @@ Source: MIT
 
 ### github.com/tphakala/go-opus
 
-License: https://github.com/tphakala/go-opus/blob/v1.1.0/LICENSE
+License: https://github.com/tphakala/go-opus/blob/v1.2.1/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/tphakala/go-tflite
