@@ -1256,6 +1256,36 @@ describe('Settings Store - saveSection', () => {
       expect(settingsAPI.save).toHaveBeenCalledTimes(2);
     });
 
+    it('a joined save clears an error set during its wait and is saving during its request', async () => {
+      const directRequest = deferred<undefined>();
+      const joinedRequest = deferred<undefined>();
+      vi.mocked(settingsAPI.save)
+        .mockReturnValueOnce(directRequest.promise)
+        .mockReturnValueOnce(joinedRequest.promise);
+
+      // No section save is in flight, so this save sends its request at once.
+      const direct = settingsActions.saveSettings({ notify: false }).catch((e: unknown) => e);
+      await vi.waitFor(() => expect(settingsAPI.save).toHaveBeenCalledTimes(1));
+      const { patch, sectionSave } = holdSectionSave();
+      const joined = settingsActions.saveSettings({ notify: false });
+
+      // The direct save fails while the joined one waits for the section save.
+      directRequest.reject(new Error('direct failed'));
+      await direct;
+      expect(get(settingsStore).error).not.toBeNull();
+
+      patch.resolve({});
+      await sectionSave;
+      await vi.waitFor(() => expect(settingsAPI.save).toHaveBeenCalledTimes(2));
+      expect(get(settingsStore).isSaving).toBe(true);
+      expect(get(settingsStore).error).toBeNull();
+
+      joinedRequest.resolve(undefined);
+      await joined;
+      expect(get(settingsStore).isSaving).toBe(false);
+      expect(get(settingsStore).error).toBeNull();
+    });
+
     it('a call after the snapshot starts its own save', async () => {
       const request = deferred<undefined>();
       vi.mocked(settingsAPI.save).mockReturnValueOnce(request.promise);

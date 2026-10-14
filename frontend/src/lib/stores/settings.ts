@@ -1390,19 +1390,16 @@ let pendingFullSave: { done: Promise<void>; notify: boolean } | null = null;
 
 /**
  * Snapshots formData and sends it to the backend, then marks it saved. Resets isSaving
- * and rethrows on every failure path, including the refusal before a load. Pass
- * `alreadyMarkedSaving` when the caller has already set isSaving and cleared the error.
+ * and rethrows on every failure path, including the refusal before a load.
  */
-async function persistFormData(notify: boolean, alreadyMarkedSaving = false): Promise<void> {
+async function persistFormData(notify: boolean): Promise<void> {
   try {
     const currentState = get(settingsStore);
     if (!currentState.dataLoaded) {
       logger.warn('Refusing to save settings before they have been loaded');
       throw new Error(t('settings.errors.loadFailed'));
     }
-    if (!alreadyMarkedSaving) {
-      settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
-    }
+    settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
 
     // Apply coercion to all sections before saving
     const coercedFormData = { ...currentState.formData };
@@ -1714,7 +1711,7 @@ export const settingsActions = {
       } finally {
         pendingFullSave = null;
       }
-      await persistFormData(pending.notify, true);
+      await persistFormData(pending.notify);
     })();
     return pending.done;
   },
