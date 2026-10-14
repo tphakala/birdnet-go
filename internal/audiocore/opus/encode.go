@@ -6,9 +6,7 @@
 // and the same
 // enhanced-error conventions. Gain is applied in Go before encoding.
 //
-// go-opus is the default encoder for .opus clip export; FFmpeg is used only as a
-// fallback for a clip go-opus cannot carry (see the encoder selection in
-// internal/analysis/processor).
+// go-opus is the only encoder for .opus clip export; there is no FFmpeg path.
 package opus
 
 import (
@@ -39,8 +37,8 @@ const (
 )
 
 // supportedSampleRates are the input rates go-opus accepts. Opus always decodes
-// at 48 kHz; these are the rates its resampler-free input path handles. Any
-// other rate (notably 44100) must stay on FFmpeg, which resamples internally.
+// at 48 kHz; these are the rates its resampler-free input path handles. The
+// caller resamples any other rate (notably 44100) to 48 kHz before encoding.
 var supportedSampleRates = [...]int{8000, 12000, 16000, 24000, 48000}
 
 // Options configures a native Opus export of an in-memory PCM buffer.

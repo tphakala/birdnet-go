@@ -9,18 +9,13 @@
 // produced no log line naming the encoder involved, and the triage that
 // attribution makes possible for saved clips was unavailable for uploads.
 //
-// This is a leaf package with no imports on purpose. The obvious alternative
-// homes both cost more than they are worth for five strings: internal/conf
-// documents its native-encoder gate file as scaffolding with a planned
-// deletion, and the tags outlive the gate; internal/audiocore/ffmpeg already
-// exports the sibling format constants but transitively pulls in datastore,
-// telemetry, notification and alerting, none of which internal/birdweather
-// depends on today.
+// This is a leaf package with no imports on purpose: internal/audiocore/ffmpeg
+// already exports the sibling format constants but transitively pulls in
+// datastore, telemetry, notification and alerting, none of which
+// internal/birdweather depends on today.
 //
 // Deliberately limited to the tags. The routing that picks between them
-// (selectEncoder in the processor) stays where it is until the native AAC/Opus
-// gate is removed and the branching simplifies, so it is moved once rather than
-// twice. These names survive that removal unchanged.
+// (selectEncoder in the processor) stays in the processor.
 package clipenc
 
 const (

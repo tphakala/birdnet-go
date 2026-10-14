@@ -217,9 +217,9 @@ realtime:
       enabled: true       # true to export audio clips containing indentified bird calls
       debug: false        # true to enable audio export debug messages
       path: clips/        # path to audio clip export directory
-      type: wav           # wav, flac, aac, opus, mp3. Formats other than wav and flac require ffmpeg.
+      type: wav           # wav, flac, aac, opus, mp3. All formats are encoded natively; ffmpeg is not required.
       ultrasonictype: flac # wav or flac only; used for bat/ultrasonic captures above 48 kHz (stored losslessly at full source rate)
-      bitrate: 96k        # bitrate for aac and opus exports
+      bitrate: 96k        # bitrate for aac, mp3 and opus exports
       retention:
         policy: usage     # retention policy: none, age or usage
         maxage: 30d       # age policy: maximum age of clips to keep before starting evictions

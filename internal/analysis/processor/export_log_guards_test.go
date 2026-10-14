@@ -223,11 +223,11 @@ func TestResampleFailureLogsOncePerRatePair(t *testing.T) {
 	resetExportLogGuards(t)
 
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
-	// An odd byte count cannot be whole int16 samples, so ResampleBytes rejects
-	// it. The rate is above conf.SampleRate so resolveExportParams takes the
-	// resampling branch rather than passing the clip through.
-	a.pcmData = []byte{0x01, 0x02, 0x03}
-	a.sourceSampleRate = conf.SampleRate * 2
+	// 100 Hz is outside the resampler's ratio range to 48 kHz, so the upsample
+	// fails deterministically. (An odd byte count no longer fails: the lossy
+	// formats trim a trailing partial sample first.)
+	const unresamplableRate = 100
+	a.sourceSampleRate = unresamplableRate
 
 	for range 4 {
 		// resolveExportParams returns no error; a failed resample is reported
@@ -236,7 +236,7 @@ func TestResampleFailureLogsOncePerRatePair(t *testing.T) {
 		_, _, _ = a.resolveExportParams(filepath.Join(t.TempDir(), "clip.mp3"))
 		// resolveExportParams rewrites sourceSampleRate only on success; on the
 		// failure path under test it stays put, so the loop keeps re-entering.
-		a.sourceSampleRate = conf.SampleRate * 2
+		a.sourceSampleRate = unresamplableRate
 	}
 
 	assert.Equal(t, 1, countLines(t, logs.String(), "audio_export_resample"),
