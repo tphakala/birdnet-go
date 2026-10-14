@@ -111,6 +111,7 @@ var goldenRoutes = []string{
 	"GET /api/v2/range/status",
 	"GET /api/v2/settings",
 	"GET /api/v2/settings/:section",
+	"GET /api/v2/settings/connection",
 	"GET /api/v2/settings/dashboard",
 	"GET /api/v2/settings/imageproviders",
 	"GET /api/v2/settings/locales",

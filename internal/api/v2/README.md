@@ -253,16 +253,26 @@ player or download.
 
 ### Settings (`settings.go`)
 
-| Method | Route                      | Handler                 | Auth | Description                                                         |
-| ------ | -------------------------- | ----------------------- | ---- | ------------------------------------------------------------------- |
-| GET    | `/settings`                | `GetAllSettings`        | ✅   | Get all configuration settings                                      |
-| GET    | `/settings/locales`        | `GetLocales`            | ✅   | Get available locales                                               |
-| GET    | `/settings/imageproviders` | `GetImageProviders`     | ✅   | Get image provider options                                          |
-| GET    | `/settings/systemid`       | `GetSystemID`           | ✅   | Get system identifier                                               |
-| GET    | `/settings/dashboard`      | `GetDashboardSettings`  | ❌   | Get dashboard display preferences (public, non-sensitive)           |
-| GET    | `/settings/:section`       | `GetSectionSettings`    | ✅   | Get specific settings section (other sections remain protected)     |
-| PUT    | `/settings`                | `UpdateSettings`        | ✅   | Update all settings                                                 |
-| PATCH  | `/settings/:section`       | `UpdateSectionSettings` | ✅   | Update settings section (writes to `/dashboard` still require auth) |
+| Method | Route                      | Handler                 | Auth | Description                                                               |
+| ------ | -------------------------- | ----------------------- | ---- | ------------------------------------------------------------------------- |
+| GET    | `/settings`                | `GetAllSettings`        | ✅   | Get all configuration settings                                            |
+| GET    | `/settings/locales`        | `GetLocales`            | ✅   | Get available locales                                                     |
+| GET    | `/settings/imageproviders` | `GetImageProviders`     | ✅   | Get image provider options                                                |
+| GET    | `/settings/systemid`       | `GetSystemID`           | ✅   | Get system identifier                                                     |
+| GET    | `/settings/connection`     | `GetConnectionCheck`    | ✅   | Classify the requester's own connection against `security.trustedProxies` |
+| GET    | `/settings/dashboard`      | `GetDashboardSettings`  | ❌   | Get dashboard display preferences (public, non-sensitive)                 |
+| GET    | `/settings/:section`       | `GetSectionSettings`    | ✅   | Get specific settings section (other sections remain protected)           |
+| PUT    | `/settings`                | `UpdateSettings`        | ✅   | Update all settings                                                       |
+| PATCH  | `/settings/:section`       | `UpdateSectionSettings` | ✅   | Update settings section (writes to `/dashboard` still require auth)       |
+
+The `GET /settings/connection` endpoint tells the requester how their own connection relates to the saved `security.trustedProxies` list, for the Reverse proxy card on the Security settings page. It is read-only and describes only the current request: it returns no other client's data and echoes no header values. It uses the same classifier (`proxytrust.Checker.Classify`) as the subnet bypass log notices, so it agrees with the authentication decision, and it reads the settings on every request, so a save applies on the next check without a restart. The response is `Cache-Control: no-store` and carries `status`, `peerAddress`, `hasForwardedHeaders`, `peerIsTrustedProxy`, `verifiedClientAddress` (the address the authentication decision uses, `""` when none could be verified), `peerIsCloudflareEdge` and `cloudflarePresetWouldVerify` (listing the peer together with the `cloudflare` preset would verify headers that currently do not verify). `status` is one of:
+
+- `direct`: no client-IP header, the peer is the client.
+- `trusted_proxy`: the peer is a listed proxy and one client address was verified.
+- `trusted_proxy_unverified`: the peer is a listed proxy but its headers could not be verified (a listed range that also holds clients, a proxy that does not append `X-Forwarded-For` or overwrite `X-Real-IP`, conflicting or repeated headers, a `Forwarded`-only header).
+- `untrusted_public_proxy`: a public peer sent client-IP headers; it is never offered for one-click trust.
+- `untrusted_proxy`: a loopback, link-local, private or CGNAT peer sent client-IP headers and listing it would verify them.
+- `untrusted_proxy_unverifiable`: client-IP headers were sent that listing the peer would not verify, or the peer address could not be parsed.
 
 The `GET /settings/dashboard` endpoint is intentionally public so that unauthenticated guests can render the SPA dashboard (species summary limit, layout, locale, thumbnails). The Dashboard section contains no secrets, tokens, or PII, and the layout is already exposed via `/app/config`. All mutations (PATCH) on the dashboard section remain auth-protected.
 

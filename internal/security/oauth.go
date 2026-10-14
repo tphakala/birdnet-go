@@ -250,8 +250,10 @@ func (s *OAuth2Server) CurrentSettings() *conf.Settings {
 // throttled Info notice naming the peer when forwarded headers kept it from
 // finding an address: one for an unlisted proxy that listing would fix
 // (unverifiedBypassPeer), another for a listed proxy whose headers cannot be
-// verified (unverifiedListedProxy). A nil request has no verifiable
-// address.
+// verified (unverifiedListedProxy). Both notices take their decision from
+// proxytrust.Checker.Classify, the classifier the settings connection check
+// also uses, and the request is classified once. A nil request has no
+// verifiable address.
 func (s *OAuth2Server) authClientIP(settings *conf.Settings, r *http.Request) net.IP {
 	if r == nil {
 		return nil
@@ -260,12 +262,15 @@ func (s *OAuth2Server) authClientIP(settings *conf.Settings, r *http.Request) ne
 	if ip := checker.AuthClientIP(r); ip != nil {
 		return ip
 	}
-	if peer, ok := unverifiedBypassPeer(settings, checker, r); ok {
+	if !bypassNoticeApplies(settings) {
+		return nil
+	}
+	conn := checker.Classify(r)
+	if peer, ok := unverifiedBypassPeerFor(&conn); ok {
 		s.logThrottledInfo(unverifiedClientIPLogKey,
 			"Subnet bypass skipped: forwarded client-IP headers came from a peer not listed in security.trustedproxies; if this peer is your reverse proxy, add it there",
 			unverifiedClientIPLogInterval, logger.String("peer", peer))
-	}
-	if peer, ok := unverifiedListedProxy(settings, checker, r); ok {
+	} else if peer, ok := unverifiedListedProxyFor(&conn); ok {
 		s.logThrottledInfo(listedProxyUnverifiedLogKey,
 			"Subnet bypass skipped: forwarded client-IP headers from a trusted proxy could not be verified: they disagree, repeat a single-value header, carry a malformed or loopback address or a Forwarded header, or every forwarded hop is itself listed in security.trustedproxies",
 			unverifiedClientIPLogInterval, logger.String("peer", peer))
@@ -296,19 +301,6 @@ const unverifiedClientIPLogKey = "subnet-bypass-unverified-client-ip"
 // notice so one cannot hide the other.
 const listedProxyUnverifiedLogKey = "subnet-bypass-listed-proxy-unverified"
 
-// cgnatCIDR is the shared address space of RFC 6598, used by carrier NAT and
-// Tailscale, where a reverse proxy in front of LAN clients can also sit.
-const cgnatCIDR = "100.64.0.0/10"
-
-// cgnatRange is cgnatCIDR parsed once.
-var cgnatRange = func() *net.IPNet {
-	_, network, err := net.ParseCIDR(cgnatCIDR)
-	if err != nil {
-		panic(err)
-	}
-	return network
-}()
-
 // unverifiedClientIPLogInterval is the minimum time between two unverified
 // forwarded address notices.
 const unverifiedClientIPLogInterval = 10 * time.Minute
@@ -316,54 +308,61 @@ const unverifiedClientIPLogInterval = 10 * time.Minute
 // unverifiedBypassPeer returns the connection peer when its forwarded client-IP
 // headers were ignored only because it is not a configured proxy, which is the
 // one case where adding it to security.trustedproxies is the right advice. It
-// requires the conditions of bypassNoticePeer, a peer that checker does not
-// list, a loopback, link-local, private or CGNAT peer (where a reverse proxy in
-// front of bypass clients sits; never a public scanner), and headers that a
-// checker also listing the peer would verify. Callers use it only after
-// authClientIP found no verifiable address.
+// requires the notice gate (bypassNoticeApplies) and that
+// proxytrust.Checker.Classify reports proxytrust.StatusUntrustedProxy: a
+// loopback, link-local, private or CGNAT peer that checker does not list
+// (where a reverse proxy in front of bypass clients sits; never a public
+// scanner) and whose headers a checker also listing the peer would verify.
+// Callers use it only after authClientIP found no verifiable address.
 func unverifiedBypassPeer(settings *conf.Settings, checker *proxytrust.Checker, r *http.Request) (string, bool) {
-	peerIP := bypassNoticePeer(settings, r)
-	if peerIP == nil || checker.IsConfiguredProxy(peerIP) {
+	if !bypassNoticeApplies(settings) {
 		return "", false
 	}
-	if !peerIP.IsLoopback() && !peerIP.IsLinkLocalUnicast() && !peerIP.IsPrivate() && !cgnatRange.Contains(peerIP) {
+	conn := checker.Classify(r)
+	return unverifiedBypassPeerFor(&conn)
+}
+
+// unverifiedBypassPeerFor is unverifiedBypassPeer for an already classified
+// connection, once the notice gate has been checked.
+func unverifiedBypassPeerFor(conn *proxytrust.Connection) (string, bool) {
+	if conn.Status != proxytrust.StatusUntrustedProxy {
 		return "", false
 	}
-	listed := append(slices.Clone(settings.Security.TrustedProxies), peerIP.String())
-	if proxytrust.NewChecker(listed).AuthClientIP(r) == nil {
-		return "", false
-	}
-	return peerIP.String(), true
+	return conn.Peer.String(), true
 }
 
 // unverifiedListedProxy returns the connection peer when it is a configured
 // proxy whose forwarded headers could not be verified (they disagree, repeat a
 // single-value header, are malformed, name loopback, include Forwarded, or
 // every hop is itself a configured proxy), which a client may also cause by
-// sending forged copies through a correctly configured proxy,
-// under the conditions of bypassNoticePeer. Callers use it only after
-// authClientIP found no verifiable address.
+// sending forged copies through a correctly configured proxy. It requires the
+// notice gate (bypassNoticeApplies) and that proxytrust.Checker.Classify
+// reports proxytrust.StatusTrustedProxyUnverified. Unlike a bare "peer is
+// listed and sent headers" test it reports nothing for a request whose headers
+// verified; its only caller runs it after authClientIP found no verifiable
+// address, where the two agree.
 func unverifiedListedProxy(settings *conf.Settings, checker *proxytrust.Checker, r *http.Request) (string, bool) {
-	peerIP := bypassNoticePeer(settings, r)
-	if peerIP == nil || !checker.IsConfiguredProxy(peerIP) {
+	if !bypassNoticeApplies(settings) {
 		return "", false
 	}
-	return peerIP.String(), true
+	conn := checker.Classify(r)
+	return unverifiedListedProxyFor(&conn)
 }
 
-// bypassNoticePeer returns the parseable connection peer of r when a subnet
-// bypass notice can apply: the bypass is enabled, an authentication provider is
-// configured (otherwise no login is asked for anyway) and r carries a
-// client-IP header. Otherwise it returns nil.
-func bypassNoticePeer(settings *conf.Settings, r *http.Request) net.IP {
-	if settings == nil || !settings.Security.AllowSubnetBypass.Enabled || !settings.IsAuthProviderConfigured() {
-		return nil
+// unverifiedListedProxyFor is unverifiedListedProxy for an already classified
+// connection, once the notice gate has been checked.
+func unverifiedListedProxyFor(conn *proxytrust.Connection) (string, bool) {
+	if conn.Status != proxytrust.StatusTrustedProxyUnverified {
+		return "", false
 	}
-	if !proxytrust.HasClientIPHeader(r.Header) {
-		return nil
-	}
-	peerIP, _ := proxytrust.PeerAddr(r)
-	return peerIP
+	return conn.Peer.String(), true
+}
+
+// bypassNoticeApplies reports whether a subnet bypass notice can apply: the
+// bypass is enabled and an authentication provider is configured (otherwise no
+// login is asked for anyway).
+func bypassNoticeApplies(settings *conf.Settings) bool {
+	return settings != nil && settings.Security.AllowSubnetBypass.Enabled && settings.IsAuthProviderConfigured()
 }
 
 // For testing purposes

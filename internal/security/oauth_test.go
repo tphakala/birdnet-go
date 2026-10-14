@@ -1870,6 +1870,56 @@ func TestUnverifiedBypassPeer(t *testing.T) {
 	}
 }
 
+// TestUnverifiedListedProxy pins when a listed proxy's unverifiable headers are
+// reported: the same gate as the unlisted-peer notice, a peer the checker lists,
+// and headers that did not verify.
+func TestUnverifiedListedProxy(t *testing.T) {
+	t.Parallel()
+
+	enabled := &conf.Settings{}
+	enabled.Security.AllowSubnetBypass.Enabled = true
+	enabled.Security.BasicAuth.Enabled = true
+	disabled := &conf.Settings{}
+	disabled.Security.BasicAuth.Enabled = true
+	noAuth := &conf.Settings{}
+	noAuth.Security.AllowSubnetBypass.Enabled = true
+
+	const listedPeer = "172.25.5.9"
+	listed := []string{listedPeer}
+
+	tests := []struct {
+		name           string
+		settings       *conf.Settings
+		trustedProxies []string
+		header         string
+		value          string
+		wantPeer       string // "" means no notice
+	}{
+		{name: "listed peer with an empty X-Real-IP", settings: enabled, trustedProxies: listed, header: echo.HeaderXRealIP, wantPeer: listedPeer},
+		{name: "listed peer sending only Forwarded", settings: enabled, trustedProxies: listed, header: "Forwarded", value: "for=192.168.1.20", wantPeer: listedPeer},
+		{name: "listed peer whose headers verify", settings: enabled, trustedProxies: listed, header: echo.HeaderXForwardedFor, value: "192.168.1.20"},
+		{name: "bypass disabled", settings: disabled, trustedProxies: listed, header: echo.HeaderXRealIP},
+		{name: "no authentication provider configured", settings: noAuth, trustedProxies: listed, header: echo.HeaderXRealIP},
+		{name: "nil settings", trustedProxies: listed, header: echo.HeaderXRealIP},
+		{name: "unlisted peer", settings: enabled, header: echo.HeaderXRealIP},
+		{name: "no client-IP header", settings: enabled, trustedProxies: listed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			req.RemoteAddr = net.JoinHostPort(listedPeer, "40000")
+			if tt.header != "" {
+				req.Header[http.CanonicalHeaderKey(tt.header)] = []string{tt.value}
+			}
+			peer, ok := unverifiedListedProxy(tt.settings, proxytrust.NewChecker(tt.trustedProxies), req)
+			assert.Equal(t, tt.wantPeer != "", ok)
+			assert.Equal(t, tt.wantPeer, peer)
+		})
+	}
+}
+
 // TestAuthClientIPReportsUnverifiedPeerThrottled verifies authClientIP records
 // the unverified forwarded address notice through the throttle, once per
 // interval, and records nothing when the address is verified or the bypass is
