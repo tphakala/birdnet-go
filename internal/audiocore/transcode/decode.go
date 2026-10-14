@@ -160,16 +160,27 @@ func decodeSource(ctx context.Context, src *source, win *window, fileSize int64,
 		wantFrames = min(src.totalFrames, maxFrames+1)
 	}
 
-	limit := readLimit(maxBytes, frameBytes, wantFrames)
-	data, err := positionAndRead(ctx, src, startFrame, frameBytes, win != nil, limit, fileSize)
-	if err != nil && src.rewind != nil && seekFallbackAllowed(err) && src.rewind() {
+	// A whole-file read is capped one frame past maxBytes so an overlong source is
+	// detected rather than silently truncated.
+	limit := int64(maxBytes) + int64(frameBytes)
+	if wantFrames >= 0 {
+		limit = min(limit, wantFrames*int64(frameBytes))
+	}
+	positionAndRead := func() ([]byte, error) {
+		if err := positionSource(ctx, src, startFrame, frameBytes, win != nil); err != nil {
+			return nil, err
+		}
+		return readLimited(ctx, src.reader, int(limit), initialCapacity(src, fileSize, limit, frameBytes), frameBytes)
+	}
+	data, err := positionAndRead()
+	if err != nil && src.rewind != nil && src.seek != nil && startFrame != 0 && seekFallbackAllowed(err) {
 		// The seek path failed on a source the forward decoder may still serve
 		// (the seekable decoder rejects an access unit with no audio element that
 		// the forward decoder skips), so no seek-path failure may fail a request
 		// the forward path serves. Positioning is retried once, by discarding.
+		src.rewind()
 		src.seek = nil
-		src.rewind = nil
-		data, err = positionAndRead(ctx, src, startFrame, frameBytes, win != nil, limit, fileSize)
+		data, err = positionAndRead()
 	}
 	if err != nil {
 		return nil, err
@@ -184,25 +195,6 @@ func decodeSource(ctx context.Context, src *source, win *window, fileSize int64,
 		return nil, wrapSentinel(ErrUndecodableSource, nil, "decode_read", "source holds no audio", errors.CategoryAudio)
 	}
 	return &pcmBuffer{Data: data, SampleRate: src.sampleRate, Channels: src.channels}, nil
-}
-
-// readLimit is the most bytes decodeSource reads. A whole-file read is capped one
-// frame past maxBytes so an overlong source is detected rather than silently
-// truncated; a window is capped at its own length.
-func readLimit(maxBytes, frameBytes int, wantFrames int64) int64 {
-	limit := int64(maxBytes) + int64(frameBytes)
-	if wantFrames >= 0 {
-		limit = min(limit, wantFrames*int64(frameBytes))
-	}
-	return limit
-}
-
-// positionAndRead positions src at startFrame and reads up to limit bytes.
-func positionAndRead(ctx context.Context, src *source, startFrame int64, frameBytes int, windowed bool, limit, fileSize int64) ([]byte, error) {
-	if err := positionSource(ctx, src, startFrame, frameBytes, windowed); err != nil {
-		return nil, err
-	}
-	return readLimited(ctx, src.reader, int(limit), initialCapacity(src, fileSize, limit, frameBytes), frameBytes)
 }
 
 // seekFallbackAllowed reports whether a failed seek may be retried on the

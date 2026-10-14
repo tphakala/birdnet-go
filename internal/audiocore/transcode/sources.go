@@ -82,10 +82,11 @@ type source struct {
 	// returning a frame below the target. It is nil for decoders without a seek;
 	// those are positioned by discarding.
 	seek func(frame int64) (int64, error)
-	// rewind abandons a seek and returns the reader to the start of the source,
-	// to be positioned by discarding from then on. It reports whether it did, and
-	// is nil for sources that never fall back.
-	rewind func() bool
+	// rewind abandons a failed seek and returns the reader to the start of the
+	// source, to be positioned by discarding from then on. It is nil for sources
+	// that never fall back, and is called only after a seek for a start other than
+	// frame 0, before anything else reads the reader.
+	rewind func()
 	// expansion bounds the initial buffer relative to the file size.
 	expansion int64
 }
@@ -257,16 +258,16 @@ func openOpus(f *os.File) (*source, error) {
 // untouched so a failed seek can fall back to decoding from the start.
 type m4aReader struct {
 	// fwd is the forward decoder, which emits nothing for an access unit with no
-	// audio element.
+	// audio element. It is read only while seeked is nil, and a seek precedes any
+	// read of a window that starts after frame 0, so a failed seek leaves it at
+	// the start of the file.
 	fwd io.Reader
-	// fwdUsed records that fwd has been read, so it is no longer at the start.
-	fwdUsed bool
 	// seeked is the seekable decoder, set once a seek has positioned it.
 	seeked *aacm4a.Decoder
-	// seekTried records that a seek was attempted, successful or not.
-	seekTried bool
 
 	file *os.File
+	// fileSize is the size of file in bytes.
+	fileSize int64
 	// skip is the count of leading decoded frames that are priming, bounded by the
 	// decoded length of the track.
 	skip int64
@@ -282,7 +283,6 @@ func (r *m4aReader) Read(p []byte) (int, error) {
 	if r.seeked != nil {
 		return r.seeked.Read(p)
 	}
-	r.fwdUsed = true
 	return r.fwd.Read(p)
 }
 
@@ -292,21 +292,16 @@ func (r *m4aReader) Read(p []byte) (int, error) {
 // to, skip+frame; the seekable decoder starts at the access unit holding it and
 // the remainder of that unit is discarded.
 func (r *m4aReader) seek(frame int64) (int64, error) {
-	r.seekTried = true
 	// No overflow: skip is bounded by frameCount*aaccodec.FrameSize, and frame by
 	// maxWindowFrames.
 	pos := r.skip + frame
 	unit := pos / aaccodec.FrameSize
-	if unit < 0 || unit >= r.frameCount {
+	if unit >= r.frameCount {
 		return 0, nil
-	}
-	info, err := r.file.Stat()
-	if err != nil {
-		return 0, err
 	}
 	// A section reader reads through ReadAt, so this decoder leaves the file
 	// offset, and with it the forward decoder, alone for the fallback.
-	dec, _, err := aacm4a.NewSeekableDecoder(io.NewSectionReader(r.file, 0, info.Size()), m4a.WithMaxBoxBuffer(maxM4ABoxBytes))
+	dec, _, err := aacm4a.NewSeekableDecoder(io.NewSectionReader(r.file, 0, r.fileSize), m4a.WithMaxBoxBuffer(maxM4ABoxBytes))
 	if err != nil {
 		return 0, err
 	}
@@ -329,15 +324,9 @@ func (r *m4aReader) seek(frame int64) (int64, error) {
 }
 
 // rewind abandons the seekable decoder and returns to the forward decoder, which
-// has to be untouched: it refuses when no seek was attempted or the forward
-// decoder has been read.
-func (r *m4aReader) rewind() bool {
-	if !r.seekTried || r.fwdUsed {
-		return false
-	}
+// no read has touched since the seek was the first step of a window.
+func (r *m4aReader) rewind() {
 	r.seeked = nil
-	r.seekTried = false
-	return true
 }
 
 // openM4A opens an AAC-LC source in an MP4 container. The forward decoder is
@@ -373,9 +362,14 @@ func openM4A(f *os.File) (*source, error) {
 	// clamped to that.
 	frameCount := int64(info.FrameCount)
 	skip := min(max(info.EncoderDelay, 0), frameCount*aaccodec.FrameSize)
+	fileInfo, err := f.Stat()
+	if err != nil {
+		return nil, wrapError(err, errors.CategoryFileIO, "decode_open_m4a")
+	}
 	reader := &m4aReader{
 		fwd:        dec,
 		file:       f,
+		fileSize:   fileInfo.Size(),
 		skip:       skip,
 		frameCount: frameCount,
 		frameBytes: pcmInfo.Channels * bytesPerSample,

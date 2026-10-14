@@ -35,8 +35,8 @@ func EncoderTag(format string) string {
 
 // EncoderAcceptsRate reports whether the native encoder for format can carry audio
 // of this shape. WAV carries any rate; FLAC carries rates up to flacpcm.MaxSampleRate;
-// AAC, MP3 and Opus accept only the rates their encoders support. Clip export and
-// on-demand transcoding share this rule to decide whether a clip must be resampled to conf.SampleRate first.
+// AAC, MP3 and Opus accept only the rates their encoders support. Clip export and on-demand transcoding share this
+// rule to decide whether a clip must be resampled to conf.SampleRate first.
 func EncoderAcceptsRate(format string, sampleRate, bitDepth, channels int) bool {
 	switch format {
 	case audioformat.AAC:
