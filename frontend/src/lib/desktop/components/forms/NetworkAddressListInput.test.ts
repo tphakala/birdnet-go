@@ -430,6 +430,60 @@ describe('NetworkAddressListInput', () => {
       expect(input()).toHaveAttribute('aria-invalid', 'true');
     });
 
+    it('hides an invalid report when a parent clears the draft without a key', async () => {
+      const { rerender } = renderControlled();
+      await typeAndSubmit('abc');
+      expect(alertText()).toContain('errors.invalid');
+
+      await rerender({ draft: '' });
+
+      expect(alertText()).toBe('');
+      expect(input()).not.toHaveAttribute('aria-invalid', 'true');
+      expect(input()).not.toHaveClass('input-error');
+    });
+
+    it('hides a duplicate report when a parent replaces the list without a key', async () => {
+      const { rerender } = renderControlled({ values: ['10.0.0.1', '10.0.0.2'] });
+      await typeAndSubmit('10.0.0.1');
+      expect(alertText()).toContain('errors.duplicate');
+
+      await rerender({ values: ['10.0.0.2'] });
+
+      expect(alertText()).toBe('');
+    });
+
+    it('does not bring a report back when the parent restores the list it replaced', async () => {
+      const { rerender } = renderControlled({ values: ['10.0.0.1', '10.0.0.2'] });
+      await typeAndSubmit('abc');
+      expect(alertText()).toContain('errors.invalid');
+
+      await rerender({ values: ['10.0.0.2'] });
+      await rerender({ values: ['10.0.0.1', '10.0.0.2'] });
+
+      expect(alertText()).toBe('');
+      expect(input()).not.toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('does not bring a report back when reportResetKey returns to an earlier value', async () => {
+      const { rerender } = renderControlled({ values: ['10.0.0.1'], reportResetKey: 0 });
+      await typeAndSubmit('10.0.0.1');
+      expect(alertText()).toContain('errors.duplicate');
+
+      await rerender({ reportResetKey: 1 });
+      await rerender({ reportResetKey: 0 });
+
+      expect(alertText()).toBe('');
+    });
+
+    it('keeps the report when a NaN reportResetKey is passed again', async () => {
+      const { rerender } = renderControlled({ values: ['10.0.0.1'], reportResetKey: NaN });
+      await typeAndSubmit('10.0.0.1');
+
+      await rerender({ values: ['10.0.0.1'], draft: '', reportResetKey: NaN });
+
+      expect(alertText()).toContain('errors.duplicate');
+    });
+
     it('keeps the report when reportResetKey is set but does not change', async () => {
       const { rerender } = renderControlled({ values: ['10.0.0.1'], reportResetKey: 3 });
       await typeAndSubmit('10.0.0.1');
