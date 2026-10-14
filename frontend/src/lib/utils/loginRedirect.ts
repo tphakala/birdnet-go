@@ -90,9 +90,8 @@ export function resolveLoginRedirect(search: string): string {
     return DEFAULT_LOGIN_TARGET;
   }
   // The raw-path check above rejects '//', backslashes and encoded separators and dots, and
-  // new URL resolves literal dot segments, so the first three checks below are defense in
-  // depth. The control character and percent escape checks are the only ones that reject
-  // an encoded control character and double encoding.
+  // new URL resolves literal dot segments; the decoded path is checked again as defense in
+  // depth.
   if (
     decoded.includes('//') ||
     decoded.includes('\\') ||
