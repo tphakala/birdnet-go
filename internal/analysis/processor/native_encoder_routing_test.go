@@ -431,6 +431,23 @@ var lossyNativeFormats = []struct {
 	{ffmpeg.FormatOpus, ".opus", clipenc.NativeOpus},
 }
 
+// Fixture values shared by the odd-length export tests.
+const (
+	// testPCMFrameBytes is the size of one interleaved PCM frame in the export
+	// pipeline, the unit trimPartialSample trims to.
+	testPCMFrameBytes = conf.BitDepth / 8 * conf.NumChannels
+	// strayPCMByte is appended to a whole-frame buffer to leave a partial frame.
+	strayPCMByte = 0x7f
+	// testSubAnalysisRate is a capture rate below the analysis rate.
+	testSubAnalysisRate = 22050
+	// testUltrasonicRate is a capture rate above the analysis rate.
+	testUltrasonicRate = 96000
+	// testSineSeconds, testSineFreqHz and testSineAmp shape the sine fixture.
+	testSineSeconds = 0.5
+	testSineFreqHz  = 1000
+	testSineAmp     = 8000
+)
+
 // losslessNativeFormats lists the lossless clip export formats with their file
 // extension and native encoder tag, mirroring lossyNativeFormats.
 var losslessNativeFormats = []struct {
@@ -478,7 +495,7 @@ func TestResolveExportParams_OddLengthPCMResamplesAfterTrimForLossy(t *testing.T
 			t.Run(fmt.Sprintf("%s_ffmpeg=%q", lf.format, ffmpegPath), func(t *testing.T) {
 				a := newExportTestAction(t, "96k")
 				a.pcmData = append(sinePCMAtRate(22050, 0.5, 1000, 8000), 0x7f)
-				require.Equal(t, 1, len(a.pcmData)%2)
+				require.Equal(t, 1, len(a.pcmData)%testPCMFrameBytes)
 				a.sourceSampleRate = 22050
 				a.Settings.Realtime.Audio.Export.Type = lf.format
 				a.Settings.Realtime.Audio.FfmpegPath = ffmpegPath
@@ -487,7 +504,7 @@ func TestResolveExportParams_OddLengthPCMResamplesAfterTrimForLossy(t *testing.T
 				rate, format, path := a.resolveExportParams(out)
 				require.Equal(t, conf.SampleRate, rate)
 				require.Equal(t, lf.format, format)
-				require.Equal(t, 0, len(a.pcmData)%2)
+				require.Equal(t, 0, len(a.pcmData)%testPCMFrameBytes)
 
 				enc, err := a.encodeClip(t.Context(), rate, format, path)
 				require.NoError(t, err)
@@ -503,14 +520,14 @@ func TestResolveExportParams_OddLengthPCMDownsamplesAfterTrimForLossy(t *testing
 		t.Run(lf.format, func(t *testing.T) {
 			a := newExportTestAction(t, "96k")
 			a.pcmData = append(sinePCMAtRate(96000, 0.5, 1000, 8000), 0x7f)
-			require.Equal(t, 1, len(a.pcmData)%2)
+			require.Equal(t, 1, len(a.pcmData)%testPCMFrameBytes)
 			a.sourceSampleRate = 96000
 			a.Settings.Realtime.Audio.Export.Type = lf.format
 
 			rate, format, path := a.resolveExportParams(filepath.Join(t.TempDir(), "clip"+lf.ext))
 			require.Equal(t, conf.SampleRate, rate)
 			require.Equal(t, lf.format, format)
-			require.Equal(t, 0, len(a.pcmData)%2)
+			require.Equal(t, 0, len(a.pcmData)%testPCMFrameBytes)
 
 			enc, err := a.encodeClip(t.Context(), rate, format, path)
 			require.NoError(t, err)
@@ -530,10 +547,10 @@ func TestResolveExportParams_OddLengthPCMEncodesForLossless(t *testing.T) {
 		wantRate int
 	}{
 		{"at the analysis rate", false, conf.SampleRate, conf.SampleRate},
-		{"below the analysis rate", false, 22050, 22050},
-		{"above the analysis rate downsamples", false, 96000, conf.SampleRate},
-		{"bat below the analysis rate", true, 22050, 22050},
-		{"bat above the analysis rate keeps its rate", true, 96000, 96000},
+		{"below the analysis rate", false, testSubAnalysisRate, testSubAnalysisRate},
+		{"above the analysis rate downsamples", false, testUltrasonicRate, conf.SampleRate},
+		{"bat below the analysis rate", true, testSubAnalysisRate, testSubAnalysisRate},
+		{"bat above the analysis rate keeps its rate", true, testUltrasonicRate, testUltrasonicRate},
 	}
 	for _, lf := range losslessNativeFormats {
 		for _, tc := range cases {
@@ -542,8 +559,9 @@ func TestResolveExportParams_OddLengthPCMEncodesForLossless(t *testing.T) {
 				if tc.bat {
 					a.modelName = batModelName
 				}
-				a.pcmData = append(sinePCMAtRate(tc.rate, 0.5, 1000, 8000), 0x7f)
-				require.Equal(t, 1, len(a.pcmData)%2)
+				a.pcmData = append(sinePCMAtRate(tc.rate, testSineSeconds, testSineFreqHz, testSineAmp), strayPCMByte)
+				require.Equal(t, 1, len(a.pcmData)%testPCMFrameBytes)
+				oddLen := len(a.pcmData)
 				a.sourceSampleRate = tc.rate
 				a.Settings.Realtime.Audio.Export.Type = lf.format
 				a.Settings.Realtime.Audio.Export.UltrasonicType = lf.format
@@ -551,7 +569,11 @@ func TestResolveExportParams_OddLengthPCMEncodesForLossless(t *testing.T) {
 				rate, format, path := a.resolveExportParams(filepath.Join(t.TempDir(), "clip"+lf.ext))
 				require.Equal(t, tc.wantRate, rate)
 				require.Equal(t, lf.format, format)
-				require.Equal(t, 0, len(a.pcmData)%2)
+				require.Equal(t, 0, len(a.pcmData)%testPCMFrameBytes)
+				if tc.wantRate == tc.rate {
+					// No resample replaced the buffer, so only the stray byte is gone.
+					require.Len(t, a.pcmData, oddLen-1)
+				}
 
 				enc, err := a.encodeClip(t.Context(), rate, format, path)
 				require.NoError(t, err)
@@ -559,6 +581,28 @@ func TestResolveExportParams_OddLengthPCMEncodesForLossless(t *testing.T) {
 				assert.FileExists(t, path)
 			})
 		}
+	}
+}
+
+// trimPartialSample drops only a trailing partial frame: whole-frame and empty
+// buffers come back unchanged, and nothing beyond the partial frame is cut.
+func TestTrimPartialSample(t *testing.T) {
+	const manyFrames = 10
+	for _, tc := range []struct {
+		name    string
+		in, out int
+	}{
+		{"empty", 0, 0},
+		{"one byte", 1, 0},
+		{"one frame", testPCMFrameBytes, testPCMFrameBytes},
+		{"one frame and a byte", testPCMFrameBytes + 1, testPCMFrameBytes},
+		{"many frames", manyFrames * testPCMFrameBytes, manyFrames * testPCMFrameBytes},
+		{"many frames and a byte", manyFrames*testPCMFrameBytes + 1, manyFrames * testPCMFrameBytes},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := make([]byte, tc.in)
+			assert.Len(t, trimPartialSample(in), tc.out)
+		})
 	}
 }
 
@@ -669,7 +713,7 @@ func TestResolveExportParams_OddLengthPCMAtSupportedRateEncodesForLossy(t *testi
 		t.Run(lf.format, func(t *testing.T) {
 			a := newExportTestAction(t, "96k")
 			a.pcmData = append(sinePCMAtRate(conf.SampleRate, 0.5, 1000, 8000), 0x7f)
-			require.Equal(t, 1, len(a.pcmData)%2)
+			require.Equal(t, 1, len(a.pcmData)%testPCMFrameBytes)
 			a.sourceSampleRate = conf.SampleRate
 			a.Settings.Realtime.Audio.Export.Type = lf.format
 
