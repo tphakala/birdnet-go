@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { get } from 'svelte/store';
+import { tick } from 'svelte';
 import {
   settingsActions,
   settingsStore,
@@ -107,5 +108,38 @@ describe('SettingsPageActions save blocking', () => {
 
     expect(screen.queryByText('settings.actions.validationBlocked')).toBeNull();
     expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+  });
+});
+
+describe('SettingsPageActions reset', () => {
+  afterEach(() => {
+    settingsStore.set(initialState);
+    vi.restoreAllMocks();
+  });
+
+  it('moves focus to Save after Reset removes the Reset button', async () => {
+    makeUnsavedChange();
+    render(SettingsPageActions);
+    const reset = screen.getByRole('button', { name: 'settings.actions.resetAriaLabel' });
+    reset.focus();
+    expect(document.activeElement).toBe(reset);
+
+    await fireEvent.click(reset);
+    await tick();
+
+    expect(screen.queryByRole('button', { name: 'settings.actions.resetAriaLabel' })).toBeNull();
+    expect(document.activeElement).toBe(saveButton());
+    expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('calls onReset once', async () => {
+    const onReset = vi.fn();
+    makeUnsavedChange();
+    render(SettingsPageActions, { props: { onReset } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'settings.actions.resetAriaLabel' }));
+    await tick();
+
+    expect(onReset).toHaveBeenCalledTimes(1);
   });
 });
