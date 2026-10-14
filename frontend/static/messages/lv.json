@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Saglabāt izmaiņas",
       "savingAriaLabel": "Saglabā izmaiņas...",
       "unsavedChanges": "Nesaglabātas izmaiņas",
-      "toolbar": "Iestatījumu darbības"
+      "toolbar": "Iestatījumu darbības",
+      "validationBlocked": "Pirms saglabāšanas izlabojiet iezīmētos laukus."
     },
     "errors": {
       "loadFailed": "Neizdevās ielādēt iestatījumus",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Cloudflare atrodas pirms {peer}. Uzticieties abiem, lai verificētu savu adresi.",
           "cloudflareEdge": "{peer} pieder pie Cloudflare. Ieslēdziet zemāk Uzticēties Cloudflare.",
           "chainHint": "Ja pirms {peer} atrodas cits starpniekserveris, norādiet sarakstā arī to.",
-          "added": "Pievienots sarakstam. Saglabājiet, lai lietotu."
+          "added": "Pievienots sarakstam. Saglabājiet, lai lietotu.",
+          "coveredBy": "Jau ietverts sarakstā esošajā diapazonā {range}. Saglabājiet, lai lietotu.",
+          "selfClientCause": "Starpniekserveris, iespējams, pārsūta savu adresi kā klienta adresi, bieži tāpēc, ka konteinera portu publicēšana slēpj īsto klientu. Novērsiet to konteinera vai starpniekservera tīkla iestatījumos."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Aiz reversā starpniekservera šī apiešana darbojas tikai tad, ja starpniekserveris ir norādīts kā uzticams.",
       "bypassProxyLink": "Iestatīt uzticamos starpniekserverus",
-      "allowedSubnetsEmpty": "Nav papildu apakštīklu. Tikai šī servera paša lokālais tīkls drīkst apiet pieteikšanos."
+      "allowedSubnetsEmpty": "Nav papildu apakštīklu. Tikai šī servera paša lokālais tīkls drīkst apiet pieteikšanos.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} ir nederīgs ieraksts.",
+        "pendingEntry": "{tab}: {field} ir teksts, kas netika pievienots. Nospiediet Enter vai Pievienot, vai notīriet to."
+      }
     },
     "species": {
       "pageLabel": "Sugu iestatījumi",

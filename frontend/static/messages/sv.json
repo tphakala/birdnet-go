@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Spara ändringar",
       "savingAriaLabel": "Sparar ändringar...",
       "unsavedChanges": "Osparade ändringar",
-      "toolbar": "Inställningsåtgärder"
+      "toolbar": "Inställningsåtgärder",
+      "validationBlocked": "Rätta de markerade fälten innan du sparar."
     },
     "errors": {
       "loadFailed": "Kunde inte ladda inställningar",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Cloudflare finns framför {peer}. Lita på båda för att verifiera din adress.",
           "cloudflareEdge": "{peer} tillhör Cloudflare. Aktivera Lita på Cloudflare nedan.",
           "chainHint": "Om en annan proxy finns framför {peer}, lista den också.",
-          "added": "Tillagd i listan. Spara för att tillämpa."
+          "added": "Tillagd i listan. Spara för att tillämpa.",
+          "coveredBy": "Täcks redan av {range} i listan. Spara för att tillämpa.",
+          "selfClientCause": "Proxyn kanske vidarebefordrar sin egen adress som klient, ofta för att containerns portpublicering döljer den verkliga klienten. Åtgärda det i containerns eller proxyns nätverksinställningar."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Bakom en omvänd proxy fungerar detta kringgående endast när proxyn är listad som betrodd.",
       "bypassProxyLink": "Konfigurera betrodda proxys",
-      "allowedSubnetsEmpty": "Inga ytterligare subnät. Endast serverns eget lokala nätverk får kringgå inloggningen."
+      "allowedSubnetsEmpty": "Inga ytterligare subnät. Endast serverns eget lokala nätverk får kringgå inloggningen.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} har en post som inte är giltig.",
+        "pendingEntry": "{tab}: {field} har text som inte lades till. Tryck på Enter eller Lägg till, eller rensa den."
+      }
     },
     "species": {
       "pageLabel": "Artinställningar",

@@ -34,7 +34,7 @@ interface PanelProps {
   loading: boolean;
   error: string | null;
   stale: boolean;
-  peerListed: boolean;
+  peerCoveredBy: string | null;
   cloudflareEnabled: boolean;
   disabled: boolean;
   onRecheck: () => void;
@@ -48,7 +48,7 @@ function renderPanel(overrides: Partial<PanelProps> = {}) {
     loading: false,
     error: null,
     stale: false,
-    peerListed: false,
+    peerCoveredBy: null,
     cloudflareEnabled: false,
     disabled: false,
     onRecheck: vi.fn(),
@@ -115,8 +115,10 @@ describe('ConnectionCheckPanel', () => {
 
   it('moves focus to the added note after Trust', async () => {
     // The page updates the form list synchronously inside onTrust, as the store does
-    let rerenderPanel: (props: { peerListed: boolean }) => Promise<void> = async () => {};
-    const { rerender } = renderPanel({ onTrust: () => void rerenderPanel({ peerListed: true }) });
+    let rerenderPanel: (props: { peerCoveredBy: string | null }) => Promise<void> = async () => {};
+    const { rerender } = renderPanel({
+      onTrust: () => void rerenderPanel({ peerCoveredBy: '172.18.0.1' }),
+    });
     rerenderPanel = rerender;
     const button = trustButton();
     if (!button) throw new Error('Trust button missing');
@@ -132,7 +134,7 @@ describe('ConnectionCheckPanel', () => {
   });
 
   it('replaces the Trust button with the added note once the peer is in the form list', () => {
-    renderPanel({ peerListed: true });
+    renderPanel({ peerCoveredBy: '172.18.0.1' });
 
     expect(trustButton()).toBeNull();
     expect(screen.getByText('settings.security.reverseProxy.check.added')).toBeInTheDocument();
@@ -157,13 +159,31 @@ describe('ConnectionCheckPanel', () => {
   it('shows the added note instead of Trust with Cloudflare when both are in the form', () => {
     renderPanel({
       result: result({ status: 'untrusted_proxy_unverifiable', cloudflarePresetWouldVerify: true }),
-      peerListed: true,
+      peerCoveredBy: '172.18.0.1',
       cloudflareEnabled: true,
     });
 
     expect(trustWithCloudflareButton()).toBeNull();
     expect(screen.getByText('settings.security.reverseProxy.check.added')).toBeInTheDocument();
   });
+
+  it('names the covering range instead of offering Trust when a listed range holds the peer', () => {
+    renderPanel({ peerCoveredBy: '172.18.0.0/16' });
+
+    expect(trustButton()).toBeNull();
+    expect(screen.getByText(/check\.coveredBy/)).toHaveTextContent('172.18.0.0/16');
+    expect(screen.queryByText('settings.security.reverseProxy.check.added')).toBeNull();
+  });
+
+  it.each(['untrusted_proxy_unverifiable', 'trusted_proxy_unverified'] as const)(
+    'lists a proxy forwarding its own address as a cause for %s',
+    status => {
+      renderPanel({ result: result({ status }) });
+      expect(
+        screen.getByText('settings.security.reverseProxy.check.selfClientCause')
+      ).toBeInTheDocument();
+    }
+  );
 
   it('mentions proxy chains for the unverified and unverifiable statuses', () => {
     renderPanel({ result: result({ status: 'untrusted_proxy_unverifiable' }) });

@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Wijzigingen bewaren",
       "savingAriaLabel": "Bewaren ...",
       "unsavedChanges": "Niet opgeslagen wijzigingen",
-      "toolbar": "Instellingenacties"
+      "toolbar": "Instellingenacties",
+      "validationBlocked": "Herstel de gemarkeerde velden voordat u opslaat."
     },
     "errors": {
       "loadFailed": "Instellingen konden niet worden geladen",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Cloudflare bevindt zich vóór {peer}. Vertrouw beide om uw adres te verifiëren.",
           "cloudflareEdge": "{peer} is van Cloudflare. Schakel hieronder Cloudflare vertrouwen in.",
           "chainHint": "Als er zich nog een proxy vóór {peer} bevindt, vermeld deze dan ook.",
-          "added": "Aan de lijst toegevoegd. Sla op om toe te passen."
+          "added": "Aan de lijst toegevoegd. Sla op om toe te passen.",
+          "coveredBy": "Al gedekt door {range} in de lijst. Sla op om toe te passen.",
+          "selfClientCause": "De proxy stuurt mogelijk zijn eigen adres door als client, vaak omdat het publiceren van containerpoorten de echte client verbergt. Los dit op in de netwerkinstellingen van de container of proxy."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Achter een reverse proxy werkt deze omzeiling alleen wanneer de proxy als vertrouwd is vermeld.",
       "bypassProxyLink": "Vertrouwde proxy's instellen",
-      "allowedSubnetsEmpty": "Geen aanvullende subnetten. Alleen het eigen lokale netwerk van deze server mag de login omzeilen."
+      "allowedSubnetsEmpty": "Geen aanvullende subnetten. Alleen het eigen lokale netwerk van deze server mag de login omzeilen.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} bevat een ongeldige invoer.",
+        "pendingEntry": "{tab}: {field} bevat tekst die niet is toegevoegd. Druk op Enter of Toevoegen, of wis de tekst."
+      }
     },
     "species": {
       "pageLabel": "Soortinstellingen",

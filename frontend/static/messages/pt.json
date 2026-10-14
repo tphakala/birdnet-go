@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Salvar alterações",
       "savingAriaLabel": "Salvando alterações...",
       "unsavedChanges": "Alterações não salvas",
-      "toolbar": "Ações de configurações"
+      "toolbar": "Ações de configurações",
+      "validationBlocked": "Corrija os campos destacados antes de guardar."
     },
     "errors": {
       "loadFailed": "Falha ao carregar as configurações",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "A Cloudflare está à frente de {peer}. Confie em ambos para verificar seu endereço.",
           "cloudflareEdge": "{peer} pertence à Cloudflare. Ative a opção Confiar na Cloudflare abaixo.",
           "chainHint": "Se outro proxy estiver à frente de {peer}, liste-o também.",
-          "added": "Adicionado à lista. Salve para aplicar."
+          "added": "Adicionado à lista. Salve para aplicar.",
+          "coveredBy": "Já abrangido por {range} na lista. Guarde para aplicar.",
+          "selfClientCause": "O proxy pode estar a encaminhar o seu próprio endereço como cliente, muitas vezes porque a publicação de portas do contentor esconde o cliente real. Corrija isto na configuração de rede do contentor ou do proxy."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Atrás de um proxy reverso, este contorno só funciona quando o proxy estiver listado como confiável.",
       "bypassProxyLink": "Configurar proxies confiáveis",
-      "allowedSubnetsEmpty": "Nenhuma sub-rede adicional. Apenas a própria rede local deste servidor pode contornar o login."
+      "allowedSubnetsEmpty": "Nenhuma sub-rede adicional. Apenas a própria rede local deste servidor pode contornar o login.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} tem uma entrada que não é válida.",
+        "pendingEntry": "{tab}: {field} tem texto que não foi adicionado. Prima Enter ou Adicionar, ou apague-o."
+      }
     },
     "species": {
       "pageLabel": "Configurações de espécies",

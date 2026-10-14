@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Módosítások mentése",
       "savingAriaLabel": "Módosítások mentése...",
       "unsavedChanges": "Nem mentett változtatások",
-      "toolbar": "Beállítások műveletek"
+      "toolbar": "Beállítások műveletek",
+      "validationBlocked": "Mentés előtt javítsa ki a kiemelt mezőket."
     },
     "errors": {
       "loadFailed": "A beállítások betöltése sikertelen",
@@ -4169,13 +4170,15 @@
           "checking": "Kapcsolat ellenőrzése",
           "error": "A kapcsolatot nem sikerült ellenőrizni.",
           "stale": "Ez az ellenőrzés a mentett beállításokat mutatja. Mentse a módosítások ellenőrzéséhez.",
-          "trust": "Megbízás: {peer}",
+          "trust": "{peer} megbízhatónak jelölése",
           "trustWarning": "Csak akkor bízzon meg ebben ({peer}), ha ez az Ön fordított proxyja, és nem a böngészésre használt gép.",
-          "trustWithCloudflare": "Megbízás: {peer} és Cloudflare",
+          "trustWithCloudflare": "{peer} és a Cloudflare megbízhatónak jelölése",
           "cloudflareInFront": "A Cloudflare a(z) {peer} előtt helyezkedik el. A cím ellenőrzéséhez bízzon meg mindkettőben.",
           "cloudflareEdge": "A(z) {peer} a Cloudflare-hez tartozik. Kapcsolja be alább a Megbízás a Cloudflare-ben beállítást.",
           "chainHint": "Ha egy másik proxy is van a(z) {peer} előtt, azt is adja meg a listában.",
-          "added": "Hozzáadva a listához. Mentse az alkalmazáshoz."
+          "added": "Hozzáadva a listához. Mentse az alkalmazáshoz.",
+          "coveredBy": "A listában szereplő {range} tartomány már lefedi. Mentse az alkalmazáshoz.",
+          "selfClientCause": "Lehet, hogy a proxy a saját címét továbbítja kliensként, gyakran azért, mert a konténer portközzététele elrejti a valódi klienst. Javítsa ezt a konténer vagy a proxy hálózati beállításaiban."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Fordított proxy mögött ez a megkerülés csak akkor működik, ha a proxy megbízhatóként van felsorolva.",
       "bypassProxyLink": "Megbízható proxyk beállítása",
-      "allowedSubnetsEmpty": "Nincsenek további alhálózatok. Csak a szerver saját helyi hálózata kerülheti meg a bejelentkezést."
+      "allowedSubnetsEmpty": "Nincsenek további alhálózatok. Csak a szerver saját helyi hálózata kerülheti meg a bejelentkezést.",
+      "validation": {
+        "invalidEntry": "{tab}: a(z) {field} mezőben érvénytelen bejegyzés van.",
+        "pendingEntry": "{tab}: a(z) {field} mezőben hozzá nem adott szöveg van. Nyomja meg az Entert vagy a Hozzáadás gombot, vagy törölje."
+      }
     },
     "species": {
       "pageLabel": "Faj beállítások",

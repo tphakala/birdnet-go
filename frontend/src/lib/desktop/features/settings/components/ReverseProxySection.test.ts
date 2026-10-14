@@ -30,7 +30,7 @@ interface SectionProps {
   disabled: boolean;
   hasChanges: boolean;
   onUpdate: (list: string[]) => void;
-  onPendingChange?: (hasPending: boolean) => void;
+  draft?: string;
 }
 
 function renderSection(overrides: Partial<SectionProps> = {}) {
@@ -240,15 +240,19 @@ describe('ReverseProxySection', () => {
     expect(screen.queryByText(/status\.untrusted_proxy\.body/)).toBeNull();
   });
 
-  it('reports pending text from the list input', async () => {
-    const onPendingChange = vi.fn();
-    renderSection({ onPendingChange });
+  it('shows a draft passed in, so it survives the card being remounted', () => {
+    renderSection({ draft: '10.0.0.9' });
 
-    await fireEvent.input(screen.getByRole('textbox', { name: /reverseProxy\.listLabel/ }), {
-      target: { value: '10.0.0.1' },
-    });
+    expect(
+      screen.getByRole<HTMLInputElement>('textbox', { name: /reverseProxy\.listLabel/ }).value
+    ).toBe('10.0.0.9');
+  });
 
-    expect(onPendingChange).toHaveBeenLastCalledWith(true);
+  it('hides Trust when a valid listed range already covers the peer', async () => {
+    renderSection({ trustedProxies: ['172.18.0.0/16'] });
+
+    expect(await screen.findByText(/check\.coveredBy/)).toHaveTextContent('172.18.0.0/16');
+    expect(screen.queryByRole('button', { name: /check\.trust \{"peer"/ })).toBeNull();
   });
 
   it('focuses the card and drops the hash when opened through the cross-link', async () => {

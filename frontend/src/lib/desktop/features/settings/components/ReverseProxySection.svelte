@@ -30,11 +30,7 @@
     recombineTrustedProxies,
     setCloudflarePreset,
   } from '$lib/desktop/features/settings/utils/trustedProxies';
-  import {
-    isSingleHost,
-    networkAddressKey,
-    validateNetworkAddress,
-  } from '$lib/utils/networkAddress';
+  import { isSingleHost, networkContains, validateNetworkAddress } from '$lib/utils/networkAddress';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { settingsAPI, type ConnectionCheckResult } from '$lib/utils/settingsApi';
   import { navigation } from '$lib/stores/navigation.svelte';
@@ -53,8 +49,8 @@
     hasChanges: boolean;
     /** Called with the whole new trusted-proxy list. */
     onUpdate: (_list: string[]) => void;
-    /** Called with true while the address input holds text that was not added. */
-    onPendingChange?: (_hasPending: boolean) => void;
+    /** Text typed into the address input but not added yet. Bindable. */
+    draft?: string;
   }
 
   let {
@@ -64,7 +60,7 @@
     disabled,
     hasChanges,
     onUpdate,
-    onPendingChange,
+    draft = $bindable(''),
   }: Props = $props();
 
   /** Element id the Exceptions tab links to (SETTINGS_ROUTES.securityReverseProxy). */
@@ -79,15 +75,18 @@
   let error = $state<string | null>(null);
   let anchor = $state<HTMLElement>();
 
-  // Whether the checked peer is already a valid row; invalid rows never count.
-  let peerListed = $derived.by(() => {
-    const peerKey = result?.peerAddress ? networkAddressKey(result.peerAddress) : null;
-    if (peerKey === null) return false;
-    return partition.entries.some(
-      entry =>
-        validateNetworkAddress(entry, ACCEPT) === null && networkAddressKey(entry) === peerKey
+  // The first valid row that contains the checked peer (the peer itself or a range
+  // around it); invalid rows never count. Trusting the peer again would add nothing.
+  let peerCoveredBy = $derived.by(() => {
+    const peer = result?.peerAddress ?? '';
+    if (peer === '') return null;
+    return (
+      partition.entries.find(
+        entry => validateNetworkAddress(entry, ACCEPT) === null && networkContains(entry, peer)
+      ) ?? null
     );
   });
+  let peerListed = $derived(peerCoveredBy !== null);
 
   function updateEntries(entries: string[]) {
     onUpdate(recombineTrustedProxies(entries, partition.hasCloudflare, savedTrustedProxies));
@@ -183,7 +182,7 @@
         {loading}
         {error}
         {stale}
-        {peerListed}
+        {peerCoveredBy}
         cloudflareEnabled={partition.hasCloudflare}
         {disabled}
         onRecheck={runCheck}
@@ -209,7 +208,7 @@
         emptyStateMessage={t('settings.security.reverseProxy.emptyState')}
         {disabled}
         rowAnnotation={rangeBadge}
-        {onPendingChange}
+        bind:draft
       />
 
       <SettingsNote>

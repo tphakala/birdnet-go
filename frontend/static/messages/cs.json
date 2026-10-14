@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Uložit změny",
       "savingAriaLabel": "Ukládání změn...",
       "unsavedChanges": "Neuložené změny",
-      "toolbar": "Akce nastavení"
+      "toolbar": "Akce nastavení",
+      "validationBlocked": "Před uložením opravte zvýrazněná pole."
     },
     "errors": {
       "loadFailed": "Nepodařilo se načíst nastavení",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Před {peer} se nachází Cloudflare. Pro ověření vaší adresy důvěřujte oběma.",
           "cloudflareEdge": "{peer} patří službě Cloudflare. Níže zapněte Důvěřovat Cloudflare.",
           "chainHint": "Pokud se před {peer} nachází další proxy, uveďte ji také.",
-          "added": "Přidáno do seznamu. Pro uplatnění uložte."
+          "added": "Přidáno do seznamu. Pro uplatnění uložte.",
+          "coveredBy": "Již pokryto rozsahem {range} v seznamu. Uložte pro použití.",
+          "selfClientCause": "Proxy může jako klienta předávat svou vlastní adresu, často proto, že publikování portů kontejneru skrývá skutečného klienta. Opravte to v nastavení sítě kontejneru nebo proxy."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Za reverzní proxy toto obejití funguje pouze tehdy, když je proxy uvedena jako důvěryhodná.",
       "bypassProxyLink": "Nastavit důvěryhodné proxy",
-      "allowedSubnetsEmpty": "Žádné další podsítě. Přihlášení může obejít pouze vlastní místní síť tohoto serveru."
+      "allowedSubnetsEmpty": "Žádné další podsítě. Přihlášení může obejít pouze vlastní místní síť tohoto serveru.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} obsahuje neplatnou položku.",
+        "pendingEntry": "{tab}: {field} obsahuje text, který nebyl přidán. Stiskněte Enter nebo Přidat, nebo jej smažte."
+      }
     },
     "species": {
       "pageLabel": "Nastavení druhů",

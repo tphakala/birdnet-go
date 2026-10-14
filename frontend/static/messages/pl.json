@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Zapisz Zmiany",
       "savingAriaLabel": "Zapisywanie zmian...",
       "unsavedChanges": "Niezapisane zmiany",
-      "toolbar": "Działania ustawień"
+      "toolbar": "Działania ustawień",
+      "validationBlocked": "Przed zapisaniem popraw wyróżnione pola."
     },
     "errors": {
       "loadFailed": "Nie udało się załadować ustawień",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Cloudflare znajduje się przed {peer}. Zaufaj obu, aby zweryfikować swój adres.",
           "cloudflareEdge": "{peer} należy do Cloudflare. Włącz poniżej opcję Zaufaj Cloudflare.",
           "chainHint": "Jeśli przed {peer} znajduje się inne proxy, je także dodaj do listy.",
-          "added": "Dodano do listy. Zapisz, aby zastosować."
+          "added": "Dodano do listy. Zapisz, aby zastosować.",
+          "coveredBy": "Już objęte zakresem {range} na liście. Zapisz, aby zastosować.",
+          "selfClientCause": "Proxy może przekazywać własny adres jako adres klienta, często dlatego, że publikowanie portów kontenera ukrywa prawdziwego klienta. Popraw to w ustawieniach sieci kontenera lub proxy."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Za reverse proxy to pomijanie działa tylko wtedy, gdy proxy znajduje się na liście zaufanych.",
       "bypassProxyLink": "Skonfiguruj zaufane proxy",
-      "allowedSubnetsEmpty": "Brak dodatkowych podsieci. Tylko własna sieć lokalna tego serwera może pominąć logowanie."
+      "allowedSubnetsEmpty": "Brak dodatkowych podsieci. Tylko własna sieć lokalna tego serwera może pominąć logowanie.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} zawiera nieprawidłowy wpis.",
+        "pendingEntry": "{tab}: {field} zawiera tekst, który nie został dodany. Naciśnij Enter lub Dodaj albo go wyczyść."
+      }
     },
     "species": {
       "pageLabel": "Ustawienia gatunków",

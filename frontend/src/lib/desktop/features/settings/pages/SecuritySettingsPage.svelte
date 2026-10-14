@@ -46,6 +46,7 @@
     settingsActions,
     securitySettings,
     settingsValidationErrors,
+    settingsValidationReasons,
     type OAuthProviderConfig,
   } from '$lib/stores/settings';
   import {
@@ -653,7 +654,9 @@
 
   // Save stays blocked while either address list holds a row the backend would reject,
   // or text that was typed but not added (it would otherwise be lost on save). The
+  // drafts live here, not in the list components, so they survive a tab switch. The
   // subnet list counts only while the bypass is on, since the backend checks it only then.
+  // Each entry carries a reason naming the tab and field, shown next to the Save button.
   const TRUSTED_PROXIES_INVALID_KEY = 'security-trusted-proxies-invalid';
   const TRUSTED_PROXIES_PENDING_KEY = 'security-trusted-proxies-pending';
   const BYPASS_SUBNETS_INVALID_KEY = 'security-bypass-subnets-invalid';
@@ -665,8 +668,13 @@
     BYPASS_SUBNETS_PENDING_KEY,
   ];
 
-  let trustedProxiesPending = $state(false);
-  let bypassSubnetsPending = $state(false);
+  let trustedProxiesDraft = $state('');
+  let bypassSubnetsDraft = $state('');
+
+  function clearAddressDrafts() {
+    trustedProxiesDraft = '';
+    bypassSubnetsDraft = '';
+  }
 
   let allowedSubnets = $derived(splitSubnetList(settings.allowSubnetBypass?.subnet ?? ''));
 
@@ -680,17 +688,35 @@
     ) {
       errors.push(TRUSTED_PROXIES_INVALID_KEY);
     }
-    if (trustedProxiesPending) errors.push(TRUSTED_PROXIES_PENDING_KEY);
+    if (trustedProxiesDraft.trim() !== '') errors.push(TRUSTED_PROXIES_PENDING_KEY);
     if (bypassEnabled && allowedSubnets.some(subnet => validateNetworkAddress(subnet, 'cidr') !== null)) {
       errors.push(BYPASS_SUBNETS_INVALID_KEY);
     }
-    if (bypassEnabled && bypassSubnetsPending) errors.push(BYPASS_SUBNETS_PENDING_KEY);
+    if (bypassEnabled && bypassSubnetsDraft.trim() !== '') errors.push(BYPASS_SUBNETS_PENDING_KEY);
     return errors;
   });
 
+  function addressListReason(key: string): string {
+    const serverTab = t('settings.security.serverConfiguration.title');
+    const exceptionsTab = t('settings.security.exceptions.title');
+    const trustedField = t('settings.security.reverseProxy.listLabel');
+    const subnetField = t('settings.security.allowedSubnetsLabel');
+    switch (key) {
+      case TRUSTED_PROXIES_INVALID_KEY:
+        return t('settings.security.validation.invalidEntry', { tab: serverTab, field: trustedField });
+      case TRUSTED_PROXIES_PENDING_KEY:
+        return t('settings.security.validation.pendingEntry', { tab: serverTab, field: trustedField });
+      case BYPASS_SUBNETS_INVALID_KEY:
+        return t('settings.security.validation.invalidEntry', { tab: exceptionsTab, field: subnetField });
+      default:
+        return t('settings.security.validation.pendingEntry', { tab: exceptionsTab, field: subnetField });
+    }
+  }
+
   $effect(() => {
     const active = addressListErrors;
-    // .update() so the effect never reads the store it writes (IntegrationSettingsPage
+    const reasons = active.map(key => [key, addressListReason(key)] as const);
+    // .update() so the effect never reads the stores it writes (IntegrationSettingsPage
     // uses the same pattern); keep the array when nothing changes.
     settingsValidationErrors.update(errors => {
       const others = errors.filter(e => !ADDRESS_LIST_ERROR_KEYS.includes(e));
@@ -699,12 +725,23 @@
         next.length === errors.length && next.every(e => errors.includes(e));
       return unchanged ? errors : next;
     });
+    settingsValidationReasons.update(current => {
+      const next = new Map(current);
+      for (const key of ADDRESS_LIST_ERROR_KEYS) next.delete(key);
+      for (const [key, reason] of reasons) next.set(key, reason);
+      return next;
+    });
   });
 
   $effect(() => () => {
     settingsValidationErrors.update(errors =>
       errors.filter(e => !ADDRESS_LIST_ERROR_KEYS.includes(e))
     );
+    settingsValidationReasons.update(current => {
+      const next = new Map(current);
+      for (const key of ADDRESS_LIST_ERROR_KEYS) next.delete(key);
+      return next;
+    });
   });
 
   function updatePublicLiveAudio(checked: boolean) {
@@ -1072,7 +1109,7 @@
       disabled={store.isLoading || store.isSaving}
       hasChanges={reverseProxyHasChanges}
       onUpdate={updateTrustedProxies}
-      onPendingChange={pending => (trustedProxiesPending = pending)}
+      bind:draft={trustedProxiesDraft}
     />
   </div>
 {/snippet}
@@ -1494,7 +1531,7 @@
               disabled={!settings.allowSubnetBypass?.enabled ||
                 store.isLoading ||
                 store.isSaving}
-              onPendingChange={pending => (bypassSubnetsPending = pending)}
+              bind:draft={bypassSubnetsDraft}
             />
 
             <ErrorAlert type="warning">
@@ -1568,5 +1605,5 @@
 
 <!-- Main Content -->
 <main class="settings-page-content" aria-label={t('settings.security.pageLabel')}>
-  <SettingsTabs {tabs} bind:activeTab />
+  <SettingsTabs {tabs} bind:activeTab onReset={clearAddressDrafts} />
 </main>

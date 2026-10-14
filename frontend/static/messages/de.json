@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Änderungen speichern",
       "savingAriaLabel": "Änderungen werden gespeichert...",
       "unsavedChanges": "Ungespeicherte Änderungen",
-      "toolbar": "Einstellungsaktionen"
+      "toolbar": "Einstellungsaktionen",
+      "validationBlocked": "Korrigieren Sie die markierten Felder vor dem Speichern."
     },
     "errors": {
       "loadFailed": "Einstellungen konnten nicht geladen werden",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Cloudflare liegt vor {peer}. Vertrauen Sie beiden, um Ihre Adresse zu verifizieren.",
           "cloudflareEdge": "{peer} gehört zu Cloudflare. Aktivieren Sie unten „Cloudflare vertrauen“.",
           "chainHint": "Wenn ein weiterer Proxy vor {peer} liegt, listen Sie diesen ebenfalls auf.",
-          "added": "Zur Liste hinzugefügt. Speichern Sie zum Übernehmen."
+          "added": "Zur Liste hinzugefügt. Speichern Sie zum Übernehmen.",
+          "coveredBy": "Bereits durch {range} in der Liste abgedeckt. Speichern Sie zum Übernehmen.",
+          "selfClientCause": "Der Proxy leitet möglicherweise seine eigene Adresse als Client weiter, oft weil die Portfreigabe des Containers den echten Client verbirgt. Beheben Sie das in der Netzwerkeinrichtung des Containers oder Proxys."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Hinter einem Reverse Proxy funktioniert diese Umgehung nur, wenn der Proxy als vertrauenswürdig aufgeführt ist.",
       "bypassProxyLink": "Vertrauenswürdige Proxys einrichten",
-      "allowedSubnetsEmpty": "Keine zusätzlichen Subnetze. Nur das eigene lokale Netzwerk dieses Servers darf die Anmeldung umgehen."
+      "allowedSubnetsEmpty": "Keine zusätzlichen Subnetze. Nur das eigene lokale Netzwerk dieses Servers darf die Anmeldung umgehen.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} enthält einen ungültigen Eintrag.",
+        "pendingEntry": "{tab}: {field} enthält Text, der nicht hinzugefügt wurde. Drücken Sie die Eingabetaste oder Hinzufügen, oder löschen Sie ihn."
+      }
     },
     "species": {
       "pageLabel": "Arteneinstellungen",

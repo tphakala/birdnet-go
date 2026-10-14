@@ -1201,6 +1201,14 @@ export const hasUnsavedChanges = derived(
 // Validation errors store - pages can add errors to prevent saving
 export const settingsValidationErrors = writable<string[]>([]);
 
+/**
+ * Optional translated, human-readable reasons for entries of settingsValidationErrors,
+ * keyed by the entry. The save bar lists the reason of every active entry that has
+ * one, so a page can say which tab and field blocks saving. Pages that set a reason
+ * remove it together with the entry.
+ */
+export const settingsValidationReasons = writable<ReadonlyMap<string, string>>(new Map());
+
 export const currentSection = derived(settingsStore, $store => $store.activeSection);
 
 export const isLoading = derived(settingsStore, $store => $store.isLoading);

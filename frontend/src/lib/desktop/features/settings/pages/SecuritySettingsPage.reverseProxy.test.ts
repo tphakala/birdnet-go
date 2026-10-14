@@ -6,6 +6,7 @@ import SecuritySettingsPage from './SecuritySettingsPage.svelte';
 import {
   settingsStore,
   settingsValidationErrors,
+  settingsValidationReasons,
   type SecuritySettings,
   type SettingsFormData,
 } from '$lib/stores/settings';
@@ -88,6 +89,7 @@ describe('SecuritySettingsPage reverse proxy wiring', () => {
   afterEach(() => {
     settingsStore.set(initialState);
     settingsValidationErrors.set([]);
+    settingsValidationReasons.set(new Map());
   });
 
   it('shows the trusted proxies without the Cloudflare token and checks the preset', () => {
@@ -146,6 +148,60 @@ describe('SecuritySettingsPage reverse proxy wiring', () => {
     await fireEvent.input(field, { target: { value: '10.0.0.1' } });
     await tick();
     expect(get(settingsValidationErrors)).toContain(TRUSTED_PENDING);
+  });
+
+  it('keeps typed but not added text across a tab switch and keeps Save blocked', async () => {
+    seedSecurity({ trustedProxies: [] });
+    render(SecuritySettingsPage);
+    const field = () =>
+      screen.getByRole<HTMLInputElement>('textbox', {
+        name: 'settings.security.reverseProxy.listLabel',
+      });
+    await fireEvent.input(field(), { target: { value: '10.0.0.1' } });
+    await tick();
+
+    openTab('exceptions');
+    await tick();
+    expect(
+      screen.queryByRole('textbox', { name: 'settings.security.reverseProxy.listLabel' })
+    ).toBeNull();
+    expect(get(settingsValidationErrors)).toContain(TRUSTED_PENDING);
+
+    openTab('server');
+    await tick();
+    expect(field().value).toBe('10.0.0.1');
+    expect(get(settingsValidationErrors)).toContain(TRUSTED_PENDING);
+  });
+
+  it('names the tab and field of each blocking entry for the save bar', async () => {
+    seedSecurity({
+      trustedProxies: ['not-an-address'],
+      allowSubnetBypass: { enabled: true, subnet: '10.0.0.1' },
+    });
+    render(SecuritySettingsPage);
+    await tick();
+
+    const reasons = get(settingsValidationReasons);
+    expect(reasons.get(TRUSTED_INVALID)).toContain('settings.security.validation.invalidEntry');
+    expect(reasons.get(SUBNETS_INVALID)).toContain('settings.security.validation.invalidEntry');
+  });
+
+  it('clears the drafts on Reset', async () => {
+    seedSecurity({ trustedProxies: [] });
+    render(SecuritySettingsPage);
+    const field = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'settings.security.reverseProxy.listLabel',
+    });
+    await fireEvent.input(field, { target: { value: '10.0.0.1' } });
+    // Reset appears only with an unsaved change
+    editSecurity({ trustedProxies: ['172.18.0.1'] });
+    await tick();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'settings.actions.resetAriaLabel' }));
+    await tick();
+
+    expect(field.value).toBe('');
+    expect(get(settingsValidationErrors)).not.toContain(TRUSTED_PENDING);
   });
 
   it('ignores blank saved entries for display and validation', async () => {

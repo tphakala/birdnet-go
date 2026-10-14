@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Gem ændringer",
       "savingAriaLabel": "Gemmer ændringer...",
       "unsavedChanges": "Ikke-gemte ændringer",
-      "toolbar": "Indstillingshandlinger"
+      "toolbar": "Indstillingshandlinger",
+      "validationBlocked": "Ret de markerede felter, før du gemmer."
     },
     "errors": {
       "loadFailed": "Kunne ikke indlæse indstillinger",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Cloudflare er placeret foran {peer}. Stol på begge for at bekræfte din adresse.",
           "cloudflareEdge": "{peer} tilhører Cloudflare. Aktivér Stol på Cloudflare nedenfor.",
           "chainHint": "Hvis en anden proxy er placeret foran {peer}, skal du også angive den.",
-          "added": "Tilføjet til listen. Gem for at anvende."
+          "added": "Tilføjet til listen. Gem for at anvende.",
+          "coveredBy": "Allerede dækket af {range} på listen. Gem for at anvende.",
+          "selfClientCause": "Proxyen sender måske sin egen adresse videre som klient, ofte fordi containerens portudgivelse skjuler den rigtige klient. Ret det i containerens eller proxyens netværksopsætning."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Bag en reverse proxy fungerer denne omgåelse kun, når proxyen er angivet som betroet.",
       "bypassProxyLink": "Konfigurer betroede proxyer",
-      "allowedSubnetsEmpty": "Ingen yderligere subnets. Kun denne servers eget lokale netværk må omgå login."
+      "allowedSubnetsEmpty": "Ingen yderligere subnets. Kun denne servers eget lokale netværk må omgå login.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} har en post, der ikke er gyldig.",
+        "pendingEntry": "{tab}: {field} har tekst, der ikke blev tilføjet. Tryk på Enter eller Tilføj, eller ryd den."
+      }
     },
     "species": {
       "pageLabel": "Artsindstillinger",

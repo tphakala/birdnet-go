@@ -22,6 +22,7 @@
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import { t } from '$lib/i18n';
   import { generateId } from '$lib/utils/uuid';
+  import { isSingleHost } from '$lib/utils/networkAddress';
   import type { ConnectionCheckResult, ConnectionStatus } from '$lib/utils/settingsApi';
 
   interface Props {
@@ -33,8 +34,11 @@
     error: string | null;
     /** The form's trusted-proxy list differs from the saved one the check describes. */
     stale: boolean;
-    /** The checked peer is already a valid row of the form's list. */
-    peerListed: boolean;
+    /**
+     * The first valid row of the form's list that contains the checked peer (the peer
+     * itself or a range around it), or null when none does.
+     */
+    peerCoveredBy: string | null;
     /** The form's list has the Cloudflare preset on. */
     cloudflareEnabled: boolean;
     /** Disables the trust actions (for example while settings save). */
@@ -60,7 +64,7 @@
     loading,
     error,
     stale,
-    peerListed,
+    peerCoveredBy,
     cloudflareEnabled,
     disabled = false,
     onRecheck,
@@ -89,6 +93,11 @@
     (status === 'untrusted_proxy_unverifiable' || status === 'trusted_proxy_unverified') &&
       peer !== '' &&
       (result?.cloudflarePresetWouldVerify ?? false)
+  );
+  let peerListed = $derived(peerCoveredBy !== null);
+  // A range around the peer covers it as well as the peer itself; say which row does.
+  let coveringRange = $derived(
+    peerCoveredBy !== null && !isSingleHost(peerCoveredBy) ? peerCoveredBy : null
   );
   let trustApplied = $derived(
     canTrustWithCloudflare ? peerListed && cloudflareEnabled : peerListed
@@ -176,6 +185,7 @@
               <li>
                 {t('settings.security.reverseProxy.status.trusted_proxy_unverified.causeConflict')}
               </li>
+              <li>{t('settings.security.reverseProxy.check.selfClientCause')}</li>
             </ul>
           {:else if status === 'untrusted_public_proxy'}
             <p class="mt-1">
@@ -205,6 +215,7 @@
             <p class="mt-1">
               {t('settings.security.reverseProxy.status.untrusted_proxy_unverifiable.fix')}
             </p>
+            <p class="mt-1">{t('settings.security.reverseProxy.check.selfClientCause')}</p>
           {/if}
 
           {#if showChainHint}
@@ -226,7 +237,9 @@
               class="mt-3 flex items-center gap-1.5 font-medium focus:outline-none"
             >
               <CircleCheck class="size-4 shrink-0 text-[var(--color-success)]" aria-hidden="true" />
-              {t('settings.security.reverseProxy.check.added')}
+              {coveringRange
+                ? t('settings.security.reverseProxy.check.coveredBy', { range: coveringRange })
+                : t('settings.security.reverseProxy.check.added')}
             </p>
           {:else if canTrust}
             <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">

@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Enregistrer les modifications",
       "savingAriaLabel": "Enregistrement des modifications...",
       "unsavedChanges": "Modifications non enregistrées",
-      "toolbar": "Actions des paramètres"
+      "toolbar": "Actions des paramètres",
+      "validationBlocked": "Corrigez les champs en surbrillance avant d'enregistrer."
     },
     "errors": {
       "loadFailed": "Échec du chargement des paramètres",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Cloudflare est placé devant {peer}. Faites confiance aux deux pour vérifier votre adresse.",
           "cloudflareEdge": "{peer} appartient à Cloudflare. Activez Faire confiance à Cloudflare ci-dessous.",
           "chainHint": "Si un autre proxy se trouve devant {peer}, ajoutez-le aussi à la liste.",
-          "added": "Ajouté à la liste. Enregistrez pour appliquer."
+          "added": "Ajouté à la liste. Enregistrez pour appliquer.",
+          "coveredBy": "Déjà couvert par {range} dans la liste. Enregistrez pour appliquer.",
+          "selfClientCause": "Le proxy transmet peut-être sa propre adresse comme client, souvent parce que la publication des ports du conteneur masque le vrai client. Corrigez cela dans la configuration réseau du conteneur ou du proxy."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Derrière un proxy inverse, ce contournement ne fonctionne que si le proxy est listé comme étant de confiance.",
       "bypassProxyLink": "Configurer les proxys de confiance",
-      "allowedSubnetsEmpty": "Aucun sous-réseau supplémentaire. Seul le propre réseau local de ce serveur peut contourner la connexion."
+      "allowedSubnetsEmpty": "Aucun sous-réseau supplémentaire. Seul le propre réseau local de ce serveur peut contourner la connexion.",
+      "validation": {
+        "invalidEntry": "{tab} : {field} contient une entrée non valide.",
+        "pendingEntry": "{tab} : {field} contient du texte qui n'a pas été ajouté. Appuyez sur Entrée ou Ajouter, ou effacez-le."
+      }
     },
     "species": {
       "pageLabel": "Paramètres des espèces",

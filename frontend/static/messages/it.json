@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Salva Modifiche",
       "savingAriaLabel": "Salvataggio modifiche...",
       "unsavedChanges": "Modifiche non salvate",
-      "toolbar": "Azioni impostazioni"
+      "toolbar": "Azioni impostazioni",
+      "validationBlocked": "Correggi i campi evidenziati prima di salvare."
     },
     "errors": {
       "loadFailed": "Caricamento delle impostazioni non riuscito",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Cloudflare si trova davanti a {peer}. Considera attendibili entrambi per verificare il tuo indirizzo.",
           "cloudflareEdge": "{peer} appartiene a Cloudflare. Attiva Considera attendibile Cloudflare qui sotto.",
           "chainHint": "Se un altro proxy si trova davanti a {peer}, inserisci anche quello nell'elenco.",
-          "added": "Aggiunto all'elenco. Salva per applicare."
+          "added": "Aggiunto all'elenco. Salva per applicare.",
+          "coveredBy": "Già coperto da {range} nell'elenco. Salva per applicare.",
+          "selfClientCause": "Il proxy potrebbe inoltrare il proprio indirizzo come client, spesso perché la pubblicazione delle porte del container nasconde il client reale. Correggi la configurazione di rete del container o del proxy."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Dietro un reverse proxy, questo bypass funziona solo se il proxy è elencato come attendibile.",
       "bypassProxyLink": "Configura proxy attendibili",
-      "allowedSubnetsEmpty": "Nessuna sottorete aggiuntiva. Solo la rete locale di questo server può bypassare l'accesso."
+      "allowedSubnetsEmpty": "Nessuna sottorete aggiuntiva. Solo la rete locale di questo server può bypassare l'accesso.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} contiene una voce non valida.",
+        "pendingEntry": "{tab}: {field} contiene testo non aggiunto. Premi Invio o Aggiungi, oppure cancellalo."
+      }
     },
     "species": {
       "pageLabel": "Impostazioni specie",

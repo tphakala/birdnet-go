@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Lagre endringer",
       "savingAriaLabel": "Lagrer endringer...",
       "unsavedChanges": "Ulagrede endringer",
-      "toolbar": "Innstillingshandlinger"
+      "toolbar": "Innstillingshandlinger",
+      "validationBlocked": "Rett de markerte feltene før du lagrer."
     },
     "errors": {
       "loadFailed": "Innlasting av innstillinger mislyktes",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Cloudflare sitter foran {peer}. Stol på begge for å bekrefte adressen din.",
           "cloudflareEdge": "{peer} tilhører Cloudflare. Slå på Stol på Cloudflare nedenfor.",
           "chainHint": "Hvis en annen proxy sitter foran {peer}, oppgi den også.",
-          "added": "Lagt til i listen. Lagre for å ta i bruk."
+          "added": "Lagt til i listen. Lagre for å ta i bruk.",
+          "coveredBy": "Allerede dekket av {range} i listen. Lagre for å ta i bruk.",
+          "selfClientCause": "Proxyen kan sende sin egen adresse videre som klient, ofte fordi portpubliseringen til containeren skjuler den egentlige klienten. Rett dette i nettverksoppsettet for containeren eller proxyen."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Bak en omvendt proxy fungerer denne omgåelsen bare når proxyen er oppført som betrodd.",
       "bypassProxyLink": "Sett opp betrodde proxyer",
-      "allowedSubnetsEmpty": "Ingen ytterligere subnett. Kun serverens eget lokale nettverk kan omgå innloggingen."
+      "allowedSubnetsEmpty": "Ingen ytterligere subnett. Kun serverens eget lokale nettverk kan omgå innloggingen.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} har en oppføring som ikke er gyldig.",
+        "pendingEntry": "{tab}: {field} har tekst som ikke ble lagt til. Trykk Enter eller Legg til, eller tøm feltet."
+      }
     },
     "species": {
       "pageLabel": "Artsinnstillinger",

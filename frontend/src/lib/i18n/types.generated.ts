@@ -1798,6 +1798,7 @@ export type TranslationKey =
   | 'settings.actions.savingAriaLabel'
   | 'settings.actions.unsavedChanges'
   | 'settings.actions.toolbar'
+  | 'settings.actions.validationBlocked'
   | 'settings.errors.loadFailed'
   | 'settings.errors.saveFailed'
   | 'settings.errors.databaseStatsFailed'
@@ -3091,6 +3092,8 @@ export type TranslationKey =
   | 'settings.security.reverseProxy.check.cloudflareEdge' // params: peer
   | 'settings.security.reverseProxy.check.chainHint' // params: peer
   | 'settings.security.reverseProxy.check.added'
+  | 'settings.security.reverseProxy.check.coveredBy' // params: range
+  | 'settings.security.reverseProxy.check.selfClientCause'
   | 'settings.security.reverseProxy.status.direct.title'
   | 'settings.security.reverseProxy.status.direct.body' // params: peer
   | 'settings.security.reverseProxy.status.direct.bodyNoPeer'
@@ -3114,6 +3117,8 @@ export type TranslationKey =
   | 'settings.security.bypassProxyNote'
   | 'settings.security.bypassProxyLink'
   | 'settings.security.allowedSubnetsEmpty'
+  | 'settings.security.validation.invalidEntry' // params: tab, field
+  | 'settings.security.validation.pendingEntry' // params: tab, field
   | 'settings.species.pageLabel'
   | 'settings.species.saveError' // params: species
   | 'settings.species.configUpdated' // params: species
@@ -4742,6 +4747,7 @@ export type TranslationParams = {
   'settings.security.reverseProxy.check.cloudflareInFront': { peer: string | number };
   'settings.security.reverseProxy.check.cloudflareEdge': { peer: string | number };
   'settings.security.reverseProxy.check.chainHint': { peer: string | number };
+  'settings.security.reverseProxy.check.coveredBy': { range: string | number };
   'settings.security.reverseProxy.status.direct.body': { peer: string | number };
   'settings.security.reverseProxy.status.direct.hint': { peer: string | number };
   'settings.security.reverseProxy.status.trusted_proxy.body': {
@@ -4755,6 +4761,8 @@ export type TranslationParams = {
   'settings.security.reverseProxy.status.untrusted_proxy_unverifiable.body': {
     peer: string | number;
   };
+  'settings.security.validation.invalidEntry': { tab: string | number; field: string | number };
+  'settings.security.validation.pendingEntry': { tab: string | number; field: string | number };
   'settings.species.saveError': { species: string | number };
   'settings.species.configUpdated': { species: string | number };
   'settings.species.configAdded': { species: string | number };

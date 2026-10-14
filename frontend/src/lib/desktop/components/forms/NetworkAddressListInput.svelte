@@ -13,15 +13,16 @@
   - Values passed in are never changed or dropped by rendering. Invalid or repeated
     rows are flagged with an icon and text until the user removes them. Rows are keyed
     by index, so repeated values render.
-  - `onPendingChange` reports whether the input holds text that was not added yet, so
-    a page can block saving instead of losing it silently.
+  - The text typed but not added yet is the bindable `draft`. Left unbound it lives in
+    the component; bind it to keep it when the component unmounts (a tab switch) and to
+    block saving while it is not empty, instead of losing it silently.
 
   Validation mirrors Go's net.ParseIP and net.ParseCIDR (see $lib/utils/networkAddress).
 
   @component
 -->
 <script lang="ts">
-  import { onDestroy, tick, type Snippet } from 'svelte';
+  import { tick, type Snippet } from 'svelte';
   import type { ClipboardEventHandler } from 'svelte/elements';
   import { Plus, X, TriangleAlert } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
@@ -63,8 +64,8 @@
     maxItems?: number;
     /** Extra content after a row's value, such as a badge. */
     rowAnnotation?: Snippet<[NetworkAddressRow]>;
-    /** Called with true while the input holds text that was not added, false otherwise. */
-    onPendingChange?: (_hasPending: boolean) => void;
+    /** Text typed but not added yet. Bindable; internal state when not bound. */
+    draft?: string;
     className?: string;
   }
 
@@ -80,7 +81,7 @@
     disabled = false,
     maxItems,
     rowAnnotation,
-    onPendingChange,
+    draft = $bindable(''),
     className,
   }: Props = $props();
 
@@ -110,7 +111,6 @@
   const pendingId = `${baseId}-pending`;
   const limitId = `${baseId}-limit`;
 
-  let text = $state('');
   let inputElement = $state<HTMLInputElement>();
   let listElement = $state<HTMLUListElement>();
   /** Lines of the last add's report; cleared when the text changes. */
@@ -118,7 +118,7 @@
   let hasInvalidTokens = $state(false);
 
   let modeKey = $derived(modeKeyFor(accept));
-  let hasPending = $derived(text.trim() !== '');
+  let hasPending = $derived(draft.trim() !== '');
   let atLimit = $derived(maxItems !== undefined && values.length >= maxItems);
   let canAdd = $derived(!disabled && hasPending && !atLimit);
 
@@ -145,20 +145,8 @@
       .join(' ') || undefined
   );
 
-  let lastReportedPending: boolean | undefined;
-  $effect(() => {
-    if (hasPending !== lastReportedPending) {
-      lastReportedPending = hasPending;
-      onPendingChange?.(hasPending);
-    }
-  });
-
-  onDestroy(() => {
-    if (lastReportedPending) onPendingChange?.(false);
-  });
-
   function setText(next: string) {
-    text = next;
+    draft = next;
     messages = [];
     hasInvalidTokens = false;
   }
@@ -166,7 +154,7 @@
   function addFromInput() {
     if (!canAdd) return;
 
-    const tokens = text.split(TOKEN_SEPARATORS).filter(token => token !== '');
+    const tokens = draft.split(TOKEN_SEPARATORS).filter(token => token !== '');
     const keys = new Set(
       values.map(value => networkAddressKey(value)).filter((key): key is string => key !== null)
     );
@@ -215,7 +203,7 @@
       );
     }
 
-    text = [...invalid, ...overLimit].join(PASTE_SEPARATOR);
+    draft = [...invalid, ...overLimit].join(PASTE_SEPARATOR);
     messages = report;
     hasInvalidTokens = invalid.length > 0;
   }
@@ -258,9 +246,9 @@
       .filter(line => line !== '')
       .join(PASTE_SEPARATOR);
     const field = event.currentTarget;
-    const start = field.selectionStart ?? text.length;
-    const end = field.selectionEnd ?? text.length;
-    setText(text.slice(0, start) + replacement + text.slice(end));
+    const start = field.selectionStart ?? draft.length;
+    const end = field.selectionEnd ?? draft.length;
+    setText(draft.slice(0, start) + replacement + draft.slice(end));
 
     await tick();
     const caret = start + replacement.length;
@@ -282,7 +270,7 @@
         'input input-sm flex-1 min-w-0 font-mono placeholder:font-sans',
         hasInvalidTokens && 'input-error'
       )}
-      value={text}
+      value={draft}
       {placeholder}
       {disabled}
       autocomplete="off"

@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Guardar cambios",
       "savingAriaLabel": "Guardando cambios...",
       "unsavedChanges": "Cambios sin guardar",
-      "toolbar": "Acciones de configuración"
+      "toolbar": "Acciones de configuración",
+      "validationBlocked": "Corrija los campos resaltados antes de guardar."
     },
     "errors": {
       "loadFailed": "Error al cargar la configuración",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Cloudflare se encuentra delante de {peer}. Confía en ambos para verificar tu dirección.",
           "cloudflareEdge": "{peer} pertenece a Cloudflare. Activa Confiar en Cloudflare a continuación.",
           "chainHint": "Si hay otro proxy delante de {peer}, indícalo también.",
-          "added": "Añadido a la lista. Guarda para aplicar."
+          "added": "Añadido a la lista. Guarda para aplicar.",
+          "coveredBy": "Ya está cubierto por {range} en la lista. Guarde para aplicar.",
+          "selfClientCause": "Es posible que el proxy reenvíe su propia dirección como cliente, a menudo porque la publicación de puertos del contenedor oculta el cliente real. Corríjalo en la configuración de red del contenedor o del proxy."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Detrás de un proxy inverso, esta omisión solo funciona cuando el proxy figura como de confianza.",
       "bypassProxyLink": "Configurar proxies de confianza",
-      "allowedSubnetsEmpty": "Sin subredes adicionales. Solo la propia red local de este servidor puede omitir el inicio de sesión."
+      "allowedSubnetsEmpty": "Sin subredes adicionales. Solo la propia red local de este servidor puede omitir el inicio de sesión.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} tiene una entrada que no es válida.",
+        "pendingEntry": "{tab}: {field} tiene texto que no se añadió. Pulse Intro o Añadir, o bórrelo."
+      }
     },
     "species": {
       "pageLabel": "Configuración de especies",

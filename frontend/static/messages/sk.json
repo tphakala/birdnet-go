@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Uložiť zmeny",
       "savingAriaLabel": "Ukladajú sa zmeny...",
       "unsavedChanges": "Neuložené zmeny",
-      "toolbar": "Akcie nastavení"
+      "toolbar": "Akcie nastavení",
+      "validationBlocked": "Pred uložením opravte zvýraznené polia."
     },
     "errors": {
       "loadFailed": "Nepodarilo sa načítať nastavenia",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Cloudflare je pred {peer}. Dôverujte obom na overenie vašej adresy.",
           "cloudflareEdge": "{peer} patrí pod Cloudflare. Zapnite možnosť Dôverovať Cloudflare nižšie.",
           "chainHint": "Ak je pred {peer} ďalší proxy, uveďte ho tiež.",
-          "added": "Pridané do zoznamu. Uložte pre aplikovanie."
+          "added": "Pridané do zoznamu. Uložte pre aplikovanie.",
+          "coveredBy": "Už pokryté rozsahom {range} v zozname. Uložte na použitie.",
+          "selfClientCause": "Proxy môže ako klienta odovzdávať svoju vlastnú adresu, často preto, že publikovanie portov kontajnera skrýva skutočného klienta. Opravte to v nastavení siete kontajnera alebo proxy."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Za reverzným proxy toto obídenie funguje iba vtedy, keď je proxy uvedený ako dôveryhodný.",
       "bypassProxyLink": "Nastaviť dôveryhodné proxy",
-      "allowedSubnetsEmpty": "Žiadne ďalšie podsiete. Iba vlastná lokálna sieť tohto servera môže obísť prihlásenie."
+      "allowedSubnetsEmpty": "Žiadne ďalšie podsiete. Iba vlastná lokálna sieť tohto servera môže obísť prihlásenie.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} obsahuje neplatnú položku.",
+        "pendingEntry": "{tab}: {field} obsahuje text, ktorý nebol pridaný. Stlačte Enter alebo Pridať, alebo ho vymažte."
+      }
     },
     "species": {
       "pageLabel": "Nastavenia druhov",

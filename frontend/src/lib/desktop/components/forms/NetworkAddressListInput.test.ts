@@ -26,7 +26,8 @@ function renderInput(props: {
   disabled?: boolean;
   maxItems?: number;
   emptyStateMessage?: string;
-  onPendingChange?: (hasPending: boolean) => void;
+  draft?: string;
+  className?: string;
   rowAnnotation?: ReturnType<typeof annotationSnippet>;
 }) {
   return render(NetworkAddressListInput, { props });
@@ -297,26 +298,68 @@ describe('NetworkAddressListInput', () => {
     expect(annotations).toEqual(['0:10.0.0.0/8:true', '1:nonsense:false']);
   });
 
-  it('reports pending text through onPendingChange and shows the hint', async () => {
-    const onPendingChange = vi.fn();
-    renderList({ onPendingChange });
+  it('shows the pending hint while text is typed but not added', async () => {
+    renderList();
 
     await fireEvent.input(input(), { target: { value: '10.0.0.1' } });
-    expect(onPendingChange).toHaveBeenLastCalledWith(true);
     expect(screen.getByText('forms.networkAddressList.pendingHint')).toBeInTheDocument();
 
     await fireEvent.keyDown(input(), { key: 'Enter' });
-    expect(onPendingChange).toHaveBeenLastCalledWith(false);
     expect(screen.queryByText('forms.networkAddressList.pendingHint')).not.toBeInTheDocument();
   });
 
-  it('clears the pending state when it is unmounted with text in the input', async () => {
-    const onPendingChange = vi.fn();
-    const { unmount } = renderList({ onPendingChange });
+  it('starts from a draft passed in, so a remounted field keeps the typed text', () => {
+    const first = renderList({ draft: '10.0.0.7' });
+    expect(input().value).toBe('10.0.0.7');
+    first.unmount();
+
+    renderList({ draft: '10.0.0.7' });
+
+    expect(input().value).toBe('10.0.0.7');
+    expect(screen.getByText('forms.networkAddressList.pendingHint')).toBeInTheDocument();
+  });
+
+  it('shows the ip-mode message and row flag for ranges in ip mode', async () => {
+    renderList({ accept: 'ip', values: ['10.0.0.0/8'] });
+
+    await typeAndSubmit('192.168.0.0/16');
+
+    expect(alertText()).toContain('forms.networkAddressList.errors.invalid.ip');
+    expect(alertText()).toContain('192.168.0.0/16');
+    expect(screen.getByText('forms.networkAddressList.rowInvalid.ip')).toBeInTheDocument();
+  });
+
+  it('keeps every token in the input and Add disabled once the list is full', async () => {
+    const onUpdate = vi.fn();
+    renderList({ values: ['10.0.0.1', '10.0.0.2'], maxItems: 2, onUpdate });
+
+    await fireEvent.input(input(), { target: { value: '10.0.0.3' } });
+
+    expect(addButton()).toBeDisabled();
+    await fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(input().value).toBe('10.0.0.3');
+    expect(input()).toHaveAttribute(
+      'aria-describedby',
+      expect.stringContaining(screen.getByText(/forms\.networkAddressList\.limitReached/).id)
+    );
+  });
+
+  it('merges className onto the root element', () => {
+    const { container } = renderList({ className: 'custom-root' });
+    expect(container.querySelector('.form-control.custom-root')).not.toBeNull();
+  });
+
+  it('keeps pending text but blocks adding when disabled while text is pending', async () => {
+    const onUpdate = vi.fn();
+    const { rerender } = renderList({ onUpdate });
     await fireEvent.input(input(), { target: { value: '10.0.0.1' } });
 
-    unmount();
+    await rerender({ disabled: true });
 
-    expect(onPendingChange).toHaveBeenLastCalledWith(false);
+    expect(input().value).toBe('10.0.0.1');
+    expect(addButton()).toBeDisabled();
+    await fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(onUpdate).not.toHaveBeenCalled();
   });
 });

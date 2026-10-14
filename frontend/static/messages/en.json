@@ -2310,7 +2310,8 @@
       "saveAriaLabel": "Save Changes",
       "savingAriaLabel": "Saving changes...",
       "unsavedChanges": "Unsaved changes",
-      "toolbar": "Settings actions"
+      "toolbar": "Settings actions",
+      "validationBlocked": "Fix the highlighted fields before saving."
     },
     "errors": {
       "loadFailed": "Failed to load settings",
@@ -4175,7 +4176,9 @@
           "cloudflareInFront": "Cloudflare sits in front of {peer}. Trust both to verify your address.",
           "cloudflareEdge": "{peer} belongs to Cloudflare. Turn on Trust Cloudflare below.",
           "chainHint": "If another proxy sits in front of {peer}, list it too.",
-          "added": "Added to the list. Save to apply."
+          "added": "Added to the list. Save to apply.",
+          "coveredBy": "Already covered by {range} in the list. Save to apply.",
+          "selfClientCause": "The proxy may forward its own address as the client, often because container port publishing hides the real client. Fix this in the container or proxy network setup."
         },
         "status": {
           "direct": {
@@ -4214,7 +4217,11 @@
       },
       "bypassProxyNote": "Behind a reverse proxy, this bypass works only when the proxy is listed as trusted.",
       "bypassProxyLink": "Set up trusted proxies",
-      "allowedSubnetsEmpty": "No additional subnets. Only this server's own local network may bypass the login."
+      "allowedSubnetsEmpty": "No additional subnets. Only this server's own local network may bypass the login.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} has an entry that is not valid.",
+        "pendingEntry": "{tab}: {field} has text that was not added. Press Enter or Add, or clear it."
+      }
     },
     "species": {
       "pageLabel": "Species settings",
