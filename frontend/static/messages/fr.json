@@ -3922,7 +3922,7 @@
       "allowSubnetBypassLabel": "Autoriser les accès depuis le sous-réseau à contourner l'authentification",
       "subnetBypassLocalNote": "Lorsque cette option est activée, les clients sur le même réseau local que ce serveur sont automatiquement approuvés et ignorent la connexion. Utilisez le champ ci-dessous uniquement pour étendre cette confiance à des réseaux supplémentaires (par exemple un VLAN distinct ou un sous-réseau routé).",
       "allowedSubnetsLabel": "Sous-réseaux autorisés",
-      "allowedSubnetsHelp": "Plages de réseau supplémentaires autorisées à contourner la connexion, en plus du propre réseau local de ce serveur. Notation CIDR, séparées par des virgules.",
+      "allowedSubnetsHelp": "Plages de réseau supplémentaires autorisées à contourner la connexion, en plus du propre réseau local de ce serveur. Utilisez la notation CIDR, par exemple 192.168.10.0/24.",
       "securityWarningTitle": "Avertissement de sécurité :",
       "subnetWarningText": "Le réseau local de ce serveur et tous les sous-réseaux listés ici obtiennent un accès complet sans connexion. N'incluez que des réseaux en lesquels vous avez entièrement confiance.",
       "httpsSettingsTitle": "Paramètres HTTPS",
@@ -4150,7 +4150,71 @@
         "downloadCertificate": "Télécharger le certificat",
         "downloadCertificateHelp": "Installez ce certificat dans le magasin de confiance de votre système d'exploitation pour éviter les avertissements de sécurité du navigateur.",
         "fileReadError": "Échec de la lecture du fichier sélectionné"
-      }
+      },
+      "reverseProxy": {
+        "title": "Proxy inverse",
+        "description": "Pour un accès via nginx, Caddy, Traefik, Cloudflare ou un autre proxy",
+        "listLabel": "Proxys de confiance",
+        "listHelp": "Ajoutez l'adresse de chaque proxy placé devant BirdNET-Go. Avec Docker, il s'agit souvent de l'adresse de passerelle Docker, comme 172.17.0.1.",
+        "placeholder": "Par exemple, 172.17.0.1",
+        "emptyState": "Aucun proxy de confiance. BirdNET-Go utilise l'adresse qui s'y connecte.",
+        "rangeBadge": "Plage",
+        "ruleOwnAddress": "Indiquez l'adresse propre de chaque proxy. N'indiquez jamais une plage contenant aussi les ordinateurs depuis lesquels vous naviguez.",
+        "ruleHeaders": "Le proxy doit ajouter l'adresse du client à X-Forwarded-For ou écraser X-Real-IP.",
+        "cloudflareLabel": "Faire confiance à Cloudflare",
+        "cloudflareHelp": "Activez cette option si votre site est desservi via Cloudflare. BirdNET-Go fera alors confiance aux adresses edge publiées par Cloudflare.",
+        "check": {
+          "title": "Votre connexion",
+          "recheck": "Vérifier à nouveau",
+          "checking": "Vérification de votre connexion",
+          "error": "Impossible de vérifier votre connexion.",
+          "stale": "Cette vérification affiche les paramètres enregistrés. Enregistrez pour vérifier vos modifications.",
+          "trust": "Faire confiance à {peer}",
+          "trustWarning": "Ne faites confiance à {peer} que s'il s'agit de votre proxy inverse, pas de l'ordinateur depuis lequel vous naviguez.",
+          "trustWithCloudflare": "Faire confiance à {peer} et Cloudflare",
+          "cloudflareInFront": "Cloudflare est placé devant {peer}. Faites confiance aux deux pour vérifier votre adresse.",
+          "cloudflareEdge": "{peer} appartient à Cloudflare. Activez Faire confiance à Cloudflare ci-dessous.",
+          "chainHint": "Si un autre proxy se trouve devant {peer}, ajoutez-le aussi à la liste.",
+          "added": "Ajouté à la liste. Enregistrez pour appliquer."
+        },
+        "status": {
+          "direct": {
+            "title": "Connexion directe",
+            "body": "Votre navigateur se connecte directement à BirdNET-Go depuis {peer}.",
+            "bodyNoPeer": "Votre navigateur se connecte directement à BirdNET-Go.",
+            "hint": "Si vous utilisez un proxy inverse et que {peer} est son adresse, configurez le proxy pour qu'il transmette X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Connexion via un proxy de confiance",
+            "body": "Votre connexion passe par {peer}, qui est de confiance. Votre adresse {client} a été vérifiée.",
+            "hint": "Si {client} est un autre proxy plutôt que votre ordinateur, ajoutez aussi ce proxy à la liste."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Votre adresse n'a pas pu être vérifiée",
+            "body": "{peer} est de confiance, mais l'adresse qu'il transmet n'a pas pu être vérifiée. Causes courantes :",
+            "causeRange": "Une plage listée contient aussi votre ordinateur, donc aucune adresse de la chaîne n'est considérée comme la vôtre.",
+            "causeHeaders": "Le proxy n'ajoute pas X-Forwarded-For ou n'écrase pas X-Real-IP.",
+            "causeConflict": "Le proxy envoie des en-têtes d'adresse contradictoires ou répétés, ou uniquement un en-tête Forwarded."
+          },
+          "untrusted_public_proxy": {
+            "title": "Connexion via un proxy public",
+            "body": "Votre connexion passe par {peer}, une adresse publique. Les adresses publiques ne sont jamais proposées pour une approbation en un clic. N'en ajoutez une manuellement que si vous êtes certain qu'il s'agit de votre proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Connexion via un proxy non approuvé",
+            "body": "Votre connexion passe par un proxy à l'adresse {peer} qui n'est pas de confiance, BirdNET-Go ne peut donc pas vérifier votre adresse."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Les en-têtes du proxy ne peuvent pas être vérifiés",
+            "body": "Votre connexion passe par {peer}, mais les en-têtes d'adresse qu'il envoie ne pourraient pas être vérifiés même s'il était de confiance.",
+            "bodyNoPeer": "Votre connexion passe par un proxy, mais son adresse n'a pas pu être lue.",
+            "fix": "Configurez le proxy pour qu'il ajoute X-Forwarded-For ou écrase X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Derrière un proxy inverse, ce contournement ne fonctionne que si le proxy est listé comme étant de confiance.",
+      "bypassProxyLink": "Configurer les proxys de confiance",
+      "allowedSubnetsEmpty": "Aucun sous-réseau supplémentaire. Seul le propre réseau local de ce serveur peut contourner la connexion."
     },
     "species": {
       "pageLabel": "Paramètres des espèces",
@@ -4908,6 +4972,28 @@
         "dragToReorder": "Glisser pour réorganiser {species}",
         "edit": "Modifier l'espèce",
         "remove": "Supprimer l'espèce"
+      }
+    },
+    "networkAddressList": {
+      "add": "Ajouter",
+      "remove": "Supprimer {address}",
+      "empty": "Aucune adresse ajoutée pour l'instant.",
+      "pendingHint": "Appuyez sur Entrée ou Ajouter pour ajouter cette adresse.",
+      "limitReached": "La liste est pleine ({max} entrées).",
+      "rowDuplicate": "Doublon",
+      "rowInvalid": {
+        "cidr": "Plage non valide",
+        "ip": "Adresse IP non valide",
+        "ipOrCidr": "Adresse ou plage non valide"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Plage non valide : {values}. Utilisez une plage telle que 192.168.1.0/24.",
+          "ip": "Adresse IP non valide : {values}. Utilisez une adresse telle que 192.168.1.10.",
+          "ipOrCidr": "Adresse ou plage non valide : {values}. Utilisez une adresse telle que 192.168.1.10 ou une plage telle que 192.168.1.0/24."
+        },
+        "duplicate": "Déjà dans la liste : {values}.",
+        "limit": "La liste contient au maximum {max} entrées. Non ajouté : {values}."
       }
     }
   },

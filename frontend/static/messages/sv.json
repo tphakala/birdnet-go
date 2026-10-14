@@ -3922,7 +3922,7 @@
       "allowSubnetBypassLabel": "Tillåt åtkomst från subnät att kringgå autentisering",
       "subnetBypassLocalNote": "När detta är aktiverat anses klienter i samma lokala nätverk som denna server automatiskt vara betrodda och hoppar över inloggningen. Använd fältet nedan endast för att utöka denna tillit till ytterligare nätverk (till exempel ett separat VLAN eller ett routat subnät).",
       "allowedSubnetsLabel": "Tillåtna subnät",
-      "allowedSubnetsHelp": "Ytterligare nätverksintervall som får kringgå inloggningen, utöver serverns eget lokala nätverk. CIDR-notation, kommaseparerade.",
+      "allowedSubnetsHelp": "Ytterligare nätverksintervall som får kringgå inloggningen, utöver serverns eget lokala nätverk. Använd CIDR-notation, som 192.168.10.0/24.",
       "securityWarningTitle": "Säkerhetsvarning:",
       "subnetWarningText": "Denna servers lokala nätverk och alla subnät som anges här får full åtkomst utan att logga in. Inkludera endast nätverk som du litar fullständigt på.",
       "httpsSettingsTitle": "HTTPS-inställningar",
@@ -4150,7 +4150,71 @@
         "downloadCertificate": "Ladda ner certifikat",
         "downloadCertificateHelp": "Installera detta certifikat i ditt operativsystems förtroendearkiv för att undvika webbläsarens säkerhetsvarningar.",
         "fileReadError": "Kunde inte läsa den valda filen"
-      }
+      },
+      "reverseProxy": {
+        "title": "Omvänd proxy",
+        "description": "För åtkomst via nginx, Caddy, Traefik, Cloudflare eller en annan proxy",
+        "listLabel": "Betrodda proxys",
+        "listHelp": "Lägg till adressen för varje proxy framför BirdNET-Go. Med Docker är detta ofta Docker-gatewayadressen, som 172.17.0.1.",
+        "placeholder": "Till exempel 172.17.0.1",
+        "emptyState": "Inga betrodda proxys. BirdNET-Go använder adressen som ansluter till den.",
+        "rangeBadge": "Intervall",
+        "ruleOwnAddress": "Ange varje proxys egen adress. Ange aldrig ett intervall som även innehåller datorerna du surfar från.",
+        "ruleHeaders": "Proxyn måste lägga till klientadressen i X-Forwarded-For eller skriva över X-Real-IP.",
+        "cloudflareLabel": "Lita på Cloudflare",
+        "cloudflareHelp": "Aktivera detta när din webbplats levereras via Cloudflare. BirdNET-Go litar då på Cloudflares publicerade edge-adresser.",
+        "check": {
+          "title": "Din anslutning",
+          "recheck": "Kontrollera igen",
+          "checking": "Kontrollerar din anslutning",
+          "error": "Kunde inte kontrollera din anslutning.",
+          "stale": "Denna kontroll visar de sparade inställningarna. Spara för att kontrollera dina ändringar.",
+          "trust": "Lita på {peer}",
+          "trustWarning": "Lita bara på {peer} om det är din omvända proxy, inte datorn du surfar från.",
+          "trustWithCloudflare": "Lita på {peer} och Cloudflare",
+          "cloudflareInFront": "Cloudflare finns framför {peer}. Lita på båda för att verifiera din adress.",
+          "cloudflareEdge": "{peer} tillhör Cloudflare. Aktivera Lita på Cloudflare nedan.",
+          "chainHint": "Om en annan proxy finns framför {peer}, lista den också.",
+          "added": "Tillagd i listan. Spara för att tillämpa."
+        },
+        "status": {
+          "direct": {
+            "title": "Direktansluten",
+            "body": "Din webbläsare ansluter direkt till BirdNET-Go från {peer}.",
+            "bodyNoPeer": "Din webbläsare ansluter direkt till BirdNET-Go.",
+            "hint": "Om du använder en omvänd proxy och {peer} är dess adress, ställ in proxyn att skicka X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Ansluten via en betrodd proxy",
+            "body": "Din anslutning går via {peer}, som är betrodd. Din adress {client} verifierades.",
+            "hint": "Om {client} är en annan proxy snarare än din dator, lista den proxyn också."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Din adress kunde inte verifieras",
+            "body": "{peer} är betrodd, men adressen den vidarebefordrar kunde inte verifieras. Vanliga orsaker:",
+            "causeRange": "Ett listat intervall innehåller även din dator, så ingen adress i kedjan räknas som din.",
+            "causeHeaders": "Proxyn lägger inte till X-Forwarded-For eller skriver inte över X-Real-IP.",
+            "causeConflict": "Proxyn skickar motstridiga eller upprepade adresshuvuden, eller endast ett Forwarded-huvud."
+          },
+          "untrusted_public_proxy": {
+            "title": "Ansluten via en offentlig proxy",
+            "body": "Din anslutning går via {peer}, en offentlig adress. Offentliga adresser erbjuds aldrig för att lita på med ett klick. Lägg till en manuellt endast om du är säker på att det är din proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Ansluten via en obetrodd proxy",
+            "body": "Din anslutning går via en proxy på {peer} som inte är betrodd, så BirdNET-Go kan inte verifiera din adress."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Proxy-huvuden kan inte verifieras",
+            "body": "Din anslutning går via {peer}, men adresshuvudena den skickar kunde inte verifieras även om den vore betrodd.",
+            "bodyNoPeer": "Din anslutning går via en proxy, men dess adress kunde inte läsas.",
+            "fix": "Ställ in proxyn att lägga till X-Forwarded-For eller skriva över X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Bakom en omvänd proxy fungerar detta kringgående endast när proxyn är listad som betrodd.",
+      "bypassProxyLink": "Konfigurera betrodda proxys",
+      "allowedSubnetsEmpty": "Inga ytterligare subnät. Endast serverns eget lokala nätverk får kringgå inloggningen."
     },
     "species": {
       "pageLabel": "Artinställningar",
@@ -4908,6 +4972,28 @@
         "dragToReorder": "Dra för att ändra ordning på {species}",
         "edit": "Redigera art",
         "remove": "Ta bort art"
+      }
+    },
+    "networkAddressList": {
+      "add": "Lägg till",
+      "remove": "Ta bort {address}",
+      "empty": "Inga adresser tillagda ännu.",
+      "pendingHint": "Tryck på Enter eller Lägg till för att lägga till denna adress.",
+      "limitReached": "Listan är full ({max} poster).",
+      "rowDuplicate": "Dubblett",
+      "rowInvalid": {
+        "cidr": "Ogiltigt intervall",
+        "ip": "Ogiltig IP-adress",
+        "ipOrCidr": "Ogiltig adress eller intervall"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Ogiltigt intervall: {values}. Använd ett intervall som 192.168.1.0/24.",
+          "ip": "Ogiltig IP-adress: {values}. Använd en adress som 192.168.1.10.",
+          "ipOrCidr": "Ogiltig adress eller intervall: {values}. Använd en adress som 192.168.1.10 eller ett intervall som 192.168.1.0/24."
+        },
+        "duplicate": "Finns redan i listan: {values}.",
+        "limit": "Listan kan innehålla högst {max} poster. Inte tillagda: {values}."
       }
     }
   },

@@ -3922,7 +3922,7 @@
       "allowSubnetBypassLabel": "Salli aliverkon käyttää ohitustunnistautumista",
       "subnetBypassLocalNote": "Kun tämä on käytössä, tämän palvelimen kanssa samassa paikallisverkossa olevat asiakaslaitteet katsotaan automaattisesti luotettaviksi ja ne ohittavat kirjautumisen. Käytä alla olevaa kenttää vain laajentaaksesi tämän luottamuksen muihin verkkoihin (esimerkiksi erilliseen VLANiin tai reititettyyn aliverkkoon).",
       "allowedSubnetsLabel": "Sallitut aliverkot",
-      "allowedSubnetsHelp": "Lisäverkkoalueet, jotka voivat ohittaa kirjautumisen, tämän palvelimen oman paikallisverkon lisäksi. CIDR-merkintä, pilkuilla eroteltuna.",
+      "allowedSubnetsHelp": "Lisäverkkoalueet, jotka voivat ohittaa kirjautumisen, tämän palvelimen oman paikallisverkon lisäksi. Käytä CIDR-merkintää, kuten 192.168.10.0/24.",
       "securityWarningTitle": "Turvallisuusvaroitus:",
       "subnetWarningText": "Tämän palvelimen paikallisverkko ja kaikki tässä luetellut aliverkot saavat täyden pääsyn ilman kirjautumista. Sisällytä vain verkkoja, joihin luotat täysin.",
       "httpsSettingsTitle": "HTTPS-asetukset",
@@ -4150,7 +4150,71 @@
         "downloadCertificate": "Lataa sertifikaatti",
         "downloadCertificateHelp": "Asenna tämä sertifikaatti käyttöjärjestelmäsi luottamusvarastoon välttääksesi selaimen turvallisuusvaroitukset.",
         "fileReadError": "Valitun tiedoston lukeminen epäonnistui"
-      }
+      },
+      "reverseProxy": {
+        "title": "Käänteinen välityspalvelin",
+        "description": "Pääsyyn nginxin, Caddyn, Traefikin, Cloudflaren tai muun välityspalvelimen kautta",
+        "listLabel": "Luotetut välityspalvelimet",
+        "listHelp": "Lisää jokaisen BirdNET-Gon edessä olevan välityspalvelimen osoite. Dockerin kanssa tämä on usein Dockerin yhdyskäytäväosoite, kuten 172.17.0.1.",
+        "placeholder": "Esimerkiksi 172.17.0.1",
+        "emptyState": "Ei luotettuja välityspalvelimia. BirdNET-Go käyttää siihen yhdistävää osoitetta.",
+        "rangeBadge": "Verkkoalue",
+        "ruleOwnAddress": "Määritä kunkin välityspalvelimen oma osoite. Älä koskaan lisää aluetta, joka sisältää myös tietokoneet, joilta selaat.",
+        "ruleHeaders": "Välityspalvelimen on lisättävä asiakkaan osoite otsakkeeseen X-Forwarded-For tai korvattava otsake X-Real-IP.",
+        "cloudflareLabel": "Luota Cloudflareen",
+        "cloudflareHelp": "Ota tämä käyttöön, kun sivustosi toimii Cloudflaren kautta. BirdNET-Go luottaa silloin Cloudflaren julkaisemiin reunapalvelinosoitteisiin.",
+        "check": {
+          "title": "Yhteytesi",
+          "recheck": "Tarkista uudelleen",
+          "checking": "Tarkistetaan yhteyttäsi",
+          "error": "Yhteyttäsi ei voitu tarkistaa.",
+          "stale": "Tämä tarkistus näyttää tallennetut asetukset. Tallenna tarkistaaksesi muutokset.",
+          "trust": "Luota kohteeseen {peer}",
+          "trustWarning": "Luota kohteeseen {peer} vain, jos se on käänteinen välityspalvelimesi, ei tietokone, jolta selaat.",
+          "trustWithCloudflare": "Luota kohteeseen {peer} ja Cloudflareen",
+          "cloudflareInFront": "Cloudflare on kohteen {peer} edessä. Luota molempiin vahvistaaksesi osoitteesi.",
+          "cloudflareEdge": "{peer} kuuluu Cloudflarelle. Ota alla käyttöön Luota Cloudflareen.",
+          "chainHint": "Jos kohteen {peer} edellä on toinen välityspalvelin, lisää myös se luetteloon.",
+          "added": "Lisätty luetteloon. Ota käyttöön tallentamalla."
+        },
+        "status": {
+          "direct": {
+            "title": "Yhdistetty suoraan",
+            "body": "Selaimesi yhdistää suoraan BirdNET-Gohon osoitteesta {peer}.",
+            "bodyNoPeer": "Selaimesi yhdistää suoraan BirdNET-Gohon.",
+            "hint": "Jos käytät käänteistä välityspalvelinta ja {peer} on sen osoite, aseta välityspalvelin lähettämään X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Yhdistetty luotetun välityspalvelimen kautta",
+            "body": "Yhteytesi tulee luotetun kohteen {peer} kautta. Osoitteesi {client} on vahvistettu.",
+            "hint": "Jos {client} on toinen välityspalvelin eikä tietokoneesi, lisää myös kyseinen välityspalvelin luetteloon."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Osoitettasi ei voitu vahvistaa",
+            "body": "{peer} on luotettu, mutta sen välittämää osoitetta ei voitu vahvistaa. Yleisiä syitä:",
+            "causeRange": "Luettelossa oleva alue sisältää myös tietokoneesi, joten mitään ketjun osoitetta ei katsota omaksesi.",
+            "causeHeaders": "Välityspalvelin ei lisää otsaketta X-Forwarded-For tai korvaa otsaketta X-Real-IP.",
+            "causeConflict": "Välityspalvelin lähettää ristiriitaisia tai toistuvia osoiteotsakkeita tai vain Forwarded-otsakkeen."
+          },
+          "untrusted_public_proxy": {
+            "title": "Yhdistetty julkisen välityspalvelimen kautta",
+            "body": "Yhteytesi tulee julkisen osoitteen {peer} kautta. Julkisille osoitteille ei koskaan tarjota yhden napsautuksen luottamusta. Lisää se käsin vain, jos olet varma, että se on välityspalvelimesi."
+          },
+          "untrusted_proxy": {
+            "title": "Yhdistetty ei-luotetun välityspalvelimen kautta",
+            "body": "Yhteytesi tulee osoitteessa {peer} olevan välityspalvelimen kautta, johon ei luoteta, joten BirdNET-Go ei voi vahvistaa osoitettasi."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Välityspalvelimen otsakkeita ei voida vahvistaa",
+            "body": "Yhteytesi tulee kohteen {peer} kautta, mutta sen lähettämiä osoiteotsakkeita ei voitaisi vahvistaa, vaikka se olisi luotettu.",
+            "bodyNoPeer": "Yhteytesi tulee välityspalvelimen kautta, mutta sen osoitetta ei voitu lukea.",
+            "fix": "Määritä välityspalvelin lisäämään otsake X-Forwarded-For tai korvaamaan otsake X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Käänteisen välityspalvelimen takana tämä ohitus toimii vain, kun välityspalvelin on merkitty luotetuksi.",
+      "bypassProxyLink": "Määritä luotetut välityspalvelimet",
+      "allowedSubnetsEmpty": "Ei lisäaliverkkoja. Vain tämän palvelimen oma paikallisverkko voi ohittaa kirjautumisen."
     },
     "species": {
       "pageLabel": "Lajiasetukset",
@@ -4908,6 +4972,28 @@
         "dragToReorder": "Vedä järjestääksesi {species}",
         "edit": "Muokkaa lajia",
         "remove": "Poista laji"
+      }
+    },
+    "networkAddressList": {
+      "add": "Lisää",
+      "remove": "Poista {address}",
+      "empty": "Osoitteita ei ole vielä lisätty.",
+      "pendingHint": "Paina Enter tai Lisää lisätäksesi tämän osoitteen.",
+      "limitReached": "Luettelo on täynnä ({max} kohdetta).",
+      "rowDuplicate": "Kaksoiskappale",
+      "rowInvalid": {
+        "cidr": "Virheellinen verkkoalue",
+        "ip": "Virheellinen IP-osoite",
+        "ipOrCidr": "Virheellinen osoite tai verkkoalue"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Virheellinen verkkoalue: {values}. Käytä aluetta kuten 192.168.1.0/24.",
+          "ip": "Virheellinen IP-osoite: {values}. Käytä osoitetta kuten 192.168.1.10.",
+          "ipOrCidr": "Virheellinen osoite tai verkkoalue: {values}. Käytä osoitetta kuten 192.168.1.10 tai aluetta kuten 192.168.1.0/24."
+        },
+        "duplicate": "On jo luettelossa: {values}.",
+        "limit": "Luetteloon mahtuu enintään {max} kohdetta. Ei lisätty: {values}."
       }
     }
   },

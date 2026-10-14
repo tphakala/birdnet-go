@@ -3922,7 +3922,7 @@
       "allowSubnetBypassLabel": "Povolit přístup z podsítě k obejití autentizace",
       "subnetBypassLocalNote": "Když je tato možnost zapnutá, klientům ve stejné místní síti jako tento server se automaticky důvěřuje a přihlášení přeskočí. Pole níže použijte pouze k rozšíření této důvěry na další sítě (například samostatnou VLAN nebo směrovanou podsíť).",
       "allowedSubnetsLabel": "Povolené podsítě",
-      "allowedSubnetsHelp": "Další síťové rozsahy, které mohou obejít přihlášení, nad rámec vlastní místní sítě tohoto serveru. Notace CIDR, oddělené čárkami.",
+      "allowedSubnetsHelp": "Další síťové rozsahy, které mohou obejít přihlášení, nad rámec vlastní místní sítě tohoto serveru. Použijte notaci CIDR, například 192.168.10.0/24.",
       "securityWarningTitle": "Bezpečnostní upozornění:",
       "subnetWarningText": "Místní síť tohoto serveru a všechny zde uvedené podsítě získají plný přístup bez přihlášení. Zahrňte pouze sítě, kterým plně důvěřujete.",
       "httpsSettingsTitle": "Nastavení HTTPS",
@@ -4150,7 +4150,71 @@
         "downloadCertificate": "Stáhnout certifikát",
         "downloadCertificateHelp": "Nainstalujte tento certifikát do úložiště důvěryhodných certifikátů vašeho operačního systému, abyste se vyhnuli bezpečnostním upozorněním prohlížeče.",
         "fileReadError": "Nepodařilo se přečíst vybraný soubor"
-      }
+      },
+      "reverseProxy": {
+        "title": "Reverzní proxy",
+        "description": "Pro přístup přes nginx, Caddy, Traefik, Cloudflare nebo jinou proxy",
+        "listLabel": "Důvěryhodné proxy",
+        "listHelp": "Přidejte adresu každé proxy před BirdNET-Go. U Dockeru se často jedná o adresu brány Dockeru, například 172.17.0.1.",
+        "placeholder": "Například 172.17.0.1",
+        "emptyState": "Žádné důvěryhodné proxy. BirdNET-Go používá adresu, která se k němu připojuje.",
+        "rangeBadge": "Rozsah",
+        "ruleOwnAddress": "Uveďte vlastní adresu každé proxy. Nikdy neuvádějte rozsah, který zahrnuje i počítače, ze kterých prohlížíte.",
+        "ruleHeaders": "Proxy musí připojit adresu klienta k X-Forwarded-For nebo přepsat X-Real-IP.",
+        "cloudflareLabel": "Důvěřovat Cloudflare",
+        "cloudflareHelp": "Zapněte tuto možnost, pokud je váš web poskytován přes Cloudflare. BirdNET-Go pak důvěřuje publikovaným koncovým adresám Cloudflare.",
+        "check": {
+          "title": "Vaše připojení",
+          "recheck": "Zkontrolovat znovu",
+          "checking": "Kontrola vašeho připojení",
+          "error": "Vaše připojení se nepodařilo zkontrolovat.",
+          "stale": "Tato kontrola zobrazuje uložená nastavení. Pro kontrolu změn nastavení uložte.",
+          "trust": "Důvěřovat {peer}",
+          "trustWarning": "Důvěřujte {peer} pouze v případě, že se jedná o vaši reverzní proxy, a nikoli počítač, ze kterého prohlížíte.",
+          "trustWithCloudflare": "Důvěřovat {peer} a Cloudflare",
+          "cloudflareInFront": "Před {peer} se nachází Cloudflare. Pro ověření vaší adresy důvěřujte oběma.",
+          "cloudflareEdge": "{peer} patří službě Cloudflare. Níže zapněte Důvěřovat Cloudflare.",
+          "chainHint": "Pokud se před {peer} nachází další proxy, uveďte ji také.",
+          "added": "Přidáno do seznamu. Pro uplatnění uložte."
+        },
+        "status": {
+          "direct": {
+            "title": "Připojeno přímo",
+            "body": "Váš prohlížeč se připojuje k BirdNET-Go přímo z {peer}.",
+            "bodyNoPeer": "Váš prohlížeč se připojuje k BirdNET-Go přímo.",
+            "hint": "Pokud používáte reverzní proxy a {peer} je její adresa, nastavte proxy tak, aby odesílala X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Připojeno přes důvěryhodnou proxy",
+            "body": "Vaše připojení přichází přes {peer}, což je důvěryhodná proxy. Vaše adresa {client} byla ověřena.",
+            "hint": "Pokud je {client} další proxy namísto vašeho počítače, uveďte tuto proxy také."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Vaši adresu se nepodařilo ověřit",
+            "body": "{peer} je důvěryhodná, ale adresu, kterou předává, se nepodařilo ověřit. Časté příčiny:",
+            "causeRange": "Uvedený rozsah zahrnuje i váš počítač, takže žádná adresa v řetězci se nepočítá jako vaše.",
+            "causeHeaders": "Proxy nepřipojuje X-Forwarded-For ani nepřepisuje X-Real-IP.",
+            "causeConflict": "Proxy posílá konfliktní nebo opakované hlavičky adres, nebo pouze hlavičku Forwarded."
+          },
+          "untrusted_public_proxy": {
+            "title": "Připojeno přes veřejnou proxy",
+            "body": "Vaše připojení přichází přes {peer}, což je veřejná adresa. U veřejných adres se nikdy nenabízí důvěra jedním kliknutím. Přidejte ji ručně pouze v případě, že jste si jisti, že je to vaše proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Připojeno přes nedůvěryhodnou proxy",
+            "body": "Vaše připojení přichází přes proxy na adrese {peer}, která není důvěryhodná, takže BirdNET-Go nemůže ověřit vaši adresu."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Hlavičky proxy nelze ověřit",
+            "body": "Vaše připojení přichází přes {peer}, ale hlavičky adres, které posílá, by nebylo možné ověřit, ani kdyby byla důvěryhodná.",
+            "bodyNoPeer": "Vaše připojení přichází přes proxy, ale její adresu se nepodařilo přečíst.",
+            "fix": "Nastavte proxy tak, aby připojovala X-Forwarded-For nebo přepisovala X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Za reverzní proxy toto obejití funguje pouze tehdy, když je proxy uvedena jako důvěryhodná.",
+      "bypassProxyLink": "Nastavit důvěryhodné proxy",
+      "allowedSubnetsEmpty": "Žádné další podsítě. Přihlášení může obejít pouze vlastní místní síť tohoto serveru."
     },
     "species": {
       "pageLabel": "Nastavení druhů",
@@ -4908,6 +4972,28 @@
         "dragToReorder": "Tažením změníte pořadí druhu {species}",
         "edit": "Upravit druh",
         "remove": "Odebrat druh"
+      }
+    },
+    "networkAddressList": {
+      "add": "Přidat",
+      "remove": "Odebrat {address}",
+      "empty": "Zatím nebyly přidány žádné adresy.",
+      "pendingHint": "Stiskněte Enter nebo Přidat pro přidání této adresy.",
+      "limitReached": "Seznam je plný ({max} položek).",
+      "rowDuplicate": "Duplikát",
+      "rowInvalid": {
+        "cidr": "Neplatný rozsah",
+        "ip": "Neplatná IP adresa",
+        "ipOrCidr": "Neplatná adresa nebo rozsah"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Neplatný rozsah: {values}. Použijte rozsah jako například 192.168.1.0/24.",
+          "ip": "Neplatná IP adresa: {values}. Použijte adresu jako například 192.168.1.10.",
+          "ipOrCidr": "Neplatná adresa nebo rozsah: {values}. Použijte adresu jako například 192.168.1.10 nebo rozsah jako například 192.168.1.0/24."
+        },
+        "duplicate": "Již je v seznamu: {values}.",
+        "limit": "Seznam může obsahovat maximálně {max} položek. Nepřidáno: {values}."
       }
     }
   },

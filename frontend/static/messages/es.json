@@ -3922,7 +3922,7 @@
       "allowSubnetBypassLabel": "Permitir acceso desde subred para omitir autenticación",
       "subnetBypassLocalNote": "Cuando está activado, los clientes en la misma red local que este servidor se consideran de confianza automáticamente y omiten el inicio de sesión. Usa el campo de abajo solo para extender esa confianza a redes adicionales (por ejemplo, una VLAN independiente o una subred enrutada).",
       "allowedSubnetsLabel": "Subredes permitidas",
-      "allowedSubnetsHelp": "Rangos de red adicionales que pueden omitir el inicio de sesión, además de la propia red local de este servidor. Notación CIDR, separados por comas.",
+      "allowedSubnetsHelp": "Rangos de red adicionales que pueden omitir el inicio de sesión, además de la propia red local de este servidor. Usa la notación CIDR, como 192.168.10.0/24.",
       "securityWarningTitle": "Advertencia de seguridad:",
       "subnetWarningText": "La red local de este servidor y todas las subredes indicadas aquí obtienen acceso completo sin iniciar sesión. Incluye solo redes en las que confíes plenamente.",
       "httpsSettingsTitle": "Configuración HTTPS",
@@ -4150,7 +4150,71 @@
         "downloadCertificate": "Descargar certificado",
         "downloadCertificateHelp": "Instala este certificado en el almacén de confianza de tu sistema operativo para evitar advertencias de seguridad del navegador.",
         "fileReadError": "Error al leer el archivo seleccionado"
-      }
+      },
+      "reverseProxy": {
+        "title": "Proxy inverso",
+        "description": "Para acceso a través de nginx, Caddy, Traefik, Cloudflare u otro proxy",
+        "listLabel": "Proxies de confianza",
+        "listHelp": "Añade la dirección de cada proxy delante de BirdNET-Go. Con Docker, suele ser la dirección de puerta de enlace de Docker, como 172.17.0.1.",
+        "placeholder": "Por ejemplo, 172.17.0.1",
+        "emptyState": "Sin proxies de confianza. BirdNET-Go utiliza la dirección que se conecta a él.",
+        "rangeBadge": "Rango",
+        "ruleOwnAddress": "Indica la dirección propia de cada proxy. Nunca indiques un rango que también contenga los ordenadores desde los que navegas.",
+        "ruleHeaders": "El proxy debe añadir la dirección del cliente a X-Forwarded-For o sobrescribir X-Real-IP.",
+        "cloudflareLabel": "Confiar en Cloudflare",
+        "cloudflareHelp": "Activa esto cuando tu sitio se sirva a través de Cloudflare. BirdNET-Go confiará entonces en las direcciones perimetrales publicadas por Cloudflare.",
+        "check": {
+          "title": "Tu conexión",
+          "recheck": "Volver a comprobar",
+          "checking": "Comprobando tu conexión",
+          "error": "No se pudo comprobar tu conexión.",
+          "stale": "Esta comprobación muestra los ajustes guardados. Guarda para comprobar tus cambios.",
+          "trust": "Confiar en {peer}",
+          "trustWarning": "Confía solo en {peer} si es tu proxy inverso, no el ordenador desde el que estás navegando.",
+          "trustWithCloudflare": "Confiar en {peer} y Cloudflare",
+          "cloudflareInFront": "Cloudflare se encuentra delante de {peer}. Confía en ambos para verificar tu dirección.",
+          "cloudflareEdge": "{peer} pertenece a Cloudflare. Activa Confiar en Cloudflare a continuación.",
+          "chainHint": "Si hay otro proxy delante de {peer}, indícalo también.",
+          "added": "Añadido a la lista. Guarda para aplicar."
+        },
+        "status": {
+          "direct": {
+            "title": "Conectado directamente",
+            "body": "Tu navegador se conecta a BirdNET-Go directamente desde {peer}.",
+            "bodyNoPeer": "Tu navegador se conecta a BirdNET-Go directamente.",
+            "hint": "Si usas un proxy inverso y {peer} es su dirección, configura el proxy para que envíe X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Conectado a través de un proxy de confianza",
+            "body": "Tu conexión llega a través de {peer}, que es de confianza. Se ha verificado tu dirección {client}.",
+            "hint": "Si {client} es otro proxy en lugar de tu ordenador, indica también ese proxy."
+          },
+          "trusted_proxy_unverified": {
+            "title": "No se pudo verificar tu dirección",
+            "body": "{peer} es de confianza, pero la dirección que reenvía no se pudo verificar. Causas habituales:",
+            "causeRange": "Un rango indicado también incluye tu ordenador, por lo que ninguna dirección en la cadena se considera tuya.",
+            "causeHeaders": "El proxy no añade X-Forwarded-For ni sobrescribe X-Real-IP.",
+            "causeConflict": "El proxy envía cabeceras de dirección conflictivas o repetidas, o solo una cabecera Forwarded."
+          },
+          "untrusted_public_proxy": {
+            "title": "Conectado a través de un proxy público",
+            "body": "Tu conexión llega a través de {peer}, una dirección pública. Las direcciones públicas nunca se ofrecen para confiar con un solo clic. Añade una manualmente solo si estás seguro de que es tu proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Conectado a través de un proxy no confiable",
+            "body": "Tu conexión llega a través de un proxy en {peer} que no es de confianza, por lo que BirdNET-Go no puede verificar tu dirección."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "No se pueden verificar las cabeceras del proxy",
+            "body": "Tu conexión llega a través de {peer}, pero las cabeceras de dirección que envía no se podrían verificar ni siquiera si fuera de confianza.",
+            "bodyNoPeer": "Tu conexión llega a través de un proxy, pero no se pudo leer su dirección.",
+            "fix": "Configura el proxy para que añada X-Forwarded-For o sobrescriba X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Detrás de un proxy inverso, esta omisión solo funciona cuando el proxy figura como de confianza.",
+      "bypassProxyLink": "Configurar proxies de confianza",
+      "allowedSubnetsEmpty": "Sin subredes adicionales. Solo la propia red local de este servidor puede omitir el inicio de sesión."
     },
     "species": {
       "pageLabel": "Configuración de especies",
@@ -4908,6 +4972,28 @@
         "dragToReorder": "Arrastra para reordenar {species}",
         "edit": "Editar especie",
         "remove": "Eliminar especie"
+      }
+    },
+    "networkAddressList": {
+      "add": "Añadir",
+      "remove": "Eliminar {address}",
+      "empty": "Aún no se han añadido direcciones.",
+      "pendingHint": "Pulsa Intro o Añadir para añadir esta dirección.",
+      "limitReached": "La lista está llena ({max} entradas).",
+      "rowDuplicate": "Duplicado",
+      "rowInvalid": {
+        "cidr": "Rango no válido",
+        "ip": "Dirección IP no válida",
+        "ipOrCidr": "Dirección o rango no válido"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Rango no válido: {values}. Usa un rango como 192.168.1.0/24.",
+          "ip": "Dirección IP no válida: {values}. Usa una dirección como 192.168.1.10.",
+          "ipOrCidr": "Dirección o rango no válido: {values}. Usa una dirección como 192.168.1.10 o un rango como 192.168.1.0/24."
+        },
+        "duplicate": "Ya está en la lista: {values}.",
+        "limit": "La lista admite como máximo {max} entradas. No añadido: {values}."
       }
     }
   },
