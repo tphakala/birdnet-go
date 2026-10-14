@@ -600,3 +600,27 @@ func TestRunEncoder_UnknownEncoderIsAnError(t *testing.T) {
 	require.Error(t, err)
 	assert.NoFileExists(t, out)
 }
+
+// A capture buffer ending in half a sample at a rate the encoder already accepts
+// takes neither resample branch. The partial frame is still trimmed, so the
+// encoder's whole-frame check cannot cost the clip.
+func TestResolveExportParams_OddLengthPCMAtSupportedRateEncodesForLossy(t *testing.T) {
+	for _, lf := range lossyNativeFormats {
+		t.Run(lf.format, func(t *testing.T) {
+			a := newExportTestAction(t, "96k")
+			a.pcmData = append(sinePCMAtRate(conf.SampleRate, 0.5, 1000, 8000), 0x7f)
+			require.Equal(t, 1, len(a.pcmData)%2)
+			a.sourceSampleRate = conf.SampleRate
+			a.Settings.Realtime.Audio.Export.Type = lf.format
+
+			out := filepath.Join(t.TempDir(), "clip"+lf.ext)
+			rate, format, path := a.resolveExportParams(out)
+			require.Equal(t, conf.SampleRate, rate)
+
+			enc, err := a.encodeClip(t.Context(), rate, format, path)
+			require.NoError(t, err)
+			assert.Equal(t, lf.encoder, enc.Encoder)
+			assert.FileExists(t, path)
+		})
+	}
+}

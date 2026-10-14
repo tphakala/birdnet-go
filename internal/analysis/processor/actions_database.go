@@ -1353,7 +1353,8 @@ func exportFormatForModel(modelName, modelVersion string, sourceRate int, export
 // the lossy formats never use FFmpeg and are never downgraded to WAV, so the
 // stored clip name and the file on disk cannot disagree. If a resample cannot run
 // (an unusable source rate), the clip stays at that rate and the encoder rejects
-// it, failing the export through the normal failure path.
+// it, failing the export through the normal failure path. A trailing partial
+// sample is trimmed from the PCM of the lossy formats first, resample or not.
 func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, format, path string) {
 	rate = a.sourceSampleRate
 	if rate <= 0 {
@@ -1371,6 +1372,15 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	// Decide the format from the ORIGINAL source rate, before the resample below
 	// can mutate it. Shared with applyExportFormatExtension on the naming path.
 	format = resolveExportFormat(isBat, rate, export)
+
+	// A trailing partial sample is trimmed for the lossy formats before anything
+	// else, whether or not a resample follows: the resampler and every lossy
+	// encoder reject a buffer that is not a whole number of frames, and with no
+	// fallback format that would cost the clip. Dropping under one sample is
+	// inaudible.
+	if conf.IsLossyExportFormat(format) {
+		a.pcmData = trimPartialSample(a.pcmData)
+	}
 
 	switch {
 	case rate > conf.SampleRate && !isBat:
@@ -1403,19 +1413,11 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 // rate the clip is now at. On failure it logs once per rate pair and leaves the
 // clip at srcRate for the caller's fallback to handle.
 //
-// For the lossy formats a trailing partial sample is trimmed first. A capture
-// buffer that ends mid-sample would otherwise make the resampler reject the
-// whole buffer for an odd byte count, which would cost the clip because there is
-// no fallback format. Dropping under one sample is inaudible.
-//
 // The failure log is keyed per rate pair because resampling a fixed pair either
 // works or it does not, so an affected source would otherwise warn on every
 // detection forever; keying by the pair (rather than assuming a fixed target) keeps
 // a future variable target from silencing a new pair.
 func (a *SaveAudioAction) resampleExportTo(srcRate, dstRate int, format string) int {
-	if conf.IsLossyExportFormat(format) {
-		a.pcmData = trimPartialSample(a.pcmData)
-	}
 	resampled, err := resample.ResampleBytes(a.pcmData, srcRate, dstRate)
 	if err != nil {
 		resampleFailureLogged.do(resampleKey(srcRate, dstRate), func() {
