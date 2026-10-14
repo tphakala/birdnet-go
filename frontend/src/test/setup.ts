@@ -444,6 +444,17 @@ vi.mock('$lib/utils/settingsApi.js', () => {
         rangeFilter: vi.fn().mockResolvedValue([]),
         all: vi.fn().mockResolvedValue([]),
       },
+      security: {
+        getConnection: vi.fn().mockResolvedValue({
+          status: 'direct',
+          peerAddress: '192.168.1.20',
+          hasForwardedHeaders: false,
+          peerIsTrustedProxy: false,
+          verifiedClientAddress: '192.168.1.20',
+          peerIsCloudflareEdge: false,
+          cloudflarePresetWouldVerify: false,
+        }),
+      },
       system: {
         audioDevices: vi.fn().mockResolvedValue([]),
         ffmpegVersion: vi.fn().mockResolvedValue({ version: '5.0.0', available: true }),

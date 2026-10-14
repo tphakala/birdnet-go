@@ -520,6 +520,13 @@ export interface SecuritySettings {
     liveAudio: boolean;
   };
   privateMode?: boolean;
+  /**
+   * Reverse proxies whose forwarded client-IP headers are honored for
+   * authentication decisions such as the subnet bypass (security.trustedProxies).
+   * Each entry is an IPv4 or IPv6 address, a CIDR, or the reserved `cloudflare`
+   * preset token. Coercion turns a missing or null value into `[]`.
+   */
+  trustedProxies?: string[];
 }
 
 // Legacy OAuth settings interface (deprecated)
@@ -1134,6 +1141,7 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
         enabled: false,
         subnet: '',
       },
+      trustedProxies: [],
     },
     sentry: {
       enabled: false,
