@@ -12,6 +12,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // decodeBytes writes data to a file named for ext and decodes it back.
@@ -93,6 +94,25 @@ func TestEncode_UnsupportedRateResamplesTo48k(t *testing.T) {
 			assert.InDelta(t, seconds*float64(tt.wantRate), back.Frames(), lossyRateSlack)
 		})
 	}
+}
+
+func TestEncode_FLACAboveMaxRateResamples(t *testing.T) {
+	t.Parallel()
+
+	const flacLimit = 655350 // the highest rate the FLAC encoder accepts
+	assert.True(t, EncoderAcceptsRate(audioformat.FLAC, flacLimit, outputBitDepth, 1), "the FLAC limit itself is carried")
+	assert.False(t, EncoderAcceptsRate(audioformat.FLAC, flacLimit+1, outputBitDepth, 1), "a rate above the FLAC limit is not carried")
+
+	const (
+		rate    = 768000 // above the FLAC limit, below the source rate bound
+		seconds = 0.25
+	)
+	src := tone(rate, 1, seconds, testToneHz, testAmp)
+	data, err := encode(t.Context(), newPCM(src, rate, 1), audioformat.FLAC, t.TempDir())
+	require.NoError(t, err, "the FLAC encoder rejects this rate, so it must be resampled first")
+
+	back := decodeBytes(t, data, ".flac")
+	assert.Equal(t, conf.SampleRate, back.SampleRate)
 }
 
 func TestEncode_UpsampleOverCap(t *testing.T) {
