@@ -347,6 +347,7 @@ func TestV2OnlyDatastore_GetSpeciesFirstAndLastDetectionTimeBefore(t *testing.T)
 		// its own end. The newest genuine detection carries a "correct" review,
 		// which must not be excluded along with the false positives.
 		review := func(ts time.Time, status entities.VerificationStatus) {
+			t.Helper()
 			det := seedDetection(t, ds, "Sylvia atricapilla", ts)
 			require.NoError(t, ds.manager.DB().Create(&entities.DetectionReview{
 				DetectionID: det.ID,

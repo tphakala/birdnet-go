@@ -24,6 +24,7 @@ func TestV2OnlyDatastore_GetSpeciesFirstAndLastDetectionTimeBefore_MySQL(t *test
 
 	t.Run("each bound skips false positives but keeps reviewed-correct detections", func(t *testing.T) {
 		review := func(ts time.Time, status entities.VerificationStatus) {
+			t.Helper()
 			det := seedDetection(t, ds, "Sylvia atricapilla", ts)
 			require.NoError(t, ds.manager.DB().Create(&entities.DetectionReview{
 				DetectionID: det.ID,
