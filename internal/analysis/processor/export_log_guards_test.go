@@ -224,8 +224,8 @@ func TestResampleFailureLogsOncePerRatePair(t *testing.T) {
 
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
 	// 100 Hz is outside the resampler's ratio range to 48 kHz, so the upsample
-	// fails deterministically. (An odd byte count no longer fails: the lossy
-	// formats trim a trailing partial sample first.)
+	// fails deterministically. (An odd byte count no longer fails: the PCM is
+	// trimmed to whole frames first.)
 	const unresamplableRate = 100
 	a.sourceSampleRate = unresamplableRate
 

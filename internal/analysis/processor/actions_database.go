@@ -1354,7 +1354,7 @@ func exportFormatForModel(modelName, modelVersion string, sourceRate int, export
 // stored clip name and the file on disk cannot disagree. If a resample cannot run
 // (an unusable source rate), the clip stays at that rate and the encoder rejects
 // it, failing the export through the normal failure path. A trailing partial
-// sample is trimmed from the PCM of the lossy formats first, resample or not.
+// sample is trimmed from the PCM first for every format, resample or not.
 func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, format, path string) {
 	rate = a.sourceSampleRate
 	if rate <= 0 {
@@ -1373,14 +1373,12 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	// can mutate it. Shared with applyExportFormatExtension on the naming path.
 	format = resolveExportFormat(isBat, rate, export)
 
-	// A trailing partial sample is trimmed for the lossy formats before anything
-	// else, whether or not a resample follows: the resampler and every lossy
-	// encoder reject a buffer that is not a whole number of frames, and with no
-	// fallback format that would cost the clip. Dropping under one sample is
-	// inaudible.
-	if conf.IsLossyExportFormat(format) {
-		a.pcmData = trimPartialSample(a.pcmData)
-	}
+	// A trailing partial sample is trimmed for every format before anything else,
+	// whether or not a resample follows: the resampler, the WAV writer, go-flac and
+	// every lossy encoder reject a buffer that is not a whole number of frames, and
+	// with no fallback format that would cost the clip. Dropping under one sample
+	// is inaudible.
+	a.pcmData = trimPartialSample(a.pcmData)
 
 	switch {
 	case rate > conf.SampleRate && !isBat:
