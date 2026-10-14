@@ -458,6 +458,13 @@ func TestDecode_RejectsHugeOrNonFiniteWindow(t *testing.T) {
 	const capBytes = testRate // half a second of mono 16-bit audio
 	_, err = decode(t.Context(), path, &window{Start: 0, Duration: 1}, capBytes)
 	require.ErrorIs(t, err, ErrAudioTooLong)
+
+	// An Ogg Opus source declares no length, so there is nothing to clamp the
+	// window to and the requested length alone is held against the cap.
+	opusPath := filepath.Join(t.TempDir(), "long.opus")
+	writeOpusFile(t, opusPath, tone(testRate, 1, 2, testToneHz, testAmp), testRate, 1)
+	_, err = decode(t.Context(), opusPath, &window{Start: 0, Duration: 1}, capBytes)
+	require.ErrorIs(t, err, ErrAudioTooLong, "a window on a source of unknown length is checked against the cap")
 }
 
 func TestDecode_WindowPastEndOfHighRateSourceIsClamped(t *testing.T) {
