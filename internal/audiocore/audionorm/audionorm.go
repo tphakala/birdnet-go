@@ -210,9 +210,9 @@ func PlanGain(meas Measurement, opts Options) Result {
 // loud static, and a hot clip from being driven toward digital silence.
 //
 // The detection-clip export path deliberately does NOT use this: it bounds gain
-// with its own nativeExportMaxGainDB (internal/analysis/processor), derived from
-// the widest lift a valid loudness target can ask for. (Distinct again from
-// transcode.MaxGainDB, which is a request validation range, not a clamp.)
+// with MaxNormalizeGainDB (shared with on-demand transcode), derived from
+// the widest lift a valid loudness target can ask for. (transcode.MaxGainDB aliases
+// MaxNormalizeGainDB and serves as the on-demand request validation range.)
 const DefaultMaxGainDB = 30.0
 
 // MaxNormalizeGainDB is the gain clamp for loudness normalization of detection
@@ -260,8 +260,9 @@ func ClampGainDB(gainDB, maxAbsDB float64) (clamped float64, limited bool) {
 // here, so callers must pass a target in (-70, 0) and a ceiling <= 0; a
 // non-finite or out-of-range target otherwise flows through as a NaN or garbage
 // gain. The sole current caller, the BirdWeather upload path, passes fixed
-// constants. (The detection export path plans its gain step by step instead, so
-// it can apply a gate fallback for clips R128 cannot measure.)
+// constants. (Detection export and on-demand transcode use
+// PlanGainWithGateFallbackInt16Bytes instead, which applies a gate fallback for
+// clips R128 cannot measure.)
 func PlanClampedGainInt16Bytes(pcm []byte, opts Options, maxAbsGainDB float64) (gainDB float64, meas Measurement, res Result, limited bool, err error) {
 	meas, err = MeasureInt16Bytes(pcm, opts.SampleRate, opts.Channels)
 	if err != nil {

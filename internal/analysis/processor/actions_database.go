@@ -1151,7 +1151,7 @@ func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate in
 }
 
 // nativeNormalizationBitDepth is the only PCM bit depth the native gain and
-// normalization path handles: audionorm.PlanClampedGainInt16Bytes and pcmgain
+// normalization path handles: audionorm.PlanGainWithGateFallbackInt16Bytes and pcmgain
 // both operate on int16 samples. The constraint belongs to those helpers rather
 // than to any one codec, so every native encoder shares it.
 const nativeNormalizationBitDepth = 16
