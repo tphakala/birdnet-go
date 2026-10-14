@@ -2,9 +2,10 @@
  * Login route helpers: the SPA login route and the validated post-login target.
  *
  * The backend redirects a logged-out visitor of a protected page to
- * `<base>/login?redirect=<path>`. The SPA rewrites that address to the login route
- * (see navigation.svelte.ts), reads the target back with resolveLoginRedirect, and
- * hands it to the login form. resolveLoginRedirect returns an internal path without a
+ * `<base>/login?redirect=<path>`. The navigation store's generic `/ui` prefixing
+ * (normalizeUiPath in navigation.svelte.ts) turns that address into the login route; the
+ * SPA reads the target back with resolveLoginRedirect and hands it to the login form.
+ * resolveLoginRedirect returns an internal path without a
  * reverse-proxy prefix, like the paths the navigation store keeps; buildLoginUrl returns
  * an address that carries the prefix.
  */
@@ -16,7 +17,7 @@ import { buildAppUrl, getAppBasePath, isRelativePath } from './urlHelpers';
 
 /** The SPA route that shows the login form. */
 export const LOGIN_ROUTE_PATH = ['', 'ui', 'login'].join('/');
-/** The path the backend redirects to; the navigation store rewrites it to the login route. */
+/** The path the backend redirects to; the navigation store prefixes it to the login route. */
 export const LEGACY_LOGIN_PATH = ['', 'login'].join('/');
 /** Where a login goes when the redirect parameter is missing or not acceptable. */
 export const DEFAULT_LOGIN_TARGET = ['', 'ui', 'dashboard'].join('/');
@@ -32,8 +33,12 @@ const DOT_SEGMENT_RE = /\/\.\.?(?:\/|$)/;
 const PERCENT_ESCAPE_RE = /%[0-9a-f]{2}/i;
 const TRAILING_SLASHES_RE = /\/+$/;
 
-/** Longest redirect value accepted, query included (same cap as LoginModal). */
-const MAX_LOGIN_REDIRECT_LENGTH = 2000;
+/**
+ * Longest redirect value accepted, query included. Intentionally a bit tighter than the
+ * backend's security.MaxSafeRedirectLength (2048), so what the client sends passes server
+ * validation. LoginModal applies the same cap.
+ */
+export const MAX_LOGIN_REDIRECT_LENGTH = 2000;
 /** The backend rejects redirect paths of this length or longer (security.MaxSafePathLength). */
 const MAX_LOGIN_REDIRECT_PATH_LENGTH = 512;
 
@@ -83,6 +88,8 @@ export function resolveLoginRedirect(search: string): string {
   } catch {
     return DEFAULT_LOGIN_TARGET;
   }
+  // The raw-path check above already rules out '//', backslashes and dot segments; they
+  // are checked again on the decoded path as defense in depth.
   if (
     decoded.includes('//') ||
     decoded.includes('\\') ||

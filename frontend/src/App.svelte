@@ -120,14 +120,16 @@
 
   // The login route (/ui/login) shows the same full-screen login form as private mode
   // to a visitor who is not allowed in. The backend sends logged-out visitors of
-  // protected pages to /login?redirect=<page>, which the navigation store rewrites to this
-  // route; the form returns to the page after a password login. A visitor who is already
-  // allowed goes straight to that target.
+  // protected pages to /login?redirect=<page>, which the navigation store's `/ui` prefixing
+  // turns into this route; the form returns to the page after a password login. A visitor
+  // who is already allowed goes straight to that target.
   let loginRouteActive = $derived(currentRoute === 'login' && securityEnabled && !accessAllowed);
+  // The validated post-login page (unprefixed); only meaningful on the login route.
+  let loginTarget = $derived(
+    currentRoute === 'login' ? resolveLoginRedirect(navigation.currentSearch) : DEFAULT_LOGIN_TARGET
+  );
   let loginRedirectUrl = $derived(
-    currentRoute === 'login'
-      ? buildAppUrl(resolveLoginRedirect(navigation.currentSearch))
-      : postLoginRedirect
+    currentRoute === 'login' ? buildAppUrl(loginTarget) : postLoginRedirect
   );
 
   // App initialization state
@@ -694,11 +696,10 @@
   // A visitor who is already allowed has nothing to do on the login route: send them to
   // the requested page. Keyed on the route and the access state, so it also covers access
   // changing while the route is shown. The replace keeps Back from returning here. The
-  // query is read untracked: the redirect itself changes it, and must not run this again.
+  // target is read untracked: the redirect itself changes it, and must not run this again.
   $effect(() => {
-    if (currentRoute !== 'login') return;
-    if (securityEnabled && !accessAllowed) return;
-    const target = untrack(() => resolveLoginRedirect(navigation.currentSearch));
+    if (currentRoute !== 'login' || loginRouteActive) return;
+    const target = untrack(() => loginTarget);
     navigation.redirect(target);
   });
 

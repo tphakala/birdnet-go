@@ -1390,16 +1390,19 @@ let pendingFullSave: { done: Promise<void>; notify: boolean } | null = null;
 
 /**
  * Snapshots formData and sends it to the backend, then marks it saved. Resets isSaving
- * and rethrows on every failure path, including the refusal before a load.
+ * and rethrows on every failure path, including the refusal before a load. Pass
+ * `alreadyMarkedSaving` when the caller has already set isSaving and cleared the error.
  */
-async function persistFormData(notify: boolean): Promise<void> {
+async function persistFormData(notify: boolean, alreadyMarkedSaving = false): Promise<void> {
   try {
     const currentState = get(settingsStore);
     if (!currentState.dataLoaded) {
       logger.warn('Refusing to save settings before they have been loaded');
       throw new Error(t('settings.errors.loadFailed'));
     }
-    settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
+    if (!alreadyMarkedSaving) {
+      settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
+    }
 
     // Apply coercion to all sections before saving
     const coercedFormData = { ...currentState.formData };
@@ -1428,16 +1431,15 @@ async function persistFormData(notify: boolean): Promise<void> {
     await settingsAPI.save(coercedFormData);
 
     // Read newLocale from coercedFormData (the value we actually persisted)
-    // and compare to originalData (the snapshot loaded from the backend),
-    // matching the coercedFormData-based comparison used by the TLS check below.
+    // and compare to originalData (the snapshot loaded from the backend).
     await afterSettingsPersisted(
       coercedFormData.realtime?.dashboard?.locale,
       currentState.originalData.realtime?.dashboard?.locale
     );
 
     // Update originalData to match the saved formData (no reload needed).
-    // Restart-required state is owned by the backend (refreshed via
-    // fetchRestartStatus above) and surfaced by the global RestartBanner, so
+    // Restart-required state is owned by the backend (refreshed in
+    // afterSettingsPersisted) and surfaced by the global RestartBanner, so
     // it is no longer tracked client-side here.
     settingsStore.update(state => ({
       ...state,
@@ -1712,7 +1714,7 @@ export const settingsActions = {
       } finally {
         pendingFullSave = null;
       }
-      await persistFormData(pending.notify);
+      await persistFormData(pending.notify, true);
     })();
     return pending.done;
   },

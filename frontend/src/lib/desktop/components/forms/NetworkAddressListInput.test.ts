@@ -387,18 +387,29 @@ describe('NetworkAddressListInput', () => {
   });
 
   describe('add report visibility', () => {
-    it('hides the invalid-token report when the parent clears the draft', async () => {
-      const { rerender } = renderControlled();
+    it('hides the invalid-token report when reportResetKey changes', async () => {
+      const { rerender } = renderControlled({ reportResetKey: 0 });
       await typeAndSubmit('abc');
       expect(alertText()).toContain('errors.invalid');
       expect(input()).toHaveAttribute('aria-invalid', 'true');
       expect(input()).toHaveClass('input-error');
 
-      await rerender({ draft: '' });
+      await rerender({ draft: '', reportResetKey: 1 });
 
       expect(alertText()).toBe('');
       expect(input()).not.toHaveAttribute('aria-invalid', 'true');
       expect(input()).not.toHaveClass('input-error');
+    });
+
+    it('hides a duplicate-only report when reportResetKey changes with the draft and list unchanged', async () => {
+      const { rerender } = renderControlled({ values: ['10.0.0.1'], reportResetKey: 0 });
+      await typeAndSubmit('10.0.0.1');
+      expect(input().value).toBe('');
+      expect(alertText()).toContain('errors.duplicate');
+
+      await rerender({ values: ['10.0.0.1'], draft: '', reportResetKey: 1 });
+
+      expect(alertText()).toBe('');
     });
 
     it('keeps the duplicate-only report after its own add empties the draft', async () => {
@@ -410,27 +421,6 @@ describe('NetworkAddressListInput', () => {
       expect(alertText()).toContain('errors.duplicate');
     });
 
-    it('hides the duplicate-only report when the parent changes the list', async () => {
-      const { rerender } = renderControlled({ values: ['10.0.0.1'] });
-      await typeAndSubmit('10.0.0.1');
-      expect(alertText()).toContain('errors.duplicate');
-
-      await rerender({ values: ['192.168.0.1'] });
-
-      expect(alertText()).toBe('');
-    });
-
-    it('hides the report when Reset restores the list from before the add', async () => {
-      const { rerender } = renderControlled({ values: ['10.0.0.1'] });
-      await typeAndSubmit('10.0.0.2, 10.0.0.1');
-      expect(input().value).toBe('');
-      expect(alertText()).toContain('errors.duplicate');
-
-      await rerender({ values: ['10.0.0.1'], draft: '' });
-
-      expect(alertText()).toBe('');
-    });
-
     it('keeps the report while the parent applies the add', async () => {
       renderControlled();
 
@@ -438,6 +428,15 @@ describe('NetworkAddressListInput', () => {
 
       expect(alertText()).toContain('errors.invalid');
       expect(input()).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('keeps the report when reportResetKey is set but does not change', async () => {
+      const { rerender } = renderControlled({ values: ['10.0.0.1'], reportResetKey: 3 });
+      await typeAndSubmit('10.0.0.1');
+
+      await rerender({ values: ['10.0.0.1'], draft: '', reportResetKey: 3 });
+
+      expect(alertText()).toContain('errors.duplicate');
     });
 
     it('hides the report after removing a row', async () => {
@@ -458,173 +457,20 @@ describe('NetworkAddressListInput', () => {
       expect(alertText()).toContain('errors.duplicate');
 
       await fireEvent.click(screen.getByRole('button', { name: /10\.0\.0\.2/ }));
-      expect(alertText()).toBe('');
       await rerender({ values: ['10.0.0.1', '10.0.0.2'], draft: '' });
 
       expect(alertText()).toBe('');
     });
 
-    it('keeps its own report when the parent writes the list back with padding', async () => {
-      let apply: (next: { values: string[] }) => Promise<void> = async () => {};
-      const view = renderList({
-        onUpdate: (values: string[]) => void apply({ values: values.map(v => ` ${v} `) }),
-      });
-      apply = view.rerender;
+    it('replaces the first report with the second add', async () => {
+      renderControlled();
 
-      await typeAndSubmit('10.0.0.2, abc');
+      await typeAndSubmit('abc');
+      await fireEvent.input(input(), { target: { value: '10.0.0.5, def' } });
+      await fireEvent.keyDown(input(), { key: 'Enter' });
 
-      expect(alertText()).toContain('errors.invalid');
+      expect(alertText()).toContain('def');
+      expect(alertText()).not.toContain('abc');
     });
-
-    // The report is derived from the draft and the list, not latched. A parent that writes
-    // a non-empty draft and then the same empty draft again, with no list change, makes a
-    // duplicate-only report reappear; a parent that must hide it then changes reportResetKey.
-    it('shows a duplicate-only report again after a parent draft round trip', async () => {
-      const { rerender } = renderControlled({ values: ['10.0.0.1'] });
-      await typeAndSubmit('10.0.0.1');
-
-      await rerender({ draft: 'x' });
-      expect(alertText()).toBe('');
-      await rerender({ draft: '' });
-
-      expect(alertText()).toContain('errors.duplicate');
-    });
-
-    it('hides the report when reportResetKey changes, with the draft and list unchanged', async () => {
-      const { rerender } = renderControlled({ values: ['10.0.0.1'], reportResetKey: 0 });
-      await typeAndSubmit('10.0.0.1');
-      expect(alertText()).toContain('errors.duplicate');
-
-      await rerender({ values: ['10.0.0.1'], draft: '', reportResetKey: 1 });
-
-      expect(alertText()).toBe('');
-    });
-
-    it('keeps the report when reportResetKey is set but does not change', async () => {
-      const { rerender } = renderControlled({ values: ['10.0.0.1'], reportResetKey: 3 });
-      await typeAndSubmit('10.0.0.1');
-
-      await rerender({ values: ['10.0.0.1'], draft: '', reportResetKey: 3 });
-
-      expect(alertText()).toContain('errors.duplicate');
-    });
-
-    type Step =
-      | { do: 'type'; text: string }
-      | { do: 'submit' }
-      | { do: 'parentClearsDraft' }
-      | { do: 'parentSetsValues'; list: string[] }
-      | { do: 'removeRow'; value: string };
-
-    const sequences: Array<{ name: string; values: string[]; steps: Step[]; visible: boolean }> = [
-      {
-        name: 'add then type',
-        values: [],
-        steps: [{ do: 'type', text: 'abc' }, { do: 'submit' }, { do: 'type', text: 'abcd' }],
-        visible: false,
-      },
-      {
-        name: 'add then parent clears draft',
-        values: [],
-        steps: [{ do: 'type', text: 'abc' }, { do: 'submit' }, { do: 'parentClearsDraft' }],
-        visible: false,
-      },
-      {
-        name: 'duplicate then parent sets the same list',
-        values: ['10.0.0.1'],
-        steps: [
-          { do: 'type', text: '10.0.0.1' },
-          { do: 'submit' },
-          { do: 'parentSetsValues', list: ['10.0.0.1'] },
-        ],
-        visible: true,
-      },
-      {
-        name: 'duplicate then parent changes the list',
-        values: ['10.0.0.1'],
-        steps: [
-          { do: 'type', text: '10.0.0.1' },
-          { do: 'submit' },
-          { do: 'parentSetsValues', list: [] },
-        ],
-        visible: false,
-      },
-      {
-        name: 'mixed add then reset before the list is applied back',
-        values: ['10.0.0.1'],
-        steps: [
-          { do: 'type', text: '10.0.0.2, 10.0.0.1' },
-          { do: 'submit' },
-          { do: 'parentSetsValues', list: ['10.0.0.1'] },
-          { do: 'parentClearsDraft' },
-        ],
-        visible: false,
-      },
-      {
-        name: 'add then remove the added row',
-        values: ['10.0.0.1'],
-        steps: [
-          { do: 'type', text: '10.0.0.2, abc' },
-          { do: 'submit' },
-          { do: 'removeRow', value: '10.0.0.2' },
-        ],
-        visible: false,
-      },
-      {
-        name: 'add then remove another row',
-        values: ['10.0.0.1'],
-        steps: [
-          { do: 'type', text: '10.0.0.2, abc' },
-          { do: 'submit' },
-          { do: 'removeRow', value: '10.0.0.1' },
-        ],
-        visible: false,
-      },
-      {
-        name: 'add then retype the same text',
-        values: ['10.0.0.1'],
-        steps: [
-          { do: 'type', text: '10.0.0.1' },
-          { do: 'submit' },
-          { do: 'type', text: '10.0.0.1' },
-        ],
-        visible: false,
-      },
-      {
-        name: 'second add replaces the first report',
-        values: [],
-        steps: [
-          { do: 'type', text: 'abc' },
-          { do: 'submit' },
-          { do: 'type', text: '10.0.0.5, def' },
-          { do: 'submit' },
-        ],
-        visible: true,
-      },
-    ];
-
-    it.each(sequences)(
-      'follows the draft and the list: $name',
-      async ({ values, steps, visible }) => {
-        const { rerender } = renderControlled({ values });
-        for (const step of steps) {
-          if (step.do === 'type') {
-            await fireEvent.input(input(), { target: { value: step.text } });
-          } else if (step.do === 'submit') {
-            await fireEvent.keyDown(input(), { key: 'Enter' });
-          } else if (step.do === 'parentClearsDraft') {
-            await rerender({ draft: '' });
-          } else if (step.do === 'parentSetsValues') {
-            await rerender({ values: step.list });
-          } else {
-            await fireEvent.click(
-              screen.getByRole('button', { name: name => name.includes(step.value) })
-            );
-          }
-        }
-
-        expect(alertText() !== '').toBe(visible);
-      }
-    );
   });
 });

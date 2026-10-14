@@ -12,6 +12,7 @@
   import { api } from '$lib/utils/api';
   import { safeGet, safeElementAccess } from '$lib/utils/security';
   import { extractRelativePath, getUiBasePath } from '$lib/utils/urlHelpers';
+  import { MAX_LOGIN_REDIRECT_LENGTH } from '$lib/utils/loginRedirect';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
   import { X, ShieldCheck, KeyRound } from '@lucide/svelte';
@@ -20,10 +21,6 @@
 
   // SECURITY: Define maximum password length to prevent DoS
   const MAX_PASSWORD_LENGTH = 512; // Reasonable limit for security
-  // Client-side cap on the captured redirect (path + query). Intentionally a bit
-  // tighter than the backend's authoritative security.MaxSafeRedirectLength (2048)
-  // so anything the client sends comfortably passes server validation.
-  const MAX_REDIRECT_LENGTH = 2000;
 
   // Logger for authentication debugging
   const logger = loggers.auth;
@@ -88,7 +85,7 @@
       }
 
       // Check length (path + query). A generous cap covers heavily-filtered views.
-      if (url.length > MAX_REDIRECT_LENGTH) {
+      if (url.length > MAX_LOGIN_REDIRECT_LENGTH) {
         return false;
       }
 
