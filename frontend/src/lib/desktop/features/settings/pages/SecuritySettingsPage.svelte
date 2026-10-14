@@ -676,21 +676,34 @@
   let bypassSubnetsInvalid = $derived(bypassEnabled && hasInvalidAddress(allowedSubnets, 'cidr'));
   let bypassSubnetsPending = $derived(bypassEnabled && bypassSubnetsDraft.trim() !== '');
 
+  // Validation entry keys for the two address lists, each with a flag for an invalid
+  // row and one for text typed but not added.
+  const TRUSTED_PROXIES_INVALID_KEY = 'security-trusted-proxies-invalid';
+  const TRUSTED_PROXIES_PENDING_KEY = 'security-trusted-proxies-pending';
+  const BYPASS_SUBNETS_INVALID_KEY = 'security-bypass-subnets-invalid';
+  const BYPASS_SUBNETS_PENDING_KEY = 'security-bypass-subnets-pending';
+  const ADDRESS_LIST_ISSUE_KEYS = [
+    TRUSTED_PROXIES_INVALID_KEY,
+    TRUSTED_PROXIES_PENDING_KEY,
+    BYPASS_SUBNETS_INVALID_KEY,
+    BYPASS_SUBNETS_PENDING_KEY,
+  ];
+
   let addressListIssues = $derived.by(() => {
     const lists = [
       {
         tab: t('settings.security.serverConfiguration.title'),
         field: t('settings.security.reverseProxy.listLabel'),
-        invalidKey: 'security-trusted-proxies-invalid',
-        pendingKey: 'security-trusted-proxies-pending',
+        invalidKey: TRUSTED_PROXIES_INVALID_KEY,
+        pendingKey: TRUSTED_PROXIES_PENDING_KEY,
         hasInvalid: trustedProxiesInvalid,
         hasPending: trustedProxiesPending,
       },
       {
         tab: t('settings.security.exceptions.title'),
         field: t('settings.security.allowedSubnetsLabel'),
-        invalidKey: 'security-bypass-subnets-invalid',
-        pendingKey: 'security-bypass-subnets-pending',
+        invalidKey: BYPASS_SUBNETS_INVALID_KEY,
+        pendingKey: BYPASS_SUBNETS_PENDING_KEY,
         hasInvalid: bypassSubnetsInvalid,
         hasPending: bypassSubnetsPending,
       },
@@ -702,13 +715,6 @@
     }
     return active;
   });
-
-  const ADDRESS_LIST_ISSUE_KEYS = [
-    'security-trusted-proxies-invalid',
-    'security-trusted-proxies-pending',
-    'security-bypass-subnets-invalid',
-    'security-bypass-subnets-pending',
-  ];
 
   $effect(() => {
     setValidationIssues(ADDRESS_LIST_ISSUE_KEYS, addressListIssues);
