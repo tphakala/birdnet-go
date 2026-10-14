@@ -2,9 +2,11 @@ package transcode
 
 import (
 	"io"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
+	"time"
 
 	aaccodec "github.com/tphakala/go-aac"
 	flacpcm "github.com/tphakala/go-flac/pcm"
@@ -82,6 +84,15 @@ func openSource(f *os.File, path string) (*source, error) {
 	return src, nil
 }
 
+// declaredFrames returns the frame count a header declares, or unknownFrames when
+// the header declares none or a count above the int64 range.
+func declaredFrames(n uint64, known bool) int64 {
+	if !known || n > math.MaxInt64 {
+		return unknownFrames
+	}
+	return int64(n) //nolint:gosec // G115: bounded by the check above
+}
+
 // openWAV opens a WAV or RF64 source, converting its samples to 16-bit.
 func openWAV(f *os.File) (*source, error) {
 	dec, err := wavpcm.NewDecoder(f, wavpcm.WithConvertTo(outputBitDepth))
@@ -89,15 +100,11 @@ func openWAV(f *os.File) (*source, error) {
 		return nil, decodeError("decode_open_wav", err)
 	}
 	info := dec.Info()
-	total := int64(unknownFrames)
-	if info.DataSizeKnown && info.TotalFrames <= math.MaxInt64 {
-		total = int64(info.TotalFrames) //nolint:gosec // G115: bounded by the check above
-	}
 	return &source{
 		reader:      dec,
 		sampleRate:  info.SampleRate,
 		channels:    info.Channels,
-		totalFrames: total,
+		totalFrames: declaredFrames(info.TotalFrames, info.DataSizeKnown),
 		seek:        dec.SeekToFrame,
 		expansion:   losslessExpansion,
 	}, nil
@@ -111,15 +118,11 @@ func openFLAC(f *os.File) (*source, error) {
 		return nil, decodeError("decode_open_flac", err)
 	}
 	info := dec.Info()
-	total := int64(unknownFrames)
-	if info.TotalSamples > 0 && info.TotalSamples <= math.MaxInt64 {
-		total = int64(info.TotalSamples) //nolint:gosec // G115: bounded by the check above
-	}
 	return &source{
 		reader:      dec,
 		sampleRate:  info.SampleRate,
 		channels:    info.Channels,
-		totalFrames: total,
+		totalFrames: declaredFrames(info.TotalSamples, info.TotalSamples > 0),
 		seek:        dec.SeekToSample,
 		expansion:   losslessExpansion,
 	}, nil
@@ -155,8 +158,7 @@ func openOpus(f *os.File) (*source, error) {
 // decoder, which rejects a non-AAC or HE-AAC track. The decoder is not edit-list
 // aware, so the priming samples are skipped through skipFrames and the padding
 // after the declared duration is cut by totalFrames. A window that starts after
-// frame 0 seeks to the access unit holding it, which handles the AAC pre-roll,
-// and discards the rest of that unit.
+// frame 0 seeks by time, which handles the AAC pre-roll.
 func openM4A(f *os.File) (*source, error) {
 	dec, info, err := aacm4a.NewSeekableDecoder(f, m4a.WithMaxBoxBuffer(maxM4ABoxBytes))
 	if err != nil {
@@ -174,22 +176,17 @@ func openM4A(f *os.File) (*source, error) {
 	// clamped to that.
 	frameCount := int64(info.FrameCount)
 	skip := min(max(info.EncoderDelay, 0), frameCount*aaccodec.FrameSize)
-	frameBytes := int64(info.Channels * bytesPerSample)
 	seek := func(frame int64) (int64, error) {
-		// No overflow: skip is bounded by frameCount*aaccodec.FrameSize, and frame
-		// by maxWindowFrames. The target is the decoded-output index the forward
-		// path discards to; the decoder starts at the access unit holding it and the
-		// remainder of that unit is discarded.
-		pos := skip + frame
-		unit := pos / aaccodec.FrameSize
-		if unit >= frameCount {
+		// The decoder output is not edit-list aware: SeekTime puts the next byte at
+		// the decoded sample EncoderDelay + frame, the index the forward path
+		// discards to. A time beyond the end, or too large for a time.Duration, is
+		// past the end of the audio.
+		ns := math.Round(float64(frame) / float64(info.SampleRate) * float64(time.Second))
+		if ns >= math.MaxInt64 {
 			return 0, nil
 		}
-		if err := dec.SeekSample(int(unit)); err != nil {
-			return 0, err
-		}
-		if _, err := io.CopyN(io.Discard, dec, (pos-unit*aaccodec.FrameSize)*frameBytes); err != nil {
-			if errors.Is(err, io.EOF) {
+		if err := dec.SeekTime(time.Duration(ns)); err != nil {
+			if errors.Is(err, m4a.ErrOutOfRange) {
 				return 0, nil
 			}
 			return 0, err
@@ -214,23 +211,23 @@ func openMP3(f *os.File) (*source, error) {
 		return nil, decodeError("decode_open_mp3", err)
 	}
 	info := dec.Info()
-	total := int64(unknownFrames)
-	if info.TotalSamples > 0 && info.TotalSamples <= math.MaxInt64 {
-		total = int64(info.TotalSamples) //nolint:gosec // G115: bounded by the check above
-	}
 	return &source{
 		reader:      dec,
 		sampleRate:  info.SampleRate,
 		channels:    info.Channels,
-		totalFrames: total,
+		totalFrames: declaredFrames(info.TotalSamples, info.TotalSamples > 0),
 		seek:        dec.SeekToSample,
 		expansion:   lossyExpansion,
 	}, nil
 }
 
-// decodeError wraps an error from a decoder library as ErrUndecodableSource: a
-// clip BirdNET-Go wrote is, once its extension is a clip format, either decodable
-// or damaged.
+// decodeError classifies an error from a decoder library. A failed read of the
+// file itself (an *fs.PathError in the chain) is a server fault and carries no
+// sentinel; anything else means the clip BirdNET-Go wrote is damaged and wraps
+// ErrUndecodableSource.
 func decodeError(operation string, err error) error {
+	if _, ok := errors.AsType[*fs.PathError](err); ok {
+		return wrapError(err, errors.CategoryFileIO, operation)
+	}
 	return wrapSentinel(ErrUndecodableSource, err, operation, "decode failed", errors.CategoryAudio)
 }
