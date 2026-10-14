@@ -50,16 +50,7 @@ type ConnectionCheckResponse struct {
 // on the next check without a restart. The request is classified from its
 // connection peer and headers, never from the attribution address (RealIP).
 func (c *Controller) GetConnectionCheck(ctx echo.Context) error {
-	settings := c.ControllerSettings()
-	if settings == nil {
-		settings = c.CurrentSettings()
-	}
-	var trustedProxies []string
-	if settings != nil {
-		trustedProxies = settings.Security.TrustedProxies
-	}
-
-	conn := proxytrust.NewChecker(trustedProxies).Classify(ctx.Request())
+	conn := c.proxyTrust.ResolveSettings(c.ControllerSettings()).Classify(ctx.Request())
 	c.LogAPIRequest(ctx, logger.LogLevelDebug, "Classified connection", logger.String("status", string(conn.Status)))
 
 	ctx.Response().Header().Set(echo.HeaderCacheControl, connectionCheckCacheControl)

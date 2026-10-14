@@ -1813,6 +1813,32 @@ func TestIsUserAuthenticatedSubnetBypassIgnoresForgedHeader(t *testing.T) {
 		"a direct client on the local network is still auto-authenticated")
 }
 
+// noticeKeyAfterAuthClientIP runs authClientIP once on a fresh server and
+// returns the throttle key of the notice it recorded ("" for none), together with
+// the peer Classify names for the request.
+func noticeKeyAfterAuthClientIP(t *testing.T, settings *conf.Settings, trustedProxies []string, req *http.Request) (key, peer string) {
+	t.Helper()
+	if settings != nil {
+		settings = conf.CloneSettings(settings)
+		settings.Security.TrustedProxies = trustedProxies
+	}
+	server := &OAuth2Server{}
+	server.authClientIP(settings, req)
+	for _, k := range []string{unverifiedClientIPLogKey, listedProxyUnverifiedLogKey} {
+		server.mutex.RLock()
+		_, noted := server.throttledMessages[k]
+		server.mutex.RUnlock()
+		if noted {
+			require.Empty(t, key, "at most one notice per request")
+			key = k
+		}
+	}
+	if key != "" {
+		peer = proxytrust.NewChecker(trustedProxies).Classify(req).Peer.String()
+	}
+	return key, peer
+}
+
 // TestUnverifiedBypassPeer pins when an unverifiable forwarded address is
 // reported: only with the subnet bypass enabled, an authentication provider
 // configured, a client-IP header present, and a loopback, link-local, private
@@ -1863,8 +1889,12 @@ func TestUnverifiedBypassPeer(t *testing.T) {
 			if tt.header != "" {
 				req.Header[http.CanonicalHeaderKey(tt.header)] = []string{tt.value}
 			}
-			peer, ok := unverifiedBypassPeer(tt.settings, proxytrust.NewChecker(tt.trustedProxies), req)
-			assert.Equal(t, tt.wantPeer != "", ok)
+			key, peer := noticeKeyAfterAuthClientIP(t, tt.settings, tt.trustedProxies, req)
+			if tt.wantPeer != "" {
+				assert.Equal(t, unverifiedClientIPLogKey, key)
+			} else {
+				assert.Empty(t, key)
+			}
 			assert.Equal(t, tt.wantPeer, peer)
 		})
 	}
@@ -1913,11 +1943,43 @@ func TestUnverifiedListedProxy(t *testing.T) {
 			if tt.header != "" {
 				req.Header[http.CanonicalHeaderKey(tt.header)] = []string{tt.value}
 			}
-			peer, ok := unverifiedListedProxy(tt.settings, proxytrust.NewChecker(tt.trustedProxies), req)
-			assert.Equal(t, tt.wantPeer != "", ok)
+			key, peer := noticeKeyAfterAuthClientIP(t, tt.settings, tt.trustedProxies, req)
+			if tt.wantPeer != "" {
+				assert.Equal(t, listedProxyUnverifiedLogKey, key)
+			} else {
+				assert.Empty(t, key)
+			}
 			assert.Equal(t, tt.wantPeer, peer)
 		})
 	}
+}
+
+// TestAuthClientIPSkipsClassifyWhileNoticesThrottled verifies a request that
+// would earn a notice leaves the throttle map untouched while both notice keys
+// are inside their interval, and is classified again once one expires.
+func TestAuthClientIPSkipsClassifyWhileNoticesThrottled(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Security.AllowSubnetBypass.Enabled = true
+	settings.Security.BasicAuth.Enabled = true
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.RemoteAddr = "172.25.5.9:40000"
+	req.Header.Set(echo.HeaderXForwardedFor, "192.168.1.20")
+
+	server := &OAuth2Server{}
+	recent := time.Now()
+	server.throttledMessages = map[string]time.Time{
+		unverifiedClientIPLogKey:    recent,
+		listedProxyUnverifiedLogKey: recent,
+	}
+	assert.Nil(t, server.authClientIP(settings, req))
+	assert.Equal(t, recent, server.throttledMessages[unverifiedClientIPLogKey])
+
+	stale := recent.Add(-2 * unverifiedClientIPLogInterval)
+	server.throttledMessages[unverifiedClientIPLogKey] = stale
+	assert.Nil(t, server.authClientIP(settings, req))
+	assert.True(t, server.throttledMessages[unverifiedClientIPLogKey].After(stale), "an expired notice is logged again")
 }
 
 // TestAuthClientIPReportsUnverifiedPeerThrottled verifies authClientIP records

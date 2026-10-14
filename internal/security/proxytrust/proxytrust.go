@@ -103,6 +103,8 @@ type Checker struct {
 	// re-parsed on every request.
 	raw    []string
 	ranges []*net.IPNet
+	// cloudflare records that raw holds the "cloudflare" preset.
+	cloudflare bool
 }
 
 // NewChecker parses the configured trusted-proxy entries into a checker. Blank
@@ -119,6 +121,7 @@ func NewChecker(trustedProxies []string) *Checker {
 			continue
 		case strings.EqualFold(trimmed, conf.TrustedProxyCloudflarePreset):
 			tc.ranges = append(tc.ranges, cloudflareEdgeNets...)
+			tc.cloudflare = true
 		default:
 			if network, ok := parseProxyCIDR(trimmed); ok {
 				tc.ranges = append(tc.ranges, network)
@@ -196,12 +199,7 @@ func (tc *Checker) IsConfiguredProxy(ip net.IP) bool {
 	if ip == nil {
 		return false
 	}
-	for _, network := range tc.ranges {
-		if network.Contains(ip) {
-			return true
-		}
-	}
-	return false
+	return containsIP(tc.ranges, ip)
 }
 
 // ClientIPFromXFF resolves the real client IP from an X-Forwarded-For header,
@@ -609,7 +607,9 @@ func (tc *Checker) cloudflarePresetWouldVerify(req *http.Request, conn *Connecti
 	if conn.Peer == nil || tc.hasCloudflarePreset() {
 		return false
 	}
-	if !conn.PeerIsCloudflareEdge && !isLocalProxyCandidate(conn.Peer) && !conn.PeerIsConfiguredProxy {
+	// A public peer is only worth testing when it is itself a Cloudflare edge;
+	// the other candidate statuses already have a configured or local peer.
+	if conn.Status == StatusUntrustedPublicProxy && !conn.PeerIsCloudflareEdge {
 		return false
 	}
 	return tc.verifiesWith(req, conn.Peer.String(), conf.TrustedProxyCloudflarePreset)
@@ -617,9 +617,7 @@ func (tc *Checker) cloudflarePresetWouldVerify(req *http.Request, conn *Connecti
 
 // hasCloudflarePreset reports whether the list holds the cloudflare preset.
 func (tc *Checker) hasCloudflarePreset() bool {
-	return slices.ContainsFunc(tc.raw, func(entry string) bool {
-		return strings.EqualFold(strings.TrimSpace(entry), conf.TrustedProxyCloudflarePreset)
-	})
+	return tc.cloudflare
 }
 
 // containsIP reports whether any network contains ip.

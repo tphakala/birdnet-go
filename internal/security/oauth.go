@@ -249,11 +249,14 @@ func (s *OAuth2Server) CurrentSettings() *conf.Settings {
 // bypass is enabled and an authentication provider is configured, it logs a
 // throttled Info notice naming the peer when forwarded headers kept it from
 // finding an address: one for an unlisted proxy that listing would fix
-// (unverifiedBypassPeer), another for a listed proxy whose headers cannot be
-// verified (unverifiedListedProxy). Both notices take their decision from
-// proxytrust.Checker.Classify, the classifier the settings connection check
-// also uses, and the request is classified once. A nil request has no
-// verifiable address.
+// (proxytrust.StatusUntrustedProxy: a loopback, link-local, private or CGNAT
+// peer, never a public scanner), another for a listed proxy whose headers
+// cannot be verified (proxytrust.StatusTrustedProxyUnverified, which a client
+// may also cause by sending forged copies through a correctly configured
+// proxy). Both notices take their decision from proxytrust.Checker.Classify,
+// the classifier the settings connection check also uses; the request is
+// classified once, and not at all while both notices are throttled. A nil
+// request has no verifiable address.
 func (s *OAuth2Server) authClientIP(settings *conf.Settings, r *http.Request) net.IP {
 	if r == nil {
 		return nil
@@ -265,15 +268,24 @@ func (s *OAuth2Server) authClientIP(settings *conf.Settings, r *http.Request) ne
 	if !bypassNoticeApplies(settings) {
 		return nil
 	}
+	// Both notices already inside their throttle interval: skip classifying.
+	if s.noticeThrottled(unverifiedClientIPLogKey, unverifiedClientIPLogInterval) &&
+		s.noticeThrottled(listedProxyUnverifiedLogKey, unverifiedClientIPLogInterval) {
+		return nil
+	}
 	conn := checker.Classify(r)
-	if peer, ok := unverifiedBypassPeerFor(&conn); ok {
+	switch conn.Status {
+	case proxytrust.StatusUntrustedProxy:
 		s.logThrottledInfo(unverifiedClientIPLogKey,
 			"Subnet bypass skipped: forwarded client-IP headers came from a peer not listed in security.trustedproxies; if this peer is your reverse proxy, add it there",
-			unverifiedClientIPLogInterval, logger.String("peer", peer))
-	} else if peer, ok := unverifiedListedProxyFor(&conn); ok {
+			unverifiedClientIPLogInterval, logger.String("peer", conn.Peer.String()))
+	case proxytrust.StatusTrustedProxyUnverified:
 		s.logThrottledInfo(listedProxyUnverifiedLogKey,
 			"Subnet bypass skipped: forwarded client-IP headers from a trusted proxy could not be verified: they disagree, repeat a single-value header, carry a malformed or loopback address or a Forwarded header, or every forwarded hop is itself listed in security.trustedproxies",
-			unverifiedClientIPLogInterval, logger.String("peer", peer))
+			unverifiedClientIPLogInterval, logger.String("peer", conn.Peer.String()))
+	case proxytrust.StatusDirect, proxytrust.StatusTrustedProxy, proxytrust.StatusUntrustedPublicProxy,
+		proxytrust.StatusUntrustedProxyUnverifiable:
+		// No notice: nothing to fix, or advice that would not help.
 	}
 	return nil
 }
@@ -304,59 +316,6 @@ const listedProxyUnverifiedLogKey = "subnet-bypass-listed-proxy-unverified"
 // unverifiedClientIPLogInterval is the minimum time between two unverified
 // forwarded address notices.
 const unverifiedClientIPLogInterval = 10 * time.Minute
-
-// unverifiedBypassPeer returns the connection peer when its forwarded client-IP
-// headers were ignored only because it is not a configured proxy, which is the
-// one case where adding it to security.trustedproxies is the right advice. It
-// requires the notice gate (bypassNoticeApplies) and that
-// proxytrust.Checker.Classify reports proxytrust.StatusUntrustedProxy: a
-// loopback, link-local, private or CGNAT peer that checker does not list
-// (where a reverse proxy in front of bypass clients sits; never a public
-// scanner) and whose headers a checker also listing the peer would verify.
-// Callers use it only after authClientIP found no verifiable address.
-func unverifiedBypassPeer(settings *conf.Settings, checker *proxytrust.Checker, r *http.Request) (string, bool) {
-	if !bypassNoticeApplies(settings) {
-		return "", false
-	}
-	conn := checker.Classify(r)
-	return unverifiedBypassPeerFor(&conn)
-}
-
-// unverifiedBypassPeerFor is unverifiedBypassPeer for an already classified
-// connection, once the notice gate has been checked.
-func unverifiedBypassPeerFor(conn *proxytrust.Connection) (string, bool) {
-	if conn.Status != proxytrust.StatusUntrustedProxy {
-		return "", false
-	}
-	return conn.Peer.String(), true
-}
-
-// unverifiedListedProxy returns the connection peer when it is a configured
-// proxy whose forwarded headers could not be verified (they disagree, repeat a
-// single-value header, are malformed, name loopback, include Forwarded, or
-// every hop is itself a configured proxy), which a client may also cause by
-// sending forged copies through a correctly configured proxy. It requires the
-// notice gate (bypassNoticeApplies) and that proxytrust.Checker.Classify
-// reports proxytrust.StatusTrustedProxyUnverified. Unlike a bare "peer is
-// listed and sent headers" test it reports nothing for a request whose headers
-// verified; its only caller runs it after authClientIP found no verifiable
-// address, where the two agree.
-func unverifiedListedProxy(settings *conf.Settings, checker *proxytrust.Checker, r *http.Request) (string, bool) {
-	if !bypassNoticeApplies(settings) {
-		return "", false
-	}
-	conn := checker.Classify(r)
-	return unverifiedListedProxyFor(&conn)
-}
-
-// unverifiedListedProxyFor is unverifiedListedProxy for an already classified
-// connection, once the notice gate has been checked.
-func unverifiedListedProxyFor(conn *proxytrust.Connection) (string, bool) {
-	if conn.Status != proxytrust.StatusTrustedProxyUnverified {
-		return "", false
-	}
-	return conn.Peer.String(), true
-}
 
 // bypassNoticeApplies reports whether a subnet bypass notice can apply: the
 // bypass is enabled and an authentication provider is configured (otherwise no
@@ -1442,14 +1401,20 @@ func (s *OAuth2Server) logThrottledInfo(key, msg string, interval time.Duration,
 	}
 }
 
+// noticeThrottled reports whether key was logged within interval, under a read
+// lock only. It does not record anything.
+func (s *OAuth2Server) noticeThrottled(key string, interval time.Duration) bool {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	last, exists := s.throttledMessages[key]
+	return exists && time.Since(last) <= interval
+}
+
 // shouldLogThrottled reports whether a message for key may be logged now, and
 // if so records the time. A read-locked check comes first so a throttled caller
 // on a request path does not take the write lock that also guards tokens.
 func (s *OAuth2Server) shouldLogThrottled(key string, interval time.Duration) bool {
-	s.mutex.RLock()
-	lastLogTime, exists := s.throttledMessages[key]
-	s.mutex.RUnlock()
-	if exists && time.Since(lastLogTime) <= interval {
+	if s.noticeThrottled(key, interval) {
 		return false
 	}
 
@@ -1459,7 +1424,7 @@ func (s *OAuth2Server) shouldLogThrottled(key string, interval time.Duration) bo
 		s.throttledMessages = make(map[string]time.Time)
 	}
 	// Re-check under the write lock so concurrent callers log once.
-	lastLogTime, exists = s.throttledMessages[key]
+	lastLogTime, exists := s.throttledMessages[key]
 	if exists && time.Since(lastLogTime) <= interval {
 		return false
 	}
