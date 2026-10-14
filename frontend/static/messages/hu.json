@@ -496,6 +496,7 @@
         "metricExceeded": "Jelenlegi érték: {value}% (küszöbérték: {threshold}%)",
         "detectionOccurred": "{species_name} érzékelve {confidence}% megbízhatósággal",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} leválasztva",
         "error": {
           "authError": "Hitelesítés sikertelen - ellenőrizze az API kulcsot vagy a hitelesítési adatokat",

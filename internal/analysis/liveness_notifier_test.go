@@ -42,12 +42,20 @@ type recordedNotif struct {
 
 // newRecordingNotifier returns a livenessNotifier whose sends are appended to
 // the returned slice pointer. notify is driven sequentially by the watchdog, so
-// the recorder needs no synchronization.
+// the recorder needs no synchronization. Names resolve to the source ID itself
+// so the coalescing assertions can key off the ID they pass in; display-name
+// resolution is covered separately by newNamingRecordingNotifier.
 func newRecordingNotifier() (*livenessNotifier, *[]recordedNotif) {
+	return newNamingRecordingNotifier(nil)
+}
+
+// newNamingRecordingNotifier is newRecordingNotifier with an explicit display
+// name resolver.
+func newNamingRecordingNotifier(nameOf livenessNameResolver) (*livenessNotifier, *[]recordedNotif) {
 	var sent []recordedNotif
 	n := newLivenessNotifier(func(priority notification.Priority, title, body string) {
 		sent = append(sent, recordedNotif{priority: priority, title: title, body: body})
-	})
+	}, nameOf)
 	return n, &sent
 }
 
@@ -164,4 +172,47 @@ func TestLivenessNotifier_EscalationResetsCoalescing(t *testing.T) {
 		"recovery after a critical escalation must notify the all-clear")
 	assert.GreaterOrEqual(t, countPriority(*sent, notification.PriorityCritical), 1,
 		"the critical escalation itself must be delivered")
+}
+
+// TestLivenessNotifier_UsesDisplayName verifies that every notification body
+// carries the user-facing source name rather than the internal source ID, and
+// that coalescing still buckets by ID so a rename cannot split one flapping
+// incident in two.
+func TestLivenessNotifier_UsesDisplayName(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID    = "rtsp_832ca5de"
+		displayName = "Backyard feeder"
+	)
+	names := map[string]string{sourceID: displayName}
+	n, sent := newNamingRecordingNotifier(func(id string) string { return names[id] })
+
+	// Transient events up to the threshold, then the flapping summary.
+	for range livenessBurstThreshold + 1 {
+		n.notify(sourceID, audiocore.StateAlarmed, "silence detected")
+	}
+	// A critical escalation takes the bypass path, which formats its own body.
+	n.notify(sourceID, audiocore.StateFailed, "retries exhausted")
+
+	require.Len(t, *sent, livenessBurstThreshold+2)
+	for i := range *sent {
+		assert.Contains(t, (*sent)[i].body, displayName,
+			"notification %d must name the source the way the user configured it", i)
+		assert.NotContains(t, (*sent)[i].body, sourceID,
+			"notification %d must not leak the internal source ID", i)
+	}
+}
+
+// TestLivenessNotifier_UnknownSourceFallsBackToID verifies that a source the
+// resolver cannot name (registry miss, or a source torn down before the
+// notification is formatted) is still identified rather than left blank.
+func TestLivenessNotifier_UnknownSourceFallsBackToID(t *testing.T) {
+	t.Parallel()
+
+	n, sent := newNamingRecordingNotifier(func(string) string { return "" })
+	n.notify("rtsp_832ca5de", audiocore.StateAlarmed, "silence detected")
+
+	require.Len(t, *sent, 1)
+	assert.Contains(t, (*sent)[0].body, "rtsp_832ca5de")
 }

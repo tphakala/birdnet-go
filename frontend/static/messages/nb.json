@@ -496,6 +496,7 @@
         "metricExceeded": "Gjeldende verdi: {value}% (terskel: {threshold}%)",
         "detectionOccurred": "{species_name} registrert med {confidence}% sikkerhet",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} koblet fra",
         "error": {
           "authError": "Autentisering mislyktes - sjekk API-nøkkel eller innloggingsdetaljer",

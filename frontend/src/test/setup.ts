@@ -237,6 +237,11 @@ const translations: Record<string, string> = {
   'notifications.timeAgo.minutesAgo': '{minutes}m ago',
   'notifications.timeAgo.hoursAgo': '{hours}h ago',
   'notifications.timeAgo.daysAgo': '{days}d ago',
+  // Alert notification messages, including the source-prefixed error wrapper
+  // and one classified error resolved into it via the error_key param.
+  'notifications.content.alert.errorWithSource': '{source_name}: {error}',
+  'notifications.content.alert.error.timeout':
+    'Connection timed out - the service may be slow or unreachable',
 };
 
 vi.mock('$lib/i18n', () => ({

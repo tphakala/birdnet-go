@@ -496,6 +496,7 @@
         "metricExceeded": "Valor actual: {value}% (umbral: {threshold}%)",
         "detectionOccurred": "{species_name} detectado con {confidence}% de confianza",
         "errorOccurred": "{error}",
+        "errorWithSource": "{source_name}: {error}",
         "disconnected": "{source_name} desconectado",
         "error": {
           "authError": "Autenticación fallida - comprueba tu clave API o credenciales",

@@ -136,6 +136,15 @@ const (
 	MsgAlertErrorOccurred     = "notifications.content.alert.errorOccurred"
 	MsgAlertDisconnected      = "notifications.content.alert.disconnected"
 
+	// MsgAlertErrorWithSource is the message key used in place of
+	// MsgAlertErrorOccurred (or a classified MsgAlertErrorPrefix key) when the
+	// event identifies which stream or device failed. It renders
+	// "{source_name}: {error}", matching formatErrorFallback, so a user with
+	// several cameras can tell which one the alert is about. The classified key,
+	// when there is one, is passed as the "error_key" param and resolved into
+	// "error" by the frontend before substitution.
+	MsgAlertErrorWithSource = "notifications.content.alert.errorWithSource"
+
 	// MsgAlertErrorPrefix is the i18n key prefix for classified error messages.
 	// Full key is MsgAlertErrorPrefix + "." + ErrorClass.Key.
 	MsgAlertErrorPrefix = "notifications.content.alert.error"
