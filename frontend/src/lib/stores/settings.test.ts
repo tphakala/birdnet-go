@@ -1246,8 +1246,7 @@ describe('Settings Store - saveSection', () => {
       await Promise.all([sectionSave, first, second]);
 
       expect(settingsAPI.save).toHaveBeenCalledTimes(1);
-      const body = vi.mocked(settingsAPI.save).mock.calls[0]?.[0] as unknown as Snapshot;
-      expect(lookup(body, ['main', 'name'])).toBe('Edited during wait');
+      expect(vi.mocked(settingsAPI.save).mock.calls[0]?.[0].main.name).toBe('Edited during wait');
     });
 
     it('sequential saves without section saves still each save', async () => {
