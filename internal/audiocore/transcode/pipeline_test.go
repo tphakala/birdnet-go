@@ -1,6 +1,7 @@
 package transcode
 
 import (
+	"context"
 	"math"
 	"os"
 	"path/filepath"
@@ -95,6 +96,23 @@ func TestClipTimeout(t *testing.T) {
 	assert.Equal(t, clipMinTimeout, clipTimeout(1))
 	assert.Equal(t, 100*time.Second, clipTimeout(50))
 	assert.Equal(t, clipMaxTimeout, clipTimeout(MaxClipDurationSec))
+}
+
+func TestRun_AppliesThePerJobTimeout(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "src.wav")
+	writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate, 1)
+
+	_, err := run(t.Context(), &job{path: path, timeout: time.Nanosecond, format: audioformat.WAV})
+	require.ErrorIs(t, err, context.DeadlineExceeded, "a job past its own timeout stops even though the caller's context is live")
+}
+
+func TestPipelineTimeouts(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 60*time.Second, processingTimeout)
+	assert.Equal(t, 120*time.Second, audibleBatsTimeout)
 }
 
 func TestProcessToWAV(t *testing.T) {
