@@ -24,15 +24,11 @@ const (
 	targetTruePeak = -2.0
 	targetLRA      = 7.0
 
-	// absoluteGateLUFS is the EBU R128 absolute gate, mirroring
-	// audionormMinTargetLUFS in internal/analysis/processor.
-	absoluteGateLUFS = -70.0
-
-	// productionMaxGainDB mirrors nativeExportMaxGainDB in
-	// internal/analysis/processor. preFixMaxGainDB is what it was before this
-	// work (audionorm.DefaultMaxGainDB), kept so the change stays measurable.
-	productionMaxGainDB = 60.0
-	preFixMaxGainDB     = 30.0
+	// productionMaxGainDB is the shipped clamp. preFixMaxGainDB is what it was
+	// before this work (audionorm.DefaultMaxGainDB), kept so the change stays
+	// measurable.
+	productionMaxGainDB = audionorm.MaxNormalizeGainDB
+	preFixMaxGainDB     = audionorm.DefaultMaxGainDB
 )
 
 // loudness is a parsed measurement of one audio file.
@@ -44,7 +40,7 @@ type loudness struct {
 
 // subGateLoudness reports whether R128 gating left the clip with no integrated
 // loudness at all, which audionorm signals as -Inf. The native path answers this
-// case with gateFallbackGainDB (mirrored by planNative below); before that landed
+// case with audionorm.GateFallbackGainDB (planNative below); before that landed
 // it planned no gain at all and exported the clip inaudible, which is why the
 // pre-fix column still shows it.
 func subGateLoudness(meas audionorm.Measurement) bool {
@@ -111,7 +107,7 @@ func TestCompareNormalization(t *testing.T) {
 
 		meas := measureNative(t, tc.pcm)
 		o.preFixPlan = planPreFix(meas)
-		o.nativePlan = planNative(meas, tc.pcm)
+		o.nativePlan = planNative(tc.pcm)
 
 		o.preFix = measure(t, ctx, ffmpegBin,
 			writeWAV(t, stem+"-prefix.wav", pcmgain.Applied(tc.pcm, o.preFixPlan.gainDB)))
@@ -181,68 +177,38 @@ func nativeMaxGainDB() float64 {
 	return productionMaxGainDB
 }
 
-// planNative mirrors planNativeNormalizationGain and gateFallbackGainDB in
-// internal/analysis/processor: when R128 gating leaves the integrated loudness at
-// -Inf but the clip still has a finite true peak, the gain is derived from the
-// true-peak ceiling instead of being abandoned.
-//
-// This is a reimplementation, not a call into production code, because the
-// production planner is an unexported method on SaveAudioAction. Keep the two in
-// step; if they drift, this harness stops measuring what actually ships.
-func planNative(meas audionorm.Measurement, pcmForRefine []byte) plan {
-	maxGain := nativeMaxGainDB()
-
-	if !subGateLoudness(meas) || math.IsInf(meas.TruePeakDBTP, -1) {
-		res := audionorm.PlanGain(meas, audionorm.Options{
-			SampleRate:   sampleRate,
-			Channels:     channels,
-			TargetLUFS:   targetLUFS,
-			TruePeakDBTP: targetTruePeak,
-		})
-		gain, clamped := audionorm.ClampGainDB(res.GainDB, maxGain)
-		p := plan{
-			wantDB:     res.TargetGainDB,
-			headroomDB: targetTruePeak - meas.TruePeakDBTP,
-			gainDB:     gain,
-		}
-		switch {
-		case subGateLoudness(meas):
-			p.bound = boundSilent
-		case clamped:
-			p.bound = boundClamp
-		case res.PeakLimited:
-			p.bound = boundPeak
-		default:
-			p.bound = boundNone
-		}
-		return p
+// planNative plans the gain the way the export path does, through
+// audionorm.PlanGainWithGateFallbackInt16Bytes, and classifies what bounded it.
+// For a clip lifted by the gate fallback the pre-clamp gain is not exposed, so
+// wantDB reports the applied gain.
+func planNative(pcm []byte) plan {
+	gp, err := audionorm.PlanGainWithGateFallbackInt16Bytes(pcm, audionorm.Options{
+		SampleRate:   sampleRate,
+		Channels:     channels,
+		TargetLUFS:   targetLUFS,
+		TruePeakDBTP: targetTruePeak,
+	}, nativeMaxGainDB())
+	if err != nil {
+		panic(err) // the harness's own fixtures are always measurable
 	}
 
-	// Both bounds from gateFallbackGainDB: the true-peak anchor, and the bound
-	// that keeps a flat sub-gate signal from being lifted past the loudness
-	// target (its loudness is unmeasurable only because it is under the gate,
-	// so it cannot exceed the target after a lift of target-minus-gate).
-	peakBound := targetTruePeak - meas.TruePeakDBTP
-	loudnessBound := targetLUFS - absoluteGateLUFS
-	want := math.Min(peakBound, loudnessBound)
-
-	// Mirrors refineLiftedGainDB: the lift usually raises the clip above the
-	// gate, so re-measuring the lifted signal lets a normal plan finish the job
-	// instead of stopping at the deliberately conservative bound.
-	if lifted, err := audionorm.MeasureInt16Bytes(pcmgain.Applied(pcmForRefine, want), sampleRate, channels); err == nil &&
-		!math.IsInf(lifted.IntegratedLUFS, -1) {
-		want += audionorm.PlanGain(lifted, audionorm.Options{
-			SampleRate:   sampleRate,
-			Channels:     channels,
-			TargetLUFS:   targetLUFS,
-			TruePeakDBTP: targetTruePeak,
-		}).GainDB
+	p := plan{
+		wantDB:     gp.Result.TargetGainDB,
+		headroomDB: targetTruePeak - gp.Measurement.TruePeakDBTP,
+		gainDB:     gp.GainDB,
+		bound:      boundNone,
 	}
-
-	gain, clamped := audionorm.ClampGainDB(want, maxGain)
-
-	p := plan{wantDB: want, headroomDB: peakBound, gainDB: gain, bound: boundNone}
-	if clamped {
+	switch {
+	case gp.GateLifted:
+		p.wantDB = gp.GainDB
+	case subGateLoudness(gp.Measurement):
+		p.bound = boundSilent
+	case gp.Clamped:
+		p.bound = boundClamp
+	case gp.Result.PeakLimited:
+		p.bound = boundPeak
+	}
+	if gp.GateLifted && gp.Clamped {
 		p.bound = boundClamp
 	}
 	return p

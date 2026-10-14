@@ -705,7 +705,7 @@ func TestRunEncoder_UnknownEncoderIsAnError(t *testing.T) {
 	a := newExportTestAction(t, "96k")
 	out := filepath.Join(t.TempDir(), "clip.invalid")
 
-	err := a.runEncoder(t.Context(), clipenc.FFmpeg, conf.SampleRate, 0, "invalid", out, 0)
+	err := a.runEncoder(t.Context(), "unknown-encoder", conf.SampleRate, 0, "invalid", out, 0)
 
 	require.Error(t, err)
 	assert.NoFileExists(t, out)

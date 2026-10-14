@@ -48,7 +48,7 @@ func TestDecode_RoundTripPerFormat(t *testing.T) {
 				t.Parallel()
 				path, src := writeFixture(t, fx, testRate, channels, testSeconds)
 
-				pcm, err := Decode(t.Context(), path, nil, 0)
+				pcm, err := decode(t.Context(), path, nil, 0)
 				require.NoError(t, err)
 				assert.Equal(t, testRate, pcm.SampleRate)
 				assert.Equal(t, channels, pcm.Channels)
@@ -81,7 +81,7 @@ func TestDecode_M4ATrimsPrimingAndPadding(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "burst.m4a")
 	writeM4AFile(t, path, src, testRate, 1)
 
-	pcm, err := Decode(t.Context(), path, nil, 0)
+	pcm, err := decode(t.Context(), path, nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, len(src), pcm.Frames(), "edit list trimming restores the source length")
 
@@ -102,9 +102,9 @@ func TestDecode_WindowMatchesWholeDecodeSlice(t *testing.T) {
 			t.Parallel()
 			path, _ := writeFixture(t, fx, testRate, 1, testSeconds)
 
-			whole, err := Decode(t.Context(), path, nil, 0)
+			whole, err := decode(t.Context(), path, nil, 0)
 			require.NoError(t, err)
-			win, err := Decode(t.Context(), path, &Window{Start: startSec, Duration: durSec}, 0)
+			win, err := decode(t.Context(), path, &window{Start: startSec, Duration: durSec}, 0)
 			require.NoError(t, err)
 
 			require.Equal(t, frames, win.Frames())
@@ -143,7 +143,7 @@ func TestDecode_SniffWinsOverExtension(t *testing.T) {
 	misnamed := filepath.Join(dir, "actually-flac.wav")
 	require.NoError(t, os.WriteFile(misnamed, flacBytes, 0o600))
 
-	pcm, err := Decode(t.Context(), misnamed, nil, 0)
+	pcm, err := decode(t.Context(), misnamed, nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, len(src), pcm.Frames())
 
@@ -151,7 +151,7 @@ func TestDecode_SniffWinsOverExtension(t *testing.T) {
 	// junk is not identifiable, an extensionless file is unknown.
 	junk := filepath.Join(dir, "noext")
 	require.NoError(t, os.WriteFile(junk, []byte("not audio at all, just text"), 0o600))
-	_, err = Decode(t.Context(), junk, nil, 0)
+	_, err = decode(t.Context(), junk, nil, 0)
 	require.ErrorIs(t, err, ErrUnsupportedSource)
 }
 
@@ -160,10 +160,7 @@ func TestDecode_UnknownContainerIsUnsupported(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "data.bin")
 	require.NoError(t, os.WriteFile(path, bytes.Repeat([]byte{0x01, 0x02, 0x03}, 100), 0o600))
-	_, err := Decode(t.Context(), path, nil, 0)
-	require.ErrorIs(t, err, ErrUnsupportedSource)
-
-	_, err = ProbeSampleRate(t.Context(), path)
+	_, err := decode(t.Context(), path, nil, 0)
 	require.ErrorIs(t, err, ErrUnsupportedSource)
 }
 
@@ -177,31 +174,24 @@ func TestDecode_OggThatIsNotOpusIsUnsupported(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "vorbis.ogg")
 	require.NoError(t, os.WriteFile(path, page, 0o600))
 
-	_, err := Decode(t.Context(), path, nil, 0)
+	_, err := decode(t.Context(), path, nil, 0)
 	require.ErrorIs(t, err, ErrUnsupportedSource)
 }
 
-func TestProbeSampleRate(t *testing.T) {
+func TestDecodeAtLeast_RejectsALowRateFromTheHeader(t *testing.T) {
 	t.Parallel()
 
 	for _, fx := range fixtures() {
 		t.Run(fx.name, func(t *testing.T) {
 			t.Parallel()
 			path, _ := writeFixture(t, fx, testRate, 1, 0.5)
-			rate, err := ProbeSampleRate(t.Context(), path)
+			_, err := decodeAtLeast(t.Context(), path, nil, 0, testRate+1)
+			require.ErrorIs(t, err, ErrBelowMinimumRate)
+			pcm, err := decodeAtLeast(t.Context(), path, nil, 0, testRate)
 			require.NoError(t, err)
-			assert.Equal(t, testRate, rate)
+			assert.Equal(t, testRate, pcm.SampleRate)
 		})
 	}
-
-	t.Run("44.1 kHz wav", func(t *testing.T) {
-		t.Parallel()
-		path := filepath.Join(t.TempDir(), "x.wav")
-		writeWAVFile(t, path, tone(44100, 1, 0.2, testToneHz, testAmp), 44100, 1)
-		rate, err := ProbeSampleRate(t.Context(), path)
-		require.NoError(t, err)
-		assert.Equal(t, 44100, rate)
-	})
 }
 
 // heAACFile writes an AAC-LC m4a whose AudioSpecificConfig is patched to declare
@@ -227,13 +217,13 @@ func TestDecode_HEAACIsUnsupported(t *testing.T) {
 	t.Parallel()
 
 	path := heAACFile(t)
-	_, err := Decode(t.Context(), path, nil, 0)
+	_, err := decode(t.Context(), path, nil, 0)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrHEAACSource)
 	require.ErrorIs(t, err, ErrUnsupportedSource)
 
-	_, err = ProbeSampleRate(t.Context(), path)
-	require.ErrorIs(t, err, ErrHEAACSource, "probing must classify HE-AAC the same way")
+	_, err = decodeAtLeast(t.Context(), path, nil, 0, testRate+1)
+	require.ErrorIs(t, err, ErrHEAACSource, "the header check classifies HE-AAC the same way")
 }
 
 func TestClassifyDecodeError(t *testing.T) {
@@ -280,7 +270,6 @@ func TestClassifyDecodeError(t *testing.T) {
 			require.ErrorIs(t, got, tt.err, "the decoder error stays in the chain")
 		})
 	}
-	require.NoError(t, classifyDecodeError("test", nil))
 }
 
 func TestDecode_CorruptAndTruncatedInputs(t *testing.T) {
@@ -322,7 +311,7 @@ func TestDecode_CorruptAndTruncatedInputs(t *testing.T) {
 			require.NoError(t, os.WriteFile(path, tt.data, 0o600))
 
 			assert.NotPanics(t, func() {
-				_, err := Decode(t.Context(), path, nil, 0)
+				_, err := decode(t.Context(), path, nil, 0)
 				require.Error(t, err)
 				assert.Truef(t, errors.Is(err, ErrUndecodableSource) || errors.Is(err, ErrUnsupportedSource),
 					"want a typed source error, got %v", err)
@@ -349,7 +338,7 @@ func TestDecode_BoundsRejectBeforeAllocating(t *testing.T) {
 			rate, ch int
 		}{
 			{name: "rate 2147483647", rate: math.MaxInt32, ch: 1},
-			{name: "rate above the maximum", rate: MaxSourceSampleRate + 1, ch: 1},
+			{name: "rate above the maximum", rate: maxSourceSampleRate + 1, ch: 1},
 			{name: "rate 4000", rate: 4000, ch: 1},
 			{name: "three channels", rate: testRate, ch: 3},
 		}
@@ -358,9 +347,7 @@ func TestDecode_BoundsRejectBeforeAllocating(t *testing.T) {
 				t.Parallel()
 				path := filepath.Join(t.TempDir(), "x.wav")
 				require.NoError(t, os.WriteFile(path, wavBytes(t, tt.rate, tt.ch, 100), 0o600))
-				_, err := Decode(t.Context(), path, nil, 0)
-				require.ErrorIs(t, err, ErrUnsupportedSource)
-				_, err = ProbeSampleRate(t.Context(), path)
+				_, err := decode(t.Context(), path, nil, 0)
 				require.ErrorIs(t, err, ErrUnsupportedSource)
 			})
 		}
@@ -371,9 +358,9 @@ func TestDecode_BoundsRejectBeforeAllocating(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "huge.wav")
 		f, err := os.Create(path) //nolint:gosec // G304: test path
 		require.NoError(t, err)
-		require.NoError(t, f.Truncate(MaxSourceFileBytes+1))
+		require.NoError(t, f.Truncate(maxSourceFileBytes+1))
 		require.NoError(t, f.Close())
-		_, err = Decode(t.Context(), path, nil, 0)
+		_, err = decode(t.Context(), path, nil, 0)
 		require.ErrorIs(t, err, ErrAudioTooLong)
 	})
 
@@ -382,9 +369,9 @@ func TestDecode_BoundsRejectBeforeAllocating(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "x.wav")
 		writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate, 1)
 
-		_, err := Decode(t.Context(), path, nil, testRate) // 0.5 s worth of bytes
+		_, err := decode(t.Context(), path, nil, testRate) // 0.5 s worth of bytes
 		require.ErrorIs(t, err, ErrAudioTooLong, "whole-file decode")
-		_, err = Decode(t.Context(), path, &Window{Start: 0, Duration: 1}, testRate)
+		_, err = decode(t.Context(), path, &window{Start: 0, Duration: 1}, testRate)
 		require.ErrorIs(t, err, ErrAudioTooLong, "window decode")
 	})
 }
@@ -403,7 +390,7 @@ func TestDecode_HeaderClaimingHugeLengthDoesNotDriveAllocation(t *testing.T) {
 
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	pcm, err := Decode(t.Context(), path, nil, 0)
+	pcm, err := decode(t.Context(), path, nil, 0)
 	runtime.ReadMemStats(&after)
 
 	if err == nil {
@@ -422,7 +409,7 @@ func TestDecode_WindowPastEnd(t *testing.T) {
 		t.Run(fx.name, func(t *testing.T) {
 			t.Parallel()
 			path, _ := writeFixture(t, fx, testRate, 1, 1)
-			_, err := Decode(t.Context(), path, &Window{Start: 30, Duration: 1}, 0)
+			_, err := decode(t.Context(), path, &window{Start: 30, Duration: 1}, 0)
 			require.ErrorIs(t, err, ErrEmptyRange)
 		})
 	}
@@ -435,7 +422,7 @@ func TestDecode_WindowPartlyPastEndIsShortened(t *testing.T) {
 		t.Run(fx.name, func(t *testing.T) {
 			t.Parallel()
 			path, src := writeFixture(t, fx, testRate, 1, testSeconds)
-			pcm, err := Decode(t.Context(), path, &Window{Start: 1.5, Duration: 10}, 0)
+			pcm, err := decode(t.Context(), path, &window{Start: 1.5, Duration: 10}, 0)
 			require.NoError(t, err)
 			want := len(src) - int(1.5*testRate)
 			assert.InDelta(t, want, pcm.Frames(), lossyFrameSlack)
@@ -450,7 +437,7 @@ func TestDecode_RejectsHugeOrNonFiniteWindow(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "x.wav")
 	writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate, 1)
 
-	invalid := []Window{
+	invalid := []window{
 		{Start: math.NaN(), Duration: 1},
 		{Start: math.Inf(1), Duration: 1},
 		{Start: -1, Duration: 1},
@@ -460,14 +447,14 @@ func TestDecode_RejectsHugeOrNonFiniteWindow(t *testing.T) {
 		{Start: 0, Duration: -2},
 	}
 	for _, w := range invalid {
-		_, err := Decode(t.Context(), path, &w, 0)
+		_, err := decode(t.Context(), path, &w, 0)
 		require.ErrorIsf(t, err, ErrInvalidRequest, "window %+v", w)
 	}
 
-	_, err := Decode(t.Context(), path, &Window{Start: 1e18, Duration: 1}, 0)
+	_, err := decode(t.Context(), path, &window{Start: 1e18, Duration: 1}, 0)
 	require.ErrorIs(t, err, ErrEmptyRange, "an astronomically late start is simply past the end")
 
-	_, err = Decode(t.Context(), path, &Window{Start: 0, Duration: 1e12}, 0)
+	_, err = decode(t.Context(), path, &window{Start: 0, Duration: 1e12}, 0)
 	require.ErrorIs(t, err, ErrAudioTooLong)
 }
 
@@ -490,9 +477,7 @@ func TestDecode_CancelledContext(t *testing.T) {
 		writeOpusFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate, 1)
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		_, err := Decode(ctx, path, &Window{Start: 0.5, Duration: 0.2}, 0)
-		require.ErrorIs(t, err, context.Canceled)
-		_, err = ProbeSampleRate(ctx, path)
+		_, err := decode(ctx, path, &window{Start: 0.5, Duration: 0.2}, 0)
 		require.ErrorIs(t, err, context.Canceled)
 	})
 
@@ -588,17 +573,17 @@ func TestDecode_HugeDeclaredLength8BitWAV(t *testing.T) {
 		expansion:   losslessExpansion,
 	}
 
-	var pcm *PCM
+	var pcm *pcmBuffer
 	var err error
 	require.NotPanics(t, func() {
-		pcm, err = decodeSource(t.Context(), src, nil, actualFrames, MaxDecodedPCMBytes)
+		pcm, err = decodeSource(t.Context(), src, nil, actualFrames, maxDecodedPCMBytes)
 	})
 	require.NoError(t, err)
 	assert.Equal(t, actualFrames, pcm.Frames(), "the bytes that exist are returned")
 
 	const fileSize = 1 << 20
 	plausible := fileSize*lossyExpansion + initialCapSlackBytes
-	assert.Equal(t, plausible, initialCapacity(&source{totalFrames: declaredFrames, expansion: lossyExpansion}, fileSize, MaxDecodedPCMBytes, bytesPerSample),
+	assert.Equal(t, plausible, initialCapacity(&source{totalFrames: declaredFrames, expansion: lossyExpansion}, fileSize, maxDecodedPCMBytes, bytesPerSample),
 		"a declared count above the cap leaves the file-size estimate to size the buffer")
 }
 
@@ -615,28 +600,25 @@ func TestDecode_ExtensionDecidesWhenSniffingIsInconclusive(t *testing.T) {
 
 	padded := filepath.Join(dir, "padded.mp3")
 	require.NoError(t, os.WriteFile(padded, append(make([]byte, 4), data...), 0o600))
-	pcm, err := Decode(t.Context(), padded, nil, 0)
+	pcm, err := decode(t.Context(), padded, nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, testRate, pcm.SampleRate)
 	assert.InDelta(t, testRate, pcm.Frames(), lossyFrameSlack)
 
 	unnamed := filepath.Join(dir, "padded")
 	require.NoError(t, os.WriteFile(unnamed, append(make([]byte, 4), data...), 0o600))
-	_, err = Decode(t.Context(), unnamed, nil, 0)
+	_, err = decode(t.Context(), unnamed, nil, 0)
 	require.ErrorIs(t, err, ErrUnsupportedSource, "without a usable extension the container stays unknown")
 }
 
 func TestDecode_AcceptsTheSourceRateBounds(t *testing.T) {
 	t.Parallel()
 
-	for _, rate := range []int{MinSourceSampleRate, MaxSourceSampleRate} {
+	for _, rate := range []int{minSourceSampleRate, maxSourceSampleRate} {
 		path := filepath.Join(t.TempDir(), "edge.wav")
 		writeWAVFile(t, path, tone(rate, 1, 0.1, testToneHz, testAmp), rate, 1)
-		pcm, err := Decode(t.Context(), path, nil, 0)
+		pcm, err := decode(t.Context(), path, nil, 0)
 		require.NoError(t, err, "rate %d", rate)
 		assert.Equal(t, rate, pcm.SampleRate)
-		probed, err := ProbeSampleRate(t.Context(), path)
-		require.NoError(t, err)
-		assert.Equal(t, rate, probed)
 	}
 }

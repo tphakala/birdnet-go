@@ -215,6 +215,13 @@ func PlanGain(meas Measurement, opts Options) Result {
 // transcode.MaxGainDB, which is a request validation range, not a clamp.)
 const DefaultMaxGainDB = 30.0
 
+// MaxNormalizeGainDB is the gain clamp for loudness normalization of detection
+// clips and on-demand clips. It is the widest lift any valid configuration can
+// ask for: the most aggressive permitted target (-10 LUFS, conf.MaxTargetLUFS)
+// minus the EBU R128 absolute gate (AbsoluteGateLUFS), which is exactly 60 dB.
+// Deliberately not DefaultMaxGainDB, the BirdWeather upload ceiling.
+const MaxNormalizeGainDB = 60.0
+
 // ClampGainDB constrains a planned gain (dB) to [-maxAbsDB, +maxAbsDB] and reports
 // whether the clamp took effect. Callers pass PlanGain's GainDB and their own
 // ceiling (usually DefaultMaxGainDB); the returned bool lets one caller log the
@@ -267,8 +274,8 @@ func PlanClampedGainInt16Bytes(pcm []byte, opts Options, maxAbsGainDB float64) (
 
 func validateDims(sampleRate, channels, n int) error {
 	switch {
-	case sampleRate < minSampleRate:
-		return fmt.Errorf("audionorm: sample rate %d Hz too low; minimum is %d Hz (K-weighting is undefined below it)", sampleRate, minSampleRate)
+	case sampleRate < MinSampleRate:
+		return fmt.Errorf("audionorm: sample rate %d Hz too low; minimum is %d Hz (K-weighting is undefined below it)", sampleRate, MinSampleRate)
 	case channels <= 0:
 		return fmt.Errorf("audionorm: channels must be positive, got %d", channels)
 	case n%channels != 0:

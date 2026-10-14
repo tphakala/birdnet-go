@@ -3,6 +3,7 @@ package transcode
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"os"
 	"path/filepath"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/mp3"
 	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
@@ -22,35 +24,75 @@ import (
 const outputBitDepth = 16
 
 // EncoderTag returns the encoder identity recorded in the export logs for format.
+// An unknown format reports the WAV writer.
 func EncoderTag(format string) string {
+	if tag, ok := clipenc.ForFormat(format); ok {
+		return tag
+	}
+	return clipenc.NativeWAV
+}
+
+// EncoderAcceptsRate reports whether the native encoder for format can carry audio
+// of this shape. WAV and FLAC carry any rate; AAC, MP3 and Opus accept only the
+// rates their encoders support. Clip export and on-demand transcoding share this
+// rule to decide whether a clip must be resampled to conf.SampleRate first.
+func EncoderAcceptsRate(format string, sampleRate, bitDepth, channels int) bool {
 	switch format {
-	case audioformat.FLAC:
-		return clipenc.NativeFLAC
-	case audioformat.MP3:
-		return clipenc.NativeMP3
 	case audioformat.AAC:
-		return clipenc.NativeAAC
+		return aac.Supports(sampleRate, bitDepth, channels) == nil
+	case audioformat.MP3:
+		return mp3.Supports(sampleRate, bitDepth, channels) == nil
 	case audioformat.Opus:
-		return clipenc.NativeOpus
+		return opus.Supports(sampleRate, bitDepth, channels) == nil
 	default:
-		return clipenc.NativeWAV
+		return true
 	}
 }
 
-// fileExtension returns the file extension the native encoder writes for format.
-func fileExtension(format string) string {
-	if format == audioformat.AAC {
-		return "m4a"
-	}
-	return format
+// fileEncodeOptions is what a file-based encoder needs.
+type fileEncodeOptions struct {
+	data        []byte
+	outputPath  string
+	sampleRate  int
+	channels    int
+	bitrateKbps int
 }
 
-// Encode encodes p in format and returns the file bytes. The sample rate is kept
+// fileEncoders maps each format that must be written to a seekable file to its
+// native encoder. WAV is built in memory and is not listed.
+var fileEncoders = map[string]func(ctx context.Context, o *fileEncodeOptions) error{
+	audioformat.FLAC: func(ctx context.Context, o *fileEncodeOptions) error {
+		return flac.EncodePCM(ctx, &flac.Options{
+			PCMData: o.data, OutputPath: o.outputPath, SampleRate: o.sampleRate,
+			Channels: o.channels, BitDepth: outputBitDepth,
+		})
+	},
+	audioformat.MP3: func(ctx context.Context, o *fileEncodeOptions) error {
+		return mp3.EncodePCM(ctx, &mp3.Options{
+			PCMData: o.data, OutputPath: o.outputPath, SampleRate: o.sampleRate,
+			Channels: o.channels, BitDepth: outputBitDepth, BitrateKbps: o.bitrateKbps,
+		})
+	},
+	audioformat.AAC: func(ctx context.Context, o *fileEncodeOptions) error {
+		return aac.EncodePCM(ctx, &aac.Options{
+			PCMData: o.data, OutputPath: o.outputPath, SampleRate: o.sampleRate,
+			Channels: o.channels, BitDepth: outputBitDepth, BitrateKbps: o.bitrateKbps,
+		})
+	},
+	audioformat.Opus: func(ctx context.Context, o *fileEncodeOptions) error {
+		return opus.EncodePCM(ctx, &opus.Options{
+			PCMData: o.data, OutputPath: o.outputPath, SampleRate: o.sampleRate,
+			Channels: o.channels, BitDepth: outputBitDepth, BitrateKbps: o.bitrateKbps,
+		})
+	},
+}
+
+// encode encodes p in format and returns the file bytes. The sample rate is kept
 // unless the target lossy encoder does not accept it, in which case the audio is
 // resampled to conf.SampleRate, the same rule clip export applies. Formats that
 // need a seekable sink are encoded into a private directory under tempDir that is
 // removed before Encode returns.
-func Encode(ctx context.Context, p *PCM, format, tempDir string) ([]byte, error) {
+func encode(ctx context.Context, p *pcmBuffer, format, tempDir string) ([]byte, error) {
 	if !IsSupportedClipFormat(format) {
 		return nil, validationError(ErrInvalidRequest, "encode", "unsupported format %q", format)
 	}
@@ -71,44 +113,59 @@ func Encode(ctx context.Context, p *PCM, format, tempDir string) ([]byte, error)
 	return encodeViaFile(ctx, p, format, tempDir)
 }
 
-// resampleForEncoder returns p at a rate the lossy encoder for format accepts.
-func resampleForEncoder(ctx context.Context, p *PCM, format string) (*PCM, error) {
-	var supports func(rate, bitDepth, channels int) error
-	switch format {
-	case audioformat.AAC:
-		supports = aac.Supports
-	case audioformat.MP3:
-		supports = mp3.Supports
-	case audioformat.Opus:
-		supports = opus.Supports
-	default:
-		// WAV and FLAC carry any rate.
+// resampleForEncoder returns p at a rate the encoder for format accepts.
+func resampleForEncoder(ctx context.Context, p *pcmBuffer, format string) (*pcmBuffer, error) {
+	if EncoderAcceptsRate(format, p.SampleRate, outputBitDepth, p.Channels) {
 		return p, nil
 	}
-	if supports(p.SampleRate, outputBitDepth, p.Channels) == nil {
-		return p, nil
-	}
-	return resampleInterleaved(ctx, p, conf.SampleRate, MaxDecodedPCMBytes)
+	return resampleInterleaved(ctx, p, conf.SampleRate, maxDecodedPCMBytes)
 }
 
+// wavHeaderBytes is the size of the canonical RIFF/WAVE header go-wav writes for
+// 16-bit PCM with one or two channels.
+const wavHeaderBytes = 44
+
+// RIFF header field offsets within the canonical header.
+const (
+	wavRIFFSizeOffset = 4
+	wavDataSizeOffset = 40
+	// wavRIFFSizeExtra is what the RIFF size adds to the data size: the header
+	// minus the "RIFF" tag and the size field itself.
+	wavRIFFSizeExtra = wavHeaderBytes - 8
+)
+
 // encodeWAV writes p as a WAV file in memory. The length is known, so the RIFF
-// sizes are final.
-func encodeWAV(p *PCM) ([]byte, error) {
+// sizes are final. When p carries header room (see pcmBuffer.wavRoom) the header
+// is written in front of the samples and no sample is copied.
+func encodeWAV(p *pcmBuffer) ([]byte, error) {
+	cfg := wavpcm.Config{SampleRate: p.SampleRate, BitDepth: outputBitDepth, Channels: p.Channels}
+	if wav, ok := encodeWAVInPlace(p, &cfg); ok {
+		return wav, nil
+	}
 	var buf bytes.Buffer
 	buf.Grow(len(p.Data) + wavHeaderSlackBytes)
-	err := wavpcm.EncodeInterleaved(&buf, wavpcm.Config{
-		SampleRate: p.SampleRate,
-		BitDepth:   outputBitDepth,
-		Channels:   p.Channels,
-	}, p.Data)
-	if err != nil {
-		return nil, errors.New(err).
-			Component(componentName).
-			Category(errors.CategoryAudio).
-			Context("operation", "encode_wav").
-			Build()
+	if err := wavpcm.EncodeInterleaved(&buf, cfg, p.Data); err != nil {
+		return nil, wrapError(err, errors.CategoryAudio, "encode_wav")
 	}
 	return buf.Bytes(), nil
+}
+
+// encodeWAVInPlace builds the WAV inside p.wavRoom. It reports false, leaving the
+// copying path to run, when p has no header room, when the room does not directly
+// precede p.Data, or when the encoder's header is not the canonical 44 bytes.
+func encodeWAVInPlace(p *pcmBuffer, cfg *wavpcm.Config) ([]byte, bool) {
+	if len(p.wavRoom) < wavHeaderBytes+len(p.Data) || len(p.Data) == 0 || &p.wavRoom[wavHeaderBytes] != &p.Data[0] {
+		return nil, false
+	}
+	var head bytes.Buffer
+	if err := wavpcm.EncodeInterleaved(&head, *cfg, nil); err != nil || head.Len() != wavHeaderBytes {
+		return nil, false
+	}
+	wav := p.wavRoom[:wavHeaderBytes+len(p.Data)]
+	copy(wav, head.Bytes())
+	binary.LittleEndian.PutUint32(wav[wavRIFFSizeOffset:], uint32(len(p.Data)+wavRIFFSizeExtra)) //nolint:gosec // G115: bounded by maxDecodedPCMBytes
+	binary.LittleEndian.PutUint32(wav[wavDataSizeOffset:], uint32(len(p.Data)))                  //nolint:gosec // G115: bounded by maxDecodedPCMBytes
+	return wav, true
 }
 
 // wavHeaderSlackBytes is spare buffer room for the WAV header.
@@ -117,51 +174,27 @@ const wavHeaderSlackBytes = 512
 // encodeViaFile runs a file-based encoder in a private temp directory and reads
 // the result back. FLAC goes through the file path rather than a buffer so the
 // STREAMINFO MD5 and seek table are real.
-func encodeViaFile(ctx context.Context, p *PCM, format, tempDir string) ([]byte, error) {
+func encodeViaFile(ctx context.Context, p *pcmBuffer, format, tempDir string) ([]byte, error) {
+	enc, ok := fileEncoders[format]
+	if !ok {
+		return nil, wrapError(errors.NewStd("no file encoder for format "+format), errors.CategoryProcessing, "encode_dispatch")
+	}
 	dir, err := os.MkdirTemp(tempDir, "transcode-*")
 	if err != nil {
-		return nil, errors.New(err).
-			Component(componentName).
-			Category(errors.CategoryFileIO).
-			Context("operation", "encode_tempdir").
-			Build()
+		return nil, wrapError(err, errors.CategoryFileIO, "encode_tempdir")
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 
-	out := filepath.Join(dir, "clip."+fileExtension(format))
-	bitrate := clipBitrateKbps[format]
-	switch format {
-	case audioformat.FLAC:
-		err = flac.EncodePCM(ctx, &flac.Options{
-			PCMData: p.Data, OutputPath: out, SampleRate: p.SampleRate,
-			Channels: p.Channels, BitDepth: outputBitDepth,
-		})
-	case audioformat.MP3:
-		err = mp3.EncodePCM(ctx, &mp3.Options{
-			PCMData: p.Data, OutputPath: out, SampleRate: p.SampleRate,
-			Channels: p.Channels, BitDepth: outputBitDepth, BitrateKbps: bitrate,
-		})
-	case audioformat.AAC:
-		err = aac.EncodePCM(ctx, &aac.Options{
-			PCMData: p.Data, OutputPath: out, SampleRate: p.SampleRate,
-			Channels: p.Channels, BitDepth: outputBitDepth, BitrateKbps: bitrate,
-		})
-	case audioformat.Opus:
-		err = opus.EncodePCM(ctx, &opus.Options{
-			PCMData: p.Data, OutputPath: out, SampleRate: p.SampleRate,
-			Channels: p.Channels, BitDepth: outputBitDepth, BitrateKbps: bitrate,
-		})
-	}
-	if err != nil {
+	out := filepath.Join(dir, "clip."+convert.GetFileExtension(format))
+	if err := enc(ctx, &fileEncodeOptions{
+		data: p.Data, outputPath: out, sampleRate: p.SampleRate,
+		channels: p.Channels, bitrateKbps: clipBitrateKbps[format],
+	}); err != nil {
 		return nil, err
 	}
 	data, err := os.ReadFile(out) //nolint:gosec // G304: out is inside a directory this function just created
 	if err != nil {
-		return nil, errors.New(err).
-			Component(componentName).
-			Category(errors.CategoryFileIO).
-			Context("operation", "encode_read_back").
-			Build()
+		return nil, wrapError(err, errors.CategoryFileIO, "encode_read_back")
 	}
 	return data, nil
 }

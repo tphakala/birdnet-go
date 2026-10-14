@@ -123,7 +123,7 @@ func exportWithResolvedGain(t *testing.T, ctx context.Context, ffmpegBin string,
 	t.Helper()
 
 	out := stem + "." + lf.container
-	gainDB := planNative(measureNative(t, pcm), pcm).gainDB
+	gainDB := planNative(pcm).gainDB
 
 	pcmPath := stem + ".pcm"
 	require.NoError(t, os.WriteFile(pcmPath, pcm, 0o600))

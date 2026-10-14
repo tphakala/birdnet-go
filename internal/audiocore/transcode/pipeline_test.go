@@ -33,13 +33,12 @@ func TestExtractClip_EndToEnd(t *testing.T) {
 		for name, filters := range filterSets {
 			t.Run(format+"_"+name, func(t *testing.T) {
 				t.Parallel()
-				res, err := ExtractClip(t.Context(), &ClipOptions{
+				data, err := ExtractClip(t.Context(), &ClipOptions{
 					InputPath: path, Start: start, End: end, Format: format, Filters: filters, TempDir: t.TempDir(),
 				})
 				require.NoError(t, err)
-				assert.Equal(t, EncoderTag(format), res.Encoder)
 
-				back := decodeBytes(t, res.Data, ext[format])
+				back := decodeBytes(t, data, ext[format])
 				assert.InDelta(t, (end-start)*testRate, back.Frames(), lossyFrameSlack)
 				assert.True(t, dominantIs(channelOf(bytesInt16(back.Data), 1, 0), testRate, testToneHz, testOffToneH))
 			})
@@ -167,10 +166,10 @@ func TestExtractClip_AppliesWindowStartAndFilters(t *testing.T) {
 	src := noisyTone(testRate)
 	writeWAVFile(t, path, src, testRate, 1)
 
-	clip := func(start, end float64, f Filters) *PCM {
-		res, err := ExtractClip(t.Context(), &ClipOptions{InputPath: path, Start: start, End: end, Format: audioformat.WAV, Filters: f})
+	clip := func(start, end float64, f Filters) *pcmBuffer {
+		data, err := ExtractClip(t.Context(), &ClipOptions{InputPath: path, Start: start, End: end, Format: audioformat.WAV, Filters: f})
 		require.NoError(t, err)
-		return decodeBytes(t, res.Data, ".wav")
+		return decodeBytes(t, data, ".wav")
 	}
 
 	t.Run("the window starts at Start", func(t *testing.T) {

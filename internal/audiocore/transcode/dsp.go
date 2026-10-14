@@ -3,6 +3,7 @@ package transcode
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 
 	"github.com/tphakala/go-audio-dsp/denoiser"
@@ -46,8 +47,8 @@ func (f Filters) Active() bool {
 	return f.Denoise != "" || f.Normalize || f.GainDB != 0
 }
 
-// ApplyFilters runs the enabled filters over p in place (p.Data may be replaced).
-func ApplyFilters(ctx context.Context, p *PCM, f Filters) error {
+// applyFilters runs the enabled filters over p in place; p.Data is modified.
+func applyFilters(ctx context.Context, p *pcmBuffer, f Filters) error {
 	if f.Denoise != "" {
 		if err := denoisePCM(ctx, p, f.Denoise); err != nil {
 			return err
@@ -64,13 +65,9 @@ func ApplyFilters(ctx context.Context, p *PCM, f Filters) error {
 			Channels:     p.Channels,
 			TargetLUFS:   normalizeTargetLUFS,
 			TruePeakDBTP: normalizeTruePeakDBTP,
-		}, normalizeMaxGainDB)
+		}, audionorm.MaxNormalizeGainDB)
 		if err != nil {
-			return errors.New(err).
-				Component(componentName).
-				Category(errors.CategoryAudio).
-				Context("operation", "normalize_measure").
-				Build()
+			return wrapError(err, errors.CategoryAudio, "normalize_measure")
 		}
 		totalGain += plan.GainDB
 	}
@@ -79,9 +76,9 @@ func ApplyFilters(ctx context.Context, p *PCM, f Filters) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		// One quantization for normalization and user gain together. Applied
-		// returns a copy: ApplyInt16 forbids overlapping src and dst.
-		p.Data = pcmgain.Applied(p.Data, totalGain)
+		// One quantization for normalization and user gain together, applied in
+		// place: p.Data is owned by this request and ApplyInt16 allows dst == src.
+		pcmgain.ApplyInt16(p.Data, p.Data, pcmgain.FactorFromDB(totalGain))
 	}
 	return nil
 }
@@ -89,7 +86,7 @@ func ApplyFilters(ctx context.Context, p *PCM, f Filters) error {
 // denoisePCM denoises p channel by channel. Each channel is copied into one
 // reusable float32 buffer, so the working set is the PCM plus one channel of
 // floats, and the result is written back into p.Data in place.
-func denoisePCM(ctx context.Context, p *PCM, preset string) error {
+func denoisePCM(ctx context.Context, p *pcmBuffer, preset string) error {
 	strength, ok := denoiseStrengths[preset]
 	if !ok {
 		return validationError(ErrInvalidRequest, "denoise_preset", "unknown denoise preset %q", preset)
@@ -106,12 +103,7 @@ func denoisePCM(ctx context.Context, p *PCM, preset string) error {
 	for ch := range p.Channels {
 		d, err := denoiser.New(denoiser.Config{SampleRate: p.SampleRate, Strength: strength})
 		if err != nil {
-			return errors.New(err).
-				Component(componentName).
-				Category(errors.CategoryAudio).
-				Context("operation", "denoise_init").
-				Context("sample_rate", p.SampleRate).
-				Build()
+			return denoiseError("denoise_init", err)
 		}
 		if need := max(d.MaxOutputLen(chunkFrames), d.FrameSize()); len(scratch) < need {
 			scratch = make([]float32, need)
@@ -127,11 +119,7 @@ func denoisePCM(ctx context.Context, p *PCM, preset string) error {
 		// failed estimate is not an error.
 		if prof, perr := d.EstimateNoiseProfile(x); perr == nil {
 			if err := d.SetNoiseProfile(prof); err != nil {
-				return errors.New(err).
-					Component(componentName).
-					Category(errors.CategoryAudio).
-					Context("operation", "denoise_profile").
-					Build()
+				return denoiseError("denoise_profile", err)
 			}
 		}
 
@@ -166,25 +154,17 @@ func denoisePCM(ctx context.Context, p *PCM, preset string) error {
 // denoiseLengthError reports a denoiser that broke its contract of returning
 // exactly as many samples as it was given.
 func denoiseLengthError(got, want int) error {
-	return errors.Newf("denoiser returned %d samples for %d input samples", got, want).
-		Component(componentName).
-		Category(errors.CategoryAudio).
-		Context("operation", "denoise_length").
-		Build()
+	return denoiseError("denoise_length", fmt.Errorf("denoiser returned %d samples for %d input samples", got, want))
 }
 
 // denoiseError wraps a denoiser failure.
 func denoiseError(operation string, err error) error {
-	return errors.New(err).
-		Component(componentName).
-		Category(errors.CategoryAudio).
-		Context("operation", operation).
-		Build()
+	return wrapError(err, errors.CategoryAudio, operation)
 }
 
 // writeChannel stores samples into channel ch of p starting at frame index start,
 // rounding and saturating to int16.
-func writeChannel(p *PCM, ch, start int, samples []float32) {
+func writeChannel(p *pcmBuffer, ch, start int, samples []float32) {
 	for i, s := range samples {
 		off := ((start+i)*p.Channels + ch) * bytesPerSample
 		binary.LittleEndian.PutUint16(p.Data[off:], uint16(floatToInt16(s))) //nolint:gosec // G115: intentional int16 to uint16 reinterpretation of PCM

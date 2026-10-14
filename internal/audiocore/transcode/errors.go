@@ -13,7 +13,7 @@ import (
 var (
 	// ErrUnsupportedSource marks a source this package does not decode: a codec
 	// or container outside the supported set, more than two channels, or a sample
-	// rate outside [MinSourceSampleRate, MaxSourceSampleRate].
+	// rate outside [minSourceSampleRate, maxSourceSampleRate].
 	ErrUnsupportedSource = errors.NewStd("source audio format is not supported")
 
 	// ErrHEAACSource marks an HE-AAC or HE-AACv2 source (AAC with SBR or PS),
@@ -31,6 +31,10 @@ var (
 	// ErrEmptyRange marks a requested range that holds no audio, for example a
 	// clip window that starts past the end of the source.
 	ErrEmptyRange = errors.NewStd("requested range holds no audio")
+
+	// ErrBelowMinimumRate marks a source whose sample rate is below the minimum the
+	// requested operation needs (audible bats needs ultrasonic capture rates).
+	ErrBelowMinimumRate = errors.NewStd("source sample rate is below the minimum for this operation")
 
 	// ErrInvalidRequest marks a caller-supplied value outside what the package
 	// accepts: a clip window with a non-finite or negative start or a non-positive
@@ -54,11 +58,16 @@ func wrapSentinel(sentinel, cause error, operation, detail string, category erro
 		Build()
 }
 
-// validationError builds a CategoryValidation error for a malformed request value.
-func validationError(sentinel error, operation, format string, args ...any) error {
-	return errors.Newf("%w: %s", sentinel, fmt.Sprintf(format, args...)).
+// wrapError wraps err with the component, category and operation telemetry tags.
+func wrapError(err error, category errors.ErrorCategory, operation string) error {
+	return errors.New(err).
 		Component(componentName).
-		Category(errors.CategoryValidation).
+		Category(category).
 		Context("operation", operation).
 		Build()
+}
+
+// validationError builds a CategoryValidation error for a malformed request value.
+func validationError(sentinel error, operation, format string, args ...any) error {
+	return wrapSentinel(sentinel, nil, operation, fmt.Sprintf(format, args...), errors.CategoryValidation)
 }

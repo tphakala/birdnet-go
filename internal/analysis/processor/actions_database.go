@@ -24,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
 	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
+	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -801,20 +802,10 @@ func (a *SaveAudioAction) logExportFailure(enc *clipEncoding, exportFormat strin
 // the clip, because a resample could not run, fails the export loudly instead of
 // writing a wrong file.
 func selectEncoder(exportFormat string) (string, error) {
-	switch exportFormat {
-	case audioformat.WAV:
-		return clipenc.NativeWAV, nil
-	case audioformat.FLAC:
-		return clipenc.NativeFLAC, nil
-	case audioformat.AAC:
-		return clipenc.NativeAAC, nil
-	case audioformat.Opus:
-		return clipenc.NativeOpus, nil
-	case audioformat.MP3:
-		return clipenc.NativeMP3, nil
-	default:
-		return "", unsupportedExportFormatError(exportFormat)
+	if tag, ok := clipenc.ForFormat(exportFormat); ok {
+		return tag, nil
 	}
+	return "", unsupportedExportFormatError(exportFormat)
 }
 
 // unsupportedExportFormatError reports an export format no native encoder
@@ -1165,10 +1156,6 @@ func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate in
 // than to any one codec, so every native encoder shares it.
 const nativeNormalizationBitDepth = 16
 
-// audionormMinTargetLUFS is the exclusive lower bound of audionorm's valid target
-// loudness range (audionorm rejects targets <= -70 LUFS, the absolute gate).
-const audionormMinTargetLUFS = -70.0
-
 // audionormSupportsTargets reports whether the configured integrated-loudness
 // target and true-peak ceiling fall within audionorm's valid range
 // (-70 < TargetLUFS < 0, ceiling <= 0). Out-of-range configs (unreachable for a
@@ -1176,50 +1163,27 @@ const audionormMinTargetLUFS = -70.0
 // normalization rather than fed values audionorm would mis-handle; no clip export
 // format uses FFmpeg.
 func audionormSupportsTargets(targetLUFS, truePeakDBTP float64) bool {
-	return targetLUFS < 0 && targetLUFS > audionormMinTargetLUFS && truePeakDBTP <= 0
-}
-
-// nativeExportMaxGainDB is the absolute backstop on the loudness gain a clip
-// export applies, whichever encoder writes the file. It is not an arbitrary round
-// number: the widest lift any in-range configuration can legitimately ask for is
-// the most aggressive permitted target (conf.MaxTargetLUFS, -10) minus the EBU
-// R128 absolute gate (audionormMinTargetLUFS, -70), which is exactly 60 dB.
-//
-// It is numerically equal to transcode.MaxGainDB, but do not read that as a shared
-// constraint: that constant validates the gain a request may ask for (see the note
-// on audionorm.DefaultMaxGainDB). The equality is a coincidence of two
-// independent derivations.
-//
-// Deliberately not audionorm.DefaultMaxGainDB (30 dB). That is the BirdWeather
-// soundscape-upload ceiling and stays where it is: those uploads go to a public
-// platform and are not this path's to change. At the default -23 LUFS target
-// the per-clip bounds below always bind first, so this constant only backstops
-// the most aggressive targets.
-const nativeExportMaxGainDB = 60.0
-
-// gateFallbackGainDB delegates to audionorm.GateFallbackGainDB, where the gate
-// fallback math and its rationale live so on-demand transcoding shares it.
-func gateFallbackGainDB(meas audionorm.Measurement, targetLUFS, truePeakDBTP float64) (gainDB float64, ok bool) {
-	return audionorm.GateFallbackGainDB(meas, targetLUFS, truePeakDBTP)
-}
-
-// refineLiftedGainDB delegates to audionorm.RefineLiftedGainDB.
-func refineLiftedGainDB(pcm []byte, liftDB float64, opts audionorm.Options) float64 {
-	return audionorm.RefineLiftedGainDB(pcm, liftDB, opts)
+	return targetLUFS < 0 && targetLUFS > audionorm.AbsoluteGateLUFS && truePeakDBTP <= 0
 }
 
 // planNativeNormalizationGain measures the clip's EBU R128 integrated loudness and
 // true peak with audionorm and returns the single linear gain (dB) that brings it
 // to targetLUFS without its true peak exceeding truePeakDBTP, clamped to
-// +/-nativeExportMaxGainDB. A clip under the R128 absolute gate is lifted by its
-// true-peak headroom instead (see gateFallbackGainDB); genuine silence yields 0.
+// +/-audionorm.MaxNormalizeGainDB. A clip under the R128 absolute gate is lifted by
+// its true-peak headroom instead (see audionorm.GateFallbackGainDB); genuine
+// silence yields 0.
 // The gain is applied by the encoder; a.pcmData is not modified here.
 func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampleRate int, format string, targetLUFS, truePeakDBTP float64) (float64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
 	// audionorm decodes the PCM bytes inline; a.pcmData is not mutated.
-	meas, err := audionorm.MeasureInt16Bytes(a.pcmData, sampleRate, conf.NumChannels)
+	plan, err := audionorm.PlanGainWithGateFallbackInt16Bytes(a.pcmData, audionorm.Options{
+		SampleRate:   sampleRate,
+		Channels:     conf.NumChannels,
+		TargetLUFS:   targetLUFS,
+		TruePeakDBTP: truePeakDBTP,
+	}, audionorm.MaxNormalizeGainDB)
 	if err != nil {
 		return 0, errors.New(err).
 			Component("analysis.processor").
@@ -1229,38 +1193,17 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 			Context("detection_id", a.CorrelationID).
 			Build()
 	}
-
-	opts := audionorm.Options{
-		SampleRate:   sampleRate,
-		Channels:     conf.NumChannels,
-		TargetLUFS:   targetLUFS,
-		TruePeakDBTP: truePeakDBTP,
-	}
-	res := audionorm.PlanGain(meas, opts)
-
-	planned := res.GainDB
-	gateLifted := false
-	if fallback, ok := gateFallbackGainDB(meas, targetLUFS, truePeakDBTP); ok {
-		// The fallback is deliberately conservative, because a sub-gate clip's
-		// real loudness is unknown and the bound has to assume the worst case.
-		// Lifting it, however, usually raises it above the gate, at which point
-		// it CAN be measured: refine from that real measurement so a very quiet
-		// clip still lands on target instead of merely somewhere audible.
-		planned = fallback + refineLiftedGainDB(a.pcmData, fallback, opts)
-		gateLifted = true
-	}
-
-	gainDB, clamped := audionorm.ClampGainDB(planned, nativeExportMaxGainDB)
+	gainDB := plan.GainDB
 
 	GetLogger().Debug("Native loudness analysis (detection save)",
 		logger.String("format", format),
-		logger.Float64("measured_lufs", meas.IntegratedLUFS),
-		logger.Float64("true_peak_dbtp", meas.TruePeakDBTP),
+		logger.Float64("measured_lufs", plan.Measurement.IntegratedLUFS),
+		logger.Float64("true_peak_dbtp", plan.Measurement.TruePeakDBTP),
 		logger.Float64("target_lufs", targetLUFS),
 		logger.Float64("gain_db", gainDB),
-		logger.Bool("peak_limited", res.PeakLimited),
-		logger.Bool("gate_lifted", gateLifted),
-		logger.Bool("gain_clamped", clamped),
+		logger.Bool("peak_limited", plan.Result.PeakLimited),
+		logger.Bool("gate_lifted", plan.GateLifted),
+		logger.Bool("gain_clamped", plan.Clamped),
 		logger.String("detection_id", a.CorrelationID))
 	return gainDB, nil
 }
@@ -1405,17 +1348,7 @@ func trimPartialSample(pcm []byte) []byte {
 // In this pipeline bit depth and channels are fixed (conf.BitDepth,
 // conf.NumChannels), so the only thing Supports rejects here is the sample rate.
 func nativeEncoderNeedsUpsample(rate int, format string) bool {
-	switch format {
-	case audioformat.AAC:
-		return aac.Supports(rate, conf.BitDepth, conf.NumChannels) != nil
-	case audioformat.MP3:
-		return mp3.Supports(rate, conf.BitDepth, conf.NumChannels) != nil
-	case audioformat.Opus:
-		return opus.Supports(rate, conf.BitDepth, conf.NumChannels) != nil
-	default:
-		// WAV and FLAC carry any rate. Nothing to resample for.
-		return false
-	}
+	return !transcode.EncoderAcceptsRate(format, rate, conf.BitDepth, conf.NumChannels)
 }
 
 // replaceExtension swaps the file extension on path (e.g. ".mp3" -> ".wav").

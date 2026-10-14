@@ -2,7 +2,7 @@ package transcode
 
 import (
 	"context"
-	"encoding/binary"
+	"fmt"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -20,7 +20,7 @@ const resampleSlackFrames = 4096
 //
 // When the rates are equal p is returned unchanged: resample.NewResampler
 // returns a nil resampler for equal rates.
-func resampleInterleaved(ctx context.Context, p *PCM, toRate, maxBytes int) (*PCM, error) {
+func resampleInterleaved(ctx context.Context, p *pcmBuffer, toRate, maxBytes int) (*pcmBuffer, error) {
 	if p.SampleRate == toRate {
 		return p, nil
 	}
@@ -31,7 +31,9 @@ func resampleInterleaved(ctx context.Context, p *PCM, toRate, maxBytes int) (*PC
 		return nil, wrapSentinel(ErrAudioTooLong, nil, "resample_size", "resampled audio exceeds the size limit", errors.CategoryLimit)
 	}
 	capFrames := int(expected) + resampleSlackFrames
-	out := make([]byte, capFrames*frameBytes)
+	// Leave room in front of the samples so a WAV can be built in place.
+	room := make([]byte, wavHeaderBytes+capFrames*frameBytes)
+	out := room[wavHeaderBytes:]
 
 	resamplers := make([]*resample.Resampler, p.Channels)
 	defer func() {
@@ -44,54 +46,54 @@ func resampleInterleaved(ctx context.Context, p *PCM, toRate, maxBytes int) (*PC
 	for ch := range resamplers {
 		r, err := resample.NewResampler(p.SampleRate, toRate)
 		if err != nil {
-			return nil, errors.New(err).
-				Component(componentName).
-				Category(errors.CategoryAudio).
-				Context("operation", "resample_init").
-				Build()
+			return nil, wrapError(err, errors.CategoryAudio, "resample_init")
 		}
 		resamplers[ch] = r
 	}
 
-	pos := make([]int, p.Channels) // output frames written per channel
-	mono := make([]byte, chunkFrames*bytesPerSample)
+	var mono []byte // per-channel input scratch, only needed to deinterleave
+	if p.Channels > 1 {
+		mono = make([]byte, chunkFrames*bytesPerSample)
+	}
+	written := 0 // output frames produced so far; every channel produces the same count
 	for off := 0; off < frames; off += chunkFrames {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		n := min(chunkFrames, frames-off)
+		got := -1
 		for ch, r := range resamplers {
-			for i := range n {
-				src := ((off+i)*p.Channels + ch) * bytesPerSample
-				copy(mono[i*bytesPerSample:], p.Data[src:src+bytesPerSample])
+			in := p.Data[off*frameBytes : (off+n)*frameBytes]
+			if p.Channels > 1 {
+				for i := range n {
+					src := (i*p.Channels + ch) * bytesPerSample
+					copy(mono[i*bytesPerSample:], in[src:src+bytesPerSample])
+				}
+				in = mono[:n*bytesPerSample]
 			}
-			res, err := r.ResampleInto(mono[:n*bytesPerSample])
+			res, err := r.ResampleInto(in)
 			if err != nil {
-				return nil, errors.New(err).
-					Component(componentName).
-					Category(errors.CategoryAudio).
-					Context("operation", "resample_process").
-					Build()
+				return nil, wrapError(err, errors.CategoryAudio, "resample_process")
 			}
-			got := len(res) / bytesPerSample
-			if pos[ch]+got > capFrames {
-				return nil, errors.Newf("resampler produced %d frames, more than the %d expected", pos[ch]+got, capFrames).
-					Component(componentName).
-					Category(errors.CategoryAudio).
-					Context("operation", "resample_length").
-					Build()
+			chGot := len(res) / bytesPerSample
+			if got >= 0 && chGot != got {
+				return nil, wrapError(fmt.Errorf("channel %d produced %d frames, channel 0 produced %d", ch, chGot, got), errors.CategoryAudio, "resample_length")
+			}
+			got = chGot
+			if written+got > capFrames {
+				return nil, wrapError(fmt.Errorf("resampler produced %d frames, more than the %d expected", written+got, capFrames), errors.CategoryAudio, "resample_length")
+			}
+			if p.Channels == 1 {
+				copy(out[written*bytesPerSample:], res[:got*bytesPerSample])
+				continue
 			}
 			for i := range got {
-				dst := ((pos[ch]+i)*p.Channels + ch) * bytesPerSample
-				binary.LittleEndian.PutUint16(out[dst:], binary.LittleEndian.Uint16(res[i*bytesPerSample:]))
+				dst := ((written+i)*p.Channels + ch) * bytesPerSample
+				copy(out[dst:dst+bytesPerSample], res[i*bytesPerSample:(i+1)*bytesPerSample])
 			}
-			pos[ch] += got
 		}
+		written += max(got, 0)
 	}
 
-	outFrames := pos[0]
-	for _, n := range pos[1:] {
-		outFrames = min(outFrames, n)
-	}
-	return &PCM{Data: out[:outFrames*frameBytes], SampleRate: toRate, Channels: p.Channels}, nil
+	return &pcmBuffer{Data: out[:written*frameBytes], SampleRate: toRate, Channels: p.Channels, wavRoom: room}, nil
 }

@@ -17,6 +17,10 @@ const (
 	Opus = "opus"
 )
 
+// MinBatSampleRate is the minimum source capture rate in Hz for bat detection and
+// audible bats playback: below it a recording cannot carry ultrasonic content.
+const MinBatSampleRate = 96000
+
 // Format-specific maximum bitrate limits (kbps). Requested bitrates above
 // these values are clamped to prevent encoder errors or bloated output.
 const (

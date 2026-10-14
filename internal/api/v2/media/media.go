@@ -20,7 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
-	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -222,10 +222,6 @@ var (
 	ErrAudioFileNotFound    = errors.NewStd("audio file not found")
 	ErrInvalidAudioPath     = errors.NewStd("invalid audio path")
 	ErrPathTraversalAttempt = errors.NewStd("security error: path attempts to traverse")
-
-	// Configuration errors
-	ErrFFmpegNotConfigured = errors.NewStd("ffmpeg path not set in settings")
-	ErrSoxNotConfigured    = errors.NewStd("sox path not set in settings")
 
 	// Generation errors
 	ErrSpectrogramGeneration = errors.NewStd("failed to generate spectrogram")
@@ -1101,20 +1097,20 @@ const processedAudioFormat = audioformat.WAV
 // One helper rather than copies: every transcode entry point in this file fails
 // the same way and needs the same fields, and a further one added later has an
 // obvious thing to call.
-func (c *Handler) logTranscodeFailure(noteID, operation, format, encoder string, filters *transcode.Filters, err error) {
+func (c *Handler) logTranscodeFailure(noteID, operation, format string, filters transcode.Filters, err error) {
 	// 4 unconditional fields, the operation, plus the 3 filter fields.
 	fields := make([]logger.Field, 0, 8)
 	fields = append(fields,
 		logger.String("note_id", noteID),
-		logger.String("encoder", encoder),
+		logger.String("encoder", transcode.EncoderTag(format)),
 		logger.String("format", format),
 		logger.String("error", privacy.ScrubMessage(err.Error())),
 	)
-	// nil means the request asked for no FILTER processing; the transcode itself
-	// still ran. That distinction is the answer to "did a filter cause this",
-	// so the fields are omitted rather than logged as three zero values, which
-	// would read as "filters were configured and were all off".
-	if filters != nil {
+	// No active filter means the request asked for no FILTER processing; the
+	// transcode itself still ran. That distinction is the answer to "did a filter
+	// cause this", so the fields are omitted rather than logged as three zero
+	// values, which would read as "filters were configured and were all off".
+	if filters.Active() {
 		fields = append(fields,
 			logger.Float64("gain_db", filters.GainDB),
 			logger.Bool("normalize", filters.Normalize),
@@ -1122,6 +1118,22 @@ func (c *Handler) logTranscodeFailure(noteID, operation, format, encoder string,
 	}
 	fields = append(fields, logger.String("operation", operation))
 	c.LogErrorIfEnabled("Audio transcode failed", fields...)
+}
+
+// gainRangeMessage is the 400 message for a gain_db outside the accepted range.
+func gainRangeMessage() string {
+	return fmt.Sprintf("Gain must be between -%.0f and %.0f dB", transcode.MaxGainDB, transcode.MaxGainDB)
+}
+
+// expansionFactorMessage is the 400 message for an unsupported time expansion.
+func expansionFactorMessage() string {
+	factors := transcode.BatExpansionFactors()
+	labels := make([]string, len(factors))
+	for i, f := range factors {
+		labels[i] = strconv.Itoa(f)
+	}
+	last := len(labels) - 1
+	return "Time expansion must be " + strings.Join(labels[:last], ", ") + ", or " + labels[last]
 }
 
 // transcodeStatus maps a transcode error to the HTTP status and user message it
@@ -1141,6 +1153,8 @@ func transcodeStatus(err error) (status int, message string, ok bool) {
 		return http.StatusUnprocessableEntity, "Audio is too long for on-demand processing", true
 	case errors.Is(err, transcode.ErrEmptyRange):
 		return http.StatusUnprocessableEntity, "Requested range is beyond the end of the audio", true
+	case errors.Is(err, transcode.ErrBelowMinimumRate):
+		return http.StatusUnprocessableEntity, fmt.Sprintf("Source audio must be at least %d Hz for audible bats mode", audioformat.MinBatSampleRate), true
 	case errors.Is(err, transcode.ErrInvalidRequest):
 		return http.StatusBadRequest, "Invalid processing parameters", true
 	}
@@ -1151,11 +1165,11 @@ func transcodeStatus(err error) (status int, message string, ok bool) {
 // client or an expired request deadline is answered by handleRequestContextError;
 // otherwise the failure is logged and answered per transcodeStatus, falling back
 // to a 500 with fallbackMsg for faults of the server itself.
-func (c *Handler) transcodeError(ctx echo.Context, noteID, operation, format, encoder string, filters *transcode.Filters, err error, fallbackMsg string) error {
+func (c *Handler) transcodeError(ctx echo.Context, noteID, operation, format string, filters transcode.Filters, err error, fallbackMsg string) error {
 	if handled, contextErr := c.handleRequestContextError(ctx); handled {
 		return contextErr
 	}
-	c.logTranscodeFailure(noteID, operation, format, encoder, filters, err)
+	c.logTranscodeFailure(noteID, operation, format, filters, err)
 	if status, message, ok := transcodeStatus(err); ok {
 		return c.HandleError(ctx, err, message, status)
 	}
@@ -1207,7 +1221,7 @@ func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 	}
 	if !transcode.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
-			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+			gainRangeMessage(), http.StatusBadRequest)
 	}
 
 	// Resolve clip path from datastore
@@ -1254,16 +1268,10 @@ func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to create temp directory", http.StatusInternalServerError)
 	}
 
-	// Build filters from request. The logger gets nil when no processing was
-	// requested, so its "did a filter cause this" distinction holds.
 	filters := transcode.Filters{Normalize: req.Normalize, Denoise: req.Denoise, GainDB: req.GainDB}
-	var loggedFilters *transcode.Filters
-	if filters.Active() {
-		loggedFilters = &filters
-	}
 
 	// Extract clip
-	res, err := transcode.ExtractClip(ctx.Request().Context(), &transcode.ClipOptions{
+	clipData, err := transcode.ExtractClip(ctx.Request().Context(), &transcode.ClipOptions{
 		InputPath: absolutePath,
 		Start:     req.Start,
 		End:       req.End,
@@ -1273,7 +1281,7 @@ func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 	})
 	if err != nil {
 		return c.transcodeError(ctx, noteID, "media_clip_transcode_failed", req.Format,
-			transcode.EncoderTag(req.Format), loggedFilters, err, "Failed to extract audio clip")
+			filters, err, "Failed to extract audio clip")
 	}
 
 	// Set response headers
@@ -1284,7 +1292,7 @@ func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 	ctx.Response().Header().Set("Content-Disposition",
 		fmt.Sprintf("attachment; filename*=UTF-8''%s", url.QueryEscape(filename)))
 
-	return ctx.Blob(http.StatusOK, mimeType, res.Data)
+	return ctx.Blob(http.StatusOK, mimeType, clipData)
 }
 
 // clipMIMEType returns the MIME type for a clip extraction format.
@@ -1305,16 +1313,14 @@ func clipMIMEType(format string) string {
 	}
 }
 
-// clipFileExtension returns the file extension for a clip extraction format.
+// clipFileExtension returns the file extension for a clip extraction format. It
+// follows the stored-clip extensions except for Opus, which is delivered in an
+// Ogg container.
 func clipFileExtension(format string) string {
-	switch format {
-	case audioformat.AAC:
-		return "m4a"
-	case audioformat.Opus:
+	if format == audioformat.Opus {
 		return "ogg"
-	default:
-		return format // wav, flac, mp3 use format name as extension
 	}
+	return convert.GetFileExtension(format)
 }
 
 // ProcessAudioByID applies audio processing filters to a detection's audio clip
@@ -1346,7 +1352,7 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 	}
 	if !transcode.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
-			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+			gainRangeMessage(), http.StatusBadRequest)
 	}
 
 	// Resolve clip path (reuse same pattern as existing handlers like ServeAudioByID)
@@ -1396,7 +1402,7 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 	wavData, err := transcode.ProcessToWAV(ctx.Request().Context(), absolutePath, filters)
 	if err != nil {
 		return c.transcodeError(ctx, noteID, "media_processed_audio_failed", processedAudioFormat,
-			clipenc.NativeWAV, &filters, err, "Failed to process audio")
+			filters, err, "Failed to process audio")
 	}
 
 	// Cache the result (non-fatal on failure)
@@ -1483,11 +1489,11 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 	}
 	if !transcode.IsValidBatExpansionFactor(req.Expansion) {
 		return c.HandleError(ctx, fmt.Errorf("invalid expansion factor: %d", req.Expansion),
-			"Time expansion must be 5, 10, 16, or 20", http.StatusBadRequest)
+			expansionFactorMessage(), http.StatusBadRequest)
 	}
 	if !transcode.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
-			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+			gainRangeMessage(), http.StatusBadRequest)
 	}
 
 	// Confirm this is a bat detection and resolve its validated source clip path.
@@ -1515,31 +1521,13 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 			"Server busy, try again later", http.StatusServiceUnavailable)
 	}
 
-	// Probe the native capture rate so time expansion maps ultrasonic content
-	// into the audible band correctly regardless of the original sample rate.
-	sampleRate, err := transcode.ProbeSampleRate(ctx.Request().Context(), absolutePath)
-	if err != nil {
-		return c.transcodeError(ctx, noteID, "media_audible_bats_probe_failed", processedAudioFormat,
-			clipenc.NativeWAV, nil, err, "Failed to probe audio sample rate")
-	}
-	// Sources below the minimum bat capture rate cannot carry ultrasonic content,
-	// so a derived "audible bats" clip would have nothing meaningful to reveal.
-	// Reject before spending CPU on time expansion.
-	if sampleRate < ffmpeg.MinBatSampleRate {
-		return c.HandleError(ctx,
-			fmt.Errorf("sample rate %d below minimum %d", sampleRate, ffmpeg.MinBatSampleRate),
-			fmt.Sprintf("Source audio must be at least %d Hz for audible bats mode", ffmpeg.MinBatSampleRate),
-			http.StatusUnprocessableEntity,
-		)
-	}
-
 	// Full-clip time expansion + 48 kHz resample (all-or-nothing; no
 	// detection-window clipping), then normalization (after conversion) and gain.
 	filters := transcode.Filters{Normalize: req.Normalize, GainDB: req.GainDB}
 	wavData, err := transcode.AudibleBats(ctx.Request().Context(), absolutePath, req.Expansion, filters)
 	if err != nil {
 		return c.transcodeError(ctx, noteID, "media_audible_bats_failed", processedAudioFormat,
-			clipenc.NativeWAV, &filters, err, "Failed to generate audible bats audio")
+			filters, err, "Failed to generate audible bats audio")
 	}
 
 	// Cache the result (non-fatal on failure).
@@ -1592,7 +1580,7 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	}
 	if !transcode.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
-			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+			gainRangeMessage(), http.StatusBadRequest)
 	}
 
 	// Resolve clip path
@@ -1642,7 +1630,7 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	wavData, err := transcode.ProcessToWAV(ctx.Request().Context(), absolutePath, filters)
 	if err != nil {
 		return c.transcodeError(ctx, noteID, "media_processed_spectrogram_failed", processedAudioFormat,
-			clipenc.NativeWAV, &filters, err, "Failed to process audio")
+			filters, err, "Failed to process audio")
 	}
 	tmpFile, err := os.CreateTemp(tmpDir, "processed-*.wav")
 	if err != nil {
@@ -1715,9 +1703,6 @@ func (c *Handler) spectrogramHTTPError(ctx echo.Context, err error) error {
 	case errors.Is(err, context.Canceled):
 		// Use StatusClientClosedRequest (non-standard, but common for Nginx)
 		return c.HandleError(ctx, err, "Spectrogram generation canceled by client", StatusClientClosedRequest)
-	case errors.Is(err, ErrFFmpegNotConfigured) || errors.Is(err, ErrSoxNotConfigured):
-		// Handle configuration errors
-		return c.HandleError(ctx, err, "Server configuration error preventing spectrogram generation", http.StatusInternalServerError)
 	default:
 		// Default to internal server error for other generation failures
 		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)

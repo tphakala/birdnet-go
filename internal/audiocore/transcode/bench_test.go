@@ -40,7 +40,7 @@ func benchNoisyTone(rate int, seconds, freq float64) []byte {
 // encoded to Opus. The request timeout for it is 10 minutes.
 func BenchmarkExtractClip_MaxWindowHeavyDenoiseNormalizeOpus(b *testing.B) {
 	path := filepath.Join(b.TempDir(), "long.wav")
-	pcm := &PCM{Data: benchNoisyTone(testRate, benchLeadSeconds+benchClipSeconds, testToneHz), SampleRate: testRate, Channels: 1}
+	pcm := &pcmBuffer{Data: benchNoisyTone(testRate, benchLeadSeconds+benchClipSeconds, testToneHz), SampleRate: testRate, Channels: 1}
 	wav, err := encodeWAV(pcm)
 	require.NoError(b, err)
 	writeBytes(b, path, wav)
@@ -60,7 +60,7 @@ func BenchmarkExtractClip_MaxWindowHeavyDenoiseNormalizeOpus(b *testing.B) {
 // for it is 120 s.
 func BenchmarkAudibleBats_Minute256kHzFactor20Normalize(b *testing.B) {
 	path := filepath.Join(b.TempDir(), "bat.wav")
-	pcm := &PCM{Data: benchNoisyTone(benchBatRate, benchBatSeconds, batToneHz), SampleRate: benchBatRate, Channels: 1}
+	pcm := &pcmBuffer{Data: benchNoisyTone(benchBatRate, benchBatSeconds, batToneHz), SampleRate: benchBatRate, Channels: 1}
 	wav, err := encodeWAV(pcm)
 	require.NoError(b, err)
 	writeBytes(b, path, wav)

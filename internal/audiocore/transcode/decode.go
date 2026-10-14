@@ -21,66 +21,58 @@ const maxWindowFrames = 1 << 50
 // initialCapSlackBytes is added to the file-size based initial buffer estimate.
 const initialCapSlackBytes = 64 << 10
 
-// PCM is decoded audio: 16-bit little-endian interleaved samples.
-type PCM struct {
+// pcmBuffer is decoded audio: 16-bit little-endian interleaved samples.
+type pcmBuffer struct {
 	// Data holds whole frames of interleaved 16-bit little-endian samples.
 	Data []byte
 	// SampleRate is the sample rate in Hz.
 	SampleRate int
 	// Channels is the interleaved channel count.
 	Channels int
+	// wavRoom, when non-nil, is the buffer Data was sliced from, with exactly
+	// wavHeaderBytes of unused space before Data. encodeWAV then builds the WAV in
+	// place instead of copying the samples.
+	wavRoom []byte
 }
 
 // Frames returns the number of whole frames in p.
-func (p *PCM) Frames() int {
+func (p *pcmBuffer) Frames() int {
 	if p.Channels <= 0 {
 		return 0
 	}
 	return len(p.Data) / (p.Channels * bytesPerSample)
 }
 
-// Window selects a time range of the source, in seconds.
-type Window struct {
+// window selects a time range of the source, in seconds.
+type window struct {
 	// Start is the offset of the first sample, at least 0.
 	Start float64
 	// Duration is the length of the range, greater than 0.
 	Duration float64
 }
 
-// ProbeSampleRate returns the sample rate of the audio file at path from its
-// header, without decoding. Opus reports 48000, the rate it decodes to.
-func ProbeSampleRate(ctx context.Context, path string) (int, error) {
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
-	f, _, err := openSourceFile(path)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = f.Close() }()
-
-	src, err := openSource(f, path)
-	if err != nil {
-		return 0, err
-	}
-	return src.sampleRate, nil
-}
-
-// Decode decodes the audio file at path to 16-bit PCM. A nil win decodes the
+// decode decodes the audio file at path to 16-bit PCM. A nil win decodes the
 // whole file; otherwise only the requested window, shortened when the source
 // ends inside it. maxBytes bounds the decoded size in output bytes (values
-// outside (0, MaxDecodedPCMBytes] select MaxDecodedPCMBytes).
+// outside (0, maxDecodedPCMBytes] select maxDecodedPCMBytes).
 //
 // The container is identified from the file's first bytes; the extension is used
 // only when they are inconclusive. Source and request problems wrap one of the
 // package sentinels; context errors pass through, and file access errors carry
 // no sentinel.
-func Decode(ctx context.Context, path string, win *Window, maxBytes int) (*PCM, error) {
+func decode(ctx context.Context, path string, win *window, maxBytes int) (*pcmBuffer, error) {
+	return decodeAtLeast(ctx, path, win, maxBytes, 0)
+}
+
+// decodeAtLeast is decode that also rejects, from the header and before any audio
+// is read, a source whose sample rate is below minRate (0 accepts any rate). The
+// rejection wraps ErrBelowMinimumRate.
+func decodeAtLeast(ctx context.Context, path string, win *window, maxBytes, minRate int) (*pcmBuffer, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if maxBytes <= 0 || maxBytes > MaxDecodedPCMBytes {
-		maxBytes = MaxDecodedPCMBytes
+	if maxBytes <= 0 || maxBytes > maxDecodedPCMBytes {
+		maxBytes = maxDecodedPCMBytes
 	}
 	if win != nil {
 		if err := validateWindow(win); err != nil {
@@ -98,11 +90,14 @@ func Decode(ctx context.Context, path string, win *Window, maxBytes int) (*PCM, 
 	if err != nil {
 		return nil, err
 	}
+	if src.sampleRate < minRate {
+		return nil, validationError(ErrBelowMinimumRate, "decode_min_rate", "sample rate %d Hz is below the required %d Hz", src.sampleRate, minRate)
+	}
 	return decodeSource(ctx, src, win, size, maxBytes)
 }
 
 // validateWindow rejects values no clip request can legitimately carry.
-func validateWindow(win *Window) error {
+func validateWindow(win *window) error {
 	switch {
 	case math.IsNaN(win.Start) || math.IsInf(win.Start, 0) || win.Start < 0:
 		return validationError(ErrInvalidRequest, "decode_validate_window", "start %v must be finite and non-negative", win.Start)
@@ -117,31 +112,23 @@ func validateWindow(win *Window) error {
 func openSourceFile(path string) (*os.File, int64, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return nil, 0, errors.New(err).
-			Component(componentName).
-			Category(errors.CategoryFileIO).
-			Context("operation", "decode_stat").
-			Build()
+		return nil, 0, wrapError(err, errors.CategoryFileIO, "decode_stat")
 	}
 	if !info.Mode().IsRegular() {
 		return nil, 0, wrapSentinel(ErrUnsupportedSource, nil, "decode_stat", "not a regular file", errors.CategoryValidation)
 	}
-	if info.Size() > MaxSourceFileBytes {
+	if info.Size() > maxSourceFileBytes {
 		return nil, 0, wrapSentinel(ErrAudioTooLong, nil, "decode_stat", "source file exceeds the size limit", errors.CategoryLimit)
 	}
 	f, err := os.Open(path) //nolint:gosec // G304: path is a stored clip resolved by the caller from the configured clip directory
 	if err != nil {
-		return nil, 0, errors.New(err).
-			Component(componentName).
-			Category(errors.CategoryFileIO).
-			Context("operation", "decode_open").
-			Build()
+		return nil, 0, wrapError(err, errors.CategoryFileIO, "decode_open")
 	}
 	return f, info.Size(), nil
 }
 
 // decodeSource reads the requested range from an opened source.
-func decodeSource(ctx context.Context, src *source, win *Window, fileSize int64, maxBytes int) (*PCM, error) {
+func decodeSource(ctx context.Context, src *source, win *window, fileSize int64, maxBytes int) (*pcmBuffer, error) {
 	frameBytes := src.channels * bytesPerSample
 	maxFrames := int64(maxBytes / frameBytes)
 
@@ -193,7 +180,7 @@ func decodeSource(ctx context.Context, src *source, win *Window, fileSize int64,
 		}
 		return nil, wrapSentinel(ErrUndecodableSource, nil, "decode_read", "source holds no audio", errors.CategoryAudio)
 	}
-	return &PCM{Data: data, SampleRate: src.sampleRate, Channels: src.channels}, nil
+	return &pcmBuffer{Data: data, SampleRate: src.sampleRate, Channels: src.channels}, nil
 }
 
 // positionSource moves the reader to startFrame, past any hidden leading frames:
@@ -319,5 +306,5 @@ func initialCapacity(src *source, fileSize, limit int64, frameBytes int) int {
 		// Clamp before multiplying: a declared count can overflow the product.
 		hint = min(hint, min(src.totalFrames, hint/int64(frameBytes)+1)*int64(frameBytes))
 	}
-	return int(min(hint, plausible, int64(MaxDecodedPCMBytes)))
+	return int(min(hint, plausible, int64(maxDecodedPCMBytes)))
 }

@@ -6,7 +6,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// TimeExpand slows p by factor and returns it at AudibleBatsOutputSampleRate,
+// timeExpand slows p by factor and returns it at AudibleBatsOutputSampleRate,
 // which lowers ultrasonic content by the same factor into the audible range. It
 // is the native equivalent of relabeling the samples at rate/factor and
 // resampling to 48 kHz: the audio is resampled by the ratio 48000*factor/rate and
@@ -15,7 +15,7 @@ import (
 //
 // Normalization must run on the result, not before, so it measures what is
 // played.
-func TimeExpand(ctx context.Context, p *PCM, factor, maxBytes int) (*PCM, error) {
+func timeExpand(ctx context.Context, p *pcmBuffer, factor, maxBytes int) (*pcmBuffer, error) {
 	if !IsValidBatExpansionFactor(factor) {
 		return nil, validationError(ErrInvalidRequest, "time_expand", "unsupported expansion factor %d", factor)
 	}
@@ -26,5 +26,5 @@ func TimeExpand(ctx context.Context, p *PCM, factor, maxBytes int) (*PCM, error)
 	if len(out.Data) == 0 {
 		return nil, wrapSentinel(ErrEmptyRange, nil, "time_expand", "no audio after time expansion", errors.CategoryAudio)
 	}
-	return &PCM{Data: out.Data, SampleRate: AudibleBatsOutputSampleRate, Channels: out.Channels}, nil
+	return &pcmBuffer{Data: out.Data, SampleRate: AudibleBatsOutputSampleRate, Channels: out.Channels, wavRoom: out.wavRoom}, nil
 }

@@ -76,8 +76,8 @@ func toneFit(x []float64, rate int, freq float64) (amp, residualRMS float64) {
 	return math.Hypot(a, b), math.Sqrt(res / float64(len(x)))
 }
 
-func newPCM(samples []int16, rate, channels int) *PCM {
-	return &PCM{Data: int16Bytes(samples), SampleRate: rate, Channels: channels}
+func newPCM(samples []int16, rate, channels int) *pcmBuffer {
+	return &pcmBuffer{Data: int16Bytes(samples), SampleRate: rate, Channels: channels}
 }
 
 func TestApplyFilters_NoFiltersLeaveBytesIdentical(t *testing.T) {
@@ -86,7 +86,7 @@ func TestApplyFilters_NoFiltersLeaveBytesIdentical(t *testing.T) {
 	src := tone(testRate, 1, 0.5, testToneHz, testAmp)
 	p := newPCM(src, testRate, 1)
 	before := bytes.Clone(p.Data)
-	require.NoError(t, ApplyFilters(t.Context(), p, Filters{}))
+	require.NoError(t, applyFilters(t.Context(), p, Filters{}))
 	assert.Equal(t, before, p.Data)
 }
 
@@ -104,7 +104,7 @@ func TestApplyFilters_UnknownDenoisePresetIsRejected(t *testing.T) {
 
 	for _, preset := range []string{"extreme", "LIGHT", "Medium", " heavy"} {
 		p := newPCM(tone(testRate, 1, 0.2, testToneHz, testAmp), testRate, 1)
-		err := ApplyFilters(t.Context(), p, Filters{Denoise: preset})
+		err := applyFilters(t.Context(), p, Filters{Denoise: preset})
 		require.ErrorIsf(t, err, ErrInvalidRequest, "preset %q must never fall back to a default strength", preset)
 	}
 }
@@ -126,7 +126,7 @@ func TestApplyFilters_ChunkedDenoiseMatchesOneShot(t *testing.T) {
 				require.Greater(t, frames, 2*chunkFrames, "the clip must span several chunks")
 
 				p := newPCM(src, rate, 1)
-				require.NoError(t, ApplyFilters(t.Context(), p, Filters{Denoise: preset}))
+				require.NoError(t, applyFilters(t.Context(), p, Filters{Denoise: preset}))
 
 				x := make([]float32, frames)
 				for i, s := range src {
@@ -160,7 +160,7 @@ func TestApplyFilters_StereoDenoiseKeepsChannelsSeparate(t *testing.T) {
 		inter[2*i+1] = right[i]
 	}
 	p := newPCM(inter, testRate, 2)
-	require.NoError(t, ApplyFilters(t.Context(), p, Filters{Denoise: "medium"}))
+	require.NoError(t, applyFilters(t.Context(), p, Filters{Denoise: "medium"}))
 
 	got := bytesInt16(p.Data)
 	require.Len(t, got, len(inter))
@@ -189,7 +189,7 @@ func TestApplyFilters_DenoiseReducesNoiseMonotonically(t *testing.T) {
 	residuals := map[string]float64{}
 	for _, preset := range []string{"light", "medium", "heavy"} {
 		p := newPCM(src, testRate, 1)
-		require.NoError(t, ApplyFilters(t.Context(), p, Filters{Denoise: preset}))
+		require.NoError(t, applyFilters(t.Context(), p, Filters{Denoise: preset}))
 		amp, residual := measure(bytesInt16(p.Data))
 		residuals[preset] = residual
 		drop := 20 * math.Log10(origAmp/amp)
@@ -209,7 +209,7 @@ func TestApplyFilters_DenoiseShorterThanOneFrame(t *testing.T) {
 		require.Len(t, src, tinyFrames)
 		p := newPCM(src, testRate, 1)
 		require.NotPanics(t, func() {
-			require.NoError(t, ApplyFilters(t.Context(), p, Filters{Denoise: preset}))
+			require.NoError(t, applyFilters(t.Context(), p, Filters{Denoise: preset}))
 		})
 		assert.Equal(t, tinyFrames, p.Frames())
 	}
@@ -219,10 +219,10 @@ func TestApplyFilters_DenoiseAtTheSourceRateBounds(t *testing.T) {
 	t.Parallel()
 
 	const boundSeconds = 0.5
-	for _, rate := range []int{MinSourceSampleRate, MaxSourceSampleRate} {
+	for _, rate := range []int{minSourceSampleRate, maxSourceSampleRate} {
 		src := tone(rate, 1, boundSeconds, testToneHz, testAmp)
 		p := newPCM(src, rate, 1)
-		require.NoError(t, ApplyFilters(t.Context(), p, Filters{Denoise: "heavy", Normalize: true}))
+		require.NoError(t, applyFilters(t.Context(), p, Filters{Denoise: "heavy", Normalize: true}))
 		assert.Equal(t, len(src), p.Frames(), "rate %d", rate)
 	}
 }
@@ -233,11 +233,11 @@ func TestApplyFilters_DenoiseCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	p := newPCM(noisyTone(testRate), testRate, 1)
-	require.ErrorIs(t, ApplyFilters(ctx, p, Filters{Denoise: "light"}), context.Canceled)
+	require.ErrorIs(t, applyFilters(ctx, p, Filters{Denoise: "light"}), context.Canceled)
 }
 
 // lufsOf measures integrated loudness and true peak of mono 16-bit PCM.
-func lufsOf(t *testing.T, p *PCM) audionorm.Measurement {
+func lufsOf(t *testing.T, p *pcmBuffer) audionorm.Measurement {
 	t.Helper()
 	m, err := audionorm.MeasureInt16Bytes(p.Data, p.SampleRate, p.Channels)
 	require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestApplyFilters_NormalizeHitsTargetUnderCeiling(t *testing.T) {
 	before := lufsOf(t, p)
 	require.Less(t, before.IntegratedLUFS, normalizeTargetLUFS-10, "fixture must start well below the target")
 
-	require.NoError(t, ApplyFilters(t.Context(), p, Filters{Normalize: true}))
+	require.NoError(t, applyFilters(t.Context(), p, Filters{Normalize: true}))
 	after := lufsOf(t, p)
 	assert.InDelta(t, normalizeTargetLUFS, after.IntegratedLUFS, normalizeToleranceLU)
 	assert.LessOrEqual(t, after.TruePeakDBTP, normalizeTruePeakDBTP+truePeakSlackDB)
@@ -268,7 +268,7 @@ func TestApplyFilters_NormalizeLimitedByTruePeak(t *testing.T) {
 		src[i] = 30000
 	}
 	p := newPCM(src, testRate, 1)
-	require.NoError(t, ApplyFilters(t.Context(), p, Filters{Normalize: true}))
+	require.NoError(t, applyFilters(t.Context(), p, Filters{Normalize: true}))
 	assert.LessOrEqual(t, lufsOf(t, p).TruePeakDBTP, normalizeTruePeakDBTP+truePeakSlackDB)
 }
 
@@ -282,12 +282,12 @@ func TestApplyFilters_NormalizeSubGateMatchesExport(t *testing.T) {
 
 	plan, err := audionorm.PlanGainWithGateFallbackInt16Bytes(orig, audionorm.Options{
 		SampleRate: testRate, Channels: 1, TargetLUFS: normalizeTargetLUFS, TruePeakDBTP: normalizeTruePeakDBTP,
-	}, normalizeMaxGainDB)
+	}, audionorm.MaxNormalizeGainDB)
 	require.NoError(t, err)
 	require.True(t, plan.GateLifted, "the fixture must sit under the absolute gate")
 	require.NotZero(t, plan.GainDB)
 
-	require.NoError(t, ApplyFilters(t.Context(), p, Filters{Normalize: true}))
+	require.NoError(t, applyFilters(t.Context(), p, Filters{Normalize: true}))
 	assert.Equal(t, pcmgain.Applied(orig, plan.GainDB), p.Data, "the same plan the clip export uses")
 }
 
@@ -296,7 +296,7 @@ func TestApplyFilters_OrderNormalizeThenGain(t *testing.T) {
 
 	const extraGainDB = 6.0
 	p := newPCM(tone(testRate, 1, 6, testToneHz, 0.01), testRate, 1)
-	require.NoError(t, ApplyFilters(t.Context(), p, Filters{Normalize: true, GainDB: extraGainDB}))
+	require.NoError(t, applyFilters(t.Context(), p, Filters{Normalize: true, GainDB: extraGainDB}))
 	assert.InDelta(t, normalizeTargetLUFS+extraGainDB, lufsOf(t, p).IntegratedLUFS, normalizeToleranceLU,
 		"gain is added on top of the normalized level")
 }
@@ -308,7 +308,7 @@ func TestApplyFilters_GainScalesAndSaturates(t *testing.T) {
 		t.Parallel()
 		src := tone(testRate, 1, 0.5, testToneHz, testAmp)
 		p := newPCM(src, testRate, 1)
-		require.NoError(t, ApplyFilters(t.Context(), p, Filters{GainDB: -6.0206}))
+		require.NoError(t, applyFilters(t.Context(), p, Filters{GainDB: -6.0206}))
 		assert.InDelta(t, peakAbs(src)/2, peakAbs(bytesInt16(p.Data)), 2)
 	})
 
@@ -316,7 +316,7 @@ func TestApplyFilters_GainScalesAndSaturates(t *testing.T) {
 		t.Parallel()
 		src := tone(testRate, 1, 0.5, testToneHz, 0.9)
 		p := newPCM(src, testRate, 1)
-		require.NoError(t, ApplyFilters(t.Context(), p, Filters{GainDB: 20}))
+		require.NoError(t, applyFilters(t.Context(), p, Filters{GainDB: 20}))
 		got := bytesInt16(p.Data)
 		assert.Equal(t, math.MaxInt16, slicesMax(got))
 		assert.Equal(t, math.MinInt16, slicesMin(got))
@@ -368,6 +368,6 @@ func TestApplyFilters_NormalizeMeasuresTheDenoisedSamples(t *testing.T) {
 	}
 
 	p := newPCM(src, testRate, 1)
-	require.NoError(t, ApplyFilters(t.Context(), p, Filters{Denoise: "heavy", Normalize: true}))
+	require.NoError(t, applyFilters(t.Context(), p, Filters{Denoise: "heavy", Normalize: true}))
 	assert.InDelta(t, normalizeTargetLUFS, lufsOf(t, p).IntegratedLUFS, normalizeToleranceLU)
 }

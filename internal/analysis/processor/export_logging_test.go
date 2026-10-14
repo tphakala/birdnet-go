@@ -419,7 +419,7 @@ func TestExecute_UnrecognizedFormatFailsWithoutEncoder(t *testing.T) {
 
 	out := logs.String()
 	assert.Contains(t, out, "Audio clip export failed")
-	assert.NotContains(t, out, "encoder="+clipenc.FFmpeg)
+	assert.NotContains(t, out, "encoder=ffmpeg")
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "nothing may be written for an unrecognized format")

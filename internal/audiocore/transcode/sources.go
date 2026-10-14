@@ -36,6 +36,9 @@ const (
 	// lossyExpansion is generous for lossy codecs, whose files are far smaller
 	// than their decoded PCM.
 	lossyExpansion = 32
+	// unknownLengthExpansion is the hint for lossy sources that declare no length
+	// (Opus, ADTS); the buffer simply grows if the guess is low.
+	unknownLengthExpansion = 16
 )
 
 // Container byte signatures.
@@ -104,8 +107,8 @@ func openSource(f *os.File, path string) (*source, error) {
 	if err != nil {
 		return nil, err
 	}
-	if src.sampleRate < MinSourceSampleRate || src.sampleRate > MaxSourceSampleRate {
-		return nil, validationError(ErrUnsupportedSource, "decode_bounds", "sample rate %d Hz outside %d..%d", src.sampleRate, MinSourceSampleRate, MaxSourceSampleRate)
+	if src.sampleRate < minSourceSampleRate || src.sampleRate > maxSourceSampleRate {
+		return nil, validationError(ErrUnsupportedSource, "decode_bounds", "sample rate %d Hz outside %d..%d", src.sampleRate, minSourceSampleRate, maxSourceSampleRate)
 	}
 	if src.channels < 1 || src.channels > maxSourceChannels {
 		return nil, validationError(ErrUnsupportedSource, "decode_bounds", "%d channels not supported", src.channels)
@@ -119,11 +122,7 @@ func sniffContainer(f *os.File, path string) (container, error) {
 	head := make([]byte, sniffLen)
 	n, err := f.ReadAt(head, 0)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return containerUnknown, errors.New(err).
-			Component(componentName).
-			Category(errors.CategoryFileIO).
-			Context("operation", "decode_sniff").
-			Build()
+		return containerUnknown, wrapError(err, errors.CategoryFileIO, "decode_sniff")
 	}
 	if kind := containerFromBytes(head[:n]); kind != containerUnknown {
 		return kind, nil
@@ -234,9 +233,6 @@ func openOpus(f *os.File) (*source, error) {
 	if !bytes.Contains(head[:n], []byte("OpusHead")) {
 		return nil, wrapSentinel(ErrUnsupportedSource, nil, "decode_open_opus", "Ogg stream is not Opus", errors.CategoryValidation)
 	}
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return nil, classifyDecodeError("decode_open_opus", err)
-	}
 	dec, err := oggopus.NewDecoder(f)
 	if err != nil {
 		return nil, classifyDecodeError("decode_open_opus", err)
@@ -247,7 +243,7 @@ func openOpus(f *os.File) (*source, error) {
 		sampleRate:  int(info.OutputSampleRate),
 		channels:    info.Channels,
 		totalFrames: unknownFrames,
-		expansion:   lossyExpansion,
+		expansion:   unknownLengthExpansion,
 	}, nil
 }
 
@@ -319,7 +315,7 @@ func openADTS(f *os.File) (*source, error) {
 		sampleRate:  info.SampleRate,
 		channels:    info.Channels,
 		totalFrames: unknownFrames,
-		expansion:   lossyExpansion,
+		expansion:   unknownLengthExpansion,
 	}, nil
 }
 
@@ -327,8 +323,6 @@ func openADTS(f *os.File) (*source, error) {
 // and errors that already carry a sentinel pass through unchanged.
 func classifyDecodeError(operation string, err error) error {
 	switch {
-	case err == nil:
-		return nil
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return err
 	case errors.Is(err, ErrUnsupportedSource), errors.Is(err, ErrUndecodableSource),

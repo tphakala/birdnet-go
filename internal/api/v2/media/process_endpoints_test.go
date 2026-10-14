@@ -226,6 +226,7 @@ func TestTranscodeStatus(t *testing.T) {
 		{transcode.ErrUndecodableSource, http.StatusUnprocessableEntity},
 		{transcode.ErrAudioTooLong, http.StatusUnprocessableEntity},
 		{transcode.ErrEmptyRange, http.StatusUnprocessableEntity},
+		{transcode.ErrBelowMinimumRate, http.StatusUnprocessableEntity},
 		{transcode.ErrInvalidRequest, http.StatusBadRequest},
 	}
 	for _, tt := range tests {

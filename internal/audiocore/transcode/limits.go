@@ -2,9 +2,12 @@ package transcode
 
 import (
 	"math"
+	"slices"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // Request validation limits.
@@ -13,8 +16,9 @@ const (
 	// Prevents memory exhaustion from very long extraction requests.
 	MaxClipDurationSec = 300 // 5 minutes
 
-	// MaxGainDB is the maximum allowed gain adjustment in dB.
-	MaxGainDB = 60.0
+	// MaxGainDB is the maximum allowed gain adjustment in dB, the same bound the
+	// loudness normalization gain is clamped to.
+	MaxGainDB = audionorm.MaxNormalizeGainDB
 
 	// AudibleBatsOutputSampleRate is the sample rate (Hz) of the derived "audible
 	// bats" review audio. Ultrasonic clips are time-expanded and then resampled to
@@ -24,25 +28,25 @@ const (
 
 // Resource bounds, checked before the buffers they protect are allocated.
 const (
-	// MaxDecodedPCMBytes bounds decoded PCM, time-expanded PCM and PCM resampled
+	// maxDecodedPCMBytes bounds decoded PCM, time-expanded PCM and PCM resampled
 	// for an encoder, each counted in 16-bit output bytes. It covers the longest
 	// configurable extended capture at 48 kHz mono (1200 s, 115.2 MB) and a 262 s
 	// window at 256 kHz.
-	MaxDecodedPCMBytes = 128 << 20
+	maxDecodedPCMBytes = 128 << 20
 
-	// MaxSourceFileBytes bounds the stored source file, checked with Stat before
-	// it is opened. It leaves room for a 32-bit WAV that holds MaxDecodedPCMBytes
+	// maxSourceFileBytes bounds the stored source file, checked with Stat before
+	// it is opened. It leaves room for a 32-bit WAV that holds maxDecodedPCMBytes
 	// of 16-bit-equivalent audio.
-	MaxSourceFileBytes = 256 << 20
+	maxSourceFileBytes = 256 << 20
 
-	// MinSourceSampleRate is the lowest source rate accepted. It is the lowest
+	// minSourceSampleRate is the lowest source rate accepted. It is the lowest
 	// rate the loudness meter supports, so normalization cannot fail on it.
-	MinSourceSampleRate = 8000
+	minSourceSampleRate = audionorm.MinSampleRate
 
-	// MaxSourceSampleRate is the highest source rate accepted. It sits above every
+	// maxSourceSampleRate is the highest source rate accepted. It sits above every
 	// bat recorder rate in use and stops a crafted header from sizing per-second
 	// scratch, denoiser frames or loudness meters by gigabytes.
-	MaxSourceSampleRate = 1_000_000
+	maxSourceSampleRate = 1_000_000
 
 	// maxM4ABoxBytes caps a single MP4 box body the M4A reader will buffer. The
 	// library default is 256 MiB.
@@ -66,14 +70,12 @@ const (
 	audibleBatsTimeout = 120 * time.Second
 )
 
-// Normalization targets, matching the loudnorm settings the FFmpeg path used
-// (I=-23, TP=-2). The gain clamp is the widest lift a valid target can ask for,
-// the most aggressive permitted target (-10 LUFS) minus the -70 LUFS absolute
-// gate; see nativeExportMaxGainDB in internal/analysis/processor for the derivation.
+// Normalization targets, matching the loudnorm settings the FFmpeg path used:
+// the configured default integrated loudness (-23 LUFS) and a -2 dBTP ceiling.
+// The gain clamp is audionorm.MaxNormalizeGainDB.
 const (
-	normalizeTargetLUFS   = -23.0
+	normalizeTargetLUFS   = conf.DefaultNormalizationTargetLUFS
 	normalizeTruePeakDBTP = -2.0
-	normalizeMaxGainDB    = 60.0
 )
 
 // Streaming chunk size, in frames, for the decode, denoise and resample loops.
@@ -87,23 +89,20 @@ var clipBitrateKbps = map[string]int{
 	audioformat.AAC:  96,
 }
 
-// supportedClipFormats is the set of formats a clip can be exported to.
-var supportedClipFormats = map[string]bool{
-	audioformat.WAV:  true,
-	audioformat.FLAC: true,
-	audioformat.MP3:  true,
-	audioformat.AAC:  true,
-	audioformat.Opus: true,
-}
-
 // validBatExpansionFactors is the set of time-expansion factors offered for
 // audible-bats playback. A larger factor slows the audio more, lowering
 // ultrasonic calls further into the human hearing range.
-var validBatExpansionFactors = map[int]bool{5: true, 10: true, 16: true, 20: true}
+var validBatExpansionFactors = []int{5, 10, 16, 20}
+
+// BatExpansionFactors returns the offered time-expansion factors in ascending order.
+func BatExpansionFactors() []int {
+	return slices.Clone(validBatExpansionFactors)
+}
 
 // IsSupportedClipFormat reports whether format is a supported clip export format.
 func IsSupportedClipFormat(format string) bool {
-	return supportedClipFormats[format]
+	_, ok := fileEncoders[format]
+	return ok || format == audioformat.WAV
 }
 
 // IsValidDenoisePreset returns true if the preset name is valid (including empty for "off").
@@ -122,5 +121,5 @@ func IsValidGainDB(gainDB float64) bool {
 
 // IsValidBatExpansionFactor reports whether n is an offered time-expansion factor.
 func IsValidBatExpansionFactor(n int) bool {
-	return validBatExpansionFactors[n]
+	return slices.Contains(validBatExpansionFactors, n)
 }

@@ -15,11 +15,11 @@ import (
 )
 
 // decodeBytes writes data to a file named for ext and decodes it back.
-func decodeBytes(t *testing.T, data []byte, ext string) *PCM {
+func decodeBytes(t *testing.T, data []byte, ext string) *pcmBuffer {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "out"+ext)
 	require.NoError(t, os.WriteFile(path, data, 0o600))
-	pcm, err := Decode(t.Context(), path, nil, 0)
+	pcm, err := decode(t.Context(), path, nil, 0)
 	require.NoError(t, err)
 	return pcm
 }
@@ -44,7 +44,7 @@ func TestEncode_PerFormatMagicAndRoundTrip(t *testing.T) {
 		t.Run(tt.format, func(t *testing.T) {
 			t.Parallel()
 			src := tone(testRate, 2, 1, testToneHz, testAmp)
-			data, err := Encode(t.Context(), newPCM(src, testRate, 2), tt.format, t.TempDir())
+			data, err := encode(t.Context(), newPCM(src, testRate, 2), tt.format, t.TempDir())
 			require.NoError(t, err)
 			assert.Truef(t, tt.magic(data), "unexpected file header % x", data[:min(len(data), 12)])
 
@@ -84,7 +84,7 @@ func TestEncode_UnsupportedRateResamplesTo48k(t *testing.T) {
 			t.Parallel()
 			const seconds = 0.5
 			src := tone(tt.rate, 1, seconds, testToneHz, testAmp)
-			data, err := Encode(t.Context(), newPCM(src, tt.rate, 1), tt.format, t.TempDir())
+			data, err := encode(t.Context(), newPCM(src, tt.rate, 1), tt.format, t.TempDir())
 			require.NoError(t, err)
 
 			ext := map[string]string{"wav": ".wav", "flac": ".flac", "mp3": ".mp3", "aac": ".m4a", "opus": ".opus"}[tt.format]
@@ -99,11 +99,11 @@ func TestEncode_UpsampleOverCap(t *testing.T) {
 	t.Parallel()
 
 	// 11.025 kHz is not an MP3 encoder rate, so the clip would be upsampled to
-	// 48 kHz; enough of it exceeds MaxDecodedPCMBytes once resampled.
+	// 48 kHz; enough of it exceeds maxDecodedPCMBytes once resampled.
 	const rate = 11025
-	frames := MaxDecodedPCMBytes/2*rate/48000 + rate
-	p := &PCM{Data: make([]byte, frames*2), SampleRate: rate, Channels: 1}
-	_, err := Encode(t.Context(), p, audioformat.MP3, t.TempDir())
+	frames := maxDecodedPCMBytes/2*rate/48000 + rate
+	p := &pcmBuffer{Data: make([]byte, frames*2), SampleRate: rate, Channels: 1}
+	_, err := encode(t.Context(), p, audioformat.MP3, t.TempDir())
 	require.ErrorIs(t, err, ErrAudioTooLong)
 }
 
@@ -119,18 +119,18 @@ func TestEncode_LeavesNoTempFiles(t *testing.T) {
 
 	for _, format := range []string{audioformat.FLAC, audioformat.MP3, audioformat.AAC, audioformat.Opus} {
 		dir := t.TempDir()
-		_, err := Encode(t.Context(), newPCM(src, testRate, 1), format, dir)
+		_, err := encode(t.Context(), newPCM(src, testRate, 1), format, dir)
 		require.NoError(t, err)
 		assert.Zerof(t, entries(dir), "%s success", format)
 
 		// A failing encode: the lossy encoders reject three channels, and the
 		// FLAC encoder rejects a trailing partial frame.
-		bad := &PCM{Data: make([]byte, 6000), SampleRate: testRate, Channels: 3}
+		bad := &pcmBuffer{Data: make([]byte, 6000), SampleRate: testRate, Channels: 3}
 		if format == audioformat.FLAC {
-			bad = &PCM{Data: make([]byte, 6001), SampleRate: testRate, Channels: 1}
+			bad = &pcmBuffer{Data: make([]byte, 6001), SampleRate: testRate, Channels: 1}
 		}
 		failDir := t.TempDir()
-		_, err = Encode(t.Context(), bad, format, failDir)
+		_, err = encode(t.Context(), bad, format, failDir)
 		require.Errorf(t, err, "%s with malformed input must fail", format)
 		assert.Zerof(t, entries(failDir), "%s failure", format)
 	}
@@ -141,15 +141,15 @@ func TestEncode_Rejections(t *testing.T) {
 
 	src := newPCM(tone(testRate, 1, 0.1, testToneHz, testAmp), testRate, 1)
 	for _, format := range []string{"alac", "ALAC", "", "m4a", "ogg"} {
-		_, err := Encode(t.Context(), src, format, t.TempDir())
+		_, err := encode(t.Context(), src, format, t.TempDir())
 		require.ErrorIsf(t, err, ErrInvalidRequest, "format %q", format)
 	}
-	_, err := Encode(t.Context(), &PCM{SampleRate: testRate, Channels: 1}, audioformat.WAV, "")
+	_, err := encode(t.Context(), &pcmBuffer{SampleRate: testRate, Channels: 1}, audioformat.WAV, "")
 	require.ErrorIs(t, err, ErrEmptyRange)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err = Encode(ctx, src, audioformat.FLAC, t.TempDir())
+	_, err = encode(ctx, src, audioformat.FLAC, t.TempDir())
 	require.ErrorIs(t, err, context.Canceled)
 }
 
@@ -162,4 +162,25 @@ func TestEncoderTag(t *testing.T) {
 	assert.Equal(t, clipenc.NativeAAC, EncoderTag(audioformat.AAC))
 	assert.Equal(t, clipenc.NativeOpus, EncoderTag(audioformat.Opus))
 	assert.Equal(t, clipenc.NativeWAV, EncoderTag("unknown"))
+}
+
+// A WAV built in place in front of the samples must equal the one the encoder
+// writes by copying them.
+func TestEncodeWAV_InPlaceMatchesTheCopyingPath(t *testing.T) {
+	t.Parallel()
+
+	for _, channels := range []int{1, 2} {
+		src := newPCM(tone(testRate, channels, 0.3, testToneHz, testAmp), testRate, channels)
+		want, err := encodeWAV(src)
+		require.NoError(t, err)
+
+		room := make([]byte, wavHeaderBytes+len(src.Data))
+		copy(room[wavHeaderBytes:], src.Data)
+		inPlace := &pcmBuffer{Data: room[wavHeaderBytes:], SampleRate: testRate, Channels: channels, wavRoom: room}
+		got, err := encodeWAV(inPlace)
+		require.NoError(t, err)
+
+		assert.Equal(t, want, got, "%d channels", channels)
+		assert.Same(t, &room[0], &got[0], "the WAV is built in the room buffer")
+	}
 }

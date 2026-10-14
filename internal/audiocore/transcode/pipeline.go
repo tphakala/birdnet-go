@@ -32,18 +32,45 @@ type ClipOptions struct {
 	TempDir string
 }
 
-// ClipResult is an extracted clip.
-type ClipResult struct {
-	// Data is the encoded file.
-	Data []byte
-	// Encoder is the encoder identity for logs (see EncoderTag).
-	Encoder string
+// job describes one decode, optional time expansion, filter and encode run.
+type job struct {
+	path    string
+	win     *window
+	timeout time.Duration
+	// minRate rejects a source below this sample rate before it is decoded (0 off).
+	minRate int
+	// expansion time-expands the decoded audio by this factor (0 off).
+	expansion int
+	filters   Filters
+	format    string
+	tempDir   string
 }
 
-// ExtractClip decodes [Start, End) of the source, applies the filters and
-// encodes the result. The timeout is twice the clip duration, clamped to
-// [30 s, 10 min].
-func ExtractClip(ctx context.Context, opts *ClipOptions) (*ClipResult, error) {
+// run is the shared pipeline: decode, time-expand, filter, encode, all under the
+// job's timeout.
+func run(ctx context.Context, j *job) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, j.timeout)
+	defer cancel()
+
+	pcm, err := decodeAtLeast(ctx, j.path, j.win, maxDecodedPCMBytes, j.minRate)
+	if err != nil {
+		return nil, err
+	}
+	if j.expansion > 0 {
+		if pcm, err = timeExpand(ctx, pcm, j.expansion, maxDecodedPCMBytes); err != nil {
+			return nil, err
+		}
+	}
+	if err := applyFilters(ctx, pcm, j.filters); err != nil {
+		return nil, err
+	}
+	return encode(ctx, pcm, j.format, j.tempDir)
+}
+
+// ExtractClip decodes [Start, End) of the source, applies the filters and returns
+// the clip encoded in opts.Format. The timeout is twice the clip duration, clamped
+// to [30 s, 10 min].
+func ExtractClip(ctx context.Context, opts *ClipOptions) ([]byte, error) {
 	if opts == nil {
 		return nil, validationError(ErrInvalidRequest, "extract_clip", "options cannot be nil")
 	}
@@ -51,22 +78,14 @@ func ExtractClip(ctx context.Context, opts *ClipOptions) (*ClipResult, error) {
 		return nil, err
 	}
 	duration := opts.End - opts.Start
-
-	ctx, cancel := context.WithTimeout(ctx, clipTimeout(duration))
-	defer cancel()
-
-	pcm, err := Decode(ctx, opts.InputPath, &Window{Start: opts.Start, Duration: duration}, MaxDecodedPCMBytes)
-	if err != nil {
-		return nil, err
-	}
-	if err := ApplyFilters(ctx, pcm, opts.Filters); err != nil {
-		return nil, err
-	}
-	data, err := Encode(ctx, pcm, opts.Format, opts.TempDir)
-	if err != nil {
-		return nil, err
-	}
-	return &ClipResult{Data: data, Encoder: EncoderTag(opts.Format)}, nil
+	return run(ctx, &job{
+		path:    opts.InputPath,
+		win:     &window{Start: opts.Start, Duration: duration},
+		timeout: clipTimeout(duration),
+		filters: opts.Filters,
+		format:  opts.Format,
+		tempDir: opts.TempDir,
+	})
 }
 
 // validateClipOptions checks the values ExtractClip depends on.
@@ -80,12 +99,8 @@ func validateClipOptions(opts *ClipOptions) error {
 		return validationError(ErrInvalidRequest, "extract_clip", "clip duration (%.1fs) exceeds maximum (%ds)", opts.End-opts.Start, MaxClipDurationSec)
 	case !IsSupportedClipFormat(opts.Format):
 		return validationError(ErrInvalidRequest, "extract_clip", "unsupported clip format %q", opts.Format)
-	case !IsValidDenoisePreset(opts.Filters.Denoise):
-		return validationError(ErrInvalidRequest, "extract_clip", "unknown denoise preset %q", opts.Filters.Denoise)
-	case !IsValidGainDB(opts.Filters.GainDB):
-		return validationError(ErrInvalidRequest, "extract_clip", "gain %v dB is out of range", opts.Filters.GainDB)
 	}
-	return nil
+	return validateFilters(opts.Filters)
 }
 
 // clipTimeout scales with the requested duration and is clamped to the bounds.
@@ -100,22 +115,13 @@ func ProcessToWAV(ctx context.Context, inputPath string, f Filters) ([]byte, err
 	if err := validateFilters(f); err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, processingTimeout)
-	defer cancel()
-
-	pcm, err := Decode(ctx, inputPath, nil, MaxDecodedPCMBytes)
-	if err != nil {
-		return nil, err
-	}
-	if err := ApplyFilters(ctx, pcm, f); err != nil {
-		return nil, err
-	}
-	return Encode(ctx, pcm, audioformat.WAV, "")
+	return run(ctx, &job{path: inputPath, timeout: processingTimeout, filters: f, format: audioformat.WAV})
 }
 
 // AudibleBats decodes the whole source, time-expands it by factor to 48 kHz, then
 // applies normalization and gain (f.Denoise must be empty) and returns a 16-bit
-// WAV. The timeout is 120 s for the whole pipeline.
+// WAV. A source below audioformat.MinBatSampleRate is rejected from its header
+// with ErrBelowMinimumRate. The timeout is 120 s for the whole pipeline.
 func AudibleBats(ctx context.Context, inputPath string, factor int, f Filters) ([]byte, error) {
 	if f.Denoise != "" {
 		return nil, validationError(ErrInvalidRequest, "audible_bats", "denoise is not offered for audible bats")
@@ -123,21 +129,17 @@ func AudibleBats(ctx context.Context, inputPath string, factor int, f Filters) (
 	if err := validateFilters(f); err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, audibleBatsTimeout)
-	defer cancel()
-
-	pcm, err := Decode(ctx, inputPath, nil, MaxDecodedPCMBytes)
-	if err != nil {
-		return nil, err
+	if !IsValidBatExpansionFactor(factor) {
+		return nil, validationError(ErrInvalidRequest, "audible_bats", "unsupported expansion factor %d", factor)
 	}
-	expanded, err := TimeExpand(ctx, pcm, factor, MaxDecodedPCMBytes)
-	if err != nil {
-		return nil, err
-	}
-	if err := ApplyFilters(ctx, expanded, f); err != nil {
-		return nil, err
-	}
-	return Encode(ctx, expanded, audioformat.WAV, "")
+	return run(ctx, &job{
+		path:      inputPath,
+		timeout:   audibleBatsTimeout,
+		minRate:   audioformat.MinBatSampleRate,
+		expansion: factor,
+		filters:   f,
+		format:    audioformat.WAV,
+	})
 }
 
 // validateFilters checks the filter values.
@@ -156,11 +158,7 @@ func validateFilters(f Filters) error {
 func ProcessingTempDir(base string) (string, error) {
 	dir := filepath.Join(base, processingTempDirName)
 	if err := os.MkdirAll(dir, processingTempDirPerm); err != nil {
-		return "", errors.New(err).
-			Component(componentName).
-			Category(errors.CategoryFileIO).
-			Context("operation", "processing_temp_dir").
-			Build()
+		return "", wrapError(err, errors.CategoryFileIO, "processing_temp_dir")
 	}
 	return dir, nil
 }

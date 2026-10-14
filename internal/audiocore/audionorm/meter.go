@@ -17,11 +17,11 @@ const (
 	subBlockSeconds  = 0.1   // sub-block length (100 ms hop, 75% overlap); 4 per 400 ms block
 	subBlocksPerGate = 4     // 400 ms / 100 ms
 
-	// minSampleRate is the lowest supported rate. Below ~3364 Hz the K-weighting
+	// MinSampleRate is the lowest supported rate. Below ~3364 Hz the K-weighting
 	// high-shelf center (1681.97 Hz) exceeds Nyquist and the bilinear transform
 	// produces unstable coefficients; 8000 Hz (the lowest standard audio rate)
 	// keeps the filter well-conditioned and the 100 ms sub-block non-empty.
-	minSampleRate = 8000
+	MinSampleRate = 8000
 )
 
 // Gating is performed in the energy domain (float32 comparisons) to avoid a
@@ -96,13 +96,13 @@ func subBlockSamples(sampleRate int) int {
 
 // NewMeter creates a meter for the given sample rate (Hz) and interleaved
 // channel count. It panics if channels is not positive or sampleRate is below
-// minSampleRate (8000 Hz); callers using the validated top-level API never hit
+// MinSampleRate (8000 Hz); callers using the validated top-level API never hit
 // that.
 func NewMeter(sampleRate, channels int) *Meter {
 	if channels <= 0 {
 		panic("audionorm: NewMeter requires positive channels")
 	}
-	if sampleRate < minSampleRate {
+	if sampleRate < MinSampleRate {
 		panic("audionorm: NewMeter requires sample rate >= 8000 Hz")
 	}
 	s1, s2 := kWeightingStages(float64(sampleRate))
