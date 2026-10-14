@@ -494,9 +494,9 @@ func TestResolveExportParams_OddLengthPCMResamplesAfterTrimForLossy(t *testing.T
 		for _, ffmpegPath := range ffmpegPathOptions {
 			t.Run(fmt.Sprintf("%s_ffmpeg=%q", lf.format, ffmpegPath), func(t *testing.T) {
 				a := newExportTestAction(t, "96k")
-				a.pcmData = append(sinePCMAtRate(22050, 0.5, 1000, 8000), 0x7f)
+				a.pcmData = append(sinePCMAtRate(testSubAnalysisRate, testSineSeconds, testSineFreqHz, testSineAmp), strayPCMByte)
 				require.Equal(t, 1, len(a.pcmData)%testPCMFrameBytes)
-				a.sourceSampleRate = 22050
+				a.sourceSampleRate = testSubAnalysisRate
 				a.Settings.Realtime.Audio.Export.Type = lf.format
 				a.Settings.Realtime.Audio.FfmpegPath = ffmpegPath
 
@@ -519,9 +519,9 @@ func TestResolveExportParams_OddLengthPCMDownsamplesAfterTrimForLossy(t *testing
 	for _, lf := range lossyNativeFormats {
 		t.Run(lf.format, func(t *testing.T) {
 			a := newExportTestAction(t, "96k")
-			a.pcmData = append(sinePCMAtRate(96000, 0.5, 1000, 8000), 0x7f)
+			a.pcmData = append(sinePCMAtRate(testUltrasonicRate, testSineSeconds, testSineFreqHz, testSineAmp), strayPCMByte)
 			require.Equal(t, 1, len(a.pcmData)%testPCMFrameBytes)
-			a.sourceSampleRate = 96000
+			a.sourceSampleRate = testUltrasonicRate
 			a.Settings.Realtime.Audio.Export.Type = lf.format
 
 			rate, format, path := a.resolveExportParams(filepath.Join(t.TempDir(), "clip"+lf.ext))
@@ -712,7 +712,7 @@ func TestResolveExportParams_OddLengthPCMAtSupportedRateEncodesForLossy(t *testi
 	for _, lf := range lossyNativeFormats {
 		t.Run(lf.format, func(t *testing.T) {
 			a := newExportTestAction(t, "96k")
-			a.pcmData = append(sinePCMAtRate(conf.SampleRate, 0.5, 1000, 8000), 0x7f)
+			a.pcmData = append(sinePCMAtRate(conf.SampleRate, testSineSeconds, testSineFreqHz, testSineAmp), strayPCMByte)
 			require.Equal(t, 1, len(a.pcmData)%testPCMFrameBytes)
 			a.sourceSampleRate = conf.SampleRate
 			a.Settings.Realtime.Audio.Export.Type = lf.format
