@@ -147,9 +147,9 @@ const isValid = cidrPattern.test(subnet);
 **After:**
 
 ```typescript
-import { validateCIDR } from '$lib/utils/security';
+import { isValidNetworkAddress } from '$lib/utils/networkAddress';
 
-const isValid = validateCIDR(subnet);
+const isValid = isValidNetworkAddress(subnet, 'cidr');
 ```
 
 ## When Warnings Are False Positives

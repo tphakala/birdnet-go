@@ -1209,6 +1209,32 @@ export const settingsValidationErrors = writable<string[]>([]);
  */
 export const settingsValidationReasons = writable<ReadonlyMap<string, string>>(new Map());
 
+/**
+ * Replaces the validation entries a page owns. `ownedKeys` are all the keys the page
+ * may set; `active` maps the ones that apply now to their reason. Both stores are
+ * written together, and neither is written when it would not change, so a page can
+ * call this from an effect without waking the save bar. Pass an empty map to clear.
+ */
+export function setValidationIssues(
+  ownedKeys: readonly string[],
+  active: ReadonlyMap<string, string>
+): void {
+  const errors = get(settingsValidationErrors);
+  const nextErrors = [...errors.filter(key => !ownedKeys.includes(key)), ...active.keys()];
+  if (nextErrors.length !== errors.length || !nextErrors.every(key => errors.includes(key))) {
+    settingsValidationErrors.set(nextErrors);
+  }
+
+  const reasons = get(settingsValidationReasons);
+  const nextReasons = new Map(reasons);
+  for (const key of ownedKeys) nextReasons.delete(key);
+  for (const [key, reason] of active) nextReasons.set(key, reason);
+  const reasonsUnchanged =
+    nextReasons.size === reasons.size &&
+    [...nextReasons].every(([key, reason]) => reasons.get(key) === reason);
+  if (!reasonsUnchanged) settingsValidationReasons.set(nextReasons);
+}
+
 export const currentSection = derived(settingsStore, $store => $store.activeSection);
 
 export const isLoading = derived(settingsStore, $store => $store.isLoading);

@@ -4,6 +4,7 @@ import { tick } from 'svelte';
 import { t } from '$lib/i18n';
 import { settingsAPI, type ConnectionCheckResult } from '$lib/utils/settingsApi';
 import { navigation } from '$lib/stores/navigation.svelte';
+import { deferred } from '../../../../../test/async-helpers';
 import ReverseProxySection from './ReverseProxySection.svelte';
 
 const getConnection = vi.mocked(settingsAPI.security.getConnection);
@@ -54,15 +55,6 @@ function rows(): HTMLElement[] {
 
 function cloudflareCheckbox(): HTMLInputElement {
   return screen.getByRole<HTMLInputElement>('checkbox', { name: /reverseProxy\.cloudflareLabel/ });
-}
-
-/** A promise with its resolve function, to answer requests in any order. */
-function deferred<T>() {
-  let resolve: (value: T) => void = () => {};
-  const promise = new Promise<T>(res => {
-    resolve = res;
-  });
-  return { promise, resolve };
 }
 
 describe('ReverseProxySection', () => {
@@ -197,7 +189,7 @@ describe('ReverseProxySection', () => {
     expect(onUpdate).toHaveBeenCalledWith(['10.0.0.1', '172.18.0.1', 'cloudflare']);
   });
 
-  it('shows the stale note while the form list differs from the saved list', async () => {
+  it('shows the stale note while the card has unsaved changes', async () => {
     const { rerender } = renderSection({
       trustedProxies: ['10.0.0.1'],
       savedTrustedProxies: ['10.0.0.1'],
@@ -205,7 +197,7 @@ describe('ReverseProxySection', () => {
     await screen.findByText(/status\.untrusted_proxy\.body/);
     expect(screen.queryByText('settings.security.reverseProxy.check.stale')).toBeNull();
 
-    await rerender({ trustedProxies: [] });
+    await rerender({ trustedProxies: [], hasChanges: true });
 
     expect(screen.getByText('settings.security.reverseProxy.check.stale')).toBeInTheDocument();
   });

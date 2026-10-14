@@ -18,6 +18,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { RefreshCw, ShieldCheck, CircleCheck, Info } from '@lucide/svelte';
+  import SettingsButton from '$lib/desktop/features/settings/components/SettingsButton.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import { t } from '$lib/i18n';
@@ -88,11 +89,25 @@
   let peer = $derived(result?.peerAddress ?? '');
   let client = $derived(result?.verifiedClientAddress ?? '');
 
+  // The statuses where the peer is known but its headers did not verify
+  let unverifiedWithPeer = $derived(
+    (status === 'untrusted_proxy_unverifiable' || status === 'trusted_proxy_unverified') &&
+      peer !== ''
+  );
   let canTrust = $derived(status === 'untrusted_proxy' && peer !== '');
   let canTrustWithCloudflare = $derived(
-    (status === 'untrusted_proxy_unverifiable' || status === 'trusted_proxy_unverified') &&
-      peer !== '' &&
-      (result?.cloudflarePresetWouldVerify ?? false)
+    unverifiedWithPeer && (result?.cloudflarePresetWouldVerify ?? false)
+  );
+  // The one action the panel offers, if any
+  let trustAction = $derived(
+    canTrust
+      ? { label: t('settings.security.reverseProxy.check.trust', { peer }), run: onTrust }
+      : canTrustWithCloudflare
+        ? {
+            label: t('settings.security.reverseProxy.check.trustWithCloudflare', { peer }),
+            run: onTrustWithCloudflare,
+          }
+        : null
   );
   let peerListed = $derived(peerCoveredBy !== null);
   // A range around the peer covers it as well as the peer itself; say which row does.
@@ -102,10 +117,7 @@
   let trustApplied = $derived(
     canTrustWithCloudflare ? peerListed && cloudflareEnabled : peerListed
   );
-  let showChainHint = $derived(
-    (status === 'untrusted_proxy_unverifiable' || status === 'trusted_proxy_unverified') &&
-      peer !== ''
-  );
+  let errorTitle = $derived(t('settings.security.reverseProxy.check.error'));
 
   // Text for the always-present status region, so a finished check is announced.
   let announcement = $derived.by(() => {
@@ -121,17 +133,14 @@
       {t('settings.security.reverseProxy.check.title')}
     </h4>
     <!-- aria-disabled rather than disabled, so a keyboard user keeps focus here while it runs -->
-    <button
-      type="button"
-      class="btn btn-ghost btn-sm gap-1.5 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+    <SettingsButton
+      variant="ghost"
       aria-disabled={loading ? 'true' : undefined}
-      onclick={() => {
-        if (!loading) onRecheck();
-      }}
+      onclick={onRecheck}
     >
       <RefreshCw class="size-4 {loading ? 'animate-spin' : ''}" aria-hidden="true" />
       {t('settings.security.reverseProxy.check.recheck')}
-    </button>
+    </SettingsButton>
   </div>
 
   <div class="sr-only" role="status">{announcement}</div>
@@ -145,8 +154,10 @@
     {:else if error}
       <ErrorAlert type="error">
         {#snippet children()}
-          <p class="font-medium">{t('settings.security.reverseProxy.check.error')}</p>
-          <p class="mt-1 text-xs">{error}</p>
+          <p class="font-medium">{errorTitle}</p>
+          {#if error !== errorTitle}
+            <p class="mt-1 text-xs">{error}</p>
+          {/if}
         {/snippet}
       </ErrorAlert>
     {:else if result && status}
@@ -218,7 +229,7 @@
             <p class="mt-1">{t('settings.security.reverseProxy.check.selfClientCause')}</p>
           {/if}
 
-          {#if showChainHint}
+          {#if unverifiedWithPeer}
             <p class="mt-1 text-xs">
               {t('settings.security.reverseProxy.check.chainHint', { peer })}
             </p>
@@ -230,7 +241,7 @@
             </p>
           {/if}
 
-          {#if (canTrust || canTrustWithCloudflare) && trustApplied}
+          {#if trustAction && trustApplied}
             <p
               bind:this={addedNote}
               tabindex="-1"
@@ -241,32 +252,18 @@
                 ? t('settings.security.reverseProxy.check.coveredBy', { range: coveringRange })
                 : t('settings.security.reverseProxy.check.added')}
             </p>
-          {:else if canTrust}
+          {:else if trustAction}
+            {@const action = trustAction}
             <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <button
-                type="button"
-                class="btn btn-primary btn-sm gap-1.5"
-                {disabled}
-                onclick={() => runAndFocusNote(onTrust)}
-              >
+              <SettingsButton {disabled} onclick={() => runAndFocusNote(action.run)}>
                 <ShieldCheck class="size-4" aria-hidden="true" />
-                {t('settings.security.reverseProxy.check.trust', { peer })}
-              </button>
-              <p class="text-xs">
-                {t('settings.security.reverseProxy.check.trustWarning', { peer })}
-              </p>
-            </div>
-          {:else if canTrustWithCloudflare}
-            <div class="mt-3">
-              <button
-                type="button"
-                class="btn btn-primary btn-sm gap-1.5"
-                {disabled}
-                onclick={() => runAndFocusNote(onTrustWithCloudflare)}
-              >
-                <ShieldCheck class="size-4" aria-hidden="true" />
-                {t('settings.security.reverseProxy.check.trustWithCloudflare', { peer })}
-              </button>
+                {action.label}
+              </SettingsButton>
+              {#if canTrust}
+                <p class="text-xs">
+                  {t('settings.security.reverseProxy.check.trustWarning', { peer })}
+                </p>
+              {/if}
             </div>
           {/if}
         {/snippet}

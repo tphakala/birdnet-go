@@ -233,6 +233,13 @@ describe('ConnectionCheckPanel', () => {
     expect(props.onRecheck).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the fallback error sentence once', () => {
+    const fallback = 'settings.security.reverseProxy.check.error';
+    renderPanel({ result: null, error: fallback });
+
+    expect(screen.getAllByText(fallback)).toHaveLength(1);
+  });
+
   it('shows the loading state instead of an earlier result', () => {
     renderPanel({ loading: true });
 

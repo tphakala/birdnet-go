@@ -1,11 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   isCloudflarePreset,
+  hasInvalidTrustedProxy,
   partitionTrustedProxies,
   recombineTrustedProxies,
-  setCloudflarePreset,
-  splitSubnetList,
-  joinSubnetList,
 } from './trustedProxies';
 
 describe('isCloudflarePreset', () => {
@@ -123,6 +121,11 @@ function editEntries(list: string[], saved: string[], edit: (entries: string[]) 
   return recombineTrustedProxies(edit(entries), hasCloudflare, saved);
 }
 
+/** Flip the Cloudflare checkbox the way the Reverse Proxy card does. */
+function toggleCloudflare(list: readonly string[], enabled: boolean, saved: readonly string[]) {
+  return recombineTrustedProxies(partitionTrustedProxies(list).entries, enabled, saved);
+}
+
 describe('lossless round trip of trustedProxies (I6)', () => {
   it('add then remove an entry restores the saved list exactly', () => {
     const saved = ['10.0.0.1', 'Cloudflare', '10.0.0.2'];
@@ -142,35 +145,23 @@ describe('lossless round trip of trustedProxies (I6)', () => {
 
   it('Cloudflare off then on restores a saved token in its spelling and slot', () => {
     const saved = ['10.0.0.1', 'CLOUDFLARE', '10.0.0.2'];
-    const off = setCloudflarePreset(saved, false, saved);
+    const off = toggleCloudflare(saved, false, saved);
     expect(off).toEqual(['10.0.0.1', '10.0.0.2']);
-    expect(setCloudflarePreset(off, true, saved)).toEqual(saved);
+    expect(toggleCloudflare(off, true, saved)).toEqual(saved);
   });
 
   it('Cloudflare off then on restores two saved tokens exactly', () => {
     const saved = ['cloudflare', '10.0.0.1', 'Cloudflare'];
-    const off = setCloudflarePreset(saved, false, saved);
+    const off = toggleCloudflare(saved, false, saved);
     expect(off).toEqual(['10.0.0.1']);
-    expect(setCloudflarePreset(off, true, saved)).toEqual(saved);
+    expect(toggleCloudflare(off, true, saved)).toEqual(saved);
   });
 
   it('Cloudflare on then off on a list without a token restores the saved list', () => {
     const saved = ['10.0.0.1'];
-    const on = setCloudflarePreset(saved, true, saved);
+    const on = toggleCloudflare(saved, true, saved);
     expect(on).toEqual(['10.0.0.1', 'cloudflare']);
-    expect(setCloudflarePreset(on, false, saved)).toEqual(saved);
-  });
-
-  it('toggling on twice adds one token', () => {
-    const saved = ['10.0.0.1'];
-    const once = setCloudflarePreset(saved, true, saved);
-    expect(setCloudflarePreset(once, true, saved)).toEqual(once);
-  });
-
-  it('toggling on keeps an existing token where it is', () => {
-    const saved = ['10.0.0.1'];
-    const list = ['cloudflare', '10.0.0.1', '10.0.0.5'];
-    expect(setCloudflarePreset(list, true, saved)).toEqual(list);
+    expect(toggleCloudflare(on, false, saved)).toEqual(saved);
   });
 
   it('Trust-button add then remove restores the saved list', () => {
@@ -186,38 +177,14 @@ describe('lossless round trip of trustedProxies (I6)', () => {
   });
 });
 
-describe('splitSubnetList', () => {
-  it('splits on commas, trims and drops blanks', () => {
-    expect(splitSubnetList('10.0.0.0/8, 192.168.0.0/16 ,, ')).toEqual([
-      '10.0.0.0/8',
-      '192.168.0.0/16',
-    ]);
+describe('hasInvalidTrustedProxy', () => {
+  it('is false for valid rows, the preset token and blanks', () => {
+    expect(hasInvalidTrustedProxy([])).toBe(false);
+    expect(hasInvalidTrustedProxy(['10.0.0.1', '10.0.0.0/8', 'Cloudflare', '  '])).toBe(false);
   });
 
-  it('returns an empty list for empty and blank text', () => {
-    expect(splitSubnetList('')).toEqual([]);
-    expect(splitSubnetList('  , ')).toEqual([]);
-  });
-});
-
-describe('joinSubnetList', () => {
-  it.each(['10.0.0.0/8, 192.168.0.0/16', '10.0.0.0/8,192.168.0.0/16, '])(
-    'restores the saved string byte for byte after add then remove (saved %j)',
-    saved => {
-      const values = splitSubnetList(saved);
-      const added = joinSubnetList([...values, '172.16.0.0/12'], saved);
-      expect(added).toBe('10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12');
-      expect(joinSubnetList(splitSubnetList(added).slice(0, -1), saved)).toBe(saved);
-    }
-  );
-
-  it('joins a real change with ", " so the backend split reads it back', () => {
-    const joined = joinSubnetList(['10.0.0.0/8', '172.16.0.0/12'], '10.0.0.0/8');
-    expect(joined).toBe('10.0.0.0/8, 172.16.0.0/12');
-    expect(splitSubnetList(joined)).toEqual(['10.0.0.0/8', '172.16.0.0/12']);
-  });
-
-  it('yields an empty string for no values', () => {
-    expect(joinSubnetList([], '10.0.0.0/8')).toBe('');
+  it('is true when a row is neither an IP nor a CIDR', () => {
+    expect(hasInvalidTrustedProxy(['10.0.0.1', 'proxy.example.com'])).toBe(true);
+    expect(hasInvalidTrustedProxy(['cloudflare2'])).toBe(true);
   });
 });

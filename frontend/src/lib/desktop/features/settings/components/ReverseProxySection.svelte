@@ -28,10 +28,9 @@
   import {
     partitionTrustedProxies,
     recombineTrustedProxies,
-    setCloudflarePreset,
+    TRUSTED_PROXY_ACCEPT,
   } from '$lib/desktop/features/settings/utils/trustedProxies';
-  import { isSingleHost, networkContains, validateNetworkAddress } from '$lib/utils/networkAddress';
-  import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import { isSingleHost, networkContains } from '$lib/utils/networkAddress';
   import { settingsAPI, type ConnectionCheckResult } from '$lib/utils/settingsApi';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { t } from '$lib/i18n';
@@ -65,27 +64,20 @@
 
   /** Element id the Exceptions tab links to (SETTINGS_ROUTES.securityReverseProxy). */
   const ANCHOR_ID = 'reverse-proxy';
-  const ACCEPT = 'ip-or-cidr';
 
   let partition = $derived(partitionTrustedProxies(trustedProxies));
-  let stale = $derived(hasSettingsChanged(savedTrustedProxies, trustedProxies));
 
   let result = $state<ConnectionCheckResult | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let anchor = $state<HTMLElement>();
+  let peer = $derived(result?.peerAddress ?? '');
 
-  // The first valid row that contains the checked peer (the peer itself or a range
-  // around it); invalid rows never count. Trusting the peer again would add nothing.
-  let peerCoveredBy = $derived.by(() => {
-    const peer = result?.peerAddress ?? '';
-    if (peer === '') return null;
-    return (
-      partition.entries.find(
-        entry => validateNetworkAddress(entry, ACCEPT) === null && networkContains(entry, peer)
-      ) ?? null
-    );
-  });
+  // The first row that contains the checked peer (the peer itself or a range around
+  // it); an invalid row contains nothing. Trusting the peer again would add nothing.
+  let peerCoveredBy = $derived(
+    peer === '' ? null : (partition.entries.find(entry => networkContains(entry, peer)) ?? null)
+  );
   let peerListed = $derived(peerCoveredBy !== null);
 
   function updateEntries(entries: string[]) {
@@ -93,11 +85,10 @@
   }
 
   function updateCloudflare(enabled: boolean) {
-    onUpdate(setCloudflarePreset(trustedProxies, enabled, savedTrustedProxies));
+    onUpdate(recombineTrustedProxies(partition.entries, enabled, savedTrustedProxies));
   }
 
   function entriesWithPeer(): string[] {
-    const peer = result?.peerAddress ?? '';
     return peerListed || peer === '' ? partition.entries : [...partition.entries, peer];
   }
 
@@ -181,7 +172,7 @@
         {result}
         {loading}
         {error}
-        {stale}
+        stale={hasChanges}
         {peerCoveredBy}
         cloudflareEnabled={partition.hasCloudflare}
         {disabled}
@@ -201,7 +192,7 @@
       <NetworkAddressListInput
         values={partition.entries}
         onUpdate={updateEntries}
-        accept={ACCEPT}
+        accept={TRUSTED_PROXY_ACCEPT}
         label={t('settings.security.reverseProxy.listLabel')}
         helpText={t('settings.security.reverseProxy.listHelp')}
         placeholder={t('settings.security.reverseProxy.placeholder')}

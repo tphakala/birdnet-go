@@ -4,7 +4,8 @@ import {
   parseIPv6,
   isValidIP,
   isValidCIDR,
-  validateNetworkAddress,
+  isValidNetworkAddress,
+  hasInvalidAddress,
   networkAddressKey,
   isSingleHost,
   networkContains,
@@ -121,30 +122,42 @@ describe('isValidCIDR', () => {
   });
 });
 
-describe('validateNetworkAddress', () => {
-  it('reports empty after trimming', () => {
-    expect(validateNetworkAddress('   ', 'cidr')).toBe('empty');
-    expect(validateNetworkAddress('', 'ip-or-cidr')).toBe('empty');
+describe('isValidNetworkAddress', () => {
+  it('rejects blank values after trimming', () => {
+    expect(isValidNetworkAddress('   ', 'cidr')).toBe(false);
+    expect(isValidNetworkAddress('', 'ip-or-cidr')).toBe(false);
   });
 
   it('applies the mode', () => {
-    expect(validateNetworkAddress('10.0.0.1', 'cidr')).toBe('invalid');
-    expect(validateNetworkAddress('10.0.0.0/8', 'cidr')).toBeNull();
-    expect(validateNetworkAddress('10.0.0.0/8', 'ip')).toBe('invalid');
-    expect(validateNetworkAddress('10.0.0.1', 'ip')).toBeNull();
-    expect(validateNetworkAddress('10.0.0.1', 'ip-or-cidr')).toBeNull();
-    expect(validateNetworkAddress('10.0.0.0/8', 'ip-or-cidr')).toBeNull();
-    expect(validateNetworkAddress('nope', 'ip-or-cidr')).toBe('invalid');
+    expect(isValidNetworkAddress('10.0.0.1', 'cidr')).toBe(false);
+    expect(isValidNetworkAddress('10.0.0.0/8', 'cidr')).toBe(true);
+    expect(isValidNetworkAddress('10.0.0.0/8', 'ip')).toBe(false);
+    expect(isValidNetworkAddress('10.0.0.1', 'ip')).toBe(true);
+    expect(isValidNetworkAddress('10.0.0.1', 'ip-or-cidr')).toBe(true);
+    expect(isValidNetworkAddress('10.0.0.0/8', 'ip-or-cidr')).toBe(true);
+    expect(isValidNetworkAddress('nope', 'ip-or-cidr')).toBe(false);
   });
 
   it('trims like the backend', () => {
-    expect(validateNetworkAddress('  10.0.0.1 ', 'ip')).toBeNull();
+    expect(isValidNetworkAddress('  10.0.0.1 ', 'ip')).toBe(true);
   });
 
   it('accepts IPv6 where valid in each mode', () => {
-    expect(validateNetworkAddress('2001:db8::1', 'ip')).toBeNull();
-    expect(validateNetworkAddress('2001:db8::/32', 'cidr')).toBeNull();
-    expect(validateNetworkAddress('2001:db8::1', 'cidr')).toBe('invalid');
+    expect(isValidNetworkAddress('2001:db8::1', 'ip')).toBe(true);
+    expect(isValidNetworkAddress('2001:db8::/32', 'cidr')).toBe(true);
+    expect(isValidNetworkAddress('2001:db8::1', 'cidr')).toBe(false);
+  });
+});
+
+describe('hasInvalidAddress', () => {
+  it('is false for an empty list and for valid values', () => {
+    expect(hasInvalidAddress([], 'ip-or-cidr')).toBe(false);
+    expect(hasInvalidAddress(['10.0.0.1', '10.0.0.0/8'], 'ip-or-cidr')).toBe(false);
+  });
+
+  it('is true when any value is invalid in the mode', () => {
+    expect(hasInvalidAddress(['10.0.0.0/8', 'nope'], 'ip-or-cidr')).toBe(true);
+    expect(hasInvalidAddress(['10.0.0.0/8', '10.0.0.1'], 'cidr')).toBe(true);
   });
 });
 

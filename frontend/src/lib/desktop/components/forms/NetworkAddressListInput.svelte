@@ -30,7 +30,7 @@
   import { t } from '$lib/i18n';
   import {
     networkAddressKey,
-    validateNetworkAddress,
+    isValidNetworkAddress,
     type NetworkAddressMode,
   } from '$lib/utils/networkAddress';
 
@@ -91,18 +91,19 @@
   const PASTE_SEPARATOR = ', ';
   const MESSAGE_SEPARATOR = ', ';
 
-  type ModeKey = 'cidr' | 'ip' | 'ipOrCidr';
-  /** i18n key segment for a mode (keys are camelCase). */
-  function modeKeyFor(mode: NetworkAddressMode): ModeKey {
-    switch (mode) {
-      case 'cidr':
-        return 'cidr';
-      case 'ip':
-        return 'ip';
-      default:
-        return 'ipOrCidr';
-    }
+  /** i18n key segment for each mode (keys are camelCase). */
+  const MODE_KEYS = {
+    cidr: 'cidr',
+    ip: 'ip',
+    'ip-or-cidr': 'ipOrCidr',
+  } as const satisfies Record<NetworkAddressMode, string>;
+
+  /** The report of the last add: its message lines and whether any token was invalid. */
+  interface AddReport {
+    messages: string[];
+    hasInvalid: boolean;
   }
+  const EMPTY_REPORT: AddReport = { messages: [], hasInvalid: false };
 
   const baseId = generateId('network-address-list');
   let inputId = $derived(id ?? `${baseId}-input`);
@@ -113,12 +114,14 @@
 
   let inputElement = $state<HTMLInputElement>();
   let listElement = $state<HTMLUListElement>();
-  /** Lines of the last add's report; cleared when the text changes. */
-  let messages = $state<string[]>([]);
-  let hasInvalidTokens = $state(false);
+  /** Report of the last add; cleared when the text changes. */
+  let report = $state<AddReport>(EMPTY_REPORT);
+  let messages = $derived(report.messages);
+  let hasInvalidTokens = $derived(report.hasInvalid);
 
-  let modeKey = $derived(modeKeyFor(accept));
+  let modeKey = $derived(MODE_KEYS[accept]);
   let hasPending = $derived(draft.trim() !== '');
+  let showPendingHint = $derived(hasPending && messages.length === 0);
   let atLimit = $derived(maxItems !== undefined && values.length >= maxItems);
   let canAdd = $derived(!disabled && hasPending && !atLimit);
 
@@ -126,7 +129,7 @@
   let rows = $derived.by(() => {
     const seen = new Set<string>();
     return values.map((value, index) => {
-      const valid = validateNetworkAddress(value, accept) === null;
+      const valid = isValidNetworkAddress(value, accept);
       const key = valid ? networkAddressKey(value) : null;
       const duplicate = key !== null && seen.has(key);
       if (key !== null) seen.add(key);
@@ -137,7 +140,7 @@
   let describedBy = $derived(
     [
       messages.length > 0 ? messageId : undefined,
-      hasPending && messages.length === 0 ? pendingId : undefined,
+      showPendingHint ? pendingId : undefined,
       atLimit ? limitId : undefined,
       helpText ? helpId : undefined,
     ]
@@ -147,8 +150,7 @@
 
   function setText(next: string) {
     draft = next;
-    messages = [];
-    hasInvalidTokens = false;
+    report = EMPTY_REPORT;
   }
 
   function addFromInput() {
@@ -164,7 +166,7 @@
     const overLimit: string[] = [];
 
     for (const token of tokens) {
-      const key = validateNetworkAddress(token, accept) === null ? networkAddressKey(token) : null;
+      const key = isValidNetworkAddress(token, accept) ? networkAddressKey(token) : null;
       if (key === null) {
         invalid.push(token);
       } else if (keys.has(key)) {
@@ -179,23 +181,23 @@
 
     if (added.length > 0) onUpdate([...values, ...added]);
 
-    const report: string[] = [];
+    const lines: string[] = [];
     if (invalid.length > 0) {
-      report.push(
+      lines.push(
         t(`forms.networkAddressList.errors.invalid.${modeKey}`, {
           values: invalid.join(MESSAGE_SEPARATOR),
         })
       );
     }
     if (duplicates.length > 0) {
-      report.push(
+      lines.push(
         t('forms.networkAddressList.errors.duplicate', {
           values: duplicates.join(MESSAGE_SEPARATOR),
         })
       );
     }
     if (overLimit.length > 0) {
-      report.push(
+      lines.push(
         t('forms.networkAddressList.errors.limit', {
           max: maxItems ?? 0,
           values: overLimit.join(MESSAGE_SEPARATOR),
@@ -204,8 +206,7 @@
     }
 
     draft = [...invalid, ...overLimit].join(PASTE_SEPARATOR);
-    messages = report;
-    hasInvalidTokens = invalid.length > 0;
+    report = { messages: lines, hasInvalid: invalid.length > 0 };
   }
 
   // The Add button turns disabled once the input is empty, which would drop focus to
@@ -299,7 +300,7 @@
     {/each}
   </div>
 
-  {#if hasPending && messages.length === 0}
+  {#if showPendingHint}
     <p id={pendingId} class="mt-1 text-xs text-muted">
       {t('forms.networkAddressList.pendingHint')}
     </p>
@@ -325,7 +326,7 @@
         <li class="flex items-center gap-2 px-3 py-1.5 min-h-10">
           <span class="font-mono text-sm break-all min-w-0">{row.value}</span>
           {#if rowAnnotation}
-            {@render rowAnnotation({ value: row.value, index: row.index, valid: row.valid })}
+            {@render rowAnnotation(row)}
           {/if}
           {#if !row.valid}
             <span class="inline-flex items-center gap-1 text-xs text-[var(--text-error)]">

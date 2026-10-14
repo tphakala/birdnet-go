@@ -45,16 +45,17 @@
     settingsStore,
     settingsActions,
     securitySettings,
-    settingsValidationErrors,
-    settingsValidationReasons,
+    setValidationIssues,
     type OAuthProviderConfig,
   } from '$lib/stores/settings';
   import {
-    joinSubnetList,
-    partitionTrustedProxies,
-    splitSubnetList,
+    hasInvalidTrustedProxy,
   } from '$lib/desktop/features/settings/utils/trustedProxies';
-  import { validateNetworkAddress } from '$lib/utils/networkAddress';
+  import {
+    joinSubnetList,
+    splitSubnetList,
+  } from '$lib/desktop/features/settings/utils/subnetList';
+  import { hasInvalidAddress } from '$lib/utils/networkAddress';
   import { fetchRestartStatus } from '$lib/stores/restart.svelte';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
@@ -65,7 +66,7 @@
   import { ExternalLink, Server, KeyRound, Users, Plus, Pencil, Trash2, Terminal, ShieldCheck, Upload, Globe, RefreshCw, TriangleAlert } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { GoogleIcon, AUTH_PROVIDERS } from '$lib/auth';
-  import type { Component } from 'svelte';
+  import { onDestroy, type Component } from 'svelte';
 
   // Provider type for OAuth providers
   type OAuthProviderType = 'google' | 'github' | 'microsoft' | 'line' | 'kakao' | 'oidc';
@@ -657,17 +658,6 @@
   // drafts live here, not in the list components, so they survive a tab switch. The
   // subnet list counts only while the bypass is on, since the backend checks it only then.
   // Each entry carries a reason naming the tab and field, shown next to the Save button.
-  const TRUSTED_PROXIES_INVALID_KEY = 'security-trusted-proxies-invalid';
-  const TRUSTED_PROXIES_PENDING_KEY = 'security-trusted-proxies-pending';
-  const BYPASS_SUBNETS_INVALID_KEY = 'security-bypass-subnets-invalid';
-  const BYPASS_SUBNETS_PENDING_KEY = 'security-bypass-subnets-pending';
-  const ADDRESS_LIST_ERROR_KEYS = [
-    TRUSTED_PROXIES_INVALID_KEY,
-    TRUSTED_PROXIES_PENDING_KEY,
-    BYPASS_SUBNETS_INVALID_KEY,
-    BYPASS_SUBNETS_PENDING_KEY,
-  ];
-
   let trustedProxiesDraft = $state('');
   let bypassSubnetsDraft = $state('');
 
@@ -676,73 +666,55 @@
     bypassSubnetsDraft = '';
   }
 
+  let trustedProxies = $derived(settings.trustedProxies ?? []);
   let allowedSubnets = $derived(splitSubnetList(settings.allowSubnetBypass?.subnet ?? ''));
+  let bypassEnabled = $derived(settings.allowSubnetBypass?.enabled ?? false);
 
-  let addressListErrors = $derived.by(() => {
-    const bypassEnabled = settings.allowSubnetBypass?.enabled ?? false;
-    const errors: string[] = [];
-    if (
-      partitionTrustedProxies(settings.trustedProxies ?? []).entries.some(
-        entry => validateNetworkAddress(entry, 'ip-or-cidr') !== null
-      )
-    ) {
-      errors.push(TRUSTED_PROXIES_INVALID_KEY);
+  // Primitive flags, so the issue map below only recomputes when one flips.
+  let trustedProxiesInvalid = $derived(hasInvalidTrustedProxy(trustedProxies));
+  let trustedProxiesPending = $derived(trustedProxiesDraft.trim() !== '');
+  let bypassSubnetsInvalid = $derived(bypassEnabled && hasInvalidAddress(allowedSubnets, 'cidr'));
+  let bypassSubnetsPending = $derived(bypassEnabled && bypassSubnetsDraft.trim() !== '');
+
+  let addressListIssues = $derived.by(() => {
+    const lists = [
+      {
+        tab: t('settings.security.serverConfiguration.title'),
+        field: t('settings.security.reverseProxy.listLabel'),
+        invalidKey: 'security-trusted-proxies-invalid',
+        pendingKey: 'security-trusted-proxies-pending',
+        hasInvalid: trustedProxiesInvalid,
+        hasPending: trustedProxiesPending,
+      },
+      {
+        tab: t('settings.security.exceptions.title'),
+        field: t('settings.security.allowedSubnetsLabel'),
+        invalidKey: 'security-bypass-subnets-invalid',
+        pendingKey: 'security-bypass-subnets-pending',
+        hasInvalid: bypassSubnetsInvalid,
+        hasPending: bypassSubnetsPending,
+      },
+    ];
+    const active = new Map<string, string>();
+    for (const { tab, field, invalidKey, pendingKey, hasInvalid, hasPending } of lists) {
+      if (hasInvalid) active.set(invalidKey, t('settings.security.validation.invalidEntry', { tab, field }));
+      if (hasPending) active.set(pendingKey, t('settings.security.validation.pendingEntry', { tab, field }));
     }
-    if (trustedProxiesDraft.trim() !== '') errors.push(TRUSTED_PROXIES_PENDING_KEY);
-    if (bypassEnabled && allowedSubnets.some(subnet => validateNetworkAddress(subnet, 'cidr') !== null)) {
-      errors.push(BYPASS_SUBNETS_INVALID_KEY);
-    }
-    if (bypassEnabled && bypassSubnetsDraft.trim() !== '') errors.push(BYPASS_SUBNETS_PENDING_KEY);
-    return errors;
+    return active;
   });
 
-  function addressListReason(key: string): string {
-    const serverTab = t('settings.security.serverConfiguration.title');
-    const exceptionsTab = t('settings.security.exceptions.title');
-    const trustedField = t('settings.security.reverseProxy.listLabel');
-    const subnetField = t('settings.security.allowedSubnetsLabel');
-    switch (key) {
-      case TRUSTED_PROXIES_INVALID_KEY:
-        return t('settings.security.validation.invalidEntry', { tab: serverTab, field: trustedField });
-      case TRUSTED_PROXIES_PENDING_KEY:
-        return t('settings.security.validation.pendingEntry', { tab: serverTab, field: trustedField });
-      case BYPASS_SUBNETS_INVALID_KEY:
-        return t('settings.security.validation.invalidEntry', { tab: exceptionsTab, field: subnetField });
-      default:
-        return t('settings.security.validation.pendingEntry', { tab: exceptionsTab, field: subnetField });
-    }
-  }
+  const ADDRESS_LIST_ISSUE_KEYS = [
+    'security-trusted-proxies-invalid',
+    'security-trusted-proxies-pending',
+    'security-bypass-subnets-invalid',
+    'security-bypass-subnets-pending',
+  ];
 
   $effect(() => {
-    const active = addressListErrors;
-    const reasons = active.map(key => [key, addressListReason(key)] as const);
-    // .update() so the effect never reads the stores it writes (IntegrationSettingsPage
-    // uses the same pattern); keep the array when nothing changes.
-    settingsValidationErrors.update(errors => {
-      const others = errors.filter(e => !ADDRESS_LIST_ERROR_KEYS.includes(e));
-      const next = [...others, ...active];
-      const unchanged =
-        next.length === errors.length && next.every(e => errors.includes(e));
-      return unchanged ? errors : next;
-    });
-    settingsValidationReasons.update(current => {
-      const next = new Map(current);
-      for (const key of ADDRESS_LIST_ERROR_KEYS) next.delete(key);
-      for (const [key, reason] of reasons) next.set(key, reason);
-      return next;
-    });
+    setValidationIssues(ADDRESS_LIST_ISSUE_KEYS, addressListIssues);
   });
 
-  $effect(() => () => {
-    settingsValidationErrors.update(errors =>
-      errors.filter(e => !ADDRESS_LIST_ERROR_KEYS.includes(e))
-    );
-    settingsValidationReasons.update(current => {
-      const next = new Map(current);
-      for (const key of ADDRESS_LIST_ERROR_KEYS) next.delete(key);
-      return next;
-    });
-  });
+  onDestroy(() => setValidationIssues(ADDRESS_LIST_ISSUE_KEYS, new Map()));
 
   function updatePublicLiveAudio(checked: boolean) {
     settingsActions.updateSection('security', {
@@ -1103,7 +1075,7 @@
 
     <!-- Reverse Proxy Card (trusted proxies apply without a restart) -->
     <ReverseProxySection
-      trustedProxies={settings.trustedProxies ?? []}
+      {trustedProxies}
       savedTrustedProxies={store.originalData.security?.trustedProxies ?? []}
       dataLoaded={store.dataLoaded}
       disabled={store.isLoading || store.isSaving}

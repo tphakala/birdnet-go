@@ -390,6 +390,15 @@ describe('settingsCoercion security trustedProxies', () => {
     expect(result).toMatchObject({ trustedProxies: ['172.18.0.1', 'Cloudflare', '10.0.0.0/8'] });
   });
 
+  it('returns an already clean list unchanged', () => {
+    const list = ['172.18.0.1', 'cloudflare'];
+    const result = coerceSettings('security', { trustedProxies: list }) as {
+      trustedProxies: string[];
+    };
+
+    expect(result.trustedProxies).toBe(list);
+  });
+
   it('coerces a null list to an empty list', () => {
     const result = coerceSettings('security', { trustedProxies: null });
 

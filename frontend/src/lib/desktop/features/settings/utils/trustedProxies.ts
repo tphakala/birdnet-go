@@ -10,16 +10,16 @@
  * saved array itself (as a copy) whenever the result describes the same entries
  * and the same Cloudflare state. That keeps the "unsaved changes" badge honest
  * and never rewrites a user's config order or spelling.
- *
- * security.allowSubnetBypass.subnet is a comma-separated string; splitSubnetList
- * and joinSubnetList convert it to and from list rows with the same rule.
  */
+
+import { hasInvalidAddress, type NetworkAddressMode } from '$lib/utils/networkAddress';
+import { deepEqual } from '$lib/utils/settingsChanges';
 
 /** Reserved trusted-proxy token that expands to Cloudflare's edge ranges (mirrors conf.TrustedProxyCloudflarePreset). */
 export const CLOUDFLARE_PRESET = 'cloudflare';
 
-/** Separator written between subnets when a list is saved as text. */
-const SUBNET_SEPARATOR = ', ';
+/** What a trusted-proxy row may hold: a single IP or a CIDR range. */
+export const TRUSTED_PROXY_ACCEPT: NetworkAddressMode = 'ip-or-cidr';
 
 /** True for the Cloudflare preset token in any case, ignoring surrounding spaces. */
 export function isCloudflarePreset(entry: string): boolean {
@@ -51,8 +51,9 @@ export function partitionTrustedProxies(list: readonly string[]): TrustedProxyPa
   return { entries, hasCloudflare };
 }
 
-function sameStrings(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b.at(index));
+/** Whether any address row of a trusted-proxy list is not an IP or a CIDR; the preset token and blanks are not rows. */
+export function hasInvalidTrustedProxy(list: readonly string[]): boolean {
+  return hasInvalidAddress(partitionTrustedProxies(list).entries, TRUSTED_PROXY_ACCEPT);
 }
 
 /**
@@ -71,7 +72,7 @@ export function recombineTrustedProxies(
   savedList: readonly string[]
 ): string[] {
   const saved = partitionTrustedProxies(savedList);
-  if (hasCloudflare === saved.hasCloudflare && sameStrings(entries, saved.entries)) {
+  if (hasCloudflare === saved.hasCloudflare && deepEqual(entries, saved.entries)) {
     return [...savedList];
   }
   const result = [...entries];
@@ -88,37 +89,4 @@ export function recombineTrustedProxies(
     );
   }
   return result;
-}
-
-/**
- * Turn the Cloudflare preset on or off in `list`. When the list is already in the
- * requested state it is returned unchanged (toggling on twice adds one token).
- * Turning it off removes every spelling of the token; turning it on restores the
- * saved token or adds one `cloudflare`. See recombineTrustedProxies.
- */
-export function setCloudflarePreset(
-  list: readonly string[],
-  enabled: boolean,
-  savedList: readonly string[]
-): string[] {
-  const { entries, hasCloudflare } = partitionTrustedProxies(list);
-  if (hasCloudflare === enabled) return [...list];
-  return recombineTrustedProxies(entries, enabled, savedList);
-}
-
-/** Split the comma-separated subnet text into trimmed, non-blank values, as the backend does. */
-export function splitSubnetList(text: string): string[] {
-  return text
-    .split(',')
-    .map(value => value.trim())
-    .filter(value => value !== '');
-}
-
-/**
- * Join subnet values into the text to store. Returns `saved` itself when it
- * already describes exactly `values`, so edits that return to the saved list
- * restore the saved string byte for byte; otherwise the values joined with ", ".
- */
-export function joinSubnetList(values: readonly string[], saved: string): string {
-  return sameStrings(splitSubnetList(saved), values) ? saved : values.join(SUBNET_SEPARATOR);
 }

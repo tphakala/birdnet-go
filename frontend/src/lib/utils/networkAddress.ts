@@ -15,15 +15,12 @@
  * - An IPv4-mapped IPv6 CIDR with a prefix of 96 or more is the IPv4 network with
  *   the prefix reduced by 96; with a shorter prefix it stays an IPv6 network.
  *
- * All functions are pure and trim nothing except validateNetworkAddress and
+ * All functions are pure and trim nothing except isValidNetworkAddress and
  * networkAddressKey, which trim first like the backend does.
  */
 
 /** Which kinds of address a field accepts. */
 export type NetworkAddressMode = 'cidr' | 'ip' | 'ip-or-cidr';
-
-/** Why a value is not acceptable: blank, or not an address of the accepted kind. */
-export type NetworkAddressIssue = 'empty' | 'invalid';
 
 const IPV4_BITS = 32;
 const IPV6_BITS = 128;
@@ -184,17 +181,17 @@ export function isValidCIDR(s: string): boolean {
 }
 
 /**
- * Check a field value against the accepted kinds. The value is trimmed first,
- * like the backend. Returns null when acceptable.
+ * Whether a field value is an address of the accepted kind. The value is trimmed
+ * first, like the backend, so a blank value is not valid.
  */
-export function validateNetworkAddress(
-  s: string,
-  accept: NetworkAddressMode
-): NetworkAddressIssue | null {
+export function isValidNetworkAddress(s: string, accept: NetworkAddressMode): boolean {
   const value = s.trim();
-  if (value === '') return 'empty';
-  const ok = (accept !== 'cidr' && isValidIP(value)) || (accept !== 'ip' && isValidCIDR(value));
-  return ok ? null : 'invalid';
+  return (accept !== 'cidr' && isValidIP(value)) || (accept !== 'ip' && isValidCIDR(value));
+}
+
+/** Whether any of `values` is not an address of the accepted kind. */
+export function hasInvalidAddress(values: readonly string[], mode: NetworkAddressMode): boolean {
+  return values.some(value => !isValidNetworkAddress(value, mode));
 }
 
 /** Keep the first `prefix` bits of bytes and clear the rest. */
@@ -284,8 +281,6 @@ export function networkContains(entry: string, address: string): boolean {
  * whole address width. Invalid values are not single hosts.
  */
 export function isSingleHost(s: string): boolean {
-  const value = s.trim();
-  if (isValidIP(value)) return true;
-  const cidr = parseCIDR(value);
-  return cidr !== null && cidr.prefix === bitWidth(cidr.address);
+  const network = canonicalNetwork(s.trim());
+  return network !== null && network.prefix === network.bytes.length * BITS_PER_BYTE;
 }
