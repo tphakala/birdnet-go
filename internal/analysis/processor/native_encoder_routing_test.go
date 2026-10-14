@@ -602,8 +602,12 @@ func TestTrimPartialSample(t *testing.T) {
 		{"many frames and a byte", manyFrames*testPCMFrameBytes + 1, manyFrames * testPCMFrameBytes},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// Distinct bytes, so a trim taken from the wrong end shows up.
 			in := make([]byte, tc.in)
-			assert.Len(t, trimPartialSample(in), tc.out)
+			for i := range in {
+				in[i] = byte(i + 1)
+			}
+			assert.Equal(t, in[:tc.out], trimPartialSample(in))
 		})
 	}
 }
