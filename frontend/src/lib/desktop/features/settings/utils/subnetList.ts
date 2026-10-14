@@ -4,6 +4,7 @@
  * and a list that equals the saved one gives the saved string back byte for byte.
  */
 
+import { trimGoSpace } from '$lib/utils/networkAddress';
 import { deepEqual } from '$lib/utils/settingsChanges';
 
 /** Separator written between subnets when a list is saved as text. */
@@ -13,7 +14,7 @@ const SUBNET_SEPARATOR = ', ';
 export function splitSubnetList(text: string): string[] {
   return text
     .split(',')
-    .map(value => value.trim())
+    .map(value => trimGoSpace(value))
     .filter(value => value !== '');
 }
 

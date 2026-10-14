@@ -9,6 +9,7 @@ import {
   networkAddressKey,
   isSingleHost,
   networkContains,
+  trimGoSpace,
 } from './networkAddress';
 
 describe('parseIPv4', () => {
@@ -253,4 +254,26 @@ describe('isSingleHost', () => {
       expect(isSingleHost(input)).toBe(false);
     }
   );
+});
+
+describe('trimming', () => {
+  // Go's strings.TrimSpace trims U+0085 but not U+FEFF; JavaScript's trim does the opposite.
+  it('trims the same whitespace as Go strings.TrimSpace', () => {
+    expect(isValidNetworkAddress('\u008510.0.0.1\u0085', 'ip')).toBe(true);
+    expect(isValidNetworkAddress('\uFEFF10.0.0.1', 'ip')).toBe(false);
+    expect(isValidNetworkAddress('10.0.0.1\uFEFF', 'ip')).toBe(false);
+    expect(networkAddressKey('\u008510.0.0.1')).toBe('10.0.0.1/32');
+    expect(networkAddressKey('\uFEFF10.0.0.1')).toBeNull();
+    expect(networkContains('\u008510.0.0.0/8', '\u008510.1.2.3')).toBe(true);
+    expect(networkContains('\uFEFF10.0.0.0/8', '10.1.2.3')).toBe(false);
+    expect(isSingleHost('\u008510.0.0.1')).toBe(true);
+    expect(isSingleHost('\uFEFF10.0.0.1')).toBe(false);
+  });
+
+  it('keeps a long whitespace run inside the text and trims the ends', () => {
+    const inner = 'a' + ' '.repeat(100_000) + 'x';
+    expect(trimGoSpace(inner)).toBe(inner);
+    expect(trimGoSpace(`\t \u3000${inner}\u0085\n`)).toBe(inner);
+    expect(trimGoSpace(' \u00A0\u2003 ')).toBe('');
+  });
 });

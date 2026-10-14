@@ -12,7 +12,7 @@
  * and never rewrites a user's config order or spelling.
  */
 
-import { hasInvalidAddress, type NetworkAddressMode } from '$lib/utils/networkAddress';
+import { hasInvalidAddress, trimGoSpace, type NetworkAddressMode } from '$lib/utils/networkAddress';
 import { deepEqual } from '$lib/utils/settingsChanges';
 
 /** Reserved trusted-proxy token that expands to Cloudflare's edge ranges (mirrors conf.TrustedProxyCloudflarePreset). */
@@ -23,7 +23,7 @@ export const TRUSTED_PROXY_ACCEPT: NetworkAddressMode = 'ip-or-cidr';
 
 /** True for the Cloudflare preset token in any case, ignoring surrounding spaces. */
 export function isCloudflarePreset(entry: string): boolean {
-  return entry.trim().toLowerCase() === CLOUDFLARE_PRESET;
+  return trimGoSpace(entry).toLowerCase() === CLOUDFLARE_PRESET;
 }
 
 /** A trusted-proxy list split into the rows the editor shows and the preset state. */
@@ -36,7 +36,7 @@ export interface TrustedProxyPartition {
 
 /**
  * Split a trusted-proxy list into editor rows and the Cloudflare state. Blank or
- * whitespace-only entries are valid to the backend and are not shown as rows.
+ * whitespace-only entries (whitespace as Go's strings.TrimSpace reads it) are valid to the backend and are not shown as rows.
  */
 export function partitionTrustedProxies(list: readonly string[]): TrustedProxyPartition {
   const entries: string[] = [];
@@ -44,7 +44,7 @@ export function partitionTrustedProxies(list: readonly string[]): TrustedProxyPa
   for (const entry of list) {
     if (isCloudflarePreset(entry)) {
       hasCloudflare = true;
-    } else if (entry.trim() !== '') {
+    } else if (trimGoSpace(entry) !== '') {
       entries.push(entry);
     }
   }

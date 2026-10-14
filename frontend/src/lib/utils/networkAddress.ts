@@ -15,8 +15,9 @@
  * - An IPv4-mapped IPv6 CIDR with a prefix of 96 or more is the IPv4 network with
  *   the prefix reduced by 96; with a shorter prefix it stays an IPv6 network.
  *
- * All functions are pure and trim nothing except isValidNetworkAddress and
- * networkAddressKey, which trim first like the backend does.
+ * All functions are pure and trim nothing except isValidNetworkAddress,
+ * networkAddressKey, networkContains and isSingleHost, which trim first like the
+ * backend does (see trimGoSpace).
  */
 
 /** Which kinds of address a field accepts. */
@@ -42,6 +43,27 @@ const BYTE_MASK = 0xff;
 const IPV4_PATTERN = /^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$/;
 const HEX_GROUP_PATTERN = /^[0-9a-fA-F]+/;
 const DIGITS_PATTERN = /^[0-9]+$/;
+/**
+ * The code points Go's strings.TrimSpace trims (Unicode White_Space). JavaScript's
+ * String.prototype.trim differs: it also trims U+FEFF and does not trim U+0085.
+ */
+const GO_SPACE_CODES: ReadonlySet<number> = new Set([
+  0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20, 0x85, 0xa0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004,
+  0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000,
+]);
+
+/**
+ * Trim s the way Go's strings.TrimSpace does, which the backend applies to these values.
+ * Two indexes walk in from the ends, so the cost is linear however long the whitespace
+ * run inside the text is.
+ */
+export function trimGoSpace(s: string): string {
+  let start = 0;
+  let end = s.length;
+  while (start < end && GO_SPACE_CODES.has(s.charCodeAt(start))) start++;
+  while (end > start && GO_SPACE_CODES.has(s.charCodeAt(end - 1))) end--;
+  return s.slice(start, end);
+}
 
 /**
  * Parse a dotted decimal IPv4 address into its four bytes, or null.
@@ -182,10 +204,10 @@ export function isValidCIDR(s: string): boolean {
 
 /**
  * Whether a field value is an address of the accepted kind. The value is trimmed
- * first, like the backend, so a blank value is not valid.
+ * first with trimGoSpace, like the backend, so a blank value is not valid.
  */
 export function isValidNetworkAddress(s: string, accept: NetworkAddressMode): boolean {
-  const value = s.trim();
+  const value = trimGoSpace(s);
   return (accept !== 'cidr' && isValidIP(value)) || (accept !== 'ip' && isValidCIDR(value));
 }
 
@@ -248,14 +270,14 @@ function canonicalNetwork(value: string): CanonicalNetwork | null {
 
 /**
  * Canonical key for duplicate detection, or null when s is neither an IP nor a
- * CIDR. Two values share a key exactly when they describe the same set of hosts
+ * CIDR (after trimGoSpace). Two values share a key exactly when they describe the same set of hosts
  * the way the backend reads them: the network is masked, a bare IP is its single
  * host prefix, and an IPv4-mapped IPv6 address keys as IPv4 (Go's ParseIP
  * returns it as IPv4, and a mapped CIDR of 96 bits or more is the IPv4 network).
  * Hex is lowercase and uses all eight groups.
  */
 export function networkAddressKey(s: string): string | null {
-  const network = canonicalNetwork(s.trim());
+  const network = canonicalNetwork(trimGoSpace(s));
   return network ? keyFromBytes(network.bytes, network.prefix) : null;
 }
 
@@ -263,12 +285,12 @@ export function networkAddressKey(s: string): string | null {
  * Whether the network an entry describes (an IP or a CIDR, read as in
  * networkAddressKey) contains the IP address `address`, with the semantics of Go's
  * net.IPNet.Contains: an IPv4 address (including an IPv4-mapped one) is only in an
- * IPv4 network, and an IPv6 address only in an IPv6 network. False when either
- * value does not parse.
+ * IPv4 network, and an IPv6 address only in an IPv6 network. Both values are
+ * trimmed with trimGoSpace first. False when either value does not parse.
  */
 export function networkContains(entry: string, address: string): boolean {
-  const network = canonicalNetwork(entry.trim());
-  const parsed = parseAddress(address.trim());
+  const network = canonicalNetwork(trimGoSpace(entry));
+  const parsed = parseAddress(trimGoSpace(address));
   if (!network || !parsed) return false;
   const bytes = isMapped(parsed.bytes) ? parsed.bytes.slice(IPV6_BYTES - IPV4_BYTES) : parsed.bytes;
   if (bytes.length !== network.bytes.length) return false;
@@ -281,6 +303,6 @@ export function networkContains(entry: string, address: string): boolean {
  * whole address width. Invalid values are not single hosts.
  */
 export function isSingleHost(s: string): boolean {
-  const network = canonicalNetwork(s.trim());
+  const network = canonicalNetwork(trimGoSpace(s));
   return network !== null && network.prefix === network.bytes.length * BITS_PER_BYTE;
 }
