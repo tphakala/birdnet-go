@@ -2,12 +2,19 @@ package transcode
 
 import (
 	"bytes"
+	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
@@ -161,4 +168,80 @@ func TestOpenOpus_TotalFramesComeFromLength(t *testing.T) {
 
 	src := openTestSource(t, path)
 	assert.Equal(t, int64(whole.Frames()), src.totalFrames)
+}
+
+// Every format clip export can write has a decoder, and the table holds no other.
+func TestSourceOpeners_CoverEveryClipFormat(t *testing.T) {
+	t.Parallel()
+
+	formats := append(slices.Collect(maps.Keys(fileEncoders)), audioformat.WAV)
+	for _, format := range formats {
+		assert.Contains(t, sourceOpeners, "."+convert.GetFileExtension(format), "format %s", format)
+	}
+	assert.Len(t, sourceOpeners, len(formats))
+}
+
+// rampSource is a source of unknown length without a seek, holding frames
+// mono frames whose 16-bit value is the frame index.
+func rampSource(frames int) *source {
+	data := make([]int16, frames)
+	for i := range data {
+		data[i] = int16(i) //nolint:gosec // G115: the test keeps frames below the int16 range
+	}
+	return &source{
+		reader:      bytes.NewReader(int16Bytes(data)),
+		sampleRate:  testRate,
+		channels:    1,
+		totalFrames: unknownFrames,
+		expansion:   lossyExpansion,
+	}
+}
+
+// A source without a seek and of unknown length is positioned by discarding, and
+// a start past its end is an empty range.
+func TestDecodeSource_UnknownLengthWindowIsPositionedByDiscarding(t *testing.T) {
+	t.Parallel()
+
+	const (
+		rampFrames  = 2000
+		startFrame  = 700
+		windowCount = 300
+	)
+	req := &window{Start: float64(startFrame) / testRate, Duration: float64(windowCount) / testRate}
+	win, err := decodeSource(t.Context(), rampSource(rampFrames), req, 0, maxDecodedPCMBytes)
+	require.NoError(t, err)
+	want := make([]int16, windowCount)
+	for i := range want {
+		want[i] = int16(startFrame + i) //nolint:gosec // G115: below the int16 range
+	}
+	assert.Equal(t, want, bytesInt16(win.Data))
+
+	past := &window{Start: float64(rampFrames+1) / testRate, Duration: 1}
+	_, err = decodeSource(t.Context(), rampSource(rampFrames), past, 0, maxDecodedPCMBytes)
+	require.ErrorIs(t, err, ErrEmptyRange)
+}
+
+// A failing seek is an undecodable source with its cause kept, and a seek that
+// lands short of the target is an empty range.
+func TestPositionSource_SeekFailureAndShortLanding(t *testing.T) {
+	t.Parallel()
+
+	const target = 1000
+	t.Run("failure", func(t *testing.T) {
+		t.Parallel()
+		cause := io.ErrUnexpectedEOF
+		src := rampSource(2000)
+		src.seek = func(int64) (int64, error) { return 0, cause }
+		err := positionSource(t.Context(), src, target, bytesPerSample, true)
+		require.ErrorIs(t, err, ErrUndecodableSource)
+		require.ErrorIs(t, err, cause)
+		assert.False(t, errors.Is(err, ErrEmptyRange))
+	})
+	t.Run("short landing", func(t *testing.T) {
+		t.Parallel()
+		src := rampSource(2000)
+		src.seek = func(frame int64) (int64, error) { return frame - 1, nil }
+		err := positionSource(t.Context(), src, target, bytesPerSample, true)
+		require.ErrorIs(t, err, ErrEmptyRange)
+	})
 }
