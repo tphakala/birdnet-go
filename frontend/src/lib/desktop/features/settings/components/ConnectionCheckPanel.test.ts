@@ -156,6 +156,28 @@ describe('ConnectionCheckPanel', () => {
     }
   );
 
+  it('shows only the Cloudflare fix when the preset would verify', () => {
+    for (const status of ['untrusted_proxy_unverifiable', 'trusted_proxy_unverified'] as const) {
+      const { unmount } = renderPanel({
+        result: result({ status, cloudflarePresetWouldVerify: true }),
+      });
+
+      expect(screen.getByText(/check\.cloudflareInFront/)).toBeInTheDocument();
+      expect(trustWithCloudflareButton()).not.toBeNull();
+      expect(screen.queryByText(new RegExp(`status\\.${status}\\.body`))).toBeNull();
+      expect(screen.queryByText(/status\.untrusted_proxy_unverifiable\.fix/)).toBeNull();
+      expect(screen.queryByText(/check\.selfClientCause/)).toBeNull();
+      expect(screen.queryByText(/status\.trusted_proxy_unverified\.cause/)).toBeNull();
+      expect(screen.queryByText(/check\.chainHint/)).toBeNull();
+      unmount();
+
+      // Without the preset fix the generic chain hint is shown
+      const plain = renderPanel({ result: result({ status, cloudflarePresetWouldVerify: false }) });
+      expect(screen.getByText(/check\.chainHint/)).toBeInTheDocument();
+      plain.unmount();
+    }
+  });
+
   it('shows the added note instead of Trust with Cloudflare when both are in the form', () => {
     renderPanel({
       result: result({ status: 'untrusted_proxy_unverifiable', cloudflarePresetWouldVerify: true }),

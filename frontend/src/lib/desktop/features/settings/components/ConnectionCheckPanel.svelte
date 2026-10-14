@@ -188,21 +188,26 @@
               {t('settings.security.reverseProxy.status.trusted_proxy.hint', { client })}
             </p>
           {:else if status === 'trusted_proxy_unverified'}
-            <p class="mt-1">
-              {t('settings.security.reverseProxy.status.trusted_proxy_unverified.body', { peer })}
-            </p>
-            <ul class="mt-1 list-disc pl-5 space-y-0.5">
-              <li>
-                {t('settings.security.reverseProxy.status.trusted_proxy_unverified.causeRange')}
-              </li>
-              <li>
-                {t('settings.security.reverseProxy.status.trusted_proxy_unverified.causeHeaders')}
-              </li>
-              <li>
-                {t('settings.security.reverseProxy.status.trusted_proxy_unverified.causeConflict')}
-              </li>
-              <li>{t('settings.security.reverseProxy.check.selfClientCause')}</li>
-            </ul>
+            <!-- With Cloudflare in front the generic causes would blame a proxy that works -->
+            {#if !canTrustWithCloudflare}
+              <p class="mt-1">
+                {t('settings.security.reverseProxy.status.trusted_proxy_unverified.body', { peer })}
+              </p>
+              <ul class="mt-1 list-disc pl-5 space-y-0.5">
+                <li>
+                  {t('settings.security.reverseProxy.status.trusted_proxy_unverified.causeRange')}
+                </li>
+                <li>
+                  {t('settings.security.reverseProxy.status.trusted_proxy_unverified.causeHeaders')}
+                </li>
+                <li>
+                  {t(
+                    'settings.security.reverseProxy.status.trusted_proxy_unverified.causeConflict'
+                  )}
+                </li>
+                <li>{t('settings.security.reverseProxy.check.selfClientCause')}</li>
+              </ul>
+            {/if}
           {:else if status === 'untrusted_public_proxy'}
             <p class="mt-1">
               {t('settings.security.reverseProxy.status.untrusted_public_proxy.body', { peer })}
@@ -216,7 +221,7 @@
             <p class="mt-1">
               {t('settings.security.reverseProxy.status.untrusted_proxy.body', { peer })}
             </p>
-          {:else if status === 'untrusted_proxy_unverifiable'}
+          {:else if status === 'untrusted_proxy_unverifiable' && !canTrustWithCloudflare}
             {#if peer}
               <p class="mt-1">
                 {t('settings.security.reverseProxy.status.untrusted_proxy_unverifiable.body', {
@@ -234,7 +239,7 @@
             <p class="mt-1">{t('settings.security.reverseProxy.check.selfClientCause')}</p>
           {/if}
 
-          {#if unverifiedWithPeer}
+          {#if unverifiedWithPeer && !canTrustWithCloudflare}
             <p class="mt-1 text-xs">
               {t('settings.security.reverseProxy.check.chainHint', { peer })}
             </p>
