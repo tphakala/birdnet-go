@@ -2,11 +2,13 @@
   Security Settings Page Component
 
   Purpose: Configure authentication and access control for BirdNET-Go including
-  HTTPS/TLS settings, basic authentication, OAuth2 social login providers, and
-  subnet-based authentication bypass.
+  HTTPS/TLS settings, trusted reverse proxies, basic authentication, OAuth2 social
+  login providers, and subnet-based authentication bypass.
 
   Features:
   - Server configuration with automatic TLS via Let's Encrypt
+  - Reverse Proxy card (ReverseProxySection): trusted proxy list, Cloudflare preset and
+    a live check of how this browser's connection reaches the server
   - Basic authentication with password protection
   - OAuth2 integration (Google, GitHub, Microsoft) with dynamic provider management
   - Subnet-based authentication bypass for local networks
@@ -33,6 +35,8 @@
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import CertificateField from '$lib/desktop/components/forms/CertificateField.svelte';
   import CertificateStateDisplay from '$lib/desktop/components/ui/CertificateStateDisplay.svelte';
+  import NetworkAddressListInput from '$lib/desktop/components/forms/NetworkAddressListInput.svelte';
+  import ReverseProxySection from '$lib/desktop/features/settings/components/ReverseProxySection.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -41,8 +45,15 @@
     settingsStore,
     settingsActions,
     securitySettings,
+    settingsValidationErrors,
     type OAuthProviderConfig,
   } from '$lib/stores/settings';
+  import {
+    joinSubnetList,
+    partitionTrustedProxies,
+    splitSubnetList,
+  } from '$lib/desktop/features/settings/utils/trustedProxies';
+  import { validateNetworkAddress } from '$lib/utils/networkAddress';
   import { fetchRestartStatus } from '$lib/stores/restart.svelte';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
@@ -97,6 +108,7 @@
         liveAudio: false,
       },
       privateMode: false,
+      trustedProxies: [],
     }
   );
 
@@ -315,6 +327,13 @@
         selfSignedValidity: store.formData.security?.selfSignedValidity,
         redirectToHttps: store.formData.security?.redirectToHttps,
       }
+    )
+  );
+
+  let reverseProxyHasChanges = $derived(
+    hasSettingsChanged(
+      store.originalData.security?.trustedProxies ?? [],
+      store.formData.security?.trustedProxies ?? []
     )
   );
 
@@ -619,6 +638,75 @@
     });
   }
 
+  function updateAllowedSubnets(values: string[]) {
+    updateSubnetBypassSubnet(
+      joinSubnetList(values, store.originalData.security?.allowSubnetBypass?.subnet ?? '')
+    );
+  }
+
+  function updateTrustedProxies(trustedProxies: string[]) {
+    settingsActions.updateSection('security', {
+      ...settings,
+      trustedProxies,
+    });
+  }
+
+  // Save stays blocked while either address list holds a row the backend would reject,
+  // or text that was typed but not added (it would otherwise be lost on save). The
+  // subnet list counts only while the bypass is on, since the backend checks it only then.
+  const TRUSTED_PROXIES_INVALID_KEY = 'security-trusted-proxies-invalid';
+  const TRUSTED_PROXIES_PENDING_KEY = 'security-trusted-proxies-pending';
+  const BYPASS_SUBNETS_INVALID_KEY = 'security-bypass-subnets-invalid';
+  const BYPASS_SUBNETS_PENDING_KEY = 'security-bypass-subnets-pending';
+  const ADDRESS_LIST_ERROR_KEYS = [
+    TRUSTED_PROXIES_INVALID_KEY,
+    TRUSTED_PROXIES_PENDING_KEY,
+    BYPASS_SUBNETS_INVALID_KEY,
+    BYPASS_SUBNETS_PENDING_KEY,
+  ];
+
+  let trustedProxiesPending = $state(false);
+  let bypassSubnetsPending = $state(false);
+
+  let allowedSubnets = $derived(splitSubnetList(settings.allowSubnetBypass?.subnet ?? ''));
+
+  let addressListErrors = $derived.by(() => {
+    const bypassEnabled = settings.allowSubnetBypass?.enabled ?? false;
+    const errors: string[] = [];
+    if (
+      partitionTrustedProxies(settings.trustedProxies ?? []).entries.some(
+        entry => validateNetworkAddress(entry, 'ip-or-cidr') !== null
+      )
+    ) {
+      errors.push(TRUSTED_PROXIES_INVALID_KEY);
+    }
+    if (trustedProxiesPending) errors.push(TRUSTED_PROXIES_PENDING_KEY);
+    if (bypassEnabled && allowedSubnets.some(subnet => validateNetworkAddress(subnet, 'cidr') !== null)) {
+      errors.push(BYPASS_SUBNETS_INVALID_KEY);
+    }
+    if (bypassEnabled && bypassSubnetsPending) errors.push(BYPASS_SUBNETS_PENDING_KEY);
+    return errors;
+  });
+
+  $effect(() => {
+    const active = addressListErrors;
+    // .update() so the effect never reads the store it writes (IntegrationSettingsPage
+    // uses the same pattern); keep the array when nothing changes.
+    settingsValidationErrors.update(errors => {
+      const others = errors.filter(e => !ADDRESS_LIST_ERROR_KEYS.includes(e));
+      const next = [...others, ...active];
+      const unchanged =
+        next.length === errors.length && next.every(e => errors.includes(e));
+      return unchanged ? errors : next;
+    });
+  });
+
+  $effect(() => () => {
+    settingsValidationErrors.update(errors =>
+      errors.filter(e => !ADDRESS_LIST_ERROR_KEYS.includes(e))
+    );
+  });
+
   function updatePublicLiveAudio(checked: boolean) {
     settingsActions.updateSection('security', {
       publicAccess: { ...(settings.publicAccess ?? {}), liveAudio: checked },
@@ -629,7 +717,7 @@
     settingsActions.updateSection('security', { privateMode: checked });
   }
 
-  // Terminal toggle — reads from webServer section of the settings store
+  // Terminal toggle: reads from the webServer section of the settings store
   let webServerData = $derived($settingsStore.formData.webServer);
   let enableTerminal = $derived(webServerData?.enableTerminal ?? false);
 
@@ -659,7 +747,7 @@
       label: t('settings.security.serverConfiguration.title'),
       icon: Server,
       content: serverTabContent,
-      hasChanges: serverConfigHasChanges,
+      hasChanges: serverConfigHasChanges || reverseProxyHasChanges,
     },
     {
       id: 'basic-auth',
@@ -975,6 +1063,17 @@
       </div>
     </div>
     </SettingsSection>
+
+    <!-- Reverse Proxy Card (trusted proxies apply without a restart) -->
+    <ReverseProxySection
+      trustedProxies={settings.trustedProxies ?? []}
+      savedTrustedProxies={store.originalData.security?.trustedProxies ?? []}
+      dataLoaded={store.dataLoaded}
+      disabled={store.isLoading || store.isSaving}
+      hasChanges={reverseProxyHasChanges}
+      onUpdate={updateTrustedProxies}
+      onPendingChange={pending => (trustedProxiesPending = pending)}
+    />
   </div>
 {/snippet}
 
@@ -1127,7 +1226,7 @@
                   {/if}
                 </div>
 
-                <!-- OIDC: Issuer URL (before credentials — identifies the IdP) -->
+                <!-- OIDC: Issuer URL (before credentials, identifies the IdP) -->
                 {#if selectedProvider === 'oidc'}
                   <TextInput
                     id="oidc-issuer-url"
@@ -1167,7 +1266,7 @@
                   />
                 </div>
 
-                <!-- OIDC: Scopes (after credentials — secondary config) -->
+                <!-- OIDC: Scopes (after credentials, secondary config) -->
                 {#if selectedProvider === 'oidc'}
                   <TextInput
                     id="oidc-scopes"
@@ -1353,8 +1452,19 @@
           onchange={updateSubnetBypassEnabled}
         />
 
+        <!-- Outside the fieldset so the link stays usable while the bypass is off -->
         <SettingsNote>
           <p>{t('settings.security.subnetBypassLocalNote')}</p>
+          <p class="mt-2">
+            {t('settings.security.bypassProxyNote')}
+            <a
+              href={buildAppUrl(SETTINGS_ROUTES.securityReverseProxy)}
+              onclick={handleAppLinkClick}
+              class="text-[var(--color-primary)] underline"
+            >
+              {t('settings.security.bypassProxyLink')}
+            </a>
+          </p>
         </SettingsNote>
 
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
@@ -1372,16 +1482,19 @@
             class="space-y-4 transition-opacity duration-200"
             class:opacity-50={!settings.allowSubnetBypass?.enabled}
           >
-            <TextInput
+            <NetworkAddressListInput
               id="allowed-subnet"
-              value={settings.allowSubnetBypass.subnet}
+              values={allowedSubnets}
+              onUpdate={updateAllowedSubnets}
+              accept="cidr"
               label={t('settings.security.allowedSubnetsLabel')}
               placeholder={t('settings.security.placeholders.subnet')}
               helpText={t('settings.security.allowedSubnetsHelp')}
+              emptyStateMessage={t('settings.security.allowedSubnetsEmpty')}
               disabled={!settings.allowSubnetBypass?.enabled ||
                 store.isLoading ||
                 store.isSaving}
-              onchange={updateSubnetBypassSubnet}
+              onPendingChange={pending => (bypassSubnetsPending = pending)}
             />
 
             <ErrorAlert type="warning">

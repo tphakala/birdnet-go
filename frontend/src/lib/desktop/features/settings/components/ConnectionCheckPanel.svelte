@@ -1,0 +1,270 @@
+<!--
+  ConnectionCheckPanel
+
+  Shows how the current browser connection reaches BirdNET-Go, as reported by
+  GET /api/v2/settings/connection for the saved trusted-proxy list, and offers the one
+  action that fixes the common case. Presentational: the result, the loading and error
+  state and every form fact come in as props, and actions go out through callbacks.
+
+  Statuses (see proxytrust.ConnectionStatus): direct, trusted_proxy (success),
+  trusted_proxy_unverified, untrusted_public_proxy, untrusted_proxy and
+  untrusted_proxy_unverifiable (warnings). Only untrusted_proxy offers "Trust {peer}",
+  since only there listing the peer is known to verify the client; the two unverified
+  statuses offer "Trust {peer} and Cloudflare" when the server says the Cloudflare preset
+  would verify the client.
+
+  @component
+-->
+<script lang="ts">
+  import { tick } from 'svelte';
+  import { RefreshCw, ShieldCheck, CircleCheck, Info } from '@lucide/svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
+  import { t } from '$lib/i18n';
+  import { generateId } from '$lib/utils/uuid';
+  import type { ConnectionCheckResult, ConnectionStatus } from '$lib/utils/settingsApi';
+
+  interface Props {
+    /** The last check, or null before the first one finishes or after an error. */
+    result: ConnectionCheckResult | null;
+    /** A check is running; the panel shows that instead of an earlier result. */
+    loading: boolean;
+    /** Why the last check failed, or null. */
+    error: string | null;
+    /** The form's trusted-proxy list differs from the saved one the check describes. */
+    stale: boolean;
+    /** The checked peer is already a valid row of the form's list. */
+    peerListed: boolean;
+    /** The form's list has the Cloudflare preset on. */
+    cloudflareEnabled: boolean;
+    /** Disables the trust actions (for example while settings save). */
+    disabled?: boolean;
+    onRecheck: () => void;
+    /** Add the peer to the form's list. */
+    onTrust: () => void;
+    /** Add the peer (if missing) and turn the Cloudflare preset on in the form. */
+    onTrustWithCloudflare: () => void;
+  }
+
+  let addedNote = $state<HTMLElement>();
+
+  // The trust button is replaced by the "added" note; move focus there so it is not lost.
+  async function runAndFocusNote(action: () => void) {
+    action();
+    await tick();
+    addedNote?.focus();
+  }
+
+  let {
+    result,
+    loading,
+    error,
+    stale,
+    peerListed,
+    cloudflareEnabled,
+    disabled = false,
+    onRecheck,
+    onTrust,
+    onTrustWithCloudflare,
+  }: Props = $props();
+
+  type Tone = 'success' | 'warning' | 'info';
+  const TONES: Record<ConnectionStatus, Tone> = {
+    direct: 'info',
+    trusted_proxy: 'success',
+    trusted_proxy_unverified: 'warning',
+    untrusted_public_proxy: 'warning',
+    untrusted_proxy: 'warning',
+    untrusted_proxy_unverifiable: 'warning',
+  };
+
+  const titleId = generateId('connection-check-title');
+
+  let status = $derived(result?.status);
+  let peer = $derived(result?.peerAddress ?? '');
+  let client = $derived(result?.verifiedClientAddress ?? '');
+
+  let canTrust = $derived(status === 'untrusted_proxy' && peer !== '');
+  let canTrustWithCloudflare = $derived(
+    (status === 'untrusted_proxy_unverifiable' || status === 'trusted_proxy_unverified') &&
+      peer !== '' &&
+      (result?.cloudflarePresetWouldVerify ?? false)
+  );
+  let trustApplied = $derived(
+    canTrustWithCloudflare ? peerListed && cloudflareEnabled : peerListed
+  );
+  let showChainHint = $derived(
+    (status === 'untrusted_proxy_unverifiable' || status === 'trusted_proxy_unverified') &&
+      peer !== ''
+  );
+
+  // Text for the always-present status region, so a finished check is announced.
+  let announcement = $derived.by(() => {
+    if (loading) return t('settings.security.reverseProxy.check.checking');
+    if (status) return t(`settings.security.reverseProxy.status.${status}.title`);
+    return '';
+  });
+</script>
+
+<section aria-labelledby={titleId}>
+  <div class="flex items-center justify-between gap-3">
+    <h4 id={titleId} class="text-sm font-semibold">
+      {t('settings.security.reverseProxy.check.title')}
+    </h4>
+    <!-- aria-disabled rather than disabled, so a keyboard user keeps focus here while it runs -->
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm gap-1.5 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+      aria-disabled={loading ? 'true' : undefined}
+      onclick={() => {
+        if (!loading) onRecheck();
+      }}
+    >
+      <RefreshCw class="size-4 {loading ? 'animate-spin' : ''}" aria-hidden="true" />
+      {t('settings.security.reverseProxy.check.recheck')}
+    </button>
+  </div>
+
+  <div class="sr-only" role="status">{announcement}</div>
+
+  <div class="mt-2">
+    {#if loading}
+      <div class="flex items-center gap-2 py-2 text-sm text-muted">
+        <LoadingSpinner size="sm" aria-hidden="true" />
+        <span>{t('settings.security.reverseProxy.check.checking')}</span>
+      </div>
+    {:else if error}
+      <ErrorAlert type="error">
+        {#snippet children()}
+          <p class="font-medium">{t('settings.security.reverseProxy.check.error')}</p>
+          <p class="mt-1 text-xs">{error}</p>
+        {/snippet}
+      </ErrorAlert>
+    {:else if result && status}
+      <!-- The status region above announces the outcome; this box is not a live region -->
+      <ErrorAlert type={TONES[status]} role={undefined}>
+        {#snippet children()}
+          <p class="font-medium">{t(`settings.security.reverseProxy.status.${status}.title`)}</p>
+
+          {#if status === 'direct'}
+            {#if peer}
+              <p class="mt-1">{t('settings.security.reverseProxy.status.direct.body', { peer })}</p>
+              <p class="mt-1 text-xs">
+                {t('settings.security.reverseProxy.status.direct.hint', { peer })}
+              </p>
+            {:else}
+              <p class="mt-1">{t('settings.security.reverseProxy.status.direct.bodyNoPeer')}</p>
+            {/if}
+          {:else if status === 'trusted_proxy'}
+            <p class="mt-1">
+              {t('settings.security.reverseProxy.status.trusted_proxy.body', { peer, client })}
+            </p>
+            <p class="mt-1 text-xs">
+              {t('settings.security.reverseProxy.status.trusted_proxy.hint', { client })}
+            </p>
+          {:else if status === 'trusted_proxy_unverified'}
+            <p class="mt-1">
+              {t('settings.security.reverseProxy.status.trusted_proxy_unverified.body', { peer })}
+            </p>
+            <ul class="mt-1 list-disc pl-5 space-y-0.5">
+              <li>
+                {t('settings.security.reverseProxy.status.trusted_proxy_unverified.causeRange')}
+              </li>
+              <li>
+                {t('settings.security.reverseProxy.status.trusted_proxy_unverified.causeHeaders')}
+              </li>
+              <li>
+                {t('settings.security.reverseProxy.status.trusted_proxy_unverified.causeConflict')}
+              </li>
+            </ul>
+          {:else if status === 'untrusted_public_proxy'}
+            <p class="mt-1">
+              {t('settings.security.reverseProxy.status.untrusted_public_proxy.body', { peer })}
+            </p>
+            {#if result.peerIsCloudflareEdge && !cloudflareEnabled}
+              <p class="mt-1 font-medium">
+                {t('settings.security.reverseProxy.check.cloudflareEdge', { peer })}
+              </p>
+            {/if}
+          {:else if status === 'untrusted_proxy'}
+            <p class="mt-1">
+              {t('settings.security.reverseProxy.status.untrusted_proxy.body', { peer })}
+            </p>
+          {:else if status === 'untrusted_proxy_unverifiable'}
+            {#if peer}
+              <p class="mt-1">
+                {t('settings.security.reverseProxy.status.untrusted_proxy_unverifiable.body', {
+                  peer,
+                })}
+              </p>
+            {:else}
+              <p class="mt-1">
+                {t('settings.security.reverseProxy.status.untrusted_proxy_unverifiable.bodyNoPeer')}
+              </p>
+            {/if}
+            <p class="mt-1">
+              {t('settings.security.reverseProxy.status.untrusted_proxy_unverifiable.fix')}
+            </p>
+          {/if}
+
+          {#if showChainHint}
+            <p class="mt-1 text-xs">
+              {t('settings.security.reverseProxy.check.chainHint', { peer })}
+            </p>
+          {/if}
+
+          {#if canTrustWithCloudflare}
+            <p class="mt-2 font-medium">
+              {t('settings.security.reverseProxy.check.cloudflareInFront', { peer })}
+            </p>
+          {/if}
+
+          {#if (canTrust || canTrustWithCloudflare) && trustApplied}
+            <p
+              bind:this={addedNote}
+              tabindex="-1"
+              class="mt-3 flex items-center gap-1.5 font-medium focus:outline-none"
+            >
+              <CircleCheck class="size-4 shrink-0 text-[var(--color-success)]" aria-hidden="true" />
+              {t('settings.security.reverseProxy.check.added')}
+            </p>
+          {:else if canTrust}
+            <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <button
+                type="button"
+                class="btn btn-primary btn-sm gap-1.5"
+                {disabled}
+                onclick={() => runAndFocusNote(onTrust)}
+              >
+                <ShieldCheck class="size-4" aria-hidden="true" />
+                {t('settings.security.reverseProxy.check.trust', { peer })}
+              </button>
+              <p class="text-xs">
+                {t('settings.security.reverseProxy.check.trustWarning', { peer })}
+              </p>
+            </div>
+          {:else if canTrustWithCloudflare}
+            <div class="mt-3">
+              <button
+                type="button"
+                class="btn btn-primary btn-sm gap-1.5"
+                {disabled}
+                onclick={() => runAndFocusNote(onTrustWithCloudflare)}
+              >
+                <ShieldCheck class="size-4" aria-hidden="true" />
+                {t('settings.security.reverseProxy.check.trustWithCloudflare', { peer })}
+              </button>
+            </div>
+          {/if}
+        {/snippet}
+      </ErrorAlert>
+    {/if}
+  </div>
+
+  {#if stale && !loading}
+    <p class="mt-3 flex items-start gap-1.5 text-xs text-muted">
+      <Info class="size-3.5 shrink-0 mt-px" aria-hidden="true" />
+      <span>{t('settings.security.reverseProxy.check.stale')}</span>
+    </p>
+  {/if}
+</section>
