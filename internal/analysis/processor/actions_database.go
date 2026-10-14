@@ -46,9 +46,7 @@ var errAudioExportDeferred = fmt.Errorf("audio export deferred until capture tai
 // the parameters a support log needs to explain the result on disk.
 //
 // It is resolved BEFORE the encoder runs, which is the point of the type: a
-// failed export can then name the encoder that failed. Otherwise an operator who
-// opted a format into its native encoder has no way to tell from the logs
-// which native encoder produced the failure.
+// failed export can then name the encoder that failed.
 type clipEncoding struct {
 	Encoder     string  // clipenc.NativeAAC, clipenc.NativeMP3, ...
 	GainDB      float64 // loudness gain the encoder applies to the clip
@@ -72,7 +70,7 @@ type clipEncoding struct {
 	// normalization enabled is a full-clip EBU R128 pass, which on a Pi with a
 	// 20-minute extended capture dominates the export; folding it into a single
 	// encode_ms blames the codec for normalization cost and makes both "exports
-	// are slow" and native-vs-FFmpeg comparisons read wrong.
+	// are slow" and codec comparisons read wrong.
 	MeasureMs int64 // wall time resolving the loudness gain (0 when normalization is off)
 	EncodeMs  int64 // wall time inside the encoder itself
 }
@@ -1415,7 +1413,7 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 // detection forever; keying by the pair (rather than assuming a fixed target) keeps
 // a future variable target from silencing a new pair.
 func (a *SaveAudioAction) resampleExportTo(srcRate, dstRate int, format string) int {
-	if isLossyNativeFormat(format) {
+	if conf.IsLossyExportFormat(format) {
 		a.pcmData = trimPartialSample(a.pcmData)
 	}
 	resampled, err := resample.ResampleBytes(a.pcmData, srcRate, dstRate)
@@ -1434,17 +1432,6 @@ func (a *SaveAudioAction) resampleExportTo(srcRate, dstRate int, format string) 
 	a.pcmData = resampled
 	a.sourceSampleRate = dstRate
 	return dstRate
-}
-
-// isLossyNativeFormat reports whether format is one of the lossy formats with a
-// native encoder and no fallback: AAC, MP3 and Opus.
-func isLossyNativeFormat(format string) bool {
-	switch format {
-	case ffmpeg.FormatAAC, ffmpeg.FormatMP3, ffmpeg.FormatOpus:
-		return true
-	default:
-		return false
-	}
 }
 
 // trimPartialSample drops a trailing partial frame (bytes that do not fill one

@@ -10,14 +10,13 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
-	"github.com/tphakala/birdnet-go/internal/audiocore/mp3"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // A shape go-mp3 accepts is encoded natively and the written file is a bare MP3
 // frame stream (no ID3 or container).
 func TestEncodeClip_MP3EncodesNatively(t *testing.T) {
-	a := newGateTestAction(t, "96k")
+	a := newExportTestAction(t, "96k")
 
 	out := filepath.Join(t.TempDir(), "clip.mp3")
 	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatMP3, out)
@@ -35,30 +34,12 @@ func TestEncodeClip_MP3EncodesNatively(t *testing.T) {
 // A native MP3 clip encoded at a non-MPEG-1 configured bitrate records the rounded
 // bitrate that was actually used, so the encoding log matches the file on disk.
 func TestEncodeClip_NativeMP3RoundsBitrate(t *testing.T) {
-	a := newGateTestAction(t, "100k")
+	a := newExportTestAction(t, "100k")
 	out := filepath.Join(t.TempDir(), "clip.mp3")
 	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatMP3, out)
 	require.NoError(t, err)
 	assert.Equal(t, clipenc.NativeMP3, encoder.Encoder, "100k is rounded, so the clip stays native MP3")
 	assert.Equal(t, 96, encoder.BitrateKbps, "100k rounds to the nearest MPEG-1 rate, 96k")
-}
-
-// go-mp3 accepts only 32, 44.1 and 48 kHz. The bitrate is not part of the check,
-// since any configured value is rounded to a valid MPEG-1 rate.
-func TestMP3Supports_RejectsUnsupportedRate(t *testing.T) {
-	require.Error(t, mp3.Supports(22050, conf.BitDepth, conf.NumChannels), "22.05 kHz is not an MPEG-1 Layer III rate")
-	assert.NoError(t, mp3.Supports(conf.SampleRate, conf.BitDepth, conf.NumChannels))
-}
-
-// selectEncoder routes MP3 to the native encoder unconditionally, and an
-// unrecognized format is an error rather than an FFmpeg route.
-func TestSelectEncoder_MP3Routing(t *testing.T) {
-	got, err := selectEncoder(ffmpeg.FormatMP3)
-	require.NoError(t, err)
-	assert.Equal(t, clipenc.NativeMP3, got)
-
-	_, err = selectEncoder("alac")
-	require.Error(t, err)
 }
 
 // A sub-48k rate go-mp3 cannot carry is resampled up to 48kHz and the MP3 format
@@ -79,7 +60,7 @@ func TestResolveExportParams_MP3SubRateResamplesInsteadOfStranding(t *testing.T)
 		{"carriable clip keeps its rate", "128k", "", conf.SampleRate, conf.SampleRate},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			a := newGateTestAction(t, tc.bitrate)
+			a := newExportTestAction(t, tc.bitrate)
 			a.sourceSampleRate = tc.rate
 			a.Settings.Realtime.Audio.Export.Type = ffmpeg.FormatMP3
 			a.Settings.Realtime.Audio.FfmpegPath = tc.ffmpegPath

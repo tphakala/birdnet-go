@@ -44,7 +44,7 @@ func persistMigration(settings *Settings, label string) {
 // integrations only in memory, and those disables must never reach disk.
 func (s *Settings) migrateEmptyLossyExportBitrate() bool {
 	export := &s.Realtime.Audio.Export
-	if !isLossyExportFormat(export.Type) || export.Bitrate != "" {
+	if !IsLossyExportFormat(export.Type) || export.Bitrate != "" {
 		return false
 	}
 	export.Bitrate = DefaultAudioExportBitrate

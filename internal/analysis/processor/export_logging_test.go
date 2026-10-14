@@ -80,8 +80,8 @@ func blockOutputPath(t *testing.T, exportDir, clipName string) {
 }
 
 // The success log is the primary support artefact for the clip export path. It
-// must name the encoder that produced the file, so a support log answers "native
-// or other" without the reader having to reconstruct it from the format and the
+// must name the encoder that produced the file, so a support log answers "which
+// encoder" without the reader having to reconstruct it from the format and the
 // operator's environment.
 func TestExecute_SuccessLogNamesNativeEncoder(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
@@ -366,8 +366,7 @@ func TestExecute_SuccessLogCarriesClampedBitrate(t *testing.T) {
 // The gap this change closes: a failed export used to leave nothing but the job
 // queue's own line ("Job failed permanently", or "Job scheduled for retry after
 // failure" on the attempts before it), which names neither the encoder nor the
-// format. An operator who opted AAC into the native encoder could not tell
-// which encoder produced the failure.
+// format, so the encoder behind a failure could not be told from the logs.
 func TestExecute_FailureLogNamesNativeEncoder(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()

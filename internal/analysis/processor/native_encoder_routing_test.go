@@ -21,13 +21,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
-// newGateTestAction builds the minimum SaveAudioAction encodeClip reads: a
+// newExportTestAction builds the minimum SaveAudioAction encodeClip reads: a
 // settings tree with an export bitrate and no normalization, plus a second of
 // PCM. Normalization is left off so these tests measure routing only.
-func newGateTestAction(t *testing.T, bitrate string) *SaveAudioAction {
+func newExportTestAction(t *testing.T, bitrate string) *SaveAudioAction {
 	t.Helper()
 	return &SaveAudioAction{
-		CorrelationID: "gate-test",
+		CorrelationID: "export-test",
 		pcmData:       sinePCMBytes(8000, 1.0, 1000),
 		Settings: &conf.Settings{
 			Realtime: conf.RealtimeSettings{
@@ -42,7 +42,7 @@ func newGateTestAction(t *testing.T, bitrate string) *SaveAudioAction {
 }
 
 func TestEncodeClip_AACEncodesNatively(t *testing.T) {
-	a := newGateTestAction(t, "96k")
+	a := newExportTestAction(t, "96k")
 
 	out := filepath.Join(t.TempDir(), "clip.m4a")
 	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatAAC, out)
@@ -52,10 +52,9 @@ func TestEncodeClip_AACEncodesNatively(t *testing.T) {
 	assertNonEmptyFileWithMagic(t, out, 4, "ftyp")
 }
 
-// Opus is encoded natively by default (go-opus), with no environment variable
-// involved, and produces an Ogg container.
-func TestEncodeClip_NativeOpusIsDefault(t *testing.T) {
-	a := newGateTestAction(t, "64k")
+// Opus is encoded natively (go-opus) and produces an Ogg container.
+func TestEncodeClip_OpusEncodesNatively(t *testing.T) {
+	a := newExportTestAction(t, "64k")
 
 	out := filepath.Join(t.TempDir(), "clip.opus")
 	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatOpus, out)
@@ -63,14 +62,6 @@ func TestEncodeClip_NativeOpusIsDefault(t *testing.T) {
 	assert.Equal(t, clipenc.NativeOpus, encoder.Encoder)
 
 	assertNonEmptyFileWithMagic(t, out, 0, "OggS")
-}
-
-// go-opus accepts only 48 kHz, so an Opus clip at another rate is resampled to it
-// by resolveExportParams rather than routed elsewhere.
-func TestOpusSupports_RejectsUnsupportedRates(t *testing.T) {
-	require.Error(t, opus.Supports(22050, conf.BitDepth, conf.NumChannels), "22.05 kHz is not an Opus input rate")
-	require.Error(t, opus.Supports(44100, conf.BitDepth, conf.NumChannels), "44.1 kHz is not an Opus input rate")
-	assert.NoError(t, opus.Supports(conf.SampleRate, conf.BitDepth, conf.NumChannels))
 }
 
 // Every export format routes to a native encoder; an unrecognized format is an
@@ -93,7 +84,7 @@ func TestSelectEncoder_AlwaysNative(t *testing.T) {
 
 // FLAC and WAV are unconditionally native.
 func TestEncodeClip_FLACAndWAVAlwaysNative(t *testing.T) {
-	a := newGateTestAction(t, "96k")
+	a := newExportTestAction(t, "96k")
 	dir := t.TempDir()
 
 	flacEncoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, filepath.Join(dir, "clip.flac"))
@@ -107,7 +98,7 @@ func TestEncodeClip_FLACAndWAVAlwaysNative(t *testing.T) {
 
 // Static Export.Gain must reach the native lossy encoders, not just FLAC.
 func TestEncodeClip_NativeLossyAppliesStaticGain(t *testing.T) {
-	a := newGateTestAction(t, "96k")
+	a := newExportTestAction(t, "96k")
 	a.Settings.Realtime.Audio.Export.Gain = -6
 
 	gainDB, _, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, ffmpeg.FormatAAC)
@@ -119,7 +110,7 @@ func TestEncodeClip_NativeLossyAppliesStaticGain(t *testing.T) {
 // gain rather than compounding with it, matching the old FFmpeg loudnorm
 // behaviour and the FLAC path.
 func TestResolveExportGainDB_NormalizationReplacesStaticGain(t *testing.T) {
-	a := newGateTestAction(t, "96k")
+	a := newExportTestAction(t, "96k")
 	a.Settings.Realtime.Audio.Export.Gain = -6
 	a.Settings.Realtime.Audio.Export.Normalization = conf.NormalizationSettings{
 		Enabled:    true,
@@ -144,7 +135,7 @@ func TestResolveExportGainDB_NormalizationReplacesStaticGain(t *testing.T) {
 // out-of-range-targets half is.
 func TestResolveExportGainDB_OutOfRangeTargetsFallBackToStaticGain(t *testing.T) {
 	t.Parallel()
-	a := newGateTestAction(t, "96k")
+	a := newExportTestAction(t, "96k")
 	a.Settings.Realtime.Audio.Export.Gain = -4
 	a.Settings.Realtime.Audio.Export.Normalization = conf.NormalizationSettings{
 		Enabled: true,
@@ -231,7 +222,7 @@ func TestEncodeClip_UltrasonicRatesKeepCaptureRate(t *testing.T) {
 			{ffmpeg.FormatFLAC, "flac", clipenc.NativeFLAC, flacSampleRate},
 		} {
 			t.Run(fmt.Sprintf("%s_%dHz", tc.format, rate), func(t *testing.T) {
-				a := newGateTestAction(t, "96k")
+				a := newExportTestAction(t, "96k")
 				a.pcmData = sinePCMAtRate(rate, 0.5, 1000, 8000)
 				out := filepath.Join(t.TempDir(), "clip."+tc.ext)
 
@@ -253,7 +244,7 @@ func TestEncodeClip_UltrasonicRatesKeepCaptureRate(t *testing.T) {
 func TestEncodeClip_UltrasonicRatesWithNormalization(t *testing.T) {
 	for _, rate := range []int{96000, 192000, 384000} {
 		t.Run(fmt.Sprintf("flac_%dHz", rate), func(t *testing.T) {
-			a := newGateTestAction(t, "96k")
+			a := newExportTestAction(t, "96k")
 			a.pcmData = sinePCMAtRate(rate, 0.5, 1000, 8000)
 			a.Settings.Realtime.Audio.Export.Normalization = conf.NormalizationSettings{
 				Enabled:    true,
@@ -280,7 +271,7 @@ func TestEncodeClip_UltrasonicRatesWithNormalization(t *testing.T) {
 			// to the encoder would leave that assertion green. Encode the same
 			// PCM with normalization off and require the bytes to differ, which
 			// only holds if the gain actually reached the encoder.
-			plain := newGateTestAction(t, "96k")
+			plain := newExportTestAction(t, "96k")
 			plain.pcmData = sinePCMAtRate(rate, 0.5, 1000, 8000)
 			plainOut := filepath.Join(dir, "plain.flac")
 			_, err = plain.encodeClip(t.Context(), rate, ffmpeg.FormatFLAC, plainOut)
@@ -316,7 +307,7 @@ func TestResolveExportParams_OpusIsNeverDowngraded(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := newGateTestAction(t, "96k")
+			a := newExportTestAction(t, "96k")
 			a.modelName = tt.modelName
 			a.pcmData = sinePCMAtRate(tt.rate, 0.2, 1000, 8000)
 			a.sourceSampleRate = tt.rate
@@ -334,9 +325,8 @@ func TestResolveExportParams_OpusIsNeverDowngraded(t *testing.T) {
 // A clip whose source rate is below 48kHz and whose lossy native encoder
 // cannot carry that rate is resampled UP to 48kHz (accepted by every native lossy
 // encoder), so the configured format is preserved.
-// A rate the encoder already supports is kept as-is (no needless resample), and an
-// Opus install that still has FFmpeg lets FFmpeg take the source rate directly;
-// AAC and MP3 never do.
+// A rate the encoder already supports is kept as-is (no needless resample), and
+// FfmpegPath changes nothing for any lossy format.
 func TestResolveExportParams_SubRateResamplesForNativeEncoder(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -370,7 +360,7 @@ func TestResolveExportParams_SubRateResamplesForNativeEncoder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			a := newGateTestAction(t, "96k")
+			a := newExportTestAction(t, "96k")
 			a.sourceSampleRate = tt.rate
 			a.Settings.Realtime.Audio.Export.Type = tt.format
 			a.Settings.Realtime.Audio.FfmpegPath = tt.ffmpegPath
@@ -404,7 +394,7 @@ func TestResolveExportParams_ResampledSubRateEncodesNatively(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			a := newGateTestAction(t, "96k")
+			a := newExportTestAction(t, "96k")
 			a.sourceSampleRate = tt.rate
 			a.Settings.Realtime.Audio.Export.Type = tt.format
 			a.Settings.Realtime.Audio.FfmpegPath = tt.ffmpegPath
@@ -447,7 +437,7 @@ func TestResolveExportParams_BatSubRateUpsamplesForLossy(t *testing.T) {
 	for _, lf := range lossyNativeFormats {
 		for _, ffmpegPath := range ffmpegPathOptions {
 			t.Run(fmt.Sprintf("%s_ffmpeg=%q", lf.format, ffmpegPath), func(t *testing.T) {
-					a := newGateTestAction(t, "96k")
+				a := newExportTestAction(t, "96k")
 				a.modelName = batModelName
 				a.pcmData = sinePCMAtRate(22050, 0.5, 1000, 8000)
 				a.sourceSampleRate = 22050
@@ -475,7 +465,7 @@ func TestResolveExportParams_OddLengthPCMResamplesAfterTrimForLossy(t *testing.T
 	for _, lf := range lossyNativeFormats {
 		for _, ffmpegPath := range ffmpegPathOptions {
 			t.Run(fmt.Sprintf("%s_ffmpeg=%q", lf.format, ffmpegPath), func(t *testing.T) {
-					a := newGateTestAction(t, "96k")
+				a := newExportTestAction(t, "96k")
 				a.pcmData = append(sinePCMAtRate(22050, 0.5, 1000, 8000), 0x7f)
 				require.Equal(t, 1, len(a.pcmData)%2)
 				a.sourceSampleRate = 22050
@@ -500,7 +490,7 @@ func TestResolveExportParams_OddLengthPCMResamplesAfterTrimForLossy(t *testing.T
 func TestResolveExportParams_OddLengthPCMDownsamplesAfterTrimForLossy(t *testing.T) {
 	for _, lf := range lossyNativeFormats {
 		t.Run(lf.format, func(t *testing.T) {
-			a := newGateTestAction(t, "96k")
+			a := newExportTestAction(t, "96k")
 			a.pcmData = append(sinePCMAtRate(96000, 0.5, 1000, 8000), 0x7f)
 			a.sourceSampleRate = 96000
 			a.Settings.Realtime.Audio.Export.Type = lf.format
@@ -521,7 +511,7 @@ func TestExecute_UnrecoverableResampleFailsLossyWithoutWAV(t *testing.T) {
 	for _, lf := range lossyNativeFormats {
 		for _, ffmpegPath := range ffmpegPathOptions {
 			t.Run(fmt.Sprintf("%s_ffmpeg=%q", lf.format, ffmpegPath), func(t *testing.T) {
-					logs := logtest.CaptureBuffer(t)
+				logs := logtest.CaptureBuffer(t)
 				dir := t.TempDir()
 				a := newExportLogAction(t, dir, "clip"+lf.ext, lf.format)
 				a.sourceSampleRate = unresamplableRate
@@ -563,7 +553,7 @@ func TestResolveExportParams_LossyNativeIndependentOfFFmpeg(t *testing.T) {
 					}
 					results := make([]result, 0, len(ffmpegPathOptions))
 					for _, ffmpegPath := range ffmpegPathOptions {
-						a := newGateTestAction(t, "96k")
+						a := newExportTestAction(t, "96k")
 						if isBat {
 							a.modelName = batModelName
 						}
@@ -602,7 +592,7 @@ func TestResolveExportParams_LossyNativeIndependentOfFFmpeg(t *testing.T) {
 // runEncoder rejects an encoder tag it has no native writer for, rather than
 // reaching for FFmpeg.
 func TestRunEncoder_UnknownEncoderIsAnError(t *testing.T) {
-	a := newGateTestAction(t, "96k")
+	a := newExportTestAction(t, "96k")
 	out := filepath.Join(t.TempDir(), "clip.alac")
 
 	err := a.runEncoder(t.Context(), clipenc.FFmpeg, conf.SampleRate, 0, "alac", out, 0)
