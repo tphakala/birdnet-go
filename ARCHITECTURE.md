@@ -588,7 +588,7 @@ Audio Source → Capture → Buffer → Analyze → Detect → Store → Notify
 FFmpeg is used for:
 
 - **RTSP Stream Ingestion**: Capturing audio from IP cameras and network streams
-- **Spectrograms**: Checking each clip with ffprobe before an on-demand spectrogram is drawn, and rendering clips in formats the installed SoX cannot read or when SoX fails
+- **Spectrograms**: Checking a stored clip with ffprobe before its on-demand spectrogram is drawn, and rendering clips in formats the installed SoX cannot read or when SoX fails
 
 On-demand clip downloads, the denoise, normalize and gain preview, and audible-bats playback in the web interface do not use FFmpeg. `internal/audiocore/transcode` decodes WAV, FLAC, MP3, AAC (M4A and ADTS) and Opus natively, denoises with the go-audio-dsp `denoiser`, normalizes with `internal/audiocore/audionorm`, applies gain with `internal/audiocore/pcmgain`, and encodes WAV, FLAC, MP3, AAC and Opus with the same native encoders clip export uses. A clip whose sample rate the lossy encoder cannot carry is resampled to 48 kHz first. HE-AAC sources cannot be decoded and are reported as unprocessable.
 
