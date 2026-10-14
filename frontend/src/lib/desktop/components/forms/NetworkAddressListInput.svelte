@@ -98,12 +98,20 @@
     'ip-or-cidr': 'ipOrCidr',
   } as const satisfies Record<NetworkAddressMode, string>;
 
-  /** The report of the last add: its message lines and whether any token was invalid. */
+  /**
+   * The report of the last add: its message lines, whether any token was invalid, the
+   * draft it left behind and the list the add produced. It is shown only while the draft
+   * equals that draft and the list equals that list, so any other change from outside
+   * (a Reset that clears the draft or restores the saved list) hides it.
+   */
   interface AddReport {
     messages: string[];
     hasInvalid: boolean;
+    draft: string;
+    list: string;
   }
-  const EMPTY_REPORT: AddReport = { messages: [], hasInvalid: false };
+  const EMPTY_REPORT: AddReport = { messages: [], hasInvalid: false, draft: '', list: '' };
+  const LIST_KEY_SEPARATOR = '\n';
 
   const baseId = generateId('network-address-list');
   let inputId = $derived(id ?? `${baseId}-input`);
@@ -116,8 +124,13 @@
   let listElement = $state<HTMLUListElement>();
   /** Report of the last add; cleared when the text changes. */
   let report = $state<AddReport>(EMPTY_REPORT);
-  let messages = $derived(report.messages);
-  let hasInvalidTokens = $derived(report.hasInvalid);
+  let reportCurrent = $derived(
+    report.messages.length > 0 &&
+      report.draft === draft &&
+      report.list === values.join(LIST_KEY_SEPARATOR)
+  );
+  let messages = $derived(reportCurrent ? report.messages : EMPTY_REPORT.messages);
+  let hasInvalidTokens = $derived(reportCurrent && report.hasInvalid);
 
   let modeKey = $derived(MODE_KEYS[accept]);
   let hasPending = $derived(draft.trim() !== '');
@@ -184,6 +197,7 @@
       }
     }
 
+    const after = [...values, ...added].join(LIST_KEY_SEPARATOR);
     if (added.length > 0) onUpdate([...values, ...added]);
 
     const lines: string[] = [];
@@ -211,7 +225,12 @@
     }
 
     draft = [...invalid, ...overLimit].join(PASTE_SEPARATOR);
-    report = { messages: lines, hasInvalid: invalid.length > 0 };
+    report = {
+      messages: lines,
+      hasInvalid: invalid.length > 0,
+      draft,
+      list: after,
+    };
   }
 
   // The Add button turns disabled once the input is empty, which would drop focus to
