@@ -454,8 +454,26 @@ func TestDecode_RejectsHugeOrNonFiniteWindow(t *testing.T) {
 	_, err := decode(t.Context(), path, &window{Start: 1e18, Duration: 1}, 0)
 	require.ErrorIs(t, err, ErrEmptyRange, "an astronomically late start is simply past the end")
 
-	_, err = decode(t.Context(), path, &window{Start: 0, Duration: 1e12}, 0)
+	// A window longer than the cap is rejected when the audio it covers is too.
+	const capBytes = testRate // half a second of mono 16-bit audio
+	_, err = decode(t.Context(), path, &window{Start: 0, Duration: 1}, capBytes)
 	require.ErrorIs(t, err, ErrAudioTooLong)
+}
+
+func TestDecode_WindowPastEndOfHighRateSourceIsClamped(t *testing.T) {
+	t.Parallel()
+
+	const (
+		rate     = 192000
+		capBytes = rate * 2 * 2 // two seconds of mono 16-bit audio
+	)
+	path := filepath.Join(t.TempDir(), "short.wav")
+	writeWAVFile(t, path, tone(rate, 1, 0.5, testToneHz, testAmp), rate, 1)
+
+	// Ten seconds asked for, half a second exists: the clamped length fits the cap.
+	pcm, err := decode(t.Context(), path, &window{Start: 0, Duration: 10}, capBytes)
+	require.NoError(t, err, "a window longer than the cap must be clamped to the audio that exists first")
+	assert.Equal(t, rate/2, pcm.Frames())
 }
 
 // zeroReader returns data forever.

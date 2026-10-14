@@ -140,16 +140,19 @@ func decodeSource(ctx context.Context, src *source, win *window, fileSize int64,
 		if start > maxWindowFrames {
 			return nil, wrapSentinel(ErrEmptyRange, nil, "decode_window", "start is beyond the end of the audio", errors.CategoryValidation)
 		}
-		if length > float64(maxFrames) {
-			return nil, wrapSentinel(ErrAudioTooLong, nil, "decode_window", "requested range exceeds the decoded size limit", errors.CategoryLimit)
-		}
-		startFrame, wantFrames = int64(start), max(int64(length), 1)
+		startFrame = int64(start)
 		if src.totalFrames >= 0 {
 			if startFrame >= src.totalFrames {
 				return nil, wrapSentinel(ErrEmptyRange, nil, "decode_window", "start is beyond the end of the audio", errors.CategoryValidation)
 			}
-			wantFrames = min(wantFrames, src.totalFrames-startFrame)
+			// Clamp to the audio that exists before the cap check, so a window longer
+			// than the cap that reaches past a short source is still served.
+			length = min(length, float64(src.totalFrames-startFrame))
 		}
+		if length > float64(maxFrames) {
+			return nil, wrapSentinel(ErrAudioTooLong, nil, "decode_window", "requested range exceeds the decoded size limit", errors.CategoryLimit)
+		}
+		wantFrames = max(int64(length), 1)
 	} else if src.totalFrames >= 0 {
 		// A header can declare more frames than any buffer holds; one frame past
 		// the cap is enough to detect an overlong source and keeps the byte
