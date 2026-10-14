@@ -13,14 +13,12 @@ import (
 	aaccodec "github.com/tphakala/go-aac"
 	m4a "github.com/tphakala/go-m4a"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
-	// m4aWindowFrames is the length of the windows in the seek table, shorter than
-	// the file so the window sits well inside it.
-	m4aWindowFrames = 3000
 	// m4aMidFileFrame is a start well after the pre-roll of any early unit.
 	m4aMidFileFrame = 40000
 	// noisyM4AWindowSeconds is the length of the noisy-window clip.
@@ -33,8 +31,6 @@ const (
 	noisyM4ANoiseAmp  = 0.2
 	noisyM4AToneAmp   = 0.2
 	noisyM4ASeed      = 11
-	// m4aTailOverrunFrames is how far before the end the overrunning window starts.
-	m4aTailOverrunFrames = 100
 	// hugeEncoderDelay is the largest media_time a version 0 edit list can carry.
 	hugeEncoderDelay = math.MaxInt32
 )
@@ -50,36 +46,20 @@ func m4aInfoOf(t *testing.T, path string) m4a.Info {
 	return rd.Info()
 }
 
-// openTestSource opens path and its decoder, closing the file when the test ends.
-func openTestSource(t *testing.T, path string) *source {
-	t.Helper()
-	f, err := os.Open(path) //nolint:gosec // G304: a test fixture path
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, f.Close()) })
-	src, err := openSource(f, path)
-	require.NoError(t, err)
-	return src
-}
-
 // cleanM4ABytes writes a mono tone as m4a and returns the file's bytes.
 func cleanM4ABytes(t *testing.T) []byte {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "clean.m4a")
-	writeM4AFile(t, path, tone(testRate, 1, testSeconds, testToneHz, testAmp), testRate)
-	data, err := os.ReadFile(path) //nolint:gosec // G304: a test fixture path
-	require.NoError(t, err)
-	return data
+	writeEncoded(t, audioformat.AAC, lossyBitrateKbps, path, tone(testRate, 1, testSeconds, testToneHz, testAmp), testRate)
+	return readFile(t, path)
 }
 
 func TestDecode_M4AWindowsMatchTheLinearDecode(t *testing.T) {
 	t.Parallel()
 
-	path, _ := writeFixture(t, fixture{ext: ".m4a", write: writeM4AFile}, testRate, testSeconds)
+	path, _ := writeFixture(t, fixtureNamed(t, "m4a"), testRate, testSeconds)
 	delay := m4aInfoOf(t, path).EncoderDelay
-
-	whole, err := decode(t.Context(), path, nil, 0)
-	require.NoError(t, err)
-	total := int64(whole.Frames())
+	total := int64(decodedFrames(t, path))
 
 	// Positions in the decoder's output (priming included), converted to window
 	// starts. They cover a start inside the first access units, exact unit
@@ -101,26 +81,7 @@ func TestDecode_M4AWindowsMatchTheLinearDecode(t *testing.T) {
 		}
 	}
 	starts = append(starts, total-1)
-
-	for _, start := range starts {
-		req := &window{Start: float64(start) / testRate, Duration: float64(m4aWindowFrames) / testRate}
-		frames := min(m4aWindowFrames, total-start)
-		want := whole.Data[start*bytesPerSample : (start+frames)*bytesPerSample]
-
-		win, err := decode(t.Context(), path, req, 0)
-		require.NoErrorf(t, err, "start %d", start)
-		assert.Truef(t, bytes.Equal(want, win.Data), "start %d: the window must equal the matching slice of the whole decode (got %d frames, want %d)", start, win.Frames(), len(want)/bytesPerSample)
-
-		again, err := decode(t.Context(), path, req, 0)
-		require.NoError(t, err)
-		assert.Truef(t, bytes.Equal(win.Data, again.Data), "start %d: a repeated request must return identical bytes", start)
-	}
-
-	// A window reaching past the end is shortened to the audio that exists.
-	start := total - m4aTailOverrunFrames
-	win, err := decode(t.Context(), path, &window{Start: float64(start) / testRate, Duration: 1}, 0)
-	require.NoError(t, err)
-	assert.True(t, bytes.Equal(whole.Data[start*bytesPerSample:], win.Data))
+	assertWindowsMatchLinear(t, path, starts)
 }
 
 // patchEncoderDelay rewrites the media_time of the first version 0 elst entry.
@@ -164,17 +125,17 @@ func TestDecode_M4ANoisyWindowWithinPNSTolerance(t *testing.T) {
 
 	src := noisePlusTone(noisyM4ASeed, testRate, int(noisyM4AWindowSeconds*testRate), 0, noisyM4ANoiseAmp, noisyM4AToneAmp)
 	path := filepath.Join(t.TempDir(), "noisy.m4a")
-	writeM4AFile(t, path, src, testRate)
+	writeEncoded(t, audioformat.AAC, lossyBitrateKbps, path, src, testRate)
 
 	whole, err := decode(t.Context(), path, nil, 0)
 	require.NoError(t, err)
 
 	const start = m4aMidFileFrame
-	win, err := decode(t.Context(), path, &window{Start: float64(start) / testRate, Duration: float64(m4aWindowFrames) / testRate}, 0)
+	win, err := decode(t.Context(), path, &window{Start: float64(start) / testRate, Duration: float64(seekWindowFrames) / testRate}, 0)
 	require.NoError(t, err)
-	require.Equal(t, m4aWindowFrames, win.Frames(), "the window length is exact")
+	require.Equal(t, seekWindowFrames, win.Frames(), "the window length is exact")
 
-	want := bytesInt16(whole.Data[start*bytesPerSample : (start+m4aWindowFrames)*bytesPerSample])
+	want := bytesInt16(whole.Data[start*bytesPerSample : (start+seekWindowFrames)*bytesPerSample])
 	got := bytesInt16(win.Data)
 	assert.GreaterOrEqual(t, correlation(want, got), pnsMinCorrelation, "correlation with the linear decode")
 	assert.InDelta(t, 0, 20*math.Log10(convert.CalculateRMSFloat64(channelOf(got, 1, 0))/convert.CalculateRMSFloat64(channelOf(want, 1, 0))), pnsMaxLevelDiffDB, "level against the linear decode")

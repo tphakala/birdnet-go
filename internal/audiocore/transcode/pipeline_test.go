@@ -23,7 +23,7 @@ func TestExtractClip_EndToEnd(t *testing.T) {
 		end        = 2.5
 	)
 	path := filepath.Join(t.TempDir(), "src.flac")
-	writeFLACFile(t, path, noisyTone(testRate)[:int(srcSeconds*testRate)], testRate)
+	writeEncoded(t, audioformat.FLAC, 0, path, noisyTone(testRate)[:int(srcSeconds*testRate)], testRate)
 
 	ext := map[string]string{"wav": ".wav", "flac": ".flac", "mp3": ".mp3", "aac": ".m4a", "opus": ".opus"}
 	filterSets := map[string]Filters{
@@ -122,7 +122,7 @@ func TestProcessToWAV(t *testing.T) {
 
 	const rate = 44100
 	path := filepath.Join(t.TempDir(), "x.flac")
-	writeFLACFile(t, path, noisyTone(rate), rate)
+	writeEncoded(t, audioformat.FLAC, 0, path, noisyTone(rate), rate)
 
 	data, err := ProcessToWAV(t.Context(), path, Filters{Denoise: "light", Normalize: true, GainDB: 1})
 	require.NoError(t, err)

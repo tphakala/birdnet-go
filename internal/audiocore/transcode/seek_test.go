@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -33,17 +32,7 @@ const (
 	// opusMinAudioPages is the number of audio pages the Opus window test needs to
 	// have starts past the first page.
 	opusMinAudioPages = 3
-	// opusTailOverrunFrames is how far before the end the overrunning window starts.
-	opusTailOverrunFrames = 100
 )
-
-// readFile returns the bytes of the file at path.
-func readFile(t *testing.T, path string) []byte {
-	t.Helper()
-	data, err := os.ReadFile(path) //nolint:gosec // G304: a test fixture path
-	require.NoError(t, err)
-	return data
-}
 
 // Every clip format with a seek positions a window with it: one seek call for a
 // start after frame 0, none for a start at frame 0. Opus has no seek and is
@@ -107,11 +96,9 @@ func TestDecodeSource_WindowsAfterFrameZeroSeek(t *testing.T) {
 func TestDecode_OpusWindowsMatchTheLinearDecode(t *testing.T) {
 	t.Parallel()
 
-	path, _ := writeFixture(t, fixture{ext: ".opus", write: writeOpusFile}, testRate, seekClipSeconds)
+	path, _ := writeFixture(t, fixtureNamed(t, "opus"), testRate, seekClipSeconds)
 	assert.Nil(t, openTestSource(t, path).seek, "Opus windows are positioned by discarding")
-	whole, err := decode(t.Context(), path, nil, 0)
-	require.NoError(t, err)
-	total := int64(whole.Frames())
+	total := int64(decodedFrames(t, path))
 
 	pageEnds := opusPageEnds(t, readFile(t, path), total)
 	require.GreaterOrEqual(t, len(pageEnds), opusMinAudioPages)
@@ -123,32 +110,14 @@ func TestDecode_OpusWindowsMatchTheLinearDecode(t *testing.T) {
 		b1 + opusPreRollFrames - 1, b1 + opusPreRollFrames, b1 + opusPreRollFrames + 1,
 		b2 + opusPreRollFrames, total / 2, total - 1,
 	}
-	for _, start := range starts {
-		req := &window{Start: float64(start) / testRate, Duration: float64(seekWindowFrames) / testRate}
-		frames := min(seekWindowFrames, total-start)
-		want := whole.Data[start*bytesPerSample : (start+frames)*bytesPerSample]
-
-		win, err := decode(t.Context(), path, req, 0)
-		require.NoErrorf(t, err, "start %d", start)
-		assert.Truef(t, bytes.Equal(want, win.Data), "start %d: the window must equal the matching slice of the whole decode (got %d frames, want %d)", start, win.Frames(), frames)
-
-		again, err := decode(t.Context(), path, req, 0)
-		require.NoError(t, err)
-		assert.Truef(t, bytes.Equal(win.Data, again.Data), "start %d: a repeated request must return identical bytes", start)
-	}
-
-	// A window reaching past the end returns exactly the tail.
-	start := total - opusTailOverrunFrames
-	win, err := decode(t.Context(), path, &window{Start: float64(start) / testRate, Duration: 1}, 0)
-	require.NoError(t, err)
-	assert.True(t, bytes.Equal(whole.Data[start*bytesPerSample:], win.Data))
+	assertWindowsMatchLinear(t, path, starts)
 }
 
 // A stream go-opus cannot index keeps an unknown length.
 func TestOpenOpus_TruncatedStreamKeepsLengthUnknown(t *testing.T) {
 	t.Parallel()
 
-	path, _ := writeFixture(t, fixture{ext: ".opus", write: writeOpusFile}, testRate, seekClipSeconds)
+	path, _ := writeFixture(t, fixtureNamed(t, "opus"), testRate, seekClipSeconds)
 	data := readFile(t, path)
 	firstAudio := oggPages(data)[opusHeaderPages]
 	cut := filepath.Join(t.TempDir(), "cut.opus")
@@ -162,7 +131,7 @@ func TestOpenOpus_TruncatedStreamKeepsLengthUnknown(t *testing.T) {
 func TestOpenOpus_TotalFramesComeFromLength(t *testing.T) {
 	t.Parallel()
 
-	path, _ := writeFixture(t, fixture{ext: ".opus", write: writeOpusFile}, testRate, seekClipSeconds)
+	path, _ := writeFixture(t, fixtureNamed(t, "opus"), testRate, seekClipSeconds)
 	whole, err := decode(t.Context(), path, nil, 0)
 	require.NoError(t, err)
 

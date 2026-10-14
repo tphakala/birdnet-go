@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -12,13 +14,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	aacpcm "github.com/tphakala/go-aac/pcm"
-	flac "github.com/tphakala/go-flac"
 	m4a "github.com/tphakala/go-m4a"
-	mp3 "github.com/tphakala/go-mp3"
-	wav "github.com/tphakala/go-wav"
 	wavpcm "github.com/tphakala/go-wav/pcm"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -70,7 +69,7 @@ func TestDecode_M4ATrimsPrimingAndPadding(t *testing.T) {
 
 	src := burst(testRate, 1, testSeconds)
 	path := filepath.Join(t.TempDir(), "burst.m4a")
-	writeM4AFile(t, path, src, testRate)
+	writeEncoded(t, audioformat.AAC, lossyBitrateKbps, path, src, testRate)
 
 	pcm, err := decode(t.Context(), path, nil, 0)
 	require.NoError(t, err)
@@ -154,30 +153,55 @@ func TestDecodeAtLeast_RejectsALowRateFromTheHeader(t *testing.T) {
 }
 
 // A library error is a corrupt or truncated file, never an unsupported one, and
-// the cause stays in the chain.
-func TestDecodeError_WrapsUndecodable(t *testing.T) {
+// the cause stays in the chain. A failed read of the file itself is a server
+// fault: no sentinel, the file I/O category.
+func TestDecodeError_Classification(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name string
-		err  error
-	}{
-		{name: "unexpected eof", err: io.ErrUnexpectedEOF},
-		{name: "aac unsupported", err: aacpcm.ErrUnsupported},
-		{name: "m4a unsupported", err: m4a.ErrUnsupported},
-		{name: "m4a box too large", err: m4a.ErrBoxTooLarge},
-		{name: "wav unsupported", err: wav.ErrUnsupported},
-		{name: "flac unsupported", err: flac.ErrUnsupported},
-		{name: "mp3 unsupported", err: mp3.ErrUnsupported},
-		{name: "m4a corrupt", err: m4a.ErrCorrupt},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for name, cause := range map[string]error{
+		"unexpected eof":   io.ErrUnexpectedEOF,
+		"library sentinel": m4a.ErrUnsupported,
+	} {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got := decodeError("test", tt.err)
+			got := decodeError("test", cause)
 			require.ErrorIs(t, got, ErrUndecodableSource)
 			assert.False(t, errors.Is(got, ErrUnsupportedSource), "a library error is not an unsupported source")
-			require.ErrorIs(t, got, tt.err, "the decoder error stays in the chain")
+			require.ErrorIs(t, got, cause, "the decoder error stays in the chain")
+		})
+	}
+
+	t.Run("file read failure", func(t *testing.T) {
+		t.Parallel()
+		cause := &fs.PathError{Op: "read", Path: "clip.wav", Err: io.ErrClosedPipe}
+		got := decodeError("test", fmt.Errorf("decoder: %w", cause))
+		assert.False(t, errors.Is(got, ErrUndecodableSource), "a disk fault is not a damaged clip")
+		require.ErrorIs(t, got, cause)
+		enhanced, ok := errors.AsType[*errors.EnhancedError](got)
+		require.True(t, ok)
+		assert.Equal(t, errors.CategoryFileIO, enhanced.Category)
+	})
+}
+
+// Opening a clip through a closed file reports the read failure of the file, not
+// a damaged clip.
+func TestOpenSource_ClosedFileIsAFileIOError(t *testing.T) {
+	t.Parallel()
+
+	for _, fx := range fixtures() {
+		t.Run(fx.name, func(t *testing.T) {
+			t.Parallel()
+			path, _ := writeFixture(t, fx, testRate, 0.5)
+			f, err := os.Open(path) //nolint:gosec // G304: a test fixture path
+			require.NoError(t, err)
+			require.NoError(t, f.Close())
+
+			_, err = openSource(f, path)
+			require.Error(t, err)
+			assert.False(t, errors.Is(err, ErrUndecodableSource))
+			enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+			require.True(t, ok)
+			assert.Equal(t, errors.CategoryFileIO, enhanced.Category)
 		})
 	}
 }
@@ -187,14 +211,12 @@ func TestDecode_CorruptAndTruncatedInputs(t *testing.T) {
 
 	dir := t.TempDir()
 	good := filepath.Join(dir, "good.flac")
-	writeFLACFile(t, good, tone(testRate, 1, 1, testToneHz, testAmp), testRate)
-	goodBytes, err := os.ReadFile(good)
-	require.NoError(t, err)
+	writeEncoded(t, audioformat.FLAC, 0, good, tone(testRate, 1, 1, testToneHz, testAmp), testRate)
+	goodBytes := readFile(t, good)
 
 	m4aGood := filepath.Join(dir, "good.m4a")
-	writeM4AFile(t, m4aGood, tone(testRate, 1, 1, testToneHz, testAmp), testRate)
-	m4aBytes, err := os.ReadFile(m4aGood)
-	require.NoError(t, err)
+	writeEncoded(t, audioformat.AAC, lossyBitrateKbps, m4aGood, tone(testRate, 1, 1, testToneHz, testAmp), testRate)
+	m4aBytes := readFile(t, m4aGood)
 
 	tests := []struct {
 		name string
@@ -389,7 +411,7 @@ func TestDecode_OpusWindowPastEndOfShortSourceIsClamped(t *testing.T) {
 		capBytes = testRate * bytesPerSample / 2 // half a second of mono 16-bit audio
 	)
 	path := filepath.Join(t.TempDir(), "short.opus")
-	writeOpusFile(t, path, tone(testRate, 1, seconds, testToneHz, testAmp), testRate)
+	writeEncoded(t, audioformat.Opus, opusBitrateKbps, path, tone(testRate, 1, seconds, testToneHz, testAmp), testRate)
 	whole, err := decode(t.Context(), path, nil, 0)
 	require.NoError(t, err)
 
@@ -430,7 +452,7 @@ func TestDecode_CancelledContext(t *testing.T) {
 	t.Run("decode returns the context error", func(t *testing.T) {
 		t.Parallel()
 		path := filepath.Join(t.TempDir(), "x.opus")
-		writeOpusFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate)
+		writeEncoded(t, audioformat.Opus, opusBitrateKbps, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate)
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		_, err := decode(ctx, path, &window{Start: 0.5, Duration: 0.2}, 0)

@@ -1,19 +1,18 @@
 package transcode
 
 import (
+	"bytes"
 	"encoding/binary"
 	"math"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
-	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
-	"github.com/tphakala/birdnet-go/internal/audiocore/mp3"
-	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
 )
 
 const (
@@ -25,6 +24,8 @@ const (
 
 	// lossyBitrateKbps is the bit rate of the lossy fixtures, in kbit/s.
 	lossyBitrateKbps = 128
+	// opusBitrateKbps is the bit rate of the Opus fixtures, in kbit/s.
+	opusBitrateKbps = 96
 	// bitsPerKilobit converts lossyBitrateKbps to bit/s.
 	bitsPerKilobit = 1000
 
@@ -112,36 +113,23 @@ func writeWAVFile(t *testing.T, path string, samples []int16, rate int) {
 	require.NoError(t, convert.SavePCMDataToWAV(path, int16Bytes(samples), rate, outputBitDepth))
 }
 
-// writeFLACFile writes mono 16-bit samples as FLAC through the production encoder.
-func writeFLACFile(t *testing.T, path string, samples []int16, rate int) {
+// writeEncoded writes mono 16-bit samples to path through the native encoder
+// clip export uses for format. bitrateKbps is ignored by lossless formats.
+func writeEncoded(t *testing.T, format string, bitrateKbps int, path string, samples []int16, rate int) {
 	t.Helper()
-	require.NoError(t, flac.EncodePCM(t.Context(), &flac.Options{
-		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: 1, BitDepth: outputBitDepth,
+	encode, ok := fileEncoders[format]
+	require.Truef(t, ok, "no file encoder for %s", format)
+	require.NoError(t, encode(t.Context(), &fileEncodeOptions{
+		data: int16Bytes(samples), outputPath: path, sampleRate: rate, channels: 1, bitrateKbps: bitrateKbps,
 	}))
 }
 
-// writeM4AFile writes samples as AAC-LC in MP4 through the production encoder.
-func writeM4AFile(t *testing.T, path string, samples []int16, rate int) {
-	t.Helper()
-	require.NoError(t, aac.EncodePCM(t.Context(), &aac.Options{
-		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: 1, BitDepth: 16, BitrateKbps: lossyBitrateKbps,
-	}))
-}
-
-// writeMP3File writes samples as MP3 through the production encoder.
-func writeMP3File(t *testing.T, path string, samples []int16, rate int) {
-	t.Helper()
-	require.NoError(t, mp3.EncodePCM(t.Context(), &mp3.Options{
-		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: 1, BitDepth: 16, BitrateKbps: lossyBitrateKbps,
-	}))
-}
-
-// writeOpusFile writes samples as Ogg Opus through the production encoder.
-func writeOpusFile(t *testing.T, path string, samples []int16, rate int) {
-	t.Helper()
-	require.NoError(t, opus.EncodePCM(t.Context(), &opus.Options{
-		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: 1, BitDepth: 16, BitrateKbps: 96,
-	}))
+// encodedWriter returns a fixture writer for a format written by writeEncoded.
+func encodedWriter(format string, bitrateKbps int) func(*testing.T, string, []int16, int) {
+	return func(t *testing.T, path string, samples []int16, rate int) {
+		t.Helper()
+		writeEncoded(t, format, bitrateKbps, path, samples, rate)
+	}
 }
 
 // fixture describes one writable source format.
@@ -157,11 +145,23 @@ type fixture struct {
 func fixtures() []fixture {
 	return []fixture{
 		{name: "wav", ext: ".wav", write: writeWAVFile, lossless: true},
-		{name: "flac", ext: ".flac", write: writeFLACFile, lossless: true},
-		{name: "mp3", ext: ".mp3", write: writeMP3File},
-		{name: "m4a", ext: ".m4a", write: writeM4AFile},
-		{name: "opus", ext: ".opus", write: writeOpusFile},
+		{name: "flac", ext: ".flac", write: encodedWriter(audioformat.FLAC, 0), lossless: true},
+		{name: "mp3", ext: ".mp3", write: encodedWriter(audioformat.MP3, lossyBitrateKbps)},
+		{name: "m4a", ext: ".m4a", write: encodedWriter(audioformat.AAC, lossyBitrateKbps)},
+		{name: "opus", ext: ".opus", write: encodedWriter(audioformat.Opus, opusBitrateKbps)},
 	}
+}
+
+// fixtureNamed returns the fixture called name.
+func fixtureNamed(t *testing.T, name string) fixture {
+	t.Helper()
+	for _, fx := range fixtures() {
+		if fx.name == name {
+			return fx
+		}
+	}
+	require.FailNowf(t, "unknown fixture", "%s", name)
+	return fixture{}
 }
 
 // writeFixture writes a mono tone in the fixture's format and returns its path.
@@ -239,4 +239,64 @@ func opusPageEnds(t *testing.T, data []byte, totalFrames int64) []int64 {
 		granules[i] -= preSkip
 	}
 	return granules
+}
+
+// tailOverrunFrames is how far before the end the overrunning window starts.
+const tailOverrunFrames = 100
+
+// readFile returns the bytes of the file at path.
+func readFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path) //nolint:gosec // G304: a test fixture path
+	require.NoError(t, err)
+	return data
+}
+
+// openTestSource opens path and its decoder, closing the file when the test ends.
+func openTestSource(t *testing.T, path string) *source {
+	t.Helper()
+	f, err := os.Open(path) //nolint:gosec // G304: a test fixture path
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, f.Close()) })
+	src, err := openSource(f, path)
+	require.NoError(t, err)
+	return src
+}
+
+// decodedFrames returns the frame count of the whole-file decode of path.
+func decodedFrames(t *testing.T, path string) int {
+	t.Helper()
+	whole, err := decode(t.Context(), path, nil, 0)
+	require.NoError(t, err)
+	return whole.Frames()
+}
+
+// assertWindowsMatchLinear requires that a seekWindowFrames window at each start
+// frame equals the matching slice of the whole-file decode of the mono clip at
+// path byte for byte, and is identical when requested again. A window that
+// reaches past the end must return exactly the tail.
+func assertWindowsMatchLinear(t *testing.T, path string, starts []int64) {
+	t.Helper()
+	whole, err := decode(t.Context(), path, nil, 0)
+	require.NoError(t, err)
+	total := int64(whole.Frames())
+
+	for _, start := range starts {
+		req := &window{Start: float64(start) / testRate, Duration: float64(seekWindowFrames) / testRate}
+		frames := min(seekWindowFrames, total-start)
+		want := whole.Data[start*bytesPerSample : (start+frames)*bytesPerSample]
+
+		win, err := decode(t.Context(), path, req, 0)
+		require.NoErrorf(t, err, "start %d", start)
+		assert.Truef(t, bytes.Equal(want, win.Data), "start %d: the window must equal the matching slice of the whole decode (got %d frames, want %d)", start, win.Frames(), frames)
+
+		again, err := decode(t.Context(), path, req, 0)
+		require.NoError(t, err)
+		assert.Truef(t, bytes.Equal(win.Data, again.Data), "start %d: a repeated request must return identical bytes", start)
+	}
+
+	start := total - tailOverrunFrames
+	win, err := decode(t.Context(), path, &window{Start: float64(start) / testRate, Duration: 1}, 0)
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(whole.Data[start*bytesPerSample:], win.Data), "a window past the end returns exactly the tail")
 }
