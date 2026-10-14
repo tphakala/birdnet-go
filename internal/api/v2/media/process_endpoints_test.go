@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	wavpcm "github.com/tphakala/go-wav/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -238,4 +239,63 @@ func TestTranscodeStatus(t *testing.T) {
 
 	_, msg, _ := transcodeStatus(transcode.ErrHEAACSource)
 	assert.Contains(t, msg, "HE-AAC", "HE-AAC gets its own message")
+}
+
+// wavPeak returns the largest absolute 16-bit sample in a 44-byte-header WAV body.
+func wavPeak(body []byte) int {
+	peak := 0
+	data := body[44:]
+	for i := 0; i+1 < len(data); i += 2 {
+		v := int(int16(uint16(data[i]) | uint16(data[i+1])<<8)) //nolint:gosec // G115: PCM bit reinterpretation in a test
+		peak = max(peak, max(v, -v))
+	}
+	return peak
+}
+
+// Each endpoint forwards normalize, denoise and gain_db into the filter chain;
+// dropping a field would leave the response unprocessed.
+func TestProcessEndpoints_ForwardFilterFields(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	const quietAmp = 0.01
+	var quiet bytes.Buffer
+	require.NoError(t, wavpcm.EncodeInterleaved(&quiet, wavpcm.Config{SampleRate: batTestRate, BitDepth: 16, Channels: 1}, toneBytes(batTestRate, batTestSeconds, fixtureBatToneHz, quietAmp)))
+	require.NoError(t, os.WriteFile(fixturePath(tempDir, "bat.wav"), quiet.Bytes(), 0o600))
+	writeToneWAV(t, fixturePath(tempDir, "tone.wav"), processTestRate, processTestLength, fixtureToneHz)
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteModelType", "30").Return("bat", nil)
+	mockDS.On("GetNoteClipPath", "30").Return("bat.wav", nil)
+	mockDS.On("GetNoteClipPath", "31").Return("tone.wav", nil)
+	controller.DS = mockDS
+
+	t.Run("audible bats gain_db", func(t *testing.T) {
+		plain := postJSON(e, "/api/v2/audio/30/audible-bats", `{"expansion": 10}`)
+		louder := postJSON(e, "/api/v2/audio/30/audible-bats", `{"expansion": 10, "gain_db": 6.0206}`)
+		require.Equal(t, http.StatusOK, plain.Code)
+		require.Equal(t, http.StatusOK, louder.Code)
+		assert.InDelta(t, 2*wavPeak(plain.Body.Bytes()), wavPeak(louder.Body.Bytes()), 4)
+	})
+
+	t.Run("audible bats normalize", func(t *testing.T) {
+		plain := postJSON(e, "/api/v2/audio/30/audible-bats", `{"expansion": 10}`)
+		normalized := postJSON(e, "/api/v2/audio/30/audible-bats", `{"expansion": 10, "normalize": true}`)
+		require.Equal(t, http.StatusOK, normalized.Code)
+		assert.Greater(t, wavPeak(normalized.Body.Bytes()), 4*wavPeak(plain.Body.Bytes()), "a quiet clip is lifted toward the target")
+	})
+
+	t.Run("process normalize", func(t *testing.T) {
+		// A 0.3 full-scale tone is far above -23 LUFS, so normalizing lowers it.
+		plain := postJSON(e, "/api/v2/audio/31/process", `{"gain_db": 0.5}`)
+		normalized := postJSON(e, "/api/v2/audio/31/process", `{"normalize": true}`)
+		require.Equal(t, http.StatusOK, normalized.Code)
+		assert.Less(t, wavPeak(normalized.Body.Bytes()), wavPeak(plain.Body.Bytes()))
+	})
+
+	t.Run("process denoise", func(t *testing.T) {
+		plain := postJSON(e, "/api/v2/audio/31/process", `{"gain_db": 0.25}`)
+		denoised := postJSON(e, "/api/v2/audio/31/process", `{"denoise": "heavy", "gain_db": 0.25}`)
+		require.Equal(t, http.StatusOK, denoised.Code)
+		assert.NotEqual(t, plain.Body.Bytes(), denoised.Body.Bytes(), "the denoise preset reaches the filter chain")
+	})
 }
