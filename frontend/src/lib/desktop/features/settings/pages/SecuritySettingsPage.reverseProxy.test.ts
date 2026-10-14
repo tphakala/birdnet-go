@@ -10,6 +10,7 @@ import {
   type SecuritySettings,
   type SettingsFormData,
 } from '$lib/stores/settings';
+import { t } from '$lib/i18n';
 import { settingsAPI } from '$lib/utils/settingsApi';
 import { navigation } from '$lib/stores/navigation.svelte';
 
@@ -18,6 +19,16 @@ const getConnection = vi.mocked(settingsAPI.security.getConnection);
 const TRUSTED_INVALID = 'security-trusted-proxies-invalid';
 const TRUSTED_PENDING = 'security-trusted-proxies-pending';
 const SUBNETS_INVALID = 'security-bypass-subnets-invalid';
+const SUBNETS_PENDING = 'security-bypass-subnets-pending';
+
+// The shared t() mock returns the bare key, which hides the tab and field a reason names.
+// Show the parameters so the tests can check them.
+const originalT = vi.mocked(t).getMockImplementation();
+
+/** The reason text the page builds for a validation message and its tab and field keys. */
+function reason(message: string, tab: string, field: string): string {
+  return `${message} ${JSON.stringify({ tab, field })}`;
+}
 
 /** The store's security section with a patch applied; the store always holds one. */
 function patched(
@@ -81,12 +92,17 @@ describe('SecuritySettingsPage reverse proxy wiring', () => {
   const initialState = get(settingsStore);
 
   beforeEach(() => {
+    vi.mocked(t).mockImplementation((key: string, params?: Record<string, unknown>) =>
+      params ? `${key} ${JSON.stringify(params)}` : key
+    );
     settingsValidationErrors.set([]);
     getConnection.mockClear();
     openTab('server');
   });
 
   afterEach(() => {
+    vi.mocked(t).mockReset();
+    if (originalT) vi.mocked(t).mockImplementation(originalT);
     settingsStore.set(initialState);
     settingsValidationErrors.set([]);
     settingsValidationReasons.set(new Map());
@@ -182,8 +198,72 @@ describe('SecuritySettingsPage reverse proxy wiring', () => {
     await tick();
 
     const reasons = get(settingsValidationReasons);
-    expect(reasons.get(TRUSTED_INVALID)).toContain('settings.security.validation.invalidEntry');
-    expect(reasons.get(SUBNETS_INVALID)).toContain('settings.security.validation.invalidEntry');
+    expect(reasons.get(TRUSTED_INVALID)).toBe(
+      reason(
+        'settings.security.validation.invalidEntry',
+        'settings.security.serverConfiguration.title',
+        'settings.security.reverseProxy.listLabel'
+      )
+    );
+    expect(reasons.get(SUBNETS_INVALID)).toBe(
+      reason(
+        'settings.security.validation.invalidEntry',
+        'settings.security.exceptions.title',
+        'settings.security.allowedSubnetsLabel'
+      )
+    );
+  });
+
+  it('names the tab and field of each pending entry for the save bar', async () => {
+    seedSecurity({ trustedProxies: [], allowSubnetBypass: { enabled: true, subnet: '' } });
+    render(SecuritySettingsPage);
+    const proxyField = screen.getByRole('textbox', {
+      name: 'settings.security.reverseProxy.listLabel',
+    });
+    await fireEvent.input(proxyField, { target: { value: '10.0.0.1' } });
+    await tick();
+
+    openTab('exceptions');
+    await tick();
+    const subnetField = screen.getByRole('textbox', {
+      name: 'settings.security.allowedSubnetsLabel',
+    });
+    await fireEvent.input(subnetField, { target: { value: '10.0.0.0/8' } });
+    await tick();
+
+    const reasons = get(settingsValidationReasons);
+    expect(reasons.get(TRUSTED_PENDING)).toBe(
+      reason(
+        'settings.security.validation.pendingEntry',
+        'settings.security.serverConfiguration.title',
+        'settings.security.reverseProxy.listLabel'
+      )
+    );
+    expect(reasons.get(SUBNETS_PENDING)).toBe(
+      reason(
+        'settings.security.validation.pendingEntry',
+        'settings.security.exceptions.title',
+        'settings.security.allowedSubnetsLabel'
+      )
+    );
+  });
+
+  it('blocks saving on typed but not added Allowed Subnets text only while the bypass is on', async () => {
+    seedSecurity({ allowSubnetBypass: { enabled: true, subnet: '' } });
+    openTab('exceptions');
+    render(SecuritySettingsPage);
+    const field = screen.getByRole('textbox', { name: 'settings.security.allowedSubnetsLabel' });
+    await fireEvent.input(field, { target: { value: '10.0.0.0/8' } });
+    await tick();
+    expect(get(settingsValidationErrors)).toContain(SUBNETS_PENDING);
+
+    editSecurity({ allowSubnetBypass: { enabled: false, subnet: '' } });
+    await tick();
+    expect(get(settingsValidationErrors)).not.toContain(SUBNETS_PENDING);
+
+    editSecurity({ allowSubnetBypass: { enabled: true, subnet: '' } });
+    await tick();
+    expect(get(settingsValidationErrors)).toContain(SUBNETS_PENDING);
   });
 
   it('clears the drafts on Reset', async () => {
