@@ -1381,6 +1381,89 @@ export const SECTION_STORE_PATHS = {
  */
 const inFlightSectionSaves = new Set<Promise<void>>();
 
+/**
+ * The full save that is waiting for section saves to finish, if any. A saveSettings
+ * call made in that window joins it. It is cleared right before the snapshot is taken,
+ * so a call made after that starts its own save.
+ */
+let pendingFullSave: { done: Promise<void>; notify: boolean } | null = null;
+
+/**
+ * Snapshots formData and sends it to the backend, then marks it saved. Resets isSaving
+ * and rethrows on every failure path, including the refusal before a load.
+ */
+async function persistFormData(notify: boolean): Promise<void> {
+  try {
+    const currentState = get(settingsStore);
+    if (!currentState.dataLoaded) {
+      logger.warn('Refusing to save settings before they have been loaded');
+      throw new Error(t('settings.errors.loadFailed'));
+    }
+    settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
+
+    // Apply coercion to all sections before saving
+    const coercedFormData = { ...currentState.formData };
+    for (const [section, data] of Object.entries(coercedFormData)) {
+      if (data && typeof data === 'object') {
+        const key = section as keyof SettingsFormData;
+        // Use a type assertion to handle the assignment
+        // eslint-disable-next-line security/detect-object-injection -- key is from controlled source
+        (coercedFormData as Record<string, unknown>)[key] = coerceSettings(
+          section,
+          data as Record<string, unknown>
+        );
+      }
+    }
+
+    // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
+    // This ensures the config file is properly cleaned when users clear these fields
+    // Trim whitespace to handle cases like "   " which should also be treated as empty
+    if (coercedFormData.birdnet.modelPath?.trim() === '') {
+      coercedFormData.birdnet.modelPath = null;
+    }
+    if (coercedFormData.birdnet.labelPath?.trim() === '') {
+      coercedFormData.birdnet.labelPath = null;
+    }
+
+    await settingsAPI.save(coercedFormData);
+
+    // Read newLocale from coercedFormData (the value we actually persisted)
+    // and compare to originalData (the snapshot loaded from the backend),
+    // matching the coercedFormData-based comparison used by the TLS check below.
+    await afterSettingsPersisted(
+      coercedFormData.realtime?.dashboard?.locale,
+      currentState.originalData.realtime?.dashboard?.locale
+    );
+
+    // Update originalData to match the saved formData (no reload needed).
+    // Restart-required state is owned by the backend (refreshed via
+    // fetchRestartStatus above) and surfaced by the global RestartBanner, so
+    // it is no longer tracked client-side here.
+    settingsStore.update(state => ({
+      ...state,
+      originalData: JSON.parse(JSON.stringify(state.formData)),
+      isSaving: false,
+    }));
+
+    if (notify) {
+      toastActions.success(t('notifications.content.settings.savedSuccessfully'));
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : t('settings.errors.saveFailed');
+    settingsStore.update(state => ({
+      ...state,
+      isSaving: false,
+      error: errorMessage,
+    }));
+
+    if (notify) {
+      toastActions.error(t('notifications.content.settings.saveFailed'));
+    }
+
+    throw error;
+  }
+}
+
 /** Returns value when it is a plain object, otherwise undefined. */
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return isPlainObject(value) ? value : undefined;
@@ -1599,86 +1682,39 @@ export const settingsActions = {
    * call) while no settings load has succeeded, because formData would then hold
    * empty defaults that the backend deep-merges over the real configuration.
    * Pass `{ notify: false }` to suppress the success and failure toasts.
+   *
+   * A call made while an earlier call still waits for section saves joins it:
+   * one request, one result, and the success or failure toast if any joined call
+   * asked for it.
    */
   async saveSettings(options: SaveSettingsOptions = {}) {
     const { notify = true } = options;
 
+    if (pendingFullSave) {
+      pendingFullSave.notify ||= notify;
+      return pendingFullSave.done;
+    }
+    if (inFlightSectionSaves.size === 0) return persistFormData(notify);
+
     // Let section saves finish first (success or failure, request and store
-    // merge) so the snapshot below carries what they patched. Loop, because a
-    // section save can start while an earlier one is awaited.
-    while (inFlightSectionSaves.size > 0) {
-      await Promise.allSettled([...inFlightSectionSaves]);
-    }
-
-    try {
-      const currentState = get(settingsStore);
-      if (!currentState.dataLoaded) {
-        logger.warn('Refusing to save settings before they have been loaded');
-        throw new Error(t('settings.errors.loadFailed'));
-      }
-      settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
-
-      // Apply coercion to all sections before saving
-      const coercedFormData = { ...currentState.formData };
-      for (const [section, data] of Object.entries(coercedFormData)) {
-        if (data && typeof data === 'object') {
-          const key = section as keyof SettingsFormData;
-          // Use a type assertion to handle the assignment
-          // eslint-disable-next-line security/detect-object-injection -- key is from controlled source
-          (coercedFormData as Record<string, unknown>)[key] = coerceSettings(
-            section,
-            data as Record<string, unknown>
-          );
+    // merge) so the snapshot taken in persistFormData carries what they patched.
+    // The pending save is published before anything else runs so that a call
+    // made from here on joins it instead of sending a second request.
+    const pending = { notify, done: Promise.resolve() };
+    pendingFullSave = pending;
+    settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
+    pending.done = (async () => {
+      try {
+        // Loop, because a section save can start while an earlier one is awaited.
+        while (inFlightSectionSaves.size > 0) {
+          await Promise.allSettled([...inFlightSectionSaves]);
         }
+      } finally {
+        pendingFullSave = null;
       }
-
-      // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
-      // This ensures the config file is properly cleaned when users clear these fields
-      // Trim whitespace to handle cases like "   " which should also be treated as empty
-      if (coercedFormData.birdnet.modelPath?.trim() === '') {
-        coercedFormData.birdnet.modelPath = null;
-      }
-      if (coercedFormData.birdnet.labelPath?.trim() === '') {
-        coercedFormData.birdnet.labelPath = null;
-      }
-
-      await settingsAPI.save(coercedFormData);
-
-      // Read newLocale from coercedFormData (the value we actually persisted)
-      // and compare to originalData (the snapshot loaded from the backend),
-      // matching the coercedFormData-based comparison used by the TLS check below.
-      await afterSettingsPersisted(
-        coercedFormData.realtime?.dashboard?.locale,
-        currentState.originalData.realtime?.dashboard?.locale
-      );
-
-      // Update originalData to match the saved formData (no reload needed).
-      // Restart-required state is owned by the backend (refreshed via
-      // fetchRestartStatus above) and surfaced by the global RestartBanner, so
-      // it is no longer tracked client-side here.
-      settingsStore.update(state => ({
-        ...state,
-        originalData: JSON.parse(JSON.stringify(state.formData)),
-        isSaving: false,
-      }));
-
-      if (notify) {
-        toastActions.success(t('notifications.content.settings.savedSuccessfully'));
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : t('settings.errors.saveFailed');
-      settingsStore.update(state => ({
-        ...state,
-        isSaving: false,
-        error: errorMessage,
-      }));
-
-      if (notify) {
-        toastActions.error(t('notifications.content.settings.saveFailed'));
-      }
-
-      throw error;
-    }
+      await persistFormData(pending.notify);
+    })();
+    return pending.done;
   },
 
   resetSection<K extends keyof SettingsFormData>(section: K) {
