@@ -4160,6 +4160,7 @@
         "listHelp": "Lägg till adressen för varje proxy framför BirdNET-Go. Med Docker är detta ofta Docker-gatewayadressen, som 172.17.0.1.",
         "placeholder": "Till exempel 172.17.0.1",
         "emptyState": "Inga betrodda proxys. BirdNET-Go använder adressen som ansluter till den.",
+        "emptyStateCloudflareOnly": "Endast Cloudflares publicerade edge-adresser är betrodda. Inga andra proxys är listade.",
         "rangeBadge": "Intervall",
         "ruleOwnAddress": "Ange varje proxys egen adress. Ange aldrig ett intervall som även innehåller datorerna du surfar från.",
         "ruleHeaders": "Proxyn måste lägga till klientadressen i X-Forwarded-For eller skriva över X-Real-IP.",

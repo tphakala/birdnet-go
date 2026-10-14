@@ -4160,6 +4160,7 @@
         "listHelp": "Dodaj adres każdego proxy poprzedzającego BirdNET-Go. W przypadku Dockera jest to często adres bramy Dockera, taki jak 172.17.0.1.",
         "placeholder": "Na przykład 172.17.0.1",
         "emptyState": "Brak zaufanych proxy. BirdNET-Go używa adresu, który się z nim łączy.",
+        "emptyStateCloudflareOnly": "Zaufane są tylko opublikowane adresy brzegowe Cloudflare. Nie wymieniono żadnych innych proxy.",
         "rangeBadge": "Zakres",
         "ruleOwnAddress": "Podaj własny adres każdego proxy. Nigdy nie podawaj zakresu obejmującego również komputery, z których przeglądasz stronę.",
         "ruleHeaders": "Proxy musi dołączyć adres klienta do X-Forwarded-For lub zastąpić X-Real-IP.",

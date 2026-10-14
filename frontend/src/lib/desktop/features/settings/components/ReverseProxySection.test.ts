@@ -85,6 +85,21 @@ describe('ReverseProxySection', () => {
     expect(cloudflareCheckbox().checked).toBe(true);
   });
 
+  it('names Cloudflare in the empty state when only the preset is saved', () => {
+    renderSection({ trustedProxies: ['cloudflare'], savedTrustedProxies: ['cloudflare'] });
+
+    expect(
+      screen.getByText('settings.security.reverseProxy.emptyStateCloudflareOnly')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('settings.security.reverseProxy.emptyState')).toBeNull();
+  });
+
+  it('keeps the plain empty state when the preset is off', () => {
+    renderSection();
+
+    expect(screen.getByText('settings.security.reverseProxy.emptyState')).toBeInTheDocument();
+  });
+
   it('turns the preset off and back on without touching the addresses', async () => {
     const saved = ['10.0.0.1', 'Cloudflare', '10.0.0.2'];
     const onUpdate = vi.fn();

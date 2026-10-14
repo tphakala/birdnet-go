@@ -4160,6 +4160,7 @@
         "listHelp": "Voeg het adres toe van elke proxy vóór BirdNET-Go. Bij Docker is dit vaak het Docker-gatewayadres, zoals 172.17.0.1.",
         "placeholder": "Bijvoorbeeld 172.17.0.1",
         "emptyState": "Geen vertrouwde proxy's. BirdNET-Go gebruikt het adres dat ermee verbindt.",
+        "emptyStateCloudflareOnly": "Alleen de gepubliceerde edge-adressen van Cloudflare worden vertrouwd. Er zijn geen andere proxy's opgegeven.",
         "rangeBadge": "Bereik",
         "ruleOwnAddress": "Vermeld het eigen adres van elke proxy. Vermeld nooit een bereik dat ook de computers bevat waarmee u browst.",
         "ruleHeaders": "De proxy moet het clientadres toevoegen aan X-Forwarded-For of X-Real-IP overschrijven.",

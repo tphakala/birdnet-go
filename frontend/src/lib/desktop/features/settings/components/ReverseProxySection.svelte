@@ -196,7 +196,9 @@
         label={t('settings.security.reverseProxy.listLabel')}
         helpText={t('settings.security.reverseProxy.listHelp')}
         placeholder={t('settings.security.reverseProxy.placeholder')}
-        emptyStateMessage={t('settings.security.reverseProxy.emptyState')}
+        emptyStateMessage={partition.hasCloudflare
+          ? t('settings.security.reverseProxy.emptyStateCloudflareOnly')
+          : t('settings.security.reverseProxy.emptyState')}
         {disabled}
         rowAnnotation={rangeBadge}
         bind:draft

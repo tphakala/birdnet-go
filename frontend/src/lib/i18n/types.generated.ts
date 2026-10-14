@@ -3076,6 +3076,7 @@ export type TranslationKey =
   | 'settings.security.reverseProxy.listHelp'
   | 'settings.security.reverseProxy.placeholder'
   | 'settings.security.reverseProxy.emptyState'
+  | 'settings.security.reverseProxy.emptyStateCloudflareOnly'
   | 'settings.security.reverseProxy.rangeBadge'
   | 'settings.security.reverseProxy.ruleOwnAddress'
   | 'settings.security.reverseProxy.ruleHeaders'

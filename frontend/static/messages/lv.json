@@ -4160,6 +4160,7 @@
         "listHelp": "Pievienojiet katra starpniekservera adresi, kas atrodas pirms BirdNET-Go. Ar Docker tā bieži ir Docker vārtejas adrese, piemēram, 172.17.0.1.",
         "placeholder": "Piemēram, 172.17.0.1",
         "emptyState": "Nav uzticamu starpniekserveru. BirdNET-Go izmanto adresi, kas tam pieslēdzas.",
+        "emptyStateCloudflareOnly": "Uzticamas ir tikai Cloudflare publicētās malas adreses. Citi starpniekserveri nav norādīti.",
         "rangeBadge": "Diapazons",
         "ruleOwnAddress": "Norādiet katra starpniekservera paša adresi. Nekad nenorādiet diapazonu, kurā ietilpst arī datori, no kuriem pārlūkojat.",
         "ruleHeaders": "Starpniekserverim ir jāpievieno klienta adrese pie X-Forwarded-For vai jāpārraksta X-Real-IP.",

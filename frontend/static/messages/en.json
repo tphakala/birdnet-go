@@ -4160,6 +4160,7 @@
         "listHelp": "Add the address of each proxy in front of BirdNET-Go. With Docker this is often the Docker gateway address, such as 172.17.0.1.",
         "placeholder": "For example, 172.17.0.1",
         "emptyState": "No trusted proxies. BirdNET-Go uses the address that connects to it.",
+        "emptyStateCloudflareOnly": "Only Cloudflare's published edge addresses are trusted. No other proxies are listed.",
         "rangeBadge": "Range",
         "ruleOwnAddress": "List each proxy's own address. Never list a range that also holds the computers you browse from.",
         "ruleHeaders": "The proxy must append the client address to X-Forwarded-For or overwrite X-Real-IP.",

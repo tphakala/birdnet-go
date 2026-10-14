@@ -4160,6 +4160,7 @@
         "listHelp": "Lisää jokaisen BirdNET-Gon edessä olevan välityspalvelimen osoite. Dockerin kanssa tämä on usein Dockerin yhdyskäytäväosoite, kuten 172.17.0.1.",
         "placeholder": "Esimerkiksi 172.17.0.1",
         "emptyState": "Ei luotettuja välityspalvelimia. BirdNET-Go käyttää siihen yhdistävää osoitetta.",
+        "emptyStateCloudflareOnly": "Vain Cloudflaren julkaistut reunaosoitteet ovat luotettuja. Muita välityspalvelimia ei ole listattu.",
         "rangeBadge": "Osoitealue",
         "ruleOwnAddress": "Määritä kunkin välityspalvelimen oma osoite. Älä koskaan lisää osoitealuetta, joka sisältää myös tietokoneet, joilta selaat.",
         "ruleHeaders": "Välityspalvelimen on lisättävä asiakkaan osoite otsakkeeseen X-Forwarded-For tai korvattava otsake X-Real-IP.",

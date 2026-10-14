@@ -4160,6 +4160,7 @@
         "listHelp": "Přidejte adresu každé proxy před BirdNET-Go. U Dockeru se často jedná o adresu brány Dockeru, například 172.17.0.1.",
         "placeholder": "Například 172.17.0.1",
         "emptyState": "Žádné důvěryhodné proxy. BirdNET-Go používá adresu, která se k němu připojuje.",
+        "emptyStateCloudflareOnly": "Důvěryhodné jsou pouze zveřejněné adresy okrajových serverů Cloudflare. Nejsou uvedeny žádné další proxy.",
         "rangeBadge": "Rozsah",
         "ruleOwnAddress": "Uveďte vlastní adresu každé proxy. Nikdy neuvádějte rozsah, který zahrnuje i počítače, ze kterých prohlížíte.",
         "ruleHeaders": "Proxy musí připojit adresu klienta k X-Forwarded-For nebo přepsat X-Real-IP.",

@@ -4160,6 +4160,7 @@
         "listHelp": "Adja meg a BirdNET-Go előtt lévő minden proxy címét. Docker esetén ez gyakran a Docker átjáró címe, például 172.17.0.1.",
         "placeholder": "Például 172.17.0.1",
         "emptyState": "Nincsenek megbízható proxyk. A BirdNET-Go a hozzá csatlakozó címet használja.",
+        "emptyStateCloudflareOnly": "Csak a Cloudflare közzétett peremhálózati címei megbízhatók. Más proxy nincs a listán.",
         "rangeBadge": "Tartomány",
         "ruleOwnAddress": "Minden proxy saját címét adja meg. Soha ne adjon meg olyan tartományt, amely tartalmazza azokat a számítógépeket is, amelyekről böngészik.",
         "ruleHeaders": "A proxynak hozzá kell fűznie a kliens címét az X-Forwarded-For fejléchez, vagy felül kell írnia az X-Real-IP fejlécet.",
