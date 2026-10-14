@@ -174,10 +174,11 @@ func decodeSource(ctx context.Context, src *source, win *window, fileSize int64,
 	}
 	data, err := positionAndRead()
 	if err != nil && src.rewind != nil && src.seek != nil && startFrame != 0 && seekFallbackAllowed(err) {
-		// The seek path failed on a source the forward decoder may still serve
-		// (the seekable decoder rejects an access unit with no audio element that
-		// the forward decoder skips), so no seek-path failure may fail a request
-		// the forward path serves. Positioning is retried once, by discarding.
+		// The seek, or a read through the seeked position, failed on a source the
+		// forward decoder may still serve (the seekable decoder rejects an access
+		// unit with no audio element that the forward decoder skips), so no
+		// seek-path failure may fail a request the forward path serves. Positioning
+		// and the read are retried once, positioning by discarding.
 		src.rewind()
 		src.seek = nil
 		data, err = positionAndRead()
@@ -197,10 +198,11 @@ func decodeSource(ctx context.Context, src *source, win *window, fileSize int64,
 	return &pcmBuffer{Data: data, SampleRate: src.sampleRate, Channels: src.channels}, nil
 }
 
-// seekFallbackAllowed reports whether a failed seek may be retried on the
-// forward path. A cancelled or expired context would fail again, and an empty
-// range means the forward decoder runs dry as well: it emits at most one frame of
-// samples per access unit, so it never has more audio than the seek path's track.
+// seekFallbackAllowed reports whether a failure on the seek path, in the seek or
+// in a read after it, may be retried on the forward path. A cancelled or expired
+// context would fail again, and an empty range means the forward decoder runs dry
+// as well: it emits at most one frame of samples per access unit, so it never has
+// more audio than the seek path's track.
 func seekFallbackAllowed(err error) bool {
 	return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, ErrEmptyRange)
 }

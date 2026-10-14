@@ -82,10 +82,11 @@ type source struct {
 	// returning a frame below the target. It is nil for decoders without a seek;
 	// those are positioned by discarding.
 	seek func(frame int64) (int64, error)
-	// rewind abandons a failed seek and returns the reader to the start of the
+	// rewind abandons the seek path and returns the reader to the start of the
 	// source, to be positioned by discarding from then on. It is nil for sources
-	// that never fall back, and is called only after a seek for a start other than
-	// frame 0, before anything else reads the reader.
+	// that never fall back. It is called only for a start other than frame 0, after
+	// the seek or a read through the seeked position failed, so it must return a
+	// stream that neither the seek nor that read has consumed.
 	rewind func()
 	// expansion bounds the initial buffer relative to the file size.
 	expansion int64
@@ -323,8 +324,9 @@ func (r *m4aReader) seek(frame int64) (int64, error) {
 	return frame, nil
 }
 
-// rewind abandons the seekable decoder and returns to the forward decoder, which
-// no read has touched since the seek was the first step of a window.
+// rewind abandons the seekable decoder and returns to the forward decoder. Every
+// read since the seek went to the seekable decoder, whose input is a separate
+// section reader, so the forward decoder is still unread.
 func (r *m4aReader) rewind() {
 	r.seeked = nil
 }
