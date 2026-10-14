@@ -439,12 +439,12 @@ Source: MIT
 
 ### github.com/tphakala/go-m4a
 
-License: https://github.com/tphakala/go-m4a/blob/v0.5.0/LICENSE
+License: https://github.com/tphakala/go-m4a/blob/v0.7.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-mp3
 
-License: https://github.com/tphakala/go-mp3/blob/v0.1.0/LICENSE
+License: https://github.com/tphakala/go-mp3/blob/v0.2.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-opus
@@ -584,7 +584,7 @@ Source: BSD-3-Clause
 
 ### gopkg.in/yaml.v3
 
-License: Unknown
+License: https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE
 Source: MIT
 
 ### gorm.io/driver/mysql
