@@ -27,6 +27,7 @@ function renderInput(props: {
   maxItems?: number;
   emptyStateMessage?: string;
   draft?: string;
+  reportResetKey?: number;
   className?: string;
   rowAnnotation?: ReturnType<typeof annotationSnippet>;
 }) {
@@ -477,8 +478,7 @@ describe('NetworkAddressListInput', () => {
 
     // The report is derived from the draft and the list, not latched. A parent that writes
     // a non-empty draft and then the same empty draft again, with no list change, makes a
-    // duplicate-only report reappear. No parent does this: the only outside write is a
-    // Reset that writes an empty draft.
+    // duplicate-only report reappear; a parent that must hide it then changes reportResetKey.
     it('shows a duplicate-only report again after a parent draft round trip', async () => {
       const { rerender } = renderControlled({ values: ['10.0.0.1'] });
       await typeAndSubmit('10.0.0.1');
@@ -486,6 +486,25 @@ describe('NetworkAddressListInput', () => {
       await rerender({ draft: 'x' });
       expect(alertText()).toBe('');
       await rerender({ draft: '' });
+
+      expect(alertText()).toContain('errors.duplicate');
+    });
+
+    it('hides the report when reportResetKey changes, with the draft and list unchanged', async () => {
+      const { rerender } = renderControlled({ values: ['10.0.0.1'], reportResetKey: 0 });
+      await typeAndSubmit('10.0.0.1');
+      expect(alertText()).toContain('errors.duplicate');
+
+      await rerender({ values: ['10.0.0.1'], draft: '', reportResetKey: 1 });
+
+      expect(alertText()).toBe('');
+    });
+
+    it('keeps the report when reportResetKey is set but does not change', async () => {
+      const { rerender } = renderControlled({ values: ['10.0.0.1'], reportResetKey: 3 });
+      await typeAndSubmit('10.0.0.1');
+
+      await rerender({ values: ['10.0.0.1'], draft: '', reportResetKey: 3 });
 
       expect(alertText()).toContain('errors.duplicate');
     });

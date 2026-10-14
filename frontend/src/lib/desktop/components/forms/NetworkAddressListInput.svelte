@@ -69,6 +69,12 @@
     rowAnnotation?: Snippet<[NetworkAddressRow]>;
     /** Text typed but not added yet. Bindable; internal state when not bound. */
     draft?: string;
+    /**
+     * Changing this value clears the add report. A parent that resets the form calls it
+     * when Reset can restore the draft and the list to exactly what the add left, which the
+     * field cannot tell from no change at all.
+     */
+    reportResetKey?: number;
     className?: string;
   }
 
@@ -85,6 +91,7 @@
     maxItems,
     rowAnnotation,
     draft = $bindable(''),
+    reportResetKey,
     className,
   }: Props = $props();
 
@@ -111,9 +118,17 @@
     hasInvalid: boolean;
     draft: string;
     listKey: string;
+    /** The parent's reportResetKey when the add happened. */
+    resetKey: number | undefined;
   }
   // An empty listKey never equals a real key: listKey([]) is '[]'.
-  const EMPTY_REPORT: AddReport = { messages: [], hasInvalid: false, draft: '', listKey: '' };
+  const EMPTY_REPORT: AddReport = {
+    messages: [],
+    hasInvalid: false,
+    draft: '',
+    listKey: '',
+    resetKey: undefined,
+  };
 
   /** Identifies a list by its trimmed entries, in order; a parent's split and join round trip keeps it. */
   function listKey(list: readonly string[]): string {
@@ -134,11 +149,18 @@
    * hidden whenever the draft or the list no longer match what the add left, for example
    * after a form Reset.
    * Visibility is derived, not latched: a parent that writes a non-empty draft and then the
-   * same empty draft again, with no list change, shows a duplicate-only report again.
+   * same empty draft again, with no list change, shows a duplicate-only report again unless
+   * it also changes reportResetKey.
    */
   let report = $state<AddReport>(EMPTY_REPORT);
   let currentListKey = $derived(listKey(values));
-  let reportApplies = $derived(report.draft === draft && report.listKey === currentListKey);
+  // A changed reportResetKey hides the report even when the draft and the list are identical
+  // to what the add left, where the comparison alone cannot see a change.
+  let reportApplies = $derived(
+    report.draft === draft &&
+      report.listKey === currentListKey &&
+      report.resetKey === reportResetKey
+  );
   let messages = $derived(reportApplies ? report.messages : []);
   let hasInvalidTokens = $derived(reportApplies && report.hasInvalid);
 
@@ -241,6 +263,7 @@
       hasInvalid: invalid.length > 0,
       draft: nextDraft,
       listKey: listKey(next),
+      resetKey: reportResetKey,
     };
   }
 

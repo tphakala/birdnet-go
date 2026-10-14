@@ -306,6 +306,40 @@ describe('SecuritySettingsPage reverse proxy wiring', () => {
     expect(screen.queryByText(/errors\.invalid/)).not.toBeInTheDocument();
   });
 
+  it.each([
+    {
+      name: 'trusted proxies',
+      label: 'settings.security.reverseProxy.listLabel',
+      tab: null as string | null,
+      seed: () => seedSecurity({ trustedProxies: ['10.0.0.1'] }),
+    },
+    {
+      name: 'allowed subnets',
+      label: 'settings.security.allowedSubnetsLabel',
+      tab: 'exceptions',
+      seed: () => seedSecurity({ allowSubnetBypass: { enabled: true, subnet: '10.0.0.1/32' } }),
+    },
+  ])('clears a duplicate-only add report on Reset: $name', async ({ label, tab, seed }) => {
+    seed();
+    if (tab) openTab(tab);
+    render(SecuritySettingsPage);
+    const field = screen.getByRole<HTMLInputElement>('textbox', { name: label });
+    await fireEvent.input(field, {
+      target: { value: label.includes('Subnets') ? '10.0.0.1/32' : '10.0.0.1' },
+    });
+    await fireEvent.keyDown(field, { key: 'Enter' });
+    await tick();
+    expect(screen.getByText(/errors\.duplicate/)).toBeInTheDocument();
+    // Reset appears only with an unsaved change elsewhere
+    editSecurity({ host: 'changed.example' });
+    await tick();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'settings.actions.resetAriaLabel' }));
+    await tick();
+
+    expect(screen.queryByText(/errors\.duplicate/)).not.toBeInTheDocument();
+  });
+
   it('ignores blank saved entries for display and validation', async () => {
     seedSecurity({ trustedProxies: ['', '172.18.0.1', '  '] });
     render(SecuritySettingsPage);

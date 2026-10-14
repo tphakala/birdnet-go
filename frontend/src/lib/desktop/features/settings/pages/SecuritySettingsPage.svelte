@@ -661,9 +661,14 @@
   let trustedProxiesDraft = $state('');
   let bypassSubnetsDraft = $state('');
 
+  // Bumped on Reset: the address lists' add reports clear even when Reset restores the
+  // draft and the list to what the add left.
+  let addressResetGeneration = $state(0);
+
   function clearAddressDrafts() {
     trustedProxiesDraft = '';
     bypassSubnetsDraft = '';
+    addressResetGeneration++;
   }
 
   let trustedProxies = $derived(settings.trustedProxies ?? []);
@@ -1088,6 +1093,7 @@
       hasChanges={reverseProxyHasChanges}
       onUpdate={updateTrustedProxies}
       bind:draft={trustedProxiesDraft}
+      reportResetKey={addressResetGeneration}
     />
   </div>
 {/snippet}
@@ -1510,6 +1516,7 @@
                 store.isLoading ||
                 store.isSaving}
               bind:draft={bypassSubnetsDraft}
+              reportResetKey={addressResetGeneration}
             />
 
             <ErrorAlert type="warning">
