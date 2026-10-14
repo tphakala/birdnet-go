@@ -159,3 +159,48 @@ func TestProcessingTempDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, dir, again, "idempotent")
 }
+
+func TestExtractClip_AppliesWindowStartAndFilters(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "src.wav")
+	src := noisyTone(testRate)
+	writeWAVFile(t, path, src, testRate, 1)
+
+	clip := func(start, end float64, f Filters) *PCM {
+		res, err := ExtractClip(t.Context(), &ClipOptions{InputPath: path, Start: start, End: end, Format: audioformat.WAV, Filters: f})
+		require.NoError(t, err)
+		return decodeBytes(t, res.Data, ".wav")
+	}
+
+	t.Run("the window starts at Start", func(t *testing.T) {
+		t.Parallel()
+		got := clip(1, 2, Filters{})
+		want := int16Bytes(src[testRate : 2*testRate])
+		assert.Equal(t, want, got.Data)
+	})
+
+	t.Run("the filters reach the encoded clip", func(t *testing.T) {
+		t.Parallel()
+		const halfGainDB = -6.0206
+		plain := clip(1, 2, Filters{})
+		quieter := clip(1, 2, Filters{GainDB: halfGainDB})
+		assert.InDelta(t, peakAbs(bytesInt16(plain.Data))/2, peakAbs(bytesInt16(quieter.Data)), 2)
+	})
+}
+
+func TestProcessToWAV_AppliesFilters(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "src.wav")
+	writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate, 1)
+
+	plain, err := ProcessToWAV(t.Context(), path, Filters{})
+	require.NoError(t, err)
+	quieter, err := ProcessToWAV(t.Context(), path, Filters{GainDB: -6.0206})
+	require.NoError(t, err)
+
+	plainPeak := peakAbs(bytesInt16(decodeBytes(t, plain, ".wav").Data))
+	quieterPeak := peakAbs(bytesInt16(decodeBytes(t, quieter, ".wav").Data))
+	assert.InDelta(t, plainPeak/2, quieterPeak, 2)
+}

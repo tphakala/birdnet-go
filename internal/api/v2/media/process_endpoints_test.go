@@ -3,6 +3,7 @@ package media
 import (
 	"bytes"
 	"context"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -70,6 +71,27 @@ func TestProcessAudioByID(t *testing.T) {
 	rec = postJSON(e, "/api/v2/audio/7/process", body)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, first, rec.Body.Bytes(), "a cache hit skips processing")
+}
+
+func TestProcessAudioByID_AppliesGain(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	writeToneWAV(t, fixturePath(tempDir, "src.wav"), processTestRate, processTestLength, fixtureToneHz)
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteClipPath", "8").Return("src.wav", nil)
+	controller.DS = mockDS
+
+	rec := postJSON(e, "/api/v2/audio/8/process", `{"gain_db": -6.0206}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	// The source tone peaks at fixtureAmp of full scale; -6 dB halves it.
+	var peak int
+	body := rec.Body.Bytes()[44:]
+	for i := 0; i+1 < len(body); i += 2 {
+		v := int(int16(uint16(body[i]) | uint16(body[i+1])<<8)) //nolint:gosec // G115: PCM bit reinterpretation in a test
+		peak = max(peak, max(v, -v))
+	}
+	assert.InDelta(t, fixtureAmp*math.MaxInt16/2, float64(peak), 4)
 }
 
 func TestProcessAudioByID_Rejections(t *testing.T) {
@@ -185,6 +207,10 @@ func TestProcessedSpectrogramByID_Renders(t *testing.T) {
 	assert.Equal(t, "image/png", rec.Header().Get("Content-Type"))
 	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 	assert.True(t, bytes.HasPrefix(rec.Body.Bytes(), []byte("\x89PNG")))
+
+	entries, err := os.ReadDir(filepath.Join(tempDir, ".tmp-processing"))
+	require.NoError(t, err)
+	assert.Empty(t, entries, "the processed WAV and the PNG are removed with the request")
 }
 
 func TestTranscodeStatus(t *testing.T) {

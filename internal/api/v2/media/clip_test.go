@@ -161,3 +161,28 @@ func TestClipMIMETypeAndExtension(t *testing.T) {
 	assert.Equal(t, "ogg", clipFileExtension("opus"))
 	assert.Equal(t, "flac", clipFileExtension("flac"))
 }
+
+func TestExtractAudioClipByID_AppliesGain(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	writeToneWAV(t, fixturePath(tempDir, "src.wav"), clipTestSourceRate, clipTestSourceSeconds, fixtureToneHz)
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteClipPath", "1").Return("src.wav", nil)
+	controller.DS = mockDS
+
+	peakOf := func(body string) int {
+		rec := clipRequest(t, e, "1", body)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		data := rec.Body.Bytes()[44:]
+		peak := 0
+		for i := 0; i+1 < len(data); i += 2 {
+			v := int(int16(uint16(data[i]) | uint16(data[i+1])<<8)) //nolint:gosec // G115: PCM bit reinterpretation in a test
+			peak = max(peak, max(v, -v))
+		}
+		return peak
+	}
+
+	plain := peakOf(`{"start": 0, "end": 1, "format": "wav"}`)
+	quieter := peakOf(`{"start": 0, "end": 1, "format": "wav", "gain_db": -6.0206}`)
+	assert.InDelta(t, plain/2, quieter, 4, "gain_db reaches the encoded clip")
+}

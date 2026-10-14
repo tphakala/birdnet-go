@@ -3,6 +3,7 @@ package transcode
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,8 +11,9 @@ import (
 )
 
 const (
-	batToneHz  = 40000.0
-	batSeconds = 0.25
+	batSourceRate = 256000
+	batToneHz     = 40000.0
+	batSeconds    = 0.25
 	// expandLengthSlack is how many frames the expanded length may differ from
 	// the exact ratio (resampler latency).
 	expandLengthSlack = 4096
@@ -107,4 +109,23 @@ func TestTimeExpand_Cancelled(t *testing.T) {
 	src := tone(256000, 1, batSeconds, batToneHz, testAmp)
 	_, err := TimeExpand(ctx, newPCM(src, 256000, 1), 10, MaxDecodedPCMBytes)
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+// Normalization must measure what is played. A low tone is attenuated by the
+// loudness meter's high-pass once it has been slowed down, but not before, so a
+// wrong order lands the result well off the target.
+func TestAudibleBats_NormalizesAfterExpansion(t *testing.T) {
+	t.Parallel()
+
+	const (
+		lowToneHz = 500.0
+		factor    = 10
+	)
+	path := filepath.Join(t.TempDir(), "bat.wav")
+	writeWAVFile(t, path, tone(batSourceRate, 1, 4, lowToneHz, 0.05), batSourceRate, 1)
+
+	data, err := AudibleBats(t.Context(), path, factor, Filters{Normalize: true})
+	require.NoError(t, err)
+	got := decodeBytes(t, data, ".wav")
+	assert.InDelta(t, normalizeTargetLUFS, lufsOf(t, got).IntegratedLUFS, normalizeToleranceLU)
 }

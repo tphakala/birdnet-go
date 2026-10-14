@@ -344,3 +344,30 @@ func slicesMin(s []int16) int {
 	}
 	return m
 }
+
+// Normalization measures the denoised samples: the loudness after both filters
+// must land on the target, which it cannot if the denoiser runs after the gain
+// was planned.
+func TestApplyFilters_NormalizeMeasuresTheDenoisedSamples(t *testing.T) {
+	t.Parallel()
+
+	const (
+		loudNoiseAmp = 0.1
+		quietToneAmp = 0.05
+	)
+	rng := rand.New(rand.NewPCG(noiseSeed, noiseSeed))
+	lead := int(noiseOnlySeconds * testRate)
+	total := lead + int(noiseToneSeconds*testRate)
+	src := make([]int16, total)
+	for i := range src {
+		v := loudNoiseAmp * rng.NormFloat64()
+		if i >= lead {
+			v += quietToneAmp * math.Sin(2*math.Pi*testToneHz*float64(i)/testRate)
+		}
+		src[i] = floatToInt16(float32(v))
+	}
+
+	p := newPCM(src, testRate, 1)
+	require.NoError(t, ApplyFilters(t.Context(), p, Filters{Denoise: "heavy", Normalize: true}))
+	assert.InDelta(t, normalizeTargetLUFS, lufsOf(t, p).IntegratedLUFS, normalizeToleranceLU)
+}

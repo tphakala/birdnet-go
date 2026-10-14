@@ -601,3 +601,42 @@ func TestDecode_HugeDeclaredLength8BitWAV(t *testing.T) {
 	assert.Equal(t, plausible, initialCapacity(&source{totalFrames: declaredFrames, expansion: lossyExpansion}, fileSize, MaxDecodedPCMBytes, bytesPerSample),
 		"a declared count above the cap leaves the file-size estimate to size the buffer")
 }
+
+// Bytes that identify no container fall back to the extension, so an MP3 with
+// leading padding still decodes.
+func TestDecode_ExtensionDecidesWhenSniffingIsInconclusive(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	good := filepath.Join(dir, "good.mp3")
+	writeMP3File(t, good, tone(testRate, 1, 1, testToneHz, testAmp), testRate, 1)
+	data, err := os.ReadFile(good)
+	require.NoError(t, err)
+
+	padded := filepath.Join(dir, "padded.mp3")
+	require.NoError(t, os.WriteFile(padded, append(make([]byte, 4), data...), 0o600))
+	pcm, err := Decode(t.Context(), padded, nil, 0)
+	require.NoError(t, err)
+	assert.Equal(t, testRate, pcm.SampleRate)
+	assert.InDelta(t, testRate, pcm.Frames(), lossyFrameSlack)
+
+	unnamed := filepath.Join(dir, "padded")
+	require.NoError(t, os.WriteFile(unnamed, append(make([]byte, 4), data...), 0o600))
+	_, err = Decode(t.Context(), unnamed, nil, 0)
+	require.ErrorIs(t, err, ErrUnsupportedSource, "without a usable extension the container stays unknown")
+}
+
+func TestDecode_AcceptsTheSourceRateBounds(t *testing.T) {
+	t.Parallel()
+
+	for _, rate := range []int{MinSourceSampleRate, MaxSourceSampleRate} {
+		path := filepath.Join(t.TempDir(), "edge.wav")
+		writeWAVFile(t, path, tone(rate, 1, 0.1, testToneHz, testAmp), rate, 1)
+		pcm, err := Decode(t.Context(), path, nil, 0)
+		require.NoError(t, err, "rate %d", rate)
+		assert.Equal(t, rate, pcm.SampleRate)
+		probed, err := ProbeSampleRate(t.Context(), path)
+		require.NoError(t, err)
+		assert.Equal(t, rate, probed)
+	}
+}

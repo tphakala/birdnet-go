@@ -50,3 +50,15 @@ func TestIsValidBatExpansionFactor(t *testing.T) {
 		assert.Falsef(t, IsValidBatExpansionFactor(n), "%d", n)
 	}
 }
+
+// These values were carried over from the FFmpeg-based pipeline; the literals are
+// deliberate so a change to a constant has to change this test too.
+func TestPipelineConstantsKeepTheirFFmpegEraValues(t *testing.T) {
+	t.Parallel()
+
+	assert.InDelta(t, -23.0, normalizeTargetLUFS, 0)
+	assert.InDelta(t, -2.0, normalizeTruePeakDBTP, 0)
+	assert.InDelta(t, 60.0, normalizeMaxGainDB, 0)
+	assert.Equal(t, map[string]int{"mp3": 128, "opus": 64, "aac": 96}, clipBitrateKbps)
+	assert.Equal(t, 48000, AudibleBatsOutputSampleRate)
+}
