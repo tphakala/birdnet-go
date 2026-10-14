@@ -292,8 +292,8 @@ func isValidClockTime(value string) bool {
 // eqFilterUsesQ reports whether a filter type derives its coefficients from Q.
 // The width-based types (BandPass, BandReject, Peaking) take a bandwidth in Hz
 // instead and never read Q, so a zero there is the normal state rather than an
-// unfinished one. BuildFilterChain in internal/audiocore/equalizer hands Q only to
-// the Q-based library filter types.
+// unfinished one. BuildFilterChain in internal/audiocore/equalizer passes Q to every
+// library band, and the library ignores it for the width-based types.
 func eqFilterUsesQ(filterType string) bool {
 	switch filterType {
 	case "LowPass", "HighPass", "AllPass", "LowShelf", "HighShelf":
