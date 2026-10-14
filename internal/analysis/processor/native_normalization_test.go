@@ -16,9 +16,9 @@ import (
 	flacmeta "github.com/tphakala/go-flac"
 	goflac "github.com/tphakala/go-flac/pcm"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
 	"github.com/tphakala/birdnet-go/internal/branding"
@@ -102,7 +102,7 @@ func TestPlanNativeNormalizationGain_QuietClipReachesTarget(t *testing.T) {
 	require.Less(t, measured, testTargetLUFS-5, "sanity: clip needs a real boost")
 
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, audioformat.FLAC, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 
 	assert.Positive(t, gainDB, "quiet clip must be boosted")
@@ -123,7 +123,7 @@ func TestPlanNativeNormalizationGain_VeryQuietClipPassesOldClamp(t *testing.T) {
 	require.Greater(t, measured, audionormMinTargetLUFS, "sanity: still above the absolute gate")
 
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, audioformat.FLAC, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 
 	assert.Greater(t, gainDB, 30.0, "must no longer be truncated at the old 30 dB clamp")
@@ -144,7 +144,7 @@ func TestPlanNativeNormalizationGain_SubGateClipIsLifted(t *testing.T) {
 	require.False(t, math.IsInf(truePeak, -1), "sanity: clip must still have a finite true peak")
 
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, audioformat.FLAC, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 
 	assert.Positive(t, gainDB, "a sub-gate clip with signal in it must not be exported untouched")
@@ -249,7 +249,7 @@ func TestPlanNativeNormalizationGain_SubGateFlatSignalDoesNotOvershoot(t *testin
 	require.False(t, math.IsInf(meas.TruePeakDBTP, -1), "sanity: clip must still have a finite true peak")
 
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, audioformat.FLAC, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 	assert.Positive(t, gainDB, "the clip must still be lifted out of inaudibility")
 
@@ -273,7 +273,7 @@ func TestPlanNativeNormalizationGain_Silence(t *testing.T) {
 	t.Parallel()
 	pcm := make([]byte, conf.SampleRate*2) // 1 s of digital silence
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, audioformat.FLAC, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 	assert.Zero(t, gainDB, "silence must not be amplified")
 }
@@ -301,7 +301,7 @@ func TestPlanNativeNormalizationGain_ClampsExtremeBoost(t *testing.T) {
 		"sanity: the loudness bound must also reach the ceiling at this target")
 
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, aggressiveTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, audioformat.FLAC, aggressiveTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 	assert.InDelta(t, nativeExportMaxGainDB, gainDB, 1e-9, "extreme boost must clamp to +nativeExportMaxGainDB")
 }
@@ -315,7 +315,7 @@ func TestPlanNativeNormalizationGain_Attenuates(t *testing.T) {
 	require.Greater(t, measured, testTargetLUFS, "sanity: clip is louder than target")
 
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, audioformat.FLAC, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 	assert.Negative(t, gainDB, "loud clip must be attenuated")
 	assert.InDelta(t, testTargetLUFS, measured+gainDB, 0.1, "attenuation must land on target")
@@ -328,7 +328,7 @@ func TestPlanNativeNormalizationGain_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	a := &SaveAudioAction{pcmData: sinePCMBytes(800, 1.0, 1000), CorrelationID: "test"}
-	_, err := a.planNativeNormalizationGain(ctx, conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
+	_, err := a.planNativeNormalizationGain(ctx, conf.SampleRate, audioformat.FLAC, testTargetLUFS, testTruePeakDBTP)
 	require.ErrorIs(t, err, context.Canceled)
 }
 
@@ -341,7 +341,7 @@ func TestNativeNormalizationEndToEnd(t *testing.T) {
 	pcm := sinePCMBytes(800, 1.0, 1000)
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
 
-	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, testTargetLUFS, testTruePeakDBTP)
+	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, audioformat.FLAC, testTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
 
 	out := filepath.Join(t.TempDir(), "clip.flac")
@@ -412,7 +412,7 @@ func TestEncodeClipSelectsNativeNormalization(t *testing.T) {
 	a := &SaveAudioAction{Settings: s, pcmData: pcm, CorrelationID: "test"}
 
 	out := filepath.Join(t.TempDir(), "clip.flac")
-	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
+	enc, err := a.encodeClip(t.Context(), conf.SampleRate, audioformat.FLAC, out)
 	require.NoError(t, err)
 	assert.Equal(t, clipenc.NativeFLAC, enc.Encoder, "must select the native FLAC encoder, not FFmpeg")
 
@@ -446,7 +446,7 @@ func TestEncodeClipFLACWithoutNormalization(t *testing.T) {
 
 	a := &SaveAudioAction{Settings: s, pcmData: pcm, CorrelationID: "test"}
 	out := filepath.Join(t.TempDir(), "clip.flac")
-	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
+	enc, err := a.encodeClip(t.Context(), conf.SampleRate, audioformat.FLAC, out)
 	require.NoError(t, err)
 	assert.Equal(t, clipenc.NativeFLAC, enc.Encoder, "FLAC must encode natively with no env gate and no FFmpeg")
 
@@ -482,7 +482,7 @@ func TestEncodeClipFLACEmbedsDetectionTags(t *testing.T) {
 		clipTags: meta, modelName: "BirdNET", modelVersion: "2.4",
 	}
 	out := filepath.Join(t.TempDir(), "clip.flac")
-	_, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
+	_, err := a.encodeClip(t.Context(), conf.SampleRate, audioformat.FLAC, out)
 	require.NoError(t, err)
 
 	dec := openFLACDecoder(t, out)
@@ -506,7 +506,7 @@ func TestEncodeClipFLACNonUTF8SpeciesStillExports(t *testing.T) {
 		clipTags: clipTagMeta{commonName: "Bad\xffName"},
 	}
 	out := filepath.Join(t.TempDir(), "clip.flac")
-	_, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
+	_, err := a.encodeClip(t.Context(), conf.SampleRate, audioformat.FLAC, out)
 	require.NoError(t, err)
 
 	var got string
@@ -549,7 +549,7 @@ func TestEncodeClipFLACNormalizationSkipped(t *testing.T) {
 
 	a := &SaveAudioAction{Settings: s, pcmData: pcm, CorrelationID: "test"}
 	out := filepath.Join(t.TempDir(), "clip.flac")
-	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatFLAC, out)
+	enc, err := a.encodeClip(t.Context(), conf.SampleRate, audioformat.FLAC, out)
 	require.NoError(t, err)
 	assert.Equal(t, clipenc.NativeFLAC, enc.Encoder, "out-of-range normalization must still encode natively, never FFmpeg")
 

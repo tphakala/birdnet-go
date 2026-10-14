@@ -1,0 +1,318 @@
+package transcode
+
+import (
+	"context"
+	"io"
+	"math"
+	"os"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
+)
+
+// bytesPerSample is the width of one sample of the 16-bit PCM this package produces.
+const bytesPerSample = 2
+
+// maxZeroReads bounds a run of (0, nil) reads before a read loop gives up.
+const maxZeroReads = 100
+
+// maxWindowFrames bounds a window start in frames before it is converted to int64.
+const maxWindowFrames = 1 << 50
+
+// initialCapSlackBytes is added to the file-size based initial buffer estimate.
+const initialCapSlackBytes = 64 << 10
+
+// PCM is decoded audio: 16-bit little-endian interleaved samples.
+type PCM struct {
+	// Data holds whole frames of interleaved 16-bit little-endian samples.
+	Data []byte
+	// SampleRate is the sample rate in Hz.
+	SampleRate int
+	// Channels is the interleaved channel count.
+	Channels int
+}
+
+// Frames returns the number of whole frames in p.
+func (p *PCM) Frames() int {
+	if p.Channels <= 0 {
+		return 0
+	}
+	return len(p.Data) / (p.Channels * bytesPerSample)
+}
+
+// Window selects a time range of the source, in seconds.
+type Window struct {
+	// Start is the offset of the first sample, at least 0.
+	Start float64
+	// Duration is the length of the range, greater than 0.
+	Duration float64
+}
+
+// ProbeSampleRate returns the sample rate of the audio file at path from its
+// header, without decoding. Opus reports 48000, the rate it decodes to.
+func ProbeSampleRate(ctx context.Context, path string) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	f, _, err := openSourceFile(path)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = f.Close() }()
+
+	src, err := openSource(f, path)
+	if err != nil {
+		return 0, err
+	}
+	return src.sampleRate, nil
+}
+
+// Decode decodes the audio file at path to 16-bit PCM. A nil win decodes the
+// whole file; otherwise only the requested window, shortened when the source
+// ends inside it. maxBytes bounds the decoded size in output bytes (values
+// outside (0, MaxDecodedPCMBytes] select MaxDecodedPCMBytes).
+//
+// The container is identified from the file's first bytes; the extension is used
+// only when they are inconclusive. Errors wrap one of the package sentinels or
+// are context errors.
+func Decode(ctx context.Context, path string, win *Window, maxBytes int) (*PCM, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if maxBytes <= 0 || maxBytes > MaxDecodedPCMBytes {
+		maxBytes = MaxDecodedPCMBytes
+	}
+	if win != nil {
+		if err := validateWindow(win); err != nil {
+			return nil, err
+		}
+	}
+
+	f, size, err := openSourceFile(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	src, err := openSource(f, path)
+	if err != nil {
+		return nil, err
+	}
+	return decodeSource(ctx, src, win, size, maxBytes)
+}
+
+// validateWindow rejects values no clip request can legitimately carry.
+func validateWindow(win *Window) error {
+	switch {
+	case math.IsNaN(win.Start) || math.IsInf(win.Start, 0) || win.Start < 0:
+		return validationError(ErrInvalidRequest, "decode_validate_window", "start %v must be finite and non-negative", win.Start)
+	case math.IsNaN(win.Duration) || math.IsInf(win.Duration, 0) || win.Duration <= 0:
+		return validationError(ErrInvalidRequest, "decode_validate_window", "duration %v must be finite and positive", win.Duration)
+	}
+	return nil
+}
+
+// openSourceFile opens path after checking it is a regular file within the size
+// bound. It returns the open file and its size.
+func openSourceFile(path string) (*os.File, int64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, 0, errors.New(err).
+			Component(componentName).
+			Category(errors.CategoryFileIO).
+			Context("operation", "decode_stat").
+			Build()
+	}
+	if !info.Mode().IsRegular() {
+		return nil, 0, wrapSentinel(ErrUnsupportedSource, nil, "decode_stat", "not a regular file", errors.CategoryValidation)
+	}
+	if info.Size() > MaxSourceFileBytes {
+		return nil, 0, wrapSentinel(ErrAudioTooLong, nil, "decode_stat", "source file exceeds the size limit", errors.CategoryLimit)
+	}
+	f, err := os.Open(path) //nolint:gosec // G304: path is a stored clip resolved by the caller from the configured clip directory
+	if err != nil {
+		return nil, 0, errors.New(err).
+			Component(componentName).
+			Category(errors.CategoryFileIO).
+			Context("operation", "decode_open").
+			Build()
+	}
+	return f, info.Size(), nil
+}
+
+// decodeSource reads the requested range from an opened source.
+func decodeSource(ctx context.Context, src *source, win *Window, fileSize int64, maxBytes int) (*PCM, error) {
+	frameBytes := src.channels * bytesPerSample
+	maxFrames := int64(maxBytes / frameBytes)
+
+	var startFrame int64
+	wantFrames := int64(-1) // negative reads to the end of the source
+	if win != nil {
+		start := math.Round(win.Start * float64(src.sampleRate))
+		length := math.Round(win.Duration * float64(src.sampleRate))
+		if start > maxWindowFrames {
+			return nil, wrapSentinel(ErrEmptyRange, nil, "decode_window", "start is beyond the end of the audio", errors.CategoryValidation)
+		}
+		if length > float64(maxFrames) {
+			return nil, wrapSentinel(ErrAudioTooLong, nil, "decode_window", "requested range exceeds the decoded size limit", errors.CategoryLimit)
+		}
+		startFrame, wantFrames = int64(start), max(int64(length), 1)
+		if src.totalFrames >= 0 {
+			if startFrame >= src.totalFrames {
+				return nil, wrapSentinel(ErrEmptyRange, nil, "decode_window", "start is beyond the end of the audio", errors.CategoryValidation)
+			}
+			wantFrames = min(wantFrames, src.totalFrames-startFrame)
+		}
+	} else if src.totalFrames >= 0 {
+		wantFrames = src.totalFrames
+	}
+
+	if err := positionSource(ctx, src, startFrame, frameBytes, win != nil); err != nil {
+		return nil, err
+	}
+
+	// A whole-file read is capped one frame past maxBytes so an overlong source is
+	// detected rather than silently truncated.
+	limit := int64(maxBytes) + int64(frameBytes)
+	if wantFrames >= 0 {
+		limit = min(limit, wantFrames*int64(frameBytes))
+	}
+	data, err := readLimited(ctx, src.reader, int(limit), initialCapacity(src, fileSize, limit, frameBytes), frameBytes)
+	if err != nil {
+		return nil, err
+	}
+	if win == nil && len(data) > maxBytes {
+		return nil, wrapSentinel(ErrAudioTooLong, nil, "decode_read", "decoded audio exceeds the size limit", errors.CategoryLimit)
+	}
+	if len(data) == 0 {
+		if win != nil {
+			return nil, wrapSentinel(ErrEmptyRange, nil, "decode_read", "no audio in the requested range", errors.CategoryValidation)
+		}
+		return nil, wrapSentinel(ErrUndecodableSource, nil, "decode_read", "source holds no audio", errors.CategoryAudio)
+	}
+	return &PCM{Data: data, SampleRate: src.sampleRate, Channels: src.channels}, nil
+}
+
+// positionSource moves the reader to startFrame, past any hidden leading frames:
+// by seeking where the decoder can, otherwise by decoding and discarding.
+func positionSource(ctx context.Context, src *source, startFrame int64, frameBytes int, windowed bool) error {
+	if src.seek != nil {
+		if startFrame == 0 {
+			return nil
+		}
+		landed, err := src.seek(startFrame)
+		if err != nil {
+			return classifyDecodeError("decode_seek", err)
+		}
+		if landed < startFrame {
+			return wrapSentinel(ErrEmptyRange, nil, "decode_seek", "start is beyond the end of the audio", errors.CategoryValidation)
+		}
+		return nil
+	}
+	skip := src.skipFrames + startFrame
+	if skip == 0 {
+		return nil
+	}
+	skipped, err := discardFrames(ctx, src.reader, skip, frameBytes)
+	if err != nil {
+		return err
+	}
+	if skipped < skip {
+		if windowed {
+			return wrapSentinel(ErrEmptyRange, nil, "decode_discard", "start is beyond the end of the audio", errors.CategoryValidation)
+		}
+		return wrapSentinel(ErrUndecodableSource, nil, "decode_discard", "source holds no audio", errors.CategoryAudio)
+	}
+	return nil
+}
+
+// discardFrames reads and drops up to n frames, checking ctx per chunk. It
+// returns the number of whole frames dropped, fewer than n when the source ends.
+func discardFrames(ctx context.Context, r io.Reader, n int64, frameBytes int) (int64, error) {
+	chunk := make([]byte, chunkBytes(frameBytes))
+	frame := int64(frameBytes)
+	remaining := n * frame
+	var dropped int64
+	zeroReads := 0
+	for remaining > 0 {
+		if err := ctx.Err(); err != nil {
+			return dropped / frame, err
+		}
+		m, err := r.Read(chunk[:min(int64(len(chunk)), remaining)])
+		dropped += int64(m)
+		remaining -= int64(m)
+		if m == 0 && err == nil {
+			zeroReads++
+			if zeroReads >= maxZeroReads {
+				return dropped / frame, wrapSentinel(ErrUndecodableSource, io.ErrNoProgress, "decode_discard", "decoder made no progress", errors.CategoryAudio)
+			}
+		} else {
+			zeroReads = 0
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return dropped / frame, classifyDecodeError("decode_discard", err)
+		}
+	}
+	return dropped / frame, nil
+}
+
+// chunkBytes returns the read chunk size, a whole number of frames.
+func chunkBytes(frameBytes int) int {
+	return chunkFrames * frameBytes
+}
+
+// readLimited reads r until EOF or until limit bytes are held, whichever comes
+// first. The buffer starts at initialCap and doubles, never beyond limit, so its
+// capacity is bounded by what the caller allowed. A trailing partial frame is
+// dropped.
+func readLimited(ctx context.Context, r io.Reader, limit, initialCap, frameBytes int) ([]byte, error) {
+	out := make([]byte, 0, min(max(initialCap, 0), limit))
+	chunk := chunkBytes(frameBytes)
+	zeroReads := 0
+	for len(out) < limit {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		n := min(chunk, limit-len(out))
+		if cap(out)-len(out) < n {
+			out = growTo(out, min(max(2*cap(out), len(out)+n), limit))
+		}
+		m, err := r.Read(out[len(out) : len(out)+n])
+		out = out[:len(out)+m]
+		if m == 0 && err == nil {
+			zeroReads++
+			if zeroReads >= maxZeroReads {
+				return nil, wrapSentinel(ErrUndecodableSource, io.ErrNoProgress, "decode_read", "decoder made no progress", errors.CategoryAudio)
+			}
+		} else {
+			zeroReads = 0
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, classifyDecodeError("decode_read", err)
+		}
+	}
+	return out[:len(out)-len(out)%frameBytes], nil
+}
+
+// growTo returns s with capacity of at least newCap, keeping its contents.
+func growTo(s []byte, newCap int) []byte {
+	grown := make([]byte, len(s), newCap)
+	copy(grown, s)
+	return grown
+}
+
+// initialCapacity picks the first buffer size. It never trusts a header length:
+// the estimate is bounded by what the file size makes plausible for the codec.
+func initialCapacity(src *source, fileSize, limit int64, frameBytes int) int {
+	plausible := fileSize*src.expansion + initialCapSlackBytes
+	hint := limit
+	if src.totalFrames >= 0 {
+		hint = min(hint, src.totalFrames*int64(frameBytes))
+	}
+	return int(min(hint, plausible, int64(MaxDecodedPCMBytes)))
+}

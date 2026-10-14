@@ -166,21 +166,34 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 ### Media (`media/media.go`)
 
-| Method | Route                                | Handler                   | Auth | Description                             |
-| ------ | ------------------------------------ | ------------------------- | ---- | --------------------------------------- |
-| GET    | `/media/audio/:filename`             | `ServeAudioClip`          | ❌   | Serve audio file                        |
-| GET    | `/media/spectrogram/:filename`       | `ServeSpectrogram`        | ❌   | Serve spectrogram image                 |
-| GET    | `/media/audio`                       | `ServeAudioByQueryID`     | ❌   | Serve audio by detection ID             |
-| GET    | `/media/species-image`               | `GetSpeciesImage`         | ❌   | Get species thumbnail image             |
-| GET    | `/media/species-image/info`          | `GetSpeciesImageInfo`     | ❌   | Get species image attribution           |
-| GET    | `/media/image/:scientific_name`      | `ServeSpeciesImageProxy`  | ❌   | Serve cached bird image (proxy)         |
-| GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy`  | ❌   | Alias for image proxy endpoint          |
-| GET    | `/audio/:id`                         | `ServeAudioByID`          | ❌   | Serve detection audio clip by ID        |
-| GET    | `/spectrogram/:id`                   | `ServeSpectrogramByID`    | ❌   | Serve detection spectrogram by ID       |
-| POST   | `/spectrogram/:id/generate`          | `GenerateSpectrogramByID` | ❌   | Trigger spectrogram generation          |
-| GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`    | ❌   | Get spectrogram generation status       |
-| POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`    | ✅   | Extract audio clip from time range      |
-| POST   | `/audio/:id/audible-bats`            | `AudibleBatsByID`         | ✅   | Time-expand bat clip into audible range |
+| Method | Route                                | Handler                    | Auth | Description                             |
+| ------ | ------------------------------------ | -------------------------- | ---- | --------------------------------------- |
+| GET    | `/media/audio/:filename`             | `ServeAudioClip`           | ❌   | Serve audio file                        |
+| GET    | `/media/spectrogram/:filename`       | `ServeSpectrogram`         | ❌   | Serve spectrogram image                 |
+| GET    | `/media/audio`                       | `ServeAudioByQueryID`      | ❌   | Serve audio by detection ID             |
+| GET    | `/media/species-image`               | `GetSpeciesImage`          | ❌   | Get species thumbnail image             |
+| GET    | `/media/species-image/info`          | `GetSpeciesImageInfo`      | ❌   | Get species image attribution           |
+| GET    | `/media/image/:scientific_name`      | `ServeSpeciesImageProxy`   | ❌   | Serve cached bird image (proxy)         |
+| GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy`   | ❌   | Alias for image proxy endpoint          |
+| GET    | `/audio/:id`                         | `ServeAudioByID`           | ❌   | Serve detection audio clip by ID        |
+| GET    | `/spectrogram/:id`                   | `ServeSpectrogramByID`     | ❌   | Serve detection spectrogram by ID       |
+| POST   | `/spectrogram/:id/generate`          | `GenerateSpectrogramByID`  | ❌   | Trigger spectrogram generation          |
+| GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`     | ❌   | Get spectrogram generation status       |
+| POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`     | ✅   | Extract audio clip from time range      |
+| POST   | `/audio/:id/process`                 | `ProcessAudioByID`         | ✅   | Denoise, normalize or gain a clip (WAV) |
+| POST   | `/audio/:id/audible-bats`            | `AudibleBatsByID`          | ✅   | Time-expand bat clip into audible range |
+| POST   | `/spectrogram/:id/process`           | `ProcessedSpectrogramByID` | ✅   | Spectrogram of denoised/normalized clip |
+
+**On-demand clip processing.** `clip`, `process`, `audible-bats` and the processed
+spectrogram decode the stored clip and process it in Go; none of them needs FFmpeg.
+`clip` accepts the formats `wav`, `flac`, `mp3`, `aac` (served as `.m4a`) and `opus`
+(served as `.ogg`); any other value answers **400**. Filters apply
+in the order denoise (`light`, `medium`, `heavy`), loudness normalization, gain
+(`gain_db`, within +/-60). A source that cannot be processed answers **422**: a codec
+or container outside WAV, FLAC, MP3, AAC (including HE-AAC, which has its own
+message) and Opus, a corrupt or truncated file, a file or range above the size limits
+(256 MiB on disk, 128 MiB of decoded audio), or a clip window that starts past the end
+of the audio.
 
 **Pending species image (`503 + Retry-After`).** The image endpoints never contact an
 image provider on the request goroutine: a cold species can take minutes to resolve

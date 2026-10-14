@@ -15,7 +15,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
 )
 
@@ -249,13 +248,9 @@ func planNative(meas audionorm.Measurement, pcmForRefine []byte) plan {
 	return p
 }
 
-// runFFmpeg drives the production FFmpeg export path with normalization on, so
-// the comparison exercises the real filter construction (two-pass linear
-// loudnorm, the gate fallback, and the single-pass fallback), reproduced here
-// because production no longer contains it.
-//
-// It used to call ffmpeg.ExportAudio and get the filter from the export path
-// itself. That path now plans its gain in Go, so the reference chain is built by
+// runFFmpeg drives FFmpeg with normalization on, reproducing the filter
+// construction (two-pass linear loudnorm, the gate fallback, and the single-pass
+// fallback) that production no longer contains. The reference chain is built by
 // loudnormFilter below and maintained in this package. See its comment for why,
 // and TestLoudnormFilter for what pins it.
 //
@@ -291,8 +286,7 @@ func runFFmpeg(t *testing.T, ctx context.Context, ffmpegBin, stem string) loudne
 // loudnormFilter builds the two-pass linear loudnorm filter this harness
 // compares the native path against.
 //
-// It lives here rather than in internal/audiocore/ffmpeg because production no
-// longer normalises with FFmpeg at all: the export path plans its gain in Go via
+// It lives here because production no longer normalises with FFmpeg at all: the export path plans its gain in Go via
 // audionorm. What FFmpeg's loudnorm would have done is now purely a reference
 // point, and a reference point belongs in the harness that reads it. This is a
 // faithful copy of what the export path built before the removal, including the
@@ -301,7 +295,7 @@ func runFFmpeg(t *testing.T, ctx context.Context, ffmpegBin, stem string) loudne
 func loudnormFilter(ctx context.Context, t *testing.T, ffmpegBin, wavPath string) string {
 	t.Helper()
 
-	stats, err := ffmpeg.AnalyzeFileLoudness(ctx, wavPath, ffmpegBin, ffmpeg.AudioFilters{}, nil)
+	stats, err := analyzeLoudness(ctx, ffmpegBin, wavPath)
 	// A cancelled or timed-out analysis is not a gated clip. Folding it into the
 	// single-pass fallback would silently downgrade the reference column and the
 	// table would report the result as a real before/after comparison, which is
@@ -333,7 +327,7 @@ func loudnormSinglePass() string {
 // the two production tests that used to pin this logic
 // (TestBuildTwoPassLoudnormFilter, TestLoudnormGateFallbackOffset_NilStats) were
 // deleted with the production code they covered.
-func loudnormFilterFromStats(stats *ffmpeg.LoudnessStats) string {
+func loudnormFilterFromStats(stats *loudnessStats) string {
 	base := loudnormSinglePass()
 	if stats == nil {
 		return base
@@ -346,7 +340,7 @@ func loudnormFilterFromStats(stats *ffmpeg.LoudnessStats) string {
 		if math.IsInf(inputTP, 0) || math.IsNaN(inputTP) {
 			return base
 		}
-		offsetDB := math.Max(-ffmpeg.MaxGainDB, math.Min(ffmpeg.MaxGainDB, targetTruePeak-inputTP))
+		offsetDB := math.Max(-loudnormMaxOffsetDB, math.Min(loudnormMaxOffsetDB, targetTruePeak-inputTP))
 		if math.Abs(offsetDB) < 0.05 {
 			return base
 		}
@@ -358,17 +352,12 @@ func loudnormFilterFromStats(stats *ffmpeg.LoudnessStats) string {
 }
 
 // loudnessStatsUsable reports whether every measured field loudnorm's second pass
-// consumes is a finite number.
-//
-// It calls the production predicate rather than copying it. That matters: the
-// removed export path gated its two-pass branch on exactly this check, and
-// checking InputI alone would not be equivalent (FFmpeg reports "-inf" for
-// input_thresh as well as input_i on a gated clip, and any one unparseable field
-// sent the old path to the fallback). A local copy could drift from the still-live
-// original and the reference column would quietly stop being the code that
-// shipped.
-func loudnessStatsUsable(s *ffmpeg.LoudnessStats) bool {
-	return s.IsValid()
+// consumes is a finite number. Checking InputI alone would not be equivalent to
+// the removed export path's gate: FFmpeg reports "-inf" for input_thresh as well
+// as input_i on a gated clip, and any one unparseable field sent that path to its
+// fallback.
+func loudnessStatsUsable(s *loudnessStats) bool {
+	return s.isValid()
 }
 
 func writeWAV(t *testing.T, path string, pcm []byte) string {
@@ -382,7 +371,7 @@ func writeWAV(t *testing.T, path string, pcm []byte) string {
 // reports, which is all this harness reads.
 func measure(t *testing.T, ctx context.Context, ffmpegBin, path string) loudness {
 	t.Helper()
-	stats, err := ffmpeg.AnalyzeFileLoudness(ctx, path, ffmpegBin, ffmpeg.AudioFilters{}, nil)
+	stats, err := analyzeLoudness(ctx, ffmpegBin, path)
 	require.NoError(t, err, "measuring %s", path)
 
 	return loudness{
@@ -407,7 +396,7 @@ func report(t *testing.T, outcomes []outcome) {
 	t.Helper()
 
 	t.Logf("\nTargets: I=%.1f LUFS  TP=%.1f dBTP  LRA=%.1f LU   pre-fix clamp %.0f dB, native clamp %.0f dB, ffmpeg clamp %.0f dB\n",
-		targetLUFS, targetTruePeak, targetLRA, preFixMaxGainDB, nativeMaxGainDB(), ffmpeg.MaxGainDB)
+		targetLUFS, targetTruePeak, targetLRA, preFixMaxGainDB, nativeMaxGainDB(), loudnormMaxOffsetDB)
 
 	header := fmt.Sprintf("%-38s | %14s | %6s | %6s | %15s | %7s | %7s | %7s | %14s",
 		"case", "input I/TP", "want", "hdroom", "applied (bound)",

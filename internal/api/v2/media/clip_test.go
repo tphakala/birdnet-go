@@ -1,32 +1,40 @@
 package media
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"gorm.io/gorm"
+
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
+
+const (
+	clipTestSourceRate    = 48000
+	clipTestSourceSeconds = 2.0
+)
+
+// clipRequest posts body to the clip endpoint for noteID.
+func clipRequest(t *testing.T, e http.Handler, noteID, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/audio/"+noteID+"/clip", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
 
 func TestExtractAudioClipByID(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
-	// Create a test WAV file (needs to be a real WAV for FFmpeg to process)
 	testFilename := "test_clip.wav"
-	audioFilePath := filepath.Join(tempDir, testFilename)
-	err := createTestAudioFile(t, audioFilePath)
-	require.NoError(t, err)
+	writeToneWAV(t, fixturePath(tempDir, testFilename), clipTestSourceRate, clipTestSourceSeconds, fixtureToneHz)
 
-	// Detect FFmpeg so the valid extraction test can set the path
-	ffmpegPath, ffmpegErr := exec.LookPath("ffmpeg")
-
-	// Configure mock datastore
 	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("GetNoteClipPath", "clip-test-1").Return(testFilename, nil)
 	mockDS.On("GetNoteClipPath", "nonexistent-999").Return("", gorm.ErrRecordNotFound)
@@ -37,77 +45,119 @@ func TestExtractAudioClipByID(t *testing.T) {
 		noteID         string
 		body           string
 		expectedStatus int
-		requiresFFmpeg bool
 	}{
-		{
-			name:           "valid extraction WAV",
-			noteID:         "clip-test-1",
-			body:           `{"start": 0.0, "end": 0.05, "format": "wav"}`,
-			expectedStatus: http.StatusOK,
-			requiresFFmpeg: true,
-		},
-		{
-			name:           "missing note ID",
-			noteID:         "",
-			body:           `{"start": 0.0, "end": 1.0, "format": "wav"}`,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "invalid start > end",
-			noteID:         "clip-test-1",
-			body:           `{"start": 2.0, "end": 1.0, "format": "wav"}`,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "negative start",
-			noteID:         "clip-test-1",
-			body:           `{"start": -1.0, "end": 1.0, "format": "wav"}`,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "unsupported format",
-			noteID:         "clip-test-1",
-			body:           `{"start": 0.0, "end": 1.0, "format": "invalid"}`,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "malformed JSON",
-			noteID:         "clip-test-1",
-			body:           `{bad json}`,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "nonexistent note",
-			noteID:         "nonexistent-999",
-			body:           `{"start": 0.0, "end": 1.0, "format": "wav"}`,
-			expectedStatus: http.StatusNotFound,
-		},
+		{name: "valid extraction WAV", noteID: "clip-test-1", body: `{"start": 0.0, "end": 0.05, "format": "wav"}`, expectedStatus: http.StatusOK},
+		{name: "missing note ID", noteID: "", body: `{"start": 0.0, "end": 1.0, "format": "wav"}`, expectedStatus: http.StatusBadRequest},
+		{name: "invalid start > end", noteID: "clip-test-1", body: `{"start": 2.0, "end": 1.0, "format": "wav"}`, expectedStatus: http.StatusBadRequest},
+		{name: "negative start", noteID: "clip-test-1", body: `{"start": -1.0, "end": 1.0, "format": "wav"}`, expectedStatus: http.StatusBadRequest},
+		{name: "unsupported format", noteID: "clip-test-1", body: `{"start": 0.0, "end": 1.0, "format": "invalid"}`, expectedStatus: http.StatusBadRequest},
+		{name: "alac is no longer a format", noteID: "clip-test-1", body: `{"start": 0.0, "end": 1.0, "format": "alac"}`, expectedStatus: http.StatusBadRequest},
+		{name: "malformed JSON", noteID: "clip-test-1", body: `{bad json}`, expectedStatus: http.StatusBadRequest},
+		{name: "nonexistent note", noteID: "nonexistent-999", body: `{"start": 0.0, "end": 1.0, "format": "wav"}`, expectedStatus: http.StatusNotFound},
+		{name: "invalid denoise preset", noteID: "clip-test-1", body: `{"start": 0, "end": 1, "format": "wav", "denoise": "extreme"}`, expectedStatus: http.StatusBadRequest},
+		{name: "gain above the limit", noteID: "clip-test-1", body: `{"start": 0, "end": 1, "format": "wav", "gain_db": 61}`, expectedStatus: http.StatusBadRequest},
+		{name: "duration above the limit", noteID: "clip-test-1", body: `{"start": 0, "end": 301, "format": "wav"}`, expectedStatus: http.StatusBadRequest},
+		{name: "start past the end of the audio", noteID: "clip-test-1", body: `{"start": 30, "end": 31, "format": "wav"}`, expectedStatus: http.StatusUnprocessableEntity},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.requiresFFmpeg {
-				if ffmpegErr != nil {
-					t.Skip("FFmpeg not available, skipping extraction test")
-				}
-				controller.Settings.Load().Realtime.Audio.FfmpegPath = ffmpegPath
-			}
-
-			path := "/api/v2/audio/" + tc.noteID + "/clip"
-			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(tc.body))
-			req.Header.Set("Content-Type", "application/json")
-			rec := httptest.NewRecorder()
-			e.ServeHTTP(rec, req)
-
+			rec := clipRequest(t, e, tc.noteID, tc.body)
 			assert.Equal(t, tc.expectedStatus, rec.Code)
-
 			if tc.expectedStatus == http.StatusOK {
-				contentType := rec.Header().Get("Content-Type")
-				assert.NotEmpty(t, contentType)
-				contentDisp := rec.Header().Get("Content-Disposition")
-				assert.Contains(t, contentDisp, "attachment")
+				assert.NotEmpty(t, rec.Header().Get("Content-Type"))
+				assert.Contains(t, rec.Header().Get("Content-Disposition"), "attachment")
 				assert.Positive(t, rec.Body.Len())
 			}
 		})
 	}
+}
+
+func TestExtractAudioClipByID_FormatsAndHeaders(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	writeToneWAV(t, fixturePath(tempDir, "src.wav"), clipTestSourceRate, clipTestSourceSeconds, fixtureToneHz)
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteClipPath", "1").Return("src.wav", nil)
+	controller.DS = mockDS
+
+	tests := []struct {
+		format    string
+		mime      string
+		extension string
+		magic     func([]byte) bool
+	}{
+		{"wav", MimeTypeWAV, "wav", func(b []byte) bool { return bytes.HasPrefix(b, []byte("RIFF")) }},
+		{"flac", MimeTypeFLAC, "flac", func(b []byte) bool { return bytes.HasPrefix(b, []byte("fLaC")) }},
+		{"mp3", MimeTypeMP3, "mp3", func(b []byte) bool { return len(b) > 1 && (bytes.HasPrefix(b, []byte("ID3")) || b[0] == 0xFF) }},
+		{"aac", MimeTypeM4A, "m4a", func(b []byte) bool { return len(b) > 8 && bytes.Equal(b[4:8], []byte("ftyp")) }},
+		{"opus", MimeTypeOGG, "ogg", func(b []byte) bool { return bytes.HasPrefix(b, []byte("OggS")) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.format, func(t *testing.T) {
+			rec := clipRequest(t, e, "1", `{"start": 0.5, "end": 1.5, "format": "`+tt.format+`"}`)
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			assert.Equal(t, tt.mime, rec.Header().Get("Content-Type"))
+			assert.Contains(t, rec.Header().Get("Content-Disposition"), "clip_0.5-1.5."+tt.extension)
+			assert.True(t, tt.magic(rec.Body.Bytes()), "unexpected file header")
+		})
+	}
+
+	t.Run("denoise, normalize and gain together", func(t *testing.T) {
+		rec := clipRequest(t, e, "1", `{"start": 0, "end": 1.5, "format": "flac", "denoise": "medium", "normalize": true, "gain_db": 3}`)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.True(t, bytes.HasPrefix(rec.Body.Bytes(), []byte("fLaC")))
+	})
+}
+
+func TestExtractAudioClipByID_SourceProblemsAre422(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	writeHEAAC(t, fixturePath(tempDir, "he.m4a"))
+	writeCorrupt(t, fixturePath(tempDir, "corrupt.flac"))
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteClipPath", "he").Return("he.m4a", nil)
+	mockDS.On("GetNoteClipPath", "corrupt").Return("corrupt.flac", nil)
+	controller.DS = mockDS
+
+	rec := clipRequest(t, e, "he", `{"start": 0, "end": 0.2, "format": "wav"}`)
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	assert.Contains(t, rec.Body.String(), "HE-AAC")
+
+	rec = clipRequest(t, e, "corrupt", `{"start": 0, "end": 0.2, "format": "wav"}`)
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	assert.Contains(t, rec.Body.String(), "could not be decoded")
+}
+
+// This test fills the process-wide clip semaphore, so it must not run in
+// parallel with the other clip tests.
+func TestExtractAudioClipByID_SemaphoreFullIs503(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	writeToneWAV(t, fixturePath(tempDir, "src.wav"), clipTestSourceRate, 0.5, fixtureToneHz)
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteClipPath", "1").Return("src.wav", nil)
+	controller.DS = mockDS
+
+	for range maxConcurrentClipExtractions {
+		clipExtractionSemaphore <- struct{}{}
+	}
+	t.Cleanup(func() {
+		for range maxConcurrentClipExtractions {
+			<-clipExtractionSemaphore
+		}
+	})
+
+	rec := clipRequest(t, e, "1", `{"start": 0, "end": 0.2, "format": "wav"}`)
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+func TestClipMIMETypeAndExtension(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, MimeTypeM4A, clipMIMEType("aac"))
+	assert.Equal(t, "application/octet-stream", clipMIMEType("alac"), "alac is not a clip format")
+	assert.Equal(t, "m4a", clipFileExtension("aac"))
+	assert.Equal(t, "ogg", clipFileExtension("opus"))
+	assert.Equal(t, "flac", clipFileExtension("flac"))
 }

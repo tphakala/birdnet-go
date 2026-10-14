@@ -6,7 +6,6 @@ package processor
 import (
 	"context"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,10 +15,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/mp3"
 	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
@@ -803,15 +802,15 @@ func (a *SaveAudioAction) logExportFailure(enc *clipEncoding, exportFormat strin
 // writing a wrong file.
 func selectEncoder(exportFormat string) (string, error) {
 	switch exportFormat {
-	case ffmpeg.FormatWAV:
+	case audioformat.WAV:
 		return clipenc.NativeWAV, nil
-	case ffmpeg.FormatFLAC:
+	case audioformat.FLAC:
 		return clipenc.NativeFLAC, nil
-	case ffmpeg.FormatAAC:
+	case audioformat.AAC:
 		return clipenc.NativeAAC, nil
-	case ffmpeg.FormatOpus:
+	case audioformat.Opus:
 		return clipenc.NativeOpus, nil
-	case ffmpeg.FormatMP3:
+	case audioformat.MP3:
 		return clipenc.NativeMP3, nil
 	default:
 		return "", unsupportedExportFormatError(exportFormat)
@@ -835,8 +834,8 @@ func unsupportedExportFormatError(exportFormat string) error {
 // clamped value that explains the size of the file on disk.
 func lossyBitrateKbps(exportFormat, bitrate string) int {
 	switch exportFormat {
-	case ffmpeg.FormatMP3, ffmpeg.FormatAAC, ffmpeg.FormatOpus:
-		return ffmpeg.EffectiveBitrateKbps(exportFormat, bitrate)
+	case audioformat.MP3, audioformat.AAC, audioformat.Opus:
+		return audioformat.EffectiveBitrateKbps(exportFormat, bitrate)
 	default:
 		return 0
 	}
@@ -1186,11 +1185,10 @@ func audionormSupportsTargets(targetLUFS, truePeakDBTP float64) bool {
 // the most aggressive permitted target (conf.MaxTargetLUFS, -10) minus the EBU
 // R128 absolute gate (audionormMinTargetLUFS, -70), which is exactly 60 dB.
 //
-// It is numerically equal to ffmpeg.MaxGainDB, but do not read that as "the
-// ceiling loudnorm allowed": ffmpeg.MaxGainDB bounded only the gate-fallback
-// OFFSET the removed export path computed, never loudnorm's own two-pass output
-// (see the note on audionorm.DefaultMaxGainDB). The equality is a coincidence of
-// two independent derivations, not a shared constraint.
+// It is numerically equal to transcode.MaxGainDB, but do not read that as a shared
+// constraint: that constant validates the gain a request may ask for (see the note
+// on audionorm.DefaultMaxGainDB). The equality is a coincidence of two
+// independent derivations.
 //
 // Deliberately not audionorm.DefaultMaxGainDB (30 dB). That is the BirdWeather
 // soundscape-upload ceiling and stays where it is: those uploads go to a public
@@ -1199,63 +1197,15 @@ func audionormSupportsTargets(targetLUFS, truePeakDBTP float64) bool {
 // the most aggressive targets.
 const nativeExportMaxGainDB = 60.0
 
-// gateFallbackGainDB handles the clip EBU R128 gating cannot measure. A clip
-// whose gated integrated loudness falls below the -70 LUFS absolute gate yields
-// -Inf, and PlanGain plans no gain at all for it, so the clip would be exported
-// untouched and inaudible. When such a clip still has a finite true peak there
-// is enough signal to work with, so the gain is anchored to the true-peak
-// ceiling, which is what the removed FFmpeg loudnorm path did for the same case.
-//
-// That anchor alone is not enough. Lifting purely by true-peak headroom leaves
-// the resulting loudness at (ceiling - crest factor), so a FLAT signal (steady
-// hiss from a dead or muted microphone, whose crest factor is only a few dB)
-// lands far LOUDER than the loudness target: measured, a sub-gate noise floor
-// came out at -13.8 LUFS against a -23 target. The second bound closes that.
-// Gating failing is itself information: the clip's true loudness must be below
-// audionormMinTargetLUFS, so lifting by no more than (target - gate) cannot
-// overshoot the target however peaky or flat the clip turns out to be.
-//
-// That premise is worth stating precisely, since the bound rests on it.
-// audionorm's meter reports -Inf on exactly three paths: every 400 ms block sat
-// under the absolute gate (the premise holds by construction); the relative gate
-// eliminated every block (unreachable, because the loudest gated block always
-// exceeds a gate set 10 LU below their mean); or the clip is shorter than one
-// 400 ms block, where loudness is undefined at ANY level. Only that third path
-// breaks the premise, and it cannot arise here because exported clips are whole
-// detection segments, orders of magnitude longer. Even if it did, the true-peak
-// anchor is the tighter bound for a short LOUD clip, so it would still attenuate
-// rather than amplify.
-//
-// Genuine silence (a true peak of -Inf too) reports false and is left alone;
-// there is nothing to lift.
+// gateFallbackGainDB delegates to audionorm.GateFallbackGainDB, where the gate
+// fallback math and its rationale live so on-demand transcoding shares it.
 func gateFallbackGainDB(meas audionorm.Measurement, targetLUFS, truePeakDBTP float64) (gainDB float64, ok bool) {
-	if !math.IsInf(meas.IntegratedLUFS, -1) || math.IsInf(meas.TruePeakDBTP, -1) {
-		return 0, false
-	}
-	peakBound := truePeakDBTP - meas.TruePeakDBTP
-	loudnessBound := targetLUFS - audionormMinTargetLUFS
-	return math.Min(peakBound, loudnessBound), true
+	return audionorm.GateFallbackGainDB(meas, targetLUFS, truePeakDBTP)
 }
 
-// refineLiftedGainDB returns the extra gain to add on top of a gate-fallback
-// lift. Loudness gating is not linear in gain, so the loudness of the lifted
-// signal cannot be derived arithmetically: blocks that sat under the absolute
-// gate before the lift pass it afterwards. The only way to know is to measure
-// the lifted signal, which is what this does, on a copy so pcm is untouched.
-//
-// Once the clip is measurable a normal PlanGain finishes the job, landing it on
-// the target and respecting the true-peak ceiling. A clip still under the gate
-// after the lift (or a measurement error) yields 0, leaving the conservative
-// fallback as the final answer rather than guessing.
-//
-// This runs only for sub-gate clips, so the extra measurement pass is off the
-// common path entirely.
+// refineLiftedGainDB delegates to audionorm.RefineLiftedGainDB.
 func refineLiftedGainDB(pcm []byte, liftDB float64, opts audionorm.Options) float64 {
-	lifted, err := audionorm.MeasureInt16Bytes(pcmgain.Applied(pcm, liftDB), opts.SampleRate, opts.Channels)
-	if err != nil || math.IsInf(lifted.IntegratedLUFS, -1) {
-		return 0
-	}
-	return audionorm.PlanGain(lifted, opts).GainDB
+	return audionorm.RefineLiftedGainDB(pcm, liftDB, opts)
 }
 
 // planNativeNormalizationGain measures the clip's EBU R128 integrated loudness and
@@ -1456,11 +1406,11 @@ func trimPartialSample(pcm []byte) []byte {
 // conf.NumChannels), so the only thing Supports rejects here is the sample rate.
 func nativeEncoderNeedsUpsample(rate int, format string) bool {
 	switch format {
-	case ffmpeg.FormatAAC:
+	case audioformat.AAC:
 		return aac.Supports(rate, conf.BitDepth, conf.NumChannels) != nil
-	case ffmpeg.FormatMP3:
+	case audioformat.MP3:
 		return mp3.Supports(rate, conf.BitDepth, conf.NumChannels) != nil
-	case ffmpeg.FormatOpus:
+	case audioformat.Opus:
 		return opus.Supports(rate, conf.BitDepth, conf.NumChannels) != nil
 	default:
 		// WAV and FLAC carry any rate. Nothing to resample for.

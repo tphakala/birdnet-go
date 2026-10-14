@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 )
 
 // TestLoudnormFilter pins the reference loudnorm chain this harness builds.
@@ -30,7 +28,7 @@ func TestLoudnormFilter(t *testing.T) {
 	// Base targets, shared by every branch.
 	const base = "loudnorm=I=-23.0:TP=-2.0:LRA=7.0"
 
-	usable := &ffmpeg.LoudnessStats{
+	usable := &loudnessStats{
 		InputI:       "-15.0",
 		InputTP:      "-1.0",
 		InputLRA:     "5.0",
@@ -62,7 +60,7 @@ func TestLoudnormFilter(t *testing.T) {
 		// R128 gated the clip to nothing, so input_i and input_thresh are -inf,
 		// but the true peak is still measurable. Offset is targetTruePeak minus
 		// the measured peak: -2.0 - (-30.0) = +28.0.
-		got := loudnormFilterFromStats(&ffmpeg.LoudnessStats{
+		got := loudnormFilterFromStats(&loudnessStats{
 			InputI:       "-inf",
 			InputTP:      "-30.0",
 			InputLRA:     "0.0",
@@ -76,7 +74,7 @@ func TestLoudnormFilter(t *testing.T) {
 	t.Run("gated clip with no measurable peak falls back to single pass", func(t *testing.T) {
 		t.Parallel()
 		// Digital silence: nothing to anchor to.
-		assert.Equal(t, base, loudnormFilterFromStats(&ffmpeg.LoudnessStats{
+		assert.Equal(t, base, loudnormFilterFromStats(&loudnessStats{
 			InputI:       "-inf",
 			InputTP:      "-inf",
 			InputLRA:     "0.0",
@@ -89,7 +87,7 @@ func TestLoudnormFilter(t *testing.T) {
 		t.Parallel()
 		// -2.0 - (-2.02) = 0.02, below the 0.05 dead band the removed
 		// loudnormGateFallbackOffset applied, so no offset is emitted.
-		assert.Equal(t, base, loudnormFilterFromStats(&ffmpeg.LoudnessStats{
+		assert.Equal(t, base, loudnormFilterFromStats(&loudnessStats{
 			InputI:       "-inf",
 			InputTP:      "-2.02",
 			InputLRA:     "0.0",
@@ -98,10 +96,10 @@ func TestLoudnormFilter(t *testing.T) {
 		}))
 	})
 
-	t.Run("offset is clamped to the ffmpeg ceiling", func(t *testing.T) {
+	t.Run("offset is clamped to the offset ceiling", func(t *testing.T) {
 		t.Parallel()
-		// -2.0 - (-200.0) = 198, far past ffmpeg.MaxGainDB (60).
-		assert.Equal(t, base+":offset=60.0", loudnormFilterFromStats(&ffmpeg.LoudnessStats{
+		// -2.0 - (-200.0) = 198, far past loudnormMaxOffsetDB (60).
+		assert.Equal(t, base+":offset=60.0", loudnormFilterFromStats(&loudnessStats{
 			InputI:       "-inf",
 			InputTP:      "-200.0",
 			InputLRA:     "0.0",
@@ -115,7 +113,7 @@ func TestLoudnormFilter(t *testing.T) {
 		// The removed path gated on all five fields, not just input_i. A clip
 		// whose input_i parses but whose thresh does not must take the fallback,
 		// otherwise the harness overstates how often two-pass really ran.
-		assert.Equal(t, base+":offset=28.0", loudnormFilterFromStats(&ffmpeg.LoudnessStats{
+		assert.Equal(t, base+":offset=28.0", loudnormFilterFromStats(&loudnessStats{
 			InputI:       "-15.0",
 			InputTP:      "-30.0",
 			InputLRA:     "5.0",

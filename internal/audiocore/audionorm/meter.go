@@ -9,11 +9,13 @@ import (
 
 // Calibration and gating constants from ITU-R BS.1770-4 / EBU R 128.
 const (
-	loudnessOffset   = -0.691 // LUFS calibration offset
-	absoluteGateLUFS = -70.0  // absolute gate
-	relativeGateLU   = -10.0  // relative gate, below the absolute-gated mean
-	subBlockSeconds  = 0.1    // sub-block length (100 ms hop, 75% overlap); 4 per 400 ms block
-	subBlocksPerGate = 4      // 400 ms / 100 ms
+	loudnessOffset = -0.691 // LUFS calibration offset
+	// AbsoluteGateLUFS is the EBU R128 absolute gate: blocks quieter than this
+	// never count toward integrated loudness, and no target at or below it is valid.
+	AbsoluteGateLUFS = -70.0
+	relativeGateLU   = -10.0 // relative gate, below the absolute-gated mean
+	subBlockSeconds  = 0.1   // sub-block length (100 ms hop, 75% overlap); 4 per 400 ms block
+	subBlocksPerGate = 4     // 400 ms / 100 ms
 
 	// minSampleRate is the lowest supported rate. Below ~3364 Hz the K-weighting
 	// high-shelf center (1681.97 Hz) exceeds Nyquist and the bilinear transform
@@ -27,8 +29,8 @@ const (
 var (
 	// absGateEnergy is the absolute -70 LUFS gate as a weighted-energy threshold:
 	// a block passes when z > absGateEnergy, equivalent to
-	// loudnessOffset + 10*log10(z) > absoluteGateLUFS.
-	absGateEnergy = float32(math.Pow(10, (absoluteGateLUFS-loudnessOffset)/10))
+	// loudnessOffset + 10*log10(z) > AbsoluteGateLUFS.
+	absGateEnergy = float32(math.Pow(10, (AbsoluteGateLUFS-loudnessOffset)/10))
 	// relGateEnergyFactor is the energy ratio for the -10 LU relative gate.
 	relGateEnergyFactor = float32(math.Pow(10, relativeGateLU/10))
 )

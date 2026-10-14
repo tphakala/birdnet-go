@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -19,7 +19,7 @@ func TestEncodeClip_MP3EncodesNatively(t *testing.T) {
 	a := newExportTestAction(t, "96k")
 
 	out := filepath.Join(t.TempDir(), "clip.mp3")
-	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatMP3, out)
+	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, audioformat.MP3, out)
 	require.NoError(t, err)
 	assert.Equal(t, clipenc.NativeMP3, encoder.Encoder, "the clip must record which encoder ran")
 	assert.Equal(t, 96, encoder.BitrateKbps, "the recorded bitrate must be the effective one")
@@ -36,7 +36,7 @@ func TestEncodeClip_MP3EncodesNatively(t *testing.T) {
 func TestEncodeClip_NativeMP3RoundsBitrate(t *testing.T) {
 	a := newExportTestAction(t, "100k")
 	out := filepath.Join(t.TempDir(), "clip.mp3")
-	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatMP3, out)
+	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, audioformat.MP3, out)
 	require.NoError(t, err)
 	assert.Equal(t, clipenc.NativeMP3, encoder.Encoder, "100k is rounded, so the clip stays native MP3")
 	assert.Equal(t, 96, encoder.BitrateKbps, "100k rounds to the nearest MPEG-1 rate, 96k")
@@ -60,12 +60,12 @@ func TestResolveExportParams_MP3SubRateResamplesInsteadOfStranding(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			a := newExportTestAction(t, tc.bitrate)
 			a.sourceSampleRate = tc.rate
-			a.Settings.Realtime.Audio.Export.Type = ffmpeg.FormatMP3
+			a.Settings.Realtime.Audio.Export.Type = audioformat.MP3
 			a.Settings.Realtime.Audio.FfmpegPath = tc.ffmpegPath
 
 			rate, format, path := a.resolveExportParams("/clips/2026/07/19/clip.mp3")
 			assert.Equal(t, tc.wantRate, rate, "resolved sample rate")
-			assert.Equal(t, ffmpeg.FormatMP3, format)
+			assert.Equal(t, audioformat.MP3, format)
 			assert.Equal(t, ".mp3", filepath.Ext(path),
 				"the clip path extension must follow the resolved format")
 		})

@@ -1,0 +1,165 @@
+package transcode
+
+import (
+	"bytes"
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
+	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
+)
+
+// decodeBytes writes data to a file named for ext and decodes it back.
+func decodeBytes(t *testing.T, data []byte, ext string) *PCM {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "out"+ext)
+	require.NoError(t, os.WriteFile(path, data, 0o600))
+	pcm, err := Decode(t.Context(), path, nil, 0)
+	require.NoError(t, err)
+	return pcm
+}
+
+func TestEncode_PerFormatMagicAndRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		format string
+		ext    string
+		magic  func(b []byte) bool
+	}{
+		{audioformat.WAV, ".wav", func(b []byte) bool { return bytes.HasPrefix(b, []byte("RIFF")) }},
+		{audioformat.FLAC, ".flac", func(b []byte) bool { return bytes.HasPrefix(b, []byte("fLaC")) }},
+		{audioformat.MP3, ".mp3", func(b []byte) bool {
+			return bytes.HasPrefix(b, []byte("ID3")) || (len(b) > 1 && b[0] == 0xFF && b[1]&0xE0 == 0xE0)
+		}},
+		{audioformat.AAC, ".m4a", func(b []byte) bool { return len(b) > 8 && bytes.Equal(b[4:8], []byte("ftyp")) }},
+		{audioformat.Opus, ".opus", func(b []byte) bool { return bytes.HasPrefix(b, []byte("OggS")) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.format, func(t *testing.T) {
+			t.Parallel()
+			src := tone(testRate, 2, 1, testToneHz, testAmp)
+			data, err := Encode(t.Context(), newPCM(src, testRate, 2), tt.format, t.TempDir())
+			require.NoError(t, err)
+			assert.Truef(t, tt.magic(data), "unexpected file header % x", data[:min(len(data), 12)])
+
+			back := decodeBytes(t, data, tt.ext)
+			assert.Equal(t, testRate, back.SampleRate)
+			assert.Equal(t, 2, back.Channels)
+			assert.InDelta(t, len(src)/2, back.Frames(), lossyFrameSlack)
+			assert.True(t, dominantIs(channelOf(bytesInt16(back.Data), 2, 0), testRate, testToneHz, testOffToneH))
+			if tt.format == audioformat.WAV || tt.format == audioformat.FLAC {
+				assert.Equal(t, int16Bytes(src), back.Data, "lossless formats round-trip exactly")
+			}
+		})
+	}
+}
+
+func TestEncode_UnsupportedRateResamplesTo48k(t *testing.T) {
+	t.Parallel()
+
+	const lossyRateSlack = 4200
+	tests := []struct {
+		name     string
+		rate     int
+		format   string
+		wantRate int
+	}{
+		{"44.1k to opus", 44100, audioformat.Opus, 48000},
+		{"256k to mp3", 256000, audioformat.MP3, 48000},
+		{"256k to aac", 256000, audioformat.AAC, 48000},
+		{"256k to opus", 256000, audioformat.Opus, 48000},
+		{"44.1k to mp3 stays", 44100, audioformat.MP3, 44100},
+		{"44.1k to aac stays", 44100, audioformat.AAC, 44100},
+		{"256k to wav stays", 256000, audioformat.WAV, 256000},
+		{"256k to flac stays", 256000, audioformat.FLAC, 256000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			const seconds = 0.5
+			src := tone(tt.rate, 1, seconds, testToneHz, testAmp)
+			data, err := Encode(t.Context(), newPCM(src, tt.rate, 1), tt.format, t.TempDir())
+			require.NoError(t, err)
+
+			ext := map[string]string{"wav": ".wav", "flac": ".flac", "mp3": ".mp3", "aac": ".m4a", "opus": ".opus"}[tt.format]
+			back := decodeBytes(t, data, ext)
+			assert.Equal(t, tt.wantRate, back.SampleRate)
+			assert.InDelta(t, seconds*float64(tt.wantRate), back.Frames(), lossyRateSlack)
+		})
+	}
+}
+
+func TestEncode_UpsampleOverCap(t *testing.T) {
+	t.Parallel()
+
+	// 11.025 kHz is not an MP3 encoder rate, so the clip would be upsampled to
+	// 48 kHz; enough of it exceeds MaxDecodedPCMBytes once resampled.
+	const rate = 11025
+	frames := MaxDecodedPCMBytes/2*rate/48000 + rate
+	p := &PCM{Data: make([]byte, frames*2), SampleRate: rate, Channels: 1}
+	_, err := Encode(t.Context(), p, audioformat.MP3, t.TempDir())
+	require.ErrorIs(t, err, ErrAudioTooLong)
+}
+
+func TestEncode_LeavesNoTempFiles(t *testing.T) {
+	t.Parallel()
+
+	entries := func(dir string) int {
+		list, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		return len(list)
+	}
+	src := tone(testRate, 1, 0.5, testToneHz, testAmp)
+
+	for _, format := range []string{audioformat.FLAC, audioformat.MP3, audioformat.AAC, audioformat.Opus} {
+		dir := t.TempDir()
+		_, err := Encode(t.Context(), newPCM(src, testRate, 1), format, dir)
+		require.NoError(t, err)
+		assert.Zerof(t, entries(dir), "%s success", format)
+
+		// A failing encode: the lossy encoders reject three channels, and the
+		// FLAC encoder rejects a trailing partial frame.
+		bad := &PCM{Data: make([]byte, 6000), SampleRate: testRate, Channels: 3}
+		if format == audioformat.FLAC {
+			bad = &PCM{Data: make([]byte, 6001), SampleRate: testRate, Channels: 1}
+		}
+		failDir := t.TempDir()
+		_, err = Encode(t.Context(), bad, format, failDir)
+		require.Errorf(t, err, "%s with malformed input must fail", format)
+		assert.Zerof(t, entries(failDir), "%s failure", format)
+	}
+}
+
+func TestEncode_Rejections(t *testing.T) {
+	t.Parallel()
+
+	src := newPCM(tone(testRate, 1, 0.1, testToneHz, testAmp), testRate, 1)
+	for _, format := range []string{"alac", "ALAC", "", "m4a", "ogg"} {
+		_, err := Encode(t.Context(), src, format, t.TempDir())
+		require.ErrorIsf(t, err, ErrInvalidRequest, "format %q", format)
+	}
+	_, err := Encode(t.Context(), &PCM{SampleRate: testRate, Channels: 1}, audioformat.WAV, "")
+	require.ErrorIs(t, err, ErrEmptyRange)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err = Encode(ctx, src, audioformat.FLAC, t.TempDir())
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestEncoderTag(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, clipenc.NativeWAV, EncoderTag(audioformat.WAV))
+	assert.Equal(t, clipenc.NativeFLAC, EncoderTag(audioformat.FLAC))
+	assert.Equal(t, clipenc.NativeMP3, EncoderTag(audioformat.MP3))
+	assert.Equal(t, clipenc.NativeAAC, EncoderTag(audioformat.AAC))
+	assert.Equal(t, clipenc.NativeOpus, EncoderTag(audioformat.Opus))
+	assert.Equal(t, clipenc.NativeWAV, EncoderTag("unknown"))
+}
