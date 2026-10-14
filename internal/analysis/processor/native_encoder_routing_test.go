@@ -431,6 +431,17 @@ var lossyNativeFormats = []struct {
 	{ffmpeg.FormatOpus, ".opus", clipenc.NativeOpus},
 }
 
+// losslessNativeFormats lists the lossless clip export formats with their file
+// extension and native encoder tag, mirroring lossyNativeFormats.
+var losslessNativeFormats = []struct {
+	format  string
+	ext     string
+	encoder string
+}{
+	{ffmpeg.FormatWAV, ".wav", clipenc.NativeWAV},
+	{ffmpeg.FormatFLAC, ".flac", clipenc.NativeFLAC},
+}
+
 // AAC and MP3 clips at a rate their encoder rejects are resampled to 48 kHz, for a
 // bat-model clip below 48 kHz too, and FFmpeg's presence changes nothing.
 func TestResolveExportParams_BatSubRateUpsamplesForLossy(t *testing.T) {
@@ -512,14 +523,6 @@ func TestResolveExportParams_OddLengthPCMDownsamplesAfterTrimForLossy(t *testing
 // buffer that is not a whole number of frames, so a trailing partial sample must
 // not cost a WAV or FLAC clip at any rate, bat or not, resampled or not.
 func TestResolveExportParams_OddLengthPCMEncodesForLossless(t *testing.T) {
-	lossless := []struct {
-		format  string
-		ext     string
-		encoder string
-	}{
-		{ffmpeg.FormatWAV, ".wav", clipenc.NativeWAV},
-		{ffmpeg.FormatFLAC, ".flac", clipenc.NativeFLAC},
-	}
 	cases := []struct {
 		name     string
 		bat      bool
@@ -532,7 +535,7 @@ func TestResolveExportParams_OddLengthPCMEncodesForLossless(t *testing.T) {
 		{"bat below the analysis rate", true, 22050, 22050},
 		{"bat above the analysis rate keeps its rate", true, 96000, 96000},
 	}
-	for _, lf := range lossless {
+	for _, lf := range losslessNativeFormats {
 		for _, tc := range cases {
 			t.Run(lf.format+"_"+tc.name, func(t *testing.T) {
 				a := newExportTestAction(t, "96k")
@@ -553,6 +556,7 @@ func TestResolveExportParams_OddLengthPCMEncodesForLossless(t *testing.T) {
 				enc, err := a.encodeClip(t.Context(), rate, format, path)
 				require.NoError(t, err)
 				assert.Equal(t, lf.encoder, enc.Encoder)
+				assert.FileExists(t, path)
 			})
 		}
 	}
