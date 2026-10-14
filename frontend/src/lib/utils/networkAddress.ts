@@ -216,6 +216,39 @@ function keyFromBytes(bytes: number[], prefix: number): string {
   return `${groups.join(':')}/${prefix}`;
 }
 
+/** A network as the backend reads it: masked bytes (4 or 16) and the prefix length. */
+interface CanonicalNetwork {
+  bytes: number[];
+  prefix: number;
+}
+
+/**
+ * The network an entry describes, or null when it is neither an IP nor a CIDR. A
+ * bare IP is its single-host network, an IPv4-mapped bare IP is IPv4, and an
+ * IPv4-mapped CIDR of 96 bits or more is the IPv4 network (as Go's ParseCIDR).
+ */
+function canonicalNetwork(value: string): CanonicalNetwork | null {
+  const cidr = parseCIDR(value);
+  if (cidr) {
+    const { address, prefix } = cidr;
+    if (isMapped(address.bytes) && prefix >= MAPPED_PREFIX_BITS) {
+      const v4Prefix = prefix - MAPPED_PREFIX_BITS;
+      return {
+        bytes: maskBytes(address.bytes.slice(IPV6_BYTES - IPV4_BYTES), v4Prefix),
+        prefix: v4Prefix,
+      };
+    }
+    return { bytes: maskBytes(address.bytes, prefix), prefix };
+  }
+
+  const address = parseAddress(value);
+  if (!address) return null;
+  if (isMapped(address.bytes)) {
+    return { bytes: address.bytes.slice(IPV6_BYTES - IPV4_BYTES), prefix: IPV4_BITS };
+  }
+  return { bytes: address.bytes, prefix: bitWidth(address) };
+}
+
 /**
  * Canonical key for duplicate detection, or null when s is neither an IP nor a
  * CIDR. Two values share a key exactly when they describe the same set of hosts
@@ -225,25 +258,25 @@ function keyFromBytes(bytes: number[], prefix: number): string {
  * Hex is lowercase and uses all eight groups.
  */
 export function networkAddressKey(s: string): string | null {
-  const value = s.trim();
-  const cidr = parseCIDR(value);
-  if (cidr) {
-    const { address, prefix } = cidr;
-    if (isMapped(address.bytes) && prefix >= MAPPED_PREFIX_BITS) {
-      return keyFromBytes(
-        maskBytes(address.bytes.slice(IPV6_BYTES - IPV4_BYTES), prefix - MAPPED_PREFIX_BITS),
-        prefix - MAPPED_PREFIX_BITS
-      );
-    }
-    return keyFromBytes(maskBytes(address.bytes, prefix), prefix);
-  }
+  const network = canonicalNetwork(s.trim());
+  return network ? keyFromBytes(network.bytes, network.prefix) : null;
+}
 
-  const address = parseAddress(value);
-  if (!address) return null;
-  if (isMapped(address.bytes)) {
-    return keyFromBytes(address.bytes.slice(IPV6_BYTES - IPV4_BYTES), IPV4_BITS);
-  }
-  return keyFromBytes(address.bytes, bitWidth(address));
+/**
+ * Whether the network an entry describes (an IP or a CIDR, read as in
+ * networkAddressKey) contains the IP address `address`, with the semantics of Go's
+ * net.IPNet.Contains: an IPv4 address (including an IPv4-mapped one) is only in an
+ * IPv4 network, and an IPv6 address only in an IPv6 network. False when either
+ * value does not parse.
+ */
+export function networkContains(entry: string, address: string): boolean {
+  const network = canonicalNetwork(entry.trim());
+  const parsed = parseAddress(address.trim());
+  if (!network || !parsed) return false;
+  const bytes = isMapped(parsed.bytes) ? parsed.bytes.slice(IPV6_BYTES - IPV4_BYTES) : parsed.bytes;
+  if (bytes.length !== network.bytes.length) return false;
+  const masked = maskBytes(bytes, network.prefix);
+  return masked.every((byte, index) => byte === network.bytes.at(index));
 }
 
 /**

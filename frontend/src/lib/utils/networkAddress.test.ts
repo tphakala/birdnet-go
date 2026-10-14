@@ -7,6 +7,7 @@ import {
   validateNetworkAddress,
   networkAddressKey,
   isSingleHost,
+  networkContains,
 } from './networkAddress';
 
 describe('parseIPv4', () => {
@@ -185,6 +186,39 @@ describe('networkAddressKey', () => {
     expect(networkAddressKey('nope')).toBeNull();
     expect(networkAddressKey('')).toBeNull();
     expect(networkAddressKey('10.0.0.0/33')).toBeNull();
+  });
+});
+
+describe('networkContains', () => {
+  // Vectors measured with go1.27 net.ParseCIDR + IPNet.Contains (bare IP entries are
+  // single hosts, as proxytrust reads them).
+  it.each([
+    ['0.0.0.0/0', '1.2.3.4', true],
+    ['0.0.0.0/0', '::ffff:1.2.3.4', true],
+    ['::/0', '1.2.3.4', false],
+    ['::/0', '::ffff:1.2.3.4', false],
+    ['::/0', '2001:db8::1', true],
+    ['::ffff:0:0/96', '1.2.3.4', true],
+    ['::ffff:1.2.3.0/120', '1.2.3.9', true],
+    ['::ffff:1.2.3.4/32', '1.2.3.4', false],
+    ['10.0.0.0/8', '10.200.1.1', true],
+    ['10.0.0.0/8', '11.0.0.1', false],
+    ['2001:db8::/32', '2001:db8:1::5', true],
+    ['2001:db8::/32', '2001:db9::5', false],
+    ['172.18.0.1/32', '172.18.0.1', true],
+    ['fe80::/10', 'fe80::1', true],
+    ['172.18.0.1', '172.18.0.1', true],
+    ['::ffff:172.18.0.1', '172.18.0.1', true],
+    ['172.18.0.1', '172.18.0.2', false],
+    [' 192.168.0.0/16 ', ' 192.168.4.176 ', true],
+  ] as const)('%s contains %s: %s', (entry, address, expected) => {
+    expect(networkContains(entry, address)).toBe(expected);
+  });
+
+  it('is false for values that do not parse', () => {
+    expect(networkContains('nonsense', '10.0.0.1')).toBe(false);
+    expect(networkContains('10.0.0.0/8', '')).toBe(false);
+    expect(networkContains('10.0.0.0/8', '10.0.0.0/8')).toBe(false);
   });
 });
 
