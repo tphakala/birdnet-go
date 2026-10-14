@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -25,6 +26,10 @@ import (
 const (
 	nativeTestRate     = 48000
 	nativeTestChannels = 1
+
+	// feedHoldTime is how long the fake feed holds the muxer before its last
+	// write, in the fake time of a synctest bubble.
+	feedHoldTime = 50 * time.Millisecond
 )
 
 // newNativeMux builds a muxer with the production codec and releases it through
@@ -391,24 +396,33 @@ func TestCloseNativeMuxIsSafeOnBothPaths(t *testing.T) {
 // internal/errors, whose Build() forwards to telemetry, so the race would fire a
 // spurious Sentry event on roughly half of all clean stops.
 func TestCloseNativeMuxWaitsForTheFeed(t *testing.T) {
-	stream := newEmptyNativeStream(t)
-	stream.feedDone = make(chan struct{})
+	synctest.Test(t, func(t *testing.T) {
+		stream := newEmptyNativeStream(t)
+		stream.feedDone = make(chan struct{})
 
-	released := make(chan struct{})
-	go func() {
-		// Hold the muxer briefly, as a feed goroutine mid-write would.
-		time.Sleep(50 * time.Millisecond)
-		close(stream.feedDone)
-		close(released)
-	}()
+		// writeErr is read only after feedDone is closed, which happens after
+		// the write, so the read is ordered after the store.
+		var writeErr error
+		go func() {
+			// Hold the muxer briefly, as a feed goroutine mid-write would, then
+			// land one last write before announcing that the feed has stopped.
+			time.Sleep(feedHoldTime)
+			writeErr = stream.mux.Write(make([]byte, 2), time.Now())
+			close(stream.feedDone)
+		}()
 
-	closeNativeMux("src", stream)
+		closeNativeMux("src", stream)
 
-	select {
-	case <-released:
-	default:
-		t.Fatal("closeNativeMux returned before the feed signalled it had stopped")
-	}
+		select {
+		case <-stream.feedDone:
+		default:
+			t.Fatal("closeNativeMux returned before the feed signalled it had stopped")
+		}
+		require.NoError(t, writeErr,
+			"the feed's last write must land before the muxer closes")
+		require.Error(t, stream.mux.Write(make([]byte, 2), time.Now()),
+			"the muxer must be closed once closeNativeMux returns")
+	})
 }
 
 // TestCloseNativeMuxGivesUpOnAWedgedFeed proves the wait is bounded, so a feed
