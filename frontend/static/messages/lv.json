@@ -2311,7 +2311,8 @@
       "savingAriaLabel": "Saglabā izmaiņas...",
       "unsavedChanges": "Nesaglabātas izmaiņas",
       "toolbar": "Iestatījumu darbības",
-      "validationBlocked": "Pirms saglabāšanas izlabojiet iezīmētos laukus."
+      "validationBlocked": "Pirms saglabāšanas izlabojiet iezīmētos laukus.",
+      "noChangesToSave": "Nav izmaiņu, ko saglabāt."
     },
     "errors": {
       "loadFailed": "Neizdevās ielādēt iestatījumus",

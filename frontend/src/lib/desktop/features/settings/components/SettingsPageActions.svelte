@@ -50,7 +50,10 @@
       .map(entry => $settingsValidationReasons.get(entry))
       .filter((reason): reason is string => reason !== undefined && reason !== '')
   );
+  // Nothing to save and no save running: the button is inert, so say why.
+  let nothingToSave = $derived(!unsavedChanges && !store.isSaving);
   const SAVE_BLOCKED_ID = generateId('settings-save-blocked');
+  const NO_CHANGES_ID = generateId('settings-save-no-changes');
 
   async function handleSave() {
     // Guard against calls when button should be disabled
@@ -118,7 +121,11 @@
       class="btn btn-primary btn-sm gap-2 shrink-0 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
       onclick={handleSave}
       aria-disabled={!canSave || store.isSaving ? 'true' : undefined}
-      aria-describedby={blockedByValidation ? SAVE_BLOCKED_ID : undefined}
+      aria-describedby={blockedByValidation
+        ? SAVE_BLOCKED_ID
+        : nothingToSave
+          ? NO_CHANGES_ID
+          : undefined}
       aria-busy={store.isSaving}
       aria-label={store.isSaving
         ? t('settings.actions.savingAriaLabel')
@@ -132,5 +139,8 @@
         {t('settings.actions.save')}
       {/if}
     </button>
+    {#if nothingToSave}
+      <span id={NO_CHANGES_ID} class="sr-only">{t('settings.actions.noChangesToSave')}</span>
+    {/if}
   </div>
 </div>

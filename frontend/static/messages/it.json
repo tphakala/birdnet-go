@@ -2311,7 +2311,8 @@
       "savingAriaLabel": "Salvataggio modifiche...",
       "unsavedChanges": "Modifiche non salvate",
       "toolbar": "Azioni impostazioni",
-      "validationBlocked": "Correggi i campi evidenziati prima di salvare."
+      "validationBlocked": "Correggi i campi evidenziati prima di salvare.",
+      "noChangesToSave": "Nessuna modifica da salvare."
     },
     "errors": {
       "loadFailed": "Caricamento delle impostazioni non riuscito",

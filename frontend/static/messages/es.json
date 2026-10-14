@@ -2311,7 +2311,8 @@
       "savingAriaLabel": "Guardando cambios...",
       "unsavedChanges": "Cambios sin guardar",
       "toolbar": "Acciones de configuración",
-      "validationBlocked": "Corrija los campos resaltados antes de guardar."
+      "validationBlocked": "Corrija los campos resaltados antes de guardar.",
+      "noChangesToSave": "No hay cambios que guardar."
     },
     "errors": {
       "loadFailed": "Error al cargar la configuración",

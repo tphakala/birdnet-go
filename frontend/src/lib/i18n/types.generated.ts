@@ -1799,6 +1799,7 @@ export type TranslationKey =
   | 'settings.actions.unsavedChanges'
   | 'settings.actions.toolbar'
   | 'settings.actions.validationBlocked'
+  | 'settings.actions.noChangesToSave'
   | 'settings.errors.loadFailed'
   | 'settings.errors.saveFailed'
   | 'settings.errors.databaseStatsFailed'

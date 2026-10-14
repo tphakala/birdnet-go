@@ -2311,7 +2311,8 @@
       "savingAriaLabel": "Änderungen werden gespeichert...",
       "unsavedChanges": "Ungespeicherte Änderungen",
       "toolbar": "Einstellungsaktionen",
-      "validationBlocked": "Korrigieren Sie die markierten Felder vor dem Speichern."
+      "validationBlocked": "Korrigieren Sie die markierten Felder vor dem Speichern.",
+      "noChangesToSave": "Keine Änderungen zu speichern."
     },
     "errors": {
       "loadFailed": "Einstellungen konnten nicht geladen werden",

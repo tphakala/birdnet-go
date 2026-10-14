@@ -2311,7 +2311,8 @@
       "savingAriaLabel": "Sparar ändringar...",
       "unsavedChanges": "Osparade ändringar",
       "toolbar": "Inställningsåtgärder",
-      "validationBlocked": "Rätta de markerade fälten innan du sparar."
+      "validationBlocked": "Rätta de markerade fälten innan du sparar.",
+      "noChangesToSave": "Inga ändringar att spara."
     },
     "errors": {
       "loadFailed": "Kunde inte ladda inställningar",

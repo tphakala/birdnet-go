@@ -2311,7 +2311,8 @@
       "savingAriaLabel": "Tallennetaan muutoksia...",
       "unsavedChanges": "Tallentamattomat muutokset",
       "toolbar": "Asetusten toiminnot",
-      "validationBlocked": "Korjaa korostetut kentät ennen tallennusta."
+      "validationBlocked": "Korjaa korostetut kentät ennen tallennusta.",
+      "noChangesToSave": "Ei tallennettavia muutoksia."
     },
     "errors": {
       "loadFailed": "Asetusten lataaminen epäonnistui",

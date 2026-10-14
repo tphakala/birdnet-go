@@ -76,7 +76,19 @@ describe('SettingsPageActions save blocking', () => {
     expect(save).toHaveBeenCalledTimes(1);
   });
 
-  it('shows no reason when there is nothing to save', () => {
+  it('describes why Save is unavailable when there is nothing to save', () => {
+    render(SettingsPageActions);
+
+    const button = saveButton();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    const reasonId = button.getAttribute('aria-describedby');
+    expect(reasonId).toBeTruthy();
+    expect(document.getElementById(reasonId ?? '')).toHaveTextContent(
+      'settings.actions.noChangesToSave'
+    );
+  });
+
+  it('shows no validation-blocked reason when there is nothing to save', () => {
     settingsValidationErrors.set(['a-key']);
     render(SettingsPageActions);
 

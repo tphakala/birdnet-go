@@ -2311,7 +2311,8 @@
       "savingAriaLabel": "Bewaren ...",
       "unsavedChanges": "Niet opgeslagen wijzigingen",
       "toolbar": "Instellingenacties",
-      "validationBlocked": "Herstel de gemarkeerde velden voordat u opslaat."
+      "validationBlocked": "Herstel de gemarkeerde velden voordat u opslaat.",
+      "noChangesToSave": "Geen wijzigingen om op te slaan."
     },
     "errors": {
       "loadFailed": "Instellingen konden niet worden geladen",

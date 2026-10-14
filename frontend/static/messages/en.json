@@ -2311,7 +2311,8 @@
       "savingAriaLabel": "Saving changes...",
       "unsavedChanges": "Unsaved changes",
       "toolbar": "Settings actions",
-      "validationBlocked": "Fix the highlighted fields before saving."
+      "validationBlocked": "Fix the highlighted fields before saving.",
+      "noChangesToSave": "No changes to save."
     },
     "errors": {
       "loadFailed": "Failed to load settings",
