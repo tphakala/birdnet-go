@@ -306,11 +306,11 @@ describe('SecuritySettingsPage reverse proxy wiring', () => {
     expect(screen.queryByText(/errors\.invalid/)).not.toBeInTheDocument();
   });
 
-  it.each([
+  it.each<{ name: string; label: string; tab: string | null; seed: () => void }>([
     {
       name: 'trusted proxies',
       label: 'settings.security.reverseProxy.listLabel',
-      tab: null as string | null,
+      tab: null,
       seed: () => seedSecurity({ trustedProxies: ['10.0.0.1'] }),
     },
     {
