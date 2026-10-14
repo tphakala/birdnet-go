@@ -5,6 +5,7 @@ import (
 	"context"
 	"math"
 	"math/rand/v2"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,20 +35,25 @@ const (
 	truePeakSlackDB = 0.1
 )
 
-// noisyTone returns mono noise for noiseOnlySeconds followed by a tone in noise.
-func noisyTone(rate int) []int16 {
-	rng := rand.New(rand.NewPCG(noiseSeed, noiseSeed))
-	total := int((noiseOnlySeconds + noiseToneSeconds) * float64(rate))
-	lead := int(noiseOnlySeconds * float64(rate))
-	out := make([]int16, total)
+// noisePlusTone returns mono white noise of amplitude noiseLevel with a testToneHz
+// tone of amplitude toneLevel added from frame toneStart on; both levels are
+// fractions of full scale. The same seed gives the same noise.
+func noisePlusTone(seed uint64, rate, frames, toneStart int, noiseLevel, toneLevel float64) []int16 {
+	rng := rand.New(rand.NewPCG(seed, seed))
+	out := make([]int16, frames)
 	for i := range out {
-		v := noiseAmp * rng.NormFloat64()
-		if i >= lead {
-			v += noiseToneAmp * math.Sin(2*math.Pi*testToneHz*float64(i)/float64(rate))
+		v := noiseLevel * rng.NormFloat64()
+		if i >= toneStart {
+			v += toneLevel * math.Sin(2*math.Pi*testToneHz*float64(i)/float64(rate))
 		}
 		out[i] = int16(math.Max(math.Min(math.Round(v*math.MaxInt16), math.MaxInt16), math.MinInt16))
 	}
 	return out
+}
+
+// noisyTone returns mono noise for noiseOnlySeconds followed by a tone in noise.
+func noisyTone(rate int) []int16 {
+	return noisePlusTone(noiseSeed, rate, int((noiseOnlySeconds+noiseToneSeconds)*float64(rate)), int(noiseOnlySeconds*float64(rate)), noiseAmp, noiseToneAmp)
 }
 
 // toneFit fits a sinusoid at freq to x by least squares and returns its
@@ -234,6 +240,40 @@ func TestApplyFilters_DenoiseCancelled(t *testing.T) {
 	cancel()
 	p := newPCM(noisyTone(testRate), testRate, 1)
 	require.ErrorIs(t, applyFilters(ctx, p, Filters{Denoise: "light"}), context.Canceled)
+}
+
+// allocSeconds is the length of the clip for the allocation test: long enough
+// that one channel of floats dwarfs the denoiser's own working set.
+const allocSeconds = 60
+
+// allocatedBy returns the bytes allocated process-wide while fn runs.
+func allocatedBy(fn func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	fn()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
+}
+
+// This test reads the process-wide allocation counter, so it must not run in
+// parallel with the tests that allocate buffers (serial tests finish before the
+// paused parallel ones resume, as in TestDecode_HeaderClaimingHugeLengthDoesNotDriveAllocation).
+func TestDenoisePCM_AllocatesLessThanOneChannelOfFloats(t *testing.T) {
+	frames := allocSeconds * testRate
+	src := make([]int16, 0, frames)
+	for len(src) < frames {
+		src = append(src, noisyTone(testRate)...)
+	}
+	src = src[:frames]
+	channelOfFloats := uint64(frames) * 4 //nolint:gosec // G115: a small positive test constant
+
+	streaming := newPCM(src, testRate, 1)
+	streamed := allocatedBy(func() {
+		require.NoError(t, denoisePCM(t.Context(), streaming, "heavy"))
+	})
+	t.Logf("channel of floats %d bytes; streaming denoise allocated %d", channelOfFloats, streamed)
+
+	assert.Less(t, streamed, channelOfFloats/2, "the streaming denoise must not hold a whole channel of floats")
 }
 
 // lufsOf measures integrated loudness and true peak of mono 16-bit PCM.

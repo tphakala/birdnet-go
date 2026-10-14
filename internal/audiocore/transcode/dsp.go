@@ -83,9 +83,16 @@ func applyFilters(ctx context.Context, p *pcmBuffer, f Filters) error {
 	return nil
 }
 
-// denoisePCM denoises p channel by channel. Each channel is copied into one
-// reusable float32 buffer, so the working set is the PCM plus one channel of
-// floats, and the result is written back into p.Data in place.
+// denoisePCM denoises p channel by channel and writes the result back into
+// p.Data in place.
+//
+// Each channel takes two passes over one reusable chunk of float32 samples, so
+// the working set is the PCM plus one chunk of floats and the profile
+// estimator's bounded window, not a whole channel of floats. Pass 1 feeds the
+// chunks to the noise profile estimator; pass 2 denoises them. Pass 2 runs
+// ProcessInto at exactly chunkFrames boundaries: chunked and one-shot denoising
+// can differ by one least significant bit, so the boundaries are part of the
+// output.
 func denoisePCM(ctx context.Context, p *pcmBuffer, preset string) error {
 	strength, ok := denoiseStrengths[preset]
 	if !ok {
@@ -96,7 +103,7 @@ func denoisePCM(ctx context.Context, p *pcmBuffer, preset string) error {
 		return nil
 	}
 
-	x := make([]float32, frames)
+	x := make([]float32, min(frames, chunkFrames))
 	// ProcessInto needs MaxOutputLen(chunk) samples; FlushInto needs FrameSize().
 	var scratch []float32
 
@@ -109,32 +116,42 @@ func denoisePCM(ctx context.Context, p *pcmBuffer, preset string) error {
 			scratch = make([]float32, need)
 		}
 
-		for i := range frames {
-			off := (i*p.Channels + ch) * bytesPerSample
-			x[i] = float32(int16(binary.LittleEndian.Uint16(p.Data[off:]))) / pcm16Scale //nolint:gosec // G115: intentional uint16 to int16 reinterpretation of PCM
+		// Pass 1, mirroring denoiser.Denoise: learn the noise floor from the
+		// quietest window when the clip has one, otherwise let the adaptive
+		// tracker converge. A failed estimate is not an error.
+		est := d.NewNoiseProfileEstimator()
+		for off := 0; off < frames; off += chunkFrames {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			end := min(off+chunkFrames, frames)
+			readChannel(p, ch, off, x[:end-off])
+			est.AddFloat32(x[:end-off])
 		}
-
-		// Mirror denoiser.Denoise: learn the noise floor from the quietest window
-		// when the clip has one, otherwise let the adaptive tracker converge. A
-		// failed estimate is not an error.
-		if prof, perr := d.EstimateNoiseProfile(x); perr == nil {
+		if prof, perr := est.Profile(); perr == nil {
 			if err := d.SetNoiseProfile(prof); err != nil {
 				return denoiseError("denoise_profile", err)
 			}
 		}
 
+		// Pass 2.
 		written := 0
 		for off := 0; off < frames; off += chunkFrames {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
 			end := min(off+chunkFrames, frames)
-			n, err := d.ProcessInto(x[off:end], scratch[:d.MaxOutputLen(end-off)])
+			// The chunk is converted to float before anything is written back.
+			readChannel(p, ch, off, x[:end-off])
+			n, err := d.ProcessInto(x[:end-off], scratch[:d.MaxOutputLen(end-off)])
 			if err != nil {
 				return denoiseError("denoise_process", err)
 			}
-			if written+n > frames {
-				return denoiseLengthError(written+n, frames)
+			// Output never exceeds the input consumed so far, so the write-back
+			// stays below the next chunk's unread samples; this guard enforces
+			// that rather than assuming it.
+			if written+n > end {
+				return denoiseLengthError(written+n, end)
 			}
 			writeChannel(p, ch, written, scratch[:n])
 			written += n
@@ -160,6 +177,15 @@ func denoiseLengthError(got, want int) error {
 // denoiseError wraps a denoiser failure.
 func denoiseError(operation string, err error) error {
 	return wrapError(err, errors.CategoryAudio, operation)
+}
+
+// readChannel fills dst with the samples of channel ch of p starting at frame
+// index start, as floats in [-1, 1).
+func readChannel(p *pcmBuffer, ch, start int, dst []float32) {
+	for i := range dst {
+		off := ((start+i)*p.Channels + ch) * bytesPerSample
+		dst[i] = float32(int16(binary.LittleEndian.Uint16(p.Data[off:]))) / pcm16Scale //nolint:gosec // G115: intentional uint16 to int16 reinterpretation of PCM
+	}
 }
 
 // writeChannel stores samples into channel ch of p starting at frame index start,

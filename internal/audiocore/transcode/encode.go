@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	flacpcm "github.com/tphakala/go-flac/pcm"
 	wavpcm "github.com/tphakala/go-wav/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
@@ -23,10 +24,6 @@ import (
 // outputBitDepth is the bit depth of the PCM this package encodes.
 const outputBitDepth = 16
 
-// flacMaxSampleRate is the highest rate the FLAC encoder accepts: 655350 Hz, the
-// limit of the FLAC frame-header sample-rate encoding (go-flac pcm/encoder.go).
-const flacMaxSampleRate = 655350
-
 // EncoderTag returns the encoder identity recorded in the export logs for format.
 // An unknown format reports the WAV writer.
 func EncoderTag(format string) string {
@@ -37,7 +34,7 @@ func EncoderTag(format string) string {
 }
 
 // EncoderAcceptsRate reports whether the native encoder for format can carry audio
-// of this shape. WAV carries any rate; FLAC carries rates up to flacMaxSampleRate;
+// of this shape. WAV carries any rate; FLAC carries rates up to flacpcm.MaxSampleRate;
 // AAC, MP3 and Opus accept only the rates their encoders support. Clip export and on-demand transcoding share this
 // rule to decide whether a clip must be resampled to conf.SampleRate first.
 func EncoderAcceptsRate(format string, sampleRate, bitDepth, channels int) bool {
@@ -49,7 +46,7 @@ func EncoderAcceptsRate(format string, sampleRate, bitDepth, channels int) bool 
 	case audioformat.Opus:
 		return opus.Supports(sampleRate, bitDepth, channels) == nil
 	case audioformat.FLAC:
-		return sampleRate <= flacMaxSampleRate
+		return sampleRate <= flacpcm.MaxSampleRate
 	default:
 		return true
 	}

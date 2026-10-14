@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	aaccodec "github.com/tphakala/go-aac"
 	aacpcm "github.com/tphakala/go-aac/pcm"
 	flac "github.com/tphakala/go-flac"
 	flacpcm "github.com/tphakala/go-flac/pcm"
 	m4a "github.com/tphakala/go-m4a"
+	aacm4a "github.com/tphakala/go-m4a/aacm4a"
 	mp3 "github.com/tphakala/go-mp3"
 	mp3pcm "github.com/tphakala/go-mp3/pcm"
 	"github.com/tphakala/go-opus/oggopus"
@@ -74,9 +76,18 @@ type source struct {
 	// skipFrames counts leading frames the reader emits that are not audio (AAC
 	// priming); they are discarded before any requested position.
 	skipFrames int64
-	// seek positions the reader at a frame index and returns the frame reached.
-	// It is nil for decoders without a seek; those are positioned by discarding.
+	// seek positions the reader at a frame index of the presented audio and
+	// returns the frame reached. It accounts for skipFrames itself and is called
+	// only for a start other than frame 0. A start past the end is reported by
+	// returning a frame below the target. It is nil for decoders without a seek;
+	// those are positioned by discarding.
 	seek func(frame int64) (int64, error)
+	// rewind abandons the seek path and returns the reader to the start of the
+	// source, to be positioned by discarding from then on. It is nil for sources
+	// that never fall back. It is called only for a start other than frame 0, after
+	// the seek or a read through the seeked position failed, so it must return a
+	// stream that neither the seek nor that read has consumed.
+	rewind func()
 	// expansion bounds the initial buffer relative to the file size.
 	expansion int64
 }
@@ -197,10 +208,10 @@ func openWAV(f *os.File) (*source, error) {
 	}, nil
 }
 
-// openFLAC opens a FLAC source. Samples wider or narrower than 16 bits are
-// converted as they are read.
+// openFLAC opens a FLAC source. The decoder converts every bit depth to 16-bit as
+// it reads; Info().BitDepth stays the native depth of the file.
 func openFLAC(f *os.File) (*source, error) {
-	dec, err := flacpcm.NewDecoder(f, flacpcm.SkipMD5Verification())
+	dec, err := flacpcm.NewDecoder(f, flacpcm.SkipMD5Verification(), flacpcm.WithConvertTo(outputBitDepth))
 	if err != nil {
 		return nil, classifyDecodeError("decode_open_flac", err)
 	}
@@ -209,12 +220,8 @@ func openFLAC(f *os.File) (*source, error) {
 	if info.TotalSamples > 0 && info.TotalSamples <= math.MaxInt64 {
 		total = int64(info.TotalSamples) //nolint:gosec // G115: bounded by the check above
 	}
-	var reader io.Reader = dec
-	if info.BitDepth != outputBitDepth {
-		reader = newWidthConverter(dec, info.BitDepth)
-	}
 	return &source{
-		reader:      reader,
+		reader:      dec,
 		sampleRate:  info.SampleRate,
 		channels:    info.Channels,
 		totalFrames: total,
@@ -247,10 +254,90 @@ func openOpus(f *os.File) (*source, error) {
 	}, nil
 }
 
-// openM4A opens an AAC-LC source in an MP4 container. The decoder is assembled
-// by hand (as go-m4a's aacm4a bridge does) so the box buffer can be capped. The
-// decoder is not edit-list aware, so the priming samples are skipped and the
-// padding after the declared duration is left unread.
+// m4aReader reads the PCM of an M4A through go-m4a's forward decoder and, once a
+// window seeks, through a second, seekable decoder. The forward decoder is kept
+// untouched so a failed seek can fall back to decoding from the start.
+type m4aReader struct {
+	// fwd is the forward decoder, which emits nothing for an access unit with no
+	// audio element. It is read only while seeked is nil, and a seek precedes any
+	// read of a window that starts after frame 0, so a failed seek leaves it at
+	// the start of the file.
+	fwd io.Reader
+	// seeked is the seekable decoder, set once a seek has positioned it.
+	seeked *aacm4a.Decoder
+
+	file *os.File
+	// fileSize is the size of file in bytes.
+	fileSize int64
+	// skip is the count of leading decoded frames that are priming, bounded by the
+	// decoded length of the track.
+	skip int64
+	// frameCount is the number of access units in the track.
+	frameCount int64
+	// frameBytes is the size of one interleaved sample frame.
+	frameBytes int
+}
+
+// Read serves the seekable decoder after a successful seek, otherwise the
+// forward decoder.
+func (r *m4aReader) Read(p []byte) (int, error) {
+	if r.seeked != nil {
+		return r.seeked.Read(p)
+	}
+	return r.fwd.Read(p)
+}
+
+// seek positions the reader at frame of the presented audio and returns the
+// frame reached: frame itself, or 0 when the position is past the end of the
+// track. The target is the same decoded-output index the forward path discards
+// to, skip+frame; the seekable decoder starts at the access unit holding it and
+// the remainder of that unit is discarded.
+func (r *m4aReader) seek(frame int64) (int64, error) {
+	// No overflow: skip is bounded by frameCount*aaccodec.FrameSize, and frame by
+	// maxWindowFrames.
+	pos := r.skip + frame
+	unit := pos / aaccodec.FrameSize
+	if unit >= r.frameCount {
+		return 0, nil
+	}
+	// A section reader reads through ReadAt, so this decoder leaves the file
+	// offset, and with it the forward decoder, alone for the fallback.
+	dec, _, err := aacm4a.NewSeekableDecoder(io.NewSectionReader(r.file, 0, r.fileSize), m4a.WithMaxBoxBuffer(maxM4ABoxBytes))
+	if err != nil {
+		return 0, err
+	}
+	if err := dec.SeekSample(int(unit)); err != nil {
+		if errors.Is(err, m4a.ErrOutOfRange) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	discard := (pos - unit*aaccodec.FrameSize) * int64(r.frameBytes)
+	if _, err := io.CopyN(io.Discard, dec, discard); err != nil {
+		if errors.Is(err, io.EOF) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	// Only a decoder that is positioned replaces the forward one.
+	r.seeked = dec
+	return frame, nil
+}
+
+// rewind abandons the seekable decoder and returns to the forward decoder. Every
+// read since the seek went to the seekable decoder, whose input is a separate
+// section reader, so the forward decoder is still unread.
+func (r *m4aReader) rewind() {
+	r.seeked = nil
+}
+
+// openM4A opens an AAC-LC source in an MP4 container. The forward decoder is
+// assembled by hand because aacm4a.NewDecoder does not check the track codec,
+// and the check is what reports a non-AAC track as unsupported. The decoder is
+// not edit-list aware, so the priming samples are skipped and the padding after
+// the declared duration is left unread. A window that starts after frame 0 seeks
+// through go-m4a's seekable decoder, which handles the AAC pre-roll; whole-file
+// and start-0 reads stay on the forward decoder.
 func openM4A(f *os.File) (*source, error) {
 	rd, err := m4a.NewReader(f, m4a.WithMaxBoxBuffer(maxM4ABoxBytes))
 	if err != nil {
@@ -272,12 +359,31 @@ func openM4A(f *os.File) (*source, error) {
 			total = int64(frames)
 		}
 	}
+	// A crafted edit list can declare an EncoderDelay near MaxInt64; the track
+	// cannot decode to more than FrameCount access units, so a larger skip is
+	// clamped to that.
+	frameCount := int64(info.FrameCount)
+	skip := min(max(info.EncoderDelay, 0), frameCount*aaccodec.FrameSize)
+	fileInfo, err := f.Stat()
+	if err != nil {
+		return nil, wrapError(err, errors.CategoryFileIO, "decode_open_m4a")
+	}
+	reader := &m4aReader{
+		fwd:        dec,
+		file:       f,
+		fileSize:   fileInfo.Size(),
+		skip:       skip,
+		frameCount: frameCount,
+		frameBytes: pcmInfo.Channels * bytesPerSample,
+	}
 	return &source{
-		reader:      dec,
+		reader:      reader,
 		sampleRate:  pcmInfo.SampleRate,
 		channels:    pcmInfo.Channels,
 		totalFrames: total,
-		skipFrames:  max(info.EncoderDelay, 0),
+		skipFrames:  skip,
+		seek:        reader.seek,
+		rewind:      reader.rewind,
 		expansion:   lossyExpansion,
 	}, nil
 }

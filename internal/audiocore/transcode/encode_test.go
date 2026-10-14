@@ -100,7 +100,7 @@ func TestEncode_UnsupportedRateResamplesTo48k(t *testing.T) {
 func TestEncode_FLACAboveMaxRateResamples(t *testing.T) {
 	t.Parallel()
 
-	const flacLimit = 655350 // the highest rate the FLAC encoder accepts
+	const flacLimit = 655350 // pins the library's flacpcm.MaxSampleRate, the highest rate the FLAC encoder accepts
 	assert.True(t, EncoderAcceptsRate(audioformat.FLAC, flacLimit, outputBitDepth, 1), "the FLAC limit itself is carried")
 	assert.False(t, EncoderAcceptsRate(audioformat.FLAC, flacLimit+1, outputBitDepth, 1), "a rate above the FLAC limit is not carried")
 

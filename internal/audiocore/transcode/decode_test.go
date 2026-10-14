@@ -4,19 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	aacpcm "github.com/tphakala/go-aac/pcm"
 	flac "github.com/tphakala/go-flac"
+	flacpcm "github.com/tphakala/go-flac/pcm"
 	m4a "github.com/tphakala/go-m4a"
 	mp3 "github.com/tphakala/go-mp3"
+	mp3pcm "github.com/tphakala/go-mp3/pcm"
 	wav "github.com/tphakala/go-wav"
 	wavpcm "github.com/tphakala/go-wav/pcm"
 
@@ -37,6 +39,16 @@ const (
 	// burstThreshold marks the first loud sample of a burst, above any codec
 	// pre-echo.
 	burstThreshold = 4000
+	// narrowingSampleBits is multiplied by the sample index to spread a deep FLAC
+	// fixture over the whole range with varied low bits, so truncation and
+	// rounding disagree on about half of the samples.
+	narrowingSampleBits = 0x5A5A5A5A
+	// narrowingContainerBits is the width of the int32 that holds a raw sample.
+	narrowingContainerBits = 32
+	// narrowingClipSeconds is the length of each narrowing fixture.
+	narrowingClipSeconds = 0.1
+	// bitsPerByte is the number of bits a raw little-endian sample byte carries.
+	bitsPerByte = 8
 )
 
 func TestDecode_RoundTripPerFormat(t *testing.T) {
@@ -44,7 +56,7 @@ func TestDecode_RoundTripPerFormat(t *testing.T) {
 
 	for _, fx := range fixtures() {
 		for _, channels := range []int{1, 2} {
-			t.Run(fx.name+"_"+map[int]string{1: "mono", 2: "stereo"}[channels], func(t *testing.T) {
+			t.Run(fx.name+"_"+channelName(channels), func(t *testing.T) {
 				t.Parallel()
 				path, src := writeFixture(t, fx, testRate, channels, testSeconds)
 
@@ -62,8 +74,8 @@ func TestDecode_RoundTripPerFormat(t *testing.T) {
 					return
 				}
 				assert.InDelta(t, len(src)/channels, pcm.Frames(), lossyFrameSlack)
-				if fx.name == "m4a" || fx.name == "opus" {
-					assert.Equal(t, len(src)/channels, pcm.Frames(), "edit-list and pre-skip trimming make the length exact")
+				if fx.name == "m4a" || fx.name == "opus" || fx.name == "mp3" {
+					assert.Equal(t, len(src)/channels, pcm.Frames(), "edit-list, pre-skip and gapless-tag trimming make the length exact")
 				}
 				for ch := range channels {
 					x := channelOf(got, channels, ch)
@@ -72,6 +84,25 @@ func TestDecode_RoundTripPerFormat(t *testing.T) {
 			})
 		}
 	}
+}
+
+// MP3 clips written before the gapless tag existed carry no tag, so their
+// priming is kept as it always was.
+func TestDecode_TaglessMP3KeepsItsPriming(t *testing.T) {
+	t.Parallel()
+
+	src := tone(testRate, 1, testSeconds, testToneHz, testAmp)
+	var buf bytes.Buffer
+	require.NoError(t, mp3pcm.EncodeInterleaved(&buf, mp3pcm.Config{
+		SampleRate: testRate, Channels: 1, Bitrate: lossyBitrateKbps * bitsPerKilobit, OmitGaplessTag: true,
+	}, int16Bytes(src)))
+	path := filepath.Join(t.TempDir(), "tagless.mp3")
+	writeBytes(t, path, buf.Bytes())
+
+	pcm, err := decode(t.Context(), path, nil, 0)
+	require.NoError(t, err)
+	assert.Greater(t, pcm.Frames(), len(src), "without a tag the encoder priming stays in the decode")
+	assert.InDelta(t, len(src)+mp3.TotalDelay, pcm.Frames(), mp3.FrameSize)
 }
 
 func TestDecode_M4ATrimsPrimingAndPadding(t *testing.T) {
@@ -388,10 +419,9 @@ func TestDecode_HeaderClaimingHugeLengthDoesNotDriveAllocation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "lie.wav")
 	require.NoError(t, os.WriteFile(path, data, 0o600))
 
-	var before, after runtime.MemStats
-	runtime.ReadMemStats(&before)
-	pcm, err := decode(t.Context(), path, nil, 0)
-	runtime.ReadMemStats(&after)
+	var pcm *pcmBuffer
+	var err error
+	allocated := allocatedBy(func() { pcm, err = decode(t.Context(), path, nil, 0) })
 
 	if err == nil {
 		assert.LessOrEqual(t, pcm.Frames(), 50)
@@ -399,7 +429,7 @@ func TestDecode_HeaderClaimingHugeLengthDoesNotDriveAllocation(t *testing.T) {
 		require.ErrorIs(t, err, ErrUndecodableSource)
 	}
 	const allocBudget = 16 << 20
-	assert.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(allocBudget), "a tiny file must not allocate for its claimed length")
+	assert.Less(t, allocated, uint64(allocBudget), "a tiny file must not allocate for its claimed length")
 }
 
 func TestDecode_WindowPastEnd(t *testing.T) {
@@ -545,43 +575,6 @@ func TestReadLimited_TrimsPartialFrameAndCapsCapacity(t *testing.T) {
 	assert.LessOrEqual(t, cap(capped), 1000, "capacity never exceeds the limit")
 }
 
-func TestWidthConverter(t *testing.T) {
-	t.Parallel()
-
-	for _, depth := range []int{8, 12, 20, 24, 32} {
-		t.Run(map[int]string{8: "8", 12: "12", 20: "20", 24: "24", 32: "32"}[depth], func(t *testing.T) {
-			t.Parallel()
-			width := (depth + 7) / 8
-			values := []int32{0, 1, -1, 100, -100, 1<<(depth-1) - 1, -(1 << (depth - 1))}
-			if depth == 32 {
-				values = []int32{0, 1, -1, 100, -100, math.MaxInt32, math.MinInt32}
-			}
-			raw := make([]byte, 0, width*len(values))
-			want := make([]int16, 0, len(values))
-			for _, v := range values {
-				for b := range width {
-					raw = append(raw, byte(v>>(8*b)))
-				}
-				if depth >= 16 {
-					want = append(want, int16(v>>(depth-16)))
-				} else {
-					want = append(want, int16(v<<(16-depth)))
-				}
-			}
-			got, err := io.ReadAll(newWidthConverter(bytes.NewReader(raw), depth))
-			require.NoError(t, err)
-			assert.Equal(t, want, bytesInt16(got))
-		})
-	}
-
-	t.Run("source ending inside a sample drops the stub", func(t *testing.T) {
-		t.Parallel()
-		got, err := io.ReadAll(newWidthConverter(bytes.NewReader([]byte{1, 0, 0, 2, 0}), 24))
-		require.NoError(t, err)
-		assert.Len(t, got, 2, "one whole 24-bit sample, the 2 trailing bytes are a stub")
-	})
-}
-
 // A header can declare a frame count whose byte size overflows int64 (an 8-bit
 // RF64 WAV declaring 2^62 frames is 2^63 bytes once widened to 16-bit). The
 // declared count only sizes buffers; it must never panic or drive allocation.
@@ -645,5 +638,40 @@ func TestDecode_AcceptsTheSourceRateBounds(t *testing.T) {
 		pcm, err := decode(t.Context(), path, nil, 0)
 		require.NoError(t, err, "rate %d", rate)
 		assert.Equal(t, rate, pcm.SampleRate)
+	}
+}
+
+// A FLAC deeper than 16 bits is narrowed by truncation (an arithmetic right
+// shift), as the hand-written converter did before, also when the low bits are
+// set and for negative samples.
+func TestDecode_FLACNarrowingTruncates(t *testing.T) {
+	t.Parallel()
+
+	for _, depth := range []int{20, 24, 32} {
+		t.Run(fmt.Sprintf("%dbit", depth), func(t *testing.T) {
+			t.Parallel()
+			width := (depth + bitsPerByte - 1) / bitsPerByte
+			shift := narrowingContainerBits - depth
+			const samples = int(testRate * narrowingClipSeconds)
+			raw := make([]byte, 0, samples*width)
+			want := make([]int16, 0, samples)
+			for i := range samples {
+				// Spread the samples over the full range of the depth, both signs,
+				// with low bits that vary from sample to sample.
+				v := int32(uint32(i)*narrowingSampleBits) >> shift //nolint:gosec // G115: intentional wraparound to spread the samples
+				for b := range width {
+					raw = append(raw, byte(v>>(bitsPerByte*b)))
+				}
+				want = append(want, int16(v>>(depth-outputBitDepth))) //nolint:gosec // G115: the shifted value fits in the output width
+			}
+			var buf bytes.Buffer
+			require.NoError(t, flacpcm.EncodeInterleaved(&buf, flacpcm.Config{SampleRate: testRate, BitDepth: depth, Channels: 1}, raw))
+			path := filepath.Join(t.TempDir(), "deep.flac")
+			writeBytes(t, path, buf.Bytes())
+
+			pcm, err := decode(t.Context(), path, nil, 0)
+			require.NoError(t, err)
+			assert.Equal(t, want, bytesInt16(pcm.Data), "each sample must be the source value shifted right by depth minus the output bit depth")
+		})
 	}
 }

@@ -43,8 +43,8 @@ require (
 	github.com/tphakala/go-audio-stream v0.6.0
 	github.com/tphakala/go-flac v1.3.0
 	github.com/tphakala/go-hls v0.1.0
-	github.com/tphakala/go-m4a v0.5.0
-	github.com/tphakala/go-mp3 v0.1.0
+	github.com/tphakala/go-m4a v0.7.0
+	github.com/tphakala/go-mp3 v0.2.0
 	github.com/tphakala/go-opus v1.1.0
 	github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7
 	github.com/tphakala/go-wav v1.1.0
