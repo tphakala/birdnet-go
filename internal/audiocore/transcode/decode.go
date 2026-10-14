@@ -160,17 +160,17 @@ func decodeSource(ctx context.Context, src *source, win *window, fileSize int64,
 		wantFrames = min(src.totalFrames, maxFrames+1)
 	}
 
-	if err := positionSource(ctx, src, startFrame, frameBytes, win != nil); err != nil {
-		return nil, err
+	limit := readLimit(maxBytes, frameBytes, wantFrames)
+	data, err := positionAndRead(ctx, src, startFrame, frameBytes, win != nil, limit, fileSize)
+	if err != nil && src.rewind != nil && seekFallbackAllowed(err) && src.rewind() {
+		// The seek path failed on a source the forward decoder may still serve
+		// (the seekable decoder rejects an access unit with no audio element that
+		// the forward decoder skips), so no seek-path failure may fail a request
+		// the forward path serves. Positioning is retried once, by discarding.
+		src.seek = nil
+		src.rewind = nil
+		data, err = positionAndRead(ctx, src, startFrame, frameBytes, win != nil, limit, fileSize)
 	}
-
-	// A whole-file read is capped one frame past maxBytes so an overlong source is
-	// detected rather than silently truncated.
-	limit := int64(maxBytes) + int64(frameBytes)
-	if wantFrames >= 0 {
-		limit = min(limit, wantFrames*int64(frameBytes))
-	}
-	data, err := readLimited(ctx, src.reader, int(limit), initialCapacity(src, fileSize, limit, frameBytes), frameBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -186,13 +186,38 @@ func decodeSource(ctx context.Context, src *source, win *window, fileSize int64,
 	return &pcmBuffer{Data: data, SampleRate: src.sampleRate, Channels: src.channels}, nil
 }
 
+// readLimit is the most bytes decodeSource reads. A whole-file read is capped one
+// frame past maxBytes so an overlong source is detected rather than silently
+// truncated; a window is capped at its own length.
+func readLimit(maxBytes, frameBytes int, wantFrames int64) int64 {
+	limit := int64(maxBytes) + int64(frameBytes)
+	if wantFrames >= 0 {
+		limit = min(limit, wantFrames*int64(frameBytes))
+	}
+	return limit
+}
+
+// positionAndRead positions src at startFrame and reads up to limit bytes.
+func positionAndRead(ctx context.Context, src *source, startFrame int64, frameBytes int, windowed bool, limit, fileSize int64) ([]byte, error) {
+	if err := positionSource(ctx, src, startFrame, frameBytes, windowed); err != nil {
+		return nil, err
+	}
+	return readLimited(ctx, src.reader, int(limit), initialCapacity(src, fileSize, limit, frameBytes), frameBytes)
+}
+
+// seekFallbackAllowed reports whether a failed seek may be retried on the
+// forward path. A cancelled or expired context would fail again, and an empty
+// range means the forward decoder runs dry as well: it emits at most one frame of
+// samples per access unit, so it never has more audio than the seek path's track.
+func seekFallbackAllowed(err error) bool {
+	return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, ErrEmptyRange)
+}
+
 // positionSource moves the reader to startFrame, past any hidden leading frames:
-// by seeking where the decoder can, otherwise by decoding and discarding.
+// by seeking where the decoder can for a start after frame 0, otherwise by
+// decoding and discarding skipFrames plus the start.
 func positionSource(ctx context.Context, src *source, startFrame int64, frameBytes int, windowed bool) error {
-	if src.seek != nil {
-		if startFrame == 0 {
-			return nil
-		}
+	if src.seek != nil && startFrame != 0 {
 		landed, err := src.seek(startFrame)
 		if err != nil {
 			return classifyDecodeError("decode_seek", err)
