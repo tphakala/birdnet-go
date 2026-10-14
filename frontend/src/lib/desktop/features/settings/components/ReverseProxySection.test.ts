@@ -204,6 +204,25 @@ describe('ReverseProxySection', () => {
     expect(onUpdate).toHaveBeenCalledWith(['10.0.0.1', '172.18.0.1', 'cloudflare']);
   });
 
+  it('lists the peer once when Trust and Cloudflare is used with the peer already listed', async () => {
+    getConnection.mockResolvedValue(
+      result({ status: 'trusted_proxy_unverified', cloudflarePresetWouldVerify: true })
+    );
+    const onUpdate = vi.fn();
+    renderSection({
+      trustedProxies: ['172.18.0.1'],
+      savedTrustedProxies: ['172.18.0.1'],
+      onUpdate,
+    });
+
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /check\.trustWithCloudflare/ })
+    );
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate).toHaveBeenCalledWith(['172.18.0.1', 'cloudflare']);
+  });
+
   it('shows the stale note while the card has unsaved changes', async () => {
     const { rerender } = renderSection({
       trustedProxies: ['10.0.0.1'],
@@ -245,6 +264,45 @@ describe('ReverseProxySection', () => {
     await tick();
 
     expect(screen.getByText(/status\.trusted_proxy\.body/)).toBeInTheDocument();
+    expect(screen.queryByText(/status\.untrusted_proxy\.body/)).toBeNull();
+  });
+
+  it('keeps the newer result when an older request fails last', async () => {
+    const first = deferred<ConnectionCheckResult>();
+    const second = deferred<ConnectionCheckResult>();
+    getConnection.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { rerender } = renderSection();
+    await waitFor(() => expect(getConnection).toHaveBeenCalledTimes(1));
+    await rerender({ savedTrustedProxies: ['172.18.0.1'] });
+    await waitFor(() => expect(getConnection).toHaveBeenCalledTimes(2));
+
+    second.resolve(result({ status: 'trusted_proxy', verifiedClientAddress: '192.168.1.20' }));
+    await screen.findByText(/status\.trusted_proxy\.body/);
+    first.reject(new Error('Old failure'));
+    await tick();
+    await tick();
+
+    expect(screen.getByText(/status\.trusted_proxy\.body/)).toBeInTheDocument();
+    expect(screen.queryByText('Old failure')).toBeNull();
+  });
+
+  it('keeps loading while the newest request runs when an older one finishes', async () => {
+    const first = deferred<ConnectionCheckResult>();
+    const second = deferred<ConnectionCheckResult>();
+    getConnection.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { rerender } = renderSection();
+    await waitFor(() => expect(getConnection).toHaveBeenCalledTimes(1));
+    await rerender({ savedTrustedProxies: ['172.18.0.1'] });
+    await waitFor(() => expect(getConnection).toHaveBeenCalledTimes(2));
+
+    first.resolve(result({ status: 'untrusted_proxy' }));
+    await tick();
+    await tick();
+
+    expect(screen.getByRole('button', { name: /check\.recheck/ })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    );
     expect(screen.queryByText(/status\.untrusted_proxy\.body/)).toBeNull();
   });
 

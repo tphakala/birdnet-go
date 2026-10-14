@@ -78,9 +78,11 @@ describe('ConnectionCheckPanel', () => {
   it.each(STATUSES)('renders the title and body for %s', status => {
     renderPanel({ result: result({ status, verifiedClientAddress: '192.168.1.20' }) });
 
-    expect(
-      screen.getAllByText(new RegExp(`reverseProxy\\.status\\.${status}\\.title`)).length
-    ).toBeGreaterThan(0);
+    // The status region repeats the title for screen readers; the visible box needs its own
+    const visibleTitles = screen
+      .getAllByText(new RegExp(`reverseProxy\\.status\\.${status}\\.title`))
+      .filter(el => !el.closest('[role="status"]'));
+    expect(visibleTitles).toHaveLength(1);
     expect(
       screen.getByText(new RegExp(`reverseProxy\\.status\\.${status}\\.body`))
     ).toBeInTheDocument();
@@ -176,6 +178,40 @@ describe('ConnectionCheckPanel', () => {
       expect(screen.getByText(/check\.chainHint/)).toBeInTheDocument();
       plain.unmount();
     }
+  });
+
+  it('offers Trust with Cloudflare for a listed peer until the preset is on, then shows the note', async () => {
+    const unverified = result({
+      status: 'trusted_proxy_unverified',
+      cloudflarePresetWouldVerify: true,
+    });
+    const { props, rerender } = renderPanel({
+      result: unverified,
+      peerCoveredBy: '172.18.0.1',
+      cloudflareEnabled: false,
+    });
+
+    // The peer is already listed, so only the preset is missing
+    expect(screen.queryByText('settings.security.reverseProxy.check.added')).toBeNull();
+    const button = trustWithCloudflareButton();
+    if (!button) throw new Error('Trust with Cloudflare button missing');
+    await fireEvent.click(button);
+    expect(props.onTrustWithCloudflare).toHaveBeenCalledTimes(1);
+
+    await rerender({ cloudflareEnabled: true });
+    expect(trustWithCloudflareButton()).toBeNull();
+    expect(screen.getByText('settings.security.reverseProxy.check.added')).toBeInTheDocument();
+  });
+
+  it('keeps the Trust with Cloudflare button when only the preset is on and the peer is not listed', () => {
+    renderPanel({
+      result: result({ status: 'trusted_proxy_unverified', cloudflarePresetWouldVerify: true }),
+      peerCoveredBy: null,
+      cloudflareEnabled: true,
+    });
+
+    expect(trustWithCloudflareButton()).not.toBeNull();
+    expect(screen.queryByText('settings.security.reverseProxy.check.added')).toBeNull();
   });
 
   it('shows the added note instead of Trust with Cloudflare when both are in the form', () => {
@@ -281,9 +317,11 @@ describe('ConnectionCheckPanel', () => {
   it('shows the loading state instead of an earlier result', () => {
     renderPanel({ loading: true });
 
-    expect(
-      screen.getAllByText('settings.security.reverseProxy.check.checking').length
-    ).toBeGreaterThan(0);
+    // The status region repeats the text for screen readers; the visible loading line needs its own
+    const visible = screen
+      .getAllByText('settings.security.reverseProxy.check.checking')
+      .filter(el => !el.closest('[role="status"]'));
+    expect(visible).toHaveLength(1);
     expect(screen.queryByText(/reverseProxy\.status\./)).toBeNull();
     expect(screen.getByRole('button', { name: /check\.recheck/ })).toHaveAttribute(
       'aria-disabled',
