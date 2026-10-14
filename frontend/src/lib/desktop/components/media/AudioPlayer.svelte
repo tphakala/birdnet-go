@@ -59,7 +59,7 @@
     type AudioNodeChain,
   } from '$lib/utils/audioNodes';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import { clipExportExtension } from '$lib/utils/clipExport';
+  import { extensionFromContentDisposition } from '$lib/utils/audioDownload';
   import { getCsrfToken } from '$lib/utils/api';
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
@@ -742,8 +742,12 @@
 
       const blob = await response.blob();
 
-      // Container file extension for the format (must match backend clipFileExtension)
-      const ext = clipExportExtension(extractionFormat);
+      // Name the download for the container the server produced (m4a for AAC, ogg
+      // for Opus), taken from the response's Content-Disposition filename.
+      const ext = extensionFromContentDisposition(
+        response.headers.get('Content-Disposition'),
+        extractionFormat
+      );
       // Sanitize label for filesystem safety (remove reserved chars, normalize whitespace)
       const safeLabel = clipLabel
         ? clipLabel.replace(/[<>:"/\\|?*]/g, '-').replace(/\s+/g, '_')
