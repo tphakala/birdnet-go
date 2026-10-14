@@ -183,6 +183,7 @@ func fixtures() []fixture {
 		{name: "flac16", ext: ".flac", write: flacAt(16), lossless: true},
 		{name: "flac24", ext: ".flac", write: flacAt(24), lossless: true},
 		{name: "flac32", ext: ".flac", write: flacAt(32), lossless: true},
+		{name: "flac8", ext: ".flac", write: flacAt(8), lossless: true, quantShift: 8},
 		{name: "flac12", ext: ".flac", write: flacAt(12), lossless: true, quantShift: 4},
 		{name: "flac20", ext: ".flac", write: flacAt(20), lossless: true},
 		{name: "mp3", ext: ".mp3", write: writeMP3File},

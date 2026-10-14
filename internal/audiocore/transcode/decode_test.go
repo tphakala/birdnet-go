@@ -545,43 +545,6 @@ func TestReadLimited_TrimsPartialFrameAndCapsCapacity(t *testing.T) {
 	assert.LessOrEqual(t, cap(capped), 1000, "capacity never exceeds the limit")
 }
 
-func TestWidthConverter(t *testing.T) {
-	t.Parallel()
-
-	for _, depth := range []int{8, 12, 20, 24, 32} {
-		t.Run(map[int]string{8: "8", 12: "12", 20: "20", 24: "24", 32: "32"}[depth], func(t *testing.T) {
-			t.Parallel()
-			width := (depth + 7) / 8
-			values := []int32{0, 1, -1, 100, -100, 1<<(depth-1) - 1, -(1 << (depth - 1))}
-			if depth == 32 {
-				values = []int32{0, 1, -1, 100, -100, math.MaxInt32, math.MinInt32}
-			}
-			raw := make([]byte, 0, width*len(values))
-			want := make([]int16, 0, len(values))
-			for _, v := range values {
-				for b := range width {
-					raw = append(raw, byte(v>>(8*b)))
-				}
-				if depth >= 16 {
-					want = append(want, int16(v>>(depth-16)))
-				} else {
-					want = append(want, int16(v<<(16-depth)))
-				}
-			}
-			got, err := io.ReadAll(newWidthConverter(bytes.NewReader(raw), depth))
-			require.NoError(t, err)
-			assert.Equal(t, want, bytesInt16(got))
-		})
-	}
-
-	t.Run("source ending inside a sample drops the stub", func(t *testing.T) {
-		t.Parallel()
-		got, err := io.ReadAll(newWidthConverter(bytes.NewReader([]byte{1, 0, 0, 2, 0}), 24))
-		require.NoError(t, err)
-		assert.Len(t, got, 2, "one whole 24-bit sample, the 2 trailing bytes are a stub")
-	})
-}
-
 // A header can declare a frame count whose byte size overflows int64 (an 8-bit
 // RF64 WAV declaring 2^62 frames is 2^63 bytes once widened to 16-bit). The
 // declared count only sizes buffers; it must never panic or drive allocation.

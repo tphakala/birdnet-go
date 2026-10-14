@@ -197,10 +197,10 @@ func openWAV(f *os.File) (*source, error) {
 	}, nil
 }
 
-// openFLAC opens a FLAC source. Samples wider or narrower than 16 bits are
-// converted as they are read.
+// openFLAC opens a FLAC source. The decoder converts every bit depth to 16-bit as
+// it reads; Info().BitDepth stays the native depth of the file.
 func openFLAC(f *os.File) (*source, error) {
-	dec, err := flacpcm.NewDecoder(f, flacpcm.SkipMD5Verification())
+	dec, err := flacpcm.NewDecoder(f, flacpcm.SkipMD5Verification(), flacpcm.WithConvertTo(outputBitDepth))
 	if err != nil {
 		return nil, classifyDecodeError("decode_open_flac", err)
 	}
@@ -209,12 +209,8 @@ func openFLAC(f *os.File) (*source, error) {
 	if info.TotalSamples > 0 && info.TotalSamples <= math.MaxInt64 {
 		total = int64(info.TotalSamples) //nolint:gosec // G115: bounded by the check above
 	}
-	var reader io.Reader = dec
-	if info.BitDepth != outputBitDepth {
-		reader = newWidthConverter(dec, info.BitDepth)
-	}
 	return &source{
-		reader:      reader,
+		reader:      dec,
 		sampleRate:  info.SampleRate,
 		channels:    info.Channels,
 		totalFrames: total,
