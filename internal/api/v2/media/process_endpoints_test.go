@@ -100,19 +100,19 @@ func TestProcessAudioByID_AppliesGain(t *testing.T) {
 func TestProcessAudioByID_Rejections(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
-	writeHEAAC(t, fixturePath(tempDir, "he.m4a"))
+	writeLegacyAAC(t, fixturePath(tempDir, "legacy.aac"))
 	writeCorrupt(t, fixturePath(tempDir, "corrupt.flac"))
 	mockDS := mocks.NewMockInterface(t)
-	mockDS.On("GetNoteClipPath", "he").Return("he.m4a", nil)
+	mockDS.On("GetNoteClipPath", "legacy").Return("legacy.aac", nil)
 	mockDS.On("GetNoteClipPath", "corrupt").Return("corrupt.flac", nil)
 	controller.DS = mockDS
 
-	assert.Equal(t, http.StatusBadRequest, postJSON(e, "/api/v2/audio/he/process", `{"denoise": "extreme"}`).Code)
-	assert.Equal(t, http.StatusBadRequest, postJSON(e, "/api/v2/audio/he/process", `{"gain_db": 61}`).Code)
+	assert.Equal(t, http.StatusBadRequest, postJSON(e, "/api/v2/audio/legacy/process", `{"denoise": "extreme"}`).Code)
+	assert.Equal(t, http.StatusBadRequest, postJSON(e, "/api/v2/audio/legacy/process", `{"gain_db": 61}`).Code)
 
-	rec := postJSON(e, "/api/v2/audio/he/process", `{"normalize": true}`)
+	rec := postJSON(e, "/api/v2/audio/legacy/process", `{"normalize": true}`)
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
-	assert.Contains(t, rec.Body.String(), "HE-AAC")
+	assert.Contains(t, rec.Body.String(), "Source audio format is not supported")
 
 	rec = postJSON(e, "/api/v2/audio/corrupt/process", `{"normalize": true}`)
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
@@ -138,7 +138,7 @@ func TestAudibleBatsByID(t *testing.T) {
 
 	writeToneWAV(t, fixturePath(tempDir, "bat.wav"), batTestRate, batTestSeconds, fixtureBatToneHz)
 	writeToneWAV(t, fixturePath(tempDir, "low.wav"), 48000, 0.2, fixtureToneHz)
-	writeHEAAC(t, fixturePath(tempDir, "he.m4a"))
+	writeLegacyAAC(t, fixturePath(tempDir, "legacy.aac"))
 	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("GetNoteModelType", "10").Return("bat", nil)
 	mockDS.On("GetNoteModelType", "11").Return("bat", nil)
@@ -146,7 +146,7 @@ func TestAudibleBatsByID(t *testing.T) {
 	mockDS.On("GetNoteModelType", "13").Return("bird", nil)
 	mockDS.On("GetNoteClipPath", "10").Return("bat.wav", nil)
 	mockDS.On("GetNoteClipPath", "11").Return("low.wav", nil)
-	mockDS.On("GetNoteClipPath", "12").Return("he.m4a", nil)
+	mockDS.On("GetNoteClipPath", "12").Return("legacy.aac", nil)
 	controller.DS = mockDS
 
 	rec := postJSON(e, "/api/v2/audio/10/audible-bats", `{"expansion": 10, "normalize": true, "gain_db": 1}`)
@@ -164,7 +164,7 @@ func TestAudibleBatsByID(t *testing.T) {
 
 	rec = postJSON(e, "/api/v2/audio/12/audible-bats", `{"expansion": 10}`)
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
-	assert.Contains(t, rec.Body.String(), "HE-AAC")
+	assert.Contains(t, rec.Body.String(), "Source audio format is not supported")
 
 	rec = postJSON(e, "/api/v2/audio/13/audible-bats", `{"expansion": 10}`)
 	assert.Equal(t, http.StatusBadRequest, rec.Code, "only bat detections are eligible")
@@ -224,7 +224,6 @@ func TestTranscodeStatus(t *testing.T) {
 		err    error
 		status int
 	}{
-		{transcode.ErrHEAACSource, http.StatusUnprocessableEntity},
 		{transcode.ErrUnsupportedSource, http.StatusUnprocessableEntity},
 		{transcode.ErrUndecodableSource, http.StatusUnprocessableEntity},
 		{transcode.ErrAudioTooLong, http.StatusUnprocessableEntity},
@@ -240,9 +239,6 @@ func TestTranscodeStatus(t *testing.T) {
 	}
 	_, _, ok := transcodeStatus(context.DeadlineExceeded)
 	assert.False(t, ok, "unclassified errors stay 500")
-
-	_, msg, _ := transcodeStatus(transcode.ErrHEAACSource)
-	assert.Contains(t, msg, "HE-AAC", "HE-AAC gets its own message")
 }
 
 // wavPeak returns the largest absolute 16-bit sample in a 44-byte-header WAV body.

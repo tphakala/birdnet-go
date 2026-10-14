@@ -45,16 +45,16 @@ func TestEncode_PerFormatMagicAndRoundTrip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.format, func(t *testing.T) {
 			t.Parallel()
-			src := tone(testRate, 2, 1, testToneHz, testAmp)
-			data, err := encode(t.Context(), newPCM(src, testRate, 2), tt.format, t.TempDir())
+			src := tone(testRate, 1, 1, testToneHz, testAmp)
+			data, err := encode(t.Context(), newPCM(src, testRate, 1), tt.format, t.TempDir())
 			require.NoError(t, err)
 			assert.Truef(t, tt.magic(data), "unexpected file header % x", data[:min(len(data), 12)])
 
 			back := decodeBytes(t, data, tt.ext)
 			assert.Equal(t, testRate, back.SampleRate)
-			assert.Equal(t, 2, back.Channels)
-			assert.InDelta(t, len(src)/2, back.Frames(), lossyFrameSlack)
-			assert.True(t, dominantIs(channelOf(bytesInt16(back.Data), 2, 0), testRate, testToneHz, testOffToneH))
+			assert.Equal(t, 1, back.Channels)
+			assert.InDelta(t, len(src), back.Frames(), lossyFrameSlack)
+			assert.True(t, dominantIs(channelOf(bytesInt16(back.Data), 1, 0), testRate, testToneHz, testOffToneH))
 			if tt.format == audioformat.WAV || tt.format == audioformat.FLAC {
 				assert.Equal(t, int16Bytes(src), back.Data, "lossless formats round-trip exactly")
 			}

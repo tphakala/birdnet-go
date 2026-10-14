@@ -23,7 +23,7 @@ func TestExtractClip_EndToEnd(t *testing.T) {
 		end        = 2.5
 	)
 	path := filepath.Join(t.TempDir(), "src.flac")
-	writeFLACFile(t, path, noisyTone(testRate)[:int(srcSeconds*testRate)], testRate, 1, 16)
+	writeEncoded(t, audioformat.FLAC, 0, path, noisyTone(testRate)[:int(srcSeconds*testRate)], testRate)
 
 	ext := map[string]string{"wav": ".wav", "flac": ".flac", "mp3": ".mp3", "aac": ".m4a", "opus": ".opus"}
 	filterSets := map[string]Filters{
@@ -51,7 +51,7 @@ func TestExtractClip_Validation(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "x.wav")
-	writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate, 1)
+	writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate)
 	base := ClipOptions{InputPath: path, Start: 0, End: 0.5, Format: audioformat.WAV, TempDir: t.TempDir()}
 
 	mutations := map[string]func(o *ClipOptions){
@@ -85,7 +85,7 @@ func TestExtractClip_StartPastEnd(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "x.wav")
-	writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate, 1)
+	writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate)
 	_, err := ExtractClip(t.Context(), &ClipOptions{InputPath: path, Start: 30, End: 31, Format: audioformat.WAV})
 	require.ErrorIs(t, err, ErrEmptyRange)
 }
@@ -102,7 +102,7 @@ func TestRun_AppliesThePerJobTimeout(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "src.wav")
-	writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate, 1)
+	writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate)
 
 	// A timeout that has already elapsed cancels the job context at once, with no
 	// timer race on a coarse clock.
@@ -122,7 +122,7 @@ func TestProcessToWAV(t *testing.T) {
 
 	const rate = 44100
 	path := filepath.Join(t.TempDir(), "x.flac")
-	writeFLACFile(t, path, noisyTone(rate), rate, 1, 16)
+	writeEncoded(t, audioformat.FLAC, 0, path, noisyTone(rate), rate)
 
 	data, err := ProcessToWAV(t.Context(), path, Filters{Denoise: "light", Normalize: true, GainDB: 1})
 	require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestAudibleBats(t *testing.T) {
 		factor = 10
 	)
 	path := filepath.Join(t.TempDir(), "bat.wav")
-	writeWAVFile(t, path, tone(rate, 1, batSeconds, batToneHz, 0.05), rate, 1)
+	writeWAVFile(t, path, tone(rate, 1, batSeconds, batToneHz, 0.05), rate)
 
 	data, err := AudibleBats(t.Context(), path, factor, Filters{Normalize: true})
 	require.NoError(t, err)
@@ -184,7 +184,7 @@ func TestExtractClip_AppliesWindowStartAndFilters(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "src.wav")
 	src := noisyTone(testRate)
-	writeWAVFile(t, path, src, testRate, 1)
+	writeWAVFile(t, path, src, testRate)
 
 	clip := func(start, end float64, f Filters) *pcmBuffer {
 		data, err := ExtractClip(t.Context(), &ClipOptions{InputPath: path, Start: start, End: end, Format: audioformat.WAV, Filters: f})
@@ -212,7 +212,7 @@ func TestProcessToWAV_AppliesFilters(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "src.wav")
-	writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate, 1)
+	writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate)
 
 	plain, err := ProcessToWAV(t.Context(), path, Filters{})
 	require.NoError(t, err)

@@ -189,9 +189,8 @@ spectrogram decode the stored clip and process it in Go without FFmpeg; the proc
 `clip` accepts the formats `wav`, `flac`, `mp3`, `aac` (served as `.m4a`) and `opus`
 (served as `.ogg`); any other value answers **400**. Filters apply
 in the order denoise (`light`, `medium`, `heavy`), loudness normalization, gain
-(`gain_db`, within +/-60). A source that cannot be processed answers **422**: a codec
-or container outside WAV, FLAC, MP3, AAC (including HE-AAC, which has its own
-message) and Opus, a corrupt or truncated file, a file or range above the size limits
+(`gain_db`, within +/-60). A source that cannot be processed answers **422**: a file
+that is not one of the clip formats (WAV, FLAC, MP3, AAC in M4A, Opus), a corrupt or truncated file, a file or range above the size limits
 (256 MiB on disk, 128 MiB of decoded audio), or a clip window that starts past the end
 of the audio.
 
