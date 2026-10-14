@@ -414,7 +414,7 @@ Source: LGPL-2.1
 
 ### github.com/tphakala/go-audio-dsp
 
-License: https://github.com/tphakala/go-audio-dsp/blob/v0.1.0/LICENSE
+License: https://github.com/tphakala/go-audio-dsp/blob/v0.2.0/LICENSE
 Source: Apache-2.0
 
 ### github.com/tphakala/go-audio-resampler
@@ -429,7 +429,7 @@ Source: MIT
 
 ### github.com/tphakala/go-flac
 
-License: https://github.com/tphakala/go-flac/blob/v1.2.0/LICENSE
+License: https://github.com/tphakala/go-flac/blob/v1.3.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-hls
@@ -584,7 +584,7 @@ Source: BSD-3-Clause
 
 ### gopkg.in/yaml.v3
 
-License: https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE
+License: Unknown
 Source: MIT
 
 ### gorm.io/driver/mysql
