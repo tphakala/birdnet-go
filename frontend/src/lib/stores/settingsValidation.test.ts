@@ -29,6 +29,28 @@ describe('setValidationIssues', () => {
     );
   });
 
+  it('ignores active keys that are not owned', () => {
+    settingsValidationErrors.set(['other']);
+    settingsValidationReasons.set(new Map([['other', 'Other reason']]));
+
+    setValidationIssues(
+      OWNED,
+      new Map([
+        ['other', 'Changed by a page that does not own it'],
+        ['stranger', 'Not owned either'],
+        ['mine-a', 'A is wrong'],
+      ])
+    );
+
+    expect(get(settingsValidationErrors)).toEqual(['other', 'mine-a']);
+    expect(get(settingsValidationReasons)).toEqual(
+      new Map([
+        ['other', 'Other reason'],
+        ['mine-a', 'A is wrong'],
+      ])
+    );
+  });
+
   it('removes owned entries that are no longer active', () => {
     setValidationIssues(
       OWNED,
