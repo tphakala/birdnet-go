@@ -1954,10 +1954,10 @@ func TestUnverifiedListedProxy(t *testing.T) {
 	}
 }
 
-// TestAuthClientIPSkipsClassifyWhileNoticesThrottled verifies a request that
-// would earn a notice leaves the throttle map untouched while both notice keys
-// are inside their interval, and is classified again once one expires.
-func TestAuthClientIPSkipsClassifyWhileNoticesThrottled(t *testing.T) {
+// TestAuthClientIPKeepsThrottledNoticeKeys verifies a request that would earn a
+// notice does not rewrite a notice key that is still inside its interval, and
+// that a key whose interval has expired is written again.
+func TestAuthClientIPKeepsThrottledNoticeKeys(t *testing.T) {
 	t.Parallel()
 
 	settings := &conf.Settings{}
