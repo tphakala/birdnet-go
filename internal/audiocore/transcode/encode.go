@@ -94,8 +94,9 @@ var fileEncoders = map[string]func(ctx context.Context, o *fileEncodeOptions) er
 }
 
 // encode encodes p in format and returns the file bytes. The sample rate is kept
-// unless the target lossy encoder does not accept it, in which case the audio is
-// resampled to conf.SampleRate, the same rule clip export applies. Formats that
+// unless the target encoder does not accept it, in which case the audio is
+// resampled to conf.SampleRate, the same rule clip export applies. Audio too
+// short to survive the resampling returns ErrEmptyRange. Formats that
 // need a seekable sink are encoded into a private directory under tempDir that is
 // removed before Encode returns.
 func encode(ctx context.Context, p *pcmBuffer, format, tempDir string) ([]byte, error) {
@@ -112,6 +113,9 @@ func encode(ctx context.Context, p *pcmBuffer, format, tempDir string) ([]byte, 
 	p, err := resampleForEncoder(ctx, p, format)
 	if err != nil {
 		return nil, err
+	}
+	if p.Frames() == 0 {
+		return nil, wrapSentinel(ErrEmptyRange, nil, "encode", "range too short to encode", errors.CategoryValidation)
 	}
 	if format == audioformat.WAV {
 		return encodeWAV(p)

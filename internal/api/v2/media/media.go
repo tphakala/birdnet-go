@@ -1137,7 +1137,7 @@ func expansionFactorMessage() string {
 }
 
 // transcodeStatus maps a transcode error to the HTTP status and user message it
-// deserves. Unsupported, undecodable and oversized sources and ranges beyond the
+// deserves. Unsupported, undecodable and oversized sources and ranges holding no
 // audio are properties of the stored file or the request, not server faults, so
 // they answer 422 like the other "Source audio ..." cases. ok is false for
 // anything else, which the caller reports as a 500.
@@ -1152,7 +1152,7 @@ func transcodeStatus(err error) (status int, message string, ok bool) {
 	case errors.Is(err, transcode.ErrAudioTooLong):
 		return http.StatusUnprocessableEntity, "Audio is too long for on-demand processing", true
 	case errors.Is(err, transcode.ErrEmptyRange):
-		return http.StatusUnprocessableEntity, "Requested range is beyond the end of the audio", true
+		return http.StatusUnprocessableEntity, "Requested range contains no audio", true
 	case errors.Is(err, transcode.ErrBelowMinimumRate):
 		return http.StatusUnprocessableEntity, fmt.Sprintf("Source audio must be at least %d Hz for audible bats mode", audioformat.MinBatSampleRate), true
 	case errors.Is(err, transcode.ErrInvalidRequest):

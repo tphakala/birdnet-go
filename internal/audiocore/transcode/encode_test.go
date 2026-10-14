@@ -115,6 +115,17 @@ func TestEncode_FLACAboveMaxRateResamples(t *testing.T) {
 	assert.Equal(t, conf.SampleRate, back.SampleRate)
 }
 
+func TestEncode_TooShortForResamplerIsEmptyRange(t *testing.T) {
+	t.Parallel()
+
+	// A few frames at a rate the Opus encoder does not carry: the resampler's
+	// latency swallows all of them, so nothing is left to encode.
+	const frames = 8
+	p := &pcmBuffer{Data: make([]byte, frames*2), SampleRate: 44100, Channels: 1}
+	_, err := encode(t.Context(), p, audioformat.Opus, t.TempDir())
+	require.ErrorIs(t, err, ErrEmptyRange)
+}
+
 func TestEncode_UpsampleOverCap(t *testing.T) {
 	t.Parallel()
 
