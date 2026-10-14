@@ -224,10 +224,10 @@ describe('ConnectionCheckPanel', () => {
   it('shows the error with a way to check again and no status', async () => {
     const { props } = renderPanel({ result: null, error: 'Network error' });
 
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'settings.security.reverseProxy.check.error'
-    );
-    expect(screen.getByRole('alert')).toHaveTextContent('Network error');
+    expect(screen.getByText('Network error')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('settings.security.reverseProxy.check.error').length
+    ).toBeGreaterThan(0);
     expect(screen.queryByText(/reverseProxy\.status\./)).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: /check\.recheck/ }));
     expect(props.onRecheck).toHaveBeenCalledTimes(1);
@@ -237,7 +237,23 @@ describe('ConnectionCheckPanel', () => {
     const fallback = 'settings.security.reverseProxy.check.error';
     renderPanel({ result: null, error: fallback });
 
-    expect(screen.getAllByText(fallback)).toHaveLength(1);
+    // The alert region repeats the title for screen readers; the visible box shows it once
+    const visible = screen.getAllByText(fallback).filter(el => !el.closest('[role="alert"]'));
+    expect(visible).toHaveLength(1);
+  });
+
+  it('announces a failed check in the alert region and not in the status region', () => {
+    renderPanel({ result: null, error: 'Network error' });
+
+    // Exactly the title: the visible box, which also shows the detail, is not the alert
+    expect(screen.getByRole('alert').textContent).toBe(
+      'settings.security.reverseProxy.check.error'
+    );
+    expect(screen.getByRole('status')).not.toHaveTextContent(
+      'settings.security.reverseProxy.check.error'
+    );
+    // The visible box is not a live region, so the failure is announced once
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
   });
 
   it('shows the loading state instead of an earlier result', () => {

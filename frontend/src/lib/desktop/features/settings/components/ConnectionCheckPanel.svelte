@@ -119,12 +119,15 @@
   );
   let errorTitle = $derived(t('settings.security.reverseProxy.check.error'));
 
-  // Text for the always-present status region, so a finished check is announced.
+  // Text for the always-present status region, so a running or finished check is
+  // announced politely. A failure goes to the alert region instead.
   let announcement = $derived.by(() => {
     if (loading) return t('settings.security.reverseProxy.check.checking');
-    if (status) return t(`settings.security.reverseProxy.status.${status}.title`);
+    if (!error && status) return t(`settings.security.reverseProxy.status.${status}.title`);
     return '';
   });
+  // Text for the always-present alert region, so a failed check is announced as an alert.
+  let errorAnnouncement = $derived(error ? errorTitle : '');
 </script>
 
 <section aria-labelledby={titleId}>
@@ -144,6 +147,7 @@
   </div>
 
   <div class="sr-only" role="status">{announcement}</div>
+  <div class="sr-only" role="alert">{errorAnnouncement}</div>
 
   <div class="mt-2">
     {#if loading}
@@ -152,7 +156,8 @@
         <span>{t('settings.security.reverseProxy.check.checking')}</span>
       </div>
     {:else if error}
-      <ErrorAlert type="error">
+      <!-- The alert region above announces the failure; this box is not a live region -->
+      <ErrorAlert type="error" role={undefined}>
         {#snippet children()}
           <p class="font-medium">{errorTitle}</p>
           {#if error !== errorTitle}

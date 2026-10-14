@@ -206,8 +206,9 @@ describe('ReverseProxySection', () => {
     getConnection.mockRejectedValue(new Error('Network error'));
     renderSection();
 
-    const alert = await screen.findByText('settings.security.reverseProxy.check.error');
-    expect(alert).toBeInTheDocument();
+    // The alert region repeats the title for screen readers, so it appears twice
+    const titles = await screen.findAllByText('settings.security.reverseProxy.check.error');
+    expect(titles.length).toBeGreaterThan(0);
     expect(screen.getByText('Network error')).toBeInTheDocument();
     expect(screen.queryByText(/reverseProxy\.status\./)).toBeNull();
   });
