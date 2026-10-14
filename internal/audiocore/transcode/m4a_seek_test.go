@@ -119,11 +119,13 @@ func TestDecode_M4AWindowsMatchTheLinearDecode(t *testing.T) {
 
 			for _, start := range starts {
 				req := &window{Start: float64(start) / testRate, Duration: float64(m4aWindowFrames) / testRate}
-				want := whole.Data[start*int64(frameBytes) : min(start+m4aWindowFrames, total)*int64(frameBytes)]
+				frames := min(m4aWindowFrames, total-start)
+				want := whole.Data[start*int64(frameBytes) : (start+frames)*int64(frameBytes)]
 
-				// decode falls back to the forward decoder when a seek fails, and that
-				// output is the expected slice, so the seek is checked on its own.
-				requireSeekServes(t, path, start)
+				// decode falls back to the forward decoder when the seek path fails,
+				// and that output is the expected slice, so the window is also read
+				// through the seekable decoder on its own.
+				assert.Truef(t, bytes.Equal(want, seekWindow(t, path, start, frames)), "start %d: the seekable decoder must serve the matching slice", start)
 
 				win, err := decode(t.Context(), path, req, 0)
 				require.NoErrorf(t, err, "start %d", start)
@@ -143,15 +145,44 @@ func TestDecode_M4AWindowsMatchTheLinearDecode(t *testing.T) {
 	}
 }
 
-// requireSeekServes opens path and positions it at start, and requires that the
-// seekable decoder, not the forward one, holds the position.
-func requireSeekServes(t *testing.T, path string, start int64) {
+// seekWindow opens path, positions it at start, requires that the seekable
+// decoder, not the forward one, holds the position, and returns the next frames
+// frames read through it. The read stops at frames because the seekable decoder
+// runs on into the track's trailing padding.
+func seekWindow(t *testing.T, path string, start, frames int64) []byte {
 	t.Helper()
 	src := openTestSource(t, path)
-	require.NoErrorf(t, positionSource(t.Context(), src, start, src.channels*bytesPerSample, true), "start %d", start)
+	frameBytes := src.channels * bytesPerSample
+	require.NoErrorf(t, positionSource(t.Context(), src, start, frameBytes, true), "start %d", start)
 	reader, ok := src.reader.(*m4aReader)
 	require.True(t, ok)
 	require.NotNilf(t, reader.seeked, "start %d must be served by the seekable decoder", start)
+	out := make([]byte, frames*int64(frameBytes))
+	_, err := io.ReadFull(src.reader, out)
+	require.NoErrorf(t, err, "start %d: reading through the seekable decoder", start)
+	return out
+}
+
+// A clean window is served by the seek path through decodeSource itself, not by
+// the fallback, which would return the same bytes.
+func TestDecodeSource_CleanM4AWindowNeedsNoFallback(t *testing.T) {
+	t.Parallel()
+
+	path, _ := writeFixture(t, fixture{ext: ".m4a", write: writeM4AFile}, testRate, 1, testSeconds)
+	whole, err := decode(t.Context(), path, nil, 0)
+	require.NoError(t, err)
+
+	src := openTestSource(t, path)
+	rewinds := 0
+	rewind := src.rewind
+	src.rewind = func() { rewinds++; rewind() }
+
+	const start = m4aMidFileFrame
+	req := &window{Start: float64(start) / testRate, Duration: float64(m4aWindowFrames) / testRate}
+	win, err := decodeSource(t.Context(), src, req, 0, len(whole.Data))
+	require.NoError(t, err)
+	assert.Zero(t, rewinds, "a clean window must not fall back to the forward decoder")
+	assert.True(t, bytes.Equal(whole.Data[start*bytesPerSample:(start+m4aWindowFrames)*bytesPerSample], win.Data))
 }
 
 func TestOpenM4A_StartZeroStaysOnTheForwardDecoder(t *testing.T) {
@@ -273,15 +304,16 @@ func TestDecode_M4ANoisyWindowWithinPNSTolerance(t *testing.T) {
 	require.NoError(t, err)
 
 	const start = m4aMidFileFrame
-	requireSeekServes(t, path, start)
 	win, err := decode(t.Context(), path, &window{Start: float64(start) / testRate, Duration: float64(m4aWindowFrames) / testRate}, 0)
 	require.NoError(t, err)
 	require.Equal(t, m4aWindowFrames, win.Frames(), "the window length is exact")
 
 	want := bytesInt16(whole.Data[start*bytesPerSample : (start+m4aWindowFrames)*bytesPerSample])
-	got := bytesInt16(win.Data)
-	assert.GreaterOrEqual(t, correlation(want, got), pnsMinCorrelation)
-	assert.InDelta(t, 0, 20*math.Log10(convert.CalculateRMSFloat64(channelOf(got, 1, 0))/convert.CalculateRMSFloat64(channelOf(want, 1, 0))), pnsMaxLevelDiffDB)
+	for name, data := range map[string][]byte{"decode": win.Data, "seekable decoder": seekWindow(t, path, start, m4aWindowFrames)} {
+		got := bytesInt16(data)
+		assert.GreaterOrEqualf(t, correlation(want, got), pnsMinCorrelation, "%s: correlation with the linear decode", name)
+		assert.InDeltaf(t, 0, 20*math.Log10(convert.CalculateRMSFloat64(channelOf(got, 1, 0))/convert.CalculateRMSFloat64(channelOf(want, 1, 0))), pnsMaxLevelDiffDB, "%s: level against the linear decode", name)
+	}
 }
 
 // rewindProbe is a source whose seek always fails with seekErr (or lands short of
@@ -346,4 +378,39 @@ func TestM4AReader_RewindServesFromTheForwardDecoder(t *testing.T) {
 	got, err := io.ReadAll(r)
 	require.NoError(t, err)
 	assert.Equal(t, want, got, "reads after a rewind come from the forward decoder")
+}
+
+// failingReader fails every read with err.
+type failingReader struct{ err error }
+
+func (r failingReader) Read([]byte) (int, error) { return 0, r.err }
+
+// The retry is limited to a seek path that ran: a read that fails at frame 0
+// never sought, and a source without a rewind cannot fall back.
+func TestDecodeSource_SeekFallbackNeedsASeekAndARewind(t *testing.T) {
+	t.Parallel()
+
+	const startSeconds, durSeconds = 0.1, 0.1
+	maxBytes := int(2 * testRate * bytesPerSample)
+
+	t.Run("a failed read at frame zero is not retried", func(t *testing.T) {
+		t.Parallel()
+		rewinds := 0
+		src := rewindProbe(nil, &rewinds)
+		src.reader = failingReader{err: aacpcm.ErrCorruptStream}
+		_, err := decodeSource(t.Context(), src, &window{Start: 0, Duration: durSeconds}, 0, maxBytes)
+		require.Error(t, err)
+		assert.Zero(t, rewinds, "a read that never went through a seek must not fall back")
+	})
+
+	t.Run("a source without a rewind reports the seek failure", func(t *testing.T) {
+		t.Parallel()
+		rewinds := 0
+		src := rewindProbe(aacpcm.ErrCorruptStream, &rewinds)
+		src.rewind = nil
+		require.NotPanics(t, func() {
+			_, err := decodeSource(t.Context(), src, &window{Start: startSeconds, Duration: durSeconds}, 0, maxBytes)
+			require.ErrorIs(t, err, aacpcm.ErrCorruptStream)
+		})
+	})
 }
