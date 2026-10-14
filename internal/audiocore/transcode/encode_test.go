@@ -3,6 +3,7 @@ package transcode
 import (
 	"bytes"
 	"context"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"testing"
@@ -213,5 +214,35 @@ func TestEncodeWAV_InPlaceMatchesTheCopyingPath(t *testing.T) {
 
 		assert.Equal(t, want, got, "%d channels", channels)
 		assert.Same(t, &room[0], &got[0], "the WAV is built in the room buffer")
+	}
+}
+
+func TestEncode_AppliesTheClipBitrates(t *testing.T) {
+	t.Parallel()
+
+	// Noise keeps the encoders at their target rate instead of letting them idle.
+	const (
+		seconds   = 4.0
+		noiseSD   = 6000
+		tolerance = 0.15 // encoder framing and container overhead
+	)
+	rng := rand.New(rand.NewPCG(noiseSeed, noiseSeed))
+	noise := make([]int16, int(seconds*testRate))
+	for i := range noise {
+		noise[i] = int16(rng.NormFloat64() * noiseSD)
+	}
+
+	// MP3 is not pinned by its output size: the encoder's own default equals the
+	// configured 128 kbps, so only the configured value is asserted.
+	assert.Equal(t, 128, clipBitrateKbps[audioformat.MP3])
+
+	for _, format := range []string{audioformat.AAC, audioformat.Opus} {
+		t.Run(format, func(t *testing.T) {
+			t.Parallel()
+			data, err := encode(t.Context(), newPCM(noise, testRate, 1), format, t.TempDir())
+			require.NoError(t, err)
+			wantBytes := float64(clipBitrateKbps[format]) * 1000 / 8 * seconds
+			assert.InEpsilon(t, wantBytes, float64(len(data)), tolerance, "the configured %s bitrate reaches the encoder", format)
+		})
 	}
 }
