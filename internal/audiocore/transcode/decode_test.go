@@ -43,6 +43,12 @@ const (
 	// fixture over the whole range with varied low bits, so truncation and
 	// rounding disagree on about half of the samples.
 	narrowingSampleBits = 0x5A5A5A5A
+	// narrowingContainerBits is the width of the int32 that holds a raw sample.
+	narrowingContainerBits = 32
+	// narrowingClipSeconds is the length of each narrowing fixture.
+	narrowingClipSeconds = 0.1
+	// bitsPerByte is the number of bits a raw little-endian sample byte carries.
+	bitsPerByte = 8
 )
 
 func TestDecode_RoundTripPerFormat(t *testing.T) {
@@ -644,9 +650,9 @@ func TestDecode_FLACNarrowingTruncates(t *testing.T) {
 	for _, depth := range []int{20, 24, 32} {
 		t.Run(fmt.Sprintf("%dbit", depth), func(t *testing.T) {
 			t.Parallel()
-			width := (depth + 7) / 8
-			shift := 32 - depth
-			const samples = testRate / 10
+			width := (depth + bitsPerByte - 1) / bitsPerByte
+			shift := narrowingContainerBits - depth
+			const samples = int(testRate * narrowingClipSeconds)
 			raw := make([]byte, 0, samples*width)
 			want := make([]int16, 0, samples)
 			for i := range samples {
@@ -654,9 +660,9 @@ func TestDecode_FLACNarrowingTruncates(t *testing.T) {
 				// with low bits that vary from sample to sample.
 				v := int32(uint32(i)*narrowingSampleBits) >> shift //nolint:gosec // G115: intentional wraparound to spread the samples
 				for b := range width {
-					raw = append(raw, byte(v>>(8*b)))
+					raw = append(raw, byte(v>>(bitsPerByte*b)))
 				}
-				want = append(want, int16(v>>(depth-16))) //nolint:gosec // G115: the shifted value fits in 16 bits
+				want = append(want, int16(v>>(depth-outputBitDepth))) //nolint:gosec // G115: the shifted value fits in the output width
 			}
 			var buf bytes.Buffer
 			require.NoError(t, flacpcm.EncodeInterleaved(&buf, flacpcm.Config{SampleRate: testRate, BitDepth: depth, Channels: 1}, raw))
@@ -665,7 +671,7 @@ func TestDecode_FLACNarrowingTruncates(t *testing.T) {
 
 			pcm, err := decode(t.Context(), path, nil, 0)
 			require.NoError(t, err)
-			assert.Equal(t, want, bytesInt16(pcm.Data), "each sample must be the source value shifted right by depth-16")
+			assert.Equal(t, want, bytesInt16(pcm.Data), "each sample must be the source value shifted right by depth minus the output bit depth")
 		})
 	}
 }

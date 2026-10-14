@@ -46,6 +46,8 @@ const (
 	fallbackWindowUnits = 4
 	// m4aTailOverrunFrames is how far before the end the overrunning window starts.
 	m4aTailOverrunFrames = 100
+	// probeMaxSeconds caps the decode in the retry tests well above their window.
+	probeMaxSeconds = 2
 	// hugeEncoderDelay is the largest media_time a version 0 edit list can carry.
 	hugeEncoderDelay = math.MaxInt32
 )
@@ -338,7 +340,7 @@ func TestDecodeSource_SeekFallbackIsLimitedToRetryableFailures(t *testing.T) {
 
 	const startSeconds, durSeconds = 0.1, 0.1
 	req := &window{Start: startSeconds, Duration: durSeconds}
-	maxBytes := int(2 * testRate * bytesPerSample)
+	maxBytes := int(probeMaxSeconds * testRate * bytesPerSample)
 
 	tests := []struct {
 		name        string
@@ -391,7 +393,7 @@ func TestDecodeSource_SeekFallbackNeedsASeekAndARewind(t *testing.T) {
 	t.Parallel()
 
 	const startSeconds, durSeconds = 0.1, 0.1
-	maxBytes := int(2 * testRate * bytesPerSample)
+	maxBytes := int(probeMaxSeconds * testRate * bytesPerSample)
 
 	t.Run("a failed read at frame zero is not retried", func(t *testing.T) {
 		t.Parallel()
