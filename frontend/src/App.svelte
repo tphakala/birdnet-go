@@ -120,8 +120,9 @@
 
   // The login route (/ui/login) shows the same full-screen login form as private mode
   // to a visitor who is not allowed in. The backend sends logged-out visitors of
-  // protected pages here with ?redirect=<page>, which the form returns to after a
-  // password login. A visitor who is already allowed goes straight to that target.
+  // protected pages to /login?redirect=<page>, which the navigation store rewrites to this
+  // route; the form returns to the page after a password login. A visitor who is already
+  // allowed goes straight to that target.
   let loginRouteActive = $derived(currentRoute === 'login' && securityEnabled && !accessAllowed);
   let loginRedirectUrl = $derived(
     currentRoute === 'login'

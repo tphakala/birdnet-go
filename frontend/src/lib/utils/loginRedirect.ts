@@ -4,8 +4,9 @@
  * The backend redirects a logged-out visitor of a protected page to
  * `<base>/login?redirect=<path>`. The SPA rewrites that address to the login route
  * (see navigation.svelte.ts), reads the target back with resolveLoginRedirect, and
- * hands it to the login form. Everything returned here is an internal path without
- * a reverse-proxy prefix, like the paths the navigation store keeps.
+ * hands it to the login form. resolveLoginRedirect returns an internal path without a
+ * reverse-proxy prefix, like the paths the navigation store keeps; buildLoginUrl returns
+ * an address that carries the prefix.
  */
 
 import { buildAppUrl, getAppBasePath, isRelativePath } from './urlHelpers';
