@@ -13,9 +13,8 @@
   - Values passed in are never changed or dropped by rendering. Invalid or repeated
     rows are flagged with an icon and text until the user removes them. Rows are keyed
     by index, so repeated values render.
-  - An add's report shows until the text is edited, a row is removed, the draft or the
-    list no longer match what the add left (a parent writing either), or the parent
-    changes `reportResetKey` (a form Reset that may restore exactly what the add left).
+  - An add's report shows until the text is edited, a row is removed, or the parent changes
+    `reportResetKey` (a form Reset).
   - The text typed but not added yet is the bindable `draft`. Left unbound it lives in
     the component; bind it to keep it when the component unmounts (a tab switch) and to
     block saving while it is not empty, instead of losing it silently.
@@ -25,7 +24,7 @@
   @component
 -->
 <script lang="ts">
-  import { tick, untrack, type Snippet } from 'svelte';
+  import { tick, type Snippet } from 'svelte';
   import type { ClipboardEventHandler } from 'svelte/elements';
   import { Plus, X, TriangleAlert } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
@@ -34,7 +33,6 @@
   import {
     networkAddressKey,
     isValidNetworkAddress,
-    trimGoSpace,
     type NetworkAddressMode,
   } from '$lib/utils/networkAddress';
 
@@ -70,10 +68,7 @@
     rowAnnotation?: Snippet<[NetworkAddressRow]>;
     /** Text typed but not added yet. Bindable; internal state when not bound. */
     draft?: string;
-    /**
-     * Changing this value clears the add report. A parent bumps it when the form is reset,
-     * since a Reset can restore the draft and the list to exactly what the add left.
-     */
+    /** Changing this value hides the add report; a parent bumps it when the form is reset. */
     reportResetKey?: number;
     className?: string;
   }
@@ -108,23 +103,13 @@
     'ip-or-cidr': 'ipOrCidr',
   } as const satisfies Record<NetworkAddressMode, string>;
 
-  /**
-   * The report of the last add: its message lines and whether any token was invalid, plus
-   * the draft that add left behind and the key of the list it produced.
-   */
+  /** The report of the last add, with the parent's `reportResetKey` at that time. */
   interface AddReport {
     messages: string[];
     hasInvalid: boolean;
-    draft: string;
-    listKey: string;
+    resetKey: number | undefined;
   }
-  // An empty listKey never equals a real key: listKey([]) is '[]'.
-  const EMPTY_REPORT: AddReport = { messages: [], hasInvalid: false, draft: '', listKey: '' };
-
-  /** Identifies a list by its trimmed entries, in order; a parent's split and join round trip keeps it. */
-  function listKey(list: readonly string[]): string {
-    return JSON.stringify(list.map(trimGoSpace));
-  }
+  const EMPTY_REPORT: AddReport = { messages: [], hasInvalid: false, resetKey: undefined };
 
   const baseId = generateId('network-address-list');
   let inputId = $derived(id ?? `${baseId}-input`);
@@ -135,31 +120,9 @@
 
   let inputElement = $state<HTMLInputElement>();
   let listElement = $state<HTMLUListElement>();
-  /**
-   * Report of the last add. It is cleared on edit, row removal, a reportResetKey change, and
-   * once the draft or the list no longer match what the add left, so restoring them later
-   * does not bring it back.
-   */
+  /** Report of the last add; cleared on edit and row removal, hidden once reportResetKey changes. */
   let report = $state<AddReport>(EMPTY_REPORT);
-  let reportApplies = $derived(report.draft === draft && report.listKey === listKey(values));
-  $effect.pre(() => {
-    if (report.messages.length > 0 && !reportApplies) {
-      untrack(() => {
-        report = EMPTY_REPORT;
-      });
-    }
-  });
-
-  // Compared with Object.is against the last value seen, so NaN written again is no change.
-  let lastResetKey = untrack(() => reportResetKey);
-  $effect.pre(() => {
-    const key = reportResetKey;
-    if (Object.is(key, lastResetKey)) return;
-    lastResetKey = key;
-    untrack(() => {
-      report = EMPTY_REPORT;
-    });
-  });
+  let reportApplies = $derived(report.resetKey === reportResetKey);
   let messages = $derived(reportApplies ? report.messages : []);
   let hasInvalidTokens = $derived(reportApplies && report.hasInvalid);
 
@@ -228,8 +191,7 @@
       }
     }
 
-    const next = added.length > 0 ? [...values, ...added] : values;
-    if (added.length > 0) onUpdate(next);
+    if (added.length > 0) onUpdate([...values, ...added]);
 
     const lines: string[] = [];
     if (invalid.length > 0) {
@@ -255,14 +217,8 @@
       );
     }
 
-    const nextDraft = [...invalid, ...overLimit].join(PASTE_SEPARATOR);
-    draft = nextDraft;
-    report = {
-      messages: lines,
-      hasInvalid: invalid.length > 0,
-      draft: nextDraft,
-      listKey: listKey(next),
-    };
+    draft = [...invalid, ...overLimit].join(PASTE_SEPARATOR);
+    report = { messages: lines, hasInvalid: invalid.length > 0, resetKey: reportResetKey };
   }
 
   // The Add button turns disabled once the input is empty, which would drop focus to
