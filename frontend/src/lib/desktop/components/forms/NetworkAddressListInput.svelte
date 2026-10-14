@@ -254,6 +254,8 @@
   // place, the new last row, or the input when the list is empty.
   async function removeAt(index: number) {
     if (disabled) return;
+    // The list is about to change; drop the report so it cannot return if the list does.
+    report = EMPTY_REPORT;
     onUpdate(values.filter((_, i) => i !== index));
     await tick();
     const buttons = listElement?.querySelectorAll<HTMLButtonElement>('[data-remove]') ?? [];

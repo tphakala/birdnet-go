@@ -451,6 +451,30 @@ describe('NetworkAddressListInput', () => {
       expect(input()).not.toHaveAttribute('aria-invalid', 'true');
     });
 
+    it('does not bring a report back when the list returns after a row removal', async () => {
+      const { rerender } = renderControlled({ values: ['10.0.0.1', '10.0.0.2'] });
+      await typeAndSubmit('10.0.0.1');
+      expect(alertText()).toContain('errors.duplicate');
+
+      await fireEvent.click(screen.getByRole('button', { name: /10\.0\.0\.2/ }));
+      expect(alertText()).toBe('');
+      await rerender({ values: ['10.0.0.1', '10.0.0.2'], draft: '' });
+
+      expect(alertText()).toBe('');
+    });
+
+    it('keeps its own report when the parent writes the list back with padding', async () => {
+      let apply: (next: { values: string[] }) => Promise<void> = async () => {};
+      const view = renderList({
+        onUpdate: (values: string[]) => void apply({ values: values.map(v => ` ${v} `) }),
+      });
+      apply = view.rerender;
+
+      await typeAndSubmit('10.0.0.2, abc');
+
+      expect(alertText()).toContain('errors.invalid');
+    });
+
     // The report is derived from the draft and the list, not latched. A parent that writes
     // a non-empty draft and then the same empty draft again, with no list change, makes a
     // duplicate-only report reappear. No parent does this: the only outside write is a
