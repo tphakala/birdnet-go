@@ -130,8 +130,9 @@
   let inputElement = $state<HTMLInputElement>();
   let listElement = $state<HTMLUListElement>();
   /**
-   * Report of the last add. It is cleared when the text is edited and hidden whenever the
-   * draft or the list no longer match what the add left, for example after a form Reset.
+   * Report of the last add. It is cleared when the text is edited or a row is removed, and
+   * hidden whenever the draft or the list no longer match what the add left, for example
+   * after a form Reset.
    * Visibility is derived, not latched: a parent that writes a non-empty draft and then the
    * same empty draft again, with no list change, shows a duplicate-only report again.
    */
