@@ -2,6 +2,7 @@ package transcode
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
 	"math"
@@ -94,6 +95,10 @@ func TestDecode_M4AWindowsMatchTheLinearDecode(t *testing.T) {
 				req := &window{Start: float64(start) / testRate, Duration: float64(m4aWindowFrames) / testRate}
 				want := whole.Data[start*int64(frameBytes) : min(start+m4aWindowFrames, total)*int64(frameBytes)]
 
+				// decode falls back to the forward decoder when a seek fails, and that
+				// output is the expected slice, so the seek is checked on its own.
+				requireSeekServes(t, path, start)
+
 				win, err := decode(t.Context(), path, req, 0)
 				require.NoErrorf(t, err, "start %d", start)
 				assert.Truef(t, bytes.Equal(want, win.Data), "start %d: the window must equal the matching slice of the whole decode (got %d frames, want %d)", start, win.Frames(), len(want)/frameBytes)
@@ -110,6 +115,21 @@ func TestDecode_M4AWindowsMatchTheLinearDecode(t *testing.T) {
 			assert.True(t, bytes.Equal(whole.Data[start*int64(frameBytes):], win.Data))
 		})
 	}
+}
+
+// requireSeekServes opens path and positions it at start, and requires that the
+// seekable decoder, not the forward one, holds the position.
+func requireSeekServes(t *testing.T, path string, start int64) {
+	t.Helper()
+	f, err := os.Open(path) //nolint:gosec // G304: a test fixture path
+	require.NoError(t, err)
+	defer func() { assert.NoError(t, f.Close()) }()
+	src, err := openSource(f, path)
+	require.NoError(t, err)
+	require.NoErrorf(t, positionSource(t.Context(), src, start, src.channels*bytesPerSample, true), "start %d", start)
+	reader, ok := src.reader.(*m4aReader)
+	require.True(t, ok)
+	require.NotNilf(t, reader.seeked, "start %d must be served by the seekable decoder", start)
 }
 
 func TestOpenM4A_WindowAfterFrameZeroSeeks(t *testing.T) {
@@ -274,6 +294,7 @@ func TestDecode_M4ANoisyWindowWithinPNSTolerance(t *testing.T) {
 	require.NoError(t, err)
 
 	const start = m4aMidFileFrame
+	requireSeekServes(t, path, start)
 	win, err := decode(t.Context(), path, &window{Start: float64(start) / testRate, Duration: float64(m4aWindowFrames) / testRate}, 0)
 	require.NoError(t, err)
 	require.Equal(t, m4aWindowFrames, win.Frames(), "the window length is exact")
@@ -291,4 +312,69 @@ func rms(samples []int16) float64 {
 		sum += float64(s) * float64(s)
 	}
 	return math.Sqrt(sum / float64(len(samples)))
+}
+
+// rewindProbe is a source whose seek always fails with seekErr (or lands short of
+// the target when seekErr is nil), counting calls to rewind.
+func rewindProbe(seekErr error, rewinds *int) *source {
+	const probeFrames = 20000
+	return &source{
+		reader:      bytes.NewReader(make([]byte, probeFrames*bytesPerSample)),
+		sampleRate:  testRate,
+		channels:    1,
+		totalFrames: probeFrames,
+		seek:        func(int64) (int64, error) { return 0, seekErr },
+		rewind:      func() bool { *rewinds++; return true },
+		expansion:   lossyExpansion,
+	}
+}
+
+// Only a seek failure the forward path could still serve is retried; a cancelled
+// context and an empty range are reported as they are.
+func TestDecodeSource_SeekFallbackIsLimitedToRetryableFailures(t *testing.T) {
+	t.Parallel()
+
+	const startSeconds, durSeconds = 0.1, 0.1
+	req := &window{Start: startSeconds, Duration: durSeconds}
+	maxBytes := int(2 * testRate * bytesPerSample)
+
+	tests := []struct {
+		name        string
+		seekErr     error
+		wantRewinds int
+		wantErr     error
+	}{
+		{name: "a decode failure is retried once", seekErr: aacpcm.ErrCorruptStream, wantRewinds: 1},
+		{name: "a cancelled context is not retried", seekErr: context.Canceled, wantErr: context.Canceled},
+		{name: "an expired context is not retried", seekErr: context.DeadlineExceeded, wantErr: context.DeadlineExceeded},
+		{name: "a start past the end is not retried", seekErr: nil, wantErr: ErrEmptyRange},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rewinds := 0
+			pcm, err := decodeSource(t.Context(), rewindProbe(tt.seekErr, &rewinds), req, 0, maxBytes)
+			assert.Equal(t, tt.wantRewinds, rewinds)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, int(durSeconds*testRate), pcm.Frames())
+		})
+	}
+}
+
+// The forward decoder may only be reused while it is still at the start of the file.
+func TestM4AReader_RewindRequiresAnUnreadForwardDecoder(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, (&m4aReader{}).rewind(), "without a seek there is nothing to abandon")
+	assert.False(t, (&m4aReader{seekTried: true, fwdUsed: true}).rewind(), "a read forward decoder is no longer at the start")
+
+	r := &m4aReader{seekTried: true, seeked: &aacm4a.Decoder{}}
+	assert.True(t, r.rewind())
+	assert.Nil(t, r.seeked, "a rewind drops the seekable decoder so reads return to the forward decoder")
+	assert.False(t, r.seekTried, "a rewind clears the seek attempt")
+	assert.False(t, r.rewind(), "a second rewind has nothing to abandon")
 }
