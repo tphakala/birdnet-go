@@ -104,7 +104,9 @@ func TestRun_AppliesThePerJobTimeout(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "src.wav")
 	writeWAVFile(t, path, tone(testRate, 1, 1, testToneHz, testAmp), testRate, 1)
 
-	_, err := run(t.Context(), &job{path: path, timeout: time.Nanosecond, format: audioformat.WAV})
+	// A timeout that has already elapsed cancels the job context at once, with no
+	// timer race on a coarse clock.
+	_, err := run(t.Context(), &job{path: path, timeout: -time.Second, format: audioformat.WAV})
 	require.ErrorIs(t, err, context.DeadlineExceeded, "a job past its own timeout stops even though the caller's context is live")
 }
 
