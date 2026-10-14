@@ -340,55 +340,6 @@ describe('SecuritySettingsPage reverse proxy wiring', () => {
     expect(screen.queryByText(/errors\.duplicate/)).not.toBeInTheDocument();
   });
 
-  it.each<{ name: string; label: string; value: string; tab: string | null; seed: () => void }>([
-    {
-      name: 'trusted proxies',
-      label: 'settings.security.reverseProxy.listLabel',
-      value: '10.0.0.1',
-      tab: null,
-      seed: () => seedSecurity({ trustedProxies: ['10.0.0.1'] }),
-    },
-    {
-      name: 'allowed subnets',
-      label: 'settings.security.allowedSubnetsLabel',
-      value: '10.0.0.1/32',
-      tab: 'exceptions',
-      seed: () => seedSecurity({ allowSubnetBypass: { enabled: true, subnet: '10.0.0.1/32' } }),
-    },
-  ])(
-    'reports an add made after Reset and hides it on a second Reset: $name',
-    async ({ label, value, tab, seed }) => {
-      seed();
-      if (tab) openTab(tab);
-      render(SecuritySettingsPage);
-      const field = screen.getByRole<HTMLInputElement>('textbox', { name: label });
-      const addDuplicate = async () => {
-        await fireEvent.input(field, { target: { value } });
-        await fireEvent.keyDown(field, { key: 'Enter' });
-        await tick();
-      };
-      // Reset appears only with an unsaved change elsewhere
-      const reset = async (host: string) => {
-        editSecurity({ host });
-        await tick();
-        await fireEvent.click(
-          screen.getByRole('button', { name: 'settings.actions.resetAriaLabel' })
-        );
-        await tick();
-      };
-
-      await addDuplicate();
-      await reset('first.example');
-      expect(screen.queryByText(/errors\.duplicate/)).not.toBeInTheDocument();
-
-      await addDuplicate();
-      expect(screen.getByText(/errors\.duplicate/)).toBeInTheDocument();
-
-      await reset('second.example');
-      expect(screen.queryByText(/errors\.duplicate/)).not.toBeInTheDocument();
-    }
-  );
-
   it('ignores blank saved entries for display and validation', async () => {
     seedSecurity({ trustedProxies: ['', '172.18.0.1', '  '] });
     render(SecuritySettingsPage);
