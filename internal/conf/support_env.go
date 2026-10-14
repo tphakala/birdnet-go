@@ -5,11 +5,12 @@ import "slices"
 // supportEnvAllowlist names the environment variables a support dump may
 // capture verbatim, together with their values.
 //
-// Why this list exists at all: the native-encoder gates are env-only and are
-// read live per export, so nothing in config.yaml records them. A dump that
-// arrives without a clip export inside the captured log window therefore cannot
-// answer whether the reporter was running a native encoder or FFmpeg, which is
-// the first thing to establish while the gate is still opt-in.
+// Why this list exists at all: runtime gates are env-only and are read live, so
+// nothing in config.yaml records them. A dump that arrives without the relevant
+// activity inside the captured log window therefore cannot answer whether the
+// reporter was running a native or an FFmpeg code path, which is the first thing
+// to establish while a gate is still opt-in. No encoder gate is read any more;
+// the entries below that name one are kept as history.
 //
 // Coverage before this was partial and asymmetric: the deployment collector
 // reads unit-file Environment= lines, so a systemd user who set a gate in their
@@ -37,12 +38,14 @@ import "slices"
 //
 //nolint:gochecknoglobals // package-level allowlist, never mutated after init
 var supportEnvAllowlist = []string{
-	EnvNativeAACEncoder,
-	// Historical: no longer read by any code path, because native FLAC, native
-	// Opus and native HLS are now unconditional. Captured anyway, so a dump
+	// Historical: no longer read by any code path, because native AAC, native
+	// MP3, native FLAC, native Opus and native HLS are now unconditional.
+	// Captured anyway, so a dump
 	// distinguishes "the operator set nothing" from "the operator set a variable
 	// that stopped doing anything", which otherwise look identical from the
 	// outside.
+	"BIRDNET_AAC_ENCODER",
+	"BIRDNET_MP3_ENCODER",
 	"BIRDNET_FLAC_ENCODER",
 	"BIRDNET_OPUS_ENCODER",
 	"BIRDNET_HLS_ENCODER",

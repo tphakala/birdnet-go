@@ -7,8 +7,7 @@
 // and the same
 // enhanced-error conventions. Gain is applied in Go before encoding.
 //
-// This path is gated at the call site (see internal/conf/native_encoders.go); AAC clip
-// export still defaults to FFmpeg.
+// This is the AAC clip encoder; clip export has no FFmpeg path for AAC.
 package aac
 
 import (
@@ -41,8 +40,8 @@ const (
 	bitDepth16 = 16
 )
 
-// supportedSampleRates are the input rates go-aac accepts. Anything else must
-// stay on FFmpeg, which resamples internally.
+// supportedSampleRates are the input rates go-aac accepts. The caller resamples
+// anything else to 48 kHz before encoding.
 var supportedSampleRates = [...]int{44100, 48000}
 
 // Options configures a native AAC export of an in-memory PCM buffer.

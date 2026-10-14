@@ -1088,9 +1088,9 @@ const processedAudioFormat = "wav"
 // chain attached, is invisible in the log file.
 //
 // encoder is recorded for the same reason the clip export records it. The
-// compound case is the point: with a native encoder gate on, a clip written by
-// go-aac can later be re-encoded by FFmpeg through these endpoints, so two
-// encoders touch one file and until now only the first was ever named.
+// compound case is the point: a clip written by go-aac can later be re-encoded
+// by FFmpeg through these endpoints, so two encoders touch one file and until
+// now only the first was ever named.
 //
 // The error is scrubbed rather than logged raw, matching what apicore does to
 // the same value a statement later. An FFmpeg failure wraps the command's

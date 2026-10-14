@@ -38,11 +38,11 @@ const (
 	AudioExportTypeOPUS = "opus" // Lossy compressed audio
 )
 
-// isLossyExportFormat reports whether an export format is a lossy codec that needs
-// a bitrate. AAC, Opus and MP3 are lossy; WAV and FLAC are lossless and ignore the
+// IsLossyExportFormat reports whether an export format is a lossy codec that needs
+// a bitrate (and, for clip export, a native encoder with no fallback). AAC, Opus and MP3 are lossy; WAV and FLAC are lossless and ignore the
 // bitrate. Callers gate bitrate defaulting and validation on this instead of
 // repeating the AAC/OPUS/MP3 set.
-func isLossyExportFormat(format string) bool {
+func IsLossyExportFormat(format string) bool {
 	switch format {
 	case AudioExportTypeAAC, AudioExportTypeOPUS, AudioExportTypeMP3:
 		return true
@@ -65,9 +65,8 @@ func isLosslessExportFormat(format string) bool {
 }
 
 // normalizeAndValidateExportType heals an empty export type to WAV and rejects
-// unknown formats before any fallback runs, so a garbage value cannot be silently
-// rewritten to WAV by the ffmpeg-missing fallback (which would hide the
-// misconfiguration). An empty Type previously produced extension-less clip_name
+// unknown formats, so a garbage value surfaces as a validation error instead of
+// being carried into clip export, where it would fail every save. An empty Type previously produced extension-less clip_name
 // rows in the DB, causing audio download and spectrogram generation to 404
 // (GitHub #2810, #2814). Kept separate from validateAudioSettings to hold that
 // function's cyclomatic complexity down.
@@ -502,45 +501,6 @@ func (s *AudioSettings) clearFfmpegMetadata() {
 	s.FfprobePath = ""
 }
 
-// applyFfmpegFormatFallback forces WAV export when FFmpeg is unavailable and the
-// configured format has no encoder that can run without it. Does nothing when
-// export is disabled.
-func (s *AudioSettings) applyFfmpegFormatFallback() {
-	if s.Export.Enabled && s.FfmpegPath == "" && exportFormatNeedsFFmpeg(s.Export.Type) {
-		GetLogger().Warn("FFmpeg not available, forcing WAV format for audio export",
-			logger.String("previous_type", s.Export.Type))
-		s.Export.Type = AudioExportTypeWAV
-	}
-}
-
-// exportFormatNeedsFFmpeg reports whether a clip export format can only be
-// produced by shelling out to FFmpeg.
-//
-// WAV, FLAC and Opus always have a native encoder, so they never need FFmpeg and
-// must NOT be downgraded to WAV when it is missing. AAC and MP3 have one too, but
-// each is opt-in while it earns field confidence, so for them the answer depends
-// on the runtime gate: without the gate the export really does need FFmpeg, and
-// with it the format is native and must NOT be downgraded. Getting this wrong is
-// silent, because the downgrade happens during config validation and the operator
-// only sees WAV files appear where they asked for .m4a or .mp3.
-//
-// REMOVAL: when the native AAC and MP3 encoders become the default too, the
-// remaining gate calls go away: every supported export type then has a native
-// encoder and this returns false for all of them, leaving the default true only
-// as a guard for an unrecognized type.
-func exportFormatNeedsFFmpeg(exportType string) bool {
-	switch exportType {
-	case AudioExportTypeWAV, AudioExportTypeFLAC, AudioExportTypeOPUS:
-		return false
-	case AudioExportTypeAAC:
-		return !NativeAACEncoderEnabled()
-	case AudioExportTypeMP3:
-		return !NativeMP3EncoderEnabled()
-	default:
-		return true
-	}
-}
-
 // ffmpegVersionDetector resolves the version of the ffmpeg binary at a validated
 // path by executing it. It is a package variable so unit tests can replace it
 // with a stub. validateAudioSettings runs across many parallel test cases that
@@ -632,10 +592,8 @@ func validateAudioSettings(settings *AudioSettings) error {
 		return err
 	}
 
-	settings.applyFfmpegFormatFallback()
-
 	// Bitrate only matters for lossy formats and only when export is enabled.
-	if settings.Export.Enabled && isLossyExportFormat(settings.Export.Type) {
+	if settings.Export.Enabled && IsLossyExportFormat(settings.Export.Type) {
 		if err := validateExportBitrate(settings.Export.Type, settings.Export.Bitrate); err != nil {
 			return err
 		}

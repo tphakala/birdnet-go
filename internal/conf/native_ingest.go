@@ -13,19 +13,17 @@ import (
 // go-aac, go-opus, or go-mp3, resample, and dispatch), exercised in the field
 // behind this gate before it becomes the default.
 //
-// The gate is read live per call, matching the encoder gates in
-// native_encoders.go. An environment variable cannot change inside a running
-// process, so a flip takes effect at the next service start (Docker --env,
-// systemd drop-in) or the next pipeline restart that rebuilds the audio engine.
+// The gate is read live per call. An environment variable cannot change inside a
+// running process, so a flip takes effect at the next service start (Docker
+// --env, systemd drop-in) or the next pipeline restart that rebuilds the audio
+// engine.
 //
 // REMOVAL: at promotion this inverts to an FFmpegStreamIngestForced() reading
-// the value "ffmpeg", native becomes the default, and this doc gets the same
-// removal note the encoder gates carry.
+// the value "ffmpeg", and native becomes the default.
 const EnvNativeStreamIngest = "BIRDNET_STREAM_INGEST"
 
 // nativeSelectValue is the only value that opts into a native code path. It is
-// shared by the ingest gate here and the encoder gates in native_encoders.go.
-// Anything else, including an unset variable, keeps the FFmpeg path.
+// used by the ingest gate. Anything else, including an unset variable, keeps the FFmpeg path.
 const nativeSelectValue = "native"
 
 // NativeStreamIngestEnabled reports whether network stream ingest should use the
@@ -41,8 +39,7 @@ func NativeStreamIngestEnabled() bool { return nativeSelected(EnvNativeStreamIng
 //
 // The value is read per call rather than cached at startup, so the gate stays
 // consistent with the rest of BirdNET-Go's settings, which take effect without a
-// restart. It lives here rather than in native_encoders.go so the encoder
-// scaffolding stays independently deletable while this shared matcher survives.
+// restart.
 func nativeSelected(env string) bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv(env)), nativeSelectValue)
 }

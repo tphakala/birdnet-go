@@ -34,16 +34,27 @@ func TestCollectRuntimeEnvRedactsASensitiveKey(t *testing.T) {
 	assert.Equal(t, redactedPlaceholder, env[sensitive])
 }
 
+// retiredGate is an allowlisted variable no code reads any more (native MP3 export
+// is unconditional). It stays on the allowlist so a dump shows an operator still
+// setting it, which also pins that allowlist entry.
+const retiredGate = "BIRDNET_MP3_ENCODER"
+
+// retiredAACGate is the AAC counterpart of retiredGate, pinned on its own so
+// removing either historical name from the allowlist fails a test.
+const retiredAACGate = "BIRDNET_AAC_ENCODER"
+
 // TestCollectRuntimeEnvCapturesAllowlistedGates covers the case the feature
 // exists for: a dump that arrives without a clip export in the captured log
-// window must still reveal whether a native encoder gate was on.
+// window must still reveal a retired gate the operator still sets.
 func TestCollectRuntimeEnvCapturesAllowlistedGates(t *testing.T) {
-	t.Setenv(conf.EnvNativeAACEncoder, "native")
+	t.Setenv(retiredGate, "native")
+	t.Setenv(retiredAACGate, "native")
 
 	env := newTestCollector().collectRuntimeEnv(conf.SupportEnvAllowlist())
 
 	require.NotNil(t, env)
-	assert.Equal(t, "native", env[conf.EnvNativeAACEncoder])
+	assert.Equal(t, "native", env[retiredGate])
+	assert.Equal(t, "native", env[retiredAACGate])
 	assert.NotContains(t, env, "BIRDNET_HLS_ENCODER",
 		"an unset allowlisted variable must be absent, not present with an empty value")
 }
@@ -83,10 +94,10 @@ func TestCollectRuntimeEnvEmptyWhenNoGatesSet(t *testing.T) {
 // the helper in, since the helper being correct in isolation is not what the
 // support dump depends on.
 func TestCollectSystemInfoIncludesRuntimeEnv(t *testing.T) {
-	t.Setenv(conf.EnvNativeAACEncoder, "native")
+	t.Setenv(retiredGate, "native")
 
 	c := &Collector{}
 	info := c.collectSystemInfo()
 
-	assert.Equal(t, "native", info.RuntimeEnv[conf.EnvNativeAACEncoder])
+	assert.Equal(t, "native", info.RuntimeEnv[retiredGate])
 }

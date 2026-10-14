@@ -390,7 +390,7 @@ func getMaxBitrate(format, requestedBitrate string) string {
 // returns 0 when the string cannot be parsed, which every encoder reads as "use
 // the codec default".
 //
-// The native AAC and Opus encoders take a numeric bitrate rather than a command
+// The native AAC, MP3 and Opus encoders take a numeric bitrate rather than a command
 // line, and call this so a clip codes at the same rate whichever encoder runs.
 //
 // Precondition: bitrate is the "NNNk" form that conf.validateExportBitrate

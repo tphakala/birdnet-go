@@ -26,9 +26,8 @@ type lossyFormat struct {
 	bitrate   string
 }
 
-// The formats FFmpeg still encodes on the export path. AAC and Opus reach it
-// whenever their native-encoder gate is unset, which is every default install;
-// MP3 has no native encoder at all.
+// The lossy formats compared here, encoded by FFmpeg. Clip export itself encodes
+// all three natively; FFmpeg is the reference side of the comparison.
 var lossyFormats = []lossyFormat{
 	{format: ffmpeg.FormatMP3, encoder: "libmp3lame", container: "mp3", bitrate: "192k"},
 	{format: ffmpeg.FormatAAC, encoder: "aac", container: "mp4", bitrate: "192k"},
