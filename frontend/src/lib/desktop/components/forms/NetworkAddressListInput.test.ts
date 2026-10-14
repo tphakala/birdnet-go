@@ -192,6 +192,16 @@ describe('NetworkAddressListInput', () => {
     expect(alertText()).toContain('192.168.1.5/24');
   });
 
+  it('adds the valid form of an invalid row instead of reporting a duplicate', async () => {
+    const onUpdate = vi.fn();
+    renderList({ accept: 'cidr', values: ['10.0.0.1'], onUpdate });
+
+    await typeAndSubmit('10.0.0.1/32');
+
+    expect(onUpdate).toHaveBeenCalledWith(['10.0.0.1', '10.0.0.1/32']);
+    expect(alertText()).not.toContain('errors.duplicate');
+  });
+
   it('removes a row and names the address in the remove button', async () => {
     const onUpdate = vi.fn();
     renderList({ values: ['10.0.0.1', '10.0.0.2'], onUpdate });

@@ -157,8 +157,13 @@
     if (!canAdd) return;
 
     const tokens = draft.split(TOKEN_SEPARATORS).filter(token => token !== '');
+    // Only rows valid for the mode count, like the rows derivation: an invalid row must
+    // not block adding its valid form.
     const keys = new Set(
-      values.map(value => networkAddressKey(value)).filter((key): key is string => key !== null)
+      values
+        .filter(value => isValidNetworkAddress(value, accept))
+        .map(value => networkAddressKey(value))
+        .filter((key): key is string => key !== null)
     );
     const added: string[] = [];
     const invalid: string[] = [];
