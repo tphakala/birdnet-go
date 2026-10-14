@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -246,11 +248,8 @@ func findFFmpegBinary() (string, error) {
 		}
 	}
 	// Try PATH last so absolute paths take priority (consistent with existing tests).
-	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
-		candidate := filepath.Join(dir, "ffmpeg")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate, nil
-		}
+	if path, err := exec.LookPath(conf.GetFfmpegBinaryName()); err == nil {
+		return path, nil
 	}
 	return "", fmt.Errorf("ffmpeg not found")
 }
