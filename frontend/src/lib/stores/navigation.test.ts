@@ -1,6 +1,7 @@
 // frontend/src/lib/stores/navigation.test.ts
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createNavigation } from './navigation.svelte';
+import { buildAppUrl, getAppBasePath } from '$lib/utils/urlHelpers';
 
 // Mock the urlHelpers module
 vi.mock('$lib/utils/urlHelpers', () => ({
@@ -309,6 +310,9 @@ describe('navigation store with proxy prefix', () => {
       writable: true,
       configurable: true,
     });
+    // clearAllMocks keeps implementations, so restore the prefix a test may have set.
+    vi.mocked(getAppBasePath).mockImplementation(() => '');
+    vi.mocked(buildAppUrl).mockImplementation((path: string) => path);
     vi.resetModules();
   });
 
@@ -375,6 +379,5 @@ describe('navigation store with proxy prefix', () => {
       '',
       '/proxy/ui/login?redirect=%2Fui%2Fsettings'
     );
-    vi.mocked(getAppBasePath).mockImplementation(() => '');
   });
 });
