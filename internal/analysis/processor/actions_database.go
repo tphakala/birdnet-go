@@ -1411,7 +1411,8 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 // resampleExportTo converts the captured PCM from srcRate to dstRate for export,
 // updating the action's PCM buffer and source rate on success and returning the
 // rate the clip is now at. On failure it logs once per rate pair and leaves the
-// clip at srcRate for the caller's fallback to handle.
+// clip at srcRate; for the lossy formats the encoder then rejects that rate and
+// the export fails.
 //
 // The failure log is keyed per rate pair because resampling a fixed pair either
 // works or it does not, so an affected source would otherwise warn on every
