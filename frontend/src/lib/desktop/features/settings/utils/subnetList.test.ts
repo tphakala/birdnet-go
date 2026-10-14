@@ -13,6 +13,10 @@ describe('splitSubnetList', () => {
     expect(splitSubnetList('')).toEqual([]);
     expect(splitSubnetList('  , ')).toEqual([]);
   });
+
+  it('trims the whitespace set the backend trims (U+0085 yes, U+FEFF no)', () => {
+    expect(splitSubnetList('\u008510.0.0.0/8\u0085,\uFEFF')).toEqual(['10.0.0.0/8', '\uFEFF']);
+  });
 });
 
 describe('joinSubnetList', () => {

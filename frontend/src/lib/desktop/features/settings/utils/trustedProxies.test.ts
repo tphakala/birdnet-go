@@ -14,6 +14,18 @@ describe('isCloudflarePreset', () => {
   it.each(['', 'cloudflare2', '10.0.0.1', 'cloud flare'])('rejects %j', value => {
     expect(isCloudflarePreset(value)).toBe(false);
   });
+
+  it('trims the whitespace set the backend trims (U+0085 yes, U+FEFF no)', () => {
+    expect(isCloudflarePreset('\u0085cloudflare\u0085')).toBe(true);
+    expect(isCloudflarePreset('\uFEFFcloudflare')).toBe(false);
+  });
+
+  it('treats a U+0085-only entry as blank and a U+FEFF entry as a row, like the backend', () => {
+    expect(partitionTrustedProxies(['\u0085', '\uFEFF', '10.0.0.1'])).toEqual({
+      entries: ['\uFEFF', '10.0.0.1'],
+      hasCloudflare: false,
+    });
+  });
 });
 
 describe('partitionTrustedProxies', () => {
