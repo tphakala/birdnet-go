@@ -1983,6 +1983,60 @@ func TestAuthClientIPKeepsThrottledNoticeKeys(t *testing.T) {
 	assert.True(t, server.throttledMessages[unverifiedClientIPLogKey].After(stale), "an expired notice is logged again")
 }
 
+// TestAuthClientIPThrottleUsesThePeersNoticeKey verifies the throttle check
+// before classifying looks at the notice the peer can earn: a recent unlisted
+// peer notice does not hold back the notice for a listed proxy, and the other
+// way round.
+func TestAuthClientIPThrottleUsesThePeersNoticeKey(t *testing.T) {
+	t.Parallel()
+
+	const listedPeer = "172.25.5.9"
+	tests := []struct {
+		name           string
+		trustedProxies []string
+		header         string
+		value          string
+		recentKey      string
+		wantKey        string
+	}{
+		{
+			name:           "listed proxy with unverifiable headers",
+			trustedProxies: []string{listedPeer},
+			header:         "Forwarded",
+			value:          "for=192.168.1.20",
+			recentKey:      unverifiedClientIPLogKey,
+			wantKey:        listedProxyUnverifiedLogKey,
+		},
+		{
+			name:      "unlisted local proxy",
+			header:    echo.HeaderXForwardedFor,
+			value:     "192.168.1.20",
+			recentKey: listedProxyUnverifiedLogKey,
+			wantKey:   unverifiedClientIPLogKey,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			settings := &conf.Settings{}
+			settings.Security.AllowSubnetBypass.Enabled = true
+			settings.Security.BasicAuth.Enabled = true
+			settings.Security.TrustedProxies = tt.trustedProxies
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			req.RemoteAddr = listedPeer + ":40000"
+			req.Header.Set(tt.header, tt.value)
+
+			server := &OAuth2Server{}
+			recent := time.Now()
+			server.throttledMessages = map[string]time.Time{tt.recentKey: recent}
+			assert.Nil(t, server.authClientIP(settings, req))
+			_, logged := server.throttledMessages[tt.wantKey]
+			assert.True(t, logged, "the notice for this peer must not be held back by the other notice's throttle")
+			assert.Equal(t, recent, server.throttledMessages[tt.recentKey])
+		})
+	}
+}
+
 // TestAuthClientIPReportsUnverifiedPeerThrottled verifies authClientIP records
 // the unverified forwarded address notice through the throttle, once per
 // interval, and records nothing when the address is verified or the bypass is

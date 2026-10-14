@@ -255,7 +255,7 @@ func (s *OAuth2Server) CurrentSettings() *conf.Settings {
 // may also cause by sending forged copies through a correctly configured
 // proxy). Both notices take their decision from proxytrust.Checker.Classify,
 // the classifier the settings connection check also uses; the request is
-// classified once, and not at all while both notices are throttled. A nil
+// classified once, and not at all while the notice it could earn is throttled. A nil
 // request has no verifiable address.
 func (s *OAuth2Server) authClientIP(settings *conf.Settings, r *http.Request) net.IP {
 	if r == nil {
@@ -268,9 +268,14 @@ func (s *OAuth2Server) authClientIP(settings *conf.Settings, r *http.Request) ne
 	if !bypassNoticeApplies(settings) {
 		return nil
 	}
-	// Both notices already inside their throttle interval: skip classifying.
-	if s.noticeThrottled(unverifiedClientIPLogKey, unverifiedClientIPLogInterval) &&
-		s.noticeThrottled(listedProxyUnverifiedLogKey, unverifiedClientIPLogInterval) {
+	// A listed peer can only earn the listed-proxy notice and any other peer only
+	// the unlisted-peer notice; when that one notice is inside its throttle
+	// interval, skip classifying.
+	noticeKey := unverifiedClientIPLogKey
+	if peerIP, _ := proxytrust.PeerAddr(r); checker.IsConfiguredProxy(peerIP) {
+		noticeKey = listedProxyUnverifiedLogKey
+	}
+	if s.noticeThrottled(noticeKey, unverifiedClientIPLogInterval) {
 		return nil
 	}
 	conn := checker.Classify(r)
