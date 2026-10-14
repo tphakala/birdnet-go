@@ -129,7 +129,9 @@ func TestGetConnectionCheck_HotReload(t *testing.T) {
 	headers := map[string]string{"X-Forwarded-For": connectionTestClient}
 	statusOf := func() string {
 		body := decodeConnectionCheck(t, getConnectionCheck(t, e, c, connectionTestPeer+":5000", headers))
-		return body["status"].(string)
+		status, ok := body["status"].(string)
+		require.True(t, ok, "status must be a string, got %v", body["status"])
+		return status
 	}
 
 	assert.Equal(t, "untrusted_proxy", statusOf())

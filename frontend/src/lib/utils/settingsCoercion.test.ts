@@ -392,9 +392,7 @@ describe('settingsCoercion security trustedProxies', () => {
 
   it('returns an already clean list unchanged', () => {
     const list = ['172.18.0.1', 'cloudflare'];
-    const result = coerceSettings('security', { trustedProxies: list }) as {
-      trustedProxies: string[];
-    };
+    const result = coerceSettings('security', { trustedProxies: list });
 
     expect(result.trustedProxies).toBe(list);
   });

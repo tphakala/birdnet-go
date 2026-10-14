@@ -23,14 +23,19 @@ function jsonResponse(status: number, data: unknown) {
 }
 
 describe('settingsAPI.security.getConnection', () => {
-  let mockFetch: ReturnType<typeof vi.fn>;
+  // The shared test setup installs a fetch mock; keep it and put it back after each test.
+  const originalFetch = globalThis.fetch;
+  let mockFetch: ReturnType<typeof vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>>;
 
   beforeEach(() => {
-    mockFetch = vi.fn();
+    mockFetch = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>();
+    // The client only reads ok, status, headers and json(), so the fake response is
+    // not a full Response and the mock does not match the fetch signature.
     globalThis.fetch = mockFetch as unknown as typeof fetch;
   });
 
   afterEach(() => {
+    globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
   });
 
@@ -51,8 +56,8 @@ describe('settingsAPI.security.getConnection', () => {
 
     expect(result).toEqual(body);
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const [url, init] = mockFetch.mock.calls[0] ?? [];
     expect(url).toBe('/api/v2/settings/connection');
-    expect(init.method ?? 'GET').toBe('GET');
+    expect(init?.method ?? 'GET').toBe('GET');
   });
 });
