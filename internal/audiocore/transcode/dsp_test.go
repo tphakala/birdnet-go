@@ -5,6 +5,7 @@ import (
 	"context"
 	"math"
 	"math/rand/v2"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -234,6 +235,45 @@ func TestApplyFilters_DenoiseCancelled(t *testing.T) {
 	cancel()
 	p := newPCM(noisyTone(testRate), testRate, 1)
 	require.ErrorIs(t, applyFilters(ctx, p, Filters{Denoise: "light"}), context.Canceled)
+}
+
+// allocSeconds is the length of the clip for the allocation test: long enough
+// that one channel of floats dwarfs the denoiser's own working set.
+const allocSeconds = 60
+
+// allocatedBy returns the bytes allocated process-wide while fn runs.
+func allocatedBy(fn func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	fn()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
+}
+
+// This test reads the process-wide allocation counter, so it must not run in
+// parallel with the tests that allocate buffers (serial tests finish before the
+// paused parallel ones resume, as in TestDecode_HeaderClaimingHugeLengthDoesNotDriveAllocation).
+func TestDenoisePCM_AllocatesLessThanOneChannelOfFloats(t *testing.T) {
+	frames := allocSeconds * testRate
+	src := make([]int16, 0, frames)
+	for len(src) < frames {
+		src = append(src, noisyTone(testRate)...)
+	}
+	src = src[:frames]
+	channelOfFloats := uint64(frames) * 4 //nolint:gosec // G115: a small positive test constant
+
+	streaming := newPCM(src, testRate, 1)
+	streamed := allocatedBy(func() {
+		require.NoError(t, denoisePCM(t.Context(), streaming, "heavy"))
+	})
+	wholeChannel := newPCM(src, testRate, 1)
+	reference := allocatedBy(func() {
+		require.NoError(t, denoisePCMWholeChannel(t.Context(), wholeChannel, "heavy"))
+	})
+	t.Logf("channel of floats %d bytes; streaming denoise allocated %d, whole-channel reference %d", channelOfFloats, streamed, reference)
+
+	assert.GreaterOrEqual(t, reference, channelOfFloats, "the reference holds a whole channel, so this test can tell the two apart")
+	assert.Less(t, streamed, channelOfFloats/2, "the streaming denoise must not hold a whole channel of floats")
 }
 
 // lufsOf measures integrated loudness and true peak of mono 16-bit PCM.
