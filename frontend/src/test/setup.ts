@@ -237,6 +237,7 @@ const translations: Record<string, string> = {
   'notifications.timeAgo.minutesAgo': '{minutes}m ago',
   'notifications.timeAgo.hoursAgo': '{hours}h ago',
   'notifications.timeAgo.daysAgo': '{days}d ago',
+  'forms.networkAddressList.remove': 'Remove {address}',
 };
 
 vi.mock('$lib/i18n', () => ({
