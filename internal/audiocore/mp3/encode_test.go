@@ -22,15 +22,12 @@ const (
 	testSampleRate = 48000
 	testToneHz     = 1000.0
 	testBitrate    = 96
-
-	// mpeg1FrameCoefficient gives the MPEG-1 Layer III frame size in bytes without
-	// padding: 144 * bitrate (bit/s) / sample rate.
-	mpeg1FrameCoefficient = 144
 )
 
 // tagFrameBytes is the size of the leading Xing/Info tag frame, which has the
-// size of an audio frame at the encoding bitrate.
-const tagFrameBytes = mpeg1FrameCoefficient * testBitrate * bitsPerKilobit / testSampleRate
+// size of an MPEG-1 Layer III audio frame at testBitrate and testSampleRate:
+// 144 * 96000 / 48000.
+const tagFrameBytes = 288
 
 // tonePCM builds interleaved little-endian mono int16 PCM holding a sine wave at
 // freq Hz. A pure tone survives lossy coding well enough that its energy stays

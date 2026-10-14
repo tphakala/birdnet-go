@@ -428,22 +428,24 @@ func TestCloseNativeMuxWaitsForTheFeed(t *testing.T) {
 // TestCloseNativeMuxGivesUpOnAWedgedFeed proves the wait is bounded, so a feed
 // goroutine that never returns cannot block shutdown forever.
 func TestCloseNativeMuxGivesUpOnAWedgedFeed(t *testing.T) {
-	stream := newEmptyNativeStream(t)
-	stream.feedDone = make(chan struct{}) // never closed
+	synctest.Test(t, func(t *testing.T) {
+		stream := newEmptyNativeStream(t)
+		stream.feedDone = make(chan struct{}) // never closed
 
-	done := make(chan struct{})
-	go func() {
-		closeNativeMux("src", stream)
-		close(done)
-	}()
+		done := make(chan struct{})
+		go func() {
+			closeNativeMux("src", stream)
+			close(done)
+		}()
 
-	select {
-	case <-done:
-	case <-time.After(nativeFeedDrainTimeout + 5*time.Second):
-		t.Fatal("closeNativeMux blocked past its drain timeout on a wedged feed")
-	}
-	require.Error(t, stream.mux.Write(make([]byte, 2), time.Now()),
-		"the muxer must still be closed after the drain timeout expires")
+		select {
+		case <-done:
+		case <-time.After(nativeFeedDrainTimeout + 5*time.Second):
+			t.Fatal("closeNativeMux blocked past its drain timeout on a wedged feed")
+		}
+		require.Error(t, stream.mux.Write(make([]byte, 2), time.Now()),
+			"the muxer must still be closed after the drain timeout expires")
+	})
 }
 
 // TestNativeFeedLoopAccumulatesSubSampleChunks is the assertion with teeth.

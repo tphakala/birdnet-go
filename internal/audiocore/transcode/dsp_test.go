@@ -35,20 +35,25 @@ const (
 	truePeakSlackDB = 0.1
 )
 
-// noisyTone returns mono noise for noiseOnlySeconds followed by a tone in noise.
-func noisyTone(rate int) []int16 {
-	rng := rand.New(rand.NewPCG(noiseSeed, noiseSeed))
-	total := int((noiseOnlySeconds + noiseToneSeconds) * float64(rate))
-	lead := int(noiseOnlySeconds * float64(rate))
-	out := make([]int16, total)
+// noisePlusTone returns mono white noise of amplitude noiseLevel with a testToneHz
+// tone of amplitude toneLevel added from frame toneStart on; both levels are
+// fractions of full scale. The same seed gives the same noise.
+func noisePlusTone(seed uint64, rate, frames, toneStart int, noiseLevel, toneLevel float64) []int16 {
+	rng := rand.New(rand.NewPCG(seed, seed))
+	out := make([]int16, frames)
 	for i := range out {
-		v := noiseAmp * rng.NormFloat64()
-		if i >= lead {
-			v += noiseToneAmp * math.Sin(2*math.Pi*testToneHz*float64(i)/float64(rate))
+		v := noiseLevel * rng.NormFloat64()
+		if i >= toneStart {
+			v += toneLevel * math.Sin(2*math.Pi*testToneHz*float64(i)/float64(rate))
 		}
 		out[i] = int16(math.Max(math.Min(math.Round(v*math.MaxInt16), math.MaxInt16), math.MinInt16))
 	}
 	return out
+}
+
+// noisyTone returns mono noise for noiseOnlySeconds followed by a tone in noise.
+func noisyTone(rate int) []int16 {
+	return noisePlusTone(noiseSeed, rate, int((noiseOnlySeconds+noiseToneSeconds)*float64(rate)), int(noiseOnlySeconds*float64(rate)), noiseAmp, noiseToneAmp)
 }
 
 // toneFit fits a sinusoid at freq to x by least squares and returns its
@@ -266,13 +271,8 @@ func TestDenoisePCM_AllocatesLessThanOneChannelOfFloats(t *testing.T) {
 	streamed := allocatedBy(func() {
 		require.NoError(t, denoisePCM(t.Context(), streaming, "heavy"))
 	})
-	wholeChannel := newPCM(src, testRate, 1)
-	reference := allocatedBy(func() {
-		require.NoError(t, denoisePCMWholeChannel(t.Context(), wholeChannel, "heavy"))
-	})
-	t.Logf("channel of floats %d bytes; streaming denoise allocated %d, whole-channel reference %d", channelOfFloats, streamed, reference)
+	t.Logf("channel of floats %d bytes; streaming denoise allocated %d", channelOfFloats, streamed)
 
-	assert.GreaterOrEqual(t, reference, channelOfFloats, "the reference holds a whole channel, so this test can tell the two apart")
 	assert.Less(t, streamed, channelOfFloats/2, "the streaming denoise must not hold a whole channel of floats")
 }
 

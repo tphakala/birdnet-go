@@ -8,7 +8,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -35,10 +34,6 @@ const (
 	// onsetTolerance is how many frames the first loud sample of a trimmed M4A
 	// decode may sit from the source's.
 	onsetTolerance = 40
-	// lossyBitrate is the bit rate, in bit/s, of the tagless MP3 fixture.
-	lossyBitrate = 128_000
-	// mp3FrameSamples is the number of samples in one MPEG-1 Layer III frame.
-	mp3FrameSamples = 1152
 	// burstThreshold marks the first loud sample of a burst, above any codec
 	// pre-echo.
 	burstThreshold = 4000
@@ -49,7 +44,7 @@ func TestDecode_RoundTripPerFormat(t *testing.T) {
 
 	for _, fx := range fixtures() {
 		for _, channels := range []int{1, 2} {
-			t.Run(fx.name+"_"+map[int]string{1: "mono", 2: "stereo"}[channels], func(t *testing.T) {
+			t.Run(fx.name+"_"+channelName(channels), func(t *testing.T) {
 				t.Parallel()
 				path, src := writeFixture(t, fx, testRate, channels, testSeconds)
 
@@ -87,15 +82,15 @@ func TestDecode_TaglessMP3KeepsItsPriming(t *testing.T) {
 	src := tone(testRate, 1, testSeconds, testToneHz, testAmp)
 	var buf bytes.Buffer
 	require.NoError(t, mp3pcm.EncodeInterleaved(&buf, mp3pcm.Config{
-		SampleRate: testRate, Channels: 1, Bitrate: lossyBitrate, OmitGaplessTag: true,
+		SampleRate: testRate, Channels: 1, Bitrate: lossyBitrateKbps * bitsPerKilobit, OmitGaplessTag: true,
 	}, int16Bytes(src)))
 	path := filepath.Join(t.TempDir(), "tagless.mp3")
-	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o600))
+	writeBytes(t, path, buf.Bytes())
 
 	pcm, err := decode(t.Context(), path, nil, 0)
 	require.NoError(t, err)
 	assert.Greater(t, pcm.Frames(), len(src), "without a tag the encoder priming stays in the decode")
-	assert.InDelta(t, len(src)+mp3.TotalDelay, pcm.Frames(), mp3FrameSamples)
+	assert.InDelta(t, len(src)+mp3.TotalDelay, pcm.Frames(), mp3.FrameSize)
 }
 
 func TestDecode_M4ATrimsPrimingAndPadding(t *testing.T) {
@@ -412,10 +407,9 @@ func TestDecode_HeaderClaimingHugeLengthDoesNotDriveAllocation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "lie.wav")
 	require.NoError(t, os.WriteFile(path, data, 0o600))
 
-	var before, after runtime.MemStats
-	runtime.ReadMemStats(&before)
-	pcm, err := decode(t.Context(), path, nil, 0)
-	runtime.ReadMemStats(&after)
+	var pcm *pcmBuffer
+	var err error
+	allocated := allocatedBy(func() { pcm, err = decode(t.Context(), path, nil, 0) })
 
 	if err == nil {
 		assert.LessOrEqual(t, pcm.Frames(), 50)
@@ -423,7 +417,7 @@ func TestDecode_HeaderClaimingHugeLengthDoesNotDriveAllocation(t *testing.T) {
 		require.ErrorIs(t, err, ErrUndecodableSource)
 	}
 	const allocBudget = 16 << 20
-	assert.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(allocBudget), "a tiny file must not allocate for its claimed length")
+	assert.Less(t, allocated, uint64(allocBudget), "a tiny file must not allocate for its claimed length")
 }
 
 func TestDecode_WindowPastEnd(t *testing.T) {

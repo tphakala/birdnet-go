@@ -24,6 +24,11 @@ const (
 	testOffToneH = 3000.0
 	testAmp      = 0.5
 	testSeconds  = 2.0
+
+	// lossyBitrateKbps is the bit rate of the lossy fixtures, in kbit/s.
+	lossyBitrateKbps = 128
+	// bitsPerKilobit converts lossyBitrateKbps to bit/s.
+	bitsPerKilobit = 1000
 )
 
 // tone returns interleaved 16-bit samples of a sine of the given amplitude
@@ -137,7 +142,7 @@ func writeADTSFile(t *testing.T, path string, samples []int16, rate, channels in
 func writeM4AFile(t *testing.T, path string, samples []int16, rate, channels int) {
 	t.Helper()
 	require.NoError(t, aac.EncodePCM(t.Context(), &aac.Options{
-		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: channels, BitDepth: 16, BitrateKbps: 128,
+		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: channels, BitDepth: 16, BitrateKbps: lossyBitrateKbps,
 	}))
 }
 
@@ -145,7 +150,7 @@ func writeM4AFile(t *testing.T, path string, samples []int16, rate, channels int
 func writeMP3File(t *testing.T, path string, samples []int16, rate, channels int) {
 	t.Helper()
 	require.NoError(t, mp3.EncodePCM(t.Context(), &mp3.Options{
-		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: channels, BitDepth: 16, BitrateKbps: 128,
+		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: channels, BitDepth: 16, BitrateKbps: lossyBitrateKbps,
 	}))
 }
 
@@ -223,6 +228,14 @@ func firstAbove(samples []int16, channels, threshold int) int {
 		}
 	}
 	return -1
+}
+
+// channelName names a channel count for subtest names.
+func channelName(channels int) string {
+	if channels == 1 {
+		return "mono"
+	}
+	return "stereo"
 }
 
 // writeBytes writes data to path.

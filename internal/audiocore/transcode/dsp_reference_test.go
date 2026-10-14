@@ -3,6 +3,7 @@ package transcode
 import (
 	"context"
 	"encoding/binary"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -115,15 +116,11 @@ func firstDifference(a, b []byte) int {
 func TestDenoisePCM_MatchesWholeChannelReference(t *testing.T) {
 	t.Parallel()
 
-	longMono := func(rate int) []int16 {
-		return append(noisyTone(rate), noisyTone(rate)[:referenceOddFrames]...)
-	}
-	head := func(rate, frames int) []int16 { return longMono(rate)[:frames] }
-	stereo := func() (samples []int16, channels int) {
-		left := noisyTone(testRate)
-		right := tone(testRate, 1, noiseOnlySeconds+noiseToneSeconds, testToneHz, testAmp)
-		return interleave(left, right[:len(left)]), 2
-	}
+	// One noisy clip, whose length is not a multiple of the chunk size, is sliced
+	// into the cases; the sample rate only configures the denoiser.
+	clip := noisyTone(testRate)
+	longMono := append(slices.Clone(clip), clip[:referenceOddFrames]...)
+	stereoSamples := interleave(clip, tone(testRate, 1, noiseOnlySeconds+noiseToneSeconds, testToneHz, testAmp))
 
 	type testCase struct {
 		name     string
@@ -131,17 +128,16 @@ func TestDenoisePCM_MatchesWholeChannelReference(t *testing.T) {
 		rate     int
 		channels int
 	}
-	stereoSamples, stereoChannels := stereo()
 	cases := []testCase{
-		{name: "mono_48k", samples: longMono(48000), rate: 48000, channels: 1},
-		{name: "mono_44k", samples: longMono(44100), rate: 44100, channels: 1},
+		{name: "mono_48k", samples: longMono, rate: 48000, channels: 1},
+		{name: "mono_44k", samples: longMono, rate: 44100, channels: 1},
 		{name: "pure_tone_no_quiet_region", samples: tone(testRate, 1, 1, testToneHz, testAmp), rate: testRate, channels: 1},
 		{name: "shorter_than_one_frame", samples: tone(testRate, 1, float64(referenceShortFrames)/testRate, testToneHz, testAmp), rate: testRate, channels: 1},
-		{name: "exactly_one_chunk", samples: head(testRate, chunkFrames), rate: testRate, channels: 1},
-		{name: "one_chunk_plus_one_frame", samples: head(testRate, chunkFrames+1), rate: testRate, channels: 1},
+		{name: "exactly_one_chunk", samples: longMono[:chunkFrames], rate: testRate, channels: 1},
+		{name: "one_chunk_plus_one_frame", samples: longMono[:chunkFrames+1], rate: testRate, channels: 1},
 		{name: "min_source_rate", samples: tone(minSourceSampleRate, 1, referenceBoundSeconds, testToneHz, testAmp), rate: minSourceSampleRate, channels: 1},
 		{name: "bat_rate", samples: tone(referenceBatRate, 1, referenceBoundSeconds, testToneHz, testAmp), rate: referenceBatRate, channels: 1},
-		{name: "stereo_48k", samples: stereoSamples, rate: testRate, channels: stereoChannels},
+		{name: "stereo_48k", samples: stereoSamples, rate: testRate, channels: 2},
 	}
 
 	for _, tc := range cases {

@@ -6,23 +6,22 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
-	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	aaccodec "github.com/tphakala/go-aac"
 	aacpcm "github.com/tphakala/go-aac/pcm"
 	m4a "github.com/tphakala/go-m4a"
 	aacm4a "github.com/tphakala/go-m4a/aacm4a"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
-	// m4aUnitFrames is the number of sample frames one AAC access unit decodes to.
-	m4aUnitFrames = 1024
 	// m4aWindowFrames is the length of the windows in the seek table, shorter than
 	// the file so the window sits well inside it.
 	m4aWindowFrames = 3000
@@ -46,25 +45,46 @@ const (
 	hugeEncoderDelay = math.MaxInt32
 )
 
-// m4aEncoderDelay reads the container's EncoderDelay for path.
-func m4aEncoderDelay(t *testing.T, path string) (delay int64, frameCount int) {
+// m4aInfoOf reads the container info of the m4a file at path.
+func m4aInfoOf(t *testing.T, path string) m4a.Info {
 	t.Helper()
 	f, err := os.Open(path) //nolint:gosec // G304: a test fixture path
 	require.NoError(t, err)
 	defer func() { assert.NoError(t, f.Close()) }()
 	rd, err := m4a.NewReader(f)
 	require.NoError(t, err)
-	return rd.Info().EncoderDelay, rd.Info().FrameCount
+	return rd.Info()
+}
+
+// openTestSource opens path and its decoder, closing the file when the test ends.
+func openTestSource(t *testing.T, path string) *source {
+	t.Helper()
+	f, err := os.Open(path) //nolint:gosec // G304: a test fixture path
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, f.Close()) })
+	src, err := openSource(f, path)
+	require.NoError(t, err)
+	return src
+}
+
+// cleanM4ABytes writes a mono tone as m4a and returns the file's bytes.
+func cleanM4ABytes(t *testing.T) []byte {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "clean.m4a")
+	writeM4AFile(t, path, tone(testRate, 1, testSeconds, testToneHz, testAmp), testRate, 1)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: a test fixture path
+	require.NoError(t, err)
+	return data
 }
 
 func TestDecode_M4AWindowsMatchTheLinearDecode(t *testing.T) {
 	t.Parallel()
 
 	for _, channels := range []int{1, 2} {
-		t.Run(map[int]string{1: "mono", 2: "stereo"}[channels], func(t *testing.T) {
+		t.Run(channelName(channels), func(t *testing.T) {
 			t.Parallel()
 			path, _ := writeFixture(t, fixture{ext: ".m4a", write: writeM4AFile}, testRate, channels, testSeconds)
-			delay, _ := m4aEncoderDelay(t, path)
+			delay := m4aInfoOf(t, path).EncoderDelay
 
 			whole, err := decode(t.Context(), path, nil, 0)
 			require.NoError(t, err)
@@ -77,10 +97,10 @@ func TestDecode_M4AWindowsMatchTheLinearDecode(t *testing.T) {
 			// one frame past it, mid-file, and the last frame.
 			positions := []int64{
 				delay + 1,
-				m4aUnitFrames,
-				2 * m4aUnitFrames,
-				3 * m4aUnitFrames,
-				3*m4aUnitFrames + 1,
+				aaccodec.FrameSize,
+				2 * aaccodec.FrameSize,
+				3 * aaccodec.FrameSize,
+				3*aaccodec.FrameSize + 1,
 				delay + m4aMidFileFrame,
 			}
 			var starts []int64
@@ -121,50 +141,22 @@ func TestDecode_M4AWindowsMatchTheLinearDecode(t *testing.T) {
 // seekable decoder, not the forward one, holds the position.
 func requireSeekServes(t *testing.T, path string, start int64) {
 	t.Helper()
-	f, err := os.Open(path) //nolint:gosec // G304: a test fixture path
-	require.NoError(t, err)
-	defer func() { assert.NoError(t, f.Close()) }()
-	src, err := openSource(f, path)
-	require.NoError(t, err)
+	src := openTestSource(t, path)
 	require.NoErrorf(t, positionSource(t.Context(), src, start, src.channels*bytesPerSample, true), "start %d", start)
 	reader, ok := src.reader.(*m4aReader)
 	require.True(t, ok)
 	require.NotNilf(t, reader.seeked, "start %d must be served by the seekable decoder", start)
 }
 
-func TestOpenM4A_WindowAfterFrameZeroSeeks(t *testing.T) {
+func TestOpenM4A_StartZeroStaysOnTheForwardDecoder(t *testing.T) {
 	t.Parallel()
 
 	path, _ := writeFixture(t, fixture{ext: ".m4a", write: writeM4AFile}, testRate, 1, testSeconds)
-	frameBytes := bytesPerSample
-
-	open := func(t *testing.T) *source {
-		t.Helper()
-		f, err := os.Open(path) //nolint:gosec // G304: a test fixture path
-		require.NoError(t, err)
-		t.Cleanup(func() { assert.NoError(t, f.Close()) })
-		src, err := openSource(f, path)
-		require.NoError(t, err)
-		return src
-	}
-
-	t.Run("a start after frame zero seeks", func(t *testing.T) {
-		t.Parallel()
-		src := open(t)
-		require.NoError(t, positionSource(t.Context(), src, m4aMidFileFrame, frameBytes, true))
-		reader, ok := src.reader.(*m4aReader)
-		require.True(t, ok, "an M4A source reads through the m4aReader")
-		assert.NotNil(t, reader.seeked, "the window must be served by the seekable decoder")
-	})
-
-	t.Run("start zero stays on the forward decoder", func(t *testing.T) {
-		t.Parallel()
-		src := open(t)
-		require.NoError(t, positionSource(t.Context(), src, 0, frameBytes, true))
-		reader, ok := src.reader.(*m4aReader)
-		require.True(t, ok)
-		assert.Nil(t, reader.seeked, "no seek happens at frame zero")
-	})
+	src := openTestSource(t, path)
+	require.NoError(t, positionSource(t.Context(), src, 0, bytesPerSample, true))
+	reader, ok := src.reader.(*m4aReader)
+	require.True(t, ok, "an M4A source reads through the m4aReader")
+	assert.Nil(t, reader.seeked, "no seek happens at frame zero")
 }
 
 // auRanges returns the byte range of every access unit of an m4a file, which
@@ -196,11 +188,7 @@ func auRanges(t *testing.T, data []byte) [][2]int {
 func TestDecode_M4AFallsBackWhenAUnitHasNoAudio(t *testing.T) {
 	t.Parallel()
 
-	src := tone(testRate, 1, testSeconds, testToneHz, testAmp)
-	clean := filepath.Join(t.TempDir(), "clean.m4a")
-	writeM4AFile(t, clean, src, testRate, 1)
-	data, err := os.ReadFile(clean) //nolint:gosec // G304: a test fixture path
-	require.NoError(t, err)
+	data := cleanM4ABytes(t)
 
 	ranges := auRanges(t, data)
 	require.Greater(t, len(ranges), corruptedUnitIndex+corruptLeadUnits+3)
@@ -209,7 +197,7 @@ func TestDecode_M4AFallsBackWhenAUnitHasNoAudio(t *testing.T) {
 		bad[i] = 0xFF // the first element id is ID_END: an access unit with no audio
 	}
 	path := filepath.Join(t.TempDir(), "bad.m4a")
-	require.NoError(t, os.WriteFile(path, bad, 0o600))
+	writeBytes(t, path, bad)
 
 	// Precondition: the seekable decoder does fail on this file, so the test
 	// proves the fallback rather than a window that never touches the bad unit.
@@ -222,12 +210,12 @@ func TestDecode_M4AFallsBackWhenAUnitHasNoAudio(t *testing.T) {
 	whole, err := decode(t.Context(), path, nil, 0)
 	require.NoError(t, err, "the forward decoder serves the whole file")
 
-	delay, _ := m4aEncoderDelay(t, path)
-	start := int64((corruptedUnitIndex-corruptLeadUnits)*m4aUnitFrames) - delay
-	req := &window{Start: float64(start) / testRate, Duration: float64(4*m4aUnitFrames) / testRate}
+	delay := m4aInfoOf(t, path).EncoderDelay
+	start := int64((corruptedUnitIndex-corruptLeadUnits)*aaccodec.FrameSize) - delay
+	req := &window{Start: float64(start) / testRate, Duration: float64(4*aaccodec.FrameSize) / testRate}
 	win, err := decode(t.Context(), path, req, 0)
 	require.NoError(t, err, "a seek failure must not fail a request the forward path serves")
-	assert.True(t, bytes.Equal(whole.Data[start*bytesPerSample:(start+4*m4aUnitFrames)*bytesPerSample], win.Data),
+	assert.True(t, bytes.Equal(whole.Data[start*bytesPerSample:(start+4*aaccodec.FrameSize)*bytesPerSample], win.Data),
 		"the fallback window equals the whole-file decode's slice")
 }
 
@@ -251,25 +239,15 @@ func patchEncoderDelay(t *testing.T, data []byte, mediaTime uint32) []byte {
 func TestOpenM4A_ClampsAHugeEncoderDelay(t *testing.T) {
 	t.Parallel()
 
-	src := tone(testRate, 1, testSeconds, testToneHz, testAmp)
-	clean := filepath.Join(t.TempDir(), "clean.m4a")
-	writeM4AFile(t, clean, src, testRate, 1)
-	data, err := os.ReadFile(clean) //nolint:gosec // G304: a test fixture path
-	require.NoError(t, err)
-
 	path := filepath.Join(t.TempDir(), "huge-delay.m4a")
-	require.NoError(t, os.WriteFile(path, patchEncoderDelay(t, data, hugeEncoderDelay), 0o600))
-	delay, frameCount := m4aEncoderDelay(t, path)
-	require.Equal(t, int64(hugeEncoderDelay), delay, "the patch must reach Info.EncoderDelay")
+	writeBytes(t, path, patchEncoderDelay(t, cleanM4ABytes(t), hugeEncoderDelay))
+	info := m4aInfoOf(t, path)
+	require.Equal(t, int64(hugeEncoderDelay), info.EncoderDelay, "the patch must reach Info.EncoderDelay")
 
-	f, err := os.Open(path) //nolint:gosec // G304: a test fixture path
-	require.NoError(t, err)
-	defer func() { assert.NoError(t, f.Close()) }()
-	opened, err := openSource(f, path)
-	require.NoError(t, err)
-	assert.LessOrEqual(t, opened.skipFrames, int64(frameCount)*m4aUnitFrames, "the priming skip is bounded by the decoded length")
+	opened := openTestSource(t, path)
+	assert.LessOrEqual(t, opened.skipFrames, int64(info.FrameCount)*aaccodec.FrameSize, "the priming skip is bounded by the decoded length")
 
-	_, err = decode(t.Context(), path, &window{Start: 1, Duration: 1}, 0)
+	_, err := decode(t.Context(), path, &window{Start: 1, Duration: 1}, 0)
 	require.Error(t, err)
 	assert.Truef(t, errors.Is(err, ErrEmptyRange) || errors.Is(err, ErrUndecodableSource), "got %v", err)
 }
@@ -280,13 +258,7 @@ func TestOpenM4A_ClampsAHugeEncoderDelay(t *testing.T) {
 func TestDecode_M4ANoisyWindowWithinPNSTolerance(t *testing.T) {
 	t.Parallel()
 
-	rng := rand.New(rand.NewPCG(noisyM4ASeed, noisyM4ASeed))
-	frames := int(noisyM4AWindowSeconds * testRate)
-	src := make([]int16, frames)
-	for i := range src {
-		v := noisyM4ANoiseAmp*rng.NormFloat64() + noisyM4AToneAmp*math.Sin(2*math.Pi*testToneHz*float64(i)/testRate)
-		src[i] = int16(math.Max(math.Min(math.Round(v*math.MaxInt16), math.MaxInt16), math.MinInt16))
-	}
+	src := noisePlusTone(noisyM4ASeed, testRate, int(noisyM4AWindowSeconds*testRate), 0, noisyM4ANoiseAmp, noisyM4AToneAmp)
 	path := filepath.Join(t.TempDir(), "noisy.m4a")
 	writeM4AFile(t, path, src, testRate, 1)
 
@@ -302,16 +274,7 @@ func TestDecode_M4ANoisyWindowWithinPNSTolerance(t *testing.T) {
 	want := bytesInt16(whole.Data[start*bytesPerSample : (start+m4aWindowFrames)*bytesPerSample])
 	got := bytesInt16(win.Data)
 	assert.GreaterOrEqual(t, correlation(want, got), pnsMinCorrelation)
-	assert.InDelta(t, 0, 20*math.Log10(rms(got)/rms(want)), pnsMaxLevelDiffDB)
-}
-
-// rms returns the root mean square of samples.
-func rms(samples []int16) float64 {
-	var sum float64
-	for _, s := range samples {
-		sum += float64(s) * float64(s)
-	}
-	return math.Sqrt(sum / float64(len(samples)))
+	assert.InDelta(t, 0, 20*math.Log10(convert.CalculateRMSFloat64(channelOf(got, 1, 0))/convert.CalculateRMSFloat64(channelOf(want, 1, 0))), pnsMaxLevelDiffDB)
 }
 
 // rewindProbe is a source whose seek always fails with seekErr (or lands short of
@@ -324,7 +287,7 @@ func rewindProbe(seekErr error, rewinds *int) *source {
 		channels:    1,
 		totalFrames: probeFrames,
 		seek:        func(int64) (int64, error) { return 0, seekErr },
-		rewind:      func() bool { *rewinds++; return true },
+		rewind:      func() { *rewinds++ },
 		expansion:   lossyExpansion,
 	}
 }
@@ -365,16 +328,15 @@ func TestDecodeSource_SeekFallbackIsLimitedToRetryableFailures(t *testing.T) {
 	}
 }
 
-// The forward decoder may only be reused while it is still at the start of the file.
-func TestM4AReader_RewindRequiresAnUnreadForwardDecoder(t *testing.T) {
+// A retry drops the seekable decoder, so reads return to the forward decoder.
+func TestM4AReader_RewindServesFromTheForwardDecoder(t *testing.T) {
 	t.Parallel()
 
-	assert.False(t, (&m4aReader{}).rewind(), "without a seek there is nothing to abandon")
-	assert.False(t, (&m4aReader{seekTried: true, fwdUsed: true}).rewind(), "a read forward decoder is no longer at the start")
-
-	r := &m4aReader{seekTried: true, seeked: &aacm4a.Decoder{}}
-	assert.True(t, r.rewind())
-	assert.Nil(t, r.seeked, "a rewind drops the seekable decoder so reads return to the forward decoder")
-	assert.False(t, r.seekTried, "a rewind clears the seek attempt")
-	assert.False(t, r.rewind(), "a second rewind has nothing to abandon")
+	want := []byte{1, 2, 3, 4}
+	r := &m4aReader{fwd: bytes.NewReader(want), seeked: &aacm4a.Decoder{}}
+	r.rewind()
+	assert.Nil(t, r.seeked, "a rewind drops the seekable decoder")
+	got, err := io.ReadAll(r)
+	require.NoError(t, err)
+	assert.Equal(t, want, got, "reads after a rewind come from the forward decoder")
 }
