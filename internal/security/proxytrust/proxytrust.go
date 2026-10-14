@@ -524,13 +524,11 @@ type Connection struct {
 	// published edge ranges, whether or not the preset is configured.
 	PeerIsCloudflareEdge bool
 	// CloudflarePresetWouldVerify reports that the headers are not verified by
-	// the current list, the cloudflare preset is not configured, and listing
-	// the peer together with the preset would verify them. That happens in two
-	// shapes: Cloudflare in front of a local or configured proxy (the peer),
-	// or the peer being a Cloudflare edge itself. For a peer on a public
-	// address (StatusUntrustedPublicProxy) it is set only in the second shape,
-	// when PeerIsCloudflareEdge is true. It is false for StatusDirect,
-	// StatusTrustedProxy and StatusUntrustedProxy.
+	// the current list (and listing the peer alone would not help), the
+	// cloudflare preset is not configured, and listing the peer together with
+	// the preset would verify them: an upstream Cloudflare in front of the
+	// peer. It is false for StatusDirect, StatusTrustedProxy and
+	// StatusUntrustedProxy.
 	CloudflarePresetWouldVerify bool
 }
 

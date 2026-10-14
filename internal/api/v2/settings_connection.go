@@ -38,12 +38,7 @@ type ConnectionCheckResponse struct {
 	PeerIsCloudflareEdge bool `json:"peerIsCloudflareEdge"`
 	// CloudflarePresetWouldVerify reports that listing the peer together with
 	// the cloudflare preset would verify the forwarded headers, which they do
-	// not today, and the preset is not saved. That is either Cloudflare in front
-	// of a local or configured proxy (the peer) or the peer being a Cloudflare
-	// edge itself. For a peer on a public address it is set only when
-	// PeerIsCloudflareEdge is true. It is false when the peer is a configured
-	// proxy that already verifies the client, when the connection is direct,
-	// and when listing the peer alone already verifies the client.
+	// not today.
 	CloudflarePresetWouldVerify bool `json:"cloudflarePresetWouldVerify"`
 }
 
