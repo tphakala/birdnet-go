@@ -54,6 +54,15 @@ const EXTENDED_FILENAME_PATTERN = /filename\*=UTF-8''([^;]+)/i;
 const PLAIN_FILENAME_PATTERN = /filename="?([^";]+)"?/i;
 
 /**
+ * File extension of the container the server produces for the formats whose name
+ * is not their extension; other formats use their own name.
+ */
+export const CLIP_CONTAINER_EXTENSION: Partial<Record<string, string>> = {
+  aac: 'm4a',
+  opus: 'ogg',
+};
+
+/**
  * Return the file extension (without a dot) of the filename in a
  * Content-Disposition header, so a download is named for the container the
  * server actually produced. Falls back to `fallback` when the header is absent,

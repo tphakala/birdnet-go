@@ -59,7 +59,10 @@
     type AudioNodeChain,
   } from '$lib/utils/audioNodes';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import { extensionFromContentDisposition } from '$lib/utils/audioDownload';
+  import {
+    CLIP_CONTAINER_EXTENSION,
+    extensionFromContentDisposition,
+  } from '$lib/utils/audioDownload';
   import { getCsrfToken } from '$lib/utils/api';
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
@@ -746,7 +749,7 @@
       // for Opus), taken from the response's Content-Disposition filename.
       const ext = extensionFromContentDisposition(
         response.headers.get('Content-Disposition'),
-        extractionFormat
+        CLIP_CONTAINER_EXTENSION[extractionFormat] ?? extractionFormat
       );
       // Sanitize label for filesystem safety (remove reserved chars, normalize whitespace)
       const safeLabel = clipLabel

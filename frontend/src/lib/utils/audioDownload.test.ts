@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildDetectionAudioFilename, extensionFromContentDisposition } from './audioDownload';
+import {
+  buildDetectionAudioFilename,
+  CLIP_CONTAINER_EXTENSION,
+  extensionFromContentDisposition,
+} from './audioDownload';
 import type { Detection } from '$lib/types/detection.types';
 
 function makeDetection(overrides: Partial<Detection>): Detection {
@@ -72,5 +76,11 @@ describe('extensionFromContentDisposition', () => {
     expect(extensionFromContentDisposition("attachment; filename*=UTF-8''%E0%A4%A", 'wav')).toBe(
       'wav'
     );
+  });
+});
+
+describe('CLIP_CONTAINER_EXTENSION', () => {
+  it('maps AAC and Opus to their containers', () => {
+    expect(CLIP_CONTAINER_EXTENSION).toEqual({ aac: 'm4a', opus: 'ogg' });
   });
 });
