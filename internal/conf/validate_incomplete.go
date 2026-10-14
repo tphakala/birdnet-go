@@ -292,8 +292,7 @@ func isValidClockTime(value string) bool {
 // eqFilterUsesQ reports whether a filter type derives its coefficients from Q.
 // The width-based types (BandPass, BandReject, Peaking) take a bandwidth in Hz
 // instead and never read Q, so a zero there is the normal state rather than an
-// unfinished one. BuildFilterChain in internal/audiocore/equalizer passes Q to every
-// library band, and the library ignores it for the width-based types.
+// unfinished one (the equalizer library ignores Q for the width-based types).
 func eqFilterUsesQ(filterType string) bool {
 	switch filterType {
 	case "LowPass", "HighPass", "AllPass", "LowShelf", "HighShelf":
@@ -305,9 +304,9 @@ func eqFilterUsesQ(filterType string) bool {
 
 // normalizeEqualizers replaces a filter Q of exactly zero with the standard
 // default. Zero is the never-written value rather than a choice, and for the
-// Q-based filters it is also harmful: the equalizer library
-// rejects a Q that is not positive for the Q-based types, so a stored zero would
-// make the builder skip the filter and the user's filter would silently do nothing.
+// Q-based filters it is also harmful: the equalizer library rejects a Q that is
+// not positive, so a stored zero would make the builder skip the filter and the
+// user's filter would silently do nothing.
 //
 // Two deliberate asymmetries with the validators:
 //
@@ -319,8 +318,8 @@ func eqFilterUsesQ(filterType string) bool {
 // set, though: a notification about a switched-off feature is noise.
 //
 // Every other invalid Q, and every invalid frequency, stays fatal. A frequency of
-// zero is the sharpest case: the equalizer library rejects it, so the builder would
-// skip the filter and it would silently do nothing.
+// zero is the sharpest case: the equalizer library rejects it, so the builder
+// would skip the filter and it would silently do nothing.
 func (s *Settings) normalizeEqualizers() {
 	audio := &s.Realtime.Audio
 

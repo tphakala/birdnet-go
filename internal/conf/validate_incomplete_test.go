@@ -465,9 +465,9 @@ func TestNormalizeQuietHours_KeepsOutOfRangeOffsetsFatal(t *testing.T) {
 }
 
 // TestNormalizeEqualizers_AppliesDefaultQ verifies that a filter with no Q factor
-// gets the standard one. This is not only a startup fix: the equalizer
-// library rejects a Q that is not positive, so a zero reaching the builder would
-// make it skip the filter.
+// gets the standard one. This is not only a startup fix: the equalizer library
+// rejects a Q that is not positive, so a zero reaching the builder would make it
+// skip the filter.
 func TestNormalizeEqualizers_AppliesDefaultQ(t *testing.T) {
 	t.Parallel()
 

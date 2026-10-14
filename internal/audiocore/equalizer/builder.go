@@ -54,21 +54,23 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *dspeq.Fi
 			continue
 		}
 
-		filter, err := dspeq.NewFilter(dspeq.Band{
+		band := dspeq.Band{
 			Type:      filterType,
 			Frequency: f.Frequency,
 			Q:         f.Q,
 			WidthHz:   f.Width,
 			GainDB:    f.Gain,
 			Passes:    max(f.Passes, 1),
-		}, sampleRate)
+		}
+		filter, err := dspeq.NewFilter(band, sampleRate)
 		if err != nil {
 			eqLog.Warn("skipping EQ filter",
 				logger.String("type", f.Type),
-				logger.Float64("frequency", f.Frequency),
-				logger.Float64("q", f.Q),
-				logger.Float64("width", f.Width),
-				logger.Int("passes", f.Passes),
+				logger.Float64("frequency", band.Frequency),
+				logger.Float64("q", band.Q),
+				logger.Float64("width", band.WidthHz),
+				logger.Float64("gain", band.GainDB),
+				logger.Int("passes", band.Passes),
 				logger.Int("sample_rate", sampleRate),
 				logger.Error(err))
 			continue
@@ -81,8 +83,8 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *dspeq.Fi
 		}
 		eqLog.Debug("added EQ filter",
 			logger.String("type", f.Type),
-			logger.Float64("frequency", f.Frequency),
-			logger.Int("passes", filter.NumSections()))
+			logger.Float64("frequency", band.Frequency),
+			logger.Int("passes", band.Passes))
 	}
 
 	if chain.Len() == 0 {
@@ -95,9 +97,9 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *dspeq.Fi
 }
 
 // BuildFilterChainWithOverride builds a library FilterChain from the given EQ
-// override settings, or from globalEQ if override is nil. This is the preferred entry
-// point for callers that have already resolved the per-source/per-stream override
-// via Settings.ResolveEQOverride.
+// override settings, or from globalEQ if override is nil. This is the preferred
+// entry point for callers that have already resolved the per-source/per-stream
+// override via Settings.ResolveEQOverride.
 func BuildFilterChainWithOverride(override *conf.EqualizerSettings, globalEQ conf.EqualizerSettings, sourceName string, sampleRate int) *dspeq.FilterChain {
 	eqSettings := globalEQ
 	if override != nil {

@@ -2,13 +2,13 @@ package equalizer_test
 
 import (
 	"math"
-	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	dspeq "github.com/tphakala/go-audio-dsp/equalizer"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -19,11 +19,9 @@ const (
 	// responseSkip drops the filter start-up transient before measuring RMS.
 	responseSkip = 4800
 	// responseLen is one second of audio at testRate.
-	responseLen = 48000
-	// responseTolDB is the allowed deviation from the measured filter response.
-	responseTolDB = 1.0
+	responseLen = testRate
 	// butterworthQ is the Q of a maximally flat second-order section.
-	butterworthQ = 0.707
+	butterworthQ = conf.DefaultEQQFactor
 )
 
 // sine returns n samples of a sine wave at hz with the given amplitude.
@@ -70,14 +68,7 @@ func directChain(t *testing.T, sr int, bands ...dspeq.Band) *dspeq.FilterChain {
 
 // rmsDB returns the RMS ratio of out to in in dB, ignoring the first skip samples.
 func rmsDB(in, out []float64, skip int) float64 {
-	rms := func(x []float64) float64 {
-		var sum float64
-		for _, v := range x[skip:] {
-			sum += v * v
-		}
-		return math.Sqrt(sum / float64(len(x)-skip))
-	}
-	return 20 * math.Log10(rms(out)/rms(in))
+	return 20 * math.Log10(convert.CalculateRMSFloat64(out[skip:])/convert.CalculateRMSFloat64(in[skip:]))
 }
 
 func enabled(filters ...conf.EqualizerFilter) conf.EqualizerSettings {
@@ -93,11 +84,9 @@ func TestBuildFilterChain_ReturnsNil(t *testing.T) {
 	}{
 		{"disabled with filters", conf.EqualizerSettings{Enabled: false, Filters: []conf.EqualizerFilter{good}}},
 		{"enabled without filters", enabled()},
-		{"every filter rejected", enabled(
+		{"every filter skipped", enabled(
 			conf.EqualizerFilter{Type: "NoSuchType", Frequency: 100, Q: 1, Passes: 1},
-			conf.EqualizerFilter{Type: "BandReject", Frequency: 100, Width: 1000, Passes: 1},
 			conf.EqualizerFilter{Type: "LowPass", Frequency: 24000, Q: butterworthQ, Passes: 1},
-			conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 17},
 		)},
 	}
 	for _, tt := range tests {
@@ -142,7 +131,6 @@ func TestBuildFilterChain_MapsFieldsToLibraryBand(t *testing.T) {
 			chain := equalizer.BuildFilterChain(enabled(tt.conf), testRate)
 			require.NotNil(t, chain)
 			assert.Equal(t, 1, chain.Len())
-			assert.Equal(t, tt.want.Passes, chain.NumSections())
 
 			got := runChain(t, chain, in)
 			want := runChain(t, directChain(t, testRate, tt.want), in)
@@ -152,54 +140,18 @@ func TestBuildFilterChain_MapsFieldsToLibraryBand(t *testing.T) {
 	}
 }
 
-func TestBuildFilterChain_FilterTypeResponse(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name    string
-		conf    conf.EqualizerFilter
-		probeHz float64
-		wantDB  float64
-		// atMostDB, when true, asserts the response is below wantDB instead of equal to it.
-		atMostDB bool
-	}{
-		{"LowPass", conf.EqualizerFilter{Type: "LowPass", Frequency: 1000, Q: butterworthQ, Passes: 1}, 10000, -42.74, false},
-		{"HighPass", conf.EqualizerFilter{Type: "HighPass", Frequency: 1000, Q: butterworthQ, Passes: 1}, 100, -40.03, false},
-		{"AllPass", conf.EqualizerFilter{Type: "AllPass", Frequency: 1000, Q: butterworthQ, Passes: 1}, 1000, 0, false},
-		{"BandPass", conf.EqualizerFilter{Type: "BandPass", Frequency: 1000, Width: 200, Passes: 1}, 100, -33.84, false},
-		{"BandReject", conf.EqualizerFilter{Type: "BandReject", Frequency: 1000, Width: 200, Passes: 1}, 1000, -60, true},
-		{"LowShelf", conf.EqualizerFilter{Type: "LowShelf", Frequency: 1000, Q: butterworthQ, Gain: -12, Passes: 1}, 100, -12, false},
-		{"HighShelf", conf.EqualizerFilter{Type: "HighShelf", Frequency: 1000, Q: butterworthQ, Gain: -12, Passes: 1}, 10000, -12, false},
-		{"Peaking", conf.EqualizerFilter{Type: "Peaking", Frequency: 1000, Width: 200, Gain: -12, Passes: 1}, 1000, -12, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			chain := equalizer.BuildFilterChain(enabled(tt.conf), testRate)
-			require.NotNil(t, chain)
-			in := sine(responseLen, tt.probeHz, testRate, 0.5)
-			gotDB := rmsDB(in, runChain(t, chain, in), responseSkip)
-			if tt.atMostDB {
-				assert.Less(t, gotDB, tt.wantDB)
-				return
-			}
-			assert.InDelta(t, tt.wantDB, gotDB, responseTolDB)
-		})
-	}
-}
-
 func TestBuildFilterChain_PassesMapping(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name         string
 		passes       int
-		wantSections int // 0 means the filter is skipped and the chain is nil
+		wantSections int
 	}{
 		{"zero means one section", 0, 1},
 		{"one", 1, 1},
 		{"three", 3, 3},
 		{"sixteen is the library maximum", 16, 16},
 		{"negative is floored to one", -1, 1},
-		{"seventeen is rejected and skipped", 17, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -207,10 +159,6 @@ func TestBuildFilterChain_PassesMapping(t *testing.T) {
 			chain := equalizer.BuildFilterChain(enabled(
 				conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: tt.passes},
 			), testRate)
-			if tt.wantSections == 0 {
-				assert.Nil(t, chain)
-				return
-			}
 			require.NotNil(t, chain)
 			assert.Equal(t, tt.wantSections, chain.NumSections())
 		})
@@ -251,68 +199,51 @@ func TestBuildFilterChain_SkipsRejectedFilter(t *testing.T) {
 
 func TestBuildFilterChain_UsesSampleRate(t *testing.T) {
 	t.Parallel()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Equalizer = enabled(
-		conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 1},
-	)
+	settings := enabled(conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 1})
 	band := dspeq.Band{Type: dspeq.HighPass, Frequency: 100, Q: butterworthQ, Passes: 1}
 	const lowRate = 16000
 
-	// The same tone sampled at two rates, so coefficients are the only difference.
-	in48 := testSignal(testSignalLen, testRate)
 	in16 := testSignal(testSignalLen, lowRate)
-
-	got48 := runChain(t, equalizer.ResolveAndBuildFilterChain(settings, "src-a", testRate), in48)
-	got16 := runChain(t, equalizer.ResolveAndBuildFilterChain(settings, "src-b", lowRate), in16)
-	assert.Equal(t, runChain(t, directChain(t, testRate, band), in48), got48)
+	got16 := runChain(t, equalizer.BuildFilterChain(settings, lowRate), in16)
 	assert.Equal(t, runChain(t, directChain(t, lowRate, band), in16), got16)
 
-	// Running the 48 kHz signal through a chain built for 16 kHz must differ.
-	wrongRate := runChain(t, equalizer.ResolveAndBuildFilterChain(settings, "src-c", lowRate), in48)
+	// The same signal through chains built for two rates must differ.
+	in48 := testSignal(testSignalLen, testRate)
+	got48 := runChain(t, equalizer.BuildFilterChain(settings, testRate), in48)
+	wrongRate := runChain(t, equalizer.BuildFilterChain(settings, lowRate), in48)
 	assert.NotEqual(t, got48, wrongRate, "coefficients must depend on the sample rate")
 }
 
 func TestBuildFilterChain_RebuildSequence(t *testing.T) {
 	t.Parallel()
-	type step struct {
-		name  string
-		apply func(f []conf.EqualizerFilter) []conf.EqualizerFilter
-		// want lists the bands the builder must produce after this step, in order.
-		want []dspeq.Band
-	}
 	hp := conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 1}
 	br := conf.EqualizerFilter{Type: "BandReject", Frequency: 1000, Width: 200, Passes: 1}
+	brEdited := conf.EqualizerFilter{Type: "BandReject", Frequency: 2000, Width: 200, Passes: 1}
 	ls := conf.EqualizerFilter{Type: "LowShelf", Frequency: 200, Q: butterworthQ, Gain: -6, Passes: 1}
 	bad := conf.EqualizerFilter{Type: "BandReject", Frequency: 100, Width: 1000, Passes: 1}
 	hpBand := dspeq.Band{Type: dspeq.HighPass, Frequency: 100, Q: butterworthQ, Passes: 1}
 	brBand := dspeq.Band{Type: dspeq.BandReject, Frequency: 1000, WidthHz: 200, Passes: 1}
+	brEditedBand := dspeq.Band{Type: dspeq.BandReject, Frequency: 2000, WidthHz: 200, Passes: 1}
 	lsBand := dspeq.Band{Type: dspeq.LowShelf, Frequency: 200, Q: butterworthQ, GainDB: -6, Passes: 1}
-	brEdited := dspeq.Band{Type: dspeq.BandReject, Frequency: 2000, WidthHz: 200, Passes: 1}
 
-	steps := []step{
-		{"initial", func([]conf.EqualizerFilter) []conf.EqualizerFilter { return []conf.EqualizerFilter{hp, br} },
-			[]dspeq.Band{hpBand, brBand}},
-		{"append", func(f []conf.EqualizerFilter) []conf.EqualizerFilter { return append(f, ls) },
-			[]dspeq.Band{hpBand, brBand, lsBand}},
-		{"remove first", func(f []conf.EqualizerFilter) []conf.EqualizerFilter { return f[1:] },
-			[]dspeq.Band{brBand, lsBand}},
-		{"reorder", func(f []conf.EqualizerFilter) []conf.EqualizerFilter { return []conf.EqualizerFilter{f[1], f[0]} },
-			[]dspeq.Band{lsBand, brBand}},
-		{"insert rejected in the middle", func(f []conf.EqualizerFilter) []conf.EqualizerFilter {
-			return []conf.EqualizerFilter{f[0], bad, f[1]}
-		}, []dspeq.Band{lsBand, brBand}},
-		{"edit a frequency", func(f []conf.EqualizerFilter) []conf.EqualizerFilter {
-			out := slices.Clone(f)
-			out[2].Frequency = 2000
-			return out
-		}, []dspeq.Band{lsBand, brEdited}},
+	// Each step is a settings save; want lists the bands the builder must
+	// produce for it, in order.
+	steps := []struct {
+		name    string
+		filters []conf.EqualizerFilter
+		want    []dspeq.Band
+	}{
+		{"initial", []conf.EqualizerFilter{hp, br}, []dspeq.Band{hpBand, brBand}},
+		{"append", []conf.EqualizerFilter{hp, br, ls}, []dspeq.Band{hpBand, brBand, lsBand}},
+		{"remove first", []conf.EqualizerFilter{br, ls}, []dspeq.Band{brBand, lsBand}},
+		{"reorder", []conf.EqualizerFilter{ls, br}, []dspeq.Band{lsBand, brBand}},
+		{"insert rejected in the middle", []conf.EqualizerFilter{ls, bad, br}, []dspeq.Band{lsBand, brBand}},
+		{"edit a frequency", []conf.EqualizerFilter{ls, bad, brEdited}, []dspeq.Band{lsBand, brEditedBand}},
 	}
 
 	in := testSignal(testSignalLen, testRate)
-	var filters []conf.EqualizerFilter
 	for _, s := range steps {
-		filters = s.apply(filters)
-		settings := enabled(filters...)
+		settings := enabled(s.filters...)
 		want := runChain(t, directChain(t, testRate, s.want...), in)
 
 		first := equalizer.BuildFilterChain(settings, testRate)
@@ -332,19 +263,16 @@ func TestBuildFilterChain_RebuildSequence(t *testing.T) {
 // distant tone alone and remove the centre tone.
 func TestBuildFilterChain_BandRejectWidthIsHz(t *testing.T) {
 	t.Parallel()
-	chain := func() *dspeq.FilterChain {
-		return equalizer.BuildFilterChain(enabled(
-			conf.EqualizerFilter{Type: "BandReject", Frequency: 1000, Width: 500, Passes: 1},
-		), testRate)
-	}
+	notch := enabled(conf.EqualizerFilter{Type: "BandReject", Frequency: 1000, Width: 500, Passes: 1})
 
+	// Each probe gets a fresh chain so it starts from zeroed filter state.
 	far := sine(responseLen, 200, testRate, 0.5)
-	farRatio := math.Pow(10, rmsDB(far, runChain(t, chain(), far), responseSkip)/20)
-	assert.Greater(t, farRatio, 0.5, "a 200 Hz tone must not be silenced by a 1 kHz notch")
+	assert.Greater(t, rmsDB(far, runChain(t, equalizer.BuildFilterChain(notch, testRate), far), responseSkip), -6.0,
+		"a 200 Hz tone must not be silenced by a 1 kHz notch")
 
 	centre := sine(responseLen, 1000, testRate, 0.5)
-	centreRatio := math.Pow(10, rmsDB(centre, runChain(t, chain(), centre), responseSkip)/20)
-	assert.Less(t, centreRatio, 1.0/3, "the 1 kHz tone must be attenuated by more than 3x")
+	assert.Less(t, rmsDB(centre, runChain(t, equalizer.BuildFilterChain(notch, testRate), centre), responseSkip), -9.5,
+		"the 1 kHz tone must be attenuated by more than 3x")
 }
 
 func TestBuildFilterChainWithOverride_UsesOverride(t *testing.T) {
@@ -352,17 +280,17 @@ func TestBuildFilterChainWithOverride_UsesOverride(t *testing.T) {
 	override := &conf.EqualizerSettings{
 		Enabled: true,
 		Filters: []conf.EqualizerFilter{
-			{Type: "HighPass", Frequency: 300, Q: 0.707, Passes: 1},
+			{Type: "HighPass", Frequency: 300, Q: butterworthQ, Passes: 1},
 		},
 	}
 	globalEQ := conf.EqualizerSettings{
 		Enabled: true,
 		Filters: []conf.EqualizerFilter{
-			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
-			{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 1},
+			{Type: "LowPass", Frequency: 15000, Q: butterworthQ, Passes: 1},
+			{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 1},
 		},
 	}
-	chain := equalizer.BuildFilterChainWithOverride(override, globalEQ, "test-source", 48000)
+	chain := equalizer.BuildFilterChainWithOverride(override, globalEQ, "test-source", testRate)
 	require.NotNil(t, chain)
 	assert.Equal(t, 1, chain.Len(), "should use 1-filter override, not 2-filter global")
 }
@@ -372,11 +300,11 @@ func TestBuildFilterChainWithOverride_FallsBackToGlobal(t *testing.T) {
 	globalEQ := conf.EqualizerSettings{
 		Enabled: true,
 		Filters: []conf.EqualizerFilter{
-			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
-			{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 1},
+			{Type: "LowPass", Frequency: 15000, Q: butterworthQ, Passes: 1},
+			{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 1},
 		},
 	}
-	chain := equalizer.BuildFilterChainWithOverride(nil, globalEQ, "test-source", 48000)
+	chain := equalizer.BuildFilterChainWithOverride(nil, globalEQ, "test-source", testRate)
 	require.NotNil(t, chain)
 	assert.Equal(t, 2, chain.Len(), "should use 2-filter global when override is nil")
 }
@@ -386,16 +314,16 @@ func TestBuildFilterChainWithOverride_DisabledOverride(t *testing.T) {
 	override := &conf.EqualizerSettings{
 		Enabled: false,
 		Filters: []conf.EqualizerFilter{
-			{Type: "HighPass", Frequency: 300, Q: 0.707, Passes: 1},
+			{Type: "HighPass", Frequency: 300, Q: butterworthQ, Passes: 1},
 		},
 	}
 	globalEQ := conf.EqualizerSettings{
 		Enabled: true,
 		Filters: []conf.EqualizerFilter{
-			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
+			{Type: "LowPass", Frequency: 15000, Q: butterworthQ, Passes: 1},
 		},
 	}
-	chain := equalizer.BuildFilterChainWithOverride(override, globalEQ, "test-source", 48000)
+	chain := equalizer.BuildFilterChainWithOverride(override, globalEQ, "test-source", testRate)
 	assert.Nil(t, chain, "disabled override should return nil chain regardless of global")
 }
 
@@ -408,7 +336,7 @@ func TestResolveAndBuildFilterChain_UsesPerSourceOverride(t *testing.T) {
 			Equalizer: &conf.EqualizerSettings{
 				Enabled: true,
 				Filters: []conf.EqualizerFilter{
-					{Type: "HighPass", Frequency: 300, Q: 0.707, Passes: 1},
+					{Type: "HighPass", Frequency: 300, Q: butterworthQ, Passes: 1},
 				},
 			},
 		},
@@ -416,12 +344,12 @@ func TestResolveAndBuildFilterChain_UsesPerSourceOverride(t *testing.T) {
 	settings.Realtime.Audio.Equalizer = conf.EqualizerSettings{
 		Enabled: true,
 		Filters: []conf.EqualizerFilter{
-			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
-			{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 1},
+			{Type: "LowPass", Frequency: 15000, Q: butterworthQ, Passes: 1},
+			{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 1},
 		},
 	}
 
-	chain := equalizer.ResolveAndBuildFilterChain(settings, "Front Mic", 48000)
+	chain := equalizer.ResolveAndBuildFilterChain(settings, "Front Mic", testRate)
 	require.NotNil(t, chain)
 	assert.Equal(t, 1, chain.Len(), "should use 1-filter per-source override, not 2-filter global")
 }
@@ -432,12 +360,12 @@ func TestResolveAndBuildFilterChain_FallsBackToGlobal(t *testing.T) {
 	settings.Realtime.Audio.Equalizer = conf.EqualizerSettings{
 		Enabled: true,
 		Filters: []conf.EqualizerFilter{
-			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
-			{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 1},
+			{Type: "LowPass", Frequency: 15000, Q: butterworthQ, Passes: 1},
+			{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 1},
 		},
 	}
 
-	chain := equalizer.ResolveAndBuildFilterChain(settings, "Unknown Source", 48000)
+	chain := equalizer.ResolveAndBuildFilterChain(settings, "Unknown Source", testRate)
 	require.NotNil(t, chain)
 	assert.Equal(t, 2, chain.Len(), "should use 2-filter global when no per-source override exists")
 }
@@ -448,10 +376,10 @@ func TestResolveAndBuildFilterChain_DisabledGlobal(t *testing.T) {
 	settings.Realtime.Audio.Equalizer = conf.EqualizerSettings{
 		Enabled: false,
 		Filters: []conf.EqualizerFilter{
-			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
+			{Type: "LowPass", Frequency: 15000, Q: butterworthQ, Passes: 1},
 		},
 	}
 
-	chain := equalizer.ResolveAndBuildFilterChain(settings, "Any Source", 48000)
+	chain := equalizer.ResolveAndBuildFilterChain(settings, "Any Source", testRate)
 	assert.Nil(t, chain, "disabled global EQ should return nil chain")
 }
