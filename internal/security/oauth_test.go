@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -19,7 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // TestIsUserAuthenticatedValidAccessToken tests the IsUserAuthenticated function with a valid access token
@@ -1813,9 +1814,13 @@ func TestIsUserAuthenticatedSubnetBypassIgnoresForgedHeader(t *testing.T) {
 		"a direct client on the local network is still auto-authenticated")
 }
 
+// loggedPeerPattern picks the peer field out of a text-format log record.
+var loggedPeerPattern = regexp.MustCompile(`\bpeer=(\S+)`)
+
 // noticeKeyAfterAuthClientIP runs authClientIP once on a fresh server and
 // returns the throttle key of the notice it recorded ("" for none), together with
-// the peer Classify names for the request.
+// the peer the notice logged ("" when nothing was logged). The log capture swaps
+// the process-global logger, so callers must not run in parallel.
 func noticeKeyAfterAuthClientIP(t *testing.T, settings *conf.Settings, trustedProxies []string, req *http.Request) (key, peer string) {
 	t.Helper()
 	if settings != nil {
@@ -1823,7 +1828,7 @@ func noticeKeyAfterAuthClientIP(t *testing.T, settings *conf.Settings, trustedPr
 		settings.Security.TrustedProxies = trustedProxies
 	}
 	server := &OAuth2Server{}
-	server.authClientIP(settings, req)
+	output := logtest.Capture(t, func() { server.authClientIP(settings, req) })
 	for _, k := range []string{unverifiedClientIPLogKey, listedProxyUnverifiedLogKey} {
 		server.mutex.RLock()
 		_, noted := server.throttledMessages[k]
@@ -1833,8 +1838,8 @@ func noticeKeyAfterAuthClientIP(t *testing.T, settings *conf.Settings, trustedPr
 			key = k
 		}
 	}
-	if key != "" {
-		peer = proxytrust.NewChecker(trustedProxies).Classify(req).Peer.String()
+	if match := loggedPeerPattern.FindStringSubmatch(output); match != nil {
+		peer = match[1]
 	}
 	return key, peer
 }
@@ -1846,8 +1851,7 @@ func noticeKeyAfterAuthClientIP(t *testing.T, settings *conf.Settings, trustedPr
 // would verify, so an operator behind an unlisted proxy learns which peer to
 // add to security.trustedproxies and a public scanner is never named.
 func TestUnverifiedBypassPeer(t *testing.T) {
-	t.Parallel()
-
+	// Not parallel: the log capture swaps the process-global logger.
 	enabled := &conf.Settings{}
 	enabled.Security.AllowSubnetBypass.Enabled = true
 	enabled.Security.BasicAuth.Enabled = true
@@ -1883,7 +1887,6 @@ func TestUnverifiedBypassPeer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req.RemoteAddr = tt.remoteAddr
 			if tt.header != "" {
@@ -1904,8 +1907,7 @@ func TestUnverifiedBypassPeer(t *testing.T) {
 // reported: the same gate as the unlisted-peer notice, a peer the checker lists,
 // and headers that did not verify.
 func TestUnverifiedListedProxy(t *testing.T) {
-	t.Parallel()
-
+	// Not parallel: the log capture swaps the process-global logger.
 	enabled := &conf.Settings{}
 	enabled.Security.AllowSubnetBypass.Enabled = true
 	enabled.Security.BasicAuth.Enabled = true
@@ -1937,7 +1939,6 @@ func TestUnverifiedListedProxy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req.RemoteAddr = net.JoinHostPort(listedPeer, "40000")
 			if tt.header != "" {
