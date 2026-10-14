@@ -68,7 +68,8 @@ function stripAppPrefix(path: string, base: string): string {
  *
  * Returns an unprefixed internal path plus query that is a real page under `/ui/`, or
  * DEFAULT_LOGIN_TARGET when the value is missing, off-site, a login path, ambiguous
- * (encoded separators, dot segments, double encoding) or too long. It rejects more
+ * (encoded separators or dots, double encoding) or too long. Literal dot segments are
+ * resolved, and the resolved path must still be a page under `/ui/`. It rejects more
  * than the backend does, on purpose.
  */
 export function resolveLoginRedirect(search: string): string {
@@ -88,8 +89,9 @@ export function resolveLoginRedirect(search: string): string {
   } catch {
     return DEFAULT_LOGIN_TARGET;
   }
-  // The raw-path check above already rules out '//', backslashes and dot segments; they
-  // are checked again on the decoded path as defense in depth.
+  // The raw-path check above rejects '//', backslashes and encoded separators and dots, and
+  // new URL resolves literal dot segments; the decoded path is checked again as defense in
+  // depth.
   if (
     decoded.includes('//') ||
     decoded.includes('\\') ||

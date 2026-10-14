@@ -156,7 +156,7 @@ describe('LoginModal', () => {
     });
 
     it('should reject URLs that are too long and fallback to base path', () => {
-      const longUrl = '/' + 'a'.repeat(2001); // Exceeds MAX_REDIRECT_LENGTH
+      const longUrl = '/' + 'a'.repeat(2001); // Exceeds MAX_LOGIN_REDIRECT_LENGTH
       loginModalTest.render({
         isOpen: true,
         onClose: vi.fn(),
