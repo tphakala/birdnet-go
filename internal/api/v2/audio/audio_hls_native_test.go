@@ -416,7 +416,7 @@ func TestCloseNativeMuxWaitsForTheFeed(t *testing.T) {
 		select {
 		case <-stream.feedDone:
 		default:
-			t.Fatal("closeNativeMux returned before the feed signalled it had stopped")
+			require.FailNow(t, "closeNativeMux returned before the feed signalled it had stopped")
 		}
 		require.NoError(t, writeErr,
 			"the feed's last write must land before the muxer closes")
@@ -426,12 +426,14 @@ func TestCloseNativeMuxWaitsForTheFeed(t *testing.T) {
 }
 
 // TestCloseNativeMuxGivesUpOnAWedgedFeed proves the wait is bounded, so a feed
-// goroutine that never returns cannot block shutdown forever.
+// goroutine that never returns cannot block shutdown forever, and that it lasts
+// the full drain timeout, so a slow feed is not cut off early.
 func TestCloseNativeMuxGivesUpOnAWedgedFeed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		stream := newEmptyNativeStream(t)
 		stream.feedDone = make(chan struct{}) // never closed
 
+		start := time.Now()
 		done := make(chan struct{})
 		go func() {
 			closeNativeMux("src", stream)
@@ -441,8 +443,12 @@ func TestCloseNativeMuxGivesUpOnAWedgedFeed(t *testing.T) {
 		select {
 		case <-done:
 		case <-time.After(nativeFeedDrainTimeout + 5*time.Second):
-			t.Fatal("closeNativeMux blocked past its drain timeout on a wedged feed")
+			require.FailNow(t, "closeNativeMux blocked past its drain timeout on a wedged feed")
 		}
+		// The bubble's clock advances only when every goroutine is blocked, so the
+		// elapsed time is exactly how long closeNativeMux waited.
+		require.GreaterOrEqual(t, time.Since(start), nativeFeedDrainTimeout,
+			"closeNativeMux must wait the full drain timeout before giving up on the feed")
 		require.Error(t, stream.mux.Write(make([]byte, 2), time.Now()),
 			"the muxer must still be closed after the drain timeout expires")
 	})
