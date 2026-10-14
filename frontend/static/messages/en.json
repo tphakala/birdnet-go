@@ -2311,7 +2311,7 @@
       "savingAriaLabel": "Saving changes...",
       "unsavedChanges": "Unsaved changes",
       "toolbar": "Settings actions",
-      "validationBlocked": "Fix the highlighted fields before saving.",
+      "validationBlocked": "Some fields need attention before you can save.",
       "noChangesToSave": "No changes to save."
     },
     "errors": {

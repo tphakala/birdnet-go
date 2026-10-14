@@ -2311,7 +2311,7 @@
       "savingAriaLabel": "Gemmer ændringer...",
       "unsavedChanges": "Ikke-gemte ændringer",
       "toolbar": "Indstillingshandlinger",
-      "validationBlocked": "Ret de markerede felter, før du gemmer.",
+      "validationBlocked": "Nogle felter kræver opmærksomhed, før du kan gemme.",
       "noChangesToSave": "Ingen ændringer at gemme."
     },
     "errors": {

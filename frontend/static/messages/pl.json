@@ -2311,7 +2311,7 @@
       "savingAriaLabel": "Zapisywanie zmian...",
       "unsavedChanges": "Niezapisane zmiany",
       "toolbar": "Działania ustawień",
-      "validationBlocked": "Przed zapisaniem popraw wyróżnione pola.",
+      "validationBlocked": "Niektóre pola wymagają uwagi, zanim będzie można zapisać.",
       "noChangesToSave": "Brak zmian do zapisania."
     },
     "errors": {

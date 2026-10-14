@@ -2311,7 +2311,7 @@
       "savingAriaLabel": "Lagrer endringer...",
       "unsavedChanges": "Ulagrede endringer",
       "toolbar": "Innstillingshandlinger",
-      "validationBlocked": "Rett de markerte feltene før du lagrer.",
+      "validationBlocked": "Noen felt trenger oppmerksomhet før du kan lagre.",
       "noChangesToSave": "Ingen endringer å lagre."
     },
     "errors": {

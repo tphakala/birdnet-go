@@ -2311,7 +2311,7 @@
       "savingAriaLabel": "Ukladajú sa zmeny...",
       "unsavedChanges": "Neuložené zmeny",
       "toolbar": "Akcie nastavení",
-      "validationBlocked": "Pred uložením opravte zvýraznené polia.",
+      "validationBlocked": "Niektoré polia vyžadujú pozornosť, kým budete môcť uložiť.",
       "noChangesToSave": "Žiadne zmeny na uloženie."
     },
     "errors": {

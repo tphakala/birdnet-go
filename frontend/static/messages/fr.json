@@ -2311,7 +2311,7 @@
       "savingAriaLabel": "Enregistrement des modifications...",
       "unsavedChanges": "Modifications non enregistrées",
       "toolbar": "Actions des paramètres",
-      "validationBlocked": "Corrigez les champs en surbrillance avant d'enregistrer.",
+      "validationBlocked": "Certains champs demandent votre attention avant de pouvoir enregistrer.",
       "noChangesToSave": "Aucune modification à enregistrer."
     },
     "errors": {

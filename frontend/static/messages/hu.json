@@ -2311,7 +2311,7 @@
       "savingAriaLabel": "Módosítások mentése...",
       "unsavedChanges": "Nem mentett változtatások",
       "toolbar": "Beállítások műveletek",
-      "validationBlocked": "Mentés előtt javítsa ki a kiemelt mezőket.",
+      "validationBlocked": "Néhány mezőt ellenőrizni kell, mielőtt menthet.",
       "noChangesToSave": "Nincs mentendő változtatás."
     },
     "errors": {

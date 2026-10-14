@@ -2311,7 +2311,7 @@
       "savingAriaLabel": "Bewaren ...",
       "unsavedChanges": "Niet opgeslagen wijzigingen",
       "toolbar": "Instellingenacties",
-      "validationBlocked": "Herstel de gemarkeerde velden voordat u opslaat.",
+      "validationBlocked": "Sommige velden vragen aandacht voordat u kunt opslaan.",
       "noChangesToSave": "Geen wijzigingen om op te slaan."
     },
     "errors": {

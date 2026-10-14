@@ -2311,7 +2311,7 @@
       "savingAriaLabel": "Guardando cambios...",
       "unsavedChanges": "Cambios sin guardar",
       "toolbar": "Acciones de configuración",
-      "validationBlocked": "Corrija los campos resaltados antes de guardar.",
+      "validationBlocked": "Algunos campos requieren atención antes de poder guardar.",
       "noChangesToSave": "No hay cambios que guardar."
     },
     "errors": {
