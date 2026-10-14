@@ -13,6 +13,8 @@
   - Values passed in are never changed or dropped by rendering. Invalid or repeated
     rows are flagged with an icon and text until the user removes them. Rows are keyed
     by index, so repeated values render.
+  - An add's report shows until the text is edited, a row is removed, or the parent changes
+    `reportResetKey` (a form Reset).
   - The text typed but not added yet is the bindable `draft`. Left unbound it lives in
     the component; bind it to keep it when the component unmounts (a tab switch) and to
     block saving while it is not empty, instead of losing it silently.
@@ -66,6 +68,8 @@
     rowAnnotation?: Snippet<[NetworkAddressRow]>;
     /** Text typed but not added yet. Bindable; internal state when not bound. */
     draft?: string;
+    /** Changing this value hides the add report; a parent bumps it when the form is reset. */
+    reportResetKey?: number;
     className?: string;
   }
 
@@ -82,6 +86,7 @@
     maxItems,
     rowAnnotation,
     draft = $bindable(''),
+    reportResetKey,
     className,
   }: Props = $props();
 
@@ -98,12 +103,13 @@
     'ip-or-cidr': 'ipOrCidr',
   } as const satisfies Record<NetworkAddressMode, string>;
 
-  /** The report of the last add: its message lines and whether any token was invalid. */
+  /** The report of the last add, with the parent's `reportResetKey` at that time. */
   interface AddReport {
     messages: string[];
     hasInvalid: boolean;
+    resetKey: number | undefined;
   }
-  const EMPTY_REPORT: AddReport = { messages: [], hasInvalid: false };
+  const EMPTY_REPORT: AddReport = { messages: [], hasInvalid: false, resetKey: undefined };
 
   const baseId = generateId('network-address-list');
   let inputId = $derived(id ?? `${baseId}-input`);
@@ -114,10 +120,11 @@
 
   let inputElement = $state<HTMLInputElement>();
   let listElement = $state<HTMLUListElement>();
-  /** Report of the last add; cleared when the text changes. */
+  /** Report of the last add; cleared on edit and row removal, hidden once reportResetKey changes. */
   let report = $state<AddReport>(EMPTY_REPORT);
-  let messages = $derived(report.messages);
-  let hasInvalidTokens = $derived(report.hasInvalid);
+  let reportApplies = $derived(report.resetKey === reportResetKey);
+  let messages = $derived(reportApplies ? report.messages : []);
+  let hasInvalidTokens = $derived(reportApplies && report.hasInvalid);
 
   let modeKey = $derived(MODE_KEYS[accept]);
   let hasPending = $derived(draft.trim() !== '');
@@ -211,7 +218,7 @@
     }
 
     draft = [...invalid, ...overLimit].join(PASTE_SEPARATOR);
-    report = { messages: lines, hasInvalid: invalid.length > 0 };
+    report = { messages: lines, hasInvalid: invalid.length > 0, resetKey: reportResetKey };
   }
 
   // The Add button turns disabled once the input is empty, which would drop focus to
@@ -225,6 +232,8 @@
   // place, the new last row, or the input when the list is empty.
   async function removeAt(index: number) {
     if (disabled) return;
+    // The report described the list as it was; a removal ends it.
+    report = EMPTY_REPORT;
     onUpdate(values.filter((_, i) => i !== index));
     await tick();
     const buttons = listElement?.querySelectorAll<HTMLButtonElement>('[data-remove]') ?? [];

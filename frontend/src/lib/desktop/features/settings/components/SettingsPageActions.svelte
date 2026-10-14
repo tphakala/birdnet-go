@@ -5,7 +5,7 @@
   instead of floating at the bottom of the screen.
 
   Features:
-  - Reset button (only visible when there are unsaved changes)
+  - Reset button (only visible when there are unsaved changes); focus moves to Save after it
   - Save button with loading state
   - Integrates with global settings store
   - Accessible with proper ARIA attributes
@@ -17,6 +17,7 @@
   @component
 -->
 <script lang="ts">
+  import { tick } from 'svelte';
   import {
     settingsStore,
     settingsActions,
@@ -37,6 +38,8 @@
   }
 
   let { onReset }: Props = $props();
+
+  let saveButton = $state<HTMLButtonElement>();
 
   let store = $derived($settingsStore);
   let unsavedChanges = $derived($hasUnsavedChanges);
@@ -70,7 +73,7 @@
     }
   }
 
-  function handleReset() {
+  async function handleReset() {
     // Guard against calls when button should be disabled
     if (store.isSaving) {
       return;
@@ -78,6 +81,9 @@
 
     settingsActions.resetAllSettings();
     onReset?.();
+    // Reset disappears once nothing is unsaved, so focus would otherwise fall to the page.
+    await tick();
+    saveButton?.focus();
   }
 </script>
 
@@ -117,6 +123,7 @@
 
     <!-- Primary Save button -->
     <button
+      bind:this={saveButton}
       type="button"
       class="btn btn-primary btn-sm gap-2 shrink-0 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
       onclick={handleSave}

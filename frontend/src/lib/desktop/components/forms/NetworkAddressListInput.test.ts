@@ -27,6 +27,7 @@ function renderInput(props: {
   maxItems?: number;
   emptyStateMessage?: string;
   draft?: string;
+  reportResetKey?: number;
   className?: string;
   rowAnnotation?: ReturnType<typeof annotationSnippet>;
 }) {
@@ -38,6 +39,20 @@ function annotationSnippet() {
     render: () =>
       `<span data-testid="annotation">${row().index}:${row().value}:${String(row().valid)}</span>`,
   }));
+}
+
+type ControlledProps = Partial<Parameters<typeof renderInput>[0]>;
+
+/**
+ * Renders the list with a parent that applies every update, as the real parents do
+ * (they write the new list back through the settings store before the next render).
+ */
+function renderControlled(props: ControlledProps = {}) {
+  let apply: (next: { values: string[] }) => Promise<void> = async () => {};
+  const onUpdate = vi.fn((values: string[]) => void apply({ values }));
+  const view = renderList({ ...props, onUpdate });
+  apply = view.rerender;
+  return { ...view, onUpdate };
 }
 
 function input(): HTMLInputElement {
@@ -114,8 +129,7 @@ describe('NetworkAddressListInput', () => {
   });
 
   it('adds the valid tokens of a batch and reports invalid ones before duplicates', async () => {
-    const onUpdate = vi.fn();
-    renderList({ onUpdate });
+    const { onUpdate } = renderControlled();
     await fireEvent.paste(input(), {
       clipboardData: { getData: () => '10.0.0.1, 10.0.0.2\nbad 10.0.0.1' },
     });
@@ -258,8 +272,7 @@ describe('NetworkAddressListInput', () => {
   });
 
   it('blocks adding at maxItems and keeps over-limit tokens in the input', async () => {
-    const onUpdate = vi.fn();
-    const { rerender } = renderList({ values: ['10.0.0.1'], maxItems: 2, onUpdate });
+    const { rerender, onUpdate } = renderControlled({ values: ['10.0.0.1'], maxItems: 2 });
 
     await typeAndSubmit('10.0.0.2, 10.0.0.3');
 
@@ -371,5 +384,93 @@ describe('NetworkAddressListInput', () => {
     expect(addButton()).toBeDisabled();
     await fireEvent.keyDown(input(), { key: 'Enter' });
     expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  describe('add report visibility', () => {
+    it('hides the invalid-token report when reportResetKey changes', async () => {
+      const { rerender } = renderControlled({ reportResetKey: 0 });
+      await typeAndSubmit('abc');
+      expect(alertText()).toContain('errors.invalid');
+      expect(input()).toHaveAttribute('aria-invalid', 'true');
+      expect(input()).toHaveClass('input-error');
+
+      await rerender({ draft: '', reportResetKey: 1 });
+
+      expect(alertText()).toBe('');
+      expect(input()).not.toHaveAttribute('aria-invalid', 'true');
+      expect(input()).not.toHaveClass('input-error');
+    });
+
+    it('hides a duplicate-only report when reportResetKey changes with the draft and list unchanged', async () => {
+      const { rerender } = renderControlled({ values: ['10.0.0.1'], reportResetKey: 0 });
+      await typeAndSubmit('10.0.0.1');
+      expect(input().value).toBe('');
+      expect(alertText()).toContain('errors.duplicate');
+
+      await rerender({ values: ['10.0.0.1'], draft: '', reportResetKey: 1 });
+
+      expect(alertText()).toBe('');
+    });
+
+    it('keeps the duplicate-only report after its own add empties the draft', async () => {
+      renderControlled({ values: ['10.0.0.1'] });
+
+      await typeAndSubmit('10.0.0.1');
+
+      expect(input().value).toBe('');
+      expect(alertText()).toContain('errors.duplicate');
+    });
+
+    it('keeps the report while the parent applies the add', async () => {
+      renderControlled();
+
+      await typeAndSubmit('10.0.0.2, abc');
+
+      expect(alertText()).toContain('errors.invalid');
+      expect(input()).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('keeps the report when reportResetKey is set but does not change', async () => {
+      const { rerender } = renderControlled({ values: ['10.0.0.1'], reportResetKey: 3 });
+      await typeAndSubmit('10.0.0.1');
+
+      await rerender({ values: ['10.0.0.1'], draft: '', reportResetKey: 3 });
+
+      expect(alertText()).toContain('errors.duplicate');
+    });
+
+    it('hides the report after removing a row', async () => {
+      renderControlled({ values: ['10.0.0.1'] });
+      await typeAndSubmit('10.0.0.2, abc');
+      expect(alertText()).toContain('errors.invalid');
+
+      await fireEvent.click(screen.getByRole('button', { name: /10\.0\.0\.2/ }));
+
+      expect(alertText()).toBe('');
+      expect(input().value).toBe('abc');
+      expect(input()).not.toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('does not bring a report back when the list returns after a row removal', async () => {
+      const { rerender } = renderControlled({ values: ['10.0.0.1', '10.0.0.2'] });
+      await typeAndSubmit('10.0.0.1');
+      expect(alertText()).toContain('errors.duplicate');
+
+      await fireEvent.click(screen.getByRole('button', { name: /10\.0\.0\.2/ }));
+      await rerender({ values: ['10.0.0.1', '10.0.0.2'], draft: '' });
+
+      expect(alertText()).toBe('');
+    });
+
+    it('replaces the first report with the second add', async () => {
+      renderControlled();
+
+      await typeAndSubmit('abc');
+      await fireEvent.input(input(), { target: { value: '10.0.0.5, def' } });
+      await fireEvent.keyDown(input(), { key: 'Enter' });
+
+      expect(alertText()).toContain('def');
+      expect(alertText()).not.toContain('abc');
+    });
   });
 });

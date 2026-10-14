@@ -126,14 +126,14 @@ describe('SecuritySettingsPage reverse proxy wiring', () => {
   it('marks the Server tab for a list change without the TLS restart note', async () => {
     seedSecurity({ trustedProxies: [] });
     render(SecuritySettingsPage);
-    expect(within(serverTab()).queryByRole('status')).toBeNull();
+    expect(serverTab()).not.toHaveAttribute('aria-describedby');
 
     const field = screen.getByRole('textbox', { name: 'settings.security.reverseProxy.listLabel' });
     await fireEvent.input(field, { target: { value: '172.18.0.1' } });
     await fireEvent.keyDown(field, { key: 'Enter' });
 
     expect(formSecurity().trustedProxies).toEqual(['172.18.0.1']);
-    expect(within(serverTab()).getByRole('status')).toBeInTheDocument();
+    expect(serverTab()).toHaveAccessibleDescription('settings.tabs.hasChanges');
     expect(screen.queryByText('settings.security.tls.restartRequired')).toBeNull();
   });
 
@@ -282,6 +282,62 @@ describe('SecuritySettingsPage reverse proxy wiring', () => {
 
     expect(field.value).toBe('');
     expect(get(settingsValidationErrors)).not.toContain(TRUSTED_PENDING);
+  });
+
+  it('clears the add error on Reset', async () => {
+    seedSecurity({ trustedProxies: [] });
+    render(SecuritySettingsPage);
+    const field = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'settings.security.reverseProxy.listLabel',
+    });
+    // The valid token is added (which makes Reset visible); `abc` stays with an error
+    await fireEvent.input(field, { target: { value: '10.0.0.1, abc' } });
+    await fireEvent.keyDown(field, { key: 'Enter' });
+    await tick();
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field.value).toBe('abc');
+    expect(screen.getByText(/errors\.invalid/)).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'settings.actions.resetAriaLabel' }));
+    await tick();
+
+    expect(field.value).toBe('');
+    expect(field).not.toHaveAttribute('aria-invalid', 'true');
+    expect(screen.queryByText(/errors\.invalid/)).not.toBeInTheDocument();
+  });
+
+  it.each<{ name: string; label: string; tab: string | null; seed: () => void }>([
+    {
+      name: 'trusted proxies',
+      label: 'settings.security.reverseProxy.listLabel',
+      tab: null,
+      seed: () => seedSecurity({ trustedProxies: ['10.0.0.1'] }),
+    },
+    {
+      name: 'allowed subnets',
+      label: 'settings.security.allowedSubnetsLabel',
+      tab: 'exceptions',
+      seed: () => seedSecurity({ allowSubnetBypass: { enabled: true, subnet: '10.0.0.1/32' } }),
+    },
+  ])('clears a duplicate-only add report on Reset: $name', async ({ label, tab, seed }) => {
+    seed();
+    if (tab) openTab(tab);
+    render(SecuritySettingsPage);
+    const field = screen.getByRole<HTMLInputElement>('textbox', { name: label });
+    await fireEvent.input(field, {
+      target: { value: label.includes('Subnets') ? '10.0.0.1/32' : '10.0.0.1' },
+    });
+    await fireEvent.keyDown(field, { key: 'Enter' });
+    await tick();
+    expect(screen.getByText(/errors\.duplicate/)).toBeInTheDocument();
+    // Reset appears only with an unsaved change elsewhere
+    editSecurity({ host: 'changed.example' });
+    await tick();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'settings.actions.resetAriaLabel' }));
+    await tick();
+
+    expect(screen.queryByText(/errors\.duplicate/)).not.toBeInTheDocument();
   });
 
   it('ignores blank saved entries for display and validation', async () => {

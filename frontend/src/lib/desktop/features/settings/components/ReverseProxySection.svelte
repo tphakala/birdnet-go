@@ -50,6 +50,8 @@
     onUpdate: (_list: string[]) => void;
     /** Text typed into the address input but not added yet. Bindable. */
     draft?: string;
+    /** Changing this value clears the address input's add report. */
+    reportResetKey?: number;
   }
 
   let {
@@ -60,6 +62,7 @@
     hasChanges,
     onUpdate,
     draft = $bindable(''),
+    reportResetKey,
   }: Props = $props();
 
   /** Element id the Exceptions tab links to (SETTINGS_ROUTES.securityReverseProxy). */
@@ -202,6 +205,7 @@
         {disabled}
         rowAnnotation={rangeBadge}
         bind:draft
+        {reportResetKey}
       />
 
       <SettingsNote>
