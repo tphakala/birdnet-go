@@ -16,6 +16,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// osWindows is runtime.GOOS on Windows, where the sox and ffprobe binaries carry
+// a .exe suffix (see getSoxBinaryName / getFfprobeBinaryName).
+const osWindows = "windows"
+
 // ValidateFFmpegPath checks if the FFmpeg path is valid for execution.
 // It rejects empty paths, relative paths, and paths that appear to be
 // HTTP/proxy URL prefixes rather than filesystem paths (e.g., ingress path contamination).

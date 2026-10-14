@@ -2,7 +2,10 @@ package ffmpeg_test
 
 import (
 	"context"
+	"encoding/binary"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -10,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -19,7 +23,7 @@ func makeTestWAVWithSize(t *testing.T, path string, size int64) {
 
 	wavHeader := []byte{
 		'R', 'I', 'F', 'F',
-		0, 0, 0, 0, // ChunkSize — updated below
+		0, 0, 0, 0, // ChunkSize, updated below
 		'W', 'A', 'V', 'E',
 		'f', 'm', 't', ' ',
 		16, 0, 0, 0, // Subchunk1Size
@@ -30,7 +34,7 @@ func makeTestWAVWithSize(t *testing.T, path string, size int64) {
 		4, 0, // BlockAlign
 		16, 0, // BitsPerSample
 		'd', 'a', 't', 'a',
-		0, 0, 0, 0, // Subchunk2Size — updated below
+		0, 0, 0, 0, // Subchunk2Size, updated below
 	}
 
 	headerLen := int64(len(wavHeader))
@@ -203,4 +207,49 @@ func TestSetAndGetFFprobePath(t *testing.T) {
 
 	ffmpeg.SetFFprobePath("/custom/path/to/ffprobe")
 	assert.Equal(t, "/custom/path/to/ffprobe", ffmpeg.GetFFprobePath())
+}
+
+// makeTestWAVSilence writes a valid PCM WAV file containing silence.
+func makeTestWAVSilence(t *testing.T, path string, durationSec int) {
+	t.Helper()
+
+	const sampleRate = 48000
+	const numChannels = 1
+	const bitsPerSample = 16
+
+	numSamples := sampleRate * durationSec * numChannels
+	dataSize := numSamples * (bitsPerSample / 8)
+
+	buf := make([]byte, 44+dataSize)
+	copy(buf[0:4], "RIFF")
+	binary.LittleEndian.PutUint32(buf[4:8], uint32(36+dataSize))
+	copy(buf[8:12], "WAVE")
+	copy(buf[12:16], "fmt ")
+	binary.LittleEndian.PutUint32(buf[16:20], 16)
+	binary.LittleEndian.PutUint16(buf[20:22], 1) // PCM
+	binary.LittleEndian.PutUint16(buf[22:24], uint16(numChannels))
+	binary.LittleEndian.PutUint32(buf[24:28], uint32(sampleRate))
+	binary.LittleEndian.PutUint32(buf[28:32], uint32(sampleRate*numChannels*bitsPerSample/8))
+	binary.LittleEndian.PutUint16(buf[32:34], uint16(numChannels*bitsPerSample/8))
+	binary.LittleEndian.PutUint16(buf[34:36], uint16(bitsPerSample))
+	copy(buf[36:40], "data")
+	binary.LittleEndian.PutUint32(buf[40:44], uint32(dataSize))
+	// silence data is already zero-filled.
+
+	require.NoError(t, os.WriteFile(path, buf, 0o600))
+}
+
+// findFFmpegBinary locates the FFmpeg binary for testing.
+func findFFmpegBinary() (string, error) {
+	paths := []string{"/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+	// Try PATH last so absolute paths take priority (consistent with existing tests).
+	if path, err := exec.LookPath(conf.GetFfmpegBinaryName()); err == nil {
+		return path, nil
+	}
+	return "", fmt.Errorf("ffmpeg not found")
 }

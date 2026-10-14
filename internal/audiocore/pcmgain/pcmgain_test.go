@@ -159,3 +159,22 @@ func TestApplied(t *testing.T) {
 		assert.Equal(t, []int16{50, -50, 501}, samples16(got))
 	})
 }
+
+// Scaling in place (dst is exactly src) must give the same bytes as scaling into
+// a separate buffer, including saturation.
+func TestApplyInt16_InPlaceMatchesSeparateBuffer(t *testing.T) {
+	t.Parallel()
+
+	src := make([]byte, 0, 2*8)
+	for _, s := range []int16{0, 1, -1, 1000, -1000, 32767, -32768, 20000} {
+		src = binary.LittleEndian.AppendUint16(src, uint16(s)) //nolint:gosec // G115: PCM bit reinterpretation in a test
+	}
+	const factor = 2.5
+
+	want := make([]byte, len(src))
+	ApplyInt16(want, src, factor)
+
+	inPlace := bytes.Clone(src)
+	ApplyInt16(inPlace, inPlace, factor)
+	assert.Equal(t, want, inPlace)
+}

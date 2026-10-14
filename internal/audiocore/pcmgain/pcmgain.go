@@ -31,7 +31,8 @@ func FactorFromDB(gainDB float64) float64 {
 
 // ApplyInt16 scales interleaved int16 little-endian PCM samples in src by
 // factor, writing the saturated result into dst. dst must be at least len(src)
-// bytes and must not overlap src. Values that exceed the int16 range are
+// bytes and must not overlap src, except that dst may be exactly src (the same
+// slice start) to scale in place, since each sample is read before it is written. Values that exceed the int16 range are
 // clamped (saturated) rather than wrapped, which matches FFmpeg's volume filter
 // perceptually (both clamp) but not bit-for-bit, since FFmpeg rounds/dithers in
 // float. A trailing odd byte (not produced by real int16 PCM) is copied through

@@ -120,7 +120,6 @@
     { id: 'mp3', label: 'MP3' },
     { id: 'aac', label: 'AAC' },
     { id: 'opus', label: 'Opus' },
-    { id: 'alac', label: 'ALAC' },
   ];
 
   function formatSelectionTime(seconds: number | null): string {

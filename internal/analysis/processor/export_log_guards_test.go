@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
@@ -112,7 +113,7 @@ func TestNormalizeSkipLogsOncePerFormat(t *testing.T) {
 	// targets arm rather than measuring. Unreachable for a validated config;
 	// set directly here because that branch is the one under test.
 	a.Settings.Realtime.Audio.Export.Normalization.Enabled = true
-	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionormMinTargetLUFS - 10
+	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionorm.AbsoluteGateLUFS - 10
 	a.Settings.Realtime.Audio.Export.Normalization.TruePeak = -2
 
 	for range 5 {
@@ -161,7 +162,7 @@ func TestNormalizeSkipReasonsAreNotConflated(t *testing.T) {
 	// is taken before any measurement is attempted.
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", format)
 	a.Settings.Realtime.Audio.Export.Normalization.Enabled = true
-	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionormMinTargetLUFS - 10
+	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionorm.AbsoluteGateLUFS - 10
 	a.Settings.Realtime.Audio.Export.Normalization.TruePeak = -2
 	_, normalized, err := a.resolveExportGainDB(t.Context(), rate, format)
 	require.NoError(t, err)
@@ -193,7 +194,7 @@ func TestNormalizeSkipLineOmitsDetectionID(t *testing.T) {
 
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
 	a.Settings.Realtime.Audio.Export.Normalization.Enabled = true
-	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionormMinTargetLUFS - 10
+	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionorm.AbsoluteGateLUFS - 10
 	a.Settings.Realtime.Audio.Export.Normalization.TruePeak = -2
 
 	_, _, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, "mp3")

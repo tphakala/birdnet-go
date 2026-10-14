@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -61,9 +61,9 @@ func TestEncodeClip_NativeLossyNormalizesToTarget(t *testing.T) {
 		ext     string
 		encoder string
 	}{
-		{ffmpeg.FormatAAC, "m4a", clipenc.NativeAAC},
-		{ffmpeg.FormatMP3, "mp3", clipenc.NativeMP3},
-		{ffmpeg.FormatOpus, "opus", clipenc.NativeOpus},
+		{audioformat.AAC, "m4a", clipenc.NativeAAC},
+		{audioformat.MP3, "mp3", clipenc.NativeMP3},
+		{audioformat.Opus, "opus", clipenc.NativeOpus},
 	} {
 		t.Run(tc.format, func(t *testing.T) {
 			t.Parallel()
@@ -119,7 +119,7 @@ func TestEncodeClip_WAVAppliesResolvedGain(t *testing.T) {
 	a := &SaveAudioAction{Settings: s, pcmData: pcm, CorrelationID: "wav"}
 	out := filepath.Join(t.TempDir(), "clip.wav")
 
-	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatWAV, out)
+	enc, err := a.encodeClip(t.Context(), conf.SampleRate, audioformat.WAV, out)
 	require.NoError(t, err)
 	require.Equal(t, clipenc.NativeWAV, enc.Encoder)
 
@@ -145,7 +145,7 @@ func TestEncodeClip_WAVLeavesPCMUnmodified(t *testing.T) {
 	a := &SaveAudioAction{Settings: s, pcmData: pcm, CorrelationID: "wav-alias"}
 	out := filepath.Join(t.TempDir(), "clip.wav")
 
-	_, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatWAV, out)
+	_, err := a.encodeClip(t.Context(), conf.SampleRate, audioformat.WAV, out)
 	require.NoError(t, err)
 
 	assert.Equal(t, before, a.pcmData, "the export must not amplify the shared capture buffer in place")

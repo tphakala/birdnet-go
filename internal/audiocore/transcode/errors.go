@@ -1,0 +1,73 @@
+package transcode
+
+import (
+	"fmt"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
+)
+
+// Sentinel errors. Problems with the source or the request wrap one of these (use
+// errors.Is), together with the underlying decoder error when there is one;
+// callers map them to HTTP statuses. Any other error (file access, an encoder or
+// denoiser failure) carries none and is a server fault.
+var (
+	// ErrUnsupportedSource marks a source this package does not decode: a codec
+	// or container outside the supported set, more than two channels, or a sample
+	// rate outside [minSourceSampleRate, maxSourceSampleRate].
+	ErrUnsupportedSource = errors.NewStd("source audio format is not supported")
+
+	// ErrHEAACSource marks an HE-AAC or HE-AACv2 source (AAC with SBR or PS),
+	// which the native AAC decoder rejects. It wraps ErrUnsupportedSource.
+	ErrHEAACSource = fmt.Errorf("%w: HE-AAC (SBR or PS) is not supported", ErrUnsupportedSource)
+
+	// ErrUndecodableSource marks a source in a supported format that is corrupt,
+	// truncated or empty.
+	ErrUndecodableSource = errors.NewStd("source audio could not be decoded")
+
+	// ErrAudioTooLong marks a source file or a decoded range that exceeds the
+	// size bounds.
+	ErrAudioTooLong = errors.NewStd("audio is too long for on-demand processing")
+
+	// ErrEmptyRange marks a requested range that holds no audio, for example a
+	// clip window that starts past the end of the source.
+	ErrEmptyRange = errors.NewStd("requested range holds no audio")
+
+	// ErrBelowMinimumRate marks a source whose sample rate is below the minimum the
+	// requested operation needs (audible bats needs ultrasonic capture rates).
+	ErrBelowMinimumRate = errors.NewStd("source sample rate is below the minimum for this operation")
+
+	// ErrInvalidRequest marks a caller-supplied value outside what the package
+	// accepts: a clip window with a non-finite or negative start or a non-positive
+	// duration, an unknown denoise preset, format or time-expansion factor.
+	ErrInvalidRequest = errors.NewStd("invalid transcode request")
+)
+
+const componentName = "audiocore/transcode"
+
+// wrapSentinel returns an error that wraps sentinel and, when non-nil, cause.
+func wrapSentinel(sentinel, cause error, operation, detail string, category errors.ErrorCategory) error {
+	var b *errors.ErrorBuilder
+	if cause != nil {
+		b = errors.Newf("%w: %s: %w", sentinel, detail, cause)
+	} else {
+		b = errors.Newf("%w: %s", sentinel, detail)
+	}
+	return b.Component(componentName).
+		Category(category).
+		Context("operation", operation).
+		Build()
+}
+
+// wrapError wraps err with the component, category and operation telemetry tags.
+func wrapError(err error, category errors.ErrorCategory, operation string) error {
+	return errors.New(err).
+		Component(componentName).
+		Category(category).
+		Context("operation", operation).
+		Build()
+}
+
+// validationError builds a CategoryValidation error for a malformed request value.
+func validationError(sentinel error, operation, format string, args ...any) error {
+	return wrapSentinel(sentinel, nil, operation, fmt.Sprintf(format, args...), errors.CategoryValidation)
+}

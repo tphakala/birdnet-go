@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	audioBuffer "github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/detection"
@@ -86,7 +86,7 @@ func blockOutputPath(t *testing.T, exportDir, clipName string) {
 func TestExecute_SuccessLogNamesNativeEncoder(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
+	a := newExportLogAction(t, dir, "clip.flac", audioformat.FLAC)
 
 	require.NoError(t, a.Execute(t.Context(), nil))
 
@@ -94,7 +94,7 @@ func TestExecute_SuccessLogNamesNativeEncoder(t *testing.T) {
 	assert.Contains(t, out, "Audio clip saved successfully")
 	assert.Contains(t, out, "encoder="+clipenc.NativeFLAC,
 		"the success log must name the encoder that wrote the clip")
-	assert.Contains(t, out, "format="+ffmpeg.FormatFLAC)
+	assert.Contains(t, out, "format="+audioformat.FLAC)
 	assert.Contains(t, out, "operation=audio_export_success")
 }
 
@@ -112,7 +112,7 @@ func TestExecute_SuccessLogNamesNativeEncoder(t *testing.T) {
 func TestExecute_SuccessLogNamesSpeciesForClipPathAggregation(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
+	a := newExportLogAction(t, dir, "clip.flac", audioformat.FLAC)
 	// Lowercase, matching what buildSaveAudioAction stores and what the sibling
 	// detection operations log; see the casing rationale on
 	// TestBuildSaveAudioAction_PopulatesLowercasedSpeciesOnEveryBranch.
@@ -137,7 +137,7 @@ func TestExecute_SuccessLogNamesSpeciesForClipPathAggregation(t *testing.T) {
 func TestExecute_SuccessLogClipPathKeepsDateSegments(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "2026/07/wren.flac", ffmpeg.FormatFLAC)
+	a := newExportLogAction(t, dir, "2026/07/wren.flac", audioformat.FLAC)
 
 	require.NoError(t, a.Execute(t.Context(), nil))
 
@@ -302,7 +302,7 @@ func buildSpeciesTestSettings(t *testing.T) *conf.Settings {
 func TestExecute_SuccessLogCarriesGainAndDuration(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.wav", ffmpeg.FormatWAV)
+	a := newExportLogAction(t, dir, "clip.wav", audioformat.WAV)
 
 	require.NoError(t, a.Execute(t.Context(), nil))
 
@@ -335,7 +335,7 @@ func TestExecute_SuccessLogCarriesGainAndDuration(t *testing.T) {
 func TestExecute_SuccessLogCarriesBitrateForLossyFormats(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.m4a", ffmpeg.FormatAAC)
+	a := newExportLogAction(t, dir, "clip.m4a", audioformat.AAC)
 
 	require.NoError(t, a.Execute(t.Context(), nil))
 
@@ -351,7 +351,7 @@ func TestExecute_SuccessLogCarriesBitrateForLossyFormats(t *testing.T) {
 func TestExecute_SuccessLogCarriesClampedBitrate(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.opus", ffmpeg.FormatOpus)
+	a := newExportLogAction(t, dir, "clip.opus", audioformat.Opus)
 	a.Settings.Realtime.Audio.Export.Bitrate = "320k"
 
 	require.NoError(t, a.Execute(t.Context(), nil))
@@ -371,7 +371,7 @@ func TestExecute_FailureLogNamesNativeEncoder(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	blockOutputPath(t, dir, "clip.m4a")
-	a := newExportLogAction(t, dir, "clip.m4a", ffmpeg.FormatAAC)
+	a := newExportLogAction(t, dir, "clip.m4a", audioformat.AAC)
 
 	require.Error(t, a.Execute(t.Context(), nil))
 
@@ -379,7 +379,7 @@ func TestExecute_FailureLogNamesNativeEncoder(t *testing.T) {
 	assert.Contains(t, out, "Audio clip export failed")
 	assert.Contains(t, out, "encoder="+clipenc.NativeAAC,
 		"a failed export must be attributable to the encoder that failed")
-	assert.Contains(t, out, "format="+ffmpeg.FormatAAC)
+	assert.Contains(t, out, "format="+audioformat.AAC)
 	assert.Contains(t, out, "operation=audio_export_failed")
 	assert.Contains(t, out, "detection_id=export-log-test")
 	// A rejected bitrate is one of the ways a lossy encode fails, so the value
@@ -394,7 +394,7 @@ func TestExecute_FailureLogIsWarnNotError(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	blockOutputPath(t, dir, "clip.mp3")
-	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
+	a := newExportLogAction(t, dir, "clip.mp3", audioformat.MP3)
 
 	require.Error(t, a.Execute(t.Context(), nil))
 
@@ -413,13 +413,13 @@ func TestExecute_FailureLogIsWarnNotError(t *testing.T) {
 func TestExecute_UnrecognizedFormatFailsWithoutEncoder(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.alac", "alac")
+	a := newExportLogAction(t, dir, "clip.invalid", "invalid")
 
 	require.Error(t, a.Execute(t.Context(), nil))
 
 	out := logs.String()
 	assert.Contains(t, out, "Audio clip export failed")
-	assert.NotContains(t, out, "encoder="+clipenc.FFmpeg)
+	assert.NotContains(t, out, "encoder=ffmpeg")
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "nothing may be written for an unrecognized format")
@@ -437,7 +437,7 @@ func TestExecute_UnrecognizedFormatFailsWithoutEncoder(t *testing.T) {
 func TestExecute_FailureBeforeGainResolutionOmitsGain(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
+	a := newExportLogAction(t, dir, "clip.flac", audioformat.FLAC)
 	a.Settings.Realtime.Audio.Export.Normalization = conf.NormalizationSettings{
 		Enabled:    true,
 		TargetLUFS: -23,
@@ -471,7 +471,7 @@ func TestExecute_FailureBeforeGainResolutionOmitsGain(t *testing.T) {
 func TestExecute_FailureLogCarriesPhaseTimings(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
+	a := newExportLogAction(t, dir, "clip.flac", audioformat.FLAC)
 	blockOutputPath(t, dir, "clip.flac")
 
 	require.Error(t, a.Execute(t.Context(), nil))
@@ -538,7 +538,7 @@ func TestExecute_FailureLogOmitsFullPath(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	blockOutputPath(t, dir, "clip.mp3")
-	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
+	a := newExportLogAction(t, dir, "clip.mp3", audioformat.MP3)
 
 	require.Error(t, a.Execute(t.Context(), nil))
 
@@ -557,7 +557,7 @@ func TestExecute_FailureLogOmitsFullPath(t *testing.T) {
 func TestExecute_CancelledExportLogsAtDebug(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
+	a := newExportLogAction(t, dir, "clip.flac", audioformat.FLAC)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -582,7 +582,7 @@ func TestExecute_RealErrorDuringShutdownStaysAtWarn(t *testing.T) {
 	// WAV takes no context, so the blocked output path is a real error that a
 	// cancelled context cannot turn into a cancellation.
 	blockOutputPath(t, dir, "clip.wav")
-	a := newExportLogAction(t, dir, "clip.wav", ffmpeg.FormatWAV)
+	a := newExportLogAction(t, dir, "clip.wav", audioformat.WAV)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -607,7 +607,7 @@ func TestExecute_TimedOutExportStaysAtWarn(t *testing.T) {
 	dir := t.TempDir()
 	// WAV takes no context, so the blocked output path is a real error.
 	blockOutputPath(t, dir, "clip.wav")
-	a := newExportLogAction(t, dir, "clip.wav", ffmpeg.FormatWAV)
+	a := newExportLogAction(t, dir, "clip.wav", audioformat.WAV)
 
 	// An already-expired deadline, which is what the job queue's execution
 	// timeout leaves on the context when an encode runs long.
@@ -629,7 +629,7 @@ func TestExecute_TimedOutExportStaysAtWarn(t *testing.T) {
 // downgrade warning and never strands.
 func TestResolveExportParams_BatUltrasonicUsesUltrasonicType(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
-	a := newExportLogAction(t, t.TempDir(), "clip.mp3", ffmpeg.FormatMP3)
+	a := newExportLogAction(t, t.TempDir(), "clip.mp3", audioformat.MP3)
 	a.Settings.Realtime.Audio.Export.UltrasonicType = conf.AudioExportTypeFLAC
 	a.modelName = batModelName
 	a.sourceSampleRate = batSourceSampleRate
@@ -651,22 +651,21 @@ func TestResolveExportParams_BatUltrasonicUsesUltrasonicType(t *testing.T) {
 func TestLossyBitrateKbps(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 96, lossyBitrateKbps(ffmpeg.FormatMP3, "96k"))
-	assert.Equal(t, 96, lossyBitrateKbps(ffmpeg.FormatAAC, "96k"))
-	assert.Equal(t, 96, lossyBitrateKbps(ffmpeg.FormatOpus, "96k"))
+	assert.Equal(t, 96, lossyBitrateKbps(audioformat.MP3, "96k"))
+	assert.Equal(t, 96, lossyBitrateKbps(audioformat.AAC, "96k"))
+	assert.Equal(t, 96, lossyBitrateKbps(audioformat.Opus, "96k"))
 
-	assert.Equal(t, 0, lossyBitrateKbps(ffmpeg.FormatWAV, "96k"), "WAV is lossless")
-	assert.Equal(t, 0, lossyBitrateKbps(ffmpeg.FormatFLAC, "96k"), "FLAC is lossless")
-	assert.Equal(t, 0, lossyBitrateKbps(ffmpeg.FormatALAC, "96k"), "ALAC is lossless")
+	assert.Equal(t, 0, lossyBitrateKbps(audioformat.WAV, "96k"), "WAV is lossless")
+	assert.Equal(t, 0, lossyBitrateKbps(audioformat.FLAC, "96k"), "FLAC is lossless")
 
 	// A malformed setting parses to 0, which the log then omits rather than
 	// reporting a bitrate the encoder never used.
-	assert.Equal(t, 0, lossyBitrateKbps(ffmpeg.FormatMP3, "not-a-bitrate"))
+	assert.Equal(t, 0, lossyBitrateKbps(audioformat.MP3, "not-a-bitrate"))
 
 	// MP3 and Opus are clamped to what the codec accepts, so the logged value
 	// tracks the encode rather than echoing an over-large setting back.
-	assert.Positive(t, lossyBitrateKbps(ffmpeg.FormatMP3, "9999k"))
-	assert.Less(t, lossyBitrateKbps(ffmpeg.FormatMP3, "9999k"), 9999)
+	assert.Positive(t, lossyBitrateKbps(audioformat.MP3, "9999k"))
+	assert.Less(t, lossyBitrateKbps(audioformat.MP3, "9999k"), 9999)
 }
 
 func TestClipDurationMs(t *testing.T) {
