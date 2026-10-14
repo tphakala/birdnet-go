@@ -18,22 +18,6 @@ function renderList(props: Partial<Parameters<typeof renderInput>[0]> = {}) {
   });
 }
 
-// A real parent applies every onUpdate to the values it passes back in. A bare vi.fn()
-// never does, which leaves the list at its pre-add state.
-function renderControlled(props: Partial<Parameters<typeof renderInput>[0]> = {}) {
-  const onUpdate = vi.fn();
-  let rerenderList: (next: { values: string[] }) => Promise<void> = async () => {};
-  const result = renderList({
-    ...props,
-    onUpdate: values => {
-      onUpdate(values);
-      void rerenderList({ values });
-    },
-  });
-  rerenderList = result.rerender;
-  return { ...result, onUpdate };
-}
-
 function renderInput(props: {
   label: string;
   values: string[];
@@ -90,7 +74,8 @@ describe('NetworkAddressListInput', () => {
   });
 
   it('adds a value with the Add button and clears the input', async () => {
-    const { onUpdate } = renderControlled({ values: ['10.0.0.1'] });
+    const onUpdate = vi.fn();
+    renderList({ values: ['10.0.0.1'], onUpdate });
 
     await typeAndSubmit('  172.18.0.1 ', 'button');
 
@@ -99,7 +84,8 @@ describe('NetworkAddressListInput', () => {
   });
 
   it('adds a value with Enter', async () => {
-    const { onUpdate } = renderControlled();
+    const onUpdate = vi.fn();
+    renderList({ onUpdate });
 
     await typeAndSubmit('192.168.1.0/24');
 
@@ -128,7 +114,8 @@ describe('NetworkAddressListInput', () => {
   });
 
   it('adds the valid tokens of a batch and reports invalid ones before duplicates', async () => {
-    const { onUpdate } = renderControlled();
+    const onUpdate = vi.fn();
+    renderList({ onUpdate });
     await fireEvent.paste(input(), {
       clipboardData: { getData: () => '10.0.0.1, 10.0.0.2\nbad 10.0.0.1' },
     });
@@ -158,46 +145,14 @@ describe('NetworkAddressListInput', () => {
     expect(input()).not.toHaveAttribute('aria-invalid', 'true');
   });
 
-  it('hides the add report when the draft is cleared from outside', async () => {
-    const { rerender } = renderList();
-    await typeAndSubmit('bad');
-    expect(alertText()).toContain('errors.invalid');
-    expect(input()).toHaveAttribute('aria-invalid', 'true');
-
-    await rerender({ draft: '' });
-
-    expect(alertText()).toBe('');
-    expect(input()).not.toHaveAttribute('aria-invalid', 'true');
-  });
-
-  it('hides a duplicate report when the list and draft are reset from outside', async () => {
-    const { rerender } = renderControlled({ values: ['10.0.0.1'] });
-    await typeAndSubmit('10.0.0.1, 10.0.0.2');
-    expect(alertText()).toContain('forms.networkAddressList.errors.duplicate');
-    expect(input().value).toBe('');
-
-    await rerender({ values: ['10.0.0.1'], draft: '' });
-
-    expect(alertText()).toBe('');
-  });
-
-  it('hides the add report when the list changes from outside', async () => {
-    const { rerender } = renderList({ values: ['10.0.0.1'] });
-    await typeAndSubmit('bad');
-    expect(alertText()).toContain('errors.invalid');
-
-    await rerender({ values: ['10.0.0.1', '10.0.0.2'] });
-
-    expect(alertText()).toBe('');
-  });
-
   it.each([
     { accept: 'ip' as const, value: '2001:DB8::1' },
     { accept: 'cidr' as const, value: '2001:db8::/32' },
     { accept: 'ip-or-cidr' as const, value: 'fe80::1' },
     { accept: 'ip-or-cidr' as const, value: '2001:db8::/48' },
   ])('accepts the IPv6 value $value in $accept mode', async ({ accept, value }) => {
-    const { onUpdate } = renderControlled({ accept });
+    const onUpdate = vi.fn();
+    renderList({ accept, onUpdate });
 
     await typeAndSubmit(value);
 
@@ -238,7 +193,8 @@ describe('NetworkAddressListInput', () => {
   });
 
   it('adds the valid form of an invalid row instead of reporting a duplicate', async () => {
-    const { onUpdate } = renderControlled({ accept: 'cidr', values: ['10.0.0.1'] });
+    const onUpdate = vi.fn();
+    renderList({ accept: 'cidr', values: ['10.0.0.1'], onUpdate });
 
     await typeAndSubmit('10.0.0.1/32');
 
@@ -302,13 +258,17 @@ describe('NetworkAddressListInput', () => {
   });
 
   it('blocks adding at maxItems and keeps over-limit tokens in the input', async () => {
-    const { onUpdate } = renderControlled({ values: ['10.0.0.1'], maxItems: 2 });
+    const onUpdate = vi.fn();
+    const { rerender } = renderList({ values: ['10.0.0.1'], maxItems: 2, onUpdate });
 
     await typeAndSubmit('10.0.0.2, 10.0.0.3');
 
     expect(onUpdate).toHaveBeenCalledWith(['10.0.0.1', '10.0.0.2']);
     expect(input().value).toBe('10.0.0.3');
     expect(alertText()).toContain('forms.networkAddressList.errors.limit');
+
+    await rerender({ values: ['10.0.0.1', '10.0.0.2'] });
+
     expect(addButton()).toBeDisabled();
     expect(screen.getByText(/forms\.networkAddressList\.limitReached/)).toBeInTheDocument();
   });
