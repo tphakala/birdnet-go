@@ -303,9 +303,29 @@ func TestProcessEndpoints_ForwardFilterFields(t *testing.T) {
 	})
 
 	t.Run("process denoise", func(t *testing.T) {
-		plain := postJSON(e, "/api/v2/audio/31/process", `{"gain_db": 0.25}`)
-		denoised := postJSON(e, "/api/v2/audio/31/process", `{"denoise": "heavy", "gain_db": 0.25}`)
-		require.Equal(t, http.StatusOK, denoised.Code)
+		plain := postJSON(e, "/api/v2/audio/31/process", `{"gain_db": 0}`)
+		denoised := postJSON(e, "/api/v2/audio/31/process", `{"denoise": "heavy"}`)
+		require.Equal(t, http.StatusOK, plain.Code, plain.Body.String())
+		require.Equal(t, http.StatusOK, denoised.Code, denoised.Body.String())
 		assert.NotEqual(t, plain.Body.Bytes(), denoised.Body.Bytes(), "the denoise preset reaches the filter chain")
+	})
+
+	t.Run("processed spectrogram", func(t *testing.T) {
+		// Rendering belongs to the spectrogram generator, which shells out to SoX
+		// and FFmpeg, so this check runs only where both are installed.
+		soxPath, soxErr := exec.LookPath("sox")
+		ffmpegPath, ffmpegErr := exec.LookPath("ffmpeg")
+		if soxErr != nil || ffmpegErr != nil {
+			t.Skip("sox and ffmpeg are required by the spectrogram renderer")
+		}
+		controller.Settings.Load().Realtime.Audio.SoxPath = soxPath
+		controller.Settings.Load().Realtime.Audio.FfmpegPath = ffmpegPath
+		mockDS.On("GetNoteModelType", "32").Return("bird", nil).Maybe()
+
+		plain := postJSON(e, "/api/v2/spectrogram/32/process", `{"gain_db": 0}`)
+		normalized := postJSON(e, "/api/v2/spectrogram/32/process", `{"normalize": true}`)
+		require.Equal(t, http.StatusOK, plain.Code, plain.Body.String())
+		require.Equal(t, http.StatusOK, normalized.Code, normalized.Body.String())
+		assert.NotEqual(t, plain.Body.Bytes(), normalized.Body.Bytes(), "the filters reach the processed spectrogram")
 	})
 }

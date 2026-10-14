@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	wavpcm "github.com/tphakala/go-wav/pcm"
 	"gorm.io/gorm"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -107,6 +109,53 @@ func TestExtractAudioClipByID_FormatsAndHeaders(t *testing.T) {
 		rec := clipRequest(t, e, "1", `{"start": 0, "end": 1.5, "format": "flac", "denoise": "medium", "normalize": true, "gain_db": 3}`)
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		assert.True(t, bytes.HasPrefix(rec.Body.Bytes(), []byte("fLaC")))
+	})
+}
+
+// A source that is quiet for its first second and loud for its second one lets a
+// test tell which part of the audio a clip request returned.
+func TestExtractAudioClipByID_ForwardsStartAndFilters(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	const (
+		quietAmp   = 0.01
+		loudAmp    = 0.3
+		halfSecond = clipTestSourceRate
+	)
+	pcm := append(toneBytes(clipTestSourceRate, 1, fixtureToneHz, quietAmp), toneBytes(clipTestSourceRate, 1, fixtureToneHz, loudAmp)...)
+	var src bytes.Buffer
+	require.NoError(t, wavpcm.EncodeInterleaved(&src, wavpcm.Config{SampleRate: clipTestSourceRate, BitDepth: 16, Channels: 1}, pcm))
+	require.NoError(t, os.WriteFile(fixturePath(tempDir, "split.wav"), src.Bytes(), 0o600))
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteClipPath", "1").Return("split.wav", nil)
+	controller.DS = mockDS
+
+	early := clipRequest(t, e, "1", `{"start": 0, "end": 1, "format": "wav"}`)
+	late := clipRequest(t, e, "1", `{"start": 1, "end": 2, "format": "wav"}`)
+	require.Equal(t, http.StatusOK, early.Code, early.Body.String())
+	require.Equal(t, http.StatusOK, late.Code, late.Body.String())
+	_, earlyLen := wavRateAndLength(t, early.Body.Bytes())
+	_, lateLen := wavRateAndLength(t, late.Body.Bytes())
+	assert.Equal(t, halfSecond*2, earlyLen, "one second of 16-bit mono")
+	assert.Equal(t, halfSecond*2, lateLen, "one second of 16-bit mono")
+	assert.Greater(t, wavPeak(late.Body.Bytes()), 10*wavPeak(early.Body.Bytes()), "the clip starts at the requested start")
+
+	t.Run("normalize", func(t *testing.T) {
+		normalized := clipRequest(t, e, "1", `{"start": 0, "end": 1, "format": "wav", "normalize": true}`)
+		require.Equal(t, http.StatusOK, normalized.Code, normalized.Body.String())
+		assert.Greater(t, wavPeak(normalized.Body.Bytes()), 4*wavPeak(early.Body.Bytes()), "a quiet clip is lifted toward the target")
+	})
+
+	t.Run("gain_db", func(t *testing.T) {
+		louder := clipRequest(t, e, "1", `{"start": 0, "end": 1, "format": "wav", "gain_db": 6.0206}`)
+		require.Equal(t, http.StatusOK, louder.Code, louder.Body.String())
+		assert.InDelta(t, 2*wavPeak(early.Body.Bytes()), wavPeak(louder.Body.Bytes()), 4)
+	})
+
+	t.Run("denoise", func(t *testing.T) {
+		denoised := clipRequest(t, e, "1", `{"start": 0, "end": 1, "format": "wav", "denoise": "heavy"}`)
+		require.Equal(t, http.StatusOK, denoised.Code, denoised.Body.String())
+		assert.NotEqual(t, early.Body.Bytes(), denoised.Body.Bytes(), "the denoise preset reaches the filter chain")
 	})
 }
 
