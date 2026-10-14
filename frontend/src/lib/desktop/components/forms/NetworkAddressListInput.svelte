@@ -13,6 +13,8 @@
   - Values passed in are never changed or dropped by rendering. Invalid or repeated
     rows are flagged with an icon and text until the user removes them. Rows are keyed
     by index, so repeated values render.
+  - An add's report shows until the text or the list changes, whether by typing, a parent
+    writing the draft (a form Reset), or a list change.
   - The text typed but not added yet is the bindable `draft`. Left unbound it lives in
     the component; bind it to keep it when the component unmounts (a tab switch) and to
     block saving while it is not empty, instead of losing it silently.
@@ -31,6 +33,7 @@
   import {
     networkAddressKey,
     isValidNetworkAddress,
+    trimGoSpace,
     type NetworkAddressMode,
   } from '$lib/utils/networkAddress';
 
@@ -98,12 +101,24 @@
     'ip-or-cidr': 'ipOrCidr',
   } as const satisfies Record<NetworkAddressMode, string>;
 
-  /** The report of the last add: its message lines and whether any token was invalid. */
+  /**
+   * The report of the last add: its message lines and whether any token was invalid, plus
+   * the draft that add left behind and the key of the list it produced. The report is shown
+   * only while both are still current.
+   */
   interface AddReport {
     messages: string[];
     hasInvalid: boolean;
+    draft: string;
+    listKey: string;
   }
-  const EMPTY_REPORT: AddReport = { messages: [], hasInvalid: false };
+  // An empty listKey never equals a real key: listKey([]) is '[]'.
+  const EMPTY_REPORT: AddReport = { messages: [], hasInvalid: false, draft: '', listKey: '' };
+
+  /** Identifies a list by its trimmed entries, in order; a parent's split and join round trip keeps it. */
+  function listKey(list: readonly string[]): string {
+    return JSON.stringify(list.map(trimGoSpace));
+  }
 
   const baseId = generateId('network-address-list');
   let inputId = $derived(id ?? `${baseId}-input`);
@@ -114,10 +129,17 @@
 
   let inputElement = $state<HTMLInputElement>();
   let listElement = $state<HTMLUListElement>();
-  /** Report of the last add; cleared when the text changes. */
+  /**
+   * Report of the last add. It is cleared when the text is edited and hidden whenever the
+   * draft or the list no longer match what the add left, for example after a form Reset.
+   * Visibility is derived, not latched: a parent that writes a non-empty draft and then the
+   * same empty draft again, with no list change, shows a duplicate-only report again.
+   */
   let report = $state<AddReport>(EMPTY_REPORT);
-  let messages = $derived(report.messages);
-  let hasInvalidTokens = $derived(report.hasInvalid);
+  let currentListKey = $derived(listKey(values));
+  let reportApplies = $derived(report.draft === draft && report.listKey === currentListKey);
+  let messages = $derived(reportApplies ? report.messages : []);
+  let hasInvalidTokens = $derived(reportApplies && report.hasInvalid);
 
   let modeKey = $derived(MODE_KEYS[accept]);
   let hasPending = $derived(draft.trim() !== '');
@@ -184,7 +206,8 @@
       }
     }
 
-    if (added.length > 0) onUpdate([...values, ...added]);
+    const next = added.length > 0 ? [...values, ...added] : values;
+    if (added.length > 0) onUpdate(next);
 
     const lines: string[] = [];
     if (invalid.length > 0) {
@@ -210,8 +233,14 @@
       );
     }
 
-    draft = [...invalid, ...overLimit].join(PASTE_SEPARATOR);
-    report = { messages: lines, hasInvalid: invalid.length > 0 };
+    const nextDraft = [...invalid, ...overLimit].join(PASTE_SEPARATOR);
+    draft = nextDraft;
+    report = {
+      messages: lines,
+      hasInvalid: invalid.length > 0,
+      draft: nextDraft,
+      listKey: listKey(next),
+    };
   }
 
   // The Add button turns disabled once the input is empty, which would drop focus to

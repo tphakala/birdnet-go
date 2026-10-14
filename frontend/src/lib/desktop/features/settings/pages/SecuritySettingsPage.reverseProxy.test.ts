@@ -284,6 +284,28 @@ describe('SecuritySettingsPage reverse proxy wiring', () => {
     expect(get(settingsValidationErrors)).not.toContain(TRUSTED_PENDING);
   });
 
+  it('clears the add error on Reset', async () => {
+    seedSecurity({ trustedProxies: [] });
+    render(SecuritySettingsPage);
+    const field = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'settings.security.reverseProxy.listLabel',
+    });
+    // The valid token is added (which makes Reset visible); `abc` stays with an error
+    await fireEvent.input(field, { target: { value: '10.0.0.1, abc' } });
+    await fireEvent.keyDown(field, { key: 'Enter' });
+    await tick();
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field.value).toBe('abc');
+    expect(screen.getByText(/errors\.invalid/)).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'settings.actions.resetAriaLabel' }));
+    await tick();
+
+    expect(field.value).toBe('');
+    expect(field).not.toHaveAttribute('aria-invalid', 'true');
+    expect(screen.queryByText(/errors\.invalid/)).not.toBeInTheDocument();
+  });
+
   it('ignores blank saved entries for display and validation', async () => {
     seedSecurity({ trustedProxies: ['', '172.18.0.1', '  '] });
     render(SecuritySettingsPage);
