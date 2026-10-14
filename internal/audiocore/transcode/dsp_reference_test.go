@@ -19,6 +19,8 @@ const (
 	referenceShortFrames = 100
 	// referenceBatRate is the sample rate of the bat path (bench_test.go benchBatRate).
 	referenceBatRate = 256000
+	// referenceCDRate is a common rate that is not a multiple of the test rate.
+	referenceCDRate = 44100
 	// referenceBoundSeconds is the length of the clips at the sample rate bounds.
 	referenceBoundSeconds = 0.5
 )
@@ -129,8 +131,8 @@ func TestDenoisePCM_MatchesWholeChannelReference(t *testing.T) {
 		channels int
 	}
 	cases := []testCase{
-		{name: "mono_48k", samples: longMono, rate: 48000, channels: 1},
-		{name: "mono_44k", samples: longMono, rate: 44100, channels: 1},
+		{name: "mono_48k", samples: longMono, rate: testRate, channels: 1},
+		{name: "mono_44k", samples: longMono, rate: referenceCDRate, channels: 1},
 		{name: "pure_tone_no_quiet_region", samples: tone(testRate, 1, 1, testToneHz, testAmp), rate: testRate, channels: 1},
 		{name: "shorter_than_one_frame", samples: tone(testRate, 1, float64(referenceShortFrames)/testRate, testToneHz, testAmp), rate: testRate, channels: 1},
 		{name: "exactly_one_chunk", samples: longMono[:chunkFrames], rate: testRate, channels: 1},

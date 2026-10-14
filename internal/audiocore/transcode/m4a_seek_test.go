@@ -41,6 +41,11 @@ const (
 	// corruptLeadUnits is how many units before the corrupted one the fallback
 	// window starts.
 	corruptLeadUnits = 2
+	// fallbackWindowUnits is the fallback window's length in access units, enough
+	// to run from before the corrupted unit to past it.
+	fallbackWindowUnits = 4
+	// m4aTailOverrunFrames is how far before the end the overrunning window starts.
+	m4aTailOverrunFrames = 100
 	// hugeEncoderDelay is the largest media_time a version 0 edit list can carry.
 	hugeEncoderDelay = math.MaxInt32
 )
@@ -92,9 +97,10 @@ func TestDecode_M4AWindowsMatchTheLinearDecode(t *testing.T) {
 			frameBytes := channels * bytesPerSample
 
 			// Positions in the decoder's output (priming included), converted to
-			// window starts. They cover a start inside the first access units,
-			// exact unit boundaries, the first start whose pre-roll is not clamped,
-			// one frame past it, mid-file, and the last frame.
+			// window starts. They cover a start inside the first access units, exact
+			// unit boundaries (with two units of pre-roll, 2*FrameSize is the first
+			// whose pre-roll is not clamped to unit 0), one frame past a boundary,
+			// mid-file, and the last frame.
 			positions := []int64{
 				delay + 1,
 				aaccodec.FrameSize,
@@ -129,7 +135,7 @@ func TestDecode_M4AWindowsMatchTheLinearDecode(t *testing.T) {
 			}
 
 			// A window reaching past the end is shortened to the audio that exists.
-			start := total - 100
+			start := total - m4aTailOverrunFrames
 			win, err := decode(t.Context(), path, &window{Start: float64(start) / testRate, Duration: 1}, 0)
 			require.NoError(t, err)
 			assert.True(t, bytes.Equal(whole.Data[start*int64(frameBytes):], win.Data))
@@ -191,7 +197,7 @@ func TestDecode_M4AFallsBackWhenAUnitHasNoAudio(t *testing.T) {
 	data := cleanM4ABytes(t)
 
 	ranges := auRanges(t, data)
-	require.Greater(t, len(ranges), corruptedUnitIndex+corruptLeadUnits+3)
+	require.Greater(t, len(ranges), corruptedUnitIndex-corruptLeadUnits+fallbackWindowUnits, "the fallback window lies inside the file")
 	bad := bytes.Clone(data)
 	for i := ranges[corruptedUnitIndex][0]; i < ranges[corruptedUnitIndex][1]; i++ {
 		bad[i] = 0xFF // the first element id is ID_END: an access unit with no audio
@@ -212,10 +218,11 @@ func TestDecode_M4AFallsBackWhenAUnitHasNoAudio(t *testing.T) {
 
 	delay := m4aInfoOf(t, path).EncoderDelay
 	start := int64((corruptedUnitIndex-corruptLeadUnits)*aaccodec.FrameSize) - delay
-	req := &window{Start: float64(start) / testRate, Duration: float64(4*aaccodec.FrameSize) / testRate}
+	const windowFrames = fallbackWindowUnits * aaccodec.FrameSize
+	req := &window{Start: float64(start) / testRate, Duration: float64(windowFrames) / testRate}
 	win, err := decode(t.Context(), path, req, 0)
 	require.NoError(t, err, "a seek failure must not fail a request the forward path serves")
-	assert.True(t, bytes.Equal(whole.Data[start*bytesPerSample:(start+4*aaccodec.FrameSize)*bytesPerSample], win.Data),
+	assert.True(t, bytes.Equal(whole.Data[start*bytesPerSample:(start+windowFrames)*bytesPerSample], win.Data),
 		"the fallback window equals the whole-file decode's slice")
 }
 
