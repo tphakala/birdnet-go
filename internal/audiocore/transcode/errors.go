@@ -11,17 +11,13 @@ import (
 // callers map them to HTTP statuses. Any other error (file access, an encoder or
 // denoiser failure) carries none and is a server fault.
 var (
-	// ErrUnsupportedSource marks a source this package does not decode: a codec
-	// or container outside the supported set, more than two channels, or a sample
-	// rate outside [minSourceSampleRate, maxSourceSampleRate].
+	// ErrUnsupportedSource marks a source this package does not decode: a file
+	// whose extension is not a clip format, a non-regular file, or a sample rate
+	// or channel count outside the bounds.
 	ErrUnsupportedSource = errors.NewStd("source audio format is not supported")
 
-	// ErrHEAACSource marks an HE-AAC or HE-AACv2 source (AAC with SBR or PS),
-	// which the native AAC decoder rejects. It wraps ErrUnsupportedSource.
-	ErrHEAACSource = fmt.Errorf("%w: HE-AAC (SBR or PS) is not supported", ErrUnsupportedSource)
-
-	// ErrUndecodableSource marks a source in a supported format that is corrupt,
-	// truncated or empty.
+	// ErrUndecodableSource marks a source that a decoder rejects: corrupt,
+	// truncated, empty, or not what its extension says.
 	ErrUndecodableSource = errors.NewStd("source audio could not be decoded")
 
 	// ErrAudioTooLong marks a source file or a decoded range that exceeds the

@@ -35,8 +35,8 @@ const (
 	maxDecodedPCMBytes = 128 << 20
 
 	// maxSourceFileBytes bounds the stored source file, checked with Stat before
-	// it is opened. It leaves room for a 32-bit WAV that holds maxDecodedPCMBytes
-	// of 16-bit-equivalent audio.
+	// it is opened. It leaves room for a 16-bit WAV that holds maxDecodedPCMBytes
+	// of audio, plus headroom.
 	maxSourceFileBytes = 256 << 20
 
 	// minSourceSampleRate is the lowest source rate accepted. It is the lowest
@@ -44,7 +44,7 @@ const (
 	minSourceSampleRate = audionorm.MinSampleRate
 
 	// maxSourceSampleRate is the highest source rate accepted. It sits above every
-	// bat recorder rate in use and stops a crafted header from sizing per-second
+	// bat recorder rate in use and stops a corrupt header from sizing per-second
 	// scratch, denoiser frames or loudness meters by gigabytes.
 	maxSourceSampleRate = 1_000_000
 
@@ -52,8 +52,8 @@ const (
 	// library default is 256 MiB.
 	maxM4ABoxBytes = 32 << 20
 
-	// maxSourceChannels is the highest channel count accepted.
-	maxSourceChannels = 2
+	// maxSourceChannels is the highest channel count accepted. Clips are mono.
+	maxSourceChannels = 1
 )
 
 // Pipeline timeouts, kept at their values from the FFmpeg-based implementation.

@@ -162,16 +162,16 @@ func TestExtractAudioClipByID_ForwardsStartAndFilters(t *testing.T) {
 func TestExtractAudioClipByID_SourceProblemsAre422(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
-	writeHEAAC(t, fixturePath(tempDir, "he.m4a"))
+	writeLegacyAAC(t, fixturePath(tempDir, "legacy.aac"))
 	writeCorrupt(t, fixturePath(tempDir, "corrupt.flac"))
 	mockDS := mocks.NewMockInterface(t)
-	mockDS.On("GetNoteClipPath", "he").Return("he.m4a", nil)
+	mockDS.On("GetNoteClipPath", "legacy").Return("legacy.aac", nil)
 	mockDS.On("GetNoteClipPath", "corrupt").Return("corrupt.flac", nil)
 	controller.DS = mockDS
 
-	rec := clipRequest(t, e, "he", `{"start": 0, "end": 0.2, "format": "wav"}`)
+	rec := clipRequest(t, e, "legacy", `{"start": 0, "end": 0.2, "format": "wav"}`)
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
-	assert.Contains(t, rec.Body.String(), "HE-AAC")
+	assert.Contains(t, rec.Body.String(), "Source audio format is not supported")
 
 	rec = clipRequest(t, e, "corrupt", `{"start": 0, "end": 0.2, "format": "wav"}`)
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)

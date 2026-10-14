@@ -1,7 +1,6 @@
 package transcode
 
 import (
-	"bytes"
 	"encoding/binary"
 	"math"
 	"os"
@@ -9,11 +8,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	aacpcm "github.com/tphakala/go-aac/pcm"
-	flacpcm "github.com/tphakala/go-flac/pcm"
-	wavpcm "github.com/tphakala/go-wav/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
+	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/mp3"
 	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
 )
@@ -29,6 +27,15 @@ const (
 	lossyBitrateKbps = 128
 	// bitsPerKilobit converts lossyBitrateKbps to bit/s.
 	bitsPerKilobit = 1000
+
+	// Ogg page layout: a fixed 27-byte header whose last byte counts the lacing
+	// values that follow, and whose bytes 6 to 13 hold the granule position.
+	oggHeaderBytes        = 27
+	oggSegmentCountOffset = 26
+	oggGranuleOffset      = 6
+	// opusHeaderPages is the number of pages that hold OpusHead and OpusTags
+	// rather than audio.
+	opusHeaderPages = 2
 )
 
 // tone returns interleaved 16-bit samples of a sine of the given amplitude
@@ -99,66 +106,41 @@ func peakAbs(samples []int16) int {
 	return peak
 }
 
-// writeWAVFile writes 16-bit PCM as a WAV file.
-func writeWAVFile(t *testing.T, path string, samples []int16, rate, channels int) {
+// writeWAVFile writes mono 16-bit PCM as a WAV file through the production writer.
+func writeWAVFile(t *testing.T, path string, samples []int16, rate int) {
 	t.Helper()
-	var buf bytes.Buffer
-	require.NoError(t, wavpcm.EncodeInterleaved(&buf, wavpcm.Config{SampleRate: rate, BitDepth: 16, Channels: channels}, int16Bytes(samples)))
-	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o600))
+	require.NoError(t, convert.SavePCMDataToWAV(path, int16Bytes(samples), rate, outputBitDepth))
 }
 
-// writeFLACFile writes samples as FLAC at the given bit depth. A depth below 16
-// shifts the samples down and a depth above 16 shifts them up, so the signal
-// keeps its level; bytes are packed at ceil(depth/8) per sample.
-func writeFLACFile(t *testing.T, path string, samples []int16, rate, channels, depth int) {
+// writeFLACFile writes mono 16-bit samples as FLAC through the production encoder.
+func writeFLACFile(t *testing.T, path string, samples []int16, rate int) {
 	t.Helper()
-	width := (depth + 7) / 8
-	raw := make([]byte, 0, len(samples)*width)
-	for _, s := range samples {
-		v := int32(s)
-		if depth >= 16 {
-			v <<= depth - 16
-		} else {
-			v >>= 16 - depth
-		}
-		for b := range width {
-			raw = append(raw, byte(v>>(8*b)))
-		}
-	}
-	var buf bytes.Buffer
-	require.NoError(t, flacpcm.EncodeInterleaved(&buf, flacpcm.Config{SampleRate: rate, BitDepth: depth, Channels: channels}, raw))
-	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o600))
-}
-
-// writeADTSFile writes samples as a raw ADTS AAC stream.
-func writeADTSFile(t *testing.T, path string, samples []int16, rate, channels int) {
-	t.Helper()
-	var buf bytes.Buffer
-	require.NoError(t, aacpcm.EncodeInterleaved(&buf, aacpcm.Config{SampleRate: rate, BitDepth: 16, Channels: channels}, int16Bytes(samples)))
-	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o600))
+	require.NoError(t, flac.EncodePCM(t.Context(), &flac.Options{
+		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: 1, BitDepth: outputBitDepth,
+	}))
 }
 
 // writeM4AFile writes samples as AAC-LC in MP4 through the production encoder.
-func writeM4AFile(t *testing.T, path string, samples []int16, rate, channels int) {
+func writeM4AFile(t *testing.T, path string, samples []int16, rate int) {
 	t.Helper()
 	require.NoError(t, aac.EncodePCM(t.Context(), &aac.Options{
-		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: channels, BitDepth: 16, BitrateKbps: lossyBitrateKbps,
+		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: 1, BitDepth: 16, BitrateKbps: lossyBitrateKbps,
 	}))
 }
 
 // writeMP3File writes samples as MP3 through the production encoder.
-func writeMP3File(t *testing.T, path string, samples []int16, rate, channels int) {
+func writeMP3File(t *testing.T, path string, samples []int16, rate int) {
 	t.Helper()
 	require.NoError(t, mp3.EncodePCM(t.Context(), &mp3.Options{
-		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: channels, BitDepth: 16, BitrateKbps: lossyBitrateKbps,
+		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: 1, BitDepth: 16, BitrateKbps: lossyBitrateKbps,
 	}))
 }
 
 // writeOpusFile writes samples as Ogg Opus through the production encoder.
-func writeOpusFile(t *testing.T, path string, samples []int16, rate, channels int) {
+func writeOpusFile(t *testing.T, path string, samples []int16, rate int) {
 	t.Helper()
 	require.NoError(t, opus.EncodePCM(t.Context(), &opus.Options{
-		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: channels, BitDepth: 16, BitrateKbps: 96,
+		PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, Channels: 1, BitDepth: 16, BitrateKbps: 96,
 	}))
 }
 
@@ -166,45 +148,28 @@ func writeOpusFile(t *testing.T, path string, samples []int16, rate, channels in
 type fixture struct {
 	name  string
 	ext   string
-	write func(t *testing.T, path string, samples []int16, rate, channels int)
-	// lossless is true when decoding returns the source samples bit-exactly, apart
-	// from the low bits dropped by quantShift.
+	write func(t *testing.T, path string, samples []int16, rate int)
+	// lossless is true when decoding returns the source samples bit-exactly.
 	lossless bool
-	// quantShift is the number of low bits a narrower sample width discards.
-	quantShift uint
 }
 
-// fixtures lists every source format the decoder supports, with stereo support
-// noted by the caller.
+// fixtures lists every source format the decoder reads, one per clip format.
 func fixtures() []fixture {
-	flacAt := func(depth int) func(*testing.T, string, []int16, int, int) {
-		return func(t *testing.T, path string, s []int16, rate, ch int) {
-			t.Helper()
-			writeFLACFile(t, path, s, rate, ch, depth)
-		}
-	}
 	return []fixture{
 		{name: "wav", ext: ".wav", write: writeWAVFile, lossless: true},
-		{name: "flac16", ext: ".flac", write: flacAt(16), lossless: true},
-		{name: "flac24", ext: ".flac", write: flacAt(24), lossless: true},
-		{name: "flac32", ext: ".flac", write: flacAt(32), lossless: true},
-		{name: "flac8", ext: ".flac", write: flacAt(8), lossless: true, quantShift: 8},
-		{name: "flac12", ext: ".flac", write: flacAt(12), lossless: true, quantShift: 4},
-		{name: "flac20", ext: ".flac", write: flacAt(20), lossless: true},
+		{name: "flac", ext: ".flac", write: writeFLACFile, lossless: true},
 		{name: "mp3", ext: ".mp3", write: writeMP3File},
 		{name: "m4a", ext: ".m4a", write: writeM4AFile},
-		{name: "adts", ext: ".aac", write: writeADTSFile},
 		{name: "opus", ext: ".opus", write: writeOpusFile},
 	}
 }
 
-// writeFixture writes a stereo-or-mono tone in the fixture's format and returns
-// its path.
-func writeFixture(t *testing.T, fx fixture, rate, channels int, seconds float64) (path string, samples []int16) {
+// writeFixture writes a mono tone in the fixture's format and returns its path.
+func writeFixture(t *testing.T, fx fixture, rate int, seconds float64) (path string, samples []int16) {
 	t.Helper()
-	samples = tone(rate, channels, seconds, testToneHz, testAmp)
+	samples = tone(rate, 1, seconds, testToneHz, testAmp)
 	path = filepath.Join(t.TempDir(), "src"+fx.ext)
-	fx.write(t, path, samples, rate, channels)
+	fx.write(t, path, samples, rate)
 	return path, samples
 }
 
@@ -230,16 +195,48 @@ func firstAbove(samples []int16, channels, threshold int) int {
 	return -1
 }
 
-// channelName names a channel count for subtest names.
-func channelName(channels int) string {
-	if channels == 1 {
-		return "mono"
-	}
-	return "stereo"
-}
-
 // writeBytes writes data to path.
 func writeBytes(tb testing.TB, path string, data []byte) {
 	tb.Helper()
 	require.NoError(tb, os.WriteFile(path, data, 0o600))
+}
+
+// oggPages returns the [start, end) byte range of every complete Ogg page in data.
+func oggPages(data []byte) [][2]int {
+	var out [][2]int
+	for off := 0; off+oggHeaderBytes <= len(data); {
+		segments := int(data[off+oggSegmentCountOffset])
+		bodyStart := off + oggHeaderBytes + segments
+		if bodyStart > len(data) {
+			break
+		}
+		end := bodyStart
+		for _, lace := range data[off+oggHeaderBytes : bodyStart] {
+			end += int(lace)
+		}
+		if end > len(data) {
+			break
+		}
+		out = append(out, [2]int{off, end})
+		off = end
+	}
+	return out
+}
+
+// opusPageEnds returns, for each audio page of an Ogg Opus file, the number of
+// decoded frames (pre-skip dropped) that exist once the page is read. The
+// pre-skip is the last granule minus totalFrames, the end-trim of the final page.
+func opusPageEnds(t *testing.T, data []byte, totalFrames int64) []int64 {
+	t.Helper()
+	pages := oggPages(data)
+	require.Greater(t, len(pages), opusHeaderPages)
+	granules := make([]int64, 0, len(pages)-opusHeaderPages)
+	for _, pg := range pages[opusHeaderPages:] {
+		granules = append(granules, int64(binary.LittleEndian.Uint64(data[pg[0]+oggGranuleOffset:]))) //nolint:gosec // G115: a granule position is a signed 64-bit value
+	}
+	preSkip := granules[len(granules)-1] - totalFrames
+	for i := range granules {
+		granules[i] -= preSkip
+	}
+	return granules
 }

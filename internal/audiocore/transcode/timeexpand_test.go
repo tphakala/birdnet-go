@@ -122,7 +122,7 @@ func TestAudibleBats_NormalizesAfterExpansion(t *testing.T) {
 		factor    = 10
 	)
 	path := filepath.Join(t.TempDir(), "bat.wav")
-	writeWAVFile(t, path, tone(batSourceRate, 1, 4, lowToneHz, 0.05), batSourceRate, 1)
+	writeWAVFile(t, path, tone(batSourceRate, 1, 4, lowToneHz, 0.05), batSourceRate)
 
 	data, err := AudibleBats(t.Context(), path, factor, Filters{Normalize: true})
 	require.NoError(t, err)

@@ -1142,8 +1142,6 @@ func expansionFactorMessage() string {
 // anything else, which the caller reports as a 500.
 func transcodeStatus(err error) (status int, message string, ok bool) {
 	switch {
-	case errors.Is(err, transcode.ErrHEAACSource):
-		return http.StatusUnprocessableEntity, "Source audio uses HE-AAC, which is not supported for on-demand processing", true
 	case errors.Is(err, transcode.ErrUnsupportedSource):
 		return http.StatusUnprocessableEntity, "Source audio format is not supported for on-demand processing", true
 	case errors.Is(err, transcode.ErrUndecodableSource):

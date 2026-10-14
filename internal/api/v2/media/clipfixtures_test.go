@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	wavpcm "github.com/tphakala/go-wav/pcm"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 )
 
@@ -49,21 +48,11 @@ func writeToneFLAC(t *testing.T, path string, rate int, seconds, freq float64) {
 	}))
 }
 
-// writeHEAAC writes an m4a whose AudioSpecificConfig declares explicit SBR
-// (audio object type 5), which the native decoder rejects as HE-AAC.
-func writeHEAAC(t *testing.T, path string) {
+// writeLegacyAAC writes a file whose .aac extension is not one of the clip formats,
+// so the transcoder rejects it as an unsupported source.
+func writeLegacyAAC(t *testing.T, path string) {
 	t.Helper()
-	require.NoError(t, aac.EncodePCM(t.Context(), &aac.Options{
-		PCMData: toneBytes(48000, 0.5, fixtureToneHz, fixtureAmp), OutputPath: path, SampleRate: 48000, Channels: 1, BitDepth: 16, BitrateKbps: 96,
-	}))
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path is a test temp path
-	require.NoError(t, err)
-	// DecoderSpecificInfo: tag 0x05, length 2, then the AAC-LC ASC for 48 kHz
-	// mono (0x11 0x88); object type 5 with the same rate and channels is 0x29 0x88.
-	idx := bytes.Index(data, []byte{0x05, 0x02, 0x11, 0x88})
-	require.NotEqual(t, -1, idx, "the esds DecoderSpecificInfo must be findable in the fixture")
-	copy(data[idx+2:], []byte{0x29, 0x88})
-	require.NoError(t, os.WriteFile(path, data, 0o600))
+	require.NoError(t, os.WriteFile(path, bytes.Repeat([]byte{0xFF, 0xF1}, 100), 0o600))
 }
 
 // writeCorrupt writes bytes that carry a FLAC marker but no valid stream.
