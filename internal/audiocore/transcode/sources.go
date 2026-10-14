@@ -178,7 +178,7 @@ func containerFromExtension(path string) container {
 
 // openWAV opens a WAV or RF64 source, converting its samples to 16-bit.
 func openWAV(f *os.File) (*source, error) {
-	dec, err := wavpcm.NewDecoder(f, wavpcm.WithConvertTo(16))
+	dec, err := wavpcm.NewDecoder(f, wavpcm.WithConvertTo(outputBitDepth))
 	if err != nil {
 		return nil, classifyDecodeError("decode_open_wav", err)
 	}
@@ -210,7 +210,7 @@ func openFLAC(f *os.File) (*source, error) {
 		total = int64(info.TotalSamples) //nolint:gosec // G115: bounded by the check above
 	}
 	var reader io.Reader = dec
-	if info.BitDepth != 16 {
+	if info.BitDepth != outputBitDepth {
 		reader = newWidthConverter(dec, info.BitDepth)
 	}
 	return &source{

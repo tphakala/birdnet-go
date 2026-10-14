@@ -13,7 +13,7 @@ import (
 type widthConverter struct {
 	r        io.Reader
 	srcWidth int // bytes per source sample
-	shift    int // bitDepth - 16
+	shift    int // bitDepth - outputBitDepth
 	scratch  []byte
 }
 
@@ -22,7 +22,7 @@ func newWidthConverter(r io.Reader, bitDepth int) *widthConverter {
 	return &widthConverter{
 		r:        r,
 		srcWidth: (bitDepth + 7) / 8,
-		shift:    bitDepth - 16,
+		shift:    bitDepth - outputBitDepth,
 	}
 }
 
