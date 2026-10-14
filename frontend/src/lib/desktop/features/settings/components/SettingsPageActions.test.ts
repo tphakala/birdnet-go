@@ -88,6 +88,19 @@ describe('SettingsPageActions save blocking', () => {
     );
   });
 
+  it('does not save again while a save is already running', async () => {
+    const save = vi.spyOn(settingsActions, 'saveSettings').mockResolvedValue(undefined);
+    makeUnsavedChange();
+    settingsStore.update(state => ({ ...state, isSaving: true }));
+    render(SettingsPageActions);
+
+    const button = screen.getByRole('button', { name: 'settings.actions.savingAriaLabel' });
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    await fireEvent.click(button);
+
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('shows no validation-blocked reason when there is nothing to save', () => {
     settingsValidationErrors.set(['a-key']);
     render(SettingsPageActions);
