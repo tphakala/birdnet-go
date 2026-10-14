@@ -52,7 +52,8 @@ func isLossyExportFormat(format string) bool {
 }
 
 // isLosslessExportFormat reports whether format is one of the lossless containers
-// (WAV or FLAC) that carry any sample rate natively without FFmpeg. It is the
+// (WAV or FLAC) that carry every capture sample rate natively without FFmpeg (FLAC
+// tops out at 655350 Hz, above the highest capture rate). It is the
 // permitted set for Export.UltrasonicType, which stores bat/ultrasonic captures
 // above the analysis rate at full source rate.
 func isLosslessExportFormat(format string) bool {
