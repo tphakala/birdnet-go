@@ -316,9 +316,10 @@ func (o Options) validate(n int) error {
 // eliminated every block (unreachable, because the loudest gated block always
 // exceeds a gate set 10 LU below their mean); or the clip is shorter than one
 // 400 ms block, where loudness is undefined at ANY level. Only that third path
-// breaks the premise, and it cannot arise for whole detection segments, orders
-// of magnitude longer. Even if it did, the true-peak anchor is the tighter bound
-// for a short LOUD clip, so it would still attenuate rather than amplify.
+// breaks the premise. Detection export never reaches it, since its clips are
+// whole segments, but on-demand clip windows can be shorter than 400 ms. Such a
+// window is lifted to its true-peak ceiling, by at most (target - gate) dB, and
+// is attenuated instead when its peak is already above the ceiling.
 //
 // Genuine silence (a true peak of -Inf too) reports false and is left alone;
 // there is nothing to lift.

@@ -6,9 +6,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// Sentinel errors. Errors returned by this package wrap exactly one of these (use
-// errors.Is) together with the underlying decoder error when there is one. Callers
-// map them to HTTP statuses; the sentinels themselves carry no request data.
+// Sentinel errors. Problems with the source or the request wrap one of these (use
+// errors.Is), together with the underlying decoder error when there is one;
+// callers map them to HTTP statuses. Any other error (file access, an encoder or
+// denoiser failure) carries none and is a server fault.
 var (
 	// ErrUnsupportedSource marks a source this package does not decode: a codec
 	// or container outside the supported set, more than two channels, or a sample
