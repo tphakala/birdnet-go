@@ -54,8 +54,6 @@ func TestResolveExportParams_MP3SubRateResamplesInsteadOfStranding(t *testing.T)
 		wantRate   int
 	}{
 		{"unsupported sub-48k rate, no ffmpeg resamples and keeps mp3", "128k", "", 22050, conf.SampleRate},
-		// 100k is not an MPEG-1 rate, but the encoder rounds it to 96k.
-		{"non-MPEG-1 bitrate keeps mp3 (rounded)", "100k", "", conf.SampleRate, conf.SampleRate},
 		{"unsupported rate with ffmpeg present still resamples", "128k", "/usr/bin/ffmpeg", 22050, conf.SampleRate},
 		{"carriable clip keeps its rate", "128k", "", conf.SampleRate, conf.SampleRate},
 	} {

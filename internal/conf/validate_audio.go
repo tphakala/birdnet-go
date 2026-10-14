@@ -65,9 +65,8 @@ func isLosslessExportFormat(format string) bool {
 }
 
 // normalizeAndValidateExportType heals an empty export type to WAV and rejects
-// unknown formats before any fallback runs, so a garbage value cannot be silently
-// rewritten to WAV by the ffmpeg-missing fallback (which would hide the
-// misconfiguration). An empty Type previously produced extension-less clip_name
+// unknown formats, so a garbage value surfaces as a validation error instead of
+// being carried into clip export, where it would fail every save. An empty Type previously produced extension-less clip_name
 // rows in the DB, causing audio download and spectrogram generation to 404
 // (GitHub #2810, #2814). Kept separate from validateAudioSettings to hold that
 // function's cyclomatic complexity down.
@@ -502,34 +501,6 @@ func (s *AudioSettings) clearFfmpegMetadata() {
 	s.FfprobePath = ""
 }
 
-// applyFfmpegFormatFallback forces WAV export when FFmpeg is unavailable and the
-// configured format has no encoder that can run without it. Does nothing when
-// export is disabled.
-func (s *AudioSettings) applyFfmpegFormatFallback() {
-	if s.Export.Enabled && s.FfmpegPath == "" && exportFormatNeedsFFmpeg(s.Export.Type) {
-		GetLogger().Warn("FFmpeg not available, forcing WAV format for audio export",
-			logger.String("previous_type", s.Export.Type))
-		s.Export.Type = AudioExportTypeWAV
-	}
-}
-
-// exportFormatNeedsFFmpeg reports whether a clip export format can only be
-// produced by shelling out to FFmpeg.
-//
-// Every supported export type (WAV, FLAC, AAC, MP3 and Opus) has a native encoder,
-// so none of them needs FFmpeg and none may be downgraded to WAV when it is
-// missing. Getting this wrong is silent, because the downgrade happens during
-// config validation and the operator only sees WAV files appear where they asked
-// for .m4a or .mp3. The default arm only guards an unrecognized type.
-func exportFormatNeedsFFmpeg(exportType string) bool {
-	switch exportType {
-	case AudioExportTypeWAV, AudioExportTypeFLAC, AudioExportTypeOPUS, AudioExportTypeAAC, AudioExportTypeMP3:
-		return false
-	default:
-		return true
-	}
-}
-
 // ffmpegVersionDetector resolves the version of the ffmpeg binary at a validated
 // path by executing it. It is a package variable so unit tests can replace it
 // with a stub. validateAudioSettings runs across many parallel test cases that
@@ -620,8 +591,6 @@ func validateAudioSettings(settings *AudioSettings) error {
 	if err := normalizeAndValidateUltrasonicExportType(&settings.Export); err != nil {
 		return err
 	}
-
-	settings.applyFfmpegFormatFallback()
 
 	// Bitrate only matters for lossy formats and only when export is enabled.
 	if settings.Export.Enabled && IsLossyExportFormat(settings.Export.Type) {

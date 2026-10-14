@@ -1174,8 +1174,8 @@ const audionormMinTargetLUFS = -70.0
 // target and true-peak ceiling fall within audionorm's valid range
 // (-70 < TargetLUFS < 0, ceiling <= 0). Out-of-range configs (unreachable for a
 // validated config, whose targets are clamped) are encoded natively WITHOUT
-// normalization rather than fed values audionorm would mis-handle; FFmpeg is no
-// longer used for FLAC.
+// normalization rather than fed values audionorm would mis-handle; no clip export
+// format uses FFmpeg.
 func audionormSupportsTargets(targetLUFS, truePeakDBTP float64) bool {
 	return targetLUFS < 0 && targetLUFS > audionormMinTargetLUFS && truePeakDBTP <= 0
 }

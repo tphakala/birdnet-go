@@ -492,12 +492,18 @@ func TestResolveExportParams_OddLengthPCMDownsamplesAfterTrimForLossy(t *testing
 		t.Run(lf.format, func(t *testing.T) {
 			a := newExportTestAction(t, "96k")
 			a.pcmData = append(sinePCMAtRate(96000, 0.5, 1000, 8000), 0x7f)
+			require.Equal(t, 1, len(a.pcmData)%2)
 			a.sourceSampleRate = 96000
 			a.Settings.Realtime.Audio.Export.Type = lf.format
 
-			rate, format, _ := a.resolveExportParams(filepath.Join(t.TempDir(), "clip"+lf.ext))
-			assert.Equal(t, conf.SampleRate, rate)
-			assert.Equal(t, lf.format, format)
+			rate, format, path := a.resolveExportParams(filepath.Join(t.TempDir(), "clip"+lf.ext))
+			require.Equal(t, conf.SampleRate, rate)
+			require.Equal(t, lf.format, format)
+			require.Equal(t, 0, len(a.pcmData)%2)
+
+			enc, err := a.encodeClip(t.Context(), rate, format, path)
+			require.NoError(t, err)
+			assert.Equal(t, lf.encoder, enc.Encoder)
 		})
 	}
 }
