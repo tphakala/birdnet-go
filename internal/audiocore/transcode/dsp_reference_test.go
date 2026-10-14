@@ -131,6 +131,7 @@ func TestDenoisePCM_MatchesWholeChannelReference(t *testing.T) {
 		rate     int
 		channels int
 	}
+	stereoSamples, stereoChannels := stereo()
 	cases := []testCase{
 		{name: "mono_48k", samples: longMono(48000), rate: 48000, channels: 1},
 		{name: "mono_44k", samples: longMono(44100), rate: 44100, channels: 1},
@@ -140,9 +141,8 @@ func TestDenoisePCM_MatchesWholeChannelReference(t *testing.T) {
 		{name: "one_chunk_plus_one_frame", samples: head(testRate, chunkFrames+1), rate: testRate, channels: 1},
 		{name: "min_source_rate", samples: tone(minSourceSampleRate, 1, referenceBoundSeconds, testToneHz, testAmp), rate: minSourceSampleRate, channels: 1},
 		{name: "bat_rate", samples: tone(referenceBatRate, 1, referenceBoundSeconds, testToneHz, testAmp), rate: referenceBatRate, channels: 1},
+		{name: "stereo_48k", samples: stereoSamples, rate: testRate, channels: stereoChannels},
 	}
-	stereoSamples, stereoChannels := stereo()
-	cases = append(cases, testCase{name: "stereo_48k", samples: stereoSamples, rate: testRate, channels: stereoChannels})
 
 	for _, tc := range cases {
 		for _, preset := range []string{"light", "medium", "heavy"} {
