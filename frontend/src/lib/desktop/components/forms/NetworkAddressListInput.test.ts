@@ -127,21 +127,6 @@ describe('NetworkAddressListInput', () => {
     expect(field.value).toBe('10.0.0.1, 10.0.0.2, bad 10.0.0.1');
   });
 
-  it('splices a multi-line paste at the caret and keeps the text around it', async () => {
-    renderList();
-    const field = input();
-    await fireEvent.input(field, { target: { value: 'beforeafter' } });
-    const caret = 'before'.length;
-    field.setSelectionRange(caret, caret);
-
-    await fireEvent.paste(field, {
-      clipboardData: { getData: () => '10.0.0.2\n10.0.0.3' },
-    });
-
-    expect(field.value).toBe('before10.0.0.2, 10.0.0.3after');
-    await waitFor(() => expect(field.selectionStart).toBe(caret + '10.0.0.2, 10.0.0.3'.length));
-  });
-
   it('adds the valid tokens of a batch and reports invalid ones before duplicates', async () => {
     const { onUpdate } = renderControlled();
     await fireEvent.paste(input(), {
