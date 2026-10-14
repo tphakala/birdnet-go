@@ -1078,15 +1078,14 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 // with the format it describes.
 const processedAudioFormat = audioformat.WAV
 
-// logTranscodeFailure records which encoder ran and the validated request
+// logTranscodeFailure records the output encoder for the format being produced and the validated request
 // parameters that shaped it. HandleError cannot: handleErrorInternal logs a
 // fixed field set and does not surface an EnhancedError's Context, so without
 // this line a transcode that fails only for one format, or only with a filter
 // chain attached, is invisible in the log file.
 //
-// encoder is recorded for the same reason the clip export records it: "encoder="
-// means the same thing on every path that writes audio, so one grep answers the
-// question across all of them.
+// encoder names the output encoder even when the failure came from decoding or processing, so it does not prove that encoder ran:
+// it identifies the format being produced, whichever stage failed.
 //
 // The error is scrubbed rather than logged raw, matching what apicore does to
 // the same value a statement later. A decoder error can wrap the source file's
