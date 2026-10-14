@@ -12,9 +12,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	dspeq "github.com/tphakala/go-audio-dsp/equalizer"
+
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
-	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -90,7 +91,7 @@ type Route struct {
 	// filterChain holds the current EQ filter chain for this route.
 	// Accessed atomically so it can be swapped without rebuilding the route.
 	// Nil means no EQ filtering is applied.
-	filterChain atomic.Pointer[equalizer.FilterChain]
+	filterChain atomic.Pointer[dspeq.FilterChain]
 
 	// inbox is the bounded channel between Dispatch and the drainer goroutine.
 	inbox chan AudioFrame
@@ -235,7 +236,7 @@ func NewAudioRouter(log logger.Logger, bufMgr *buffer.Manager) *AudioRouter {
 // the consumer ID for logging, metrics, and route lookup. Duplicate IDs on
 // different sources will not cause an error but may produce confusing log
 // output and make RemoveRoute ambiguous.
-func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSampleRate int, gainDB float64, filterChain *equalizer.FilterChain) error {
+func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSampleRate int, gainDB float64, filterChain *dspeq.FilterChain) error {
 	// Reject routes after the router has been closed.
 	if r.ctx.Err() != nil {
 		return fmt.Errorf("router is closed: %w", r.ctx.Err())
@@ -351,7 +352,7 @@ func (r *AudioRouter) RemoveAllRoutes(sourceID string) {
 // FilterChainBuilder creates a FilterChain for a given sample rate.
 // Used by UpdateFilterChain to build per-route chains with correct
 // coefficients and independent biquad state (avoiding data races).
-type FilterChainBuilder func(sampleRate int) *equalizer.FilterChain
+type FilterChainBuilder func(sampleRate int) *dspeq.FilterChain
 
 // UpdateFilterChain atomically replaces the EQ filter chain for every route
 // on the given source. The builder is called once per route with the route's
@@ -367,7 +368,7 @@ func (r *AudioRouter) UpdateFilterChain(sourceID string, build FilterChainBuilde
 		rt.filterChain.Store(chain)
 		filterCount := 0
 		if chain != nil {
-			filterCount = chain.Length()
+			filterCount = chain.Len()
 		}
 		r.log.Debug("EQ filter chain updated",
 			logger.String("source_id", sourceID),
@@ -1003,7 +1004,7 @@ func (p *processingResult) release() {
 // When bufMgr is nil or a pool lookup returns nil, the function falls back to
 // make() with no corresponding Put, preserving legacy behaviour for unit tests
 // that construct routers with a nil Manager.
-func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equalizer.FilterChain) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
+func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *dspeq.FilterChain) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
 	// frame.Data holds a whole number of samples: handleRouteFrame aligns every
 	// PCM16 frame before either processing stage runs, and only PCM16 frames
 	// reach this function, so the align gate covers a strict superset of the
@@ -1045,7 +1046,7 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equ
 
 	// EQ first - filters operate on the original signal shape.
 	if chain != nil {
-		chain.ApplyBatch(floatBuf)
+		chain.ApplyFloat64(floatBuf)
 	}
 
 	// Gain second - scales the (possibly filtered) signal.

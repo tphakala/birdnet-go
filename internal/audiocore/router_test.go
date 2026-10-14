@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
-	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
+	dspeq "github.com/tphakala/go-audio-dsp/equalizer"
 )
 
 // mockConsumer implements AudioConsumer for testing.
@@ -624,9 +624,9 @@ func TestRouter_UpdateFilterChain(t *testing.T) {
 	router.mu.RUnlock()
 
 	// Build a chain via builder and update.
-	router.UpdateFilterChain("src-1", func(sampleRate int) *equalizer.FilterChain {
-		chain := equalizer.NewFilterChain()
-		hp, hpErr := equalizer.NewHighPass(float64(sampleRate), 100, 0.707, 1)
+	router.UpdateFilterChain("src-1", func(sampleRate int) *dspeq.FilterChain {
+		chain := dspeq.NewFilterChain()
+		hp, hpErr := dspeq.NewFilter(dspeq.Band{Type: dspeq.HighPass, Frequency: 100, Q: 0.707, Passes: 1}, sampleRate)
 		require.NoError(t, hpErr)
 		require.NoError(t, chain.AddFilter(hp))
 		return chain
@@ -636,11 +636,11 @@ func TestRouter_UpdateFilterChain(t *testing.T) {
 	routes = router.routes["src-1"]
 	loaded := routes[0].filterChain.Load()
 	assert.NotNil(t, loaded, "chain should be set after update")
-	assert.Equal(t, 1, loaded.Length())
+	assert.Equal(t, 1, loaded.Len())
 	router.mu.RUnlock()
 
 	// Update to nil (disable EQ).
-	router.UpdateFilterChain("src-1", func(_ int) *equalizer.FilterChain {
+	router.UpdateFilterChain("src-1", func(_ int) *dspeq.FilterChain {
 		return nil
 	})
 
@@ -660,8 +660,8 @@ func TestRouter_ApplyProcessing_EQOnly(t *testing.T) {
 	consumer := newMockConsumer("c1")
 
 	// Build a HighPass at 8000 Hz: should strongly attenuate a 100 Hz tone.
-	chain := equalizer.NewFilterChain()
-	hp, err := equalizer.NewHighPass(48000, 8000, 0.707, 2)
+	chain := dspeq.NewFilterChain()
+	hp, err := dspeq.NewFilter(dspeq.Band{Type: dspeq.HighPass, Frequency: 8000, Q: 0.707, Passes: 2}, 48000)
 	require.NoError(t, err)
 	require.NoError(t, chain.AddFilter(hp))
 
@@ -711,15 +711,17 @@ func TestRouter_ApplyProcessing_EQAndGain(t *testing.T) {
 
 	consumer := newMockConsumer("c1")
 
-	// Use a simple LowPass that passes a 100 Hz signal, combined with +6 dB gain.
-	chain := equalizer.NewFilterChain()
-	lp, err := equalizer.NewLowPass(48000, 15000, 0.707, 1)
+	// A -12 dB low shelf at 1 kHz cuts a 100 Hz tone to 0.25x amplitude; the
+	// +6 dB route gain then raises it to ~0.5x. Without the EQ the output would
+	// be ~2x the input and without the gain ~0.25x, so both stages are pinned.
+	chain := dspeq.NewFilterChain()
+	shelf, err := dspeq.NewFilter(dspeq.Band{Type: dspeq.LowShelf, Frequency: 1000, Q: 0.707, GainDB: -12}, 48000)
 	require.NoError(t, err)
-	require.NoError(t, chain.AddFilter(lp))
+	require.NoError(t, chain.AddFilter(shelf))
 
 	require.NoError(t, router.AddRoute("src-both", consumer, 48000, 6.0, chain))
 
-	// 100 Hz sine, well below the 15kHz cutoff: should pass through LowPass.
+	// 100 Hz sine, well below the 1 kHz shelf corner: receives the full -12 dB.
 	const numSamples = 480
 	input := make([]byte, numSamples*2)
 	for i := range numSamples {
@@ -745,11 +747,11 @@ func TestRouter_ApplyProcessing_EQAndGain(t *testing.T) {
 		t.Fatal("timeout waiting for processed frame")
 	}
 
-	// Signal passes through LowPass mostly unchanged, then +6 dB ≈ 2x amplitude.
+	// -12 dB shelf (x0.25) then +6 dB gain (x2) gives x0.5.
 	inputRMS := rmsOfPCM16(input)
 	outputRMS := rmsOfPCM16(received.Data)
-	assert.InDelta(t, inputRMS*2.0, outputRMS, inputRMS*0.5,
-		"output should be ~2x input (6 dB gain) after passing through LowPass")
+	assert.InDelta(t, inputRMS*0.5, outputRMS, inputRMS*0.05,
+		"output should be ~0.5x input (-12 dB shelf then +6 dB gain)")
 }
 
 // BenchmarkApplyProcessing_PoolWarm measures steady-state per-frame allocations

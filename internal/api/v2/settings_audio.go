@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"slices"
 
+	dspeq "github.com/tphakala/go-audio-dsp/equalizer"
+
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -141,7 +143,7 @@ func (c *Controller) handleEqualizerChange(currentSettings *conf.Settings) error
 
 	for _, src := range eng.Registry().List() {
 		displayName := src.DisplayName
-		router.UpdateFilterChain(src.ID, func(sampleRate int) *equalizer.FilterChain {
+		router.UpdateFilterChain(src.ID, func(sampleRate int) *dspeq.FilterChain {
 			return equalizer.ResolveAndBuildFilterChain(currentSettings, displayName, sampleRate)
 		})
 	}
