@@ -24,6 +24,7 @@ describe('resolveLoginRedirect', () => {
       '/ui/detections?species=Robin&offset=0',
     ],
     ['the hash is dropped', '/ui/settings/audio?tab=eq#frag', '/ui/settings/audio?tab=eq'],
+    ['a literal dot segment is resolved', '/ui/a/../settings', '/ui/settings'],
   ])('keeps a valid target: %s', (_name, value, expected) => {
     expect(resolveLoginRedirect(search(value))).toBe(expected);
   });
