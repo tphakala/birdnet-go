@@ -323,9 +323,13 @@ func TestProcessEndpoints_ForwardFilterFields(t *testing.T) {
 		mockDS.On("GetNoteModelType", "32").Return("bird", nil).Maybe()
 
 		plain := postJSON(e, "/api/v2/spectrogram/32/process", `{"gain_db": 0}`)
-		normalized := postJSON(e, "/api/v2/spectrogram/32/process", `{"normalize": true}`)
 		require.Equal(t, http.StatusOK, plain.Code, plain.Body.String())
-		require.Equal(t, http.StatusOK, normalized.Code, normalized.Body.String())
-		assert.NotEqual(t, plain.Body.Bytes(), normalized.Body.Bytes(), "the filters reach the processed spectrogram")
+		// Each filter on its own must change the rendered image, so dropping any
+		// one of them from the handler's filter set fails here.
+		for _, body := range []string{`{"normalize": true}`, `{"denoise": "heavy"}`, `{"gain_db": 12}`} {
+			filtered := postJSON(e, "/api/v2/spectrogram/32/process", body)
+			require.Equal(t, http.StatusOK, filtered.Code, filtered.Body.String())
+			assert.NotEqualf(t, plain.Body.Bytes(), filtered.Body.Bytes(), "filter %s reaches the processed spectrogram", body)
+		}
 	})
 }
