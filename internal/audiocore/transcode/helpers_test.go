@@ -26,8 +26,6 @@ const (
 	lossyBitrateKbps = 128
 	// opusBitrateKbps is the bit rate of the Opus fixtures, in kbit/s.
 	opusBitrateKbps = 96
-	// bitsPerKilobit converts lossyBitrateKbps to bit/s.
-	bitsPerKilobit = 1000
 
 	// Ogg page layout: a fixed 27-byte header whose last byte counts the lacing
 	// values that follow, and whose bytes 6 to 13 hold the granule position.
@@ -280,9 +278,10 @@ func assertWindowsMatchLinear(t *testing.T, path string, starts []int64) {
 	whole, err := decode(t.Context(), path, nil, 0)
 	require.NoError(t, err)
 	total := int64(whole.Frames())
+	rate := float64(whole.SampleRate)
 
 	for _, start := range starts {
-		req := &window{Start: float64(start) / testRate, Duration: float64(seekWindowFrames) / testRate}
+		req := &window{Start: float64(start) / rate, Duration: float64(seekWindowFrames) / rate}
 		frames := min(seekWindowFrames, total-start)
 		want := whole.Data[start*bytesPerSample : (start+frames)*bytesPerSample]
 
@@ -296,7 +295,7 @@ func assertWindowsMatchLinear(t *testing.T, path string, starts []int64) {
 	}
 
 	start := total - tailOverrunFrames
-	win, err := decode(t.Context(), path, &window{Start: float64(start) / testRate, Duration: 1}, 0)
+	win, err := decode(t.Context(), path, &window{Start: float64(start) / rate, Duration: 1}, 0)
 	require.NoError(t, err)
 	assert.True(t, bytes.Equal(whole.Data[start*bytesPerSample:], win.Data), "a window past the end returns exactly the tail")
 }

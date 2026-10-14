@@ -58,7 +58,8 @@ type window struct {
 //
 // The decoder is chosen by the file extension. Source and request problems wrap
 // one of the package sentinels; context errors pass through, and file access
-// errors carry no sentinel.
+// errors carry no sentinel (except a failed read of M4A frame data, which
+// go-m4a reports as corrupt data).
 func decode(ctx context.Context, path string, win *window, maxBytes int) (*pcmBuffer, error) {
 	return decodeAtLeast(ctx, path, win, maxBytes, 0)
 }

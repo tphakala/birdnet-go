@@ -84,6 +84,31 @@ func TestDecode_M4AWindowsMatchTheLinearDecode(t *testing.T) {
 	assertWindowsMatchLinear(t, path, starts)
 }
 
+// The AAC writer also runs at 44.1 kHz, where a frame index does not map to a
+// whole number of nanoseconds, so the seek's time rounding must still land on
+// the frame the forward path discards to.
+func TestDecode_M4AWindowsMatchTheLinearDecodeAt44k(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "cd.m4a")
+	writeEncoded(t, audioformat.AAC, lossyBitrateKbps, path, tone(referenceCDRate, 1, testSeconds, testToneHz, testAmp), referenceCDRate)
+	total := int64(decodedFrames(t, path))
+	assertWindowsMatchLinear(t, path, []int64{1, aaccodec.FrameSize + 1, m4aMidFileFrame + 1, total - 1})
+}
+
+// A seek to the end of the track reports a frame below the target, which
+// positionSource turns into an empty range, rather than an error.
+func TestOpenM4A_SeekPastTheEndLandsShort(t *testing.T) {
+	t.Parallel()
+
+	path, _ := writeFixture(t, fixtureNamed(t, "m4a"), testRate, testSeconds)
+	src := openTestSource(t, path)
+	require.Positive(t, src.totalFrames)
+	landed, err := src.seek(src.totalFrames + 1)
+	require.NoError(t, err)
+	assert.Less(t, landed, src.totalFrames+1)
+}
+
 // patchEncoderDelay rewrites the media_time of the first version 0 elst entry.
 func patchEncoderDelay(t *testing.T, data []byte, mediaTime uint32) []byte {
 	t.Helper()

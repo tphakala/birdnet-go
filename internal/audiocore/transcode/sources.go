@@ -179,12 +179,9 @@ func openM4A(f *os.File) (*source, error) {
 	seek := func(frame int64) (int64, error) {
 		// The decoder output is not edit-list aware: SeekTime puts the next byte at
 		// the decoded sample EncoderDelay + frame, the index the forward path
-		// discards to. A time beyond the end, or too large for a time.Duration, is
-		// past the end of the audio.
+		// discards to. A time beyond the end is past the end of the audio. frame is
+		// at most maxWindowFrames, so the time fits a time.Duration.
 		ns := math.Round(float64(frame) / float64(info.SampleRate) * float64(time.Second))
-		if ns >= math.MaxInt64 {
-			return 0, nil
-		}
 		if err := dec.SeekTime(time.Duration(ns)); err != nil {
 			if errors.Is(err, m4a.ErrOutOfRange) {
 				return 0, nil
@@ -224,7 +221,9 @@ func openMP3(f *os.File) (*source, error) {
 // decodeError classifies an error from a decoder library. A failed read of the
 // file itself (an *fs.PathError in the chain) is a server fault and carries no
 // sentinel; anything else means the clip BirdNET-Go wrote is damaged and wraps
-// ErrUndecodableSource.
+// ErrUndecodableSource. go-m4a reports a failed read of M4A frame data as
+// corrupt data with the cause as text only, so that one still lands here as
+// undecodable.
 func decodeError(operation string, err error) error {
 	if _, ok := errors.AsType[*fs.PathError](err); ok {
 		return wrapError(err, errors.CategoryFileIO, operation)

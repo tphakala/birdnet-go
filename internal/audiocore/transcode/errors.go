@@ -9,7 +9,9 @@ import (
 // Sentinel errors. Problems with the source or the request wrap one of these (use
 // errors.Is), together with the underlying decoder error when there is one;
 // callers map them to HTTP statuses. Any other error (file access, an encoder or
-// denoiser failure) carries none and is a server fault.
+// denoiser failure) carries none and is a server fault. The one exception is a
+// failed read of M4A frame data, which go-m4a reports as corrupt data, so it
+// wraps ErrUndecodableSource.
 var (
 	// ErrUnsupportedSource marks a source this package does not decode: a file
 	// whose extension is not a clip format, a non-regular file, or a sample rate
