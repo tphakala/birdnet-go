@@ -166,8 +166,10 @@ func EncodePCM(ctx context.Context, opts *Options) error {
 	// copy is made.
 	pcm := pcmgain.Applied(opts.PCMData, opts.GainDB)
 
-	// go-mp3/pcm draws its encoder from an internal pool and streams frames as it
-	// goes, so the encoded stream is never held in memory whole.
+	// EncodeInterleaved writes a leading Xing/Info and LAME gapless tag, whose
+	// frame count is known only once the clip is encoded, so it encodes into
+	// memory and writes the stream once. The encoded stream is far smaller than
+	// the PCM this call already holds.
 	// WriteFile classifies its own filesystem failures and passes a cancelled
 	// context through raw. The payload write happens in here though, so a write
 	// fault surfacing through the codec is classified as file I/O rather than

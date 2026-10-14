@@ -294,8 +294,8 @@ github.com/tphakala/go-hls v0.1.0 h1:bLJMJYV1b4FGXsjkQXdtsU9CWHEjdaON5dGLZeqWebc
 github.com/tphakala/go-hls v0.1.0/go.mod h1:/s06WIf8A9M0xVcCf92276IuMBYvLIX+ljtTfjQ5OyU=
 github.com/tphakala/go-m4a v0.7.0 h1:XRHyluz8HHTsKgzh8DGsIZbiJX3LfCvwhBZFUgivyWE=
 github.com/tphakala/go-m4a v0.7.0/go.mod h1:gvAHt12fiA4nlJ6WymOda/AfV2j05aTFQbj5LYfOA/c=
-github.com/tphakala/go-mp3 v0.1.0 h1:3nY1WwY3E9lSK22d1AtaAvQXqMSfDQlPtqD+Ym/Yc+c=
-github.com/tphakala/go-mp3 v0.1.0/go.mod h1:h8c9IC7aD14TKrq+hnjOMd31B+0GLXtX9TJXXNItisg=
+github.com/tphakala/go-mp3 v0.2.0 h1:lioFkfigl+cJH1moF+unA/35WcfOFYvfsAnzhFQqMcM=
+github.com/tphakala/go-mp3 v0.2.0/go.mod h1:wJYpJc1F7LMD80kZtjSNtQLsRBqWb7APCDEwGcvuxR8=
 github.com/tphakala/go-opus v1.1.0 h1:SbXQjwI/ZYy6wPXd0fafLTurkUbAhBpaYnvXYtn8uIo=
 github.com/tphakala/go-opus v1.1.0/go.mod h1:57hQHipntY2+xK7sycF4CYVSXDLW3V+AiX77iOJlojQ=
 github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7 h1:fJtEs8rODoFDk8HDRwvNxIYEgsUUrEAvqPdllxF0cmg=

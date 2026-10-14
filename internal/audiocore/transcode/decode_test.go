@@ -17,6 +17,7 @@ import (
 	flac "github.com/tphakala/go-flac"
 	m4a "github.com/tphakala/go-m4a"
 	mp3 "github.com/tphakala/go-mp3"
+	mp3pcm "github.com/tphakala/go-mp3/pcm"
 	wav "github.com/tphakala/go-wav"
 	wavpcm "github.com/tphakala/go-wav/pcm"
 
@@ -34,6 +35,10 @@ const (
 	// onsetTolerance is how many frames the first loud sample of a trimmed M4A
 	// decode may sit from the source's.
 	onsetTolerance = 40
+	// lossyBitrate is the bit rate, in bit/s, of the tagless MP3 fixture.
+	lossyBitrate = 128_000
+	// mp3FrameSamples is the number of samples in one MPEG-1 Layer III frame.
+	mp3FrameSamples = 1152
 	// burstThreshold marks the first loud sample of a burst, above any codec
 	// pre-echo.
 	burstThreshold = 4000
@@ -62,8 +67,8 @@ func TestDecode_RoundTripPerFormat(t *testing.T) {
 					return
 				}
 				assert.InDelta(t, len(src)/channels, pcm.Frames(), lossyFrameSlack)
-				if fx.name == "m4a" || fx.name == "opus" {
-					assert.Equal(t, len(src)/channels, pcm.Frames(), "edit-list and pre-skip trimming make the length exact")
+				if fx.name == "m4a" || fx.name == "opus" || fx.name == "mp3" {
+					assert.Equal(t, len(src)/channels, pcm.Frames(), "edit-list, pre-skip and gapless-tag trimming make the length exact")
 				}
 				for ch := range channels {
 					x := channelOf(got, channels, ch)
@@ -72,6 +77,25 @@ func TestDecode_RoundTripPerFormat(t *testing.T) {
 			})
 		}
 	}
+}
+
+// MP3 clips written before the gapless tag existed carry no tag, so their
+// priming is kept as it always was.
+func TestDecode_TaglessMP3KeepsItsPriming(t *testing.T) {
+	t.Parallel()
+
+	src := tone(testRate, 1, testSeconds, testToneHz, testAmp)
+	var buf bytes.Buffer
+	require.NoError(t, mp3pcm.EncodeInterleaved(&buf, mp3pcm.Config{
+		SampleRate: testRate, Channels: 1, Bitrate: lossyBitrate, OmitGaplessTag: true,
+	}, int16Bytes(src)))
+	path := filepath.Join(t.TempDir(), "tagless.mp3")
+	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o600))
+
+	pcm, err := decode(t.Context(), path, nil, 0)
+	require.NoError(t, err)
+	assert.Greater(t, pcm.Frames(), len(src), "without a tag the encoder priming stays in the decode")
+	assert.InDelta(t, len(src)+mp3.TotalDelay, pcm.Frames(), mp3FrameSamples)
 }
 
 func TestDecode_M4ATrimsPrimingAndPadding(t *testing.T) {
