@@ -508,6 +508,56 @@ func TestResolveExportParams_OddLengthPCMDownsamplesAfterTrimForLossy(t *testing
 	}
 }
 
+// The lossless formats get the same trim: the WAV writer and go-flac both reject a
+// buffer that is not a whole number of frames, so a trailing partial sample must
+// not cost a WAV or FLAC clip at any rate, bat or not, resampled or not.
+func TestResolveExportParams_OddLengthPCMEncodesForLossless(t *testing.T) {
+	lossless := []struct {
+		format  string
+		ext     string
+		encoder string
+	}{
+		{ffmpeg.FormatWAV, ".wav", clipenc.NativeWAV},
+		{ffmpeg.FormatFLAC, ".flac", clipenc.NativeFLAC},
+	}
+	cases := []struct {
+		name     string
+		bat      bool
+		rate     int
+		wantRate int
+	}{
+		{"at the analysis rate", false, conf.SampleRate, conf.SampleRate},
+		{"below the analysis rate", false, 22050, 22050},
+		{"above the analysis rate downsamples", false, 96000, conf.SampleRate},
+		{"bat below the analysis rate", true, 22050, 22050},
+		{"bat above the analysis rate keeps its rate", true, 96000, 96000},
+	}
+	for _, lf := range lossless {
+		for _, tc := range cases {
+			t.Run(lf.format+"_"+tc.name, func(t *testing.T) {
+				a := newExportTestAction(t, "96k")
+				if tc.bat {
+					a.modelName = batModelName
+				}
+				a.pcmData = append(sinePCMAtRate(tc.rate, 0.5, 1000, 8000), 0x7f)
+				require.Equal(t, 1, len(a.pcmData)%2)
+				a.sourceSampleRate = tc.rate
+				a.Settings.Realtime.Audio.Export.Type = lf.format
+				a.Settings.Realtime.Audio.Export.UltrasonicType = lf.format
+
+				rate, format, path := a.resolveExportParams(filepath.Join(t.TempDir(), "clip"+lf.ext))
+				require.Equal(t, tc.wantRate, rate)
+				require.Equal(t, lf.format, format)
+				require.Equal(t, 0, len(a.pcmData)%2)
+
+				enc, err := a.encodeClip(t.Context(), rate, format, path)
+				require.NoError(t, err)
+				assert.Equal(t, lf.encoder, enc.Encoder)
+			})
+		}
+	}
+}
+
 // When the resample cannot run at all (a source rate the resampler rejects), an AAC
 // or MP3 clip is neither routed to FFmpeg nor written as WAV: the format and
 // extension stay, the encoder rejects the unsupported rate, and the export fails

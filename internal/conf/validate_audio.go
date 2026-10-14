@@ -38,11 +38,11 @@ const (
 	AudioExportTypeOPUS = "opus" // Lossy compressed audio
 )
 
-// IsLossyExportFormat reports whether an export format is a lossy codec that needs
-// a bitrate (and, for clip export, a native encoder with no fallback). AAC, Opus and MP3 are lossy; WAV and FLAC are lossless and ignore the
+// isLossyExportFormat reports whether an export format is a lossy codec that needs
+// a bitrate. AAC, Opus and MP3 are lossy; WAV and FLAC are lossless and ignore the
 // bitrate. Callers gate bitrate defaulting and validation on this instead of
 // repeating the AAC/OPUS/MP3 set.
-func IsLossyExportFormat(format string) bool {
+func isLossyExportFormat(format string) bool {
 	switch format {
 	case AudioExportTypeAAC, AudioExportTypeOPUS, AudioExportTypeMP3:
 		return true
@@ -593,7 +593,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 	}
 
 	// Bitrate only matters for lossy formats and only when export is enabled.
-	if settings.Export.Enabled && IsLossyExportFormat(settings.Export.Type) {
+	if settings.Export.Enabled && isLossyExportFormat(settings.Export.Type) {
 		if err := validateExportBitrate(settings.Export.Type, settings.Export.Bitrate); err != nil {
 			return err
 		}
