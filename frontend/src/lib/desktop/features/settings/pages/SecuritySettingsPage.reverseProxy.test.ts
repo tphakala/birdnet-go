@@ -126,14 +126,14 @@ describe('SecuritySettingsPage reverse proxy wiring', () => {
   it('marks the Server tab for a list change without the TLS restart note', async () => {
     seedSecurity({ trustedProxies: [] });
     render(SecuritySettingsPage);
-    expect(within(serverTab()).queryByRole('status')).toBeNull();
+    expect(serverTab()).not.toHaveAttribute('aria-describedby');
 
     const field = screen.getByRole('textbox', { name: 'settings.security.reverseProxy.listLabel' });
     await fireEvent.input(field, { target: { value: '172.18.0.1' } });
     await fireEvent.keyDown(field, { key: 'Enter' });
 
     expect(formSecurity().trustedProxies).toEqual(['172.18.0.1']);
-    expect(within(serverTab()).getByRole('status')).toBeInTheDocument();
+    expect(serverTab()).toHaveAccessibleDescription('settings.tabs.hasChanges');
     expect(screen.queryByText('settings.security.tls.restartRequired')).toBeNull();
   });
 
