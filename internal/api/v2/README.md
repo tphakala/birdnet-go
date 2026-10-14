@@ -185,7 +185,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/spectrogram/:id/process`           | `ProcessedSpectrogramByID` | ✅   | Spectrogram of denoised/normalized clip |
 
 **On-demand clip processing.** `clip`, `process`, `audible-bats` and the processed
-spectrogram decode the stored clip and process it in Go; none of them needs FFmpeg.
+spectrogram decode the stored clip and process it in Go without FFmpeg; the processed spectrogram is then rendered by the spectrogram generator (SoX, with an FFmpeg fallback).
 `clip` accepts the formats `wav`, `flac`, `mp3`, `aac` (served as `.m4a`) and `opus`
 (served as `.ogg`); any other value answers **400**. Filters apply
 in the order denoise (`light`, `medium`, `heavy`), loudness normalization, gain
