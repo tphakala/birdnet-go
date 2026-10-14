@@ -433,9 +433,11 @@ var lossyNativeFormats = []struct {
 
 // Fixture values shared by the odd-length export tests.
 const (
+	// testBitsPerByte converts conf.BitDepth to bytes.
+	testBitsPerByte = 8
 	// testPCMFrameBytes is the size of one interleaved PCM frame in the export
 	// pipeline, the unit trimPartialSample trims to.
-	testPCMFrameBytes = conf.BitDepth / 8 * conf.NumChannels
+	testPCMFrameBytes = conf.BitDepth / testBitsPerByte * conf.NumChannels
 	// strayPCMByte is appended to a whole-frame buffer to leave a partial frame.
 	strayPCMByte = 0x7f
 	// testSubAnalysisRate is a capture rate below the analysis rate.
