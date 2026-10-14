@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	aacpcm "github.com/tphakala/go-aac/pcm"
 	flac "github.com/tphakala/go-flac"
+	flacpcm "github.com/tphakala/go-flac/pcm"
 	m4a "github.com/tphakala/go-m4a"
 	mp3 "github.com/tphakala/go-mp3"
 	mp3pcm "github.com/tphakala/go-mp3/pcm"
@@ -37,6 +39,9 @@ const (
 	// burstThreshold marks the first loud sample of a burst, above any codec
 	// pre-echo.
 	burstThreshold = 4000
+	// narrowingSampleBits sets every bit below the top 16 of a deep FLAC sample
+	// fixture, so truncation and rounding disagree on every sample.
+	narrowingSampleBits = 0x5A5A5A5A
 )
 
 func TestDecode_RoundTripPerFormat(t *testing.T) {
@@ -626,5 +631,40 @@ func TestDecode_AcceptsTheSourceRateBounds(t *testing.T) {
 		pcm, err := decode(t.Context(), path, nil, 0)
 		require.NoError(t, err, "rate %d", rate)
 		assert.Equal(t, rate, pcm.SampleRate)
+	}
+}
+
+// A FLAC deeper than 16 bits is narrowed by truncation (an arithmetic right
+// shift), as the hand-written converter did before, also when the low bits are
+// set and for negative samples.
+func TestDecode_FLACNarrowingTruncates(t *testing.T) {
+	t.Parallel()
+
+	for _, depth := range []int{20, 24, 32} {
+		t.Run(fmt.Sprintf("%dbit", depth), func(t *testing.T) {
+			t.Parallel()
+			width := (depth + 7) / 8
+			shift := 32 - depth
+			const samples = testRate / 10
+			raw := make([]byte, 0, samples*width)
+			want := make([]int16, 0, samples)
+			for i := range samples {
+				// Spread the samples over the full range of the depth, both signs,
+				// with the low bits all set to the fixture pattern.
+				v := int32(uint32(i)*narrowingSampleBits) >> shift //nolint:gosec // G115: intentional wraparound to spread the samples
+				for b := range width {
+					raw = append(raw, byte(v>>(8*b)))
+				}
+				want = append(want, int16(v>>(depth-16))) //nolint:gosec // G115: the shifted value fits in 16 bits
+			}
+			var buf bytes.Buffer
+			require.NoError(t, flacpcm.EncodeInterleaved(&buf, flacpcm.Config{SampleRate: testRate, BitDepth: depth, Channels: 1}, raw))
+			path := filepath.Join(t.TempDir(), "deep.flac")
+			writeBytes(t, path, buf.Bytes())
+
+			pcm, err := decode(t.Context(), path, nil, 0)
+			require.NoError(t, err)
+			assert.Equal(t, want, bytesInt16(pcm.Data), "each sample must be the source value shifted right by depth-16")
+		})
 	}
 }
