@@ -39,8 +39,9 @@ const (
 	// burstThreshold marks the first loud sample of a burst, above any codec
 	// pre-echo.
 	burstThreshold = 4000
-	// narrowingSampleBits sets every bit below the top 16 of a deep FLAC sample
-	// fixture, so truncation and rounding disagree on every sample.
+	// narrowingSampleBits is multiplied by the sample index to spread a deep FLAC
+	// fixture over the whole range with varied low bits, so truncation and
+	// rounding disagree on about half of the samples.
 	narrowingSampleBits = 0x5A5A5A5A
 )
 
@@ -650,7 +651,7 @@ func TestDecode_FLACNarrowingTruncates(t *testing.T) {
 			want := make([]int16, 0, samples)
 			for i := range samples {
 				// Spread the samples over the full range of the depth, both signs,
-				// with the low bits all set to the fixture pattern.
+				// with low bits that vary from sample to sample.
 				v := int32(uint32(i)*narrowingSampleBits) >> shift //nolint:gosec // G115: intentional wraparound to spread the samples
 				for b := range width {
 					raw = append(raw, byte(v>>(8*b)))
