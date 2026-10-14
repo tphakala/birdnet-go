@@ -39,16 +39,22 @@ func TestCollectRuntimeEnvRedactsASensitiveKey(t *testing.T) {
 // setting it, which also pins that allowlist entry.
 const retiredGate = "BIRDNET_MP3_ENCODER"
 
+// retiredAACGate is the AAC counterpart of retiredGate, pinned on its own so
+// removing either historical name from the allowlist fails a test.
+const retiredAACGate = "BIRDNET_AAC_ENCODER"
+
 // TestCollectRuntimeEnvCapturesAllowlistedGates covers the case the feature
 // exists for: a dump that arrives without a clip export in the captured log
 // window must still reveal a retired gate the operator still sets.
 func TestCollectRuntimeEnvCapturesAllowlistedGates(t *testing.T) {
 	t.Setenv(retiredGate, "native")
+	t.Setenv(retiredAACGate, "native")
 
 	env := newTestCollector().collectRuntimeEnv(conf.SupportEnvAllowlist())
 
 	require.NotNil(t, env)
 	assert.Equal(t, "native", env[retiredGate])
+	assert.Equal(t, "native", env[retiredAACGate])
 	assert.NotContains(t, env, "BIRDNET_HLS_ENCODER",
 		"an unset allowlisted variable must be absent, not present with an empty value")
 }
