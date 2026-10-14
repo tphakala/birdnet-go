@@ -255,6 +255,22 @@ describe('navigation store', () => {
       );
     });
 
+    it('maps the backend login redirect to the login route and keeps the query', () => {
+      Object.defineProperty(window, 'location', {
+        value: { pathname: '/login', search: '?redirect=%2Fui%2Fsettings', hash: '' },
+        writable: true,
+        configurable: true,
+      });
+      const nav = createNavigation();
+      expect(nav.currentPath).toBe('/ui/login');
+      expect(nav.currentSearch).toBe('?redirect=%2Fui%2Fsettings');
+      expect(window.history.replaceState).toHaveBeenCalledWith(
+        {},
+        '',
+        '/ui/login?redirect=%2Fui%2Fsettings'
+      );
+    });
+
     it('should initialize with normalized path', () => {
       Object.defineProperty(window, 'location', {
         value: { pathname: '/ui/dashboard', search: '', hash: '' },
@@ -340,5 +356,25 @@ describe('navigation store with proxy prefix', () => {
       '',
       '/proxy/ui/detections/123?tab=review'
     );
+  });
+  it('maps a prefixed login redirect to the prefixed login route', async () => {
+    const { buildAppUrl, getAppBasePath } = await import('$lib/utils/urlHelpers');
+    vi.mocked(getAppBasePath).mockImplementation(() => '/proxy');
+    vi.mocked(buildAppUrl).mockImplementation((path: string) => `/proxy${path}`);
+    Object.defineProperty(window, 'location', {
+      value: { pathname: '/proxy/login', search: '?redirect=%2Fui%2Fsettings', hash: '' },
+      writable: true,
+      configurable: true,
+    });
+
+    const nav = createNavigation();
+
+    expect(nav.currentPath).toBe('/ui/login');
+    expect(window.history.replaceState).toHaveBeenCalledWith(
+      {},
+      '',
+      '/proxy/ui/login?redirect=%2Fui%2Fsettings'
+    );
+    vi.mocked(getAppBasePath).mockImplementation(() => '');
   });
 });

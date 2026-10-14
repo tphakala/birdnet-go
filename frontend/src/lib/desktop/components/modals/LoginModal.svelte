@@ -33,7 +33,13 @@
 
   interface Props {
     isOpen: boolean;
+    /** Called when the dialog closes, including after a successful login. */
     onClose: () => void;
+    /**
+     * Called when the user dismisses the dialog (close button, backdrop, Escape);
+     * defaults to onClose. A successful login still calls onClose.
+     */
+    onCancel?: () => void;
     redirectUrl?: string;
     authConfig?: AuthConfig;
   }
@@ -41,6 +47,7 @@
   let {
     isOpen = false,
     onClose,
+    onCancel,
     // Empty by default so an omitted prop falls through to the proxy-aware
     // getUiBasePath() fallback instead of a hardcoded '/ui/' that ignores any
     // reverse-proxy prefix.
@@ -50,6 +57,10 @@
       enabledProviders: [],
     },
   }: Props = $props();
+
+  function cancel() {
+    (onCancel ?? onClose)();
+  }
 
   let password = $state('');
   let error = $state('');
@@ -286,7 +297,7 @@
           }
         } else if (e.key === 'Escape') {
           e.preventDefault();
-          onClose();
+          cancel();
         }
       };
 
@@ -331,7 +342,7 @@
       <button
         type="button"
         class="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
-        onclick={onClose}
+        onclick={cancel}
         disabled={isAnyLoading}
         aria-label="Close login dialog"
       >
@@ -441,8 +452,8 @@
 
     <div
       class="modal-backdrop bg-black/50"
-      onclick={onClose}
-      onkeydown={e => e.key === 'Escape' && onClose()}
+      onclick={cancel}
+      onkeydown={e => e.key === 'Escape' && cancel()}
       role="button"
       tabindex="-1"
       aria-label="Close modal"
