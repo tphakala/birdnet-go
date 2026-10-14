@@ -412,6 +412,11 @@ Source: Unknown
 License: https://github.com/tphakala/go-aac/blob/v0.7.0/LICENSE
 Source: LGPL-2.1
 
+### github.com/tphakala/go-audio-dsp
+
+License: https://github.com/tphakala/go-audio-dsp/blob/v0.1.0/LICENSE
+Source: Apache-2.0
+
 ### github.com/tphakala/go-audio-resampler
 
 License: https://github.com/tphakala/go-audio-resampler/blob/v1.7.0/LICENSE
