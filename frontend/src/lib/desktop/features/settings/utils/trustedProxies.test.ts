@@ -93,7 +93,11 @@ describe('recombineTrustedProxies', () => {
   });
 
   it('ignores blank entries passed in the rows, so the saved list is returned unchanged', () => {
-    expect(recombineTrustedProxies(['10.0.0.1', ' '], false, ['10.0.0.1'])).toEqual(['10.0.0.1']);
+    // The saved list keeps its own blank entry, so only the identity return can produce it.
+    expect(recombineTrustedProxies(['10.0.0.1', ' '], false, ['10.0.0.1', ''])).toEqual([
+      '10.0.0.1',
+      '',
+    ]);
   });
 
   it('puts the token back at its saved index, in its saved spelling, after a real change', () => {
