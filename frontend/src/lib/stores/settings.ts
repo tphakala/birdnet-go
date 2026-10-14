@@ -520,6 +520,13 @@ export interface SecuritySettings {
     liveAudio: boolean;
   };
   privateMode?: boolean;
+  /**
+   * Reverse proxies whose forwarded client-IP headers are honored for
+   * authentication decisions such as the subnet bypass (security.trustedProxies).
+   * Each entry is an IPv4 or IPv6 address, a CIDR, or the reserved `cloudflare`
+   * preset token. Coercion turns a missing or null value into `[]`.
+   */
+  trustedProxies?: string[];
 }
 
 // Legacy OAuth settings interface (deprecated)
@@ -1134,6 +1141,7 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
         enabled: false,
         subnet: '',
       },
+      trustedProxies: [],
     },
     sentry: {
       enabled: false,
@@ -1192,6 +1200,47 @@ export const hasUnsavedChanges = derived(
 
 // Validation errors store - pages can add errors to prevent saving
 export const settingsValidationErrors = writable<string[]>([]);
+
+/**
+ * Optional translated, human-readable reasons for entries of settingsValidationErrors,
+ * keyed by the entry. The save bar lists the reason of every active entry that has
+ * one, so a page can say which tab and field blocks saving. Pages that set a reason
+ * remove it together with the entry.
+ */
+export const settingsValidationReasons = writable<ReadonlyMap<string, string>>(new Map());
+
+/**
+ * Replaces the validation entries a page owns. `ownedKeys` are all the keys the page
+ * may set; `active` maps the ones that apply now to their reason (entries of `active`
+ * outside `ownedKeys` are ignored). Both stores are
+ * written together, and neither is written when it would not change, so a page can
+ * call this from an effect without waking the save bar. Pass an empty map to clear.
+ */
+export function setValidationIssues(
+  ownedKeys: readonly string[],
+  active: ReadonlyMap<string, string>
+): void {
+  // Keys the caller does not own are ignored, so they can neither leak into the
+  // stores nor be listed twice.
+  const owned = [...active].filter(([key]) => ownedKeys.includes(key));
+  const errors = get(settingsValidationErrors);
+  const nextErrors = [
+    ...errors.filter(key => !ownedKeys.includes(key)),
+    ...owned.map(([key]) => key),
+  ];
+  if (nextErrors.length !== errors.length || !nextErrors.every(key => errors.includes(key))) {
+    settingsValidationErrors.set(nextErrors);
+  }
+
+  const reasons = get(settingsValidationReasons);
+  const nextReasons = new Map(reasons);
+  for (const key of ownedKeys) nextReasons.delete(key);
+  for (const [key, reason] of owned) nextReasons.set(key, reason);
+  const reasonsUnchanged =
+    nextReasons.size === reasons.size &&
+    [...nextReasons].every(([key, reason]) => reasons.get(key) === reason);
+  if (!reasonsUnchanged) settingsValidationReasons.set(nextReasons);
+}
 
 export const currentSection = derived(settingsStore, $store => $store.activeSection);
 

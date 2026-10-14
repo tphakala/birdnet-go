@@ -77,6 +77,9 @@ func (c *Controller) initSettingsRoutes() {
 	settingsGroup.GET("/imageproviders", c.GetImageProviders)
 	// GET /api/v2/settings/systemid - Retrieves the system ID for support tracking (must be before /:section)
 	settingsGroup.GET("/systemid", c.GetSystemID)
+	// GET /api/v2/settings/connection - Classifies the requester's own connection against
+	// security.trustedProxies (read-only, must be before /:section)
+	settingsGroup.GET("/connection", c.GetConnectionCheck)
 	// GET /api/v2/settings/:section - Retrieves settings for a specific section (e.g., birdnet, webserver)
 	// NOTE: /settings/dashboard is intentionally registered publicly above and
 	// will match before this parameterized route.

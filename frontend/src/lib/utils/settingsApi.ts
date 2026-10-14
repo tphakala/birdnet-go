@@ -31,6 +31,43 @@ export interface TLSCertificateInfo {
   fingerprint?: string;
 }
 
+/**
+ * How the requester's own connection relates to security.trustedProxies, as
+ * reported by GET /api/v2/settings/connection:
+ * - `direct`: no client-IP header, the peer is the client.
+ * - `trusted_proxy`: the peer is a listed proxy and one client address was verified.
+ * - `trusted_proxy_unverified`: the peer is listed but its headers could not be verified.
+ * - `untrusted_public_proxy`: a public peer sent client-IP headers; never offered for trust.
+ * - `untrusted_proxy`: a local (loopback, link-local, private, CGNAT) peer sent client-IP
+ *   headers and listing it would verify them.
+ * - `untrusted_proxy_unverifiable`: headers were sent that listing the peer would not
+ *   verify, or the peer address was unparseable.
+ */
+export type ConnectionStatus =
+  | 'direct'
+  | 'trusted_proxy'
+  | 'trusted_proxy_unverified'
+  | 'untrusted_public_proxy'
+  | 'untrusted_proxy'
+  | 'untrusted_proxy_unverifiable';
+
+/** Response of GET /api/v2/settings/connection; describes the saved settings and the current request only. */
+export interface ConnectionCheckResult {
+  status: ConnectionStatus;
+  /** The connection peer, or an empty string when it could not be parsed. */
+  peerAddress: string;
+  /** Whether the request carries any client-IP header. */
+  hasForwardedHeaders: boolean;
+  /** Whether the peer is inside a saved trusted proxy range. */
+  peerIsTrustedProxy: boolean;
+  /** The client address the authentication decision uses, or an empty string when none was verified. */
+  verifiedClientAddress: string;
+  /** Whether the peer is inside Cloudflare's published edge ranges, whatever the saved list says. */
+  peerIsCloudflareEdge: boolean;
+  /** Whether listing the peer together with the `cloudflare` preset would verify the headers that do not verify now. */
+  cloudflarePresetWouldVerify: boolean;
+}
+
 export interface TLSCertificateUpload {
   certificate: string;
   privateKey: string;
@@ -217,6 +254,18 @@ export const settingsAPI = {
     ffmpegStatus: (): Promise<{ available: boolean; version?: string }> => {
       return api.get('/api/v2/system/ffmpeg');
     },
+  },
+
+  /**
+   * Security helpers that are not part of a settings section
+   */
+  security: {
+    /**
+     * Classify the requester's own connection against the saved trusted proxy
+     * list. Read-only; reflects the saved settings, not unsaved form edits.
+     */
+    getConnection: (): Promise<ConnectionCheckResult> =>
+      api.get<ConnectionCheckResult>('/api/v2/settings/connection'),
   },
 
   /**

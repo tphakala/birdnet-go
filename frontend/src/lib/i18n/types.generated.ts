@@ -1798,6 +1798,8 @@ export type TranslationKey =
   | 'settings.actions.savingAriaLabel'
   | 'settings.actions.unsavedChanges'
   | 'settings.actions.toolbar'
+  | 'settings.actions.validationBlocked'
+  | 'settings.actions.noChangesToSave'
   | 'settings.errors.loadFailed'
   | 'settings.errors.saveFailed'
   | 'settings.errors.databaseStatsFailed'
@@ -3068,6 +3070,57 @@ export type TranslationKey =
   | 'settings.security.tls.downloadCertificate'
   | 'settings.security.tls.downloadCertificateHelp'
   | 'settings.security.tls.fileReadError'
+  | 'settings.security.reverseProxy.title'
+  | 'settings.security.reverseProxy.description'
+  | 'settings.security.reverseProxy.listLabel'
+  | 'settings.security.reverseProxy.listHelp'
+  | 'settings.security.reverseProxy.placeholder'
+  | 'settings.security.reverseProxy.emptyState'
+  | 'settings.security.reverseProxy.emptyStateCloudflareOnly'
+  | 'settings.security.reverseProxy.rangeBadge'
+  | 'settings.security.reverseProxy.ruleOwnAddress'
+  | 'settings.security.reverseProxy.ruleHeaders'
+  | 'settings.security.reverseProxy.cloudflareLabel'
+  | 'settings.security.reverseProxy.cloudflareHelp'
+  | 'settings.security.reverseProxy.check.title'
+  | 'settings.security.reverseProxy.check.recheck'
+  | 'settings.security.reverseProxy.check.checking'
+  | 'settings.security.reverseProxy.check.error'
+  | 'settings.security.reverseProxy.check.stale'
+  | 'settings.security.reverseProxy.check.trust' // params: peer
+  | 'settings.security.reverseProxy.check.trustWarning' // params: peer
+  | 'settings.security.reverseProxy.check.trustWithCloudflare' // params: peer
+  | 'settings.security.reverseProxy.check.cloudflareInFront' // params: peer
+  | 'settings.security.reverseProxy.check.cloudflareEdge' // params: peer
+  | 'settings.security.reverseProxy.check.chainHint' // params: peer
+  | 'settings.security.reverseProxy.check.added'
+  | 'settings.security.reverseProxy.check.coveredBy' // params: range
+  | 'settings.security.reverseProxy.check.selfClientCause'
+  | 'settings.security.reverseProxy.status.direct.title'
+  | 'settings.security.reverseProxy.status.direct.body' // params: peer
+  | 'settings.security.reverseProxy.status.direct.bodyNoPeer'
+  | 'settings.security.reverseProxy.status.direct.hint' // params: peer
+  | 'settings.security.reverseProxy.status.trusted_proxy.title'
+  | 'settings.security.reverseProxy.status.trusted_proxy.body' // params: peer, client
+  | 'settings.security.reverseProxy.status.trusted_proxy.hint' // params: client
+  | 'settings.security.reverseProxy.status.trusted_proxy_unverified.title'
+  | 'settings.security.reverseProxy.status.trusted_proxy_unverified.body' // params: peer
+  | 'settings.security.reverseProxy.status.trusted_proxy_unverified.causeRange'
+  | 'settings.security.reverseProxy.status.trusted_proxy_unverified.causeHeaders'
+  | 'settings.security.reverseProxy.status.trusted_proxy_unverified.causeConflict'
+  | 'settings.security.reverseProxy.status.untrusted_public_proxy.title'
+  | 'settings.security.reverseProxy.status.untrusted_public_proxy.body' // params: peer
+  | 'settings.security.reverseProxy.status.untrusted_proxy.title'
+  | 'settings.security.reverseProxy.status.untrusted_proxy.body' // params: peer
+  | 'settings.security.reverseProxy.status.untrusted_proxy_unverifiable.title'
+  | 'settings.security.reverseProxy.status.untrusted_proxy_unverifiable.body' // params: peer
+  | 'settings.security.reverseProxy.status.untrusted_proxy_unverifiable.bodyNoPeer'
+  | 'settings.security.reverseProxy.status.untrusted_proxy_unverifiable.fix'
+  | 'settings.security.bypassProxyNote'
+  | 'settings.security.bypassProxyLink'
+  | 'settings.security.allowedSubnetsEmpty'
+  | 'settings.security.validation.invalidEntry' // params: tab, field
+  | 'settings.security.validation.pendingEntry' // params: tab, field
   | 'settings.species.pageLabel'
   | 'settings.species.saveError' // params: species
   | 'settings.species.configUpdated' // params: species
@@ -3598,6 +3651,20 @@ export type TranslationKey =
   | 'forms.species.aria.dragToReorder' // params: species
   | 'forms.species.aria.edit'
   | 'forms.species.aria.remove'
+  | 'forms.networkAddressList.add'
+  | 'forms.networkAddressList.remove' // params: address
+  | 'forms.networkAddressList.empty'
+  | 'forms.networkAddressList.pendingHint'
+  | 'forms.networkAddressList.limitReached' // params: max
+  | 'forms.networkAddressList.rowDuplicate'
+  | 'forms.networkAddressList.rowInvalid.cidr'
+  | 'forms.networkAddressList.rowInvalid.ip'
+  | 'forms.networkAddressList.rowInvalid.ipOrCidr'
+  | 'forms.networkAddressList.errors.invalid.cidr' // params: values
+  | 'forms.networkAddressList.errors.invalid.ip' // params: values
+  | 'forms.networkAddressList.errors.invalid.ipOrCidr' // params: values
+  | 'forms.networkAddressList.errors.duplicate' // params: values
+  | 'forms.networkAddressList.errors.limit' // params: max, values
   | 'media.audio.settings'
   | 'media.audio.play'
   | 'media.audio.pause'
@@ -4676,6 +4743,28 @@ export type TranslationParams = {
   'settings.security.oauth.providers.deleteConfirm': { provider: string | number };
   'settings.security.oauth.getCredentialsLabel': { provider: string | number };
   'settings.security.tls.autoTLSPrivateTLD': { tld: string | number };
+  'settings.security.reverseProxy.check.trust': { peer: string | number };
+  'settings.security.reverseProxy.check.trustWarning': { peer: string | number };
+  'settings.security.reverseProxy.check.trustWithCloudflare': { peer: string | number };
+  'settings.security.reverseProxy.check.cloudflareInFront': { peer: string | number };
+  'settings.security.reverseProxy.check.cloudflareEdge': { peer: string | number };
+  'settings.security.reverseProxy.check.chainHint': { peer: string | number };
+  'settings.security.reverseProxy.check.coveredBy': { range: string | number };
+  'settings.security.reverseProxy.status.direct.body': { peer: string | number };
+  'settings.security.reverseProxy.status.direct.hint': { peer: string | number };
+  'settings.security.reverseProxy.status.trusted_proxy.body': {
+    peer: string | number;
+    client: string | number;
+  };
+  'settings.security.reverseProxy.status.trusted_proxy.hint': { client: string | number };
+  'settings.security.reverseProxy.status.trusted_proxy_unverified.body': { peer: string | number };
+  'settings.security.reverseProxy.status.untrusted_public_proxy.body': { peer: string | number };
+  'settings.security.reverseProxy.status.untrusted_proxy.body': { peer: string | number };
+  'settings.security.reverseProxy.status.untrusted_proxy_unverifiable.body': {
+    peer: string | number;
+  };
+  'settings.security.validation.invalidEntry': { tab: string | number; field: string | number };
+  'settings.security.validation.pendingEntry': { tab: string | number; field: string | number };
   'settings.species.saveError': { species: string | number };
   'settings.species.configUpdated': { species: string | number };
   'settings.species.configAdded': { species: string | number };
@@ -4710,6 +4799,13 @@ export type TranslationParams = {
   'forms.dateRange.labels.selected': { startDate: string | number; endDate: string | number };
   'forms.species.maxReached': { maxItems: string | number };
   'forms.species.aria.dragToReorder': { species: string | number };
+  'forms.networkAddressList.remove': { address: string | number };
+  'forms.networkAddressList.limitReached': { max: string | number };
+  'forms.networkAddressList.errors.invalid.cidr': { values: string | number };
+  'forms.networkAddressList.errors.invalid.ip': { values: string | number };
+  'forms.networkAddressList.errors.invalid.ipOrCidr': { values: string | number };
+  'forms.networkAddressList.errors.duplicate': { values: string | number };
+  'forms.networkAddressList.errors.limit': { max: string | number; values: string | number };
   'media.audio.currentTime': { current: string | number; total: string | number };
   'media.audio.volumeGain': { value: string | number };
   'media.audio.highPassFilter': { freq: string | number };

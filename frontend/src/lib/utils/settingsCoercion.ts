@@ -476,6 +476,15 @@ export function coerceSecuritySettings(settings: PartialSecuritySettings): Parti
     };
   }
 
+  // Trusted reverse proxies: a missing or null list is the empty list (the
+  // backend treats them alike), so the saved and edited copies agree and the
+  // page never reports a change for a config that never had the key.
+  const isString = (entry: unknown): entry is string => typeof entry === 'string';
+  coerced.trustedProxies =
+    Array.isArray(settings.trustedProxies) && settings.trustedProxies.every(isString)
+      ? settings.trustedProxies
+      : coerceArray<unknown>(settings.trustedProxies).filter(isString);
+
   // Auto TLS - handle as boolean
   if ('autoTls' in settings) {
     coerced.autoTls = coerceBoolean(settings.autoTls, false);

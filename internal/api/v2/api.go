@@ -48,6 +48,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -88,6 +89,10 @@ type Controller struct {
 	// settings; the remaining deps (Metrics, Processor, settings accessors, and the
 	// error/log helpers) all promote from the shared *apicore.Core.
 	integrations *integrations.Handler
+
+	// proxyTrust caches the checker the connection check builds from
+	// Security.TrustedProxies, rebuilt only when the list changes.
+	proxyTrust proxytrust.Cache
 
 	// detections serves the /api/v2/detections/* CRUD/review/lock/ignore/batch
 	// endpoints and POST /api/v2/search. Besides the shared *apicore.Core it holds
