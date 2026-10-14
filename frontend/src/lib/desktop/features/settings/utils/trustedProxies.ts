@@ -57,7 +57,9 @@ export function hasInvalidTrustedProxy(list: readonly string[]): boolean {
 }
 
 /**
- * Build the list to store from edited rows and the Cloudflare state.
+ * Build the list to store from edited rows and the Cloudflare state. A preset token
+ * in `entries` is ignored: only `hasCloudflare` decides whether the token is stored.
+ * Blank and whitespace-only entries in `entries` are ignored too.
  *
  * When the rows and the state equal those of `savedList`, a copy of `savedList`
  * is returned, so a round trip is the identity. Otherwise the result is the rows
@@ -72,10 +74,13 @@ export function recombineTrustedProxies(
   savedList: readonly string[]
 ): string[] {
   const saved = partitionTrustedProxies(savedList);
-  if (hasCloudflare === saved.hasCloudflare && deepEqual(entries, saved.entries)) {
+  // The checkbox alone decides whether the token is stored, so a token in the rows is
+  // dropped, and blank entries are not rows.
+  const rows = entries.filter(entry => !isCloudflarePreset(entry) && trimGoSpace(entry) !== '');
+  if (hasCloudflare === saved.hasCloudflare && deepEqual(rows, saved.entries)) {
     return [...savedList];
   }
-  const result = [...entries];
+  const result = [...rows];
   if (!hasCloudflare) return result;
 
   const savedIndex = savedList.findIndex(isCloudflarePreset);

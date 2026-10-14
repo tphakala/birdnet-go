@@ -70,6 +70,20 @@ describe('recombineTrustedProxies', () => {
     expect(recombineTrustedProxies(entries, hasCloudflare, saved)).not.toBe(saved);
   });
 
+  it('drops a preset token passed in the rows when the preset is off', () => {
+    expect(recombineTrustedProxies(['10.0.0.1', 'cloudflare'], false, ['10.0.0.1'])).toEqual([
+      '10.0.0.1',
+    ]);
+    expect(recombineTrustedProxies(['10.0.0.1', 'Cloudflare'], true, ['10.0.0.1'])).toEqual([
+      '10.0.0.1',
+      'cloudflare',
+    ]);
+  });
+
+  it('ignores blank entries passed in the rows, so the saved list is returned unchanged', () => {
+    expect(recombineTrustedProxies(['10.0.0.1', ' '], false, ['10.0.0.1'])).toEqual(['10.0.0.1']);
+  });
+
   it('puts the token back at its saved index, in its saved spelling, after a real change', () => {
     const saved = ['10.0.0.1', 'CloudFlare', '10.0.0.2'];
     expect(recombineTrustedProxies(['10.0.0.1', '10.0.0.2', '10.0.0.3'], true, saved)).toEqual([
