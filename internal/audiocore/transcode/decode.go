@@ -72,8 +72,9 @@ func ProbeSampleRate(ctx context.Context, path string) (int, error) {
 // outside (0, MaxDecodedPCMBytes] select MaxDecodedPCMBytes).
 //
 // The container is identified from the file's first bytes; the extension is used
-// only when they are inconclusive. Errors wrap one of the package sentinels or
-// are context errors.
+// only when they are inconclusive. Source and request problems wrap one of the
+// package sentinels; context errors pass through, and file access errors carry
+// no sentinel.
 func Decode(ctx context.Context, path string, win *Window, maxBytes int) (*PCM, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -163,7 +164,10 @@ func decodeSource(ctx context.Context, src *source, win *Window, fileSize int64,
 			wantFrames = min(wantFrames, src.totalFrames-startFrame)
 		}
 	} else if src.totalFrames >= 0 {
-		wantFrames = src.totalFrames
+		// A header can declare more frames than any buffer holds; one frame past
+		// the cap is enough to detect an overlong source and keeps the byte
+		// products below from overflowing.
+		wantFrames = min(src.totalFrames, maxFrames+1)
 	}
 
 	if err := positionSource(ctx, src, startFrame, frameBytes, win != nil); err != nil {
@@ -312,7 +316,8 @@ func initialCapacity(src *source, fileSize, limit int64, frameBytes int) int {
 	plausible := fileSize*src.expansion + initialCapSlackBytes
 	hint := limit
 	if src.totalFrames >= 0 {
-		hint = min(hint, src.totalFrames*int64(frameBytes))
+		// Clamp before multiplying: a declared count can overflow the product.
+		hint = min(hint, min(src.totalFrames, hint/int64(frameBytes)+1)*int64(frameBytes))
 	}
 	return int(min(hint, plausible, int64(MaxDecodedPCMBytes)))
 }

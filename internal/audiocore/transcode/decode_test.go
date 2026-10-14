@@ -571,3 +571,33 @@ func TestWidthConverter(t *testing.T) {
 		assert.Len(t, got, 2, "one whole 24-bit sample, the 2 trailing bytes are a stub")
 	})
 }
+
+// A header can declare a frame count whose byte size overflows int64 (an 8-bit
+// RF64 WAV declaring 2^62 frames is 2^63 bytes once widened to 16-bit). The
+// declared count only sizes buffers; it must never panic or drive allocation.
+func TestDecode_HugeDeclaredLength8BitWAV(t *testing.T) {
+	t.Parallel()
+
+	const declaredFrames = 1 << 62
+	const actualFrames = 100
+	src := &source{
+		reader:      bytes.NewReader(make([]byte, actualFrames*bytesPerSample)),
+		sampleRate:  testRate,
+		channels:    1,
+		totalFrames: declaredFrames,
+		expansion:   losslessExpansion,
+	}
+
+	var pcm *PCM
+	var err error
+	require.NotPanics(t, func() {
+		pcm, err = decodeSource(t.Context(), src, nil, actualFrames, MaxDecodedPCMBytes)
+	})
+	require.NoError(t, err)
+	assert.Equal(t, actualFrames, pcm.Frames(), "the bytes that exist are returned")
+
+	const fileSize = 1 << 20
+	plausible := fileSize*lossyExpansion + initialCapSlackBytes
+	assert.Equal(t, plausible, initialCapacity(&source{totalFrames: declaredFrames, expansion: lossyExpansion}, fileSize, MaxDecodedPCMBytes, bytesPerSample),
+		"a declared count above the cap leaves the file-size estimate to size the buffer")
+}
