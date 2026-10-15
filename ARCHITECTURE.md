@@ -592,6 +592,8 @@ FFmpeg is used for:
 
 On-demand clip downloads, the denoise, normalize and gain preview, and audible-bats playback in the web interface do not use FFmpeg. `internal/audiocore/transcode` decodes WAV, FLAC, MP3, AAC (M4A) and Opus natively, denoises with the go-audio-dsp `denoiser`, normalizes with the go-audio-dsp `loudnorm` package, applies gain with the go-audio-dsp `gain` package, and encodes WAV, FLAC, MP3, AAC and Opus with the same native encoders clip export uses. A clip whose sample rate the lossy encoder cannot carry is resampled to 48 kHz first.
 
+On the live path, the per-route EQ and gain in `internal/audiocore` run on the go-audio-dsp `equalizer` and `gain` packages in float32, with float64 filter state. Audio returns to 16-bit with round-to-nearest and saturation. A route that resamples and processes hands the resampler's float32 output straight to those stages, so the audio is quantized once.
+
 **SoX Integration:**
 
 SoX (Sound eXchange) is used exclusively for:
