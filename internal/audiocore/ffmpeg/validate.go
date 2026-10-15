@@ -136,6 +136,9 @@ type validateConfig struct {
 	maxAttempts int
 	// retryDelay overrides the initial retry delay.
 	retryDelay time.Duration
+	// probeGate, if set, is invoked immediately before running ffprobe to acquire
+	// concurrency permission (e.g. semaphore slot). The returned function releases the slot.
+	probeGate func(ctx context.Context) (func(), error)
 }
 
 // WithMaxAttempts sets the maximum number of validation attempts.
@@ -149,6 +152,13 @@ func WithMaxAttempts(n int) ValidateOption {
 func WithRetryDelay(d time.Duration) ValidateOption {
 	return func(c *validateConfig) {
 		c.retryDelay = d
+	}
+}
+
+// WithProbeGate sets a concurrency gating function invoked immediately before ffprobe runs.
+func WithProbeGate(gate func(ctx context.Context) (func(), error)) ValidateOption {
+	return func(c *validateConfig) {
+		c.probeGate = gate
 	}
 }
 
@@ -173,7 +183,7 @@ func ValidateFile(ctx context.Context, path string, opts ...ValidateOption) (*Va
 			return lastResult, ctx.Err()
 		}
 
-		result, err := validateFile(ctx, path)
+		result, err := validateFile(ctx, path, &cfg)
 		if err != nil {
 			// Hard error (e.g. context deadline, permissions) — do not retry.
 			return result, err
@@ -269,14 +279,19 @@ func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResul
 		chunkID := string(chunkHeader[0:4])
 		chunkSize := int64(binary.LittleEndian.Uint32(chunkHeader[4:8]))
 
-		// Guard against malformed chunk sizes larger than remaining file size
-		if chunkSize < 0 || chunkSize > fileInfo.Size() {
+		currentOffset, err := f.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return false
+		}
+
+		// Guard against malformed chunk sizes extending beyond the remaining file size
+		if chunkSize < 0 || currentOffset+chunkSize > fileInfo.Size() {
 			return false
 		}
 
 		switch chunkID {
 		case "fmt ":
-			if chunkSize < 14 {
+			if chunkSize < 16 {
 				return false
 			}
 			fmtData := make([]byte, chunkSize)
@@ -290,17 +305,18 @@ func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResul
 			channels = int(binary.LittleEndian.Uint16(fmtData[2:4]))
 			sampleRate = int(binary.LittleEndian.Uint32(fmtData[4:8]))
 			byteRate := int(binary.LittleEndian.Uint32(fmtData[8:12]))
+			bitsPerSample := binary.LittleEndian.Uint16(fmtData[14:16])
+			if bitsPerSample == 0 {
+				return false
+			}
 
 			if byteRate > 0 {
 				bitRate = (byteRate * 8) / BitsPerKilobit
 			}
-			if len(fmtData) >= 16 {
-				bitsPerSample := binary.LittleEndian.Uint16(fmtData[14:16])
-				if audioFormat == 1 {
-					formatName = fmt.Sprintf("pcm_s%dle", bitsPerSample)
-				} else if audioFormat == 3 {
-					formatName = fmt.Sprintf("pcm_f%dle", bitsPerSample)
-				}
+			if audioFormat == 1 {
+				formatName = fmt.Sprintf("pcm_s%dle", bitsPerSample)
+			} else if audioFormat == 3 {
+				formatName = fmt.Sprintf("pcm_f%dle", bitsPerSample)
 			}
 			foundFmt = true
 
@@ -360,7 +376,7 @@ func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResul
 }
 
 // validateFile performs a single validation pass without retry.
-func validateFile(ctx context.Context, path string) (*ValidationResult, error) {
+func validateFile(ctx context.Context, path string, cfg *validateConfig) (*ValidationResult, error) {
 	result := &ValidationResult{}
 
 	fileInfo, err := os.Stat(path)
@@ -405,6 +421,18 @@ func validateFile(ctx context.Context, path string) (*ValidationResult, error) {
 		result.IsValid = true
 		result.Error = nil
 		return result, nil
+	}
+
+	// Gate probe execution if a gate hook was provided (e.g. concurrency semaphore).
+	if cfg != nil && cfg.probeGate != nil {
+		release, err := cfg.probeGate(ctx)
+		if err != nil {
+			result.Error = fmt.Errorf("probe gate failed: %w", err)
+			return result, result.Error
+		}
+		if release != nil {
+			defer release()
+		}
 	}
 
 	// Use ffprobe for format and metadata validation.

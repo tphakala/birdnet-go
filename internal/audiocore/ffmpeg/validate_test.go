@@ -302,6 +302,71 @@ func makeTestWAVCustom(t *testing.T, path string, audioFormat uint16, channels u
 	require.NoError(t, os.WriteFile(path, data, 0o600))
 }
 
+// makeTestWAVTruncated creates a WAV file where the data chunk header declares declaredDataSize,
+// but only actualDataSize bytes are written to disk.
+func makeTestWAVTruncated(t *testing.T, path string, declaredDataSize, actualDataSize uint32) {
+	t.Helper()
+
+	var buf bytes.Buffer
+	buf.WriteString("RIFF")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(0))
+	buf.WriteString("WAVE")
+
+	// fmt chunk (16 bytes)
+	buf.WriteString("fmt ")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(16))
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(1)) // PCM
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(1)) // mono
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(48000))
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(96000))
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(2))
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(16))
+
+	// data chunk with declared size larger than written bytes
+	buf.WriteString("data")
+	_ = binary.Write(&buf, binary.LittleEndian, declaredDataSize)
+	if actualDataSize > 0 {
+		buf.Write(make([]byte, actualDataSize))
+	}
+
+	data := buf.Bytes()
+	binary.LittleEndian.PutUint32(data[4:8], uint32(len(data)-8))
+
+	require.NoError(t, os.WriteFile(path, data, 0o600))
+}
+
+// makeTestWAVIncompleteFmt creates a WAV file with custom fmt chunk size and bitsPerSample.
+func makeTestWAVIncompleteFmt(t *testing.T, path string, fmtSize uint32, bitsPerSample uint16) {
+	t.Helper()
+
+	var buf bytes.Buffer
+	buf.WriteString("RIFF")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(0))
+	buf.WriteString("WAVE")
+
+	// fmt chunk with custom fmtSize (e.g. 14 bytes)
+	buf.WriteString("fmt ")
+	_ = binary.Write(&buf, binary.LittleEndian, fmtSize)
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(1)) // PCM
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(1)) // mono
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(48000))
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(96000))
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(2))
+	if fmtSize >= 16 {
+		_ = binary.Write(&buf, binary.LittleEndian, bitsPerSample)
+	}
+
+	// data chunk (2048 bytes so total file > 1024 MinValidAudioSize)
+	buf.WriteString("data")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(2048))
+	buf.Write(make([]byte, 2048))
+
+	data := buf.Bytes()
+	binary.LittleEndian.PutUint32(data[4:8], uint32(len(data)-8))
+
+	require.NoError(t, os.WriteFile(path, data, 0o600))
+}
+
 func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 	// Intentionally set a bogus ffprobe path to ensure the WAV fast-path
 	// parses metadata directly without ever invoking ffprobe.
@@ -393,5 +458,95 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 				assert.False(t, result.IsValid)
 			}
 		}
+	})
+
+	t.Run("WAV with truncated data chunk falls back to ffprobe", func(t *testing.T) {
+		p := filepath.Join(t.TempDir(), "truncated.wav")
+		// Declares 100000 bytes for data chunk, but only writes 2048 bytes (total file ~2092 > MinValidAudioSize)
+		makeTestWAVTruncated(t, p, 100000, 2048)
+
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		t.Cleanup(cancel)
+
+		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1))
+		assert.Error(t, err)
+		if result != nil {
+			assert.False(t, result.IsValid)
+		}
+	})
+
+	t.Run("WAV with incomplete fmt chunk (< 16 bytes) falls back to ffprobe", func(t *testing.T) {
+		p := filepath.Join(t.TempDir(), "short_fmt.wav")
+		// 14 byte fmt chunk
+		makeTestWAVIncompleteFmt(t, p, 14, 16)
+
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		t.Cleanup(cancel)
+
+		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1))
+		assert.Error(t, err)
+		if result != nil {
+			assert.False(t, result.IsValid)
+		}
+	})
+
+	t.Run("WAV with zero bitsPerSample falls back to ffprobe", func(t *testing.T) {
+		p := filepath.Join(t.TempDir(), "zero_bits.wav")
+		makeTestWAVIncompleteFmt(t, p, 16, 0)
+
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		t.Cleanup(cancel)
+
+		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1))
+		assert.Error(t, err)
+		if result != nil {
+			assert.False(t, result.IsValid)
+		}
+	})
+}
+
+func TestValidateFile_WithProbeGate(t *testing.T) {
+	original := ffmpeg.GetFFprobePath()
+	t.Cleanup(func() { ffmpeg.SetFFprobePath(original) })
+	ffmpeg.SetFFprobePath("/nonexistent/ffprobe/binary")
+
+	t.Run("probe gate is not called for valid WAV fast path", func(t *testing.T) {
+		p := filepath.Join(t.TempDir(), "fast.wav")
+		makeTestWAVWithSize(t, p, 96044)
+
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		t.Cleanup(cancel)
+
+		var gateCalled bool
+		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithProbeGate(func(ctx context.Context) (func(), error) {
+			gateCalled = true
+			return func() {}, nil
+		}))
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.True(t, result.IsValid)
+		assert.False(t, gateCalled, "Probe gate should not be called when fast path succeeds")
+	})
+
+	t.Run("probe gate is called and released when falling back to ffprobe", func(t *testing.T) {
+		p := filepath.Join(t.TempDir(), "fallback.wav")
+		// Unsupported format code 6 falls back to ffprobe
+		makeTestWAVCustom(t, p, 6, 1, 8000, 8, 8000, true)
+
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		t.Cleanup(cancel)
+
+		var gateAcquired, gateReleased bool
+		_, _ = ffmpeg.ValidateFile(ctx, p,
+			ffmpeg.WithMaxAttempts(1),
+			ffmpeg.WithProbeGate(func(ctx context.Context) (func(), error) {
+				gateAcquired = true
+				return func() {
+					gateReleased = true
+				}, nil
+			}),
+		)
+		assert.True(t, gateAcquired, "Probe gate should be acquired when falling back to probe")
+		assert.True(t, gateReleased, "Probe gate should be released after probe execution")
 	})
 }

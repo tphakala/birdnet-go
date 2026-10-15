@@ -2783,7 +2783,23 @@ func (c *Handler) validateSpectrogramInputs(ctx context.Context, absAudioPath, a
 		logger.String("queue_key", queueKey))
 
 	validationStart := time.Now()
-	validationResult, err := ffmpeg.ValidateFile(ctx, absAudioPath)
+	validationResult, err := ffmpeg.ValidateFile(ctx, absAudioPath,
+		ffmpeg.WithProbeGate(func(probeCtx context.Context) (func(), error) {
+			if err := c.acquireSemaphoreSlot(probeCtx, queueKey); err != nil {
+				return nil, err
+			}
+			return func() {
+				slotsBeforeRelease := len(spectrogramSemaphore)
+				<-spectrogramSemaphore
+				slotsAfterRelease := len(spectrogramSemaphore)
+				getSpectrogramLogger().Debug("Probe semaphore slot released",
+					logger.String("queue_key", queueKey),
+					logger.Int("slots_before_release", slotsBeforeRelease),
+					logger.Int("slots_after_release", slotsAfterRelease),
+					logger.Int("slots_now_available", maxConcurrentSpectrograms-slotsAfterRelease))
+			}, nil
+		}),
+	)
 	validationDuration := time.Since(validationStart)
 
 	if err != nil {
