@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,20 +27,43 @@ import (
 const (
 	// soundLevelTestSourceID is the stable source id a sound level event carries.
 	soundLevelTestSourceID = "rtsp-1"
+	// soundLevelTestDisplayName and soundLevelTestRenamed are display names an
+	// authenticated subscriber sees before and after a rename.
+	soundLevelTestDisplayName = "Front Garden"
+	soundLevelTestRenamed     = "Back Garden"
 	// authTestHeader marks a test request as authenticated for the stub auth check.
 	authTestHeader = "X-Test-Authenticated"
+	// authTestHeaderValue is the authTestHeader value that means authenticated.
+	authTestHeaderValue = "1"
+	// soundLevelEventName is the SSE event name the sound level stream uses.
+	soundLevelEventName = "soundlevel"
+	// sseEventPrefix and sseDataPrefix start the SSE lines the reader parses.
+	sseEventPrefix = "event: "
+	sseDataPrefix  = "data: "
 	// soundLevelEventTimeout bounds how long a test waits for a sound level event.
 	soundLevelEventTimeout = 5 * time.Second
+	// soundLevelClientTimeoutFactor scales the HTTP client timeout over the wait bound.
+	soundLevelClientTimeoutFactor = 4
 	// soundLevelBroadcastRetry is the pause between broadcasts while a client registers.
 	soundLevelBroadcastRetry = 20 * time.Millisecond
+	// soundLevelReaderBuffer is the capacity of the decoded event channel.
+	soundLevelReaderBuffer = 16
+	// soundLevelScannerInitialBuffer and soundLevelScannerMaxBuffer size the SSE line scanner.
+	soundLevelScannerInitialBuffer = 64 * 1024
+	soundLevelScannerMaxBuffer     = 1024 * 1024
+	// soundLevelTestDuration is the duration carried by every test event.
+	soundLevelTestDuration = 10
 )
 
-func newSoundLevelEvent(name string) apicore.SSESoundLevelData {
+// newSoundLevelEvent builds a test event. The marker is carried in Duration so a
+// test can tell one broadcast from another even when the anonymized name is the
+// same for all of them.
+func newSoundLevelEvent(name string, marker int) apicore.SSESoundLevelData {
 	var ev apicore.SSESoundLevelData
 	ev.Timestamp = time.Unix(1700000000, 0)
 	ev.Source = soundLevelTestSourceID
 	ev.Name = name
-	ev.Duration = 10
+	ev.Duration = marker
 	ev.OctaveBands = map[string]soundlevel.OctaveBandData{
 		"1000.0": {CenterFreq: 1000, Min: -60, Max: -40, Mean: -50},
 	}
@@ -52,7 +76,7 @@ func TestSoundLevelPayloadForClient(t *testing.T) {
 
 	t.Run("unauthenticated gets the source id as name without mutating input", func(t *testing.T) {
 		t.Parallel()
-		input := newSoundLevelEvent(sensitiveDisplayName)
+		input := newSoundLevelEvent(sensitiveDisplayName, soundLevelTestDuration)
 
 		out := soundLevelPayloadForClient(&input, false)
 
@@ -65,71 +89,118 @@ func TestSoundLevelPayloadForClient(t *testing.T) {
 
 	t.Run("authenticated keeps the display name", func(t *testing.T) {
 		t.Parallel()
-		input := newSoundLevelEvent("Front Garden")
+		input := newSoundLevelEvent(soundLevelTestDisplayName, soundLevelTestDuration)
 
 		out := soundLevelPayloadForClient(&input, true)
 
-		assert.Equal(t, "Front Garden", out.Name)
+		assert.Equal(t, soundLevelTestDisplayName, out.Name)
 		assert.Equal(t, soundLevelTestSourceID, out.Source)
+	})
+
+	t.Run("unauthenticated with an empty or id-equal display name gets the id", func(t *testing.T) {
+		t.Parallel()
+		for _, name := range []string{"", soundLevelTestSourceID} {
+			input := newSoundLevelEvent(name, soundLevelTestDuration)
+			out := soundLevelPayloadForClient(&input, false)
+			assert.Equal(t, soundLevelTestSourceID, out.Name)
+		}
 	})
 }
 
-// openSoundLevelStream connects to the sound level stream and returns a channel
-// of decoded sound level events. Events are delivered until the test ends.
-func openSoundLevelStream(t *testing.T, serverURL string, authenticated bool) <-chan apicore.SSESoundLevelData {
+// soundLevelStream is a connected sound level subscriber under test.
+type soundLevelStream struct {
+	events <-chan apicore.SSESoundLevelData
+}
+
+// newSoundLevelServer serves the SSE routes with the given auth check and returns
+// the core (to broadcast on) and the server URL.
+func newSoundLevelServer(t *testing.T, authCheck func(echo.Context) bool) (core *apicore.Core, serverURL string) {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodGet, serverURL+"/api/v2/soundlevels/stream", http.NoBody)
+	e := echo.New()
+	core = apitest.NewCore(t, apitest.WithEcho(e), apitest.WithoutSettingsPublish())
+	h := New(core, authCheck)
+	h.RegisterRoutes(core.Group)
+	server := httptest.NewServer(e)
+	t.Cleanup(func() {
+		core.SSEManager.CloseAllClients()
+		server.Close()
+	})
+	return core, server.URL
+}
+
+// headerAuthCheck authenticates a request that carries authTestHeader.
+func headerAuthCheck(ctx echo.Context) bool {
+	return ctx.Request().Header.Get(authTestHeader) == authTestHeaderValue
+}
+
+// openSoundLevelStream connects to the sound level stream and decodes its sound
+// level events. The reader stops when the test ends, even with undrained events.
+func openSoundLevelStream(t *testing.T, serverURL string, authenticated bool) soundLevelStream {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, serverURL+soundLevelStreamEndpoint, http.NoBody)
 	require.NoError(t, err)
 	req.Header.Set("Accept", "text/event-stream")
 	if authenticated {
-		req.Header.Set(authTestHeader, "1")
+		req.Header.Set(authTestHeader, authTestHeaderValue)
 	}
-	client := apitest.NewTestHTTPClient(soundLevelEventTimeout * 4)
+	client := apitest.NewTestHTTPClient(soundLevelEventTimeout * soundLevelClientTimeoutFactor)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
 	t.Cleanup(func() {
 		_ = resp.Body.Close()
 		client.CloseIdleConnections()
 	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	events := make(chan apicore.SSESoundLevelData, 16)
+	done := make(chan struct{})
+	t.Cleanup(func() { close(done) })
+	events := make(chan apicore.SSESoundLevelData, soundLevelReaderBuffer)
 	go func() {
 		defer close(events)
 		scanner := bufio.NewScanner(resp.Body)
-		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		scanner.Buffer(make([]byte, 0, soundLevelScannerInitialBuffer), soundLevelScannerMaxBuffer)
 		var event string
 		for scanner.Scan() {
 			line := scanner.Text()
 			switch {
-			case strings.HasPrefix(line, "event: "):
-				event = strings.TrimPrefix(line, "event: ")
-			case strings.HasPrefix(line, "data: ") && event == "soundlevel":
+			case strings.HasPrefix(line, sseEventPrefix):
+				event = strings.TrimPrefix(line, sseEventPrefix)
+			case strings.HasPrefix(line, sseDataPrefix) && event == soundLevelEventName:
 				var data apicore.SSESoundLevelData
-				if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &data) == nil {
-					events <- data
+				if json.Unmarshal([]byte(strings.TrimPrefix(line, sseDataPrefix)), &data) != nil {
+					continue
+				}
+				select {
+				case events <- data:
+				case <-done:
+					return
 				}
 			}
 		}
 	}()
-	return events
+	return soundLevelStream{events: events}
 }
 
-// broadcastUntilReceived broadcasts the event repeatedly (the client registers
-// asynchronously and full channels drop updates) until one event arrives.
-func broadcastUntilReceived(t *testing.T, core *apicore.Core, events <-chan apicore.SSESoundLevelData, name string) apicore.SSESoundLevelData {
+// broadcastMarker numbers broadcasts so each wait matches exactly its own event.
+var broadcastMarker atomic.Int64
+
+// broadcastUntilReceived broadcasts an event with a fresh marker repeatedly (the
+// client registers asynchronously and a full channel drops updates) until the
+// stream delivers an event carrying that marker, and returns it. Events left over
+// from earlier broadcasts are skipped.
+func broadcastUntilReceived(t *testing.T, core *apicore.Core, stream soundLevelStream, name string) apicore.SSESoundLevelData {
 	t.Helper()
+	marker := int(broadcastMarker.Add(1))
 	deadline := time.After(soundLevelEventTimeout)
 	for {
-		ev := newSoundLevelEvent(name)
+		ev := newSoundLevelEvent(name, marker)
 		core.SSEManager.BroadcastSoundLevel(&ev)
 		select {
-		case got, ok := <-events:
+		case got, ok := <-stream.events:
 			require.True(t, ok, "stream closed before a sound level event arrived")
-			if got.Name == name || got.Name == soundLevelTestSourceID {
+			if got.Duration == marker {
 				return got
 			}
-			// A stale event from an earlier broadcast; keep draining.
 		case <-deadline:
 			require.FailNow(t, "timed out waiting for a sound level event")
 		case <-time.After(soundLevelBroadcastRetry):
@@ -140,30 +211,52 @@ func broadcastUntilReceived(t *testing.T, core *apicore.Core, events <-chan apic
 func TestStreamSoundLevelsAnonymization(t *testing.T) {
 	t.Parallel()
 
-	e := echo.New()
-	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithoutSettingsPublish())
-	h := New(core, func(ctx echo.Context) bool { return ctx.Request().Header.Get(authTestHeader) == "1" })
-	h.RegisterRoutes(core.Group)
-	server := httptest.NewServer(e)
-	t.Cleanup(func() {
-		core.SSEManager.CloseAllClients()
-		server.Close()
-	})
-
-	anon := openSoundLevelStream(t, server.URL, false)
-	authed := openSoundLevelStream(t, server.URL, true)
+	core, serverURL := newSoundLevelServer(t, headerAuthCheck)
+	anon := openSoundLevelStream(t, serverURL, false)
+	authed := openSoundLevelStream(t, serverURL, true)
 
 	got := broadcastUntilReceived(t, core, anon, sensitiveDisplayName)
 	assert.Equal(t, soundLevelTestSourceID, got.Name, "unauthenticated client must receive the source id, not the display name")
 	assert.Equal(t, soundLevelTestSourceID, got.Source)
 
-	got = broadcastUntilReceived(t, core, authed, "Front Garden")
-	assert.Equal(t, "Front Garden", got.Name)
+	got = broadcastUntilReceived(t, core, authed, soundLevelTestDisplayName)
+	assert.Equal(t, soundLevelTestDisplayName, got.Name)
 
 	// A rename is followed by authenticated clients and still hidden from
 	// unauthenticated ones.
-	got = broadcastUntilReceived(t, core, authed, "Back Garden")
-	assert.Equal(t, "Back Garden", got.Name)
-	got = broadcastUntilReceived(t, core, anon, "Back Garden")
+	got = broadcastUntilReceived(t, core, authed, soundLevelTestRenamed)
+	assert.Equal(t, soundLevelTestRenamed, got.Name)
+	got = broadcastUntilReceived(t, core, anon, soundLevelTestRenamed)
 	assert.Equal(t, soundLevelTestSourceID, got.Name)
+}
+
+// TestStreamSoundLevelsNilAuthCheckFailsClosed pins that a handler without an
+// auth check serves the source id, not the display name, on the real stream.
+func TestStreamSoundLevelsNilAuthCheckFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	core, serverURL := newSoundLevelServer(t, nil)
+	stream := openSoundLevelStream(t, serverURL, true)
+
+	got := broadcastUntilReceived(t, core, stream, sensitiveDisplayName)
+	assert.Equal(t, soundLevelTestSourceID, got.Name)
+}
+
+// TestStreamSoundLevelsAuthCapturedAtConnect pins that the auth state is read once
+// when the stream connects: a later change of the auth result does not alter what
+// an open stream sends.
+func TestStreamSoundLevelsAuthCapturedAtConnect(t *testing.T) {
+	t.Parallel()
+
+	var authenticated atomic.Bool
+	authenticated.Store(true)
+	core, serverURL := newSoundLevelServer(t, func(echo.Context) bool { return authenticated.Load() })
+	stream := openSoundLevelStream(t, serverURL, false)
+
+	got := broadcastUntilReceived(t, core, stream, soundLevelTestDisplayName)
+	require.Equal(t, soundLevelTestDisplayName, got.Name)
+
+	authenticated.Store(false)
+	got = broadcastUntilReceived(t, core, stream, soundLevelTestRenamed)
+	assert.Equal(t, soundLevelTestRenamed, got.Name, "an open stream keeps its connect-time auth state")
 }
