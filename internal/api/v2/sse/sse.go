@@ -44,10 +44,11 @@ const (
 //
 // isClientAuthenticated is injected from the facade (the auth-service check that
 // lives on facade-owned state, matching the detections/analytics domains). The
-// detection stream evaluates it ONCE at connect time so unauthenticated
-// subscribers receive a sanitized payload that omits the raw audio source
-// DisplayName (which can embed internal host details), exposing only the stable
-// Source.ID.
+// detection and sound level streams evaluate it ONCE at connect time so
+// unauthenticated subscribers receive a sanitized payload that omits the raw
+// audio source DisplayName (which can embed internal host details). The
+// detection stream exposes only the stable Source.ID; the sound level stream
+// sets name to the stable source id.
 type Handler struct {
 	*apicore.Core
 
@@ -56,8 +57,8 @@ type Handler struct {
 
 // New constructs the SSE endpoint handler from the shared core and the
 // facade-injected auth check. isClientAuthenticated is read once per connection
-// (at connect time) to decide whether the detection stream exposes the raw source
-// DisplayName to that subscriber.
+// (at connect time) to decide whether the detection and sound level streams
+// expose the raw source display name to that subscriber.
 func New(core *apicore.Core, isClientAuthenticated func(ctx echo.Context) bool) *Handler {
 	return &Handler{
 		Core:                  core,
