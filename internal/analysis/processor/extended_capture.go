@@ -313,9 +313,10 @@ func (p *Processor) applyExtendedCapture(mapKey string, now time.Time, normalDet
 //   - Medium (30s-2m): 30s after now
 //   - Long (>2m): 60s after now
 //
-// The result is always capped at maxDeadline, so a detection is decided no later than
-// MaxDuration after its first detection; detectionEndTime caps the end time at the
-// same bound (the saved clip then ends PreCapture after it).
+// The result is always capped at maxDeadline. The privacy filter may still hold the
+// detection after that deadline until its clip is scanned, up to the clip end plus
+// the coverage wait; detectionEndTime caps the end time at the same bound, and the
+// saved clip ends PreCapture after it.
 func calculateExtendedFlushDeadline(now, firstDetected, maxDeadline time.Time, normalDetectionWindow time.Duration) time.Time {
 	sessionDuration := now.Sub(firstDetected)
 
