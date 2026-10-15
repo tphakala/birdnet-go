@@ -1197,7 +1197,7 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 		logger.Float64("true_peak_dbtp", plan.Result.Input.TruePeakDBTP),
 		logger.Float64("target_lufs", targetLUFS),
 		logger.Float64("gain_db", gainDB),
-		logger.Bool("peak_limited", plan.Result.PeakLimited),
+		logger.Bool("peak_limited", plan.PeakLimited),
 		logger.Bool("gate_lifted", plan.GateLifted),
 		logger.Bool("gain_clamped", plan.Clamped),
 		logger.String("detection_id", a.CorrelationID))
