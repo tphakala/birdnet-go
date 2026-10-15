@@ -130,6 +130,24 @@ const (
 	clipIndeterminate                  // could not be determined (e.g. permission error)
 )
 
+// logExportDirInaccessible logs why the export directory cannot be used. A
+// directory that does not exist yet is the normal state of a fresh install or one
+// that never exported a clip, so it stays at Debug; anything else (a permission or
+// I/O error, or a path that is not a directory) is a Warn, because it usually means
+// the storage is broken. cause is nil when the path exists but is not a directory.
+func logExportDirInaccessible(log logger.Logger, cause error) {
+	if errors.Is(cause, fs.ErrNotExist) {
+		log.Debug("clip reconcile: skipping pass, export directory does not exist",
+			logger.String("operation", "clip_reconcile_abort"))
+		return
+	}
+	fields := []logger.Field{logger.String("operation", "clip_reconcile_abort")}
+	if cause != nil {
+		fields = append(fields, logger.Error(cause))
+	}
+	log.Warn("clip reconcile: skipping pass, export directory is not accessible", fields...)
+}
+
 // ReconcileClipOrphansPass walks all clip references in keyset-paginated chunks and
 // clears those whose audio file is confirmed missing and that pass the guards below,
 // or, when a spectrogram render of the clip survives, re-links the render by moving
@@ -138,8 +156,9 @@ const (
 // Safety guards (fail-safe = leave the stale reference rather than risk data loss):
 //
 //   - Directory-present guard: if baseDir is unconfigured or not an accessible
-//     directory, the pass aborts without clearing anything. An unmounted volume
-//     must never be read as "all clips gone".
+//     directory, the pass aborts without clearing anything. It logs a Warn when
+//     the path exists but cannot be read, and only a Debug line when the directory
+//     does not exist yet. An unmounted volume must never be read as "all clips gone".
 //   - Row-order evidence rule: row IDs only grow, so after a storage swap every
 //     present file belongs to a row newer than every pre-swap row. A missing clip is
 //     therefore cleared only when a row with a lower ID, earlier in the same pass,
@@ -176,6 +195,7 @@ func ReconcileClipOrphansPass(quitChan <-chan struct{}, store ReconcileStore, ba
 	}
 	startInfo, err := os.Stat(baseDir)
 	if err != nil || !startInfo.IsDir() {
+		logExportDirInaccessible(log, err)
 		result.Aborted = true
 		result.AbortReason = abortReasonDirInaccessible
 		return result
@@ -187,6 +207,7 @@ func ReconcileClipOrphansPass(quitChan <-chan struct{}, store ReconcileStore, ba
 	// resulting error as indeterminate rather than as a missing/orphan file.
 	root, err := os.OpenRoot(baseDir)
 	if err != nil {
+		logExportDirInaccessible(log, err)
 		result.Aborted = true
 		result.AbortReason = abortReasonDirInaccessible
 		return result
