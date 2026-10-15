@@ -59,7 +59,7 @@ type ExportSettings struct {
 // NormalizationSettings contains audio normalization configuration based on EBU R128 standard.
 //
 // Clip normalization applies a single linear gain to reach TargetLUFS without
-// exceeding TruePeak (internal/audiocore/audionorm). There is no dynamic-range
+// exceeding TruePeak (go-audio-dsp loudnorm). There is no dynamic-range
 // stage, so LoudnessRange is accepted and validated but never applied; it is
 // retained only so existing config.yaml files keep loading unchanged.
 type NormalizationSettings struct {
