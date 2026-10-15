@@ -947,7 +947,7 @@ func TestPrivacy_LabelCoverageNeedsEveryCurrentModel(t *testing.T) {
 	})
 	t.Run("a model that began mid-clip owes only its part", func(t *testing.T) {
 		r := newRig(45 * time.Second)
-		r.feedOther(second, 25, 30) // scans 20 s to 30 s of the clip padded to 17 s to 36 s
+		r.feedOther(second, 25, 30) // scans 20 s to 30 s of the clip, padded to 17.5 s to 33.5 s
 		r.pend(24 * time.Second)
 		require.Equal(t, "pending", r.outcome())
 		r.feedOther(second, 31, 36) // now 20 s to 36 s, all it could have heard
