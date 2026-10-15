@@ -568,3 +568,33 @@ func TestAnalysisBuffer_LostAtLastReadAttributesLossToTheNextWindow(t *testing.T
 	release()
 	assert.Equal(t, int64(3), ab.LostAtLastRead())
 }
+
+// TestAnalysisBuffer_ResetIsVisibleInLostAtLastRead: Reset drops unread audio and
+// the overlap carry, so the next window must differ in LostAtLastRead from the
+// window before it, even though Stats keeps the cumulative counters.
+func TestAnalysisBuffer_ResetIsVisibleInLostAtLastRead(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 64
+		overlap  = 4
+		readSize = 8
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, overlap, readSize, "reset-gap-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	_, release, err := ab.Read()
+	require.NoError(t, err)
+	release()
+	before := ab.LostAtLastRead()
+
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	ab.Reset()
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	_, release, err = ab.Read()
+	require.NoError(t, err)
+	release()
+
+	assert.NotEqual(t, before, ab.LostAtLastRead(), "the window after a Reset has a zero-filled overlap head and lost audio")
+}

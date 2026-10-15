@@ -84,7 +84,7 @@ type monitorTickState struct {
 // earlier, the safe direction for coverage claims.
 //
 // gap is true for the first window of a buffer instance (its overlap head is
-// zero filled), after overwrite-mode loss, and after a window that was read but
+// zero filled), after overwrite-mode loss or an AnalysisBuffer.Reset, and after a window that was read but
 // skipped (see markWindowSkipped). The skip latch is consumed here.
 func (s *monitorTickState) windowTiming(ab *buffer.AnalysisBuffer, bytesPerSecond int) (audioEnd time.Time, gap bool) {
 	backlogBytes, lastWriteAt := ab.Backlog()
