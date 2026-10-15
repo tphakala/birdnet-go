@@ -367,6 +367,73 @@ func makeTestWAVIncompleteFmt(t *testing.T, path string, fmtSize uint32, bitsPer
 	require.NoError(t, os.WriteFile(path, data, 0o600))
 }
 
+// makeTestWAVInconsistentFormat creates a WAV file with specific byteRate and blockAlign.
+func makeTestWAVInconsistentFormat(t *testing.T, path string, byteRate uint32, blockAlign uint16) {
+	t.Helper()
+
+	var buf bytes.Buffer
+	buf.WriteString("RIFF")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(0))
+	buf.WriteString("WAVE")
+
+	// fmt chunk (16 bytes)
+	buf.WriteString("fmt ")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(16))
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(1)) // PCM
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(1)) // mono
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(48000))
+	_ = binary.Write(&buf, binary.LittleEndian, byteRate)
+	_ = binary.Write(&buf, binary.LittleEndian, blockAlign)
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(16))
+
+	// data chunk (2048 bytes so total file > 1024 MinValidAudioSize)
+	buf.WriteString("data")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(2048))
+	buf.Write(make([]byte, 2048))
+
+	data := buf.Bytes()
+	binary.LittleEndian.PutUint32(data[4:8], uint32(len(data)-8))
+
+	require.NoError(t, os.WriteFile(path, data, 0o600))
+}
+
+// makeTestWAVExtendedFmt creates a WAV file with extra bytes in the fmt chunk.
+func makeTestWAVExtendedFmt(t *testing.T, path string, extraBytes int) {
+	t.Helper()
+
+	var buf bytes.Buffer
+	buf.WriteString("RIFF")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(0))
+	buf.WriteString("WAVE")
+
+	// fmt chunk with extended bytes
+	fmtSize := uint32(16 + extraBytes)
+	buf.WriteString("fmt ")
+	_ = binary.Write(&buf, binary.LittleEndian, fmtSize)
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(1)) // PCM
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(1)) // mono
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(48000))
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(96000))
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(2))
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(16))
+	if extraBytes > 0 {
+		buf.Write(make([]byte, extraBytes))
+	}
+	if fmtSize%2 != 0 {
+		buf.WriteByte(0) // RIFF chunk word-boundary padding
+	}
+
+	// data chunk (2048 bytes)
+	buf.WriteString("data")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(2048))
+	buf.Write(make([]byte, 2048))
+
+	data := buf.Bytes()
+	binary.LittleEndian.PutUint32(data[4:8], uint32(len(data)-8))
+
+	require.NoError(t, os.WriteFile(path, data, 0o600))
+}
+
 func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 	// Intentionally set a bogus ffprobe path to ensure the WAV fast-path
 	// parses metadata directly without ever invoking ffprobe.
@@ -433,10 +500,17 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		t.Cleanup(cancel)
 
+		var gateCalled bool
+		gate := func(ctx context.Context) (func(), error) {
+			gateCalled = true
+			return func() {}, nil
+		}
+
 		// Without a data chunk, fast path must return false and fall back to ffprobe.
 		// Since ffprobe is set to a nonexistent path, validation must fail.
-		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1))
+		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1), ffmpeg.WithProbeGate(gate))
 		assert.Error(t, err)
+		assert.True(t, gateCalled, "Probe gate should be acquired when no data chunk falls back to ffprobe")
 		if result != nil {
 			assert.False(t, result.IsValid)
 		}
@@ -450,10 +524,17 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			t.Cleanup(cancel)
 
+			var gateCalled bool
+			gate := func(ctx context.Context) (func(), error) {
+				gateCalled = true
+				return func() {}, nil
+			}
+
 			// With unsupported format code, fast path must return false and fall back to ffprobe.
 			// Since ffprobe is set to a nonexistent path, validation must fail.
-			result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1))
+			result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1), ffmpeg.WithProbeGate(gate))
 			assert.Error(t, err, "Format code %d should not pass fast path", formatCode)
+			assert.True(t, gateCalled, "Probe gate should be acquired when unsupported format code falls back to ffprobe")
 			if result != nil {
 				assert.False(t, result.IsValid)
 			}
@@ -468,8 +549,15 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		t.Cleanup(cancel)
 
-		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1))
+		var gateCalled bool
+		gate := func(ctx context.Context) (func(), error) {
+			gateCalled = true
+			return func() {}, nil
+		}
+
+		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1), ffmpeg.WithProbeGate(gate))
 		assert.Error(t, err)
+		assert.True(t, gateCalled, "Probe gate should be acquired when truncated data chunk falls back to ffprobe")
 		if result != nil {
 			assert.False(t, result.IsValid)
 		}
@@ -483,8 +571,15 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		t.Cleanup(cancel)
 
-		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1))
+		var gateCalled bool
+		gate := func(ctx context.Context) (func(), error) {
+			gateCalled = true
+			return func() {}, nil
+		}
+
+		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1), ffmpeg.WithProbeGate(gate))
 		assert.Error(t, err)
+		assert.True(t, gateCalled, "Probe gate should be acquired when incomplete fmt chunk falls back to ffprobe")
 		if result != nil {
 			assert.False(t, result.IsValid)
 		}
@@ -497,10 +592,76 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		t.Cleanup(cancel)
 
-		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1))
+		var gateCalled bool
+		gate := func(ctx context.Context) (func(), error) {
+			gateCalled = true
+			return func() {}, nil
+		}
+
+		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1), ffmpeg.WithProbeGate(gate))
 		assert.Error(t, err)
+		assert.True(t, gateCalled, "Probe gate should be acquired when zero bitsPerSample falls back to ffprobe")
 		if result != nil {
 			assert.False(t, result.IsValid)
+		}
+	})
+
+	t.Run("WAV with inconsistent byteRate or blockAlign falls back to ffprobe", func(t *testing.T) {
+		tests := []struct {
+			name       string
+			byteRate   uint32
+			blockAlign uint16
+		}{
+			{name: "inconsistent byteRate", byteRate: 8000, blockAlign: 2},
+			{name: "inconsistent blockAlign", byteRate: 96000, blockAlign: 4},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				p := filepath.Join(t.TempDir(), "inconsistent.wav")
+				makeTestWAVInconsistentFormat(t, p, tt.byteRate, tt.blockAlign)
+
+				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+				t.Cleanup(cancel)
+
+				var gateCalled bool
+				gate := func(ctx context.Context) (func(), error) {
+					gateCalled = true
+					return func() {}, nil
+				}
+
+				result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1), ffmpeg.WithProbeGate(gate))
+				assert.Error(t, err)
+				assert.True(t, gateCalled, "Probe gate should be acquired when format consistency check fails")
+				if result != nil {
+					assert.False(t, result.IsValid)
+				}
+			})
+		}
+	})
+
+	t.Run("WAV with extended fmt chunk (>16 bytes) succeeds on fast path", func(t *testing.T) {
+		for _, extraBytes := range []int{1, 24} {
+			p := filepath.Join(t.TempDir(), fmt.Sprintf("extended_%d.wav", extraBytes))
+			makeTestWAVExtendedFmt(t, p, extraBytes)
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			t.Cleanup(cancel)
+
+			var gateCalled bool
+			gate := func(ctx context.Context) (func(), error) {
+				gateCalled = true
+				return func() {}, nil
+			}
+
+			result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithProbeGate(gate))
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.True(t, result.IsValid)
+			assert.False(t, gateCalled, "Probe gate should not be called when fast path succeeds for extended fmt chunk")
+			assert.Equal(t, "pcm_s16le", result.Format)
+			assert.Equal(t, 48000, result.SampleRate)
+			assert.Equal(t, 1, result.Channels)
 		}
 	})
 }

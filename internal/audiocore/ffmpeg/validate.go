@@ -270,9 +270,9 @@ func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResul
 	var formatName string = "pcm_s16le"
 
 	// Iterate through RIFF chunks
-	chunkHeader := make([]byte, 8)
+	var chunkHeader [8]byte
 	for {
-		if _, err := io.ReadFull(f, chunkHeader); err != nil {
+		if _, err := io.ReadFull(f, chunkHeader[:]); err != nil {
 			break
 		}
 
@@ -294,24 +294,37 @@ func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResul
 			if chunkSize < 16 {
 				return false
 			}
-			fmtData := make([]byte, chunkSize)
-			if _, err := io.ReadFull(f, fmtData); err != nil {
+			var fmtHeader [16]byte
+			if _, err := io.ReadFull(f, fmtHeader[:]); err != nil {
 				return false
 			}
-			audioFormat := binary.LittleEndian.Uint16(fmtData[0:2])
+			audioFormat := binary.LittleEndian.Uint16(fmtHeader[0:2])
 			if audioFormat != 1 && audioFormat != 3 {
 				return false
 			}
-			channels = int(binary.LittleEndian.Uint16(fmtData[2:4]))
-			sampleRate = int(binary.LittleEndian.Uint32(fmtData[4:8]))
-			byteRate := int(binary.LittleEndian.Uint32(fmtData[8:12]))
-			bitsPerSample := binary.LittleEndian.Uint16(fmtData[14:16])
-			if bitsPerSample == 0 {
+			channels = int(binary.LittleEndian.Uint16(fmtHeader[2:4]))
+			sampleRate = int(binary.LittleEndian.Uint32(fmtHeader[4:8]))
+			byteRate := binary.LittleEndian.Uint32(fmtHeader[8:12])
+			blockAlign := binary.LittleEndian.Uint16(fmtHeader[12:14])
+			bitsPerSample := binary.LittleEndian.Uint16(fmtHeader[14:16])
+
+			if channels <= 0 || sampleRate <= 0 {
+				return false
+			}
+			if bitsPerSample == 0 || bitsPerSample%8 != 0 {
+				return false
+			}
+			expectedBlockAlign := uint16(channels * int(bitsPerSample) / 8)
+			if blockAlign != expectedBlockAlign {
+				return false
+			}
+			expectedByteRate := uint32(sampleRate) * uint32(blockAlign)
+			if byteRate != expectedByteRate {
 				return false
 			}
 
 			if byteRate > 0 {
-				bitRate = (byteRate * 8) / BitsPerKilobit
+				bitRate = int((uint64(byteRate) * 8) / BitsPerKilobit)
 			}
 			if audioFormat == 1 {
 				formatName = fmt.Sprintf("pcm_s%dle", bitsPerSample)
@@ -319,6 +332,13 @@ func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResul
 				formatName = fmt.Sprintf("pcm_f%dle", bitsPerSample)
 			}
 			foundFmt = true
+
+			// Seek past any remaining format bytes beyond the 16-byte header
+			if remaining := chunkSize - 16; remaining > 0 {
+				if _, err := f.Seek(remaining, io.SeekCurrent); err != nil {
+					return false
+				}
+			}
 
 			// RIFF chunks are padded to 2-byte word boundary
 			if chunkSize%2 != 0 {
