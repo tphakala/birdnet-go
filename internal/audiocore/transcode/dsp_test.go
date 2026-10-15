@@ -11,9 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/go-audio-dsp/denoiser"
+	"github.com/tphakala/go-audio-dsp/gain"
+	"github.com/tphakala/go-audio-dsp/loudnorm"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
-	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
+	"github.com/tphakala/birdnet-go/internal/audiocore/loudness"
 )
 
 const (
@@ -277,9 +278,9 @@ func TestDenoisePCM_AllocatesLessThanOneChannelOfFloats(t *testing.T) {
 }
 
 // lufsOf measures integrated loudness and true peak of mono 16-bit PCM.
-func lufsOf(t *testing.T, p *pcmBuffer) audionorm.Measurement {
+func lufsOf(t *testing.T, p *pcmBuffer) loudnorm.Measurement {
 	t.Helper()
-	m, err := audionorm.MeasureInt16Bytes(p.Data, p.SampleRate, p.Channels)
+	m, err := loudnorm.MeasureBytes(p.Data, p.SampleRate, p.Channels)
 	require.NoError(t, err)
 	return m
 }
@@ -312,7 +313,10 @@ func TestApplyFilters_NormalizeLimitedByTruePeak(t *testing.T) {
 	assert.LessOrEqual(t, lufsOf(t, p).TruePeakDBTP, normalizeTruePeakDBTP+truePeakSlackDB)
 }
 
-func TestApplyFilters_NormalizeSubGateMatchesExport(t *testing.T) {
+// TestApplyFilters_NormalizeAppliesClipPlan pins that on-demand normalization
+// applies the same plan the clip export does: gate fallback on and the 60 dB
+// clamp, both from loudness.ClipPlanOptions.
+func TestApplyFilters_NormalizeAppliesClipPlan(t *testing.T) {
 	t.Parallel()
 
 	const subGateAmp = 0.0001 // about -80 dBFS
@@ -320,15 +324,34 @@ func TestApplyFilters_NormalizeSubGateMatchesExport(t *testing.T) {
 	p := newPCM(src, testRate, 1)
 	orig := bytes.Clone(p.Data)
 
-	plan, err := audionorm.PlanGainWithGateFallbackInt16Bytes(orig, audionorm.Options{
-		SampleRate: testRate, Channels: 1, TargetLUFS: normalizeTargetLUFS, TruePeakDBTP: normalizeTruePeakDBTP,
-	}, audionorm.MaxNormalizeGainDB)
+	plan, err := loudnorm.PlanBytes(t.Context(), orig,
+		loudness.ClipPlanOptions(testRate, 1, normalizeTargetLUFS, normalizeTruePeakDBTP))
 	require.NoError(t, err)
 	require.True(t, plan.GateLifted, "the fixture must sit under the absolute gate")
 	require.NotZero(t, plan.GainDB)
 
+	want := bytes.Clone(orig)
+	g, err := gain.New(plan.GainDB)
+	require.NoError(t, err)
+	require.NoError(t, g.ApplyBytes(want))
+
 	require.NoError(t, applyFilters(t.Context(), p, Filters{Normalize: true}))
-	assert.Equal(t, pcmgain.Applied(orig, plan.GainDB), p.Data, "the same plan the clip export uses")
+	assert.Equal(t, want, p.Data, "the same plan the clip export uses")
+}
+
+// TestApplyFilters_NormalizeCancelled pins that a cancelled context is returned
+// as is and leaves the samples untouched.
+func TestApplyFilters_NormalizeCancelled(t *testing.T) {
+	t.Parallel()
+
+	p := newPCM(tone(testRate, 1, 5, testToneHz, 0.01), testRate, 1)
+	orig := bytes.Clone(p.Data)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err := applyFilters(ctx, p, Filters{Normalize: true})
+	require.Equal(t, context.Canceled, err, "cancellation must not be wrapped")
+	assert.Equal(t, orig, p.Data)
 }
 
 func TestApplyFilters_OrderNormalizeThenGain(t *testing.T) {

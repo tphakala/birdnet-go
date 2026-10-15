@@ -5,8 +5,10 @@ import (
 	"slices"
 	"time"
 
+	"github.com/tphakala/go-audio-dsp/loudnorm"
+
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
-	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
+	"github.com/tphakala/birdnet-go/internal/audiocore/loudness"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -18,7 +20,7 @@ const (
 
 	// MaxGainDB is the maximum allowed gain adjustment in dB, the same bound the
 	// loudness normalization gain is clamped to.
-	MaxGainDB = audionorm.MaxNormalizeGainDB
+	MaxGainDB = loudness.MaxClipGainDB
 
 	// AudibleBatsOutputSampleRate is the sample rate (Hz) of the derived "audible
 	// bats" review audio. Ultrasonic clips are time-expanded and then resampled to
@@ -41,7 +43,7 @@ const (
 
 	// minSourceSampleRate is the lowest source rate accepted. It is the lowest
 	// rate the loudness meter supports, so normalization cannot fail on it.
-	minSourceSampleRate = audionorm.MinSampleRate
+	minSourceSampleRate = loudnorm.MinSampleRate
 
 	// maxSourceSampleRate is the highest source rate accepted. It sits above every
 	// bat recorder rate in use and stops a corrupt header from sizing per-second
@@ -71,11 +73,14 @@ const (
 )
 
 // Normalization targets, matching the loudnorm settings the FFmpeg path used:
-// the configured default integrated loudness (-23 LUFS) and a -2 dBTP ceiling.
-// The gain clamp is audionorm.MaxNormalizeGainDB.
+// the default integrated loudness (-23 LUFS) and the default -2 dBTP ceiling.
+// On-demand clips use these defaults, not the hot-reloadable export settings,
+// because the processing cache key (internal/api/v2/media/process_cache.go)
+// does not include the target, so a settings change would serve stale cached
+// audio. The gain clamp is loudness.MaxClipGainDB.
 const (
 	normalizeTargetLUFS   = conf.DefaultNormalizationTargetLUFS
-	normalizeTruePeakDBTP = -2.0
+	normalizeTruePeakDBTP = conf.DefaultNormalizationTruePeak
 )
 
 // Streaming chunk size, in frames, for the decode, denoise and resample loops.

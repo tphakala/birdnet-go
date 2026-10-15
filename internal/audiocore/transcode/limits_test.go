@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
 )
 
 func TestIsSupportedClipFormat(t *testing.T) {
@@ -60,7 +58,7 @@ func TestPipelineConstantsKeepTheirFFmpegEraValues(t *testing.T) {
 
 	assert.InDelta(t, -23.0, normalizeTargetLUFS, 0)
 	assert.InDelta(t, -2.0, normalizeTruePeakDBTP, 0)
-	assert.InDelta(t, 60.0, audionorm.MaxNormalizeGainDB, 0)
+	assert.InDelta(t, 60.0, MaxGainDB, 0)
 	assert.Equal(t, map[string]int{"mp3": 128, "opus": 64, "aac": 96}, clipBitrateKbps)
 	assert.Equal(t, 48000, AudibleBatsOutputSampleRate)
 }
