@@ -22,6 +22,13 @@ const (
 	CategoryDevice Category = "device"
 )
 
+const (
+	// labelWordSeparator joins the words of a multi-word model label.
+	labelWordSeparator = "_"
+	// displayWordSeparator joins the words of a human-readable class name.
+	displayWordSeparator = " "
+)
+
 // firstTokenSet holds the first underscore-delimited token of every multi-word key in classes.
 // Keys are split on the first "_" only, so a token may itself contain a hyphen
 // (e.g. "fixed-wing" from "fixed-wing_aircraft_and_airplane"). It is derived once in
@@ -31,7 +38,7 @@ var firstTokenSet map[string]struct{}
 func init() {
 	firstTokenSet = make(map[string]struct{})
 	for k := range classes {
-		if before, _, found := strings.Cut(k, "_"); found {
+		if before, _, found := strings.Cut(k, labelWordSeparator); found {
 			firstTokenSet[before] = struct{}{}
 		}
 	}
@@ -62,10 +69,43 @@ func IsNonSpeciesLabel(rawLabel string) bool {
 	return ok
 }
 
+// MultiWordLabelNames recognises a full multi-word (underscore-joined) non-bird
+// class label such as "Domestic_sounds_and_home_sounds". The match is an exact,
+// case-insensitive whole-label lookup in the known class set, after trimming
+// surrounding whitespace and dropping carriage returns. When it matches, identity
+// is the sanitized label with the model's case and underscores kept, and display
+// is the identity with underscores replaced by spaces. Single-token classes and
+// unknown labels return ok=false: callers already keep a single-token label whole,
+// and every other label follows the BirdNET "Scientific_Common" rule.
+func MultiWordLabelNames(label string) (identity, display string, ok bool) {
+	label = strings.TrimSpace(label)
+	label = strings.ReplaceAll(label, "\r", "")
+	if strings.IndexByte(label, labelWordSeparator[0]) < 0 {
+		return "", "", false
+	}
+	if _, known := CategoryOf(label); !known {
+		return "", "", false
+	}
+	return label, strings.ReplaceAll(label, labelWordSeparator, displayWordSeparator), true
+}
+
+// IsMultiWordClassPrefix reports whether name is a known non-bird class that is
+// also the first token of a longer multi-word class (for example "car", which
+// begins "car_passing_by"). Case-insensitive.
+func IsMultiWordClassPrefix(name string) bool {
+	lower := strings.ToLower(name)
+	if _, ok := classes[lower]; !ok {
+		return false
+	}
+	_, ok := firstTokenSet[lower]
+	return ok
+}
+
 // IsNonBirdName reports whether name is a non-bird class, matching EITHER the full
-// label OR the first token of a multi-word (underscore-joined) class. The image
-// provider only receives the underscore-split first token of a label (e.g. "Power"
-// from "power_tool", "Engine" from "engine"), so this is the lookup it needs.
+// label OR the first token of a multi-word (underscore-joined) class. New detections
+// carry the full label; the first-token match remains for names stored before
+// full labels were kept whole (e.g. "Power" from "power_tool", "Engine" from
+// "engine"), and for the image provider's lookups of those names.
 // Case-insensitive.
 func IsNonBirdName(name string) bool {
 	lower := strings.ToLower(name)

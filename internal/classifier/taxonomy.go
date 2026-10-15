@@ -11,6 +11,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 )
 
 //go:embed data/eBird_taxonomy_codes_2021E.json
@@ -176,10 +178,16 @@ func GetSpeciesNameFromCode(taxonomyMap TaxonomyMap, code string) (string, bool)
 // Handles three formats:
 //   - BirdNET: "Scientific name_Common name" (underscore-separated)
 //   - Perch v2 birds: "Genus species" (binomial scientific name, no common name)
-//   - Perch v2 sounds: "sound_event_name" (underscore-separated, no common name)
+//   - Perch v2 sound classes: a known multi-word class label is returned whole as
+//     the scientific (identity) name with a spaced common name; single-token
+//     classes return (label, "")
 func SplitSpeciesName(speciesName string) (scientific, common string) {
 	if speciesName == "" {
 		return "", ""
+	}
+
+	if id, display, ok := nonbird.MultiWordLabelNames(speciesName); ok {
+		return id, display
 	}
 
 	// Split by underscore

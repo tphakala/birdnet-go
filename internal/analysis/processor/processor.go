@@ -2312,7 +2312,7 @@ func retryConfigFromSettings(rs conf.RetrySettings) jobqueue.RetryConfig {
 // buildSaveAudioAction creates a SaveAudioAction for the given detection.
 // It reads PCM data from the capture buffer eagerly (while the data is still
 // available) and returns an action that will encode and write the audio file
-// when executed by the job queue. This decouples the slow FFmpeg encoding
+// when executed by the job queue. This decouples the slower clip encoding
 // from the fast Database -> SSE -> MQTT pipeline.
 func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext) *SaveAudioAction {
 	settings := p.currentSettings()
@@ -2360,6 +2360,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 			modelName:        det.Result.Model.Name,
 			modelVersion:     det.Result.Model.Version,
 			species:          strings.ToLower(det.Result.Species.CommonName),
+			clipTags:         newClipTagMeta(&det.Result),
 			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 			PreRenderer:      p.preRenderer,
 			DetectionCtx:     detectionCtx,

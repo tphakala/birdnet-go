@@ -4,6 +4,7 @@ export const SETTINGS_ROUTES = {
   analysisSettings: '/ui/settings/analysis?tab=settings',
   analysisModels: '/ui/settings/analysis?tab=models',
   securityServer: '/ui/settings/security?tab=server',
+  securityReverseProxy: '/ui/settings/security?tab=server#reverse-proxy',
   securityTerminal: '/ui/settings/security?tab=terminal',
 } as const;
 

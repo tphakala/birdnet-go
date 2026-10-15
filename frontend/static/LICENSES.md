@@ -139,7 +139,7 @@ Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
 
-License: https://github.com/googleapis/gax-go/blob/v2.26.2/LICENSE
+License: https://github.com/googleapis/gax-go/blob/v2.26.2/v2/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gorilla/mux
@@ -412,6 +412,11 @@ Source: Unknown
 License: https://github.com/tphakala/go-aac/blob/v0.7.0/LICENSE
 Source: LGPL-2.1
 
+### github.com/tphakala/go-audio-dsp
+
+License: https://github.com/tphakala/go-audio-dsp/blob/v0.2.0/LICENSE
+Source: Apache-2.0
+
 ### github.com/tphakala/go-audio-resampler
 
 License: https://github.com/tphakala/go-audio-resampler/blob/v1.7.0/LICENSE
@@ -424,7 +429,7 @@ Source: MIT
 
 ### github.com/tphakala/go-flac
 
-License: https://github.com/tphakala/go-flac/blob/v1.1.0/LICENSE
+License: https://github.com/tphakala/go-flac/blob/v1.3.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-hls
@@ -434,17 +439,17 @@ Source: MIT
 
 ### github.com/tphakala/go-m4a
 
-License: https://github.com/tphakala/go-m4a/blob/v0.5.0/LICENSE
+License: https://github.com/tphakala/go-m4a/blob/v0.7.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-mp3
 
-License: https://github.com/tphakala/go-mp3/blob/v0.1.0/LICENSE
+License: https://github.com/tphakala/go-mp3/blob/v0.2.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-opus
 
-License: https://github.com/tphakala/go-opus/blob/v1.1.0/LICENSE
+License: https://github.com/tphakala/go-opus/blob/v1.2.1/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/tphakala/go-tflite
@@ -539,7 +544,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.48.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.49.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term

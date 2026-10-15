@@ -8,12 +8,12 @@
  */
 
 import { buildAppUrl, getAppBasePath, extractRelativePath } from '$lib/utils/urlHelpers';
+import { DEFAULT_LOGIN_TARGET as DEFAULT_PATH } from '$lib/utils/loginRedirect';
 
 // Path constants built via array join at runtime.
 // IMPORTANT: Do NOT use string literals like '/ui/dashboard' or '/ui/' here.
 // nginx sub_filter rewrites quoted strings matching patterns like '/u' in JS bundles,
 // corrupting constants and breaking path logic. Array.join() is immune to this.
-const DEFAULT_PATH = ['', 'ui', 'dashboard'].join('/');
 const UI_PREFIX_STR = ['', 'ui'].join('/');
 
 // Regex patterns for UI path matching.

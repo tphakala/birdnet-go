@@ -2,6 +2,8 @@ package detection
 
 import (
 	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 )
 
 // Species holds parsed species identification.
@@ -22,6 +24,9 @@ type Species struct {
 // Supported formats:
 //   - "ScientificName_CommonName_SpeciesCode" (3 parts)
 //   - "ScientificName_CommonName" (2 parts, most common)
+//   - Perch v2 multi-word sound class (for example "Power_tool"): the whole label
+//     is the ScientificName (identity) and the CommonName is the label with
+//     spaces instead of underscores
 //   - Fallback: returns original string as both ScientificName and CommonName
 //
 // For custom models with species not in the eBird taxonomy, the species code
@@ -38,6 +43,11 @@ func ParseSpeciesString(species string) Species {
 			CommonName:     species,
 			Code:           "",
 		}
+	}
+
+	// Perch v2 multi-word sound class: keep the whole label as the identity.
+	if id, display, ok := nonbird.MultiWordLabelNames(species); ok {
+		return Species{ScientificName: id, CommonName: display}
 	}
 
 	// Split the species string by "_" separator
@@ -70,7 +80,9 @@ func ParseSpeciesString(species string) Species {
 }
 
 // ExtractScientificName returns the scientific name portion from a
-// "ScientificName_CommonName" label string.
+// "ScientificName_CommonName" label string. A full Perch v2 multi-word sound
+// class label (for example "Domestic_sounds_and_home_sounds") is returned
+// whole, because it has no scientific/common split.
 //
 // It applies the same sanitization as ParseSpeciesString, in the same order
 // (trim surrounding whitespace, then drop carriage returns), before splitting,
@@ -83,8 +95,28 @@ func ParseSpeciesString(species string) Species {
 func ExtractScientificName(label string) string {
 	label = strings.TrimSpace(label)
 	label = strings.ReplaceAll(label, "\r", "")
+	if id, _, ok := nonbird.MultiWordLabelNames(label); ok {
+		return id
+	}
 	if sci, _, ok := strings.Cut(label, "_"); ok {
 		return sci
+	}
+	return label
+}
+
+// StoredLabel returns the label string used to persist the species in a result
+// row: "ScientificName_CommonName[_Code]" for BirdNET-style species, or the whole
+// label for a Perch multi-word sound class (see ParseSpeciesString), whatever
+// its CommonName or Code, since a class has no scientific/common split. The
+// result parses back to the same ScientificName through ParseSpeciesString and
+// ExtractScientificName. Rows persisted by earlier builds are not rewritten.
+func (s Species) StoredLabel() string {
+	if id, _, ok := nonbird.MultiWordLabelNames(s.ScientificName); ok {
+		return id
+	}
+	label := s.ScientificName + "_" + s.CommonName
+	if s.Code != "" {
+		label += "_" + s.Code
 	}
 	return label
 }

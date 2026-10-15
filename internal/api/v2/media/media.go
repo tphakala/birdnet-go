@@ -18,9 +18,11 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
-	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
@@ -220,10 +222,6 @@ var (
 	ErrAudioFileNotFound    = errors.NewStd("audio file not found")
 	ErrInvalidAudioPath     = errors.NewStd("invalid audio path")
 	ErrPathTraversalAttempt = errors.NewStd("security error: path attempts to traverse")
-
-	// Configuration errors
-	ErrFFmpegNotConfigured = errors.NewStd("ffmpeg path not set in settings")
-	ErrSoxNotConfigured    = errors.NewStd("sox path not set in settings")
 
 	// Generation errors
 	ErrSpectrogramGeneration = errors.NewStd("failed to generate spectrogram")
@@ -591,8 +589,8 @@ func parseRawParameter(rawParam string) bool {
 // findEncodingTempPath looks for an in-progress export temp file for relClipPath
 // and, if a recent one exists, returns its path (relative to the SecureFS root)
 // and true. Exports write to a per-export unique temp file named
-// "<clip>.<pid>.<seq>.temp" (see ffmpeg.ExportAudio and the native flac, aac and
-// opus EncodePCM) that is atomically renamed to the final clip on completion,
+// "<clip>.<pid>.<seq>.temp" (see audiotemp.UniquePath and the native flac, aac,
+// mp3 and opus EncodePCM) that is atomically renamed to the final clip on completion,
 // so the clip's directory is
 // scanned for any matching temp. The pre-fix "<clip>.temp" name is matched too,
 // so a temp written by an older build mid-upgrade is handled. Returning the
@@ -1071,51 +1069,47 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 	return nil
 }
 
-// processedAudioFormat is what the two ProcessAudioToFile calls hand to FFmpeg.
-// Unlike the clip-extraction endpoint, neither takes a format from the request:
-// both write a temp .wav so FFmpeg can seek back and fix the RIFF chunk sizes.
-// It is the transcode's output, which is what a transcode failure needs to
+// processedAudioFormat is the format the process and processed-spectrogram
+// endpoints encode to. Neither takes a format from the request: both produce a
+// WAV. It is the transcode's output, which is what a transcode failure needs to
 // report, not necessarily the endpoint's own response type (the spectrogram
 // endpoint goes on to render a PNG from it; its operation tag says which is
 // which). Named rather than inlined so the log field cannot silently disagree
-// with the temp-file suffix it describes.
-const processedAudioFormat = "wav"
+// with the format it describes.
+const processedAudioFormat = audioformat.WAV
 
-// logTranscodeFailure records which encoder ran and the validated request
+// logTranscodeFailure records the output encoder for the format being produced and the validated request
 // parameters that shaped it. HandleError cannot: handleErrorInternal logs a
 // fixed field set and does not surface an EnhancedError's Context, so without
 // this line a transcode that fails only for one format, or only with a filter
 // chain attached, is invisible in the log file.
 //
-// encoder is recorded for the same reason the clip export records it. The
-// compound case is the point: with a native encoder gate on, a clip written by
-// go-aac can later be re-encoded by FFmpeg through these endpoints, so two
-// encoders touch one file and until now only the first was ever named.
+// encoder names the output encoder even when the failure came from decoding or processing, so it does not prove that encoder ran:
+// it identifies the format being produced, whichever stage failed.
 //
 // The error is scrubbed rather than logged raw, matching what apicore does to
-// the same value a statement later. An FFmpeg failure wraps the command's
-// stderr, which names the absolute input path, so the raw string carries the
-// operator's account name and directory layout; emitting it here unscrubbed
-// would defeat the redaction HandleError performs on the identical error.
+// the same value a statement later. A decoder error can wrap the source file's
+// path, which carries the operator's account name and directory layout; emitting
+// it here unscrubbed would defeat the redaction HandleError performs on the
+// identical error.
 //
-// One helper rather than three copies: all three FFmpeg entry points in this
-// file (ExtractClip plus the two ProcessAudioToFile sites) fail the same way and
-// need the same fields, and a fourth transcode path added later has an obvious
-// thing to call.
-func (c *Handler) logTranscodeFailure(noteID, operation, format string, filters *ffmpeg.AudioFilters, err error) {
-	// 5 unconditional fields plus the 3 filter fields.
+// One helper rather than copies: every transcode entry point in this file fails
+// the same way and needs the same fields, and a further one added later has an
+// obvious thing to call.
+func (c *Handler) logTranscodeFailure(noteID, operation, format string, filters transcode.Filters, err error) {
+	// 4 unconditional fields, the operation, plus the 3 filter fields.
 	fields := make([]logger.Field, 0, 8)
 	fields = append(fields,
 		logger.String("note_id", noteID),
-		logger.String("encoder", clipenc.FFmpeg),
+		logger.String("encoder", transcode.EncoderTag(format)),
 		logger.String("format", format),
 		logger.String("error", privacy.ScrubMessage(err.Error())),
 	)
-	// nil means the request asked for no FILTER processing; the transcode itself
-	// still ran. That distinction is the answer to "did a filter cause this",
-	// so the fields are omitted rather than logged as three zero values, which
-	// would read as "filters were configured and were all off".
-	if filters != nil {
+	// No active filter means the request asked for no FILTER processing; the
+	// transcode itself still ran. That distinction is the answer to "did a filter
+	// cause this", so the fields are omitted rather than logged as three zero
+	// values, which would read as "filters were configured and were all off".
+	if filters.Active() {
 		fields = append(fields,
 			logger.Float64("gain_db", filters.GainDB),
 			logger.Bool("normalize", filters.Normalize),
@@ -1123,6 +1117,60 @@ func (c *Handler) logTranscodeFailure(noteID, operation, format string, filters 
 	}
 	fields = append(fields, logger.String("operation", operation))
 	c.LogErrorIfEnabled("Audio transcode failed", fields...)
+}
+
+// gainRangeMessage is the 400 message for a gain_db outside the accepted range.
+func gainRangeMessage() string {
+	return fmt.Sprintf("Gain must be between -%.0f and %.0f dB", transcode.MaxGainDB, transcode.MaxGainDB)
+}
+
+// expansionFactorMessage is the 400 message for an unsupported time expansion.
+func expansionFactorMessage() string {
+	factors := transcode.BatExpansionFactors()
+	labels := make([]string, len(factors))
+	for i, f := range factors {
+		labels[i] = strconv.Itoa(f)
+	}
+	last := len(labels) - 1
+	return "Time expansion must be " + strings.Join(labels[:last], ", ") + ", or " + labels[last]
+}
+
+// transcodeStatus maps a transcode error to the HTTP status and user message it
+// deserves. Unsupported, undecodable and oversized sources and ranges holding no
+// audio are properties of the stored file or the request, not server faults, so
+// they answer 422 like the other "Source audio ..." cases. ok is false for
+// anything else, which the caller reports as a 500.
+func transcodeStatus(err error) (status int, message string, ok bool) {
+	switch {
+	case errors.Is(err, transcode.ErrUnsupportedSource):
+		return http.StatusUnprocessableEntity, "Source audio format is not supported for on-demand processing", true
+	case errors.Is(err, transcode.ErrUndecodableSource):
+		return http.StatusUnprocessableEntity, "Source audio could not be decoded", true
+	case errors.Is(err, transcode.ErrAudioTooLong):
+		return http.StatusUnprocessableEntity, "Audio is too long for on-demand processing", true
+	case errors.Is(err, transcode.ErrEmptyRange):
+		return http.StatusUnprocessableEntity, "Requested range contains no audio", true
+	case errors.Is(err, transcode.ErrBelowMinimumRate):
+		return http.StatusUnprocessableEntity, fmt.Sprintf("Source audio must be at least %d Hz for audible bats mode", audioformat.MinBatSampleRate), true
+	case errors.Is(err, transcode.ErrInvalidRequest):
+		return http.StatusBadRequest, "Invalid processing parameters", true
+	}
+	return 0, "", false
+}
+
+// transcodeError turns a failed transcode into the HTTP response. A disconnected
+// client or an expired request deadline is answered by handleRequestContextError;
+// otherwise the failure is logged and answered per transcodeStatus, falling back
+// to a 500 with fallbackMsg for faults of the server itself.
+func (c *Handler) transcodeError(ctx echo.Context, noteID, operation, format string, filters transcode.Filters, err error, fallbackMsg string) error {
+	if handled, contextErr := c.handleRequestContextError(ctx); handled {
+		return contextErr
+	}
+	c.logTranscodeFailure(noteID, operation, format, filters, err)
+	if status, message, ok := transcodeStatus(err); ok {
+		return c.HandleError(ctx, err, message, status)
+	}
+	return c.HandleError(ctx, err, fallbackMsg, http.StatusInternalServerError)
 }
 
 // ExtractAudioClipByID extracts a time range from an audio clip and returns the
@@ -1156,21 +1204,21 @@ func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("end (%f) must be > start (%f)", req.End, req.Start),
 			"End time must be greater than start time", http.StatusBadRequest)
 	}
-	if req.End-req.Start > ffmpeg.MaxClipDurationSec {
-		return c.HandleError(ctx, fmt.Errorf("clip duration (%.1fs) exceeds maximum (%ds)", req.End-req.Start, ffmpeg.MaxClipDurationSec),
+	if req.End-req.Start > transcode.MaxClipDurationSec {
+		return c.HandleError(ctx, fmt.Errorf("clip duration (%.1fs) exceeds maximum (%ds)", req.End-req.Start, transcode.MaxClipDurationSec),
 			"Clip duration too long", http.StatusBadRequest)
 	}
-	if !ffmpeg.IsSupportedClipFormat(req.Format) {
+	if !transcode.IsSupportedClipFormat(req.Format) {
 		return c.HandleError(ctx, fmt.Errorf("unsupported format: %s", req.Format),
 			"Unsupported audio format", http.StatusBadRequest)
 	}
-	if !ffmpeg.IsValidDenoisePreset(req.Denoise) {
+	if !transcode.IsValidDenoisePreset(req.Denoise) {
 		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
 			"Invalid denoise preset", http.StatusBadRequest)
 	}
-	if !ffmpeg.IsValidGainDB(req.GainDB) {
+	if !transcode.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
-			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+			gainRangeMessage(), http.StatusBadRequest)
 	}
 
 	// Resolve clip path from datastore
@@ -1212,31 +1260,25 @@ func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 			"Server busy, try again later", http.StatusServiceUnavailable)
 	}
 
-	// Build filters from request (nil when no processing requested)
-	var filters *ffmpeg.AudioFilters
-	if req.Normalize || req.Denoise != "" || req.GainDB != 0 {
-		filters = &ffmpeg.AudioFilters{
-			Normalize: req.Normalize,
-			Denoise:   req.Denoise,
-			GainDB:    req.GainDB,
-		}
+	tmpDir, err := transcode.ProcessingTempDir(c.SFS.BaseDir())
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to create temp directory", http.StatusInternalServerError)
 	}
 
+	filters := transcode.Filters{Normalize: req.Normalize, Denoise: req.Denoise, GainDB: req.GainDB}
+
 	// Extract clip
-	buf, err := ffmpeg.ExtractClip(ctx.Request().Context(), &ffmpeg.ClipOptions{
-		InputPath:  absolutePath,
-		Start:      req.Start,
-		End:        req.End,
-		Format:     req.Format,
-		Filters:    filters,
-		FFmpegPath: c.CurrentSettings().Realtime.Audio.FfmpegPath,
+	clipData, err := transcode.ExtractClip(ctx.Request().Context(), &transcode.ClipOptions{
+		InputPath: absolutePath,
+		Start:     req.Start,
+		End:       req.End,
+		Format:    req.Format,
+		Filters:   filters,
+		TempDir:   tmpDir,
 	})
 	if err != nil {
-		if handled, contextErr := c.handleRequestContextError(ctx); handled {
-			return contextErr
-		}
-		c.logTranscodeFailure(noteID, "media_clip_transcode_failed", req.Format, filters, err)
-		return c.HandleError(ctx, err, "Failed to extract audio clip", http.StatusInternalServerError)
+		return c.transcodeError(ctx, noteID, "media_clip_transcode_failed", req.Format,
+			filters, err, "Failed to extract audio clip")
 	}
 
 	// Set response headers
@@ -1247,37 +1289,35 @@ func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 	ctx.Response().Header().Set("Content-Disposition",
 		fmt.Sprintf("attachment; filename*=UTF-8''%s", url.QueryEscape(filename)))
 
-	return ctx.Blob(http.StatusOK, mimeType, buf.Bytes())
+	return ctx.Blob(http.StatusOK, mimeType, clipData)
 }
 
 // clipMIMEType returns the MIME type for a clip extraction format.
 func clipMIMEType(format string) string {
 	switch format {
-	case "wav":
+	case audioformat.WAV:
 		return MimeTypeWAV
-	case ffmpeg.FormatFLAC:
+	case audioformat.FLAC:
 		return MimeTypeFLAC
-	case ffmpeg.FormatMP3:
+	case audioformat.MP3:
 		return MimeTypeMP3
-	case ffmpeg.FormatAAC, ffmpeg.FormatALAC:
+	case audioformat.AAC:
 		return MimeTypeM4A
-	case ffmpeg.FormatOpus:
+	case audioformat.Opus:
 		return MimeTypeOGG
 	default:
 		return "application/octet-stream"
 	}
 }
 
-// clipFileExtension returns the file extension for a clip extraction format.
+// clipFileExtension returns the file extension for a clip extraction format. It
+// follows the stored-clip extensions except for Opus, which is delivered in an
+// Ogg container.
 func clipFileExtension(format string) string {
-	switch format {
-	case ffmpeg.FormatAAC, ffmpeg.FormatALAC:
-		return "m4a"
-	case ffmpeg.FormatOpus:
+	if format == audioformat.Opus {
 		return "ogg"
-	default:
-		return format // wav, flac, mp3 use format name as extension
 	}
+	return convert.GetFileExtension(format)
 }
 
 // ProcessAudioByID applies audio processing filters to a detection's audio clip
@@ -1303,13 +1343,13 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 	}
 
 	// Validate denoise preset and gain range
-	if !ffmpeg.IsValidDenoisePreset(req.Denoise) {
+	if !transcode.IsValidDenoisePreset(req.Denoise) {
 		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
 			"Invalid denoise preset", http.StatusBadRequest)
 	}
-	if !ffmpeg.IsValidGainDB(req.GainDB) {
+	if !transcode.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
-			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+			gainRangeMessage(), http.StatusBadRequest)
 	}
 
 	// Resolve clip path (reuse same pattern as existing handlers like ServeAudioByID)
@@ -1335,7 +1375,7 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 	}
 
 	// Check cache
-	filters := ffmpeg.AudioFilters{
+	filters := transcode.Filters{
 		Normalize: req.Normalize,
 		Denoise:   req.Denoise,
 		GainDB:    req.GainDB,
@@ -1356,34 +1396,10 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 			"Server busy, try again later", http.StatusServiceUnavailable)
 	}
 
-	// Write to a temp file so FFmpeg produces valid WAV headers (correct data size).
-	// Piping to stdout produces broken headers because FFmpeg can't seek back to
-	// update the RIFF chunk sizes, causing playback artifacts in some browsers.
-	// Use app-managed dir (not os.TempDir) for container compatibility with read-only rootfs.
-	tmpDir := filepath.Join(c.SFS.BaseDir(), ".tmp-processing")
-	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
-		return c.HandleError(ctx, err, "Failed to create temp directory", http.StatusInternalServerError)
-	}
-	tmpFile, err := os.CreateTemp(tmpDir, "birdnet-process-*.wav")
+	wavData, err := transcode.ProcessToWAV(ctx.Request().Context(), absolutePath, filters)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to create temp file", http.StatusInternalServerError)
-	}
-	tmpPath := tmpFile.Name()
-	_ = tmpFile.Close()
-	defer os.Remove(tmpPath) //nolint:errcheck // best-effort cleanup
-
-	if err := ffmpeg.ProcessAudioToFile(ctx.Request().Context(), absolutePath,
-		c.CurrentSettings().Realtime.Audio.FfmpegPath, filters, tmpPath); err != nil {
-		if handled, contextErr := c.handleRequestContextError(ctx); handled {
-			return contextErr
-		}
-		c.logTranscodeFailure(noteID, "media_processed_audio_failed", processedAudioFormat, &filters, err)
-		return c.HandleError(ctx, err, "Failed to process audio", http.StatusInternalServerError)
-	}
-
-	wavData, err := os.ReadFile(tmpPath)
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to read processed audio", http.StatusInternalServerError)
+		return c.transcodeError(ctx, noteID, "media_processed_audio_failed", processedAudioFormat,
+			filters, err, "Failed to process audio")
 	}
 
 	// Cache the result (non-fatal on failure)
@@ -1468,13 +1484,13 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
 	}
-	if !ffmpeg.IsValidBatExpansionFactor(req.Expansion) {
+	if !transcode.IsValidBatExpansionFactor(req.Expansion) {
 		return c.HandleError(ctx, fmt.Errorf("invalid expansion factor: %d", req.Expansion),
-			"Time expansion must be 5, 10, 16, or 20", http.StatusBadRequest)
+			expansionFactorMessage(), http.StatusBadRequest)
 	}
-	if !ffmpeg.IsValidGainDB(req.GainDB) {
+	if !transcode.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
-			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+			gainRangeMessage(), http.StatusBadRequest)
 	}
 
 	// Confirm this is a bat detection and resolve its validated source clip path.
@@ -1502,83 +1518,13 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 			"Server busy, try again later", http.StatusServiceUnavailable)
 	}
 
-	ffmpegPath := c.CurrentSettings().Realtime.Audio.FfmpegPath
-
-	// Probe the native capture rate so time expansion maps ultrasonic content
-	// into the audible band correctly regardless of the original sample rate.
-	sampleRate, err := ffmpeg.ProbeFileSampleRate(ctx.Request().Context(), absolutePath)
+	// Full-clip time expansion + 48 kHz resample (all-or-nothing; no
+	// detection-window clipping), then normalization (after conversion) and gain.
+	filters := transcode.Filters{Normalize: req.Normalize, GainDB: req.GainDB}
+	wavData, err := transcode.AudibleBats(ctx.Request().Context(), absolutePath, req.Expansion, filters)
 	if err != nil {
-		if ctx.Request().Context().Err() != nil {
-			return nil // Client disconnected
-		}
-		// A source with no audio streams (a corrupt or video-only file) is a
-		// client-side problem, not a server fault: report 422 like the stream
-		// test handler rather than a generic 500.
-		if errors.Is(err, ffmpeg.ErrNoAudioStreamsFound) {
-			return c.HandleError(ctx, err, "Source audio has no audio track", http.StatusUnprocessableEntity)
-		}
-		return c.HandleError(ctx, err, "Failed to probe audio sample rate", http.StatusInternalServerError)
-	}
-	// Sources below the minimum bat capture rate cannot carry ultrasonic content,
-	// so a derived "audible bats" clip would have nothing meaningful to reveal.
-	// Reject before spending CPU on time expansion.
-	if sampleRate < ffmpeg.MinBatSampleRate {
-		return c.HandleError(ctx,
-			fmt.Errorf("sample rate %d below minimum %d", sampleRate, ffmpeg.MinBatSampleRate),
-			fmt.Sprintf("Source audio must be at least %d Hz for audible bats mode", ffmpeg.MinBatSampleRate),
-			http.StatusUnprocessableEntity,
-		)
-	}
-
-	// Temp working directory under the SecureFS root (container-friendly with a
-	// read-only rootfs), reusing the existing processing temp dir.
-	tmpDir := filepath.Join(c.SFS.BaseDir(), ".tmp-processing")
-	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
-		return c.HandleError(ctx, err, "Failed to create temp directory", http.StatusInternalServerError)
-	}
-
-	// Pass 1: full-clip time expansion + 48 kHz resample (all-or-nothing; no
-	// detection-window clipping).
-	expandedFile, err := os.CreateTemp(tmpDir, "bat-expanded-*.wav")
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to create temp file", http.StatusInternalServerError)
-	}
-	expandedPath := expandedFile.Name()
-	_ = expandedFile.Close()
-	defer func() { _ = os.Remove(expandedPath) }()
-
-	if err := ffmpeg.TimeExpandBatAudio(ctx.Request().Context(), absolutePath, ffmpegPath,
-		req.Expansion, sampleRate, expandedPath); err != nil {
-		if ctx.Request().Context().Err() != nil {
-			return nil // Client disconnected
-		}
-		return c.HandleError(ctx, err, "Failed to generate audible bats audio", http.StatusInternalServerError)
-	}
-
-	// Pass 2: apply normalization (after conversion) and gain to the derived clip.
-	finalPath := expandedPath
-	filters := ffmpeg.AudioFilters{Normalize: req.Normalize, GainDB: req.GainDB}
-	if filters.HasFilters() {
-		finalFile, err := os.CreateTemp(tmpDir, "bat-audible-*.wav")
-		if err != nil {
-			return c.HandleError(ctx, err, "Failed to create temp file", http.StatusInternalServerError)
-		}
-		processedPath := finalFile.Name()
-		_ = finalFile.Close()
-		defer func() { _ = os.Remove(processedPath) }()
-
-		if err := ffmpeg.ProcessAudioToFile(ctx.Request().Context(), expandedPath, ffmpegPath, filters, processedPath); err != nil {
-			if ctx.Request().Context().Err() != nil {
-				return nil // Client disconnected
-			}
-			return c.HandleError(ctx, err, "Failed to process audible bats audio", http.StatusInternalServerError)
-		}
-		finalPath = processedPath
-	}
-
-	wavData, err := os.ReadFile(finalPath)
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to read audible bats audio", http.StatusInternalServerError)
+		return c.transcodeError(ctx, noteID, "media_audible_bats_failed", processedAudioFormat,
+			filters, err, "Failed to generate audible bats audio")
 	}
 
 	// Cache the result (non-fatal on failure).
@@ -1625,13 +1571,13 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Validate inputs
-	if !ffmpeg.IsValidDenoisePreset(req.Denoise) {
+	if !transcode.IsValidDenoisePreset(req.Denoise) {
 		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
 			"Invalid denoise preset", http.StatusBadRequest)
 	}
-	if !ffmpeg.IsValidGainDB(req.GainDB) {
+	if !transcode.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
-			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+			gainRangeMessage(), http.StatusBadRequest)
 	}
 
 	// Resolve clip path
@@ -1666,33 +1612,35 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Create temp directory inside SecureFS root for processed files
-	tmpDir := filepath.Join(c.SFS.BaseDir(), ".tmp-processing")
-	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+	tmpDir, err := transcode.ProcessingTempDir(c.SFS.BaseDir())
+	if err != nil {
 		return c.HandleError(ctx, err, "Failed to create temp directory", http.StatusInternalServerError)
 	}
 
-	// Process audio directly to a temp file (not pipe) so WAV header is correct.
-	// ProcessAudioFile uses pipe:1 which produces broken WAV headers (size=INT32_MAX).
-	filters := ffmpeg.AudioFilters{
+	// Process the audio in memory, then hand the renderer a WAV file with a
+	// correct header.
+	filters := transcode.Filters{
 		Normalize: req.Normalize,
 		Denoise:   req.Denoise,
 		GainDB:    req.GainDB,
+	}
+	wavData, err := transcode.ProcessToWAV(ctx.Request().Context(), absolutePath, filters)
+	if err != nil {
+		return c.transcodeError(ctx, noteID, "media_processed_spectrogram_failed", processedAudioFormat,
+			filters, err, "Failed to process audio")
 	}
 	tmpFile, err := os.CreateTemp(tmpDir, "processed-*.wav")
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to create temp file", http.StatusInternalServerError)
 	}
 	tmpPath := tmpFile.Name()
-	_ = tmpFile.Close()
 	defer func() { _ = os.Remove(tmpPath) }()
-
-	if err := ffmpeg.ProcessAudioToFile(ctx.Request().Context(), absolutePath,
-		c.CurrentSettings().Realtime.Audio.FfmpegPath, filters, tmpPath); err != nil {
-		if handled, contextErr := c.handleRequestContextError(ctx); handled {
-			return contextErr
-		}
-		c.logTranscodeFailure(noteID, "media_processed_spectrogram_failed", processedAudioFormat, &filters, err)
-		return c.HandleError(ctx, err, "Failed to process audio", http.StatusInternalServerError)
+	_, writeErr := tmpFile.Write(wavData)
+	if closeErr := tmpFile.Close(); writeErr == nil {
+		writeErr = closeErr
+	}
+	if writeErr != nil {
+		return c.HandleError(ctx, writeErr, "Failed to write processed audio", http.StatusInternalServerError)
 	}
 
 	// Generate spectrogram from processed audio into another temp file
@@ -1752,9 +1700,6 @@ func (c *Handler) spectrogramHTTPError(ctx echo.Context, err error) error {
 	case errors.Is(err, context.Canceled):
 		// Use StatusClientClosedRequest (non-standard, but common for Nginx)
 		return c.HandleError(ctx, err, "Spectrogram generation canceled by client", StatusClientClosedRequest)
-	case errors.Is(err, ErrFFmpegNotConfigured) || errors.Is(err, ErrSoxNotConfigured):
-		// Handle configuration errors
-		return c.HandleError(ctx, err, "Server configuration error preventing spectrogram generation", http.StatusInternalServerError)
 	default:
 		// Default to internal server error for other generation failures
 		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)

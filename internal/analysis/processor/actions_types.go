@@ -157,7 +157,10 @@ type SaveAudioAction struct {
 	// exact string match. Without it every bucket the endpoint returns has an
 	// empty ClipPaths; with the wrong casing the paths land on a phantom
 	// zero-count species row instead of the counted one.
-	species       string
+	species string
+	// clipTags is the safe, display-ready detection metadata embedded as FLAC
+	// tags; see clip_tags.go for what may and may not be carried.
+	clipTags      clipTagMeta
 	NoteID        uint              // Note ID for correlation logging with pre-renderer
 	PreRenderer   PreRendererSubmit // Injected from processor
 	DetectionCtx  *DetectionContext // Shared context to signal ClipSaved to late consumers

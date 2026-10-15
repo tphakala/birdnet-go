@@ -6,11 +6,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
 	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	goflacmeta "github.com/tphakala/go-flac"
 	goflac "github.com/tphakala/go-flac/pcm"
 )
 
@@ -32,6 +34,22 @@ const (
 	// without allocating a full-size copy of the PCM. Even so int16 samples never
 	// straddle a chunk boundary.
 	gainScratchBytes = 32 * 1024
+
+	// Tag limits. go-flac rejects a VORBIS_COMMENT body above 24 bits (16 MiB) and
+	// any invalid name or non-UTF-8 value, which would fail the whole export. These
+	// caps keep the worst-case body (about 71 KB) far below that limit.
+	maxTagCount      = 64
+	maxTagNameBytes  = 64
+	maxTagValueBytes = 1024
+
+	// tagInvalidUTF8Replacement stands in for each run of invalid UTF-8 bytes in a
+	// tag value or vendor string (the Unicode replacement character).
+	tagInvalidUTF8Replacement = "\uFFFD"
+
+	// Vorbis comment field names are ASCII 0x20 through 0x7D, excluding '='.
+	tagNameMinByte   = 0x20
+	tagNameMaxByte   = 0x7D
+	tagNameSeparator = '='
 )
 
 // encoderPool reuses go-flac encoders (and their multi-MB workspaces) across
@@ -50,6 +68,17 @@ var gainScratchPool = sync.Pool{New: func() any {
 	return &b
 }}
 
+// Tag is one textual metadata field written to the clip's VORBIS_COMMENT block.
+type Tag struct {
+	// Name is the field name: 1 to 64 ASCII bytes in 0x20..0x7D, excluding '='.
+	// A tag with any other name is dropped.
+	Name string
+	// Value is the field text. Invalid UTF-8 is replaced, surrounding space is
+	// trimmed, and the value is cut to 1024 bytes. A tag whose sanitized value
+	// is empty is dropped.
+	Value string
+}
+
 // Options configures a native FLAC export of an in-memory PCM buffer.
 type Options struct {
 	// PCMData is interleaved little-endian PCM (the capture buffer format).
@@ -64,6 +93,15 @@ type Options struct {
 	BitDepth int
 	// GainDB is the volume adjustment in dB (0 = no change).
 	GainDB float64
+	// Tags are written in order to a VORBIS_COMMENT block. Nil Tags (or none left
+	// after sanitization) together with an empty Vendor write no block, so the
+	// output is byte-identical to an untagged encode. Invalid tags are dropped or
+	// repaired; tags never cause an encode error. At most 64 tags are kept.
+	Tags []Tag
+	// Vendor is the optional VORBIS_COMMENT vendor string, sanitized like a tag
+	// value. A Vendor that is still non-empty after sanitization writes the
+	// block even when no tag survives.
+	Vendor string
 }
 
 // SupportedBitDepth reports whether the native encoder supports a PCM bit depth.
@@ -74,8 +112,11 @@ func SupportedBitDepth(bitDepth int) bool { return bitDepth == bitDepth16 }
 
 // EncodePCM encodes opts.PCMData to a FLAC file at opts.OutputPath. The write is
 // atomic: data is encoded to a unique per-export temp file and renamed on
-// success, with the temp file removed on any failure. A non-zero GainDB is
+// success, with the temp file removed on any failure. Options.Tags and
+// Options.Vendor are embedded as VORBIS_COMMENT metadata. A non-zero GainDB is
 // applied in Go before encoding; opts.PCMData itself is never modified.
+// STREAMINFO carries the real MD5 of the encoded PCM, patched at Close via the
+// seekable temp file.
 func EncodePCM(ctx context.Context, opts *Options) (err error) {
 	if opts == nil {
 		return errors.Newf("flac encode: nil options").
@@ -142,9 +183,11 @@ func EncodePCM(ctx context.Context, opts *Options) (err error) {
 		// efficiently in long extended-capture clips. Patched in place at Close
 		// via the seekable temp file.
 		SeekTableInterval: opts.SampleRate,
+		Tags:              sanitizeTags(opts.Tags),
+		Vendor:            sanitizeTagText(opts.Vendor),
 	}
 
-	if encErr := encodeToWriter(ctx, f, cfg, opts.PCMData, opts.GainDB); encErr != nil {
+	if encErr := encodeToWriter(ctx, f, &cfg, opts.PCMData, opts.GainDB); encErr != nil {
 		return encErr
 	}
 
@@ -220,9 +263,9 @@ func validateEncodeInput(pcmData []byte, bitDepth, channels int) error {
 // samples, and closes the encoder (which patches STREAMINFO/SEEKTABLE when w is
 // an io.WriteSeeker), but does not close w itself. Used by both the file and
 // in-memory buffer entry points.
-func encodeToWriter(ctx context.Context, w io.Writer, cfg goflac.Config, pcmData []byte, gainDB float64) error {
+func encodeToWriter(ctx context.Context, w io.Writer, cfg *goflac.Config, pcmData []byte, gainDB float64) error {
 	enc := encoderPool.Get().(*goflac.Encoder)
-	if resetErr := enc.Reset(w, cfg); resetErr != nil {
+	if resetErr := enc.Reset(w, *cfg); resetErr != nil {
 		// A failed Reset may leave the encoder half-initialized; go-flac's
 		// contract says it must not be reused, so drop it (do not Put it back)
 		// and let the pool allocate a fresh one next time.
@@ -240,10 +283,10 @@ func encodeToWriter(ctx context.Context, w io.Writer, cfg goflac.Config, pcmData
 	// release it; SeekTableInterval is zeroed so a non-seekable sink is accepted.
 	// This also re-primes the encoder, so it is pooled only if the re-Reset
 	// succeeds (a failed one drops the encoder, matching the failed-Reset path).
+	// Tags and Vendor are cleared too: a pooled encoder must not pin the previous
+	// clip's tag strings, and the discard stream needs no comment block.
 	defer func() {
-		depinCfg := cfg
-		depinCfg.SeekTableInterval = 0
-		if enc.Reset(io.Discard, depinCfg) == nil {
+		if enc.Reset(io.Discard, depinConfig(cfg)) == nil {
 			encoderPool.Put(enc)
 		}
 	}()
@@ -260,6 +303,16 @@ func encodeToWriter(ctx context.Context, w io.Writer, cfg goflac.Config, pcmData
 			Build()
 	}
 	return nil
+}
+
+// depinConfig returns the config for the re-Reset that releases a pooled
+// encoder's writer: a copy of cfg with the seek table, tags and vendor cleared.
+func depinConfig(cfg *goflac.Config) goflac.Config {
+	depinCfg := *cfg
+	depinCfg.SeekTableInterval = 0
+	depinCfg.Tags = nil
+	depinCfg.Vendor = ""
+	return depinCfg
 }
 
 // encodeSamples writes pcmData to enc, applying gain when requested. With no gain
@@ -303,7 +356,9 @@ func wrapWriteErr(err error) error {
 }
 
 // BufferOptions configures a native FLAC export of an in-memory PCM buffer to an
-// in-memory FLAC buffer. It mirrors Options without OutputPath.
+// in-memory FLAC buffer. It mirrors Options without OutputPath. It deliberately
+// carries no tags: the buffer is uploaded to a third party (BirdWeather) and is a
+// whole soundscape, not one detection.
 type BufferOptions struct {
 	// PCMData is interleaved little-endian PCM (the capture buffer format).
 	PCMData []byte
@@ -322,9 +377,10 @@ type BufferOptions struct {
 // so no SEEKTABLE is emitted. The STREAMINFO total-samples field is finalized
 // up front from the PCM length (go-flac verifies it against the samples actually
 // written on Close), so consumers that read the sample count for duration get a
-// correct value without a seekable sink; the MD5 field is left at its spec-legal
-// "unknown" sentinel for this streaming path. A non-zero GainDB is applied in Go
-// before encoding; opts.PCMData itself is never modified.
+// correct value without a seekable sink. The MD5 field is left at the spec-legal
+// all-zero "unknown" sentinel and is not computed: recording it on a
+// non-seekable sink would need the whole gained PCM hashed up front. A non-zero
+// GainDB is applied in Go before encoding; opts.PCMData itself is never modified.
 func EncodePCMToBuffer(ctx context.Context, opts *BufferOptions) (*bytes.Buffer, error) {
 	if opts == nil {
 		return nil, errors.Newf("flac encode: nil options").
@@ -356,14 +412,66 @@ func EncodePCMToBuffer(ctx context.Context, opts *BufferOptions) (*bytes.Buffer,
 		// seek-back, so a bytes.Buffer sink still reports the correct duration.
 		// go-flac verifies it against the samples written on Close.
 		TotalSamples: totalSamples,
+		// go-flac cannot patch the MD5 into a non-seekable sink at Close, so
+		// hashing every frame would be wasted work; the output is unchanged.
+		SkipMD5: true,
 		// No SeekTableInterval: a bytes.Buffer is not an io.WriteSeeker, and
 		// go-flac rejects a seektable on a non-seekable sink. Short upload clips
 		// do not need one.
 	}
 
 	buf := new(bytes.Buffer)
-	if encErr := encodeToWriter(ctx, buf, cfg, opts.PCMData, opts.GainDB); encErr != nil {
+	if encErr := encodeToWriter(ctx, buf, &cfg, opts.PCMData, opts.GainDB); encErr != nil {
 		return nil, encErr
 	}
 	return buf, nil
+}
+
+// validTagName reports whether name is a legal Vorbis comment field name that
+// go-flac accepts: 1..maxTagNameBytes ASCII bytes in 0x20..0x7D, excluding '='.
+func validTagName(name string) bool {
+	if name == "" || len(name) > maxTagNameBytes {
+		return false
+	}
+	for i := range len(name) {
+		c := name[i]
+		if c < tagNameMinByte || c > tagNameMaxByte || c == tagNameSeparator {
+			return false
+		}
+	}
+	return true
+}
+
+// sanitizeTagText makes s acceptable to go-flac as a tag value or vendor string:
+// invalid UTF-8 is replaced, surrounding space trimmed, and the result cut to
+// maxTagValueBytes on a rune boundary.
+func sanitizeTagText(s string) string {
+	s = strings.TrimSpace(strings.ToValidUTF8(s, tagInvalidUTF8Replacement))
+	if len(s) > maxTagValueBytes {
+		// Cutting mid-rune leaves a trailing partial rune; drop it, and trim
+		// any space the cut exposed.
+		s = strings.TrimSpace(strings.ToValidUTF8(s[:maxTagValueBytes], ""))
+	}
+	return s
+}
+
+// sanitizeTags converts tags to go-flac tags, dropping those with an invalid
+// name or an empty sanitized value and keeping at most maxTagCount. It returns
+// nil when nothing is kept so that no VORBIS_COMMENT block is written.
+func sanitizeTags(tags []Tag) []goflacmeta.Tag {
+	var out []goflacmeta.Tag
+	for _, tag := range tags {
+		if len(out) >= maxTagCount {
+			break
+		}
+		if !validTagName(tag.Name) {
+			continue
+		}
+		value := sanitizeTagText(tag.Value)
+		if value == "" {
+			continue
+		}
+		out = append(out, goflacmeta.Tag{Name: tag.Name, Value: value})
+	}
+	return out
 }

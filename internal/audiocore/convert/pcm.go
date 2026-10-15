@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/simd/f64"
 )
@@ -23,15 +24,12 @@ const (
 	// pcm16ScaleFactor is used as divisor when converting PCM16 to float64.
 	// Using 32768 ensures -32768 maps exactly to -1.0.
 	pcm16ScaleFactor = 32768.0
-
-	// formatAAC is the AAC audio format string.
-	formatAAC = "aac"
 )
 
 // GetFileExtension returns the appropriate file extension for a given audio format string.
 func GetFileExtension(format string) string {
 	switch format {
-	case formatAAC:
+	case audioformat.AAC:
 		return "m4a"
 	default:
 		return format

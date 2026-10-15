@@ -9,17 +9,19 @@ import (
 
 // Calibration and gating constants from ITU-R BS.1770-4 / EBU R 128.
 const (
-	loudnessOffset   = -0.691 // LUFS calibration offset
-	absoluteGateLUFS = -70.0  // absolute gate
-	relativeGateLU   = -10.0  // relative gate, below the absolute-gated mean
-	subBlockSeconds  = 0.1    // sub-block length (100 ms hop, 75% overlap); 4 per 400 ms block
-	subBlocksPerGate = 4      // 400 ms / 100 ms
+	loudnessOffset = -0.691 // LUFS calibration offset
+	// AbsoluteGateLUFS is the EBU R128 absolute gate: blocks quieter than this
+	// never count toward integrated loudness, and no target at or below it is valid.
+	AbsoluteGateLUFS = -70.0
+	relativeGateLU   = -10.0 // relative gate, below the absolute-gated mean
+	subBlockSeconds  = 0.1   // sub-block length (100 ms hop, 75% overlap); 4 per 400 ms block
+	subBlocksPerGate = 4     // 400 ms / 100 ms
 
-	// minSampleRate is the lowest supported rate. Below ~3364 Hz the K-weighting
+	// MinSampleRate is the lowest supported rate. Below ~3364 Hz the K-weighting
 	// high-shelf center (1681.97 Hz) exceeds Nyquist and the bilinear transform
 	// produces unstable coefficients; 8000 Hz (the lowest standard audio rate)
 	// keeps the filter well-conditioned and the 100 ms sub-block non-empty.
-	minSampleRate = 8000
+	MinSampleRate = 8000
 )
 
 // Gating is performed in the energy domain (float32 comparisons) to avoid a
@@ -27,8 +29,8 @@ const (
 var (
 	// absGateEnergy is the absolute -70 LUFS gate as a weighted-energy threshold:
 	// a block passes when z > absGateEnergy, equivalent to
-	// loudnessOffset + 10*log10(z) > absoluteGateLUFS.
-	absGateEnergy = float32(math.Pow(10, (absoluteGateLUFS-loudnessOffset)/10))
+	// loudnessOffset + 10*log10(z) > AbsoluteGateLUFS.
+	absGateEnergy = float32(math.Pow(10, (AbsoluteGateLUFS-loudnessOffset)/10))
 	// relGateEnergyFactor is the energy ratio for the -10 LU relative gate.
 	relGateEnergyFactor = float32(math.Pow(10, relativeGateLU/10))
 )
@@ -94,13 +96,13 @@ func subBlockSamples(sampleRate int) int {
 
 // NewMeter creates a meter for the given sample rate (Hz) and interleaved
 // channel count. It panics if channels is not positive or sampleRate is below
-// minSampleRate (8000 Hz); callers using the validated top-level API never hit
+// MinSampleRate (8000 Hz); callers using the validated top-level API never hit
 // that.
 func NewMeter(sampleRate, channels int) *Meter {
 	if channels <= 0 {
 		panic("audionorm: NewMeter requires positive channels")
 	}
-	if sampleRate < minSampleRate {
+	if sampleRate < MinSampleRate {
 		panic("audionorm: NewMeter requires sample rate >= 8000 Hz")
 	}
 	s1, s2 := kWeightingStages(float64(sampleRate))

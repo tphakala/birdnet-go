@@ -2310,7 +2310,9 @@
       "saveAriaLabel": "Uložiť zmeny",
       "savingAriaLabel": "Ukladajú sa zmeny...",
       "unsavedChanges": "Neuložené zmeny",
-      "toolbar": "Akcie nastavení"
+      "toolbar": "Akcie nastavení",
+      "validationBlocked": "Niektoré polia vyžadujú pozornosť, kým budete môcť uložiť.",
+      "noChangesToSave": "Žiadne zmeny na uloženie."
     },
     "errors": {
       "loadFailed": "Nepodarilo sa načítať nastavenia",
@@ -3922,7 +3924,7 @@
       "allowSubnetBypassLabel": "Povoliť prístup zo subnetu na obídenie autentifikácie",
       "subnetBypassLocalNote": "Keď je táto možnosť zapnutá, klienti v rovnakej lokálnej sieti ako tento server sú automaticky dôveryhodní a preskočia prihlásenie. Pole nižšie použite iba na rozšírenie tejto dôvery na ďalšie siete (napríklad samostatnú VLAN alebo smerovanú podsieť).",
       "allowedSubnetsLabel": "Povolené subnety",
-      "allowedSubnetsHelp": "Ďalšie sieťové rozsahy, ktoré môžu obísť prihlásenie, nad rámec vlastnej lokálnej siete tohto servera. Notácia CIDR, oddelené čiarkami.",
+      "allowedSubnetsHelp": "Ďalšie sieťové rozsahy, ktoré môžu obísť prihlásenie, nad rámec vlastnej lokálnej siete tohto servera. Použite notáciu CIDR, napríklad 192.168.10.0/24.",
       "securityWarningTitle": "Bezpečnostné varovanie:",
       "subnetWarningText": "Lokálna sieť tohto servera a všetky tu uvedené podsiete získajú plný prístup bez prihlásenia. Zahrňte iba siete, ktorým plne dôverujete.",
       "httpsSettingsTitle": "Nastavenia HTTPS",
@@ -4150,6 +4152,77 @@
         "downloadCertificate": "Stiahnuť certifikát",
         "downloadCertificateHelp": "Nainštalujte tento certifikát do úložiska dôveryhodných certifikátov vášho operačného systému, aby ste sa vyhli bezpečnostným upozorneniam prehliadača.",
         "fileReadError": "Nepodarilo sa prečítať vybraný súbor"
+      },
+      "reverseProxy": {
+        "title": "Reverzný proxy",
+        "description": "Pre prístup cez nginx, Caddy, Traefik, Cloudflare alebo iný proxy",
+        "listLabel": "Dôveryhodné proxy",
+        "listHelp": "Pridajte adresu každého proxy pred BirdNET-Go. Pri Dockeri je to často adresa brány Dockeru, napríklad 172.17.0.1.",
+        "placeholder": "Napríklad 172.17.0.1",
+        "emptyState": "Žiadne dôveryhodné proxy. BirdNET-Go používa adresu, ktorá sa k nemu pripája.",
+        "emptyStateCloudflareOnly": "Dôveryhodné sú iba zverejnené okrajové adresy Cloudflare. Nie sú uvedené žiadne iné proxy.",
+        "rangeBadge": "Rozsah",
+        "ruleOwnAddress": "Uveďte vlastnú adresu každého proxy. Nikdy neuvádzajte rozsah, ktorý obsahuje aj počítače, z ktorých prehliadate.",
+        "ruleHeaders": "Proxy musí pridať adresu klienta do X-Forwarded-For alebo prepísať X-Real-IP.",
+        "cloudflareLabel": "Dôverovať Cloudflare",
+        "cloudflareHelp": "Zapnite túto možnosť, keď je vaša stránka poskytovaná cez Cloudflare. BirdNET-Go potom dôveruje publikovaným edge adresám Cloudflare.",
+        "check": {
+          "title": "Vaše pripojenie",
+          "recheck": "Znova skontrolovať",
+          "checking": "Kontroluje sa vaše pripojenie",
+          "error": "Nepodarilo sa skontrolovať vaše pripojenie.",
+          "stale": "Táto kontrola zobrazuje uložené nastavenia. Uložte pre kontrolu zmien.",
+          "trust": "Dôverovať {peer}",
+          "trustWarning": "Dôverujte {peer} iba vtedy, ak je to váš reverzný proxy, nie počítač, z ktorého prehliadate.",
+          "trustWithCloudflare": "Dôverovať {peer} a Cloudflare",
+          "cloudflareInFront": "Cloudflare je pred {peer}. Dôverujte obom na overenie vašej adresy.",
+          "cloudflareEdge": "{peer} patrí pod Cloudflare. Zapnite možnosť Dôverovať Cloudflare nižšie.",
+          "chainHint": "Ak je pred {peer} ďalší proxy, uveďte ho tiež.",
+          "added": "Pridané do zoznamu. Uložte pre aplikovanie.",
+          "coveredBy": "Už pokryté rozsahom {range} v zozname. Uložte na použitie.",
+          "selfClientCause": "Proxy môže ako klienta odovzdávať svoju vlastnú adresu, často preto, že publikovanie portov kontajnera skrýva skutočného klienta. Opravte to v nastavení siete kontajnera alebo proxy."
+        },
+        "status": {
+          "direct": {
+            "title": "Pripojené priamo",
+            "body": "Váš prehliadač sa pripája k BirdNET-Go priamo z {peer}.",
+            "bodyNoPeer": "Váš prehliadač sa pripája k BirdNET-Go priamo.",
+            "hint": "Ak používate reverzný proxy a {peer} je jeho adresa, nastavte proxy tak, aby odosielal X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Pripojené cez dôveryhodný proxy",
+            "body": "Vaše pripojenie prechádza cez {peer}, ktorý je dôveryhodný. Vaša adresa {client} bola overená.",
+            "hint": "Ak je {client} ďalší proxy a nie váš počítač, uveďte aj tento proxy."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Vašu adresu sa nepodarilo overiť",
+            "body": "{peer} je dôveryhodný, ale adresu, ktorú odovzdáva, nebolo možné overiť. Časté príčiny:",
+            "causeRange": "Uvedený rozsah obsahuje aj váš počítač, takže žiadna adresa v reťazci sa nepovažuje za vašu.",
+            "causeHeaders": "Proxy nepridáva X-Forwarded-For ani neprepisuje X-Real-IP.",
+            "causeConflict": "Proxy odosiela konfliktné alebo opakované hlavičky adries, alebo iba hlavičku Forwarded."
+          },
+          "untrusted_public_proxy": {
+            "title": "Pripojené cez verejný proxy",
+            "body": "Vaše pripojenie prechádza cez {peer}, verejnú adresu. Verejné adresy sa nikdy neponúkajú na dôverovanie jedným kliknutím. Pridajte ju manuálne iba vtedy, ak ste si istí, že je to váš proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Pripojené cez nedôveryhodný proxy",
+            "body": "Vaše pripojenie prechádza cez proxy na adrese {peer}, ktorý nie je dôveryhodný, takže BirdNET-Go nemôže overiť vašu adresu."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Hlavičky proxy nie je možné overiť",
+            "body": "Vaše pripojenie prechádza cez {peer}, ale odosielané hlavičky adries nebolo možné overiť, aj keby bol dôveryhodný.",
+            "bodyNoPeer": "Vaše pripojenie prechádza cez proxy, ale jeho adresu sa nepodarilo prečítať.",
+            "fix": "Nastavte proxy tak, aby pridával X-Forwarded-For alebo prepisoval X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Za reverzným proxy toto obídenie funguje iba vtedy, keď je proxy uvedený ako dôveryhodný.",
+      "bypassProxyLink": "Nastaviť dôveryhodné proxy",
+      "allowedSubnetsEmpty": "Žiadne ďalšie podsiete. Iba vlastná lokálna sieť tohto servera môže obísť prihlásenie.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} obsahuje neplatnú položku.",
+        "pendingEntry": "{tab}: {field} obsahuje text, ktorý nebol pridaný. Stlačte Enter alebo Pridať, alebo ho vymažte."
       }
     },
     "species": {
@@ -4908,6 +4981,28 @@
         "dragToReorder": "Potiahnite pre zmenu poradia druhu {species}",
         "edit": "Upraviť druh",
         "remove": "Odstrániť druh"
+      }
+    },
+    "networkAddressList": {
+      "add": "Pridať",
+      "remove": "Odstrániť {address}",
+      "empty": "Zatiaľ neboli pridané žiadne adresy.",
+      "pendingHint": "Stlačte Enter alebo Pridať pre pridanie tejto adresy.",
+      "limitReached": "Zoznam je plný ({max} položiek).",
+      "rowDuplicate": "Duplikát",
+      "rowInvalid": {
+        "cidr": "Neplatný rozsah",
+        "ip": "Neplatná IP adresa",
+        "ipOrCidr": "Neplatná adresa alebo rozsah"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Neplatný rozsah: {values}. Použite rozsah ako 192.168.1.0/24.",
+          "ip": "Neplatná IP adresa: {values}. Použite adresu ako 192.168.1.10.",
+          "ipOrCidr": "Neplatná adresa alebo rozsah: {values}. Použite adresu ako 192.168.1.10 alebo rozsah ako 192.168.1.0/24."
+        },
+        "duplicate": "Už je v zozname: {values}.",
+        "limit": "Zoznam môže obsahovať maximálne {max} položiek. Nepridané: {values}."
       }
     }
   },

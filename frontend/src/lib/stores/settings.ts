@@ -520,6 +520,13 @@ export interface SecuritySettings {
     liveAudio: boolean;
   };
   privateMode?: boolean;
+  /**
+   * Reverse proxies whose forwarded client-IP headers are honored for
+   * authentication decisions such as the subnet bypass (security.trustedProxies).
+   * Each entry is an IPv4 or IPv6 address, a CIDR, or the reserved `cloudflare`
+   * preset token. Coercion turns a missing or null value into `[]`.
+   */
+  trustedProxies?: string[];
 }
 
 // Legacy OAuth settings interface (deprecated)
@@ -1134,6 +1141,7 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
         enabled: false,
         subnet: '',
       },
+      trustedProxies: [],
     },
     sentry: {
       enabled: false,
@@ -1192,6 +1200,47 @@ export const hasUnsavedChanges = derived(
 
 // Validation errors store - pages can add errors to prevent saving
 export const settingsValidationErrors = writable<string[]>([]);
+
+/**
+ * Optional translated, human-readable reasons for entries of settingsValidationErrors,
+ * keyed by the entry. The save bar lists the reason of every active entry that has
+ * one, so a page can say which tab and field blocks saving. Pages that set a reason
+ * remove it together with the entry.
+ */
+export const settingsValidationReasons = writable<ReadonlyMap<string, string>>(new Map());
+
+/**
+ * Replaces the validation entries a page owns. `ownedKeys` are all the keys the page
+ * may set; `active` maps the ones that apply now to their reason (entries of `active`
+ * outside `ownedKeys` are ignored). Both stores are
+ * written together, and neither is written when it would not change, so a page can
+ * call this from an effect without waking the save bar. Pass an empty map to clear.
+ */
+export function setValidationIssues(
+  ownedKeys: readonly string[],
+  active: ReadonlyMap<string, string>
+): void {
+  // Keys the caller does not own are ignored, so they can neither leak into the
+  // stores nor be listed twice.
+  const owned = [...active].filter(([key]) => ownedKeys.includes(key));
+  const errors = get(settingsValidationErrors);
+  const nextErrors = [
+    ...errors.filter(key => !ownedKeys.includes(key)),
+    ...owned.map(([key]) => key),
+  ];
+  if (nextErrors.length !== errors.length || !nextErrors.every(key => errors.includes(key))) {
+    settingsValidationErrors.set(nextErrors);
+  }
+
+  const reasons = get(settingsValidationReasons);
+  const nextReasons = new Map(reasons);
+  for (const key of ownedKeys) nextReasons.delete(key);
+  for (const [key, reason] of owned) nextReasons.set(key, reason);
+  const reasonsUnchanged =
+    nextReasons.size === reasons.size &&
+    [...nextReasons].every(([key, reason]) => reasons.get(key) === reason);
+  if (!reasonsUnchanged) settingsValidationReasons.set(nextReasons);
+}
 
 export const currentSection = derived(settingsStore, $store => $store.activeSection);
 
@@ -1331,6 +1380,88 @@ export const SECTION_STORE_PATHS = {
  * waits for them so its snapshot of formData never predates a merge.
  */
 const inFlightSectionSaves = new Set<Promise<void>>();
+
+/**
+ * The full save that is waiting for section saves to finish, if any. A saveSettings
+ * call made in that window joins it. It is cleared right before the snapshot is taken,
+ * so a call made after that starts its own save.
+ */
+let pendingFullSave: { done: Promise<void>; notify: boolean } | null = null;
+
+/**
+ * Snapshots formData and sends it to the backend, then marks it saved. Resets isSaving
+ * and rethrows on every failure path, including the refusal before a load.
+ */
+async function persistFormData(notify: boolean): Promise<void> {
+  try {
+    const currentState = get(settingsStore);
+    if (!currentState.dataLoaded) {
+      logger.warn('Refusing to save settings before they have been loaded');
+      throw new Error(t('settings.errors.loadFailed'));
+    }
+    settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
+
+    // Apply coercion to all sections before saving
+    const coercedFormData = { ...currentState.formData };
+    for (const [section, data] of Object.entries(coercedFormData)) {
+      if (data && typeof data === 'object') {
+        const key = section as keyof SettingsFormData;
+        // Use a type assertion to handle the assignment
+        // eslint-disable-next-line security/detect-object-injection -- key is from controlled source
+        (coercedFormData as Record<string, unknown>)[key] = coerceSettings(
+          section,
+          data as Record<string, unknown>
+        );
+      }
+    }
+
+    // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
+    // This ensures the config file is properly cleaned when users clear these fields
+    // Trim whitespace to handle cases like "   " which should also be treated as empty
+    if (coercedFormData.birdnet.modelPath?.trim() === '') {
+      coercedFormData.birdnet.modelPath = null;
+    }
+    if (coercedFormData.birdnet.labelPath?.trim() === '') {
+      coercedFormData.birdnet.labelPath = null;
+    }
+
+    await settingsAPI.save(coercedFormData);
+
+    // Read newLocale from coercedFormData (the value we actually persisted)
+    // and compare to originalData (the snapshot loaded from the backend).
+    await afterSettingsPersisted(
+      coercedFormData.realtime?.dashboard?.locale,
+      currentState.originalData.realtime?.dashboard?.locale
+    );
+
+    // Update originalData to match the saved formData (no reload needed).
+    // Restart-required state is owned by the backend (refreshed in
+    // afterSettingsPersisted) and surfaced by the global RestartBanner, so
+    // it is no longer tracked client-side here.
+    settingsStore.update(state => ({
+      ...state,
+      originalData: JSON.parse(JSON.stringify(state.formData)),
+      isSaving: false,
+    }));
+
+    if (notify) {
+      toastActions.success(t('notifications.content.settings.savedSuccessfully'));
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : t('settings.errors.saveFailed');
+    settingsStore.update(state => ({
+      ...state,
+      isSaving: false,
+      error: errorMessage,
+    }));
+
+    if (notify) {
+      toastActions.error(t('notifications.content.settings.saveFailed'));
+    }
+
+    throw error;
+  }
+}
 
 /** Returns value when it is a plain object, otherwise undefined. */
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -1550,86 +1681,39 @@ export const settingsActions = {
    * call) while no settings load has succeeded, because formData would then hold
    * empty defaults that the backend deep-merges over the real configuration.
    * Pass `{ notify: false }` to suppress the success and failure toasts.
+   *
+   * A call made while an earlier call still waits for section saves joins it:
+   * one request, one result, and the success or failure toast if any joined call
+   * asked for it.
    */
   async saveSettings(options: SaveSettingsOptions = {}) {
     const { notify = true } = options;
 
+    if (pendingFullSave) {
+      pendingFullSave.notify ||= notify;
+      return pendingFullSave.done;
+    }
+    if (inFlightSectionSaves.size === 0) return persistFormData(notify);
+
     // Let section saves finish first (success or failure, request and store
-    // merge) so the snapshot below carries what they patched. Loop, because a
-    // section save can start while an earlier one is awaited.
-    while (inFlightSectionSaves.size > 0) {
-      await Promise.allSettled([...inFlightSectionSaves]);
-    }
-
-    try {
-      const currentState = get(settingsStore);
-      if (!currentState.dataLoaded) {
-        logger.warn('Refusing to save settings before they have been loaded');
-        throw new Error(t('settings.errors.loadFailed'));
-      }
-      settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
-
-      // Apply coercion to all sections before saving
-      const coercedFormData = { ...currentState.formData };
-      for (const [section, data] of Object.entries(coercedFormData)) {
-        if (data && typeof data === 'object') {
-          const key = section as keyof SettingsFormData;
-          // Use a type assertion to handle the assignment
-          // eslint-disable-next-line security/detect-object-injection -- key is from controlled source
-          (coercedFormData as Record<string, unknown>)[key] = coerceSettings(
-            section,
-            data as Record<string, unknown>
-          );
+    // merge) so the snapshot taken in persistFormData carries what they patched.
+    // The pending save is published before anything else runs so that a call
+    // made from here on joins it instead of sending a second request.
+    const pending = { notify, done: Promise.resolve() };
+    pendingFullSave = pending;
+    settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
+    pending.done = (async () => {
+      try {
+        // Loop, because a section save can start while an earlier one is awaited.
+        while (inFlightSectionSaves.size > 0) {
+          await Promise.allSettled([...inFlightSectionSaves]);
         }
+      } finally {
+        pendingFullSave = null;
       }
-
-      // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
-      // This ensures the config file is properly cleaned when users clear these fields
-      // Trim whitespace to handle cases like "   " which should also be treated as empty
-      if (coercedFormData.birdnet.modelPath?.trim() === '') {
-        coercedFormData.birdnet.modelPath = null;
-      }
-      if (coercedFormData.birdnet.labelPath?.trim() === '') {
-        coercedFormData.birdnet.labelPath = null;
-      }
-
-      await settingsAPI.save(coercedFormData);
-
-      // Read newLocale from coercedFormData (the value we actually persisted)
-      // and compare to originalData (the snapshot loaded from the backend),
-      // matching the coercedFormData-based comparison used by the TLS check below.
-      await afterSettingsPersisted(
-        coercedFormData.realtime?.dashboard?.locale,
-        currentState.originalData.realtime?.dashboard?.locale
-      );
-
-      // Update originalData to match the saved formData (no reload needed).
-      // Restart-required state is owned by the backend (refreshed via
-      // fetchRestartStatus above) and surfaced by the global RestartBanner, so
-      // it is no longer tracked client-side here.
-      settingsStore.update(state => ({
-        ...state,
-        originalData: JSON.parse(JSON.stringify(state.formData)),
-        isSaving: false,
-      }));
-
-      if (notify) {
-        toastActions.success(t('notifications.content.settings.savedSuccessfully'));
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : t('settings.errors.saveFailed');
-      settingsStore.update(state => ({
-        ...state,
-        isSaving: false,
-        error: errorMessage,
-      }));
-
-      if (notify) {
-        toastActions.error(t('notifications.content.settings.saveFailed'));
-      }
-
-      throw error;
-    }
+      await persistFormData(pending.notify);
+    })();
+    return pending.done;
   },
 
   resetSection<K extends keyof SettingsFormData>(section: K) {

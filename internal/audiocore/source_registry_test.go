@@ -527,3 +527,64 @@ func TestSourceRegistry_SyncReconfiguredParams_NotFound(t *testing.T) {
 
 	assert.False(t, r.SyncReconfiguredParams("nonexistent-id", "left", "full-stream", transportTCP, 48000, 1, false))
 }
+
+// TestSourceRegistry_TransitionState pins the compare-and-set contract: the
+// state changes and an event fires only when the current state equals from.
+func TestSourceRegistry_TransitionState(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		current   SourceState
+		from      SourceState
+		to        SourceState
+		wantOK    bool
+		wantState SourceState
+	}{
+		{"matching from applies", SourceStarting, SourceStarting, SourceRunning, true, SourceRunning},
+		{"to is honoured", SourceRunning, SourceRunning, SourceStopped, true, SourceStopped},
+		{"non-matching from is ignored", SourceStopped, SourceStarting, SourceRunning, false, SourceStopped},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := newTestRegistry(t)
+
+			var mu sync.Mutex
+			var received []SourceEvent
+			r.AddListener(func(e SourceEvent) {
+				mu.Lock()
+				defer mu.Unlock()
+				received = append(received, e)
+			})
+
+			src, err := r.Register(&SourceConfig{ConnectionString: "rtsp://cas-" + tt.name + ".example.com/stream"})
+			require.NoError(t, err)
+			require.NoError(t, r.UpdateState(src.ID, tt.current))
+			mu.Lock()
+			received = received[:0]
+			mu.Unlock()
+
+			assert.Equal(t, tt.wantOK, r.TransitionState(src.ID, tt.from, tt.to))
+
+			got, ok := r.Get(src.ID)
+			require.True(t, ok)
+			assert.Equal(t, tt.wantState, got.State)
+
+			mu.Lock()
+			defer mu.Unlock()
+			if tt.wantOK {
+				require.Len(t, received, 1)
+				assert.Equal(t, SourceStateChanged, received[0].Type)
+			} else {
+				assert.Empty(t, received)
+			}
+		})
+	}
+
+	t.Run("unknown ID returns false", func(t *testing.T) {
+		t.Parallel()
+		r := newTestRegistry(t)
+		assert.False(t, r.TransitionState("missing", SourceStarting, SourceRunning))
+	})
+}

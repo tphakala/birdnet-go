@@ -1,13 +1,15 @@
 // Package proxytrust decides which reverse proxies may vouch for the client
 // address of an HTTP request, and resolves that address.
 //
-// It serves two callers. The attribution extractor in internal/api/v2/apicore
+// It serves three callers. The attribution extractor in internal/api/v2/apicore
 // (logs, rate limiting, tunnel detection) composes TrustsPeer, ClientIPFromXFF
 // and ParseHeaderIP, which honor forwarded client-IP headers from any loopback,
 // link-local or private peer, and from configured proxies, so home-LAN proxies
 // work without configuration. Authentication decisions such as the subnet bypass
 // use AuthClientIP, which honors forwarded headers only from operator-configured
-// proxies and returns no address when it cannot verify them.
+// proxies and returns no address when it cannot verify them. Classify describes
+// a connection for the settings UI and the authentication log notices, using
+// AuthClientIP so they cannot disagree with the authentication decision.
 package proxytrust
 
 import (
@@ -101,6 +103,8 @@ type Checker struct {
 	// re-parsed on every request.
 	raw    []string
 	ranges []*net.IPNet
+	// cloudflare records that raw holds the "cloudflare" preset.
+	cloudflare bool
 }
 
 // NewChecker parses the configured trusted-proxy entries into a checker. Blank
@@ -117,6 +121,7 @@ func NewChecker(trustedProxies []string) *Checker {
 			continue
 		case strings.EqualFold(trimmed, conf.TrustedProxyCloudflarePreset):
 			tc.ranges = append(tc.ranges, cloudflareEdgeNets...)
+			tc.cloudflare = true
 		default:
 			if network, ok := parseProxyCIDR(trimmed); ok {
 				tc.ranges = append(tc.ranges, network)
@@ -194,12 +199,7 @@ func (tc *Checker) IsConfiguredProxy(ip net.IP) bool {
 	if ip == nil {
 		return false
 	}
-	for _, network := range tc.ranges {
-		if network.Contains(ip) {
-			return true
-		}
-	}
-	return false
+	return containsIP(tc.ranges, ip)
 }
 
 // ClientIPFromXFF resolves the real client IP from an X-Forwarded-For header,
@@ -454,4 +454,178 @@ func stripZone(s string) string {
 		return before
 	}
 	return s
+}
+
+// cgnatCIDR is the shared address space of RFC 6598, used by carrier NAT and
+// Tailscale, where a reverse proxy in front of LAN clients can also sit.
+const cgnatCIDR = "100.64.0.0/10"
+
+// cgnatRange is cgnatCIDR parsed once.
+var cgnatRange = func() *net.IPNet {
+	_, network, err := net.ParseCIDR(cgnatCIDR)
+	if err != nil {
+		panic(err)
+	}
+	return network
+}()
+
+// isLocalProxyCandidate reports whether ip is a loopback, link-local, private
+// or CGNAT address: where a reverse proxy in front of LAN clients sits, and the
+// only peers for which offering to list them as a trusted proxy is sensible.
+// A public address is never a candidate.
+func isLocalProxyCandidate(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate() || cgnatRange.Contains(ip)
+}
+
+// ConnectionStatus names how a connection relates to the configured trusted
+// proxies. The string value is the JSON value of the connection check API.
+type ConnectionStatus string
+
+// The connection statuses, in the order Classify evaluates them.
+const (
+	// StatusDirect means the request carries no client-IP header, so its peer
+	// is taken to be the client.
+	StatusDirect ConnectionStatus = "direct"
+	// StatusTrustedProxy means the peer is a configured proxy and the forwarded
+	// headers verified one client address.
+	StatusTrustedProxy ConnectionStatus = "trusted_proxy"
+	// StatusTrustedProxyUnverified means the peer is a configured proxy but its
+	// forwarded headers could not be verified.
+	StatusTrustedProxyUnverified ConnectionStatus = "trusted_proxy_unverified"
+	// StatusUntrustedPublicProxy means a public peer, which is never offered
+	// for one-click trust, sent client-IP headers and is not configured.
+	StatusUntrustedPublicProxy ConnectionStatus = "untrusted_public_proxy"
+	// StatusUntrustedProxy means a loopback, link-local, private or CGNAT peer
+	// sent client-IP headers, is not configured, and listing it would verify
+	// them.
+	StatusUntrustedProxy ConnectionStatus = "untrusted_proxy"
+	// StatusUntrustedProxyUnverifiable means client-IP headers were sent that
+	// listing the peer would not verify (for example an empty X-Real-IP or a
+	// Forwarded-only proxy), or the peer address could not be parsed.
+	StatusUntrustedProxyUnverifiable ConnectionStatus = "untrusted_proxy_unverifiable"
+)
+
+// Connection describes one request's relation to the trusted proxy list.
+type Connection struct {
+	// Status is the classification.
+	Status ConnectionStatus
+	// Peer is the parsed connection peer, nil when unparseable.
+	Peer net.IP
+	// HasClientIPHeaders reports whether the request carries any client-IP
+	// header, even an empty one.
+	HasClientIPHeaders bool
+	// PeerIsConfiguredProxy reports whether the peer is inside a configured
+	// proxy range.
+	PeerIsConfiguredProxy bool
+	// VerifiedClient is what AuthClientIP returns for the request: the address
+	// the authentication decision uses, nil when none could be verified.
+	VerifiedClient net.IP
+	// PeerIsCloudflareEdge reports whether the peer lies inside Cloudflare's
+	// published edge ranges, whether or not the preset is configured.
+	PeerIsCloudflareEdge bool
+	// CloudflarePresetWouldVerify reports that the headers are not verified by
+	// the current list (and listing the peer alone would not help), the
+	// cloudflare preset is not configured, and listing the peer together with
+	// the preset would verify them: an upstream Cloudflare in front of the
+	// peer. It is false for StatusDirect, StatusTrustedProxy and
+	// StatusUntrustedProxy.
+	CloudflarePresetWouldVerify bool
+}
+
+// Classify describes how req relates to the configured proxies. It is the one
+// classifier behind the settings connection check and the authentication log
+// notices, so they cannot disagree with the authentication decision:
+// Connection.VerifiedClient is always what AuthClientIP returns. Conditions are
+// evaluated in this order:
+//
+//  1. no client-IP header: StatusDirect;
+//  2. headers but an unparseable peer: StatusUntrustedProxyUnverifiable;
+//  3. peer configured: StatusTrustedProxy when AuthClientIP verified an
+//     address, else StatusTrustedProxyUnverified;
+//  4. peer not configured and not a local candidate: StatusUntrustedPublicProxy;
+//  5. local candidate whose listing would verify the headers:
+//     StatusUntrustedProxy, else StatusUntrustedProxyUnverifiable.
+//
+// A nil request is StatusDirect without a peer.
+func (tc *Checker) Classify(req *http.Request) Connection {
+	if req == nil {
+		return Connection{Status: StatusDirect}
+	}
+	peer, _ := PeerAddr(req)
+	conn := Connection{
+		Peer:               peer,
+		HasClientIPHeaders: HasClientIPHeader(req.Header),
+		VerifiedClient:     tc.AuthClientIP(req),
+	}
+	if peer != nil {
+		conn.PeerIsConfiguredProxy = tc.IsConfiguredProxy(peer)
+		conn.PeerIsCloudflareEdge = containsIP(cloudflareEdgeNets, peer)
+	}
+
+	switch {
+	case !conn.HasClientIPHeaders:
+		conn.Status = StatusDirect
+	case peer == nil:
+		conn.Status = StatusUntrustedProxyUnverifiable
+	case conn.PeerIsConfiguredProxy && conn.VerifiedClient != nil:
+		conn.Status = StatusTrustedProxy
+	case conn.PeerIsConfiguredProxy:
+		conn.Status = StatusTrustedProxyUnverified
+	case !isLocalProxyCandidate(peer):
+		conn.Status = StatusUntrustedPublicProxy
+	case tc.verifiesWith(req, peer.String()):
+		conn.Status = StatusUntrustedProxy
+	default:
+		conn.Status = StatusUntrustedProxyUnverifiable
+	}
+
+	conn.CloudflarePresetWouldVerify = tc.cloudflarePresetWouldVerify(req, &conn)
+	return conn
+}
+
+// verifiesWith reports whether a checker whose list also holds extra entries
+// would verify a client address for req.
+func (tc *Checker) verifiesWith(req *http.Request, extra ...string) bool {
+	return NewChecker(append(slices.Clone(tc.raw), extra...)).AuthClientIP(req) != nil
+}
+
+// cloudflarePresetCandidateStatuses are the statuses for which listing the
+// cloudflare preset could be the missing step. StatusUntrustedProxy is left out
+// because listing the peer alone already verifies it.
+var cloudflarePresetCandidateStatuses = []ConnectionStatus{
+	StatusTrustedProxyUnverified,
+	StatusUntrustedPublicProxy,
+	StatusUntrustedProxyUnverifiable,
+}
+
+// cloudflarePresetWouldVerify computes Connection.CloudflarePresetWouldVerify
+// for a classified connection.
+func (tc *Checker) cloudflarePresetWouldVerify(req *http.Request, conn *Connection) bool {
+	if !slices.Contains(cloudflarePresetCandidateStatuses, conn.Status) {
+		return false
+	}
+	if conn.Peer == nil || tc.hasCloudflarePreset() {
+		return false
+	}
+	// A public peer is only worth testing when it is itself a Cloudflare edge;
+	// the other candidate statuses already have a configured or local peer.
+	if conn.Status == StatusUntrustedPublicProxy && !conn.PeerIsCloudflareEdge {
+		return false
+	}
+	return tc.verifiesWith(req, conn.Peer.String(), conf.TrustedProxyCloudflarePreset)
+}
+
+// hasCloudflarePreset reports whether the list holds the cloudflare preset.
+func (tc *Checker) hasCloudflarePreset() bool {
+	return tc.cloudflare
+}
+
+// containsIP reports whether any network contains ip.
+func containsIP(networks []*net.IPNet, ip net.IP) bool {
+	for _, network := range networks {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }

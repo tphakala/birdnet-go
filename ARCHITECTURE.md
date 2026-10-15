@@ -588,9 +588,9 @@ Audio Source → Capture → Buffer → Analyze → Detect → Store → Notify
 FFmpeg is used for:
 
 - **RTSP Stream Ingestion**: Capturing audio from IP cameras and network streams
-- **Audio Format Conversion**: PCM to MP3 at the audio export/save stage, and to AAC while its native encoder remains opt-in. WAV, FLAC, and Opus are encoded natively (FFmpeg encodes Opus only as a fallback for the rare clip shapes go-opus cannot carry).
-- **On-demand Clip Transcoding**: Re-encoding already-saved clips for the web player (the v2 media API), which is the only remaining user of the `loudnorm` filter
-- **Gain Application**: `volume` filter for dB boost/cut. On the clip export path the value it applies is the EBU R128 gain measured in Go by `internal/audiocore/audionorm`; FFmpeg no longer measures or normalises loudness there.
+- **Spectrograms**: Checking each clip with ffprobe before an on-demand spectrogram is drawn, and rendering clips in formats the installed SoX cannot read or when SoX fails
+
+On-demand clip downloads, the denoise, normalize and gain preview, and audible-bats playback in the web interface do not use FFmpeg. `internal/audiocore/transcode` decodes WAV, FLAC, MP3, AAC (M4A) and Opus natively, denoises with the go-audio-dsp `denoiser`, normalizes with `internal/audiocore/audionorm`, applies gain with `internal/audiocore/pcmgain`, and encodes WAV, FLAC, MP3, AAC and Opus with the same native encoders clip export uses. A clip whose sample rate the lossy encoder cannot carry is resampled to 48 kHz first.
 
 **SoX Integration:**
 

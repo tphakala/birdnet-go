@@ -2310,7 +2310,9 @@
       "saveAriaLabel": "Salvar alterações",
       "savingAriaLabel": "Salvando alterações...",
       "unsavedChanges": "Alterações não salvas",
-      "toolbar": "Ações de configurações"
+      "toolbar": "Ações de configurações",
+      "validationBlocked": "Alguns campos precisam de atenção antes de você poder salvar.",
+      "noChangesToSave": "Não há alterações para salvar."
     },
     "errors": {
       "loadFailed": "Falha ao carregar as configurações",
@@ -3922,7 +3924,7 @@
       "allowSubnetBypassLabel": "Permitir acesso da sub-rede para contornar autenticação",
       "subnetBypassLocalNote": "Quando ativado, os clientes na mesma rede local que este servidor são considerados confiáveis automaticamente e ignoram o login. Use o campo abaixo apenas para estender essa confiança a redes adicionais (por exemplo, uma VLAN separada ou uma sub-rede roteada).",
       "allowedSubnetsLabel": "Sub-redes permitidas",
-      "allowedSubnetsHelp": "Intervalos de rede adicionais que podem contornar o login, além da própria rede local deste servidor. Notação CIDR, separados por vírgulas.",
+      "allowedSubnetsHelp": "Intervalos de rede adicionais que podem contornar o login, além da própria rede local deste servidor. Use a notação CIDR, como 192.168.10.0/24.",
       "securityWarningTitle": "Aviso de segurança:",
       "subnetWarningText": "A rede local deste servidor e todas as sub-redes listadas aqui obtêm acesso total sem fazer login. Inclua apenas redes em que você confia totalmente.",
       "httpsSettingsTitle": "Configurações HTTPS",
@@ -4150,6 +4152,77 @@
         "downloadCertificate": "Transferir Certificado",
         "downloadCertificateHelp": "Instale este certificado no armazenamento de confiança do seu sistema operativo para evitar avisos de segurança do navegador.",
         "fileReadError": "Falha ao ler o ficheiro selecionado"
+      },
+      "reverseProxy": {
+        "title": "Proxy Reverso",
+        "description": "Para acesso através do nginx, Caddy, Traefik, Cloudflare ou outro proxy",
+        "listLabel": "Proxies confiáveis",
+        "listHelp": "Adicione o endereço de cada proxy à frente do BirdNET-Go. Com o Docker, este é frequentemente o endereço do gateway do Docker, como 172.17.0.1.",
+        "placeholder": "Por exemplo, 172.17.0.1",
+        "emptyState": "Nenhum proxy confiável. O BirdNET-Go usa o endereço que se conecta a ele.",
+        "emptyStateCloudflareOnly": "Apenas os endereços de borda publicados da Cloudflare são confiáveis. Nenhum outro proxy está listado.",
+        "rangeBadge": "Intervalo",
+        "ruleOwnAddress": "Liste o próprio endereço de cada proxy. Nunca liste um intervalo que também contenha os computadores a partir dos quais você navega.",
+        "ruleHeaders": "O proxy deve acrescentar o endereço do cliente ao X-Forwarded-For ou substituir o X-Real-IP.",
+        "cloudflareLabel": "Confiar na Cloudflare",
+        "cloudflareHelp": "Ative esta opção quando o seu site for servido através da Cloudflare. O BirdNET-Go passará a confiar nos endereços de borda publicados da Cloudflare.",
+        "check": {
+          "title": "Sua conexão",
+          "recheck": "Verificar novamente",
+          "checking": "Verificando sua conexão",
+          "error": "Não foi possível verificar sua conexão.",
+          "stale": "Esta verificação mostra as configurações salvas. Salve para verificar suas alterações.",
+          "trust": "Confiar em {peer}",
+          "trustWarning": "Só confie em {peer} se for o seu proxy reverso, e não o computador a partir do qual você navega.",
+          "trustWithCloudflare": "Confiar em {peer} e na Cloudflare",
+          "cloudflareInFront": "A Cloudflare está à frente de {peer}. Confie em ambos para verificar seu endereço.",
+          "cloudflareEdge": "{peer} pertence à Cloudflare. Ative a opção Confiar na Cloudflare abaixo.",
+          "chainHint": "Se outro proxy estiver à frente de {peer}, liste-o também.",
+          "added": "Adicionado à lista. Salve para aplicar.",
+          "coveredBy": "Já abrangido por {range} na lista. Guarde para aplicar.",
+          "selfClientCause": "O proxy pode estar a encaminhar o seu próprio endereço como cliente, muitas vezes porque a publicação de portas do contentor esconde o cliente real. Corrija isto na configuração de rede do contentor ou do proxy."
+        },
+        "status": {
+          "direct": {
+            "title": "Conectado diretamente",
+            "body": "O seu navegador conecta-se diretamente ao BirdNET-Go a partir de {peer}.",
+            "bodyNoPeer": "O seu navegador conecta-se diretamente ao BirdNET-Go.",
+            "hint": "Se você usa um proxy reverso e {peer} é o seu endereço, configure o proxy para enviar X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Conectado através de um proxy confiável",
+            "body": "Sua conexão passa por {peer}, que é confiável. Seu endereço {client} foi verificado.",
+            "hint": "Se {client} for outro proxy em vez do seu computador, liste esse proxy também."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Seu endereço não pôde ser verificado",
+            "body": "{peer} é confiável, mas o endereço que ele encaminha não pôde ser verificado. Causas comuns:",
+            "causeRange": "Um intervalo listado também contém o seu computador, portanto nenhum endereço na cadeia conta como seu.",
+            "causeHeaders": "O proxy não acrescenta o X-Forwarded-For nem substitui o X-Real-IP.",
+            "causeConflict": "O proxy envia cabeçalhos de endereço conflitantes ou repetidos, ou apenas um cabeçalho Forwarded."
+          },
+          "untrusted_public_proxy": {
+            "title": "Conectado através de um proxy público",
+            "body": "Sua conexão passa por {peer}, um endereço público. Endereços públicos nunca são oferecidos para confiança em um clique. Adicione um manualmente apenas se tiver certeza de que é o seu proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Conectado através de um proxy não confiável",
+            "body": "Sua conexão passa por um proxy em {peer} que não é confiável, portanto o BirdNET-Go não pode verificar seu endereço."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Os cabeçalhos do proxy não podem ser verificados",
+            "body": "Sua conexão passa por {peer}, mas os cabeçalhos de endereço que ele envia não puderam ser verificados, mesmo se ele fosse confiável.",
+            "bodyNoPeer": "Sua conexão passa por um proxy, mas o endereço dele não pôde ser lido.",
+            "fix": "Configure o proxy para acrescentar o X-Forwarded-For ou substituir o X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Atrás de um proxy reverso, este contorno só funciona quando o proxy estiver listado como confiável.",
+      "bypassProxyLink": "Configurar proxies confiáveis",
+      "allowedSubnetsEmpty": "Nenhuma sub-rede adicional. Apenas a própria rede local deste servidor pode contornar o login.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} tem uma entrada que não é válida.",
+        "pendingEntry": "{tab}: {field} tem texto que não foi adicionado. Prima Enter ou Adicionar, ou apague-o."
       }
     },
     "species": {
@@ -4908,6 +4981,28 @@
         "dragToReorder": "Arraste para reordenar {species}",
         "edit": "Editar espécie",
         "remove": "Remover espécie"
+      }
+    },
+    "networkAddressList": {
+      "add": "Adicionar",
+      "remove": "Remover {address}",
+      "empty": "Nenhum endereço adicionado ainda.",
+      "pendingHint": "Pressione Enter ou Adicionar para adicionar este endereço.",
+      "limitReached": "A lista está cheia ({max} entradas).",
+      "rowDuplicate": "Duplicado",
+      "rowInvalid": {
+        "cidr": "Intervalo inválido",
+        "ip": "Endereço IP inválido",
+        "ipOrCidr": "Endereço ou intervalo inválido"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Intervalo inválido: {values}. Use um intervalo como 192.168.1.0/24.",
+          "ip": "Endereço IP inválido: {values}. Use um endereço como 192.168.1.10.",
+          "ipOrCidr": "Endereço ou intervalo inválido: {values}. Use um endereço como 192.168.1.10 ou um intervalo como 192.168.1.0/24."
+        },
+        "duplicate": "Já está na lista: {values}.",
+        "limit": "A lista comporta no máximo {max} entradas. Não adicionado: {values}."
       }
     }
   },

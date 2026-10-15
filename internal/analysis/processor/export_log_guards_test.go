@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
@@ -112,7 +113,7 @@ func TestNormalizeSkipLogsOncePerFormat(t *testing.T) {
 	// targets arm rather than measuring. Unreachable for a validated config;
 	// set directly here because that branch is the one under test.
 	a.Settings.Realtime.Audio.Export.Normalization.Enabled = true
-	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionormMinTargetLUFS - 10
+	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionorm.AbsoluteGateLUFS - 10
 	a.Settings.Realtime.Audio.Export.Normalization.TruePeak = -2
 
 	for range 5 {
@@ -161,7 +162,7 @@ func TestNormalizeSkipReasonsAreNotConflated(t *testing.T) {
 	// is taken before any measurement is attempted.
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", format)
 	a.Settings.Realtime.Audio.Export.Normalization.Enabled = true
-	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionormMinTargetLUFS - 10
+	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionorm.AbsoluteGateLUFS - 10
 	a.Settings.Realtime.Audio.Export.Normalization.TruePeak = -2
 	_, normalized, err := a.resolveExportGainDB(t.Context(), rate, format)
 	require.NoError(t, err)
@@ -193,7 +194,7 @@ func TestNormalizeSkipLineOmitsDetectionID(t *testing.T) {
 
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
 	a.Settings.Realtime.Audio.Export.Normalization.Enabled = true
-	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionormMinTargetLUFS - 10
+	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionorm.AbsoluteGateLUFS - 10
 	a.Settings.Realtime.Audio.Export.Normalization.TruePeak = -2
 
 	_, _, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, "mp3")
@@ -223,11 +224,11 @@ func TestResampleFailureLogsOncePerRatePair(t *testing.T) {
 	resetExportLogGuards(t)
 
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
-	// An odd byte count cannot be whole int16 samples, so ResampleBytes rejects
-	// it. The rate is above conf.SampleRate so resolveExportParams takes the
-	// resampling branch rather than passing the clip through.
-	a.pcmData = []byte{0x01, 0x02, 0x03}
-	a.sourceSampleRate = conf.SampleRate * 2
+	// 100 Hz is outside the resampler's ratio range to 48 kHz, so the upsample
+	// fails deterministically. (An odd byte count no longer fails: the PCM is
+	// trimmed to whole frames first.)
+	const unresamplableRate = 100
+	a.sourceSampleRate = unresamplableRate
 
 	for range 4 {
 		// resolveExportParams returns no error; a failed resample is reported
@@ -236,7 +237,7 @@ func TestResampleFailureLogsOncePerRatePair(t *testing.T) {
 		_, _, _ = a.resolveExportParams(filepath.Join(t.TempDir(), "clip.mp3"))
 		// resolveExportParams rewrites sourceSampleRate only on success; on the
 		// failure path under test it stays put, so the loop keeps re-entering.
-		a.sourceSampleRate = conf.SampleRate * 2
+		a.sourceSampleRate = unresamplableRate
 	}
 
 	assert.Equal(t, 1, countLines(t, logs.String(), "audio_export_resample"),

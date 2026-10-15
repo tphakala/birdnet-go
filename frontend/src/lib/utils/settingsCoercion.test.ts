@@ -380,3 +380,38 @@ describe('settingsCoercion realtime audio export ultrasonicType', () => {
     });
   });
 });
+
+describe('settingsCoercion security trustedProxies', () => {
+  it('keeps a trusted proxy list in order', () => {
+    const result = coerceSettings('security', {
+      trustedProxies: ['172.18.0.1', 'Cloudflare', '10.0.0.0/8'],
+    });
+
+    expect(result).toMatchObject({ trustedProxies: ['172.18.0.1', 'Cloudflare', '10.0.0.0/8'] });
+  });
+
+  it('returns an already clean list unchanged', () => {
+    const list = ['172.18.0.1', 'cloudflare'];
+    const result = coerceSettings('security', { trustedProxies: list });
+
+    expect(result.trustedProxies).toBe(list);
+  });
+
+  it('coerces a null list to an empty list', () => {
+    const result = coerceSettings('security', { trustedProxies: null });
+
+    expect(result).toMatchObject({ trustedProxies: [] });
+  });
+
+  it('adds an empty list when the key is absent, so saved and edited copies agree', () => {
+    const result = coerceSettings('security', { host: 'example.com' });
+
+    expect(result).toMatchObject({ host: 'example.com', trustedProxies: [] });
+  });
+
+  it('drops non-string entries', () => {
+    const result = coerceSettings('security', { trustedProxies: ['10.0.0.1', 5, null, {}] });
+
+    expect(result).toMatchObject({ trustedProxies: ['10.0.0.1'] });
+  });
+});

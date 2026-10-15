@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -45,56 +45,66 @@ func decodeToPCM16(t *testing.T, ffmpegBin, path string) []byte {
 	return out
 }
 
-// TestEncodeClip_FFmpegPathNormalizesToTarget is the end-to-end proof of this
-// change's central claim: a clip encoded by FFmpeg now lands on the same loudness
-// target as one encoded natively, with no loudnorm filter anywhere.
+// TestEncodeClip_NativeLossyNormalizesToTarget is the end-to-end proof that a
+// clip encoded by a native lossy encoder lands on the loudness target.
 //
-// Every other test around this stops at the ExportOptions struct, which pins the
-// plumbing but not the result. Nothing in CI actually encoded an MP3 and measured
-// it, so a wrong gain, a dropped -af, or a filter FFmpeg silently rejected would
-// all have passed. MP3 is the case that matters most: it has no native encoder,
-// so it is the FFmpeg path on every default install.
-func TestEncodeClip_FFmpegPathNormalizesToTarget(t *testing.T) {
+// Every other test around this stops at the resolved gain, which pins the
+// plumbing but not the result. Nothing else in CI actually encoded a clip and
+// measured it, so a wrong gain or a dropped gain would pass. FFmpeg is used only
+// to decode the clip back for measurement.
+func TestEncodeClip_NativeLossyNormalizesToTarget(t *testing.T) {
 	t.Parallel()
 	ffmpegBin := requireFFmpegTools(t)
 
-	// A quiet 1 kHz sine, well clear of the R128 gate and far enough below the
-	// target that the gain has to be substantial and neither the true-peak
-	// ceiling nor the clamp binds.
-	pcm := sinePCMBytes(800, 2.0, 1000)
-	measured := measureLUFS(t, pcm)
-	require.Less(t, measured, testTargetLUFS-5, "sanity: the clip needs a real boost")
+	for _, tc := range []struct {
+		format  string
+		ext     string
+		encoder string
+	}{
+		{audioformat.AAC, "m4a", clipenc.NativeAAC},
+		{audioformat.MP3, "mp3", clipenc.NativeMP3},
+		{audioformat.Opus, "opus", clipenc.NativeOpus},
+	} {
+		t.Run(tc.format, func(t *testing.T) {
+			t.Parallel()
 
-	s := &conf.Settings{}
-	s.Realtime.Audio.Export.Normalization.Enabled = true
-	s.Realtime.Audio.Export.Normalization.TargetLUFS = testTargetLUFS
-	s.Realtime.Audio.Export.Normalization.TruePeak = testTruePeakDBTP
-	s.Realtime.Audio.Export.Bitrate = "192k"
-	s.Realtime.Audio.FfmpegPath = ffmpegBin
-	// A static gain that must NOT be applied, because normalization supersedes it.
-	s.Realtime.Audio.Export.Gain = -12
+			// A quiet 1 kHz sine, well clear of the R128 gate and far enough below
+			// the target that the gain has to be substantial and neither the
+			// true-peak ceiling nor the clamp binds.
+			pcm := sinePCMBytes(800, 2.0, 1000)
+			measured := measureLUFS(t, pcm)
+			require.Less(t, measured, testTargetLUFS-5, "sanity: the clip needs a real boost")
 
-	a := &SaveAudioAction{Settings: s, pcmData: pcm, CorrelationID: "e2e"}
-	out := filepath.Join(t.TempDir(), "clip.mp3")
+			s := &conf.Settings{}
+			s.Realtime.Audio.Export.Normalization.Enabled = true
+			s.Realtime.Audio.Export.Normalization.TargetLUFS = testTargetLUFS
+			s.Realtime.Audio.Export.Normalization.TruePeak = testTruePeakDBTP
+			s.Realtime.Audio.Export.Bitrate = "192k"
+			// A static gain that must NOT be applied, because normalization supersedes it.
+			s.Realtime.Audio.Export.Gain = -12
 
-	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatMP3, out)
-	require.NoError(t, err)
-	require.Equal(t, clipenc.FFmpeg, enc.Encoder, "MP3 has no native encoder; it must go through FFmpeg")
+			a := &SaveAudioAction{Settings: s, pcmData: pcm, CorrelationID: "e2e"}
+			out := filepath.Join(t.TempDir(), "clip."+tc.ext)
 
-	got := measureLUFS(t, decodeToPCM16(t, ffmpegBin, out))
+			enc, err := a.encodeClip(t.Context(), conf.SampleRate, tc.format, out)
+			require.NoError(t, err)
+			require.Equal(t, tc.encoder, enc.Encoder)
 
-	// 1.5 LU covers MP3 codec loss and the resampling in the decode round trip.
-	assert.InDelta(t, testTargetLUFS, got, 1.5,
-		"an FFmpeg-encoded clip must reach the loudness target, same as a native one")
-	// The static gain would have landed it ~12 dB below the input instead.
-	assert.Greater(t, got, measured, "normalization must supersede the negative static gain")
+			got := measureLUFS(t, decodeToPCM16(t, ffmpegBin, out))
+
+			// 1.5 LU covers codec loss and the resampling in the decode round trip.
+			assert.InDelta(t, testTargetLUFS, got, 1.5,
+				"a natively encoded clip must reach the loudness target")
+			// The static gain would have landed it ~12 dB below the input instead.
+			assert.Greater(t, got, measured, "normalization must supersede the negative static gain")
+		})
+	}
 }
 
 // TestEncodeClip_WAVAppliesResolvedGain covers the WAV branch, which until this
 // change wrote captured samples verbatim and so silently ignored both
-// normalization and Export.Gain. That was easy to miss because resolveExportParams
-// downgrades to WAV on its own for ultrasonic clips and encoder-less installs, so
-// an operator could land here without choosing WAV.
+// normalization and Export.Gain. That was easy to miss because an
+// ultrasonic clip can be stored as WAV without the operator choosing WAV.
 func TestEncodeClip_WAVAppliesResolvedGain(t *testing.T) {
 	t.Parallel()
 
@@ -109,7 +119,7 @@ func TestEncodeClip_WAVAppliesResolvedGain(t *testing.T) {
 	a := &SaveAudioAction{Settings: s, pcmData: pcm, CorrelationID: "wav"}
 	out := filepath.Join(t.TempDir(), "clip.wav")
 
-	enc, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatWAV, out)
+	enc, err := a.encodeClip(t.Context(), conf.SampleRate, audioformat.WAV, out)
 	require.NoError(t, err)
 	require.Equal(t, clipenc.NativeWAV, enc.Encoder)
 
@@ -135,7 +145,7 @@ func TestEncodeClip_WAVLeavesPCMUnmodified(t *testing.T) {
 	a := &SaveAudioAction{Settings: s, pcmData: pcm, CorrelationID: "wav-alias"}
 	out := filepath.Join(t.TempDir(), "clip.wav")
 
-	_, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatWAV, out)
+	_, err := a.encodeClip(t.Context(), conf.SampleRate, audioformat.WAV, out)
 	require.NoError(t, err)
 
 	assert.Equal(t, before, a.pcmData, "the export must not amplify the shared capture buffer in place")

@@ -331,6 +331,30 @@ describe('URL Helpers', () => {
       expect(getAppBasePath()).toBe('');
     });
 
+    it('should take the prefix before a final login segment when there is no ui segment', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/proxy/birdnet/login' };
+      expect(getAppBasePath()).toBe('/proxy/birdnet');
+    });
+
+    it('should return empty string for the bare login path', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/login' };
+      expect(getAppBasePath()).toBe('');
+    });
+
+    it('should return empty string for the login route at the root', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/ui/login' };
+      expect(getAppBasePath()).toBe('');
+    });
+
+    it('should use the ui segment, not the login segment, when both are present', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/a/ui/b/login' };
+      expect(getAppBasePath()).toBe('/a');
+    });
+
     it('should return empty string for path "/ui" (ui at root)', () => {
       // @ts-expect-error - Mocking window.location
       window.location = { pathname: '/ui' };

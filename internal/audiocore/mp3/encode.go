@@ -6,10 +6,7 @@
 // and the same enhanced-error conventions. Gain is applied in Go before
 // encoding.
 //
-// This path is opt-in: MP3 clip export still defaults to FFmpeg until the native
-// encoder earns field confidence. The gate lives in
-// internal/conf/native_encoders.go and the encoder selection in
-// internal/analysis/processor.
+// This is the MP3 clip encoder; clip export has no FFmpeg path for MP3.
 package mp3
 
 import (
@@ -40,8 +37,9 @@ const (
 )
 
 // supportedSampleRates are the input rates go-mp3 accepts (the MPEG-1 Layer III
-// rates). Anything else, notably an ultrasonic bat-capture rate, must stay on
-// FFmpeg, which resamples internally.
+// rates). The caller resamples any other rate to 48 kHz before encoding;
+// ultrasonic bat-capture rates never reach MP3, they go to the lossless
+// ultrasonic export type.
 var supportedSampleRates = [...]int{32000, 44100, 48000}
 
 // supportedBitratesKbps is the fixed set of MPEG-1 Layer III CBR bitrates go-mp3
@@ -114,7 +112,7 @@ func Supports(sampleRate, bitDepth, channels int) error {
 // the 14 fixed MPEG-1 Layer III rates. BirdNET-Go config allows any value in
 // 32-320k, so a setting like 100k that is not one of those rates is snapped to the
 // closest one (96k) instead of being rejected, so the native path always encodes
-// MP3 rather than downgrading the clip to FFmpeg or WAV. Zero (and any non-positive
+// MP3 rather than rejecting the clip. Zero (and any non-positive
 // value) maps to 0, which selects go-mp3's default (128 kbps). A value below 32k
 // snaps up to 32k and one above 320k snaps down to 320k; on an exact tie the higher
 // rate wins, favouring quality and keeping the result deterministic.
@@ -156,7 +154,7 @@ func EncodePCM(ctx context.Context, opts *Options) error {
 
 	// go-mp3 codes only the 14 fixed MPEG-1 Layer III rates, so round the requested
 	// bitrate to the nearest before handing it over; this is what lets the native
-	// path carry any configured 32-320k value instead of falling back to FFmpeg.
+	// path carry any configured 32-320k value instead of rejecting it.
 	cfg := mp3pcm.Config{
 		SampleRate: opts.SampleRate,
 		Channels:   opts.Channels,
@@ -168,8 +166,10 @@ func EncodePCM(ctx context.Context, opts *Options) error {
 	// copy is made.
 	pcm := pcmgain.Applied(opts.PCMData, opts.GainDB)
 
-	// go-mp3/pcm draws its encoder from an internal pool and streams frames as it
-	// goes, so the encoded stream is never held in memory whole.
+	// EncodeInterleaved writes a leading Xing/Info and LAME gapless tag, whose
+	// frame count is known only once the clip is encoded, so it encodes into
+	// memory and writes the stream once. The encoded stream is far smaller than
+	// the PCM this call already holds.
 	// WriteFile classifies its own filesystem failures and passes a cancelled
 	// context through raw. The payload write happens in here though, so a write
 	// fault surfacing through the codec is classified as file I/O rather than

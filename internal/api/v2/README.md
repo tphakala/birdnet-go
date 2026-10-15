@@ -166,21 +166,33 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 ### Media (`media/media.go`)
 
-| Method | Route                                | Handler                   | Auth | Description                             |
-| ------ | ------------------------------------ | ------------------------- | ---- | --------------------------------------- |
-| GET    | `/media/audio/:filename`             | `ServeAudioClip`          | ❌   | Serve audio file                        |
-| GET    | `/media/spectrogram/:filename`       | `ServeSpectrogram`        | ❌   | Serve spectrogram image                 |
-| GET    | `/media/audio`                       | `ServeAudioByQueryID`     | ❌   | Serve audio by detection ID             |
-| GET    | `/media/species-image`               | `GetSpeciesImage`         | ❌   | Get species thumbnail image             |
-| GET    | `/media/species-image/info`          | `GetSpeciesImageInfo`     | ❌   | Get species image attribution           |
-| GET    | `/media/image/:scientific_name`      | `ServeSpeciesImageProxy`  | ❌   | Serve cached bird image (proxy)         |
-| GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy`  | ❌   | Alias for image proxy endpoint          |
-| GET    | `/audio/:id`                         | `ServeAudioByID`          | ❌   | Serve detection audio clip by ID        |
-| GET    | `/spectrogram/:id`                   | `ServeSpectrogramByID`    | ❌   | Serve detection spectrogram by ID       |
-| POST   | `/spectrogram/:id/generate`          | `GenerateSpectrogramByID` | ❌   | Trigger spectrogram generation          |
-| GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`    | ❌   | Get spectrogram generation status       |
-| POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`    | ✅   | Extract audio clip from time range      |
-| POST   | `/audio/:id/audible-bats`            | `AudibleBatsByID`         | ✅   | Time-expand bat clip into audible range |
+| Method | Route                                | Handler                    | Auth | Description                             |
+| ------ | ------------------------------------ | -------------------------- | ---- | --------------------------------------- |
+| GET    | `/media/audio/:filename`             | `ServeAudioClip`           | ❌   | Serve audio file                        |
+| GET    | `/media/spectrogram/:filename`       | `ServeSpectrogram`         | ❌   | Serve spectrogram image                 |
+| GET    | `/media/audio`                       | `ServeAudioByQueryID`      | ❌   | Serve audio by detection ID             |
+| GET    | `/media/species-image`               | `GetSpeciesImage`          | ❌   | Get species thumbnail image             |
+| GET    | `/media/species-image/info`          | `GetSpeciesImageInfo`      | ❌   | Get species image attribution           |
+| GET    | `/media/image/:scientific_name`      | `ServeSpeciesImageProxy`   | ❌   | Serve cached bird image (proxy)         |
+| GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy`   | ❌   | Alias for image proxy endpoint          |
+| GET    | `/audio/:id`                         | `ServeAudioByID`           | ❌   | Serve detection audio clip by ID        |
+| GET    | `/spectrogram/:id`                   | `ServeSpectrogramByID`     | ❌   | Serve detection spectrogram by ID       |
+| POST   | `/spectrogram/:id/generate`          | `GenerateSpectrogramByID`  | ❌   | Trigger spectrogram generation          |
+| GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`     | ❌   | Get spectrogram generation status       |
+| POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`     | ✅   | Extract audio clip from time range      |
+| POST   | `/audio/:id/process`                 | `ProcessAudioByID`         | ✅   | Denoise, normalize or gain a clip (WAV) |
+| POST   | `/audio/:id/audible-bats`            | `AudibleBatsByID`          | ✅   | Time-expand bat clip into audible range |
+| POST   | `/spectrogram/:id/process`           | `ProcessedSpectrogramByID` | ✅   | Spectrogram of denoised/normalized clip |
+
+**On-demand clip processing.** `clip`, `process`, `audible-bats` and the processed
+spectrogram decode the stored clip and process it in Go without FFmpeg; the processed spectrogram is then rendered by the spectrogram generator (SoX, with an FFmpeg fallback).
+`clip` accepts the formats `wav`, `flac`, `mp3`, `aac` (served as `.m4a`) and `opus`
+(served as `.ogg`); any other value answers **400**. Filters apply
+in the order denoise (`light`, `medium`, `heavy`), loudness normalization, gain
+(`gain_db`, within +/-60). A source that cannot be processed answers **422**: a file
+that is not one of the clip formats (WAV, FLAC, MP3, AAC in M4A, Opus), a corrupt or truncated file, a file or range above the size limits
+(256 MiB on disk, 128 MiB of decoded audio), or a clip window that starts past the end
+of the audio.
 
 **Pending species image (`503 + Retry-After`).** The image endpoints never contact an
 image provider on the request goroutine: a cold species can take minutes to resolve
@@ -253,16 +265,26 @@ player or download.
 
 ### Settings (`settings.go`)
 
-| Method | Route                      | Handler                 | Auth | Description                                                         |
-| ------ | -------------------------- | ----------------------- | ---- | ------------------------------------------------------------------- |
-| GET    | `/settings`                | `GetAllSettings`        | ✅   | Get all configuration settings                                      |
-| GET    | `/settings/locales`        | `GetLocales`            | ✅   | Get available locales                                               |
-| GET    | `/settings/imageproviders` | `GetImageProviders`     | ✅   | Get image provider options                                          |
-| GET    | `/settings/systemid`       | `GetSystemID`           | ✅   | Get system identifier                                               |
-| GET    | `/settings/dashboard`      | `GetDashboardSettings`  | ❌   | Get dashboard display preferences (public, non-sensitive)           |
-| GET    | `/settings/:section`       | `GetSectionSettings`    | ✅   | Get specific settings section (other sections remain protected)     |
-| PUT    | `/settings`                | `UpdateSettings`        | ✅   | Update all settings                                                 |
-| PATCH  | `/settings/:section`       | `UpdateSectionSettings` | ✅   | Update settings section (writes to `/dashboard` still require auth) |
+| Method | Route                      | Handler                 | Auth | Description                                                               |
+| ------ | -------------------------- | ----------------------- | ---- | ------------------------------------------------------------------------- |
+| GET    | `/settings`                | `GetAllSettings`        | ✅   | Get all configuration settings                                            |
+| GET    | `/settings/locales`        | `GetLocales`            | ✅   | Get available locales                                                     |
+| GET    | `/settings/imageproviders` | `GetImageProviders`     | ✅   | Get image provider options                                                |
+| GET    | `/settings/systemid`       | `GetSystemID`           | ✅   | Get system identifier                                                     |
+| GET    | `/settings/connection`     | `GetConnectionCheck`    | ✅   | Classify the requester's own connection against `security.trustedProxies` |
+| GET    | `/settings/dashboard`      | `GetDashboardSettings`  | ❌   | Get dashboard display preferences (public, non-sensitive)                 |
+| GET    | `/settings/:section`       | `GetSectionSettings`    | ✅   | Get specific settings section (other sections remain protected)           |
+| PUT    | `/settings`                | `UpdateSettings`        | ✅   | Update all settings                                                       |
+| PATCH  | `/settings/:section`       | `UpdateSectionSettings` | ✅   | Update settings section (writes to `/dashboard` still require auth)       |
+
+The `GET /settings/connection` endpoint tells the requester how their own connection relates to the saved `security.trustedProxies` list, for the Reverse proxy card on the Security settings page. It is read-only and describes only the current request: it returns no other client's data and no raw header text; `verifiedClientAddress` is the requester's own address as the authentication decision sees it (from a verified forwarded header when one applies). It uses the same classifier (`proxytrust.Checker.Classify`) as the subnet bypass log notices, so it agrees with the authentication decision, and it reads the settings on every request, so a save applies on the next check without a restart. The response is `Cache-Control: no-store` and carries `status`, `peerAddress`, `hasForwardedHeaders`, `peerIsTrustedProxy`, `verifiedClientAddress` (the address the authentication decision uses, `""` when none could be verified), `peerIsCloudflareEdge` and `cloudflarePresetWouldVerify` (listing the peer together with the `cloudflare` preset would verify headers that currently do not verify). `status` is one of:
+
+- `direct`: no client-IP header, the peer is the client.
+- `trusted_proxy`: the peer is a listed proxy and one client address was verified.
+- `trusted_proxy_unverified`: the peer is a listed proxy but its headers could not be verified (a listed range that also holds clients, a proxy that does not append `X-Forwarded-For` or overwrite `X-Real-IP`, conflicting or repeated headers, a `Forwarded`-only header).
+- `untrusted_public_proxy`: a public peer sent client-IP headers; it is never offered for one-click trust.
+- `untrusted_proxy`: a loopback, link-local, private or CGNAT peer sent client-IP headers and listing it would verify them.
+- `untrusted_proxy_unverifiable`: client-IP headers were sent that listing the peer would not verify, or the peer address could not be parsed.
 
 The `GET /settings/dashboard` endpoint is intentionally public so that unauthenticated guests can render the SPA dashboard (species summary limit, layout, locale, thumbnails). The Dashboard section contains no secrets, tokens, or PII, and the layout is already exposed via `/app/config`. All mutations (PATCH) on the dashboard section remain auth-protected.
 
@@ -352,7 +374,7 @@ Both verbs report identically under the `skippedFields` response key: it lists o
 }
 ```
 
-Returns an empty `sources` array when no sources are configured. The `type` field is one of: `rtsp`, `http`, `hls`, `rtmp`, `udp`, `audio_card`, `file`. The `state` field is one of: `inactive`, `starting`, `running`, `error`, `stopped`. The `/streams/sources` endpoint returns only stream types (excludes `audio_card` and `file`).
+Returns an empty `sources` array when no sources are configured. The `type` field is one of: `rtsp`, `http`, `hls`, `rtmp`, `udp`, `audio_card`, `file`. The `state` field is one of: `inactive`, `starting`, `running`, `error`, `stopped`; for stream sources `running` means capture has started, and connection health is on the stream health endpoints. The `/streams/sources` endpoint returns only stream types (excludes `audio_card` and `file`).
 
 ### HLS Streaming (`audio/audio_hls.go`)
 

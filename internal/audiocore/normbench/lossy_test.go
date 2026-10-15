@@ -7,18 +7,18 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 )
 
 // lossyFormat is one FFmpeg-encoded export format under comparison, with the
-// encoder and container the production export path selects for it (getEncoder
-// and getOutputFormat in internal/audiocore/ffmpeg/clip.go, both unexported).
+// encoder and container FFmpeg used for it when it encoded clip exports.
 type lossyFormat struct {
 	format    string
 	encoder   string
@@ -26,13 +26,12 @@ type lossyFormat struct {
 	bitrate   string
 }
 
-// The formats FFmpeg still encodes on the export path. AAC and Opus reach it
-// whenever their native-encoder gate is unset, which is every default install;
-// MP3 has no native encoder at all.
+// The lossy formats compared here, encoded by FFmpeg. Clip export itself encodes
+// all three natively; FFmpeg is the reference side of the comparison.
 var lossyFormats = []lossyFormat{
-	{format: ffmpeg.FormatMP3, encoder: "libmp3lame", container: "mp3", bitrate: "192k"},
-	{format: ffmpeg.FormatAAC, encoder: "aac", container: "mp4", bitrate: "192k"},
-	{format: ffmpeg.FormatOpus, encoder: "libopus", container: "opus", bitrate: "96k"},
+	{format: audioformat.MP3, encoder: "libmp3lame", container: "mp3", bitrate: "192k"},
+	{format: audioformat.AAC, encoder: "aac", container: "mp4", bitrate: "192k"},
+	{format: audioformat.Opus, encoder: "libopus", container: "opus", bitrate: "96k"},
 }
 
 // TestCompareLossyFormats answers the question removing loudnorm actually raises:
@@ -45,7 +44,7 @@ var lossyFormats = []lossyFormat{
 //   - before: FFmpeg's two-pass linear loudnorm filter, which is what the export
 //     path built until it was removed
 //   - after: the audionorm gain resolved in Go and handed to FFmpeg as a plain
-//     volume filter, which is what buildFFmpegExportOptions now does
+//     volume filter, which is how FFmpeg-encoded exports applied it
 //
 // Like the sibling harness this is a report, not a gate: it asserts only that
 // both paths produce a measurable file. Read the table.
@@ -117,27 +116,33 @@ func exportLoudnorm(t *testing.T, ctx context.Context, ffmpegBin string, lf loss
 	return measure(t, ctx, ffmpegBin, out)
 }
 
-// exportWithResolvedGain renders the clip the way the export path does now: the
-// gain is planned in Go and ExportAudio turns it into a volume filter. This calls
-// the real production ExportAudio, so the argument list under test is the one
-// that ships.
+// exportWithResolvedGain renders the clip with the gain planned in Go and handed
+// to FFmpeg as a plain volume filter, the way FFmpeg-encoded exports applied it.
+// No production code builds this command any more, so it is assembled here.
 func exportWithResolvedGain(t *testing.T, ctx context.Context, ffmpegBin string, lf lossyFormat, pcm []byte, stem string) loudness {
 	t.Helper()
 
 	out := stem + "." + lf.container
-	gainDB := planNative(measureNative(t, pcm), pcm).gainDB
+	gainDB := planNative(pcm).gainDB
 
-	require.NoError(t, ffmpeg.ExportAudio(ctx, &ffmpeg.ExportOptions{
-		PCMData:    pcm,
-		OutputPath: out,
-		Format:     lf.format,
-		Bitrate:    lf.bitrate,
-		SampleRate: sampleRate,
-		Channels:   channels,
-		BitDepth:   bitDepth,
-		GainDB:     gainDB,
-		FFmpegPath: ffmpegBin,
-	}), "native-gain export")
+	pcmPath := stem + ".pcm"
+	require.NoError(t, os.WriteFile(pcmPath, pcm, 0o600))
+
+	args := []string{
+		"-hide_banner", "-loglevel", "error",
+		"-f", "s16le", "-ar", itoa(sampleRate), "-ac", itoa(channels),
+		"-i", pcmPath,
+	}
+	if gainDB != 0 {
+		args = append(args, "-af", fmt.Sprintf("volume=%+.6fdB", gainDB))
+	}
+	args = append(args,
+		"-c:a", lf.encoder,
+		"-b:a", lf.bitrate,
+		"-f", lf.container,
+		"-y", out,
+	)
+	runFFmpegCmd(t, ctx, ffmpegBin, args)
 
 	return measure(t, ctx, ffmpegBin, out)
 }
