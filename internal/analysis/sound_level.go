@@ -532,10 +532,11 @@ func fanOutSoundLevel(wg *sync.WaitGroup, done <-chan struct{}, src <-chan sound
 
 // startSoundLevelPublishers starts all sound level publishers with the given done channel.
 // Each publisher reads its own channel, fed by one fan-out goroutine from
-// soundLevelChan, so every publisher sees every interval.
+// soundLevelChan, so every publisher sees every interval. The MQTT publisher
+// always runs (with a processor) and publishes only while MQTT is enabled; while
+// it is disabled the fan-out still copies each interval to its channel and the
+// publisher returns at that check, one cheap settings read per interval.
 func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller) {
-	settings := conf.Setting()
-
 	// Create a merged quit channel that responds to both the done channel and global quit
 	mergedQuitChan := make(chan struct{})
 	go func() {
@@ -550,8 +551,14 @@ func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc 
 		return ch
 	}
 
-	// Start MQTT publisher if enabled
-	if settings.Realtime.MQTT.Enabled {
+	// Start the MQTT publisher whenever there is a processor, whether or not MQTT
+	// is enabled now: MQTT can be enabled or disabled at runtime (the
+	// reconfigure_mqtt control signal) while sound level monitoring keeps
+	// running, and this publisher is not restarted for that. It publishes only
+	// while the current settings have MQTT enabled (publishSoundLevelToMQTT) and
+	// uses the processor's current client for every message, so a change takes
+	// effect from the next interval.
+	if proc != nil {
 		startSoundLevelMQTTPublisherWithDone(wg, mergedQuitChan, proc, newPublisherChan())
 	}
 
@@ -586,8 +593,14 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan st
 					getSoundLevelLogger().Info("Sound level channel closed, stopping MQTT publisher")
 					return
 				}
+				// While MQTT is disabled the interval is dropped here, before the
+				// debug log, so a disabled broker does not log a receipt per interval.
+				settings := conf.Setting()
+				if !settings.Realtime.MQTT.Enabled {
+					continue
+				}
 				// Log received sound level data if debug is enabled
-				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
+				if settings.Realtime.Audio.SoundLevel.Debug {
 					lg := getSoundLevelLogger()
 					lg.Debug("MQTT publisher received sound level data",
 						logger.String("source", soundData.Source),
