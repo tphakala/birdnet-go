@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"testing"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -51,6 +54,7 @@ func TestProcessMonitorTick_SkipsWhenModelNotLoaded(t *testing.T) {
 	assert.NotContains(t, logBuf.String(), "error processing data",
 		"a not-loaded model must not reach ProcessData")
 	assert.True(t, state.notLoadedWarned, "the warn-once latch is set after the first skip")
+	assert.True(t, state.skippedSinceProcess, "an unanalyzed window makes the next one report a gap")
 
 	// A second full window on the next tick must not repeat the warning and must
 	// still never dispatch to ProcessData.
@@ -594,4 +598,94 @@ func TestMonitorTickState_WindowTimingGapFlag(t *testing.T) {
 	require.NoError(t, err)
 	require.NotSame(t, ab, ab2, "reallocation must give a new buffer")
 	assert.True(t, next(ab2), "reallocated buffer")
+}
+
+// dispatchBackend is a classifierBackend fake for driving processMonitorTick all
+// the way through ProcessData: the model is loaded and active, and inference
+// returns no results (or predictErr).
+type dispatchBackend struct {
+	classifierBackend
+	predictErr error
+}
+
+func (dispatchBackend) IsModelLoaded(string) bool { return true }
+func (dispatchBackend) IsModelActive(string) bool { return true }
+
+func (b dispatchBackend) PredictModelTimed(context.Context, string, [][]float32) ([]datastore.Results, classifier.PredictTiming, error) {
+	return nil, classifier.PredictTiming{}, b.predictErr
+}
+
+func (dispatchBackend) EffectiveBaseOverlap() time.Duration { return 0 }
+
+func (dispatchBackend) ModelSpecFor(id string) (classifier.ModelSpec, bool) {
+	info, ok := classifier.ModelRegistry[id]
+	return info.Spec, ok
+}
+
+// nextQueuedResult waits for the queued result of source on the shared results queue.
+func nextQueuedResult(t *testing.T, source string) classifier.Results {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case r := <-classifier.ResultsQueue:
+			if r.Source.ID == source {
+				return r
+			}
+		case <-deadline:
+			require.FailNow(t, "no queued result for source "+source)
+		}
+	}
+}
+
+// TestProcessMonitorTick_ForwardsAudioTimingToResults pins the whole producer
+// chain: the backlog-corrected audio end and the gap flag computed for a window
+// reach the queued classifier.Results, and a window skipped because inference
+// failed makes the next one report a gap.
+func TestProcessMonitorTick_ForwardsAudioTimingToResults(t *testing.T) {
+	const (
+		sourceID = "timing-forward-src"
+		modelID  = "BirdNET_V2.4"
+	)
+	spec := classifier.ModelRegistry[modelID].Spec
+	window := spec.ClipSizeBytes()
+	bytesPerSecond := spec.EffectiveSampleRate() * conf.BytesPerSample * conf.NumChannels
+
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, window*4, 0, window))
+	ab, err := mgr.AnalysisBuffer(sourceID, modelID)
+	require.NoError(t, err)
+
+	backend := &dispatchBackend{}
+	bm := &BufferManager{bn: backend, bufferMgr: mgr, logger: logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC)}
+	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, spec: spec, readSize: window}
+	state := &monitorTickState{}
+	quit := make(chan struct{})
+
+	// Two windows are buffered, so one full window of audio is still unread when
+	// the first is read.
+	require.NoError(t, ab.Write(make([]byte, window)))
+	require.NoError(t, ab.Write(make([]byte, window)))
+	_, lastWriteAt := ab.Backlog()
+
+	require.True(t, bm.processMonitorTick(quit, cfg, window, 0, state, 1))
+	first := nextQueuedResult(t, sourceID)
+	assert.True(t, first.AudioGap, "the first window of a buffer is a gap")
+	wantEnd := lastWriteAt.Add(-time.Duration(window) * time.Second / time.Duration(bytesPerSecond))
+	assert.True(t, first.AudioEndAt.Equal(wantEnd), "audio end is the last write minus the unread backlog: got %v want %v", first.AudioEndAt, wantEnd)
+
+	require.True(t, bm.processMonitorTick(quit, cfg, window, 0, state, 2))
+	second := nextQueuedResult(t, sourceID)
+	assert.False(t, second.AudioGap, "a contiguous window is not a gap")
+	assert.True(t, second.AudioEndAt.Equal(lastWriteAt))
+
+	// An inference failure leaves the window unanalyzed, so the next one is a gap.
+	backend.predictErr = errors.NewStd("predict failed")
+	require.NoError(t, ab.Write(make([]byte, window)))
+	require.True(t, bm.processMonitorTick(quit, cfg, window, 0, state, 3))
+	assert.True(t, state.skippedSinceProcess, "a failed ProcessData marks the window skipped")
+	backend.predictErr = nil
+	require.NoError(t, ab.Write(make([]byte, window)))
+	require.True(t, bm.processMonitorTick(quit, cfg, window, 0, state, 4))
+	assert.True(t, nextQueuedResult(t, sourceID).AudioGap, "the window after a skipped one is a gap")
 }
