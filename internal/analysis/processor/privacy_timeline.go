@@ -75,15 +75,16 @@ type chunkAudio struct {
 	pcm        []byte
 	sampleRate int
 	// span is the audio the chunk's window covers on the capture timeline, ending
-	// at item.Audio.EndAt (set by the producer, backlog corrected).
+	// at item.Audio.EndAt (set by the producer, backlog corrected), or at the
+	// processing time when the producer gave none (see timingUnknown).
 	span audioSpan
-	// gap, freshBytes, contiguousBytes, endPos and generation come from the
-	// producer (classifier.AudioTiming); generation zero means it reports no
-	// stream positions.
 	// timingUnknown reports that the producer gave no audio end, so span was made
 	// up from the processing time: hits are stamped with it (the conservative,
 	// later direction) but it claims no coverage.
-	timingUnknown   bool
+	timingUnknown bool
+	// gap, freshBytes, contiguousBytes, endPos and generation come from the
+	// producer (classifier.AudioTiming); generation zero means it reports no
+	// stream positions.
 	gap             bool
 	freshBytes      int
 	contiguousBytes int
