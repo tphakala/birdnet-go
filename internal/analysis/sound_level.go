@@ -517,7 +517,7 @@ func fanOutSoundLevel(wg *sync.WaitGroup, done <-chan struct{}, src <-chan sound
 					case dst <- data:
 					default:
 						drops[i]++
-						if drops[i]%100 == 1 {
+						if drops[i]%soundLevelDropLogInterval == 1 {
 							getSoundLevelLogger().Warn("sound level publisher channel full, dropping measurement",
 								logger.Int("publisher_index", i),
 								logger.Int64("total_drops", drops[i]),

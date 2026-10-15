@@ -16,6 +16,16 @@ import (
 const soundLevelChanSize = 100
 
 const (
+	// soundLevelDropLogInterval is how many dropped measurements pass between
+	// warnings about a full channel, starting with the first drop.
+	soundLevelDropLogInterval = 100
+
+	// soundLevelSustainedDropThreshold is the drop count at which sustained
+	// output drops are reported.
+	soundLevelSustainedDropThreshold = 1000
+)
+
+const (
 	// soundLevelDecodeChunk is the number of samples decoded per step. It bounds
 	// the float32 scratch and matches the octave meter's own chunk size.
 	soundLevelDecodeChunk = 4096
@@ -153,12 +163,12 @@ func (c *SoundLevelConsumer) publish(data soundlevel.SoundLevelData) {
 	case c.outCh <- data:
 	default:
 		drops := c.outDrops.Add(1)
-		if drops%100 == 1 {
+		if drops%soundLevelDropLogInterval == 1 {
 			GetLogger().Warn("sound level output channel full, dropping measurement",
 				logger.String("consumer_id", c.id),
 				logger.Int64("total_out_drops", drops))
 		}
-		if drops == 1000 {
+		if drops == soundLevelSustainedDropThreshold {
 			_ = errors.Newf("sound level consumer dropped %d output measurements", drops).
 				Component("analysis.sound_level_consumer").
 				Category(errors.CategoryAudio).
