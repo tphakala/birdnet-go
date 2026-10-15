@@ -44,7 +44,7 @@ type mqttRuntimeFixture struct {
 
 func startMQTTRuntimeFixture(t *testing.T, mqttEnabled bool) *mqttRuntimeFixture {
 	t.Helper()
-	prev := conf.GetSettings()
+	prev := conf.CloneSettings(conf.GetSettings())
 	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 	setMQTTRuntimeEnabled(mqttEnabled)
 

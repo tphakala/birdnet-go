@@ -3,6 +3,8 @@ package analysis
 import (
 	"bytes"
 	"math"
+	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,10 +31,8 @@ const (
 	// gainTestFrameTimeout bounds the wait for a routed frame.
 	gainTestFrameTimeout = 5 * time.Second
 
-	// gainTestStreamURL and gainTestDevice are the connection strings of the
-	// test sources.
-	gainTestStreamURL = "rtsp://gain-cam.invalid/stream"
-	gainTestDevice    = "hw:gain-test"
+	// gainTestDevice is the connection string of the sound card test source.
+	gainTestDevice = "hw:gain-test"
 )
 
 // gainTestPCM holds four samples: 1000, -1000, 500, -500.
@@ -75,6 +75,11 @@ type gainFixture struct {
 	consumer *gainCaptureConsumer
 	sourceID string
 	setGain  func(gainDB float64)
+
+	// streamContacts counts connections made to the stream's address. A probe or
+	// any other contact with the stream shows up here; it stays zero for a sound
+	// card source.
+	streamContacts *atomic.Int64
 }
 
 // newGainFixture registers the stream or sound card described by kind in a real
@@ -93,6 +98,7 @@ func newGainFixture(t *testing.T, kind audiocore.SourceType) *gainFixture {
 		Channels:    1,
 	}
 	var setGain func(gainDB float64)
+	contacts := &atomic.Int64{}
 	switch kind {
 	case audiocore.SourceTypeAudioCard:
 		cfg.ConnectionString = gainTestDevice
@@ -103,9 +109,10 @@ func newGainFixture(t *testing.T, kind audiocore.SourceType) *gainFixture {
 			conftest.SetTestSettings(s)
 		}
 	default:
-		cfg.ConnectionString = gainTestStreamURL
+		streamURL := listenCountingContacts(t, contacts)
+		cfg.ConnectionString = streamURL
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{{
-			Name: "gain-test", URL: gainTestStreamURL, Enabled: true, Type: conf.StreamTypeRTSP, Models: []string{"birdnet"},
+			Name: "gain-test", URL: streamURL, Enabled: true, Type: conf.StreamTypeRTSP, Models: []string{"birdnet"},
 		}}
 		cfg.Transport = settings.Realtime.RTSP.ResolveTransport("")
 		setGain = func(gainDB float64) {
@@ -123,7 +130,27 @@ func newGainFixture(t *testing.T, kind audiocore.SourceType) *gainFixture {
 
 	consumer := newGainCaptureConsumer()
 	require.NoError(t, eng.Router().AddRoute(src.ID, consumer, gainTestRateHz, 0, nil))
-	return &gainFixture{engine: eng, consumer: consumer, sourceID: src.ID, setGain: setGain}
+	return &gainFixture{engine: eng, consumer: consumer, sourceID: src.ID, setGain: setGain, streamContacts: contacts}
+}
+
+// listenCountingContacts listens on a loopback port, counts and closes every
+// connection, and returns an rtsp URL for it. The listener closes with the test.
+func listenCountingContacts(t *testing.T, contacts *atomic.Int64) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			c, acceptErr := ln.Accept()
+			if acceptErr != nil {
+				return
+			}
+			contacts.Add(1)
+			_ = c.Close()
+		}
+	}()
+	return "rtsp://" + ln.Addr().String() + "/stream"
 }
 
 // dispatch sends gainTestPCM through the router and returns what the consumer got.
@@ -158,8 +185,9 @@ func boosted(t *testing.T) []byte {
 
 // TestApplySourceGains_UpdatesLiveRoutesWithoutProbing applies a changed
 // configured gain to the running source's registry entry and its live route, for
-// a stream and a sound card. The stream URL does not resolve, so a probe would
-// show up as a log line and a delay, and no route may be rebuilt or closed.
+// a stream and a sound card. The stream address is a local listener that counts
+// connections, so any probe of the stream is caught, and no route may be rebuilt
+// or closed.
 func TestApplySourceGains_UpdatesLiveRoutesWithoutProbing(t *testing.T) {
 	// Not parallel: the settings snapshot is global.
 	for _, kind := range []audiocore.SourceType{audiocore.SourceTypeRTSP, audiocore.SourceTypeAudioCard} {
@@ -170,9 +198,8 @@ func TestApplySourceGains_UpdatesLiveRoutesWithoutProbing(t *testing.T) {
 			require.Equal(t, gainTestPCM, f.dispatch(t), "setup: gain 0 must pass the frame through")
 
 			f.setGain(gainTestNewGainDB)
-			start := time.Now()
 			p.applySourceGains()
-			assert.Less(t, time.Since(start), gainTestFrameTimeout, "applying gains must not wait on a stream probe")
+			assert.Zero(t, f.streamContacts.Load(), "applying gains must not contact the stream")
 
 			gain, ok := f.engine.Registry().GetGain(f.sourceID)
 			require.True(t, ok)
@@ -181,9 +208,9 @@ func TestApplySourceGains_UpdatesLiveRoutesWithoutProbing(t *testing.T) {
 			assert.False(t, f.consumer.isClosed(), "the consumer must not be closed")
 			assert.Equal(t, boosted(t), f.dispatch(t), "the live route must apply the new gain")
 
-			// A second call finds nothing to change.
+			// A second call finds nothing to change and keeps the gain in place.
 			p.applySourceGains()
-			assert.Equal(t, boosted(t), f.dispatch(t), "an unchanged gain must leave the route alone")
+			assert.Equal(t, boosted(t), f.dispatch(t), "the route must keep applying the gain after a repeated call")
 			assert.False(t, f.consumer.isClosed())
 		})
 	}
