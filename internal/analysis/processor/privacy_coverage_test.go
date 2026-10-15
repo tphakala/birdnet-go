@@ -436,3 +436,58 @@ func TestPrivacy_HitWrittenAfterCoverageReadIsStillSeen(t *testing.T) {
 	}
 	assert.Equal(t, "discarded", r.outcome())
 }
+
+// TestPrivacy_BatChunksPublishNoLabelCoverage: an ultrasonic bat chunk is no
+// evidence the label path heard the speech band, so it earns no coverage and a
+// bat-only source never waits on it.
+func TestPrivacy_BatChunksPublishNoLabelCoverage(t *testing.T) {
+	r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+	bat := r.chunk(sec(30))
+	bat.ModelID = classifier.RegistryIDBat
+	r.p.processDetections(bat)
+	assert.Empty(t, r.p.privacyCoverage, "bat chunks publish no coverage")
+
+	r.pend(40 * time.Second)
+	assert.Equal(t, "approved", r.outcome())
+}
+
+// TestPrivacy_GuardMagnitude pins the guard to its documented range with literal
+// offsets: hits and coverage 400 ms inside the guard count, 600 ms outside do not.
+func TestPrivacy_GuardMagnitude(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
+	settings := vadSettings(true, 0.35)
+	settings.Realtime.Audio.Export.Length = e2eExportLength
+	settings.Realtime.Audio.Export.PreCapture = e2ePreCapture
+	item := &PendingDetection{Source: e2eSource, FirstDetected: base, Count: 5}
+	_, end := clipSpan(settings, item)
+
+	for _, tc := range []struct {
+		name string
+		hit  time.Time
+		want bool
+	}{
+		{"hit 400 ms before the clip begin discards", base.Add(-400 * time.Millisecond), true},
+		{"hit 600 ms before the clip begin is kept", base.Add(-600 * time.Millisecond), false},
+	} {
+		p := &Processor{LastHumanDetection: map[string]HumanDetection{e2eSource: {Time: tc.hit}}}
+		got, _ := p.shouldDiscardDetection(item, settings, 1)
+		assert.Equal(t, tc.want, got, tc.name)
+	}
+
+	for _, tc := range []struct {
+		name string
+		to   time.Time
+		want coverageVerdict
+	}{
+		{"coverage 400 ms past the clip end defers", end.Add(400 * time.Millisecond), coverageDefer},
+		{"coverage 600 ms past the clip end keeps", end.Add(600 * time.Millisecond), coverageKeep},
+	} {
+		p := &Processor{privacyCoverage: map[coverageKey][]vadSpan{
+			{e2eSource, "m", metrics.TriggerVAD}: {{from: base.Add(-time.Minute), to: tc.to}},
+		}}
+		p.vadGate = newTestGate(nil, &fakeSession{}, nil)
+		p.vadGate.snapshot.Store(&vadConfigSnapshot{})
+		assert.Equal(t, tc.want, p.privacyCoverageVerdict(settings, item, end.Add(time.Second)), tc.name)
+	}
+}
