@@ -607,8 +607,8 @@ func TestReconcileClipOrphansPass_MidPassDetachHoldsRemainingChunks(t *testing.T
 
 func TestReconcileClipOrphansPass_AbortsWhenExportStorageChanges(t *testing.T) {
 	// Each case changes the export storage while the second chunk is read; the
-	// check before the third read must stop the pass before any of its rows are
-	// cleared.
+	// check before that chunk's writes must stop the pass before any of its rows
+	// are cleared, and the third chunk must never be read.
 	tests := []struct {
 		name string
 		// change alters the storage and returns the pathCurrent callback for the pass.
@@ -656,16 +656,34 @@ func TestReconcileClipOrphansPass_AbortsWhenExportStorageChanges(t *testing.T) {
 
 			assert.True(t, result.Aborted)
 			assert.Equal(t, abortReasonExportDirChanged, result.AbortReason)
-			// The abort happens before the third read, not after it.
-			require.Len(t, store.reads, 2, "the pass must stop before reading the chunk that follows the change")
+			// The pass stops before the writes of the second chunk, so the third is never read.
+			require.Len(t, store.reads, 2, "the pass must not read the chunk that follows the change")
 			assert.Equal(t, uint(0), store.reads[0].afterID)
 			assert.Equal(t, uint(reconcileChunkSize), store.reads[1].afterID)
 			got := clearedSet(store)
-			for _, r := range third {
+			// The change lands while the second chunk is read, so its clears are
+			// stopped by the check before the writes.
+			for _, r := range second {
 				assert.False(t, got[r.ClipName], "row %d follows the storage change and must not be cleared", r.ID)
 			}
 		})
 	}
+}
+
+func TestReconcileClipOrphansPass_AbortsBeforeReadWhenStorageAlreadyChanged(t *testing.T) {
+	withNoChunkPause(t)
+
+	baseDir := t.TempDir()
+	refs := refRange(1, 3, "2025/01", "p")
+	writeRefs(t, baseDir, refs)
+	store := &fakeReconcileStore{refs: refs}
+
+	result := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir, func() bool { return false })
+
+	assert.True(t, result.Aborted)
+	assert.Equal(t, abortReasonExportDirChanged, result.AbortReason)
+	assert.Empty(t, store.reads, "the check before the read must stop the pass before any store read")
+	assert.Empty(t, store.cleared)
 }
 
 func TestReconcileClipOrphansPass_FlatNameOrphanNeedsChunkEvidence(t *testing.T) {

@@ -152,8 +152,9 @@ const (
 //     still exists (retention removes files, never directories), so a vanished mount
 //     or a deleted subtree is held. A clip at the export root is cleared only if
 //     its own chunk holds a present row.
-//   - Same-storage check: before every chunk the pass aborts if baseDir no longer
-//     stats as the directory it opened, or if pathCurrent reports false.
+//   - Same-storage check: before every read and again before a chunk's writes the
+//     pass aborts if baseDir no longer stats as the directory it opened, or if
+//     pathCurrent reports false.
 //   - Recency guard: rows whose completion time is within ClipRecencyWindow (or is
 //     unknown) are skipped so a clip still being encoded is never cleared.
 //
@@ -192,6 +193,21 @@ func ReconcileClipOrphansPass(quitChan <-chan struct{}, store ReconcileStore, ba
 	}
 	defer func() { _ = root.Close() }()
 
+	// abortOnStorageChange marks the pass aborted when the export storage is no
+	// longer the one the pass started on. It runs before each read and again before
+	// a chunk's writes, because evaluating a chunk takes many filesystem calls.
+	abortOnStorageChange := func() bool {
+		if sameExportStorage(baseDir, startInfo, pathCurrent) {
+			return false
+		}
+		log.Warn("clip reconcile: aborting pass, export storage changed",
+			logger.Int("scanned", result.Scanned),
+			logger.String("operation", "clip_reconcile_abort"))
+		result.Aborted = true
+		result.AbortReason = abortReasonExportDirChanged
+		return true
+	}
+
 	var afterID uint
 	evidenceSeen := false
 	for {
@@ -204,12 +220,7 @@ func ReconcileClipOrphansPass(quitChan <-chan struct{}, store ReconcileStore, ba
 		default:
 		}
 
-		if !sameExportStorage(baseDir, startInfo, pathCurrent) {
-			log.Warn("clip reconcile: aborting pass, export storage changed",
-				logger.Int("scanned", result.Scanned),
-				logger.String("operation", "clip_reconcile_abort"))
-			result.Aborted = true
-			result.AbortReason = abortReasonExportDirChanged
+		if abortOnStorageChange() {
 			return result
 		}
 
@@ -238,6 +249,9 @@ func ReconcileClipOrphansPass(quitChan <-chan struct{}, store ReconcileStore, ba
 		// Recompute now per chunk so the recency window tracks wall-clock across a
 		// long, throttled walk.
 		chunk := evaluateClipChunk(root, refs, time.Now(), evidenceSeen)
+		if abortOnStorageChange() {
+			return result
+		}
 		evidenceSeen = chunk.evidenceSeen
 		result.HeldNoEvidence += chunk.heldNoEvidence
 		result.HeldMissingDir += chunk.heldMissingDir
