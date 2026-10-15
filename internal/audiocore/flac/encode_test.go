@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/go-audio-dsp/gain"
 	goflac "github.com/tphakala/go-flac/pcm"
 )
@@ -552,4 +553,37 @@ func TestEncodePCMToBuffer_CancelledDuringEncode(t *testing.T) {
 	ctx := &errAfterCtx{Context: t.Context(), after: 1}
 	_, err := EncodePCMToBuffer(ctx, opts)
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+// A NaN gain cannot be turned into a scale factor: the file and buffer
+// encoders report a validation error from the gain step, and the file encoder
+// leaves neither an output file nor a temp file.
+func TestEncodePCM_NaNGainFailsAtGainInit(t *testing.T) {
+	t.Parallel()
+	pcm := makeTestPCM(10000)
+
+	check := func(t *testing.T, err error) {
+		t.Helper()
+		require.Error(t, err)
+		enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+		require.True(t, ok, "want an enhanced error, got %T", err)
+		assert.Equal(t, string(errors.CategoryValidation), enhanced.GetCategory())
+		assert.Equal(t, "flac_gain_init", enhanced.GetContext()["operation"])
+	}
+
+	t.Run("file", func(t *testing.T) {
+		t.Parallel()
+		opts := baseOpts(filepath.Join(t.TempDir(), "clip.flac"), pcm)
+		opts.GainDB = math.NaN()
+		check(t, EncodePCM(t.Context(), opts))
+		assert.NoFileExists(t, opts.OutputPath)
+		assertNoTempLeftover(t, opts.OutputPath)
+	})
+	t.Run("buffer", func(t *testing.T) {
+		t.Parallel()
+		opts := bufferBaseOpts(pcm)
+		opts.GainDB = math.NaN()
+		_, err := EncodePCMToBuffer(t.Context(), opts)
+		check(t, err)
+	})
 }

@@ -16,6 +16,7 @@ import (
 	mp3pcm "github.com/tphakala/go-mp3/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
@@ -467,4 +468,26 @@ func rms(samples []int16) float64 {
 		sum += float64(v) * float64(v)
 	}
 	return math.Sqrt(sum / float64(len(samples)))
+}
+
+// A NaN gain cannot be turned into a scale factor: the encoder reports a
+// validation error from the gain step and leaves no output file.
+func TestEncodePCM_NaNGainFailsAtGainInit(t *testing.T) {
+	t.Parallel()
+	out := filepath.Join(t.TempDir(), "clip.mp3")
+	err := EncodePCM(t.Context(), &Options{
+		PCMData:     tonePCM(t, testSampleRate, 0.25, testToneHz),
+		OutputPath:  out,
+		SampleRate:  testSampleRate,
+		Channels:    1,
+		BitDepth:    16,
+		BitrateKbps: testBitrate,
+		GainDB:      math.NaN(),
+	})
+	require.Error(t, err)
+	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+	require.True(t, ok, "want an enhanced error, got %T", err)
+	assert.Equal(t, string(errors.CategoryValidation), enhanced.GetCategory())
+	assert.Equal(t, "mp3_gain_init", enhanced.GetContext()["operation"])
+	assert.NoFileExists(t, out)
 }
