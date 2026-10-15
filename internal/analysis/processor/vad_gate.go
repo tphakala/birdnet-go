@@ -457,8 +457,9 @@ func freshTailBytes(delta time.Duration, sampleRate, pcmLen int) int {
 //
 // It returns the span of audio the chunk's (source, model) stream has scored
 // when this call ran an inference (ok=true); the caller publishes it as coverage
-// once the chunk's label hits are also written. The chunk's fresh byte count
-// sets how much of its audio is scored.
+// once the chunk's label hits are also written (publishPrivacyCoverage publishes
+// nothing for a chunk with unknown timing). The chunk's fresh byte count sets how
+// much of its audio is scored.
 func (p *Processor) runVADGate(settings *conf.Settings, chunk *chunkAudio) (span audioSpan, ok bool) {
 	pf := &settings.Realtime.PrivacyFilter
 	if !pf.Enabled || !pf.VAD.Enabled {
