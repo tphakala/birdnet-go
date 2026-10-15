@@ -107,9 +107,9 @@ func setDefaultConfig() {
 	viper.SetDefault("bat.falsepositivefilter.level", 2)
 	viper.SetDefault("bat.ultrasonicfilter.enabled", true)
 	viper.SetDefault("bat.ultrasonicfilter.cvthreshold", 0.15)
-	viper.SetDefault("bat.ultrasonicfilter.fftsize", 8192)
-	viper.SetDefault("bat.ultrasonicfilter.hopsize", 4096)
-	viper.SetDefault("bat.ultrasonicfilter.frequencysplithz", 20000)
+	viper.SetDefault("bat.ultrasonicfilter.fftsize", DefaultUltrasonicFFTSize)
+	viper.SetDefault("bat.ultrasonicfilter.hopsize", DefaultUltrasonicHopSize)
+	viper.SetDefault("bat.ultrasonicfilter.frequencysplithz", DefaultUltrasonicSplitHz)
 
 	// Global model enablement (BirdNET only by default)
 	viper.SetDefault("models.enabled", []string{"birdnet"})

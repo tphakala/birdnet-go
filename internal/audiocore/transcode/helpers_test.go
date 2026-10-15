@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
+	"github.com/tphakala/birdnet-go/internal/audiocore/wav"
 )
 
 const (
@@ -78,6 +78,15 @@ func channelOf(samples []int16, channels, ch int) []float64 {
 	return out
 }
 
+// rmsFloat64 returns the root mean square of x.
+func rmsFloat64(x []float64) float64 {
+	var sumSquares float64
+	for _, v := range x {
+		sumSquares += v * v
+	}
+	return math.Sqrt(sumSquares / float64(len(x)))
+}
+
 // goertzelPower returns the signal power at freq.
 func goertzelPower(x []float64, rate int, freq float64) float64 {
 	w := 2 * math.Pi * freq / float64(rate)
@@ -108,7 +117,7 @@ func peakAbs(samples []int16) int {
 // writeWAVFile writes mono 16-bit PCM as a WAV file through the production writer.
 func writeWAVFile(t *testing.T, path string, samples []int16, rate int) {
 	t.Helper()
-	require.NoError(t, convert.SavePCMDataToWAV(path, int16Bytes(samples), rate, outputBitDepth))
+	require.NoError(t, wav.EncodePCM(t.Context(), &wav.Options{PCMData: int16Bytes(samples), OutputPath: path, SampleRate: rate, BitDepth: outputBitDepth}))
 }
 
 // writeEncoded writes mono 16-bit samples to path through the native encoder

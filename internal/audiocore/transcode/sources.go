@@ -17,7 +17,6 @@ import (
 	wavpcm "github.com/tphakala/go-wav/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -58,11 +57,11 @@ type source struct {
 // extensions come from the function clip export names its files with, so a format
 // exported without a decoder here fails the dispatch test.
 var sourceOpeners = map[string]func(*os.File) (*source, error){
-	"." + convert.GetFileExtension(audioformat.WAV):  openWAV,
-	"." + convert.GetFileExtension(audioformat.FLAC): openFLAC,
-	"." + convert.GetFileExtension(audioformat.MP3):  openMP3,
-	"." + convert.GetFileExtension(audioformat.AAC):  openM4A,
-	"." + convert.GetFileExtension(audioformat.Opus): openOpus,
+	"." + audioformat.FileExtension(audioformat.WAV):  openWAV,
+	"." + audioformat.FileExtension(audioformat.FLAC): openFLAC,
+	"." + audioformat.FileExtension(audioformat.MP3):  openMP3,
+	"." + audioformat.FileExtension(audioformat.AAC):  openM4A,
+	"." + audioformat.FileExtension(audioformat.Opus): openOpus,
 }
 
 // openSource opens the decoder that the extension of path names.

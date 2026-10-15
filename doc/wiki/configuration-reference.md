@@ -121,8 +121,8 @@ BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
 | `bat.falsepositivefilter.level` | integer | Filtering aggressivity level (0-5): 0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum |
 | `bat.ultrasonicfilter.enabled` | boolean | enable ultrasonic validation filter |
 | `bat.ultrasonicfilter.cvthreshold` | number | detections with US frame CV below this are tagged unlikely |
-| `bat.ultrasonicfilter.fftsize` | integer | FFT window size in samples (must be power of 2) |
-| `bat.ultrasonicfilter.hopsize` | integer | STFT hop size in samples |
+| `bat.ultrasonicfilter.fftsize` | integer | FFT window size in samples (a power of 2, at least 2) |
+| `bat.ultrasonicfilter.hopsize` | integer | STFT hop size in samples, 1 to fftsize |
 | `bat.ultrasonicfilter.frequencysplithz` | integer | boundary between audible and ultrasonic bands in Hz |
 
 ## bsg

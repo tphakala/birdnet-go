@@ -85,6 +85,12 @@ const (
 	DefaultRetentionMaxUsage            = "80%"
 	DefaultRetryBackoffMultiplier       = 2.0
 
+	// The bat ultrasonic filter's STFT defaults. normalizeUltrasonicFilter resets an
+	// invalid or unwritten value to them on load.
+	DefaultUltrasonicFFTSize = 8192
+	DefaultUltrasonicHopSize = 4096
+	DefaultUltrasonicSplitHz = 20000
+
 	// DefaultEQQFactor is the Q factor applied to an equalizer filter whose q was
 	// never set. eqfilter_config.go offers it as the settings UI's default too, so a
 	// filter created in the UI and one repaired here get the same value. 0.707 is the

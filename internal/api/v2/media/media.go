@@ -20,7 +20,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -1317,7 +1316,7 @@ func clipFileExtension(format string) string {
 	if format == audioformat.Opus {
 		return "ogg"
 	}
-	return convert.GetFileExtension(format)
+	return audioformat.FileExtension(format)
 }
 
 // ProcessAudioByID applies audio processing filters to a detection's audio clip

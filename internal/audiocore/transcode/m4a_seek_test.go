@@ -14,7 +14,6 @@ import (
 	m4a "github.com/tphakala/go-m4a"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -163,5 +162,5 @@ func TestDecode_M4ANoisyWindowWithinPNSTolerance(t *testing.T) {
 	want := bytesInt16(whole.Data[start*bytesPerSample : (start+seekWindowFrames)*bytesPerSample])
 	got := bytesInt16(win.Data)
 	assert.GreaterOrEqual(t, correlation(want, got), pnsMinCorrelation, "correlation with the linear decode")
-	assert.InDelta(t, 0, 20*math.Log10(convert.CalculateRMSFloat64(channelOf(got, 1, 0))/convert.CalculateRMSFloat64(channelOf(want, 1, 0))), pnsMaxLevelDiffDB, "level against the linear decode")
+	assert.InDelta(t, 0, 20*math.Log10(rmsFloat64(channelOf(got, 1, 0))/rmsFloat64(channelOf(want, 1, 0))), pnsMaxLevelDiffDB, "level against the linear decode")
 }

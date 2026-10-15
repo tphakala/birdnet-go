@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -145,7 +144,7 @@ func TestSourceOpeners_CoverEveryClipFormat(t *testing.T) {
 
 	formats := append(slices.Collect(maps.Keys(fileEncoders)), audioformat.WAV)
 	for _, format := range formats {
-		assert.Contains(t, sourceOpeners, "."+convert.GetFileExtension(format), "format %s", format)
+		assert.Contains(t, sourceOpeners, "."+audioformat.FileExtension(format), "format %s", format)
 	}
 	assert.Len(t, sourceOpeners, len(formats))
 }

@@ -18,8 +18,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ultrasonic"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -37,6 +37,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	dsppcm "github.com/tphakala/go-audio-dsp/pcm"
 )
 
 // Compile-time assertion to ensure *spectrogram.PreRenderer implements PreRendererSubmit
@@ -899,10 +900,16 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 	return detections
 }
 
+// bytesPerPCM16Sample is the size of one 16-bit PCM sample in bytes.
+const bytesPerPCM16Sample = 2
+
 // applyUltrasonicFilter runs the ultrasonic validation filter on a batch of bat detections.
 // It computes the US frame CV once from the shared PCM audio and tags all detections
 // as unlikely when the CV falls below the configured threshold. The PCM data is at
 // the source sample rate (e.g., 256kHz), not the model's internal 48kHz rate.
+// It does nothing when the filter is disabled, when the source rate leaves no
+// band above the split, when the STFT settings are invalid, or when the PCM
+// cannot be decoded (a half sample) or holds too few frames.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional for item
 func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifier.Results, detections []Detections) {
@@ -913,7 +920,16 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 
 	resolved := p.resolveAudioSource(item.Source)
 	sourceRate := resolved.SampleRate
-	if sourceRate <= 0 || sourceRate <= filterCfg.FrequencySplitHz*2 {
+	if !ultrasonic.HasUltrasonicBand(sourceRate, filterCfg.FrequencySplitHz) {
+		return
+	}
+
+	// Settings that never went through load or the API can carry an STFT
+	// configuration the filter refuses; say so before decoding the chunk.
+	if err := filterCfg.ValidateSTFT(); err != nil {
+		GetLogger().Debug("ultrasonic filter: invalid STFT settings, skipping",
+			logger.String("source", resolved.DisplayName),
+			logger.Error(err))
 		return
 	}
 
@@ -921,9 +937,17 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 		return
 	}
 
-	samples := convert.BytesToFloat64PCM16(item.PCMdata)
-	cv, ok := ultrasonic.ComputeUSFrameCV(samples, sourceRate, filterCfg)
 	sourceName := resolved.DisplayName
+	samples := make([]float32, len(item.PCMdata)/bytesPerPCM16Sample)
+	if _, err := dsppcm.BytesToFloat32(samples, item.PCMdata); err != nil {
+		GetLogger().Debug("ultrasonic filter: PCM data cannot be decoded",
+			logger.String("source", sourceName),
+			logger.Int("sample_count", len(samples)),
+			logger.Int("sample_rate", sourceRate),
+			logger.Error(err))
+		return
+	}
+	cv, ok := ultrasonic.ComputeUSFrameCV(samples, sourceRate, filterCfg)
 	if !ok {
 		GetLogger().Debug("ultrasonic filter: insufficient data for CV computation",
 			logger.String("source", sourceName),
@@ -1471,11 +1495,11 @@ func (p *Processor) applyExportFormatExtension(settings *conf.Settings, clipName
 	mInfo := classifier.DetectionModelInfoForID(modelID)
 	sourceRate := p.resolveAudioSource(source).SampleRate
 	format := exportFormatForModel(mInfo.Name, mInfo.Version, sourceRate, &settings.Realtime.Audio.Export)
-	// GetFileExtension returns the extension WITHOUT a leading dot; replaceExtension
+	// audioformat.FileExtension returns the extension WITHOUT a leading dot; replaceExtension
 	// expects the dot. Guard against an empty extension (only reachable with an
 	// unvalidated empty format) so buildClipPath's own extension is preserved rather
 	// than clobbered to a trailing dot (GitHub #2810/#2814).
-	ext := convert.GetFileExtension(format)
+	ext := audioformat.FileExtension(format)
 	if ext == "" {
 		return clipName
 	}
@@ -1501,7 +1525,7 @@ func (p *Processor) generateClipNameWithDuration(settings *conf.Settings, scient
 // Export.Type.
 //
 // buildClipPath falls back to a wav extension when Export.Type produces an
-// empty GetFileExtension result. Post fix this branch should be unreachable -
+// empty audioformat.FileExtension result. Post fix this branch should be unreachable -
 // the WARN exists purely as a defense-in-depth signal that a previously unknown
 // code path is writing extension-less clip paths to the DB (see GitHub #2810,
 // #2814).
@@ -1524,9 +1548,9 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 	month := t.Format("01")
 
 	rawExportType := settings.Realtime.Audio.Export.Type
-	// GetFileExtension is a passthrough for unknown formats, so a whitespace-
+	// audioformat.FileExtension is a passthrough for unknown formats, so a whitespace-
 	// only Type would otherwise leak into the filename as a ". " suffix.
-	fileType := convert.GetFileExtension(strings.TrimSpace(rawExportType))
+	fileType := audioformat.FileExtension(strings.TrimSpace(rawExportType))
 	if fileType == "" {
 		// Stored outside the guard: onceByKey marks the key BEFORE running emit,
 		// so a concurrent second caller returns while the first is still inside

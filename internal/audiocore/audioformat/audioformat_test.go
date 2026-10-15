@@ -39,3 +39,14 @@ func TestEffectiveBitrateKbps(t *testing.T) {
 		})
 	}
 }
+
+// TestFileExtension verifies format-to-extension mapping.
+func TestFileExtension(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "m4a", FileExtension(AAC))
+	assert.Equal(t, "wav", FileExtension(WAV))
+	assert.Equal(t, "mp3", FileExtension(MP3))
+	assert.Equal(t, "flac", FileExtension(FLAC))
+	assert.Equal(t, "opus", FileExtension(Opus))
+}

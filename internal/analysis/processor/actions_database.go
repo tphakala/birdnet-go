@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tphakala/go-audio-dsp/gain"
 	"github.com/tphakala/go-audio-dsp/loudnorm"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
@@ -20,13 +19,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/loudness"
 	"github.com/tphakala/birdnet-go/internal/audiocore/mp3"
 	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
+	"github.com/tphakala/birdnet-go/internal/audiocore/wav"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -892,31 +891,16 @@ func (a *SaveAudioAction) runEncoder(ctx context.Context, encoder string, export
 		// one exception, writing captured samples verbatim, which meant an
 		// operator with normalization or Export.Gain configured silently got
 		// neither. (A bat/ultrasonic capture above the analysis rate is stored
-		// losslessly in Export.UltrasonicType, which may be WAV.)
-		pcm := a.pcmData
-		if gainDB != 0 {
-			// AppliedBytes returns a gained copy (or the source itself when the
-			// factor rounds to exactly 1, in which case it is only read), so
-			// a.pcmData stays pristine for the spectrogram pre-render job that
-			// reads it after the export.
-			g, err := gain.New(gainDB)
-			if err != nil {
-				return errors.New(err).
-					Component("analysis.processor").
-					Category(errors.CategoryValidation).
-					Context("operation", "wav_gain_init").
-					Build()
-			}
-			pcm, err = g.AppliedBytes(pcm)
-			if err != nil {
-				return errors.New(err).
-					Component("analysis.processor").
-					Category(errors.CategoryAudio).
-					Context("operation", "wav_apply_gain").
-					Build()
-			}
-		}
-		return convert.SavePCMDataToWAV(outputPath, pcm, exportRate, conf.BitDepth)
+		// losslessly in Export.UltrasonicType, which may be WAV.) wav.EncodePCM
+		// gains a copy, so a.pcmData stays pristine for the spectrogram pre-render
+		// job that reads it after the export.
+		return wav.EncodePCM(ctx, &wav.Options{
+			PCMData:    a.pcmData,
+			OutputPath: outputPath,
+			SampleRate: exportRate,
+			BitDepth:   conf.BitDepth,
+			GainDB:     gainDB,
+		})
 
 	case clipenc.NativeFLAC:
 		// FLAC always encodes natively via go-flac; FFmpeg is never used for FLAC.
@@ -1304,7 +1288,7 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	// extension (only reachable with an unvalidated empty format) so the path
 	// keeps buildClipPath's own extension rather than being clobbered to a
 	// trailing dot (GitHub #2810/#2814).
-	if ext := convert.GetFileExtension(format); ext != "" {
+	if ext := audioformat.FileExtension(format); ext != "" {
 		path = replaceExtension(path, "."+ext)
 	}
 
