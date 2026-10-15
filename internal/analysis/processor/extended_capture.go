@@ -241,7 +241,9 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 // normalizeDetectionTimes sets BeginTime/EndTime on an approved detection.
 // BeginTime is always backdated to FirstDetected so the audio clip starts from
 // the beginning of the event. EndTime handling depends on capture mode:
-//   - Extended captures: EndTime = LastUpdated + normal detection window (spans full session)
+//   - Extended captures: EndTime = LastUpdated + normal detection window (spans full session),
+//     with LastUpdated capped so EndTime stops at MaxDeadline once MaxDuration is at
+//     least the normal window (see detectionEndTime)
 //   - Normal captures: EndTime = FirstDetected + normal detection window (configured length)
 //
 // EndTime comes from detectionEndTime, read with the caller's settings snapshot so the
@@ -256,7 +258,8 @@ func (p *Processor) normalizeDetectionTimes(item *PendingDetection, settings *co
 	// time span (EndTime - BeginTime) keeps the configured capture length even when
 	// a later higher-confidence detection replaced the Detection struct during the
 	// pending window. For extended captures it reflects LastUpdated (set on
-	// creation and every re-detection) + the normal detection window.
+	// creation and every re-detection) + the normal detection window, with
+	// LastUpdated capped at MaxDeadline minus the window (see detectionEndTime).
 	if item.ExtendedCapture {
 		// Regenerate clip name with the actual duration (unknown at createDetection
 		// time), but only when export is enabled. When export is off the clip name
@@ -310,7 +313,9 @@ func (p *Processor) applyExtendedCapture(mapKey string, now time.Time, normalDet
 //   - Medium (30s-2m): 30s after now
 //   - Long (>2m): 60s after now
 //
-// The result is always capped at maxDeadline to enforce the absolute maximum duration.
+// The result is always capped at maxDeadline, so a detection is decided no later than
+// MaxDuration after its first detection; detectionEndTime caps the end time at the
+// same bound (the saved clip then ends PreCapture after it).
 func calculateExtendedFlushDeadline(now, firstDetected, maxDeadline time.Time, normalDetectionWindow time.Duration) time.Time {
 	sessionDuration := now.Sub(firstDetected)
 

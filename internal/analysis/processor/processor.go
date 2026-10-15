@@ -254,7 +254,7 @@ type PendingDetection struct {
 	FlushDeadline   time.Time  // Deadline by which the detection must be processed
 	Count           int        // Total detection count across all models
 	ExtendedCapture bool       // Whether this detection uses extended capture
-	MaxDeadline     time.Time  // Absolute max flush time (FirstDetected + maxDuration)
+	MaxDeadline     time.Time  // Absolute max flush time (FirstDetected + maxDuration); the privacy filter can hold a detection past it until its clip is scanned. Also caps the clip EndTime (see detectionEndTime); the saved clip ends PreCapture after it
 
 	ModelContributions map[string]ModelContribution // Per-model detection data, keyed by model ID
 }

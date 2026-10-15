@@ -814,3 +814,56 @@ func TestPrivacy_VADHitsAreWrittenBeforeTheirCoverageIsPublished(t *testing.T) {
 		}
 	}
 }
+
+// TestPrivacy_ExtendedCaptureFlushesAfterMaxDeadlineWhileTheBirdKeepsSinging: an
+// extended capture's EndTime stops at MaxDeadline (MaxDuration is at least the
+// window here), however long the species keeps being heard. Once the audio of the capped clip is scanned the detection is
+// released, instead of chasing a clip end that moves with every new detection.
+func TestPrivacy_ExtendedCaptureFlushesAfterMaxDeadlineWhileTheBirdKeepsSinging(t *testing.T) {
+	r := newPrivacyRig(t, "BirdNET_V2.4", 100*time.Second)
+	r.settings.Realtime.ExtendedCapture.Enabled = true
+	r.settings.Realtime.ExtendedCapture.MaxDuration = 60
+	r.pend(26 * time.Second) // clip begins at 20 s
+	key := pendingDetectionKey(e2eSource, e2eSpecies)
+	item := r.p.pendingDetections[key]
+	item.ExtendedCapture = true
+	item.MaxDeadline = item.FirstDetected.Add(60 * time.Second)
+	item.LastUpdated = item.FirstDetected.Add(100 * time.Second) // still singing well past the bound
+	r.p.pendingDetections[key] = item
+	require.True(t, detectionEndTime(r.settings, &item).Equal(item.MaxDeadline), "EndTime is capped at MaxDeadline")
+
+	// The saved clip ends PreCapture after EndTime (83 s); the audio up to it plus
+	// the guard is scanned and nothing beyond exists yet.
+	r.feed(r.clip, 84*time.Second+500*time.Millisecond, sec(1))
+	assert.Equal(t, "approved", r.outcome())
+}
+
+// TestDetectionEndTime_ExtendedCaptureCap pins the EndTime rule of an extended
+// capture: LastUpdated plus the window, capped at MaxDeadline, and never below the
+// normal capture span when MaxDuration is shorter than the window.
+func TestDetectionEndTime_ExtendedCaptureCap(t *testing.T) {
+	t.Parallel()
+	settings := e2eSettings() // window 12 s
+	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name        string
+		maxDuration time.Duration
+		updated     time.Duration
+		want        time.Duration
+	}{
+		{"below the cap follows LastUpdated", 60 * time.Second, 10 * time.Second, 22 * time.Second},
+		{"past the cap stops at MaxDeadline", 60 * time.Second, 100 * time.Second, 60 * time.Second},
+		{"MaxDuration shorter than the window keeps the normal span", 5 * time.Second, 20 * time.Second, 12 * time.Second},
+		{"LastUpdated before the first detection keeps the normal span", 60 * time.Second, -5 * time.Second, 12 * time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			item := &PendingDetection{
+				FirstDetected: base, LastUpdated: base.Add(tt.updated),
+				ExtendedCapture: true, MaxDeadline: base.Add(tt.maxDuration),
+			}
+			assert.True(t, base.Add(tt.want).Equal(detectionEndTime(settings, item)))
+		})
+	}
+}

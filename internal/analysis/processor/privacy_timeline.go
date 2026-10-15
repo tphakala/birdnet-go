@@ -209,15 +209,42 @@ func clipSpan(settings *conf.Settings, item *PendingDetection) audioSpan {
 }
 
 // detectionEndTime is the EndTime normalizeDetectionTimes assigns to an approved
-// detection: LastUpdated for an extended capture, else FirstDetected, plus the
-// normal detection window. clipSpan and normalizeDetectionTimes both use it, so
-// the span the privacy gate waits for cannot drift from the saved clip.
+// detection: FirstDetected plus the normal detection window, or for an extended
+// capture LastUpdated plus the window, with LastUpdated capped so the end never
+// passes MaxDeadline (MaxDuration after FirstDetected) however long the species
+// keeps being heard, and the end never below the normal span when MaxDuration is
+// shorter than the window. The saved clip ends PreCapture after this end (see
+// conf.Settings.DetectionCaptureWindow), so without the cap the privacy coverage
+// gate would chase a clip end that moves with every new detection. clipSpan and
+// normalizeDetectionTimes both use it, so the span the privacy gate waits for
+// cannot drift from the saved clip.
 func detectionEndTime(settings *conf.Settings, item *PendingDetection) time.Time {
 	window := normalDetectionWindow(settings)
-	if item.ExtendedCapture {
-		return item.LastUpdated.Add(window)
+	end := item.FirstDetected.Add(window)
+	if !item.ExtendedCapture {
+		return end
 	}
-	return item.FirstDetected.Add(window)
+	last := item.LastUpdated
+	if !item.MaxDeadline.IsZero() {
+		last = earlierTime(last, item.MaxDeadline.Add(-window))
+	}
+	return latestTime(end, last.Add(window))
+}
+
+// latestTime returns the later of a and b.
+func latestTime(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
+}
+
+// earlierTime returns the earlier of a and b.
+func earlierTime(a, b time.Time) time.Time {
+	if b.Before(a) {
+		return b
+	}
+	return a
 }
 
 // coverageUpdate is one span published for a coverage key.
