@@ -378,12 +378,33 @@ func (c *Handler) runSSEEventLoopMulti(ctx echo.Context, client *apicore.SSEClie
 	}
 }
 
+// soundLevelPayloadForClient returns the sound level event to serialize for a
+// single subscriber. Authenticated subscribers receive the event unchanged,
+// including the source display name. Unauthenticated subscribers receive a COPY
+// whose Name is the stable source id (Source), because the display name can
+// embed internal host details for stream sources without a user-configured name.
+// Source is the stable id (the pipeline builds the processor with the source id,
+// audio_pipeline_service.go:825, and the processor emits it as Source,
+// audiocore/soundlevel/processor.go:99), so it is kept. The input is never mutated;
+// the OctaveBands map is shared with the input but only read.
+func soundLevelPayloadForClient(event *apicore.SSESoundLevelData, authenticated bool) apicore.SSESoundLevelData {
+	out := *event
+	if !authenticated {
+		out.Name = out.Source
+	}
+	return out
+}
+
 // StreamSoundLevels handles the SSE connection for real-time sound level streaming
 func (c *Handler) StreamSoundLevels(ctx echo.Context) error {
 	return c.handleSSEStream(ctx, apicore.StreamTypeSoundLevels, "Connected to sound level stream", "sound level",
 		func(client *apicore.SSEClient) {
 			client.Channel = make(chan apicore.SSEDetectionData, sseMinimalBufferSize)            // Minimal buffer, not used for sound levels
 			client.SoundLevelChan = make(chan apicore.SSESoundLevelData, sseSoundLevelBufferSize) // Buffer for sound level data
+			// Capture the authentication state ONCE at connect time, as the
+			// detection stream does, so the per-client send path below can decide
+			// whether to expose the source display name.
+			client.Authenticated = c.clientAuthenticated(ctx)
 		},
 		func(ctx echo.Context, client *apicore.SSEClient, clientID string) error {
 			return c.runSSEEventLoop(ctx, client, clientID, soundLevelStreamEndpoint,
@@ -393,7 +414,7 @@ func (c *Handler) StreamSoundLevels(ctx echo.Context) error {
 						if !ok {
 							return nil, false // Channel closed, no more data
 						}
-						return soundLevel, true
+						return soundLevelPayloadForClient(&soundLevel, client.Authenticated), true
 					default:
 						return nil, false
 					}
