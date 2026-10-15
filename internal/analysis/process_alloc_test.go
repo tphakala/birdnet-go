@@ -145,3 +145,15 @@ func TestDecodePCM16WithPool_OddLengthFails(t *testing.T) {
 	after := pool.GetStats()
 	assert.Equal(t, before, after, "an odd-length decode must not touch the pool")
 }
+
+// TestDecodePCM16WithPool_EmptyInput verifies that an empty buffer decodes to an
+// empty slice without a pool, which has no size-0 entry.
+func TestDecodePCM16WithPool_EmptyInput(t *testing.T) {
+	mgr := buffer.NewManager(newAllocTestLogger())
+	require.NotNil(t, mgr)
+
+	out, err := decodePCM16WithPool(mgr, nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, out)
+}

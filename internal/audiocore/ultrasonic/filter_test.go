@@ -82,6 +82,20 @@ func TestComputeUSFrameCV_FrequencySplitAboveNyquist(t *testing.T) {
 	assert.False(t, ok, "should fail when frequency split >= Nyquist")
 }
 
+func TestComputeUSFrameCV_FrequencySplitAtNyquist(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	cfg.FrequencySplitHz = 24000
+
+	// At 48kHz, Nyquist is 24kHz: a split exactly at Nyquist leaves no band.
+	_, ok := ComputeUSFrameCV(make([]float32, 20000), 48000, cfg)
+	assert.False(t, ok, "should fail when frequency split equals Nyquist")
+
+	cfg.FrequencySplitHz = 23999
+	_, ok = ComputeUSFrameCV(make([]float32, 20000), 48000, cfg)
+	assert.True(t, ok, "a split just below Nyquist leaves a band")
+}
+
 func TestComputeUSFrameCV_NonPowerOfTwoFFTSize(t *testing.T) {
 	t.Parallel()
 	cfg := defaultFilterConfig()
