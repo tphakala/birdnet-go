@@ -107,11 +107,11 @@ func BenchmarkHandleRouteFrame_Contention(b *testing.B) {
 				routes[i] = &Route{
 					SourceID: "bench",
 					Consumer: mc,
-					gain:     testGain(b, 6.020599913279624), // triggers applyProcessing
 					inbox:    make(chan AudioFrame, 1),
 					done:     make(chan struct{}),
 					stopped:  make(chan struct{}),
 				}
+				routes[i].gain.Store(testGain(b, 6.020599913279624)) // triggers applyProcessing
 			}
 
 			// Warm pools so steady-state reuse is established.
@@ -121,7 +121,7 @@ func BenchmarkHandleRouteFrame_Contention(b *testing.B) {
 					Data: frameData, SampleRate: 48000,
 					BitDepth: 16, Channels: 1,
 				}
-				res, err := r.applyProcessing(frame, route, nil)
+				res, err := r.applyProcessing(frame, route, nil, route.gain.Load())
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -183,11 +183,11 @@ func BenchmarkHandleRouteFrame_ResampleEQ(b *testing.B) {
 		Consumer:         mc,
 		resampler:        rs,
 		sourceSampleRate: srcRate,
-		gain:             testGain(b, 6.020599913279624),
 		inbox:            make(chan AudioFrame, 1),
 		done:             make(chan struct{}),
 		stopped:          make(chan struct{}),
 	}
+	route.gain.Store(testGain(b, 6.020599913279624))
 	route.filterChain.Store(testChain(b, dstRate, benchEQBands...))
 
 	frame := AudioFrame{

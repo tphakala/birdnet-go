@@ -80,13 +80,14 @@ type Route struct {
 	// sourceSampleRate is the sample rate of the source producing frames.
 	sourceSampleRate int
 
-	// gain scales the route's audio by a fixed number of decibels. Nil means
-	// no gain (0 dB) and skips the gain stage. Set at route creation time and
-	// immutable, so a gain change rebuilds the route. It is float32 inside
-	// (go-audio-dsp derives the linear factor with dsp.FactorFromDB), so a
-	// gain-only route differs from a float64 math.Pow factor by at most one
-	// LSB on a small fraction of samples.
-	gain *dspgain.Gain
+	// gain scales the route's audio by a number of decibels. Nil means no gain
+	// (0 dB) and skips the gain stage. Accessed atomically so UpdateGain can swap
+	// it without rebuilding the route; the drainer loads it once per frame. A
+	// Gain is not safe for concurrent use on one instance, so every route owns
+	// its own. It is float32 inside (go-audio-dsp derives the linear factor with
+	// dsp.FactorFromDB), so a gain-only route differs from a float64 math.Pow
+	// factor by at most one LSB on a small fraction of samples.
+	gain atomic.Pointer[dspgain.Gain]
 
 	// resampler converts source-rate PCM to the consumer's expected rate.
 	// Nil when no rate conversion is required.
@@ -241,9 +242,10 @@ func NewAudioRouter(log logger.Logger, bufMgr *buffer.Manager) *AudioRouter {
 // different sources will not cause an error but may produce confusing log
 // output and make RemoveRoute ambiguous.
 //
-// gainDB is applied by go-audio-dsp in float32; 0 dB adds no gain stage. It
-// returns an error for a NaN, an infinity, or a gain whose linear factor
-// overflows float32 (above about +770 dB). The settings layer limits gain to
+// gainDB is the route's initial gain (UpdateGain changes it later without
+// rebuilding the route). It is applied by go-audio-dsp in float32; 0 dB adds no
+// gain stage. AddRoute returns an error for a NaN, an infinity, or a gain whose
+// linear factor overflows float32 (above about +770 dB). The settings layer limits gain to
 // [-40, 40] dB, so the overflow case is unreachable from configuration.
 func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSampleRate int, gainDB float64, filterChain *dspeq.FilterChain) error {
 	// Reject routes after the router has been closed.
@@ -262,28 +264,21 @@ func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSa
 		return fmt.Errorf("%w: source=%s consumer=%s", ErrRouteExists, sourceID, consumer.ID())
 	}
 
-	// 0 dB needs no gain stage. Any other value must be accepted by
-	// go-audio-dsp, which rejects NaN, infinities and a gain whose linear
-	// factor overflows float32.
-	var routeGain *dspgain.Gain
-	if gainDB != 0 {
-		g, err := dspgain.New(gainDB)
-		if err != nil {
-			return fmt.Errorf("invalid gain value for source=%s consumer=%s: %w", sourceID, consumer.ID(), err)
-		}
-		routeGain = g
+	routeGain, err := newRouteGain(gainDB)
+	if err != nil {
+		return fmt.Errorf("invalid gain value for source=%s consumer=%s: %w", sourceID, consumer.ID(), err)
 	}
 
 	route := &Route{
 		SourceID:         sourceID,
 		Consumer:         consumer,
 		sourceSampleRate: sourceSampleRate,
-		gain:             routeGain,
 		inbox:            make(chan AudioFrame, RouteInboxCapacity),
 		done:             make(chan struct{}),
 		stopped:          make(chan struct{}),
 	}
 
+	route.gain.Store(routeGain)
 	route.filterChain.Store(filterChain)
 
 	// Create a resampler when the source and consumer rates differ.
@@ -392,6 +387,54 @@ func (r *AudioRouter) UpdateFilterChain(sourceID string, build FilterChainBuilde
 		r.log.Debug("EQ filter chain update: no routes found for source",
 			logger.String("source_id", sourceID))
 	}
+}
+
+// newRouteGain returns the gain stage for gainDB, or nil for 0 dB, which needs
+// no stage. Any other value must be accepted by go-audio-dsp, which rejects NaN,
+// infinities and a gain whose linear factor overflows float32.
+func newRouteGain(gainDB float64) (*dspgain.Gain, error) {
+	if gainDB == 0 {
+		return nil, nil //nolint:nilnil // intentional: nil means "no gain stage" (0 dB)
+	}
+	return dspgain.New(gainDB)
+}
+
+// UpdateGain sets the gain of every route on sourceID to gainDB from each
+// route's next frame, without rebuilding the routes, so consumers (live-audio
+// listeners included) stay open. 0 dB removes the gain stage. The change is a
+// step at a frame boundary with no ramp; a frame in flight finishes with the
+// gain it started with. It returns an error and changes no route for a NaN, an
+// infinity or a gain whose linear factor overflows float32. An unknown source is
+// a no-op.
+func (r *AudioRouter) UpdateGain(sourceID string, gainDB float64) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	routes := r.routes[sourceID]
+
+	// Build every route's gain before storing any, so a rejected value leaves
+	// all routes on the old gain. Each route needs its own instance.
+	gains := make([]*dspgain.Gain, len(routes))
+	for i := range routes {
+		g, err := newRouteGain(gainDB)
+		if err != nil {
+			return fmt.Errorf("invalid gain value for source=%s: %w", sourceID, err)
+		}
+		gains[i] = g
+	}
+
+	for i, rt := range routes {
+		rt.gain.Store(gains[i])
+		r.log.Debug("route gain updated",
+			logger.String("source_id", sourceID),
+			logger.String("consumer_id", rt.Consumer.ID()),
+			logger.Float64("gain_db", gainDB))
+	}
+	if len(routes) == 0 {
+		r.log.Debug("gain update: no routes found for source",
+			logger.String("source_id", sourceID))
+	}
+	return nil
 }
 
 // Dispatch sends a frame to every consumer registered for the frame's source.
@@ -754,7 +797,9 @@ func drainInboxRefs(inbox <-chan AudioFrame) {
 // writes it to the route's consumer. It is called from drainRoute's select loop
 // and is extracted to keep drainRoute under the cognitive-complexity limit.
 //
-// A PCM16 frame is processed when the route has an EQ chain or a gain. A route
+// A PCM16 frame is processed when the route has an EQ chain or a gain; both are
+// per-frame snapshots, loaded once, so UpdateGain and UpdateFilterChain take
+// effect on a route's next frame. A route
 // that resamples and processes hands the resampler's float32 output straight to
 // the processing stage (applyProcessingResampled), so the audio is quantised to
 // int16 once instead of twice and no resample byte buffer is taken. A route that
@@ -795,7 +840,10 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	// byte at stream end. The resampler assumes PCM16 by contract: ResampleTo
 	// rejects an odd byte length but cannot tell another depth from PCM16 at an
 	// even length, so a resampling route is only ever fed PCM16 sources.
+	// The chain and the gain are each loaded once, so a concurrent update
+	// cannot split the process gate from the stages within this frame.
 	chain := route.filterChain.Load()
+	g := route.gain.Load()
 	if frame.BitDepth == bitDepthPCM16 {
 		frame.Data = r.alignPCM16(frame.Data, route)
 		if len(frame.Data) == 0 {
@@ -806,7 +854,7 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	}
 
 	// EQ and gain both require 16-bit PCM; other formats skip them.
-	process := frame.BitDepth == bitDepthPCM16 && (chain != nil || route.gain != nil)
+	process := frame.BitDepth == bitDepthPCM16 && (chain != nil || g != nil)
 
 	var resamplePool *buffer.BytePool // nil when not pooled
 
@@ -880,9 +928,9 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 		var result processingResult
 		var err error
 		if route.resampler != nil {
-			result, err = r.applyProcessingResampled(frame, route, chain, resampled)
+			result, err = r.applyProcessingResampled(frame, route, chain, g, resampled)
 		} else {
-			result, err = r.applyProcessing(frame, route, chain)
+			result, err = r.applyProcessing(frame, route, chain, g)
 		}
 		if err != nil {
 			// The apply functions already released their own pool buffers on
@@ -1121,7 +1169,7 @@ func (r *AudioRouter) recordProcessingError(route *Route, err error) error {
 
 // applyProcessing applies EQ filtering and/or gain scaling to a PCM16 frame
 // whose Data is the route's own (not resampled-to-float) input. The chain may
-// be nil (EQ disabled) and route.gain may be nil (0 dB); at least one must be
+// be nil (EQ disabled) and g may be nil (0 dB); at least one must be
 // active when this is called.
 //
 // Arithmetic is float32 on go-audio-dsp: samples are decoded to float32 (exact
@@ -1140,7 +1188,7 @@ func (r *AudioRouter) recordProcessingError(route *Route, err error) error {
 // When bufMgr is nil or a pool lookup returns nil, the function falls back to
 // make() with no corresponding Put, preserving legacy behaviour for unit tests
 // that construct routers with a nil Manager.
-func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *dspeq.FilterChain) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
+func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *dspeq.FilterChain, g *dspgain.Gain) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
 	// frame.Data holds a whole number of samples: handleRouteFrame aligns every
 	// PCM16 frame before either processing stage runs, and only PCM16 frames
 	// reach this function, so the align gate covers a strict superset of the
@@ -1152,7 +1200,7 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *dsp
 	evenLen := len(frame.Data) &^ (bytesPerPCM16Sample - 1)
 
 	if chain == nil {
-		return r.applyGainBytes(frame, route, evenLen)
+		return r.applyGainBytes(frame, route, g, evenLen)
 	}
 
 	scratch := r.getFloatScratch(route, evenLen/bytesPerPCM16Sample)
@@ -1161,30 +1209,30 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *dsp
 	if _, err := dsppcm.BytesToFloat32(scratch.buf, frame.Data[:evenLen]); err != nil {
 		return processingResult{}, r.recordProcessingError(route, err)
 	}
-	return r.encodeProcessed(frame, route, chain, scratch.buf, &scratch)
+	return r.encodeProcessed(frame, route, chain, g, scratch.buf, &scratch)
 }
 
 // applyProcessingResampled is applyProcessing for a route that resamples: src
 // is the resampler's float32 output, so the audio is not re-decoded from bytes
 // or quantised to int16 between the resampler and the EQ and gain stages. src
 // is only read (it aliases the resampler's scratch) and must be non-empty. The
-// return contract and fallbacks are those of applyProcessing; frame supplies the
-// output metadata and its Data is ignored.
-func (r *AudioRouter) applyProcessingResampled(frame AudioFrame, route *Route, chain *dspeq.FilterChain, src []float32) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
+// return contract and fallbacks are those of applyProcessing, and g may be nil
+// (0 dB) as there; frame supplies the output metadata and its Data is ignored.
+func (r *AudioRouter) applyProcessingResampled(frame AudioFrame, route *Route, chain *dspeq.FilterChain, g *dspgain.Gain, src []float32) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
 	scratch := r.getFloatScratch(route, len(src))
 	defer scratch.putBack()
 
-	return r.encodeProcessed(frame, route, chain, src, &scratch)
+	return r.encodeProcessed(frame, route, chain, g, src, &scratch)
 }
 
 // applyGainBytes is the gain-only path: it scales the first evenLen bytes of
 // frame.Data straight into a pooled output buffer. No float buffer is taken. A
-// nil route.gain copies the bytes unchanged.
-func (r *AudioRouter) applyGainBytes(frame AudioFrame, route *Route, evenLen int) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
+// nil g copies the bytes unchanged.
+func (r *AudioRouter) applyGainBytes(frame AudioFrame, route *Route, g *dspgain.Gain, evenLen int) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
 	outPool, out := r.getOutBytes(route, evenLen)
 
-	if route.gain != nil {
-		if err := route.gain.ApplyBytesTo(out, frame.Data[:evenLen]); err != nil {
+	if g != nil {
+		if err := g.ApplyBytesTo(out, frame.Data[:evenLen]); err != nil {
 			if outPool != nil {
 				outPool.Put(out)
 			}
@@ -1203,8 +1251,10 @@ func (r *AudioRouter) applyGainBytes(frame AudioFrame, route *Route, evenLen int
 // scratch.buf is always written before it is read. On success it marks scratch
 // as handed off, so the caller's deferred putBack leaves the float buffer to
 // the returned result; on error it returns the output buffer to its pool and
-// leaves the float buffer to the caller's putBack.
-func (r *AudioRouter) encodeProcessed(frame AudioFrame, route *Route, chain *dspeq.FilterChain, src []float32, scratch *floatScratch) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
+// leaves the float buffer to the caller's putBack. chain and g may each be nil;
+// they are the caller's per-frame snapshots, so a concurrent UpdateGain cannot
+// change them mid-frame.
+func (r *AudioRouter) encodeProcessed(frame AudioFrame, route *Route, chain *dspeq.FilterChain, g *dspgain.Gain, src []float32, scratch *floatScratch) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
 	x := src
 	if chain != nil {
 		// EQ first - filters operate on the original signal shape.
@@ -1213,9 +1263,9 @@ func (r *AudioRouter) encodeProcessed(frame AudioFrame, route *Route, chain *dsp
 		}
 		x = scratch.buf
 	}
-	if route.gain != nil {
+	if g != nil {
 		// Gain second - scales the (possibly filtered) signal.
-		if _, err := route.gain.ProcessInto(x, scratch.buf); err != nil {
+		if _, err := g.ProcessInto(x, scratch.buf); err != nil {
 			return processingResult{}, r.recordProcessingError(route, err)
 		}
 		x = scratch.buf
