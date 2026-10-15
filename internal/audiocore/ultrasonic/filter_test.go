@@ -96,6 +96,25 @@ func TestComputeUSFrameCV_FrequencySplitAtNyquist(t *testing.T) {
 	assert.True(t, ok, "a split just below Nyquist leaves a band")
 }
 
+// TestComputeUSFrameCV_OddSampleRateNyquistBoundary pins the exact comparison
+// split*2 versus sampleRate: at 40001 Hz a 20000 Hz split still leaves the
+// Nyquist bin, at 40000 Hz it does not. Integer division of the rate would
+// reject both.
+func TestComputeUSFrameCV_OddSampleRateNyquistBoundary(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	cfg.FrequencySplitHz = 20000
+
+	_, ok := ComputeUSFrameCV(make([]float32, 20000), 40001, cfg)
+	assert.True(t, ok, "a split just below Nyquist at an odd rate leaves a band")
+	assert.True(t, HasUltrasonicBand(40001, cfg.FrequencySplitHz))
+
+	_, ok = ComputeUSFrameCV(make([]float32, 20000), 40000, cfg)
+	assert.False(t, ok, "a split at Nyquist leaves no band")
+	assert.False(t, HasUltrasonicBand(40000, cfg.FrequencySplitHz))
+	assert.False(t, HasUltrasonicBand(0, cfg.FrequencySplitHz))
+}
+
 func TestComputeUSFrameCV_NonPowerOfTwoFFTSize(t *testing.T) {
 	t.Parallel()
 	cfg := defaultFilterConfig()
@@ -109,9 +128,13 @@ func TestComputeUSFrameCV_TooFewFrames(t *testing.T) {
 	t.Parallel()
 	cfg := defaultFilterConfig()
 
-	// Exactly FFTSize samples = 0 frames with hop
+	// Exactly FFTSize samples = 1 frame, below the 2 the CV needs
 	_, ok := ComputeUSFrameCV(make([]float32, cfg.FFTSize), 256000, cfg)
 	assert.False(t, ok, "should fail with too few STFT frames")
+
+	// One sample short of the second frame is still a single frame
+	_, ok = ComputeUSFrameCV(make([]float32, cfg.FFTSize+cfg.HopSize-1), 256000, cfg)
+	assert.False(t, ok, "FFTSize + HopSize - 1 should yield only 1 frame")
 
 	// FFTSize + HopSize samples = 2 frames (with +1 formula), which is the minimum
 	_, ok = ComputeUSFrameCV(make([]float32, cfg.FFTSize+cfg.HopSize), 256000, cfg)

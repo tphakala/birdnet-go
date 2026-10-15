@@ -39,6 +39,46 @@ func flatUltrasonicToneS16LE() []byte {
 // half sample at the end is skipped instead of being filtered on zeroed samples,
 // while the same audio with an even length is tagged unlikely.
 func TestApplyUltrasonicFilter_OddLengthPCMIsNotFiltered(t *testing.T) {
+	p, settings := newUltrasonicFilterFixture(t)
+	run := func(pcm []byte) bool { return runUltrasonicFilter(p, settings, pcm) }
+
+	pcm := flatUltrasonicToneS16LE()
+	require.True(t, run(pcm), "the aligned flat tone must be tagged unlikely")
+
+	assert.False(t, run(append(pcm, 0x01)), "PCM ending in a half sample must not be filtered")
+}
+
+// TestApplyUltrasonicFilter_InvalidSTFTSettingsAreNotFiltered verifies that an
+// STFT configuration the filter refuses (a hop above the FFT size, or a split of
+// 0 Hz that would sum every bin) tags nothing.
+func TestApplyUltrasonicFilter_InvalidSTFTSettingsAreNotFiltered(t *testing.T) {
+	p, settings := newUltrasonicFilterFixture(t)
+	pcm := flatUltrasonicToneS16LE()
+	require.True(t, runUltrasonicFilter(p, settings, pcm), "the valid configuration must tag the flat tone")
+
+	settings.Bat.UltrasonicFilter.HopSize = settings.Bat.UltrasonicFilter.FFTSize * 2
+	assert.False(t, runUltrasonicFilter(p, settings, pcm), "hop above the FFT size must not filter")
+
+	settings.Bat.UltrasonicFilter.HopSize = conf.DefaultUltrasonicHopSize
+	settings.Bat.UltrasonicFilter.FrequencySplitHz = 0
+	assert.False(t, runUltrasonicFilter(p, settings, pcm), "a 0 Hz split must not filter")
+}
+
+// TestApplyUltrasonicFilter_SplitAtNyquistIsNotFiltered verifies that a source
+// whose rate leaves no band above the split is skipped.
+func TestApplyUltrasonicFilter_SplitAtNyquistIsNotFiltered(t *testing.T) {
+	p, settings := newUltrasonicFilterFixture(t)
+	pcm := flatUltrasonicToneS16LE()
+	require.True(t, runUltrasonicFilter(p, settings, pcm), "the default split must tag the flat tone")
+
+	settings.Bat.UltrasonicFilter.FrequencySplitHz = ultrasonicTestRate / 2
+	assert.False(t, runUltrasonicFilter(p, settings, pcm), "a split at Nyquist leaves no band")
+}
+
+// newUltrasonicFilterFixture returns a Processor whose registry knows a 256 kHz
+// source and settings with the default ultrasonic filter enabled.
+func newUltrasonicFilterFixture(t *testing.T) (*Processor, *conf.Settings) {
+	t.Helper()
 	registry := audiocore.NewSourceRegistry(audiocore.GetLogger())
 	_, err := registry.Register(&audiocore.SourceConfig{
 		ID:               ultrasonicTestSourceID,
@@ -60,18 +100,17 @@ func TestApplyUltrasonicFilter_OddLengthPCMIsNotFiltered(t *testing.T) {
 		FrequencySplitHz: conf.DefaultUltrasonicSplitHz,
 	}
 
-	run := func(pcm []byte) bool {
-		item := classifier.Results{
-			PCMdata: pcm,
-			Source:  datastore.AudioSource{ID: ultrasonicTestConnection},
-		}
-		detections := []Detections{{Result: detection.Result{}}}
-		p.applyUltrasonicFilter(settings, item, detections)
-		return detections[0].Result.Unlikely
+	return p, settings
+}
+
+// runUltrasonicFilter applies the filter to pcm and reports whether the
+// detection was tagged unlikely.
+func runUltrasonicFilter(p *Processor, settings *conf.Settings, pcm []byte) bool {
+	item := classifier.Results{
+		PCMdata: pcm,
+		Source:  datastore.AudioSource{ID: ultrasonicTestConnection},
 	}
-
-	pcm := flatUltrasonicToneS16LE()
-	require.True(t, run(pcm), "the aligned flat tone must be tagged unlikely")
-
-	assert.False(t, run(append(pcm, 0x01)), "PCM ending in a half sample must not be filtered")
+	detections := []Detections{{Result: detection.Result{}}}
+	p.applyUltrasonicFilter(settings, item, detections)
+	return detections[0].Result.Unlikely
 }

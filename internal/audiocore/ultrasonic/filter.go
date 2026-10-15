@@ -11,6 +11,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// HasUltrasonicBand reports whether a source at sampleRate Hz has any band above
+// splitHz: the rate must be positive and the split strictly below Nyquist
+// (sampleRate/2). The comparison is exact, so an odd rate keeps a split just
+// under its half.
+func HasUltrasonicBand(sampleRate, splitHz int) bool {
+	return sampleRate > 0 && splitHz*2 < sampleRate
+}
+
 // ComputeUSFrameCV computes the coefficient of variation of per-frame ultrasonic
 // energy for the given PCM audio samples. Returns the CV value and whether the
 // computation succeeded (false if insufficient data or invalid parameters).
@@ -24,13 +32,13 @@ import (
 // FFT to about 2e-6 absolute.
 //
 // It returns false for any configuration cfg.ValidateSTFT rejects, for a
-// FrequencySplitHz at or above Nyquist, and when samples hold fewer than two
+// FrequencySplitHz that leaves no band (see HasUltrasonicBand), and when samples hold fewer than two
 // frames.
 func ComputeUSFrameCV(samples []float32, sampleRate int, cfg conf.UltrasonicFilterConfig) (float64, bool) {
 	if cfg.ValidateSTFT() != nil {
 		return 0, false
 	}
-	if len(samples) < cfg.FFTSize || sampleRate <= 0 || cfg.FrequencySplitHz >= sampleRate/2 {
+	if len(samples) < cfg.FFTSize || !HasUltrasonicBand(sampleRate, cfg.FrequencySplitHz) {
 		return 0, false
 	}
 

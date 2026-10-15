@@ -907,6 +907,9 @@ const bytesPerPCM16Sample = 2
 // It computes the US frame CV once from the shared PCM audio and tags all detections
 // as unlikely when the CV falls below the configured threshold. The PCM data is at
 // the source sample rate (e.g., 256kHz), not the model's internal 48kHz rate.
+// It does nothing when the filter is disabled, when the source rate leaves no
+// band above the split, when the STFT settings are invalid, or when the PCM
+// cannot be decoded (a half sample) or holds too few frames.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional for item
 func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifier.Results, detections []Detections) {
@@ -917,7 +920,16 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 
 	resolved := p.resolveAudioSource(item.Source)
 	sourceRate := resolved.SampleRate
-	if sourceRate <= 0 || sourceRate <= filterCfg.FrequencySplitHz*2 {
+	if !ultrasonic.HasUltrasonicBand(sourceRate, filterCfg.FrequencySplitHz) {
+		return
+	}
+
+	// Settings that never went through load or the API can carry an STFT
+	// configuration the filter refuses; say so before decoding the chunk.
+	if err := filterCfg.ValidateSTFT(); err != nil {
+		GetLogger().Debug("ultrasonic filter: invalid STFT settings, skipping",
+			logger.String("source", resolved.DisplayName),
+			logger.Error(err))
 		return
 	}
 
