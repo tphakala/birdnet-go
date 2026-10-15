@@ -455,10 +455,12 @@ func TestClipSpan_MatchesExporter(t *testing.T) {
 		extended bool
 		updated  time.Duration
 		capBuf   int
+		maxDur   time.Duration // MaxDeadline offset from the first detection; zero for none
 	}{
-		{"normal", false, 0, 0},
-		{"extended", true, 40 * time.Second, 0},
-		{"extended capped at the buffer", true, 90 * time.Second, 30},
+		{"normal", false, 0, 0, 0},
+		{"extended", true, 40 * time.Second, 0, 0},
+		{"extended capped at the buffer", true, 90 * time.Second, 30, 0},
+		{"extended capped at MaxDeadline", true, 90 * time.Second, 0, 30 * time.Second},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -471,6 +473,9 @@ func TestClipSpan_MatchesExporter(t *testing.T) {
 			}
 			p := &Processor{Settings: settings}
 			item := &PendingDetection{FirstDetected: base, LastUpdated: base.Add(tt.updated), ExtendedCapture: tt.extended}
+			if tt.maxDur > 0 {
+				item.MaxDeadline = base.Add(tt.maxDur)
+			}
 
 			clip := clipSpan(settings, item)
 			p.normalizeDetectionTimes(item, p.currentSettings())
@@ -480,6 +485,9 @@ func TestClipSpan_MatchesExporter(t *testing.T) {
 			assert.True(t, clip.to.Equal(item.Detection.Result.BeginTime.Add(time.Duration(win.Length)*time.Second)))
 			if tt.capBuf > 0 {
 				assert.True(t, win.Capped, "the capped case must actually be capped")
+			}
+			if tt.maxDur > 0 {
+				assert.True(t, item.Detection.Result.EndTime.Equal(item.MaxDeadline), "the saved EndTime is capped at MaxDeadline like the privacy span")
 			}
 		})
 	}
