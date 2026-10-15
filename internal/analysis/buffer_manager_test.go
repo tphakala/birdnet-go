@@ -773,6 +773,7 @@ func TestProcessMonitorTick_ResultsDropMakesNextWindowADiscontinuity(t *testing.
 	drainResultsQueue(t)
 
 	const source = "drop-src"
+	t.Cleanup(func() { RemoveOverrunTrackers(source) })
 	spec := classifier.ModelRegistry[forwardModelID].Spec
 	window := spec.ClipSizeBytes()
 	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
