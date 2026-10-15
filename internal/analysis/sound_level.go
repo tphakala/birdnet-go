@@ -3,10 +3,7 @@ package analysis
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -24,8 +21,8 @@ import (
 // Constants for sound level monitoring
 const (
 	// dB value bounds for validation and sanitization
-	minValidDB = -200.0
-	maxValidDB = 20.0
+	minValidDB = soundlevel.MinLevelDB
+	maxValidDB = soundlevel.MaxLevelDB
 
 	// Error message constants
 	errMsgEmptyField       = "empty %s field"
@@ -78,18 +75,15 @@ func sanitizeSoundLevelData(data soundlevel.SoundLevelData) soundlevel.SoundLeve
 			sanitizedBand.Max = sanitizedBand.Mean
 		}
 
-		// Normalize band key format (ensure consistent naming)
-		normalizedKey := normalizeBandKey(key)
-		sanitized.OctaveBands[normalizedKey] = sanitizedBand
+		sanitized.OctaveBands[key] = sanitizedBand
 
 		// Log sanitization details if debug is enabled and realtime logging is on
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
 			if band.Min != sanitizedBand.Min || band.Max != sanitizedBand.Max ||
-				band.Mean != sanitizedBand.Mean || key != normalizedKey {
+				band.Mean != sanitizedBand.Mean {
 				lg := getSoundLevelLogger()
 				lg.Debug("sanitized and polished octave band data",
 					logger.String("original_band", key),
-					logger.String("normalized_band", normalizedKey),
 					logger.Float64("center_freq", band.CenterFreq),
 					logger.Float64("original_min", band.Min),
 					logger.Float64("original_max", band.Max),
@@ -110,11 +104,11 @@ func sanitizeFloat64(value, defaultValue float64) float64 {
 		return defaultValue
 	}
 	// Clamp to reasonable bounds for sound levels
-	if value < -200.0 {
-		return -200.0
+	if value < minValidDB {
+		return minValidDB
 	}
-	if value > 20.0 {
-		return 20.0
+	if value > maxValidDB {
+		return maxValidDB
 	}
 	return value
 }
@@ -132,29 +126,6 @@ func stringOrDefault(value, defaultValue string) string {
 func roundToDecimalPlaces(value float64, places int) float64 {
 	factor := math.Pow(10, float64(places))
 	return math.Round(value*factor) / factor
-}
-
-// normalizeBandKey ensures consistent band key formatting
-func normalizeBandKey(key string) string {
-	// Already normalized keys will pass through unchanged
-	// Convert any variations to consistent format
-	if strings.Contains(key, "_") {
-		return key // Already in correct format
-	}
-
-	// Handle "1000Hz" -> "1.0_kHz" conversion
-	key = strings.ToLower(key)
-	if before, ok := strings.CutSuffix(key, "hz"); ok {
-		freq := before
-		if val, err := strconv.ParseFloat(freq, 64); err == nil {
-			if val >= 1000 {
-				return fmt.Sprintf("%.1f_kHz", val/1000)
-			}
-			return fmt.Sprintf("%.1f_Hz", val)
-		}
-	}
-
-	return key // Return as-is if we can't parse it
 }
 
 // validateSoundLevelData validates sound level data before publishing

@@ -776,8 +776,8 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 // AudioRouter for each source ID, bridging output to the pipeline's soundLevelChan.
 //
 // The function is a no-op when Realtime.Audio.SoundLevel.Enabled is false so that
-// the DSP pipeline (27 biquad filters per source, per-second float64 accumulator
-// windows) is not allocated or exercised when sound level monitoring is off. It
+// the DSP pipeline (a go-audio-dsp octave meter with up to 30 band filters per
+// source) is not allocated or exercised when sound level monitoring is off. It
 // is also idempotent: sources that already have a tracked consumer are skipped,
 // so the caller may include previously registered source IDs.
 func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, operation string) {
@@ -788,7 +788,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 	}
 	slInterval := settings.Realtime.Audio.SoundLevel.Interval
 	if slInterval <= 0 {
-		slInterval = 10 // default 10-second aggregation window
+		slInterval = conf.DefaultSoundLevelInterval
 	}
 	for _, sid := range sourceIDs {
 		// Skip sources that already have a registered soundlevel consumer so

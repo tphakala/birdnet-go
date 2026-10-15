@@ -504,8 +504,8 @@ func TestPublishDiscoveryMultipleSources(t *testing.T) {
 // =============================================================================
 //
 // These tests verify that the sound level value template uses the correct
-// octave band key format. The keys must match what formatBandKey() produces
-// in internal/audiocore/soundlevel/soundlevel.go:
+// octave band key format. The keys must match what bandKey() produces
+// in internal/audiocore/soundlevel/processor.go:
 //   - Frequencies < 1000 Hz: "%.1f_Hz" (e.g., "500.0_Hz")
 //   - Frequencies >= 1000 Hz: "%.1f_kHz" (e.g., "1.0_kHz" for 1000 Hz)
 //
@@ -515,7 +515,7 @@ func TestPublishDiscoveryMultipleSources(t *testing.T) {
 
 // TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat verifies that the sound
 // level discovery message uses the correct octave band key format in its value
-// template. The 1000 Hz band key is "1.0_kHz" (as produced by formatBandKey).
+// template. The 1000 Hz band key is "1.0_kHz" (as produced by bandKey).
 //
 // This test catches the bug where the template used '1000' instead of '1.0_kHz',
 // causing Home Assistant to never find the sound level data.
@@ -567,7 +567,7 @@ func TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat(t *testing.T) {
 	// ==========================================================================
 	// CRITICAL ASSERTION: The value template MUST use '1.0_kHz' NOT '1000'
 	// ==========================================================================
-	// The octave band keys are formatted by formatBandKey() in soundlevel.go:
+	// The octave band keys are formatted by bandKey() in internal/audiocore/soundlevel/processor.go:
 	// - 1000 Hz becomes "1.0_kHz" (since 1000 >= 1000, it uses kHz format)
 	// - The template must match this format to extract data correctly
 	//
@@ -577,12 +577,12 @@ func TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat(t *testing.T) {
 
 	assert.Contains(t, payload.ValueTemplate, "1.0_kHz",
 		"SOUND LEVEL BUG: Value template must use '1.0_kHz' band key, not '1000'. "+
-			"The formatBandKey() function formats 1000 Hz as '1.0_kHz'. "+
+			"The bandKey() function formats 1000 Hz as '1.0_kHz'. "+
 			"Got template: %s", payload.ValueTemplate)
 
 	assert.NotContains(t, payload.ValueTemplate, "['1000']",
 		"SOUND LEVEL BUG: Value template uses incorrect band key '1000'. "+
-			"Should be '1.0_kHz' to match formatBandKey() output. "+
+			"Should be '1.0_kHz' to match bandKey() output. "+
 			"Got template: %s", payload.ValueTemplate)
 
 	// Also verify the template structure is correct overall
