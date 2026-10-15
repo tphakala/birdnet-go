@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -647,6 +648,21 @@ func TestProcessMonitorTick_ForwardsAudioTimingToResults(t *testing.T) {
 		sourceID = "timing-forward-src"
 		modelID  = "BirdNET_V2.4"
 	)
+	// Not parallel: ProcessData reads the global settings and queues to the shared
+	// results queue, which is drained on cleanup so a failed run leaves nothing
+	// for another test to pick up.
+	conftest.SetTestSettings(conftest.GetTestSettings())
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+	t.Cleanup(func() {
+		for {
+			select {
+			case <-classifier.ResultsQueue:
+			default:
+				return
+			}
+		}
+	})
+
 	spec := classifier.ModelRegistry[modelID].Spec
 	window := spec.ClipSizeBytes()
 	bytesPerSecond := spec.EffectiveSampleRate() * conf.BytesPerSample * conf.NumChannels
