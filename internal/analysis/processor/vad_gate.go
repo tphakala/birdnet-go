@@ -70,6 +70,9 @@ type vadChunk struct {
 	// gap reports lost or unanalyzed audio before this window, or the first
 	// window of a buffer; it resets the stream and restarts coverage.
 	gap bool
+	// freshBytes is how many bytes at the end of pcm are new audio, from the
+	// producer's exact count; 0 means unknown and the audio-end delta is used.
+	freshBytes int
 }
 
 // vadSpan is a contiguous stretch of audio time a speech detector has scored.
@@ -204,7 +207,8 @@ func (g *vadGate) closeAllLocked() {
 // backoff window, the chunk was buffered without a flush this interval (the
 // throttle cadence), it was an out-of-order or duplicate chunk, or the flush had
 // no complete hop yet. When ran is true, span is the contiguous audio time this
-// stream has scored so far, ending at the chunk's audio end. A non-nil error
+// stream has scored so far, ending at the chunk's audio end. The audio appended
+// for the chunk is at least ch.freshBytes when the producer reports it. A non-nil error
 // indicates a session load or inference failure (an inference failure tears the
 // session down; a per-stream data error drops only that streamer).
 func (g *vadGate) score(cfg *vad.Config, cacheKey string, ch *vadChunk) (prob float32, ran bool, dur time.Duration, span vadSpan, err error) {
@@ -261,7 +265,9 @@ func (g *vadGate) score(cfg *vad.Config, cacheKey string, ch *vadChunk) (prob fl
 	// Advance the accepted-chunk timestamp only after Append succeeds, so a failed
 	// Append does not leave lastEnd pointing past audio that was never buffered
 	// (which would make the next chunk's fresh-tail slice drop real audio).
-	entry.lastEnd = ch.audioEnd
+	if ch.audioEnd.After(entry.lastEnd) {
+		entry.lastEnd = ch.audioEnd
+	}
 
 	// Flush (a decision) at most once per throttle span per stream; between
 	// flushes fresh audio is only buffered.
@@ -314,7 +320,9 @@ func (g *vadGate) score(cfg *vad.Config, cacheKey string, ch *vadChunk) (prob fl
 // chunk plus vadResetGap), restarts the coverage span on any hole larger than
 // vadCoverageJoinTolerance, and leaves lastEnd for the caller to advance after
 // Append succeeds. All timing is on the chunk's audio end, which does not move
-// with the PreCapture setting. The caller must hold g.mu.
+// with the PreCapture setting. The fresh audio appended is at
+// least the producer's exact fresh byte count, never less, so timing jitter in the
+// audio end cannot drop audio the span goes on to claim. The caller must hold g.mu.
 func (g *vadGate) prepareSourceStream(ch *vadChunk) (entry *sourceStream, freshPCM []byte, skip bool) {
 	chunkDur := pcmChunkDuration(len(ch.pcm), ch.sampleRate)
 	chunkStart := ch.audioEnd.Add(-chunkDur)
@@ -348,9 +356,11 @@ func (g *vadGate) prepareSourceStream(ch *vadChunk) (entry *sourceStream, freshP
 			entry.covFrom = ch.audioEnd
 		}
 		freshPCM = ch.pcm
-	case delta <= 0:
+	case delta <= 0 && ch.freshBytes <= 0:
 		// Out-of-order or duplicate chunk: its audio was already appended when the
-		// earlier chunk arrived, so there is nothing new to score.
+		// earlier chunk arrived, so there is nothing new to score. A chunk whose
+		// producer reports fresh bytes is never a duplicate: delta can be zero or
+		// negative from timing jitter while the window still carries new audio.
 		return entry, nil, true
 	default:
 		if delta-chunkDur > vadCoverageJoinTolerance {
@@ -362,7 +372,17 @@ func (g *vadGate) prepareSourceStream(ch *vadChunk) (entry *sourceStream, freshP
 		// end is new audio. freshTailBytes rounds to whole samples and clamps to
 		// the whole chunk, so a contiguous chunk (delta ~= chunkDur) yields the
 		// whole chunk with no dropped leading sample and preserves the LSTM state.
-		freshPCM = ch.pcm[len(ch.pcm)-freshTailBytes(delta, ch.sampleRate, len(ch.pcm)):]
+		//
+		// The producer's exact fresh byte count is a floor: audio-end deltas carry
+		// arrival jitter, and a delta shorter than the true step would drop real
+		// audio from scoring while the span still claims it. The delta can only add
+		// to the floor, which recovers the audio of a window the queue dropped from
+		// this window's overlap head.
+		fresh := freshTailBytes(delta, ch.sampleRate, len(ch.pcm))
+		if ch.freshBytes > fresh {
+			fresh = min(ch.freshBytes, len(ch.pcm)) &^ (vadBytesPerSample - 1)
+		}
+		freshPCM = ch.pcm[len(ch.pcm)-fresh:]
 	}
 	return entry, freshPCM, false
 }
@@ -416,7 +436,8 @@ func freshTailBytes(delta time.Duration, sampleRate, pcmLen int) int {
 //
 // It returns the span of audio the chunk's (source, model) stream has scored
 // when this call ran an inference (ok=true); the caller publishes it as coverage
-// once the chunk's label hits are also written.
+// once the chunk's label hits are also written. The chunk's fresh byte count
+// (item.AudioFreshBytes) sets how much of its audio is scored.
 func (p *Processor) runVADGate(settings *conf.Settings, item *classifier.Results) (span vadSpan, ok bool) {
 	pf := &settings.Realtime.PrivacyFilter
 	if !pf.Enabled || !pf.VAD.Enabled {
@@ -461,6 +482,7 @@ func (p *Processor) runVADGate(settings *conf.Settings, item *classifier.Results
 		sampleRate: sampleRate,
 		audioEnd:   audioEnd,
 		gap:        item.AudioGap,
+		freshBytes: item.AudioFreshBytes,
 	})
 	if err != nil {
 		GetLogger().Warn("privacy VAD unavailable; speech gate inactive this interval",

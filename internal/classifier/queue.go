@@ -24,6 +24,10 @@ type Results struct {
 	// the same (source, model) was lost or not analyzed, or that this is the first
 	// window of a buffer (its overlap head is zero filled).
 	AudioGap bool
+	// AudioFreshBytes is how many bytes at the end of PCMdata are new audio, not
+	// repeated from the previous window of the same (source, model); the whole
+	// of PCMdata after a gap. Zero when the producer does not know it.
+	AudioFreshBytes int
 }
 
 // Default buffer size for the results queue
@@ -36,7 +40,7 @@ const DefaultQueueSize = 100
 var ResultsQueue = make(chan Results, DefaultQueueSize)
 
 // Copy creates a deep copy of the Results struct.
-// AudioEndAt and AudioGap are copied as is.
+// AudioEndAt, AudioGap and AudioFreshBytes are copied as is.
 // NOTE: This method is kept for compatibility but is no longer used in the main
 // audio processing pipeline. The ownership model has been updated so that data
 // ownership transfers through the ResultsQueue without requiring copies.
@@ -51,6 +55,7 @@ func (r Results) Copy() Results { //nolint:gocritic // This is a copy function, 
 		ModelID:         r.ModelID,
 		AudioEndAt:      r.AudioEndAt,
 		AudioGap:        r.AudioGap,
+		AudioFreshBytes: r.AudioFreshBytes,
 	}
 
 	// Deep copy PCMdata

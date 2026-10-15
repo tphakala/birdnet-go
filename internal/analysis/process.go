@@ -261,13 +261,17 @@ type ProcessRequest struct {
 	// AudioGap is true when audio before this window was lost or not analyzed
 	// (first window of a buffer, overwrite-mode loss, a buffer Reset, skipped windows).
 	AudioGap bool
+	// AudioFreshBytes is how many bytes at the end of Data are new audio, not
+	// repeated from the previous window (see AnalysisBuffer.FreshAtLastRead). Zero
+	// when unknown.
+	AudioFreshBytes int
 }
 
 // ProcessData processes the given audio data to detect bird species, logs the
 // detected species and optionally saves the audio clip if a bird species is
 // detected above the configured threshold.
 //
-// req.AudioEndAt and req.AudioGap are passed through unchanged to the queued
+// req.AudioEndAt, req.AudioGap and req.AudioFreshBytes are passed through unchanged to the queued
 // classifier.Results.
 //
 // ctx is propagated to the model inference call for cancellation and deadlines.
@@ -442,6 +446,7 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 		ModelID:         modelID,
 		AudioEndAt:      req.AudioEndAt,
 		AudioGap:        req.AudioGap,
+		AudioFreshBytes: req.AudioFreshBytes,
 	}
 
 	// Send the results to the queue. PCMdata is the independently owned copy

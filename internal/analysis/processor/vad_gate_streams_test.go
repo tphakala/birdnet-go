@@ -322,3 +322,47 @@ func TestVADGate_PreCaptureHotReloadDoesNotSkipAudio(t *testing.T) {
 		"every chunk's fresh audio must reach the streamer")
 	assert.Len(t, st.appends, chunks, "no chunk may be skipped as a duplicate")
 }
+
+// TestVADGate_JitteredAudioEndsStillScoreEveryFreshByte: when timing jitter makes
+// a window's audio-end delta shorter than the audio it really adds, the gate
+// still appends all of the producer's fresh bytes, so speech in the part a
+// timestamp-derived trim would drop is scored and recorded.
+func TestVADGate_JitteredAudioEndsStillScoreEveryFreshByte(t *testing.T) {
+	t.Parallel()
+	g := newTestGate(nil, &fakeSession{}, nil)
+	g.newStreamer = func() vad.Streamer { return &markerStreamer{} }
+	p := &Processor{LastHumanDetection: map[string]HumanDetection{}, vadGate: g}
+	settings := vadSettings(true, 0.35)
+
+	const (
+		chunkSeconds = 3
+		oneSecond    = testVADRate * vadBytesPerSample
+	)
+	// True audio ends are 10, 11, 12 and 13 s; the second window is stamped 0.2 s
+	// early. Speech is in the first 0.2 s of the second window's fresh second.
+	trueEnds := []time.Duration{10 * time.Second, 11 * time.Second, 12 * time.Second, 13 * time.Second}
+	stamped := []time.Duration{10 * time.Second, 10800 * time.Millisecond, 12 * time.Second, 13 * time.Second}
+	speechFrom, speechTo := 10*time.Second, 10200*time.Millisecond
+
+	for i, end := range trueEnds {
+		pcm := make([]byte, chunkSeconds*oneSecond)
+		start := end - chunkSeconds*time.Second
+		for s := range len(pcm) / vadBytesPerSample {
+			at := start + time.Duration(s)*time.Second/testVADRate
+			if at >= speechFrom && at < speechTo {
+				pcm[s*vadBytesPerSample] = 1
+			}
+		}
+		item := makeVADItem(testVADModel, "src1", testVADBase.Add(stamped[i]), 0)
+		item.PCMdata = pcm
+		item.AudioFreshBytes = oneSecond
+		if i == 0 {
+			item.AudioFreshBytes = len(pcm)
+		}
+		p.runVADGate(settings, item)
+	}
+
+	hit, ok := p.LastHumanDetection["src1"]
+	require.True(t, ok, "speech in the slice a timestamp trim drops must still be scored")
+	assert.False(t, hit.Time.Before(testVADBase.Add(10200*time.Millisecond)))
+}

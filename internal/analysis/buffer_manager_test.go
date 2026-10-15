@@ -687,6 +687,7 @@ func TestProcessMonitorTick_ForwardsAudioTimingToResults(t *testing.T) {
 	require.True(t, bm.processMonitorTick(quit, cfg, window, 0, state, 1))
 	first := nextQueuedResult(t, sourceID)
 	assert.True(t, first.AudioGap, "the first window of a buffer is a gap")
+	assert.Equal(t, window, first.AudioFreshBytes, "a window with no overlap carry is all fresh")
 	wantEnd := lastWriteAt.Add(-time.Duration(window) * time.Second / time.Duration(bytesPerSecond))
 	assert.True(t, first.AudioEndAt.Equal(wantEnd), "audio end is the last write minus the unread backlog: got %v want %v", first.AudioEndAt, wantEnd)
 

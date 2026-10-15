@@ -59,6 +59,9 @@ type AnalysisBuffer struct {
 	// lostAtLastRead is lostBytes plus resets as of the latest successful Read,
 	// guarded by mu.
 	lostAtLastRead int64
+	// freshAtLastRead is the number of bytes of the latest window that are new
+	// audio, guarded by mu.
+	freshAtLastRead int
 }
 
 // NewAnalysisBuffer creates an AnalysisBuffer with a ring buffer of the given
@@ -193,7 +196,8 @@ func (ab *AnalysisBuffer) Write(data []byte) error {
 // (nil, noopRelease, nil) is still the "try again later" signal when the ring
 // has not yet accumulated readSize bytes.
 //
-// A successful Read also snapshots the discontinuity marker for LostAtLastRead.
+// A successful Read also snapshots the discontinuity marker for LostAtLastRead
+// and the fresh byte count for FreshAtLastRead.
 //
 // Read is safe for concurrent use. The returned release func is bound to a
 // single call chain and must not be invoked from multiple goroutines; in
@@ -212,11 +216,15 @@ func (ab *AnalysisBuffer) Read() (window []byte, release func(), err error) {
 		window = make([]byte, ab.windowSize)
 	}
 
+	// fresh counts the window bytes that are new audio: the step read from the
+	// ring, or the whole window when the overlap head is zero filled.
+	fresh := ab.readSize
 	if ab.overlapSize > 0 {
 		if len(ab.prevData) == ab.overlapSize {
 			copy(window[:ab.overlapSize], ab.prevData)
 		} else {
 			clear(window[:ab.overlapSize])
+			fresh = ab.windowSize
 		}
 	}
 
@@ -256,6 +264,7 @@ func (ab *AnalysisBuffer) Read() (window []byte, release func(), err error) {
 
 	ab.windowsRead++
 	ab.lostAtLastRead = ab.lostBytes + ab.resets
+	ab.freshAtLastRead = fresh
 
 	pool := ab.windowPool
 	released := false
@@ -309,6 +318,17 @@ func (ab *AnalysisBuffer) LostAtLastRead() int64 {
 	ab.mu.Lock()
 	defer ab.mu.Unlock()
 	return ab.lostAtLastRead
+}
+
+// FreshAtLastRead returns how many bytes of the window the latest successful Read
+// returned are new audio: the step read from the ring, or the whole window when
+// its overlap head was zero filled (the first read, or the first after Reset).
+// The rest of the window repeats audio an earlier window already carried. It is
+// safe for concurrent use.
+func (ab *AnalysisBuffer) FreshAtLastRead() int {
+	ab.mu.Lock()
+	defer ab.mu.Unlock()
+	return ab.freshAtLastRead
 }
 
 // Reset clears the ring buffer, the overlap state and the last write time

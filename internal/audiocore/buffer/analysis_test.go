@@ -598,3 +598,41 @@ func TestAnalysisBuffer_ResetIsVisibleInLostAtLastRead(t *testing.T) {
 
 	assert.NotEqual(t, before, ab.LostAtLastRead(), "the window after a Reset has a zero-filled overlap head and lost audio")
 }
+
+// TestAnalysisBuffer_FreshAtLastRead pins the exact count of new bytes in each
+// window: the whole window when the overlap head is zero filled (first read,
+// after Reset), else the step read from the ring.
+func TestAnalysisBuffer_FreshAtLastRead(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 256
+		overlap  = 12
+		readSize = 8
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, overlap, readSize, "fresh-source", newTestLogger(), nil)
+	require.NoError(t, err)
+	read := func() int {
+		t.Helper()
+		require.NoError(t, ab.Write(make([]byte, readSize)))
+		_, release, rerr := ab.Read()
+		require.NoError(t, rerr)
+		release()
+		return ab.FreshAtLastRead()
+	}
+
+	assert.Equal(t, overlap+readSize, read(), "the first window has a zero-filled head, so all of it is fresh")
+	assert.Equal(t, readSize, read(), "a contiguous window adds one step")
+	assert.Equal(t, readSize, read())
+	ab.Reset()
+	assert.Equal(t, overlap+readSize, read(), "the window after a Reset has a zero-filled head")
+	assert.Equal(t, readSize, read())
+
+	noOverlap, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "fresh-nooverlap", newTestLogger(), nil)
+	require.NoError(t, err)
+	require.NoError(t, noOverlap.Write(make([]byte, readSize)))
+	_, release, err := noOverlap.Read()
+	require.NoError(t, err)
+	release()
+	assert.Equal(t, readSize, noOverlap.FreshAtLastRead(), "with no overlap every window is all fresh")
+}

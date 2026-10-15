@@ -539,7 +539,8 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monit
 // the model-not-loaded warn-once latch and the not-found grace counter.
 //
 // Each full window is stamped with its backlog-corrected audio end and a gap
-// flag (see monitorTickState.windowTiming) that ProcessData passes on to the
+// flag (see monitorTickState.windowTiming), plus the exact count of fresh bytes
+// it carries (AnalysisBuffer.FreshAtLastRead), that ProcessData passes on to the
 // results consumer; a window read but not analyzed makes the next one report a
 // gap.
 //
@@ -684,6 +685,7 @@ func (m *BufferManager) processMonitorTick(
 		ModelID:         cfg.modelID,
 		AudioEndAt:      audioEndAt,
 		AudioGap:        audioGap,
+		AudioFreshBytes: ab.FreshAtLastRead(),
 	}); processErr != nil {
 		state.markWindowSkipped()
 		m.logger.Error("error processing data",
