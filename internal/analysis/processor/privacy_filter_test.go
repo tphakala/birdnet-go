@@ -15,6 +15,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
+// discardNow runs shouldDiscardDetection with the privacy state read at the
+// current time, as one flush tick does.
+func discardNow(p *Processor, item *PendingDetection, settings *conf.Settings, minDetections int) (discard bool, reason string) {
+	priv := p.checkPrivacy(settings, item, time.Now())
+	return p.shouldDiscardDetection(item, settings, minDetections, &priv)
+}
+
 // newPrivacyFilterDetection builds a minimal pending bird detection for a single
 // audio source, back-dated to firstDetected.
 func newPrivacyFilterDetection(source string, firstDetected time.Time) *PendingDetection {
@@ -34,11 +41,12 @@ func newPrivacyFilterDetection(source string, firstDetected time.Time) *PendingD
 }
 
 // TestShouldDiscardDetection_PrivacyFilterBoundary exercises the privacy filter
-// across the human-voice-vs-bird timestamp boundary. The key case is equal
-// timestamps: a human voice and a bird detected in the exact same audio chunk
-// share the same back-dated start time, and that must still discard the bird
-// (the prior strict "human after bird" comparison leaked it). A human voice from
-// an earlier chunk (strictly before) must not discard a later bird.
+// across the human-voice-vs-clip-begin boundary. A hit is stamped with the end of
+// the audio that produced it and the bird's clip begins at FirstDetected, so a
+// hit at or after the clip begin (equal timestamps included, which the prior
+// strict "human after bird" comparison leaked) must discard the bird. A hit from
+// an earlier chunk, more than privacyClipGuard before the clip begin, must not
+// discard a later bird.
 func TestShouldDiscardDetection_PrivacyFilterBoundary(t *testing.T) {
 	t.Parallel()
 
@@ -53,21 +61,21 @@ func TestShouldDiscardDetection_PrivacyFilterBoundary(t *testing.T) {
 		wantReason  string
 	}{
 		{
-			name:        "same chunk: human and bird share the timestamp",
+			name:        "hit stamped exactly at the clip begin",
 			humanTime:   base,
 			birdTime:    base,
 			wantDiscard: true,
 			wantReason:  "privacy filter",
 		},
 		{
-			name:        "human voice after the bird started",
+			name:        "hit after the clip begin",
 			humanTime:   base.Add(time.Second),
 			birdTime:    base,
 			wantDiscard: true,
 			wantReason:  "privacy filter",
 		},
 		{
-			name:        "human voice from an earlier chunk is kept",
+			name:        "hit one second before the clip begin is kept",
 			humanTime:   base,
 			birdTime:    base.Add(time.Second),
 			wantDiscard: false,
@@ -87,7 +95,7 @@ func TestShouldDiscardDetection_PrivacyFilterBoundary(t *testing.T) {
 			}
 			item := newPrivacyFilterDetection(source, tt.birdTime)
 
-			discard, reason := p.shouldDiscardDetection(item, settings, 1)
+			discard, reason := discardNow(p, item, settings, 1)
 
 			assert.Equal(t, tt.wantDiscard, discard)
 			assert.Equal(t, tt.wantReason, reason)
@@ -133,10 +141,10 @@ func TestShouldDiscardDetection_RecordsTriggerMetric(t *testing.T) {
 				Metrics:            &observability.Metrics{PrivacyFilter: pfm},
 				LastHumanDetection: map[string]HumanDetection{source: tt.stored},
 			}
-			// The bird shares the human's chunk (equal timestamps), so it is discarded.
+			// The hit is stamped at the clip begin (equal timestamps), so it is discarded.
 			item := newPrivacyFilterDetection(source, humanTime)
 
-			discard, reason := p.shouldDiscardDetection(item, settings, 1)
+			discard, reason := discardNow(p, item, settings, 1)
 			require.True(t, discard, "a human voice at/after the bird must discard")
 			assert.Equal(t, "privacy filter", reason)
 

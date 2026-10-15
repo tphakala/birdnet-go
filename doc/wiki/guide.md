@@ -1064,7 +1064,7 @@ realtime:
     confidence: 0.05 # Sensitivity to human voices
 ```
 
-- Discards bird detections if human speech is detected after the initial detection
+- Discards a bird detection when human speech is heard anywhere in its saved clip, including the pre-capture part, and also when speech is heard after the clip while the detection is still waiting. A detection waits until its whole clip has been scanned. Only a detection whose clip is never fully scanned within 30 seconds after the clip end is saved and counted as unscanned
 - Protects privacy by preventing recordings during conversations
 
 #### Dog Bark Filter

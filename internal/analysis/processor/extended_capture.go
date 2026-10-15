@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -240,23 +241,26 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 // normalizeDetectionTimes sets BeginTime/EndTime on an approved detection.
 // BeginTime is always backdated to FirstDetected so the audio clip starts from
 // the beginning of the event. EndTime handling depends on capture mode:
-//   - Extended captures: EndTime = LastUpdated + normal detection window (spans full session)
+//   - Extended captures: EndTime = LastUpdated + normal detection window (spans full session),
+//     with LastUpdated capped so EndTime stops at MaxDeadline once MaxDuration is at
+//     least the normal window (see detectionEndTime)
 //   - Normal captures: EndTime = FirstDetected + normal detection window (configured length)
 //
+// EndTime comes from detectionEndTime, read with the caller's settings snapshot so the
+// saved span matches the one the privacy check used.
 // For extended captures the clip name is regenerated to reflect the actual duration.
-func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
-	settings := p.currentSettings()
+func (p *Processor) normalizeDetectionTimes(item *PendingDetection, settings *conf.Settings) {
 	item.Detection.Result.BeginTime = item.FirstDetected
 
-	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
-	normalDetectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+	item.Detection.Result.EndTime = detectionEndTime(settings, item)
 
+	// For non-extended detections EndTime is recalculated from FirstDetected so the
+	// time span (EndTime - BeginTime) keeps the configured capture length even when
+	// a later higher-confidence detection replaced the Detection struct during the
+	// pending window. For extended captures it reflects LastUpdated (set on
+	// creation and every re-detection) + the normal detection window, with
+	// LastUpdated capped at MaxDeadline minus the window (see detectionEndTime).
 	if item.ExtendedCapture {
-		// For extended captures, EndTime reflects the last detection + normal detection window.
-		// LastUpdated is always initialized (set on creation and every re-detection).
-		item.Detection.Result.EndTime = item.LastUpdated.Add(normalDetectionWindow)
-
 		// Regenerate clip name with the actual duration (unknown at createDetection
 		// time), but only when export is enabled. When export is off the clip name
 		// stays empty so it remains a truthful per-detection signal (no file will be
@@ -278,13 +282,6 @@ func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
 			item.Detection.Result.ClipName = p.applyExportFormatExtension(
 				settings, clipName, item.BestModelID, datastore.AudioSource{ID: item.Source})
 		}
-	} else {
-		// For non-extended detections, recalculate EndTime to maintain the configured
-		// capture window. BeginTime was backdated to FirstDetected, but EndTime may
-		// come from a later higher-confidence detection that replaced the Detection
-		// struct during the pending window. Without this recalculation, the time span
-		// (EndTime - BeginTime) inflates beyond the configured capture length.
-		item.Detection.Result.EndTime = item.FirstDetected.Add(normalDetectionWindow)
 	}
 }
 
@@ -316,7 +313,10 @@ func (p *Processor) applyExtendedCapture(mapKey string, now time.Time, normalDet
 //   - Medium (30s-2m): 30s after now
 //   - Long (>2m): 60s after now
 //
-// The result is always capped at maxDeadline to enforce the absolute maximum duration.
+// The result is always capped at maxDeadline. The privacy filter may still hold the
+// detection after that deadline until its clip is scanned, up to the clip end plus
+// the coverage wait; detectionEndTime caps the end time at the same bound, and the
+// saved clip ends PreCapture after it.
 func calculateExtendedFlushDeadline(now, firstDetected, maxDeadline time.Time, normalDetectionWindow time.Duration) time.Time {
 	sessionDuration := now.Sub(firstDetected)
 

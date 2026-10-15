@@ -8,9 +8,10 @@ import (
 
 // HumanDetection records when human speech was last detected on an audio source
 // and which mechanism flagged it (metrics.TriggerLabel or metrics.TriggerVAD), so
-// the privacy-filter discard can attribute itself. Keeping the timestamp and the
-// trigger in one value (rather than two parallel maps) makes them impossible to
-// desynchronise.
+// the privacy-filter discard can attribute itself. Time is the capture time of
+// the end of the newest audio that produced the latest speech hit, and never
+// moves backward. Keeping the timestamp and the trigger in one value (rather than
+// two parallel maps) makes them impossible to desynchronise.
 type HumanDetection struct {
 	Time    time.Time
 	Trigger string

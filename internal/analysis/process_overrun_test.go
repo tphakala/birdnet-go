@@ -36,7 +36,7 @@ const (
 // wallWait (on synctest's fake clock, see runProcessData) and reports a
 // scripted timing split.
 type timedBackend struct {
-	classifierBackend
+	registrySpecBackend
 	wallWait time.Duration
 	timing   classifier.PredictTiming
 	err      error // returned from PredictModelTimed alongside the timing
@@ -48,11 +48,6 @@ func (b timedBackend) PredictModelTimed(_ context.Context, _ string, _ [][]float
 }
 
 func (b timedBackend) EffectiveBaseOverlap() time.Duration { return overrunTestEffectiveOverlap }
-
-func (b timedBackend) ModelSpecFor(id string) (classifier.ModelSpec, bool) {
-	info, ok := classifier.ModelRegistry[id]
-	return info.Spec, ok
-}
 
 // runOverrunCase runs one ProcessData call against a timedBackend with a fresh
 // metrics registry installed, and returns the registry and the overrun count.
@@ -81,15 +76,7 @@ func runProcessData(t *testing.T, source string, backend timedBackend) (*prometh
 	t.Cleanup(func() { processMetrics.Store(prev) })
 	t.Cleanup(func() { RemoveOverrunTrackers(source) })
 
-	t.Cleanup(func() {
-		for {
-			select {
-			case <-classifier.ResultsQueue:
-			default:
-				return
-			}
-		}
-	})
+	drainResultsQueue(t)
 
 	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
 	synctest.Test(t, func(t *testing.T) {

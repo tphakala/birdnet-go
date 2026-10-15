@@ -24,6 +24,9 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 
 	const source = "src1"
 	start := time.Date(2026, 6, 19, 8, 0, 0, 0, time.UTC)
+	// audioEnd differs from start so the human stamp is distinguishable: it is the
+	// chunk's audio end, while the dog filter still stamps StartTime.
+	audioEnd := start.Add(7 * time.Second)
 
 	enablePrivacy := func(s *conf.Settings) {
 		s.Realtime.PrivacyFilter.Enabled = true
@@ -64,7 +67,7 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 				LastHumanDetection: make(map[string]HumanDetection),
 				LastDogDetection:   make(map[string]time.Time),
 			}
-			item := classifier.Results{StartTime: start}
+			item := classifier.Results{StartTime: start, Audio: classifier.AudioTiming{EndAt: audioEnd}}
 			item.Source.ID = source
 			result := datastore.Results{Species: tt.species, Confidence: tt.confidence}
 
@@ -77,7 +80,7 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 				got, ok := p.LastHumanDetection[source]
 				assert.Equal(t, tt.wantStored, ok, "unexpected record state in human map")
 				if tt.wantStored {
-					assert.Equal(t, start, got.Time)
+					assert.Equal(t, audioEnd, got.Time)
 				}
 				assert.Empty(t, p.LastDogDetection, "human handler must not write the dog map")
 			} else {

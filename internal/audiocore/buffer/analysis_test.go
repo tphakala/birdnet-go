@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -503,4 +504,305 @@ func TestAnalysisBuffer_ResetKeepsCumulativeStats(t *testing.T) {
 
 	ab.Reset()
 	assert.Equal(t, before, ab.Stats())
+}
+
+// readWindowOnce reads one window and releases it, returning its info.
+func readWindowOnce(t *testing.T, ab *buffer.AnalysisBuffer) buffer.WindowInfo {
+	t.Helper()
+	window, info, release, err := ab.ReadWindow()
+	require.NoError(t, err)
+	require.NotNil(t, window)
+	release()
+	return info
+}
+
+// TestAnalysisBuffer_ReadWindowReportsBacklogAndLastWrite pins WindowInfo: the
+// bytes still unread after the read and the time of the latest Write.
+func TestAnalysisBuffer_ReadWindowReportsBacklogAndLastWrite(t *testing.T) {
+	t.Parallel()
+
+	// The bubble's clock is virtual, so the sleeps below separate the write stamps
+	// exactly and instantly.
+	synctest.Test(t, func(t *testing.T) {
+		const (
+			capacity = 64 * 1024
+			readSize = 1024
+		)
+		ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "backlog-source", newTestLogger(), nil)
+		require.NoError(t, err)
+
+		_, info, release, err := ab.ReadWindow()
+		require.NoError(t, err)
+		release()
+		assert.Equal(t, buffer.WindowInfo{}, info, "no window yet")
+
+		require.NoError(t, ab.Write(make([]byte, readSize)))
+		afterFirstWrite := time.Now()
+		time.Sleep(time.Millisecond)
+		for range 2 {
+			require.NoError(t, ab.Write(make([]byte, readSize)))
+		}
+		info = readWindowOnce(t, ab)
+		assert.Equal(t, 2*readSize, info.Backlog, "two of the three chunks are still unread")
+		assert.True(t, info.LastWriteAt.After(afterFirstWrite), "the time is the latest write's, not the first")
+		assert.False(t, info.LastWriteAt.After(time.Now()))
+
+		ab.Reset()
+		afterReset := time.Now()
+		time.Sleep(time.Millisecond)
+		require.NoError(t, ab.Write(make([]byte, readSize)))
+		info = readWindowOnce(t, ab)
+		assert.Zero(t, info.Backlog)
+		assert.True(t, info.LastWriteAt.After(afterReset), "the write after Reset sets the time again")
+	})
+}
+
+// TestAnalysisBuffer_ReadWindowGapAttributesLossToTheNextWindow: audio discarded
+// after a Read makes the window that follows it a gap, not the one already read.
+func TestAnalysisBuffer_ReadWindowGapAttributesLossToTheNextWindow(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 10
+		readSize = 4
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "lost-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	require.NoError(t, ab.Write(make([]byte, 8)))
+	assert.True(t, readWindowOnce(t, ab).Gap, "the first window of a buffer is a gap")
+
+	// 4 buffered of 10 (6 free), so 9 bytes discard 3 unread bytes.
+	require.NoError(t, ab.Write(make([]byte, 9)))
+	assert.True(t, readWindowOnce(t, ab).Gap, "the window after overwrite loss is a gap")
+	assert.False(t, readWindowOnce(t, ab).Gap, "the loss is reported once")
+}
+
+// TestAnalysisBuffer_ReadWindowGapAfterReset: Reset drops unread audio and the
+// overlap carry, so the next window has a zero-filled head and is a gap.
+func TestAnalysisBuffer_ReadWindowGapAfterReset(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 64
+		overlap  = 4
+		readSize = 8
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, overlap, readSize, "reset-gap-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	require.NoError(t, ab.Write(make([]byte, 3*readSize)))
+	require.True(t, readWindowOnce(t, ab).Gap)
+	assert.False(t, readWindowOnce(t, ab).Gap, "a contiguous window is not a gap")
+
+	ab.Reset()
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	assert.True(t, readWindowOnce(t, ab).Gap, "the window after a Reset has a zero-filled overlap head")
+}
+
+// TestAnalysisBuffer_ReadWindowFreshBytes pins the exact count of new bytes in
+// each window: the whole window when the overlap head is zero filled (first
+// read, after Reset), else the step read from the ring.
+func TestAnalysisBuffer_ReadWindowFreshBytes(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 256
+		overlap  = 12
+		readSize = 8
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, overlap, readSize, "fresh-source", newTestLogger(), nil)
+	require.NoError(t, err)
+	read := func() int {
+		t.Helper()
+		require.NoError(t, ab.Write(make([]byte, readSize)))
+		return readWindowOnce(t, ab).FreshBytes
+	}
+
+	assert.Equal(t, overlap+readSize, read(), "the first window has a zero-filled head, so all of it is fresh")
+	assert.Equal(t, readSize, read(), "a contiguous window adds one step")
+	assert.Equal(t, readSize, read())
+	ab.Reset()
+	assert.Equal(t, overlap+readSize, read(), "the window after a Reset has a zero-filled head")
+	assert.Equal(t, readSize, read())
+
+	noOverlap, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "fresh-nooverlap", newTestLogger(), nil)
+	require.NoError(t, err)
+	require.NoError(t, noOverlap.Write(make([]byte, readSize)))
+	assert.Equal(t, readSize, readWindowOnce(t, noOverlap).FreshBytes, "with no overlap every window is all fresh")
+}
+
+// TestAnalysisBuffer_RefusedWriteSplicesTheWindowThatContainsIt: a write larger
+// than the ring is refused whole. The lost audio sits behind the unread backlog,
+// so the window that joins the audio before it to the audio after it is the gap,
+// not the window read next.
+func TestAnalysisBuffer_RefusedWriteSplicesTheWindowThatContainsIt(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 40
+		readSize = 8
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "refused-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	require.True(t, readWindowOnce(t, ab).Gap, "the first window of a buffer is a gap")
+
+	require.NoError(t, ab.Write(make([]byte, 2*readSize)))
+	require.Error(t, ab.Write(make([]byte, capacity+1)), "a write larger than the ring is refused")
+	require.Error(t, ab.Write(make([]byte, capacity+1)), "a second refused write at the same position is one splice")
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+
+	assert.False(t, readWindowOnce(t, ab).Gap, "the first window after the backlog was recorded before the loss")
+	assert.False(t, readWindowOnce(t, ab).Gap, "the second one too")
+	assert.True(t, readWindowOnce(t, ab).Gap, "the window after the refused bytes splices the loss")
+}
+
+// TestAnalysisBuffer_EmptyAndRefusedWritesDoNotStampTheWriteTime: only an
+// accepted, non-empty write moves the time the audio end is derived from.
+func TestAnalysisBuffer_EmptyAndRefusedWritesDoNotStampTheWriteTime(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 40
+		readSize = 8
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "stamp-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	afterAccepted := time.Now()
+	require.NoError(t, ab.Write(nil))
+	require.Error(t, ab.Write(make([]byte, capacity+1)))
+
+	info := readWindowOnce(t, ab)
+	assert.False(t, info.LastWriteAt.After(afterAccepted), "empty and refused writes must not stamp the write time")
+	assert.False(t, info.LastWriteAt.IsZero())
+}
+
+// TestAnalysisBuffer_ReadWindowContiguityAndPositions pins ContiguousBytes, the
+// ring-space positions and the generation across the first window, a splice in
+// the overlap head, a splice in the fresh part and a Reset.
+func TestAnalysisBuffer_ReadWindowContiguityAndPositions(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 64
+		overlap  = 12
+		readSize = 8
+		window   = overlap + readSize
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, overlap, readSize, "contig-source", newTestLogger(), nil)
+	require.NoError(t, err)
+	write := func(n int) { require.NoError(t, ab.Write(make([]byte, n))) }
+
+	write(readSize)
+	first := readWindowOnce(t, ab)
+	assert.True(t, first.Gap)
+	assert.Equal(t, readSize, first.ContiguousBytes, "the zero-filled head is not contiguous audio")
+	assert.Equal(t, int64(readSize), first.EndPos)
+	assert.NotZero(t, first.Generation, "zero means a producer without positions")
+
+	write(readSize)
+	second := readWindowOnce(t, ab)
+	assert.False(t, second.Gap)
+	assert.Equal(t, 2*readSize, second.ContiguousBytes, "the head still holds 4 zero-filled bytes of the first window")
+	assert.Equal(t, int64(2*readSize), second.EndPos)
+
+	write(readSize)
+	third := readWindowOnce(t, ab)
+	assert.False(t, third.Gap)
+	assert.Equal(t, window, third.ContiguousBytes, "head and fresh part are all genuine audio")
+
+	// Overwrite loss: fill the ring beyond capacity so unread bytes are dropped.
+	write(capacity)
+	write(readSize)
+	lossWindow := readWindowOnce(t, ab)
+	assert.True(t, lossWindow.Gap, "the loss lies at the start of the fresh part")
+	assert.Equal(t, readSize, lossWindow.ContiguousBytes, "the pre-loss head is not contiguous")
+	next := readWindowOnce(t, ab)
+	assert.False(t, next.Gap)
+	assert.Equal(t, 2*readSize, next.ContiguousBytes, "the window after the loss counts its head only from the splice")
+	assert.Equal(t, lossWindow.EndPos+readSize, next.EndPos)
+
+	ab.Reset()
+	write(readSize)
+	afterReset := readWindowOnce(t, ab)
+	assert.NotEqual(t, first.Generation, afterReset.Generation, "a Reset starts a new stream")
+	assert.True(t, afterReset.Gap)
+	assert.Equal(t, readSize, afterReset.ContiguousBytes)
+}
+
+// TestAnalysisBuffer_RefusedWriteOnADrainedRingLeavesAPositionHole: even when the
+// monitor has drained the ring, the bytes of a refused write count toward the
+// reported positions, so the window after it does not look adjacent to the one
+// before.
+func TestAnalysisBuffer_RefusedWriteOnADrainedRingLeavesAPositionHole(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 40
+		readSize = 8
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "hole-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	before := readWindowOnce(t, ab)
+
+	require.Error(t, ab.Write(make([]byte, capacity+1)))
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	after := readWindowOnce(t, ab)
+
+	assert.True(t, after.Gap)
+	tailStart := after.EndPos - int64(after.ContiguousBytes)
+	assert.Greater(t, tailStart, before.EndPos, "the refused bytes leave a hole between the two windows")
+	assert.Equal(t, before.Generation, after.Generation)
+}
+
+// newGenerationBuffer builds a buffer and resets it the given number of times.
+func newGenerationBuffer(t *testing.T, resets int) *buffer.AnalysisBuffer {
+	t.Helper()
+	ab, err := buffer.NewAnalysisBuffer(64, 0, 8, "generation-source", newTestLogger(), nil)
+	require.NoError(t, err)
+	for range resets {
+		ab.Reset()
+	}
+	return ab
+}
+
+// TestAnalysisBuffer_GenerationsAreUniqueAcrossBuffersAndResets: positions of one
+// buffer instance mean nothing next to another's, so no two buffers, and no two
+// resets of different buffers, may report the same generation. A rebuilt buffer
+// that restarted at the same generation would join the old coverage. All buffers
+// are built before any generation is read, so a reset that took a generation
+// another buffer later draws is caught.
+func TestAnalysisBuffer_GenerationsAreUniqueAcrossBuffersAndResets(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		resets int
+	}{
+		{"first buffer", 0},
+		{"second buffer", 0},
+		{"third buffer, one reset", 1},
+		{"fourth buffer", 0},
+		{"fifth buffer, two resets", 2},
+		{"sixth buffer", 0},
+	}
+	buffers := make([]*buffer.AnalysisBuffer, len(cases))
+	for i, c := range cases {
+		buffers[i] = newGenerationBuffer(t, c.resets)
+	}
+	seen := map[uint64]string{}
+	for i, c := range cases {
+		require.NoError(t, buffers[i].Write(make([]byte, 8)))
+		gen := readWindowOnce(t, buffers[i]).Generation
+		require.NotZero(t, gen)
+		other, dup := seen[gen]
+		require.Falsef(t, dup, "%s reports the generation of %s", c.name, other)
+		seen[gen] = c.name
+	}
 }

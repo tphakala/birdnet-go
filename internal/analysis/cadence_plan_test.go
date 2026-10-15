@@ -361,16 +361,11 @@ func TestCadenceReplanSequence(t *testing.T) {
 
 // cadenceBackend is a classifierBackend fake that reports a fixed effective overlap.
 type cadenceBackend struct {
-	classifierBackend
+	registrySpecBackend
 	effective time.Duration
 }
 
 func (c cadenceBackend) EffectiveBaseOverlap() time.Duration { return c.effective }
-
-func (c cadenceBackend) ModelSpecFor(id string) (classifier.ModelSpec, bool) {
-	info, ok := classifier.ModelRegistry[id]
-	return info.Spec, ok
-}
 
 // TestBufferIntervalFor_UsesEffectiveBaseOverlap pins that the overrun threshold
 // follows the published (effective) overlap and not the configured one.

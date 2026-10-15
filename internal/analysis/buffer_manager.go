@@ -65,6 +65,42 @@ type monitorTickState struct {
 	// keepUp evaluates whether analysis keeps up with the audio arriving in the
 	// analysis buffer (see keepUpState).
 	keepUp keepUpState
+
+	// lastWindowAnalyzed records that the previous window read was handed to
+	// ProcessData and processed without error; false until then, so a window read
+	// but skipped or failed (and the first window) makes the next one report a gap.
+	lastWindowAnalyzed bool
+}
+
+// windowAudio places the window just read on its source's audio timeline. Call it
+// once per window read, right after ReadWindow.
+//
+// The analysis ring is FIFO, so a lagging monitor reads old audio: the newest
+// unread byte was written at info.LastWriteAt, and the window ends the unread
+// backlog earlier. That write is read under the same lock as the window, so it
+// is the latest write at the moment of the read.
+//
+// Gap is the buffer's own gap flag (a splice at or inside the window's fresh
+// part: the first window of a buffer, overwrite-mode loss, a refused write, a
+// Reset) or a previous window that was read but not analyzed (skipped, failed or
+// its result dropped by a full queue). ContiguousBytes, the stream positions and
+// the generation come from the buffer unchanged. The analyzed latch is cleared
+// here and set again once ProcessData succeeds.
+func (s *monitorTickState) windowAudio(info buffer.WindowInfo, bytesPerSecond int) classifier.AudioTiming {
+	gap := info.Gap || !s.lastWindowAnalyzed
+	s.lastWindowAnalyzed = false
+	endAt := info.LastWriteAt
+	if bytesPerSecond > 0 {
+		endAt = endAt.Add(-time.Duration(info.Backlog) * time.Second / time.Duration(bytesPerSecond))
+	}
+	return classifier.AudioTiming{
+		EndAt:           endAt,
+		Gap:             gap,
+		FreshBytes:      info.FreshBytes,
+		ContiguousBytes: info.ContiguousBytes,
+		EndPos:          info.EndPos,
+		Generation:      info.Generation,
+	}
 }
 
 // classifierBackend is the analysis package's view of *classifier.Orchestrator:
@@ -501,6 +537,13 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monit
 // caller can toggle its "once seen, log on later loss" log-level preference and hold
 // the model-not-loaded warn-once latch and the not-found grace counter.
 //
+// Each full window is stamped with its backlog-corrected audio end, a gap flag
+// and the exact count of fresh bytes it carries (see monitorTickState.windowAudio
+// and buffer.WindowInfo), which ProcessData passes on to the results consumer; a
+// window read but not analyzed, including one whose result the full results
+// queue dropped (ProcessData returns ErrResultsDropped, logged where it happens),
+// makes the next one report a gap.
+//
 // The window's backing slice is always returned to its pool via a
 // "defer release()" immediately after Read, so every exit path including the
 // try-again-later (nil data), error, and partial-read branches releases.
@@ -553,7 +596,7 @@ func (m *BufferManager) processMonitorTick(
 	// window ticks, so lost audio is seen whatever the tick does afterwards.
 	m.observeKeepUp(cfg, ab, &state.keepUp, time.Now())
 
-	data, release, readErr := ab.Read()
+	data, info, release, readErr := ab.ReadWindow()
 	defer release()
 	if readErr != nil {
 		m.logger.Error("buffer read error",
@@ -569,6 +612,10 @@ func (m *BufferManager) processMonitorTick(
 	}
 
 	if len(data) != analysisWindowBytes {
+		if len(data) > 0 {
+			// A window was consumed but cannot be analyzed.
+			state.lastWindowAnalyzed = false
+		}
 		if tickCount%bufferMonitorDebugEveryTicks == 0 {
 			m.logger.Debug("buffer monitor polling",
 				logger.String("source_id", cfg.sourceID),
@@ -578,6 +625,9 @@ func (m *BufferManager) processMonitorTick(
 		}
 		return true
 	}
+
+	audio := state.windowAudio(info,
+		cfg.spec.EffectiveSampleRate()*conf.BytesPerSample*conf.NumChannels)
 
 	// Skip inference when the model is not loaded in the orchestrator. A monitor
 	// can briefly outlive its model's registration: UnloadModel (uninstall,
@@ -629,13 +679,20 @@ func (m *BufferManager) processMonitorTick(
 	beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
 	startTime := time.Now().Add(-beginTimeOffset)
 
-	if processErr := ProcessData(context.Background(), m.bn, m.bufferMgr, &ProcessRequest{
+	switch processErr := ProcessData(context.Background(), m.bn, m.bufferMgr, &ProcessRequest{
 		Data:            data,
 		StartTime:       startTime,
 		AudioCapturedAt: audioCapturedAt,
 		Source:          cfg.sourceID,
 		ModelID:         cfg.modelID,
-	}); processErr != nil {
+		Audio:           audio,
+	}); {
+	case processErr == nil:
+		state.lastWindowAnalyzed = true
+	case errors.Is(processErr, ErrResultsDropped):
+		// Already logged and counted at the drop; the window stays unanalyzed so
+		// the next one reports a gap.
+	default:
 		m.logger.Error("error processing data",
 			logger.String("source_id", cfg.sourceID),
 			logger.String("model_id", cfg.modelID),

@@ -244,6 +244,12 @@ func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 	processMetrics.CompareAndSwap(nil, myAudioMetrics)
 }
 
+// ErrResultsDropped is returned by ProcessData when the analysis result could not
+// be queued because the results queue was full. The drop is already logged and
+// counted by recordResultsQueueDrop; callers treat the window as not analyzed.
+// It is a bare sentinel so it adds no telemetry report of its own.
+var ErrResultsDropped = errors.NewStd("analysis result dropped: results queue full")
+
 // ProcessRequest carries the per-window audio payload and identifiers for one
 // ProcessData call. ctx, the classifier backend, and the *buffer.Manager stay separate
 // parameters (they are collaborators, not request data); grouping the payload keeps the
@@ -254,11 +260,18 @@ type ProcessRequest struct {
 	AudioCapturedAt time.Time // capture timestamp used for detection alignment
 	Source          string    // audio source ID
 	ModelID         string    // registry model ID to run inference with
+	// Audio is the window's place on the audio timeline (backlog-corrected end,
+	// gap flag, fresh byte count), passed through to the queued
+	// classifier.Results. The zero value means unknown.
+	Audio classifier.AudioTiming
 }
 
 // ProcessData processes the given audio data to detect bird species, logs the
 // detected species and optionally saves the audio clip if a bird species is
 // detected above the configured threshold.
+//
+// req.Audio is passed through unchanged to the queued classifier.Results. A
+// result that cannot be queued is dropped and reported as ErrResultsDropped.
 //
 // ctx is propagated to the model inference call for cancellation and deadlines.
 // bufMgr is the audiocore buffer manager owning the Float32Pool that the
@@ -430,6 +443,7 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 		Results:         results,
 		Source:          audioSource,
 		ModelID:         modelID,
+		Audio:           req.Audio,
 	}
 
 	// Send the results to the queue. PCMdata is the independently owned copy
@@ -450,6 +464,7 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 		// counter + log + rate-limited telemetry) instead of discarding it
 		// silently.
 		recordResultsQueueDrop(source, modelID, pm)
+		return ErrResultsDropped
 	}
 	return nil
 }
