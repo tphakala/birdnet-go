@@ -25,7 +25,7 @@ func updateSoundLevelMetrics(soundData soundlevel.SoundLevelData, metrics *obser
 	startTime := time.Now()
 
 	// Record the measurement duration
-	metrics.SoundLevel.RecordSoundLevelDuration(soundData.Source, soundData.Name, float64(soundData.Duration))
+	metrics.SoundLevel.RecordSoundLevelDuration(soundData.Source, float64(soundData.Duration))
 
 	// Log metrics update if debug is enabled
 	// This is logged at interval rate, not realtime
@@ -44,7 +44,6 @@ func updateSoundLevelMetrics(soundData soundlevel.SoundLevelData, metrics *obser
 		// Round values to 2 decimal places for cleaner metrics
 		metrics.SoundLevel.UpdateOctaveBandLevel(
 			soundData.Source,
-			soundData.Name,
 			bandKey,
 			math.Round(bandData.Min*100)/100,
 			math.Round(bandData.Max*100)/100,
@@ -79,7 +78,7 @@ func updateSoundLevelMetrics(soundData soundlevel.SoundLevelData, metrics *obser
 		overallLevel := 10 * math.Log10(avgPower)
 		// Round to 2 decimal places
 		overallLevel = math.Round(overallLevel*100) / 100
-		metrics.SoundLevel.UpdateSoundLevel(soundData.Source, soundData.Name, "overall", overallLevel)
+		metrics.SoundLevel.UpdateSoundLevel(soundData.Source, "overall", overallLevel)
 
 		// Log overall sound level if debug is enabled
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
@@ -94,7 +93,7 @@ func updateSoundLevelMetrics(soundData soundlevel.SoundLevelData, metrics *obser
 
 	// Record processing duration
 	processingDuration := time.Since(startTime).Seconds()
-	metrics.SoundLevel.RecordSoundLevelProcessingDuration(soundData.Source, soundData.Name, "update_metrics", processingDuration)
+	metrics.SoundLevel.RecordSoundLevelProcessingDuration(soundData.Source, "update_metrics", processingDuration)
 
 	// Log processing duration if debug is enabled
 	if conf.Setting().Realtime.Audio.SoundLevel.Debug {

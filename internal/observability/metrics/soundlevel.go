@@ -2,12 +2,15 @@
 package metrics
 
 import (
-	"sync"
-
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// SoundLevelMetrics contains Prometheus metrics for sound level measurements
+// SoundLevelMetrics contains Prometheus metrics for sound level measurements.
+//
+// Every series is labelled by the stable source id. The name label is kept so
+// existing dashboards keep working, and it carries the same value as the source
+// label. The recorders take no display name: the metrics listener has no
+// authentication, and a display name can embed internal host details.
 type SoundLevelMetrics struct {
 	registry *prometheus.Registry
 
@@ -27,16 +30,11 @@ type SoundLevelMetrics struct {
 	soundLevelProcessingErrors   *prometheus.CounterVec
 	soundLevelPublishingTotal    *prometheus.CounterVec
 	soundLevelPublishingErrors   *prometheus.CounterVec
-
-	// lastNames holds the name each source last published under, guarded by
-	// namesMu, so a rename can drop the series of the old name.
-	namesMu   sync.RWMutex
-	lastNames map[string]string
 }
 
 // NewSoundLevelMetrics creates and registers new sound level metrics
 func NewSoundLevelMetrics(registry *prometheus.Registry) (*SoundLevelMetrics, error) {
-	m := &SoundLevelMetrics{registry: registry, lastNames: make(map[string]string)}
+	m := &SoundLevelMetrics{registry: registry}
 	if err := m.initMetrics(); err != nil {
 		return nil, err
 	}
@@ -176,137 +174,45 @@ func (m *SoundLevelMetrics) Collect(ch chan<- prometheus.Metric) {
 
 // Recording methods
 
-// TrackSourceName records the name a source publishes under. When the name
-// differs from the one last recorded for that source, every series labelled with
-// that source and the old name is deleted from all sound level vectors, so a
-// rename leaves no frozen series behind and the new name starts from zero. An
-// unchanged name only takes the read lock and compares strings. It is safe for
-// concurrent use. Call it once per interval before any recorder sees the new
-// name, so every recorder can tell a stale name from the current one.
-func (m *SoundLevelMetrics) TrackSourceName(source, name string) {
-	m.namesMu.RLock()
-	prev, seen := m.lastNames[source]
-	m.namesMu.RUnlock()
-	if seen && prev == name {
-		return
-	}
-	m.namesMu.Lock()
-	defer m.namesMu.Unlock()
-	prev, seen = m.lastNames[source]
-	if seen && prev == name {
-		return
-	}
-	m.lastNames[source] = name
-	if seen {
-		m.deleteSourceName(source, prev)
-	}
-}
-
-// deleteSourceName removes every series with the given source and name labels.
-func (m *SoundLevelMetrics) deleteSourceName(source, name string) {
-	labels := prometheus.Labels{labelSource: source, "name": name}
-	m.soundLevelGauge.DeletePartialMatch(labels)
-	m.soundLevelUpdatesTotal.DeletePartialMatch(labels)
-	m.soundLevelDuration.DeletePartialMatch(labels)
-	m.octaveBandLevelGauge.DeletePartialMatch(labels)
-	m.octaveBandMinGauge.DeletePartialMatch(labels)
-	m.octaveBandMaxGauge.DeletePartialMatch(labels)
-	m.octaveBandMeanGauge.DeletePartialMatch(labels)
-	m.soundLevelProcessingDuration.DeletePartialMatch(labels)
-	m.soundLevelProcessingErrors.DeletePartialMatch(labels)
-	m.soundLevelPublishingTotal.DeletePartialMatch(labels)
-	m.soundLevelPublishingErrors.DeletePartialMatch(labels)
-}
-
-// acquireCurrent takes the names read lock and reports whether name is the one
-// source currently publishes under (a source never passed to TrackSourceName
-// counts as current). On true the caller writes its series and then calls
-// m.namesMu.RUnlock, so TrackSourceName cannot delete between the check and the
-// write. On false the lock is already released and the write must be skipped: a
-// recorder finishing an old interval, for example a publisher still draining its
-// channel after a rename, must not recreate a series TrackSourceName deleted.
-// The lock is a single read lock and no other lock is taken while it is held.
-func (m *SoundLevelMetrics) acquireCurrent(source, name string) bool {
-	m.namesMu.RLock()
-	if current, seen := m.lastNames[source]; seen && current != name {
-		m.namesMu.RUnlock()
-		return false
-	}
-	return true
-}
-
-// UpdateSoundLevel updates the current sound level gauge. A write under a name
-// the source no longer has is dropped (see acquireCurrent).
-func (m *SoundLevelMetrics) UpdateSoundLevel(source, name, measurementType string, levelDB float64) {
-	if !m.acquireCurrent(source, name) {
-		return
-	}
-	defer m.namesMu.RUnlock()
-	m.soundLevelGauge.WithLabelValues(source, name, measurementType).Set(levelDB)
-	m.soundLevelUpdatesTotal.WithLabelValues(source, name).Inc()
+// UpdateSoundLevel updates the current sound level gauge.
+func (m *SoundLevelMetrics) UpdateSoundLevel(source, measurementType string, levelDB float64) {
+	m.soundLevelGauge.WithLabelValues(source, source, measurementType).Set(levelDB)
+	m.soundLevelUpdatesTotal.WithLabelValues(source, source).Inc()
 }
 
 // RecordSoundLevelDuration records the duration of a sound level measurement
-// window. A write under a stale name is dropped (see acquireCurrent).
-func (m *SoundLevelMetrics) RecordSoundLevelDuration(source, name string, durationSeconds float64) {
-	if !m.acquireCurrent(source, name) {
-		return
-	}
-	defer m.namesMu.RUnlock()
-	m.soundLevelDuration.WithLabelValues(source, name).Observe(durationSeconds)
+// window.
+func (m *SoundLevelMetrics) RecordSoundLevelDuration(source string, durationSeconds float64) {
+	m.soundLevelDuration.WithLabelValues(source, source).Observe(durationSeconds)
 }
 
-// UpdateOctaveBandLevel updates the sound level for a specific octave band. A
-// write under a stale name is dropped (see acquireCurrent).
-func (m *SoundLevelMetrics) UpdateOctaveBandLevel(source, name, frequencyBand string, minDB, maxDB, meanDB float64) {
-	if !m.acquireCurrent(source, name) {
-		return
-	}
-	defer m.namesMu.RUnlock()
-	m.octaveBandMinGauge.WithLabelValues(source, name, frequencyBand).Set(minDB)
-	m.octaveBandMaxGauge.WithLabelValues(source, name, frequencyBand).Set(maxDB)
-	m.octaveBandMeanGauge.WithLabelValues(source, name, frequencyBand).Set(meanDB)
-	m.octaveBandLevelGauge.WithLabelValues(source, name, frequencyBand, "current").Set(meanDB)
+// UpdateOctaveBandLevel updates the sound level for a specific octave band.
+func (m *SoundLevelMetrics) UpdateOctaveBandLevel(source, frequencyBand string, minDB, maxDB, meanDB float64) {
+	m.octaveBandMinGauge.WithLabelValues(source, source, frequencyBand).Set(minDB)
+	m.octaveBandMaxGauge.WithLabelValues(source, source, frequencyBand).Set(maxDB)
+	m.octaveBandMeanGauge.WithLabelValues(source, source, frequencyBand).Set(meanDB)
+	m.octaveBandLevelGauge.WithLabelValues(source, source, frequencyBand, "current").Set(meanDB)
 }
 
 // RecordSoundLevelProcessingDuration records the duration of sound level
-// processing. A write under a stale name is dropped (see acquireCurrent).
-func (m *SoundLevelMetrics) RecordSoundLevelProcessingDuration(source, name, operation string, duration float64) {
-	if !m.acquireCurrent(source, name) {
-		return
-	}
-	defer m.namesMu.RUnlock()
-	m.soundLevelProcessingDuration.WithLabelValues(source, name, operation).Observe(duration)
+// processing.
+func (m *SoundLevelMetrics) RecordSoundLevelProcessingDuration(source, operation string, duration float64) {
+	m.soundLevelProcessingDuration.WithLabelValues(source, source, operation).Observe(duration)
 }
 
-// RecordSoundLevelProcessingError records a sound level processing error. A
-// write under a stale name is dropped (see acquireCurrent).
-func (m *SoundLevelMetrics) RecordSoundLevelProcessingError(source, name, errorType string) {
-	if !m.acquireCurrent(source, name) {
-		return
-	}
-	defer m.namesMu.RUnlock()
-	m.soundLevelProcessingErrors.WithLabelValues(source, name, errorType).Inc()
+// RecordSoundLevelProcessingError records a sound level processing error.
+func (m *SoundLevelMetrics) RecordSoundLevelProcessingError(source, errorType string) {
+	m.soundLevelProcessingErrors.WithLabelValues(source, source, errorType).Inc()
 }
 
-// RecordSoundLevelPublishing records a sound level publishing attempt. A write
-// under a stale name is dropped (see acquireCurrent).
-func (m *SoundLevelMetrics) RecordSoundLevelPublishing(source, name, destination, status string) {
-	if !m.acquireCurrent(source, name) {
-		return
-	}
-	defer m.namesMu.RUnlock()
-	m.soundLevelPublishingTotal.WithLabelValues(source, name, destination, status).Inc()
+// RecordSoundLevelPublishing records a sound level publishing attempt.
+func (m *SoundLevelMetrics) RecordSoundLevelPublishing(source, destination, status string) {
+	m.soundLevelPublishingTotal.WithLabelValues(source, source, destination, status).Inc()
 }
 
-// RecordSoundLevelPublishingError records a sound level publishing error. A
-// write under a stale name is dropped (see acquireCurrent).
-func (m *SoundLevelMetrics) RecordSoundLevelPublishingError(source, name, destination, errorType string) {
-	if !m.acquireCurrent(source, name) {
-		return
-	}
-	defer m.namesMu.RUnlock()
-	m.soundLevelPublishingErrors.WithLabelValues(source, name, destination, errorType).Inc()
+// RecordSoundLevelPublishingError records a sound level publishing error.
+func (m *SoundLevelMetrics) RecordSoundLevelPublishingError(source, destination, errorType string) {
+	m.soundLevelPublishingErrors.WithLabelValues(source, source, destination, errorType).Inc()
 }
 
 // SoundLevelPublishingErrorsVec exposes the publishing-errors counter vector so

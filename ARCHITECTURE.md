@@ -598,7 +598,7 @@ A gain change applies to a source's live routes, including open live-audio liste
 
 Analysis inference input, the bat ultrasonic filter input and the voice activity detector's 16 kHz passthrough decode PCM16 with the go-audio-dsp `pcm` package, and the bat ultrasonic filter computes its STFT with the go-audio-dsp `stft` package. The route resampler decodes and encodes PCM16 with the same package, and the MP3 stream decoder encodes its float32 output with it, so both round to nearest and reach the full 16-bit range like the per-route EQ and gain.
 
-Sound level monitoring (`internal/audiocore/soundlevel`) measures each source with the go-audio-dsp `octave` meter: 1/3-octave bands from 25 Hz to 20 kHz below 0.95 of Nyquist, one-second mean square per band. birdnet-go keeps only the interval min/max/mean aggregation, the band keys and the output type.
+Sound level monitoring (`internal/audiocore/soundlevel`) measures each source with the go-audio-dsp `octave` meter: 1/3-octave bands from 25 Hz to 20 kHz below 0.95 of Nyquist, one-second mean square per band. birdnet-go keeps only the interval min/max/mean aggregation, the band keys and the output type. The Prometheus sound level series are labelled with the source id in both the `source` and the `name` label, never the display name, because the metrics listener has no authentication.
 
 **SoX Integration:**
 
