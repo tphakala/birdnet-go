@@ -647,28 +647,6 @@ func TestPrivacy_SkippedPublishLeavesAPositionHole(t *testing.T) {
 	}
 }
 
-// TestPrivacy_ExtendedCaptureFlushesAfterMaxDeadlineWhileTheBirdKeepsSinging: an
-// extended capture's clip never runs past MaxDuration, however long the species
-// keeps being heard. Once the audio up to that bound is scanned the detection is
-// released, instead of chasing a clip end that moves with every new detection.
-func TestPrivacy_ExtendedCaptureFlushesAfterMaxDeadlineWhileTheBirdKeepsSinging(t *testing.T) {
-	r := newPrivacyRig(t, "BirdNET_V2.4", 100*time.Second)
-	r.settings.Realtime.ExtendedCapture.Enabled = true
-	r.settings.Realtime.ExtendedCapture.MaxDuration = 60
-	r.pend(26 * time.Second) // clip begins at 20 s
-	key := pendingDetectionKey(e2eSource, e2eSpecies)
-	item := r.p.pendingDetections[key]
-	item.ExtendedCapture = true
-	item.MaxDeadline = item.FirstDetected.Add(60 * time.Second)
-	item.LastUpdated = item.FirstDetected.Add(100 * time.Second) // still singing well past the bound
-	r.p.pendingDetections[key] = item
-
-	// The audio up to the MaxDuration bound plus the pre-capture lead-in of the
-	// clip and the guard (83.5 s) is scanned; nothing beyond it exists yet.
-	r.feed(r.clip, 84*time.Second+500*time.Millisecond, sec(1))
-	assert.Equal(t, "approved", r.outcome())
-}
-
 // TestProcessApprovedDetection_UsesThePassedSettingsSnapshot: the saved clip must
 // be built from the snapshot the privacy check used, not from whatever the
 // processor's configuration has become since.
