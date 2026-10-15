@@ -188,6 +188,16 @@ func (r *privacyRig) pend(end time.Duration) {
 	}
 }
 
+// pendModel is pend for a detection made by model.
+func (r *privacyRig) pendModel(end time.Duration, model string) {
+	r.t.Helper()
+	r.pend(end)
+	key := pendingDetectionKey(e2eSource, e2eSpecies)
+	item := r.p.pendingDetections[key]
+	item.BestModelID = model
+	r.p.pendingDetections[key] = item
+}
+
 // outcome flushes once and reports whether the detection was approved, still
 // pending, or discarded.
 func (r *privacyRig) outcome() string {
@@ -339,12 +349,18 @@ func TestPrivacy_CoverageGapDefersWithinWait(t *testing.T) {
 	assert.Equal(t, "pending", r.outcome())
 }
 
-// TestPrivacy_NotApplicableKeeps: a source no detector scored is approved without
-// waiting, and a VAD that never loaded falls back to the label coverage.
+// TestPrivacy_NotApplicableKeeps: a detection by a model that cannot carry speech
+// on a source no detector scored is approved without waiting, a VAD that never
+// loaded falls back to the label coverage, and label-only users are gated too.
 func TestPrivacy_NotApplicableKeeps(t *testing.T) {
-	t.Run("bat-only source has no coverage", func(t *testing.T) {
+	t.Run("bat detection on a source no detector scored", func(t *testing.T) {
 		r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
-		r.pend(40 * time.Second)
+		r.pendModel(40*time.Second, classifier.RegistryIDBat)
+		assert.Equal(t, "approved", r.outcome())
+	})
+	t.Run("unregistered model spec", func(t *testing.T) {
+		r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+		r.pendModel(40*time.Second, "no-such-model")
 		assert.Equal(t, "approved", r.outcome())
 	})
 	t.Run("VAD enabled but never loaded falls back to label coverage", func(t *testing.T) {
@@ -520,7 +536,7 @@ func TestPrivacy_BatChunksPublishNoLabelCoverage(t *testing.T) {
 	r.p.processDetections(bat)
 	assert.Empty(t, r.p.privacyCoverage, "bat chunks publish no coverage")
 
-	r.pend(40 * time.Second)
+	r.pendModel(40*time.Second, classifier.RegistryIDBat)
 	assert.Equal(t, "approved", r.outcome())
 }
 
@@ -685,4 +701,34 @@ func TestBuildSaveAudioAction_UsesThePassedSettingsSnapshot(t *testing.T) {
 
 	assert.Same(t, checked, action.Settings)
 	assert.Equal(t, 15, action.duration, "the exported length follows the checked snapshot")
+}
+
+// TestPrivacy_NoRecentCoverageDefersThenFailsOpen: when no detector has recently
+// scored the source (the filter was just switched on, a VAD toggle, startup) a
+// speech-band detection waits instead of being approved unscanned at once, and
+// is approved, logged and counted once the wait expires.
+func TestPrivacy_NoRecentCoverageDefersThenFailsOpen(t *testing.T) {
+	t.Run("defers within the wait", func(t *testing.T) {
+		r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+		r.pend(40 * time.Second) // clip 34 s to 49 s, wait until 79 s
+		assert.Equal(t, "pending", r.outcome())
+	})
+	t.Run("stale coverage older than the horizon is no coverage", func(t *testing.T) {
+		r := newPrivacyRig(t, "BirdNET_V2.4", 170*time.Second)
+		r.feed(r.clip, 40*time.Second, sec(1)) // 130 s old at the flush, past the 120 s horizon
+		r.pend(135 * time.Second)              // clip 129 s to 144 s, wait until 174 s
+		assert.Equal(t, "pending", r.outcome())
+	})
+	t.Run("approved and counted after the wait", func(t *testing.T) {
+		r := newPrivacyRig(t, "BirdNET_V2.4", 100*time.Second)
+		pfm, err := metrics.NewPrivacyFilterMetrics(prometheus.NewRegistry())
+		require.NoError(t, err)
+		r.p.Metrics = &observability.Metrics{PrivacyFilter: pfm}
+		r.settings.Realtime.Telemetry.Enabled = true
+		r.pend(40 * time.Second)
+		assert.Equal(t, "approved", r.outcome())
+		expected := "\n# HELP privacy_filter_unscanned_saves_total Total detections approved for saving whose clip span was not fully scanned for speech before the coverage wait expired\n" +
+			"# TYPE privacy_filter_unscanned_saves_total counter\nprivacy_filter_unscanned_saves_total 1\n"
+		require.NoError(t, testutil.CollectAndCompare(pfm, strings.NewReader(expected), "privacy_filter_unscanned_saves_total"))
+	})
 }

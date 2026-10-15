@@ -21,8 +21,10 @@ const (
 	// speech detector to scan the whole clip before it is approved unscanned.
 	privacyCoverageMaxWait = 30 * time.Second
 	// privacyCoverageHorizon bounds how stale a source's coverage may be before the
-	// coverage gate treats the source as not covered by any detector at all (a
-	// bat-only source, or a detector that never ran) and does not wait. It equals
+	// coverage gate treats the source as not covered by any detector at all (the
+	// filter just switched on, a VAD toggle, a stall, or a bat-only source). A
+	// speech-band detection then waits for the fail-open timeout; a bat detection
+	// keeps. It equals
 	// the default capture buffer; an extended capture can reach further back, and
 	// then a clip with a hole in its coverage waits for the fail-open timeout.
 	privacyCoverageHorizon = time.Duration(conf.DefaultCaptureBufferSeconds) * time.Second
@@ -45,7 +47,8 @@ type coverageVerdict int
 
 const (
 	// coverageKeep means the detection may proceed: its clip span is scanned, or
-	// no detector applies to its source.
+	// it comes from a model whose audio cannot carry speech and no detector has
+	// recently scored its source.
 	coverageKeep coverageVerdict = iota
 	// coverageDefer means a speech detector has not yet scored the whole clip
 	// span; the detection stays pending.
@@ -82,6 +85,13 @@ type chunkAudio struct {
 	contiguousBytes int
 	endPos          int64
 	generation      uint64
+}
+
+// speechBandModel reports whether the registered model modelID analyzes audio that
+// can carry speech. An unregistered model, like the bat model, does not.
+func speechBandModel(modelID string) bool {
+	spec, ok := classifier.GetModelSpec(modelID)
+	return ok && speechBandSpec(spec)
 }
 
 // speechBandSpec reports whether a model's audio can carry speech: the ultrasonic
@@ -333,10 +343,11 @@ type privacyCheck struct {
 //
 // The verdict defers until a speech detector has scored the whole saved clip span
 // (padded by privacyClipGuard), so speech in the clip's post-capture tail is not
-// scored after the decision. It keeps the detection when no detector has recently
-// scored the source (a bat-only source, or a VAD that never loaded and no label
-// model running), and reports coverageTimedOut once now passes the clip end by
-// privacyCoverageMaxWait.
+// scored after the decision. A speech-band detection on a source no detector has
+// recently scored waits too, and reports coverageTimedOut once now passes the clip
+// end by privacyCoverageMaxWait. A detection by a model that cannot carry speech
+// (the bat model) or an unregistered one keeps at once only when no detector has
+// recently scored its source; otherwise it waits for coverage like any other.
 func (p *Processor) checkPrivacy(settings *conf.Settings, item *PendingDetection, now time.Time) privacyCheck {
 	clip := clipSpan(settings, item)
 	if !settings.Realtime.PrivacyFilter.Enabled {
@@ -346,14 +357,20 @@ func (p *Processor) checkPrivacy(settings *conf.Settings, item *PendingDetection
 	p.detectionMutex.RLock()
 	defer p.detectionMutex.RUnlock()
 	hit, hasHit := p.LastHumanDetection[item.Source]
-	return privacyCheck{clip: clip, hit: hit, hasHit: hasHit, verdict: p.coverageVerdictLocked(settings, item.Source, clip, now)}
+	return privacyCheck{clip: clip, hit: hit, hasHit: hasHit, verdict: p.coverageVerdictLocked(settings, item.Source, item.BestModelID, clip, now)}
 }
 
-// coverageVerdictLocked is the coverage half of checkPrivacy; the caller must
-// hold detectionMutex.
-func (p *Processor) coverageVerdictLocked(settings *conf.Settings, source string, clip audioSpan, now time.Time) coverageVerdict {
+// coverageVerdictLocked is the coverage half of checkPrivacy; model is the model
+// of the pending detection. The caller must hold detectionMutex.
+func (p *Processor) coverageVerdictLocked(settings *conf.Settings, source, model string, clip audioSpan, now time.Time) coverageVerdict {
 	detector := p.requiredDetectorLocked(settings, source, now)
-	if !p.hasRecentCoverageLocked(source, detector, now) {
+	if !p.hasRecentCoverageLocked(source, detector, now) && !speechBandModel(model) {
+		// No detector has recently scored the source, and the detection comes from
+		// a model whose audio cannot carry speech (the ultrasonic bat model) or
+		// that is not registered (consistent with newChunkAudio): nothing to wait
+		// for. A speech-band detection instead falls through and waits, so a
+		// source that was just switched on, a VAD toggle or startup fails open
+		// through the timeout, which logs and counts it.
 		return coverageKeep
 	}
 	for key, spans := range p.privacyCoverage {
