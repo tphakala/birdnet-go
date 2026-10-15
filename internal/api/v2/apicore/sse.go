@@ -178,10 +178,11 @@ type SSEClient struct {
 
 	// Authenticated records the client's authentication state, captured ONCE at
 	// connect time (mirroring StreamAudioLevel, which checks isClientAuthenticated
-	// per connection). The detection stream reads this to decide whether to expose
-	// the raw audio source DisplayName: unauthenticated subscribers receive only
-	// the stable Source.ID, since DisplayName can embed internal host details for
-	// stream sources without a user-configured name. Set before the read loop runs
+	// per connection). The detection and sound level streams read this to decide
+	// whether to expose the raw audio source display name: unauthenticated
+	// subscribers receive only the stable source id, since the display name can
+	// embed internal host details for stream sources without a user-configured
+	// name. Set before the read loop runs
 	// and never mutated afterwards, so concurrent broadcasts read it race-free.
 	Authenticated bool
 
