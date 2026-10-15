@@ -47,9 +47,9 @@ func TestEQFilterUsesQ(t *testing.T) {
 	}
 }
 
-// TestEqFilterConfigMatchesLibrary checks that the settings UI offers exactly
-// the Q, Width and Gain parameters the equalizer library reads for each type,
-// so the hand-written parameter table cannot drift from the library.
+// TestEqFilterConfigMatchesLibrary checks that each type in the EqFilterConfig
+// parameter table lists the Q, Width and Gain parameters exactly when the
+// equalizer library type uses them.
 func TestEqFilterConfigMatchesLibrary(t *testing.T) {
 	t.Parallel()
 
