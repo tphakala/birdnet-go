@@ -452,6 +452,8 @@ func TestRouter_PooledBuffersAreReturnedExactlyOnce(t *testing.T) {
 			r, route, consumer, mgr := newProcessingTestRouter(t, srcRate, tt.dstRate, chain, tt.gainDB)
 			signal := alignTestSignal(1200)
 
+			var floatPool *buffer.Float32Pool
+			var bytePool *buffer.BytePool
 			for range frames {
 				consumer.out = consumer.out[:0]
 				r.handleRouteFrame(AudioFrame{
@@ -462,15 +464,25 @@ func TestRouter_PooledBuffersAreReturnedExactlyOnce(t *testing.T) {
 				require.NotEmpty(t, consumer.out, "the frame must reach the consumer")
 
 				if tt.floatScratch {
-					pool := mgr.Float32PoolFor(len(consumer.out) / bytesPerPCM16Sample)
-					requirePoolBuffersDistinct(t, pool.Get, "the float32 scratch buffer")
+					floatPool = mgr.Float32PoolFor(len(consumer.out) / bytesPerPCM16Sample)
+					requirePoolBuffersDistinct(t, floatPool.Get, "the float32 scratch buffer")
 				}
 				byteSize := len(consumer.out)
 				if tt.resampleBuf {
 					byteSize = route.resampler.EstimateOutputBytes(len(signal))
 				}
-				requirePoolBuffersDistinct(t, mgr.BytePoolFor(byteSize).Get, "a byte buffer")
+				bytePool = mgr.BytePoolFor(byteSize)
+				requirePoolBuffersDistinct(t, bytePool.Get, "a byte buffer")
 			}
+
+			// A buffer that is never Put leaves the pool empty, so every Get above
+			// misses; the two Gets per frame can only hit a buffer the router
+			// returned. Without this, a dropped Put would pass the distinctness
+			// check, since a fresh allocation is distinct too.
+			if tt.floatScratch {
+				assert.Positive(t, floatPool.GetStats().Hits, "the float32 scratch buffer was never returned to its pool")
+			}
+			assert.Positive(t, bytePool.GetStats().Hits, "the byte buffer was never returned to its pool")
 		})
 	}
 }

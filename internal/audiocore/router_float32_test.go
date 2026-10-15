@@ -1,11 +1,13 @@
 package audiocore
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"math/rand/v2"
 	"runtime/debug"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -429,4 +431,111 @@ func TestRouter_ZeroSampleResampleOutputSkipsWrite(t *testing.T) {
 			assert.Zero(t, route.errors.Load(), "an empty resample result is not an error")
 		})
 	}
+}
+
+// frameCapture is a consumer that keeps the last frame handed to Write, with
+// Data copied because the router recycles it after Write returns.
+type frameCapture struct {
+	mockConsumer
+	last   AudioFrame
+	writes int
+}
+
+func (c *frameCapture) Write(frame AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
+	c.last = frame
+	c.last.Data = bytes.Clone(frame.Data)
+	c.writes++
+	return nil
+}
+
+// TestRouter_ResampledOrProcessedFrameKeepsMetadataAndDropsRef pins what a
+// consumer receives on a route that resamples or processes: the producer's Ref
+// is not carried (it tracks a different buffer than the delivered Data), the
+// sample rate is the consumer's, and the rest of the frame metadata is kept.
+func TestRouter_ResampledOrProcessedFrameKeepsMetadataAndDropsRef(t *testing.T) {
+	t.Parallel()
+
+	const srcRate = 48000
+	bands := []dspeq.Band{{Type: dspeq.HighPass, Frequency: 100, Q: 0.707, Passes: 1}}
+	tests := []struct {
+		name    string
+		dstRate int
+		eq      bool
+		gainDB  float64
+	}{
+		{"resample_only", 32000, false, 0},
+		{"gain_only", srcRate, false, -6},
+		{"eq_only", srcRate, true, 0},
+		{"resample_then_process_handoff", 32000, true, -6},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			mgr := buffer.NewManager(GetLogger())
+			r := NewAudioRouter(GetLogger(), mgr)
+			t.Cleanup(r.Close)
+
+			consumer := &frameCapture{}
+			consumer.id, consumer.sampleRate, consumer.bitDepth, consumer.channels = "capture", tt.dstRate, 16, 1
+			route := newAlignTestRoute(t, consumer, alignRunOpts{gainDB: tt.gainDB, srcRate: srcRate, dstRate: tt.dstRate, bitDepth: 16})
+			if tt.eq {
+				route.filterChain.Store(testChain(t, tt.dstRate, bands...))
+			}
+
+			released := 0
+			in := AudioFrame{
+				SourceID: "meta-src", SourceName: "meta-name",
+				Data: alignTestSignal(1200), SampleRate: srcRate,
+				BitDepth: 16, Channels: 1,
+				Timestamp: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+				Ref:       NewFrameRef(func() { released++ }),
+			}
+			r.handleRouteFrame(in, route)
+
+			require.Equal(t, 1, consumer.writes, "the frame must reach the consumer")
+			got := consumer.last
+			assert.Nil(t, got.Ref, "the producer's Ref tracks the producer's buffer, not the delivered Data")
+			assert.Equal(t, 1, released, "the router must release its reference to the producer's frame exactly once")
+			assert.Equal(t, tt.dstRate, got.SampleRate)
+			assert.Equal(t, in.SourceID, got.SourceID)
+			assert.Equal(t, in.SourceName, got.SourceName)
+			assert.Equal(t, in.BitDepth, got.BitDepth)
+			assert.Equal(t, in.Channels, got.Channels)
+			assert.Equal(t, in.Timestamp, got.Timestamp)
+		})
+	}
+}
+
+// TestRouter_NonPCM16FrameSkipsEQAndGain pins that a frame declaring another bit
+// depth is never decoded, scaled or float-resampled as PCM16, even on a route
+// with gain and EQ: without a resampler it passes through unchanged, and with
+// one it takes the byte resample branch (resample buffer pooled, no float
+// scratch, no processing output buffer).
+func TestRouter_NonPCM16FrameSkipsEQAndGain(t *testing.T) {
+	t.Parallel()
+
+	const srcRate = 48000
+	bands := []dspeq.Band{{Type: dspeq.HighPass, Frequency: 100, Q: 0.707, Passes: 1}}
+	data := alignTestSignal(600)
+
+	t.Run("no_resampler_passes_through", func(t *testing.T) {
+		t.Parallel()
+		r, route, consumer, _ := newProcessingTestRouter(t, srcRate, srcRate, testChain(t, srcRate, bands...), 6)
+		r.handleRouteFrame(AudioFrame{Data: data, SampleRate: srcRate, BitDepth: 8, Channels: 1}, route)
+
+		assert.Equal(t, data, consumer.out, "a non-PCM16 frame must reach the consumer unprocessed")
+		assert.Nil(t, route.float32Pool.Load(), "a non-PCM16 frame must not take a float scratch buffer")
+		assert.Nil(t, route.byteOutPool.Load(), "a non-PCM16 frame must not take a processing output buffer")
+	})
+
+	t.Run("resampler_takes_byte_branch", func(t *testing.T) {
+		t.Parallel()
+		r, route, consumer, _ := newProcessingTestRouter(t, srcRate, 32000, testChain(t, 32000, bands...), 6)
+		r.handleRouteFrame(AudioFrame{Data: data, SampleRate: srcRate, BitDepth: 8, Channels: 1}, route)
+
+		require.Equal(t, 1, consumer.writes, "the resampled frame must reach the consumer")
+		assert.NotNil(t, route.resamplePool.Load(), "a non-PCM16 frame must take the byte resample branch")
+		assert.Nil(t, route.float32Pool.Load(), "a non-PCM16 frame must not take a float scratch buffer")
+		assert.Nil(t, route.byteOutPool.Load(), "a non-PCM16 frame must not take a processing output buffer")
+	})
 }
