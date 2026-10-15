@@ -7,19 +7,20 @@ import (
 // Rolling-aggregation window for the streaming path.
 const (
 	// aggWindowSeconds is the span of recent audio the rolling window keeps
-	// between flushes, matching the 3 s analysis chunk the stateless detector
-	// scored for BirdNET v2.4. A single Flush that infers more than this span
-	// is scored over all of its new hops (see Flush).
+	// between flushes. It does not need to span a whole model clip: the gate
+	// stamps each speech hit with the end of the audio it scored, and every hop
+	// is fresh in exactly one Flush, so a hop's hit is recorded by the Flush
+	// that inferred it. A single Flush that infers more than this span is
+	// scored over all of its new hops (see Flush).
 	aggWindowSeconds = 3
 	// aggWindowFrames is aggWindowSeconds expressed in hops: ceil(3 s * 16000 Hz
-	// / 512) = 94, exactly the hop count of one full 3 s chunk. Between Flush
-	// calls the ring holds the last aggWindowFrames per-hop probabilities, so a
-	// hop stays eligible for the aggregate for the same ~3 s it would have
-	// stayed inside overlapping 3 s chunks on the stateless path, while being
-	// inferred only once. When one Flush infers more hops than aggWindowFrames
-	// (a step longer than ~3 s, as with 5 s models), the aggregate instead spans
-	// every new hop plus the minConsec-1 hops before them, so no inferred hop
-	// goes unscored and speech straddling the flush boundary still counts.
+	// / 512) = 94. Between Flush calls the ring holds the last aggWindowFrames
+	// per-hop probabilities, so a hop stays eligible for the aggregate for about
+	// 3 s while being inferred only once. When one Flush infers more hops than
+	// aggWindowFrames (a step longer than ~3 s, as with 5 s models), the
+	// aggregate instead spans every new hop plus the minConsec-1 hops before
+	// them, so no inferred hop goes unscored and speech straddling the flush
+	// boundary still counts.
 	aggWindowFrames = (aggWindowSeconds*sampleRate16k + windowSamples - 1) / windowSamples
 )
 
@@ -40,7 +41,9 @@ type Streamer interface {
 	// inferred hop plus the prior hops that fill aggWindowFrames, or the last
 	// minConsec-1 prior hops when that is more, so a run straddling the flush
 	// boundary counts. The rolling window is then trimmed to the last
-	// aggWindowFrames hops for the next Flush. ok is false when no complete hop
+	// aggWindowFrames hops for the next Flush. The window need not span a whole
+	// model clip, because the caller stamps hits with the end of the scored
+	// audio and each hop is inferred in exactly one Flush. ok is false when no complete hop
 	// was available. framesRun is the number of hops actually inferred (for
 	// metrics).
 	Flush(sess SpeechSession) (prob float32, ok bool, framesRun int, err error)
@@ -147,15 +150,11 @@ func (s *streamer) Flush(sess SpeechSession) (prob float32, ok bool, framesRun i
 	// aggWindowFrames, or the minConsec-1 hops that let speech straddling the
 	// flush boundary reach the sustain length. After aggregating, the ring is
 	// trimmed back to aggWindowFrames for the next Flush.
-	keepPrior := max(aggWindowFrames-len(probs), min(len(s.ring), max(s.minConsec-1, 0)))
-	if over := len(s.ring) - keepPrior; over > 0 {
-		s.ring = s.ring[:copy(s.ring, s.ring[over:])]
-	}
+	keepPrior := max(aggWindowFrames-len(probs), s.minConsec-1, 0)
+	s.ring = trimToLast(s.ring, keepPrior)
 	s.ring = append(s.ring, probs...)
 	res := aggregate(s.ring, s.minConsec)
-	if over := len(s.ring) - aggWindowFrames; over > 0 {
-		s.ring = s.ring[:copy(s.ring, s.ring[over:])]
-	}
+	s.ring = trimToLast(s.ring, aggWindowFrames)
 	return res, true, n, nil
 }
 
@@ -168,4 +167,14 @@ func (s *streamer) Reset() {
 	clear(s.ctx[:])
 	clear(s.h[:])
 	clear(s.c[:])
+}
+
+// trimToLast keeps the last keep elements of ring, moving them to the front in
+// place (the backing array is reused). It returns ring unchanged when it holds
+// keep elements or fewer.
+func trimToLast(ring []float32, keep int) []float32 {
+	if len(ring) <= keep {
+		return ring
+	}
+	return ring[:copy(ring, ring[len(ring)-keep:])]
 }
