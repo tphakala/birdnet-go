@@ -259,7 +259,7 @@ type ProcessRequest struct {
 	// AudioCapturedAt).
 	AudioEndAt time.Time
 	// AudioGap is true when audio before this window was lost or not analyzed
-	// (first window of a buffer, overwrite-mode loss, skipped windows).
+	// (first window of a buffer, overwrite-mode loss, a buffer Reset, skipped windows).
 	AudioGap bool
 }
 
