@@ -14,10 +14,10 @@ import (
 	"os"
 	"slices"
 
+	"github.com/tphakala/go-audio-dsp/gain"
 	"github.com/tphakala/go-opus/oggopus"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
-	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -103,7 +103,8 @@ func Supports(sampleRate, bitDepth, channels int) error {
 // through a temp file so a partially written clip is never visible at the final
 // path.
 //
-// ctx is honoured before the temp file is created but not during encoding:
+// ctx is honoured before the gain copy and the temp file are created but not
+// during encoding:
 // go-opus's one-shot entry point runs to completion once started.
 func EncodePCM(ctx context.Context, opts *Options) error {
 	if opts == nil {
@@ -120,9 +121,28 @@ func EncodePCM(ctx context.Context, opts *Options) error {
 	}
 
 	// Gain is applied up front because the library entry point takes the whole
-	// clip; at 0 dB (the common case) Applied returns the source unchanged, so
-	// no copy is made.
-	pcm := pcmgain.Applied(opts.PCMData, opts.GainDB)
+	// clip; at 0 dB (the common case) AppliedBytes returns the source itself, so
+	// no copy is made. The result is read-only: it may alias opts.PCMData.
+	// A cancelled request must not pay for a full-clip gain copy first.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	g, err := gain.New(opts.GainDB)
+	if err != nil {
+		return errors.New(err).
+			Component(component).
+			Category(errors.CategoryValidation).
+			Context("operation", "opus_gain_init").
+			Build()
+	}
+	pcm, err := g.AppliedBytes(opts.PCMData)
+	if err != nil {
+		return errors.New(err).
+			Component(component).
+			Category(errors.CategoryAudio).
+			Context("operation", "opus_apply_gain").
+			Build()
+	}
 
 	// oggopus draws its encoder from an internal pool and streams Ogg pages as
 	// it goes, so the encoded stream is never held in memory whole.

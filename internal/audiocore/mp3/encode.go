@@ -14,10 +14,10 @@ import (
 	"os"
 	"slices"
 
+	"github.com/tphakala/go-audio-dsp/gain"
 	mp3pcm "github.com/tphakala/go-mp3/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
-	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -142,7 +142,8 @@ func RoundBitrateKbps(kbps int) int {
 // no seeking. It still writes through a temp file so a partially written clip is
 // never visible at the final path.
 //
-// ctx is honoured before the temp file is created but not during encoding:
+// ctx is honoured before the gain copy and the temp file are created but not
+// during encoding:
 // go-mp3's one-shot entry point runs to completion once started.
 func EncodePCM(ctx context.Context, opts *Options) error {
 	if opts == nil {
@@ -162,9 +163,28 @@ func EncodePCM(ctx context.Context, opts *Options) error {
 	}
 
 	// Gain is applied up front because the library entry point takes the whole
-	// clip; at 0 dB (the common case) Applied returns the source unchanged, so no
-	// copy is made.
-	pcm := pcmgain.Applied(opts.PCMData, opts.GainDB)
+	// clip; at 0 dB (the common case) AppliedBytes returns the source itself, so
+	// no copy is made. The result is read-only: it may alias opts.PCMData.
+	// A cancelled request must not pay for a full-clip gain copy first.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	g, err := gain.New(opts.GainDB)
+	if err != nil {
+		return errors.New(err).
+			Component(component).
+			Category(errors.CategoryValidation).
+			Context("operation", "mp3_gain_init").
+			Build()
+	}
+	pcm, err := g.AppliedBytes(opts.PCMData)
+	if err != nil {
+		return errors.New(err).
+			Component(component).
+			Category(errors.CategoryAudio).
+			Context("operation", "mp3_apply_gain").
+			Build()
+	}
 
 	// EncodeInterleaved writes a leading Xing/Info and LAME gapless tag, whose
 	// frame count is known only once the clip is encoded, so it encodes into

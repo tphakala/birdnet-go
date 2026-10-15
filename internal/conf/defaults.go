@@ -144,7 +144,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.normalization.enabled", false)                             // disabled by default
 	viper.SetDefault("realtime.audio.export.normalization.targetLUFS", DefaultNormalizationTargetLUFS) // EBU R128 broadcast standard
 	viper.SetDefault("realtime.audio.export.normalization.loudnessRange", 7.0)                         // typical range for broadcast
-	viper.SetDefault("realtime.audio.export.normalization.truePeak", -2.0)                             // headroom to prevent clipping
+	viper.SetDefault("realtime.audio.export.normalization.truePeak", DefaultNormalizationTruePeak)     // headroom to prevent clipping
 
 	// Quiet hours configuration (sound card)
 	viper.SetDefault("realtime.audio.quiethours.enabled", false)

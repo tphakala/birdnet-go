@@ -13,14 +13,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/go-audio-dsp/gain"
+	"github.com/tphakala/go-audio-dsp/loudnorm"
 	flacmeta "github.com/tphakala/go-flac"
 	goflac "github.com/tphakala/go-flac/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
-	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
-	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
+	"github.com/tphakala/birdnet-go/internal/audiocore/loudness"
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -71,16 +72,27 @@ func noisePCMBytes(amp, seconds float64) []byte {
 	return buf
 }
 
+// appliedGain returns pcm scaled by gainDB through gain.AppliedBytes, the way the
+// encoders apply it. The result may alias pcm at unity and is read-only.
+func appliedGain(t *testing.T, pcm []byte, gainDB float64) []byte {
+	t.Helper()
+	g, err := gain.New(gainDB)
+	require.NoError(t, err)
+	out, err := g.AppliedBytes(pcm)
+	require.NoError(t, err)
+	return out
+}
+
 func measureTruePeak(t *testing.T, pcm []byte) float64 {
 	t.Helper()
-	meas, err := audionorm.MeasureInt16Bytes(pcm, conf.SampleRate, conf.NumChannels)
+	meas, err := loudnorm.MeasureBytes(pcm, conf.SampleRate, conf.NumChannels)
 	require.NoError(t, err)
 	return meas.TruePeakDBTP
 }
 
 func measureLUFS(t *testing.T, pcm []byte) float64 {
 	t.Helper()
-	meas, err := audionorm.MeasureInt16Bytes(pcm, conf.SampleRate, conf.NumChannels)
+	meas, err := loudnorm.MeasureBytes(pcm, conf.SampleRate, conf.NumChannels)
 	require.NoError(t, err)
 	return meas.IntegratedLUFS
 }
@@ -92,7 +104,7 @@ const (
 
 // TestPlanNativeNormalizationGain_QuietClipReachesTarget verifies a quiet clip is
 // boosted by exactly (target - measured) when neither the true-peak ceiling nor
-// the +/-30 dB clamp binds, so applying the gain lands the clip on target.
+// the +/-60 dB clamp binds, so applying the gain lands the clip on target.
 func TestPlanNativeNormalizationGain_QuietClipReachesTarget(t *testing.T) {
 	t.Parallel()
 	// ~-35 LUFS: wants ~+12 dB toward -23, well under the ceiling and the clamp.
@@ -108,11 +120,11 @@ func TestPlanNativeNormalizationGain_QuietClipReachesTarget(t *testing.T) {
 	assert.Positive(t, gainDB, "quiet clip must be boosted")
 	assert.InDelta(t, testTargetLUFS, measured+gainDB, 0.1,
 		"gain must bring the measured loudness onto the target (not peak-limited, not clamped)")
-	assert.Less(t, gainDB, audionorm.MaxNormalizeGainDB, "this clip must not hit the clamp")
+	assert.Less(t, gainDB, loudness.MaxClipGainDB, "this clip must not hit the clamp")
 }
 
 // TestPlanNativeNormalizationGain_VeryQuietClipPassesOldClamp guards the ceiling
-// raise from 30 dB to audionorm.MaxNormalizeGainDB. A clip around -61 LUFS wants ~+38 dB,
+// raise from 30 dB to loudness.MaxClipGainDB. A clip around -61 LUFS wants ~+38 dB,
 // which the old 30 dB clamp truncated, leaving the export ~8 LU below target while
 // the FFmpeg path (ceiling 60 dB) reached it. It must now reach target too.
 func TestPlanNativeNormalizationGain_VeryQuietClipPassesOldClamp(t *testing.T) {
@@ -120,7 +132,7 @@ func TestPlanNativeNormalizationGain_VeryQuietClipPassesOldClamp(t *testing.T) {
 	pcm := sinePCMBytes(40, 1.0, 1000) // ~-61 LUFS
 	measured := measureLUFS(t, pcm)
 	require.Less(t, measured, testTargetLUFS-30, "sanity: uncapped gain exceeds the old 30 dB clamp")
-	require.Greater(t, measured, audionorm.AbsoluteGateLUFS, "sanity: still above the absolute gate")
+	require.Greater(t, measured, loudnorm.AbsoluteGateLUFS, "sanity: still above the absolute gate")
 
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
 	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, audioformat.FLAC, testTargetLUFS, testTruePeakDBTP)
@@ -154,10 +166,10 @@ func TestPlanNativeNormalizationGain_SubGateClipIsLifted(t *testing.T) {
 	// The conservative fallback alone would stop at the loudness bound, leaving
 	// the clip merely audible. The refinement pass re-measures the lifted signal
 	// and finishes the job, so the clip actually lands on target.
-	assert.Greater(t, gainDB, testTargetLUFS-audionorm.AbsoluteGateLUFS,
+	assert.Greater(t, gainDB, testTargetLUFS-loudnorm.AbsoluteGateLUFS,
 		"the refinement pass must carry the lift past the conservative bound")
 
-	after, err := audionorm.MeasureInt16Bytes(pcmgain.Applied(pcm, gainDB), conf.SampleRate, conf.NumChannels)
+	after, err := loudnorm.MeasureBytes(appliedGain(t, pcm, gainDB), conf.SampleRate, conf.NumChannels)
 	require.NoError(t, err)
 	assert.InDelta(t, testTargetLUFS, after.IntegratedLUFS, 0.5,
 		"a lifted sub-gate clip must end up on the loudness target")
@@ -171,14 +183,14 @@ func TestPlanNativeNormalizationGain_SubGateClipIsLifted(t *testing.T) {
 // of only a few dB and came out at -13.8 LUFS against a -23 target, i.e. a user
 // upgrading would get loud hiss where they previously got a silent clip.
 //
-// The loudness bound in audionorm.GateFallbackGainDB exists solely to prevent this, so
+// The loudness bound in loudnorm.GateFallbackGainDB exists solely to prevent this, so
 // this test asserts the property that bound guarantees.
 func TestPlanNativeNormalizationGain_SubGateFlatSignalDoesNotOvershoot(t *testing.T) {
 	t.Parallel()
 
 	// Steady uniform noise: sub-gate integrated loudness, low crest factor.
 	pcm := noisePCMBytes(8, 1.0)
-	meas, err := audionorm.MeasureInt16Bytes(pcm, conf.SampleRate, conf.NumChannels)
+	meas, err := loudnorm.MeasureBytes(pcm, conf.SampleRate, conf.NumChannels)
 	require.NoError(t, err)
 	require.True(t, math.IsInf(meas.IntegratedLUFS, -1), "sanity: clip must be under the R128 absolute gate")
 	require.False(t, math.IsInf(meas.TruePeakDBTP, -1), "sanity: clip must still have a finite true peak")
@@ -190,7 +202,7 @@ func TestPlanNativeNormalizationGain_SubGateFlatSignalDoesNotOvershoot(t *testin
 
 	// Measure what the encoder would actually write, rather than trusting the
 	// planned gain: the whole defect was a mismatch between the two.
-	after, err := audionorm.MeasureInt16Bytes(pcmgain.Applied(pcm, gainDB), conf.SampleRate, conf.NumChannels)
+	after, err := loudnorm.MeasureBytes(appliedGain(t, pcm, gainDB), conf.SampleRate, conf.NumChannels)
 	require.NoError(t, err)
 
 	// The property that matters: never LOUDER than the target. The small
@@ -214,10 +226,10 @@ func TestPlanNativeNormalizationGain_Silence(t *testing.T) {
 }
 
 // TestPlanNativeNormalizationGain_ClampsExtremeBoost bounds the gain at
-// audionorm.MaxNormalizeGainDB.
+// loudness.MaxClipGainDB.
 //
 // Reaching that backstop takes the most aggressive target the config allows.
-// audionorm.MaxNormalizeGainDB is conf.MaxTargetLUFS (-10) minus the R128 absolute gate
+// loudness.MaxClipGainDB is conf.MaxTargetLUFS (-10) minus the R128 absolute gate
 // (-70), so at any lower target both the loudness bound and the measurable-clip
 // path stay strictly under it and the ceiling never binds. This uses -10 so the
 // backstop is genuinely exercised rather than asserted against dead code.
@@ -230,15 +242,15 @@ func TestPlanNativeNormalizationGain_ClampsExtremeBoost(t *testing.T) {
 	require.True(t, math.IsInf(measureLUFS(t, pcm), -1), "sanity: clip must be under the R128 absolute gate")
 	truePeak := measureTruePeak(t, pcm)
 	require.False(t, math.IsInf(truePeak, -1), "sanity: true peak is finite")
-	require.Greater(t, testTruePeakDBTP-truePeak, audionorm.MaxNormalizeGainDB,
+	require.Greater(t, testTruePeakDBTP-truePeak, loudness.MaxClipGainDB,
 		"sanity: the true-peak-anchored gain must exceed the ceiling")
-	require.Greater(t, aggressiveTargetLUFS-audionorm.AbsoluteGateLUFS, audionorm.MaxNormalizeGainDB-1e-9,
+	require.Greater(t, aggressiveTargetLUFS-loudnorm.AbsoluteGateLUFS, loudness.MaxClipGainDB-1e-9,
 		"sanity: the loudness bound must also reach the ceiling at this target")
 
 	a := &SaveAudioAction{pcmData: pcm, CorrelationID: "test"}
 	gainDB, err := a.planNativeNormalizationGain(t.Context(), conf.SampleRate, audioformat.FLAC, aggressiveTargetLUFS, testTruePeakDBTP)
 	require.NoError(t, err)
-	assert.InDelta(t, audionorm.MaxNormalizeGainDB, gainDB, 1e-9, "extreme boost must clamp to +audionorm.MaxNormalizeGainDB")
+	assert.InDelta(t, loudness.MaxClipGainDB, gainDB, 1e-9, "extreme boost must clamp to +loudness.MaxClipGainDB")
 }
 
 // TestPlanNativeNormalizationGain_Attenuates reduces a loud clip toward the target
@@ -300,37 +312,13 @@ func TestNativeNormalizationEndToEnd(t *testing.T) {
 	assert.InDelta(t, testTargetLUFS, got, 1.0, "decoded clip loudness must sit near the target")
 }
 
-func TestAudionormSupportsTargets(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		target   float64
-		truePeak float64
-		want     bool
-	}{
-		{"typical -23/-2", -23, -2, true},
-		{"boundary near 0", -0.1, -1, true},
-		{"target zero rejected", 0, -1, false},
-		{"target positive rejected", 5, -1, false},
-		{"target at absolute gate rejected", -70, -1, false},
-		{"target below gate rejected", -75, -1, false},
-		{"positive true peak rejected", -23, 1, false},
-		{"zero true peak allowed", -23, 0, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.want, audionormSupportsTargets(tt.target, tt.truePeak))
-		})
-	}
-}
-
-// The []byte->[]int16 signed-cast and odd-trailing-byte regression guards now
-// live with the shared decoder in internal/audiocore/audionorm (MeasureInt16Bytes
-// / Meter.AddInt16Bytes), which this path calls instead of a local helper.
+// The []byte->[]int16 signed-cast and odd-trailing-byte regression guards live
+// with the go-audio-dsp byte decoders (loudnorm.MeasureBytes and PlanBytes),
+// which this path calls instead of a local helper. The target range table lives
+// in loudnorm.ValidateTargets' own tests.
 
 // TestEncodeClipSelectsNativeNormalization drives the real encodeClip switch with
-// normalization enabled, proving FLAC routes to the native audionorm path (returns
+// normalization enabled, proving FLAC routes to the native loudnorm path (returns
 // clipenc.NativeFLAC, not FFmpeg) AND that the static Export.Gain is NOT applied on
 // top of the loudness gain (FFmpeg gives normalization precedence over gain, and
 // the native path must match).
@@ -463,7 +451,7 @@ func openFLACDecoder(t *testing.T, path string) *goflac.Decoder {
 }
 
 // TestEncodeClipFLACNormalizationSkipped drives the defensive branch inside the
-// FLAC case: normalization is enabled but the targets are outside audionorm's
+// FLAC case: normalization is enabled but the targets are outside loudnorm's
 // range (unreachable for a validated config, which clamps them into range). With
 // FFmpeg FLAC removed there is no loudnorm fallback, so encodeClip must still
 // encode natively, skip normalization with a WARN, and apply the static Export.Gain.
@@ -474,8 +462,8 @@ func TestEncodeClipFLACNormalizationSkipped(t *testing.T) {
 	s := &conf.Settings{}
 	s.Realtime.Audio.Export.Normalization.Enabled = true
 	s.Realtime.Audio.Export.Normalization.TargetLUFS = testTargetLUFS
-	// TruePeak > 0 is outside audionorm's supported range, so audionormSupportsTargets
-	// returns false and encodeClip takes the skip-normalization branch.
+	// TruePeak > 0 is outside loudnorm's supported range, so loudnorm.ValidateTargets
+	// returns an error and encodeClip takes the skip-normalization branch.
 	s.Realtime.Audio.Export.Normalization.TruePeak = 5.0
 	s.Realtime.Audio.Export.Gain = staticGainDB
 

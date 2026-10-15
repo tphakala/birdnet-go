@@ -9,8 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
+	"github.com/tphakala/birdnet-go/internal/audiocore/loudness"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/go-audio-dsp/loudnorm"
 	goflac "github.com/tphakala/go-flac/pcm"
 )
 
@@ -74,9 +75,9 @@ func TestEncodeWithNativeFLAC(t *testing.T) {
 
 	// Re-measure the decoded output: it should sit near the target loudness.
 	out := decodeToInt16(t, flacBytes)
-	meas, err := audionorm.MeasureInt16(out, conf.SampleRate, conf.NumChannels)
+	meas, err := loudnorm.MeasureInt16(out, conf.SampleRate, conf.NumChannels)
 	require.NoError(t, err)
-	assert.InDelta(t, targetIntegratedLoudnessLUFS, meas.IntegratedLUFS, 1.5,
+	assert.InDelta(t, loudness.SoundscapeTargetLUFS, meas.IntegratedLUFS, 1.5,
 		"native path should normalize the decoded clip toward the target loudness")
 }
 
@@ -92,6 +93,30 @@ func TestEncodeWithNativeFLAC_DoesNotMutateInput(t *testing.T) {
 	_, err := client.encodeWithNativeFLAC(pcm, testTimestamp)
 	require.NoError(t, err)
 	assert.Equal(t, orig, pcm, "native encode must not mutate the caller's PCM buffer")
+}
+
+// TestEncodeWithNativeFLAC_SubGateStaysUntouched pins that the soundscape policy
+// has no gate fallback: a clip under the -70 LUFS absolute gate is encoded with
+// gain 0, unlike detection clips, which are lifted.
+func TestEncodeWithNativeFLAC_SubGateStaysUntouched(t *testing.T) {
+	t.Parallel()
+	client := &BwClient{Settings: &conf.Settings{}}
+
+	pcm := sinePCM(conf.SampleRate, -75) // about -79 LUFS: every block under the gate
+	meas, err := loudnorm.MeasureBytes(pcm, conf.SampleRate, conf.NumChannels)
+	require.NoError(t, err)
+	require.True(t, math.IsInf(meas.IntegratedLUFS, -1), "sanity: clip must be under the absolute gate")
+	require.False(t, math.IsInf(meas.TruePeakDBTP, -1), "sanity: clip must still have a finite true peak")
+
+	res, err := client.encodeWithNativeFLAC(pcm, testTimestamp)
+	require.NoError(t, err)
+
+	out := decodeToInt16(t, res.buffer.Bytes())
+	require.Len(t, out, len(pcm)/2)
+	for i, s := range out {
+		want := int16(binary.LittleEndian.Uint16(pcm[i*2:])) //nolint:gosec // G115: PCM bit reinterpretation
+		require.Equal(t, want, s, "sample %d: a sub-gate soundscape must not be lifted", i)
+	}
 }
 
 // TestEncodeWithNativeFLAC_Silence keeps silent input unchanged (gain 0) rather
@@ -111,6 +136,20 @@ func TestEncodeWithNativeFLAC_Silence(t *testing.T) {
 	}
 }
 
-// The signed-cast and odd-trailing-byte regression guards now live with the
-// shared decoder in internal/audiocore/audionorm (MeasureInt16Bytes /
-// Meter.AddInt16Bytes), which this path calls instead of a local helper.
+// TestEncodeWithNativeFLAC_MeasureFailureIsReported pins that a planning
+// failure (an odd-length buffer is not whole 16-bit samples) fails the encode
+// instead of producing audio, and takes the logging path shared with the
+// encode pass.
+func TestEncodeWithNativeFLAC_MeasureFailureIsReported(t *testing.T) {
+	t.Parallel()
+	client := &BwClient{Settings: &conf.Settings{}}
+
+	res, err := client.encodeWithNativeFLAC(make([]byte, conf.SampleRate*2+1), testTimestamp)
+	require.Error(t, err)
+	assert.Nil(t, res)
+	require.ErrorIs(t, err, loudnorm.ErrOddByteLength)
+}
+
+// The signed-cast and odd-trailing-byte regression guards live with the
+// go-audio-dsp byte decoders (loudnorm.PlanBytes and MeasureBytes), which this
+// path calls instead of a local helper.

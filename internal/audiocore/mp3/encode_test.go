@@ -16,6 +16,7 @@ import (
 	mp3pcm "github.com/tphakala/go-mp3/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
@@ -179,7 +180,7 @@ func TestEncodePCM_DoesNotMutateSource(t *testing.T) {
 	copy(original, pcm)
 
 	// Both gain paths: -3 dB copies the buffer, 0 dB hands the caller's slice
-	// straight to the library (pcmgain.Applied is zero-copy there).
+	// straight to the library (gain.AppliedBytes is zero-copy at 0 dB).
 	for _, gainDB := range []float64{-3, 0} {
 		require.NoError(t, EncodePCM(t.Context(), &Options{
 			PCMData:     pcm,
@@ -348,8 +349,8 @@ func TestSupports_BitDepthAndChannels(t *testing.T) {
 	require.Error(t, Supports(48000, 8, 1))
 	// go-mp3 reads int16 only, and the shared gain/loudness path is int16-only
 	// too, so wider depths must be rejected rather than silently reinterpreted.
-	require.Error(t, Supports(48000, 24, 1), "24-bit must be rejected: pcmgain is int16-only")
-	require.Error(t, Supports(48000, 32, 1), "32-bit must be rejected: pcmgain is int16-only")
+	require.Error(t, Supports(48000, 24, 1), "24-bit must be rejected: gain and loudnorm are int16-only")
+	require.Error(t, Supports(48000, 32, 1), "32-bit must be rejected: gain and loudnorm are int16-only")
 	require.NoError(t, Supports(48000, 16, 2))
 	require.Error(t, Supports(48000, 16, 0))
 	require.Error(t, Supports(48000, 16, 3))
@@ -467,4 +468,26 @@ func rms(samples []int16) float64 {
 		sum += float64(v) * float64(v)
 	}
 	return math.Sqrt(sum / float64(len(samples)))
+}
+
+// A NaN gain cannot be turned into a scale factor: the encoder reports a
+// validation error from the gain step and leaves no output file.
+func TestEncodePCM_NaNGainFailsAtGainInit(t *testing.T) {
+	t.Parallel()
+	out := filepath.Join(t.TempDir(), "clip.mp3")
+	err := EncodePCM(t.Context(), &Options{
+		PCMData:     tonePCM(t, testSampleRate, 0.25, testToneHz),
+		OutputPath:  out,
+		SampleRate:  testSampleRate,
+		Channels:    1,
+		BitDepth:    16,
+		BitrateKbps: testBitrate,
+		GainDB:      math.NaN(),
+	})
+	require.Error(t, err)
+	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+	require.True(t, ok, "want an enhanced error, got %T", err)
+	assert.Equal(t, string(errors.CategoryValidation), enhanced.GetCategory())
+	assert.Equal(t, "mp3_gain_init", enhanced.GetContext()["operation"])
+	assert.NoFileExists(t, out)
 }

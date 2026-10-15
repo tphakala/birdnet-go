@@ -80,6 +80,7 @@ const (
 	DefaultAudioExportLength            = 15
 	DefaultAudioExportBitrate           = "96k"
 	DefaultNormalizationTargetLUFS      = -23.0
+	DefaultNormalizationTruePeak        = -2.0
 	DefaultRetentionMaxAge              = "30d"
 	DefaultRetentionMaxUsage            = "80%"
 	DefaultRetryBackoffMultiplier       = 2.0

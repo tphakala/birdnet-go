@@ -590,7 +590,7 @@ FFmpeg is used for:
 - **RTSP Stream Ingestion**: Capturing audio from IP cameras and network streams
 - **Spectrograms**: Checking each clip with ffprobe before an on-demand spectrogram is drawn, and rendering clips in formats the installed SoX cannot read or when SoX fails
 
-On-demand clip downloads, the denoise, normalize and gain preview, and audible-bats playback in the web interface do not use FFmpeg. `internal/audiocore/transcode` decodes WAV, FLAC, MP3, AAC (M4A) and Opus natively, denoises with the go-audio-dsp `denoiser`, normalizes with `internal/audiocore/audionorm`, applies gain with `internal/audiocore/pcmgain`, and encodes WAV, FLAC, MP3, AAC and Opus with the same native encoders clip export uses. A clip whose sample rate the lossy encoder cannot carry is resampled to 48 kHz first.
+On-demand clip downloads, the denoise, normalize and gain preview, and audible-bats playback in the web interface do not use FFmpeg. `internal/audiocore/transcode` decodes WAV, FLAC, MP3, AAC (M4A) and Opus natively, denoises with the go-audio-dsp `denoiser`, normalizes with the go-audio-dsp `loudnorm` package, applies gain with the go-audio-dsp `gain` package, and encodes WAV, FLAC, MP3, AAC and Opus with the same native encoders clip export uses. A clip whose sample rate the lossy encoder cannot carry is resampled to 48 kHz first.
 
 **SoX Integration:**
 
@@ -874,7 +874,7 @@ internal/birdweather/
 **Features:**
 
 - **Soundscape Upload**: Uploads 15-second audio clips to BirdWeather
-- **Audio Normalization**: Uses the native Go `audiocore/audionorm` library to achieve -23 LUFS (EBU R128 standard); no FFmpeg involvement
+- **Audio Normalization**: Uses the go-audio-dsp `loudnorm` package to achieve -23 LUFS (EBU R128 standard); no FFmpeg involvement
 - **Detection Metadata**: Sends species, confidence, location, and timestamp
 - **Error Handling**: Retry logic via job queue for network failures
 - **Logging**: Dedicated file logger (`logs/birdweather.log`) for debugging uploads

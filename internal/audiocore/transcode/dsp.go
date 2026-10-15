@@ -7,9 +7,10 @@ import (
 	"math"
 
 	"github.com/tphakala/go-audio-dsp/denoiser"
+	"github.com/tphakala/go-audio-dsp/gain"
+	"github.com/tphakala/go-audio-dsp/loudnorm"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
-	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
+	"github.com/tphakala/birdnet-go/internal/audiocore/loudness"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -57,16 +58,13 @@ func applyFilters(ctx context.Context, p *pcmBuffer, f Filters) error {
 
 	totalGain := f.GainDB
 	if f.Normalize {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		plan, err := audionorm.PlanGainWithGateFallbackInt16Bytes(p.Data, audionorm.Options{
-			SampleRate:   p.SampleRate,
-			Channels:     p.Channels,
-			TargetLUFS:   normalizeTargetLUFS,
-			TruePeakDBTP: normalizeTruePeakDBTP,
-		}, audionorm.MaxNormalizeGainDB)
+		plan, err := loudnorm.PlanBytes(ctx, p.Data,
+			loudness.ClipPlanOptions(p.SampleRate, p.Channels, normalizeTargetLUFS, normalizeTruePeakDBTP))
 		if err != nil {
+			// A cancelled request is reported as cancellation, not as a failed measurement.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
 			return wrapError(err, errors.CategoryAudio, "normalize_measure")
 		}
 		totalGain += plan.GainDB
@@ -76,9 +74,15 @@ func applyFilters(ctx context.Context, p *pcmBuffer, f Filters) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		g, err := gain.New(totalGain)
+		if err != nil {
+			return wrapError(err, errors.CategoryValidation, "gain_init")
+		}
 		// One quantization for normalization and user gain together, applied in
-		// place: p.Data is owned by this request and ApplyInt16 allows dst == src.
-		pcmgain.ApplyInt16(p.Data, p.Data, pcmgain.FactorFromDB(totalGain))
+		// place: p.Data is owned by this request, so it may be overwritten.
+		if err := g.ApplyBytes(p.Data); err != nil {
+			return wrapError(err, errors.CategoryAudio, "apply_gain")
+		}
 	}
 	return nil
 }

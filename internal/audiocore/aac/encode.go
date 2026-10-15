@@ -16,10 +16,10 @@ import (
 	"slices"
 
 	aacpcm "github.com/tphakala/go-aac/pcm"
+	"github.com/tphakala/go-audio-dsp/gain"
 	"github.com/tphakala/go-m4a/aacm4a"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
-	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -32,8 +32,8 @@ const (
 	bitsPerKilobit = 1000
 
 	// bitDepth16 is the only PCM bit depth this encoder accepts. go-aac itself
-	// also codes 24- and 32-bit input, but pcmgain (and the audionorm
-	// measurement feeding GainDB) operate on int16 samples, so a wider depth
+	// also codes 24- and 32-bit input, but go-audio-dsp gain (and the
+	// loudnorm measurement feeding GainDB) operate on int16 samples, so a wider depth
 	// would be silently reinterpreted as int16 the moment gain is non-zero.
 	// Advertising only what the whole path can honour keeps that trap shut; the
 	// capture pipeline is 16-bit throughout, so nothing is lost.
@@ -108,7 +108,8 @@ func Supports(sampleRate, bitDepth, channels int) error {
 // therefore lands after the payload, so the file is not optimised for
 // progressive download; the FFmpeg export path produces the same layout.
 //
-// ctx is honoured before the temp file is created but not during encoding:
+// ctx is honoured before the gain copy and the temp file are created but not
+// during encoding:
 // go-m4a's one-shot entry point runs to completion once started.
 func EncodePCM(ctx context.Context, opts *Options) error {
 	if opts == nil {
@@ -126,11 +127,31 @@ func EncodePCM(ctx context.Context, opts *Options) error {
 	}
 
 	// Gain is applied up front because the library entry point takes the whole
-	// clip; at 0 dB (the common case) Applied returns the source unchanged, so
-	// no copy is made. Note aacm4a buffers the entire encoded ADTS stream in
-	// memory before muxing it, so peak usage scales with clip length rather than
-	// staying constant as it does on the FLAC path.
-	pcm := pcmgain.Applied(opts.PCMData, opts.GainDB)
+	// clip; at 0 dB (the common case) AppliedBytes returns the source itself, so
+	// no copy is made. The result is read-only: it may alias opts.PCMData. Note
+	// aacm4a buffers the entire encoded ADTS stream in memory before muxing it,
+	// so peak usage scales with clip length rather than staying constant as it
+	// does on the FLAC path.
+	// A cancelled request must not pay for a full-clip gain copy first.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	g, err := gain.New(opts.GainDB)
+	if err != nil {
+		return errors.New(err).
+			Component(component).
+			Category(errors.CategoryValidation).
+			Context("operation", "aac_gain_init").
+			Build()
+	}
+	pcm, err := g.AppliedBytes(opts.PCMData)
+	if err != nil {
+		return errors.New(err).
+			Component(component).
+			Category(errors.CategoryAudio).
+			Context("operation", "aac_apply_gain").
+			Build()
+	}
 
 	// WriteFile classifies its own filesystem failures and passes a cancelled
 	// context through raw. The payload write happens in here though, so a write
