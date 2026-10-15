@@ -128,9 +128,9 @@ func TestResolveExportGainDB_NormalizationReplacesStaticGain(t *testing.T) {
 		"the measured loudness gain must supersede the static gain")
 }
 
-// When normalization is enabled but its targets fall outside the range audionorm
+// When normalization is enabled but its targets fall outside the range loudnorm
 // can honour, the clip is encoded with the static gain rather than being fed
-// values audionorm would mishandle. The bit-depth half of that guard is not
+// values loudnorm would mishandle. The bit-depth half of that guard is not
 // reachable from a test (conf.BitDepth is a build constant), but the
 // out-of-range-targets half is.
 func TestResolveExportGainDB_OutOfRangeTargetsFallBackToStaticGain(t *testing.T) {
@@ -139,7 +139,7 @@ func TestResolveExportGainDB_OutOfRangeTargetsFallBackToStaticGain(t *testing.T)
 	a.Settings.Realtime.Audio.Export.Gain = -4
 	a.Settings.Realtime.Audio.Export.Normalization = conf.NormalizationSettings{
 		Enabled: true,
-		// Below audionorm's absolute gate, so it cannot produce a usable measurement.
+		// Below loudnorm's absolute gate, so it cannot produce a usable measurement.
 		TargetLUFS: -80,
 		TruePeak:   testTruePeakDBTP,
 	}

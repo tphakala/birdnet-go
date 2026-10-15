@@ -12,17 +12,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/go-audio-dsp/gain"
+	"github.com/tphakala/go-audio-dsp/loudnorm"
+
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
-	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
+	"github.com/tphakala/birdnet-go/internal/audiocore/loudness"
 	"github.com/tphakala/birdnet-go/internal/audiocore/mp3"
 	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
-	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -837,7 +839,7 @@ func lossyBitrateKbps(exportFormat, bitrate string) int {
 //
 // Loudness is resolved identically for every format and once for all of them,
 // before any encoder runs: when normalization is enabled the EBU R128 gain is
-// measured in Go via audionorm, otherwise the static Export.Gain is used. A
+// measured in Go via go-audio-dsp loudnorm, otherwise the static Export.Gain is used. A
 // native encoder applies that gain itself and WAV has it applied to the samples
 // before writing. No export format depends on FFmpeg.
 //
@@ -893,9 +895,26 @@ func (a *SaveAudioAction) runEncoder(ctx context.Context, encoder string, export
 		// losslessly in Export.UltrasonicType, which may be WAV.)
 		pcm := a.pcmData
 		if gainDB != 0 {
-			// Applied returns a gained copy, so a.pcmData stays pristine for the
-			// spectrogram pre-render job that reads it after the export.
-			pcm = pcmgain.Applied(pcm, gainDB)
+			// AppliedBytes returns a gained copy (or the source itself when the
+			// factor rounds to exactly 1, in which case it is only read), so
+			// a.pcmData stays pristine for the spectrogram pre-render job that
+			// reads it after the export.
+			g, err := gain.New(gainDB)
+			if err != nil {
+				return errors.New(err).
+					Component("analysis.processor").
+					Category(errors.CategoryValidation).
+					Context("operation", "wav_gain_init").
+					Build()
+			}
+			pcm, err = g.AppliedBytes(pcm)
+			if err != nil {
+				return errors.New(err).
+					Component("analysis.processor").
+					Category(errors.CategoryAudio).
+					Context("operation", "wav_apply_gain").
+					Build()
+			}
 		}
 		return convert.SavePCMDataToWAV(outputPath, pcm, exportRate, conf.BitDepth)
 
@@ -1056,7 +1075,7 @@ var (
 // an enabled loudnorm filter also superseded the volume filter. Otherwise it is
 // the static Export.Gain.
 //
-// Note that audionorm applies a single linear gain to reach the target
+// Note that loudnorm normalization applies a single linear gain to reach the target
 // integrated loudness under the true-peak ceiling. It does not consume
 // Normalization.LoudnessRange, so no export format gets LRA/dynamic-range
 // treatment any more.
@@ -1064,27 +1083,27 @@ var (
 // That is deliberate. On a clip built to force FFmpeg out of linear mode
 // (measured LRA 7.40 against a 7.0 target) loudnorm's dynamic mode compressed
 // LRA only 7.4 to 7.1 while missing the loudness target by 1.1 LU, where the
-// linear gain landed within 0.02 LU. Reproduce with the normbench
-// transient-over-quiet-bed case: go test -tags normcompare
-// ./internal/audiocore/normbench/ and read the LRA p/n/f column.
+// linear gain landed within 0.02 LU. The go-audio-dsp corpus comparison
+// against ffmpeg loudnorm (task ab:loudnorm in that repository) covers the
+// same transient-over-quiet-bed case.
 //
 // Scope that evidence honestly: it was gathered on clips around the 15 s default
 // export length. Extended capture can export far longer clips
 // (conf.MaxExtendedCaptureDuration is 1200 s), where dynamic-range treatment
 // would matter more, and the corpus does not cover that.
-func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate int, format string) (gain float64, normalized bool, err error) {
+func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate int, format string) (gainDB float64, normalized bool, err error) {
 	exportSettings := &a.Settings.Realtime.Audio.Export
 	if !exportSettings.Normalization.Enabled {
 		return exportSettings.Gain, false, nil
 	}
 
 	depthSupported := conf.BitDepth == nativeNormalizationBitDepth
-	if depthSupported && audionormSupportsTargets(exportSettings.Normalization.TargetLUFS, exportSettings.Normalization.TruePeak) {
-		gainDB, err := a.planNativeNormalizationGain(ctx, exportRate, format,
+	if depthSupported && loudnorm.ValidateTargets(exportSettings.Normalization.TargetLUFS, exportSettings.Normalization.TruePeak) == nil {
+		planned, err := a.planNativeNormalizationGain(ctx, exportRate, format,
 			exportSettings.Normalization.TargetLUFS, exportSettings.Normalization.TruePeak)
 		switch {
 		case err == nil:
-			return gainDB, true, nil
+			return planned, true, nil
 		case ctx.Err() != nil:
 			// The caller is going away; do not paper over that with a fallback.
 			//
@@ -1093,19 +1112,25 @@ func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate in
 			// measurement error alone is not fatal, because the code below would
 			// have degraded to the static gain and finished the export. The clip
 			// fails only because the context is done, so cancellation genuinely is
-			// the cause and the joined error says so. audionorm's own error need
-			// not wrap ctx.Err(), so without the join a normal shutdown here would
-			// be reported as a WARN failure.
-			return 0, false, errors.Join(err, ctx.Err())
+			// the cause and the joined error says so. The planner returns a
+			// cancellation unwrapped, but it can also fail for another reason
+			// (for example a sub-8 kHz source) just before the context is done;
+			// that error need not wrap ctx.Err(), so without the join a normal
+			// shutdown here would be reported as a WARN failure. The join is
+			// skipped when the error already carries the cancellation.
+			if ctxErr := ctx.Err(); !errors.Is(err, ctxErr) {
+				err = errors.Join(err, ctxErr)
+			}
+			return 0, false, err
 		}
-		// The clip could not be measured (audionorm rejects the dimensions, e.g. a
-		// source reporting a sample rate below the K-weighting minimum). Losing
+		// The clip could not be measured (loudnorm rejects the dimensions, e.g. a
+		// source reporting a sample rate below loudnorm.MinSampleRate). Losing
 		// normalization is bad; losing the recording is worse, and every other
 		// unmeasurable case below already degrades to the static gain. Before this
 		// path stopped using loudnorm, FFmpeg would still have produced a clip
 		// here, so failing hard would be a new way to lose audio on the default
 		// MP3 install.
-		// Guarded per (format, rate): audionorm rejects the clip's dimensions, and
+		// Guarded per (format, rate): loudnorm rejects the clip's dimensions, and
 		// those come from the source, not from this detection, so the failure
 		// repeats for every clip that source produces. The error text can vary
 		// within a rate pair but the cause does not, so it is not part of the key.
@@ -1122,7 +1147,7 @@ func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate in
 	}
 
 	// Unreachable for a validated config: capture is 16-bit (conf.BitDepth) and
-	// settings validation REJECTS loudness targets outside audionorm's range at
+	// settings validation REJECTS loudness targets outside loudnorm's range at
 	// startup rather than clamping them, so a running instance cannot hold one.
 	// Defense-in-depth for unvalidated/legacy settings only. There is no longer a
 	// loudnorm fallback on any path, FFmpeg included, so encode with the static
@@ -1151,39 +1176,27 @@ func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate in
 }
 
 // nativeNormalizationBitDepth is the only PCM bit depth the native gain and
-// normalization path handles: audionorm.PlanGainWithGateFallbackInt16Bytes and pcmgain
-// both operate on int16 samples. The constraint belongs to those helpers rather
-// than to any one codec, so every native encoder shares it.
+// normalization path handles: loudnorm's byte planner (loudnorm.PlanBytes) and
+// gain's byte paths (gain.Gain.ApplyBytes, ApplyBytesTo, AppliedBytes) both
+// operate on int16 samples. The constraint belongs to those helpers rather than
+// to any one codec, so every native encoder shares it.
 const nativeNormalizationBitDepth = 16
 
-// audionormSupportsTargets reports whether the configured integrated-loudness
-// target and true-peak ceiling fall within audionorm's valid range
-// (-70 < TargetLUFS < 0, ceiling <= 0). Out-of-range configs (unreachable for a
-// validated config, whose targets are clamped) are encoded natively WITHOUT
-// normalization rather than fed values audionorm would mis-handle; no clip export
-// format uses FFmpeg.
-func audionormSupportsTargets(targetLUFS, truePeakDBTP float64) bool {
-	return targetLUFS < 0 && targetLUFS > audionorm.AbsoluteGateLUFS && truePeakDBTP <= 0
-}
-
 // planNativeNormalizationGain measures the clip's EBU R128 integrated loudness and
-// true peak with audionorm and returns the single linear gain (dB) that brings it
-// to targetLUFS without its true peak exceeding truePeakDBTP, clamped to
-// +/-audionorm.MaxNormalizeGainDB. A clip under the R128 absolute gate is lifted by
-// its true-peak headroom instead (see audionorm.GateFallbackGainDB); genuine
-// silence yields 0.
+// true peak with loudnorm.PlanBytes and returns the single linear gain (dB) that
+// brings it to targetLUFS without its true peak exceeding truePeakDBTP, clamped
+// to +/-loudness.MaxClipGainDB. A clip under the R128 absolute gate is lifted by
+// its true-peak headroom instead (see loudnorm.GateFallbackGainDB); genuine
+// silence yields 0. Cancellation is checked while measuring and returned as is.
 // The gain is applied by the encoder; a.pcmData is not modified here.
 func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampleRate int, format string, targetLUFS, truePeakDBTP float64) (float64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	// audionorm decodes the PCM bytes inline; a.pcmData is not mutated.
-	plan, err := audionorm.PlanGainWithGateFallbackInt16Bytes(a.pcmData, audionorm.Options{
-		SampleRate:   sampleRate,
-		Channels:     conf.NumChannels,
-		TargetLUFS:   targetLUFS,
-		TruePeakDBTP: truePeakDBTP,
-	}, audionorm.MaxNormalizeGainDB)
+	// PlanBytes decodes the PCM bytes in chunks and only reads them; a.pcmData is
+	// not mutated.
+	plan, err := loudnorm.PlanBytes(ctx, a.pcmData,
+		loudness.ClipPlanOptions(sampleRate, conf.NumChannels, targetLUFS, truePeakDBTP))
 	if err != nil {
 		return 0, errors.New(err).
 			Component("analysis.processor").
@@ -1197,8 +1210,8 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 
 	GetLogger().Debug("Native loudness analysis (detection save)",
 		logger.String("format", format),
-		logger.Float64("measured_lufs", plan.Measurement.IntegratedLUFS),
-		logger.Float64("true_peak_dbtp", plan.Measurement.TruePeakDBTP),
+		logger.Float64("measured_lufs", plan.Result.Input.IntegratedLUFS),
+		logger.Float64("true_peak_dbtp", plan.Result.Input.TruePeakDBTP),
 		logger.Float64("target_lufs", targetLUFS),
 		logger.Float64("gain_db", gainDB),
 		logger.Bool("peak_limited", plan.Result.PeakLimited),
