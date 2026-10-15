@@ -18,23 +18,31 @@ const (
 	// missing model or absent ONNX Runtime library logs at most once per
 	// interval instead of once per chunk.
 	vadLoadBackoff = 30 * time.Second
-	// vadSourceThrottle paces speech decisions per source: fresh audio from every
-	// accepted chunk is buffered into the source's streamer, but the streamer is
-	// flushed (one inference over the accumulated fresh hops, one gate decision)
-	// at most once per this span of chunk start time. This keeps ORT dispatch at
-	// ~1 call/s/source while every hop of audio is still scored exactly once.
+	// vadSourceThrottle paces speech decisions per (source, model) stream: fresh
+	// audio from every accepted chunk is buffered into the stream's streamer, but
+	// the streamer is flushed (one inference over the accumulated fresh hops, one
+	// gate decision) at most once per this span of chunk audio end time. This
+	// keeps ORT dispatch at ~1 call/s/stream while every hop of audio is still
+	// scored exactly once.
 	vadSourceThrottle = time.Second
 	// vadBytesPerSample is the size of one 16-bit PCM sample in the analysis
 	// chunks the gate receives.
 	vadBytesPerSample = 2
-	// vadResetGap is how much a chunk's start-time delta must exceed the chunk
+	// vadResetGap is how much a chunk's audio-end delta must exceed the chunk
 	// duration before the gate treats it as a genuine discontinuity (dropped audio
-	// or a source restart) and resets the streamer. Chunk start times are
-	// wall-clock and poll-quantized (~100 ms), not sample-derived, so a tolerance
-	// well above that scheduling jitter keeps a contiguous boundary at the default
-	// zero overlap (delta ~= chunkDur) from being mistaken for a gap and thrashing
-	// the LSTM state every chunk.
+	// or a source restart) and resets the streamer. Chunk audio ends are derived
+	// from wall-clock write times and poll-quantized (~100 ms), not
+	// sample-derived, so a tolerance well above that scheduling jitter keeps a
+	// contiguous boundary at the default zero overlap (delta ~= chunkDur) from
+	// being mistaken for a gap and thrashing the LSTM state every chunk.
 	vadResetGap = time.Second
+	// vadCoverageJoinTolerance is the largest time hole between two consecutive
+	// chunks (audio-end delta minus chunk duration) that still counts as
+	// contiguous scored audio. A larger hole, short of vadResetGap, keeps the LSTM
+	// state but starts a new coverage span, because the audio inside the hole was
+	// never scored. A hole under this tolerance is timing jitter; speech cannot
+	// fit entirely inside one, though a syllable fragment can.
+	vadCoverageJoinTolerance = 150 * time.Millisecond
 	// vadMinThreshold and vadMaxThreshold clamp a misconfigured gate threshold.
 	vadMinThreshold = 0.01
 	vadMaxThreshold = 1.0
@@ -43,7 +51,33 @@ const (
 	vadHitCap = 10
 )
 
-// vadGate lazily owns the shared Silero VAD session and the per-source streamers used by the privacy filter.
+// vadStreamKey identifies one VAD stream: the audio of one analysis monitor,
+// i.e. one source analyzed by one model. A stream sees one sample rate, one clip
+// length and one FIFO timeline, so adding, removing or reloading another model
+// on the same source never resets or re-times it.
+type vadStreamKey struct {
+	source string
+	model  string
+}
+
+// vadChunk is one analysis window as the gate sees it.
+type vadChunk struct {
+	key        vadStreamKey
+	pcm        []byte
+	sampleRate int
+	// audioEnd is the capture time of the last sample in pcm (backlog corrected).
+	audioEnd time.Time
+	// gap reports lost or unanalyzed audio before this window, or the first
+	// window of a buffer; it resets the stream and restarts coverage.
+	gap bool
+}
+
+// vadSpan is a contiguous stretch of audio time a speech detector has scored.
+type vadSpan struct {
+	from, to time.Time
+}
+
+// vadGate lazily owns the shared Silero VAD session and the per-(source, model) streamers used by the privacy filter.
 //
 // All access is from the single results-consumer goroutine plus Shutdown. The
 // mutex is held across the ENTIRE inference call (not just the session-pointer
@@ -54,16 +88,16 @@ type vadGate struct {
 	// newSession builds the one shared ONNX session for a config. Injectable so
 	// tests can supply a fake without a real ONNX model; defaults to vad.NewSession.
 	newSession func(vad.Config) (vad.SpeechSession, error)
-	// newStreamer builds a session-less per-source streamer. Injectable so tests
+	// newStreamer builds a session-less per-stream streamer. Injectable so tests
 	// can supply a fake; defaults to a vad.NewStreamer with the default sustain.
 	newStreamer func() vad.Streamer
 	// sess is the one ONNX session shared across every source's streamer. The
 	// LSTM state is threaded through each Flush, so a single session (and its ORT
-	// thread pool) serves all sources. nil until the first successful load.
+	// thread pool) serves all streams. nil until the first successful load.
 	sess vad.SpeechSession
-	// streams holds one lazily-built streamer per audio source plus the per-source
-	// chunk/flush bookkeeping that drives overlap decoupling.
-	streams map[string]*sourceStream
+	// streams holds one lazily-built streamer per (source, model) plus the
+	// per-stream chunk/flush bookkeeping that drives overlap decoupling.
+	streams map[vadStreamKey]*sourceStream
 	// attemptedKey is the model-source cache key of the last load attempt
 	// (success OR failure). A change in the requested key drops the shared session,
 	// every streamer, and the failure backoff.
@@ -103,20 +137,24 @@ type vadConfigSnapshot struct {
 	sampleRate int
 }
 
-// sourceStream is one audio source's streamer plus the chunk bookkeeping that
-// turns overlapping analysis chunks into a single non-overlapped stream. The
-// streamer holds no ONNX session; it is flushed against the gate's shared session.
+// sourceStream is one (source, model) stream's streamer plus the chunk
+// bookkeeping that turns overlapping analysis chunks into a single
+// non-overlapped stream. The streamer holds no ONNX session; it is flushed
+// against the gate's shared session.
 type sourceStream struct {
 	s vad.Streamer
-	// lastStart is the start time of the last accepted chunk for this source.
-	lastStart time.Time
-	// lastFlush is the start time of the last completed flush (decision); paired
+	// lastEnd is the audio end of the last accepted chunk for this stream.
+	lastEnd time.Time
+	// lastFlush is the audio end at the last completed flush (decision); paired
 	// with hasFlushed so the very first chunk flushes immediately.
 	lastFlush  time.Time
 	hasFlushed bool
-	// sampleRate is the source's PCM rate; a change is a discontinuity that resets
-	// the streamer.
+	// sampleRate is the stream's PCM rate; a change is a discontinuity that
+	// resets the streamer.
 	sampleRate int
+	// covFrom is the start of this stream's contiguous scored audio; a flush
+	// publishes [covFrom, audioEnd] as covered.
+	covFrom time.Time
 }
 
 // newVADGate creates an empty gate; the shared session and per-source streamers
@@ -125,7 +163,7 @@ func newVADGate() *vadGate {
 	return &vadGate{
 		newSession:  vad.NewSession,
 		newStreamer: func() vad.Streamer { return vad.NewStreamer(0) },
-		streams:     make(map[string]*sourceStream),
+		streams:     make(map[vadStreamKey]*sourceStream),
 	}
 }
 
@@ -154,17 +192,18 @@ func (g *vadGate) closeAllLocked() {
 }
 
 // score scores one chunk against the shared session built from cfg, lazily
-// loading (or reloading when cacheKey changes) that session and the per-source
-// streamer. cacheKey identifies the model source (e.g. "embedded" or
-// "path:<file>"); an empty cacheKey means no model is available. It returns the
-// speech probability and ran=true only when a fresh inference was performed;
-// ran=false means no model is available, a load is in its failure backoff
-// window, the chunk was buffered without a flush this interval (the throttle
-// cadence), it was an out-of-order or duplicate chunk, or the flush had no
-// complete hop yet. A non-nil error indicates a session load or inference
-// failure (an inference failure tears the session down; a per-source data error
-// drops only that streamer).
-func (g *vadGate) score(cfg *vad.Config, cacheKey string, pcm []byte, sourceID string, startTime time.Time, sampleRate int) (prob float32, ran bool, dur time.Duration, err error) {
+// loading (or reloading when cacheKey changes) that session and the chunk's
+// (source, model) streamer. cacheKey identifies the model source (e.g.
+// "embedded" or "path:<file>"); an empty cacheKey means no model is available.
+// It returns the speech probability and ran=true only when a fresh inference was
+// performed; ran=false means no model is available, a load is in its failure
+// backoff window, the chunk was buffered without a flush this interval (the
+// throttle cadence), it was an out-of-order or duplicate chunk, or the flush had
+// no complete hop yet. When ran is true, span is the contiguous audio time this
+// stream has scored so far, ending at the chunk's audio end. A non-nil error
+// indicates a session load or inference failure (an inference failure tears the
+// session down; a per-stream data error drops only that streamer).
+func (g *vadGate) score(cfg *vad.Config, cacheKey string, ch *vadChunk) (prob float32, ran bool, dur time.Duration, span vadSpan, err error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -177,18 +216,18 @@ func (g *vadGate) score(cfg *vad.Config, cacheKey string, pcm []byte, sourceID s
 		g.attemptedKey = cacheKey
 	}
 	if cacheKey == "" {
-		return 0, false, 0, nil
+		return 0, false, 0, vadSpan{}, nil
 	}
 
 	if g.sess == nil {
 		if g.failed && time.Since(g.lastAttempt) < vadLoadBackoff {
-			return 0, false, 0, nil
+			return 0, false, 0, vadSpan{}, nil
 		}
 		g.lastAttempt = time.Now()
 		sess, newErr := g.newSession(*cfg)
 		if newErr != nil {
 			g.failed = true
-			return 0, false, 0, newErr
+			return 0, false, 0, vadSpan{}, newErr
 		}
 		g.sess = sess
 		g.failed = false
@@ -208,28 +247,28 @@ func (g *vadGate) score(cfg *vad.Config, cacheKey string, pcm []byte, sourceID s
 			logger.String("operation", "privacy_filter_vad"))
 	}
 
-	entry, freshPCM, skip := g.prepareSourceStream(sourceID, pcm, startTime, sampleRate)
+	entry, freshPCM, skip := g.prepareSourceStream(ch)
 	if skip {
-		return 0, false, 0, nil
+		return 0, false, 0, vadSpan{}, nil
 	}
-	if appendErr := entry.s.Append(freshPCM, sampleRate); appendErr != nil {
-		return 0, false, 0, appendErr
+	if appendErr := entry.s.Append(freshPCM, ch.sampleRate); appendErr != nil {
+		return 0, false, 0, vadSpan{}, appendErr
 	}
 	// Advance the accepted-chunk timestamp only after Append succeeds, so a failed
-	// Append does not leave lastStart pointing past audio that was never buffered
+	// Append does not leave lastEnd pointing past audio that was never buffered
 	// (which would make the next chunk's fresh-tail slice drop real audio).
-	entry.lastStart = startTime
+	entry.lastEnd = ch.audioEnd
 
-	// Flush (a decision) at most once per throttle span per source; between
+	// Flush (a decision) at most once per throttle span per stream; between
 	// flushes fresh audio is only buffered.
 	//
 	// Note: fresh audio Appended within the throttle window stays buffered until
 	// the next flush (~1 s), which scores it. If a source stops entirely right
 	// after a throttled chunk, the last sub-second of buffered audio is not
 	// scored; that bounded stream-end tail is the accepted cost of pacing ONNX
-	// dispatch to ~1 call/s/source on constrained hosts.
-	if entry.hasFlushed && startTime.Sub(entry.lastFlush) < vadSourceThrottle {
-		return 0, false, 0, nil
+	// dispatch to ~1 call/s/stream on constrained hosts.
+	if entry.hasFlushed && ch.audioEnd.Sub(entry.lastFlush) < vadSourceThrottle {
+		return 0, false, 0, vadSpan{}, nil
 	}
 
 	start := time.Now()
@@ -245,61 +284,81 @@ func (g *vadGate) score(cfg *vad.Config, cacheKey string, pcm []byte, sourceID s
 			g.failed = true
 			g.lastAttempt = time.Now()
 		} else {
-			// A per-source data or resampling error: the shared session is healthy,
-			// so drop only this source's streamer (discarding its bad buffer) and
-			// keep serving every other source rather than tearing the gate down.
+			// A per-stream data or resampling error: the shared session is healthy,
+			// so drop only this stream's streamer (discarding its bad buffer) and
+			// keep serving every other stream rather than tearing the gate down.
 			entry.s.Reset()
-			delete(g.streams, sourceID)
+			delete(g.streams, ch.key)
 		}
-		return 0, false, 0, flushErr
+		return 0, false, 0, vadSpan{}, flushErr
 	}
 	if !ok {
 		// No complete hop was available yet; the cadence clock does not advance so
 		// the next chunk can flush as soon as a hop accumulates.
-		return 0, false, 0, nil
+		return 0, false, 0, vadSpan{}, nil
 	}
-	entry.lastFlush = startTime
+	entry.lastFlush = ch.audioEnd
 	entry.hasFlushed = true
 	g.recordInference(dur)
-	return prob, true, dur, nil
+	return prob, true, dur, vadSpan{from: entry.covFrom, to: ch.audioEnd}, nil
 }
 
-// prepareSourceStream returns the source's streamer, the non-overlapped tail of
+// prepareSourceStream returns the chunk's stream, the non-overlapped tail of
 // this chunk to append, and skip=true when the chunk carries no new audio (an
-// out-of-order or duplicate chunk). It resets the streamer on a discontinuity
-// (a sample-rate change or a coverage gap larger than one chunk) and advances
-// the source's last-chunk timestamp. The caller must hold g.mu.
-func (g *vadGate) prepareSourceStream(sourceID string, pcm []byte, startTime time.Time, sampleRate int) (entry *sourceStream, freshPCM []byte, skip bool) {
-	entry, ok := g.streams[sourceID]
+// out-of-order or duplicate chunk). It resets the streamer on a discontinuity (a
+// producer gap flag, a sample-rate change or a coverage gap larger than one
+// chunk plus vadResetGap), restarts the coverage span on any hole larger than
+// vadCoverageJoinTolerance, and leaves lastEnd for the caller to advance after
+// Append succeeds. All timing is on the chunk's audio end, which does not move
+// with the PreCapture setting. The caller must hold g.mu.
+func (g *vadGate) prepareSourceStream(ch *vadChunk) (entry *sourceStream, freshPCM []byte, skip bool) {
+	chunkDur := pcmChunkDuration(len(ch.pcm), ch.sampleRate)
+	chunkStart := ch.audioEnd.Add(-chunkDur)
+	entry, ok := g.streams[ch.key]
 	if !ok {
-		entry = &sourceStream{s: g.newStreamer(), sampleRate: sampleRate}
-		g.streams[sourceID] = entry
-		return entry, pcm, false
+		entry = &sourceStream{s: g.newStreamer(), sampleRate: ch.sampleRate, covFrom: chunkStart}
+		if ch.gap {
+			// The first window of a buffer has a zero-filled overlap head: scored,
+			// but not real audio, so it is not claimed as covered.
+			entry.covFrom = ch.audioEnd
+		}
+		g.streams[ch.key] = entry
+		return entry, ch.pcm, false
 	}
 
-	chunkDur := pcmChunkDuration(len(pcm), sampleRate)
-	delta := startTime.Sub(entry.lastStart)
+	delta := ch.audioEnd.Sub(entry.lastEnd)
 	switch {
-	case sampleRate != entry.sampleRate, delta > chunkDur+vadResetGap:
-		// Discontinuity: a sample-rate change, or a gap well beyond one chunk (a
-		// restart or dropped audio). Reset the LSTM state and aggregation and treat
-		// the whole chunk as fresh. The vadResetGap tolerance above chunkDur absorbs
-		// the wall-clock jitter in the chunk start times, so a contiguous boundary
-		// at the default zero overlap (delta ~= chunkDur) is not mistaken for a gap.
+	case ch.gap, ch.sampleRate != entry.sampleRate, delta > chunkDur+vadResetGap:
+		// Discontinuity: lost audio, a sample-rate change, or a gap well beyond one
+		// chunk (a restart or dropped audio). Reset the LSTM state and aggregation
+		// and treat the whole chunk as fresh. The vadResetGap tolerance above
+		// chunkDur absorbs the timing jitter in the chunk audio ends, so a
+		// contiguous boundary at the default zero overlap (delta ~= chunkDur) is
+		// not mistaken for a gap. A window spliced across lost audio is not
+		// contiguous, so a producer gap claims none of it.
 		entry.s.Reset()
-		entry.sampleRate = sampleRate
+		entry.sampleRate = ch.sampleRate
 		entry.hasFlushed = false
-		freshPCM = pcm
+		entry.covFrom = chunkStart
+		if ch.gap {
+			entry.covFrom = ch.audioEnd
+		}
+		freshPCM = ch.pcm
 	case delta <= 0:
 		// Out-of-order or duplicate chunk: its audio was already appended when the
 		// earlier chunk arrived, so there is nothing new to score.
 		return entry, nil, true
 	default:
+		if delta-chunkDur > vadCoverageJoinTolerance {
+			// A hole the LSTM state survives but the scorer never saw: the audio
+			// before this chunk is not contiguous with what was scored.
+			entry.covFrom = chunkStart
+		}
 		// Overlap or a contiguous boundary: only the tail past the previous chunk's
-		// start is new audio. freshTailBytes rounds to whole samples and clamps to
+		// end is new audio. freshTailBytes rounds to whole samples and clamps to
 		// the whole chunk, so a contiguous chunk (delta ~= chunkDur) yields the
 		// whole chunk with no dropped leading sample and preserves the LSTM state.
-		freshPCM = pcm[len(pcm)-freshTailBytes(delta, sampleRate, len(pcm)):]
+		freshPCM = ch.pcm[len(ch.pcm)-freshTailBytes(delta, ch.sampleRate, len(ch.pcm)):]
 	}
 	return entry, freshPCM, false
 }
@@ -345,27 +404,32 @@ func freshTailBytes(delta time.Duration, sampleRate, pcmLen int) int {
 
 // runVADGate runs the dedicated Silero VAD speech gate for one chunk and, on a
 // speech hit, records it in LastHumanDetection exactly as the label-based path
-// does. This AUGMENTS the label match: shouldDiscardDetection consults the same
-// map, so a bird detection is discarded if EITHER the VAD or the label trigger
-// fires. When the VAD is disabled or its model is absent, behaviour is unchanged.
-func (p *Processor) runVADGate(settings *conf.Settings, item *classifier.Results) {
+// does, stamped with the end of the audio it scored. This AUGMENTS the label
+// match: shouldDiscardDetection consults the same map, so a bird detection is
+// discarded if EITHER the VAD or the label trigger fires. When the VAD is
+// disabled or its model is absent, behaviour is unchanged.
+//
+// It returns the span of audio the chunk's (source, model) stream has scored
+// when this call ran an inference (ok=true); the caller publishes it as coverage
+// once the chunk's label hits are also written.
+func (p *Processor) runVADGate(settings *conf.Settings, item *classifier.Results) (span vadSpan, ok bool) {
 	pf := &settings.Realtime.PrivacyFilter
 	if !pf.Enabled || !pf.VAD.Enabled {
 		// Lazily unload if the feature was just turned off (no restart needed).
 		p.vadGate.close()
-		return
+		return vadSpan{}, false
 	}
 	// The VAD runs at 16 kHz on speech; skip ultrasonic bat chunks entirely.
 	if item.ModelID == classifier.RegistryIDBat || len(item.PCMdata) == 0 {
-		return
+		return vadSpan{}, false
 	}
-	spec, ok := classifier.GetModelSpec(item.ModelID)
-	if !ok {
-		return
+	spec, specOK := classifier.GetModelSpec(item.ModelID)
+	if !specOK {
+		return vadSpan{}, false
 	}
 	sampleRate := spec.EffectiveSampleRate()
 	if sampleRate <= 0 {
-		return
+		return vadSpan{}, false
 	}
 
 	cfg, cacheKey := resolveVADModel(&pf.VAD, settings.BirdNET.ONNXRuntimePath)
@@ -382,21 +446,26 @@ func (p *Processor) runVADGate(settings *conf.Settings, item *classifier.Results
 				logger.String("hint", "set realtime.privacyfilter.vad.modelpath to a Silero sequence-export .onnx, or unset it to use the embedded model"),
 				logger.String("operation", "privacy_filter_vad"))
 		}
-		return
+		return vadSpan{}, false
 	}
 
-	prob, ran, dur, err := p.vadGate.score(
-		&cfg, cacheKey, item.PCMdata, item.Source.ID, item.StartTime, sampleRate,
-	)
+	audioEnd := itemAudioEnd(settings, item)
+	prob, ran, dur, span, err := p.vadGate.score(&cfg, cacheKey, &vadChunk{
+		key:        vadStreamKey{source: item.Source.ID, model: item.ModelID},
+		pcm:        item.PCMdata,
+		sampleRate: sampleRate,
+		audioEnd:   audioEnd,
+		gap:        item.AudioGap,
+	})
 	if err != nil {
 		GetLogger().Warn("privacy VAD unavailable; speech gate inactive this interval",
 			logger.String("error", err.Error()),
 			logger.String("model_path", pf.VAD.ModelPath),
 			logger.String("operation", "privacy_filter_vad"))
-		return
+		return vadSpan{}, false
 	}
 	if !ran {
-		return
+		return vadSpan{}, false
 	}
 
 	// Prometheus (opt-in via telemetry). The dashboard stats above are always on;
@@ -415,7 +484,7 @@ func (p *Processor) runVADGate(settings *conf.Settings, item *classifier.Results
 			logger.String("operation", "privacy_filter_vad"))
 	}
 	if float64(prob) < threshold {
-		return
+		return span, true
 	}
 
 	GetLogger().Info("human speech detected by VAD; privacy filter engaged",
@@ -424,15 +493,16 @@ func (p *Processor) runVADGate(settings *conf.Settings, item *classifier.Results
 		logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
 		logger.String("operation", "privacy_filter_vad"))
 
-	p.vadGate.recordSpeechHit(item.StartTime, prob, p.getDisplayNameForSource(item.Source.ID))
+	p.vadGate.recordSpeechHit(audioEnd, prob, p.getDisplayNameForSource(item.Source.ID))
 	if settings.Realtime.Telemetry.Enabled && p.Metrics != nil {
 		p.Metrics.PrivacyFilter.RecordVADSpeechHit()
 		p.Metrics.PrivacyFilter.SetVADLastSpeechProbability(float64(prob))
 	}
 
 	p.detectionMutex.Lock()
-	p.LastHumanDetection[item.Source.ID] = HumanDetection{Time: item.StartTime, Trigger: metrics.TriggerVAD}
+	p.LastHumanDetection[item.Source.ID] = HumanDetection{Time: audioEnd, Trigger: metrics.TriggerVAD}
 	p.detectionMutex.Unlock()
+	return span, true
 }
 
 // resolveVADModel selects the VAD model source. An explicit ModelPath override
