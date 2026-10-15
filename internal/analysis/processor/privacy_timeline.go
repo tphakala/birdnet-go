@@ -390,7 +390,9 @@ type privacyCheck struct {
 //
 // The verdict defers until a speech detector has scored the whole saved clip span
 // (padded by privacyClipGuard), so speech in the clip's post-capture tail is not
-// scored after the decision. A speech-band detection on a source no detector has
+// scored after the decision. The VAD path is satisfied by any one
+// model's stream; the label path by every model currently scoring the source (see
+// labelCoverageCoversLocked), since each model's windows are scored separately. A speech-band detection on a source no detector has
 // recently scored waits too, and reports coverageTimedOut once now passes the clip
 // end by privacyCoverageMaxWait. A detection by a model that cannot carry speech
 // (the bat model) or an unregistered one keeps at once only when no detector has
@@ -408,7 +410,11 @@ func (p *Processor) checkPrivacy(settings *conf.Settings, item *PendingDetection
 }
 
 // coverageVerdictLocked is the coverage half of checkPrivacy; model is the model
-// of the pending detection. The caller must hold detectionMutex.
+// of the pending detection. With the VAD as the required detector, one stream
+// covering the padded clip keeps it; with the label detector every current model
+// must cover its share (labelCoverageCoversLocked). Otherwise the verdict defers
+// until the clip end plus privacyCoverageMaxWait, then reports a timeout. The
+// caller must hold detectionMutex.
 func (p *Processor) coverageVerdictLocked(settings *conf.Settings, source, model string, clip audioSpan, now time.Time) coverageVerdict {
 	detector := p.requiredDetectorLocked(settings, source, now)
 	if !p.hasRecentCoverageLocked(source, detector, now) && !speechBandModel(model) {
@@ -420,18 +426,78 @@ func (p *Processor) coverageVerdictLocked(settings *conf.Settings, source, model
 		// through the timeout, which logs and counts it.
 		return coverageKeep
 	}
-	for key, spans := range p.privacyCoverage {
-		if key.source != source || key.detector != detector {
-			continue
-		}
-		for _, s := range spans {
-			if !s.from.After(clip.from.Add(-privacyClipGuard)) && !s.to.Before(clip.to.Add(privacyClipGuard)) {
-				return coverageKeep
-			}
-		}
+	padded := audioSpan{from: clip.from.Add(-privacyClipGuard), to: clip.to.Add(privacyClipGuard)}
+	var covered bool
+	if detector == metrics.TriggerLabel {
+		covered = p.labelCoverageCoversLocked(source, padded, now)
+	} else {
+		covered = p.anyStreamCoversLocked(source, detector, padded)
+	}
+	if covered {
+		return coverageKeep
 	}
 	if now.Before(clip.to.Add(privacyCoverageMaxWait)) {
 		return coverageDefer
 	}
 	return coverageTimedOut
+}
+
+// anyStreamCoversLocked reports whether one published span of any model's stream
+// for source and detector contains padded. The caller must hold detectionMutex.
+func (p *Processor) anyStreamCoversLocked(source, detector string, padded audioSpan) bool {
+	for key, spans := range p.privacyCoverage {
+		if key.source != source || key.detector != detector {
+			continue
+		}
+		for _, s := range spans {
+			if spanContains(s, padded) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// labelCoverageCoversLocked reports whether every label model currently scoring
+// source has scanned the part of padded it could have heard. A model is current
+// when its newest span ends within privacyCoverageHorizon of now. Each current
+// model must cover [max(padded.from, start of its earliest retained span),
+// padded.to] with one span: a model that began mid-clip owes only the part from
+// its start, one that began after the clip end owes nothing, and one that has not
+// yet reached the clip leaves it deferred. A clip no current model owes anything
+// for is not covered. The caller must hold detectionMutex.
+func (p *Processor) labelCoverageCoversLocked(source string, padded audioSpan, now time.Time) bool {
+	owed := false
+	for key, spans := range p.privacyCoverage {
+		if key.source != source || key.detector != metrics.TriggerLabel || len(spans) == 0 {
+			continue
+		}
+		if now.Sub(spans[len(spans)-1].to) > privacyCoverageHorizon {
+			continue
+		}
+		need := audioSpan{from: padded.from, to: padded.to}
+		if runStart := spans[0].from; runStart.After(need.from) {
+			need.from = runStart
+		}
+		if !need.to.After(need.from) {
+			continue
+		}
+		owed = true
+		covered := false
+		for _, s := range spans {
+			if spanContains(s, need) {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			return false
+		}
+	}
+	return owed
+}
+
+// spanContains reports whether outer covers all of inner by time.
+func spanContains(outer, inner audioSpan) bool {
+	return !outer.from.After(inner.from) && !outer.to.Before(inner.to)
 }

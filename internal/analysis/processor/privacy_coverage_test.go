@@ -867,3 +867,88 @@ func TestDetectionEndTime_ExtendedCaptureCap(t *testing.T) {
 		})
 	}
 }
+
+// otherModelChunk builds a silent window of model ending at end, as a second
+// model's monitor on the same source would produce it.
+func (r *privacyRig) otherModelChunk(model string, end time.Duration) classifier.Results {
+	spec := classifier.ModelRegistry[model].Spec
+	rate := spec.EffectiveSampleRate()
+	item := classifier.Results{
+		StartTime: r.at(end).Add(-spec.ClipLength - e2ePreCapture*time.Second),
+		Audio:     classifier.AudioTiming{EndAt: r.at(end)},
+		PCMdata:   make([]byte, int(spec.ClipLength.Seconds())*rate*vadBytesPerSample),
+		ModelID:   model,
+	}
+	item.Source = datastore.AudioSource{ID: e2eSource}
+	return item
+}
+
+// feedOther feeds one chunk of model per second with audio ends in [from, to].
+func (r *privacyRig) feedOther(model string, from, to int) {
+	r.t.Helper()
+	for end := from; end <= to; end++ {
+		r.p.processDetections(r.otherModelChunk(model, time.Duration(end)*time.Second))
+	}
+}
+
+// TestPrivacy_LabelCoverageNeedsEveryCurrentModel: with the VAD off, a clip is
+// released only when every label model that is currently scoring the source has
+// scanned the part of the clip it could have heard. A model that began mid-clip
+// owes only the part from its start, and one that began after the clip owes
+// nothing.
+func TestPrivacy_LabelCoverageNeedsEveryCurrentModel(t *testing.T) {
+	const second = "Perch_V2"
+	newRig := func(ago time.Duration) *privacyRig {
+		r := newPrivacyRig(t, "BirdNET_V2.4", ago)
+		r.settings.Realtime.PrivacyFilter.VAD.Enabled = false
+		r.feed(r.clip, 40*time.Second, sec(1)) // the 3 s model has scanned past the clip end
+		return r
+	}
+	t.Run("a model behind the clip tail holds the clip", func(t *testing.T) {
+		r := newRig(45 * time.Second)
+		r.feedOther(second, 5, 33)
+		r.pend(24 * time.Second) // clip 18 s to 33 s
+		require.Equal(t, "pending", r.outcome(), "the second model has not covered the clip tail yet")
+		r.feedOther(second, 34, 36)
+		assert.Equal(t, "approved", r.outcome())
+	})
+	t.Run("a model that has not reached the clip start holds the clip", func(t *testing.T) {
+		r := newRig(45 * time.Second)
+		r.feedOther(second, 5, 10)
+		r.pend(24 * time.Second) // clip 18 s to 33 s
+		assert.Equal(t, "pending", r.outcome())
+	})
+	t.Run("a model that began mid-clip owes only its part", func(t *testing.T) {
+		r := newRig(45 * time.Second)
+		r.feedOther(second, 25, 30) // scans 20 s to 30 s of the clip padded to 17 s to 36 s
+		r.pend(24 * time.Second)
+		require.Equal(t, "pending", r.outcome())
+		r.feedOther(second, 31, 36) // now 20 s to 36 s, all it could have heard
+		assert.Equal(t, "approved", r.outcome())
+	})
+	t.Run("a model that began after the clip is not waited for", func(t *testing.T) {
+		r := newRig(45 * time.Second)
+		r.feedOther(second, 45, 48)
+		r.pend(24 * time.Second)
+		assert.Equal(t, "approved", r.outcome())
+	})
+	t.Run("a removed model times out, fails open and is counted", func(t *testing.T) {
+		r := newRig(100 * time.Second)
+		pfm, err := metrics.NewPrivacyFilterMetrics(prometheus.NewRegistry())
+		require.NoError(t, err)
+		r.p.Metrics = &observability.Metrics{PrivacyFilter: pfm}
+		r.settings.Realtime.Telemetry.Enabled = true
+		r.feedOther(second, 5, 18) // stops while the 3 s model scans on
+		r.pend(24 * time.Second)   // clip 18 s to 33 s, wait until 63 s, flushed at 100 s
+		assert.Equal(t, "approved", r.outcome())
+		expected := "\n# HELP privacy_filter_unscanned_saves_total Total detections approved for saving whose clip span was not fully scanned for speech before the coverage wait expired\n" +
+			"# TYPE privacy_filter_unscanned_saves_total counter\nprivacy_filter_unscanned_saves_total 1\n"
+		require.NoError(t, testutil.CollectAndCompare(pfm, strings.NewReader(expected), "privacy_filter_unscanned_saves_total"))
+	})
+	t.Run("a removed model holds the clip within the wait", func(t *testing.T) {
+		r := newRig(45 * time.Second)
+		r.feedOther(second, 5, 18)
+		r.pend(24 * time.Second)
+		assert.Equal(t, "pending", r.outcome())
+	})
+}
