@@ -40,6 +40,9 @@ const (
 	// gain flipped between.
 	gainUpdateFinalDB = 3.0
 
+	// gainUpdateOverflowDB is a finite gain whose linear factor overflows float32.
+	gainUpdateOverflowDB = 1000.0
+
 	// gainUpdateHighPassHz is the corner of the EQ chain in the sequence test.
 	gainUpdateHighPassHz = 200.0
 )
@@ -196,6 +199,19 @@ func TestRouter_UpdateGainZeroDBWithoutChainIsPassthrough(t *testing.T) {
 	router.Dispatch(gainUpdateFrame(input))
 	restored := waitForGainFrame(t, consumer)
 	assert.True(t, bytes.Equal(input, restored.Data), "0 dB without a chain must be a byte-exact passthrough")
+}
+
+// TestRouter_UpdateGainInvalidGainWithoutRoutesIsRejected pins that an unusable
+// gain is an error even when the source has no route to reject it.
+func TestRouter_UpdateGainInvalidGainWithoutRoutesIsRejected(t *testing.T) {
+	t.Parallel()
+
+	router := NewAudioRouter(GetLogger(), nil)
+	t.Cleanup(router.Close)
+
+	for _, bad := range []float64{math.NaN(), math.Inf(1), math.Inf(-1), gainUpdateOverflowDB} {
+		require.Error(t, router.UpdateGain("no-such-source", bad), "gain %v", bad)
+	}
 }
 
 // TestRouter_UpdateGainUnknownSourceIsNoOp checks that a source without routes

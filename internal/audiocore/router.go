@@ -83,8 +83,8 @@ type Route struct {
 	// gain scales the route's audio by a number of decibels. Nil means no gain
 	// (0 dB) and skips the gain stage. Accessed atomically so UpdateGain can swap
 	// it without rebuilding the route; the drainer loads it once per frame. A
-	// Gain is not safe for concurrent use on one instance, so every route owns
-	// its own. It is float32 inside (go-audio-dsp derives the linear factor with
+	// Gain holds only its immutable factor, so routes may share one instance.
+	// It is float32 inside (go-audio-dsp derives the linear factor with
 	// dsp.FactorFromDB), so a gain-only route differs from a float64 math.Pow
 	// factor by at most one LSB on a small fraction of samples.
 	gain atomic.Pointer[dspgain.Gain]
@@ -407,24 +407,20 @@ func newRouteGain(gainDB float64) (*dspgain.Gain, error) {
 // infinity or a gain whose linear factor overflows float32. An unknown source is
 // a no-op.
 func (r *AudioRouter) UpdateGain(sourceID string, gainDB float64) error {
+	// Build and validate the gain before taking the lock, so a rejected value is
+	// an error whether or not the source has routes. A Gain holds only its
+	// immutable factor, so one instance serves every route's drainer.
+	g, err := newRouteGain(gainDB)
+	if err != nil {
+		return fmt.Errorf("invalid gain value for source=%s: %w", sourceID, err)
+	}
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	routes := r.routes[sourceID]
-
-	// Build every route's gain before storing any, so a rejected value leaves
-	// all routes on the old gain. Each route needs its own instance.
-	gains := make([]*dspgain.Gain, len(routes))
-	for i := range routes {
-		g, err := newRouteGain(gainDB)
-		if err != nil {
-			return fmt.Errorf("invalid gain value for source=%s: %w", sourceID, err)
-		}
-		gains[i] = g
-	}
-
-	for i, rt := range routes {
-		rt.gain.Store(gains[i])
+	for _, rt := range routes {
+		rt.gain.Store(g)
 		r.log.Debug("route gain updated",
 			logger.String("source_id", sourceID),
 			logger.String("consumer_id", rt.Consumer.ID()),
