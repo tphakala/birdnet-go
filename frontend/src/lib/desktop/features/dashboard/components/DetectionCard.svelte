@@ -167,10 +167,10 @@
     if (currentSpectrogramSize !== previousSpectrogramSize) {
       previousSpectrogramSize = currentSpectrogramSize;
       if (detection.clipName && isVisible) {
-        loader.stop();
-        loader.start(detection.id);
+        loader.restart(detection.id);
         return;
       }
+      loader.reset();
     }
 
     if (detection.clipName && isVisible) {

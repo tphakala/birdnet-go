@@ -637,8 +637,8 @@ describe('spectrogramLoader', () => {
       mockFetch.mockResolvedValue(mockJsonResponse({ data: { status: 'exists' } }));
 
       const loader = createSpectrogramLoader({
-        size: () => undefined as unknown as string,
-        raw: () => undefined as unknown as boolean,
+        size: () => undefined,
+        raw: () => undefined,
       });
 
       loader.start(42);
@@ -673,6 +673,122 @@ describe('spectrogramLoader', () => {
           method: 'POST',
           headers: { 'X-CSRF-Token': 'test-csrf-token' },
         })
+      );
+      loader.destroy();
+    });
+  });
+
+  describe('restart and reset', () => {
+    it('re-fetches when restart is called on an already loaded spectrogram', async () => {
+      mockFetch.mockResolvedValue(mockJsonResponse({ data: { status: 'exists' } }));
+
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+      loader.handleImageLoad();
+
+      expect(loader.state).toBe('loaded');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      // Normal start with same id is a no-op
+      loader.start(42);
+      await flushAll();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      // restart triggers a new status fetch for the same id
+      loader.restart(42);
+      await flushAll();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      loader.destroy();
+    });
+
+    it('allows overriding size when calling restart', async () => {
+      mockFetch.mockResolvedValue(mockJsonResponse({ data: { status: 'exists' } }));
+
+      const loader = createSpectrogramLoader({ size: 'md' });
+      loader.start(42);
+      await flushAll();
+      loader.handleImageLoad();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/spectrogram/42/status?size=md&raw=true',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+
+      loader.restart(42, 'lg');
+      await flushAll();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/spectrogram/42/status?size=lg&raw=true',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+      loader.destroy();
+    });
+
+    it('uses currentDetectionId when restart is called without arguments', async () => {
+      mockFetch.mockResolvedValue(mockJsonResponse({ data: { status: 'exists' } }));
+
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+      loader.handleImageLoad();
+
+      loader.restart();
+      await flushAll();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      loader.destroy();
+    });
+
+    it('resets state to idle and allows subsequent start for the same detection', async () => {
+      mockFetch.mockResolvedValue(mockJsonResponse({ data: { status: 'exists' } }));
+
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+      loader.handleImageLoad();
+
+      expect(loader.state).toBe('loaded');
+      expect(loader.spectrogramUrl).toBeTruthy();
+
+      loader.reset();
+
+      expect(loader.state).toBe('idle');
+      expect(loader.spectrogramUrl).toBe('');
+      expect(loader.error).toBe(false);
+
+      // Now start(42) triggers a fresh fetch
+      loader.start(42);
+      await flushAll();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      loader.destroy();
+    });
+
+    it('re-fetches with updated dynamic size when getter changes and restart is called', async () => {
+      let currentSize = 'sm';
+      mockFetch.mockResolvedValue(mockJsonResponse({ data: { status: 'exists' } }));
+
+      const loader = createSpectrogramLoader({
+        size: () => currentSize,
+      });
+
+      loader.start(42);
+      await flushAll();
+      loader.handleImageLoad();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/spectrogram/42/status?size=sm&raw=true',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+
+      currentSize = 'xl';
+      loader.restart(42);
+      await flushAll();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/spectrogram/42/status?size=xl&raw=true',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
       );
       loader.destroy();
     });

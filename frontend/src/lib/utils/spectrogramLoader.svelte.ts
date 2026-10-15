@@ -450,6 +450,31 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     }
   }
 
+  function reset(): void {
+    clearTimers();
+    abortPending();
+    releaseCurrentSlot();
+    state = 'idle';
+    showSpinner = false;
+    hasError = false;
+    spectrogramUrl = '';
+    serverStatus = undefined;
+    currentDetectionId = undefined;
+    resetInternalState();
+  }
+
+  function restart(detectionId?: number, size?: string): void {
+    if (destroyed) return;
+    if (size !== undefined) {
+      config.size = size;
+    }
+    const targetId = detectionId ?? currentDetectionId;
+    reset();
+    if (targetId !== undefined) {
+      start(targetId);
+    }
+  }
+
   function handleImageLoad(): void {
     state = 'loaded';
     showSpinner = false;
@@ -522,6 +547,8 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
     start,
     stop,
+    reset,
+    restart,
     handleImageLoad,
     handleImageError,
     destroy,

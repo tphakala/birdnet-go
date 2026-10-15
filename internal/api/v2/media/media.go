@@ -2439,11 +2439,7 @@ func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 	queueKey := buildSpectrogramQueueKey(noteID, params.width, params.raw, params.style, params.dynamicRange)
 
 	// Check if file already exists on disk and is non-empty (including fallbacks to other standard sizes)
-	existsOnDisk := false
 	if _, exists := c.findExistingSpectrogram(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix); exists {
-		existsOnDisk = true
-	}
-	if existsOnDisk {
 		// Already exists, return immediately with generated status
 		queryParams := url.Values{}
 		sizeParam := params.sizeStr
@@ -2702,9 +2698,11 @@ func (c *Handler) findExistingSpectrogram(relAudioPath string, requestedWidth in
 	}
 
 	// 3. Fallback for pre-rendered spectrograms created as <basename>.png
-	barePath := strings.TrimSuffix(relAudioPath, filepath.Ext(relAudioPath)) + ".png"
-	if statInfo, err := c.SFS.StatRel(barePath); err == nil && statInfo.Size() > 0 {
-		return barePath, true
+	if raw && buildStyleSuffix(style, dynamicRange) == "" && freqSuffix == "" {
+		barePath := strings.TrimSuffix(relAudioPath, filepath.Ext(relAudioPath)) + ".png"
+		if statInfo, err := c.SFS.StatRel(barePath); err == nil && statInfo.Size() > 0 {
+			return barePath, true
+		}
 	}
 
 	return "", false

@@ -16,7 +16,7 @@
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
   import { get } from 'svelte/store';
-  import { dashboardSettings } from '$lib/stores/settings';
+  import { dashboardSettings, settingsDataLoaded } from '$lib/stores/settings';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { t } from '$lib/i18n';
 
@@ -52,7 +52,7 @@
 
   const loader = createSpectrogramLoader({
     size: () =>
-    get(settingsDataLoaded) ? (get(dashboardSettings)?.spectrogram?.size ?? 'sm') : 'sm',
+      get(settingsDataLoaded) ? (get(dashboardSettings)?.spectrogram?.size ?? 'sm') : 'sm',
     raw: () => get(dashboardSettings)?.spectrogram?.raw ?? true,
   });
 
@@ -90,7 +90,23 @@
     }
   });
 
+  let currentSpectrogramSize = $derived(
+    $settingsDataLoaded ? ($dashboardSettings?.spectrogram?.size ?? 'sm') : 'sm'
+  );
+  // svelte-ignore state_referenced_locally
+  let previousSpectrogramSize = currentSpectrogramSize;
+
   $effect(() => {
+    // If configured spectrogram size changes, restart loader with the new size
+    if (currentSpectrogramSize !== previousSpectrogramSize) {
+      previousSpectrogramSize = currentSpectrogramSize;
+      if (detection.clipName && isVisible) {
+        loader.restart(detection.id);
+        return;
+      }
+      loader.reset();
+    }
+
     if (detection.clipName && isVisible) {
       loader.start(detection.id);
     } else {
