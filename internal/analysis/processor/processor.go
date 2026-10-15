@@ -74,7 +74,7 @@ type Processor struct {
 	syncMutex              sync.Mutex                // Mutex to protect sync operations
 	syncInProgress         atomic.Bool               // Flag to prevent overlapping syncs
 	LastDogDetection       map[string]time.Time      // keep track of dog barks per audio source
-	LastHumanDetection     map[string]HumanDetection // keep track of human vocal per audio source, with the trigger that flagged it
+	LastHumanDetection     map[string]HumanDetection // latest speech hit per audio source: capture time of the end of the newest audio that produced it, and its trigger
 	Metrics                *observability.Metrics
 	DynamicThresholds      map[string]*DynamicThreshold
 	thresholdsMutex        sync.RWMutex        // Mutex to protect access to DynamicThresholds
@@ -1404,7 +1404,9 @@ func (p *Processor) handleDogDetection(settings *conf.Settings, item classifier.
 	}
 }
 
-// handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
+// handleHumanDetection handles the detection of human vocalizations and records
+// the hit in LastHumanDetection, stamped with the end of the chunk's audio and
+// never moving the stored time backward.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifier.Results, result datastore.Results) {
@@ -1416,11 +1418,10 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 			logger.Float32("threshold", float32(settings.Realtime.PrivacyFilter.Confidence)),
 			logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
 			logger.String("operation", "privacy_filter"))
-		// put human detection timestamp into LastHumanDetection map. This is used to discard
-		// bird detections if a human vocalization is detected after the first detection
-		p.detectionMutex.Lock()
-		p.LastHumanDetection[item.Source.ID] = HumanDetection{Time: item.StartTime, Trigger: metrics.TriggerLabel}
-		p.detectionMutex.Unlock()
+		// Put the human detection into the LastHumanDetection map, stamped with the
+		// end of the audio this label scored (not the back-dated chunk start). This is
+		// used to discard bird detections whose saved clip reaches that audio.
+		p.recordHumanDetection(item.Source.ID, itemAudioEnd(settings, &item), metrics.TriggerLabel)
 	}
 }
 

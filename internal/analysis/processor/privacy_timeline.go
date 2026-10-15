@@ -26,3 +26,18 @@ func itemAudioEnd(settings *conf.Settings, item *classifier.Results) time.Time {
 	}
 	return end
 }
+
+// recordHumanDetection records a speech hit on source at the capture time of the
+// end of the audio that produced it. The hit time never moves backward: the
+// discard check reads only the latest value, so a later write with an earlier
+// stamp (the label path after the VAD within one chunk, or a 5 s model's chunk
+// after a 3 s model's) would hide an earlier-reaching hit. An equal time keeps
+// the existing entry and its trigger.
+func (p *Processor) recordHumanDetection(source string, at time.Time, trigger string) {
+	p.detectionMutex.Lock()
+	defer p.detectionMutex.Unlock()
+	if existing, ok := p.LastHumanDetection[source]; ok && !at.After(existing.Time) {
+		return
+	}
+	p.LastHumanDetection[source] = HumanDetection{Time: at, Trigger: trigger}
+}
