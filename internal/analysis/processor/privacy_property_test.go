@@ -19,26 +19,21 @@ import (
 // overlap head of a spliced window. Real audio is zero (or one for speech).
 const propFakeByte = 0x7f
 
-// interval is a [from, to) stretch of audio time.
-type interval struct{ from, to time.Time }
-
 // recordingStreamer logs the real audio it was given, per stream instance, so
 // the test can compare the gate's published spans against what was scored.
 type recordingStreamer struct {
-	curEnd  *time.Time
-	scored  []interval
-	appends int
+	curEnd *time.Time
+	scored []audioSpan
 }
 
 func (r *recordingStreamer) Append(pcm []byte, rate int) error {
-	r.appends++
 	end := *r.curEnd
 	start := end.Add(-pcmChunkDuration(len(pcm), rate))
 	sampleDur := time.Second / time.Duration(rate)
 	runStart := -1
 	flush := func(i int) {
 		if runStart >= 0 {
-			r.scored = append(r.scored, interval{
+			r.scored = append(r.scored, audioSpan{
 				from: start.Add(time.Duration(runStart) * sampleDur),
 				to:   start.Add(time.Duration(i) * sampleDur),
 			})
@@ -64,13 +59,9 @@ func (r *recordingStreamer) Reset() { r.scored = nil }
 
 // largestHole returns the longest stretch of [span.from, span.to] not covered by
 // the union of the logged intervals.
-func largestHole(span vadSpan, logged []interval) time.Duration {
+func largestHole(span audioSpan, logged []audioSpan) time.Duration {
 	sorted := slices.Clone(logged)
-	for i := range sorted { // insertion sort: lists are short
-		for j := i; j > 0 && sorted[j].from.Before(sorted[j-1].from); j-- {
-			sorted[j], sorted[j-1] = sorted[j-1], sorted[j]
-		}
-	}
+	slices.SortFunc(sorted, func(a, b audioSpan) int { return a.from.Compare(b.from) })
 	cursor := span.from
 	var hole time.Duration
 	for _, iv := range sorted {
@@ -98,15 +89,14 @@ func largestHole(span vadSpan, logged []interval) time.Duration {
 // decreases (I2).
 func TestPrivacy_CoverageNeverClaimsUnscoredAudio(t *testing.T) {
 	stepsMs := []int{200, 300, 600, 1000, 333, 1667, 3000, 5000}
-	models := []struct {
-		id   string
-		clip time.Duration
-		rate int
-	}{
-		{"BirdNET_V2.4", 3 * time.Second, 48000},
-		{"Perch_V2", 5 * time.Second, 32000},
+	models := []string{testVADModel, testVADModelB}
+	zeroLen := 0
+	for _, id := range models {
+		spec, ok := classifier.GetModelSpec(id)
+		require.True(t, ok)
+		zeroLen = max(zeroLen, int(spec.ClipLength.Seconds())*spec.EffectiveSampleRate()*vadBytesPerSample)
 	}
-	zero := make([]byte, 5*48000*vadBytesPerSample)
+	zero := make([]byte, zeroLen)
 
 	for seed := uint64(1); seed <= 100; seed++ {
 		rng := rand.New(rand.NewPCG(seed, seed*7919)) //nolint:gosec // G404: deterministic test sequence
@@ -148,8 +138,8 @@ func TestPrivacy_CoverageNeverClaimsUnscoredAudio(t *testing.T) {
 			gap := rng.IntN(10) == 0
 			curEnd = ends[m]
 
-			mod := models[m]
-			pcm := zero[:int(mod.clip.Seconds())*mod.rate*vadBytesPerSample]
+			spec := classifier.ModelRegistry[models[m]].Spec
+			pcm := zero[:int(spec.ClipLength.Seconds())*spec.EffectiveSampleRate()*vadBytesPerSample]
 			if gap {
 				pcm = bytes.Clone(pcm)
 				head := len(pcm) / 2
@@ -158,21 +148,20 @@ func TestPrivacy_CoverageNeverClaimsUnscoredAudio(t *testing.T) {
 				}
 			}
 			item := classifier.Results{
-				ModelID:    mod.id,
-				PCMdata:    pcm,
-				AudioEndAt: ends[m],
-				AudioGap:   gap,
+				ModelID: models[m],
+				PCMdata: pcm,
+				Audio:   classifier.AudioTiming{EndAt: ends[m], Gap: gap},
 			}
 			item.Source = datastore.AudioSource{ID: "src"}
-			lastKey = vadStreamKey{source: "src", model: mod.id}
+			lastKey = vadStreamKey{source: "src", model: models[m]}
 
 			if rng.IntN(5) == 0 { // a label hit with an unrelated stamp
 				label := item
-				label.AudioEndAt = base.Add(time.Duration(rng.IntN(120)) * time.Second)
+				label.Audio.EndAt = base.Add(time.Duration(rng.IntN(120)) * time.Second)
 				p.handleHumanDetection(settings, label, datastore.Results{Species: "Speech", Confidence: 0.9})
 			}
 
-			span, ran := p.runVADGate(settings, &item)
+			span, ran := runGate(p, settings, &item)
 			if ran {
 				rs := streams[lastKey]
 				require.NotNil(t, rs)

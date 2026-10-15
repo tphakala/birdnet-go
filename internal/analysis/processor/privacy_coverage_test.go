@@ -3,6 +3,7 @@ package processor
 import (
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,6 +28,14 @@ const (
 	e2ePreCapture   = 3
 	e2eSpecies      = "great tit"
 )
+
+// e2eSettings returns the privacy-on, VAD-on settings of the end-to-end tests.
+func e2eSettings() *conf.Settings {
+	settings := vadSettings(true, 0.35)
+	settings.Realtime.Audio.Export.Length = e2eExportLength
+	settings.Realtime.Audio.Export.PreCapture = e2ePreCapture
+	return settings
+}
 
 // speechInterval is a stretch of speech in the synthetic audio timeline, as
 // offsets from the rig's base time.
@@ -78,9 +87,7 @@ func newPrivacyRig(t *testing.T, model string, ago time.Duration) *privacyRig {
 
 	spec, ok := classifier.GetModelSpec(model)
 	require.True(t, ok)
-	settings := vadSettings(true, 0.35)
-	settings.Realtime.Audio.Export.Length = e2eExportLength
-	settings.Realtime.Audio.Export.PreCapture = e2ePreCapture
+	settings := e2eSettings()
 	g := newTestGate(nil, &fakeSession{}, nil)
 	g.newStreamer = func() vad.Streamer { return &markerStreamer{} }
 	return &privacyRig{
@@ -98,6 +105,12 @@ func newPrivacyRig(t *testing.T, model string, ago time.Duration) *privacyRig {
 
 func (r *privacyRig) at(off time.Duration) time.Time { return r.base.Add(off) }
 
+// clipBegin is where the clip of a bird first heard in the chunk ending at end
+// begins: the chunk start moved back by PreCapture.
+func (r *privacyRig) clipBegin(end time.Duration) time.Time {
+	return r.at(end).Add(-r.clip - e2ePreCapture*time.Second)
+}
+
 // chunk builds the analysis window ending at end, with speech samples marked
 // non-zero wherever the timeline has speech.
 func (r *privacyRig) chunk(end time.Duration) classifier.Results {
@@ -112,10 +125,10 @@ func (r *privacyRig) chunk(end time.Duration) classifier.Results {
 		}
 	}
 	item := classifier.Results{
-		StartTime:  r.at(end).Add(-r.clip - e2ePreCapture*time.Second),
-		AudioEndAt: r.at(end),
-		PCMdata:    pcm,
-		ModelID:    r.model,
+		StartTime: r.clipBegin(end),
+		Audio:     classifier.AudioTiming{EndAt: r.at(end)},
+		PCMdata:   pcm,
+		ModelID:   r.model,
 	}
 	item.Source = datastore.AudioSource{ID: e2eSource}
 	return item
@@ -129,6 +142,17 @@ func (r *privacyRig) feed(from, to, step time.Duration) {
 	}
 }
 
+// feedWithGapAt feeds one chunk per step over [from, to], except that the chunk
+// ending at gapAt arrives flagged as following lost audio.
+func (r *privacyRig) feedWithGapAt(from, gapAt, to, step time.Duration) {
+	r.t.Helper()
+	r.feed(from, gapAt-step, step)
+	gapped := r.chunk(gapAt)
+	gapped.Audio.Gap = true
+	r.p.processDetections(gapped)
+	r.feed(gapAt+step, to, step)
+}
+
 // pend registers a bird first heard in the chunk ending at end, as production
 // does: FirstDetected is the chunk start moved back by PreCapture, and the
 // deadline has passed.
@@ -138,7 +162,7 @@ func (r *privacyRig) pend(end time.Duration) {
 		Confidence:    0.9,
 		Source:        e2eSource,
 		BestModelID:   r.model,
-		FirstDetected: r.at(end).Add(-r.clip - e2ePreCapture*time.Second),
+		FirstDetected: r.clipBegin(end),
 		FlushDeadline: time.Now().Add(-time.Second),
 		Count:         5,
 	}
@@ -184,20 +208,20 @@ var e2eGeometries = []e2eGeometry{
 func TestPrivacy_PreCaptureSpeechDiscards(t *testing.T) {
 	for _, geo := range e2eGeometries {
 		for _, tc := range []struct {
-			name   string
-			speech []speechInterval
-			want   string
+			name      string
+			hasSpeech bool
+			want      string
 		}{
 			// The detecting chunk ends at 40 s; its clip begins PreCapture before the
 			// chunk start. The speech case has 0.5 s of speech ending 0.2 s before the
 			// detecting chunk begins, i.e. inside the pre-capture part of the clip.
-			{"speech in the pre-capture region", nil, "discarded"},
-			{"no speech", []speechInterval{}, "approved"},
+			{"speech in the pre-capture region", true, "discarded"},
+			{"no speech", false, "approved"},
 		} {
 			t.Run(geo.name+"/"+tc.name, func(t *testing.T) {
 				r := newPrivacyRig(t, geo.model, 45*time.Second)
 				chunkStart := 40*time.Second - r.clip
-				if tc.want == "discarded" {
+				if tc.hasSpeech {
 					r.speech = []speechInterval{{chunkStart - sec(0.7), chunkStart - sec(0.2)}}
 				}
 				// Chunks up to well past the clip end (detecting end + 9 s for the
@@ -233,9 +257,9 @@ func TestPrivacy_PostCaptureSpeechDefersThenDiscards(t *testing.T) {
 	for _, geo := range e2eGeometries {
 		t.Run(geo.name, func(t *testing.T) {
 			r := newPrivacyRig(t, geo.model, 45*time.Second)
-			_, clipEnd := clipSpan(r.settings, &PendingDetection{FirstDetected: r.at(40 * time.Second).Add(-r.clip - e2ePreCapture*time.Second)})
+			clip := clipSpan(r.settings, &PendingDetection{FirstDetected: r.clipBegin(40 * time.Second)})
 			// Speech 0.3 s before the clip's end.
-			endOff := clipEnd.Sub(r.base)
+			endOff := clip.to.Sub(r.base)
 			r.speech = []speechInterval{{endOff - sec(0.8), endOff - sec(0.3)}}
 
 			r.feed(r.clip, endOff-2*time.Second, geo.step)
@@ -258,8 +282,7 @@ func TestPrivacy_ExtendedCaptureWaitsForClipEnd(t *testing.T) {
 	item.ExtendedCapture = true
 	item.LastUpdated = r.at(46 * time.Second)
 	r.p.pendingDetections[key] = item
-	_, clipEnd := clipSpan(r.settings, &item)
-	endOff := clipEnd.Sub(r.base)
+	endOff := clipSpan(r.settings, &item).to.Sub(r.base)
 	require.Greater(t, endOff, 50*time.Second, "an extended clip reaches past the normal one")
 
 	r.feed(r.clip, endOff-sec(2), sec(1))
@@ -278,11 +301,7 @@ func TestPrivacy_CoverageGapTimesOut(t *testing.T) {
 	r.p.Metrics = &observability.Metrics{PrivacyFilter: pfm}
 	r.settings.Realtime.Telemetry.Enabled = true
 
-	r.feed(r.clip, sec(38), sec(1))
-	gapped := r.chunk(sec(40))
-	gapped.AudioGap = true
-	r.p.processDetections(gapped)
-	r.feed(sec(41), sec(55), sec(1))
+	r.feedWithGapAt(r.clip, sec(40), sec(55), sec(1))
 	r.pend(40 * time.Second)
 
 	assert.Equal(t, "approved", r.outcome(), "the clip end is more than the max wait in the past")
@@ -295,11 +314,7 @@ func TestPrivacy_CoverageGapTimesOut(t *testing.T) {
 // while the wait has not expired.
 func TestPrivacy_CoverageGapDefersWithinWait(t *testing.T) {
 	r := newPrivacyRig(t, "BirdNET_V2.4", 55*time.Second)
-	r.feed(r.clip, sec(38), sec(1))
-	gapped := r.chunk(sec(40))
-	gapped.AudioGap = true
-	r.p.processDetections(gapped)
-	r.feed(sec(41), sec(54), sec(1))
+	r.feedWithGapAt(r.clip, sec(40), sec(54), sec(1))
 	r.pend(40 * time.Second)
 	assert.Equal(t, "pending", r.outcome())
 }
@@ -332,50 +347,53 @@ func TestPrivacy_NotApplicableKeeps(t *testing.T) {
 	})
 }
 
-// TestPrivacy_GuardBoundary pins the guard margins exactly.
-func TestPrivacy_GuardBoundary(t *testing.T) {
+// TestPrivacy_GuardMargins pins the guard on both sides of a clip, at its exact
+// edge and with literal offsets that bound the constant between 400 and 600 ms.
+func TestPrivacy_GuardMargins(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
-	settings := vadSettings(true, 0.35)
-	settings.Realtime.Audio.Export.Length = e2eExportLength
-	settings.Realtime.Audio.Export.PreCapture = e2ePreCapture
+	settings := e2eSettings()
 	item := &PendingDetection{Source: e2eSource, FirstDetected: base, Count: 5}
-	_, end := clipSpan(settings, item)
+	clip := clipSpan(settings, item)
+	now := clip.to.Add(time.Second)
 
-	t.Run("discard check", func(t *testing.T) {
+	t.Run("speech hit against the clip begin", func(t *testing.T) {
 		t.Parallel()
 		for _, tc := range []struct {
 			name string
 			hit  time.Time
 			want bool
 		}{
-			{"hit at begin minus guard", base.Add(-privacyClipGuard), true},
-			{"hit one ns earlier", base.Add(-privacyClipGuard - 1), false},
+			{"at begin minus guard", base.Add(-privacyClipGuard), true},
+			{"one ns earlier", base.Add(-privacyClipGuard - 1), false},
+			{"400 ms before", base.Add(-400 * time.Millisecond), true},
+			{"600 ms before", base.Add(-600 * time.Millisecond), false},
 		} {
 			p := &Processor{LastHumanDetection: map[string]HumanDetection{e2eSource: {Time: tc.hit}}}
-			got, _ := p.shouldDiscardDetection(item, settings, 1)
+			got, _ := discardNow(p, item, settings, 1)
 			assert.Equal(t, tc.want, got, tc.name)
 		}
 	})
-	t.Run("coverage check", func(t *testing.T) {
+	t.Run("coverage against the clip span", func(t *testing.T) {
 		t.Parallel()
-		now := end.Add(time.Second)
 		for _, tc := range []struct {
 			name string
 			from time.Time
 			to   time.Time
 			want coverageVerdict
 		}{
-			{"covers exactly with guards", base.Add(-privacyClipGuard), end.Add(privacyClipGuard), coverageKeep},
-			{"end short by 1 ns defers", base.Add(-privacyClipGuard), end.Add(privacyClipGuard - 1), coverageDefer},
-			{"start late by 1 ns defers", base.Add(-privacyClipGuard + 1), end.Add(privacyClipGuard), coverageDefer},
+			{"covers exactly with guards", base.Add(-privacyClipGuard), clip.to.Add(privacyClipGuard), coverageKeep},
+			{"end short by 1 ns", base.Add(-privacyClipGuard), clip.to.Add(privacyClipGuard - 1), coverageDefer},
+			{"start late by 1 ns", base.Add(-privacyClipGuard + 1), clip.to.Add(privacyClipGuard), coverageDefer},
+			{"end 400 ms past the clip", base.Add(-time.Minute), clip.to.Add(400 * time.Millisecond), coverageDefer},
+			{"end 600 ms past the clip", base.Add(-time.Minute), clip.to.Add(600 * time.Millisecond), coverageKeep},
 		} {
-			p := &Processor{privacyCoverage: map[coverageKey][]vadSpan{
+			p := &Processor{privacyCoverage: map[coverageKey][]audioSpan{
 				{e2eSource, "m", metrics.TriggerVAD}: {{from: tc.from, to: tc.to}},
 			}}
 			p.vadGate = newTestGate(nil, &fakeSession{}, nil)
 			p.vadGate.snapshot.Store(&vadConfigSnapshot{})
-			assert.Equal(t, tc.want, p.privacyCoverageVerdict(settings, item, now), tc.name)
+			assert.Equal(t, tc.want, p.checkPrivacy(settings, item, now).verdict, tc.name)
 		}
 	})
 }
@@ -409,12 +427,12 @@ func TestClipSpan_MatchesExporter(t *testing.T) {
 			p := &Processor{Settings: settings}
 			item := &PendingDetection{FirstDetected: base, LastUpdated: base.Add(tt.updated), ExtendedCapture: tt.extended}
 
-			begin, end := clipSpan(settings, item)
+			clip := clipSpan(settings, item)
 			p.normalizeDetectionTimes(item)
 			win, _ := settings.DetectionCaptureWindow(item.Detection.Result.BeginTime, item.Detection.Result.EndTime)
 
-			assert.True(t, begin.Equal(item.Detection.Result.BeginTime))
-			assert.True(t, end.Equal(item.Detection.Result.BeginTime.Add(time.Duration(win.Length)*time.Second)))
+			assert.True(t, clip.from.Equal(item.Detection.Result.BeginTime))
+			assert.True(t, clip.to.Equal(item.Detection.Result.BeginTime.Add(time.Duration(win.Length)*time.Second)))
 			if tt.capBuf > 0 {
 				assert.True(t, win.Capped, "the capped case must actually be capped")
 			}
@@ -422,19 +440,54 @@ func TestClipSpan_MatchesExporter(t *testing.T) {
 	}
 }
 
-// TestPrivacy_HitWrittenAfterCoverageReadIsStillSeen: a chunk can write its speech
-// hit and publish the coverage that completes a pending clip between the
-// flusher's coverage read and its hit read. The flusher must read the hit after
-// the coverage, so the late hit still discards the detection.
-func TestPrivacy_HitWrittenAfterCoverageReadIsStillSeen(t *testing.T) {
-	r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
-	r.feed(r.clip, sec(52), sec(1))
-	r.pend(40 * time.Second)
-	hitAt := r.at(40 * time.Second)
-	r.p.afterCoverageRead = func() {
-		r.p.recordHumanDetection(e2eSource, hitAt, metrics.TriggerVAD)
+// TestPrivacy_CheckPrivacyReadsHitAndCoverageAtomically: a chunk writes its
+// speech hit and then publishes the coverage that includes it. A check that sees
+// coverage reaching the end of a clip must therefore see the hit of that same
+// chunk; reading the hit and the coverage in separate critical sections lets a
+// chunk land in between and approve a clip that holds its speech.
+func TestPrivacy_CheckPrivacyReadsHitAndCoverageAtomically(t *testing.T) {
+	t.Parallel()
+	const iterations = 100000
+	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
+	at := func(i int64) time.Time { return base.Add(time.Duration(i) * time.Second) }
+	settings := e2eSettings()
+	settings.Realtime.PrivacyFilter.VAD.Enabled = false // label coverage is the required detector
+	key := coverageKey{e2eSource, "m", metrics.TriggerLabel}
+	p := &Processor{LastHumanDetection: map[string]HumanDetection{}}
+
+	write := func(i int64) {
+		p.recordHumanDetection(e2eSource, at(i), metrics.TriggerLabel)
+		p.publishCoverage(coverageUpdate{key, audioSpan{from: base.Add(-time.Hour), to: at(i)}})
 	}
-	assert.Equal(t, "discarded", r.outcome())
+	write(0)
+
+	var done atomic.Int64 // chunks fully written (hit and coverage)
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		for i := int64(1); i <= iterations; i++ {
+			write(i)
+			done.Store(i)
+		}
+	}()
+
+	for {
+		select {
+		case <-finished:
+			return
+		default:
+		}
+		next := done.Load() + 1
+		// A clip that coverage reaches exactly when chunk next is published.
+		item := &PendingDetection{Source: e2eSource}
+		item.FirstDetected = at(next).Add(-privacyClipGuard - e2eExportLength*time.Second)
+		check := p.checkPrivacy(settings, item, at(next))
+		if check.verdict == coverageKeep {
+			require.True(t, check.hasHit)
+			require.False(t, check.hit.Time.Before(at(next)),
+				"coverage through chunk %d was seen with only the hit of an earlier chunk", next)
+		}
+	}
 }
 
 // TestPrivacy_BatChunksPublishNoLabelCoverage: an ultrasonic bat chunk is no
@@ -449,45 +502,4 @@ func TestPrivacy_BatChunksPublishNoLabelCoverage(t *testing.T) {
 
 	r.pend(40 * time.Second)
 	assert.Equal(t, "approved", r.outcome())
-}
-
-// TestPrivacy_GuardMagnitude pins the guard to its documented range with literal
-// offsets: hits and coverage 400 ms inside the guard count, 600 ms outside do not.
-func TestPrivacy_GuardMagnitude(t *testing.T) {
-	t.Parallel()
-	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
-	settings := vadSettings(true, 0.35)
-	settings.Realtime.Audio.Export.Length = e2eExportLength
-	settings.Realtime.Audio.Export.PreCapture = e2ePreCapture
-	item := &PendingDetection{Source: e2eSource, FirstDetected: base, Count: 5}
-	_, end := clipSpan(settings, item)
-
-	for _, tc := range []struct {
-		name string
-		hit  time.Time
-		want bool
-	}{
-		{"hit 400 ms before the clip begin discards", base.Add(-400 * time.Millisecond), true},
-		{"hit 600 ms before the clip begin is kept", base.Add(-600 * time.Millisecond), false},
-	} {
-		p := &Processor{LastHumanDetection: map[string]HumanDetection{e2eSource: {Time: tc.hit}}}
-		got, _ := p.shouldDiscardDetection(item, settings, 1)
-		assert.Equal(t, tc.want, got, tc.name)
-	}
-
-	for _, tc := range []struct {
-		name string
-		to   time.Time
-		want coverageVerdict
-	}{
-		{"coverage 400 ms past the clip end defers", end.Add(400 * time.Millisecond), coverageDefer},
-		{"coverage 600 ms past the clip end keeps", end.Add(600 * time.Millisecond), coverageKeep},
-	} {
-		p := &Processor{privacyCoverage: map[coverageKey][]vadSpan{
-			{e2eSource, "m", metrics.TriggerVAD}: {{from: base.Add(-time.Minute), to: tc.to}},
-		}}
-		p.vadGate = newTestGate(nil, &fakeSession{}, nil)
-		p.vadGate.snapshot.Store(&vadConfigSnapshot{})
-		assert.Equal(t, tc.want, p.privacyCoverageVerdict(settings, item, end.Add(time.Second)), tc.name)
-	}
 }

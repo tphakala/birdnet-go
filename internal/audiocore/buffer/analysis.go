@@ -53,15 +53,34 @@ type AnalysisBuffer struct {
 	// lastWriteAt is the time of the latest Write call, accepted or not;
 	// guarded by mu. Zero until the first Write and after Reset.
 	lastWriteAt time.Time
-	// resets counts Reset calls, guarded by mu; each drops unread audio and the
-	// overlap carry, which is a discontinuity LostAtLastRead reports.
-	resets int64
-	// lostAtLastRead is lostBytes plus resets as of the latest successful Read,
-	// guarded by mu.
-	lostAtLastRead int64
-	// freshAtLastRead is the number of bytes of the latest window that are new
-	// audio, guarded by mu.
-	freshAtLastRead int
+	// gapPending is true until the first Read after construction or Reset: that
+	// window has a zero-filled overlap head, so it is not contiguous with any
+	// earlier audio. Guarded by mu.
+	gapPending bool
+	// lostAtPrevRead is lostBytes as of the previous successful Read, so a Read
+	// can tell whether audio was discarded since. Guarded by mu.
+	lostAtPrevRead int64
+}
+
+// WindowInfo describes one analysis window as returned by ReadWindow. It is
+// computed under the buffer lock together with the read, so it cannot be skewed
+// by a concurrent Write or Reset.
+type WindowInfo struct {
+	// LastWriteAt is the time of the latest Write when the window was read; zero
+	// before the first Write. The newest unread byte, and so the end of the
+	// audio still queued behind this window, was written then.
+	LastWriteAt time.Time
+	// Backlog is the number of bytes still unread in the ring after this read.
+	// The capture time of the window's last sample is LastWriteAt minus the
+	// duration of Backlog bytes.
+	Backlog int
+	// FreshBytes is how many bytes at the end of the window are new audio: the
+	// step read from the ring, or the whole window when its overlap head is zero
+	// filled. The rest repeats audio an earlier window already carried.
+	FreshBytes int
+	// Gap reports that the window is not contiguous with the previous one: it is
+	// the first after construction or Reset, or audio was discarded in between.
+	Gap bool
 }
 
 // NewAnalysisBuffer creates an AnalysisBuffer with a ring buffer of the given
@@ -74,6 +93,8 @@ type AnalysisBuffer struct {
 // sourced from bufMgr.BytePoolFor(overlapSize+readSize) and must be returned
 // via the release func that Read returns. When bufMgr is nil (test paths),
 // window slices are allocated per Read and the release func is a no-op.
+//
+// The first window read is reported as a gap in its WindowInfo.
 //
 // Returns an error if any dimension is not positive or if sourceID is empty.
 func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log logger.Logger, bufMgr *Manager) (*AnalysisBuffer, error) {
@@ -146,6 +167,7 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 		sourceID:    sourceID,
 		log:         log,
 		windowPool:  windowPool,
+		gapPending:  true,
 	}, nil
 }
 
@@ -154,12 +176,13 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 // byte counters (see Stats) are advanced. A write larger than the ring is
 // refused whole and counted as lost, leaving the buffered audio untouched.
 //
-// Every call, accepted or not, records the time for Backlog.
+// Every call, accepted or not, records the time reported in WindowInfo.
 //
 // Write is safe for concurrent use.
 func (ab *AnalysisBuffer) Write(data []byte) error {
+	now := time.Now()
 	ab.mu.Lock()
-	ab.lastWriteAt = time.Now()
+	ab.lastWriteAt = now
 	ab.writtenBytes += int64(len(data))
 	var err error
 	if len(data) > ab.ring.Capacity() {
@@ -196,18 +219,22 @@ func (ab *AnalysisBuffer) Write(data []byte) error {
 // (nil, noopRelease, nil) is still the "try again later" signal when the ring
 // has not yet accumulated readSize bytes.
 //
-// A successful Read also snapshots the discontinuity marker for LostAtLastRead
-// and the fresh byte count for FreshAtLastRead.
-//
 // Read is safe for concurrent use. The returned release func is bound to a
 // single call chain and must not be invoked from multiple goroutines; in
 // practice callers "defer release()" in the same goroutine as the Read call.
 func (ab *AnalysisBuffer) Read() (window []byte, release func(), err error) {
+	window, _, release, err = ab.ReadWindow()
+	return window, release, err
+}
+
+// ReadWindow is Read plus a WindowInfo describing the window, computed under the
+// same lock as the read. info is the zero value when no window is returned.
+func (ab *AnalysisBuffer) ReadWindow() (window []byte, info WindowInfo, release func(), err error) {
 	ab.mu.Lock()
 	defer ab.mu.Unlock()
 
 	if ab.ring.Length() < ab.readSize {
-		return nil, noopRelease, nil
+		return nil, WindowInfo{}, noopRelease, nil
 	}
 
 	if ab.windowPool != nil {
@@ -233,7 +260,7 @@ func (ab *AnalysisBuffer) Read() (window []byte, release func(), err error) {
 		if ab.windowPool != nil {
 			ab.windowPool.Put(window)
 		}
-		return nil, noopRelease, errors.New(readErr).
+		return nil, WindowInfo{}, noopRelease, errors.New(readErr).
 			Component("audiocore").
 			Category(errors.CategorySystem).
 			Context("operation", "analysis_buffer_read").
@@ -263,8 +290,14 @@ func (ab *AnalysisBuffer) Read() (window []byte, release func(), err error) {
 	}
 
 	ab.windowsRead++
-	ab.lostAtLastRead = ab.lostBytes + ab.resets
-	ab.freshAtLastRead = fresh
+	info = WindowInfo{
+		LastWriteAt: ab.lastWriteAt,
+		Backlog:     ab.ring.Length(),
+		FreshBytes:  fresh,
+		Gap:         ab.gapPending || ab.lostBytes != ab.lostAtPrevRead,
+	}
+	ab.gapPending = false
+	ab.lostAtPrevRead = ab.lostBytes
 
 	pool := ab.windowPool
 	released := false
@@ -275,7 +308,7 @@ func (ab *AnalysisBuffer) Read() (window []byte, release func(), err error) {
 		released = true
 		pool.Put(window)
 	}
-	return window, release, nil
+	return window, info, release, nil
 }
 
 // WindowSize returns the total window size (overlapSize + readSize) in bytes.
@@ -296,50 +329,15 @@ func (ab *AnalysisBuffer) Stats() AnalysisBufferStats {
 	}
 }
 
-// Backlog reports how many bytes sit unread in the ring and when Write was last
-// called. The newest unread byte was written at lastWriteAt, so the capture time
-// of the last byte of a window just returned by Read is lastWriteAt minus the
-// duration of bytes. lastWriteAt is zero before the first Write and after
-// Reset. It is safe for concurrent use.
-func (ab *AnalysisBuffer) Backlog() (bytes int, lastWriteAt time.Time) {
-	ab.mu.Lock()
-	defer ab.mu.Unlock()
-	return ab.ring.Length(), ab.lastWriteAt
-}
-
-// LostAtLastRead returns a cumulative discontinuity marker as of the latest Read
-// that returned a window: the lost-byte count (see AnalysisBufferStats.LostBytes)
-// plus the number of Reset calls. Two consecutive windows with different values
-// had audio discarded between them, or a Reset between them dropped unread audio
-// and the overlap carry. Unlike Stats, the value cannot move after the Read that produced it, so
-// a loss is attributed to the window that follows it. It is safe for concurrent
-// use.
-func (ab *AnalysisBuffer) LostAtLastRead() int64 {
-	ab.mu.Lock()
-	defer ab.mu.Unlock()
-	return ab.lostAtLastRead
-}
-
-// FreshAtLastRead returns how many bytes of the window the latest successful Read
-// returned are new audio: the step read from the ring, or the whole window when
-// its overlap head was zero filled (the first read, or the first after Reset).
-// The rest of the window repeats audio an earlier window already carried. It is
-// safe for concurrent use.
-func (ab *AnalysisBuffer) FreshAtLastRead() int {
-	ab.mu.Lock()
-	defer ab.mu.Unlock()
-	return ab.freshAtLastRead
-}
-
-// Reset clears the ring buffer, the overlap state and the last write time
-// reported by Backlog, and counts as a discontinuity in LostAtLastRead.
+// Reset clears the ring buffer, the overlap state and the last write time, and
+// makes the next window a gap in its WindowInfo.
 // Useful for testing or restarting a source. The cumulative counters reported
 // by Stats are not reset.
 func (ab *AnalysisBuffer) Reset() {
 	ab.mu.Lock()
 	ab.ring.Reset()
 	ab.prevData = nil
-	ab.resets++
+	ab.gapPending = true
 	ab.lastWriteAt = time.Time{}
 	ab.mu.Unlock()
 }

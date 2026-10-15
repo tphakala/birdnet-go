@@ -15,6 +15,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
+// discardNow runs shouldDiscardDetection with the privacy state read at the
+// current time, as one flush tick does.
+func discardNow(p *Processor, item *PendingDetection, settings *conf.Settings, minDetections int) (discard bool, reason string) {
+	priv := p.checkPrivacy(settings, item, time.Now())
+	return p.shouldDiscardDetection(item, settings, minDetections, &priv)
+}
+
 // newPrivacyFilterDetection builds a minimal pending bird detection for a single
 // audio source, back-dated to firstDetected.
 func newPrivacyFilterDetection(source string, firstDetected time.Time) *PendingDetection {
@@ -88,7 +95,7 @@ func TestShouldDiscardDetection_PrivacyFilterBoundary(t *testing.T) {
 			}
 			item := newPrivacyFilterDetection(source, tt.birdTime)
 
-			discard, reason := p.shouldDiscardDetection(item, settings, 1)
+			discard, reason := discardNow(p, item, settings, 1)
 
 			assert.Equal(t, tt.wantDiscard, discard)
 			assert.Equal(t, tt.wantReason, reason)
@@ -137,7 +144,7 @@ func TestShouldDiscardDetection_RecordsTriggerMetric(t *testing.T) {
 			// The hit is stamped at the clip begin (equal timestamps), so it is discarded.
 			item := newPrivacyFilterDetection(source, humanTime)
 
-			discard, reason := p.shouldDiscardDetection(item, settings, 1)
+			discard, reason := discardNow(p, item, settings, 1)
 			require.True(t, discard, "a human voice at/after the bird must discard")
 			assert.Equal(t, "privacy filter", reason)
 

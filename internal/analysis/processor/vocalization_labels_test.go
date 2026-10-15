@@ -67,7 +67,7 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 				LastHumanDetection: make(map[string]HumanDetection),
 				LastDogDetection:   make(map[string]time.Time),
 			}
-			item := classifier.Results{StartTime: start, AudioEndAt: audioEnd}
+			item := classifier.Results{StartTime: start, Audio: classifier.AudioTiming{EndAt: audioEnd}}
 			item.Source.ID = source
 			result := datastore.Results{Species: tt.species, Confidence: tt.confidence}
 

@@ -254,25 +254,17 @@ type ProcessRequest struct {
 	AudioCapturedAt time.Time // capture timestamp used for detection alignment
 	Source          string    // audio source ID
 	ModelID         string    // registry model ID to run inference with
-	// AudioEndAt is the capture time of the last sample in Data, corrected for the
-	// analysis backlog. Zero when unknown (the consumer then falls back to
-	// AudioCapturedAt).
-	AudioEndAt time.Time
-	// AudioGap is true when audio before this window was lost or not analyzed
-	// (first window of a buffer, overwrite-mode loss, a buffer Reset, skipped windows).
-	AudioGap bool
-	// AudioFreshBytes is how many bytes at the end of Data are new audio, not
-	// repeated from the previous window (see AnalysisBuffer.FreshAtLastRead). Zero
-	// when unknown.
-	AudioFreshBytes int
+	// Audio is the window's place on the audio timeline (backlog-corrected end,
+	// gap flag, fresh byte count), passed through to the queued
+	// classifier.Results. The zero value means unknown.
+	Audio classifier.AudioTiming
 }
 
 // ProcessData processes the given audio data to detect bird species, logs the
 // detected species and optionally saves the audio clip if a bird species is
 // detected above the configured threshold.
 //
-// req.AudioEndAt, req.AudioGap and req.AudioFreshBytes are passed through unchanged to the queued
-// classifier.Results.
+// req.Audio is passed through unchanged to the queued classifier.Results.
 //
 // ctx is propagated to the model inference call for cancellation and deadlines.
 // bufMgr is the audiocore buffer manager owning the Float32Pool that the
@@ -444,9 +436,7 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 		Results:         results,
 		Source:          audioSource,
 		ModelID:         modelID,
-		AudioEndAt:      req.AudioEndAt,
-		AudioGap:        req.AudioGap,
-		AudioFreshBytes: req.AudioFreshBytes,
+		Audio:           req.Audio,
 	}
 
 	// Send the results to the queue. PCMdata is the independently owned copy

@@ -7,11 +7,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestResults_CopyKeepsAudioTiming(t *testing.T) {
+func TestResults_CopyKeepsAudioTimingAndDeepCopiesPCM(t *testing.T) {
 	t.Parallel()
 	end := time.Now()
-	got := Results{AudioEndAt: end, AudioGap: true, AudioFreshBytes: 7, PCMdata: []byte{1}}.Copy()
-	assert.True(t, got.AudioEndAt.Equal(end))
-	assert.True(t, got.AudioGap)
-	assert.Equal(t, 7, got.AudioFreshBytes)
+	src := Results{Audio: AudioTiming{EndAt: end, Gap: true, FreshBytes: 7}, PCMdata: []byte{1}, ModelID: "m"}
+	got := src.Copy()
+	assert.True(t, got.Audio.EndAt.Equal(end))
+	assert.True(t, got.Audio.Gap)
+	assert.Equal(t, 7, got.Audio.FreshBytes)
+	assert.Equal(t, "m", got.ModelID)
+
+	got.PCMdata[0] = 9
+	assert.Equal(t, []byte{1}, src.PCMdata, "PCM must be deep copied")
 }

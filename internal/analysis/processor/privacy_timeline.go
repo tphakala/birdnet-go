@@ -55,24 +55,62 @@ const (
 	coverageTimedOut
 )
 
-// itemAudioEnd returns the capture time of the last sample of the chunk in item:
-// item.AudioEndAt when the producer set it, else item.AudioCapturedAt, else
-// StartTime advanced by PreCapture and the chunk's PCM duration (StartTime is
-// back-dated by PreCapture plus the clip length at read time, so this
-// reconstructs the read time; only tests and hypothetical producers that set
-// none of the audio times reach it).
-func itemAudioEnd(settings *conf.Settings, item *classifier.Results) time.Time {
-	if !item.AudioEndAt.IsZero() {
-		return item.AudioEndAt
+// audioSpan is a stretch of audio time, [from, to].
+type audioSpan struct {
+	from, to time.Time
+}
+
+// chunkAudio is the per-chunk data the VAD gate and the coverage publisher both
+// need, built once per processed chunk.
+type chunkAudio struct {
+	key        vadStreamKey
+	pcm        []byte
+	sampleRate int
+	// span is the audio the chunk's window covers on the capture timeline, ending
+	// at item.Audio.EndAt (set by the producer, backlog corrected).
+	span audioSpan
+	// gap and freshBytes come from the producer (classifier.AudioTiming).
+	gap        bool
+	freshBytes int
+}
+
+// speechBandSpec reports whether a model's audio can carry speech: the ultrasonic
+// bat model is analyzed on raw audio at its own rate and is not.
+func speechBandSpec(spec classifier.ModelSpec) bool {
+	return spec.RawSampleRate == 0 && spec.EffectiveSampleRate() > 0
+}
+
+// newChunkAudio builds the per-chunk data for item. ok is false when the chunk
+// cannot carry speech the privacy detectors could hear: no PCM, an unknown model
+// or an ultrasonic one.
+func newChunkAudio(item *classifier.Results) (chunk chunkAudio, ok bool) {
+	if len(item.PCMdata) == 0 {
+		return chunkAudio{}, false
 	}
-	if !item.AudioCapturedAt.IsZero() {
-		return item.AudioCapturedAt
+	spec, found := classifier.GetModelSpec(item.ModelID)
+	if !found || !speechBandSpec(spec) {
+		return chunkAudio{}, false
 	}
-	end := item.StartTime.Add(time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second)
-	if spec, ok := classifier.GetModelSpec(item.ModelID); ok {
-		end = end.Add(pcmChunkDuration(len(item.PCMdata), spec.EffectiveSampleRate()))
+	rate := spec.EffectiveSampleRate()
+	end := item.Audio.EndAt
+	return chunkAudio{
+		key:        vadStreamKey{source: item.Source.ID, model: item.ModelID},
+		pcm:        item.PCMdata,
+		sampleRate: rate,
+		span:       audioSpan{from: end.Add(-pcmChunkDuration(len(item.PCMdata), rate)), to: end},
+		gap:        item.Audio.Gap,
+		freshBytes: item.Audio.FreshBytes,
+	}, true
+}
+
+// scoredFrom is where the chunk's genuinely captured audio begins. A window after
+// a gap (the first of a buffer, or after lost audio) has a zero-filled or spliced
+// head that must not be claimed as scanned, so it claims nothing before its end.
+func (c *chunkAudio) scoredFrom() time.Time {
+	if c.gap {
+		return c.span.to
 	}
-	return end
+	return c.span.from
 }
 
 // recordHumanDetection records a speech hit on source at the capture time of the
@@ -91,40 +129,51 @@ func (p *Processor) recordHumanDetection(source string, at time.Time, trigger st
 }
 
 // clipSpan returns the exact audio span the exporter saves for a pending
-// detection: from FirstDetected for the capture length that
+// detection: from FirstDetected until the ReadyAt of the capture window that
 // conf.Settings.DetectionCaptureWindow derives from the detection's end time.
-// normalizeDetectionTimes and buildSaveAudioAction use the same inputs, so the
-// span cannot drift from the saved clip.
-func clipSpan(settings *conf.Settings, item *PendingDetection) (begin, end time.Time) {
-	begin = item.FirstDetected
-	win, _ := settings.DetectionCaptureWindow(begin, detectionEndTime(settings, item))
-	return begin, begin.Add(time.Duration(win.Length) * time.Second)
+// buildSaveAudioAction derives its capture length from the same method.
+func clipSpan(settings *conf.Settings, item *PendingDetection) audioSpan {
+	win, _ := settings.DetectionCaptureWindow(item.FirstDetected, detectionEndTime(settings, item))
+	return audioSpan{from: item.FirstDetected, to: win.ReadyAt}
 }
 
 // detectionEndTime is the EndTime normalizeDetectionTimes assigns to an approved
 // detection: LastUpdated for an extended capture, else FirstDetected, plus the
-// normal detection window (export length minus pre-capture, never negative).
+// normal detection window. clipSpan and normalizeDetectionTimes both use it, so
+// the span the privacy gate waits for cannot drift from the saved clip.
 func detectionEndTime(settings *conf.Settings, item *PendingDetection) time.Time {
-	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
-	window := max(time.Duration(0), captureLength-preCaptureLength)
+	window := normalDetectionWindow(settings)
 	if item.ExtendedCapture {
 		return item.LastUpdated.Add(window)
 	}
 	return item.FirstDetected.Add(window)
 }
 
-// publishCoverage records that detector scored the audio span for key. A span
-// that starts within vadCoverageJoinTolerance of the newest recorded span's end
-// extends it (keeping the older start); a later one starts a new span. Spans
-// older than privacyCoverageHorizon before the newest end are dropped. It takes
-// detectionMutex.
-func (p *Processor) publishCoverage(key coverageKey, span vadSpan) {
+// coverageUpdate is one span published for a coverage key.
+type coverageUpdate struct {
+	key  coverageKey
+	span audioSpan
+}
+
+// publishCoverage records the scanned spans in updates under one detectionMutex
+// hold. A span that starts within vadCoverageJoinTolerance of its key's newest
+// recorded span's end extends it (keeping the older start); a later one starts a
+// new span. Spans older than privacyCoverageHorizon before the newest end are
+// dropped.
+func (p *Processor) publishCoverage(updates ...coverageUpdate) {
 	p.detectionMutex.Lock()
 	defer p.detectionMutex.Unlock()
 	if p.privacyCoverage == nil {
-		p.privacyCoverage = make(map[coverageKey][]vadSpan)
+		p.privacyCoverage = make(map[coverageKey][]audioSpan)
 	}
+	for _, u := range updates {
+		p.mergeCoverageLocked(u.key, u.span)
+	}
+}
+
+// mergeCoverageLocked is the per-key body of publishCoverage; the caller must
+// hold detectionMutex and have created the map.
+func (p *Processor) mergeCoverageLocked(key coverageKey, span audioSpan) {
 	spans := p.privacyCoverage[key]
 	if n := len(spans); n > 0 && span.from.Compare(spans[n-1].to.Add(vadCoverageJoinTolerance)) <= 0 {
 		if span.to.After(spans[n-1].to) {
@@ -152,34 +201,24 @@ func (p *Processor) publishCoverage(key coverageKey, span vadSpan) {
 	p.privacyCoverage[key] = kept
 }
 
-// publishPrivacyCoverage publishes the coverage a processed chunk earned. Call it
-// after the chunk's VAD hit and label hits are written, so a published span never
-// claims audio whose hits are still outstanding. vadSpan is the span runVADGate
-// returned when it ran an inference. When the privacy filter is on, the label
-// model's own chunk counts as label coverage (a bat chunk does not: the label
-// path cannot hear speech in ultrasonic audio).
-func (p *Processor) publishPrivacyCoverage(settings *conf.Settings, item *classifier.Results, vad vadSpan, vadRan bool) {
+// publishPrivacyCoverage publishes the coverage a processed chunk earned, in one
+// step. Call it after the chunk's VAD hit and label hits are written, so a
+// published span never claims audio whose hits are still outstanding. vad is the
+// span runVADGate returned when it ran an inference (vadRan). When the privacy
+// filter is on, the label model's own chunk counts as label coverage.
+func (p *Processor) publishPrivacyCoverage(settings *conf.Settings, chunk *chunkAudio, vad audioSpan, vadRan bool) {
 	if !settings.Realtime.PrivacyFilter.Enabled {
 		return
 	}
+	updates := make([]coverageUpdate, 0, 2)
 	if vadRan {
-		p.publishCoverage(coverageKey{item.Source.ID, item.ModelID, metrics.TriggerVAD}, vad)
+		updates = append(updates, coverageUpdate{coverageKey{chunk.key.source, chunk.key.model, metrics.TriggerVAD}, vad})
 	}
-	if item.ModelID == classifier.RegistryIDBat || len(item.PCMdata) == 0 {
-		return
-	}
-	spec, ok := classifier.GetModelSpec(item.ModelID)
-	if !ok || spec.EffectiveSampleRate() <= 0 {
-		return
-	}
-	end := itemAudioEnd(settings, item)
-	from := end.Add(-pcmChunkDuration(len(item.PCMdata), spec.EffectiveSampleRate()))
-	if item.AudioGap {
-		// The first window of a buffer has a zero-filled overlap head and a window
-		// after lost audio is spliced; neither head is real audio.
-		from = end
-	}
-	p.publishCoverage(coverageKey{item.Source.ID, item.ModelID, metrics.TriggerLabel}, vadSpan{from: from, to: end})
+	updates = append(updates, coverageUpdate{
+		coverageKey{chunk.key.source, chunk.key.model, metrics.TriggerLabel},
+		audioSpan{from: chunk.scoredFrom(), to: chunk.span.to},
+	})
+	p.publishCoverage(updates...)
 }
 
 // requiredDetectorLocked returns the detector whose coverage the gate waits for
@@ -213,37 +252,57 @@ func (p *Processor) hasRecentCoverageLocked(source, detector string, now time.Ti
 	return false
 }
 
-// privacyCoverageVerdict decides whether a pending detection whose deadline has
-// passed may proceed. It defers until a speech detector has scored the whole
-// saved clip span (padded by privacyClipGuard), so speech in the clip's
-// post-capture tail is not scored after the decision. It keeps the detection
-// when the privacy filter is off or no detector has recently scored the source
-// (a bat-only source, or a VAD that never loaded and no label model running),
-// and reports coverageTimedOut once now passes the clip end by
+// privacyCheck is one consistent read of the privacy state for a pending
+// detection: its saved clip span, the source's latest speech hit and the
+// coverage gate's verdict. The hit and the coverage are read in one
+// detectionMutex hold; a chunk writes its hit before it publishes the coverage
+// that includes it, so any coverage the check sees has its hits visible in it.
+type privacyCheck struct {
+	clip    audioSpan
+	hit     HumanDetection
+	hasHit  bool
+	verdict coverageVerdict
+}
+
+// checkPrivacy takes the privacyCheck for a pending detection at now. With the
+// privacy filter off it reads nothing and the verdict is coverageKeep.
+//
+// The verdict defers until a speech detector has scored the whole saved clip span
+// (padded by privacyClipGuard), so speech in the clip's post-capture tail is not
+// scored after the decision. It keeps the detection when no detector has recently
+// scored the source (a bat-only source, or a VAD that never loaded and no label
+// model running), and reports coverageTimedOut once now passes the clip end by
 // privacyCoverageMaxWait.
-func (p *Processor) privacyCoverageVerdict(settings *conf.Settings, item *PendingDetection, now time.Time) coverageVerdict {
+func (p *Processor) checkPrivacy(settings *conf.Settings, item *PendingDetection, now time.Time) privacyCheck {
+	clip := clipSpan(settings, item)
 	if !settings.Realtime.PrivacyFilter.Enabled {
-		return coverageKeep
+		return privacyCheck{clip: clip, verdict: coverageKeep}
 	}
-	begin, end := clipSpan(settings, item)
 
 	p.detectionMutex.RLock()
 	defer p.detectionMutex.RUnlock()
-	detector := p.requiredDetectorLocked(settings, item.Source, now)
-	if !p.hasRecentCoverageLocked(item.Source, detector, now) {
+	hit, hasHit := p.LastHumanDetection[item.Source]
+	return privacyCheck{clip: clip, hit: hit, hasHit: hasHit, verdict: p.coverageVerdictLocked(settings, item.Source, clip, now)}
+}
+
+// coverageVerdictLocked is the coverage half of checkPrivacy; the caller must
+// hold detectionMutex.
+func (p *Processor) coverageVerdictLocked(settings *conf.Settings, source string, clip audioSpan, now time.Time) coverageVerdict {
+	detector := p.requiredDetectorLocked(settings, source, now)
+	if !p.hasRecentCoverageLocked(source, detector, now) {
 		return coverageKeep
 	}
 	for key, spans := range p.privacyCoverage {
-		if key.source != item.Source || key.detector != detector {
+		if key.source != source || key.detector != detector {
 			continue
 		}
 		for _, s := range spans {
-			if !s.from.After(begin.Add(-privacyClipGuard)) && !s.to.Before(end.Add(privacyClipGuard)) {
+			if !s.from.After(clip.from.Add(-privacyClipGuard)) && !s.to.Before(clip.to.Add(privacyClipGuard)) {
 				return coverageKeep
 			}
 		}
 	}
-	if now.Before(end.Add(privacyCoverageMaxWait)) {
+	if now.Before(clip.to.Add(privacyCoverageMaxWait)) {
 		return coverageDefer
 	}
 	return coverageTimedOut

@@ -215,9 +215,7 @@ func (p *Processor) LearnFromApprovedDetection(speciesLowercase, scientificName 
 
 	// Calculate learning cooldown based on detection window duration
 	// This prevents multiple threshold learnings within a single detection event
-	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
-	learningCooldown := captureLength - preCaptureLength
+	learningCooldown := normalDetectionWindow(settings)
 	const minCooldown = 5 * time.Second
 	if learningCooldown < minCooldown {
 		learningCooldown = minCooldown

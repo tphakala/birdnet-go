@@ -66,43 +66,32 @@ type monitorTickState struct {
 	// analysis buffer (see keepUpState).
 	keepUp keepUpState
 
-	// prevBuf and prevLost identify the buffer instance and its lost-byte count
-	// at the previous window read; skippedSinceProcess records that a window was
-	// read but not analyzed. They feed windowTiming's gap flag.
-	prevBuf             *buffer.AnalysisBuffer
-	prevLost            int64
-	skippedSinceProcess bool
+	// lastWindowAnalyzed records that the previous window read was handed to
+	// ProcessData and processed without error; false until then, so a window read
+	// but skipped or failed (and the first window) makes the next one report a gap.
+	lastWindowAnalyzed bool
 }
 
-// windowTiming returns the capture time of the last sample of the window ab
-// just returned from Read, and whether audio before this window was lost or not
-// analyzed. Call it once per window read, right after Read.
+// windowAudio places the window just read on its source's audio timeline. Call it
+// once per window read, right after ReadWindow.
 //
 // The analysis ring is FIFO, so a lagging monitor reads old audio: the newest
-// unread byte was written at lastWriteAt, and the window ends the unread
-// backlog earlier. A write between Read and Backlog shifts the result by that
-// write's arrival jitter: later when the write arrives after a stall, so the
-// error is bounded by the stall and absorbed by the privacy clip guard.
+// unread byte was written at info.LastWriteAt, and the window ends the unread
+// backlog earlier. That write is read under the same lock as the window, so it
+// is the latest write at the moment of the read.
 //
-// gap is true for the first window of a buffer instance (its overlap head is
-// zero filled), after overwrite-mode loss or an AnalysisBuffer.Reset, and after
-// a window that was read but skipped (see markWindowSkipped). The skip latch is consumed here.
-func (s *monitorTickState) windowTiming(ab *buffer.AnalysisBuffer, bytesPerSecond int) (audioEnd time.Time, gap bool) {
-	backlogBytes, lastWriteAt := ab.Backlog()
-	lost := ab.LostAtLastRead()
-	gap = ab != s.prevBuf || lost != s.prevLost || s.skippedSinceProcess
-	s.prevBuf, s.prevLost, s.skippedSinceProcess = ab, lost, false
-	if bytesPerSecond <= 0 {
-		return lastWriteAt, gap
+// Gap is the buffer's own gap flag (first window of a buffer, overwrite-mode
+// loss, a Reset) or a previous window that was read but not analyzed. The
+// analyzed latch is cleared here and set again once ProcessData succeeds.
+func (s *monitorTickState) windowAudio(info buffer.WindowInfo, bytesPerSecond int) classifier.AudioTiming {
+	gap := info.Gap || !s.lastWindowAnalyzed
+	s.lastWindowAnalyzed = false
+	endAt := info.LastWriteAt
+	if bytesPerSecond > 0 {
+		endAt = endAt.Add(-time.Duration(info.Backlog) * time.Second / time.Duration(bytesPerSecond))
 	}
-	backlog := time.Duration(backlogBytes) * time.Second / time.Duration(bytesPerSecond)
-	return lastWriteAt.Add(-backlog), gap
+	return classifier.AudioTiming{EndAt: endAt, Gap: gap, FreshBytes: info.FreshBytes}
 }
-
-// markWindowSkipped records that the window just timed was read but not
-// analyzed (model not loaded, inactive, or ProcessData failed), so the next
-// window reports a gap.
-func (s *monitorTickState) markWindowSkipped() { s.skippedSinceProcess = true }
 
 // classifierBackend is the analysis package's view of *classifier.Orchestrator:
 // the exact set of methods BufferManager and ProcessData call on it. Declaring
@@ -538,11 +527,10 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monit
 // caller can toggle its "once seen, log on later loss" log-level preference and hold
 // the model-not-loaded warn-once latch and the not-found grace counter.
 //
-// Each full window is stamped with its backlog-corrected audio end and a gap
-// flag (see monitorTickState.windowTiming), plus the exact count of fresh bytes
-// it carries (AnalysisBuffer.FreshAtLastRead), that ProcessData passes on to the
-// results consumer; a window read but not analyzed makes the next one report a
-// gap.
+// Each full window is stamped with its backlog-corrected audio end, a gap flag
+// and the exact count of fresh bytes it carries (see monitorTickState.windowAudio
+// and buffer.WindowInfo), which ProcessData passes on to the results consumer; a
+// window read but not analyzed makes the next one report a gap.
 //
 // The window's backing slice is always returned to its pool via a
 // "defer release()" immediately after Read, so every exit path including the
@@ -596,7 +584,7 @@ func (m *BufferManager) processMonitorTick(
 	// window ticks, so lost audio is seen whatever the tick does afterwards.
 	m.observeKeepUp(cfg, ab, &state.keepUp, time.Now())
 
-	data, release, readErr := ab.Read()
+	data, info, release, readErr := ab.ReadWindow()
 	defer release()
 	if readErr != nil {
 		m.logger.Error("buffer read error",
@@ -612,6 +600,10 @@ func (m *BufferManager) processMonitorTick(
 	}
 
 	if len(data) != analysisWindowBytes {
+		if len(data) > 0 {
+			// A window was consumed but cannot be analyzed.
+			state.lastWindowAnalyzed = false
+		}
 		if tickCount%bufferMonitorDebugEveryTicks == 0 {
 			m.logger.Debug("buffer monitor polling",
 				logger.String("source_id", cfg.sourceID),
@@ -622,7 +614,7 @@ func (m *BufferManager) processMonitorTick(
 		return true
 	}
 
-	audioEndAt, audioGap := state.windowTiming(ab,
+	audio := state.windowAudio(info,
 		cfg.spec.EffectiveSampleRate()*conf.BytesPerSample*conf.NumChannels)
 
 	// Skip inference when the model is not loaded in the orchestrator. A monitor
@@ -637,7 +629,6 @@ func (m *BufferManager) processMonitorTick(
 	// switch that re-registers the same registry ID resumes inference immediately,
 	// while UpdateMonitors still removes it if the model is gone for good.
 	if !m.bn.IsModelLoaded(cfg.modelID) {
-		state.markWindowSkipped()
 		switch {
 		case !state.notLoadedWarned:
 			m.logger.Warn("model not loaded, skipping inference window (a model reconfigure or reinstall may be in progress)",
@@ -664,7 +655,6 @@ func (m *BufferManager) processMonitorTick(
 	// during daytime when nighttime-only scheduling is enabled). The buffered
 	// audio data is released by the existing defer release().
 	if !m.bn.IsModelActive(cfg.modelID) {
-		state.markWindowSkipped()
 		return true
 	}
 
@@ -683,15 +673,14 @@ func (m *BufferManager) processMonitorTick(
 		AudioCapturedAt: audioCapturedAt,
 		Source:          cfg.sourceID,
 		ModelID:         cfg.modelID,
-		AudioEndAt:      audioEndAt,
-		AudioGap:        audioGap,
-		AudioFreshBytes: ab.FreshAtLastRead(),
+		Audio:           audio,
 	}); processErr != nil {
-		state.markWindowSkipped()
 		m.logger.Error("error processing data",
 			logger.String("source_id", cfg.sourceID),
 			logger.String("model_id", cfg.modelID),
 			logger.Error(processErr))
+	} else {
+		state.lastWindowAnalyzed = true
 	}
 	return true
 }

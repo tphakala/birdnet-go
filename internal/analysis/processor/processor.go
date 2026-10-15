@@ -74,7 +74,7 @@ type Processor struct {
 	syncMutex              sync.Mutex                // Mutex to protect sync operations
 	syncInProgress         atomic.Bool               // Flag to prevent overlapping syncs
 	LastDogDetection       map[string]time.Time      // keep track of dog barks per audio source
-	LastHumanDetection     map[string]HumanDetection // latest speech hit per audio source: capture time of the end of the newest audio that produced it, and its trigger
+	LastHumanDetection     map[string]HumanDetection // latest speech hit per audio source, see HumanDetection
 	Metrics                *observability.Metrics
 	DynamicThresholds      map[string]*DynamicThreshold
 	thresholdsMutex        sync.RWMutex        // Mutex to protect access to DynamicThresholds
@@ -88,20 +88,17 @@ type Processor struct {
 	// privacyCoverage lists the audio spans each (source, model, detector) has
 	// scored for speech, guarded by detectionMutex. The privacy coverage gate
 	// defers a pending detection until its saved clip span is inside one of them.
-	privacyCoverage map[coverageKey][]vadSpan
-	// afterCoverageRead is a test seam called by flushPendingDetections right after
-	// it reads a pending detection's privacy coverage; nil in production.
-	afterCoverageRead func()
-	controlChan       chan string
-	JobQueue          *jobqueue.JobQueue // Queue for managing job retries
-	workerCancel      context.CancelFunc // Function to cancel worker goroutines
-	thresholdsCtx     context.Context    // Context for threshold persistence/cleanup goroutines
-	thresholdsCancel  context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
-	flusherCtx        context.Context    // Context for pending detections flusher goroutine
-	flusherCancel     context.CancelFunc // Function to cancel flusher goroutine
-	preRenderer       PreRendererSubmit  // Spectrogram pre-renderer for background generation
-	preRendererOnce   sync.Once          // Ensures pre-renderer is initialized only once
-	startOnce         sync.Once          // Ensures Start() is called only once
+	privacyCoverage  map[coverageKey][]audioSpan
+	controlChan      chan string
+	JobQueue         *jobqueue.JobQueue // Queue for managing job retries
+	workerCancel     context.CancelFunc // Function to cancel worker goroutines
+	thresholdsCtx    context.Context    // Context for threshold persistence/cleanup goroutines
+	thresholdsCancel context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
+	flusherCtx       context.Context    // Context for pending detections flusher goroutine
+	flusherCancel    context.CancelFunc // Function to cancel flusher goroutine
+	preRenderer      PreRendererSubmit  // Spectrogram pre-renderer for background generation
+	preRendererOnce  sync.Once          // Ensures pre-renderer is initialized only once
+	startOnce        sync.Once          // Ensures Start() is called only once
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
@@ -219,6 +216,14 @@ type Processor struct {
 // processing cycle without restarting the service.
 func (p *Processor) currentSettings() *conf.Settings {
 	return conf.CurrentOrFallback(p.Settings)
+}
+
+// normalDetectionWindow is how long a detection's clip runs past its first
+// detection chunk: the export length minus the pre-capture, never negative.
+func normalDetectionWindow(settings *conf.Settings) time.Duration {
+	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
+	return max(time.Duration(0), captureLength-preCaptureLength)
 }
 
 type Detections struct {
@@ -533,17 +538,15 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 	p.pipelineStats = NewPipelineStats(p.getDisplayNameForSource)
 
 	// Validate detection window configuration
-	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
-	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+	detectionWindow := normalDetectionWindow(settings)
 
 	// Warn if detection window is very short (may affect overlap-based filtering)
 	minRecommendedWindow := 3 * time.Second
 	if detectionWindow < minRecommendedWindow {
 		GetLogger().Warn("Detection window very short, may affect accuracy",
 			logger.Float64("window_seconds", detectionWindow.Seconds()),
-			logger.Float64("capture_length_seconds", captureLength.Seconds()),
-			logger.Float64("pre_capture_seconds", preCaptureLength.Seconds()),
+			logger.Int("capture_length_seconds", settings.Realtime.Audio.Export.Length),
+			logger.Int("pre_capture_seconds", settings.Realtime.Audio.Export.PreCapture),
 			logger.Float64("min_recommended_seconds", minRecommendedWindow.Seconds()),
 			logger.String("operation", "config_validation"))
 	}
@@ -705,15 +708,18 @@ func (p *Processor) processDetections(item classifier.Results) {
 	// audio it scored) so the privacy filter discards detections whose saved clip
 	// reaches that audio, regardless of the top-K label truncation. The span it
 	// returns is published as coverage after the label hits are written.
-	vadCoverage, vadRan := p.runVADGate(settings, &item)
+	chunk, hasChunk := newChunkAudio(&item)
+	var vadCoverage audioSpan
+	var vadRan bool
+	if hasChunk {
+		vadCoverage, vadRan = p.runVADGate(settings, &chunk)
+	}
 
 	// Detection window sets wait time before a detection is considered final and is flushed.
 	// This represents the duration to wait from NOW (detection creation time) before flushing,
 	// allowing overlapping analyses to accumulate confirmations for false positive filtering.
-	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
-	// Ensure detectionWindow is non-negative to prevent early flushes
-	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+	// The window is never negative, which would flush early.
+	detectionWindow := normalDetectionWindow(settings)
 
 	// processResults() returns a slice of detections, we iterate through each and process them
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
@@ -723,7 +729,9 @@ func (p *Processor) processDetections(item classifier.Results) {
 	// Publish what this chunk scored only now, after both the VAD hit and the label
 	// hits for it are written, so the coverage gate never sees audio whose hits
 	// are still outstanding.
-	p.publishPrivacyCoverage(settings, &item, vadCoverage, vadRan)
+	if hasChunk {
+		p.publishPrivacyCoverage(settings, &chunk, vadCoverage, vadRan)
+	}
 
 	// Log processing results with deduplication to prevent spam
 	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
@@ -1203,12 +1211,9 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 	clipName := p.resolveClipName(settings, &item, scientificName, result.Confidence)
 
 	// Get capture length and pre-capture length for detection end time calculation
-	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
-
 	// Set begin and end time for note
 	beginTime := item.StartTime
-	endTime := item.StartTime.Add(captureLength - preCaptureLength)
+	endTime := item.StartTime.Add(normalDetectionWindow(settings))
 
 	// Get occurrence probability for this species at detection time
 	occurrence := p.Bn.GetSpeciesOccurrenceAtTime(result.Species, item.StartTime)
@@ -1438,7 +1443,7 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 		// Put the human detection into the LastHumanDetection map, stamped with the
 		// end of the audio this label scored (not the back-dated chunk start). This is
 		// used to discard bird detections whose saved clip reaches that audio.
-		p.recordHumanDetection(item.Source.ID, itemAudioEnd(settings, &item), metrics.TriggerLabel)
+		p.recordHumanDetection(item.Source.ID, item.Audio.EndAt, metrics.TriggerLabel)
 	}
 }
 
@@ -1597,10 +1602,11 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 // shouldDiscardDetection checks if a detection should be discarded based on various criteria.
 // The caller provides a settings snapshot and the precomputed minDetections (from
 // MinDetectionsForModel) to avoid redundant settings fetches and ensure
-// consistency within a single flush cycle. The privacy filter discards a
-// detection when the source's latest speech hit is at or after the saved clip's
-// begin (clipSpan) less privacyClipGuard.
-func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int) (shouldDiscard bool, reason string) {
+// consistency within a single flush cycle. priv is the detection's privacyCheck
+// for that cycle; the privacy filter discards a detection when the source's
+// latest speech hit in it is at or after the saved clip's begin less
+// privacyClipGuard.
+func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int, priv *privacyCheck) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
 		GetLogger().Debug("Detection discarded due to insufficient count",
@@ -1614,17 +1620,14 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 
 	// Check privacy filter
 	if settings.Realtime.PrivacyFilter.Enabled {
-		p.detectionMutex.RLock()
-		lastHumanDetection, exists := p.LastHumanDetection[item.Source]
-		p.detectionMutex.RUnlock()
+		lastHumanDetection, exists := priv.hit, priv.hasHit
 		// Discard when speech was detected at or after the start of the bird's saved
 		// clip. Hit times are the capture time of the end of the audio that produced
 		// the hit, so a hit at or after the clip begin means the clip may contain
 		// that speech (including the pre-capture part, which precedes the detecting
 		// chunk). The comparison is padded by privacyClipGuard and uses !Before (>=)
 		// so a hit stamped exactly at the clip begin still discards.
-		clipBegin, _ := clipSpan(settings, item)
-		if exists && !lastHumanDetection.Time.Before(clipBegin.Add(-privacyClipGuard)) {
+		if exists && !lastHumanDetection.Time.Before(priv.clip.from.Add(-privacyClipGuard)) {
 			// Add structured logging for privacy filter
 			GetLogger().Debug("Detection discarded by privacy filter",
 				logger.String("species", item.Detection.Result.Species.CommonName),
@@ -1702,13 +1705,12 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 // recordUnscannedSave logs and counts a detection approved although a speech
 // detector never scored its whole clip within privacyCoverageMaxWait (the privacy
 // filter fails open rather than losing the detection).
-func (p *Processor) recordUnscannedSave(settings *conf.Settings, item *PendingDetection, speciesName string) {
-	begin, end := clipSpan(settings, item)
+func (p *Processor) recordUnscannedSave(settings *conf.Settings, item *PendingDetection, clip audioSpan, speciesName string) {
 	GetLogger().Info("privacy filter: clip not fully scanned for speech before the wait expired, approving detection",
 		logger.String("species", speciesName),
 		logger.String("source", p.getDisplayNameForSource(item.Source)),
-		logger.Time("clip_begin", begin),
-		logger.Time("clip_end", end),
+		logger.Time("clip_begin", clip.from),
+		logger.Time("clip_end", clip.to),
 		logger.Duration("max_wait", privacyCoverageMaxWait),
 		logger.String("operation", "privacy_filter_coverage"))
 	if settings.Realtime.Telemetry.Enabled && p.Metrics != nil {
@@ -1869,10 +1871,10 @@ func (p *Processor) effectiveBaseOverlap(settings *conf.Settings) time.Duration 
 // flushPendingDetections processes one flush cycle, flushing eligible detections.
 // minDetections is computed per-item using the item's BestModelID so that bat
 // and bird models each apply their own false positive filter configuration.
-// The privacy coverage gate (see privacyCoverageVerdict) is read before the
-// discard checks, which include the speech-hit comparison; a detection that
-// passes the discard checks is approved only when the gate allows it, otherwise
-// it stays pending and is re-checked on the next tick. Returns the count of pending and
+// Each pending detection's privacy state is read once per tick (see
+// privacyCheck): the discard checks compare its speech hit, and a detection that
+// passes them is approved only when the coverage gate allows it, otherwise it
+// stays pending and is re-checked on the next tick. Returns the count of pending and
 // flushed detections for logging.
 func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	now := time.Now()
@@ -1896,17 +1898,12 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 		speciesName := strings.ToLower(item.Detection.Result.Species.CommonName)
 		itemMinDetections := MinDetectionsForModel(settings, item.BestModelID, baseOverlap)
 
-		// Read the privacy coverage BEFORE the discard check reads the speech hit. A
-		// chunk writes its hit and only then publishes the coverage that includes it,
-		// so any coverage seen here has its hits already visible to the discard check
-		// below. The opposite order lets a hit and the coverage completing the clip
-		// both land between the two reads, approving a clip that holds the speech.
-		verdict := p.privacyCoverageVerdict(settings, &item, now)
-		if p.afterCoverageRead != nil {
-			p.afterCoverageRead()
-		}
+		// One consistent read of the clip span, the source's latest speech hit and
+		// the privacy coverage: a chunk writes its hit before it publishes the
+		// coverage that includes it, so coverage seen here never lacks its hits.
+		priv := p.checkPrivacy(settings, &item, now)
 
-		if shouldDiscard, reason := p.shouldDiscardDetection(&item, settings, itemMinDetections); shouldDiscard {
+		if shouldDiscard, reason := p.shouldDiscardDetection(&item, settings, itemMinDetections, &priv); shouldDiscard {
 			// Aggregate daylight-filter discards into the periodic pipeline-stats
 			// summary so a user who sees zero saved detections has an at-a-glance
 			// signal that a filter is eating them. The per-detection log stays at
@@ -1934,13 +1931,13 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 			continue
 		}
 
-		switch verdict {
+		switch priv.verdict {
 		case coverageDefer:
 			// A speech detector has not yet scored the whole saved clip. Leave the
 			// detection pending; the next tick re-runs the discard check and this one.
 			continue
 		case coverageTimedOut:
-			p.recordUnscannedSave(settings, &item, speciesName)
+			p.recordUnscannedSave(settings, &item, priv.clip, speciesName)
 		case coverageKeep:
 		}
 

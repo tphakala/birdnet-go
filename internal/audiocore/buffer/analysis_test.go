@@ -505,10 +505,20 @@ func TestAnalysisBuffer_ResetKeepsCumulativeStats(t *testing.T) {
 	assert.Equal(t, before, ab.Stats())
 }
 
-// TestAnalysisBuffer_BacklogReportsUnreadBytesAndLastWrite pins Backlog: the
-// unread ring bytes after a Read and the time of the latest Write, cleared by
-// Reset.
-func TestAnalysisBuffer_BacklogReportsUnreadBytesAndLastWrite(t *testing.T) {
+// readWindowOnce reads one window and releases it, returning its info.
+func readWindowOnce(t *testing.T, ab *buffer.AnalysisBuffer) buffer.WindowInfo {
+	t.Helper()
+	window, info, release, err := ab.ReadWindow()
+	require.NoError(t, err)
+	require.NotNil(t, window)
+	release()
+	return info
+}
+
+// TestAnalysisBuffer_ReadWindowReportsBacklogAndLastWrite pins WindowInfo: the
+// bytes still unread after the read and the time of the latest Write, which
+// Reset clears.
+func TestAnalysisBuffer_ReadWindowReportsBacklogAndLastWrite(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -518,32 +528,30 @@ func TestAnalysisBuffer_BacklogReportsUnreadBytesAndLastWrite(t *testing.T) {
 	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "backlog-source", newTestLogger(), nil)
 	require.NoError(t, err)
 
-	bytesLeft, lastWriteAt := ab.Backlog()
-	assert.Zero(t, bytesLeft)
-	assert.True(t, lastWriteAt.IsZero(), "no write yet")
+	_, info, release, err := ab.ReadWindow()
+	require.NoError(t, err)
+	release()
+	assert.Equal(t, buffer.WindowInfo{}, info, "no window yet")
 
 	before := time.Now()
 	for range 3 {
 		require.NoError(t, ab.Write(make([]byte, readSize)))
 	}
-	_, release, err := ab.Read()
-	require.NoError(t, err)
-	release()
-
-	bytesLeft, lastWriteAt = ab.Backlog()
-	assert.Equal(t, 2*readSize, bytesLeft, "two of the three chunks are still unread")
-	assert.False(t, lastWriteAt.Before(before), "last write time must be set by Write")
-	assert.False(t, lastWriteAt.After(time.Now()))
+	info = readWindowOnce(t, ab)
+	assert.Equal(t, 2*readSize, info.Backlog, "two of the three chunks are still unread")
+	assert.False(t, info.LastWriteAt.Before(before), "last write time must be set by Write")
+	assert.False(t, info.LastWriteAt.After(time.Now()))
 
 	ab.Reset()
-	bytesLeft, lastWriteAt = ab.Backlog()
-	assert.Zero(t, bytesLeft)
-	assert.True(t, lastWriteAt.IsZero(), "Reset clears the last write time")
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	info = readWindowOnce(t, ab)
+	assert.Zero(t, info.Backlog)
+	assert.False(t, info.LastWriteAt.Before(before), "the Write after Reset sets the time again")
 }
 
-// TestAnalysisBuffer_LostAtLastReadAttributesLossToTheNextWindow pins that a
-// loss after a Read does not change LostAtLastRead until the next Read.
-func TestAnalysisBuffer_LostAtLastReadAttributesLossToTheNextWindow(t *testing.T) {
+// TestAnalysisBuffer_ReadWindowGapAttributesLossToTheNextWindow: audio discarded
+// after a Read makes the window that follows it a gap, not the one already read.
+func TestAnalysisBuffer_ReadWindowGapAttributesLossToTheNextWindow(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -554,25 +562,17 @@ func TestAnalysisBuffer_LostAtLastReadAttributesLossToTheNextWindow(t *testing.T
 	require.NoError(t, err)
 
 	require.NoError(t, ab.Write(make([]byte, 8)))
-	_, release, err := ab.Read()
-	require.NoError(t, err)
-	release()
-	assert.Zero(t, ab.LostAtLastRead())
+	assert.True(t, readWindowOnce(t, ab).Gap, "the first window of a buffer is a gap")
 
 	// 4 buffered of 10 (6 free), so 9 bytes discard 3 unread bytes.
 	require.NoError(t, ab.Write(make([]byte, 9)))
-	assert.Zero(t, ab.LostAtLastRead(), "loss belongs to the next window, not the one already read")
-
-	_, release, err = ab.Read()
-	require.NoError(t, err)
-	release()
-	assert.Equal(t, int64(3), ab.LostAtLastRead())
+	assert.True(t, readWindowOnce(t, ab).Gap, "the window after overwrite loss is a gap")
+	assert.False(t, readWindowOnce(t, ab).Gap, "the loss is reported once")
 }
 
-// TestAnalysisBuffer_ResetIsVisibleInLostAtLastRead: Reset drops unread audio and
-// the overlap carry, so the next window must differ in LostAtLastRead from the
-// window before it, even though Stats keeps the cumulative counters.
-func TestAnalysisBuffer_ResetIsVisibleInLostAtLastRead(t *testing.T) {
+// TestAnalysisBuffer_ReadWindowGapAfterReset: Reset drops unread audio and the
+// overlap carry, so the next window has a zero-filled head and is a gap.
+func TestAnalysisBuffer_ReadWindowGapAfterReset(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -583,26 +583,19 @@ func TestAnalysisBuffer_ResetIsVisibleInLostAtLastRead(t *testing.T) {
 	ab, err := buffer.NewAnalysisBuffer(capacity, overlap, readSize, "reset-gap-source", newTestLogger(), nil)
 	require.NoError(t, err)
 
-	require.NoError(t, ab.Write(make([]byte, readSize)))
-	_, release, err := ab.Read()
-	require.NoError(t, err)
-	release()
-	before := ab.LostAtLastRead()
+	require.NoError(t, ab.Write(make([]byte, 3*readSize)))
+	require.True(t, readWindowOnce(t, ab).Gap)
+	assert.False(t, readWindowOnce(t, ab).Gap, "a contiguous window is not a gap")
 
-	require.NoError(t, ab.Write(make([]byte, readSize)))
 	ab.Reset()
 	require.NoError(t, ab.Write(make([]byte, readSize)))
-	_, release, err = ab.Read()
-	require.NoError(t, err)
-	release()
-
-	assert.NotEqual(t, before, ab.LostAtLastRead(), "the window after a Reset has a zero-filled overlap head and lost audio")
+	assert.True(t, readWindowOnce(t, ab).Gap, "the window after a Reset has a zero-filled overlap head")
 }
 
-// TestAnalysisBuffer_FreshAtLastRead pins the exact count of new bytes in each
-// window: the whole window when the overlap head is zero filled (first read,
-// after Reset), else the step read from the ring.
-func TestAnalysisBuffer_FreshAtLastRead(t *testing.T) {
+// TestAnalysisBuffer_ReadWindowFreshBytes pins the exact count of new bytes in
+// each window: the whole window when the overlap head is zero filled (first
+// read, after Reset), else the step read from the ring.
+func TestAnalysisBuffer_ReadWindowFreshBytes(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -615,10 +608,7 @@ func TestAnalysisBuffer_FreshAtLastRead(t *testing.T) {
 	read := func() int {
 		t.Helper()
 		require.NoError(t, ab.Write(make([]byte, readSize)))
-		_, release, rerr := ab.Read()
-		require.NoError(t, rerr)
-		release()
-		return ab.FreshAtLastRead()
+		return readWindowOnce(t, ab).FreshBytes
 	}
 
 	assert.Equal(t, overlap+readSize, read(), "the first window has a zero-filled head, so all of it is fresh")
@@ -631,8 +621,5 @@ func TestAnalysisBuffer_FreshAtLastRead(t *testing.T) {
 	noOverlap, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "fresh-nooverlap", newTestLogger(), nil)
 	require.NoError(t, err)
 	require.NoError(t, noOverlap.Write(make([]byte, readSize)))
-	_, release, err := noOverlap.Read()
-	require.NoError(t, err)
-	release()
-	assert.Equal(t, readSize, noOverlap.FreshAtLastRead(), "with no overlap every window is all fresh")
+	assert.Equal(t, readSize, readWindowOnce(t, noOverlap).FreshBytes, "with no overlap every window is all fresh")
 }

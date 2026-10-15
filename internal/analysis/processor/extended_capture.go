@@ -243,15 +243,12 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 //   - Extended captures: EndTime = LastUpdated + normal detection window (spans full session)
 //   - Normal captures: EndTime = FirstDetected + normal detection window (configured length)
 //
-// EndTime comes from detectionEndTime, which clipSpan also uses to predict the
-// saved clip for the privacy coverage gate.
+// EndTime comes from detectionEndTime.
 // For extended captures the clip name is regenerated to reflect the actual duration.
 func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
 	settings := p.currentSettings()
 	item.Detection.Result.BeginTime = item.FirstDetected
 
-	// detectionEndTime is shared with clipSpan, which the privacy coverage gate uses
-	// to know the exact audio span the exporter will save.
 	item.Detection.Result.EndTime = detectionEndTime(settings, item)
 
 	// For non-extended detections EndTime is recalculated from FirstDetected so the

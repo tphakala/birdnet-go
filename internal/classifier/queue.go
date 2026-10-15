@@ -16,18 +16,26 @@ type Results struct {
 	ClipName        string                // Name of the audio clip
 	Source          datastore.AudioSource // Audio source with ID, SafeString, and DisplayName
 	ModelID         string                // identifies which model produced these results
-	// AudioEndAt is the capture time of the last sample in PCMdata, corrected for
+	// Audio describes the timing of PCMdata on the producer's audio timeline.
+	Audio AudioTiming
+}
+
+// AudioTiming describes where one analysis window sits on its source's audio
+// timeline. The zero value means the producer does not know.
+type AudioTiming struct {
+	// EndAt is the capture time of the last sample of the window, corrected for
 	// the analysis backlog (the ring is FIFO, so a lagging monitor reads old audio).
-	// Zero when the producer does not know it.
-	AudioEndAt time.Time
-	// AudioGap reports that audio between this window and the previous window of
-	// the same (source, model) was lost or not analyzed, or that this is the first
+	EndAt time.Time
+	// Gap reports that audio between this window and the previous window of the
+	// same (source, model) was lost or not analyzed, or that this is the first
 	// window of a buffer (its overlap head is zero filled).
-	AudioGap bool
-	// AudioFreshBytes is how many bytes at the end of PCMdata are new audio, not
-	// repeated from the previous window of the same (source, model); the whole
-	// of PCMdata after a gap. Zero when the producer does not know it.
-	AudioFreshBytes int
+	Gap bool
+	// FreshBytes is the producer's count of bytes at the end of the window that
+	// are new audio, not repeated from the previous window: one step of the
+	// analysis buffer, or the whole window when its overlap head is zero filled.
+	// A Gap caused by lost audio still reports one step; consumers treat any gap
+	// window as wholly fresh. Zero when unknown.
+	FreshBytes int
 }
 
 // Default buffer size for the results queue
@@ -40,23 +48,11 @@ const DefaultQueueSize = 100
 var ResultsQueue = make(chan Results, DefaultQueueSize)
 
 // Copy creates a deep copy of the Results struct.
-// AudioEndAt, AudioGap and AudioFreshBytes are copied as is.
 // NOTE: This method is kept for compatibility but is no longer used in the main
 // audio processing pipeline. The ownership model has been updated so that data
 // ownership transfers through the ResultsQueue without requiring copies.
 func (r Results) Copy() Results { //nolint:gocritic // This is a copy function, avoid warning about heavy parameters
-	// Create a new Results struct with simple field copies
-	newCopy := Results{
-		StartTime:       r.StartTime,
-		AudioCapturedAt: r.AudioCapturedAt,
-		ElapsedTime:     r.ElapsedTime,
-		ClipName:        r.ClipName,
-		Source:          r.Source,
-		ModelID:         r.ModelID,
-		AudioEndAt:      r.AudioEndAt,
-		AudioGap:        r.AudioGap,
-		AudioFreshBytes: r.AudioFreshBytes,
-	}
+	newCopy := r
 
 	// Deep copy PCMdata
 	if r.PCMdata != nil {
