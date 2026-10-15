@@ -1,7 +1,9 @@
-package convert_test
+package wav_test
 
 import (
+	"bytes"
 	"encoding/binary"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -9,18 +11,29 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
+	"github.com/tphakala/birdnet-go/internal/audiocore/wav"
 	wavpcm "github.com/tphakala/go-wav/pcm"
 )
 
-// TestSavePCMDataToWAV_ConcurrentSamePathNoCorruption reproduces the WAV
+// savePCM writes pcm as a mono WAV at path through the production writer.
+func savePCM(t *testing.T, path string, pcm []byte, sampleRate, bitDepth int) error {
+	t.Helper()
+	return wav.EncodePCM(t.Context(), &wav.Options{
+		PCMData:    pcm,
+		OutputPath: path,
+		SampleRate: sampleRate,
+		BitDepth:   bitDepth,
+	})
+}
+
+// TestEncodePCM_ConcurrentSamePathNoCorruption reproduces the WAV
 // counterpart of GitHub #3323: when several detections resolve to the same clip
 // path, the WAV writer must not let concurrent saves interleave into one file.
 // Each worker writes a worker-distinct constant sample value, so a clean result
 // (one writer's complete WAV, finalized atomically) is uniform, while an
 // interleaved write mixes values from different writers. The save must use a
 // per-write unique temp file and an atomic rename, like the FFmpeg/FLAC paths.
-func TestSavePCMDataToWAV_ConcurrentSamePathNoCorruption(t *testing.T) {
+func TestEncodePCM_ConcurrentSamePathNoCorruption(t *testing.T) {
 	t.Parallel()
 	const (
 		workers = 32
@@ -41,7 +54,7 @@ func TestSavePCMDataToWAV_ConcurrentSamePathNoCorruption(t *testing.T) {
 				binary.LittleEndian.PutUint16(pcm[j*2:], uint16(1000+i)) //nolint:gosec // G115: small positive test constant
 			}
 			<-start // release all workers together to maximise collision
-			errs[i] = convert.SavePCMDataToWAV(filePath, pcm, 48000, 16)
+			errs[i] = savePCM(t, filePath, pcm, 48000, 16)
 		}(i)
 	}
 	close(start)
@@ -81,9 +94,9 @@ func makePCM16Bytes(t *testing.T, samples []int16) []byte {
 	return makePCMBytes(t, 16, widened)
 }
 
-// TestSavePCMDataToWAV verifies that known PCM data is written as a valid WAV file
+// TestEncodePCM verifies that known PCM data is written as a valid WAV file
 // with correct RIFF/fmt/data chunk structure and matching audio parameters.
-func TestSavePCMDataToWAV(t *testing.T) {
+func TestEncodePCM(t *testing.T) {
 	t.Parallel()
 
 	t.Run("valid 48kHz mono 16-bit WAV", func(t *testing.T) {
@@ -96,7 +109,7 @@ func TestSavePCMDataToWAV(t *testing.T) {
 		dir := t.TempDir()
 		filePath := filepath.Join(dir, "out.wav")
 
-		err := convert.SavePCMDataToWAV(filePath, pcmData, 48000, 16)
+		err := savePCM(t, filePath, pcmData, 48000, 16)
 		require.NoError(t, err)
 
 		data, err := os.ReadFile(filePath)
@@ -145,7 +158,7 @@ func TestSavePCMDataToWAV(t *testing.T) {
 	t.Run("empty file path returns error", func(t *testing.T) {
 		t.Parallel()
 		pcmData := makePCM16Bytes(t, []int16{0, 1, 2})
-		err := convert.SavePCMDataToWAV("", pcmData, 48000, 16)
+		err := savePCM(t, "", pcmData, 48000, 16)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "empty file path")
 	})
@@ -153,7 +166,7 @@ func TestSavePCMDataToWAV(t *testing.T) {
 	t.Run("empty PCM data returns error", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		err := convert.SavePCMDataToWAV(filepath.Join(dir, "out.wav"), []byte{}, 48000, 16)
+		err := savePCM(t, filepath.Join(dir, "out.wav"), []byte{}, 48000, 16)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "empty PCM data")
 	})
@@ -171,7 +184,7 @@ func TestSavePCMDataToWAV(t *testing.T) {
 		}
 		for _, c := range cases {
 			dir := t.TempDir()
-			err := convert.SavePCMDataToWAV(filepath.Join(dir, "out.wav"), make([]byte, c.nbytes), 48000, c.bitDepth)
+			err := savePCM(t, filepath.Join(dir, "out.wav"), make([]byte, c.nbytes), 48000, c.bitDepth)
 			require.Errorf(t, err, "%d-bit %d-byte input must be rejected", c.bitDepth, c.nbytes)
 			assert.Contains(t, err.Error(), "not aligned")
 		}
@@ -181,7 +194,7 @@ func TestSavePCMDataToWAV(t *testing.T) {
 		t.Parallel()
 		for _, sr := range []int{0, -1} {
 			dir := t.TempDir()
-			err := convert.SavePCMDataToWAV(filepath.Join(dir, "out.wav"), makePCM16Bytes(t, []int16{0, 1}), sr, 16)
+			err := savePCM(t, filepath.Join(dir, "out.wav"), makePCM16Bytes(t, []int16{0, 1}), sr, 16)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "sample rate")
 		}
@@ -193,7 +206,7 @@ func TestSavePCMDataToWAV(t *testing.T) {
 		dir := t.TempDir()
 		filePath := filepath.Join(dir, "nested", "deep", "out.wav")
 
-		err := convert.SavePCMDataToWAV(filePath, pcmData, 48000, 16)
+		err := savePCM(t, filePath, pcmData, 48000, 16)
 		require.NoError(t, err)
 
 		_, statErr := os.Stat(filePath)
@@ -206,7 +219,7 @@ func TestSavePCMDataToWAV(t *testing.T) {
 		dir := t.TempDir()
 		filePath := filepath.Join(dir, "out44.wav")
 
-		err := convert.SavePCMDataToWAV(filePath, pcmData, 44100, 16)
+		err := savePCM(t, filePath, pcmData, 44100, 16)
 		require.NoError(t, err)
 
 		data, err := os.ReadFile(filePath)
@@ -234,11 +247,11 @@ func makePCMBytes(t *testing.T, bitDepth int, samples []int32) []byte {
 	return buf
 }
 
-// TestSavePCMDataToWAV_HigherBitDepths verifies that 24- and 32-bit mono PCM is
+// TestEncodePCM_HigherBitDepths verifies that 24- and 32-bit mono PCM is
 // written and reads back byte-for-byte through the go-wav decoder. These depths
 // use WAVE_FORMAT_EXTENSIBLE, so the round-trip is verified via the decoder
 // rather than fixed canonical header offsets.
-func TestSavePCMDataToWAV_HigherBitDepths(t *testing.T) {
+func TestEncodePCM_HigherBitDepths(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -257,7 +270,7 @@ func TestSavePCMDataToWAV_HigherBitDepths(t *testing.T) {
 
 			dir := t.TempDir()
 			filePath := filepath.Join(dir, "out.wav")
-			require.NoError(t, convert.SavePCMDataToWAV(filePath, pcmData, 48000, tc.bitDepth))
+			require.NoError(t, savePCM(t, filePath, pcmData, 48000, tc.bitDepth))
 
 			data, err := os.ReadFile(filePath)
 			require.NoError(t, err)
@@ -280,19 +293,102 @@ func TestSavePCMDataToWAV_HigherBitDepths(t *testing.T) {
 	}
 }
 
-// TestSavePCMDataToWAV_UnsupportedBitDepth verifies that depths outside the
+// TestEncodePCM_UnsupportedBitDepth verifies that depths outside the
 // supported {16, 24, 32} integer set are rejected before any file is created.
-func TestSavePCMDataToWAV_UnsupportedBitDepth(t *testing.T) {
+func TestEncodePCM_UnsupportedBitDepth(t *testing.T) {
 	t.Parallel()
 	for _, bd := range []int{8, 12, 64} {
 		dir := t.TempDir()
 		filePath := filepath.Join(dir, "out.wav")
 		// One frame's worth of bytes, so alignment is not the reason it fails.
 		pcm := make([]byte, bd/8)
-		err := convert.SavePCMDataToWAV(filePath, pcm, 48000, bd)
+		err := savePCM(t, filePath, pcm, 48000, bd)
 		require.Errorf(t, err, "bit depth %d must be rejected", bd)
 		assert.Contains(t, err.Error(), "unsupported bit depth")
 		_, statErr := os.Stat(filePath)
 		assert.Truef(t, os.IsNotExist(statErr), "no file should be created for unsupported depth %d", bd)
 	}
+}
+
+// gainTestSamples is a ramp that stays inside int16 after a +6 dB gain.
+func gainTestSamples() []int16 {
+	samples := make([]int16, 1000)
+	for i := range samples {
+		samples[i] = int16((i - 500) * 20) //nolint:gosec // G115: bounded to +-10000 by construction
+	}
+	return samples
+}
+
+// TestEncodePCM_AppliesGain verifies that GainDB scales the written samples:
+// +6 dB is a factor of 1.9953, so every sample lands within 1 LSB of its double.
+func TestEncodePCM_AppliesGain(t *testing.T) {
+	t.Parallel()
+	const gainDB = 6.0
+	samples := gainTestSamples()
+	filePath := filepath.Join(t.TempDir(), "gain.wav")
+
+	require.NoError(t, wav.EncodePCM(t.Context(), &wav.Options{
+		PCMData:    makePCM16Bytes(t, samples),
+		OutputPath: filePath,
+		SampleRate: 48000,
+		BitDepth:   16,
+		GainDB:     gainDB,
+	}))
+
+	data, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+	decoded, _, err := wavpcm.DecodeInterleavedBytes(data)
+	require.NoError(t, err)
+	require.Len(t, decoded, len(samples)*2)
+
+	factor := math.Pow(10, gainDB/20)
+	for i, in := range samples {
+		got := int16(binary.LittleEndian.Uint16(decoded[i*2:])) //nolint:gosec // G115: intentional uint16->int16 reinterpretation of PCM
+		assert.InDeltaf(t, float64(in)*factor, float64(got), 1.0, "sample %d", i)
+	}
+}
+
+// TestEncodePCM_LeavesInputUnchanged verifies that applying gain works on a
+// copy: the caller's PCMData is read again after the export by the spectrogram
+// pre-render job.
+func TestEncodePCM_LeavesInputUnchanged(t *testing.T) {
+	t.Parallel()
+	pcm := makePCM16Bytes(t, gainTestSamples())
+	want := bytes.Clone(pcm)
+
+	require.NoError(t, wav.EncodePCM(t.Context(), &wav.Options{
+		PCMData:    pcm,
+		OutputPath: filepath.Join(t.TempDir(), "gain.wav"),
+		SampleRate: 48000,
+		BitDepth:   16,
+		GainDB:     6,
+	}))
+
+	assert.Equal(t, want, pcm)
+}
+
+// TestEncodePCM_GainRequiresSixteenBit verifies that a non-zero gain on 24-bit
+// PCM is rejected instead of being applied to the wrong sample layout.
+func TestEncodePCM_GainRequiresSixteenBit(t *testing.T) {
+	t.Parallel()
+	filePath := filepath.Join(t.TempDir(), "gain.wav")
+
+	err := wav.EncodePCM(t.Context(), &wav.Options{
+		PCMData:    make([]byte, 6),
+		OutputPath: filePath,
+		SampleRate: 48000,
+		BitDepth:   24,
+		GainDB:     6,
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "gain is not supported")
+	_, statErr := os.Stat(filePath)
+	assert.True(t, os.IsNotExist(statErr), "no file should be created")
+}
+
+// TestEncodePCM_NilOptions verifies the nil guard.
+func TestEncodePCM_NilOptions(t *testing.T) {
+	t.Parallel()
+	require.Error(t, wav.EncodePCM(t.Context(), nil))
 }

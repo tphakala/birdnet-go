@@ -13,7 +13,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/mp3"
 	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
@@ -192,7 +191,7 @@ func encodeViaFile(ctx context.Context, p *pcmBuffer, format, tempDir string) ([
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 
-	out := filepath.Join(dir, "clip."+convert.GetFileExtension(format))
+	out := filepath.Join(dir, "clip."+audioformat.FileExtension(format))
 	if err := enc(ctx, &fileEncodeOptions{
 		data: p.Data, outputPath: out, sampleRate: p.SampleRate,
 		channels: p.Channels, bitrateKbps: clipBitrateKbps[format],

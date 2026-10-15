@@ -433,7 +433,7 @@ func init() {
 
 	// audiocore package and subpackages (slash-separated match Go import paths)
 	RegisterComponent("audiocore", "audiocore")
-	RegisterComponent("audiocore/convert", "audiocore.convert")
+	RegisterComponent("audiocore/wav", "audiocore.wav")
 	RegisterComponent("audiocore/flac", "audiocore.flac")
 	RegisterComponent("audiocore/ffmpeg", "audiocore.ffmpeg")
 	RegisterComponent("audiocore/buffer", "audiocore.buffer")
