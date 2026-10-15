@@ -183,14 +183,25 @@ func clipSpan(settings *conf.Settings, item *PendingDetection) audioSpan {
 
 // detectionEndTime is the EndTime normalizeDetectionTimes assigns to an approved
 // detection: LastUpdated for an extended capture, else FirstDetected, plus the
-// normal detection window. clipSpan and normalizeDetectionTimes both use it, so
-// the span the privacy gate waits for cannot drift from the saved clip.
+// normal detection window. An extended capture's end is capped at MaxDeadline
+// (MaxDuration after FirstDetected) however long the species keeps being heard, so
+// the saved clip, which also carries PreCapture of lead-in, ends at most PreCapture
+// after MaxDeadline; without the cap the privacy coverage gate would chase a clip
+// end that moves with every new detection. clipSpan and
+// normalizeDetectionTimes both use it, so the span the privacy gate waits for
+// cannot drift from the saved clip.
 func detectionEndTime(settings *conf.Settings, item *PendingDetection) time.Time {
 	window := normalDetectionWindow(settings)
-	if item.ExtendedCapture {
-		return item.LastUpdated.Add(window)
+	if !item.ExtendedCapture {
+		return item.FirstDetected.Add(window)
 	}
-	return item.FirstDetected.Add(window)
+	last := item.LastUpdated
+	if !item.MaxDeadline.IsZero() {
+		if limit := item.MaxDeadline.Add(-window); last.After(limit) {
+			last = limit
+		}
+	}
+	return last.Add(window)
 }
 
 // coverageUpdate is one span published for a coverage key.
