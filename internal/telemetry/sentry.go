@@ -206,7 +206,14 @@ func shouldSkipTelemetry() bool {
 	// Even when opted in, skip when the SDK was never initialized for this build
 	// (no DSN configured). Otherwise the capture paths would run and log
 	// "event sent" while sentry-go silently no-ops because no client is bound.
-	return sentry.CurrentHub().Client() == nil
+	return !sentryClientBound()
+}
+
+// sentryClientBound reports whether a real Sentry client is bound to the
+// current hub. sentry-go binds a shared, disabled no-op client when none was
+// initialized, so a nil check on Client() cannot tell the two apart.
+func sentryClientBound() bool {
+	return sentry.CurrentHub().Client().IsEnabled()
 }
 
 // PlatformInfo holds privacy-safe platform information for telemetry
@@ -1111,7 +1118,7 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 	// drain deferred messages without initializing the SDK; relying on that flag
 	// here would make support-dump upload a silent no-op for users who keep
 	// telemetry disabled but request an upload.
-	if sentry.CurrentHub().Client() != nil {
+	if sentryClientBound() {
 		return nil
 	}
 
