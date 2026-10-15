@@ -3614,8 +3614,26 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 			return nil, err
 		}
 
-		// Step 5: Validate audio file with FFprobe (expensive ~300ms subprocess).
-		// Running inside singleflight ensures only one FFprobe call per unique spectrogram key.
+		// Acquire semaphore inside singleflight - only the actual worker gets a slot.
+		// Acquiring before validation ensures only maxConcurrentSpectrograms runs validation
+		// or generation at any time, preventing CPU and I/O contention on resource-constrained systems.
+		if err := c.acquireSemaphoreSlot(sharedCtx, queueKey); err != nil {
+			return nil, err
+		}
+		defer func() {
+			slotsBeforeRelease := len(spectrogramSemaphore)
+			<-spectrogramSemaphore
+			slotsAfterRelease := len(spectrogramSemaphore)
+			getSpectrogramLogger().Debug("Semaphore slot released",
+				logger.String("queue_key", queueKey),
+				logger.Int("slots_before_release", slotsBeforeRelease),
+				logger.Int("slots_after_release", slotsAfterRelease),
+				logger.Int("slots_now_available", maxConcurrentSpectrograms-slotsAfterRelease),
+				logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
+		}()
+
+		// Step 5: Validate audio file (fast WAV header or FFprobe fallback).
+		// Running inside singleflight and holding semaphore ensures strict serialization.
 		validationResult, err := c.validateSpectrogramInputs(sharedCtx, absAudioPath, audioPath, queueKey)
 		if err != nil {
 			return nil, err
@@ -3635,22 +3653,6 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 			logger.Int("width", width),
 			logger.Bool("raw", raw),
 			logger.Float64("validated_duration", validatedDuration))
-
-		// Acquire semaphore inside singleflight - only the actual worker gets a slot
-		if err := c.acquireSemaphoreSlot(sharedCtx, queueKey); err != nil {
-			return nil, err
-		}
-		defer func() {
-			slotsBeforeRelease := len(spectrogramSemaphore)
-			<-spectrogramSemaphore
-			slotsAfterRelease := len(spectrogramSemaphore)
-			getSpectrogramLogger().Debug("Semaphore slot released",
-				logger.String("queue_key", queueKey),
-				logger.Int("slots_before_release", slotsBeforeRelease),
-				logger.Int("slots_after_release", slotsAfterRelease),
-				logger.Int("slots_now_available", maxConcurrentSpectrograms-slotsAfterRelease),
-				logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
-		}()
 		return c.performSpectrogramGeneration(sharedCtx, relSpectrogramPath, absAudioPath, absSpectrogramPath, queueKey, width, raw, validatedDuration, extraOpts...)
 	})
 

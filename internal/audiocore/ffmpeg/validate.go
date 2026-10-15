@@ -3,7 +3,9 @@ package ffmpeg
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -234,6 +236,126 @@ func ValidateFile(ctx context.Context, path string, opts ...ValidateOption) (*Va
 	return lastResult, exhaustionErr
 }
 
+// parseWAVMetadata attempts to parse a WAV file directly to extract its format and metadata
+// without spawning an external ffprobe subprocess. Returns true if successfully parsed.
+func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResult) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+
+	var header [12]byte
+	if _, err := io.ReadFull(f, header[:]); err != nil {
+		return false
+	}
+
+	if string(header[0:4]) != "RIFF" || string(header[8:12]) != "WAVE" {
+		return false
+	}
+
+	var foundFmt, foundData bool
+	var channels, sampleRate, bitRate int
+	var duration float64
+	var formatName string = "pcm_s16le"
+
+	// Iterate through RIFF chunks
+	chunkHeader := make([]byte, 8)
+	for {
+		if _, err := io.ReadFull(f, chunkHeader); err != nil {
+			break
+		}
+
+		chunkID := string(chunkHeader[0:4])
+		chunkSize := int64(binary.LittleEndian.Uint32(chunkHeader[4:8]))
+
+		// Guard against malformed chunk sizes larger than remaining file size
+		if chunkSize < 0 || chunkSize > fileInfo.Size() {
+			return false
+		}
+
+		switch chunkID {
+		case "fmt ":
+			if chunkSize < 14 {
+				return false
+			}
+			fmtData := make([]byte, chunkSize)
+			if _, err := io.ReadFull(f, fmtData); err != nil {
+				return false
+			}
+			audioFormat := binary.LittleEndian.Uint16(fmtData[0:2])
+			channels = int(binary.LittleEndian.Uint16(fmtData[2:4]))
+			sampleRate = int(binary.LittleEndian.Uint32(fmtData[4:8]))
+			byteRate := int(binary.LittleEndian.Uint32(fmtData[8:12]))
+
+			if byteRate > 0 {
+				bitRate = (byteRate * 8) / BitsPerKilobit
+			}
+			if len(fmtData) >= 16 {
+				bitsPerSample := binary.LittleEndian.Uint16(fmtData[14:16])
+				if audioFormat == 1 {
+					formatName = fmt.Sprintf("pcm_s%dle", bitsPerSample)
+				} else if audioFormat == 3 {
+					formatName = fmt.Sprintf("pcm_f%dle", bitsPerSample)
+				}
+			}
+			foundFmt = true
+
+			// RIFF chunks are padded to 2-byte word boundary
+			if chunkSize%2 != 0 {
+				if _, err := f.Seek(1, io.SeekCurrent); err != nil {
+					return false
+				}
+			}
+
+		case "data":
+			foundData = true
+			if sampleRate > 0 && channels > 0 {
+				if bitRate > 0 {
+					duration = float64(chunkSize) / (float64(bitRate*BitsPerKilobit) / 8.0)
+				} else {
+					duration = float64(chunkSize) / float64(sampleRate*channels*2)
+				}
+			}
+			// Skip chunk data
+			if _, err := f.Seek(chunkSize, io.SeekCurrent); err != nil {
+				break
+			}
+			if chunkSize%2 != 0 {
+				if _, err := f.Seek(1, io.SeekCurrent); err != nil {
+					break
+				}
+			}
+
+		default:
+			// Skip unknown chunk
+			if _, err := f.Seek(chunkSize, io.SeekCurrent); err != nil {
+				break
+			}
+			if chunkSize%2 != 0 {
+				if _, err := f.Seek(1, io.SeekCurrent); err != nil {
+					break
+				}
+			}
+		}
+
+		if foundFmt && foundData && duration > 0 {
+			break
+		}
+	}
+
+	if foundFmt && channels > 0 && sampleRate > 0 {
+		result.Format = formatName
+		result.Channels = channels
+		result.SampleRate = sampleRate
+		result.BitRate = bitRate
+		result.Duration = duration
+		return true
+	}
+
+	return false
+}
+
 // validateFile performs a single validation pass without retry.
 func validateFile(ctx context.Context, path string) (*ValidationResult, error) {
 	result := &ValidationResult{}
@@ -272,6 +394,15 @@ func validateFile(ctx context.Context, path string) (*ValidationResult, error) {
 	// Extract format from file extension.
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
 	result.Format = ext
+
+	// Fast path for WAV files: parse RIFF/WAVE header directly in Go memory,
+	// avoiding expensive ffprobe subprocess execution on resource-constrained devices.
+	if ext == "wav" && parseWAVMetadata(path, fileInfo, result) {
+		result.IsComplete = true
+		result.IsValid = true
+		result.Error = nil
+		return result, nil
+	}
 
 	// Use ffprobe for format and metadata validation.
 	if err := validateWithFFprobe(ctx, path, result); err != nil {
@@ -483,14 +614,18 @@ func GetDurationViaFFprobe(ctx context.Context, audioPath string) (float64, erro
 
 // validateWithFFprobe uses ffprobe to validate audio file format and extract metadata.
 func validateWithFFprobe(ctx context.Context, path string, result *ValidationResult) error {
-	// Apply a per-call timeout if the context has no deadline.
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, FFprobeTimeout)
-		defer cancel()
+	// Apply a bounded per-call timeout so ffprobe never inherits a 5-minute deadline and hangs the system.
+	probeTimeout := FFprobeTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining < probeTimeout {
+			probeTimeout = remaining
+		}
 	}
+	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
 
-	output, err := executeFFprobe(ctx, path)
+	output, err := executeFFprobe(probeCtx, path)
 	if err != nil {
 		return err
 	}

@@ -253,3 +253,28 @@ func findFFmpegBinary() (string, error) {
 	}
 	return "", fmt.Errorf("ffmpeg not found")
 }
+
+func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
+	// Intentionally set a bogus ffprobe path to ensure the WAV fast-path
+	// parses metadata directly without ever invoking ffprobe.
+	original := ffmpeg.GetFFprobePath()
+	t.Cleanup(func() { ffmpeg.SetFFprobePath(original) })
+	ffmpeg.SetFFprobePath("/nonexistent/ffprobe/binary")
+
+	p := filepath.Join(t.TempDir(), "fastpath.wav")
+	makeTestWAVWithSize(t, p, 96044) // 44 byte header + 96000 bytes = 1s of 48kHz mono 16-bit
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	result, err := ffmpeg.ValidateFile(ctx, p)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.IsValid, "WAV file should be valid via Go fast path")
+	assert.True(t, result.IsComplete, "WAV file should be marked complete")
+	assert.Equal(t, "pcm_s16le", result.Format)
+	assert.Equal(t, 44100, result.SampleRate)
+	assert.Equal(t, 2, result.Channels)
+	expectedDuration := float64(96000) / float64(44100*2*2)
+	assert.InDelta(t, expectedDuration, result.Duration, 0.01)
+}
