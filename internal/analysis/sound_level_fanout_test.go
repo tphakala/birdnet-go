@@ -78,7 +78,16 @@ func TestFanOutSoundLevel_SlowPublisherDoesNotBlockOthers(t *testing.T) {
 		}
 	}
 
-	assert.Len(t, healthy, fanOutTestIntervals)
+	// The source send returns before the fan-out has delivered that value, so
+	// receive with a timeout instead of inspecting the channel length.
+	for i := range fanOutTestIntervals {
+		select {
+		case got := <-healthy:
+			assert.Equal(t, i+1, got.Duration)
+		case <-time.After(fanOutTestTimeout):
+			require.Failf(t, "timeout", "healthy publisher missed interval %d", i)
+		}
+	}
 
 	close(done)
 	wg.Wait()
