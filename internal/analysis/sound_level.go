@@ -289,7 +289,8 @@ const soundLevelMQTTPublishTimeout = 5 * time.Second
 //
 // Failure is logged, not returned: the data already reached the shared topic,
 // and the next interval publishes a fresh reading anyway. ErrMQTTClientNotReady
-// is dropped silently, matching how the shared topic handles it.
+// is dropped silently, matching how the shared topic handles it. name is only
+// logged; the failure metric is labelled with sourceID.
 func publishSoundLevelToSourceTopic(settings *conf.Settings, sourceID, name, payload string, proc *processor.Processor) {
 	// validateSoundLevelData already rejected an empty Source before this point,
 	// so no sourceID == "" guard is needed here.
@@ -315,7 +316,7 @@ func publishSoundLevelToSourceTopic(settings *conf.Settings, sourceID, name, pay
 		// Record the failure so it is visible via Prometheus, guarded the same
 		// way the shared-topic path guards its metric recording.
 		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(sourceID, name, "mqtt", "source_topic_error")
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(sourceID, "mqtt", "source_topic_error")
 		}
 	}
 }
@@ -391,7 +392,7 @@ func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processo
 	if err != nil {
 		// Record error metric
 		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "marshal_error")
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, "mqtt", "marshal_error")
 		}
 		return errors.New(err).
 			Component("analysis.soundlevel").
@@ -423,15 +424,15 @@ func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processo
 			// Record a lightweight metric so the condition is still observable
 			// via Prometheus without generating Sentry events.
 			if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-				proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "client_not_ready")
+				proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, "mqtt", "client_not_ready")
 			}
 			return nil
 		}
 
 		// Record error metric
 		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "publish_error")
-			proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "mqtt", "error")
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, "mqtt", "publish_error")
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, "mqtt", "error")
 		}
 		return errors.New(err).
 			Component("analysis.soundlevel").
@@ -449,7 +450,7 @@ func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processo
 
 	// Record success metric
 	if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-		proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "mqtt", "success")
+		proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, "mqtt", "success")
 	}
 
 	LogSoundLevelMQTTPublished(topic, soundData.Source, len(soundData.OctaveBands))

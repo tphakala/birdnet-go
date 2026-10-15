@@ -1940,10 +1940,12 @@ GET /api/v2/soundlevels/stream
 
 Sound level data is exposed as Prometheus metrics:
 
-- `myaudio_octave_band_level_db`, `myaudio_octave_band_min_db`, `myaudio_octave_band_max_db`, `myaudio_octave_band_mean_db`: Level of each 1/3rd octave band, labelled by source, name and `frequency_band`
+- `myaudio_octave_band_level_db`, `myaudio_octave_band_min_db`, `myaudio_octave_band_max_db`, `myaudio_octave_band_mean_db`: Level of each 1/3rd octave band, labelled by `source`, `name` and `frequency_band`
 - `myaudio_sound_level_db`: Overall sound level of a source (`measurement_type="overall"`), the mean of the band powers
 - `myaudio_sound_level_processing_duration_seconds`: Processing time histogram
 - `myaudio_sound_level_publishing_total`: Publishing success/error counters
+
+Every sound level series carries the source ID in both the `source` and the `name` label. The display name is not used, because the metrics listener has no authentication. A dashboard that wants the display name can map it from the source ID with relabeling.
 
 #### Performance Considerations
 
@@ -2052,7 +2054,7 @@ The implementation provides a solid foundation for environmental sound monitorin
 
 Sound level monitoring now uses the go-audio-dsp octave band meter. The previous filters were too narrow near the Nyquist frequency, so the high bands read too low on broadband sound. The high bands now read higher: at 48 kHz by about +6.4 dB in the 20 kHz band, +3.3 dB at 16 kHz, +1.9 dB at 12.5 kHz, +1.2 dB at 10 kHz and +0.7 dB at 8 kHz, with smaller changes down to 2.5 kHz. Bands up to 2 kHz, including the 1 kHz band that the Home Assistant Sound Level sensor shows, change by 0.06 dB or less. At 96 kHz the top band moves by about +1.2 dB and at 256 kHz by +0.1 dB. A steady tone at a band's centre reads the same as before. This affects the MQTT sound level topics, the SSE stream and the Prometheus band gauges. The Prometheus overall sound level, which averages the band powers, rises with broadband high-frequency sound: about +1.8 dB for white noise, +0.3 dB for pink noise and close to 0 dB for typical outdoor sound dominated by low frequencies. Dashboards or automations with thresholds on high bands or on the overall level may need adjusting. Band names and the message format are unchanged. Each source now uses under 100 KB of memory instead of about 11 MB at 48 kHz, and half the CPU on a Raspberry Pi 5.
 
-The `name` field of the SSE stream, the `nm` field of the MQTT messages and the `name` label of the Prometheus metrics now show the source name instead of the source ID. The `source` field, the per-source MQTT topic and the Home Assistant sensor still use the source ID.
+The `nm` field of the MQTT messages and the `name` field of the SSE stream for signed-in users now show the source name instead of the source ID. The SSE stream sends the source ID as `name` to clients that are not signed in. The `source` field, the per-source MQTT topic and the Home Assistant sensor still use the source ID. The Prometheus sound level series are labelled with the source ID, as before, in both the `source` and the `name` label.
 
 MQTT, SSE and Prometheus each receive every measurement now. Before, with all three enabled, each one received only about a third of them.
 

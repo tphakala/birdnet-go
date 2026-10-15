@@ -67,11 +67,11 @@ func TestPublishSoundLevelToSourceTopic_RecordsFailureMetric(t *testing.T) {
 
 			require.NoError(t, publishSoundLevelToMQTT(data, proc))
 
-			// Assert the exact value of the specific labelled series, not just how
-			// many series exist, so a double count or a wrong-label increment is
-			// caught.
+			// Assert the exact value of the specific labelled series (the name
+			// label is the source id), not just how many series exist, so a double
+			// count or a wrong-label increment is caught.
 			got := testutil.ToFloat64(metricsObj.SoundLevel.SoundLevelPublishingErrorsVec().
-				WithLabelValues(data.Source, data.Name, "mqtt", "source_topic_error"))
+				WithLabelValues(data.Source, data.Source, "mqtt", "source_topic_error"))
 			assert.InDelta(t, float64(tt.wantErrors), got, 0, "source_topic_error metric value")
 		})
 	}
