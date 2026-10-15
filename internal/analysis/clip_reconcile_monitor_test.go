@@ -1,9 +1,13 @@
 package analysis
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -58,4 +62,150 @@ func TestLogReconcileResult(t *testing.T) {
 			}
 		})
 	}
+}
+
+// waitRecorder is a wait function for runClipReconcileLoop that records each
+// requested delay and reports shutdown once allow waits have been granted.
+type waitRecorder struct {
+	delays []time.Duration
+	allow  int
+}
+
+func (w *waitRecorder) wait(_ <-chan struct{}, d time.Duration) bool {
+	w.delays = append(w.delays, d)
+	return len(w.delays) <= w.allow
+}
+
+func TestRunClipReconcileLoop(t *testing.T) {
+	t.Parallel()
+
+	t.Run("shutdown before the startup delay ends runs no pass", func(t *testing.T) {
+		t.Parallel()
+		w := &waitRecorder{allow: 0}
+		passes := 0
+		runClipReconcileLoop(nil, w.wait, func() bool { passes++; return false })
+		assert.Zero(t, passes)
+		assert.Equal(t, []time.Duration{clipReconcileStartupDelay}, w.delays)
+	})
+
+	t.Run("passes run once per interval until a pass asks to stop", func(t *testing.T) {
+		t.Parallel()
+		w := &waitRecorder{allow: 100}
+		passes := 0
+		runClipReconcileLoop(nil, w.wait, func() bool { passes++; return passes == 3 })
+		assert.Equal(t, 3, passes)
+		assert.Equal(t, []time.Duration{clipReconcileStartupDelay, clipReconcilePassInterval, clipReconcilePassInterval}, w.delays,
+			"the startup delay once, then one interval after each pass that did not stop")
+	})
+
+	t.Run("shutdown during the interval wait ends the loop after one pass", func(t *testing.T) {
+		t.Parallel()
+		w := &waitRecorder{allow: 1}
+		passes := 0
+		runClipReconcileLoop(nil, w.wait, func() bool { passes++; return false })
+		assert.Equal(t, 1, passes)
+		assert.Equal(t, []time.Duration{clipReconcileStartupDelay, clipReconcilePassInterval}, w.delays)
+	})
+}
+
+// fakeReconcileStore serves a fixed list of clip references to the reconcile pass
+// and records what it was asked to clear.
+type fakeReconcileStore struct {
+	refs    []diskmanager.ClipReference
+	reads   int
+	cleared []string
+}
+
+func (f *fakeReconcileStore) GetNoteClipReferences(afterID uint, limit int) ([]diskmanager.ClipReference, error) {
+	f.reads++
+	var out []diskmanager.ClipReference
+	for _, r := range f.refs {
+		if r.ID > afterID && len(out) < limit {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeReconcileStore) ClearNoteClipPathsByNames(names []string) (int64, error) {
+	f.cleared = append(f.cleared, names...)
+	return int64(len(names)), nil
+}
+
+func (f *fakeReconcileStore) RetainNoteSpectrogramsByClipNames(names []string) (int64, error) {
+	return int64(len(names)), nil
+}
+
+// reconcileFixture writes one present clip and returns refs for it and for a
+// missing clip that follows it, both old enough to be judged.
+func reconcileFixture(t *testing.T) (baseDir string, store *fakeReconcileStore) {
+	t.Helper()
+	baseDir = t.TempDir()
+	dir := filepath.Join(baseDir, "2026", "01")
+	require.NoError(t, os.MkdirAll(dir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "present.wav"), []byte("x"), 0o600))
+	old := time.Now().Add(-time.Hour)
+	return baseDir, &fakeReconcileStore{refs: []diskmanager.ClipReference{
+		{ID: 1, ClipName: "2026/01/present.wav", CompletionTime: old},
+		{ID: 2, ClipName: "2026/01/gone.wav", CompletionTime: old},
+	}}
+}
+
+func TestRunClipReconcilePass(t *testing.T) {
+	// Not parallel: logtest.Capture swaps the process-global logger.
+	t.Run("unconfigured export path skips the pass without reading the store", func(t *testing.T) {
+		store := &fakeReconcileStore{}
+		stop := false
+		out := logtest.Capture(t, func() {
+			stop = runClipReconcilePass(GetLogger(), make(chan struct{}), store, func() string { return "" })
+		})
+		assert.False(t, stop)
+		assert.Zero(t, store.reads)
+		assert.Contains(t, out, "export path not configured")
+	})
+
+	t.Run("a pass clears the missing clip and logs the completion", func(t *testing.T) {
+		baseDir, store := reconcileFixture(t)
+		stop := true
+		out := logtest.Capture(t, func() {
+			stop = runClipReconcilePass(GetLogger(), make(chan struct{}), store, func() string { return baseDir })
+		})
+		assert.False(t, stop)
+		assert.Equal(t, []string{"2026/01/gone.wav"}, store.cleared)
+		assert.Contains(t, out, "clip reconcile pass completed")
+		assert.Contains(t, out, "cleared=1")
+	})
+
+	t.Run("shutdown during the pass asks the loop to stop and logs nothing", func(t *testing.T) {
+		baseDir, store := reconcileFixture(t)
+		quit := make(chan struct{})
+		close(quit)
+		stop := false
+		out := logtest.Capture(t, func() {
+			stop = runClipReconcilePass(GetLogger(), quit, store, func() string { return baseDir })
+		})
+		assert.True(t, stop)
+		assert.Empty(t, store.cleared)
+		assert.NotContains(t, out, "clip reconcile pass")
+	})
+
+	t.Run("an export path change after the pass started aborts it before any read", func(t *testing.T) {
+		baseDir, store := reconcileFixture(t)
+		calls := 0
+		exportDir := func() string {
+			calls++
+			if calls == 1 {
+				return baseDir
+			}
+			return baseDir + "-moved"
+		}
+		stop := true
+		out := logtest.Capture(t, func() {
+			stop = runClipReconcilePass(GetLogger(), make(chan struct{}), store, exportDir)
+		})
+		assert.False(t, stop)
+		assert.Zero(t, store.reads, "pathCurrent must make the pass abort before it reads the store")
+		assert.Empty(t, store.cleared)
+		assert.Contains(t, out, "clip reconcile pass aborted")
+	})
 }

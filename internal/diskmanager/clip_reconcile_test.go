@@ -3,6 +3,7 @@ package diskmanager
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // --- test helpers ---
@@ -253,17 +255,38 @@ func TestReconcileClipOrphansPass_DetachedStorageClearsNothing(t *testing.T) {
 func TestReconcileClipOrphansPass_DirectoryPresentGuard(t *testing.T) {
 	withNoChunkPause(t)
 
-	missing := filepath.Join(t.TempDir(), "does-not-exist")
-	store := &fakeReconcileStore{refs: []ClipReference{
-		{ID: 1, ClipName: "2024/01/a.wav", CompletionTime: time.Now().Add(testOld)},
-	}}
-	quit := make(chan struct{})
+	notADir := filepath.Join(t.TempDir(), "a-file")
+	require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o600))
 
-	result := ReconcileClipOrphansPass(quit, store, missing, nil)
+	tests := []struct {
+		name     string
+		baseDir  string
+		wantWarn bool
+	}{
+		{name: "directory does not exist yet", baseDir: filepath.Join(t.TempDir(), "does-not-exist"), wantWarn: false},
+		{name: "path is not a directory", baseDir: notADir, wantWarn: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &fakeReconcileStore{refs: []ClipReference{
+				{ID: 1, ClipName: "2024/01/a.wav", CompletionTime: time.Now().Add(testOld)},
+			}}
+			var result ReconcileResult
+			out := logtest.Capture(t, func() {
+				result = ReconcileClipOrphansPass(make(chan struct{}), store, tt.baseDir, nil)
+			})
 
-	assert.True(t, result.Aborted)
-	assert.Equal(t, abortReasonDirInaccessible, result.AbortReason)
-	assert.Empty(t, store.cleared)
+			assert.True(t, result.Aborted)
+			assert.Equal(t, abortReasonDirInaccessible, result.AbortReason)
+			assert.Empty(t, store.cleared)
+			if tt.wantWarn {
+				assert.Contains(t, out, "level=WARN", "an unusable export path must be visible at the default log level")
+				assert.Contains(t, out, "export directory is not accessible")
+			} else {
+				assert.NotContains(t, out, "level=WARN", "a directory that does not exist yet is the normal state of a fresh install")
+			}
+		})
+	}
 }
 
 func TestReconcileClipOrphansPass_EmptyBaseDirAborts(t *testing.T) {
@@ -611,11 +634,15 @@ func TestReconcileClipOrphansPass_AbortsWhenExportStorageChanges(t *testing.T) {
 	// are cleared, and the third chunk must never be read.
 	tests := []struct {
 		name string
+		// skipOnWindows skips a case that renames a directory the pass holds open,
+		// which Windows refuses.
+		skipOnWindows bool
 		// change alters the storage and returns the pathCurrent callback for the pass.
 		change func(t *testing.T, baseDir string) (trigger func(), pathCurrent func() bool)
 	}{
 		{
-			name: "export directory replaced",
+			name:          "export directory replaced",
+			skipOnWindows: true,
 			change: func(t *testing.T, baseDir string) (func(), func() bool) {
 				t.Helper()
 				return func() {
@@ -635,6 +662,9 @@ func TestReconcileClipOrphansPass_AbortsWhenExportStorageChanges(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.skipOnWindows && runtime.GOOS == "windows" {
+				t.Skip("Windows refuses to rename a directory the pass holds open")
+			}
 			withNoChunkPause(t)
 
 			baseDir := filepath.Join(t.TempDir(), "clips")

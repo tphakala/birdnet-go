@@ -43,38 +43,56 @@ func clipReconcileMonitor(quitChan <-chan struct{}, dataStore datastore.Interfac
 	log.Info("clip reconcile monitor initialized",
 		logger.String("operation", "clip_reconcile_init"))
 
+	runClipReconcileLoop(quitChan, reconcileMonitorWait, func() bool {
+		return runClipReconcilePass(log, quitChan, dataStore, exportBaseDir)
+	})
+}
+
+// runClipReconcileLoop defers the first pass by clipReconcileStartupDelay, then
+// runs pass once per clipReconcilePassInterval. It returns when wait reports
+// shutdown or when pass returns true. wait and pass are parameters so tests can
+// drive the loop without real delays or settings.
+func runClipReconcileLoop(quitChan <-chan struct{}, wait func(<-chan struct{}, time.Duration) bool, pass func() (stop bool)) {
 	// Defer the first pass; bail out immediately if shutdown arrives first.
-	if !reconcileMonitorWait(quitChan, clipReconcileStartupDelay) {
+	if !wait(quitChan, clipReconcileStartupDelay) {
 		return
 	}
-
 	for {
-		baseDir := exportBaseDir()
-		if baseDir == "" {
-			log.Debug("skipping clip reconcile: export path not configured",
-				logger.String("operation", "clip_reconcile_skip"))
-		} else {
-			// Keeps a long pass honest under hot reload: it aborts if the export
-			// path setting stops matching the directory the pass started on.
-			pathCurrent := func() bool {
-				return exportBaseDir() == baseDir
-			}
-			result := diskmanager.ReconcileClipOrphansPass(quitChan, dataStore, baseDir, pathCurrent)
-			if result.ShutdownRequested {
-				return
-			}
-			logReconcileResult(log, &result)
+		if pass() {
+			return
 		}
-
-		if !reconcileMonitorWait(quitChan, clipReconcilePassInterval) {
+		if !wait(quitChan, clipReconcilePassInterval) {
 			return
 		}
 	}
 }
 
+// runClipReconcilePass runs one reconcile pass against the directory exportDir
+// returns now, and logs its outcome. exportDir is read again during the pass so a
+// hot-reloaded export path aborts a pass that started on the old one. It returns
+// true when the pass stopped because shutdown was requested.
+func runClipReconcilePass(log logger.Logger, quitChan <-chan struct{}, store diskmanager.ReconcileStore, exportDir func() string) (stop bool) {
+	baseDir := exportDir()
+	if baseDir == "" {
+		log.Debug("skipping clip reconcile: export path not configured",
+			logger.String("operation", "clip_reconcile_skip"))
+		return false
+	}
+	pathCurrent := func() bool {
+		return exportDir() == baseDir
+	}
+	result := diskmanager.ReconcileClipOrphansPass(quitChan, store, baseDir, pathCurrent)
+	if result.ShutdownRequested {
+		return true
+	}
+	logReconcileResult(log, &result)
+	return false
+}
+
 // logReconcileResult logs the outcome of one reconcile pass. An aborted pass
-// stays at Debug: an unconfigured or inaccessible export directory is an expected
-// state, and the pass itself warns about read errors and export changes. A pass
+// stays at Debug: the pass itself warns about read errors, export changes and an
+// unreadable export directory, and the monitor skips an unconfigured path before
+// calling the pass. A pass
 // whose clear or retain writes failed is raised to Warn, aborted or not, so rows
 // that could not be healed are not reported as a clean run.
 func logReconcileResult(log logger.Logger, result *diskmanager.ReconcileResult) {
