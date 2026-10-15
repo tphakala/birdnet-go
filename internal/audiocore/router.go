@@ -792,9 +792,9 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	// analysis consumers, which read a pass-through route, enforcing the
 	// invariant nowhere. Non-PCM16 frames are left untouched: a 2-byte carry
 	// would regroup their frame boundaries and permanently withhold a trailing
-	// byte at stream end. The resampler assumes PCM16 by contract, so a
-	// resampling route fed another depth now fails loudly in ResampleTo
-	// instead of being silently realigned on the wrong unit.
+	// byte at stream end. The resampler assumes PCM16 by contract: ResampleTo
+	// rejects an odd byte length but cannot tell another depth from PCM16 at an
+	// even length, so a resampling route is only ever fed PCM16 sources.
 	chain := route.filterChain.Load()
 	if frame.BitDepth == bitDepthPCM16 {
 		frame.Data = r.alignPCM16(frame.Data, route)
