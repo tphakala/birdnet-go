@@ -1083,14 +1083,13 @@ var (
 // That is deliberate. On a clip built to force FFmpeg out of linear mode
 // (measured LRA 7.40 against a 7.0 target) loudnorm's dynamic mode compressed
 // LRA only 7.4 to 7.1 while missing the loudness target by 1.1 LU, where the
-// linear gain landed within 0.02 LU. The go-audio-dsp corpus comparison
-// against ffmpeg loudnorm (task ab:loudnorm in that repository) covers the
-// same transient-over-quiet-bed case.
+// linear gain landed within 0.02 LU. These figures were measured with a
+// comparison harness that is no longer in the repository.
 //
 // Scope that evidence honestly: it was gathered on clips around the 15 s default
 // export length. Extended capture can export far longer clips
 // (conf.MaxExtendedCaptureDuration is 1200 s), where dynamic-range treatment
-// would matter more, and the corpus does not cover that.
+// would matter more, and those measurements do not cover that.
 func (a *SaveAudioAction) resolveExportGainDB(ctx context.Context, exportRate int, format string) (gainDB float64, normalized bool, err error) {
 	exportSettings := &a.Settings.Realtime.Audio.Export
 	if !exportSettings.Normalization.Enabled {
