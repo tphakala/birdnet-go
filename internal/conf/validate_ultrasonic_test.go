@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // ultrasonicFilter returns an enabled filter config with the given STFT fields.
@@ -159,4 +161,23 @@ func TestNormalizeUltrasonicFilter_RepairsOnLoad(t *testing.T) {
 		assert.Equal(t, 2, first, "one warning for the pair, one for the split")
 		assert.Len(t, ultrasonicWarnings(s), first)
 	})
+}
+
+func TestValidateSTFT_ErrorsCarryComponentAndOperation(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  UltrasonicFilterConfig
+	}{
+		{name: "fft size", cfg: ultrasonicFilter(6000, 3000, 20000)},
+		{name: "hop size", cfg: ultrasonicFilter(8192, 16384, 20000)},
+		{name: "split", cfg: ultrasonicFilter(8192, 4096, -1)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var enhanced *errors.EnhancedError
+			require.ErrorAs(t, tt.cfg.ValidateSTFT(), &enhanced)
+			assert.Equal(t, "config", enhanced.GetComponent())
+			assert.Equal(t, "validate_ultrasonic_filter", enhanced.GetContext()["operation"])
+		})
+	}
 }

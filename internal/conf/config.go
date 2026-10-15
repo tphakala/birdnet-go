@@ -1442,14 +1442,18 @@ func (c UltrasonicFilterConfig) validateFrame() error {
 	if c.FFTSize < minUltrasonicFFTSize || c.FFTSize&(c.FFTSize-1) != 0 {
 		return errors.Newf("bat.ultrasonicfilter.fftsize must be a power of two of at least %d, got %d",
 			minUltrasonicFFTSize, c.FFTSize).
+			Component("config").
 			Category(errors.CategoryValidation).
+			Context("operation", "validate_ultrasonic_filter").
 			Context("validation_type", "ultrasonic-filter").
 			Build()
 	}
 	if c.HopSize < 1 || c.HopSize > c.FFTSize {
 		return errors.Newf("bat.ultrasonicfilter.hopsize must be between 1 and bat.ultrasonicfilter.fftsize (%d), got %d",
 			c.FFTSize, c.HopSize).
+			Component("config").
 			Category(errors.CategoryValidation).
+			Context("operation", "validate_ultrasonic_filter").
 			Context("validation_type", "ultrasonic-filter").
 			Build()
 	}
@@ -1460,7 +1464,9 @@ func (c UltrasonicFilterConfig) validateFrame() error {
 func (c UltrasonicFilterConfig) validateSplit() error {
 	if c.FrequencySplitHz < 0 {
 		return errors.Newf("bat.ultrasonicfilter.frequencysplithz must be 0 or greater, got %d", c.FrequencySplitHz).
+			Component("config").
 			Category(errors.CategoryValidation).
+			Context("operation", "validate_ultrasonic_filter").
 			Context("validation_type", "ultrasonic-filter").
 			Build()
 	}
