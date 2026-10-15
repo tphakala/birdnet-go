@@ -142,7 +142,8 @@ func RoundBitrateKbps(kbps int) int {
 // no seeking. It still writes through a temp file so a partially written clip is
 // never visible at the final path.
 //
-// ctx is honoured before the temp file is created but not during encoding:
+// ctx is honoured before the gain copy and the temp file are created but not
+// during encoding:
 // go-mp3's one-shot entry point runs to completion once started.
 func EncodePCM(ctx context.Context, opts *Options) error {
 	if opts == nil {
@@ -164,6 +165,10 @@ func EncodePCM(ctx context.Context, opts *Options) error {
 	// Gain is applied up front because the library entry point takes the whole
 	// clip; at 0 dB (the common case) AppliedBytes returns the source itself, so
 	// no copy is made. The result is read-only: it may alias opts.PCMData.
+	// A cancelled request must not pay for a full-clip gain copy first.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
 	g, err := gain.New(opts.GainDB)
 	if err != nil {
 		return errors.New(err).

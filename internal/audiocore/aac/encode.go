@@ -108,7 +108,8 @@ func Supports(sampleRate, bitDepth, channels int) error {
 // therefore lands after the payload, so the file is not optimised for
 // progressive download; the FFmpeg export path produces the same layout.
 //
-// ctx is honoured before the temp file is created but not during encoding:
+// ctx is honoured before the gain copy and the temp file are created but not
+// during encoding:
 // go-m4a's one-shot entry point runs to completion once started.
 func EncodePCM(ctx context.Context, opts *Options) error {
 	if opts == nil {
@@ -131,6 +132,10 @@ func EncodePCM(ctx context.Context, opts *Options) error {
 	// aacm4a buffers the entire encoded ADTS stream in memory before muxing it,
 	// so peak usage scales with clip length rather than staying constant as it
 	// does on the FLAC path.
+	// A cancelled request must not pay for a full-clip gain copy first.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
 	g, err := gain.New(opts.GainDB)
 	if err != nil {
 		return errors.New(err).

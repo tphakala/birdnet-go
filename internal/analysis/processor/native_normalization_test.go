@@ -463,7 +463,7 @@ func TestEncodeClipFLACNormalizationSkipped(t *testing.T) {
 	s.Realtime.Audio.Export.Normalization.Enabled = true
 	s.Realtime.Audio.Export.Normalization.TargetLUFS = testTargetLUFS
 	// TruePeak > 0 is outside loudnorm's supported range, so loudnorm.ValidateTargets
-	// returns false and encodeClip takes the skip-normalization branch.
+	// returns an error and encodeClip takes the skip-normalization branch.
 	s.Realtime.Audio.Export.Normalization.TruePeak = 5.0
 	s.Realtime.Audio.Export.Gain = staticGainDB
 
