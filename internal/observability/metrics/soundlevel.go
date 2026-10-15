@@ -30,7 +30,7 @@ type SoundLevelMetrics struct {
 
 	// lastNames holds the name each source last published under, guarded by
 	// namesMu, so a rename can drop the series of the old name.
-	namesMu   sync.Mutex
+	namesMu   sync.RWMutex
 	lastNames map[string]string
 }
 
@@ -180,12 +180,19 @@ func (m *SoundLevelMetrics) Collect(ch chan<- prometheus.Metric) {
 // differs from the one last recorded for that source, every series labelled with
 // that source and the old name is deleted from all sound level vectors, so a
 // rename leaves no frozen series behind and the new name starts from zero. An
-// unchanged name only takes the lock and compares strings. It is safe for
-// concurrent use.
+// unchanged name only takes the read lock and compares strings. It is safe for
+// concurrent use. Call it once per interval before any publisher sees the new
+// name, so the publishing recorders can tell a stale name from the current one.
 func (m *SoundLevelMetrics) TrackSourceName(source, name string) {
+	m.namesMu.RLock()
+	prev, seen := m.lastNames[source]
+	m.namesMu.RUnlock()
+	if seen && prev == name {
+		return
+	}
 	m.namesMu.Lock()
 	defer m.namesMu.Unlock()
-	prev, seen := m.lastNames[source]
+	prev, seen = m.lastNames[source]
 	if seen && prev == name {
 		return
 	}
@@ -193,6 +200,15 @@ func (m *SoundLevelMetrics) TrackSourceName(source, name string) {
 	if seen {
 		m.deleteSourceName(source, prev)
 	}
+}
+
+// isStaleName reports whether name is not the name last tracked for source. A
+// source that was never tracked has no stale name.
+func (m *SoundLevelMetrics) isStaleName(source, name string) bool {
+	m.namesMu.RLock()
+	current, seen := m.lastNames[source]
+	m.namesMu.RUnlock()
+	return seen && current != name
 }
 
 // deleteSourceName removes every series with the given source and name labels.
@@ -240,13 +256,22 @@ func (m *SoundLevelMetrics) RecordSoundLevelProcessingError(source, name, errorT
 	m.soundLevelProcessingErrors.WithLabelValues(source, name, errorType).Inc()
 }
 
-// RecordSoundLevelPublishing records a sound level publishing attempt
+// RecordSoundLevelPublishing records a sound level publishing attempt. A write
+// under a name the source no longer has is dropped, so a slow publisher
+// finishing an old interval cannot recreate a series TrackSourceName deleted.
 func (m *SoundLevelMetrics) RecordSoundLevelPublishing(source, name, destination, status string) {
+	if m.isStaleName(source, name) {
+		return
+	}
 	m.soundLevelPublishingTotal.WithLabelValues(source, name, destination, status).Inc()
 }
 
-// RecordSoundLevelPublishingError records a sound level publishing error
+// RecordSoundLevelPublishingError records a sound level publishing error. Like
+// RecordSoundLevelPublishing it drops a write under a stale name.
 func (m *SoundLevelMetrics) RecordSoundLevelPublishingError(source, name, destination, errorType string) {
+	if m.isStaleName(source, name) {
+		return
+	}
 	m.soundLevelPublishingErrors.WithLabelValues(source, name, destination, errorType).Inc()
 }
 

@@ -24,9 +24,6 @@ func updateSoundLevelMetrics(soundData soundlevel.SoundLevelData, metrics *obser
 
 	startTime := time.Now()
 
-	// A rename changes the name label; drop the series of the old name first.
-	metrics.SoundLevel.TrackSourceName(soundData.Source, soundData.Name)
-
 	// Record the measurement duration
 	metrics.SoundLevel.RecordSoundLevelDuration(soundData.Source, soundData.Name, float64(soundData.Duration))
 

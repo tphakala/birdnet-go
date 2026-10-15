@@ -28,6 +28,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	obsmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
@@ -900,6 +901,11 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 					// Follow a rename made since registration, which does not
 					// rebuild the consumer.
 					data.Name = p.currentSourceName(sid)
+					// Record the name before any publisher sees it, so the
+					// metrics drop the old name's series and reject its late writes.
+					if sl := p.soundLevelMetrics(); sl != nil {
+						sl.TrackSourceName(data.Source, data.Name)
+					}
 					select {
 					case p.soundLevelChan <- data:
 					default:
@@ -914,6 +920,18 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 			logger.Int("interval_seconds", slInterval),
 			logger.String("operation", operation))
 	}
+}
+
+// soundLevelMetrics returns the sound level metrics, or nil when metrics are
+// not configured.
+func (p *AudioPipelineService) soundLevelMetrics() *obsmetrics.SoundLevelMetrics {
+	if p.apiService == nil {
+		return nil
+	}
+	if m := p.apiService.Metrics(); m != nil {
+		return m.SoundLevel
+	}
+	return nil
 }
 
 // currentSourceName returns the display name the registry holds for sourceID

@@ -2,12 +2,10 @@ package analysis
 
 import (
 	"testing"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -30,31 +28,30 @@ func metricNameLabelCounts(t *testing.T, reg *prometheus.Registry) map[string]in
 	return counts
 }
 
-// TestUpdateSoundLevelMetrics_RenameDropsOldNameSeries pins that publishing the
-// same source under a new name removes the series of the old name.
-func TestUpdateSoundLevelMetrics_RenameDropsOldNameSeries(t *testing.T) {
+// TestSoundLevelBridge_RenameDropsOldNameSeries pins that the pipeline records
+// each interval's name before any publisher sees it, so a rename removes the
+// series of the old name and a late write under it is dropped.
+func TestSoundLevelBridge_RenameDropsOldNameSeries(t *testing.T) {
+	p, engine, src := newNameTestPipeline(t)
 	reg := prometheus.NewRegistry()
 	sl, err := metrics.NewSoundLevelMetrics(reg)
 	require.NoError(t, err)
-	m := &observability.Metrics{SoundLevel: sl}
+	p.apiService = &APIServerService{metrics: &observability.Metrics{SoundLevel: sl}}
+	p.registerSoundLevelConsumers([]string{src.ID}, "unit_test_metrics_rename")
 
-	publish := func(name string) {
-		updateSoundLevelMetrics(soundlevel.SoundLevelData{
-			Timestamp: time.Now(),
-			Source:    "src-1",
-			Name:      name,
-			Duration:  10,
-			OctaveBands: map[string]soundlevel.OctaveBandData{
-				"1.0_kHz": {CenterFreq: 1000, Min: -50, Max: -30, Mean: -40, SampleCount: 10},
-			},
-		}, m)
-	}
+	first := publishOneSecond(t, p, engine, src.ID)
+	sl.RecordSoundLevelPublishing(first.Source, first.Name, "mqtt", "success")
+	require.Positive(t, metricNameLabelCounts(t, reg)[first.Name])
 
-	publish("Old name")
-	require.Positive(t, metricNameLabelCounts(t, reg)["Old name"])
+	require.True(t, engine.Registry().UpdateDisplayName(src.ID, nameTestRenamed))
+	second := publishOneSecond(t, p, engine, src.ID)
+	require.Equal(t, nameTestRenamed, second.Name)
 
-	publish("New name")
+	// A publisher that was still working on the first interval finishes now.
+	sl.RecordSoundLevelPublishing(first.Source, first.Name, "mqtt", "success")
+	sl.RecordSoundLevelPublishing(second.Source, second.Name, "mqtt", "success")
+
 	counts := metricNameLabelCounts(t, reg)
-	assert.Zero(t, counts["Old name"])
-	assert.Positive(t, counts["New name"])
+	assert.Zero(t, counts[first.Name])
+	assert.Positive(t, counts[nameTestRenamed])
 }

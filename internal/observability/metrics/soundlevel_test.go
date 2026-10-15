@@ -92,3 +92,47 @@ func TestTrackSourceName_SameNameKeepsSeriesAndDoesNotAllocate(t *testing.T) {
 	assert.Zero(t, allocs)
 	assert.Equal(t, before, seriesWithName(t, reg, testSourceID, testNameA))
 }
+
+// TestRecordPublishing_StaleNameIsDropped pins that a publisher finishing an
+// interval under a name the source no longer has cannot recreate the deleted
+// series, for both publishing recorders.
+func TestRecordPublishing_StaleNameIsDropped(t *testing.T) {
+	m, reg := newTestSoundLevelMetrics(t)
+
+	m.TrackSourceName(testSourceID, testNameA)
+	m.RecordSoundLevelPublishing(testSourceID, testNameA, "mqtt", "success")
+	require.Positive(t, seriesWithName(t, reg, testSourceID, testNameA))
+
+	m.TrackSourceName(testSourceID, testNameB)
+	m.RecordSoundLevelPublishing(testSourceID, testNameA, "mqtt", "success")
+	m.RecordSoundLevelPublishingError(testSourceID, testNameA, "mqtt", "publish_error")
+
+	assert.Zero(t, seriesWithName(t, reg, testSourceID, testNameA), "a stale write must not recreate the old series")
+
+	m.RecordSoundLevelPublishing(testSourceID, testNameB, "mqtt", "success")
+	assert.Positive(t, seriesWithName(t, reg, testSourceID, testNameB), "the current name still records")
+}
+
+// TestRecordPublishing_UnseenSourceRecords pins that a source never passed to
+// TrackSourceName records normally.
+func TestRecordPublishing_UnseenSourceRecords(t *testing.T) {
+	m, reg := newTestSoundLevelMetrics(t)
+
+	m.RecordSoundLevelPublishing(testSourceID, testNameA, "sse", "success")
+	m.RecordSoundLevelPublishingError(testSourceID, testNameA, "sse", "broadcast_error")
+
+	assert.Equal(t, 2, seriesWithName(t, reg, testSourceID, testNameA))
+}
+
+// TestRecordPublishing_CurrentNameDoesNotAllocate pins the steady state of the
+// stale-name check on the publishing recorders.
+func TestRecordPublishing_CurrentNameDoesNotAllocate(t *testing.T) {
+	m, _ := newTestSoundLevelMetrics(t)
+	m.TrackSourceName(testSourceID, testNameA)
+	m.RecordSoundLevelPublishing(testSourceID, testNameA, "mqtt", "success")
+
+	allocs := testing.AllocsPerRun(testAllocRuns, func() {
+		m.RecordSoundLevelPublishing(testSourceID, testNameA, "mqtt", "success")
+	})
+	assert.Zero(t, allocs)
+}
