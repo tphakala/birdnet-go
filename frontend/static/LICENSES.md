@@ -584,7 +584,7 @@ Source: BSD-3-Clause
 
 ### gopkg.in/yaml.v3
 
-License: https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE
+License: Unknown
 Source: MIT
 
 ### gorm.io/driver/mysql
