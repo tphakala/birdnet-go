@@ -23,7 +23,8 @@ const (
 	// privacyCoverageHorizon bounds how stale a source's coverage may be before the
 	// coverage gate treats the source as not covered by any detector at all (a
 	// bat-only source, or a detector that never ran) and does not wait. It equals
-	// the default capture buffer, the longest span a clip can reach back.
+	// the default capture buffer; an extended capture can reach further back, and
+	// then a clip with a hole in its coverage waits for the fail-open timeout.
 	privacyCoverageHorizon = time.Duration(conf.DefaultCaptureBufferSeconds) * time.Second
 	// privacyCoverageMaxSpans caps the scanned spans kept per (source, model,
 	// detector); a new span starts only after a hole, so few are ever live.

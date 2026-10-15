@@ -157,7 +157,7 @@ type sourceStream struct {
 	covFrom time.Time
 }
 
-// newVADGate creates an empty gate; the shared session and per-source streamers
+// newVADGate creates an empty gate; the shared session and per-stream streamers
 // load lazily on first use.
 func newVADGate() *vadGate {
 	return &vadGate{
@@ -389,7 +389,7 @@ func isInferenceError(err error) bool {
 	return false
 }
 
-// freshTailBytes converts the start-time delta between two overlapping chunks
+// freshTailBytes converts the audio-end delta between two overlapping chunks
 // into the byte length of the newest (non-overlapped) tail of the current chunk,
 // clamped to [0, pcmLen] and aligned to whole PCM samples.
 func freshTailBytes(delta time.Duration, sampleRate, pcmLen int) int {

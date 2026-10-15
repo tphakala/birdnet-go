@@ -80,12 +80,13 @@ type monitorTickState struct {
 //
 // The analysis ring is FIFO, so a lagging monitor reads old audio: the newest
 // unread byte was written at lastWriteAt, and the window ends the unread
-// backlog earlier. A write between Read and Backlog only makes the result
-// earlier, the safe direction for coverage claims.
+// backlog earlier. A write between Read and Backlog shifts the result by that
+// write's arrival jitter: later when the write arrives after a stall, so the
+// error is bounded by the stall and absorbed by the privacy clip guard.
 //
 // gap is true for the first window of a buffer instance (its overlap head is
-// zero filled), after overwrite-mode loss or an AnalysisBuffer.Reset, and after a window that was read but
-// skipped (see markWindowSkipped). The skip latch is consumed here.
+// zero filled), after overwrite-mode loss or an AnalysisBuffer.Reset, and after
+// a window that was read but skipped (see markWindowSkipped). The skip latch is consumed here.
 func (s *monitorTickState) windowTiming(ab *buffer.AnalysisBuffer, bytesPerSecond int) (audioEnd time.Time, gap bool) {
 	backlogBytes, lastWriteAt := ab.Backlog()
 	lost := ab.LostAtLastRead()
