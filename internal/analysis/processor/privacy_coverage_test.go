@@ -803,11 +803,12 @@ func TestPrivacy_VADHitsAreWrittenBeforeTheirCoverageIsPublished(t *testing.T) {
 		next := done.Load() + 1
 		end := time.Duration(next) * time.Second
 		// A clip that coverage reaches exactly when chunk next is published.
-		item := &PendingDetection{Source: e2eSource, FirstDetected: r.at(end).Add(-privacyClipGuard - e2eExportLength*time.Second)}
+		item := &PendingDetection{Source: e2eSource, BestModelID: r.model, FirstDetected: r.at(end).Add(-privacyClipGuard - e2eExportLength*time.Second)}
 		check := r.p.checkPrivacy(r.settings, item, r.at(end))
-		if check.verdict == coverageKeep && check.hasHit {
-			if !assert.False(t, check.hit.Time.Before(r.at(end)),
-				"coverage through chunk %d was seen before its speech hit", next) {
+		if check.verdict == coverageKeep {
+			if !assert.True(t, check.hasHit, "coverage through chunk %d was seen with no speech hit at all", next) ||
+				!assert.False(t, check.hit.Time.Before(r.at(end)),
+					"coverage through chunk %d was seen before its speech hit", next) {
 				return
 			}
 		}
