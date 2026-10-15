@@ -305,7 +305,7 @@ func TestReconcileClipOrphansPass_KeysetPaginationAcrossChunks(t *testing.T) {
 
 	// More refs than one chunk to exercise keyset pagination and termination.
 	// Present files are interspersed (even IDs) so every chunk has positive
-	// evidence and the detached-storage guard never trips; odd IDs are ghosts.
+	// evidence; odd IDs are ghosts, and ID 1 is held for lack of earlier evidence.
 	refs := make([]ClipReference, 0, reconcileChunkSize+50)
 	wantCleared := 0
 	for i := uint(1); i <= reconcileChunkSize+50; i++ {
@@ -322,7 +322,7 @@ func TestReconcileClipOrphansPass_KeysetPaginationAcrossChunks(t *testing.T) {
 
 	result := ReconcileClipOrphansPass(quit, store, baseDir, nil)
 
-	assert.False(t, result.Aborted, "no chunk is all-orphan, so the pass must complete")
+	assert.False(t, result.Aborted, "every chunk holds a present file, so the pass must complete")
 	assert.Equal(t, len(refs), result.Scanned, "must scan every ref across chunks")
 	// ID 1 is a ghost before any evidence (ID 2 is the first present file): held.
 	assert.Equal(t, int64(wantCleared-1), result.Cleared)

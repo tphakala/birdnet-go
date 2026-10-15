@@ -131,9 +131,9 @@ const (
 )
 
 // ReconcileClipOrphansPass walks all clip references in keyset-paginated chunks and
-// clears those whose audio file is confirmed missing, or, when a spectrogram render
-// of the clip survives, re-links the render by moving the name to the spectrogram
-// clip name. It never deletes files.
+// clears those whose audio file is confirmed missing and that pass the guards below,
+// or, when a spectrogram render of the clip survives, re-links the render by moving
+// the name to the spectrogram clip name. It never deletes files.
 //
 // Safety guards (fail-safe = leave the stale reference rather than risk data loss):
 //
