@@ -2035,7 +2035,7 @@ realtime:
       debug_realtime_logging: true # Enable per-band logging for every interval (verbose!)
 ```
 
-Debug logs are written by the `analysis.soundlevel` logger module. No dedicated log file is configured for it by default, so they go to the application log unless you add a file for that module under `logging.modules`. Use `debug_realtime_logging` sparingly as it logs every band of every interval.
+Debug logs are written by the `analysis.soundlevel` logger module, and its `analysis.soundlevel.metrics` child for the per-band metric updates. No dedicated log file is configured for it by default, so they go to the application log unless you add a file for that module under `logging.modules`. Use `debug_realtime_logging` sparingly as it logs every band of every interval.
 
 ##### Extending the System
 
