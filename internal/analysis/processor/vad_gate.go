@@ -37,7 +37,8 @@ const (
 	vadResetGap = time.Second
 	// vadCoverageJoinTolerance is the largest time hole between two consecutive
 	// chunks (audio-end delta minus chunk duration) that still counts as
-	// contiguous scored audio. A larger hole, short of vadResetGap, keeps the LSTM
+	// contiguous scored audio, for producers that report no stream positions
+	// (with positions, adjacency is judged on the positions instead). A larger hole, short of vadResetGap, keeps the LSTM
 	// state but starts a new coverage span, because the audio inside the hole was
 	// never scored. A hole under this tolerance is timing jitter; speech cannot
 	// fit entirely inside one, though a syllable fragment can.
@@ -144,8 +145,14 @@ type sourceStream struct {
 	// resets the streamer.
 	sampleRate int
 	// covFrom is the start of this stream's contiguous scored audio; a flush
-	// publishes [covFrom, audioEnd] as covered.
+	// publishes [covFrom, audioEnd] as covered. covPos is the stream position of
+	// covFrom when the producer reports positions.
 	covFrom time.Time
+	covPos  int64
+	// lastEndPos and lastGen are the producer's end position and generation of the
+	// last accepted chunk, to tell a position hole from contiguous audio.
+	lastEndPos int64
+	lastGen    uint64
 }
 
 // newVADGate creates an empty gate; the shared session and per-stream streamers
@@ -195,7 +202,8 @@ func (g *vadGate) closeAllLocked() {
 // backoff window, the chunk was buffered without a flush this interval (the
 // throttle cadence), it was an out-of-order or duplicate chunk, or the flush had
 // no complete hop yet. When ran is true, span is the contiguous audio time this
-// stream has scored so far, ending at the chunk's audio end. The audio appended
+// stream has scored so far, ending at the chunk's audio end, with the stream
+// positions it covers when the producer reports them. The audio appended
 // for the chunk is at least ch.freshBytes when the producer reports it. A non-nil error
 // indicates a session load or inference failure (an inference failure tears the
 // session down; a per-stream data error drops only that streamer).
@@ -256,6 +264,7 @@ func (g *vadGate) score(cfg *vad.Config, cacheKey string, ch *chunkAudio) (resul
 	if ch.span.to.After(entry.lastEnd) {
 		entry.lastEnd = ch.span.to
 	}
+	entry.lastEndPos, entry.lastGen = ch.endPos, ch.generation
 
 	// Flush (a decision) at most once per throttle span per stream; between
 	// flushes fresh audio is only buffered.
@@ -298,30 +307,34 @@ func (g *vadGate) score(cfg *vad.Config, cacheKey string, ch *chunkAudio) (resul
 	entry.lastFlush = ch.span.to
 	entry.hasFlushed = true
 	g.recordInference(dur)
-	return vadScore{prob: prob, dur: dur, span: audioSpan{from: entry.covFrom, to: ch.span.to}}, true, nil
+	span := audioSpan{from: entry.covFrom, to: ch.span.to}
+	if ch.hasPositions() {
+		span.startPos, span.endPos, span.gen = entry.covPos, ch.endPos, ch.generation
+	}
+	return vadScore{prob: prob, dur: dur, span: span}, true, nil
 }
 
 // prepareSourceStream returns the chunk's stream, the non-overlapped tail of
 // this chunk to append, and skip=true when the chunk carries no new audio (an
 // out-of-order or duplicate chunk). It resets the streamer on a discontinuity (a
 // producer gap flag, a sample-rate change or a coverage gap larger than one
-// chunk plus vadResetGap), restarts the coverage span on any hole larger than
-// vadCoverageJoinTolerance, and leaves lastEnd for the caller to advance after
+// chunk plus vadResetGap), restarts the coverage span at the start of the
+// chunk's contiguous tail on a gap or on any unscored hole (a stream position
+// hole, or a time hole beyond vadCoverageJoinTolerance when the producer reports
+// no positions), and leaves lastEnd for the caller to advance after
 // Append succeeds. All timing is on the chunk's audio end, which does not move
 // with the PreCapture setting. The fresh audio appended is at
-// least the producer's exact fresh byte count, never less, so timing jitter in the
-// audio end cannot drop audio the span goes on to claim. The caller must hold g.mu.
+// least the producer's exact fresh byte count, never less, and with stream
+// positions it is exactly what was added since the last accepted chunk, so
+// timing jitter in the audio end cannot drop audio the span goes on to claim. The caller must hold g.mu.
 func (g *vadGate) prepareSourceStream(ch *chunkAudio) (entry *sourceStream, freshPCM []byte, skip bool) {
 	chunkDur := pcmChunkDuration(len(ch.pcm), ch.sampleRate)
 	chunkStart := ch.span.from
 	entry, ok := g.streams[ch.key]
 	if !ok {
-		entry = &sourceStream{s: g.newStreamer(), sampleRate: ch.sampleRate, covFrom: chunkStart}
-		if ch.gap {
-			// The first window of a buffer has a zero-filled overlap head: scored,
-			// but not real audio, so it is not claimed as covered.
-			entry.covFrom = ch.span.to
-		}
+		// The first window of a buffer has a zero-filled overlap head: scored, but
+		// not real audio, so only the contiguous tail is claimed as covered.
+		entry = &sourceStream{s: g.newStreamer(), sampleRate: ch.sampleRate, covFrom: ch.scoredFrom(), covPos: ch.tailStartPos()}
 		g.streams[ch.key] = entry
 		return entry, ch.pcm, false
 	}
@@ -339,10 +352,7 @@ func (g *vadGate) prepareSourceStream(ch *chunkAudio) (entry *sourceStream, fres
 		entry.s.Reset()
 		entry.sampleRate = ch.sampleRate
 		entry.hasFlushed = false
-		entry.covFrom = chunkStart
-		if ch.gap {
-			entry.covFrom = ch.span.to
-		}
+		entry.covFrom, entry.covPos = ch.scoredFrom(), ch.tailStartPos()
 		freshPCM = ch.pcm
 	case delta <= 0 && ch.freshBytes <= 0:
 		// Out-of-order or duplicate chunk: its audio was already appended when the
@@ -351,10 +361,14 @@ func (g *vadGate) prepareSourceStream(ch *chunkAudio) (entry *sourceStream, fres
 		// negative from timing jitter while the window still carries new audio.
 		return entry, nil, true
 	default:
-		if delta-chunkDur > vadCoverageJoinTolerance {
+		if g.hasUnscoredHole(entry, ch, delta-chunkDur) {
 			// A hole the LSTM state survives but the scorer never saw: the audio
 			// before this chunk is not contiguous with what was scored.
+			entry.covPos = ch.tailStartPos()
 			entry.covFrom = chunkStart
+			if ch.hasPositions() {
+				entry.covFrom = ch.scoredFrom()
+			}
 		}
 		// Overlap or a contiguous boundary: only the tail past the previous chunk's
 		// end is new audio. freshTailBytes rounds to whole samples and clamps to
@@ -365,14 +379,33 @@ func (g *vadGate) prepareSourceStream(ch *chunkAudio) (entry *sourceStream, fres
 		// arrival jitter, and a delta shorter than the true step would drop real
 		// audio from scoring while the span still claims it. The delta can only add
 		// to the floor, which recovers the audio of a window the queue dropped from
-		// this window's overlap head.
+		// this window's overlap head. When the producer reports stream positions
+		// they replace the delta, so the audio appended is exactly the audio the
+		// span claims.
 		fresh := freshTailBytes(delta, ch.sampleRate, len(ch.pcm))
+		if ch.hasPositions() && ch.generation == entry.lastGen {
+			// With stream positions the bytes added since the last accepted chunk
+			// are known exactly, whatever the timestamps say.
+			fresh = int(min(max(ch.endPos-entry.lastEndPos, 0), int64(len(ch.pcm)))) &^ (vadBytesPerSample - 1)
+		}
 		if ch.freshBytes > fresh {
 			fresh = min(ch.freshBytes, len(ch.pcm)) &^ (vadBytesPerSample - 1)
 		}
 		freshPCM = ch.pcm[len(ch.pcm)-fresh:]
 	}
 	return entry, freshPCM, false
+}
+
+// hasUnscoredHole reports whether audio between the stream's last accepted chunk
+// and the start of ch was never scored. With stream positions it is a position
+// hole (or a new stream generation); the producer's positions do not depend on
+// timestamp jitter. Without positions it is a time hole beyond
+// vadCoverageJoinTolerance (extra is the audio-end delta minus the chunk length).
+func (g *vadGate) hasUnscoredHole(entry *sourceStream, ch *chunkAudio, extra time.Duration) bool {
+	if ch.hasPositions() {
+		return ch.generation != entry.lastGen || ch.tailStartPos() > entry.lastEndPos
+	}
+	return extra > vadCoverageJoinTolerance
 }
 
 // pcmChunkDuration returns the wall-clock duration of a 16-bit mono PCM chunk of

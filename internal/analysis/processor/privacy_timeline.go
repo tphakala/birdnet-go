@@ -55,9 +55,14 @@ const (
 	coverageTimedOut
 )
 
-// audioSpan is a stretch of audio time, [from, to].
+// audioSpan is a stretch of audio time, [from, to]. A coverage span published
+// from a producer that reports stream positions also carries the stream
+// position range it covers (startPos to endPos) and the stream generation, so
+// spans join on positions instead of timestamps; gen zero means no positions.
 type audioSpan struct {
-	from, to time.Time
+	from, to         time.Time
+	startPos, endPos int64
+	gen              uint64
 }
 
 // chunkAudio is the per-chunk data the VAD gate and the coverage publisher both
@@ -69,9 +74,14 @@ type chunkAudio struct {
 	// span is the audio the chunk's window covers on the capture timeline, ending
 	// at item.Audio.EndAt (set by the producer, backlog corrected).
 	span audioSpan
-	// gap and freshBytes come from the producer (classifier.AudioTiming).
-	gap        bool
-	freshBytes int
+	// gap, freshBytes, contiguousBytes, endPos and generation come from the
+	// producer (classifier.AudioTiming); generation zero means it reports no
+	// stream positions.
+	gap             bool
+	freshBytes      int
+	contiguousBytes int
+	endPos          int64
+	generation      uint64
 }
 
 // speechBandSpec reports whether a model's audio can carry speech: the ultrasonic
@@ -80,7 +90,8 @@ func speechBandSpec(spec classifier.ModelSpec) bool {
 	return spec.RawSampleRate == 0 && spec.EffectiveSampleRate() > 0
 }
 
-// newChunkAudio builds the per-chunk data for item. ok is false when the chunk
+// newChunkAudio builds the per-chunk data for item, including the producer's
+// contiguous tail and stream positions when it reports them. ok is false when the chunk
 // cannot carry speech the privacy detectors could hear: no PCM, an unknown model
 // or an ultrasonic one.
 func newChunkAudio(item *classifier.Results) (chunk chunkAudio, ok bool) {
@@ -94,23 +105,56 @@ func newChunkAudio(item *classifier.Results) (chunk chunkAudio, ok bool) {
 	rate := spec.EffectiveSampleRate()
 	end := item.Audio.EndAt
 	return chunkAudio{
-		key:        vadStreamKey{source: item.Source.ID, model: item.ModelID},
-		pcm:        item.PCMdata,
-		sampleRate: rate,
-		span:       audioSpan{from: end.Add(-pcmChunkDuration(len(item.PCMdata), rate)), to: end},
-		gap:        item.Audio.Gap,
-		freshBytes: item.Audio.FreshBytes,
+		key:             vadStreamKey{source: item.Source.ID, model: item.ModelID},
+		pcm:             item.PCMdata,
+		sampleRate:      rate,
+		span:            audioSpan{from: end.Add(-pcmChunkDuration(len(item.PCMdata), rate)), to: end},
+		gap:             item.Audio.Gap,
+		freshBytes:      item.Audio.FreshBytes,
+		contiguousBytes: item.Audio.ContiguousBytes,
+		endPos:          item.Audio.EndPos,
+		generation:      item.Audio.Generation,
 	}, true
 }
 
-// scoredFrom is where the chunk's genuinely captured audio begins. A window after
-// a gap (the first of a buffer, or after lost audio) has a zero-filled or spliced
-// head that must not be claimed as scanned, so it claims nothing before its end.
+// hasPositions reports that the producer gave stream positions for the chunk.
+func (c *chunkAudio) hasPositions() bool { return c.generation != 0 }
+
+// tailBytes is how many bytes at the end of the chunk are genuine contiguous
+// audio: the producer's count, clamped to the chunk, or the whole chunk when the
+// producer does not report one.
+func (c *chunkAudio) tailBytes() int {
+	if c.contiguousBytes <= 0 || c.contiguousBytes > len(c.pcm) {
+		return len(c.pcm)
+	}
+	return c.contiguousBytes
+}
+
+// tailStartPos is the stream position where the chunk's contiguous tail starts.
+func (c *chunkAudio) tailStartPos() int64 { return c.endPos - int64(c.tailBytes()) }
+
+// scoredFrom is where the chunk's genuinely captured audio begins. With stream
+// positions it is the start of the contiguous tail, so a zero-filled head or the
+// pre-loss audio in an overlap head is never claimed as scanned. Without
+// positions, a window after a gap claims nothing before its end.
 func (c *chunkAudio) scoredFrom() time.Time {
+	if c.hasPositions() {
+		return c.span.to.Add(-pcmChunkDuration(c.tailBytes(), c.sampleRate))
+	}
 	if c.gap {
 		return c.span.to
 	}
 	return c.span.from
+}
+
+// coverage is the span this chunk's own scan earned: its contiguous tail, with
+// the stream positions when the producer reports them.
+func (c *chunkAudio) coverage() audioSpan {
+	span := audioSpan{from: c.scoredFrom(), to: c.span.to}
+	if c.hasPositions() {
+		span.startPos, span.endPos, span.gen = c.tailStartPos(), c.endPos, c.generation
+	}
+	return span
 }
 
 // recordHumanDetection records a speech hit on source at the capture time of the
@@ -172,15 +216,25 @@ func (p *Processor) publishCoverage(updates ...coverageUpdate) {
 }
 
 // mergeCoverageLocked is the per-key body of publishCoverage; the caller must
-// hold detectionMutex and have created the map.
+// hold detectionMutex and have created the map. When both spans carry stream
+// positions they join only if they are in the same generation and the new span
+// starts at or before the stored end position: a publish that was skipped, or
+// audio lost on the way, leaves a position hole whatever the timestamps say.
+// Otherwise a span joins when it starts within vadCoverageJoinTolerance of the
+// stored end time.
 func (p *Processor) mergeCoverageLocked(key coverageKey, span audioSpan) {
 	spans := p.privacyCoverage[key]
-	if n := len(spans); n > 0 && span.from.Compare(spans[n-1].to.Add(vadCoverageJoinTolerance)) <= 0 {
-		if span.to.After(spans[n-1].to) {
-			spans[n-1].to = span.to
+	if n := len(spans); n > 0 && spansJoin(&spans[n-1], &span) {
+		last := &spans[n-1]
+		if span.to.After(last.to) {
+			last.to = span.to
 		}
-		if span.from.Before(spans[n-1].from) {
-			spans[n-1].from = span.from
+		if span.from.Before(last.from) {
+			last.from = span.from
+		}
+		if span.gen != 0 {
+			last.endPos = max(last.endPos, span.endPos)
+			last.startPos = min(last.startPos, span.startPos)
 		}
 	} else if span.to.After(span.from) {
 		spans = append(spans, span)
@@ -201,9 +255,19 @@ func (p *Processor) mergeCoverageLocked(key coverageKey, span audioSpan) {
 	p.privacyCoverage[key] = kept
 }
 
+// spansJoin reports whether next continues last without an unscanned hole.
+func spansJoin(last, next *audioSpan) bool {
+	if last.gen != 0 && next.gen != 0 {
+		return last.gen == next.gen && next.startPos <= last.endPos
+	}
+	return next.from.Compare(last.to.Add(vadCoverageJoinTolerance)) <= 0
+}
+
 // publishPrivacyCoverage publishes the coverage a processed chunk earned, in one
 // step. Call it after the chunk's VAD hit and label hits are written, so a
-// published span never claims audio whose hits are still outstanding. vad is the
+// published span never claims audio whose hits are still outstanding. Label
+// coverage claims the chunk's contiguous tail; spans join on stream positions
+// when the producer reports them. vad is the
 // span runVADGate returned when it ran an inference (vadRan). When the privacy
 // filter is on, the label model's own chunk counts as label coverage.
 func (p *Processor) publishPrivacyCoverage(settings *conf.Settings, chunk *chunkAudio, vad audioSpan, vadRan bool) {
@@ -216,7 +280,7 @@ func (p *Processor) publishPrivacyCoverage(settings *conf.Settings, chunk *chunk
 	}
 	updates = append(updates, coverageUpdate{
 		coverageKey{chunk.key.source, chunk.key.model, metrics.TriggerLabel},
-		audioSpan{from: chunk.scoredFrom(), to: chunk.span.to},
+		chunk.coverage(),
 	})
 	p.publishCoverage(updates...)
 }

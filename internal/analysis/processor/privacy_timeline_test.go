@@ -123,7 +123,7 @@ func TestPublishCoverage(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 	key := coverageKey{"src", "m", metrics.TriggerVAD}
-	span := func(from, to time.Duration) audioSpan { return audioSpan{base.Add(from), base.Add(to)} }
+	span := func(from, to time.Duration) audioSpan { return audioSpan{from: base.Add(from), to: base.Add(to)} }
 
 	t.Run("contiguous spans extend the newest", func(t *testing.T) {
 		t.Parallel()
@@ -173,7 +173,7 @@ func TestRequiredDetector(t *testing.T) {
 
 	assert.Equal(t, metrics.TriggerLabel, p.requiredDetectorLocked(settings, "src", now), "VAD not loaded and never seen")
 
-	p.publishCoverage(coverageUpdate{coverageKey{"src", "m", metrics.TriggerVAD}, audioSpan{now.Add(-time.Minute), now.Add(-30 * time.Second)}})
+	p.publishCoverage(coverageUpdate{coverageKey{"src", "m", metrics.TriggerVAD}, audioSpan{from: now.Add(-time.Minute), to: now.Add(-30 * time.Second)}})
 	assert.Equal(t, metrics.TriggerVAD, p.requiredDetectorLocked(settings, "src", now), "recent VAD coverage")
 	assert.Equal(t, metrics.TriggerLabel, p.requiredDetectorLocked(settings, "other", now))
 	assert.Equal(t, metrics.TriggerLabel, p.requiredDetectorLocked(settings, "src", now.Add(time.Hour)), "stale VAD coverage")

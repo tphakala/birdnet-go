@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -132,6 +133,21 @@ func (r *privacyRig) chunk(end time.Duration) classifier.Results {
 	}
 	item.Source = datastore.AudioSource{ID: e2eSource}
 	return item
+}
+
+// bytesFor is the PCM size of d of audio for the rig's model.
+func (r *privacyRig) bytesFor(d time.Duration) int {
+	return int(d.Seconds()*float64(r.rate)) * vadBytesPerSample
+}
+
+// positioned stamps item as a producer that reports stream positions: the window
+// ends at the stream position of audio time end (positions advance with audio,
+// whether or not the audio was lost on the way) and its last contiguous bytes
+// are the audio since contiguousSince.
+func (r *privacyRig) positioned(item *classifier.Results, end, contiguous time.Duration) {
+	item.Audio.Generation = 1
+	item.Audio.EndPos = int64(r.bytesFor(end))
+	item.Audio.ContiguousBytes = min(r.bytesFor(contiguous), len(item.PCMdata))
 }
 
 // feed processes one chunk per step with audio ends in [from, to].
@@ -502,4 +518,127 @@ func TestPrivacy_BatChunksPublishNoLabelCoverage(t *testing.T) {
 
 	r.pend(40 * time.Second)
 	assert.Equal(t, "approved", r.outcome())
+}
+
+// TestPrivacy_LabelCoverageAfterOverwriteLossClaimsOnlyTheContiguousTail: after the
+// producer lost two seconds of audio, the windows that follow still carry the
+// pre-loss audio in their overlap head. Label coverage may claim only their
+// contiguous tail, so a clip that includes the lost stretch is never reported as
+// scanned.
+func TestPrivacy_LabelCoverageAfterOverwriteLossClaimsOnlyTheContiguousTail(t *testing.T) {
+	for _, vadEnabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("vad=%v", vadEnabled), func(t *testing.T) {
+			lossLeavesClipUnscanned(t, vadEnabled)
+		})
+	}
+}
+
+// TestPrivacy_NewBufferGenerationNeverJoinsEarlierCoverage: a reallocated analysis
+// buffer starts a new generation whose positions mean nothing next to the old
+// ones, so its coverage does not join the spans published before, however the
+// timestamps line up.
+func TestPrivacy_NewBufferGenerationNeverJoinsEarlierCoverage(t *testing.T) {
+	for _, vadEnabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("vad=%v", vadEnabled), func(t *testing.T) {
+			r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+			r.settings.Realtime.PrivacyFilter.VAD.Enabled = vadEnabled
+			ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
+			for end := 3000; end <= 20000; end += 200 {
+				item := r.chunk(ms(end))
+				r.positioned(&item, ms(end), r.clip)
+				r.p.processDetections(item)
+			}
+			// The buffer was reallocated: positions restart in generation 2.
+			for end := 20200; end <= 36000; end += 200 {
+				item := r.chunk(ms(end))
+				item.Audio.Gap = end == 20200
+				r.positioned(&item, ms(end-20000), min(ms(end-20000), r.clip))
+				item.Audio.Generation = 2
+				r.p.processDetections(item)
+			}
+			r.pend(24 * time.Second) // clip 18 s to 33 s spans both generations
+			assert.Equal(t, "pending", r.outcome())
+		})
+	}
+}
+
+// lossLeavesClipUnscanned feeds a producer that lost 2 s of audio and checks that a
+// clip across the loss stays pending.
+func lossLeavesClipUnscanned(t *testing.T, vadEnabled bool) {
+	t.Helper()
+	r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+	r.settings.Realtime.PrivacyFilter.VAD.Enabled = vadEnabled
+	ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
+
+	for end := 3000; end <= 20000; end += 200 {
+		item := r.chunk(ms(end))
+		r.positioned(&item, ms(end), r.clip)
+		r.p.processDetections(item)
+	}
+	// Audio between 20.0 s and 22.0 s was overwritten unread. The first window
+	// after it is a gap whose only genuine audio is its fresh 0.2 s; each later
+	// one gains another step of genuine tail until the whole window is genuine.
+	for end := 22200; end <= 36000; end += 200 {
+		item := r.chunk(ms(end))
+		item.Audio.Gap = end == 22200
+		r.positioned(&item, ms(end), min(ms(end-22000), r.clip))
+		r.p.processDetections(item)
+	}
+	r.pend(24 * time.Second) // clip 18 s to 33 s, across the lost stretch
+
+	assert.Equal(t, "pending", r.outcome(), "the lost stretch was never scanned")
+}
+
+// TestPrivacy_ZeroOverlapJitterOver150msJoinsOnContiguousPositions: at zero overlap
+// consecutive windows abut. When arrival jitter makes their audio-end stamps differ
+// by more than the time tolerance but the producer reports contiguous stream
+// positions, the spans still join and a fully scanned clip is released.
+func TestPrivacy_ZeroOverlapJitterOver150msJoinsOnContiguousPositions(t *testing.T) {
+	for _, vadEnabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("vad=%v", vadEnabled), func(t *testing.T) {
+			zeroOverlapJitterJoins(t, vadEnabled)
+		})
+	}
+}
+
+func zeroOverlapJitterJoins(t *testing.T, vadEnabled bool) {
+	t.Helper()
+	r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+	r.settings.Realtime.PrivacyFilter.VAD.Enabled = vadEnabled
+
+	for k := 1; k <= 14; k++ {
+		end := time.Duration(3*k) * time.Second
+		item := r.chunk(end)
+		if k%2 == 1 { // odd windows are stamped 300 ms late
+			item.Audio.EndAt = item.Audio.EndAt.Add(300 * time.Millisecond)
+		}
+		r.positioned(&item, end, r.clip)
+		r.p.processDetections(item)
+	}
+	r.pend(21 * time.Second) // clip 15 s to 30 s
+
+	assert.Equal(t, "approved", r.outcome(), "contiguous positions join the spans despite the jitter")
+}
+
+// TestPrivacy_SkippedPublishLeavesAPositionHole: while the privacy filter is off
+// nothing is published, so once it is back on the new spans start after a
+// position hole and a clip across it is not reported as scanned, however
+// contiguous the timestamps look.
+func TestPrivacy_SkippedPublishLeavesAPositionHole(t *testing.T) {
+	for _, vadEnabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("vad=%v", vadEnabled), func(t *testing.T) {
+			r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+			r.settings.Realtime.PrivacyFilter.VAD.Enabled = vadEnabled
+			for end := 3; end <= 30; end++ {
+				// The filter is off for the windows ending 10 s to 16 s.
+				r.settings.Realtime.PrivacyFilter.Enabled = end < 10 || end > 16
+				item := r.chunk(time.Duration(end) * time.Second)
+				r.positioned(&item, time.Duration(end)*time.Second, r.clip)
+				r.p.processDetections(item)
+			}
+			r.settings.Realtime.PrivacyFilter.Enabled = true
+			r.pend(15 * time.Second) // clip 9 s to 24 s, across the unpublished stretch
+			assert.Equal(t, "pending", r.outcome())
+		})
+	}
 }
