@@ -226,10 +226,12 @@ type coverageUpdate struct {
 }
 
 // publishCoverage records the scanned spans in updates under one detectionMutex
-// hold. A span that starts within vadCoverageJoinTolerance of its key's newest
-// recorded span's end extends it (keeping the older start); a later one starts a
-// new span. Spans older than privacyCoverageHorizon before the newest end are
-// dropped.
+// hold. A span that continues its key's newest recorded span extends it (keeping
+// the older start); a later one starts a new span. Spans with stream positions
+// continue when they are in the same generation and start at or before the stored
+// end position (see mergeCoverageLocked); spans without positions continue when
+// they start within vadCoverageJoinTolerance of the stored end time. Spans older
+// than privacyCoverageHorizon before the newest end are dropped.
 func (p *Processor) publishCoverage(updates ...coverageUpdate) {
 	p.detectionMutex.Lock()
 	defer p.detectionMutex.Unlock()
