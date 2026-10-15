@@ -51,7 +51,8 @@
   }: Props = $props();
 
   const loader = createSpectrogramLoader({
-    size: () => get(dashboardSettings)?.spectrogram?.size ?? 'md',
+    size: () =>
+    get(settingsDataLoaded) ? (get(dashboardSettings)?.spectrogram?.size ?? 'sm') : 'sm',
     raw: () => get(dashboardSettings)?.spectrogram?.raw ?? true,
   });
 
