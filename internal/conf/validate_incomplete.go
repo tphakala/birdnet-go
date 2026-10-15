@@ -110,6 +110,41 @@ func normalizeIncompleteFeatures(s *Settings) {
 	s.normalizeWebServer()
 	s.normalizeProfiling()
 	s.normalizeModelThresholds()
+	s.normalizeUltrasonicFilter()
+}
+
+// normalizeUltrasonicFilter resets invalid or unwritten ultrasonic STFT settings
+// to their defaults on load, recording a warning for each repair. It runs
+// whether or not the filter is enabled: the settings UI toggle sends the stored
+// fftsize and hopsize back unchanged and has no field to fix them, so a bad pair
+// left in place would make enabling the filter fail with an error the user
+// cannot act on. The (fftsize, hopsize) pair is repaired as a unit and the split
+// separately, so a bad split never resets a valid custom pair. A pair left at
+// zero (never written) takes the defaults without a warning. The settings API
+// path does not run this pass; it rejects invalid values when the filter is on
+// (validateUltrasonicFilter).
+func (s *Settings) normalizeUltrasonicFilter() {
+	f := &s.Bat.UltrasonicFilter
+	switch err := f.validateFrame(); {
+	case err == nil:
+	case f.FFTSize == 0 && f.HopSize == 0:
+		// Never written (viper always supplies both, so this is a bare Settings
+		// value): take the defaults without a warning, there is nothing to report.
+		f.FFTSize = DefaultUltrasonicFFTSize
+		f.HopSize = DefaultUltrasonicHopSize
+	default:
+		s.recordValidationWarning(warnComponentModels,
+			"ultrasonic filter fftsize %d and hopsize %d are invalid (%v); using the defaults %d and %d",
+			f.FFTSize, f.HopSize, err, DefaultUltrasonicFFTSize, DefaultUltrasonicHopSize)
+		f.FFTSize = DefaultUltrasonicFFTSize
+		f.HopSize = DefaultUltrasonicHopSize
+	}
+	if err := f.validateSplit(); err != nil {
+		s.recordValidationWarning(warnComponentModels,
+			"ultrasonic filter frequencysplithz %d is invalid (%v); using the default %d",
+			f.FrequencySplitHz, err, DefaultUltrasonicSplitHz)
+		f.FrequencySplitHz = DefaultUltrasonicSplitHz
+	}
 }
 
 // normalizeModelThresholds resets an out-of-range per-model confidence threshold

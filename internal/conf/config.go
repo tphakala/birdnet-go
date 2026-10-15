@@ -1420,9 +1420,51 @@ type BatConfig struct {
 type UltrasonicFilterConfig struct {
 	Enabled          bool    `yaml:"enabled" json:"enabled"`                   // enable ultrasonic validation filter
 	CVThreshold      float64 `yaml:"cvthreshold" json:"cvThreshold"`           // detections with US frame CV below this are tagged unlikely
-	FFTSize          int     `yaml:"fftsize" json:"fftSize"`                   // FFT window size in samples (must be power of 2)
-	HopSize          int     `yaml:"hopsize" json:"hopSize"`                   // STFT hop size in samples
+	FFTSize          int     `yaml:"fftsize" json:"fftSize"`                   // FFT window size in samples (a power of 2, at least 2)
+	HopSize          int     `yaml:"hopsize" json:"hopSize"`                   // STFT hop size in samples, 1 to fftsize
 	FrequencySplitHz int     `yaml:"frequencysplithz" json:"frequencySplitHz"` // boundary between audible and ultrasonic bands in Hz
+}
+
+// ValidateSTFT checks the STFT fields of the filter: FFTSize a power of two of
+// at least 2, HopSize from 1 to FFTSize, and FrequencySplitHz not negative. It
+// is the one rule set shared by settings validation, the load-time repair and
+// the filter itself; the filter computes nothing for a configuration it rejects.
+// Messages name the YAML keys so an operator can find the field.
+func (c UltrasonicFilterConfig) ValidateSTFT() error {
+	if err := c.validateFrame(); err != nil {
+		return err
+	}
+	return c.validateSplit()
+}
+
+// validateFrame checks the (FFTSize, HopSize) pair.
+func (c UltrasonicFilterConfig) validateFrame() error {
+	if c.FFTSize < minUltrasonicFFTSize || c.FFTSize&(c.FFTSize-1) != 0 {
+		return errors.Newf("bat.ultrasonicfilter.fftsize must be a power of two of at least %d, got %d",
+			minUltrasonicFFTSize, c.FFTSize).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "ultrasonic-filter").
+			Build()
+	}
+	if c.HopSize < 1 || c.HopSize > c.FFTSize {
+		return errors.Newf("bat.ultrasonicfilter.hopsize must be between 1 and bat.ultrasonicfilter.fftsize (%d), got %d",
+			c.FFTSize, c.HopSize).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "ultrasonic-filter").
+			Build()
+	}
+	return nil
+}
+
+// validateSplit checks FrequencySplitHz.
+func (c UltrasonicFilterConfig) validateSplit() error {
+	if c.FrequencySplitHz < 0 {
+		return errors.Newf("bat.ultrasonicfilter.frequencysplithz must be 0 or greater, got %d", c.FrequencySplitHz).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "ultrasonic-filter").
+			Build()
+	}
+	return nil
 }
 
 // BSGConfig holds configuration for BSG regional bird models.

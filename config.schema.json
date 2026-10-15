@@ -2665,11 +2665,11 @@
         },
         "fftsize": {
           "type": "integer",
-          "description": "FFT window size in samples (must be power of 2)"
+          "description": "FFT window size in samples (a power of 2, at least 2)"
         },
         "hopsize": {
           "type": "integer",
-          "description": "STFT hop size in samples"
+          "description": "STFT hop size in samples, 1 to fftsize"
         },
         "frequencysplithz": {
           "type": "integer",
