@@ -33,10 +33,6 @@ func GetLogger() logger.Logger {
 	return logger.Global().Module("birdweather")
 }
 
-// targetIntegratedLoudnessLUFS defines the target loudness for normalization.
-// EBU R128 standard target is -23 LUFS.
-const targetIntegratedLoudnessLUFS = -23.0
-
 // HTTP and timeout constants
 const (
 	// httpClientTimeout is the default timeout for HTTP requests
@@ -44,9 +40,10 @@ const (
 
 	// encodingTimeout bounds the native go-flac encode of a soundscape upload so a
 	// slow host (Raspberry Pi, Home Assistant add-on, tired SD card) cannot hang the
-	// upload. The audionorm loudness measurement is pure in-memory CPU work; only the
-	// encode pass runs under this budget. 60s leaves ample room, and the upload runs
-	// in a background worker, so a slow encode never blocks the analysis pipeline or UI.
+	// upload. The loudnorm measurement and the encode pass both run under this
+	// budget (loudnorm.PlanBytes stops on its deadline). 60s leaves ample room,
+	// and the upload runs in a background worker, so a slow encode never blocks
+	// the analysis pipeline or UI.
 	encodingTimeout = 60 * time.Second
 
 	// http2SendPingTimeout and http2PingTimeout enable HTTP/2 connection health
@@ -1021,7 +1018,7 @@ type audioEncodingResult struct {
 }
 
 // encodeAudioForUpload encodes the PCM soundscape to FLAC for upload using the
-// native go-flac encoder with audionorm EBU R128 loudness normalization. FFmpeg is
+// native go-flac encoder with loudnorm EBU R128 loudness normalization. FFmpeg is
 // neither used nor required; BirdWeather's FLAC-only API is served entirely in Go.
 func (b *BwClient) encodeAudioForUpload(pcmData []byte, timestamp string) (*audioEncodingResult, error) {
 	GetLogger().Debug("Encoding BirdWeather upload with native go-flac encoder",

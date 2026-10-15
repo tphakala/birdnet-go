@@ -9,7 +9,7 @@ BirdWeather is a service that allows sharing of bird detections and environmenta
 ## Features
 
 - **Audio Processing**: Encode PCM audio data to FLAC using the native go-flac encoder (no FFmpeg dependency)
-- **Loudness Normalization**: FLAC uploads are normalized to EBU R128 loudness with true-peak limiting via the native audionorm library
+- **Loudness Normalization**: FLAC uploads are normalized to EBU R128 loudness with true-peak limiting via go-audio-dsp `loudnorm`
 - **API Integration**: Connect to the BirdWeather API for data submission
 - **Location Privacy**: Randomize location coordinates to protect precise location data
 - **Error Handling**: Comprehensive network and API error handling
@@ -53,7 +53,7 @@ BirdWeather's soundscape API is FLAC-only. The package encodes PCM to FLAC with
 the native go-flac encoder, entirely in Go:
 
 ```go
-// Native FLAC encoding with audionorm EBU R128 loudness normalization.
+// Native FLAC encoding with go-audio-dsp loudnorm EBU R128 loudness normalization.
 func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audioEncodingResult, error)
 ```
 
@@ -65,12 +65,12 @@ even on hosts where FFmpeg is not installed.
 
 ### Loudness Normalization
 
-The package normalizes every FLAC upload with the native audionorm library
+The package normalizes every FLAC upload with go-audio-dsp `loudnorm`
 (EBU R128), applied as a single linear gain during encoding:
 
 - **Target Loudness**: -23 LUFS (EBU R128 integrated-loudness target)
 - **True Peak Ceiling**: -1 dBTP - prevents inter-sample clipping in different playback environments
-- **Gain Limit**: clamped to +/- `audionorm.DefaultMaxGainDB`; silent or very short (<400 ms) clips are left unchanged (0 dB) rather than boosted into noise
+- **Gain Limit**: clamped to +/- `loudnorm.DefaultMaxGainDB`; silent or very short (<400 ms) clips are left unchanged (0 dB) rather than boosted into noise
 
 The normalization makes bird vocalizations easier to hear across different devices and platforms while preserving audio quality through the lossless FLAC format.
 
@@ -167,7 +167,7 @@ func testConnection(client *birdweather.BwClient) {
 
 This package is designed to work across Linux, macOS, and Windows platforms. The Go code itself handles OS differences:
 
-- **No FFmpeg dependency**: FLAC encoding and loudness normalization are pure Go (go-flac + audionorm), so BirdWeather uploads work whether or not FFmpeg is installed.
+- **No FFmpeg dependency**: FLAC encoding and loudness normalization are pure Go (go-flac + go-audio-dsp), so BirdWeather uploads work whether or not FFmpeg is installed.
 - Network connectivity differences between platforms are handled internally.
 - Proper error handling for platform-specific network issues is implemented.
 - Fallback DNS resolution for network problems is used.
@@ -251,15 +251,15 @@ debug/
 
 ## Loudness Normalization Technical Details
 
-Bird call audio is normalized with the native audionorm library (EBU R128) toward:
+Bird call audio is normalized with go-audio-dsp `loudnorm` (EBU R128) toward:
 
 - **Integrated Loudness (I)**: -23 LUFS - EBU R128 integrated-loudness target
 - **True Peak (TP)**: -1 dBTP - prevents inter-sample clipping during playback
 
 The normalization process involves:
 
-1.  **Measurement**: audionorm decodes the 16-bit PCM in memory and measures the clip's integrated loudness and true peak.
-2.  **Gain planning**: a single linear gain toward the target is computed under the true-peak ceiling, then clamped to +/- `audionorm.DefaultMaxGainDB`. Silent or sub-400 ms input yields 0 dB, leaving the clip unchanged.
+1.  **Measurement**: `loudnorm.PlanBytes` decodes the 16-bit PCM in memory, without copying it, and measures the clip's integrated loudness and true peak.
+2.  **Gain planning**: a single linear gain toward the target is computed under the true-peak ceiling, then clamped to +/- `loudnorm.DefaultMaxGainDB`. Silent or sub-400 ms input yields 0 dB, leaving the clip unchanged.
 3.  **Encoding**: the gain is applied in Go while the PCM is streamed into the go-flac encoder, producing the in-memory FLAC upload buffer.
 
 Benefits:
@@ -293,7 +293,7 @@ Comprehensive tests are provided for all key functionality:
 - Standard library packages (`net/http`, `encoding/binary`, etc.)
 - Internal `datastore` package for detection data structures
 - Internal `conf` package for configuration settings
-- Internal `audiocore/flac` and `audiocore/audionorm` packages for native FLAC encoding and loudness normalization
+- Internal `audiocore/flac` and `audiocore/loudness` packages and go-audio-dsp `loudnorm` and `gain` for native FLAC encoding and loudness normalization
 
 ## Thread Safety
 
