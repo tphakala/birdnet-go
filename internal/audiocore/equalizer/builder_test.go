@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	dspeq "github.com/tphakala/go-audio-dsp/equalizer"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -25,16 +24,16 @@ const (
 )
 
 // sine returns n samples of a sine wave at hz with the given amplitude.
-func sine(n int, hz float64, sr int, amp float64) []float64 {
-	out := make([]float64, n)
+func sine(n int, hz float64, sr int, amp float64) []float32 {
+	out := make([]float32, n)
 	for i := range out {
-		out[i] = amp * math.Sin(2*math.Pi*hz*float64(i)/float64(sr))
+		out[i] = float32(amp * math.Sin(2*math.Pi*hz*float64(i)/float64(sr)))
 	}
 	return out
 }
 
 // testSignal is a deterministic mix of tones at 150, 1100 and 7000 Hz.
-func testSignal(n, sr int) []float64 {
+func testSignal(n, sr int) []float32 {
 	a := sine(n, 150, sr, 0.3)
 	b := sine(n, 1100, sr, 0.3)
 	c := sine(n, 7000, sr, 0.3)
@@ -45,12 +44,13 @@ func testSignal(n, sr int) []float64 {
 }
 
 // runChain copies in and runs it through chain.
-func runChain(t *testing.T, chain *dspeq.FilterChain, in []float64) []float64 {
+func runChain(t *testing.T, chain *dspeq.FilterChain, in []float32) []float32 {
 	t.Helper()
 	require.NotNil(t, chain)
-	out := make([]float64, len(in))
-	copy(out, in)
-	chain.ApplyFloat64(out)
+	out := make([]float32, len(in))
+	n, err := chain.ProcessInto(in, out)
+	require.NoError(t, err)
+	require.Equal(t, len(in), n)
 	return out
 }
 
@@ -67,8 +67,17 @@ func directChain(t *testing.T, sr int, bands ...dspeq.Band) *dspeq.FilterChain {
 }
 
 // rmsDB returns the RMS ratio of out to in in dB, ignoring the first skip samples.
-func rmsDB(in, out []float64, skip int) float64 {
-	return 20 * math.Log10(convert.CalculateRMSFloat64(out[skip:])/convert.CalculateRMSFloat64(in[skip:]))
+func rmsDB(in, out []float32, skip int) float64 {
+	return 20 * math.Log10(rms(out[skip:])/rms(in[skip:]))
+}
+
+// rms returns the root mean square of samples, accumulated in float64.
+func rms(samples []float32) float64 {
+	var sumSquares float64
+	for _, v := range samples {
+		sumSquares += float64(v) * float64(v)
+	}
+	return math.Sqrt(sumSquares / float64(len(samples)))
 }
 
 func enabled(filters ...conf.EqualizerFilter) conf.EqualizerSettings {

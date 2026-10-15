@@ -17,6 +17,16 @@ const (
 	Opus = "opus"
 )
 
+// FileExtension returns the file extension, without the dot, that clip export
+// gives format: the format name itself, except AAC, which is stored in an MP4
+// container as .m4a.
+func FileExtension(format string) string {
+	if format == AAC {
+		return "m4a"
+	}
+	return format
+}
+
 // MinBatSampleRate is the minimum source capture rate in Hz for bat detection and
 // audible bats playback: below it a recording cannot carry ultrasonic content.
 const MinBatSampleRate = 96000

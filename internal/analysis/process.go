@@ -5,7 +5,6 @@ package analysis
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -22,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
+	dsppcm "github.com/tphakala/go-audio-dsp/pcm"
 )
 
 var processMetrics atomic.Pointer[metrics.MyAudioMetrics]
@@ -293,14 +292,13 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 	predictStart := time.Now()
 
 	// convert audio data to float32
-	sampleData, err := convertToFloat32WithPool(bufMgr, data, conf.BitDepth)
+	samples, err := decodePCM16WithPool(bufMgr, data)
 	conversionDuration := time.Since(predictStart)
 	if err != nil {
 		return errors.New(err).
 			Component("analysis").
 			Category(errors.CategoryAudio).
 			Context("operation", "pcm_to_float32").
-			Context("bit_depth", fmt.Sprintf("%d", conf.BitDepth)).
 			Build()
 	}
 
@@ -310,19 +308,17 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 	//
 	// INVARIANT: bn.PredictModelTimed must copy the samples into the model's
 	// input tensor before returning; it must not retain a reference to
-	// sampleData past Predict. The pool may hand the same backing array to
+	// samples past Predict. The pool may hand the same backing array to
 	// another caller as soon as Put returns, so any retained reference
 	// would become a use-after-free. Classifier backends plugged into the
 	// Orchestrator are required to honour this contract; see
 	// internal/classifier for the implementing side.
-	if conf.BitDepth == 16 && len(sampleData) > 0 {
-		if pool := bufMgr.Float32PoolFor(len(sampleData[0])); pool != nil {
-			defer pool.Put(sampleData[0])
-		}
+	if pool := bufMgr.Float32PoolFor(len(samples)); pool != nil {
+		defer pool.Put(samples)
 	}
 
 	// Run inference on the specified model via the Orchestrator.
-	results, timing, err := bn.PredictModelTimed(ctx, modelID, sampleData)
+	results, timing, err := bn.PredictModelTimed(ctx, modelID, [][]float32{samples})
 
 	// Record inference duration and lock wait metrics (always, even on error)
 	pm := processMetrics.Load()
@@ -501,36 +497,46 @@ func recordResultsQueueDrop(source, modelID string, pm *metrics.MyAudioMetrics) 
 	return totalDropped
 }
 
-func convertToFloat32WithPool(bufMgr *buffer.Manager, sample []byte, bitDepth int) ([][]float32, error) {
-	if bitDepth == 16 {
-		return [][]float32{convert16BitToFloat32WithPool(bufMgr, sample)}, nil
+// decodePCM16WithPool decodes little-endian 16-bit PCM to float32 samples in
+// [-1, 1) using the size-specific pool from bufMgr. The result is bit-identical
+// to int16/32768. The Manager lazily creates a per-size Float32Pool on first
+// use, so any length the pipeline produces is pooled; the caller returns the
+// slice to the same pool. An odd byte length (a half sample) is an error and
+// takes nothing from the pool.
+func decodePCM16WithPool(bufMgr *buffer.Manager, pcm []byte) ([]float32, error) {
+	if len(pcm)%bytesPerSample != 0 {
+		return nil, errors.New(dsppcm.ErrOddByteLength).
+			Component("analysis").
+			Category(errors.CategoryAudio).
+			Context("operation", "decode_pcm16").
+			Context("data_size", len(pcm)).
+			Build()
 	}
-	// Delegate non-16-bit conversions to audiocore/convert (no pooling needed here;
-	// non-16-bit paths are cold and handled separately by PR B2).
-	return convert.ConvertToFloat32(sample, bitDepth)
-}
 
-// convert16BitToFloat32WithPool converts 16-bit PCM samples to float32 using
-// the size-specific pool from bufMgr. The Manager lazily creates a per-size
-// Float32Pool on first use, so any length the pipeline produces is pooled.
-func convert16BitToFloat32WithPool(bufMgr *buffer.Manager, sample []byte) []float32 {
-	length := len(sample) / 2
+	length := len(pcm) / bytesPerSample
 	pool := bufMgr.Float32PoolFor(length)
 
-	var float32Data []float32
+	var samples []float32
 	if pool != nil {
-		float32Data = pool.Get()
+		samples = pool.Get()
 	} else {
 		// length == 0 (or exceedingly rare pool construction failure) falls through to a fresh slice.
-		float32Data = make([]float32, length)
+		samples = make([]float32, length)
 	}
 
-	const divisor = float32(32768.0)
-	for i := range length {
-		s := int16(sample[i*2]) | int16(sample[i*2+1])<<8
-		float32Data[i] = float32(s) / divisor
+	// Every sample is written: samples has exactly len(pcm)/2 elements, and
+	// the pool does not zero recycled buffers.
+	if _, err := dsppcm.BytesToFloat32(samples, pcm); err != nil {
+		if pool != nil {
+			pool.Put(samples)
+		}
+		return nil, errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryAudio).
+			Context("operation", "decode_pcm16").
+			Build()
 	}
-	return float32Data
+	return samples, nil
 }
 
 // bufferIntervalFor returns the analysis buffer interval for a model under the

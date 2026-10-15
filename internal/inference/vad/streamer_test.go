@@ -66,7 +66,9 @@ func pcm16Ramp(t *testing.T, n int) (pcm []byte, want []float32) {
 		binary.LittleEndian.PutUint16(pcm[i*bytesPerSample:], uint16(i+1)) //nolint:gosec // G115: small positive test values
 	}
 	want = make([]float32, n)
-	pcm16ToFloat32(pcm, want)
+	for i := range want {
+		want[i] = float32(i+1) / pcm16Scale
+	}
 	return pcm, want
 }
 
@@ -108,7 +110,9 @@ func TestStreamer_FlushEmitsCompleteHopsAndRetainsRemainder(t *testing.T) {
 		binary.LittleEndian.PutUint16(pcm2[i*bytesPerSample:], uint16(1000+i)) //nolint:gosec // G115: small positive test values
 	}
 	want2 := make([]float32, 324)
-	pcm16ToFloat32(pcm2, want2)
+	for i := range want2 {
+		want2[i] = float32(1000+i) / pcm16Scale
+	}
 
 	require.NoError(t, s.Append(pcm2, sampleRate16k))
 	_, ok, framesRun, err = s.Flush(stub)
