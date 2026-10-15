@@ -72,23 +72,33 @@ func clipReconcileMonitor(quitChan <-chan struct{}, dataStore datastore.Interfac
 	}
 }
 
-// logReconcileResult logs the outcome of one reconcile pass.
+// logReconcileResult logs the outcome of one reconcile pass. An aborted pass
+// stays at Debug: an unconfigured or inaccessible export directory is an expected
+// state, and the pass itself warns about read errors and export changes. A pass
+// whose clear or retain writes failed is raised to Warn, aborted or not, so rows
+// that could not be healed are not reported as a clean run.
 func logReconcileResult(log logger.Logger, result *diskmanager.ReconcileResult) {
-	if result.Aborted {
-		log.Debug("clip reconcile pass aborted",
-			logger.String("reason", result.AbortReason),
-			logger.Int("scanned", result.Scanned),
-			logger.String("operation", "clip_reconcile_pass"))
-		return
-	}
-	log.Info("clip reconcile pass completed",
+	fields := []logger.Field{
 		logger.Int("scanned", result.Scanned),
 		logger.Int64("cleared", result.Cleared),
 		logger.Int64("retained", result.Retained),
 		logger.Int("held_no_evidence", result.HeldNoEvidence),
 		logger.Int("held_missing_dir", result.HeldMissingDir),
 		logger.Int("write_errors", result.WriteErrors),
-		logger.String("operation", "clip_reconcile_pass"))
+		logger.String("operation", "clip_reconcile_pass"),
+	}
+	switch {
+	case result.Aborted && result.WriteErrors > 0:
+		log.Warn("clip reconcile pass aborted with write errors",
+			append([]logger.Field{logger.String("reason", result.AbortReason)}, fields...)...)
+	case result.Aborted:
+		log.Debug("clip reconcile pass aborted",
+			append([]logger.Field{logger.String("reason", result.AbortReason)}, fields...)...)
+	case result.WriteErrors > 0:
+		log.Warn("clip reconcile pass completed with write errors", fields...)
+	default:
+		log.Info("clip reconcile pass completed", fields...)
+	}
 }
 
 // reconcileMonitorWait waits for d or until quitChan closes. It returns false if
