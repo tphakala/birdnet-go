@@ -3,6 +3,7 @@ package analysis
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -136,15 +137,15 @@ func TestRunClipReconcileLoop(t *testing.T) {
 		t.Parallel()
 		w := &waitRecorder{allow: 100}
 		calls := 0
-		idle := []bool{true, true, false, true}
+		idle := []bool{false, true, true, false, true, true, true}
 		next := scriptedPasses(idle, &calls)
 		runClipReconcileLoop(nil, w.wait, func() (bool, bool) {
 			_, i := next()
 			return calls == len(idle), i
 		})
 		h := time.Hour
-		assert.Equal(t, []time.Duration{clipReconcileStartupDelay, h, 2 * h, h}, w.delays,
-			"the non-idle pass (cleared, retained, aborted or write errors) returns the wait to one interval")
+		assert.Equal(t, []time.Duration{clipReconcileStartupDelay, h, h, 2 * h, h, h, 2 * h}, w.delays,
+			"a non-idle pass (cleared, retained, aborted or write errors), first or later, returns the wait to one interval and doubling restarts from there")
 	})
 
 	t.Run("shutdown in the middle of the back-off sequence ends the loop", func(t *testing.T) {
@@ -155,6 +156,37 @@ func TestRunClipReconcileLoop(t *testing.T) {
 		assert.Equal(t, 3, passes)
 		h := time.Hour
 		assert.Equal(t, []time.Duration{clipReconcileStartupDelay, h, 2 * h, 4 * h}, w.delays)
+	})
+}
+
+// TestRunClipReconcileLoopIntervalLog pins that the loop logs the chosen wait only
+// when it differs from the one it last logged.
+func TestRunClipReconcileLoopIntervalLog(t *testing.T) {
+	// Not parallel: logtest.Capture swaps the process-global logger.
+	const changed = "clip reconcile pass interval changed"
+	run := func(t *testing.T, idle []bool) string {
+		t.Helper()
+		w := &waitRecorder{allow: 100}
+		calls := 0
+		next := scriptedPasses(idle, &calls)
+		return logtest.Capture(t, func() {
+			runClipReconcileLoop(nil, w.wait, func() (bool, bool) {
+				_, i := next()
+				return calls == len(idle), i
+			})
+		})
+	}
+
+	t.Run("logs each doubling and each reset, not an unchanged wait", func(t *testing.T) {
+		// Waits after passes 1 to 5: 1h, 2h, 1h, 1h, 2h.
+		out := run(t, []bool{true, true, false, true, true, true})
+		assert.Equal(t, 3, strings.Count(out, changed), out)
+	})
+
+	t.Run("stays quiet while the wait sits at the cap", func(t *testing.T) {
+		// Waits after passes 1 to 8: 1h, 2h, 4h, 8h, 16h, 24h, 24h, 24h.
+		out := run(t, []bool{true, true, true, true, true, true, true, true, true})
+		assert.Equal(t, 5, strings.Count(out, changed), out)
 	})
 }
 

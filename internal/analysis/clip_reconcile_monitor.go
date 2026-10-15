@@ -17,9 +17,9 @@ import (
 const clipReconcileStartupDelay = 2 * time.Minute
 
 // clipReconcilePassInterval is the base wait between full reconcile passes, used
-// at startup and after any pass that changed something or needs a retry. Ghosts
-// are rare and not time-critical to clear, so a slow cadence keeps disk I/O
-// negligible.
+// at startup and after any pass that is not idle (it changed something, needs a
+// retry, or was skipped for lack of an export path). Ghosts are rare and not
+// time-critical to clear, so a slow cadence keeps disk I/O negligible.
 const clipReconcilePassInterval = 1 * time.Hour
 
 // clipReconcileMaxPassInterval caps the wait between passes while consecutive
