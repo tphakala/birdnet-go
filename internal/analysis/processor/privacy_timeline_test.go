@@ -123,3 +123,59 @@ func TestRunVADGate_HitStampedWithFlushAudioEnd(t *testing.T) {
 	run(time.Second)
 	assert.True(t, p.LastHumanDetection["src1"].Time.Equal(base.Add(time.Second)))
 }
+
+// TestPublishCoverage pins span merging and pruning.
+func TestPublishCoverage(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
+	key := coverageKey{"src", "m", metrics.TriggerVAD}
+	span := func(from, to time.Duration) vadSpan { return vadSpan{base.Add(from), base.Add(to)} }
+
+	t.Run("contiguous spans extend the newest", func(t *testing.T) {
+		t.Parallel()
+		p := &Processor{}
+		p.publishCoverage(key, span(0, 10*time.Second))
+		p.publishCoverage(key, span(10*time.Second+vadCoverageJoinTolerance, 20*time.Second))
+		p.publishCoverage(key, span(-time.Second, 15*time.Second)) // earlier start widens it
+		assert.Equal(t, []vadSpan{span(-time.Second, 20*time.Second)}, p.privacyCoverage[key])
+	})
+	t.Run("a hole starts a new span and zero-length spans are ignored", func(t *testing.T) {
+		t.Parallel()
+		p := &Processor{}
+		p.publishCoverage(key, span(0, 10*time.Second))
+		p.publishCoverage(key, span(30*time.Second, 30*time.Second))
+		p.publishCoverage(key, span(30*time.Second, 40*time.Second))
+		assert.Equal(t, []vadSpan{span(0, 10*time.Second), span(30*time.Second, 40*time.Second)}, p.privacyCoverage[key])
+	})
+	t.Run("old spans are pruned and the list is capped", func(t *testing.T) {
+		t.Parallel()
+		p := &Processor{}
+		p.publishCoverage(key, span(0, time.Second))
+		for i := range privacyCoverageMaxSpans + 4 {
+			from := time.Duration(10+i*2) * time.Second
+			p.publishCoverage(key, span(from, from+time.Second))
+		}
+		assert.Len(t, p.privacyCoverage[key], privacyCoverageMaxSpans)
+		p.publishCoverage(key, span(privacyCoverageHorizon+time.Hour, privacyCoverageHorizon+time.Hour+time.Second))
+		assert.Len(t, p.privacyCoverage[key], 1, "everything older than the horizon is dropped")
+	})
+}
+
+// TestRequiredDetector picks the VAD only when it is enabled and either loaded
+// or recently active on the source.
+func TestRequiredDetector(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
+	settings := vadSettings(true, 0.35)
+	p := &Processor{vadGate: newTestGate(nil, &fakeSession{}, nil)}
+
+	assert.Equal(t, metrics.TriggerLabel, p.requiredDetectorLocked(settings, "src", now), "VAD not loaded and never seen")
+
+	p.publishCoverage(coverageKey{"src", "m", metrics.TriggerVAD}, vadSpan{now.Add(-time.Minute), now.Add(-30 * time.Second)})
+	assert.Equal(t, metrics.TriggerVAD, p.requiredDetectorLocked(settings, "src", now), "recent VAD coverage")
+	assert.Equal(t, metrics.TriggerLabel, p.requiredDetectorLocked(settings, "other", now))
+	assert.Equal(t, metrics.TriggerLabel, p.requiredDetectorLocked(settings, "src", now.Add(time.Hour)), "stale VAD coverage")
+
+	disabled := vadSettings(false, 0.35)
+	assert.Equal(t, metrics.TriggerLabel, p.requiredDetectorLocked(disabled, "src", now))
+}

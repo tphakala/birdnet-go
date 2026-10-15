@@ -243,20 +243,23 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 //   - Extended captures: EndTime = LastUpdated + normal detection window (spans full session)
 //   - Normal captures: EndTime = FirstDetected + normal detection window (configured length)
 //
+// EndTime comes from detectionEndTime, which clipSpan also uses to predict the
+// saved clip for the privacy coverage gate.
 // For extended captures the clip name is regenerated to reflect the actual duration.
 func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
 	settings := p.currentSettings()
 	item.Detection.Result.BeginTime = item.FirstDetected
 
-	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
-	normalDetectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+	// detectionEndTime is shared with clipSpan, which the privacy coverage gate uses
+	// to know the exact audio span the exporter will save.
+	item.Detection.Result.EndTime = detectionEndTime(settings, item)
 
+	// For non-extended detections EndTime is recalculated from FirstDetected so the
+	// time span (EndTime - BeginTime) keeps the configured capture length even when
+	// a later higher-confidence detection replaced the Detection struct during the
+	// pending window. For extended captures it reflects LastUpdated (set on
+	// creation and every re-detection) + the normal detection window.
 	if item.ExtendedCapture {
-		// For extended captures, EndTime reflects the last detection + normal detection window.
-		// LastUpdated is always initialized (set on creation and every re-detection).
-		item.Detection.Result.EndTime = item.LastUpdated.Add(normalDetectionWindow)
-
 		// Regenerate clip name with the actual duration (unknown at createDetection
 		// time), but only when export is enabled. When export is off the clip name
 		// stays empty so it remains a truthful per-detection signal (no file will be
@@ -278,13 +281,6 @@ func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
 			item.Detection.Result.ClipName = p.applyExportFormatExtension(
 				settings, clipName, item.BestModelID, datastore.AudioSource{ID: item.Source})
 		}
-	} else {
-		// For non-extended detections, recalculate EndTime to maintain the configured
-		// capture window. BeginTime was backdated to FirstDetected, but EndTime may
-		// come from a later higher-confidence detection that replaced the Detection
-		// struct during the pending window. Without this recalculation, the time span
-		// (EndTime - BeginTime) inflates beyond the configured capture length.
-		item.Detection.Result.EndTime = item.FirstDetected.Add(normalDetectionWindow)
 	}
 }
 

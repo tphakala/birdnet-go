@@ -85,16 +85,20 @@ type Processor struct {
 	dogDetectionMutex      sync.Mutex
 	detectionMutex         sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
 	vadGate                *vadGate     // Lazily-loaded Silero VAD speech gate for the privacy filter
-	controlChan            chan string
-	JobQueue               *jobqueue.JobQueue // Queue for managing job retries
-	workerCancel           context.CancelFunc // Function to cancel worker goroutines
-	thresholdsCtx          context.Context    // Context for threshold persistence/cleanup goroutines
-	thresholdsCancel       context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
-	flusherCtx             context.Context    // Context for pending detections flusher goroutine
-	flusherCancel          context.CancelFunc // Function to cancel flusher goroutine
-	preRenderer            PreRendererSubmit  // Spectrogram pre-renderer for background generation
-	preRendererOnce        sync.Once          // Ensures pre-renderer is initialized only once
-	startOnce              sync.Once          // Ensures Start() is called only once
+	// privacyCoverage lists the audio spans each (source, model, detector) has
+	// scored for speech, guarded by detectionMutex. The privacy coverage gate
+	// defers a pending detection until its saved clip span is inside one of them.
+	privacyCoverage  map[coverageKey][]vadSpan
+	controlChan      chan string
+	JobQueue         *jobqueue.JobQueue // Queue for managing job retries
+	workerCancel     context.CancelFunc // Function to cancel worker goroutines
+	thresholdsCtx    context.Context    // Context for threshold persistence/cleanup goroutines
+	thresholdsCancel context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
+	flusherCtx       context.Context    // Context for pending detections flusher goroutine
+	flusherCancel    context.CancelFunc // Function to cancel flusher goroutine
+	preRenderer      PreRendererSubmit  // Spectrogram pre-renderer for background generation
+	preRendererOnce  sync.Once          // Ensures pre-renderer is initialized only once
+	startOnce        sync.Once          // Ensures Start() is called only once
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
@@ -673,6 +677,9 @@ func (p *Processor) startDetectionProcessor() {
 
 // processDetections examines each detection from the queue, updating held detections
 // with new or higher-confidence instances and setting an appropriate flush deadline.
+// It also runs the VAD speech gate on the chunk and, once the chunk's speech hits
+// are written, publishes the audio the chunk's detectors scored as privacy
+// coverage.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) processDetections(item classifier.Results) {
@@ -691,9 +698,11 @@ func (p *Processor) processDetections(item classifier.Results) {
 
 	// Run the dedicated Silero VAD speech gate before per-result processing. It
 	// scores the raw chunk independently of what the bird model ranked and, on a
-	// speech hit, records it in LastHumanDetection so the privacy filter discards
-	// this window's detections regardless of the top-K label truncation.
-	p.runVADGate(settings, &item)
+	// speech hit, records it in LastHumanDetection (stamped with the end of the
+	// audio it scored) so the privacy filter discards detections whose saved clip
+	// reaches that audio, regardless of the top-K label truncation. The span it
+	// returns is published as coverage after the label hits are written.
+	vadCoverage, vadRan := p.runVADGate(settings, &item)
 
 	// Detection window sets wait time before a detection is considered final and is flushed.
 	// This represents the duration to wait from NOW (detection creation time) before flushing,
@@ -707,6 +716,11 @@ func (p *Processor) processDetections(item classifier.Results) {
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
 	// once deadline is reached detections are delivered to workers for actions (save to db etc) processing
 	detectionResults := p.processResults(settings, item)
+
+	// Publish what this chunk scored only now, after both the VAD hit and the label
+	// hits for it are written, so the coverage gate never sees audio whose hits
+	// are still outstanding.
+	p.publishPrivacyCoverage(settings, &item, vadCoverage, vadRan)
 
 	// Log processing results with deduplication to prevent spam
 	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
@@ -1580,7 +1594,9 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 // shouldDiscardDetection checks if a detection should be discarded based on various criteria.
 // The caller provides a settings snapshot and the precomputed minDetections (from
 // MinDetectionsForModel) to avoid redundant settings fetches and ensure
-// consistency within a single flush cycle.
+// consistency within a single flush cycle. The privacy filter discards a
+// detection when the source's latest speech hit is at or after the saved clip's
+// begin (clipSpan) less privacyClipGuard.
 func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
@@ -1598,11 +1614,14 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 		p.detectionMutex.RLock()
 		lastHumanDetection, exists := p.LastHumanDetection[item.Source]
 		p.detectionMutex.RUnlock()
-		// Discard when a human voice was detected at or after the bird detection
-		// started. Using !Before (>=) rather than After (>) so a human and a bird
-		// sharing the exact same audio chunk (equal timestamps) still trips the
-		// privacy filter instead of leaking the detection.
-		if exists && !lastHumanDetection.Time.Before(item.FirstDetected) {
+		// Discard when speech was detected at or after the start of the bird's saved
+		// clip. Hit times are the capture time of the end of the audio that produced
+		// the hit, so a hit at or after the clip begin means the clip may contain
+		// that speech (including the pre-capture part, which precedes the detecting
+		// chunk). The comparison is padded by privacyClipGuard and uses !Before (>=)
+		// so a hit stamped exactly at the clip begin still discards.
+		clipBegin, _ := clipSpan(settings, item)
+		if exists && !lastHumanDetection.Time.Before(clipBegin.Add(-privacyClipGuard)) {
 			// Add structured logging for privacy filter
 			GetLogger().Debug("Detection discarded by privacy filter",
 				logger.String("species", item.Detection.Result.Species.CommonName),
@@ -1675,6 +1694,23 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 	}
 
 	return false, ""
+}
+
+// recordUnscannedSave logs and counts a detection approved although a speech
+// detector never scored its whole clip within privacyCoverageMaxWait (the privacy
+// filter fails open rather than losing the detection).
+func (p *Processor) recordUnscannedSave(settings *conf.Settings, item *PendingDetection, speciesName string) {
+	begin, end := clipSpan(settings, item)
+	GetLogger().Info("privacy filter: clip not fully scanned for speech before the wait expired, approving detection",
+		logger.String("species", speciesName),
+		logger.String("source", p.getDisplayNameForSource(item.Source)),
+		logger.Time("clip_begin", begin),
+		logger.Time("clip_end", end),
+		logger.Duration("max_wait", privacyCoverageMaxWait),
+		logger.String("operation", "privacy_filter_coverage"))
+	if settings.Realtime.Telemetry.Enabled && p.Metrics != nil {
+		p.Metrics.PrivacyFilter.RecordUnscannedSave()
+	}
 }
 
 // processApprovedDetection handles an approved detection by sending it to the worker queue
@@ -1830,7 +1866,10 @@ func (p *Processor) effectiveBaseOverlap(settings *conf.Settings) time.Duration 
 // flushPendingDetections processes one flush cycle, flushing eligible detections.
 // minDetections is computed per-item using the item's BestModelID so that bat
 // and bird models each apply their own false positive filter configuration.
-// Returns the count of pending and flushed detections for logging.
+// A detection that passes the discard checks is approved only when the privacy
+// coverage gate allows it (see privacyCoverageVerdict); otherwise it stays
+// pending and is re-checked on the next tick. Returns the count of pending and
+// flushed detections for logging.
 func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	now := time.Now()
 	settings := p.currentSettings()
@@ -1879,6 +1918,16 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 			}
 
 			continue
+		}
+
+		switch p.privacyCoverageVerdict(settings, &item, now) {
+		case coverageDefer:
+			// A speech detector has not yet scored the whole saved clip. Leave the
+			// detection pending; the next tick re-runs the discard check and this one.
+			continue
+		case coverageTimedOut:
+			p.recordUnscannedSave(settings, &item, speciesName)
+		case coverageKeep:
 		}
 
 		GetLogger().Info("Flushing detection",

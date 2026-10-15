@@ -167,6 +167,10 @@ func newVADGate() *vadGate {
 	}
 }
 
+// loaded reports whether the shared VAD session is currently held. It reads an
+// atomic snapshot, so it never blocks on an in-flight inference.
+func (g *vadGate) loaded() bool { return g.snapshot.Load() != nil }
+
 // close releases the shared session and every streamer. It is idempotent and
 // safe to call concurrently with score (the shared mutex serialises them, so it
 // blocks until any in-flight inference completes).
