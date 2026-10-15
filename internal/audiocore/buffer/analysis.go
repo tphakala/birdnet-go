@@ -2,6 +2,7 @@ package buffer
 
 import (
 	"sync"
+	"time"
 
 	"github.com/smallnest/ringbuffer"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -48,6 +49,12 @@ type AnalysisBuffer struct {
 	writtenBytes int64
 	lostBytes    int64
 	windowsRead  int64
+
+	// lastWriteAt is the time of the latest Write call, accepted or not;
+	// guarded by mu. Zero until the first Write and after Reset.
+	lastWriteAt time.Time
+	// lostAtLastRead is lostBytes as of the latest successful Read, guarded by mu.
+	lostAtLastRead int64
 }
 
 // NewAnalysisBuffer creates an AnalysisBuffer with a ring buffer of the given
@@ -140,9 +147,12 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 // byte counters (see Stats) are advanced. A write larger than the ring is
 // refused whole and counted as lost, leaving the buffered audio untouched.
 //
+// Every call, accepted or not, records the time for Backlog.
+//
 // Write is safe for concurrent use.
 func (ab *AnalysisBuffer) Write(data []byte) error {
 	ab.mu.Lock()
+	ab.lastWriteAt = time.Now()
 	ab.writtenBytes += int64(len(data))
 	var err error
 	if len(data) > ab.ring.Capacity() {
@@ -178,6 +188,8 @@ func (ab *AnalysisBuffer) Write(data []byte) error {
 //
 // (nil, noopRelease, nil) is still the "try again later" signal when the ring
 // has not yet accumulated readSize bytes.
+//
+// A successful Read also snapshots the lost-byte count for LostAtLastRead.
 //
 // Read is safe for concurrent use. The returned release func is bound to a
 // single call chain and must not be invoked from multiple goroutines; in
@@ -239,6 +251,7 @@ func (ab *AnalysisBuffer) Read() (window []byte, release func(), err error) {
 	}
 
 	ab.windowsRead++
+	ab.lostAtLastRead = ab.lostBytes
 
 	pool := ab.windowPool
 	released := false
@@ -270,12 +283,37 @@ func (ab *AnalysisBuffer) Stats() AnalysisBufferStats {
 	}
 }
 
-// Reset clears the ring buffer and the overlap state.
+// Backlog reports how many bytes sit unread in the ring and when Write was last
+// called. The newest unread byte was written at lastWriteAt, so the capture time
+// of the last byte of a window just returned by Read is lastWriteAt minus the
+// duration of bytes. lastWriteAt is zero before the first Write and after
+// Reset. It is safe for concurrent use.
+func (ab *AnalysisBuffer) Backlog() (bytes int, lastWriteAt time.Time) {
+	ab.mu.Lock()
+	defer ab.mu.Unlock()
+	return ab.ring.Length(), ab.lastWriteAt
+}
+
+// LostAtLastRead returns the cumulative lost-byte count (see
+// AnalysisBufferStats.LostBytes) as of the latest Read that returned a window.
+// Two consecutive windows with different values had audio discarded between
+// them. Unlike Stats, the value cannot move after the Read that produced it, so
+// a loss is attributed to the window that follows it. It is safe for concurrent
+// use.
+func (ab *AnalysisBuffer) LostAtLastRead() int64 {
+	ab.mu.Lock()
+	defer ab.mu.Unlock()
+	return ab.lostAtLastRead
+}
+
+// Reset clears the ring buffer, the overlap state and the last write time
+// reported by Backlog.
 // Useful for testing or restarting a source. The cumulative counters reported
 // by Stats are not reset.
 func (ab *AnalysisBuffer) Reset() {
 	ab.mu.Lock()
 	ab.ring.Reset()
 	ab.prevData = nil
+	ab.lastWriteAt = time.Time{}
 	ab.mu.Unlock()
 }

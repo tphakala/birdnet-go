@@ -506,3 +506,92 @@ func TestDetectionOffset_DerivedFromClipLength(t *testing.T) {
 		})
 	}
 }
+
+// timingTestBuffer allocates an analysis buffer for the window timing tests.
+func timingTestBuffer(t *testing.T, capacity, readSize int) (*buffer.Manager, *buffer.AnalysisBuffer) {
+	t.Helper()
+	const (
+		sourceID = "timing-src"
+		modelID  = "timing-model"
+	)
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, capacity, 0, readSize))
+	ab, err := mgr.AnalysisBuffer(sourceID, modelID)
+	require.NoError(t, err)
+	return mgr, ab
+}
+
+func readWindow(t *testing.T, ab *buffer.AnalysisBuffer) {
+	t.Helper()
+	w, release, err := ab.Read()
+	require.NoError(t, err)
+	require.NotNil(t, w)
+	release()
+}
+
+// TestMonitorTickState_WindowTimingSubtractsBacklog pins AudioEndAt: the time of
+// the last write minus the duration of the audio still unread in the ring.
+func TestMonitorTickState_WindowTimingSubtractsBacklog(t *testing.T) {
+	t.Parallel()
+	const (
+		readSize       = 1000
+		bytesPerSecond = 2000
+	)
+	_, ab := timingTestBuffer(t, readSize*10, readSize)
+	for range 3 {
+		require.NoError(t, ab.Write(make([]byte, readSize)))
+	}
+	readWindow(t, ab)
+	_, lastWriteAt := ab.Backlog()
+
+	state := &monitorTickState{}
+	audioEnd, _ := state.windowTiming(ab, bytesPerSecond)
+	// Two of three chunks (2000 bytes = 1 s) are still unread.
+	assert.Equal(t, lastWriteAt.Add(-time.Second), audioEnd)
+}
+
+// TestMonitorTickState_WindowTimingGapFlag pins when AudioGap is raised: the
+// first window, an inactive-model skip, overwrite loss and buffer reallocation.
+func TestMonitorTickState_WindowTimingGapFlag(t *testing.T) {
+	t.Parallel()
+	const (
+		readSize       = 1000
+		bytesPerSecond = 2000
+	)
+	mgr, ab := timingTestBuffer(t, readSize*2, readSize)
+	state := &monitorTickState{}
+
+	next := func(buf *buffer.AnalysisBuffer) bool {
+		t.Helper()
+		require.NoError(t, buf.Write(make([]byte, readSize)))
+		readWindow(t, buf)
+		_, gap := state.windowTiming(buf, bytesPerSecond)
+		return gap
+	}
+
+	assert.True(t, next(ab), "first window of a buffer")
+	assert.False(t, next(ab), "contiguous window")
+
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	readWindow(t, ab)
+	_, _ = state.windowTiming(ab, bytesPerSecond)
+	state.markWindowSkipped()
+	assert.True(t, next(ab), "a window read but not analyzed precedes this one")
+	assert.False(t, next(ab), "the skip is cleared once a window is dispatched")
+
+	// Overwrite loss: fill the 2-chunk ring beyond capacity before the next read.
+	for range 3 {
+		require.NoError(t, ab.Write(make([]byte, readSize)))
+	}
+	readWindow(t, ab)
+	_, gap := state.windowTiming(ab, bytesPerSecond)
+	assert.True(t, gap, "overwritten audio before this window")
+	assert.False(t, next(ab))
+
+	mgr.DeallocateAnalysis("timing-src", "timing-model")
+	require.NoError(t, mgr.AllocateAnalysis("timing-src", "timing-model", readSize*2, 0, readSize))
+	ab2, err := mgr.AnalysisBuffer("timing-src", "timing-model")
+	require.NoError(t, err)
+	require.NotSame(t, ab, ab2, "reallocation must give a new buffer")
+	assert.True(t, next(ab2), "reallocated buffer")
+}

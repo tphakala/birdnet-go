@@ -504,3 +504,67 @@ func TestAnalysisBuffer_ResetKeepsCumulativeStats(t *testing.T) {
 	ab.Reset()
 	assert.Equal(t, before, ab.Stats())
 }
+
+// TestAnalysisBuffer_BacklogReportsUnreadBytesAndLastWrite pins Backlog: the
+// unread ring bytes after a Read and the time of the latest Write, cleared by
+// Reset.
+func TestAnalysisBuffer_BacklogReportsUnreadBytesAndLastWrite(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 64 * 1024
+		readSize = 1024
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "backlog-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	bytesLeft, lastWriteAt := ab.Backlog()
+	assert.Zero(t, bytesLeft)
+	assert.True(t, lastWriteAt.IsZero(), "no write yet")
+
+	before := time.Now()
+	for range 3 {
+		require.NoError(t, ab.Write(make([]byte, readSize)))
+	}
+	_, release, err := ab.Read()
+	require.NoError(t, err)
+	release()
+
+	bytesLeft, lastWriteAt = ab.Backlog()
+	assert.Equal(t, 2*readSize, bytesLeft, "two of the three chunks are still unread")
+	assert.False(t, lastWriteAt.Before(before), "last write time must be set by Write")
+	assert.False(t, lastWriteAt.After(time.Now()))
+
+	ab.Reset()
+	bytesLeft, lastWriteAt = ab.Backlog()
+	assert.Zero(t, bytesLeft)
+	assert.True(t, lastWriteAt.IsZero(), "Reset clears the last write time")
+}
+
+// TestAnalysisBuffer_LostAtLastReadAttributesLossToTheNextWindow pins that a
+// loss after a Read does not change LostAtLastRead until the next Read.
+func TestAnalysisBuffer_LostAtLastReadAttributesLossToTheNextWindow(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 10
+		readSize = 4
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "lost-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	require.NoError(t, ab.Write(make([]byte, 8)))
+	_, release, err := ab.Read()
+	require.NoError(t, err)
+	release()
+	assert.Zero(t, ab.LostAtLastRead())
+
+	// 4 buffered of 10 (6 free), so 9 bytes discard 3 unread bytes.
+	require.NoError(t, ab.Write(make([]byte, 9)))
+	assert.Zero(t, ab.LostAtLastRead(), "loss belongs to the next window, not the one already read")
+
+	_, release, err = ab.Read()
+	require.NoError(t, err)
+	release()
+	assert.Equal(t, int64(3), ab.LostAtLastRead())
+}
