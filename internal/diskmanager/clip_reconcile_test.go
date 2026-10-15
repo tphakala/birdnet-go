@@ -289,6 +289,31 @@ func TestReconcileClipOrphansPass_DirectoryPresentGuard(t *testing.T) {
 	}
 }
 
+func TestReconcileClipOrphansPass_UnreadableDirectoryWarns(t *testing.T) {
+	skipIfDirPermissionsNotEnforced(t)
+	withNoChunkPause(t)
+
+	baseDir := filepath.Join(t.TempDir(), "clips")
+	require.NoError(t, os.MkdirAll(baseDir, 0o750))
+	require.NoError(t, os.Chmod(baseDir, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(baseDir, 0o750) })
+	store := &fakeReconcileStore{refs: []ClipReference{
+		{ID: 1, ClipName: "2024/01/a.wav", CompletionTime: time.Now().Add(testOld)},
+	}}
+
+	var result ReconcileResult
+	out := logtest.Capture(t, func() {
+		result = ReconcileClipOrphansPass(make(chan struct{}), store, baseDir, nil)
+	})
+
+	assert.True(t, result.Aborted)
+	assert.Equal(t, abortReasonDirInaccessible, result.AbortReason)
+	assert.Empty(t, store.cleared)
+	assert.Empty(t, store.reads, "an unreadable export directory must stop the pass before any store read")
+	assert.Contains(t, out, "level=WARN")
+	assert.Contains(t, out, "export directory is not accessible")
+}
+
 func TestReconcileClipOrphansPass_EmptyBaseDirAborts(t *testing.T) {
 	withNoChunkPause(t)
 
