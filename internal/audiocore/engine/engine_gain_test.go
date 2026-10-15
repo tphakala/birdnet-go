@@ -23,6 +23,10 @@ const (
 	// gainTestFrameWait bounds the wait for a routed frame.
 	gainTestFrameWait = 5 * time.Second
 
+	// gainTestOverflowDB is a finite gain whose linear factor overflows float32,
+	// so go-audio-dsp rejects it.
+	gainTestOverflowDB = 1000.0
+
 	// gainTestBoostDB is a gain that visibly changes the test samples.
 	gainTestBoostDB = 6.0
 )
@@ -137,4 +141,30 @@ func TestUpdateSourceGain_UnknownSource(t *testing.T) {
 
 	err := eng.UpdateSourceGain("missing", gainTestBoostDB)
 	require.ErrorIs(t, err, audiocore.ErrSourceNotFound)
+}
+
+// TestUpdateSourceGain_InvalidGainWithoutRoutesIsRejected pins that an unusable
+// gain is rejected, and never reaches the registry, even when the source has no
+// route to reject it: a route built later would read the registry value and
+// fail to start.
+func TestUpdateSourceGain_InvalidGainWithoutRoutesIsRejected(t *testing.T) {
+	t.Parallel()
+	eng := newTestEngine(t)
+	_, err := eng.Registry().Register(&audiocore.SourceConfig{
+		ID:               gainTestSourceID,
+		DisplayName:      "Gain Test",
+		Type:             audiocore.SourceTypeAudioCard,
+		ConnectionString: "gain-test-device",
+		SampleRate:       gainTestRate,
+		BitDepth:         16,
+		Channels:         1,
+	})
+	require.NoError(t, err)
+
+	for _, bad := range []float64{math.NaN(), math.Inf(1), math.Inf(-1), gainTestOverflowDB} {
+		require.Error(t, eng.UpdateSourceGain(gainTestSourceID, bad), "gain %v", bad)
+		gain, ok := eng.Registry().GetGain(gainTestSourceID)
+		require.True(t, ok)
+		assert.InDelta(t, 0.0, gain, 0, "an unusable gain must not reach the registry (gain %v)", bad)
+	}
 }
