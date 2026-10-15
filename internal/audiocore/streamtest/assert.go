@@ -42,6 +42,9 @@ const (
 // nil for a buffer with a half sample at the end: DominantFrequency then
 // returns 0 and RMSDBFS returns silenceFloorDBFS.
 func samplesFromS16LE(pcm []byte) []float32 {
+	if len(pcm)%bytesPerSample != 0 {
+		return nil
+	}
 	samples := make([]float32, len(pcm)/bytesPerSample)
 	if _, err := dsppcm.BytesToFloat32(samples, pcm); err != nil {
 		return nil

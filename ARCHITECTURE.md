@@ -594,7 +594,7 @@ On-demand clip downloads, the denoise, normalize and gain preview, and audible-b
 
 On the live path, the per-route EQ and gain in `internal/audiocore` run on the go-audio-dsp `equalizer` and `gain` packages in float32, with float64 filter state. Audio returns to 16-bit with round-to-nearest and saturation. A route that resamples and processes hands the resampler's float32 output straight to those stages, so the audio is quantized once.
 
-Analysis inference input, the bat ultrasonic filter input and voice activity detection decode PCM16 with the go-audio-dsp `pcm` package, and the bat ultrasonic filter computes its STFT with the go-audio-dsp `stft` package.
+Analysis inference input, the bat ultrasonic filter input and the voice activity detector's 16 kHz passthrough decode PCM16 with the go-audio-dsp `pcm` package, and the bat ultrasonic filter computes its STFT with the go-audio-dsp `stft` package. The route resampler still decodes on its own.
 
 Sound level monitoring (`internal/audiocore/soundlevel`) measures each source with the go-audio-dsp `octave` meter: 1/3-octave bands from 25 Hz to 20 kHz below 0.95 of Nyquist, one-second mean square per band. birdnet-go keeps only the interval min/max/mean aggregation, the band keys and the output type.
 
