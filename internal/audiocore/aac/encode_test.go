@@ -172,7 +172,7 @@ func TestEncodePCM_DoesNotMutateSource(t *testing.T) {
 	copy(original, pcm)
 
 	// Both gain paths: -3 dB copies the buffer, 0 dB hands the caller's slice
-	// straight to the library (pcmgain.Applied is zero-copy there), which is the
+	// straight to the library (gain.AppliedBytes is zero-copy at 0 dB), which is the
 	// case that would corrupt the spectrogram pre-render if a library ever wrote
 	// into its input.
 	for _, gainDB := range []float64{-3, 0} {
@@ -346,8 +346,8 @@ func TestSupports_BitDepthAndChannels(t *testing.T) {
 	// go-aac itself codes 24- and 32-bit, but the shared gain and loudness path
 	// is int16-only, so this encoder must reject them rather than silently
 	// reinterpret the samples.
-	require.Error(t, Supports(48000, 24, 1), "24-bit must be rejected: pcmgain is int16-only")
-	require.Error(t, Supports(48000, 32, 1), "32-bit must be rejected: pcmgain is int16-only")
+	require.Error(t, Supports(48000, 24, 1), "24-bit must be rejected: gain and loudnorm are int16-only")
+	require.Error(t, Supports(48000, 32, 1), "32-bit must be rejected: gain and loudnorm are int16-only")
 	require.NoError(t, Supports(48000, 16, 1))
 	require.NoError(t, Supports(48000, 16, 2))
 	require.Error(t, Supports(48000, 16, 0))

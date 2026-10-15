@@ -179,7 +179,7 @@ func TestEncodePCM_DoesNotMutateSource(t *testing.T) {
 	copy(original, pcm)
 
 	// Both gain paths: -3 dB copies the buffer, 0 dB hands the caller's slice
-	// straight to the library (pcmgain.Applied is zero-copy there).
+	// straight to the library (gain.AppliedBytes is zero-copy at 0 dB).
 	for _, gainDB := range []float64{-3, 0} {
 		require.NoError(t, EncodePCM(t.Context(), &Options{
 			PCMData:     pcm,
@@ -348,8 +348,8 @@ func TestSupports_BitDepthAndChannels(t *testing.T) {
 	require.Error(t, Supports(48000, 8, 1))
 	// go-mp3 reads int16 only, and the shared gain/loudness path is int16-only
 	// too, so wider depths must be rejected rather than silently reinterpreted.
-	require.Error(t, Supports(48000, 24, 1), "24-bit must be rejected: pcmgain is int16-only")
-	require.Error(t, Supports(48000, 32, 1), "32-bit must be rejected: pcmgain is int16-only")
+	require.Error(t, Supports(48000, 24, 1), "24-bit must be rejected: gain and loudnorm are int16-only")
+	require.Error(t, Supports(48000, 32, 1), "32-bit must be rejected: gain and loudnorm are int16-only")
 	require.NoError(t, Supports(48000, 16, 2))
 	require.Error(t, Supports(48000, 16, 0))
 	require.Error(t, Supports(48000, 16, 3))

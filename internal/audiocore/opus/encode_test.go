@@ -170,7 +170,7 @@ func TestEncodePCM_DoesNotMutateSource(t *testing.T) {
 	copy(original, pcm)
 
 	// Both gain paths: -3 dB copies the buffer, 0 dB hands the caller's slice
-	// straight to the library (pcmgain.Applied is zero-copy there), which is the
+	// straight to the library (gain.AppliedBytes is zero-copy at 0 dB), which is the
 	// case that would corrupt the spectrogram pre-render if a library ever wrote
 	// into its input.
 	for _, gainDB := range []float64{-3, 0} {
