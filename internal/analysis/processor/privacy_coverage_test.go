@@ -243,8 +243,13 @@ func TestPrivacy_PreCaptureSpeechDiscards(t *testing.T) {
 			want      string
 		}{
 			// The detecting chunk ends at 40 s; its clip begins PreCapture before the
-			// chunk start. The speech case has 0.5 s of speech ending 0.2 s before the
-			// detecting chunk begins, i.e. inside the pre-capture part of the clip.
+			// chunk start. The speech case has 0.5 s of speech ending 1.2 s before the
+			// detecting chunk begins: inside the pre-capture part of the clip and
+			// farther back than the guard, so a comparison against the chunk start
+			// instead of the clip begin would miss it. With zero overlap the chunk
+			// before the detecting one ends exactly at the chunk start, so for the
+			// 5 s model at step 5000 ms this case cannot tell the two apart;
+			// TestPrivacy_GuardMargins pins the comparison point itself.
 			{"speech in the pre-capture region", true, "discarded"},
 			{"no speech", false, "approved"},
 		} {
@@ -252,7 +257,7 @@ func TestPrivacy_PreCaptureSpeechDiscards(t *testing.T) {
 				r := newPrivacyRig(t, geo.model, 45*time.Second)
 				chunkStart := 40*time.Second - r.clip
 				if tc.hasSpeech {
-					r.speech = []speechInterval{{chunkStart - sec(0.7), chunkStart - sec(0.2)}}
+					r.speech = []speechInterval{{chunkStart - sec(1.7), chunkStart - sec(1.2)}}
 				}
 				// Chunks up to well past the clip end (detecting end + 9 s for the
 				// 3 s model, +7 s for the 5 s model).
@@ -355,6 +360,9 @@ func TestPrivacy_CoverageGapDefersWithinWait(t *testing.T) {
 func TestPrivacy_NotApplicableKeeps(t *testing.T) {
 	t.Run("bat detection on a source no detector scored", func(t *testing.T) {
 		r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+		bat := r.chunk(sec(30)) // a bat window is analyzed too, and earns no coverage
+		bat.ModelID = classifier.RegistryIDBat
+		r.p.processDetections(bat)
 		r.pendModel(40*time.Second, classifier.RegistryIDBat)
 		assert.Equal(t, "approved", r.outcome())
 	})
@@ -506,6 +514,9 @@ func TestPrivacy_CheckPrivacyReadsHitAndCoverageAtomically(t *testing.T) {
 			done.Store(i)
 		}
 	}()
+	// The writer ends on its own; waiting for it keeps it from outliving the test
+	// when an assertion fails and the loop below returns early.
+	t.Cleanup(func() { <-finished })
 
 	for {
 		select {
@@ -519,9 +530,11 @@ func TestPrivacy_CheckPrivacyReadsHitAndCoverageAtomically(t *testing.T) {
 		item.FirstDetected = at(next).Add(-privacyClipGuard - e2eExportLength*time.Second)
 		check := p.checkPrivacy(settings, item, at(next))
 		if check.verdict == coverageKeep {
-			require.True(t, check.hasHit)
-			require.False(t, check.hit.Time.Before(at(next)),
-				"coverage through chunk %d was seen with only the hit of an earlier chunk", next)
+			if !assert.True(t, check.hasHit) ||
+				!assert.False(t, check.hit.Time.Before(at(next)),
+					"coverage through chunk %d was seen with only the hit of an earlier chunk", next) {
+				return
+			}
 		}
 	}
 }
@@ -767,4 +780,59 @@ func TestPrivacy_ZeroAudioEndStampsHitsAtNowAndPublishesNoCoverage(t *testing.T)
 
 func datastoreResult(species string) datastore.Results {
 	return datastore.Results{Species: species, Confidence: 0.9}
+}
+
+// TestPrivacy_SwitchingTheFilterOffReleasesDeferredDetections: a hot reload that
+// turns the privacy filter off must release detections already waiting for
+// coverage, even when coverage was published while the filter was on.
+func TestPrivacy_SwitchingTheFilterOffReleasesDeferredDetections(t *testing.T) {
+	r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+	r.feed(r.clip, 36*time.Second, sec(1))
+	r.pend(40 * time.Second) // clip 34 s to 49 s, coverage not there yet
+	require.Equal(t, "pending", r.outcome())
+
+	r.settings.Realtime.PrivacyFilter.Enabled = false
+	assert.Equal(t, "approved", r.outcome())
+}
+
+// TestPrivacy_VADHitsAreWrittenBeforeTheirCoverageIsPublished: processDetections
+// writes a chunk's speech hit and only then publishes the coverage that includes
+// it, so a flusher that sees the coverage always sees the hit. The writer is the
+// real processDetections with speech in every chunk; the reader checks the
+// invariant continuously. (The label hits of the same chunk are written by
+// processResults, which needs a loaded orchestrator and is not reachable here.)
+func TestPrivacy_VADHitsAreWrittenBeforeTheirCoverageIsPublished(t *testing.T) {
+	r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+	r.speech = []speechInterval{{0, time.Hour}}
+	const chunks = 400
+
+	var done atomic.Int64
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		for i := int64(1); i <= chunks; i++ {
+			r.p.processDetections(r.chunk(time.Duration(i) * time.Second))
+			done.Store(i)
+		}
+	}()
+	t.Cleanup(func() { <-finished })
+
+	for {
+		select {
+		case <-finished:
+			return
+		default:
+		}
+		next := done.Load() + 1
+		end := time.Duration(next) * time.Second
+		// A clip that coverage reaches exactly when chunk next is published.
+		item := &PendingDetection{Source: e2eSource, FirstDetected: r.at(end).Add(-privacyClipGuard - e2eExportLength*time.Second)}
+		check := r.p.checkPrivacy(r.settings, item, r.at(end))
+		if check.verdict == coverageKeep && check.hasHit {
+			if !assert.False(t, check.hit.Time.Before(r.at(end)),
+				"coverage through chunk %d was seen before its speech hit", next) {
+				return
+			}
+		}
+	}
 }

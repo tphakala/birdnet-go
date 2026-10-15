@@ -691,6 +691,7 @@ func TestProcessMonitorTick_ForwardsAudioTimingToResults(t *testing.T) {
 	conftest.SetTestSettings(conftest.GetTestSettings())
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 	drainResultsQueue(t)
+	t.Cleanup(func() { RemoveOverrunTrackers(forwardSource) })
 
 	spec := classifier.ModelRegistry[forwardModelID].Spec
 	window := spec.ClipSizeBytes()
@@ -804,4 +805,22 @@ func TestProcessMonitorTick_ResultsDropMakesNextWindowADiscontinuity(t *testing.
 	}
 	tick(4)
 	assert.True(t, nextQueuedResult(t, source).Audio.Gap, "the window after a dropped result is not contiguous with an analyzed one")
+}
+
+// TestProcessMonitorTick_EmptyPollKeepsTheAnalyzedLatch: most ticks find no full
+// window. They must not clear the analyzed latch, or every real window would
+// report a gap.
+func TestProcessMonitorTick_EmptyPollKeepsTheAnalyzedLatch(t *testing.T) {
+	t.Parallel()
+	const readSize = 480
+	mgr, _ := timingTestBuffer(t, readSize*2, readSize) // nothing written
+	bm := &BufferManager{
+		bn:        &scriptedModelState{loaded: []bool{true}, active: true},
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC),
+	}
+	cfg := &monitorConfig{sourceID: timingSourceID, modelID: timingModelID, readSize: readSize}
+	state := &monitorTickState{lastWindowAnalyzed: true}
+	require.True(t, bm.processMonitorTick(make(chan struct{}), cfg, readSize, 0, state, 1))
+	assert.True(t, state.lastWindowAnalyzed)
 }

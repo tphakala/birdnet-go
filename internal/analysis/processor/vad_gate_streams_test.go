@@ -347,3 +347,62 @@ func TestVADGate_JitteredAudioEndsStillScoreEveryFreshByte(t *testing.T) {
 	require.True(t, ok, "speech in the slice a timestamp trim drops must still be scored")
 	assert.False(t, hit.Time.Before(testVADBase.Add(10200*time.Millisecond)))
 }
+
+// positioned gives ch producer stream positions: it ends at endPos in generation
+// gen and its last contiguous bytes are genuine audio.
+func positioned(ch *chunkAudio, gen uint64, endPos int64, contiguous int) *chunkAudio {
+	ch.generation, ch.endPos, ch.contiguousBytes = gen, endPos, contiguous
+	return ch
+}
+
+// TestVADGate_PositionHoleRestartsCoverageWithoutResettingTheStream: audio the
+// producer never delivered between two windows (a hole in the stream positions)
+// restarts the covered span at the new window's contiguous tail, but the LSTM
+// state survives because the window is not flagged as a gap.
+func TestVADGate_PositionHoleRestartsCoverageWithoutResettingTheStream(t *testing.T) {
+	t.Parallel()
+	g, l := newLoggedGate()
+	full := testVADChunkBytes
+	oneSecond := int64(testVADRate * vadBytesPerSample)
+
+	first := positioned(modelChunk("s1", testVADModel, testVADBase), 1, 10*oneSecond, full)
+	scFirst, ran := scoreChunk(t, g, first)
+	require.True(t, ran)
+
+	second := positioned(modelChunk("s1", testVADModel, testVADBase.Add(time.Second)), 1, 11*oneSecond, full)
+	scSecond, ran := scoreChunk(t, g, second)
+	require.True(t, ran)
+	assert.True(t, scSecond.span.from.Equal(scFirst.span.from), "adjacent windows keep one span")
+	assert.Equal(t, int(oneSecond), l.list[0].appends[1], "only the audio added since the last window is appended")
+
+	// Ten seconds of stream never arrived, but the window is not flagged.
+	third := positioned(modelChunk("s1", testVADModel, testVADBase.Add(2*time.Second)), 1, 21*oneSecond, full)
+	scThird, ran := scoreChunk(t, g, third)
+	require.True(t, ran)
+	assert.True(t, scThird.span.from.Equal(testVADBase.Add(2*time.Second-3*time.Second)), "coverage restarts at the window's tail")
+	assert.Equal(t, full, l.list[0].appends[2], "a hole larger than the window appends the whole window")
+	assert.Zero(t, l.list[0].resets, "the stream is not reset without a gap flag")
+}
+
+// TestVADGate_FreshBytesFollowStreamPositionsNotTimestamps: with stream positions
+// the audio appended is exactly what the stream advanced, however the timestamps
+// of the two windows differ.
+func TestVADGate_FreshBytesFollowStreamPositionsNotTimestamps(t *testing.T) {
+	t.Parallel()
+	g, l := newLoggedGate()
+	full := testVADChunkBytes
+	oneSecond := int64(testVADRate * vadBytesPerSample)
+
+	scoreChunk(t, g, positioned(modelChunk("s1", testVADModel, testVADBase), 1, 10*oneSecond, full))
+	// Stamped only 100 ms later, but the stream advanced a whole second.
+	scoreChunk(t, g, positioned(modelChunk("s1", testVADModel, testVADBase.Add(100*time.Millisecond)), 1, 11*oneSecond, full))
+	assert.Equal(t, int(oneSecond), l.list[0].appends[1])
+
+	// A new generation (a reallocated buffer) is a hole whatever the positions say.
+	g2, l2 := newLoggedGate()
+	scoreChunk(t, g2, positioned(modelChunk("s1", testVADModel, testVADBase), 1, 10*oneSecond, full))
+	sc, ran := scoreChunk(t, g2, positioned(modelChunk("s1", testVADModel, testVADBase.Add(time.Second)), 2, 11*oneSecond, full))
+	require.True(t, ran)
+	assert.True(t, sc.span.from.Equal(testVADBase.Add(time.Second-3*time.Second)), "a new generation restarts coverage")
+	assert.Len(t, l2.list[0].appends, 2)
+}
