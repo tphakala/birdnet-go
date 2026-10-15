@@ -202,8 +202,9 @@ func TestStreamer_RollingWindowSemantics(t *testing.T) {
 	assert.InDelta(t, 0.9, flush(), 1e-6, "speech still inside the rolling window must keep the aggregate high")
 	assert.Len(t, s.ring, 2*hopsPerFlush)
 
-	// Third flush: ring reaches 120 hops and trims to aggWindowFrames (94), which
-	// still holds 14 of the 0.9 hops (>= minConsec), so the aggregate stays high.
+	// Third flush: the 80 prior hops are cut to 54 so the ring holds exactly
+	// aggWindowFrames (94) after the append; 14 of the 0.9 hops survive
+	// (>= minConsec), so the aggregate stays high.
 	assert.InDelta(t, 0.9, flush(), 1e-6)
 	assert.Len(t, s.ring, aggWindowFrames, "ring must trim to the aggregation window")
 
@@ -211,62 +212,106 @@ func TestStreamer_RollingWindowSemantics(t *testing.T) {
 	assert.InDelta(t, 0.0, flush(), 1e-6, "speech older than the window must age out")
 }
 
+// TestStreamer_FlushExceedingWindowScoresLeadingAndBoundaryHops proves a Flush
+// scores every hop it infers, even when one Flush yields more hops than
+// aggWindowFrames (a step longer than ~3 s, as with 5 s models), and that
+// speech straddling the previous flush boundary still reaches the sustain
+// length, while prior speech older than that boundary carry does not count.
 func TestStreamer_FlushExceedingWindowScoresLeadingAndBoundaryHops(t *testing.T) {
 	t.Parallel()
 
-	t.Run("leading speech in a 4.5s step (140 hops) is scored before trimming", func(t *testing.T) {
-		t.Parallel()
-		const stepHops = 140 // 4.5 s step at 16 kHz / 512 samples (> aggWindowFrames=94)
-		probs := repeatProbs(0.0, stepHops)
-		for i := range defaultMinConsecutiveFrames {
-			probs[i] = 0.9
-		}
-		stub := &stubSession{probQueue: [][]float32{probs}}
-		s := newTestStreamer(t)
+	const (
+		// longFlushHops is a 4.5 s step at 16 kHz / 512-sample hops, longer
+		// than the aggregation window.
+		longFlushHops = 140
+		// priorHops is a short first flush that seeds the ring.
+		priorHops  = 40
+		speechProb = 0.85
+		// boundaryCarry is how many prior hops a run straddling the flush
+		// boundary can have before it.
+		boundaryCarry = defaultMinConsecutiveFrames - 1
+	)
+	require.Greater(t, longFlushHops, aggWindowFrames, "long flush must exceed the aggregation window")
 
-		pcm, _ := pcm16Ramp(t, stepHops*windowSamples)
+	// flushHops appends hops of audio, flushes with the stub's next queued
+	// probabilities, and returns the aggregate.
+	flushHops := func(t *testing.T, s *streamer, stub *stubSession, hops int) float32 {
+		t.Helper()
+		pcm, _ := pcm16Ramp(t, hops*windowSamples)
 		require.NoError(t, s.Append(pcm, sampleRate16k))
 		prob, ok, framesRun, err := s.Flush(stub)
 		require.NoError(t, err)
-		assert.True(t, ok)
-		assert.Equal(t, stepHops, framesRun)
-		assert.InDelta(t, 0.9, prob, 1e-6, "speech in the leading hops of a >3s flush must be scored")
+		require.True(t, ok)
+		require.Equal(t, hops, framesRun)
+		return prob
+	}
+	// endsHigh returns n silent hops whose last k hops carry speech.
+	endsHigh := func(n, k int) []float32 {
+		p := repeatProbs(0, n)
+		for i := n - k; i < n; i++ {
+			p[i] = speechProb
+		}
+		return p
+	}
+	// startsHigh returns n silent hops whose first k hops carry speech.
+	startsHigh := func(n, k int) []float32 {
+		p := repeatProbs(0, n)
+		for i := range k {
+			p[i] = speechProb
+		}
+		return p
+	}
+
+	t.Run("leading speech in a long flush is scored before trimming", func(t *testing.T) {
+		t.Parallel()
+		stub := &stubSession{probQueue: [][]float32{startsHigh(longFlushHops, defaultMinConsecutiveFrames)}}
+		s := newTestStreamer(t)
+
+		assert.InDelta(t, speechProb, flushHops(t, s, stub, longFlushHops), 1e-6,
+			"speech in the leading hops of a flush longer than the window must be scored")
 		assert.Len(t, s.ring, aggWindowFrames, "ring must trim to aggWindowFrames after aggregating")
 	})
 
-	t.Run("speech straddling flush boundary before a >94-hop flush is scored", func(t *testing.T) {
+	// Each case ends the prior flush with boundaryCarry speech hops and starts
+	// the next flush with the one hop that completes the sustain run.
+	for _, tc := range []struct {
+		name string
+		hops int
+	}{
+		{"speech straddling the boundary into a long flush is scored", longFlushHops},
+		// One hop short of the window: the boundary carry (minConsec-1 hops)
+		// is larger than the hops needed to fill the window (one), so the
+		// carry alone keeps the run whole.
+		{"speech straddling the boundary into a window-minus-one flush is scored", aggWindowFrames - 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			stub := &stubSession{probQueue: [][]float32{
+				endsHigh(priorHops, boundaryCarry),
+				startsHigh(tc.hops, 1),
+			}}
+			s := newTestStreamer(t)
+
+			assert.InDelta(t, 0.0, flushHops(t, s, stub, priorHops), 1e-6,
+				"a run shorter than minConsec must not trip")
+			assert.InDelta(t, speechProb, flushHops(t, s, stub, tc.hops), 1e-6,
+				"speech straddling the flush boundary must be scored")
+			assert.Len(t, s.ring, aggWindowFrames, "ring must trim to aggWindowFrames after aggregating")
+		})
+	}
+
+	t.Run("prior speech beyond the boundary carry does not count in a long flush", func(t *testing.T) {
 		t.Parallel()
-		const (
-			firstHops  = 40
-			secondHops = 140
-		)
-		firstProbs := repeatProbs(0.0, firstHops)
-		// Place minConsec-1 (2) high hops at the very end of flush 1.
-		firstProbs[firstHops-2] = 0.85
-		firstProbs[firstHops-1] = 0.85
-
-		secondProbs := repeatProbs(0.0, secondHops)
-		// Place 1 high hop at index 0 of flush 2 to complete the 3-hop sustain across the boundary.
-		secondProbs[0] = 0.85
-
-		stub := &stubSession{probQueue: [][]float32{firstProbs, secondProbs}}
+		stub := &stubSession{probQueue: [][]float32{
+			endsHigh(priorHops, defaultMinConsecutiveFrames),
+			repeatProbs(0, longFlushHops),
+		}}
 		s := newTestStreamer(t)
 
-		pcm1, _ := pcm16Ramp(t, firstHops*windowSamples)
-		require.NoError(t, s.Append(pcm1, sampleRate16k))
-		prob1, ok, _, err := s.Flush(stub)
-		require.NoError(t, err)
-		require.True(t, ok)
-		assert.InDelta(t, 0.0, prob1, 1e-6, "2 consecutive hops < minConsec(3) must not trip")
-
-		pcm2, _ := pcm16Ramp(t, secondHops*windowSamples)
-		require.NoError(t, s.Append(pcm2, sampleRate16k))
-		prob2, ok, framesRun, err := s.Flush(stub)
-		require.NoError(t, err)
-		assert.True(t, ok)
-		assert.Equal(t, secondHops, framesRun)
-		assert.InDelta(t, 0.85, prob2, 1e-6, "speech straddling the boundary into a >94-hop flush must be scored")
-		assert.Len(t, s.ring, aggWindowFrames, "ring must trim to aggWindowFrames after aggregating")
+		assert.InDelta(t, speechProb, flushHops(t, s, stub, priorHops), 1e-6,
+			"a full sustain run must trip (positive control)")
+		assert.InDelta(t, 0.0, flushHops(t, s, stub, longFlushHops), 1e-6,
+			"a long flush must keep only the boundary carry, so older speech ages out")
 	})
 }
 
