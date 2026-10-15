@@ -53,6 +53,9 @@ type Options struct {
 // works on a copy, so the caller's PCMData stays pristine for later readers such
 // as the spectrogram pre-render job.
 //
+// Errors are categorized: invalid options and encoder rejections of the stream
+// are validation or audio errors, and only filesystem failures are file I/O.
+//
 // ctx is accepted for symmetry with the other clip encoders and is not consulted:
 // a WAV save is one buffered write that is not cancellable, so a cancelled context
 // neither aborts it nor turns a real failure into a cancellation.
@@ -173,14 +176,7 @@ func EncodePCM(_ context.Context, opts *Options) error {
 		Channels:   wavNumChannels,
 	}
 	if err := wavpcm.EncodeInterleaved(outFile, cfg, pcmData); err != nil {
-		return errors.New(err).
-			Component("audiocore/wav").
-			Category(errors.CategoryFileIO).
-			Context("operation", "save_pcm_to_wav").
-			Context("file_operation", "encode_wav").
-			Context("sample_rate", sampleRate).
-			Context("bit_depth", bitDepth).
-			Build()
+		return classifyEncodeError(err, sampleRate, bitDepth)
 	}
 
 	// Flush the temp file to stable storage before renaming so a crash right
@@ -249,4 +245,27 @@ func applyGain(pcmData []byte, bitDepth int, gainDB float64) ([]byte, error) {
 			Build()
 	}
 	return gained, nil
+}
+
+// classifyEncodeError tags an error from the go-wav encoder. A *os.PathError is
+// a write fault (a full disk, a read-only remount) and stays a file I/O error;
+// anything else is the stream or its parameters and is an audio error, so a full
+// disk does not show up in telemetry as an audio bug.
+func classifyEncodeError(err error, sampleRate, bitDepth int) error {
+	if audiotemp.IsWriteFault(err) {
+		return errors.New(err).
+			Component("audiocore/wav").
+			Category(errors.CategoryFileIO).
+			Context("operation", "save_pcm_to_wav").
+			Context("file_operation", "encode_wav").
+			Build()
+	}
+	return errors.New(err).
+		Component("audiocore/wav").
+		Category(errors.CategoryAudio).
+		Context("operation", "save_pcm_to_wav").
+		Context("file_operation", "encode_wav").
+		Context("sample_rate", sampleRate).
+		Context("bit_depth", bitDepth).
+		Build()
 }

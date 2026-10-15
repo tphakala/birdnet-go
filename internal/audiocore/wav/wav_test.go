@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore/wav"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	wavpcm "github.com/tphakala/go-wav/pcm"
 )
 
@@ -391,4 +393,32 @@ func TestEncodePCM_GainRequiresSixteenBit(t *testing.T) {
 func TestEncodePCM_NilOptions(t *testing.T) {
 	t.Parallel()
 	require.Error(t, wav.EncodePCM(t.Context(), nil))
+}
+
+// TestEncodePCM_EncoderValidationErrorIsAudioCategory verifies that an error the
+// go-wav encoder raises for the stream itself (here a sample rate above what the
+// format can carry) is not filed as a filesystem fault, and that no clip is
+// left behind.
+func TestEncodePCM_EncoderValidationErrorIsAudioCategory(t *testing.T) {
+	t.Parallel()
+	if bits.UintSize == 32 {
+		t.Skip("a sample rate above the RIFF ceiling is not representable in a 32-bit int")
+	}
+	filePath := filepath.Join(t.TempDir(), "rate.wav")
+	sampleRate := math.MaxInt32
+	sampleRate++
+
+	err := wav.EncodePCM(t.Context(), &wav.Options{
+		PCMData:    make([]byte, 4),
+		OutputPath: filePath,
+		SampleRate: sampleRate,
+		BitDepth:   16,
+	})
+
+	require.Error(t, err)
+	var enhanced *errors.EnhancedError
+	require.ErrorAs(t, err, &enhanced)
+	assert.Equal(t, string(errors.CategoryAudio), enhanced.GetCategory())
+	_, statErr := os.Stat(filePath)
+	assert.True(t, os.IsNotExist(statErr), "no clip is left behind")
 }
