@@ -46,7 +46,8 @@ type AudioTiming struct {
 	ContiguousBytes int
 	// EndPos is the producer's stream position just after the window's last byte
 	// (audio refused before it still counts toward it, so a loss leaves a hole),
-	// and Generation identifies the stream it belongs to. EndPos minus
+	// and Generation identifies the stretch of stream it belongs to (unique per
+	// buffer instance and per buffer Reset, never shared by a rebuilt buffer). EndPos minus
 	// ContiguousBytes is where the contiguous tail starts. Two windows of the same
 	// Generation are adjacent when the later tail starts at or before the earlier
 	// EndPos, whatever their timestamps say. Generation zero means no positions.

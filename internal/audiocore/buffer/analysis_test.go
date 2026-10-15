@@ -697,7 +697,7 @@ func TestAnalysisBuffer_ReadWindowContiguityAndPositions(t *testing.T) {
 	assert.True(t, first.Gap)
 	assert.Equal(t, readSize, first.ContiguousBytes, "the zero-filled head is not contiguous audio")
 	assert.Equal(t, int64(readSize), first.EndPos)
-	assert.Equal(t, uint64(1), first.Generation)
+	assert.NotZero(t, first.Generation, "zero means a producer without positions")
 
 	write(readSize)
 	second := readWindowOnce(t, ab)
@@ -724,7 +724,7 @@ func TestAnalysisBuffer_ReadWindowContiguityAndPositions(t *testing.T) {
 	ab.Reset()
 	write(readSize)
 	afterReset := readWindowOnce(t, ab)
-	assert.Equal(t, uint64(2), afterReset.Generation)
+	assert.NotEqual(t, first.Generation, afterReset.Generation, "a Reset starts a new stream")
 	assert.True(t, afterReset.Gap)
 	assert.Equal(t, readSize, afterReset.ContiguousBytes)
 }
@@ -754,4 +754,50 @@ func TestAnalysisBuffer_RefusedWriteOnADrainedRingLeavesAPositionHole(t *testing
 	tailStart := after.EndPos - int64(after.ContiguousBytes)
 	assert.Greater(t, tailStart, before.EndPos, "the refused bytes leave a hole between the two windows")
 	assert.Equal(t, before.Generation, after.Generation)
+}
+
+// newGenerationBuffer builds a buffer and resets it the given number of times.
+func newGenerationBuffer(t *testing.T, resets int) *buffer.AnalysisBuffer {
+	t.Helper()
+	ab, err := buffer.NewAnalysisBuffer(64, 0, 8, "generation-source", newTestLogger(), nil)
+	require.NoError(t, err)
+	for range resets {
+		ab.Reset()
+	}
+	return ab
+}
+
+// TestAnalysisBuffer_GenerationsAreUniqueAcrossBuffersAndResets: positions of one
+// buffer instance mean nothing next to another's, so no two buffers, and no two
+// resets of different buffers, may report the same generation. A rebuilt buffer
+// that restarted at the same generation would join the old coverage. All buffers
+// are built before any generation is read, so a reset that took a generation
+// another buffer later draws is caught.
+func TestAnalysisBuffer_GenerationsAreUniqueAcrossBuffersAndResets(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		resets int
+	}{
+		{"first buffer", 0},
+		{"second buffer", 0},
+		{"third buffer, one reset", 1},
+		{"fourth buffer", 0},
+		{"fifth buffer, two resets", 2},
+		{"sixth buffer", 0},
+	}
+	buffers := make([]*buffer.AnalysisBuffer, len(cases))
+	for i, c := range cases {
+		buffers[i] = newGenerationBuffer(t, c.resets)
+	}
+	seen := map[uint64]string{}
+	for i, c := range cases {
+		require.NoError(t, buffers[i].Write(make([]byte, 8)))
+		gen := readWindowOnce(t, buffers[i]).Generation
+		require.NotZero(t, gen)
+		other, dup := seen[gen]
+		require.Falsef(t, dup, "%s reports the generation of %s", c.name, other)
+		seen[gen] = c.name
+	}
 }

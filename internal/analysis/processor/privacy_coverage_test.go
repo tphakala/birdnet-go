@@ -576,23 +576,41 @@ func TestPrivacy_NewBufferGenerationNeverJoinsEarlierCoverage(t *testing.T) {
 			r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
 			r.settings.Realtime.PrivacyFilter.VAD.Enabled = vadEnabled
 			ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
+			firstGen := newBufferGeneration(t)
 			for end := 3000; end <= 20000; end += 200 {
 				item := r.chunk(ms(end))
 				r.positioned(&item, ms(end), r.clip)
+				item.Audio.Generation = firstGen
 				r.p.processDetections(item)
 			}
-			// The buffer was reallocated: positions restart in generation 2.
+			// The buffer was reallocated: positions restart in a new generation.
+			secondGen := newBufferGeneration(t)
+			require.NotEqual(t, firstGen, secondGen)
 			for end := 20200; end <= 36000; end += 200 {
 				item := r.chunk(ms(end))
 				item.Audio.Gap = end == 20200
 				r.positioned(&item, ms(end-20000), min(ms(end-20000), r.clip))
-				item.Audio.Generation = 2
+				item.Audio.Generation = secondGen
 				r.p.processDetections(item)
 			}
 			r.pend(24 * time.Second) // clip 18 s to 33 s spans both generations
 			assert.Equal(t, "pending", r.outcome())
 		})
 	}
+}
+
+// newBufferGeneration is the generation a freshly built analysis buffer reports on
+// its first window.
+func newBufferGeneration(t *testing.T) uint64 {
+	t.Helper()
+	const readSize = 8
+	ab, err := buffer.NewAnalysisBuffer(64, 0, readSize, e2eSource, logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC), nil)
+	require.NoError(t, err)
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	_, info, release, err := ab.ReadWindow()
+	require.NoError(t, err)
+	release()
+	return info.Generation
 }
 
 // lossLeavesClipUnscanned feeds a producer that lost 2 s of audio and checks that a

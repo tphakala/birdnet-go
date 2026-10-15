@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/smallnest/ringbuffer"
@@ -72,10 +73,22 @@ type AnalysisBuffer struct {
 	lastSplice     int64
 	skipped        int64
 	pendingSplices []splice
-	// generation identifies the stream: it starts at 1 and increases on Reset, so
-	// positions from different generations are never comparable.
+	// generation identifies one stretch of this buffer's stream: it is drawn from
+	// nextGeneration at construction and again on Reset, so no two buffer
+	// instances or resets share one and positions from different generations are
+	// never comparable.
 	generation uint64
 }
+
+// nextGeneration hands out stream generations process wide. A buffer rebuilt for
+// the same source (model change, watchdog restart, reconfigure) restarts its
+// positions at zero; drawing generations from one counter keeps the new buffer's
+// positions from being compared with the old buffer's.
+var nextGeneration atomic.Uint64
+
+// newGeneration returns a generation no buffer or Reset has used before. Zero is
+// never returned: it means "no positions" to consumers.
+func newGeneration() uint64 { return nextGeneration.Add(1) }
 
 // splice marks a point in the ring where the audio before and after are not
 // adjacent in time. skip is the number of audio bytes lost at that point without
@@ -118,7 +131,9 @@ type WindowInfo struct {
 	// contiguous tail starts. Two windows of the same Generation are adjacent when
 	// the later tail starts at or before the earlier EndPos.
 	EndPos int64
-	// Generation identifies the stream EndPos belongs to; see Reset.
+	// Generation identifies the stretch of stream EndPos belongs to. It is unique
+	// per buffer instance and per Reset (see newGeneration), so a rebuilt buffer
+	// never shares one with the buffer it replaces.
 	Generation uint64
 }
 
@@ -135,6 +150,10 @@ type WindowInfo struct {
 //
 // The first window read is reported as a gap in its WindowInfo and counts only
 // its fresh part as contiguous.
+//
+// Each buffer reports its own stream generation, never shared with another
+// buffer or an earlier Reset, so a buffer built to replace another one is not
+// mistaken for its continuation.
 //
 // Returns an error if any dimension is not positive or if sourceID is empty.
 func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log logger.Logger, bufMgr *Manager) (*AnalysisBuffer, error) {
@@ -210,7 +229,7 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 		// The first window's overlap head is zero filled, so the stream starts
 		// with a splice at position 0.
 		pendingSplices: []splice{{pos: 0}},
-		generation:     1,
+		generation:     newGeneration(),
 	}, nil
 }
 
@@ -408,8 +427,8 @@ func (ab *AnalysisBuffer) Stats() AnalysisBufferStats {
 
 // Reset clears the ring buffer, the overlap state and the last write time. The
 // unread audio is dropped, so the next window starts with a splice and a zero
-// filled overlap head, and the stream generation increases so positions from
-// before the Reset are never compared with later ones.
+// filled overlap head, and the stream gets a new generation, so positions
+// from before the Reset are never compared with later ones.
 // Useful for testing or restarting a source. The cumulative counters reported
 // by Stats are not reset.
 func (ab *AnalysisBuffer) Reset() {
@@ -419,7 +438,7 @@ func (ab *AnalysisBuffer) Reset() {
 	ab.readPos = ab.writePos
 	ab.pendingSplices = ab.pendingSplices[:0]
 	ab.addSpliceLocked(splice{pos: ab.readPos})
-	ab.generation++
+	ab.generation = newGeneration()
 	ab.lastWriteAt = time.Time{}
 	ab.mu.Unlock()
 }
