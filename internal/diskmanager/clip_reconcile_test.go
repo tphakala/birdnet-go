@@ -656,6 +656,10 @@ func TestReconcileClipOrphansPass_AbortsWhenExportStorageChanges(t *testing.T) {
 
 			assert.True(t, result.Aborted)
 			assert.Equal(t, abortReasonExportDirChanged, result.AbortReason)
+			// The abort happens before the third read, not after it.
+			require.Len(t, store.reads, 2, "the pass must stop before reading the chunk that follows the change")
+			assert.Equal(t, uint(0), store.reads[0].afterID)
+			assert.Equal(t, uint(reconcileChunkSize), store.reads[1].afterID)
 			got := clearedSet(store)
 			for _, r := range third {
 				assert.False(t, got[r.ClipName], "row %d follows the storage change and must not be cleared", r.ID)

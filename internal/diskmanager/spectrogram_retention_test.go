@@ -306,6 +306,7 @@ func TestReconcileClipOrphansPass_RetainErrorLeavesRowsUntouched(t *testing.T) {
 	result := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir, nil)
 
 	assert.Equal(t, int64(0), result.Retained)
+	assert.Equal(t, 1, result.WriteErrors, "a failed retain call is counted")
 	assert.Empty(t, store.retained)
 	assert.Empty(t, store.cleared, "rows that failed to retain must not be cleared")
 }
