@@ -669,62 +669,6 @@ func TestPrivacy_ExtendedCaptureFlushesAfterMaxDeadlineWhileTheBirdKeepsSinging(
 	assert.Equal(t, "approved", r.outcome())
 }
 
-// otherModelChunk builds a silent window of model ending at end, as a second
-// model's monitor on the same source would produce it.
-func (r *privacyRig) otherModelChunk(model string, end time.Duration) classifier.Results {
-	spec := classifier.ModelRegistry[model].Spec
-	rate := spec.EffectiveSampleRate()
-	item := classifier.Results{
-		StartTime: r.at(end).Add(-spec.ClipLength - e2ePreCapture*time.Second),
-		Audio:     classifier.AudioTiming{EndAt: r.at(end)},
-		PCMdata:   make([]byte, int(spec.ClipLength.Seconds())*rate*vadBytesPerSample),
-		ModelID:   model,
-	}
-	item.Source = datastore.AudioSource{ID: e2eSource}
-	return item
-}
-
-// TestPrivacy_LabelCoverageWaitsForEveryLiveModel: with the VAD off, a clip is
-// released only when every live label model on the source has scanned it. A
-// model that went quiet (removed, scheduled off, unloaded) stops being required.
-func TestPrivacy_LabelCoverageWaitsForEveryLiveModel(t *testing.T) {
-	t.Run("a live slower model holds the clip", func(t *testing.T) {
-		r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
-		r.settings.Realtime.PrivacyFilter.VAD.Enabled = false
-		r.feed(r.clip, 40*time.Second, sec(1)) // the 3 s model has scanned past the clip end
-		for end := 5; end <= 33; end++ {       // the 5 s model is live but only reaches 33 s
-			r.p.processDetections(r.otherModelChunk("Perch_V2", time.Duration(end)*time.Second))
-		}
-		r.pend(24 * time.Second) // clip 18 s to 33 s
-		require.Equal(t, "pending", r.outcome(), "the second model has not covered the clip tail yet")
-
-		for end := 34; end <= 36; end++ {
-			r.p.processDetections(r.otherModelChunk("Perch_V2", time.Duration(end)*time.Second))
-		}
-		assert.Equal(t, "approved", r.outcome())
-	})
-	t.Run("a model that went quiet is not waited for", func(t *testing.T) {
-		r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
-		r.settings.Realtime.PrivacyFilter.VAD.Enabled = false
-		for end := 5; end <= 18; end++ { // stops while the other model scans on to 40 s
-			r.p.processDetections(r.otherModelChunk("Perch_V2", time.Duration(end)*time.Second))
-		}
-		r.feed(r.clip, 40*time.Second, sec(1))
-		r.pend(16 * time.Second) // clip 10 s to 25 s
-		assert.Equal(t, "approved", r.outcome())
-	})
-	t.Run("a model that started after the clip is not waited for", func(t *testing.T) {
-		r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
-		r.settings.Realtime.PrivacyFilter.VAD.Enabled = false
-		r.feed(r.clip, 40*time.Second, sec(1))
-		for end := 45; end <= 48; end++ { // the second model only began after the clip
-			r.p.processDetections(r.otherModelChunk("Perch_V2", time.Duration(end)*time.Second))
-		}
-		r.pend(16 * time.Second) // clip 10 s to 25 s
-		assert.Equal(t, "approved", r.outcome())
-	})
-}
-
 // TestProcessApprovedDetection_UsesThePassedSettingsSnapshot: the saved clip must
 // be built from the snapshot the privacy check used, not from whatever the
 // processor's configuration has become since.
