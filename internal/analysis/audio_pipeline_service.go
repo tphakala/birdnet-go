@@ -28,6 +28,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	obsmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
@@ -776,8 +777,8 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 // AudioRouter for each source ID, bridging output to the pipeline's soundLevelChan.
 //
 // The function is a no-op when Realtime.Audio.SoundLevel.Enabled is false so that
-// the DSP pipeline (27 biquad filters per source, per-second float64 accumulator
-// windows) is not allocated or exercised when sound level monitoring is off. It
+// the DSP pipeline (a go-audio-dsp octave meter with up to 30 band filters per
+// source) is not allocated or exercised when sound level monitoring is off. It
 // is also idempotent: sources that already have a tracked consumer are skipped,
 // so the caller may include previously registered source IDs.
 func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, operation string) {
@@ -788,7 +789,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 	}
 	slInterval := settings.Realtime.Audio.SoundLevel.Interval
 	if slInterval <= 0 {
-		slInterval = 10 // default 10-second aggregation window
+		slInterval = conf.DefaultSoundLevelInterval
 	}
 	for _, sid := range sourceIDs {
 		// Skip sources that already have a registered soundlevel consumer so
@@ -820,7 +821,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 
 		eqChain := equalizer.ResolveAndBuildFilterChain(settings, sourceName, sourceSampleRate)
 
-		slProc, slErr := soundlevel.NewProcessor(sid, sid, sourceSampleRate, slInterval)
+		slProc, slErr := soundlevel.NewProcessor(sid, sourceName, sourceSampleRate, slInterval)
 		if slErr != nil {
 			log.Warn("failed to create sound level processor",
 				logger.String("source_id", sid),
@@ -897,6 +898,14 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 					if !ok {
 						return
 					}
+					// Follow a rename made since registration, which does not
+					// rebuild the consumer.
+					data.Name = p.currentSourceName(sid)
+					// Record the name before any publisher sees it, so the
+					// metrics drop the old name's series and reject its late writes.
+					if sl := p.soundLevelMetrics(); sl != nil {
+						sl.TrackSourceName(data.Source, data.Name)
+					}
 					select {
 					case p.soundLevelChan <- data:
 					default:
@@ -911,6 +920,28 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 			logger.Int("interval_seconds", slInterval),
 			logger.String("operation", operation))
 	}
+}
+
+// soundLevelMetrics returns the sound level metrics, or nil when metrics are
+// not configured.
+func (p *AudioPipelineService) soundLevelMetrics() *obsmetrics.SoundLevelMetrics {
+	if p.apiService == nil {
+		return nil
+	}
+	if m := p.apiService.Metrics(); m != nil {
+		return m.SoundLevel
+	}
+	return nil
+}
+
+// currentSourceName returns the display name the registry holds for sourceID
+// now, or the ID when the source is gone or its display name is empty. The
+// publishers reject an empty name.
+func (p *AudioPipelineService) currentSourceName(sourceID string) string {
+	if src, ok := p.engine.Registry().Get(sourceID); ok && src.DisplayName != "" {
+		return src.DisplayName
+	}
+	return sourceID
 }
 
 // ReconfigureSoundLevel reconciles the sound level pipeline with the current

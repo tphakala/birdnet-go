@@ -1020,7 +1020,7 @@
                 </li>
                 <li>
                   {t('settings.audio.soundLevelMonitoring.prometheusMetrics')}
-                  <code>birdnet_sound_level_db</code>
+                  <code>myaudio_sound_level_db</code>
                 </li>
               </ul>
             </SettingsNote>
