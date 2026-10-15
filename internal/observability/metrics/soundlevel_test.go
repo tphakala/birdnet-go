@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -135,4 +136,50 @@ func TestRecordPublishing_CurrentNameDoesNotAllocate(t *testing.T) {
 		m.RecordSoundLevelPublishing(testSourceID, testNameA, "mqtt", "success")
 	})
 	assert.Zero(t, allocs)
+}
+
+const (
+	stressRecorders  = 8
+	stressRenames    = 200
+	stressRecordsMin = 50
+)
+
+// TestRecordPublishing_ConcurrentRenameLeavesOnlyCurrentName is a stress test:
+// recorders keep writing under the previous name while the source is renamed,
+// and once they stop only the final name may have series. It cannot fail
+// deterministically before the fix (the window between the name check and the
+// write is a few instructions wide), so it relies on -race scheduling and many
+// iterations.
+func TestRecordPublishing_ConcurrentRenameLeavesOnlyCurrentName(t *testing.T) {
+	for i := range stressRenames {
+		m, reg := newTestSoundLevelMetrics(t)
+		oldName, newName := testNameA, testNameB
+
+		m.TrackSourceName(testSourceID, oldName)
+		stop := make(chan struct{})
+		var wg sync.WaitGroup
+		started := make(chan struct{}, stressRecorders)
+		for range stressRecorders {
+			wg.Go(func() {
+				started <- struct{}{}
+				for {
+					select {
+					case <-stop:
+						return
+					default:
+						m.RecordSoundLevelPublishing(testSourceID, oldName, "mqtt", "success")
+						m.RecordSoundLevelPublishingError(testSourceID, oldName, "mqtt", "publish_error")
+					}
+				}
+			})
+		}
+		for range stressRecorders {
+			<-started
+		}
+		m.TrackSourceName(testSourceID, newName)
+		close(stop)
+		wg.Wait()
+
+		require.Zero(t, seriesWithName(t, reg, testSourceID, oldName), "iteration %d: the old name's series were recreated", i)
+	}
 }

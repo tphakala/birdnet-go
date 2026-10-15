@@ -202,15 +202,6 @@ func (m *SoundLevelMetrics) TrackSourceName(source, name string) {
 	}
 }
 
-// isStaleName reports whether name is not the name last tracked for source. A
-// source that was never tracked has no stale name.
-func (m *SoundLevelMetrics) isStaleName(source, name string) bool {
-	m.namesMu.RLock()
-	current, seen := m.lastNames[source]
-	m.namesMu.RUnlock()
-	return seen && current != name
-}
-
 // deleteSourceName removes every series with the given source and name labels.
 func (m *SoundLevelMetrics) deleteSourceName(source, name string) {
 	labels := prometheus.Labels{labelSource: source, "name": name}
@@ -259,17 +250,24 @@ func (m *SoundLevelMetrics) RecordSoundLevelProcessingError(source, name, errorT
 // RecordSoundLevelPublishing records a sound level publishing attempt. A write
 // under a name the source no longer has is dropped, so a slow publisher
 // finishing an old interval cannot recreate a series TrackSourceName deleted.
+// The read lock is held through the write, so TrackSourceName cannot delete
+// between the name check and the write.
 func (m *SoundLevelMetrics) RecordSoundLevelPublishing(source, name, destination, status string) {
-	if m.isStaleName(source, name) {
+	m.namesMu.RLock()
+	defer m.namesMu.RUnlock()
+	if current, seen := m.lastNames[source]; seen && current != name {
 		return
 	}
 	m.soundLevelPublishingTotal.WithLabelValues(source, name, destination, status).Inc()
 }
 
 // RecordSoundLevelPublishingError records a sound level publishing error. Like
-// RecordSoundLevelPublishing it drops a write under a stale name.
+// RecordSoundLevelPublishing it drops a write under a stale name, holding the
+// read lock through the write.
 func (m *SoundLevelMetrics) RecordSoundLevelPublishingError(source, name, destination, errorType string) {
-	if m.isStaleName(source, name) {
+	m.namesMu.RLock()
+	defer m.namesMu.RUnlock()
+	if current, seen := m.lastNames[source]; seen && current != name {
 		return
 	}
 	m.soundLevelPublishingErrors.WithLabelValues(source, name, destination, errorType).Inc()
