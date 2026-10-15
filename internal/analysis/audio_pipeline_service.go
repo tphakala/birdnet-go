@@ -1671,7 +1671,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 
 	// Rebuild routes for sources whose gain changed. The capture device
 	// stays running; only the routes are torn down and re-created so
-	// drainRoute picks up the new gainLinear value.
+	// the rebuilt routes carry the new gain.
 	if len(gainChangedIDs) > 0 {
 		p.rebuildRoutesForSources(gainChangedIDs, sourceModelMap, audioLevelChan, operationGainChange)
 	}
