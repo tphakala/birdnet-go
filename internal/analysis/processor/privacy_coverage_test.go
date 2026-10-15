@@ -653,29 +653,6 @@ func zeroOverlapJitterJoins(t *testing.T, vadEnabled bool) {
 	assert.Equal(t, "approved", r.outcome(), "contiguous positions join the spans despite the jitter")
 }
 
-// TestPrivacy_SkippedPublishLeavesAPositionHole: while the privacy filter is off
-// nothing is published, so once it is back on the new spans start after a
-// position hole and a clip across it is not reported as scanned, however
-// contiguous the timestamps look.
-func TestPrivacy_SkippedPublishLeavesAPositionHole(t *testing.T) {
-	for _, vadEnabled := range []bool{false, true} {
-		t.Run(fmt.Sprintf("vad=%v", vadEnabled), func(t *testing.T) {
-			r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
-			r.settings.Realtime.PrivacyFilter.VAD.Enabled = vadEnabled
-			for end := 3; end <= 30; end++ {
-				// The filter is off for the windows ending 10 s to 16 s.
-				r.settings.Realtime.PrivacyFilter.Enabled = end < 10 || end > 16
-				item := r.chunk(time.Duration(end) * time.Second)
-				r.positioned(&item, time.Duration(end)*time.Second, r.clip)
-				r.p.processDetections(item)
-			}
-			r.settings.Realtime.PrivacyFilter.Enabled = true
-			r.pend(15 * time.Second) // clip 9 s to 24 s, across the unpublished stretch
-			assert.Equal(t, "pending", r.outcome())
-		})
-	}
-}
-
 // TestProcessApprovedDetection_UsesThePassedSettingsSnapshot: the saved clip must
 // be built from the snapshot the privacy check used, not from whatever the
 // processor's configuration has become since.

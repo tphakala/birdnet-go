@@ -181,3 +181,39 @@ func TestRequiredDetector(t *testing.T) {
 	disabled := vadSettings(false, 0.35)
 	assert.Equal(t, metrics.TriggerLabel, p.requiredDetectorLocked(disabled, "src", now))
 }
+
+// TestMergeCoverage_JoinsOnStreamPositionsWhenReported: with producer stream
+// positions a span joins the previous one only in the same generation and when it
+// starts at or before the stored end position, whatever the timestamps say; spans
+// without positions fall back to the time tolerance.
+func TestMergeCoverage_JoinsOnStreamPositionsWhenReported(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
+	key := coverageKey{"src", "m", metrics.TriggerLabel}
+	span := func(from, to time.Duration, startPos, endPos int64, gen uint64) audioSpan {
+		return audioSpan{from: base.Add(from), to: base.Add(to), startPos: startPos, endPos: endPos, gen: gen}
+	}
+	tests := []struct {
+		name      string
+		next      audioSpan
+		wantSpans int
+	}{
+		{"adjacent positions join despite a timestamp hole", span(10*time.Second, 13*time.Second, 1000, 1300, 1), 1},
+		{"a position hole splits despite adjacent timestamps", span(3*time.Second, 6*time.Second, 1500, 1800, 1), 2},
+		{"a new generation never joins", span(3*time.Second, 6*time.Second, 1000, 1300, 2), 2},
+		{"no positions use the time tolerance", span(3*time.Second+vadCoverageJoinTolerance, 6*time.Second, 0, 0, 0), 1},
+		{"no positions split beyond the time tolerance", span(4*time.Second, 6*time.Second, 0, 0, 0), 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := &Processor{}
+			p.publishCoverage(coverageUpdate{key, span(0, 3*time.Second, 1000, 1000, 1)})
+			if tt.next.gen == 0 {
+				p.privacyCoverage[key][0].gen = 0 // the stored span has no positions either
+			}
+			p.publishCoverage(coverageUpdate{key, tt.next})
+			assert.Len(t, p.privacyCoverage[key], tt.wantSpans)
+		})
+	}
+}
