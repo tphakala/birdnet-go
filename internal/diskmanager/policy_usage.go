@@ -331,7 +331,7 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 		file := &files[i]
 		run.markLocked(file)
 		stats.Scanned++
-		outcome, latency, deletionErr := handleUsageDeletionIteration(file, speciesMonthCount, params.minClipsPerSpecies, params.keepSpectrograms, currentUsagePercent, params.usageThreshold, run.now)
+		outcome, latency, deletionErr := handleUsageDeletionIteration(file, speciesMonthCount, params.minClipsPerSpecies, params.keepSpectrograms, currentUsagePercent, params.usageThreshold, run.now, &run.renderDirs)
 
 		if deletionErr != nil {
 			stats.Errors++
@@ -459,7 +459,7 @@ func checkInitialUsage(baseDir string, usageThreshold int) (initialUsagePercent 
 // It returns the outcome classification (usageOutcomeDeleted means the file was deleted; see the
 // usageOutcome* constants for cleanupStats tallying), how long the deletion took (zero when no
 // deletion was attempted), and any critical error encountered during deletion.
-func handleUsageDeletionIteration(file *FileInfo, speciesMonthCount map[string]map[string]int, minClipsPerSpecies int, keepSpectrograms bool, currentUsagePercent, usageThreshold int, now func() time.Time) (outcome string, latency time.Duration, deletionErr error) {
+func handleUsageDeletionIteration(file *FileInfo, speciesMonthCount map[string]map[string]int, minClipsPerSpecies int, keepSpectrograms bool, currentUsagePercent, usageThreshold int, now func() time.Time, dirs *renderDirCache) (outcome string, latency time.Duration, deletionErr error) {
 	// Check if locked
 	if checkLocked(file) {
 		return usageOutcomeLocked, 0, nil
@@ -477,7 +477,7 @@ func handleUsageDeletionIteration(file *FileInfo, speciesMonthCount map[string]m
 
 	// Call the common deletion function
 	start := now()
-	delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, "usage")
+	delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, "usage", dirs)
 	latency = now().Sub(start)
 	if errors.Is(delErr, errFileAlreadyGone) {
 		return usageOutcomeAlreadyGone, latency, nil
