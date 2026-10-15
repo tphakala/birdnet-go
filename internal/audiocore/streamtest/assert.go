@@ -31,6 +31,9 @@ const (
 	// minScanFreqHz is the lowest frequency the fine sweep will probe, keeping the
 	// scan above DC even when the coarse peak sits near the low bound.
 	minScanFreqHz = 1.0
+
+	// bytesPerSample is the size of one 16-bit PCM sample in bytes.
+	bytesPerSample = 2
 )
 
 // samplesFromS16LE decodes mono s16le PCM into float32 samples in [-1, 1) with
@@ -39,7 +42,7 @@ const (
 // nil for a buffer with a half sample at the end: DominantFrequency then
 // returns 0 and RMSDBFS returns silenceFloorDBFS.
 func samplesFromS16LE(pcm []byte) []float32 {
-	samples := make([]float32, len(pcm)/2)
+	samples := make([]float32, len(pcm)/bytesPerSample)
 	if _, err := dsppcm.BytesToFloat32(samples, pcm); err != nil {
 		return nil
 	}
