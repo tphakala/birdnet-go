@@ -1427,8 +1427,9 @@ func (p *Processor) handleDogDetection(settings *conf.Settings, item classifier.
 }
 
 // handleHumanDetection handles the detection of human vocalizations and records
-// the hit in LastHumanDetection, stamped with the end of the chunk's audio and
-// never moving the stored time backward.
+// the hit in LastHumanDetection, stamped with the end of the chunk's audio (the
+// processing time when the producer gave none) and never moving the stored time
+// backward.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifier.Results, result datastore.Results) {
@@ -1443,7 +1444,8 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 		// Put the human detection into the LastHumanDetection map, stamped with the
 		// end of the audio this label scored (not the back-dated chunk start). This is
 		// used to discard bird detections whose saved clip reaches that audio.
-		p.recordHumanDetection(item.Source.ID, item.Audio.EndAt, metrics.TriggerLabel)
+		end, _ := audioEndOrNow(&item)
+		p.recordHumanDetection(item.Source.ID, end, metrics.TriggerLabel)
 	}
 }
 

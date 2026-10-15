@@ -21,7 +21,8 @@ type Results struct {
 }
 
 // AudioTiming describes where one analysis window sits on its source's audio
-// timeline. The zero value means the producer does not know.
+// timeline. The zero value means the producer does not know: speech hits are then
+// stamped at processing time and no coverage is claimed for the window.
 type AudioTiming struct {
 	// EndAt is the capture time of the last sample of the window, corrected for
 	// the analysis backlog (the ring is FIFO, so a lagging monitor reads old audio).

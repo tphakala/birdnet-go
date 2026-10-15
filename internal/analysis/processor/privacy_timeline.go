@@ -80,6 +80,10 @@ type chunkAudio struct {
 	// gap, freshBytes, contiguousBytes, endPos and generation come from the
 	// producer (classifier.AudioTiming); generation zero means it reports no
 	// stream positions.
+	// timingUnknown reports that the producer gave no audio end, so span was made
+	// up from the processing time: hits are stamped with it (the conservative,
+	// later direction) but it claims no coverage.
+	timingUnknown   bool
 	gap             bool
 	freshBytes      int
 	contiguousBytes int
@@ -101,7 +105,8 @@ func speechBandSpec(spec classifier.ModelSpec) bool {
 }
 
 // newChunkAudio builds the per-chunk data for item, including the producer's
-// contiguous tail and stream positions when it reports them. ok is false when the chunk
+// contiguous tail and stream positions when it reports them, or marked as having
+// unknown timing when it gives no audio end. ok is false when the chunk
 // cannot carry speech the privacy detectors could hear: no PCM, an unknown model
 // or an ultrasonic one.
 func newChunkAudio(item *classifier.Results) (chunk chunkAudio, ok bool) {
@@ -113,8 +118,9 @@ func newChunkAudio(item *classifier.Results) (chunk chunkAudio, ok bool) {
 		return chunkAudio{}, false
 	}
 	rate := spec.EffectiveSampleRate()
-	end := item.Audio.EndAt
+	end, known := audioEndOrNow(item)
 	return chunkAudio{
+		timingUnknown:   !known,
 		key:             vadStreamKey{source: item.Source.ID, model: item.ModelID},
 		pcm:             item.PCMdata,
 		sampleRate:      rate,
@@ -142,6 +148,16 @@ func (c *chunkAudio) tailBytes() int {
 
 // tailStartPos is the stream position where the chunk's contiguous tail starts.
 func (c *chunkAudio) tailStartPos() int64 { return c.endPos - int64(c.tailBytes()) }
+
+// audioEndOrNow is the capture time of the last sample of item's window, or the
+// current time when the producer gave none (known is false then). A later stamp is
+// the conservative direction for a speech hit; coverage must not use it.
+func audioEndOrNow(item *classifier.Results) (end time.Time, known bool) {
+	if item.Audio.EndAt.IsZero() {
+		return time.Now(), false
+	}
+	return item.Audio.EndAt, true
+}
 
 // scoredFrom is where the chunk's genuinely captured audio begins. With stream
 // positions it is the start of the contiguous tail, so a zero-filled head or the
@@ -275,13 +291,14 @@ func spansJoin(last, next *audioSpan) bool {
 
 // publishPrivacyCoverage publishes the coverage a processed chunk earned, in one
 // step. Call it after the chunk's VAD hit and label hits are written, so a
-// published span never claims audio whose hits are still outstanding. Label
+// published span never claims audio whose hits are still outstanding; a chunk with
+// unknown timing publishes nothing. Label
 // coverage claims the chunk's contiguous tail; spans join on stream positions
 // when the producer reports them. vad is the
 // span runVADGate returned when it ran an inference (vadRan). When the privacy
 // filter is on, the label model's own chunk counts as label coverage.
 func (p *Processor) publishPrivacyCoverage(settings *conf.Settings, chunk *chunkAudio, vad audioSpan, vadRan bool) {
-	if !settings.Realtime.PrivacyFilter.Enabled {
+	if !settings.Realtime.PrivacyFilter.Enabled || chunk.timingUnknown {
 		return
 	}
 	updates := make([]coverageUpdate, 0, 2)

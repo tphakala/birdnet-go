@@ -732,3 +732,39 @@ func TestPrivacy_NoRecentCoverageDefersThenFailsOpen(t *testing.T) {
 		require.NoError(t, testutil.CollectAndCompare(pfm, strings.NewReader(expected), "privacy_filter_unscanned_saves_total"))
 	})
 }
+
+// TestPrivacy_ZeroAudioEndStampsHitsAtNowAndPublishesNoCoverage: a window whose
+// audio end is unknown (a producer that reports no timing) must neither lose its
+// speech hits at time zero nor claim coverage for a made-up span. Hits are
+// stamped at processing time, the conservative later direction, and nothing is
+// published as scanned.
+func TestPrivacy_ZeroAudioEndStampsHitsAtNowAndPublishesNoCoverage(t *testing.T) {
+	r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+	before := time.Now()
+
+	// VAD path: the window holds speech throughout.
+	r.speech = []speechInterval{{0, time.Hour}}
+	for end := 3; end <= 6; end++ {
+		item := r.chunk(time.Duration(end) * time.Second)
+		item.Audio = classifier.AudioTiming{}
+		r.p.processDetections(item)
+	}
+	hit, ok := r.p.LastHumanDetection[e2eSource]
+	require.True(t, ok, "speech in a window with unknown timing must still be recorded")
+	assert.False(t, hit.Time.Before(before), "the hit is stamped at processing time, not at time zero")
+	assert.Empty(t, r.p.privacyCoverage, "a window with unknown timing publishes no coverage")
+
+	// Label path.
+	r2 := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+	r2.settings.Realtime.PrivacyFilter.Confidence = 0.05
+	label := classifier.Results{}
+	label.Source = datastore.AudioSource{ID: e2eSource}
+	r2.p.handleHumanDetection(r2.settings, label, datastoreResult("Speech"))
+	labelHit, ok := r2.p.LastHumanDetection[e2eSource]
+	require.True(t, ok)
+	assert.False(t, labelHit.Time.Before(before))
+}
+
+func datastoreResult(species string) datastore.Results {
+	return datastore.Results{Species: species, Confidence: 0.9}
+}
