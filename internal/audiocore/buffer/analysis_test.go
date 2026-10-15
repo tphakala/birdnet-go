@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -520,36 +521,40 @@ func readWindowOnce(t *testing.T, ab *buffer.AnalysisBuffer) buffer.WindowInfo {
 func TestAnalysisBuffer_ReadWindowReportsBacklogAndLastWrite(t *testing.T) {
 	t.Parallel()
 
-	const (
-		capacity = 64 * 1024
-		readSize = 1024
-	)
-	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "backlog-source", newTestLogger(), nil)
-	require.NoError(t, err)
+	// The bubble's clock is virtual, so the sleeps below separate the write stamps
+	// exactly and instantly.
+	synctest.Test(t, func(t *testing.T) {
+		const (
+			capacity = 64 * 1024
+			readSize = 1024
+		)
+		ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "backlog-source", newTestLogger(), nil)
+		require.NoError(t, err)
 
-	_, info, release, err := ab.ReadWindow()
-	require.NoError(t, err)
-	release()
-	assert.Equal(t, buffer.WindowInfo{}, info, "no window yet")
+		_, info, release, err := ab.ReadWindow()
+		require.NoError(t, err)
+		release()
+		assert.Equal(t, buffer.WindowInfo{}, info, "no window yet")
 
-	require.NoError(t, ab.Write(make([]byte, readSize)))
-	afterFirstWrite := time.Now()
-	time.Sleep(2 * time.Millisecond) // separate the stamps on coarse clocks
-	for range 2 {
 		require.NoError(t, ab.Write(make([]byte, readSize)))
-	}
-	info = readWindowOnce(t, ab)
-	assert.Equal(t, 2*readSize, info.Backlog, "two of the three chunks are still unread")
-	assert.True(t, info.LastWriteAt.After(afterFirstWrite), "the time is the latest write's, not the first")
-	assert.False(t, info.LastWriteAt.After(time.Now()))
+		afterFirstWrite := time.Now()
+		time.Sleep(time.Millisecond)
+		for range 2 {
+			require.NoError(t, ab.Write(make([]byte, readSize)))
+		}
+		info = readWindowOnce(t, ab)
+		assert.Equal(t, 2*readSize, info.Backlog, "two of the three chunks are still unread")
+		assert.True(t, info.LastWriteAt.After(afterFirstWrite), "the time is the latest write's, not the first")
+		assert.False(t, info.LastWriteAt.After(time.Now()))
 
-	ab.Reset()
-	afterReset := time.Now()
-	time.Sleep(2 * time.Millisecond)
-	require.NoError(t, ab.Write(make([]byte, readSize)))
-	info = readWindowOnce(t, ab)
-	assert.Zero(t, info.Backlog)
-	assert.True(t, info.LastWriteAt.After(afterReset), "the write after Reset sets the time again")
+		ab.Reset()
+		afterReset := time.Now()
+		time.Sleep(time.Millisecond)
+		require.NoError(t, ab.Write(make([]byte, readSize)))
+		info = readWindowOnce(t, ab)
+		assert.Zero(t, info.Backlog)
+		assert.True(t, info.LastWriteAt.After(afterReset), "the write after Reset sets the time again")
+	})
 }
 
 // TestAnalysisBuffer_ReadWindowGapAttributesLossToTheNextWindow: audio discarded
