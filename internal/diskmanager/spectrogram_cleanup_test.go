@@ -336,3 +336,56 @@ func TestDeleteUnsizedSpectrograms_RemovesBothCasesWhenDistinctFiles(t *testing.
 	assert.NoFileExists(t, lower)
 	assert.NoFileExists(t, upper)
 }
+
+func TestDeletionRun_UsagePolicyListsEachDirectoryOncePerBatch(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	files := makeDrainFiles(t, dir, 3)
+	run, _ := newTestRun(t)
+	counts := map[string]int{}
+	run.renderDirs.readDir = countingReadDir(counts, nil)
+	params := newUsageLoopTestParams(1000, 900, 80, 0)
+	params.keepSpectrograms = false
+
+	deletedCount, _, _, _, err := processUsageDeletionLoop(files, buildSpeciesSubDirCountMap(files), params, dir, run)
+
+	require.NoError(t, err)
+	require.Equal(t, 3, deletedCount)
+	// Batch 1 (two clips) shares one listing; batch 2 lists the directory again.
+	assert.Equal(t, map[string]int{dir: 2}, counts)
+}
+
+// regularEntry reports a directory entry as a regular file whatever it is on disk.
+type regularEntry struct{ os.DirEntry }
+
+func (regularEntry) IsDir() bool       { return false }
+func (regularEntry) Type() fs.FileMode { return 0 }
+
+func TestDeleteFileAndOptionalSpectrogram_RenderRemovalFailureDoesNotFailTheClip(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	audio := filepath.Join(dir, "a.wav")
+	require.NoError(t, os.WriteFile(audio, []byte("audio"), 0o600))
+	// A non-empty directory named like a render: listed as a regular file, but
+	// os.Remove refuses it.
+	stuck := filepath.Join(dir, "a_514px.png")
+	require.NoError(t, os.MkdirAll(filepath.Join(stuck, "inner"), 0o750))
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	listed := make([]os.DirEntry, 0, len(entries))
+	for _, e := range entries {
+		if e.Name() == "a_514px.png" {
+			e = regularEntry{e}
+		}
+		listed = append(listed, e)
+	}
+	dirs := &renderDirCache{readDir: func(string) ([]os.DirEntry, error) { return listed, nil }}
+
+	err = deleteFileAndOptionalSpectrogram(&FileInfo{Path: audio, Size: 5}, "test", false, "age", dirs)
+
+	require.NoError(t, err, "a render that cannot be removed must not fail the clip")
+	assert.NoFileExists(t, audio)
+	assert.DirExists(t, stuck)
+}
