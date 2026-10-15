@@ -60,30 +60,35 @@ func clipReconcileMonitor(quitChan <-chan struct{}, dataStore datastore.Interfac
 				return exportBaseDir() == baseDir
 			}
 			result := diskmanager.ReconcileClipOrphansPass(quitChan, dataStore, baseDir, pathCurrent)
-			switch {
-			case result.ShutdownRequested:
+			if result.ShutdownRequested {
 				return
-			case result.Aborted:
-				log.Debug("clip reconcile pass aborted",
-					logger.String("reason", result.AbortReason),
-					logger.Int("scanned", result.Scanned),
-					logger.String("operation", "clip_reconcile_pass"))
-			default:
-				log.Info("clip reconcile pass completed",
-					logger.Int("scanned", result.Scanned),
-					logger.Int64("cleared", result.Cleared),
-					logger.Int64("retained", result.Retained),
-					logger.Int("held_no_evidence", result.HeldNoEvidence),
-					logger.Int("held_missing_dir", result.HeldMissingDir),
-					logger.Int("write_errors", result.WriteErrors),
-					logger.String("operation", "clip_reconcile_pass"))
 			}
+			logReconcileResult(log, &result)
 		}
 
 		if !reconcileMonitorWait(quitChan, clipReconcilePassInterval) {
 			return
 		}
 	}
+}
+
+// logReconcileResult logs the outcome of one reconcile pass.
+func logReconcileResult(log logger.Logger, result *diskmanager.ReconcileResult) {
+	if result.Aborted {
+		log.Debug("clip reconcile pass aborted",
+			logger.String("reason", result.AbortReason),
+			logger.Int("scanned", result.Scanned),
+			logger.String("operation", "clip_reconcile_pass"))
+		return
+	}
+	log.Info("clip reconcile pass completed",
+		logger.Int("scanned", result.Scanned),
+		logger.Int64("cleared", result.Cleared),
+		logger.Int64("retained", result.Retained),
+		logger.Int("held_no_evidence", result.HeldNoEvidence),
+		logger.Int("held_missing_dir", result.HeldMissingDir),
+		logger.Int("write_errors", result.WriteErrors),
+		logger.String("operation", "clip_reconcile_pass"))
 }
 
 // reconcileMonitorWait waits for d or until quitChan closes. It returns false if
