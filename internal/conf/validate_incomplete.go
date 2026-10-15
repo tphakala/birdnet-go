@@ -332,17 +332,14 @@ func isValidClockTime(value string) bool {
 	return err == nil
 }
 
-// eqFilterUsesQ reports whether a filter type derives its coefficients from Q.
-// The width-based types (BandPass, BandReject, Peaking) take a bandwidth in Hz
-// instead and never read Q, so a zero there is the normal state rather than an
-// unfinished one (the equalizer library ignores Q for the width-based types).
+// eqFilterUsesQ reports whether a filter type derives its coefficients from Q,
+// as the equalizer library defines it. The width-based types (BandPass,
+// BandReject, Peaking) take a bandwidth in Hz instead and never read Q, so a
+// zero there is the normal state rather than an unfinished one. An unknown type
+// uses neither.
 func eqFilterUsesQ(filterType string) bool {
-	switch filterType {
-	case "LowPass", "HighPass", "AllPass", "LowShelf", "HighShelf":
-		return true
-	default:
-		return false
-	}
+	t, ok := EQFilterType(filterType)
+	return ok && t.UsesQ()
 }
 
 // normalizeEqualizers replaces a filter Q of exactly zero with the standard

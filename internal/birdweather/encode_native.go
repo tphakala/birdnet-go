@@ -75,7 +75,7 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 		logger.Float64("true_peak_dbtp", plan.Result.Input.TruePeakDBTP),
 		logger.Float64("target_lufs", opts.TargetLUFS),
 		logger.Float64("gain_db", plan.GainDB),
-		logger.Bool("peak_limited", plan.Result.PeakLimited))
+		logger.Bool("peak_limited", plan.PeakLimited))
 
 	// Pass 2: apply the gain in Go and encode straight to an in-memory FLAC
 	// buffer. go-flac finalizes STREAMINFO.total_samples up front from the PCM

@@ -11,19 +11,6 @@ import (
 
 var eqLog = logger.Global().Module("audio").Module("equalizer")
 
-// filterTypes maps the filter type names stored in conf.EqualizerFilter to the
-// equalizer library's filter types.
-var filterTypes = map[string]dspeq.FilterType{
-	"LowPass":    dspeq.LowPass,
-	"HighPass":   dspeq.HighPass,
-	"AllPass":    dspeq.AllPass,
-	"BandPass":   dspeq.BandPass,
-	"BandReject": dspeq.BandReject,
-	"LowShelf":   dspeq.LowShelf,
-	"HighShelf":  dspeq.HighShelf,
-	"Peaking":    dspeq.Peaking,
-}
-
 // BuildFilterChain creates a library FilterChain from the given equalizer
 // settings. Returns nil when the equalizer is disabled, has no filters
 // configured, or every filter was skipped. Unknown filter types and filters the
@@ -47,7 +34,7 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *dspeq.Fi
 	for i := range settings.Filters {
 		f := &settings.Filters[i]
 
-		filterType, ok := filterTypes[f.Type]
+		filterType, ok := conf.EQFilterType(f.Type)
 		if !ok {
 			eqLog.Warn("unknown EQ filter type, skipping",
 				logger.String("type", f.Type))
