@@ -897,6 +897,9 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 					if !ok {
 						return
 					}
+					// Follow a rename made since registration, which does not
+					// rebuild the consumer.
+					data.Name = p.currentSourceName(sid)
 					select {
 					case p.soundLevelChan <- data:
 					default:
@@ -911,6 +914,16 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 			logger.Int("interval_seconds", slInterval),
 			logger.String("operation", operation))
 	}
+}
+
+// currentSourceName returns the display name the registry holds for sourceID
+// now, or the ID when the source is gone or its display name is empty. The
+// publishers reject an empty name.
+func (p *AudioPipelineService) currentSourceName(sourceID string) string {
+	if src, ok := p.engine.Registry().Get(sourceID); ok && src.DisplayName != "" {
+		return src.DisplayName
+	}
+	return sourceID
 }
 
 // ReconfigureSoundLevel reconciles the sound level pipeline with the current
