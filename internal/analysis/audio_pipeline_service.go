@@ -820,7 +820,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 
 		eqChain := equalizer.ResolveAndBuildFilterChain(settings, sourceName, sourceSampleRate)
 
-		slProc, slErr := soundlevel.NewProcessor(sid, sid, sourceSampleRate, slInterval)
+		slProc, slErr := soundlevel.NewProcessor(sid, sourceName, sourceSampleRate, slInterval)
 		if slErr != nil {
 			log.Warn("failed to create sound level processor",
 				logger.String("source_id", sid),
