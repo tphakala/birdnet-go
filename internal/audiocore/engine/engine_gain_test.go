@@ -113,8 +113,9 @@ func TestUpdateSourceGain_UpdatesRegistryAndRoutes(t *testing.T) {
 	assert.Equal(t, input, dispatchGainTestFrame(t, eng, consumer, input), "0 dB must restore the original bytes")
 }
 
-// TestUpdateSourceGain_RejectedGainLeavesRegistryUnchanged checks that a gain the
-// router rejects does not leave the registry on the rejected value.
+// TestUpdateSourceGain_RejectedGainLeavesRegistryUnchanged checks that an unusable
+// gain on a source with a live route is rejected and leaves both the registry and
+// the route on the previous gain.
 func TestUpdateSourceGain_RejectedGainLeavesRegistryUnchanged(t *testing.T) {
 	t.Parallel()
 	eng, consumer := newGainTestEngine(t)
