@@ -211,6 +211,65 @@ func TestStreamer_RollingWindowSemantics(t *testing.T) {
 	assert.InDelta(t, 0.0, flush(), 1e-6, "speech older than the window must age out")
 }
 
+func TestStreamer_FlushExceedingWindowScoresLeadingAndBoundaryHops(t *testing.T) {
+	t.Parallel()
+
+	t.Run("leading speech in a 4.5s step (140 hops) is scored before trimming", func(t *testing.T) {
+		t.Parallel()
+		const stepHops = 140 // 4.5 s step at 16 kHz / 512 samples (> aggWindowFrames=94)
+		probs := repeatProbs(0.0, stepHops)
+		for i := range defaultMinConsecutiveFrames {
+			probs[i] = 0.9
+		}
+		stub := &stubSession{probQueue: [][]float32{probs}}
+		s := newTestStreamer(t)
+
+		pcm, _ := pcm16Ramp(t, stepHops*windowSamples)
+		require.NoError(t, s.Append(pcm, sampleRate16k))
+		prob, ok, framesRun, err := s.Flush(stub)
+		require.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, stepHops, framesRun)
+		assert.InDelta(t, 0.9, prob, 1e-6, "speech in the leading hops of a >3s flush must be scored")
+		assert.Len(t, s.ring, aggWindowFrames, "ring must trim to aggWindowFrames after aggregating")
+	})
+
+	t.Run("speech straddling flush boundary before a >94-hop flush is scored", func(t *testing.T) {
+		t.Parallel()
+		const (
+			firstHops  = 40
+			secondHops = 140
+		)
+		firstProbs := repeatProbs(0.0, firstHops)
+		// Place minConsec-1 (2) high hops at the very end of flush 1.
+		firstProbs[firstHops-2] = 0.85
+		firstProbs[firstHops-1] = 0.85
+
+		secondProbs := repeatProbs(0.0, secondHops)
+		// Place 1 high hop at index 0 of flush 2 to complete the 3-hop sustain across the boundary.
+		secondProbs[0] = 0.85
+
+		stub := &stubSession{probQueue: [][]float32{firstProbs, secondProbs}}
+		s := newTestStreamer(t)
+
+		pcm1, _ := pcm16Ramp(t, firstHops*windowSamples)
+		require.NoError(t, s.Append(pcm1, sampleRate16k))
+		prob1, ok, _, err := s.Flush(stub)
+		require.NoError(t, err)
+		require.True(t, ok)
+		assert.InDelta(t, 0.0, prob1, 1e-6, "2 consecutive hops < minConsec(3) must not trip")
+
+		pcm2, _ := pcm16Ramp(t, secondHops*windowSamples)
+		require.NoError(t, s.Append(pcm2, sampleRate16k))
+		prob2, ok, framesRun, err := s.Flush(stub)
+		require.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, secondHops, framesRun)
+		assert.InDelta(t, 0.85, prob2, 1e-6, "speech straddling the boundary into a >94-hop flush must be scored")
+		assert.Len(t, s.ring, aggWindowFrames, "ring must trim to aggWindowFrames after aggregating")
+	})
+}
+
 func TestStreamer_ResetClearsAllCarriedState(t *testing.T) {
 	t.Parallel()
 	stub := &stubSession{probQueue: [][]float32{repeatProbs(0.9, 1)}}

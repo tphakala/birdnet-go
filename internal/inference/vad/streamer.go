@@ -136,13 +136,21 @@ func (s *streamer) Flush(sess SpeechSession) (prob float32, ok bool, framesRun i
 	rem := copy(s.pending, s.pending[n*windowSamples:])
 	s.pending = s.pending[:rem]
 
-	// Append the fresh per-hop probabilities and trim the ring to the last
-	// aggWindowFrames, so the aggregate always covers the recent ~3 s.
+	// Append the fresh per-hop probabilities, keeping enough of the prior ring to
+	// cover at least aggWindowFrames total hops and any minConsec-1 hops needed
+	// for speech straddling the flush boundary. Every newly inferred hop in probs
+	// is evaluated by aggregate before trimming the retained ring down to
+	// aggWindowFrames for subsequent flushes.
+	keepPrior := max(aggWindowFrames-len(probs), min(len(s.ring), max(s.minConsec-1, 0)))
+	if over := len(s.ring) - keepPrior; over > 0 {
+		s.ring = s.ring[:copy(s.ring, s.ring[over:])]
+	}
 	s.ring = append(s.ring, probs...)
+	res := aggregate(s.ring, s.minConsec)
 	if over := len(s.ring) - aggWindowFrames; over > 0 {
 		s.ring = s.ring[:copy(s.ring, s.ring[over:])]
 	}
-	return aggregate(s.ring, s.minConsec), true, n, nil
+	return res, true, n, nil
 }
 
 // Reset implements Streamer.
