@@ -14,6 +14,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	enginepkg "github.com/tphakala/birdnet-go/internal/audiocore/engine"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
@@ -198,7 +199,7 @@ func TestApplySourceGains_UpdatesLiveRoutesWithoutProbing(t *testing.T) {
 			require.Equal(t, gainTestPCM, f.dispatch(t), "setup: gain 0 must pass the frame through")
 
 			f.setGain(gainTestNewGainDB)
-			p.applySourceGains()
+			p.applySourceGains(make(chan audiocore.AudioLevelData))
 			assert.Zero(t, f.streamContacts.Load(), "applying gains must not contact the stream")
 
 			gain, ok := f.engine.Registry().GetGain(f.sourceID)
@@ -209,7 +210,7 @@ func TestApplySourceGains_UpdatesLiveRoutesWithoutProbing(t *testing.T) {
 			assert.Equal(t, boosted(t), f.dispatch(t), "the live route must apply the new gain")
 
 			// A second call finds nothing to change and keeps the gain in place.
-			p.applySourceGains()
+			p.applySourceGains(make(chan audiocore.AudioLevelData))
 			assert.Equal(t, boosted(t), f.dispatch(t), "the route must keep applying the gain after a repeated call")
 			assert.False(t, f.consumer.isClosed())
 		})
@@ -224,11 +225,11 @@ func TestApplySourceGains_RejectedGainKeepsPreviousGain(t *testing.T) {
 	p := &AudioPipelineService{engine: f.engine}
 
 	f.setGain(gainTestNewGainDB)
-	p.applySourceGains()
+	p.applySourceGains(make(chan audiocore.AudioLevelData))
 	require.Equal(t, boosted(t), f.dispatch(t), "setup: the valid gain must apply")
 
 	f.setGain(math.NaN())
-	p.applySourceGains()
+	p.applySourceGains(make(chan audiocore.AudioLevelData))
 
 	gain, ok := f.engine.Registry().GetGain(f.sourceID)
 	require.True(t, ok)
@@ -256,4 +257,63 @@ func TestReconfigureChangedSources_GainOnlyChangeKeepsRoutes(t *testing.T) {
 			assert.Equal(t, boosted(t), f.dispatch(t), "the kept route must apply the new gain")
 		})
 	}
+}
+
+// TestApplySourceGains_RetriesSourceWhoseRouteWasDown pins that a gain save keeps
+// the retry the reconfigure path always ran: a kept source whose analysis route
+// failed on the previous pass is re-wired in the same pass (its old routes are
+// removed and rebuilt), and its gain is still applied.
+func TestApplySourceGains_RetriesSourceWhoseRouteWasDown(t *testing.T) {
+	f := newGainFixture(t, audiocore.SourceTypeAudioCard)
+	orch := &classifier.Orchestrator{Settings: conf.GetSettings()}
+	p := &AudioPipelineService{
+		engine:              f.engine,
+		bnAnalyzer:          &BirdNETAnalyzer{bn: orch},
+		routeFailedLastPass: map[string]bool{f.sourceID: true},
+	}
+
+	f.setGain(gainTestNewGainDB)
+	p.applySourceGains(make(chan audiocore.AudioLevelData))
+
+	assert.True(t, f.consumer.isClosed(), "the source whose route was down must be rebuilt")
+	gain, ok := f.engine.Registry().GetGain(f.sourceID)
+	require.True(t, ok)
+	assert.InDelta(t, gainTestNewGainDB, gain, 0, "the gain must still be applied")
+}
+
+// TestApplySourceGains_LeavesHealthySourceRoutesAlone pins that the retry step
+// touches only sources recorded as failed: with no failure memory the routes
+// are neither removed nor rebuilt, with a pipeline that could rebuild them.
+func TestApplySourceGains_LeavesHealthySourceRoutesAlone(t *testing.T) {
+	f := newGainFixture(t, audiocore.SourceTypeAudioCard)
+	orch := &classifier.Orchestrator{Settings: conf.GetSettings()}
+	p := &AudioPipelineService{engine: f.engine, bnAnalyzer: &BirdNETAnalyzer{bn: orch}}
+
+	f.setGain(gainTestNewGainDB)
+	p.applySourceGains(make(chan audiocore.AudioLevelData))
+
+	assert.False(t, f.consumer.isClosed(), "a healthy source must keep its routes")
+	assert.Equal(t, boosted(t), f.dispatch(t))
+}
+
+// TestReconfigureChangedSources_GainOnlyChangeStillRetriesDownRoute pins that the
+// gain-only branch of the reconfigure diff does not shield a source from the
+// persistent-route-failure retry that ends the pass.
+func TestReconfigureChangedSources_GainOnlyChangeStillRetriesDownRoute(t *testing.T) {
+	f := newGainFixture(t, audiocore.SourceTypeAudioCard)
+	orch := &classifier.Orchestrator{Settings: conf.GetSettings()}
+	p := &AudioPipelineService{
+		engine:              f.engine,
+		bnAnalyzer:          &BirdNETAnalyzer{bn: orch},
+		restartChan:         make(chan struct{}, 1),
+		routeFailedLastPass: map[string]bool{f.sourceID: true},
+	}
+
+	f.setGain(gainTestNewGainDB)
+	p.reconfigureChangedSources(make(chan audiocore.AudioLevelData))
+
+	assert.True(t, f.consumer.isClosed(), "the source whose route was down must be rebuilt")
+	gain, ok := f.engine.Registry().GetGain(f.sourceID)
+	require.True(t, ok)
+	assert.InDelta(t, gainTestNewGainDB, gain, 0, "the gain change must still be applied")
 }

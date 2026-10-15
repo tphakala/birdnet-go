@@ -421,7 +421,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	apiController := p.apiService.APIController()
 	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine, reconfigureFn, reconfigureSoundLevelFn, reconfigureMonitoringFn)
 	p.ctrlMonitor.replanCadenceFn = p.replanCadence
-	p.ctrlMonitor.updateSourceGainsFn = p.applySourceGains
+	p.ctrlMonitor.updateSourceGainsFn = func() { p.applySourceGains(apiAudioLevelChan) }
 	p.ctrlMonitor.Start()
 
 	// Start restart loop goroutine.
@@ -1753,25 +1753,39 @@ const operationUpdateGains = "update_source_gains"
 
 // applySourceGains applies the configured gain of every running source to its
 // registry entry and its live routes, without a reconfigure: no stream is probed,
-// no capture restarts and no route is rebuilt, so open live-audio listeners keep
-// receiving audio. It resolves the desired sources with the same rules as the
-// reconfigure diff (including that rtsp.streams wins over audio.sources) but with
-// probeStreams false, so it never contacts a stream. A source that is not running
-// is left to the reconfigure path that adds it. It runs on the control monitor
-// goroutine, the one that also runs reconfigures, and under sourcesMu, so a route
-// rebuild cannot read the registry between the registry and route updates.
-func (p *AudioPipelineService) applySourceGains() {
+// no capture restarts and no route of a healthy source is rebuilt, so open
+// live-audio listeners keep receiving audio. It resolves the desired sources with
+// the same rules as the reconfigure diff (including that rtsp.streams wins over
+// audio.sources) but with probeStreams false, so it never contacts a stream. A
+// source that is not running is left to the reconfigure path that adds it.
+//
+// It then runs the same persistent-route-failure retry the reconfigure path ends
+// with: a kept source whose analysis route failed on the previous pass is
+// re-wired (audioLevelChan feeds the rebuilt audio level route), which a gain
+// save used to do as part of a reconfigure. With no failure recorded the retry
+// returns without touching anything. It runs on the control monitor goroutine,
+// the one that also runs reconfigures, and under sourcesMu, which neither
+// buildSourceConfigs nor the retry takes, so a route rebuild cannot read the
+// registry between the registry and route updates.
+func (p *AudioPipelineService) applySourceGains(audioLevelChan chan audiocore.AudioLevelData) {
 	p.sourcesMu.Lock()
 	defer p.sourcesMu.Unlock()
 
 	registry := p.engine.Registry()
+	alreadyRunning := make(map[string]string) // connection string -> source ID
+	sourceModelMap := make(map[string][]string)
 	for _, scm := range p.buildSourceConfigs(nil, false) {
 		src, ok := registry.GetByConnection(scm.config.ConnectionString)
-		if !ok || src.Gain == scm.config.Gain {
+		if !ok {
 			continue
 		}
-		p.applySourceGain(src, scm.config.Gain, operationUpdateGains)
+		alreadyRunning[scm.config.ConnectionString] = src.ID
+		sourceModelMap[src.ID] = scm.modelIDs
+		if src.Gain != scm.config.Gain {
+			p.applySourceGain(src, scm.config.Gain, operationUpdateGains)
+		}
 	}
+	p.retryPersistentRouteFailures(alreadyRunning, nil, sourceModelMap, audioLevelChan)
 }
 
 // applySourceGain moves src to gainDB in the registry and on its live routes and

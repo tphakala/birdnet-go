@@ -338,7 +338,9 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 
 // handleUpdateSourceGains applies changed sound card and stream gains to the
 // running sources' live routes. Unlike handleReconfigureAudioSources it does not
-// diff or probe sources, rebuild routes, or restart anything.
+// diff or probe sources, restart anything, or rebuild the routes of a healthy
+// source; it only re-wires a source whose analysis route failed on the previous
+// pass, as every reconfigure does.
 func (cm *ControlMonitor) handleUpdateSourceGains() {
 	if cm.updateSourceGainsFn == nil {
 		return
