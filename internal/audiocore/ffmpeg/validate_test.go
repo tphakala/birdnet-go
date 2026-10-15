@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -434,6 +435,16 @@ func makeTestWAVExtendedFmt(t *testing.T, path string, extraBytes int) {
 	require.NoError(t, os.WriteFile(path, data, 0o600))
 }
 
+// newRecordingGate returns a probe gate callback that records when it is called using an atomic boolean.
+func newRecordingGate(t *testing.T) (func(context.Context) (func(), error), func() bool) {
+	t.Helper()
+	var n atomic.Bool
+	return func(context.Context) (func(), error) {
+		n.Store(true)
+		return func() {}, nil
+	}, n.Load
+}
+
 func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 	// Intentionally set a bogus ffprobe path to ensure the WAV fast-path
 	// parses metadata directly without ever invoking ffprobe.
@@ -500,17 +511,13 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		t.Cleanup(cancel)
 
-		var gateCalled bool
-		gate := func(ctx context.Context) (func(), error) {
-			gateCalled = true
-			return func() {}, nil
-		}
+		gate, called := newRecordingGate(t)
 
 		// Without a data chunk, fast path must return false and fall back to ffprobe.
 		// Since ffprobe is set to a nonexistent path, validation must fail.
 		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1), ffmpeg.WithProbeGate(gate))
 		assert.Error(t, err)
-		assert.True(t, gateCalled, "Probe gate should be acquired when no data chunk falls back to ffprobe")
+		assert.True(t, called(), "Probe gate should be acquired when no data chunk falls back to ffprobe")
 		if result != nil {
 			assert.False(t, result.IsValid)
 		}
@@ -524,17 +531,13 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			t.Cleanup(cancel)
 
-			var gateCalled bool
-			gate := func(ctx context.Context) (func(), error) {
-				gateCalled = true
-				return func() {}, nil
-			}
+			gate, called := newRecordingGate(t)
 
 			// With unsupported format code, fast path must return false and fall back to ffprobe.
 			// Since ffprobe is set to a nonexistent path, validation must fail.
 			result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1), ffmpeg.WithProbeGate(gate))
 			assert.Error(t, err, "Format code %d should not pass fast path", formatCode)
-			assert.True(t, gateCalled, "Probe gate should be acquired when unsupported format code falls back to ffprobe")
+			assert.True(t, called(), "Probe gate should be acquired when unsupported format code falls back to ffprobe")
 			if result != nil {
 				assert.False(t, result.IsValid)
 			}
@@ -549,15 +552,11 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		t.Cleanup(cancel)
 
-		var gateCalled bool
-		gate := func(ctx context.Context) (func(), error) {
-			gateCalled = true
-			return func() {}, nil
-		}
+		gate, called := newRecordingGate(t)
 
 		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1), ffmpeg.WithProbeGate(gate))
 		assert.Error(t, err)
-		assert.True(t, gateCalled, "Probe gate should be acquired when truncated data chunk falls back to ffprobe")
+		assert.True(t, called(), "Probe gate should be acquired when truncated data chunk falls back to ffprobe")
 		if result != nil {
 			assert.False(t, result.IsValid)
 		}
@@ -571,15 +570,11 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		t.Cleanup(cancel)
 
-		var gateCalled bool
-		gate := func(ctx context.Context) (func(), error) {
-			gateCalled = true
-			return func() {}, nil
-		}
+		gate, called := newRecordingGate(t)
 
 		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1), ffmpeg.WithProbeGate(gate))
 		assert.Error(t, err)
-		assert.True(t, gateCalled, "Probe gate should be acquired when incomplete fmt chunk falls back to ffprobe")
+		assert.True(t, called(), "Probe gate should be acquired when incomplete fmt chunk falls back to ffprobe")
 		if result != nil {
 			assert.False(t, result.IsValid)
 		}
@@ -592,15 +587,11 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		t.Cleanup(cancel)
 
-		var gateCalled bool
-		gate := func(ctx context.Context) (func(), error) {
-			gateCalled = true
-			return func() {}, nil
-		}
+		gate, called := newRecordingGate(t)
 
 		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1), ffmpeg.WithProbeGate(gate))
 		assert.Error(t, err)
-		assert.True(t, gateCalled, "Probe gate should be acquired when zero bitsPerSample falls back to ffprobe")
+		assert.True(t, called(), "Probe gate should be acquired when zero bitsPerSample falls back to ffprobe")
 		if result != nil {
 			assert.False(t, result.IsValid)
 		}
@@ -624,15 +615,11 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 				t.Cleanup(cancel)
 
-				var gateCalled bool
-				gate := func(ctx context.Context) (func(), error) {
-					gateCalled = true
-					return func() {}, nil
-				}
+				gate, called := newRecordingGate(t)
 
 				result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1), ffmpeg.WithProbeGate(gate))
 				assert.Error(t, err)
-				assert.True(t, gateCalled, "Probe gate should be acquired when format consistency check fails")
+				assert.True(t, called(), "Probe gate should be acquired when format consistency check fails")
 				if result != nil {
 					assert.False(t, result.IsValid)
 				}
@@ -648,17 +635,13 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			t.Cleanup(cancel)
 
-			var gateCalled bool
-			gate := func(ctx context.Context) (func(), error) {
-				gateCalled = true
-				return func() {}, nil
-			}
+			gate, called := newRecordingGate(t)
 
 			result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithProbeGate(gate))
 			require.NoError(t, err)
 			require.NotNil(t, result)
 			assert.True(t, result.IsValid)
-			assert.False(t, gateCalled, "Probe gate should not be called when fast path succeeds for extended fmt chunk")
+			assert.False(t, called(), "Probe gate should not be called when fast path succeeds for extended fmt chunk")
 			assert.Equal(t, "pcm_s16le", result.Format)
 			assert.Equal(t, 48000, result.SampleRate)
 			assert.Equal(t, 1, result.Channels)
@@ -678,15 +661,12 @@ func TestValidateFile_WithProbeGate(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		t.Cleanup(cancel)
 
-		var gateCalled bool
-		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithProbeGate(func(ctx context.Context) (func(), error) {
-			gateCalled = true
-			return func() {}, nil
-		}))
+		gate, called := newRecordingGate(t)
+		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithProbeGate(gate))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.True(t, result.IsValid)
-		assert.False(t, gateCalled, "Probe gate should not be called when fast path succeeds")
+		assert.False(t, called(), "Probe gate should not be called when fast path succeeds")
 	})
 
 	t.Run("probe gate is called and released when falling back to ffprobe", func(t *testing.T) {
@@ -697,17 +677,17 @@ func TestValidateFile_WithProbeGate(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		t.Cleanup(cancel)
 
-		var gateAcquired, gateReleased bool
+		var gateAcquired, gateReleased atomic.Bool
 		_, _ = ffmpeg.ValidateFile(ctx, p,
 			ffmpeg.WithMaxAttempts(1),
 			ffmpeg.WithProbeGate(func(ctx context.Context) (func(), error) {
-				gateAcquired = true
+				gateAcquired.Store(true)
 				return func() {
-					gateReleased = true
+					gateReleased.Store(true)
 				}, nil
 			}),
 		)
-		assert.True(t, gateAcquired, "Probe gate should be acquired when falling back to probe")
-		assert.True(t, gateReleased, "Probe gate should be released after probe execution")
+		assert.True(t, gateAcquired.Load(), "Probe gate should be acquired when falling back to probe")
+		assert.True(t, gateReleased.Load(), "Probe gate should be released after probe execution")
 	})
 }

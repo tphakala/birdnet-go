@@ -265,7 +265,7 @@ func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResul
 	}
 
 	var foundFmt, foundData bool
-	var channels, sampleRate, bitRate int
+	var channels, sampleRate, bitRate, byteRate int
 	var duration float64
 	var formatName string = "pcm_s16le"
 
@@ -304,7 +304,7 @@ func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResul
 			}
 			channels = int(binary.LittleEndian.Uint16(fmtHeader[2:4]))
 			sampleRate = int(binary.LittleEndian.Uint32(fmtHeader[4:8]))
-			byteRate := binary.LittleEndian.Uint32(fmtHeader[8:12])
+			byteRate = int(binary.LittleEndian.Uint32(fmtHeader[8:12]))
 			blockAlign := binary.LittleEndian.Uint16(fmtHeader[12:14])
 			bitsPerSample := binary.LittleEndian.Uint16(fmtHeader[14:16])
 
@@ -318,7 +318,7 @@ func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResul
 			if blockAlign != expectedBlockAlign {
 				return false
 			}
-			expectedByteRate := uint32(sampleRate) * uint32(blockAlign)
+			expectedByteRate := sampleRate * int(blockAlign)
 			if byteRate != expectedByteRate {
 				return false
 			}
@@ -349,12 +349,8 @@ func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResul
 
 		case "data":
 			foundData = true
-			if sampleRate > 0 && channels > 0 {
-				if bitRate > 0 {
-					duration = float64(chunkSize) / (float64(bitRate*BitsPerKilobit) / 8.0)
-				} else {
-					duration = float64(chunkSize) / float64(sampleRate*channels*2)
-				}
+			if byteRate > 0 {
+				duration = float64(chunkSize) / float64(byteRate)
 			}
 			// Skip chunk data
 			if _, err := f.Seek(chunkSize, io.SeekCurrent); err != nil {
