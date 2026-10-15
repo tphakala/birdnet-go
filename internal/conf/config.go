@@ -1426,7 +1426,7 @@ type UltrasonicFilterConfig struct {
 }
 
 // ValidateSTFT checks the STFT fields of the filter: FFTSize a power of two of
-// at least 2, HopSize from 1 to FFTSize, and FrequencySplitHz not negative. It
+// at least 2, HopSize from 1 to FFTSize, and FrequencySplitHz positive. It
 // is the one rule set shared by settings validation, the load-time repair and
 // the filter itself; the filter computes nothing for a configuration it rejects.
 // Messages name the YAML keys so an operator can find the field.
@@ -1462,8 +1462,8 @@ func (c UltrasonicFilterConfig) validateFrame() error {
 
 // validateSplit checks FrequencySplitHz.
 func (c UltrasonicFilterConfig) validateSplit() error {
-	if c.FrequencySplitHz < 0 {
-		return errors.Newf("bat.ultrasonicfilter.frequencysplithz must be 0 or greater, got %d", c.FrequencySplitHz).
+	if c.FrequencySplitHz < 1 {
+		return errors.Newf("bat.ultrasonicfilter.frequencysplithz must be greater than 0, got %d", c.FrequencySplitHz).
 			Component("config").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_ultrasonic_filter").

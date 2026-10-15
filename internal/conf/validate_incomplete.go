@@ -120,11 +120,15 @@ func normalizeIncompleteFeatures(s *Settings) {
 // left in place would make enabling the filter fail with an error the user
 // cannot act on. The (fftsize, hopsize) pair is repaired as a unit and the split
 // separately, so a bad split never resets a valid custom pair. A pair left at
-// zero (never written) takes the defaults without a warning. The settings API
+// zero (never written) takes the defaults without a warning, and so does a split
+// of zero when the whole struct is unwritten; a zero or negative split next to
+// a written pair is a bad value and warns, because a split of 0 Hz would sum
+// every bin from DC and let audible bursts defeat the filter. The settings API
 // path does not run this pass; it rejects invalid values when the filter is on
 // (validateUltrasonicFilter).
 func (s *Settings) normalizeUltrasonicFilter() {
 	f := &s.Bat.UltrasonicFilter
+	unwritten := f.FFTSize == 0 && f.HopSize == 0 && f.FrequencySplitHz == 0
 	switch err := f.validateFrame(); {
 	case err == nil:
 	case f.FFTSize == 0 && f.HopSize == 0:
@@ -140,6 +144,10 @@ func (s *Settings) normalizeUltrasonicFilter() {
 		f.HopSize = DefaultUltrasonicHopSize
 	}
 	if err := f.validateSplit(); err != nil {
+		if unwritten {
+			f.FrequencySplitHz = DefaultUltrasonicSplitHz
+			return
+		}
 		s.recordValidationWarning(warnComponentModels,
 			"ultrasonic filter frequencysplithz %d is invalid (%v); using the default %d",
 			f.FrequencySplitHz, err, DefaultUltrasonicSplitHz)

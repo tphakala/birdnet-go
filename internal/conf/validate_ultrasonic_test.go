@@ -34,6 +34,7 @@ func TestValidateSettings_UltrasonicFilterSTFT(t *testing.T) {
 		{name: "hop zero", cfg: ultrasonicFilter(8192, 0, 20000), wantErr: true, errContains: "bat.ultrasonicfilter.hopsize"},
 		{name: "fft size not a power of two", cfg: ultrasonicFilter(6000, 3000, 20000), wantErr: true, errContains: "bat.ultrasonicfilter.fftsize"},
 		{name: "fft size one", cfg: ultrasonicFilter(1, 1, 20000), wantErr: true, errContains: "bat.ultrasonicfilter.fftsize"},
+		{name: "zero split", cfg: ultrasonicFilter(8192, 4096, 0), wantErr: true, errContains: "bat.ultrasonicfilter.frequencysplithz"},
 		{name: "negative split", cfg: ultrasonicFilter(8192, 4096, -1), wantErr: true, errContains: "bat.ultrasonicfilter.frequencysplithz"},
 		{
 			name: "disabled filter is not validated",
@@ -116,7 +117,7 @@ func TestNormalizeUltrasonicFilter_RepairsOnLoad(t *testing.T) {
 		require.NoError(t, ValidateSettings(s), "enabling it through the API afterwards succeeds")
 	})
 
-	t.Run("unwritten pair takes the defaults silently and a zero split stays valid", func(t *testing.T) {
+	t.Run("unwritten struct takes the defaults silently", func(t *testing.T) {
 		s := createMinimalValidSettings()
 		s.Bat.UltrasonicFilter = UltrasonicFilterConfig{Enabled: true, CVThreshold: 0.15}
 
@@ -124,8 +125,21 @@ func TestNormalizeUltrasonicFilter_RepairsOnLoad(t *testing.T) {
 
 		assert.Equal(t, DefaultUltrasonicFFTSize, s.Bat.UltrasonicFilter.FFTSize)
 		assert.Equal(t, DefaultUltrasonicHopSize, s.Bat.UltrasonicFilter.HopSize)
-		assert.Zero(t, s.Bat.UltrasonicFilter.FrequencySplitHz, "0 Hz is a valid split, so it is not repaired")
-		assert.Empty(t, ultrasonicWarnings(s), "an unwritten pair is not worth a warning")
+		assert.Equal(t, DefaultUltrasonicSplitHz, s.Bat.UltrasonicFilter.FrequencySplitHz)
+		assert.Empty(t, ultrasonicWarnings(s), "an unwritten struct is not worth a warning")
+	})
+
+	t.Run("zero split next to a valid pair is repaired with a warning", func(t *testing.T) {
+		s := createMinimalValidSettings()
+		s.Bat.UltrasonicFilter = ultrasonicFilter(4096, 2048, 0)
+
+		normalizeIncompleteFeatures(s)
+
+		assert.Equal(t, 4096, s.Bat.UltrasonicFilter.FFTSize)
+		assert.Equal(t, 2048, s.Bat.UltrasonicFilter.HopSize)
+		assert.Equal(t, DefaultUltrasonicSplitHz, s.Bat.UltrasonicFilter.FrequencySplitHz)
+		assert.Len(t, ultrasonicWarnings(s), 1)
+		require.NoError(t, ValidateSettings(s))
 	})
 
 	t.Run("valid custom pair survives a bad split", func(t *testing.T) {
