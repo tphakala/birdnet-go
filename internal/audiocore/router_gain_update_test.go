@@ -312,9 +312,7 @@ func TestRouter_UpdateGainConcurrentWithDispatch(t *testing.T) {
 					break
 				}
 			}
-			if !matched {
-				t.Errorf("delivered frame %d equals none of the three gain references", delivered)
-			}
+			assert.True(t, matched, "delivered frame %d equals none of the three gain references", delivered)
 		case <-stop:
 			done = true
 		case <-time.After(gainUpdateWaitTimeout):
