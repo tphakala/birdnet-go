@@ -76,6 +76,16 @@ func (w *waitRecorder) wait(_ <-chan struct{}, d time.Duration) bool {
 	return len(w.delays) <= w.allow
 }
 
+// scriptedPasses returns a pass function for runClipReconcileLoop that reports
+// the given idle flags in order, never asks to stop, and counts its calls.
+func scriptedPasses(idle []bool, calls *int) func() (bool, bool) {
+	return func() (bool, bool) {
+		i := *calls
+		*calls++
+		return false, idle[i]
+	}
+}
+
 func TestRunClipReconcileLoop(t *testing.T) {
 	t.Parallel()
 
@@ -83,16 +93,16 @@ func TestRunClipReconcileLoop(t *testing.T) {
 		t.Parallel()
 		w := &waitRecorder{allow: 0}
 		passes := 0
-		runClipReconcileLoop(nil, w.wait, func() bool { passes++; return false })
+		runClipReconcileLoop(nil, w.wait, func() (bool, bool) { passes++; return false, false })
 		assert.Zero(t, passes)
 		assert.Equal(t, []time.Duration{clipReconcileStartupDelay}, w.delays)
 	})
 
-	t.Run("passes run once per interval until a pass asks to stop", func(t *testing.T) {
+	t.Run("a pass that asks to stop ends the loop without another wait", func(t *testing.T) {
 		t.Parallel()
 		w := &waitRecorder{allow: 100}
 		passes := 0
-		runClipReconcileLoop(nil, w.wait, func() bool { passes++; return passes == 3 })
+		runClipReconcileLoop(nil, w.wait, func() (bool, bool) { passes++; return passes == 3, false })
 		assert.Equal(t, 3, passes)
 		assert.Equal(t, []time.Duration{clipReconcileStartupDelay, clipReconcilePassInterval, clipReconcilePassInterval}, w.delays,
 			"the startup delay once, then one interval after each pass that did not stop")
@@ -102,10 +112,72 @@ func TestRunClipReconcileLoop(t *testing.T) {
 		t.Parallel()
 		w := &waitRecorder{allow: 1}
 		passes := 0
-		runClipReconcileLoop(nil, w.wait, func() bool { passes++; return false })
+		runClipReconcileLoop(nil, w.wait, func() (bool, bool) { passes++; return false, true })
 		assert.Equal(t, 1, passes)
 		assert.Equal(t, []time.Duration{clipReconcileStartupDelay, clipReconcilePassInterval}, w.delays)
 	})
+
+	t.Run("idle passes double the interval up to the cap and stay there", func(t *testing.T) {
+		t.Parallel()
+		w := &waitRecorder{allow: 100}
+		calls := 0
+		idle := []bool{true, true, true, true, true, true, true, false}
+		next := scriptedPasses(idle, &calls)
+		runClipReconcileLoop(nil, w.wait, func() (bool, bool) {
+			_, i := next()
+			return calls == len(idle), i
+		})
+		h := time.Hour
+		assert.Equal(t, []time.Duration{clipReconcileStartupDelay, h, 2 * h, 4 * h, 8 * h, 16 * h, 24 * h, 24 * h}, w.delays)
+		assert.Equal(t, clipReconcileMaxPassInterval, 24*h)
+	})
+
+	t.Run("a pass that changed something resets the interval", func(t *testing.T) {
+		t.Parallel()
+		w := &waitRecorder{allow: 100}
+		calls := 0
+		idle := []bool{true, true, false, true}
+		next := scriptedPasses(idle, &calls)
+		runClipReconcileLoop(nil, w.wait, func() (bool, bool) {
+			_, i := next()
+			return calls == len(idle), i
+		})
+		h := time.Hour
+		assert.Equal(t, []time.Duration{clipReconcileStartupDelay, h, 2 * h, h}, w.delays,
+			"the non-idle pass (cleared, retained, aborted or write errors) returns the wait to one interval")
+	})
+
+	t.Run("shutdown in the middle of the back-off sequence ends the loop", func(t *testing.T) {
+		t.Parallel()
+		w := &waitRecorder{allow: 3}
+		passes := 0
+		runClipReconcileLoop(nil, w.wait, func() (bool, bool) { passes++; return false, true })
+		assert.Equal(t, 3, passes)
+		h := time.Hour
+		assert.Equal(t, []time.Duration{clipReconcileStartupDelay, h, 2 * h, 4 * h}, w.delays)
+	})
+}
+
+func TestReconcileIdle(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		result diskmanager.ReconcileResult
+		want   bool
+	}{
+		{"nothing changed", diskmanager.ReconcileResult{Scanned: 5}, true},
+		{"held rows alone are no change", diskmanager.ReconcileResult{HeldNoEvidence: 3, HeldMissingDir: 2}, true},
+		{"cleared rows", diskmanager.ReconcileResult{Cleared: 1}, false},
+		{"retained rows", diskmanager.ReconcileResult{Retained: 1}, false},
+		{"aborted", diskmanager.ReconcileResult{Aborted: true}, false},
+		{"write errors", diskmanager.ReconcileResult{WriteErrors: 1}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, reconcileIdle(&tt.result))
+		})
+	}
 }
 
 // fakeReconcileStore serves a fixed list of clip references to the reconcile pass
@@ -155,22 +227,24 @@ func TestRunClipReconcilePass(t *testing.T) {
 	// Not parallel: logtest.Capture swaps the process-global logger.
 	t.Run("unconfigured export path skips the pass without reading the store", func(t *testing.T) {
 		store := &fakeReconcileStore{}
-		stop := false
+		stop, idle := false, true
 		out := logtest.Capture(t, func() {
-			stop = runClipReconcilePass(GetLogger(), make(chan struct{}), store, func() string { return "" })
+			stop, idle = runClipReconcilePass(GetLogger(), make(chan struct{}), store, func() string { return "" })
 		})
 		assert.False(t, stop)
+		assert.False(t, idle, "a skipped pass must not back the interval off")
 		assert.Zero(t, store.reads)
 		assert.Contains(t, out, "export path not configured")
 	})
 
 	t.Run("a pass clears the missing clip and logs the completion", func(t *testing.T) {
 		baseDir, store := reconcileFixture(t)
-		stop := true
+		stop, idle := true, true
 		out := logtest.Capture(t, func() {
-			stop = runClipReconcilePass(GetLogger(), make(chan struct{}), store, func() string { return baseDir })
+			stop, idle = runClipReconcilePass(GetLogger(), make(chan struct{}), store, func() string { return baseDir })
 		})
 		assert.False(t, stop)
+		assert.False(t, idle, "a pass that cleared a row resets the interval")
 		assert.Equal(t, []string{"2026/01/gone.wav"}, store.cleared)
 		assert.Contains(t, out, "clip reconcile pass completed")
 		assert.Contains(t, out, "cleared=1")
@@ -182,7 +256,7 @@ func TestRunClipReconcilePass(t *testing.T) {
 		close(quit)
 		stop := false
 		out := logtest.Capture(t, func() {
-			stop = runClipReconcilePass(GetLogger(), quit, store, func() string { return baseDir })
+			stop, _ = runClipReconcilePass(GetLogger(), quit, store, func() string { return baseDir })
 		})
 		assert.True(t, stop)
 		assert.Empty(t, store.cleared)
@@ -199,13 +273,26 @@ func TestRunClipReconcilePass(t *testing.T) {
 			}
 			return baseDir + "-moved"
 		}
-		stop := true
+		stop, idle := true, true
 		out := logtest.Capture(t, func() {
-			stop = runClipReconcilePass(GetLogger(), make(chan struct{}), store, exportDir)
+			stop, idle = runClipReconcilePass(GetLogger(), make(chan struct{}), store, exportDir)
 		})
 		assert.False(t, stop)
+		assert.False(t, idle, "an aborted pass resets the interval")
 		assert.Zero(t, store.reads, "pathCurrent must make the pass abort before it reads the store")
 		assert.Empty(t, store.cleared)
 		assert.Contains(t, out, "clip reconcile pass aborted")
+	})
+
+	t.Run("a pass over a clean library reports idle", func(t *testing.T) {
+		baseDir, store := reconcileFixture(t)
+		store.refs = store.refs[:1]
+		stop, idle := true, false
+		logtest.Capture(t, func() {
+			stop, idle = runClipReconcilePass(GetLogger(), make(chan struct{}), store, func() string { return baseDir })
+		})
+		assert.False(t, stop)
+		assert.True(t, idle)
+		assert.Empty(t, store.cleared)
 	})
 }

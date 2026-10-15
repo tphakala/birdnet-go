@@ -16,9 +16,19 @@ import (
 // with boot-time I/O (model load, DB open, initial captures).
 const clipReconcileStartupDelay = 2 * time.Minute
 
-// clipReconcilePassInterval is the wait between full reconcile passes. Ghosts are
-// rare and not time-critical to clear, so a slow cadence keeps disk I/O negligible.
+// clipReconcilePassInterval is the base wait between full reconcile passes, used
+// at startup and after any pass that changed something or needs a retry. Ghosts
+// are rare and not time-critical to clear, so a slow cadence keeps disk I/O
+// negligible.
 const clipReconcilePassInterval = 1 * time.Hour
+
+// clipReconcileMaxPassInterval caps the wait between passes while consecutive
+// passes find nothing to change.
+const clipReconcileMaxPassInterval = 24 * time.Hour
+
+// clipReconcileBackoffFactor is the multiplier applied to the wait after each
+// pass that changed nothing.
+const clipReconcileBackoffFactor = 2
 
 // exportBaseDir returns the configured audio export path, trimmed, read from the
 // live settings so hot-reload takes effect.
@@ -37,56 +47,89 @@ func exportBaseDir() string {
 // underlying diskmanager pass clears a reference only after a surviving clip
 // earlier in the same pass shows the storage is attached, and only when its month
 // directory exists, so a detached or replaced export volume never causes mass
-// clearing.
+// clearing. While passes keep changing nothing the wait between them doubles from
+// clipReconcilePassInterval up to clipReconcileMaxPassInterval; a pass that
+// cleared or retained rows, aborted or had write errors returns it to
+// clipReconcilePassInterval. The interval is kept in memory only, so a restart
+// begins at clipReconcilePassInterval again.
 func clipReconcileMonitor(quitChan <-chan struct{}, dataStore datastore.Interface) {
 	log := GetLogger()
 	log.Info("clip reconcile monitor initialized",
 		logger.String("operation", "clip_reconcile_init"))
 
-	runClipReconcileLoop(quitChan, reconcileMonitorWait, func() bool {
+	runClipReconcileLoop(quitChan, reconcileMonitorWait, func() (stop, idle bool) {
 		return runClipReconcilePass(log, quitChan, dataStore, exportBaseDir)
 	})
 }
 
 // runClipReconcileLoop defers the first pass by clipReconcileStartupDelay, then
-// runs pass once per clipReconcilePassInterval. It returns when wait reports
-// shutdown or when pass returns true. wait and pass are parameters so tests can
-// drive the loop without real delays or settings.
-func runClipReconcileLoop(quitChan <-chan struct{}, wait func(<-chan struct{}, time.Duration) bool, pass func() (stop bool)) {
+// runs pass repeatedly. pass reports whether the loop should stop and whether the
+// pass was idle (found nothing to change and needs no retry). The wait after a
+// pass starts at clipReconcilePassInterval and doubles after each consecutive
+// idle pass up to clipReconcileMaxPassInterval; a pass that is not idle returns it
+// to clipReconcilePassInterval. The loop returns when wait reports shutdown or
+// when pass asks to stop. wait and pass are parameters so tests can drive the
+// loop without real delays or settings.
+func runClipReconcileLoop(quitChan <-chan struct{}, wait func(<-chan struct{}, time.Duration) bool, pass func() (stop, idle bool)) {
 	// Defer the first pass; bail out immediately if shutdown arrives first.
 	if !wait(quitChan, clipReconcileStartupDelay) {
 		return
 	}
+	interval := clipReconcilePassInterval
+	logged := interval
 	for {
-		if pass() {
+		stop, idle := pass()
+		if stop {
 			return
 		}
-		if !wait(quitChan, clipReconcilePassInterval) {
+		if !idle {
+			interval = clipReconcilePassInterval
+		}
+		if interval != logged {
+			GetLogger().Debug("clip reconcile pass interval changed",
+				logger.Duration("interval", interval),
+				logger.String("operation", "clip_reconcile_interval"))
+			logged = interval
+		}
+		if !wait(quitChan, interval) {
 			return
+		}
+		if idle {
+			interval = min(interval*clipReconcileBackoffFactor, clipReconcileMaxPassInterval)
 		}
 	}
 }
 
+// reconcileIdle reports whether a completed pass changed nothing and needs no
+// retry: it cleared no rows, retained none, did not abort and had no write
+// errors. Rows held for lack of evidence or a missing month directory do not
+// count as a change.
+func reconcileIdle(result *diskmanager.ReconcileResult) bool {
+	return result.Cleared == 0 && result.Retained == 0 && !result.Aborted && result.WriteErrors == 0
+}
+
 // runClipReconcilePass runs one reconcile pass against the directory exportDir
 // returns now, and logs its outcome. exportDir is read again during the pass so a
-// hot-reloaded export path aborts a pass that started on the old one. It returns
-// true when the pass stopped because shutdown was requested.
-func runClipReconcilePass(log logger.Logger, quitChan <-chan struct{}, store diskmanager.ReconcileStore, exportDir func() string) (stop bool) {
+// hot-reloaded export path aborts a pass that started on the old one. stop is
+// true when the pass ended because shutdown was requested. idle is true only for
+// a completed pass that changed nothing; a skipped pass is not idle, so an
+// unconfigured export path does not lengthen the wait.
+func runClipReconcilePass(log logger.Logger, quitChan <-chan struct{}, store diskmanager.ReconcileStore, exportDir func() string) (stop, idle bool) {
 	baseDir := exportDir()
 	if baseDir == "" {
 		log.Debug("skipping clip reconcile: export path not configured",
 			logger.String("operation", "clip_reconcile_skip"))
-		return false
+		return false, false
 	}
 	pathCurrent := func() bool {
 		return exportDir() == baseDir
 	}
 	result := diskmanager.ReconcileClipOrphansPass(quitChan, store, baseDir, pathCurrent)
 	if result.ShutdownRequested {
-		return true
+		return true, false
 	}
 	logReconcileResult(log, &result)
-	return false
+	return false, reconcileIdle(&result)
 }
 
 // logReconcileResult logs the outcome of one reconcile pass. An aborted pass
