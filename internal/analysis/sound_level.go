@@ -535,7 +535,8 @@ func fanOutSoundLevel(wg *sync.WaitGroup, done <-chan struct{}, src <-chan sound
 // soundLevelChan, so every publisher sees every interval. The MQTT publisher
 // always runs (with a processor) and publishes only while MQTT is enabled; while
 // it is disabled the fan-out still copies each interval to its channel and the
-// publisher returns at that check, one cheap settings read per interval.
+// publisher drops each one at that check and keeps running, one cheap settings
+// read per interval.
 func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller) {
 	// Create a merged quit channel that responds to both the done channel and global quit
 	mergedQuitChan := make(chan struct{})
