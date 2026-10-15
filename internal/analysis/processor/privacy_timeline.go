@@ -26,6 +26,13 @@ const (
 	// the default capture buffer; an extended capture can reach further back, and
 	// then a clip with a hole in its coverage waits for the fail-open timeout.
 	privacyCoverageHorizon = time.Duration(conf.DefaultCaptureBufferSeconds) * time.Second
+	// privacyModelLiveness is how far behind the newest label coverage on a source
+	// a model's own newest coverage may be and still be waited for. A model scans a
+	// window per step of at most one clip length (5 s), and its publishing can lag
+	// by a few queued windows, so three clip lengths separate a live model from one
+	// that was removed, scheduled off or unloaded. A model more than this behind
+	// the others is treated as gone.
+	privacyModelLiveness = 15 * time.Second
 	// privacyCoverageMaxSpans caps the scanned spans kept per (source, model,
 	// detector); a new span starts only after a hole, so few are ever live.
 	privacyCoverageMaxSpans = 16
@@ -361,24 +368,78 @@ func (p *Processor) checkPrivacy(settings *conf.Settings, item *PendingDetection
 }
 
 // coverageVerdictLocked is the coverage half of checkPrivacy; the caller must
-// hold detectionMutex.
+// hold detectionMutex. See clipCoveredLocked for which coverage must contain the
+// clip.
 func (p *Processor) coverageVerdictLocked(settings *conf.Settings, source string, clip audioSpan, now time.Time) coverageVerdict {
 	detector := p.requiredDetectorLocked(settings, source, now)
 	if !p.hasRecentCoverageLocked(source, detector, now) {
 		return coverageKeep
 	}
-	for key, spans := range p.privacyCoverage {
-		if key.source != source || key.detector != detector {
-			continue
-		}
-		for _, s := range spans {
-			if !s.from.After(clip.from.Add(-privacyClipGuard)) && !s.to.Before(clip.to.Add(privacyClipGuard)) {
-				return coverageKeep
-			}
-		}
+	if p.clipCoveredLocked(source, detector, clip) {
+		return coverageKeep
 	}
 	if now.Before(clip.to.Add(privacyCoverageMaxWait)) {
 		return coverageDefer
 	}
 	return coverageTimedOut
+}
+
+// clipCoveredLocked reports whether the detector's coverage on source contains
+// the padded clip. The VAD scores a source's audio in one stream, so any stream
+// that contains the clip is enough. The label path runs per model, and each
+// model writes its own label hits from its own windows, so every live model that
+// existed by the end of the clip must contain it, including a live model that is
+// still behind the clip. A model is live while its newest span ends within
+// privacyModelLiveness of the newest label coverage on the source, so a removed,
+// scheduled-off or unloaded model stops being waited for after that much audio;
+// measuring against the other models and not the wall clock keeps a model that is
+// merely backlogged from looking removed, unless it falls that far behind. A model
+// whose coverage begins after the clip is not required. When no model is required,
+// any span containing the clip is enough. The caller must hold detectionMutex.
+func (p *Processor) clipCoveredLocked(source, detector string, clip audioSpan) bool {
+	padded := audioSpan{from: clip.from.Add(-privacyClipGuard), to: clip.to.Add(privacyClipGuard)}
+	type modelCoverage struct {
+		newest, earliest time.Time
+		contains         bool
+	}
+	models := make([]modelCoverage, 0, 4)
+	var newestAll time.Time
+	anyCovered := false
+	for key, spans := range p.privacyCoverage {
+		if key.source != source || key.detector != detector || len(spans) == 0 {
+			continue
+		}
+		mc := modelCoverage{newest: spans[len(spans)-1].to, earliest: spans[0].from}
+		for _, s := range spans {
+			mc.contains = mc.contains || (!s.from.After(padded.from) && !s.to.Before(padded.to))
+		}
+		anyCovered = anyCovered || mc.contains
+		newestAll = latestTime(newestAll, mc.newest)
+		models = append(models, mc)
+	}
+	if detector != metrics.TriggerLabel {
+		return anyCovered
+	}
+	required := 0
+	for _, mc := range models {
+		if newestAll.Sub(mc.newest) > privacyModelLiveness || mc.earliest.After(padded.to) {
+			continue
+		}
+		required++
+		if !mc.contains {
+			return false
+		}
+	}
+	if required == 0 {
+		return anyCovered
+	}
+	return true
+}
+
+// latestTime returns the later of a and b.
+func latestTime(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
 }
