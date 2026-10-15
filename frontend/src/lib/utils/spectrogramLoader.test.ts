@@ -792,5 +792,33 @@ describe('spectrogramLoader', () => {
       );
       loader.destroy();
     });
+
+    it('re-fetches with updated dynamic raw when getter changes and restart is called', async () => {
+      let currentRaw = true;
+      mockFetch.mockResolvedValue(mockJsonResponse({ data: { status: 'exists' } }));
+
+      const loader = createSpectrogramLoader({
+        raw: () => currentRaw,
+      });
+
+      loader.start(42);
+      await flushAll();
+      loader.handleImageLoad();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/spectrogram/42/status?size=md&raw=true',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+
+      currentRaw = false;
+      loader.restart(42);
+      await flushAll();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/spectrogram/42/status?size=md&raw=false',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+      loader.destroy();
+    });
   });
 });

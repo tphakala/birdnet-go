@@ -161,11 +161,18 @@
   );
   // svelte-ignore state_referenced_locally
   let previousSpectrogramSize = currentSpectrogramSize;
+  let currentSpectrogramRaw = $derived($dashboardSettings?.spectrogram?.raw ?? true);
+  // svelte-ignore state_referenced_locally
+  let previousSpectrogramRaw = currentSpectrogramRaw;
 
   $effect(() => {
-    // If configured spectrogram size changes, restart loader with the new size
-    if (currentSpectrogramSize !== previousSpectrogramSize) {
+    // If configured spectrogram size or raw mode changes, restart loader
+    if (
+      currentSpectrogramSize !== previousSpectrogramSize ||
+      currentSpectrogramRaw !== previousSpectrogramRaw
+    ) {
       previousSpectrogramSize = currentSpectrogramSize;
+      previousSpectrogramRaw = currentSpectrogramRaw;
       if (detection.clipName && isVisible) {
         loader.restart(detection.id);
         return;
