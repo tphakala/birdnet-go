@@ -80,9 +80,12 @@ type monitorTickState struct {
 // backlog earlier. That write is read under the same lock as the window, so it
 // is the latest write at the moment of the read.
 //
-// Gap is the buffer's own gap flag (first window of a buffer, overwrite-mode
-// loss, a Reset) or a previous window that was read but not analyzed. The
-// analyzed latch is cleared here and set again once ProcessData succeeds.
+// Gap is the buffer's own gap flag (a splice at or inside the window's fresh
+// part: the first window of a buffer, overwrite-mode loss, a refused write, a
+// Reset) or a previous window that was read but not analyzed (skipped, failed or
+// its result dropped by a full queue). ContiguousBytes, the stream positions and
+// the generation come from the buffer unchanged. The analyzed latch is cleared
+// here and set again once ProcessData succeeds.
 func (s *monitorTickState) windowAudio(info buffer.WindowInfo, bytesPerSecond int) classifier.AudioTiming {
 	gap := info.Gap || !s.lastWindowAnalyzed
 	s.lastWindowAnalyzed = false
@@ -90,7 +93,14 @@ func (s *monitorTickState) windowAudio(info buffer.WindowInfo, bytesPerSecond in
 	if bytesPerSecond > 0 {
 		endAt = endAt.Add(-time.Duration(info.Backlog) * time.Second / time.Duration(bytesPerSecond))
 	}
-	return classifier.AudioTiming{EndAt: endAt, Gap: gap, FreshBytes: info.FreshBytes}
+	return classifier.AudioTiming{
+		EndAt:           endAt,
+		Gap:             gap,
+		FreshBytes:      info.FreshBytes,
+		ContiguousBytes: info.ContiguousBytes,
+		EndPos:          info.EndPos,
+		Generation:      info.Generation,
+	}
 }
 
 // classifierBackend is the analysis package's view of *classifier.Orchestrator:
@@ -530,7 +540,9 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monit
 // Each full window is stamped with its backlog-corrected audio end, a gap flag
 // and the exact count of fresh bytes it carries (see monitorTickState.windowAudio
 // and buffer.WindowInfo), which ProcessData passes on to the results consumer; a
-// window read but not analyzed makes the next one report a gap.
+// window read but not analyzed, including one whose result the full results
+// queue dropped (ProcessData returns ErrResultsDropped, logged where it happens),
+// makes the next one report a gap.
 //
 // The window's backing slice is always returned to its pool via a
 // "defer release()" immediately after Read, so every exit path including the
@@ -667,20 +679,24 @@ func (m *BufferManager) processMonitorTick(
 	beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
 	startTime := time.Now().Add(-beginTimeOffset)
 
-	if processErr := ProcessData(context.Background(), m.bn, m.bufferMgr, &ProcessRequest{
+	switch processErr := ProcessData(context.Background(), m.bn, m.bufferMgr, &ProcessRequest{
 		Data:            data,
 		StartTime:       startTime,
 		AudioCapturedAt: audioCapturedAt,
 		Source:          cfg.sourceID,
 		ModelID:         cfg.modelID,
 		Audio:           audio,
-	}); processErr != nil {
+	}); {
+	case processErr == nil:
+		state.lastWindowAnalyzed = true
+	case errors.Is(processErr, ErrResultsDropped):
+		// Already logged and counted at the drop; the window stays unanalyzed so
+		// the next one reports a gap.
+	default:
 		m.logger.Error("error processing data",
 			logger.String("source_id", cfg.sourceID),
 			logger.String("model_id", cfg.modelID),
 			logger.Error(processErr))
-	} else {
-		state.lastWindowAnalyzed = true
 	}
 	return true
 }

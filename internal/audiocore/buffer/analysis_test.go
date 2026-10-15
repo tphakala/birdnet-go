@@ -623,3 +623,52 @@ func TestAnalysisBuffer_ReadWindowFreshBytes(t *testing.T) {
 	require.NoError(t, noOverlap.Write(make([]byte, readSize)))
 	assert.Equal(t, readSize, readWindowOnce(t, noOverlap).FreshBytes, "with no overlap every window is all fresh")
 }
+
+// TestAnalysisBuffer_RefusedWriteSplicesTheWindowThatContainsIt: a write larger
+// than the ring is refused whole. The lost audio sits behind the unread backlog,
+// so the window that joins the audio before it to the audio after it is the gap,
+// not the window read next.
+func TestAnalysisBuffer_RefusedWriteSplicesTheWindowThatContainsIt(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 40
+		readSize = 8
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "refused-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	require.True(t, readWindowOnce(t, ab).Gap, "the first window of a buffer is a gap")
+
+	require.NoError(t, ab.Write(make([]byte, 2*readSize)))
+	require.Error(t, ab.Write(make([]byte, capacity+1)), "a write larger than the ring is refused")
+	require.Error(t, ab.Write(make([]byte, capacity+1)), "a second refused write at the same position is one splice")
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+
+	assert.False(t, readWindowOnce(t, ab).Gap, "the first window after the backlog was recorded before the loss")
+	assert.False(t, readWindowOnce(t, ab).Gap, "the second one too")
+	assert.True(t, readWindowOnce(t, ab).Gap, "the window after the refused bytes splices the loss")
+}
+
+// TestAnalysisBuffer_EmptyAndRefusedWritesDoNotStampTheWriteTime: only an
+// accepted, non-empty write moves the time the audio end is derived from.
+func TestAnalysisBuffer_EmptyAndRefusedWritesDoNotStampTheWriteTime(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capacity = 40
+		readSize = 8
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, 0, readSize, "stamp-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	afterAccepted := time.Now()
+	require.NoError(t, ab.Write(nil))
+	require.Error(t, ab.Write(make([]byte, capacity+1)))
+
+	info := readWindowOnce(t, ab)
+	assert.False(t, info.LastWriteAt.After(afterAccepted), "empty and refused writes must not stamp the write time")
+	assert.False(t, info.LastWriteAt.IsZero())
+}

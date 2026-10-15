@@ -26,9 +26,11 @@ type AudioTiming struct {
 	// EndAt is the capture time of the last sample of the window, corrected for
 	// the analysis backlog (the ring is FIFO, so a lagging monitor reads old audio).
 	EndAt time.Time
-	// Gap reports that audio between this window and the previous window of the
-	// same (source, model) was lost or not analyzed, or that this is the first
-	// window of a buffer (its overlap head is zero filled).
+	// Gap reports that the window is not contiguous with the previous window of
+	// the same (source, model): the producer lost or spliced audio at or inside
+	// its fresh part, this is the first window of a buffer or stream, or the
+	// previous window was never analyzed (skipped, failed, or its result dropped
+	// by a full results queue).
 	Gap bool
 	// FreshBytes is the producer's count of bytes at the end of the window that
 	// are new audio, not repeated from the previous window: one step of the
@@ -36,6 +38,19 @@ type AudioTiming struct {
 	// A Gap caused by lost audio still reports one step; consumers treat any gap
 	// window as wholly fresh. Zero when unknown.
 	FreshBytes int
+	// ContiguousBytes is how many bytes at the end of the window are genuine
+	// audio adjacent in time, with no loss, splice or zero fill; a window after a
+	// loss still has a contiguous tail. Zero when the producer reports no
+	// positions, in which case the whole window is assumed genuine.
+	ContiguousBytes int
+	// EndPos is the producer's stream position just after the window's last byte
+	// (audio refused before it still counts toward it, so a loss leaves a hole),
+	// and Generation identifies the stream it belongs to. EndPos minus
+	// ContiguousBytes is where the contiguous tail starts. Two windows of the same
+	// Generation are adjacent when the later tail starts at or before the earlier
+	// EndPos, whatever their timestamps say. Generation zero means no positions.
+	EndPos     int64
+	Generation uint64
 }
 
 // Default buffer size for the results queue

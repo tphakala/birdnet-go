@@ -761,3 +761,47 @@ func TestProcessMonitorTick_MismatchedWindowLeavesWindowUnanalyzed(t *testing.T)
 	require.True(t, bm.processMonitorTick(make(chan struct{}), cfg, readSize*2, 0, state, 1))
 	assert.False(t, state.lastWindowAnalyzed)
 }
+
+// TestProcessMonitorTick_ResultsDropMakesNextWindowADiscontinuity: a window whose
+// result the full results queue drops was never analyzed, so the next window
+// must not claim to be contiguous with it.
+func TestProcessMonitorTick_ResultsDropMakesNextWindowADiscontinuity(t *testing.T) {
+	// Not parallel: the results queue is shared and is filled to capacity here.
+	conftest.SetTestSettings(conftest.GetTestSettings())
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+	drainResultsQueue(t)
+
+	const source = "drop-src"
+	spec := classifier.ModelRegistry[forwardModelID].Spec
+	window := spec.ClipSizeBytes()
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(source, forwardModelID, window*4, 0, window))
+	ab, err := mgr.AnalysisBuffer(source, forwardModelID)
+	require.NoError(t, err)
+	bm := &BufferManager{bn: &dispatchBackend{}, bufferMgr: mgr, logger: logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC)}
+	cfg := &monitorConfig{sourceID: source, modelID: forwardModelID, spec: spec, readSize: window}
+	state := &monitorTickState{}
+	quit := make(chan struct{})
+	tick := func(n int64) {
+		t.Helper()
+		require.NoError(t, ab.Write(make([]byte, window)))
+		require.True(t, bm.processMonitorTick(quit, cfg, window, 0, state, n))
+	}
+
+	tick(1)
+	nextQueuedResult(t, source) // the first window is a gap by construction
+	tick(2)
+	assert.False(t, nextQueuedResult(t, source).Audio.Gap, "an analyzed, contiguous window is not a gap")
+
+	// Fill the queue so the next result is dropped.
+	for len(classifier.ResultsQueue) < cap(classifier.ResultsQueue) {
+		classifier.ResultsQueue <- classifier.Results{Source: datastore.AudioSource{ID: "filler"}}
+	}
+	tick(3)
+	assert.False(t, state.lastWindowAnalyzed, "a dropped result leaves the window unanalyzed")
+	for len(classifier.ResultsQueue) > 0 {
+		<-classifier.ResultsQueue
+	}
+	tick(4)
+	assert.True(t, nextQueuedResult(t, source).Audio.Gap, "the window after a dropped result is not contiguous with an analyzed one")
+}

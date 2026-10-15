@@ -1,6 +1,8 @@
 package buffer
 
 import (
+	"cmp"
+	"slices"
 	"sync"
 	"time"
 
@@ -50,16 +52,38 @@ type AnalysisBuffer struct {
 	lostBytes    int64
 	windowsRead  int64
 
-	// lastWriteAt is the time of the latest Write call, accepted or not;
-	// guarded by mu. Zero until the first Write and after Reset.
+	// lastWriteAt is the time of the latest accepted, non-empty Write; guarded by
+	// mu. Zero until the first such Write and after Reset.
 	lastWriteAt time.Time
-	// gapPending is true until the first Read after construction or Reset: that
-	// window has a zero-filled overlap head, so it is not contiguous with any
-	// earlier audio. Guarded by mu.
-	gapPending bool
-	// lostAtPrevRead is lostBytes as of the previous successful Read, so a Read
-	// can tell whether audio was discarded since. Guarded by mu.
-	lostAtPrevRead int64
+
+	// Ring-space stream positions, guarded by mu. writePos counts the bytes the
+	// ring accepted; readPos counts the bytes read or dropped, so the ring holds
+	// [readPos, writePos). A splice at position p means the audio just before p
+	// and the audio at p are not adjacent in time: construction and Reset (the
+	// zero-filled overlap head), overwrite loss (the oldest unread bytes went
+	// missing) and a refused write (its bytes never entered the ring).
+	writePos int64
+	readPos  int64
+	// lastSplice is the latest splice at or before the read position; splices
+	// ahead of it, in the unread backlog, wait in pendingSplices (ascending).
+	// skipped is the sum of the bytes refused by consumed splices: reported
+	// positions add it to the ring position so that audio refused at a splice
+	// leaves a hole in the position space.
+	lastSplice     int64
+	skipped        int64
+	pendingSplices []splice
+	// generation identifies the stream: it starts at 1 and increases on Reset, so
+	// positions from different generations are never comparable.
+	generation uint64
+}
+
+// splice marks a point in the ring where the audio before and after are not
+// adjacent in time. skip is the number of audio bytes lost at that point without
+// ever entering the ring (a refused write); zero for loss that removed bytes
+// already counted in the ring positions.
+type splice struct {
+	pos  int64
+	skip int64
 }
 
 // WindowInfo describes one analysis window as returned by ReadWindow. It is
@@ -78,9 +102,24 @@ type WindowInfo struct {
 	// step read from the ring, or the whole window when its overlap head is zero
 	// filled. The rest repeats audio an earlier window already carried.
 	FreshBytes int
-	// Gap reports that the window is not contiguous with the previous one: it is
-	// the first after construction or Reset, or audio was discarded in between.
+	// Gap reports that the window's fresh part is not contiguous with the audio
+	// before it: a splice (construction, Reset, overwrite loss or a refused write)
+	// lies at or inside the fresh part. A splice in the overlap head only shortens
+	// ContiguousBytes.
 	Gap bool
+	// ContiguousBytes is how many bytes at the end of the window are genuine
+	// audio, adjacent in time with no splice: the window end minus the later of
+	// the head start and the latest splice. A zero-filled or pre-loss head is
+	// not counted.
+	ContiguousBytes int
+	// EndPos is the stream position just after the window's last byte: the ring
+	// position plus every byte refused before it, so audio lost without entering
+	// the ring still leaves a hole. EndPos minus ContiguousBytes is where the
+	// contiguous tail starts. Two windows of the same Generation are adjacent when
+	// the later tail starts at or before the earlier EndPos.
+	EndPos int64
+	// Generation identifies the stream EndPos belongs to; see Reset.
+	Generation uint64
 }
 
 // NewAnalysisBuffer creates an AnalysisBuffer with a ring buffer of the given
@@ -94,7 +133,8 @@ type WindowInfo struct {
 // via the release func that Read returns. When bufMgr is nil (test paths),
 // window slices are allocated per Read and the release func is a no-op.
 //
-// The first window read is reported as a gap in its WindowInfo.
+// The first window read is reported as a gap in its WindowInfo and counts only
+// its fresh part as contiguous.
 //
 // Returns an error if any dimension is not positive or if sourceID is empty.
 func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log logger.Logger, bufMgr *Manager) (*AnalysisBuffer, error) {
@@ -167,7 +207,10 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 		sourceID:    sourceID,
 		log:         log,
 		windowPool:  windowPool,
-		gapPending:  true,
+		// The first window's overlap head is zero filled, so the stream starts
+		// with a splice at position 0.
+		pendingSplices: []splice{{pos: 0}},
+		generation:     1,
 	}, nil
 }
 
@@ -176,26 +219,43 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 // byte counters (see Stats) are advanced. A write larger than the ring is
 // refused whole and counted as lost, leaving the buffered audio untouched.
 //
-// Every call, accepted or not, records the time reported in WindowInfo.
+// Only an accepted, non-empty write records the time reported in WindowInfo: a
+// refused write adds no audio to the ring, and an empty one adds nothing. A
+// refused write and overwrite loss each record a splice, so the window that
+// joins the audio on either side of the loss is the one reported as a gap. The
+// bytes of a refused write count toward the positions reported in WindowInfo, so
+// the loss leaves a hole there even when the ring had been drained.
 //
 // Write is safe for concurrent use.
 func (ab *AnalysisBuffer) Write(data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
 	now := time.Now()
 	ab.mu.Lock()
-	ab.lastWriteAt = now
 	ab.writtenBytes += int64(len(data))
 	var err error
 	if len(data) > ab.ring.Capacity() {
 		// The ring cannot hold the write, and in overwrite mode it would move
-		// its read pointer past the buffered audio, so refuse it.
+		// its read pointer past the buffered audio, so refuse it. The audio on
+		// either side of the refused bytes is no longer adjacent.
 		ab.lostBytes += int64(len(data))
+		ab.addSpliceLocked(splice{pos: ab.writePos, skip: int64(len(data))})
 		err = ringbuffer.ErrTooMuchDataToWrite
 	} else {
 		// In overwrite mode the ring advances its read pointer by len(data)
 		// minus the free space, so that many of the oldest bytes are discarded
 		// unread.
-		ab.lostBytes += int64(max(len(data)-ab.ring.Free(), 0))
-		_, err = ab.ring.Write(data)
+		dropped := int64(max(len(data)-ab.ring.Free(), 0))
+		ab.lostBytes += dropped
+		if dropped > 0 {
+			ab.readPos += dropped
+			ab.addSpliceLocked(splice{pos: ab.readPos})
+		}
+		if _, err = ab.ring.Write(data); err == nil {
+			ab.writePos += int64(len(data))
+			ab.lastWriteAt = now
+		}
 	}
 	ab.mu.Unlock()
 
@@ -228,7 +288,10 @@ func (ab *AnalysisBuffer) Read() (window []byte, release func(), err error) {
 }
 
 // ReadWindow is Read plus a WindowInfo describing the window, computed under the
-// same lock as the read. info is the zero value when no window is returned.
+// same lock as the read: its gap flag, contiguous tail, stream positions and the
+// backlog and write time its audio end is derived from, and the stream position
+// and generation consumers use to tell whether two windows are adjacent. info is
+// the zero value when no window is returned.
 func (ab *AnalysisBuffer) ReadWindow() (window []byte, info WindowInfo, release func(), err error) {
 	ab.mu.Lock()
 	defer ab.mu.Unlock()
@@ -245,6 +308,7 @@ func (ab *AnalysisBuffer) ReadWindow() (window []byte, info WindowInfo, release 
 
 	// fresh counts the window bytes that are new audio: the step read from the
 	// ring, or the whole window when the overlap head is zero filled.
+	freshStart := ab.readPos
 	fresh := ab.readSize
 	if ab.overlapSize > 0 {
 		if len(ab.prevData) == ab.overlapSize {
@@ -290,14 +354,27 @@ func (ab *AnalysisBuffer) ReadWindow() (window []byte, info WindowInfo, release 
 	}
 
 	ab.windowsRead++
-	info = WindowInfo{
-		LastWriteAt: ab.lastWriteAt,
-		Backlog:     ab.ring.Length(),
-		FreshBytes:  fresh,
-		Gap:         ab.gapPending || ab.lostBytes != ab.lostAtPrevRead,
+	ab.readPos += int64(n)
+	// Splices before the window end are now behind it: one inside the fresh part
+	// makes the window a gap, and the latest one bounds its contiguous tail.
+	gap := false
+	for len(ab.pendingSplices) > 0 && ab.pendingSplices[0].pos < ab.readPos {
+		sp := ab.pendingSplices[0]
+		ab.pendingSplices = ab.pendingSplices[1:]
+		gap = gap || sp.pos >= freshStart
+		ab.lastSplice = max(ab.lastSplice, sp.pos)
+		ab.skipped += sp.skip
 	}
-	ab.gapPending = false
-	ab.lostAtPrevRead = ab.lostBytes
+	tailStart := max(freshStart-int64(ab.overlapSize), ab.lastSplice)
+	info = WindowInfo{
+		LastWriteAt:     ab.lastWriteAt,
+		Backlog:         ab.ring.Length(),
+		FreshBytes:      fresh,
+		Gap:             gap,
+		ContiguousBytes: int(ab.readPos - tailStart),
+		EndPos:          ab.readPos + ab.skipped,
+		Generation:      ab.generation,
+	}
 
 	pool := ab.windowPool
 	released := false
@@ -329,15 +406,34 @@ func (ab *AnalysisBuffer) Stats() AnalysisBufferStats {
 	}
 }
 
-// Reset clears the ring buffer, the overlap state and the last write time, and
-// makes the next window a gap in its WindowInfo.
+// Reset clears the ring buffer, the overlap state and the last write time. The
+// unread audio is dropped, so the next window starts with a splice and a zero
+// filled overlap head, and the stream generation increases so positions from
+// before the Reset are never compared with later ones.
 // Useful for testing or restarting a source. The cumulative counters reported
 // by Stats are not reset.
 func (ab *AnalysisBuffer) Reset() {
 	ab.mu.Lock()
 	ab.ring.Reset()
 	ab.prevData = nil
-	ab.gapPending = true
+	ab.readPos = ab.writePos
+	ab.pendingSplices = ab.pendingSplices[:0]
+	ab.addSpliceLocked(splice{pos: ab.readPos})
+	ab.generation++
 	ab.lastWriteAt = time.Time{}
 	ab.mu.Unlock()
+}
+
+// addSpliceLocked records a splice, keeping pendingSplices ascending by position
+// and merging splices at the same position (their skipped bytes add up). The
+// caller must hold mu.
+func (ab *AnalysisBuffer) addSpliceLocked(sp splice) {
+	i, found := slices.BinarySearchFunc(ab.pendingSplices, sp.pos, func(e splice, pos int64) int {
+		return cmp.Compare(e.pos, pos)
+	})
+	if found {
+		ab.pendingSplices[i].skip += sp.skip
+		return
+	}
+	ab.pendingSplices = slices.Insert(ab.pendingSplices, i, sp)
 }
