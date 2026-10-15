@@ -36,6 +36,10 @@ const (
 	// gainUpdateFlips is how many times the concurrent test flips the gain.
 	gainUpdateFlips = 1000
 
+	// gainUpdateFinalDB is set after the concurrent flips and differs from every
+	// gain flipped between.
+	gainUpdateFinalDB = 3.0
+
 	// gainUpdateHighPassHz is the corner of the EQ chain in the sequence test.
 	gainUpdateHighPassHz = 200.0
 )
@@ -258,11 +262,12 @@ func TestRouter_UpdateGainConcurrentWithDispatch(t *testing.T) {
 	}
 
 	stop := make(chan struct{})
+	flipErr := make(chan error, 1)
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		for i := range gainUpdateFlips {
 			if err := router.UpdateGain(gainUpdateSource, gains[i%len(gains)]); err != nil {
-				t.Errorf("UpdateGain: %v", err)
+				flipErr <- err
 				break
 			}
 		}
@@ -301,5 +306,59 @@ func TestRouter_UpdateGainConcurrentWithDispatch(t *testing.T) {
 		}
 	}
 	wg.Wait()
+	select {
+	case err := <-flipErr:
+		require.NoError(t, err, "UpdateGain must accept every gain in the flip sequence")
+	default:
+	}
 	assert.Positive(t, delivered, "at least one frame must be delivered during the flips")
+
+	// A frame path that read the gain twice could dereference a nil gain while
+	// the flips switch to 0 dB; the drainer recovers from that panic and retires
+	// the route. This is a best-effort check for that: the route must still be
+	// registered and still deliver frames, now at a gain set after the flips.
+	require.True(t, router.HasConsumers(gainUpdateSource), "the route must survive the gain flips")
+	assert.False(t, consumer.closed.Load(), "the consumer must not have been closed by a drainer panic")
+	// Set one more gain, distinct from the three flipped between, so no frame
+	// queued during the flips can match it. Dispatch inside the wait: a frame can
+	// be dropped while the inbox is still full of queued frames.
+	require.NoError(t, router.UpdateGain(gainUpdateSource, gainUpdateFinalDB))
+	want := newGainRefPipeline(t, gainUpdateSrcRate, false).process(t, input, gainUpdateFinalDB)
+	require.Eventually(t, func() bool {
+		router.Dispatch(gainUpdateFrame(input))
+		for {
+			select {
+			case f := <-consumer.frames:
+				if bytes.Equal(want, f.Data) {
+					return true
+				}
+			default:
+				return false
+			}
+		}
+	}, gainUpdateWaitTimeout, time.Millisecond, "a frame carrying the gain set after the flips must arrive")
+}
+
+// TestRouter_UpdateGainOnResampledRouteWithoutChain covers the common production
+// route: resampled, no EQ. Moving it between 0 dB (the byte resample path) and a
+// non-zero gain (the float handoff path) must follow each step.
+func TestRouter_UpdateGainOnResampledRouteWithoutChain(t *testing.T) {
+	t.Parallel()
+
+	router := NewAudioRouter(GetLogger(), nil)
+	t.Cleanup(router.Close)
+
+	res := newMockConsumer("res")
+	res.sampleRate = gainUpdateResampledRate
+	require.NoError(t, router.AddRoute(gainUpdateSource, res, gainUpdateSrcRate, 0, nil))
+
+	ref := newGainRefPipeline(t, gainUpdateResampledRate, false)
+	input := int16sToBytes(noiseAndTone(gainUpdateFrameSamples, gainUpdateSrcRate))
+
+	for _, db := range []float64{0, 6, 0, -6, 0} {
+		require.NoError(t, router.UpdateGain(gainUpdateSource, db))
+		router.Dispatch(gainUpdateFrame(input))
+		got := waitForGainFrame(t, res)
+		assert.True(t, bytes.Equal(ref.process(t, input, db), got.Data), "gain %g dB: resampled route differs from the reference", db)
+	}
 }
