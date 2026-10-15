@@ -601,9 +601,9 @@ func TestRouter_AddRouteWithGain(t *testing.T) {
 			routes := router.routes["src-1"]
 			require.Len(t, routes, 1)
 			if tt.gainDB == 0 {
-				assert.Nil(t, routes[0].gain, "0 dB must add no gain stage")
-			} else if assert.NotNil(t, routes[0].gain) {
-				assert.InDelta(t, tt.gainDB, routes[0].gain.GainDB(), 0)
+				assert.Nil(t, routes[0].gain.Load(), "0 dB must add no gain stage")
+			} else if assert.NotNil(t, routes[0].gain.Load()) {
+				assert.InDelta(t, tt.gainDB, routes[0].gain.Load().GainDB(), 0)
 			}
 			router.mu.RUnlock()
 		})
@@ -846,7 +846,8 @@ func benchApplyProcessing(b *testing.B, tc processingBenchCase) {
 	r := NewAudioRouter(GetLogger(), mgr)
 	defer r.Close()
 
-	route := &Route{gain: testGain(b, tc.gainDB)}
+	route := &Route{}
+	route.gain.Store(testGain(b, tc.gainDB))
 	var chain *dspeq.FilterChain
 	if tc.bands != nil {
 		chain = testChain(b, 48000, tc.bands...)
@@ -855,7 +856,7 @@ func benchApplyProcessing(b *testing.B, tc processingBenchCase) {
 
 	// Warm the pools so steady-state pool reuse is established before timing.
 	for range 4 {
-		res, err := r.applyProcessing(frame, route, chain)
+		res, err := r.applyProcessing(frame, route, chain, route.gain.Load())
 		if err != nil {
 			b.Fatalf("warm-up applyProcessing failed: %v", err)
 		}
@@ -865,7 +866,7 @@ func benchApplyProcessing(b *testing.B, tc processingBenchCase) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		res, err := r.applyProcessing(frame, route, chain)
+		res, err := r.applyProcessing(frame, route, chain, route.gain.Load())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -903,7 +904,8 @@ func TestApplyProcessing_AllocationRegression(t *testing.T) {
 			r := NewAudioRouter(GetLogger(), mgr)
 			defer r.Close()
 
-			route := &Route{gain: testGain(t, tc.gainDB)}
+			route := &Route{}
+			route.gain.Store(testGain(t, tc.gainDB))
 			var chain *dspeq.FilterChain
 			if tc.bands != nil {
 				chain = testChain(t, 48000, tc.bands...)
@@ -911,13 +913,13 @@ func TestApplyProcessing_AllocationRegression(t *testing.T) {
 			frame := benchProcessingFrame()
 
 			for range 4 {
-				res, err := r.applyProcessing(frame, route, chain)
+				res, err := r.applyProcessing(frame, route, chain, route.gain.Load())
 				require.NoError(t, err)
 				res.release()
 			}
 
 			allocs := testing.AllocsPerRun(100, func() {
-				res, err := r.applyProcessing(frame, route, chain)
+				res, err := r.applyProcessing(frame, route, chain, route.gain.Load())
 				if err != nil {
 					panic(err)
 				}

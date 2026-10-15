@@ -137,11 +137,11 @@ func newAlignTestRoute(t *testing.T, consumer AudioConsumer, opts alignRunOpts) 
 		SourceID:         "align-src",
 		Consumer:         consumer,
 		sourceSampleRate: opts.srcRate,
-		gain:             testGain(t, opts.gainDB),
 		inbox:            make(chan AudioFrame, 1),
 		done:             make(chan struct{}),
 		stopped:          make(chan struct{}),
 	}
+	route.gain.Store(testGain(t, opts.gainDB))
 	if opts.srcRate != opts.dstRate {
 		rs, err := resample.NewResampler(opts.srcRate, opts.dstRate)
 		require.NoError(t, err)

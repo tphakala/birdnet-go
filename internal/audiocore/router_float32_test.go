@@ -239,7 +239,8 @@ func TestApplyProcessing_MatchesFloat64Reference(t *testing.T) {
 			mgr := buffer.NewManager(GetLogger())
 			r := NewAudioRouter(GetLogger(), mgr)
 			t.Cleanup(r.Close)
-			route := &Route{gain: testGain(t, tt.gainDB)}
+			route := &Route{}
+			route.gain.Store(testGain(t, tt.gainDB))
 
 			poisonFloat32Pool(mgr, refFrameSamples, 8)
 			poisonBytePool(mgr, refFrameSamples*2, 8)
@@ -251,7 +252,7 @@ func TestApplyProcessing_MatchesFloat64Reference(t *testing.T) {
 			for off := 0; off < len(input); off += refFrameSamples {
 				end := min(off+refFrameSamples, len(input))
 				frame := AudioFrame{Data: int16sToBytes(input[off:end]), SampleRate: tt.rate, BitDepth: 16, Channels: 1}
-				res, err := r.applyProcessing(frame, route, chain)
+				res, err := r.applyProcessing(frame, route, chain, route.gain.Load())
 				require.NoError(t, err)
 				got = append(got, bytesToInt16s(res.Frame.Data)...)
 				res.release()
@@ -284,7 +285,7 @@ func TestApplyProcessing_IdentityChainIsLossless(t *testing.T) {
 	}
 	data := int16sToBytes(all)
 
-	res, err := r.applyProcessing(AudioFrame{Data: data, BitDepth: 16}, route, dspeq.NewFilterChain())
+	res, err := r.applyProcessing(AudioFrame{Data: data, BitDepth: 16}, route, dspeq.NewFilterChain(), route.gain.Load())
 	require.NoError(t, err)
 	t.Cleanup(res.release)
 	assert.Equal(t, data, res.Frame.Data, "an identity chain must return every int16 value unchanged")
@@ -311,17 +312,19 @@ func TestApplyProcessing_GainFastPathMatchesFloatPath(t *testing.T) {
 			r := NewAudioRouter(GetLogger(), mgr)
 			t.Cleanup(r.Close)
 
-			fast := &Route{gain: testGain(t, db)}
-			slow := &Route{gain: testGain(t, db)}
+			fast := &Route{}
+			fast.gain.Store(testGain(t, db))
+			slow := &Route{}
+			slow.gain.Store(testGain(t, db))
 			frame := AudioFrame{Data: data, BitDepth: 16}
 
-			fastRes, err := r.applyProcessing(frame, fast, nil)
+			fastRes, err := r.applyProcessing(frame, fast, nil, fast.gain.Load())
 			require.NoError(t, err)
 			t.Cleanup(fastRes.release)
 			require.Nil(t, fastRes.FloatPool, "the fast path must not take a float buffer")
 			require.Empty(t, fastRes.FloatBuf, "the fast path must not take a float buffer")
 
-			slowRes, err := r.applyProcessing(frame, slow, dspeq.NewFilterChain())
+			slowRes, err := r.applyProcessing(frame, slow, dspeq.NewFilterChain(), slow.gain.Load())
 			require.NoError(t, err)
 			t.Cleanup(slowRes.release)
 			require.NotEmpty(t, slowRes.FloatBuf, "the float path must take a float buffer")

@@ -94,46 +94,48 @@ func TestTrackSourceName_SameNameKeepsSeriesAndDoesNotAllocate(t *testing.T) {
 	assert.Equal(t, before, seriesWithName(t, reg, testSourceID, testNameA))
 }
 
-// TestRecordPublishing_StaleNameIsDropped pins that a publisher finishing an
-// interval under a name the source no longer has cannot recreate the deleted
-// series, for both publishing recorders.
-func TestRecordPublishing_StaleNameIsDropped(t *testing.T) {
+// TestRecord_StaleNameIsDropped pins that a recorder finishing an interval under
+// a name the source no longer has cannot recreate the deleted series, for every
+// recorder (the publishers, the measurement and the processing recorders).
+func TestRecord_StaleNameIsDropped(t *testing.T) {
 	m, reg := newTestSoundLevelMetrics(t)
 
 	m.TrackSourceName(testSourceID, testNameA)
-	m.RecordSoundLevelPublishing(testSourceID, testNameA, "mqtt", "success")
+	recordSoundLevelSeries(m, testSourceID, testNameA)
 	require.Positive(t, seriesWithName(t, reg, testSourceID, testNameA))
 
 	m.TrackSourceName(testSourceID, testNameB)
-	m.RecordSoundLevelPublishing(testSourceID, testNameA, "mqtt", "success")
-	m.RecordSoundLevelPublishingError(testSourceID, testNameA, "mqtt", "publish_error")
+	recordSoundLevelSeries(m, testSourceID, testNameA)
 
 	assert.Zero(t, seriesWithName(t, reg, testSourceID, testNameA), "a stale write must not recreate the old series")
 
-	m.RecordSoundLevelPublishing(testSourceID, testNameB, "mqtt", "success")
+	recordSoundLevelSeries(m, testSourceID, testNameB)
 	assert.Positive(t, seriesWithName(t, reg, testSourceID, testNameB), "the current name still records")
 }
 
-// TestRecordPublishing_UnseenSourceRecords pins that a source never passed to
-// TrackSourceName records normally.
-func TestRecordPublishing_UnseenSourceRecords(t *testing.T) {
+// TestRecord_UnseenSourceRecords pins that a source never passed to
+// TrackSourceName records normally through every recorder.
+func TestRecord_UnseenSourceRecords(t *testing.T) {
 	m, reg := newTestSoundLevelMetrics(t)
 
-	m.RecordSoundLevelPublishing(testSourceID, testNameA, "sse", "success")
-	m.RecordSoundLevelPublishingError(testSourceID, testNameA, "sse", "broadcast_error")
+	recordSoundLevelSeries(m, testSourceID, testNameA)
 
-	assert.Equal(t, 2, seriesWithName(t, reg, testSourceID, testNameA))
+	assert.Positive(t, seriesWithName(t, reg, testSourceID, testNameA))
+	m2, reg2 := newTestSoundLevelMetrics(t)
+	m2.RecordSoundLevelPublishing(testSourceID, testNameA, "sse", "success")
+	m2.RecordSoundLevelPublishingError(testSourceID, testNameA, "sse", "broadcast_error")
+	assert.Equal(t, 2, seriesWithName(t, reg2, testSourceID, testNameA))
 }
 
-// TestRecordPublishing_CurrentNameDoesNotAllocate pins the steady state of the
-// stale-name check on the publishing recorders.
-func TestRecordPublishing_CurrentNameDoesNotAllocate(t *testing.T) {
+// TestRecord_CurrentNameDoesNotAllocate pins the steady state of the stale-name
+// check on every recorder.
+func TestRecord_CurrentNameDoesNotAllocate(t *testing.T) {
 	m, _ := newTestSoundLevelMetrics(t)
 	m.TrackSourceName(testSourceID, testNameA)
-	m.RecordSoundLevelPublishing(testSourceID, testNameA, "mqtt", "success")
+	recordSoundLevelSeries(m, testSourceID, testNameA)
 
 	allocs := testing.AllocsPerRun(testAllocRuns, func() {
-		m.RecordSoundLevelPublishing(testSourceID, testNameA, "mqtt", "success")
+		recordSoundLevelSeries(m, testSourceID, testNameA)
 	})
 	assert.Zero(t, allocs)
 }
@@ -144,13 +146,13 @@ const (
 	stressRecordsMin = 50
 )
 
-// TestRecordPublishing_ConcurrentRenameLeavesOnlyCurrentName is a stress test:
+// TestRecord_ConcurrentRenameLeavesOnlyCurrentName is a stress test:
 // recorders keep writing under the previous name while the source is renamed,
 // and once they stop only the final name may have series. It cannot fail
 // deterministically before the fix (the window between the name check and the
 // write is a few instructions wide), so it relies on -race scheduling and many
 // iterations.
-func TestRecordPublishing_ConcurrentRenameLeavesOnlyCurrentName(t *testing.T) {
+func TestRecord_ConcurrentRenameLeavesOnlyCurrentName(t *testing.T) {
 	for i := range stressRenames {
 		m, reg := newTestSoundLevelMetrics(t)
 		oldName, newName := testNameA, testNameB
@@ -167,8 +169,7 @@ func TestRecordPublishing_ConcurrentRenameLeavesOnlyCurrentName(t *testing.T) {
 					case <-stop:
 						return
 					default:
-						m.RecordSoundLevelPublishing(testSourceID, oldName, "mqtt", "success")
-						m.RecordSoundLevelPublishingError(testSourceID, oldName, "mqtt", "publish_error")
+						recordSoundLevelSeries(m, testSourceID, oldName)
 					}
 				}
 			})

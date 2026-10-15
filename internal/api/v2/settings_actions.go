@@ -6,6 +6,10 @@ const (
 	actionReconfigureSoundLevel   = "reconfigure_sound_level"
 	actionReconfigureAudioSources = "reconfigure_audio_sources"
 	actionRebuildExtendedCapture  = "rebuild_extended_capture"
+	// actionUpdateSourceGains applies changed sound card and stream gains to the
+	// running sources' live routes. It does not reconfigure sources, probe
+	// streams or rebuild routes, so live-audio listeners keep receiving audio.
+	actionUpdateSourceGains = "update_source_gains"
 	// actionRestartAudioCapture tears down and rebuilds all audio capture,
 	// reallocating every analysis buffer. Used for changes the diff-based
 	// reconfigure_audio_sources cannot see because they are not per-source audio
@@ -35,5 +39,6 @@ func AudioSettingsChangeActions() []string {
 		actionReconfigureSoundLevel,
 		actionReconfigureAudioSources,
 		actionRebuildExtendedCapture,
+		actionUpdateSourceGains,
 	}
 }

@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	dspgain "github.com/tphakala/go-audio-dsp/gain"
+
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
@@ -593,6 +595,37 @@ func (e *AudioEngine) RemoveSource(sourceID string) error {
 	e.logger.Info("source removed",
 		logger.String("source_id", sourceID))
 
+	return nil
+}
+
+// UpdateSourceGain sets the gain of sourceID to gainDB in the registry and on
+// every live route of the source, without rebuilding the routes, so open
+// consumers (live-audio listeners included) keep receiving audio from the next
+// frame. An unusable gain (a NaN, an infinity or a factor that overflows
+// float32) is rejected before the registry is touched, also for a source with
+// no route, so a route built later never reads it. The registry is then updated
+// before the routes so a route built concurrently reads the new value; if the
+// router still rejects the gain the registry value is restored. It returns an
+// error wrapping audiocore.ErrSourceNotFound for an unregistered source. Callers
+// that rebuild routes from the registry serialise with it so a rebuild never
+// reads the registry between the two updates; a route added outside that
+// serialisation (a live-audio listener starting) can still read the old value
+// and keep it until the next gain change.
+func (e *AudioEngine) UpdateSourceGain(sourceID string, gainDB float64) error {
+	oldGain, ok := e.registry.GetGain(sourceID)
+	if !ok {
+		return fmt.Errorf("update source gain: %w: %s", audiocore.ErrSourceNotFound, sourceID)
+	}
+	if gainDB != 0 {
+		if _, err := dspgain.New(gainDB); err != nil {
+			return fmt.Errorf("update source gain: invalid gain value for source=%s: %w", sourceID, err)
+		}
+	}
+	e.registry.UpdateGain(sourceID, gainDB)
+	if err := e.router.UpdateGain(sourceID, gainDB); err != nil {
+		e.registry.UpdateGain(sourceID, oldGain)
+		return fmt.Errorf("update source gain: %w", err)
+	}
 	return nil
 }
 

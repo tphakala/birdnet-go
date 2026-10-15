@@ -108,7 +108,7 @@ func TestMergePreservesJSONDashFields(t *testing.T) {
 	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
 	controller.Settings.Store(initialSettings)
 
-	// PATCH birdnet section — Labels (json:"-") must survive
+	// PATCH birdnet section: Labels (json:"-") must survive
 	update := map[string]any{"sensitivity": 1.0}
 	body, err := json.Marshal(update)
 	require.NoError(t, err)
@@ -124,7 +124,7 @@ func TestMergePreservesJSONDashFields(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	// Runtime field must be preserved — Labels is json:"-" and would be
+	// Runtime field must be preserved: Labels is json:"-" and would be
 	// destroyed if zeroJSONSliceFields zeroed json:"-" tagged slices.
 	assert.Equal(t, []string{"species1", "species2"}, controller.Settings.Load().BirdNET.Labels,
 		"BirdNET.Labels (json:\"-\") must survive merge")
@@ -670,7 +670,7 @@ func TestDeepNestedUpdates(t *testing.T) {
 // list changes trigger reconfigure_rtsp_sources. Without this, a user who
 // adds a classifier to a stream (e.g., enables Perch v2 alongside BirdNET)
 // would see the save persist to disk but the running pipeline keep using
-// the old model set — silently breaking the hot-reload contract.
+// the old model set, silently breaking the hot-reload contract.
 func TestStreamsSettingsChanged_DetectsModelEdits(t *testing.T) {
 	t.Parallel()
 
@@ -760,7 +760,7 @@ func TestAudioDeviceSettingChanged_DetectsModelsEdits(t *testing.T) {
 
 // TestStreamsSettingsChanged_BackwardCompatibility verifies that the existing
 // fields (Name, URL, Enabled, Type, Transport) still trigger the change
-// detector — the Models check is additive and must not regress prior coverage.
+// detector: the Models check is additive and must not regress prior coverage.
 func TestStreamsSettingsChanged_BackwardCompatibility(t *testing.T) {
 	t.Parallel()
 
