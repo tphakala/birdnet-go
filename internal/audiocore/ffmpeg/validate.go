@@ -284,6 +284,9 @@ func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResul
 				return false
 			}
 			audioFormat := binary.LittleEndian.Uint16(fmtData[0:2])
+			if audioFormat != 1 && audioFormat != 3 {
+				return false
+			}
 			channels = int(binary.LittleEndian.Uint16(fmtData[2:4]))
 			sampleRate = int(binary.LittleEndian.Uint32(fmtData[4:8]))
 			byteRate := int(binary.LittleEndian.Uint32(fmtData[8:12]))
@@ -344,7 +347,7 @@ func parseWAVMetadata(path string, fileInfo os.FileInfo, result *ValidationResul
 		}
 	}
 
-	if foundFmt && channels > 0 && sampleRate > 0 {
+	if foundFmt && foundData && channels > 0 && sampleRate > 0 {
 		result.Format = formatName
 		result.Channels = channels
 		result.SampleRate = sampleRate

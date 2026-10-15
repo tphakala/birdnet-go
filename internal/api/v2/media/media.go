@@ -3614,9 +3614,21 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 			return nil, err
 		}
 
-		// Acquire semaphore inside singleflight - only the actual worker gets a slot.
-		// Acquiring before validation ensures only maxConcurrentSpectrograms runs validation
-		// or generation at any time, preventing CPU and I/O contention on resource-constrained systems.
+		// Step 5: Validate audio file (fast WAV header or FFprobe fallback).
+		validationResult, err := c.validateSpectrogramInputs(sharedCtx, absAudioPath, audioPath, queueKey)
+		if err != nil {
+			return nil, err
+		}
+
+		validatedDuration := validationResult.Duration
+		getSpectrogramLogger().Debug("Audio validated successfully",
+			logger.String("queue_key", queueKey),
+			logger.String("path", absAudioPath),
+			logger.Int("width", width),
+			logger.Bool("raw", raw),
+			logger.Float64("validated_duration", validatedDuration))
+
+		// Acquire semaphore inside singleflight - only the actual worker gets a slot for generation
 		if err := c.acquireSemaphoreSlot(sharedCtx, queueKey); err != nil {
 			return nil, err
 		}
@@ -3632,27 +3644,6 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 				logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
 		}()
 
-		// Step 5: Validate audio file (fast WAV header or FFprobe fallback).
-		// Running inside singleflight and holding semaphore ensures strict serialization.
-		validationResult, err := c.validateSpectrogramInputs(sharedCtx, absAudioPath, audioPath, queueKey)
-		if err != nil {
-			return nil, err
-		}
-
-		// Extract validated duration to pass to the generator, avoiding a redundant
-		// sox --info call (which fails for MP3/AAC without libsox-fmt-mp3).
-		var validatedDuration float64
-		if validationResult != nil {
-			validatedDuration = validationResult.Duration
-		}
-
-		getSpectrogramLogger().Debug("Proceeding with spectrogram generation",
-			logger.String("queue_key", queueKey),
-			logger.String("abs_audio_path", absAudioPath),
-			logger.String("abs_spectrogram_path", absSpectrogramPath),
-			logger.Int("width", width),
-			logger.Bool("raw", raw),
-			logger.Float64("validated_duration", validatedDuration))
 		return c.performSpectrogramGeneration(sharedCtx, relSpectrogramPath, absAudioPath, absSpectrogramPath, queueKey, width, raw, validatedDuration, extraOpts...)
 	})
 

@@ -1,6 +1,7 @@
 package ffmpeg_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -254,6 +255,53 @@ func findFFmpegBinary() (string, error) {
 	return "", fmt.Errorf("ffmpeg not found")
 }
 
+// makeTestWAVCustom creates a WAV file with specific audioFormat, channels, sampleRate, bitsPerSample, and dataSize.
+// If includeDataChunk is false, the data chunk is omitted.
+// If the file would otherwise be smaller than 2048 bytes, a JUNK chunk is appended so that
+// the file exceeds MinValidAudioSize (1024 bytes) and tests the WAV parser rather than the minimum size check.
+func makeTestWAVCustom(t *testing.T, path string, audioFormat uint16, channels uint16, sampleRate uint32, bitsPerSample uint16, dataSize uint32, includeDataChunk bool) {
+	t.Helper()
+
+	var buf bytes.Buffer
+	buf.WriteString("RIFF")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(0)) // total size, updated below
+	buf.WriteString("WAVE")
+
+	// fmt chunk
+	buf.WriteString("fmt ")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(16)) // fmt chunk size
+	_ = binary.Write(&buf, binary.LittleEndian, audioFormat)
+	_ = binary.Write(&buf, binary.LittleEndian, channels)
+	_ = binary.Write(&buf, binary.LittleEndian, sampleRate)
+	bytesPerSample := uint32(max(bitsPerSample/8, 1))
+	byteRate := sampleRate * uint32(channels) * bytesPerSample
+	_ = binary.Write(&buf, binary.LittleEndian, byteRate)
+	blockAlign := channels * uint16(bytesPerSample)
+	_ = binary.Write(&buf, binary.LittleEndian, blockAlign)
+	_ = binary.Write(&buf, binary.LittleEndian, bitsPerSample)
+
+	if includeDataChunk {
+		buf.WriteString("data")
+		_ = binary.Write(&buf, binary.LittleEndian, dataSize)
+		if dataSize > 0 {
+			buf.Write(make([]byte, dataSize))
+		}
+	}
+
+	// Ensure file exceeds MinValidAudioSize (1024 bytes) so validateFile reaches format inspection.
+	if buf.Len() < 2048 {
+		junkPayloadSize := uint32(2048 - buf.Len())
+		buf.WriteString("JUNK")
+		_ = binary.Write(&buf, binary.LittleEndian, junkPayloadSize)
+		buf.Write(make([]byte, junkPayloadSize))
+	}
+
+	data := buf.Bytes()
+	binary.LittleEndian.PutUint32(data[4:8], uint32(len(data)-8))
+
+	require.NoError(t, os.WriteFile(path, data, 0o600))
+}
+
 func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 	// Intentionally set a bogus ffprobe path to ensure the WAV fast-path
 	// parses metadata directly without ever invoking ffprobe.
@@ -261,20 +309,89 @@ func TestValidateFile_WAVFastPath_BypassesFFprobe(t *testing.T) {
 	t.Cleanup(func() { ffmpeg.SetFFprobePath(original) })
 	ffmpeg.SetFFprobePath("/nonexistent/ffprobe/binary")
 
-	p := filepath.Join(t.TempDir(), "fastpath.wav")
-	makeTestWAVWithSize(t, p, 96044) // 44 byte header + 96000 bytes = 1s of 48kHz mono 16-bit
+	t.Run("valid PCM format 1 succeeds on fast path", func(t *testing.T) {
+		p := filepath.Join(t.TempDir(), "pcm.wav")
+		makeTestWAVWithSize(t, p, 96044) // 44 byte header + 96000 bytes = 1s of 48kHz mono 16-bit
 
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	t.Cleanup(cancel)
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		t.Cleanup(cancel)
 
-	result, err := ffmpeg.ValidateFile(ctx, p)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.True(t, result.IsValid, "WAV file should be valid via Go fast path")
-	assert.True(t, result.IsComplete, "WAV file should be marked complete")
-	assert.Equal(t, "pcm_s16le", result.Format)
-	assert.Equal(t, 44100, result.SampleRate)
-	assert.Equal(t, 2, result.Channels)
-	expectedDuration := float64(96000) / float64(44100*2*2)
-	assert.InDelta(t, expectedDuration, result.Duration, 0.01)
+		result, err := ffmpeg.ValidateFile(ctx, p)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.True(t, result.IsValid, "WAV file should be valid via Go fast path")
+		assert.True(t, result.IsComplete, "WAV file should be marked complete")
+		assert.Equal(t, "pcm_s16le", result.Format)
+		assert.Equal(t, 44100, result.SampleRate)
+		assert.Equal(t, 2, result.Channels)
+		expectedDuration := float64(96000) / float64(44100*2*2)
+		assert.InDelta(t, expectedDuration, result.Duration, 0.01)
+	})
+
+	t.Run("valid float format 3 succeeds on fast path", func(t *testing.T) {
+		p := filepath.Join(t.TempDir(), "float.wav")
+		// 48000 Hz, 2 channels, 32-bit float, 1 second = 48000 * 2 * 4 = 384000 bytes
+		makeTestWAVCustom(t, p, 3, 2, 48000, 32, 384000, true)
+
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		t.Cleanup(cancel)
+
+		result, err := ffmpeg.ValidateFile(ctx, p)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.True(t, result.IsValid, "Float WAV file should be valid via Go fast path")
+		assert.True(t, result.IsComplete, "Float WAV file should be marked complete")
+		assert.Equal(t, "pcm_f32le", result.Format)
+		assert.Equal(t, 48000, result.SampleRate)
+		assert.Equal(t, 2, result.Channels)
+		assert.InDelta(t, 1.0, result.Duration, 0.01)
+	})
+
+	t.Run("valid PCM format 1 with zero-length data chunk succeeds on fast path", func(t *testing.T) {
+		p := filepath.Join(t.TempDir(), "empty_data.wav")
+		makeTestWAVCustom(t, p, 1, 1, 48000, 16, 0, true)
+
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		t.Cleanup(cancel)
+
+		result, err := ffmpeg.ValidateFile(ctx, p)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.True(t, result.IsValid, "Zero-length data chunk should be valid")
+		assert.Equal(t, 0.0, result.Duration)
+	})
+
+	t.Run("WAV with no data chunk falls back to ffprobe", func(t *testing.T) {
+		p := filepath.Join(t.TempDir(), "no_data.wav")
+		makeTestWAVCustom(t, p, 1, 1, 48000, 16, 0, false)
+
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		t.Cleanup(cancel)
+
+		// Without a data chunk, fast path must return false and fall back to ffprobe.
+		// Since ffprobe is set to a nonexistent path, validation must fail.
+		result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1))
+		assert.Error(t, err)
+		if result != nil {
+			assert.False(t, result.IsValid)
+		}
+	})
+
+	t.Run("WAV with unsupported audioFormat falls back to ffprobe", func(t *testing.T) {
+		for _, formatCode := range []uint16{6, 7} { // 6 = A-law, 7 = mu-law
+			p := filepath.Join(t.TempDir(), fmt.Sprintf("format_%d.wav", formatCode))
+			makeTestWAVCustom(t, p, formatCode, 1, 8000, 8, 8000, true)
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			t.Cleanup(cancel)
+
+			// With unsupported format code, fast path must return false and fall back to ffprobe.
+			// Since ffprobe is set to a nonexistent path, validation must fail.
+			result, err := ffmpeg.ValidateFile(ctx, p, ffmpeg.WithMaxAttempts(1))
+			assert.Error(t, err, "Format code %d should not pass fast path", formatCode)
+			if result != nil {
+				assert.False(t, result.IsValid)
+			}
+		}
+	})
 }
