@@ -596,6 +596,28 @@ func (e *AudioEngine) RemoveSource(sourceID string) error {
 	return nil
 }
 
+// UpdateSourceGain sets the gain of sourceID to gainDB in the registry and on
+// every live route of the source, without rebuilding the routes, so open
+// consumers (live-audio listeners included) keep receiving audio from the next
+// frame. The registry is updated first so a route built concurrently reads the
+// new value; if the router rejects the gain (a NaN, an infinity or a factor that
+// overflows float32) the registry value is restored and the error returned. It
+// returns an error wrapping audiocore.ErrSourceNotFound for an unregistered
+// source. Callers serialise it with route rebuilds so a rebuild never reads the
+// registry between the two updates.
+func (e *AudioEngine) UpdateSourceGain(sourceID string, gainDB float64) error {
+	oldGain, ok := e.registry.GetGain(sourceID)
+	if !ok {
+		return fmt.Errorf("update source gain: %w: %s", audiocore.ErrSourceNotFound, sourceID)
+	}
+	e.registry.UpdateGain(sourceID, gainDB)
+	if err := e.router.UpdateGain(sourceID, gainDB); err != nil {
+		e.registry.UpdateGain(sourceID, oldGain)
+		return fmt.Errorf("update source gain: %w", err)
+	}
+	return nil
+}
+
 // ReconfigureSource stops the existing capture for sourceID, reallocates its
 // model-independent capture buffer with the new configuration, and restarts
 // capture. It removes the source's per-model analysis buffers (via
