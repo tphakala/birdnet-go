@@ -27,6 +27,8 @@ import (
 // integrated loudness and true peak; the planned gain (clamped to
 // +/-loudnorm.DefaultMaxGainDB) is then applied in Go while the original bytes
 // are streamed into the encoder.
+// Both passes run under one encodingTimeout, and a failure in either is logged
+// through logFLACEncodingError, so a timeout or cancel is a WARN either way.
 // pcmData is not modified.
 func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audioEncodingResult, error) {
 	log := GetLogger()
@@ -48,6 +50,7 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 	opts := loudness.SoundscapePlanOptions()
 	plan, err := loudnorm.PlanBytes(ctx, pcmData, opts)
 	if err != nil {
+		logFLACEncodingError(err)
 		return nil, errors.New(err).
 			Component("birdweather").
 			Category(errors.CategoryAudio).

@@ -136,6 +136,20 @@ func TestEncodeWithNativeFLAC_Silence(t *testing.T) {
 	}
 }
 
+// TestEncodeWithNativeFLAC_MeasureFailureIsReported pins that a planning
+// failure (an odd-length buffer is not whole 16-bit samples) fails the encode
+// instead of producing audio, and takes the logging path shared with the
+// encode pass.
+func TestEncodeWithNativeFLAC_MeasureFailureIsReported(t *testing.T) {
+	t.Parallel()
+	client := &BwClient{Settings: &conf.Settings{}}
+
+	res, err := client.encodeWithNativeFLAC(make([]byte, conf.SampleRate*2+1), testTimestamp)
+	require.Error(t, err)
+	assert.Nil(t, res)
+	require.ErrorIs(t, err, loudnorm.ErrOddByteLength)
+}
+
 // The signed-cast and odd-trailing-byte regression guards live with the
 // go-audio-dsp byte decoders (loudnorm.PlanBytes and MeasureBytes), which this
 // path calls instead of a local helper.
