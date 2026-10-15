@@ -248,7 +248,8 @@ func TestPrivacy_PreCaptureSpeechDiscards(t *testing.T) {
 			// farther back than the guard, so a comparison against the chunk start
 			// instead of the clip begin would miss it. With zero overlap the chunk
 			// before the detecting one ends exactly at the chunk start, so for the
-			// 5 s model at step 5000 ms this case cannot tell the two apart;
+			// 5 s model at step 5000 ms, and likewise at step 1667 ms, this case cannot
+			// tell the two apart;
 			// TestPrivacy_GuardMargins pins the comparison point itself.
 			{"speech in the pre-capture region", true, "discarded"},
 			{"no speech", false, "approved"},
