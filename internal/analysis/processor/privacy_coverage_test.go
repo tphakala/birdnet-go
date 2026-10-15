@@ -970,3 +970,55 @@ func TestPrivacy_LabelCoverageNeedsEveryCurrentModel(t *testing.T) {
 		assert.Equal(t, "pending", r.outcome())
 	})
 }
+
+// TestPrivacy_LabelCoverageNeedsOneModelThatScannedTheWholeClip: a model that
+// began mid-clip owes only its part, but the clip is released only when some
+// current model scanned all of it. A source whose only scanner began inside the
+// clip (the filter was just switched on, or coverage restarted after a stall)
+// has never scanned the clip head, so the clip defers and then fails open.
+func TestPrivacy_LabelCoverageNeedsOneModelThatScannedTheWholeClip(t *testing.T) {
+	t.Run("defers while the only model began mid-clip", func(t *testing.T) {
+		r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+		r.settings.Realtime.PrivacyFilter.VAD.Enabled = false
+		r.feed(30*time.Second, 40*time.Second, sec(1)) // scans 27 s on; the clip 18 s to 33 s starts before
+		r.pend(24 * time.Second)
+		assert.Equal(t, "pending", r.outcome())
+	})
+	t.Run("defers when every current model began mid-clip", func(t *testing.T) {
+		r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+		r.settings.Realtime.PrivacyFilter.VAD.Enabled = false
+		r.feed(30*time.Second, 40*time.Second, sec(1)) // scans from 27 s
+		r.feedOther("Perch_V2", 33, 40)                // scans from 28 s
+		r.pend(24 * time.Second)
+		assert.Equal(t, "pending", r.outcome())
+	})
+	t.Run("a model whose coverage is older than the horizon is not the whole-clip model", func(t *testing.T) {
+		r := newPrivacyRig(t, "BirdNET_V2.4", 200*time.Second)
+		r.settings.Realtime.PrivacyFilter.VAD.Enabled = false
+		pfm, err := metrics.NewPrivacyFilterMetrics(prometheus.NewRegistry())
+		require.NoError(t, err)
+		r.p.Metrics = &observability.Metrics{PrivacyFilter: pfm}
+		r.settings.Realtime.Telemetry.Enabled = true
+		r.feed(r.clip, 40*time.Second, sec(1)) // covers the clip, but its newest end is 160 s old at the flush
+		r.feedOther("Perch_V2", 25, 90)        // current, began mid-clip
+		r.pend(24 * time.Second)               // clip 18 s to 33 s, wait until 63 s, flushed at 200 s
+		require.Equal(t, "approved", r.outcome())
+		expected := "\n# HELP privacy_filter_unscanned_saves_total Total detections approved for saving whose clip span was not fully scanned for speech before the coverage wait expired\n" +
+			"# TYPE privacy_filter_unscanned_saves_total counter\nprivacy_filter_unscanned_saves_total 1\n"
+		require.NoError(t, testutil.CollectAndCompare(pfm, strings.NewReader(expected), "privacy_filter_unscanned_saves_total"))
+	})
+	t.Run("fails open and is counted after the wait", func(t *testing.T) {
+		r := newPrivacyRig(t, "BirdNET_V2.4", 100*time.Second)
+		r.settings.Realtime.PrivacyFilter.VAD.Enabled = false
+		pfm, err := metrics.NewPrivacyFilterMetrics(prometheus.NewRegistry())
+		require.NoError(t, err)
+		r.p.Metrics = &observability.Metrics{PrivacyFilter: pfm}
+		r.settings.Realtime.Telemetry.Enabled = true
+		r.feed(30*time.Second, 40*time.Second, sec(1))
+		r.pend(24 * time.Second) // wait until 63 s, flushed at 100 s
+		assert.Equal(t, "approved", r.outcome())
+		expected := "\n# HELP privacy_filter_unscanned_saves_total Total detections approved for saving whose clip span was not fully scanned for speech before the coverage wait expired\n" +
+			"# TYPE privacy_filter_unscanned_saves_total counter\nprivacy_filter_unscanned_saves_total 1\n"
+		require.NoError(t, testutil.CollectAndCompare(pfm, strings.NewReader(expected), "privacy_filter_unscanned_saves_total"))
+	})
+}

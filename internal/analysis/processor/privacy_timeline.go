@@ -24,7 +24,8 @@ const (
 	// coverage gate treats the source as not covered by any detector at all (the
 	// filter just switched on, a VAD toggle, a stall, or a bat-only source). A
 	// speech-band detection then waits for the fail-open timeout; a bat detection
-	// keeps. It equals
+	// keeps. A clip whose head predates every retained label span waits too, even
+	// when the one model that scored the source is current. It equals
 	// the default capture buffer; an extended capture can reach further back, and
 	// then a clip with a hole in its coverage waits for the fail-open timeout.
 	privacyCoverageHorizon = time.Duration(conf.DefaultCaptureBufferSeconds) * time.Second
@@ -390,10 +391,12 @@ type privacyCheck struct {
 //
 // The verdict defers until a speech detector has scored the whole saved clip span
 // (padded by privacyClipGuard), so speech in the clip's post-capture tail is not
-// scored after the decision. The VAD path is satisfied by any one
-// model's stream; the label path by every model currently scoring the source (see
-// labelCoverageCoversLocked), since each model's windows are scored separately. A speech-band detection on a source no detector has
-// recently scored waits too, and reports coverageTimedOut once now passes the clip
+// scored after the decision. The VAD path is satisfied by any one model's stream.
+// The label path needs one current model that scanned the whole padded clip and
+// every current model to have scanned the part of it that model could have heard
+// (see labelCoverageCoversLocked), since each model's windows are scored
+// separately. A speech-band detection on a source no detector has recently scored
+// waits too, and reports coverageTimedOut once now passes the clip
 // end by privacyCoverageMaxWait. A detection by a model that cannot carry speech
 // (the bat model) or an unregistered one keeps at once only when no detector has
 // recently scored its source; otherwise it waits for coverage like any other.
@@ -411,8 +414,9 @@ func (p *Processor) checkPrivacy(settings *conf.Settings, item *PendingDetection
 
 // coverageVerdictLocked is the coverage half of checkPrivacy; model is the model
 // of the pending detection. With the VAD as the required detector, one stream
-// covering the padded clip keeps it; with the label detector every current model
-// must cover its share (labelCoverageCoversLocked). Otherwise the verdict defers
+// covering the padded clip keeps it; with the label detector one current model
+// must have covered all of it and every current model its own share
+// (labelCoverageCoversLocked). Otherwise the verdict defers
 // until the clip end plus privacyCoverageMaxWait, then reports a timeout. The
 // caller must hold detectionMutex.
 func (p *Processor) coverageVerdictLocked(settings *conf.Settings, source, model string, clip audioSpan, now time.Time) coverageVerdict {
@@ -458,16 +462,19 @@ func (p *Processor) anyStreamCoversLocked(source, detector string, padded audioS
 	return false
 }
 
-// labelCoverageCoversLocked reports whether every label model currently scoring
-// source has scanned the part of padded it could have heard. A model is current
-// when its newest span ends within privacyCoverageHorizon of now. Each current
-// model must cover [max(padded.from, start of its earliest retained span),
-// padded.to] with one span: a model that began mid-clip owes only the part from
-// its start, one that began after the clip end owes nothing, and one that has not
-// yet reached the clip leaves it deferred. A clip no current model owes anything
-// for is not covered. The caller must hold detectionMutex.
+// labelCoverageCoversLocked reports whether the label models currently scoring
+// source have scanned padded. A model is current when its newest span ends within
+// privacyCoverageHorizon of now. Two things must hold. At least one current model
+// has a single span containing all of padded: a clip head that no model ever
+// scanned (the filter was just switched on, coverage restarted after a stall or
+// lost spans) is never counted as scanned because the only scanner began later.
+// And every current model covers [max(padded.from, start of its earliest retained
+// span), padded.to] with one span: a model that began mid-clip owes only the part
+// from its start, one that began after the clip end owes nothing, and one that has
+// not yet reached the clip leaves it deferred. The caller must hold
+// detectionMutex.
 func (p *Processor) labelCoverageCoversLocked(source string, padded audioSpan, now time.Time) bool {
-	owed := false
+	owed, whole := false, false
 	for key, spans := range p.privacyCoverage {
 		if key.source != source || key.detector != metrics.TriggerLabel || len(spans) == 0 {
 			continue
@@ -485,16 +492,18 @@ func (p *Processor) labelCoverageCoversLocked(source string, padded audioSpan, n
 		owed = true
 		covered := false
 		for _, s := range spans {
+			if spanContains(s, padded) {
+				whole = true
+			}
 			if spanContains(s, need) {
 				covered = true
-				break
 			}
 		}
 		if !covered {
 			return false
 		}
 	}
-	return owed
+	return owed && whole
 }
 
 // spanContains reports whether outer covers all of inner by time.
