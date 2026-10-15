@@ -20,6 +20,12 @@ const clipReconcileStartupDelay = 2 * time.Minute
 // rare and not time-critical to clear, so a slow cadence keeps disk I/O negligible.
 const clipReconcilePassInterval = 1 * time.Hour
 
+// exportBaseDir returns the configured audio export path, trimmed, read from the
+// live settings so hot-reload takes effect.
+func exportBaseDir() string {
+	return strings.TrimSpace(conf.Setting().Realtime.Audio.Export.Path)
+}
+
 // clipReconcileMonitor continuously reconciles persisted clip_name references
 // against the audio files on disk, clearing references to files that no longer
 // exist (ghosts from failed exports, or from detections created while export was
@@ -28,8 +34,10 @@ const clipReconcilePassInterval = 1 * time.Hour
 // regardless of whether audio export is currently enabled, because orphaned
 // references persist across runtime toggling of the export setting. It reads the
 // export path via conf.Setting() each pass so hot-reload takes effect, and the
-// underlying diskmanager pass applies fail-safe guards so a detached/unmounted
-// export volume never causes mass clearing.
+// underlying diskmanager pass clears a reference only after a surviving clip
+// earlier in the same pass shows the storage is attached, and only when its month
+// directory exists, so a detached or replaced export volume never causes mass
+// clearing.
 func clipReconcileMonitor(quitChan <-chan struct{}, dataStore datastore.Interface) {
 	log := GetLogger()
 	log.Info("clip reconcile monitor initialized",
@@ -41,12 +49,17 @@ func clipReconcileMonitor(quitChan <-chan struct{}, dataStore datastore.Interfac
 	}
 
 	for {
-		baseDir := strings.TrimSpace(conf.Setting().Realtime.Audio.Export.Path)
+		baseDir := exportBaseDir()
 		if baseDir == "" {
 			log.Debug("skipping clip reconcile: export path not configured",
 				logger.String("operation", "clip_reconcile_skip"))
 		} else {
-			result := diskmanager.ReconcileClipOrphansPass(quitChan, dataStore, baseDir)
+			// Keeps a long pass honest under hot reload: it aborts if the export
+			// path setting stops matching the directory the pass started on.
+			pathCurrent := func() bool {
+				return exportBaseDir() == baseDir
+			}
+			result := diskmanager.ReconcileClipOrphansPass(quitChan, dataStore, baseDir, pathCurrent)
 			switch {
 			case result.ShutdownRequested:
 				return
@@ -60,6 +73,9 @@ func clipReconcileMonitor(quitChan <-chan struct{}, dataStore datastore.Interfac
 					logger.Int("scanned", result.Scanned),
 					logger.Int64("cleared", result.Cleared),
 					logger.Int64("retained", result.Retained),
+					logger.Int("held_no_evidence", result.HeldNoEvidence),
+					logger.Int("held_missing_dir", result.HeldMissingDir),
+					logger.Int("write_errors", result.WriteErrors),
 					logger.String("operation", "clip_reconcile_pass"))
 			}
 		}

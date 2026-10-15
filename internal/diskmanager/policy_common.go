@@ -415,7 +415,8 @@ func categorizeFilePath(path string) string {
 // image stays reachable. When it cannot be told whether a render survived (the
 // directory or an entry could not be read), or the move fails, the row is left
 // untouched: a cleared row is never visited by the reconcile pass again, while an
-// untouched one is re-linked or cleared by it on its next run.
+// untouched one is re-linked or cleared by it once a surviving clip earlier in its
+// walk shows the storage is attached.
 //
 // It returns how many rows were retained and how many were cleared.
 func releaseDeletedClipPaths(db Interface, deletedPaths []string, baseDir, policy string, keepSpectrograms bool) (retained, cleared int64) {
@@ -458,7 +459,7 @@ func releaseDeletedClipPaths(db Interface, deletedPaths []string, baseDir, polic
 		retained, err = db.RetainNoteSpectrogramsByClipNames(retain)
 		if err != nil {
 			// The rows keep clip_name, so the reconcile pass re-links the renders or
-			// clears the rows on its next run.
+			// clears the rows once a surviving clip precedes them in its walk.
 			log.Warn("Failed to retain spectrogram references for deleted files, leaving them for the reconcile pass",
 				logger.String("policy", policy),
 				logger.Int("deleted_files", len(retain)),
