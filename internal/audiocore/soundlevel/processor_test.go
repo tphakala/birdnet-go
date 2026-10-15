@@ -407,8 +407,14 @@ func TestProcess_EmptyAndNilEmit(t *testing.T) {
 
 	noise := generateNoise(noiseSigma, 2*testSampleRate, 11)
 	assert.NotPanics(t, func() { p.Process(noise[:testSampleRate], nil) })
-	p.Process(noise[testSampleRate:], count)
-	assert.Equal(t, 1, calls, "the interval after a nil emit must still be reported")
+
+	// The interval after the discarded one starts fresh: it holds exactly one
+	// period, so nothing from the discarded second leaked into its statistics.
+	got := collect(p, noise[testSampleRate:])
+	require.Len(t, got, 1)
+	for key, band := range got[0].OctaveBands {
+		assert.Equal(t, 1, band.SampleCount, key)
+	}
 }
 
 func BenchmarkProcessor_Process(b *testing.B) {

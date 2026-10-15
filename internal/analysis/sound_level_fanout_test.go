@@ -10,6 +10,22 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 )
 
+// waitFanOut waits for the fan-out goroutines, failing the test instead of
+// hanging when they do not stop.
+func waitFanOut(t *testing.T, wg *sync.WaitGroup) {
+	t.Helper()
+	stopped := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(fanOutTestTimeout):
+		require.Fail(t, "fan-out did not stop")
+	}
+}
+
 const (
 	fanOutTestPublishers = 3
 	fanOutTestIntervals  = 6
@@ -51,7 +67,7 @@ func TestFanOutSoundLevel_EveryPublisherSeesEveryInterval(t *testing.T) {
 	}
 
 	close(done)
-	wg.Wait()
+	waitFanOut(t, &wg)
 	for _, dst := range dsts {
 		_, ok := <-dst
 		assert.False(t, ok, "destination must be closed after the fan-out stops")
@@ -90,7 +106,7 @@ func TestFanOutSoundLevel_SlowPublisherDoesNotBlockOthers(t *testing.T) {
 	}
 
 	close(done)
-	wg.Wait()
+	waitFanOut(t, &wg)
 }
 
 // TestFanOutSoundLevel_SourceCloseStopsAndClosesDestinations pins shutdown on a
@@ -106,7 +122,7 @@ func TestFanOutSoundLevel_SourceCloseStopsAndClosesDestinations(t *testing.T) {
 
 	fanOutSoundLevel(&wg, done, src, dsts...)
 	close(src)
-	wg.Wait()
+	waitFanOut(t, &wg)
 
 	for _, dst := range dsts {
 		_, ok := <-dst
