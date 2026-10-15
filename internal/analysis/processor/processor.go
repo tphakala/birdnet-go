@@ -88,17 +88,20 @@ type Processor struct {
 	// privacyCoverage lists the audio spans each (source, model, detector) has
 	// scored for speech, guarded by detectionMutex. The privacy coverage gate
 	// defers a pending detection until its saved clip span is inside one of them.
-	privacyCoverage  map[coverageKey][]vadSpan
-	controlChan      chan string
-	JobQueue         *jobqueue.JobQueue // Queue for managing job retries
-	workerCancel     context.CancelFunc // Function to cancel worker goroutines
-	thresholdsCtx    context.Context    // Context for threshold persistence/cleanup goroutines
-	thresholdsCancel context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
-	flusherCtx       context.Context    // Context for pending detections flusher goroutine
-	flusherCancel    context.CancelFunc // Function to cancel flusher goroutine
-	preRenderer      PreRendererSubmit  // Spectrogram pre-renderer for background generation
-	preRendererOnce  sync.Once          // Ensures pre-renderer is initialized only once
-	startOnce        sync.Once          // Ensures Start() is called only once
+	privacyCoverage map[coverageKey][]vadSpan
+	// afterCoverageRead is a test seam called by flushPendingDetections right after
+	// it reads a pending detection's privacy coverage; nil in production.
+	afterCoverageRead func()
+	controlChan       chan string
+	JobQueue          *jobqueue.JobQueue // Queue for managing job retries
+	workerCancel      context.CancelFunc // Function to cancel worker goroutines
+	thresholdsCtx     context.Context    // Context for threshold persistence/cleanup goroutines
+	thresholdsCancel  context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
+	flusherCtx        context.Context    // Context for pending detections flusher goroutine
+	flusherCancel     context.CancelFunc // Function to cancel flusher goroutine
+	preRenderer       PreRendererSubmit  // Spectrogram pre-renderer for background generation
+	preRendererOnce   sync.Once          // Ensures pre-renderer is initialized only once
+	startOnce         sync.Once          // Ensures Start() is called only once
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
@@ -1866,9 +1869,10 @@ func (p *Processor) effectiveBaseOverlap(settings *conf.Settings) time.Duration 
 // flushPendingDetections processes one flush cycle, flushing eligible detections.
 // minDetections is computed per-item using the item's BestModelID so that bat
 // and bird models each apply their own false positive filter configuration.
-// A detection that passes the discard checks is approved only when the privacy
-// coverage gate allows it (see privacyCoverageVerdict); otherwise it stays
-// pending and is re-checked on the next tick. Returns the count of pending and
+// The privacy coverage gate (see privacyCoverageVerdict) is read before the
+// discard checks, which include the speech-hit comparison; a detection that
+// passes the discard checks is approved only when the gate allows it, otherwise
+// it stays pending and is re-checked on the next tick. Returns the count of pending and
 // flushed detections for logging.
 func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	now := time.Now()
@@ -1891,6 +1895,16 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 
 		speciesName := strings.ToLower(item.Detection.Result.Species.CommonName)
 		itemMinDetections := MinDetectionsForModel(settings, item.BestModelID, baseOverlap)
+
+		// Read the privacy coverage BEFORE the discard check reads the speech hit. A
+		// chunk writes its hit and only then publishes the coverage that includes it,
+		// so any coverage seen here has its hits already visible to the discard check
+		// below. The opposite order lets a hit and the coverage completing the clip
+		// both land between the two reads, approving a clip that holds the speech.
+		verdict := p.privacyCoverageVerdict(settings, &item, now)
+		if p.afterCoverageRead != nil {
+			p.afterCoverageRead()
+		}
 
 		if shouldDiscard, reason := p.shouldDiscardDetection(&item, settings, itemMinDetections); shouldDiscard {
 			// Aggregate daylight-filter discards into the periodic pipeline-stats
@@ -1920,7 +1934,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 			continue
 		}
 
-		switch p.privacyCoverageVerdict(settings, &item, now) {
+		switch verdict {
 		case coverageDefer:
 			// A speech detector has not yet scored the whole saved clip. Leave the
 			// detection pending; the next tick re-runs the discard check and this one.

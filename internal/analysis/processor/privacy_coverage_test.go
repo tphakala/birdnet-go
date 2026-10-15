@@ -421,3 +421,18 @@ func TestClipSpan_MatchesExporter(t *testing.T) {
 		})
 	}
 }
+
+// TestPrivacy_HitWrittenAfterCoverageReadIsStillSeen: a chunk can write its speech
+// hit and publish the coverage that completes a pending clip between the
+// flusher's coverage read and its hit read. The flusher must read the hit after
+// the coverage, so the late hit still discards the detection.
+func TestPrivacy_HitWrittenAfterCoverageReadIsStillSeen(t *testing.T) {
+	r := newPrivacyRig(t, "BirdNET_V2.4", 45*time.Second)
+	r.feed(r.clip, sec(52), sec(1))
+	r.pend(40 * time.Second)
+	hitAt := r.at(40 * time.Second)
+	r.p.afterCoverageRead = func() {
+		r.p.recordHumanDetection(e2eSource, hitAt, metrics.TriggerVAD)
+	}
+	assert.Equal(t, "discarded", r.outcome())
+}
