@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -244,10 +245,10 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 //     LastUpdated capped so EndTime never passes MaxDeadline)
 //   - Normal captures: EndTime = FirstDetected + normal detection window (configured length)
 //
-// EndTime comes from detectionEndTime.
+// EndTime comes from detectionEndTime, read with the caller's settings snapshot so the
+// saved span matches the one the privacy check used.
 // For extended captures the clip name is regenerated to reflect the actual duration.
-func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
-	settings := p.currentSettings()
+func (p *Processor) normalizeDetectionTimes(item *PendingDetection, settings *conf.Settings) {
 	item.Detection.Result.BeginTime = item.FirstDetected
 
 	item.Detection.Result.EndTime = detectionEndTime(settings, item)

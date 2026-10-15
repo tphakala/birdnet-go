@@ -2,6 +2,7 @@ package processor
 
 import (
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -13,11 +14,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference/vad"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -444,7 +448,7 @@ func TestClipSpan_MatchesExporter(t *testing.T) {
 			item := &PendingDetection{FirstDetected: base, LastUpdated: base.Add(tt.updated), ExtendedCapture: tt.extended}
 
 			clip := clipSpan(settings, item)
-			p.normalizeDetectionTimes(item)
+			p.normalizeDetectionTimes(item, p.currentSettings())
 			win, _ := settings.DetectionCaptureWindow(item.Detection.Result.BeginTime, item.Detection.Result.EndTime)
 
 			assert.True(t, clip.from.Equal(item.Detection.Result.BeginTime))
@@ -719,4 +723,44 @@ func TestPrivacy_LabelCoverageWaitsForEveryLiveModel(t *testing.T) {
 		r.pend(16 * time.Second) // clip 10 s to 25 s
 		assert.Equal(t, "approved", r.outcome())
 	})
+}
+
+// TestProcessApprovedDetection_UsesThePassedSettingsSnapshot: the saved clip must
+// be built from the snapshot the privacy check used, not from whatever the
+// processor's configuration has become since.
+func TestProcessApprovedDetection_UsesThePassedSettingsSnapshot(t *testing.T) {
+	conf.StoreSettings(nil)
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+	checked := e2eSettings() // export length 15 s, pre-capture 3 s
+	reloaded := e2eSettings()
+	reloaded.Realtime.Audio.Export.Length = 60
+	p := &Processor{Settings: reloaded}
+
+	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
+	item := &PendingDetection{FirstDetected: base, Source: e2eSource}
+	p.processApprovedDetection(item, e2eSpecies, checked)
+
+	assert.True(t, item.Detection.Result.EndTime.Equal(base.Add(12*time.Second)),
+		"EndTime must follow the checked snapshot (15 s - 3 s), not the reloaded one")
+}
+
+// TestBuildSaveAudioAction_UsesThePassedSettingsSnapshot: the audio export length
+// and settings come from the snapshot the privacy check used, not from the
+// processor's current configuration.
+func TestBuildSaveAudioAction_UsesThePassedSettingsSnapshot(t *testing.T) {
+	conf.StoreSettings(nil)
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+	checked := e2eSettings() // export length 15 s
+	reloaded := e2eSettings()
+	reloaded.Realtime.Audio.Export.Length = 60
+	// A capture window that ends in the future takes the deferred read path, which
+	// records the export length in the action.
+	p := &Processor{Settings: reloaded, BufferMgr: buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))}
+
+	base := time.Now()
+	det := &Detections{Result: detection.Result{BeginTime: base, EndTime: base.Add(12 * time.Second)}}
+	action := p.buildSaveAudioAction(det, &DetectionContext{}, checked)
+
+	assert.Same(t, checked, action.Settings)
+	assert.Equal(t, 15, action.duration, "the exported length follows the checked snapshot")
 }

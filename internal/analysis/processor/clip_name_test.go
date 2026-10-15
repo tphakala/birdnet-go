@@ -216,7 +216,7 @@ func TestNormalizeDetectionTimes_ExtendedCapture_ExportGating(t *testing.T) {
 			},
 		}
 		item := newItem()
-		p.normalizeDetectionTimes(item)
+		p.normalizeDetectionTimes(item, p.currentSettings())
 		assert.Empty(t, item.Detection.Result.ClipName,
 			"extended capture must not regenerate a clip name when export is disabled")
 	})
@@ -234,7 +234,7 @@ func TestNormalizeDetectionTimes_ExtendedCapture_ExportGating(t *testing.T) {
 			},
 		}
 		item := newItem()
-		p.normalizeDetectionTimes(item)
+		p.normalizeDetectionTimes(item, p.currentSettings())
 		require.NotEmpty(t, item.Detection.Result.ClipName,
 			"extended capture must regenerate a clip name when export is enabled")
 		assert.Contains(t, item.Detection.Result.ClipName, "strix_aluco")

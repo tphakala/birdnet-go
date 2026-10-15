@@ -1719,9 +1719,10 @@ func (p *Processor) recordUnscannedSave(settings *conf.Settings, item *PendingDe
 }
 
 // processApprovedDetection handles an approved detection by sending it to the worker queue
-func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName string) {
-	settings := p.currentSettings()
-
+//
+// settings is the snapshot the privacy check used for this detection, so the saved
+// clip is built from the same configuration that was checked.
+func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName string, settings *conf.Settings) {
 	GetLogger().Info("approving detection",
 		logger.String("species", speciesName),
 		logger.String("source", p.getDisplayNameForSource(item.Source)),
@@ -1742,7 +1743,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 		}
 	}
 
-	p.normalizeDetectionTimes(item)
+	p.normalizeDetectionTimes(item, settings)
 
 	// Populate model contributions on the Result for downstream persistence
 	if len(item.ModelContributions) > 0 {
@@ -1756,7 +1757,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 		}
 	}
 
-	actionList := p.getActionsForItem(&item.Detection)
+	actionList := p.getActionsForItem(&item.Detection, settings)
 	for _, action := range actionList {
 		task := &Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
 		if err := p.EnqueueTask(task); err != nil {
@@ -1874,7 +1875,8 @@ func (p *Processor) effectiveBaseOverlap(settings *conf.Settings) time.Duration 
 // Each pending detection's privacy state is read once per tick (see
 // privacyCheck): the discard checks compare its speech hit, and a detection that
 // passes them is approved only when the coverage gate allows it, otherwise it
-// stays pending and is re-checked on the next tick. Returns the count of pending and
+// stays pending and is re-checked on the next tick. An approved detection is built
+// from the same settings snapshot the check used. Returns the count of pending and
 // flushed detections for logging.
 func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	now := time.Now()
@@ -1951,7 +1953,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 			logger.Int("required", itemMinDetections),
 			logger.String("operation", "flush_detection"))
 
-		p.processApprovedDetection(&item, speciesName)
+		p.processApprovedDetection(&item, speciesName, settings)
 		delete(p.pendingDetections, mapKey)
 		flushedCount++
 
@@ -2043,9 +2045,9 @@ func (p *Processor) pendingDetectionsFlusher() {
 }
 
 // getActionsForItem determines the actions to be taken for a given detection.
-func (p *Processor) getActionsForItem(det *Detections) []Action {
-	settings := p.currentSettings()
-
+//
+// settings is the configuration snapshot the actions are built from.
+func (p *Processor) getActionsForItem(det *Detections, settings *conf.Settings) []Action {
 	// Check if species has custom configuration using both common and scientific name lookup
 	if speciesConfig, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, det.Result.Species.CommonName, det.Result.Species.ScientificName); exists {
 		if settings.Debug {
@@ -2136,7 +2138,7 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 
 		// If executeDefaults is true, combine custom and default actions
 		if len(actions) > 0 && executeDefaults {
-			defaultActions := p.getDefaultActions(det)
+			defaultActions := p.getDefaultActions(det, settings)
 			return append(actions, defaultActions...)
 		}
 
@@ -2165,7 +2167,7 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 	}
 
 	// Fall back to default actions if no custom actions or if custom actions should be combined
-	defaultActions := p.getDefaultActions(det)
+	defaultActions := p.getDefaultActions(det, settings)
 	// Add structured logging for default actions
 	GetLogger().Debug("Using default actions for detection",
 		logger.String("species", strings.ToLower(det.Result.Species.CommonName)),
@@ -2191,9 +2193,7 @@ func parseCommandParams(params []string, det *Detections) map[string]any {
 }
 
 // getDefaultActions returns the default actions to be taken for a given detection.
-func (p *Processor) getDefaultActions(det *Detections) []Action {
-	settings := p.currentSettings()
-
+func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) []Action {
 	var actions []Action
 	var databaseAction *DatabaseAction
 	var sseAction *SSEAction
@@ -2343,7 +2343,7 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	// take 10-30+ seconds, which previously caused CompositeAction 30s timeouts
 	// (Sentry BIRDNET-GO-WD), preventing SSE/MQTT from ever firing.
 	if settings.Realtime.Audio.Export.Enabled && databaseAction != nil {
-		actions = append(actions, p.buildSaveAudioAction(det, detectionCtx))
+		actions = append(actions, p.buildSaveAudioAction(det, detectionCtx, settings))
 	}
 
 	// Add BirdWeatherAction if enabled and client is initialized
@@ -2394,14 +2394,13 @@ func retryConfigFromSettings(rs conf.RetrySettings) jobqueue.RetryConfig {
 	}
 }
 
-// buildSaveAudioAction creates a SaveAudioAction for the given detection.
+// buildSaveAudioAction creates a SaveAudioAction for the given detection from the
+// given settings snapshot.
 // It reads PCM data from the capture buffer eagerly (while the data is still
 // available) and returns an action that will encode and write the audio file
 // when executed by the job queue. This decouples the slower clip encoding
 // from the fast Database -> SSE -> MQTT pipeline.
-func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext) *SaveAudioAction {
-	settings := p.currentSettings()
-
+func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext, settings *conf.Settings) *SaveAudioAction {
 	// Derive the capture length and readiness time from the shared conf helper so this
 	// scheduler and the media API (which decides whether a not-yet-written clip is still
 	// legitimately pending) never compute the window differently. The two log lines are

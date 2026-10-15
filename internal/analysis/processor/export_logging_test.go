@@ -189,7 +189,7 @@ func TestBuildSaveAudioAction_PopulatesLowercasedSpeciesOnEveryBranch(t *testing
 		t.Run(tt.name, func(t *testing.T) {
 			p, det := tt.build(t)
 
-			action := p.buildSaveAudioAction(det, &DetectionContext{})
+			action := p.buildSaveAudioAction(det, &DetectionContext{}, p.currentSettings())
 
 			require.NotNil(t, action)
 			// Pin WHICH branch ran. Without this the eager row silently fell back
