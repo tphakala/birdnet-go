@@ -22,6 +22,11 @@ const (
 	// hit inside the window is dropped and never counts.
 	labelConfirmWindow = 15 * time.Second
 
+	// privacyFilterOperation is the log operation of a human hit that counts as
+	// speech. The events API counts every line with this exact operation as a
+	// privacy discard.
+	privacyFilterOperation = "privacy_filter"
+
 	// labelConfirmOperation is the log operation of the label confirmation
 	// messages. It is deliberately not "privacy_filter": the events API counts
 	// every privacy_filter line as a privacy discard (see how
@@ -167,7 +172,7 @@ func (p *Processor) logLabelHitDecision(settings *conf.Settings, source string, 
 			logger.Float32("confidence", conf),
 			logger.Float32("threshold", threshold),
 			logger.String("source", display),
-			logger.String("operation", "privacy_filter"))
+			logger.String("operation", privacyFilterOperation))
 	}
 	if d.dropped != nil {
 		GetLogger().Info("privacy filter: human label hit ignored, no second hit within the confirmation window",
