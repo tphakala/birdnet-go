@@ -118,8 +118,8 @@ func (p *Processor) recordVADHit(settings *conf.Settings, source string, at time
 }
 
 // logLabelHitDecision logs the outcome of a hit after detectionMutex is
-// released. own is the label hit that was recorded, or nil for a VAD hit (which
-// logs its own line elsewhere). Counted label hits keep the "human detection
+// released. own is the label hit being processed, recorded unless d.held is set,
+// or nil for a VAD hit (which logs its own line elsewhere). Counted label hits keep the "human detection
 // filtered" line; held and ignored hits use labelConfirmOperation.
 func (p *Processor) logLabelHitDecision(settings *conf.Settings, source string, own *heldLabelHit, d *labelHitDecision) {
 	if own == nil && d.confirmed == nil && d.dropped == nil {
