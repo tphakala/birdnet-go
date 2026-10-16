@@ -9,7 +9,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference/vad"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 const (
@@ -530,7 +529,8 @@ func (p *Processor) runVADGate(settings *conf.Settings, chunk *chunkAudio) (span
 		p.Metrics.PrivacyFilter.SetVADLastSpeechProbability(float64(result.prob))
 	}
 
-	p.recordHumanDetection(source, audioEnd, metrics.TriggerVAD)
+	d := p.recordVADHit(settings, source, audioEnd)
+	p.logLabelHitDecision(settings, source, audioEnd, 0, &d, false)
 	return result.span, true
 }
 
