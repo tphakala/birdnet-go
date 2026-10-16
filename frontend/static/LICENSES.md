@@ -414,7 +414,7 @@ Source: LGPL-2.1
 
 ### github.com/tphakala/go-audio-dsp
 
-License: https://github.com/tphakala/go-audio-dsp/blob/v0.5.0/LICENSE
+License: https://github.com/tphakala/go-audio-dsp/blob/v0.6.0/LICENSE
 Source: Apache-2.0
 
 ### github.com/tphakala/go-audio-resampler
