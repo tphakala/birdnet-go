@@ -135,6 +135,17 @@ var (
 	// GPS coordinates pattern - matches decimal degree coordinates
 	coordinatesPattern = regexp.MustCompile(`(?:lat(?:itude)?|lng|lon|longitude)[:=]?\s*-?\d{1,3}\.?\d*[,\s]+(?:lng|lon|longitude)[:=]?\s*-?\d{1,3}\.?\d*|(?:lat(?:itude)?[:=]?\s*)?-?\d{1,3}\.?\d*[,\s]+-?\d{1,3}\.?\d*`)
 
+	// dateTimePattern matches the date-and-time prefix of a log line, in ISO,
+	// US, European and dotted forms ("2026-10-16 00:12:34", "10/16/2026 00:12").
+	// coordinatesPattern's keyword-less alternative reads the "-16 00" of such
+	// a prefix as a coordinate pair, so ScrubCoordinates skips matches that
+	// overlap one.
+	dateTimePattern = regexp.MustCompile(`\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}[T ]\d{1,2}:\d{2}(?::\d{2})?`)
+
+	// syslogTimePattern matches the "Oct 16 00:12:34" prefix of a syslog line,
+	// for the same reason as dateTimePattern.
+	syslogTimePattern = regexp.MustCompile(`[A-Za-z]{3}\s+\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?`)
+
 	// Enhanced API token/key pattern - includes bearer tokens and more formats
 	// Requires a separator (: or =) between the key name and the token value
 	apiTokenPattern = regexp.MustCompile(`(?i)(?:(?:api[_-]?key|token|secret|auth)[:=]\s*|(?:bearer)(?:\s+token)?[:=\s]+|(?:with\s+(?:token|key|secret|auth))\s+)([A-Za-z0-9+/\-_]{8,}[A-Za-z0-9+/=]*)`)
@@ -444,9 +455,39 @@ func ScrubStandaloneIPs(message string) string {
 }
 
 // ScrubCoordinates removes or anonymizes GPS coordinates from text messages
-// It replaces coordinate pairs with generic placeholders while preserving message structure
+// It replaces coordinate pairs with generic placeholders while preserving message structure.
+// A match that overlaps a date-time or syslog time prefix is not a coordinate
+// pair and is left unchanged.
 func ScrubCoordinates(message string) string {
-	return coordinatesPattern.ReplaceAllString(message, "[LAT],[LON]")
+	matches := coordinatesPattern.FindAllStringIndex(message, -1)
+	if len(matches) == 0 {
+		return message
+	}
+	protected := dateTimePattern.FindAllStringIndex(message, -1)
+	protected = append(protected, syslogTimePattern.FindAllStringIndex(message, -1)...)
+
+	var out strings.Builder
+	pos := 0
+	for _, m := range matches {
+		if overlapsAny(m, protected) {
+			continue
+		}
+		out.WriteString(message[pos:m[0]])
+		out.WriteString("[LAT],[LON]")
+		pos = m[1]
+	}
+	out.WriteString(message[pos:])
+	return out.String()
+}
+
+// overlapsAny reports whether span [start, end) overlaps any of the spans.
+func overlapsAny(span []int, spans [][]int) bool {
+	for _, other := range spans {
+		if span[0] < other[1] && other[0] < span[1] {
+			return true
+		}
+	}
+	return false
 }
 
 // ScrubAPITokens removes or anonymizes API tokens, keys, and secrets from text messages

@@ -939,6 +939,58 @@ func TestScrubCoordinates(t *testing.T) {
 	runScrubTests(t, ScrubCoordinates, tests)
 }
 
+func TestScrubMessage_KeepsSpaceSeparatedDateTimes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"journal date time", "2026-10-16 00:12:34"},
+		{"date time with fraction", "2026-10-16 00:12:34.015573"},
+		{"syslog prefix", "Oct 16 00:12:34 host birdnet-go[1]: started"},
+		{"date time in a sentence", "restart at 2026-10-16 23:59:01 after crash"},
+		{"clock times", "from 10:15:30 to 11:45:00"},
+		{"dotted date time", "16.10.2026 00:12 started"},
+		{"date time with T", "2026-10-16T00:12:34 started"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.input, ScrubMessage(tt.input))
+		})
+	}
+}
+
+func TestScrubCoordinates_StillScrubsWithNeighbors(t *testing.T) {
+	t.Parallel()
+
+	inputs := []string{
+		"coords:60.1699,24.9384",
+		"Lat:60.1699,24.9384",
+		"error at 60.1699,24.9384: timeout",
+		"60.1699,24.9384N",
+		"60.1699, 24.9384m away",
+		"pos=60.1699,24.9384_x",
+		"user_lat=60.1699 lon=24.9384",
+	}
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			t.Parallel()
+			got := ScrubCoordinates(in)
+			assert.NotContains(t, got, "60.1699")
+			assert.NotContains(t, got, "24.9384")
+		})
+	}
+}
+
+func TestScrubCoordinates_StillScrubsBesideTimestamps(t *testing.T) {
+	t.Parallel()
+	got := ScrubCoordinates("2026-10-16 00:12:34 weather for 60.1699,24.9384 failed")
+	assert.Equal(t, "2026-10-16 00:12:34 weather for [LAT],[LON] failed", got)
+}
+
 func TestScrubAPITokens(t *testing.T) {
 	t.Parallel()
 
