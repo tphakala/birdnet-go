@@ -188,7 +188,7 @@ describe('settingsCoercion realtime privacyFilter and VAD', () => {
       debug: false,
       vad: {
         enabled: false,
-        threshold: 0.35,
+        threshold: 0.6,
         modelPath: '',
       },
     });

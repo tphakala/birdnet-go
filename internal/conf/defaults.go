@@ -305,7 +305,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.privacyfilter.debug", false)
 	viper.SetDefault("realtime.privacyfilter.confidence", 0.05)
 	viper.SetDefault("realtime.privacyfilter.vad.enabled", false)
-	viper.SetDefault("realtime.privacyfilter.vad.threshold", 0.35)
+	viper.SetDefault("realtime.privacyfilter.vad.threshold", 0.6)
 	viper.SetDefault("realtime.privacyfilter.vad.modelpath", "")
 
 	// Dog bark filter configuration

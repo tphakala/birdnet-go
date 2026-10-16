@@ -3186,7 +3186,7 @@
         "vadEnable": "Povoliť Ochranu Súkromia (Silero VAD)",
         "vadHelp": "Spúšťa vyhradený neurónový model detekcie reči popri klasifikátore pre spoľahlivé filtrovanie hlasu. Spotrebováva ďalšie systémové prostriedky (cca 20-30 MB RAM a inferenciu procesora na segment).",
         "vadThresholdLabel": "Prah Ochrany Súkromia",
-        "vadThresholdHelp": "Prah citlivosti pre detektor hlasovej aktivity (predvolené 0.35). Nižšie hodnoty robia filter citlivejším na tichú alebo vzdialenú reč."
+        "vadThresholdHelp": "Prah citlivosti pre detektor hlasovej aktivity (predvolené 0.6). Nižšie hodnoty robia filter citlivejším na tichú alebo vzdialenú reč."
       },
       "falsePositivePrevention": {
         "title": "Prevencia falošne pozitívnych výsledkov",

@@ -65,7 +65,7 @@
         debug: privacySettings?.debug ?? false,
         vad: {
           enabled: privacySettings?.vad?.enabled ?? false,
-          threshold: privacySettings?.vad?.threshold ?? 0.35,
+          threshold: privacySettings?.vad?.threshold ?? 0.6,
           modelPath: privacySettings?.vad?.modelPath ?? '',
         },
       };
