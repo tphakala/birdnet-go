@@ -233,11 +233,7 @@ const (
 // The entries have no effect at the single-thread default set here; they matter
 // because WithSessionOptions callbacks raise the thread count afterwards
 // (NewONNXClassifier uses runtime.NumCPU), and config entries survive that.
-//
-// ortVersion is the loaded ONNX Runtime version. Releases before 1.27 also get
-// the KleidiAI kernels disabled, see ApplyKleidiAIWorkaround: they leak memory
-// on Arm CPUs with SME. This is a no-op on other CPUs and on 1.27 or newer.
-func applySessionDefaults(so sessionOptionSetter, ortVersion string) error {
+func applySessionDefaults(so sessionOptionSetter) error {
 	if err := so.SetIntraOpNumThreads(1); err != nil {
 		return fmt.Errorf("birdnet: failed to set intra-op threads: %w", err)
 	}
@@ -250,7 +246,7 @@ func applySessionDefaults(so sessionOptionSetter, ortVersion string) error {
 	if err := so.AddSessionConfigEntry(ortConfigAllowInterOpSpinning, ortConfigValueDisabled); err != nil {
 		return fmt.Errorf("birdnet: failed to disable inter-op spinning: %w", err)
 	}
-	return ApplyKleidiAIWorkaround(so, ortVersion)
+	return nil
 }
 
 // createSession builds an ONNX Runtime session with default options.
@@ -261,7 +257,10 @@ func createSession(modelPath string, inputNames, outputNames []string, sessionOp
 	}
 	defer func() { _ = sessOpts.Destroy() }()
 
-	if err := applySessionDefaults(sessOpts, ort.GetVersion()); err != nil {
+	if err := applySessionDefaults(sessOpts); err != nil {
+		return nil, err
+	}
+	if err := DisableKleidiAIIfNeeded(sessOpts); err != nil {
 		return nil, err
 	}
 

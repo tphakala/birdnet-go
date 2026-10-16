@@ -50,43 +50,35 @@ func TestKleidiAIWorkaroundNeeded(t *testing.T) {
 	}
 }
 
-func TestApplyKleidiAIWorkaround_AddsEntryBelowFixedVersion(t *testing.T) {
+func TestApplyKleidiAIWorkaround_AddsEntryOnlyBelowFixedVersion(t *testing.T) {
 	t.Parallel()
 
 	opts := &recordingSessionOptions{}
-	require.NoError(t, ApplyKleidiAIWorkaround(opts, "1.25.1"))
-
+	require.NoError(t, applyKleidiAIWorkaround(opts, "1.25.1"))
 	assert.Equal(t, map[string]string{"mlas.disable_kleidiai": "1"}, opts.configEntries)
-}
 
-func TestApplyKleidiAIWorkaround_LeavesFixedVersionsAlone(t *testing.T) {
-	t.Parallel()
-
-	for _, version := range []string{"1.27.0", "1.31.0"} {
-		opts := &recordingSessionOptions{}
-		require.NoError(t, ApplyKleidiAIWorkaround(opts, version))
-		assert.Empty(t, opts.configEntries, "no entry expected for ORT %s", version)
-	}
+	fixed := &recordingSessionOptions{}
+	require.NoError(t, applyKleidiAIWorkaround(fixed, "1.31.0"))
+	assert.Empty(t, fixed.configEntries, "a release with the fix keeps the KleidiAI kernels")
 }
 
 func TestApplyKleidiAIWorkaround_PropagatesSetterError(t *testing.T) {
 	t.Parallel()
 
 	setErr := errors.NewStd("config entry rejected")
-	err := ApplyKleidiAIWorkaround(&failingEntrySetter{err: setErr}, "1.25.1")
+	err := applyKleidiAIWorkaround(&failingEntrySetter{err: setErr}, "1.25.1")
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, setErr)
 }
 
-// TestKleidiAIFixedVersion_MatchesCompareConstants keeps the log-facing version
-// string in step with the numbers the workaround decision compares against.
-func TestKleidiAIFixedVersion_MatchesCompareConstants(t *testing.T) {
+// TestKleidiAIFixedVersion_Parses guards the constant the decision parses: an
+// unparseable value would compare as 0.0 and silently turn the workaround off
+// for every release with a parseable version.
+func TestKleidiAIFixedVersion_Parses(t *testing.T) {
 	t.Parallel()
 
-	major, minor, ok := ParseORTVersion(KleidiAIFixedVersion)
+	_, _, ok := ParseORTVersion(KleidiAIFixedVersion)
 	require.True(t, ok)
-	assert.Equal(t, kleidiAILeakFixedMajor, major)
-	assert.Equal(t, kleidiAILeakFixedMinor, minor)
 	assert.False(t, KleidiAIWorkaroundNeeded(KleidiAIFixedVersion))
 }

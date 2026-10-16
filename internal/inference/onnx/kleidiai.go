@@ -1,6 +1,10 @@
 package onnx
 
-import "fmt"
+import (
+	"fmt"
+
+	ort "github.com/yalue/onnxruntime_go"
+)
 
 // KleidiAI workaround for the ONNX Runtime memory growth on Arm SME CPUs.
 //
@@ -17,10 +21,6 @@ import "fmt"
 //     evicted, so every inference with new input data grows memory. The leak is
 //     fixed in ONNX Runtime 1.27.0 (microsoft/onnxruntime#28363), which removed
 //     the input-data hash from the cache key.
-//
-// A one-off local probe on an Apple M5 Pro (Perch v2 int8_arm, fresh random
-// input per run) measured the bundled ONNX Runtime 1.25.1 growing about 1173 KB
-// per run without the entry and about 3 KB per run with it.
 const (
 	// ortConfigMlasDisableKleidiAI is the session config key that turns the
 	// KleidiAI kernels off.
@@ -28,40 +28,42 @@ const (
 	// ortConfigValueEnabled is the "on" value for boolean session config keys.
 	ortConfigValueEnabled = "1"
 
-	// kleidiAILeakFixedMajor and kleidiAILeakFixedMinor are the first ONNX
-	// Runtime release without the KleidiAI cache leak.
-	kleidiAILeakFixedMajor = 1
-	kleidiAILeakFixedMinor = 27
-
 	// KleidiAIFixedVersion is the first ONNX Runtime release without the
-	// KleidiAI cache leak, for log output. Keep it in step with the two
-	// constants above.
+	// KleidiAI cache leak.
 	KleidiAIFixedVersion = "1.27"
 )
 
-// ConfigEntrySetter is the part of *ort.SessionOptions that
-// ApplyKleidiAIWorkaround needs.
-type ConfigEntrySetter interface {
+// configEntrySetter is the part of *ort.SessionOptions that the workaround
+// needs, so the decision can be tested without the native library.
+type configEntrySetter interface {
 	AddSessionConfigEntry(key, value string) error
 }
 
 // KleidiAIWorkaroundNeeded reports whether sessions on the ONNX Runtime release
 // named by ortVersion need the KleidiAI kernels disabled: true for releases
-// before 1.27 and for versions that cannot be parsed, false otherwise.
+// before KleidiAIFixedVersion and for versions that cannot be parsed, false
+// otherwise.
 func KleidiAIWorkaroundNeeded(ortVersion string) bool {
 	major, minor, ok := ParseORTVersion(ortVersion)
 	if !ok {
 		return true
 	}
-	return major < kleidiAILeakFixedMajor ||
-		(major == kleidiAILeakFixedMajor && minor < kleidiAILeakFixedMinor)
+	fixedMajor, fixedMinor, _ := ParseORTVersion(KleidiAIFixedVersion)
+	return major < fixedMajor || (major == fixedMajor && minor < fixedMinor)
 }
 
-// ApplyKleidiAIWorkaround disables the KleidiAI kernels on a session options
-// object when KleidiAIWorkaroundNeeded reports true for ortVersion, and does
-// nothing otherwise. Call it with ort.GetVersion() on every session that runs
-// inference, before the session is created. It is a no-op on CPUs without SME.
-func ApplyKleidiAIWorkaround(so ConfigEntrySetter, ortVersion string) error {
+// DisableKleidiAIIfNeeded disables the KleidiAI kernels on so when the loaded
+// ONNX Runtime is older than KleidiAIFixedVersion. Call it on every session
+// options object used for inference, before the session is created; the ONNX
+// Runtime environment must already be initialized. It is a no-op on CPUs
+// without SME.
+func DisableKleidiAIIfNeeded(so *ort.SessionOptions) error {
+	return applyKleidiAIWorkaround(so, ort.GetVersion())
+}
+
+// applyKleidiAIWorkaround adds the disable entry to so when
+// KleidiAIWorkaroundNeeded reports true for ortVersion.
+func applyKleidiAIWorkaround(so configEntrySetter, ortVersion string) error {
 	if !KleidiAIWorkaroundNeeded(ortVersion) {
 		return nil
 	}

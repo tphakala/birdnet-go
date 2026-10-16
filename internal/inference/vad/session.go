@@ -142,7 +142,7 @@ func newSession(modelPath string, modelData []byte, sessionOptsFn func(*ort.Sess
 	if err = sessOpts.SetInterOpNumThreads(1); err != nil {
 		return nil, errors.New(err).Component("inference/vad").Category(errors.CategoryModelInit).Build()
 	}
-	if err = onnx.ApplyKleidiAIWorkaround(sessOpts, ort.GetVersion()); err != nil {
+	if err = onnx.DisableKleidiAIIfNeeded(sessOpts); err != nil {
 		return nil, errors.New(err).
 			Component("inference/vad").
 			Category(errors.CategoryModelInit).

@@ -77,7 +77,7 @@ func NewRangeFilter(modelPath string, opts ...RangeFilterOption) (*RangeFilter, 
 	if err := sessOpts.SetInterOpNumThreads(1); err != nil {
 		return nil, fmt.Errorf("birdnet: failed to set inter-op threads: %w", err)
 	}
-	if err := ApplyKleidiAIWorkaround(sessOpts, ort.GetVersion()); err != nil {
+	if err := DisableKleidiAIIfNeeded(sessOpts); err != nil {
 		return nil, err
 	}
 

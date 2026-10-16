@@ -121,8 +121,8 @@ func createHeatmapSession(modelPath string, inputNames, outputNames []string) (*
 			Category(errors.CategoryModelInit).
 			Build()
 	}
-	if err := onnx.ApplyKleidiAIWorkaround(sessOpts, ort.GetVersion()); err != nil {
-		return nil, errors.Newf("heatmap service: failed to disable KleidiAI kernels: %v", err).
+	if err := onnx.DisableKleidiAIIfNeeded(sessOpts); err != nil {
+		return nil, errors.Newf("heatmap service: %v", err).
 			Component("classifier.heatmap_service").
 			Category(errors.CategoryModelInit).
 			Build()
