@@ -282,8 +282,8 @@ github.com/tklauser/numcpus v0.12.0 h1:NR85qdvHA9pFse3x3weVZ0r0ST8R6l5RHbZrlRaqo
 github.com/tklauser/numcpus v0.12.0/go.mod h1:ABHeXzJnr/qqwguhClkZKT1/8VABcYrsyUiUGobwWJg=
 github.com/tphakala/go-aac v0.7.1 h1:/aspCjUIl+7i+Xs6K43Xm7P+yucn3V6WSvEbdzOyebU=
 github.com/tphakala/go-aac v0.7.1/go.mod h1:5BL5jIIhw7Q1R6Tl7mUOHSoEQeKG7EUVNAGYRIQ7xbg=
-github.com/tphakala/go-audio-dsp v0.5.0 h1:M3iOo0c8z5TdWEbFUWs7V5UjhbbcyuFypYVywPs+k5Y=
-github.com/tphakala/go-audio-dsp v0.5.0/go.mod h1:JybMnlesX8sHXkjrsyBrtbyGl/XyFKbxbJ5/O2S/5G0=
+github.com/tphakala/go-audio-dsp v0.6.0 h1:aNmNBX4pzfZ2USMjfXKv++CefEfL4QgKv4f19IWvyl4=
+github.com/tphakala/go-audio-dsp v0.6.0/go.mod h1:JybMnlesX8sHXkjrsyBrtbyGl/XyFKbxbJ5/O2S/5G0=
 github.com/tphakala/go-audio-resampler v1.7.0 h1:Nqr1zNRlow28EjlQKS/SSmhqSa6qHRZRydrPXNkiKTo=
 github.com/tphakala/go-audio-resampler v1.7.0/go.mod h1:h/j0tsie+Jv7qVEytRZ4KrxfO//zxO3RAbesX+1ZEo4=
 github.com/tphakala/go-audio-stream v0.6.0 h1:aVMV95cgqpn3fOELIBVDSs9nKuYPLYts1ouQh7ooCfU=
