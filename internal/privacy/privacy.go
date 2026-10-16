@@ -697,7 +697,7 @@ func isHexChar(r rune) bool {
 func keepParsableIPMatches(message string, matches [][]int) [][]int {
 	kept := matches[:0]
 	for _, match := range matches {
-		if net.ParseIP(message[match[0]:match[1]]) != nil {
+		if isIPAddress(message[match[0]:match[1]]) {
 			kept = append(kept, match)
 		}
 	}

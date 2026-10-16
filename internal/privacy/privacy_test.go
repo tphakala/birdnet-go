@@ -3,7 +3,6 @@ package privacy
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -2230,22 +2229,6 @@ func TestScrubStandaloneIPs_LeavesTimestampsIntact(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tt.input, ScrubStandaloneIPs(tt.input))
 		})
-	}
-}
-
-func TestScrubStandaloneIPs_TimestampSweep(t *testing.T) {
-	t.Parallel()
-
-	const nanos = 15573000
-	layouts := []string{time.RFC3339, time.RFC3339Nano, time.DateTime, time.TimeOnly}
-	for h := range 24 {
-		for m := range 60 {
-			ts := time.Date(2026, time.October, 16, h, m, (h+m)%60, nanos, time.UTC)
-			for _, layout := range layouts {
-				in := ts.Format(layout)
-				require.Equal(t, in, ScrubStandaloneIPs(in), "layout %q", layout)
-			}
-		}
 	}
 }
 

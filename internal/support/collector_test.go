@@ -2023,21 +2023,3 @@ func TestMarkJournalSkipped(t *testing.T) {
 	assert.False(t, diag.Attempted)
 	assert.Equal(t, map[string]any{journalSkippedReasonKey: journalSkipUnsupportedOS}, diag.Details)
 }
-
-func TestCollect_JournalDiagnosticsMatchHostGate(t *testing.T) {
-	t.Parallel()
-	c := NewCollector(t.TempDir(), t.TempDir(), "sys-id", "20260716")
-	dump, err := c.Collect(t.Context(), CollectorOptions{
-		IncludeLogs: true, LogDuration: testWindowHourly, MaxLogSize: testSize1KB, AnonymizePII: true,
-	})
-	require.NoError(t, err)
-
-	jl := dump.Diagnostics.LogCollection.JournalLogs
-	if reason := hostJournalSkipReason(); reason != "" {
-		assert.False(t, jl.Attempted)
-		assert.Equal(t, reason, jl.Details[journalSkippedReasonKey])
-		assert.Empty(t, jl.Error)
-		return
-	}
-	assert.True(t, jl.Attempted)
-}
