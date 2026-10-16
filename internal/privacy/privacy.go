@@ -479,11 +479,36 @@ func ScrubCoordinates(message string) string {
 	return out.String()
 }
 
+// trimGluedCoordinate returns the end of the time prefix message[start:end]
+// without a trailing comma fraction that is really the whole-degree part of a
+// coordinate: ",123" is a fraction of a second, but ",151.2093" is a longitude
+// written right after the time.
+func trimGluedCoordinate(message string, start, end int) int {
+	if end+1 >= len(message) || message[end] != '.' || message[end+1] < '0' || message[end+1] > '9' {
+		return end
+	}
+	comma := strings.LastIndexByte(message[start:end], ',')
+	if comma < 0 {
+		return end
+	}
+	for _, c := range message[start+comma+1 : end] {
+		if c < '0' || c > '9' {
+			return end
+		}
+	}
+	return start + comma
+}
+
 // protectedTimeSpans returns the date-time and syslog time prefixes in message
-// as sorted, non-overlapping [start, end) spans.
+// as sorted, non-overlapping [start, end) spans. A trailing comma fraction that
+// is really the start of a coordinate (see trimGluedCoordinate) is not part of
+// a span.
 func protectedTimeSpans(message string) [][]int {
 	spans := dateTimePattern.FindAllStringIndex(message, -1)
 	spans = append(spans, syslogTimePattern.FindAllStringIndex(message, -1)...)
+	for _, span := range spans {
+		span[1] = trimGluedCoordinate(message, span[0], span[1])
+	}
 	if len(spans) < 2 {
 		return spans
 	}

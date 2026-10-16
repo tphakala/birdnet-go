@@ -1004,6 +1004,10 @@ func TestScrubCoordinates_ScrubsPairRightAfterTimestamp(t *testing.T) {
 		{"comma pair right after seconds", "2026-10-16 00:12:34,60.1699 24.9384", "2026-10-16 00:12:34,[LAT],[LON]"},
 		{"long comma fraction", "2026-10-16 00:12:34,015573 60.1699,24.9384", "2026-10-16 00:12:34,015573 [LAT],[LON]"},
 		{"negative latitude glued to time", "2026-10-16T00:12:34-45.12,122.4", "2026-10-16T00:12:34[LAT],[LON]"},
+		{"longitude first right after time", "2026-10-16 00:12:34,151.2093,-33.8688", "2026-10-16 00:12:34,[LAT],[LON]"},
+		{"zero padded pair right after time", "2026-10-16 00:12:34,060.1699,24.9384", "2026-10-16 00:12:34,[LAT],[LON]"},
+		{"syslog longitude first", "Oct 16 00:12:34,151.2093,-33.8688", "Oct 16 00:12:34,[LAT],[LON]"},
+		{"sentence period after fraction", "2026-10-16 00:12:34,123. 50 birds", "2026-10-16 00:12:34,123. 50 birds"},
 		{"Z suffix", "2026-10-16T00:12:34Z 60.1699,24.9384", "2026-10-16T00:12:34Z [LAT],[LON]"},
 		{"negative pair after time", "2026-10-16 00:12:34 -45.123,122.456", "2026-10-16 00:12:34 [LAT],[LON]"},
 		{"pair between timestamps", "2026-10-16 00:12:34 at 60.1699,24.9384 until 2026-10-16 00:13:00", "2026-10-16 00:12:34 at [LAT],[LON] until 2026-10-16 00:13:00"},
@@ -1012,6 +1016,31 @@ func TestScrubCoordinates_ScrubsPairRightAfterTimestamp(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tt.want, ScrubCoordinates(tt.input))
+		})
+	}
+}
+
+func TestTrimGluedCoordinate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		message string
+		start   int
+		end     int
+		want    int
+	}{
+		{"comma fraction before a dot", "00:12:34,151.2", 0, 12, 8},
+		{"comma fraction before a sentence period", "00:12:34,123. 50 birds", 0, 12, 12},
+		{"comma fraction before a final period", "00:12:34,123.", 0, 12, 12},
+		{"comma fraction at end of text", "00:12:34,123", 0, 12, 12},
+		{"dot fraction before a dot", "00:12:34.5.7", 0, 10, 10},
+		{"non-digit after the comma", "00:12:34,123Z.5", 0, 13, 13},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, trimGluedCoordinate(tt.message, tt.start, tt.end))
 		})
 	}
 }
