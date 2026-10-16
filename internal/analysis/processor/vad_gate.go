@@ -449,7 +449,7 @@ func freshTailBytes(delta time.Duration, sampleRate, pcmLen int) int {
 // runVADGate runs the dedicated Silero VAD speech gate for one chunk and, on a
 // speech hit, records it in LastHumanDetection exactly as the label-based path
 // does, stamped with the end of the audio it scored (the stored time never moves
-// backward, see recordHumanDetection). This AUGMENTS the label
+// backward, see recordHumanDetectionLocked). This AUGMENTS the label
 // match: shouldDiscardDetection consults the same map, so a bird detection is
 // discarded if EITHER the VAD or the label trigger fires. When the VAD is
 // disabled or its model is absent, behaviour is unchanged.
@@ -530,7 +530,7 @@ func (p *Processor) runVADGate(settings *conf.Settings, chunk *chunkAudio) (span
 	}
 
 	d := p.recordVADHit(settings, source, audioEnd)
-	p.logLabelHitDecision(settings, source, audioEnd, 0, &d, false)
+	p.logLabelHitDecision(settings, source, nil, &d)
 	return result.span, true
 }
 

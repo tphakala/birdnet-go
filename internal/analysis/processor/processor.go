@@ -89,10 +89,9 @@ type Processor struct {
 	// scored for speech, guarded by detectionMutex. The privacy coverage gate
 	// defers a pending detection until its saved clip span is inside one of them.
 	privacyCoverage map[coverageKey][]audioSpan
-	// labelConfirm holds the per-source label hit confirmation state used when the
-	// effective base overlap is above labelConfirmMinBaseOverlap, guarded by
-	// detectionMutex and created lazily.
-	labelConfirm     map[string]*labelConfirmState
+	// heldLabelHits holds the label hit of each source waiting for a second hit
+	// (see recordLabelHit), guarded by detectionMutex and created lazily.
+	heldLabelHits    map[string]heldLabelHit
 	controlChan      chan string
 	JobQueue         *jobqueue.JobQueue // Queue for managing job retries
 	workerCancel     context.CancelFunc // Function to cancel worker goroutines
@@ -1446,8 +1445,9 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 		// clip. Above the confirmation overlap a lone hit is held (see
 		// recordLabelHit) and counts only when a second hit confirms it.
 		end, _ := audioEndOrNow(&item)
-		d := p.recordLabelHit(settings, item.Source.ID, end, result.Confidence)
-		p.logLabelHitDecision(settings, item.Source.ID, end, result.Confidence, &d, true)
+		hit := heldLabelHit{at: end, confidence: result.Confidence}
+		d := p.recordLabelHit(settings, item.Source.ID, hit)
+		p.logLabelHitDecision(settings, item.Source.ID, &hit, &d)
 	}
 }
 
@@ -1639,7 +1639,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 				logger.Time("last_human_detection", lastHumanDetection.Time),
 				logger.String("trigger", lastHumanDetection.Trigger),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
-				logger.String("operation", "privacy_filter"))
+				logger.String("operation", privacyFilterOperation))
 			// Attribute the discard to the trigger that flagged the human voice
 			// (label match vs VAD speech gate), when telemetry is enabled.
 			if settings.Realtime.Telemetry.Enabled && p.Metrics != nil {

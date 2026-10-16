@@ -10,16 +10,15 @@ import (
 )
 
 const (
-	// labelConfirmMinBaseOverlap is the effective base overlap above which a
-	// human label hit needs a second hit before it counts as speech. At more than
-	// half the analysis clip length every stretch of audio is scored more than
-	// twice, so one stray label score is weak evidence. At or below it (strictly
-	// greater than is required) a single label hit counts, as it always has.
+	// labelConfirmMinBaseOverlap is the effective base overlap above which a human
+	// label hit needs a second hit before it counts as speech (at or below it, a
+	// single hit counts). Above half the clip length every stretch of audio is
+	// scored more than twice, so one stray label score is weak evidence.
 	labelConfirmMinBaseOverlap = classifier.AnalysisBaseClipLength / 2
 
 	// labelConfirmWindow is the longest gap between the audio-end stamps of two
-	// hits for the second to confirm the first. A held label hit with no second
-	// hit inside the window is dropped and never counts.
+	// hits for the second to confirm the first. A held hit with no second hit
+	// inside the window is dropped and never counts.
 	labelConfirmWindow = 15 * time.Second
 
 	// privacyFilterOperation is the log operation of a human hit that counts as
@@ -27,40 +26,25 @@ const (
 	// privacy discard.
 	privacyFilterOperation = "privacy_filter"
 
-	// labelConfirmOperation is the log operation of the label confirmation
-	// messages. It is deliberately not "privacy_filter": the events API counts
-	// every privacy_filter line as a privacy discard (see how
-	// privacy_filter_coverage is treated in events.go).
+	// labelConfirmOperation is the log operation of the confirmation messages. It
+	// must differ from privacyFilterOperation so held and ignored hits are not
+	// counted as discards.
 	labelConfirmOperation = "privacy_filter_label_confirm"
 )
 
-// heldLabelHit is a human label hit waiting for a second hit.
+// heldLabelHit is a human label hit: the audio end it was stamped with and its
+// confidence. While it waits for a second hit it is kept in Processor.heldLabelHits.
 type heldLabelHit struct {
 	at         time.Time
 	confidence float32
 }
 
-// labelConfirmState is the per-source confirmation state, guarded by
-// detectionMutex. It keeps only the latest held hit and the latest counted hit,
-// so its size does not grow with the number of hits.
-type labelConfirmState struct {
-	held        *heldLabelHit
-	lastCounted time.Time // audio end of the latest counted hit; zero when none
-}
-
 // labelHitDecision is what a hit did to the confirmation state, for logging
-// after the lock is released.
+// after the lock is released. A label hit counts unless held is set.
 type labelHitDecision struct {
-	counts    bool          // the hit itself counts as speech
-	held      bool          // the hit was held for confirmation
+	held      bool          // the label hit was held for confirmation
 	confirmed *heldLabelHit // a held hit that this hit confirmed and was recorded
 	dropped   *heldLabelHit // a held hit whose window expired without a second hit
-}
-
-// labelConfirmationActive reports whether a single label hit needs confirmation
-// at baseOverlap, the effective base overlap read for the current operation.
-func labelConfirmationActive(baseOverlap time.Duration) bool {
-	return baseOverlap > labelConfirmMinBaseOverlap
 }
 
 // withinLabelConfirmWindow reports whether two audio-end stamps are close
@@ -69,72 +53,57 @@ func withinLabelConfirmWindow(a, b time.Time) bool {
 	return a.Sub(b).Abs() <= labelConfirmWindow
 }
 
-// labelConfirmStateLocked returns source's state, creating it lazily. The caller
-// holds detectionMutex for writing.
-func (p *Processor) labelConfirmStateLocked(source string) *labelConfirmState {
-	if p.labelConfirm == nil {
-		p.labelConfirm = make(map[string]*labelConfirmState)
-	}
-	st, ok := p.labelConfirm[source]
+// takeHeldLocked removes the held label hit of source, if any, and resolves it
+// against a counted hit stamped at: inside the window it is confirmed and
+// recorded with its own stamp, otherwise dropped. The caller holds detectionMutex
+// for writing.
+func (p *Processor) takeHeldLocked(source string, at time.Time) labelHitDecision {
+	held, ok := p.heldLabelHits[source]
 	if !ok {
-		st = &labelConfirmState{}
-		p.labelConfirm[source] = st
+		return labelHitDecision{}
 	}
-	return st
+	delete(p.heldLabelHits, source)
+	if !withinLabelConfirmWindow(held.at, at) {
+		return labelHitDecision{dropped: &held}
+	}
+	p.recordHumanDetectionLocked(source, held.at, metrics.TriggerLabel)
+	return labelHitDecision{confirmed: &held}
 }
 
-// noteCountedLocked remembers at as the latest counted hit of the source.
-func (st *labelConfirmState) noteCountedLocked(at time.Time) {
-	if at.After(st.lastCounted) {
-		st.lastCounted = at
-	}
-}
-
-// recordLabelHit applies the confirmation rule to one human label hit stamped at
-// the audio end `at`. Below the overlap threshold it records the hit at once.
-// Above it the hit counts when a held hit of the source is inside the window (any
-// model, even the same chunk) or when a hit already counted is, and is otherwise
-// held. Hits that count are recorded with their own stamps and the label trigger.
-func (p *Processor) recordLabelHit(settings *conf.Settings, source string, at time.Time, confidence float32) labelHitDecision {
+// recordLabelHit applies the confirmation rule to one human label hit. At or
+// below labelConfirmMinBaseOverlap it is recorded at once. Above it, the hit
+// counts when it confirms a held hit of the source (any model, even the same
+// chunk) or when a counted hit of the source, label or VAD, is inside the window;
+// otherwise it is held. LastHumanDetection carries the latest counted stamp, so
+// a hit counted while confirmation was off also confirms after a hot reload to a
+// higher overlap. Counted hits are recorded with their own stamps.
+func (p *Processor) recordLabelHit(settings *conf.Settings, source string, hit heldLabelHit) labelHitDecision {
 	baseOverlap := p.effectiveBaseOverlap(settings)
 
 	p.detectionMutex.Lock()
 	defer p.detectionMutex.Unlock()
 
-	if !labelConfirmationActive(baseOverlap) {
-		p.recordHumanDetectionLocked(source, at, metrics.TriggerLabel)
-		return labelHitDecision{counts: true}
+	if baseOverlap <= labelConfirmMinBaseOverlap {
+		p.recordHumanDetectionLocked(source, hit.at, metrics.TriggerLabel)
+		return labelHitDecision{}
 	}
 
-	st := p.labelConfirmStateLocked(source)
-	var d labelHitDecision
-	if st.held != nil {
-		if withinLabelConfirmWindow(st.held.at, at) {
-			d.confirmed = st.held
-			st.held = nil
-			p.recordHumanDetectionLocked(source, d.confirmed.at, metrics.TriggerLabel)
-			st.noteCountedLocked(d.confirmed.at)
-		} else {
-			d.dropped = st.held
-			st.held = nil
-		}
-	}
-
-	if d.confirmed != nil || (!st.lastCounted.IsZero() && withinLabelConfirmWindow(st.lastCounted, at)) {
-		p.recordHumanDetectionLocked(source, at, metrics.TriggerLabel)
-		st.noteCountedLocked(at)
-		d.counts = true
+	d := p.takeHeldLocked(source, hit.at)
+	if last, ok := p.LastHumanDetection[source]; d.confirmed != nil || (ok && withinLabelConfirmWindow(last.Time, hit.at)) {
+		p.recordHumanDetectionLocked(source, hit.at, metrics.TriggerLabel)
 		return d
 	}
 
-	st.held = &heldLabelHit{at: at, confidence: confidence}
+	if p.heldLabelHits == nil {
+		p.heldLabelHits = make(map[string]heldLabelHit)
+	}
+	p.heldLabelHits[source] = hit
 	d.held = true
 	return d
 }
 
 // recordVADHit records a VAD speech hit, which always counts on its own, and
-// lets it confirm a held label hit of the source. The VAD hit also counts as a
-// confirmer for label hits that follow it inside the window.
+// lets it confirm a held label hit of the source.
 func (p *Processor) recordVADHit(settings *conf.Settings, source string, at time.Time) labelHitDecision {
 	baseOverlap := p.effectiveBaseOverlap(settings)
 
@@ -142,34 +111,25 @@ func (p *Processor) recordVADHit(settings *conf.Settings, source string, at time
 	defer p.detectionMutex.Unlock()
 
 	p.recordHumanDetectionLocked(source, at, metrics.TriggerVAD)
-	d := labelHitDecision{counts: true}
-	if !labelConfirmationActive(baseOverlap) {
-		return d
+	if baseOverlap <= labelConfirmMinBaseOverlap {
+		return labelHitDecision{}
 	}
-
-	st := p.labelConfirmStateLocked(source)
-	if st.held != nil {
-		if withinLabelConfirmWindow(st.held.at, at) {
-			d.confirmed = st.held
-			p.recordHumanDetectionLocked(source, d.confirmed.at, metrics.TriggerLabel)
-		} else {
-			d.dropped = st.held
-		}
-		st.held = nil
-	}
-	st.noteCountedLocked(at)
-	return d
+	return p.takeHeldLocked(source, at)
 }
 
 // logLabelHitDecision logs the outcome of a hit after detectionMutex is
-// released. Counted label hits keep the "human detection filtered" line; held and
-// ignored hits use the label confirmation operation.
-func (p *Processor) logLabelHitDecision(settings *conf.Settings, source string, at time.Time, confidence float32, d *labelHitDecision, logSelf bool) {
+// released. own is the label hit that was recorded, or nil for a VAD hit (which
+// logs its own line elsewhere). Counted label hits keep the "human detection
+// filtered" line; held and ignored hits use labelConfirmOperation.
+func (p *Processor) logLabelHitDecision(settings *conf.Settings, source string, own *heldLabelHit, d *labelHitDecision) {
+	if own == nil && d.confirmed == nil && d.dropped == nil {
+		return
+	}
 	threshold := float32(settings.Realtime.PrivacyFilter.Confidence)
 	display := p.getDisplayNameForSource(source)
-	logCounted := func(conf float32) {
+	logCounted := func(confidence float32) {
 		GetLogger().Info("human detection filtered",
-			logger.Float32("confidence", conf),
+			logger.Float32("confidence", confidence),
 			logger.Float32("threshold", threshold),
 			logger.String("source", display),
 			logger.String("operation", privacyFilterOperation))
@@ -187,14 +147,15 @@ func (p *Processor) logLabelHitDecision(settings *conf.Settings, source string, 
 		logCounted(d.confirmed.confidence)
 	}
 	switch {
+	case own == nil: // a VAD hit logs its own line elsewhere
 	case d.held:
 		GetLogger().Debug("human label hit held for confirmation",
-			logger.Float32("confidence", confidence),
-			logger.Time("hit_time", at),
+			logger.Float32("confidence", own.confidence),
+			logger.Time("hit_time", own.at),
 			logger.Duration("window", labelConfirmWindow),
 			logger.String("source", display),
 			logger.String("operation", labelConfirmOperation))
-	case d.counts && logSelf:
-		logCounted(confidence)
+	default:
+		logCounted(own.confidence)
 	}
 }
