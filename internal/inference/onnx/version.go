@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// ortVersionMaxParts is the number of dot-separated parts ParseORTVersion
-// looks at (major.minor.patch); anything after the third dot is ignored.
+// ortVersionMaxParts caps the dot-separated split ParseORTVersion makes:
+// major, minor and the rest. Only major and minor are read.
 const ortVersionMaxParts = 3
 
 // ParseORTVersion extracts the major and minor numbers from an ONNX Runtime
