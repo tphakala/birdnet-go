@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
@@ -280,4 +281,69 @@ func TestRunVADGate_VADHitDoesNotLogAsLabelHit(t *testing.T) {
 	out := infoLog.String()
 	assert.Empty(t, countedLogLine.FindAllString(out, -1), "the VAD hit logs its own line, not a counted label hit: %s", out)
 	assert.NotContains(t, out, "human detection filtered")
+}
+
+// attachCadencePlan gives p a backend whose published plan caps the configured
+// overlap to effective, in seconds, so effectiveBaseOverlap no longer follows
+// settings.BirdNET.Overlap.
+func attachCadencePlan(t *testing.T, p *Processor, configured, effective float64) {
+	t.Helper()
+	require.NotEqual(t, configured, effective, "the plan must differ from the configured overlap")
+	orch := &classifier.Orchestrator{}
+	orch.SetCadencePlan(&cadence.Plan{
+		ConfiguredBaseOverlap: time.Duration(configured * float64(time.Second)),
+		EffectiveBaseOverlap:  time.Duration(effective * float64(time.Second)),
+		Status:                cadence.StatusCapped,
+	})
+	p.Bn = orch
+}
+
+func TestRecordLabelHit_FollowsEffectiveOverlap(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		configured float64
+		effective  float64
+		wantHeld   bool
+	}{
+		{"capped below the boundary counts a single hit", 2.4, 1.0, false},
+		{"capped to exactly the boundary counts a single hit", 2.4, 1.5, false},
+		{"effective above the boundary holds a single hit", 1.0, 2.4, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p, settings := confirmProcessor(tt.configured)
+			attachCadencePlan(t, p, tt.configured, tt.effective)
+
+			d := p.recordLabelHit(settings, confirmSource, heldLabelHit{at: time.Unix(1000, 0), confidence: 0.4})
+
+			assert.Equal(t, tt.wantHeld, d.held)
+			_, counted := lastHit(p)
+			assert.Equal(t, !tt.wantHeld, counted)
+		})
+	}
+}
+
+func TestRecordVADHit_FollowsEffectiveOverlap(t *testing.T) {
+	t.Parallel()
+	p, settings := confirmProcessor(2.4)
+	attachCadencePlan(t, p, 2.4, 2.4+0.5)
+	t0 := time.Unix(1000, 0)
+
+	require.True(t, p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0, confidence: 0.4}).held)
+
+	// The plan is republished with the overlap capped below the boundary while the
+	// configured value stays above it: the VAD hit counts alone and does not
+	// resolve the held label hit.
+	attachCadencePlan(t, p, 2.4, 1.0)
+	d := p.recordVADHit(settings, confirmSource, t0.Add(time.Second))
+
+	assert.Nil(t, d.confirmed)
+	assert.Nil(t, d.dropped)
+	_, stillHeld := held(p, confirmSource)
+	assert.True(t, stillHeld)
+	got, ok := lastHit(p)
+	require.True(t, ok)
+	assert.Equal(t, metrics.TriggerVAD, got.Trigger)
 }
