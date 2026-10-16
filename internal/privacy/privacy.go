@@ -137,17 +137,17 @@ var (
 
 	// dateTimePattern matches the date-and-time prefix of a log line, in ISO,
 	// US, European and dotted forms ("2026-10-16 00:12:34", "10/16/2026 00:12"),
-	// with optional fractional seconds (".015573" or Java style ",123") and a Z
-	// or numeric UTC offset. A spaced offset needs four digits so that a
-	// negative latitude after the time is not read as one.
+	// with optional fractional seconds (".015573" or ",123") and a Z or numeric
+	// UTC offset. An offset needs minutes ("+0200", "-05:00") so that a negative
+	// latitude after the time ("-45.12") is not read as one.
 	// coordinatesPattern's keyword-less alternative reads the "-16 00" of such
 	// a prefix as a coordinate pair, so ScrubCoordinates keeps these spans
 	// out of the text it scrubs.
-	dateTimePattern = regexp.MustCompile(`\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+|,\d{3})?(?:Z|[+-]\d{2}(?::?\d{2})?|\s[+-]\d{2}:?\d{2})?`)
+	dateTimePattern = regexp.MustCompile(`\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+|,\d{3,9})?(?:Z|\s?[+-]\d{2}:?\d{2})?`)
 
 	// syslogTimePattern matches the "Oct 16 00:12:34" prefix of a syslog line,
 	// for the same reason as dateTimePattern.
-	syslogTimePattern = regexp.MustCompile(`(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+|,\d{3})?`)
+	syslogTimePattern = regexp.MustCompile(`(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+|,\d{3,9})?`)
 
 	// Enhanced API token/key pattern - includes bearer tokens and more formats
 	// Requires a separator (: or =) between the key name and the token value
