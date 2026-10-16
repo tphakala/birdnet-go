@@ -1,6 +1,9 @@
 package processor
 
 import (
+	"log/slog"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -206,4 +210,93 @@ func TestRecordLabelHit_ReadsOverlapPerCall(t *testing.T) {
 	d = p.recordLabelHit(settings, confirmSource, t0.Add(2*time.Hour), 0.4)
 	assert.True(t, d.held)
 	assert.True(t, t0.Add(time.Hour).Equal(p.LastHumanDetection[confirmSource].Time))
+}
+
+func TestRunVADGate_ConfirmsHeldLabelHit(t *testing.T) {
+	t.Parallel()
+	p, settings := confirmProcessor(2.4)
+	t0 := time.Unix(1000, 0)
+	vadEnd := t0.Add(3 * time.Second)
+
+	labelHit(p, settings, confirmSource, testVADModel, t0)
+	require.NotNil(t, p.labelConfirm[confirmSource].held, "the lone label hit is held")
+	require.Empty(t, p.LastHumanDetection)
+
+	_, ran := runGate(p, settings, makeVADItem(testVADModel, confirmSource, vadEnd, testVADChunkBytes))
+	require.True(t, ran)
+
+	st := p.labelConfirm[confirmSource]
+	assert.Nil(t, st.held, "the VAD hit through the gate confirms the held label hit")
+	assert.True(t, vadEnd.Equal(st.lastCounted))
+	assert.True(t, vadEnd.Equal(p.LastHumanDetection[confirmSource].Time))
+	assert.Equal(t, metrics.TriggerVAD, p.LastHumanDetection[confirmSource].Trigger)
+}
+
+func TestRunVADGate_LabelHitAfterVADCountsImmediately(t *testing.T) {
+	t.Parallel()
+	p, settings := confirmProcessor(2.4)
+	t0 := time.Unix(1000, 0)
+
+	_, ran := runGate(p, settings, makeVADItem(testVADModel, confirmSource, t0, testVADChunkBytes))
+	require.True(t, ran)
+
+	labelAt := t0.Add(2 * time.Second)
+	labelHit(p, settings, confirmSource, testVADModel, labelAt)
+
+	got := p.LastHumanDetection[confirmSource]
+	assert.True(t, labelAt.Equal(got.Time), "the label hit after the VAD hit counts at once")
+	assert.Equal(t, metrics.TriggerLabel, got.Trigger)
+	assert.Nil(t, p.labelConfirm[confirmSource].held)
+}
+
+func TestRunVADGate_OtherSourceLeavesHeldHitAlone(t *testing.T) {
+	t.Parallel()
+	p, settings := confirmProcessor(2.4)
+	t0 := time.Unix(1000, 0)
+
+	labelHit(p, settings, confirmSource, testVADModel, t0)
+	_, ran := runGate(p, settings, makeVADItem(testVADModel, "other", t0, testVADChunkBytes))
+	require.True(t, ran)
+
+	held := p.labelConfirm[confirmSource].held
+	require.NotNil(t, held, "a VAD hit of another source does not touch the held hit")
+	assert.True(t, t0.Equal(held.at))
+	assert.NotContains(t, p.LastHumanDetection, confirmSource)
+	assert.Contains(t, p.LastHumanDetection, "other")
+}
+
+// countedLogLine matches the operation of a hit that counts as speech exactly;
+// privacy_filter_label_confirm must not match.
+var countedLogLine = regexp.MustCompile(`operation=privacy_filter(\s|$)`)
+
+// Not parallel: logtest.CaptureBufferAt replaces the global logger.
+func TestLogLabelHitDecision_OperationAndLevel(t *testing.T) {
+	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
+	p, settings := confirmProcessor(2.4)
+	t0 := time.Unix(1000, 0)
+
+	// hit 1 is held, hit 2 drops it (ignored) and is held, hit 3 confirms hit 2.
+	labelHit(p, settings, confirmSource, testVADModel, t0)
+	labelHit(p, settings, confirmSource, testVADModel, t0.Add(labelConfirmWindow+time.Second))
+	labelHit(p, settings, confirmSource, testVADModel, t0.Add(labelConfirmWindow+2*time.Second))
+
+	out := infoLog.String()
+	assert.Len(t, countedLogLine.FindAllString(out, -1), 2, "only the confirmed pair logs as counted: %s", out)
+	assert.Equal(t, 2, strings.Count(out, "human detection filtered"))
+	assert.Equal(t, 1, strings.Count(out, "operation=privacy_filter_label_confirm"), "the ignored hit logs once at Info")
+	assert.Contains(t, out, "ignored")
+	assert.NotContains(t, out, "held for confirmation", "held hits log at Debug only")
+}
+
+// Not parallel: logtest.CaptureBufferAt replaces the global logger.
+func TestLogLabelHitDecision_HeldHitLogsAtDebugWithoutCountedOperation(t *testing.T) {
+	debugLog := logtest.CaptureBufferAt(t, slog.LevelDebug)
+	p, settings := confirmProcessor(2.4)
+
+	labelHit(p, settings, confirmSource, testVADModel, time.Unix(1000, 0))
+
+	out := debugLog.String()
+	assert.Contains(t, out, "held for confirmation")
+	assert.Contains(t, out, "operation=privacy_filter_label_confirm")
+	assert.Empty(t, countedLogLine.FindAllString(out, -1), "a held hit is not logged as a privacy_filter hit")
 }
