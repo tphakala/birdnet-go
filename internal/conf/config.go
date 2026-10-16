@@ -527,7 +527,7 @@ type PrivacyFilterSettings struct {
 // inactive without one.
 type VADSettings struct {
 	Enabled   bool    `yaml:"enabled" json:"enabled"`     // true to enable the VAD speech gate (opt-in, default false)
-	Threshold float64 `yaml:"threshold" json:"threshold"` // speech-probability gate in (0,1]; default 0.35
+	Threshold float64 `yaml:"threshold" json:"threshold"` // speech-probability gate in (0,1]; default 0.6
 	ModelPath string  `yaml:"modelpath" json:"modelPath"` // optional override for the embedded silero .onnx; must be a sequence-export model (inputs input/h/c), not the stock upstream frame model; empty uses the embedded model
 }
 

@@ -817,7 +817,7 @@ export function coercePrivacyFilterSettings(
     debug: false,
     vad: {
       enabled: false,
-      threshold: 0.35,
+      threshold: 0.6,
       modelPath: '',
     },
   };
@@ -829,7 +829,7 @@ export function coercePrivacyFilterSettings(
   const rawVad = data.vad as Record<string, unknown> | undefined;
   const vad: PrivacyFilterVadSettings = {
     enabled: coerceBoolean(rawVad?.enabled, false),
-    threshold: coerceNumber(rawVad?.threshold, 0.01, 1.0, 0.35),
+    threshold: coerceNumber(rawVad?.threshold, 0.01, 1.0, 0.6),
     modelPath: coerceString(rawVad?.modelPath, ''),
   };
 

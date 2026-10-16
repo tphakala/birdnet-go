@@ -3186,7 +3186,7 @@
         "vadEnable": "Aktivera Integritetsskydd (Silero VAD)",
         "vadHelp": "Kör en dedikerad neural talidentifieringsmodell jämte klassificeraren för robust röstfiltrering. Förbrukar ytterligare systemresurser (ca 20-30 MB RAM och CPU-inferens per segment).",
         "vadThresholdLabel": "Tröskelvärde för Integritetsskydd",
-        "vadThresholdHelp": "Känslighetströskel för talaktivitetsdetektorn (standard 0.35). Lägre värden gör filtret känsligare för tyst eller avlägset tal."
+        "vadThresholdHelp": "Känslighetströskel för talaktivitetsdetektorn (standard 0.6). Lägre värden gör filtret känsligare för tyst eller avlägset tal."
       },
       "falsePositivePrevention": {
         "title": "Förebyggande av falska positiva",
