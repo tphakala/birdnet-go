@@ -300,3 +300,17 @@ func TestLogLabelHitDecision_HeldHitLogsAtDebugWithoutCountedOperation(t *testin
 	assert.Contains(t, out, "operation=privacy_filter_label_confirm")
 	assert.Empty(t, countedLogLine.FindAllString(out, -1), "a held hit is not logged as a privacy_filter hit")
 }
+
+// Not parallel: logtest.CaptureBufferAt replaces the global logger.
+func TestRunVADGate_VADHitDoesNotLogAsLabelHit(t *testing.T) {
+	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
+	p, settings := confirmProcessor(2.4)
+
+	_, ran := runGate(p, settings, makeVADItem(testVADModel, confirmSource, time.Unix(1000, 0), testVADChunkBytes))
+	require.True(t, ran)
+	require.Contains(t, p.LastHumanDetection, confirmSource)
+
+	out := infoLog.String()
+	assert.Empty(t, countedLogLine.FindAllString(out, -1), "the VAD hit logs its own line, not a counted label hit: %s", out)
+	assert.NotContains(t, out, "human detection filtered")
+}
