@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	diagpkg "github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1974,6 +1976,39 @@ func TestCreateArchiveSkipsMissingJournal(t *testing.T) {
 	for _, f := range zr.File {
 		assert.NotEqual(t, "diagnostics/journal.jsonl", f.Name)
 	}
+}
+
+// TestJournalSkipReasonValues pins the strings that appear in support dumps.
+func TestJournalSkipReasonValues(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "skipped_reason", journalSkippedReasonKey)
+	assert.Equal(t, "running_in_container", journalSkipContainer)
+	assert.Equal(t, "unsupported_os", journalSkipUnsupportedOS)
+	assert.Equal(t, "journalctl_not_found", journalSkipNotInstalled)
+}
+
+// TestCollectLogs_SkipsJournaldWithoutJournalctl removes journalctl from PATH,
+// so the host gate reports a skip on every OS and collectLogs must record it
+// as not attempted instead of a failed command.
+func TestCollectLogs_SkipsJournaldWithoutJournalctl(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	c := NewCollector(t.TempDir(), t.TempDir(), "sys-id", "20260716")
+	diag := LogCollectionDiagnostics{
+		JournalLogs: LogSourceDiagnostics{Details: make(map[string]any)},
+		FileLogs:    LogSourceDiagnostics{Details: make(map[string]any)},
+	}
+	c.collectLogs(t.Context(), testWindowHourly, testSize1KB, false, &diag)
+
+	jl := diag.JournalLogs
+	assert.False(t, jl.Attempted)
+	assert.Contains(t, []any{journalSkipUnsupportedOS, journalSkipContainer, journalSkipNotInstalled},
+		jl.Details[journalSkippedReasonKey])
+	if runtime.GOOS == osLinux && !sysinfo.IsContainer() {
+		// The PATH branch is the only gate that can fire here.
+		assert.Equal(t, journalSkipNotInstalled, jl.Details[journalSkippedReasonKey])
+	}
+	assert.Empty(t, jl.Error)
+	assert.NotEqual(t, "command_failed", jl.Details["error_type"])
 }
 
 func TestJournalSkipReason(t *testing.T) {
