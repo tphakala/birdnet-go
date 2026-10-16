@@ -985,6 +985,50 @@ func TestScrubCoordinates_StillScrubsWithNeighbors(t *testing.T) {
 	}
 }
 
+func TestScrubCoordinates_ScrubsPairRightAfterTimestamp(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"date time then pair", "2026-10-16 00:12:34 60.1699,24.9384", "2026-10-16 00:12:34 [LAT],[LON]"},
+		{"syslog then pair", "Oct 16 00:12:34 60.1699,24.9384", "Oct 16 00:12:34 [LAT],[LON]"},
+		{"fractional seconds", "2026-10-16 00:12:34.015573 60.1699,24.9384", "2026-10-16 00:12:34.015573 [LAT],[LON]"},
+		{"comma milliseconds", "2026-10-16 00:12:34,123 60.1699,24.9384", "2026-10-16 00:12:34,123 [LAT],[LON]"},
+		{"syslog fraction", "Oct 16 00:12:34.567 60.1699,24.9384", "Oct 16 00:12:34.567 [LAT],[LON]"},
+		{"RFC3339 offset", "2026-10-16T00:12:34+02:00 60.1699,24.9384", "2026-10-16T00:12:34+02:00 [LAT],[LON]"},
+		{"spaced numeric offset", "2026-10-16 00:12:34 +0200 60.1699,24.9384", "2026-10-16 00:12:34 +0200 [LAT],[LON]"},
+		{"spaced negative offset", "2026-10-16 00:12:34 -0500 60.1699,24.9384", "2026-10-16 00:12:34 -0500 [LAT],[LON]"},
+		{"comma pair right after seconds", "2026-10-16 00:12:34,60.1699 24.9384", "2026-10-16 00:12:34,[LAT],[LON]"},
+		{"hour-only offset", "2026-10-16T00:12:34+02 60.1699,24.9384", "2026-10-16T00:12:34+02 [LAT],[LON]"},
+		{"Z suffix", "2026-10-16T00:12:34Z 60.1699,24.9384", "2026-10-16T00:12:34Z [LAT],[LON]"},
+		{"negative pair after time", "2026-10-16 00:12:34 -45.123,122.456", "2026-10-16 00:12:34 [LAT],[LON]"},
+		{"pair between timestamps", "2026-10-16 00:12:34 at 60.1699,24.9384 until 2026-10-16 00:13:00", "2026-10-16 00:12:34 at [LAT],[LON] until 2026-10-16 00:13:00"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, ScrubCoordinates(tt.input))
+		})
+	}
+}
+
+func TestProtectedTimeSpans_MergesTouchingSpans(t *testing.T) {
+	t.Parallel()
+	// The date-time ends exactly where the syslog prefix starts.
+	in := "2026-10-16 00:12:34Oct 16 00:12:35"
+	assert.Equal(t, [][]int{{0, len(in)}}, protectedTimeSpans(in))
+	assert.Equal(t, in, ScrubCoordinates(in))
+}
+
+func TestScrubCoordinates_LabelIsNotASyslogMonth(t *testing.T) {
+	t.Parallel()
+	got := ScrubCoordinates("lat 60 12:34")
+	assert.NotContains(t, got, "lat 60")
+}
+
 func TestScrubCoordinates_StillScrubsBesideTimestamps(t *testing.T) {
 	t.Parallel()
 	got := ScrubCoordinates("2026-10-16 00:12:34 weather for 60.1699,24.9384 failed")
