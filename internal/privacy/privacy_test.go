@@ -939,6 +939,132 @@ func TestScrubCoordinates(t *testing.T) {
 	runScrubTests(t, ScrubCoordinates, tests)
 }
 
+func TestScrubMessage_KeepsSpaceSeparatedDateTimes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"journal date time", "2026-10-16 00:12:34"},
+		{"date time with fraction", "2026-10-16 00:12:34.015573"},
+		{"syslog prefix", "Oct 16 00:12:34 host birdnet-go[1]: started"},
+		{"date time in a sentence", "restart at 2026-10-16 23:59:01 after crash"},
+		{"clock times", "from 10:15:30 to 11:45:00"},
+		{"dotted date time", "16.10.2026 00:12 started"},
+		{"date time with T", "2026-10-16T00:12:34 started"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.input, ScrubMessage(tt.input))
+		})
+	}
+}
+
+func TestScrubCoordinates_StillScrubsWithNeighbors(t *testing.T) {
+	t.Parallel()
+
+	inputs := []string{
+		"coords:60.1699,24.9384",
+		"Lat:60.1699,24.9384",
+		"error at 60.1699,24.9384: timeout",
+		"60.1699,24.9384N",
+		"60.1699, 24.9384m away",
+		"pos=60.1699,24.9384_x",
+		"user_lat=60.1699 lon=24.9384",
+	}
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			t.Parallel()
+			got := ScrubCoordinates(in)
+			assert.NotContains(t, got, "60.1699")
+			assert.NotContains(t, got, "24.9384")
+		})
+	}
+}
+
+func TestScrubCoordinates_ScrubsPairRightAfterTimestamp(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"date time then pair", "2026-10-16 00:12:34 60.1699,24.9384", "2026-10-16 00:12:34 [LAT],[LON]"},
+		{"syslog then pair", "Oct 16 00:12:34 60.1699,24.9384", "Oct 16 00:12:34 [LAT],[LON]"},
+		{"fractional seconds", "2026-10-16 00:12:34.015573 60.1699,24.9384", "2026-10-16 00:12:34.015573 [LAT],[LON]"},
+		{"comma milliseconds", "2026-10-16 00:12:34,123 60.1699,24.9384", "2026-10-16 00:12:34,123 [LAT],[LON]"},
+		{"syslog fraction", "Oct 16 00:12:34.567 60.1699,24.9384", "Oct 16 00:12:34.567 [LAT],[LON]"},
+		{"RFC3339 offset", "2026-10-16T00:12:34+02:00 60.1699,24.9384", "2026-10-16T00:12:34+02:00 [LAT],[LON]"},
+		{"spaced numeric offset", "2026-10-16 00:12:34 +0200 60.1699,24.9384", "2026-10-16 00:12:34 +0200 [LAT],[LON]"},
+		{"spaced negative offset", "2026-10-16 00:12:34 -0500 60.1699,24.9384", "2026-10-16 00:12:34 -0500 [LAT],[LON]"},
+		{"comma pair right after seconds", "2026-10-16 00:12:34,60.1699 24.9384", "2026-10-16 00:12:34,[LAT],[LON]"},
+		{"long comma fraction", "2026-10-16 00:12:34,015573 60.1699,24.9384", "2026-10-16 00:12:34,015573 [LAT],[LON]"},
+		{"negative latitude glued to time", "2026-10-16T00:12:34-45.12,122.4", "2026-10-16T00:12:34[LAT],[LON]"},
+		{"longitude first right after time", "2026-10-16 00:12:34,151.2093,-33.8688", "2026-10-16 00:12:34,[LAT],[LON]"},
+		{"zero padded pair right after time", "2026-10-16 00:12:34,060.1699,24.9384", "2026-10-16 00:12:34,[LAT],[LON]"},
+		{"syslog longitude first", "Oct 16 00:12:34,151.2093,-33.8688", "Oct 16 00:12:34,[LAT],[LON]"},
+		{"sentence period after fraction", "2026-10-16 00:12:34,123. 50 birds", "2026-10-16 00:12:34,123. 50 birds"},
+		{"Z suffix", "2026-10-16T00:12:34Z 60.1699,24.9384", "2026-10-16T00:12:34Z [LAT],[LON]"},
+		{"negative pair after time", "2026-10-16 00:12:34 -45.123,122.456", "2026-10-16 00:12:34 [LAT],[LON]"},
+		{"pair between timestamps", "2026-10-16 00:12:34 at 60.1699,24.9384 until 2026-10-16 00:13:00", "2026-10-16 00:12:34 at [LAT],[LON] until 2026-10-16 00:13:00"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, ScrubCoordinates(tt.input))
+		})
+	}
+}
+
+func TestTrimGluedCoordinate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		message string
+		start   int
+		end     int
+		want    int
+	}{
+		{"comma fraction before a dot", "00:12:34,151.2", 0, 12, 8},
+		{"comma fraction before a sentence period", "00:12:34,123. 50 birds", 0, 12, 12},
+		{"comma fraction before a final period", "00:12:34,123.", 0, 12, 12},
+		{"comma fraction at end of text", "00:12:34,123", 0, 12, 12},
+		{"dot fraction before a dot", "00:12:34.5.7", 0, 10, 10},
+		{"non-digit after the comma", "00:12:34,123Z.5", 0, 13, 13},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, trimGluedCoordinate(tt.message, tt.start, tt.end))
+		})
+	}
+}
+
+func TestProtectedTimeSpans_MergesTouchingSpans(t *testing.T) {
+	t.Parallel()
+	// The date-time ends exactly where the syslog prefix starts.
+	in := "2026-10-16 00:12:34Oct 16 00:12:35"
+	assert.Equal(t, [][]int{{0, len(in)}}, protectedTimeSpans(in))
+	assert.Equal(t, in, ScrubCoordinates(in))
+}
+
+func TestScrubCoordinates_LabelIsNotASyslogMonth(t *testing.T) {
+	t.Parallel()
+	got := ScrubCoordinates("lat 60 12:34")
+	assert.NotContains(t, got, "lat 60")
+}
+
+func TestScrubCoordinates_StillScrubsBesideTimestamps(t *testing.T) {
+	t.Parallel()
+	got := ScrubCoordinates("2026-10-16 00:12:34 weather for 60.1699,24.9384 failed")
+	assert.Equal(t, "2026-10-16 00:12:34 weather for [LAT],[LON] failed", got)
+}
+
 func TestScrubAPITokens(t *testing.T) {
 	t.Parallel()
 

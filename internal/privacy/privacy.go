@@ -135,6 +135,20 @@ var (
 	// GPS coordinates pattern - matches decimal degree coordinates
 	coordinatesPattern = regexp.MustCompile(`(?:lat(?:itude)?|lng|lon|longitude)[:=]?\s*-?\d{1,3}\.?\d*[,\s]+(?:lng|lon|longitude)[:=]?\s*-?\d{1,3}\.?\d*|(?:lat(?:itude)?[:=]?\s*)?-?\d{1,3}\.?\d*[,\s]+-?\d{1,3}\.?\d*`)
 
+	// dateTimePattern matches the date-and-time prefix of a log line, in ISO,
+	// US, European and dotted forms ("2026-10-16 00:12:34", "10/16/2026 00:12"),
+	// with optional fractional seconds (".015573" or ",123") and a Z or numeric
+	// UTC offset. An offset needs minutes ("+0200", "-05:00") so that a negative
+	// latitude after the time ("-45.12") is not read as one.
+	// coordinatesPattern's keyword-less alternative reads the "-16 00" of such
+	// a prefix as a coordinate pair, so ScrubCoordinates keeps these spans
+	// out of the text it scrubs.
+	dateTimePattern = regexp.MustCompile(`\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+|,\d{3,9})?(?:Z|\s?[+-]\d{2}:?\d{2})?`)
+
+	// syslogTimePattern matches the "Oct 16 00:12:34" prefix of a syslog line,
+	// for the same reason as dateTimePattern.
+	syslogTimePattern = regexp.MustCompile(`(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+|,\d{3,9})?`)
+
 	// Enhanced API token/key pattern - includes bearer tokens and more formats
 	// Requires a separator (: or =) between the key name and the token value
 	apiTokenPattern = regexp.MustCompile(`(?i)(?:(?:api[_-]?key|token|secret|auth)[:=]\s*|(?:bearer)(?:\s+token)?[:=\s]+|(?:with\s+(?:token|key|secret|auth))\s+)([A-Za-z0-9+/\-_]{8,}[A-Za-z0-9+/=]*)`)
@@ -444,9 +458,71 @@ func ScrubStandaloneIPs(message string) string {
 }
 
 // ScrubCoordinates removes or anonymizes GPS coordinates from text messages
-// It replaces coordinate pairs with generic placeholders while preserving message structure
+// It replaces coordinate pairs with generic placeholders while preserving message structure.
+// Date-time and syslog time prefixes are not coordinate pairs; they are kept
+// as they are and the text around them is scrubbed on its own, so a pair
+// that follows a timestamp is still replaced.
 func ScrubCoordinates(message string) string {
-	return coordinatesPattern.ReplaceAllString(message, "[LAT],[LON]")
+	protected := protectedTimeSpans(message)
+	if len(protected) == 0 {
+		return coordinatesPattern.ReplaceAllString(message, "[LAT],[LON]")
+	}
+
+	var out strings.Builder
+	pos := 0
+	for _, span := range protected {
+		out.WriteString(coordinatesPattern.ReplaceAllString(message[pos:span[0]], "[LAT],[LON]"))
+		out.WriteString(message[span[0]:span[1]])
+		pos = span[1]
+	}
+	out.WriteString(coordinatesPattern.ReplaceAllString(message[pos:], "[LAT],[LON]"))
+	return out.String()
+}
+
+// trimGluedCoordinate returns the end of the time prefix message[start:end]
+// without a trailing comma fraction that is really the whole-degree part of a
+// coordinate: ",123" is a fraction of a second, but ",151.2093" is a longitude
+// written right after the time.
+func trimGluedCoordinate(message string, start, end int) int {
+	if end+1 >= len(message) || message[end] != '.' || message[end+1] < '0' || message[end+1] > '9' {
+		return end
+	}
+	comma := strings.LastIndexByte(message[start:end], ',')
+	if comma < 0 {
+		return end
+	}
+	for _, c := range message[start+comma+1 : end] {
+		if c < '0' || c > '9' {
+			return end
+		}
+	}
+	return start + comma
+}
+
+// protectedTimeSpans returns the date-time and syslog time prefixes in message
+// as sorted, non-overlapping [start, end) spans. A trailing comma fraction that
+// is really the start of a coordinate (see trimGluedCoordinate) is not part of
+// a span.
+func protectedTimeSpans(message string) [][]int {
+	spans := dateTimePattern.FindAllStringIndex(message, -1)
+	spans = append(spans, syslogTimePattern.FindAllStringIndex(message, -1)...)
+	for _, span := range spans {
+		span[1] = trimGluedCoordinate(message, span[0], span[1])
+	}
+	if len(spans) < 2 {
+		return spans
+	}
+	sort.Slice(spans, func(i, j int) bool { return spans[i][0] < spans[j][0] })
+	merged := spans[:1]
+	for _, span := range spans[1:] {
+		last := merged[len(merged)-1]
+		if span[0] <= last[1] {
+			last[1] = max(last[1], span[1])
+			continue
+		}
+		merged = append(merged, span)
+	}
+	return merged
 }
 
 // ScrubAPITokens removes or anonymizes API tokens, keys, and secrets from text messages
