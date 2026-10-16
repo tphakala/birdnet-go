@@ -88,7 +88,10 @@ type Processor struct {
 	// privacyCoverage lists the audio spans each (source, model, detector) has
 	// scored for speech, guarded by detectionMutex. The privacy coverage gate
 	// defers a pending detection until its saved clip span is inside one of them.
-	privacyCoverage  map[coverageKey][]audioSpan
+	privacyCoverage map[coverageKey][]audioSpan
+	// heldLabelHits holds the label hit of each source waiting for a second hit
+	// (see recordLabelHit), guarded by detectionMutex and created lazily.
+	heldLabelHits    map[string]heldLabelHit
 	controlChan      chan string
 	JobQueue         *jobqueue.JobQueue // Queue for managing job retries
 	workerCancel     context.CancelFunc // Function to cancel worker goroutines
@@ -1429,23 +1432,22 @@ func (p *Processor) handleDogDetection(settings *conf.Settings, item classifier.
 // handleHumanDetection handles the detection of human vocalizations and records
 // the hit in LastHumanDetection, stamped with the end of the chunk's audio (the
 // processing time when the producer gave none) and never moving the stored time
-// backward.
+// backward. When the effective base overlap is above labelConfirmMinBaseOverlap
+// a hit counts only once a second hit confirms it, see recordLabelHit.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifier.Results, result datastore.Results) {
 	// only check this if privacy filter is enabled
 	if settings.Realtime.PrivacyFilter.Enabled && isHumanVocalization(result.Species) &&
 		result.Confidence > settings.Realtime.PrivacyFilter.Confidence {
-		GetLogger().Info("human detection filtered",
-			logger.Float32("confidence", result.Confidence),
-			logger.Float32("threshold", float32(settings.Realtime.PrivacyFilter.Confidence)),
-			logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
-			logger.String("operation", "privacy_filter"))
-		// Put the human detection into the LastHumanDetection map, stamped with the
-		// end of the audio this label scored (not the back-dated chunk start). This is
-		// used to discard bird detections whose saved clip reaches that audio.
+		// Stamp the hit with the end of the audio this label scored (not the
+		// back-dated chunk start); the discard check compares it with the saved
+		// clip. Above the confirmation overlap a lone hit is held (see
+		// recordLabelHit) and counts only when a second hit confirms it.
 		end, _ := audioEndOrNow(&item)
-		p.recordHumanDetection(item.Source.ID, end, metrics.TriggerLabel)
+		hit := heldLabelHit{at: end, confidence: result.Confidence}
+		d := p.recordLabelHit(settings, item.Source.ID, hit)
+		p.logLabelHitDecision(settings, item.Source.ID, &hit, &d)
 	}
 }
 
@@ -1637,7 +1639,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 				logger.Time("last_human_detection", lastHumanDetection.Time),
 				logger.String("trigger", lastHumanDetection.Trigger),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
-				logger.String("operation", "privacy_filter"))
+				logger.String("operation", privacyFilterOperation))
 			// Attribute the discard to the trigger that flagged the human voice
 			// (label match vs VAD speech gate), when telemetry is enabled.
 			if settings.Realtime.Telemetry.Enabled && p.Metrics != nil {

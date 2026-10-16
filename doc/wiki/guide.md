@@ -1066,6 +1066,7 @@ realtime:
 
 - Discards a bird detection when human speech is heard anywhere in its saved clip, including the pre-capture part, and also when speech is heard after the clip while the detection is still waiting. A detection waits until its whole clip has been scanned. Only a detection whose clip is never fully scanned within 30 seconds after the clip end is saved and counted as unscanned
 - Protects privacy by preventing recordings during conversations
+- When `birdnet.overlap` is above 1.5 (as applied after any cadence cap), a human voice label match is held until a second match from the same audio source arrives within 15 seconds: another label match from any model, or a VAD speech hit. A held match that is not confirmed in time is ignored. At 1.5 or below, and for VAD speech hits on their own, a single match counts
 
 #### Dog Bark Filter
 

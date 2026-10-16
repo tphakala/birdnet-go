@@ -194,6 +194,12 @@ func (c *chunkAudio) coverage() audioSpan {
 func (p *Processor) recordHumanDetection(source string, at time.Time, trigger string) {
 	p.detectionMutex.Lock()
 	defer p.detectionMutex.Unlock()
+	p.recordHumanDetectionLocked(source, at, trigger)
+}
+
+// recordHumanDetectionLocked is recordHumanDetection for a caller that already
+// holds detectionMutex for writing.
+func (p *Processor) recordHumanDetectionLocked(source string, at time.Time, trigger string) {
 	if existing, ok := p.LastHumanDetection[source]; ok && !at.After(existing.Time) {
 		return
 	}
