@@ -2120,9 +2120,12 @@ func hostJournalSkipReason() string {
 }
 
 // markJournalSkipped records that journald collection was not attempted and why.
+// It clears any result of an earlier attempt and keeps only the searched paths.
 func markJournalSkipped(diag *LogSourceDiagnostics, reason string) {
-	diag.Attempted = false
-	diag.Details = map[string]any{journalSkippedReasonKey: reason}
+	*diag = LogSourceDiagnostics{
+		PathsSearched: diag.PathsSearched,
+		Details:       map[string]any{journalSkippedReasonKey: reason},
+	}
 }
 
 // getJournaldLogs retrieves logs from journald as a string

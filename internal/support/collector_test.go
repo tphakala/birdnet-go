@@ -2051,10 +2051,20 @@ func TestJournalSkipReason(t *testing.T) {
 func TestMarkJournalSkipped(t *testing.T) {
 	t.Parallel()
 	diag := LogSourceDiagnostics{
-		Attempted: true,
-		Details:   map[string]any{"error_type": "command_failed", "stale": 1},
+		Attempted:     true,
+		Successful:    true,
+		Error:         "stale failure",
+		EntriesFound:  7,
+		Command:       "journalctl -u birdnet-go.service",
+		PathsSearched: []SearchedPath{},
+		Details:       map[string]any{"error_type": "command_failed", "stale": 1},
 	}
 	markJournalSkipped(&diag, journalSkipUnsupportedOS)
 	assert.False(t, diag.Attempted)
+	assert.False(t, diag.Successful)
+	assert.Empty(t, diag.Error)
+	assert.Zero(t, diag.EntriesFound)
+	assert.Empty(t, diag.Command)
+	assert.NotNil(t, diag.PathsSearched)
 	assert.Equal(t, map[string]any{journalSkippedReasonKey: journalSkipUnsupportedOS}, diag.Details)
 }

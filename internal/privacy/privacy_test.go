@@ -2303,10 +2303,27 @@ func TestScrubStandaloneIPs_IPv6InURLUntouched(t *testing.T) {
 	assert.Equal(t, in, ScrubStandaloneIPs(in))
 }
 
-func TestScrubStandaloneIPs_MACLikeTokenPassesThrough(t *testing.T) {
+func TestScrubStandaloneIPs_NonTimeTokensStillHashed(t *testing.T) {
 	t.Parallel()
-	in := "mac aa:bb:cc:dd:ee:ff seen"
-	assert.Equal(t, in, ScrubStandaloneIPs(in))
+
+	tests := []struct {
+		name  string
+		input string
+		leaks string
+	}{
+		{"MAC with letters", "mac aa:bb:cc:dd:ee:ff seen", "aa:bb:cc:dd:ee:ff"},
+		{"MAC of digits", "mac 00:11:22:33:44:55 seen", "00:11:22:33:44:55"},
+		{"IPv6 CIDR prefix", "net 2001:db8:abcd:1234::/64 up", "2001:db8:abcd:1234"},
+		{"short hex token", "id ab:cd:ef seen", "ab:cd:ef"},
+		{"digit-only prefix", "net 2001:1234:5678:9012::/64 up", "2001:1234:5678:9012"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.NotContains(t, ScrubStandaloneIPs(tt.input), tt.leaks)
+		})
+	}
 }
 
 func TestScrubStandaloneIPs_IPv4LeadingZerosStillHashed(t *testing.T) {
