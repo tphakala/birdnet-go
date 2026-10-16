@@ -320,13 +320,13 @@ func InitONNXRuntime(libraryPath string) (err error) {
 }
 
 // archARM64 is the runtime.GOARCH value of 64-bit Arm. Of the targets
-// BirdNET-Go builds for, it is the only one with Arm SME CPUs, which the
-// KleidiAI kernels need.
+// BirdNET-Go builds for, it is the only one where ONNX Runtime uses KleidiAI
+// kernels.
 const archARM64 = "arm64"
 
 // logKleidiAIWorkaround logs at Info that sessions disable the KleidiAI
 // kernels for ortVersion, so support can confirm the workaround is active on
-// Arm SME CPUs (Apple M4 and M5). It stays silent off arm64, where the
+// an arm64 host. It stays silent off arm64, where the
 // session option changes nothing. InitONNXRuntime calls it after a successful
 // init.
 func logKleidiAIWorkaround(ortVersion, goarch string) {
