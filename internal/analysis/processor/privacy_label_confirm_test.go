@@ -347,3 +347,20 @@ func TestRecordVADHit_FollowsEffectiveOverlap(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, metrics.TriggerVAD, got.Trigger)
 }
+
+func TestHandleHumanDetection_OtherSourceLeavesHeldHitAlone(t *testing.T) {
+	t.Parallel()
+	p, settings := confirmProcessor(2.4)
+	t0 := time.Unix(1000, 0)
+
+	labelHit(p, settings, confirmSource, testVADModel, t0)
+	labelHit(p, settings, "other", testVADModel, t0.Add(time.Second))
+
+	assert.Empty(t, p.LastHumanDetection, "a hit from another source confirms nothing")
+	first, ok := held(p, confirmSource)
+	require.True(t, ok, "the first source keeps its held hit")
+	assert.True(t, t0.Equal(first.at))
+	second, ok := held(p, "other")
+	require.True(t, ok, "the other source holds its own hit")
+	assert.True(t, t0.Add(time.Second).Equal(second.at))
+}
