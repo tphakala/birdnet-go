@@ -406,7 +406,9 @@ func ScrubUUIDs(message string) string {
 }
 
 // ScrubStandaloneIPs removes or anonymizes standalone IP addresses from text messages
-// It handles both IPv4 and IPv6 addresses that are not part of URLs
+// It handles both IPv4 and IPv6 addresses that are not part of URLs.
+// IPv6-like candidates that are not valid addresses (timestamps, MAC-like
+// tokens) are left unchanged.
 func ScrubStandaloneIPs(message string) string {
 	// First mark all URLs to avoid processing IPs within them
 	urlPositions := make(map[int]int) // start -> end position of URLs
@@ -428,7 +430,7 @@ func ScrubStandaloneIPs(message string) string {
 	// Find all IP matches in the original message to ensure coordinates
 	// are consistent with URL positions (avoids stale coordinate bug)
 	ipv4Matches := ipv4Pattern.FindAllStringIndex(message, -1)
-	ipv6Matches := ipv6Pattern.FindAllStringIndex(message, -1)
+	ipv6Matches := keepParsableIPMatches(message, ipv6Pattern.FindAllStringIndex(message, -1))
 
 	// Combine and sort by position to process in order
 	allMatches := make([][]int, 0, len(ipv4Matches)+len(ipv6Matches))
@@ -686,6 +688,20 @@ func isNumeric(s string) bool {
 // isHexChar checks if a rune is a valid hex character
 func isHexChar(r rune) bool {
 	return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'F') || (r >= 'a' && r <= 'f')
+}
+
+// keepParsableIPMatches returns the matches whose text parses as an IP address.
+// ipv6Pattern also matches non-addresses such as the "12:34:56" part of a
+// timestamp; those are left untouched instead of being hashed. net.ParseIP is
+// the parser AnonymizeIP uses, so every kept match is anonymized as an IP.
+func keepParsableIPMatches(message string, matches [][]int) [][]int {
+	kept := matches[:0]
+	for _, match := range matches {
+		if net.ParseIP(message[match[0]:match[1]]) != nil {
+			kept = append(kept, match)
+		}
+	}
+	return kept
 }
 
 // replaceIPMatches replaces IP addresses in a message with their anonymized versions
