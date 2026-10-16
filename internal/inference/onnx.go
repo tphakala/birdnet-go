@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	ort "github.com/tphakala/birdnet-go/internal/inference/onnx"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	ortlib "github.com/yalue/onnxruntime_go"
 )
 
@@ -314,7 +315,22 @@ func InitONNXRuntime(libraryPath string) (err error) {
 
 	ort.MustInitORT(libraryPath)
 	ortInitialized = true
+	logKleidiAIWorkaround(ortlib.GetVersion())
 	return nil
+}
+
+// logKleidiAIWorkaround logs at Info that sessions disable the KleidiAI
+// kernels for ortVersion, so support can tell why inference is slower on Arm
+// SME CPUs (Apple M4 and M5). InitONNXRuntime calls it once per process, after
+// the first successful init.
+func logKleidiAIWorkaround(ortVersion string) {
+	if !ort.KleidiAIWorkaroundNeeded(ortVersion) {
+		return
+	}
+	logger.Global().Module("inference").Info(
+		"ONNX Runtime KleidiAI kernels are disabled to avoid a known memory growth in older ONNX Runtime releases on Arm CPUs with SME",
+		logger.String("ort_version", ortVersion),
+		logger.String("fixed_in", ort.KleidiAIFixedVersion))
 }
 
 // findONNXRuntimeLibrary searches standard system paths for the ONNX Runtime
