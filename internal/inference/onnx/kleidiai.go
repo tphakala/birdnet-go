@@ -18,10 +18,9 @@ import "fmt"
 //     fixed in ONNX Runtime 1.27.0 (microsoft/onnxruntime#28363), which removed
 //     the input-data hash from the cache key.
 //
-// Measured on an Apple M5 Pro with Perch v2 int8_arm, 7 threads, fresh input per
-// run, bundled ONNX Runtime 1.25.1: +1263 KB per run without the entry, flat
-// with it, at about 16% longer inference time. ONNX Runtime 1.31.0 stays flat
-// without the entry.
+// A one-off local probe on an Apple M5 Pro (Perch v2 int8_arm, fresh random
+// input per run) measured the bundled ONNX Runtime 1.25.1 growing about 1173 KB
+// per run without the entry and about 3 KB per run with it.
 const (
 	// ortConfigMlasDisableKleidiAI is the session config key that turns the
 	// KleidiAI kernels off.

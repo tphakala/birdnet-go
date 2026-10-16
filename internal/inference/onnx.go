@@ -320,9 +320,9 @@ func InitONNXRuntime(libraryPath string) (err error) {
 }
 
 // logKleidiAIWorkaround logs at Info that sessions disable the KleidiAI
-// kernels for ortVersion, so support can tell why inference is slower on Arm
-// SME CPUs (Apple M4 and M5). InitONNXRuntime calls it once per process, after
-// the first successful init.
+// kernels for ortVersion, so support can confirm the workaround is active on
+// Arm SME CPUs (Apple M4 and M5). InitONNXRuntime calls it after a successful
+// init.
 func logKleidiAIWorkaround(ortVersion string) {
 	if !ort.KleidiAIWorkaroundNeeded(ortVersion) {
 		return
