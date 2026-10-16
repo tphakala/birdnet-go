@@ -2206,3 +2206,136 @@ func TestAnonymizeStacktracePath(t *testing.T) {
 
 	runScrubTests(t, AnonymizeStacktracePath, tests)
 }
+
+func TestScrubStandaloneIPs_LeavesTimestampsIntact(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"RFC3339 with offset and fraction", "2026-10-16T00:12:34.015573-07:00"},
+		{"RFC3339 Z", "2026-08-23T19:55:13Z"},
+		{"JSON log line", `{"time":"2026-10-16T00:12:34.015573-07:00","msg":"x"}`},
+		{"clock time in free text", "at 12:34:56 done"},
+		{"journal text format", "2026-10-16 00:12:34"},
+		{"syslog prefix", "Oct 16 00:12:34 host birdnet-go[1]: x"},
+		{"duration", "dur 00:00:01 elapsed"},
+		{"Go stack position", "main.go:123:45 panic"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.input, ScrubStandaloneIPs(tt.input))
+		})
+	}
+}
+
+// ipv6Samples are IPv6 addresses the scrubber must still anonymize.
+var ipv6Samples = []struct {
+	name   string
+	addr   string
+	prefix string
+}{
+	{"compressed public", "2001:db8::1", "public-ip-"},
+	{"full form", "2001:0db8:85a3:0000:0000:8a2e:0370:7334", "public-ip-"},
+	{"link local", "fe80::1", "private-ip-"},
+}
+
+func TestScrubStandaloneIPs_StillAnonymizesIPv6(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range ipv6Samples {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ScrubStandaloneIPs("peer " + tt.addr + " up")
+			assert.NotContains(t, got, tt.addr)
+			assert.Contains(t, got, tt.prefix)
+			assert.True(t, strings.HasPrefix(got, "peer ") && strings.HasSuffix(got, " up"), got)
+		})
+	}
+
+	t.Run("zone suffix stays", func(t *testing.T) {
+		t.Parallel()
+		got := ScrubStandaloneIPs("addr fe80::1%eth0 up")
+		assert.NotContains(t, got, "fe80::1")
+		assert.Contains(t, got, "private-ip-")
+		assert.Contains(t, got, "%eth0")
+	})
+
+	t.Run("trailing port stays", func(t *testing.T) {
+		t.Parallel()
+		got := ScrubStandaloneIPs("2001:db8:85a3:0:0:8a2e:370:7334:8080")
+		assert.NotContains(t, got, "2001:db8")
+		assert.True(t, strings.HasSuffix(got, ":8080"), got)
+	})
+
+	t.Run("timestamp next to address", func(t *testing.T) {
+		t.Parallel()
+		got := ScrubStandaloneIPs("2026-10-16T00:12:34Z peer 2001:db8::1")
+		assert.True(t, strings.HasPrefix(got, "2026-10-16T00:12:34Z peer "), got)
+		assert.NotContains(t, got, "2001:db8::1")
+		assert.Contains(t, got, "public-ip-")
+	})
+}
+
+func TestScrubStandaloneIPs_IPv6MatchesAnonymizeIP(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range ipv6Samples {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, "x "+AnonymizeIP(tt.addr)+" y", ScrubStandaloneIPs("x "+tt.addr+" y"))
+		})
+	}
+}
+
+func TestScrubStandaloneIPs_IPv4MappedAnonymizesIPv4Part(t *testing.T) {
+	t.Parallel()
+	got := ScrubStandaloneIPs("peer ::ffff:192.0.2.1 up")
+	assert.NotContains(t, got, "192.0.2.1")
+}
+
+func TestScrubStandaloneIPs_IPv6InURLUntouched(t *testing.T) {
+	t.Parallel()
+	in := "https://[2001:db8::1]:8443/x"
+	assert.Equal(t, in, ScrubStandaloneIPs(in))
+}
+
+func TestScrubStandaloneIPs_NonTimeTokensStillHashed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		leaks string
+	}{
+		{"MAC with letters", "mac aa:bb:cc:dd:ee:ff seen", "aa:bb:cc:dd:ee:ff"},
+		{"MAC of digits", "mac 00:11:22:33:44:55 seen", "00:11:22:33:44:55"},
+		{"IPv6 CIDR prefix", "net 2001:db8:abcd:1234::/64 up", "2001:db8:abcd:1234"},
+		{"short hex token", "id ab:cd:ef seen", "ab:cd:ef"},
+		{"digit-only prefix", "net 2001:1234:5678:9012::/64 up", "2001:1234:5678:9012"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.NotContains(t, ScrubStandaloneIPs(tt.input), tt.leaks)
+		})
+	}
+}
+
+func TestScrubStandaloneIPs_IPv4LeadingZerosStillHashed(t *testing.T) {
+	t.Parallel()
+	got := ScrubStandaloneIPs("host 192.168.001.010 up")
+	assert.Contains(t, got, "invalid-ip-")
+	assert.NotContains(t, got, "192.168.001.010")
+}
+
+func TestScrubMessage_KeepsLogTimestampScrubsIP(t *testing.T) {
+	t.Parallel()
+	got := ScrubMessage(`{"time":"2026-10-16T00:12:34.015573-07:00","msg":"conn from 192.168.1.100"}`)
+	assert.Contains(t, got, `"time":"2026-10-16T00:12:34.015573-07:00"`)
+	assert.NotContains(t, got, "192.168.1.100")
+}

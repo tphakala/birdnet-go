@@ -5,9 +5,12 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	diagpkg "github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1952,6 +1956,8 @@ func TestCreateArchiveIncludesJournal(t *testing.T) {
 	shipped, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	assert.Contains(t, string(shipped), `"type":"boot"`)
+	assert.Contains(t, string(shipped), `"timestamp":"2026-07-18T10:00:00Z"`,
+		"timestamps must survive the scrubber unchanged")
 	assert.NotContains(t, string(shipped), "/home/someuser/birdnet",
 		"journal lines are scrubbed on the way out")
 }
@@ -1970,4 +1976,95 @@ func TestCreateArchiveSkipsMissingJournal(t *testing.T) {
 	for _, f := range zr.File {
 		assert.NotEqual(t, "diagnostics/journal.jsonl", f.Name)
 	}
+}
+
+// TestJournalSkipReasonValues pins the strings that appear in support dumps.
+func TestJournalSkipReasonValues(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "skipped_reason", journalSkippedReasonKey)
+	assert.Equal(t, "running_in_container", journalSkipContainer)
+	assert.Equal(t, "unsupported_os", journalSkipUnsupportedOS)
+	assert.Equal(t, "journalctl_not_found", journalSkipNotInstalled)
+}
+
+// TestCollectLogs_SkipsJournaldWithoutJournalctl removes journalctl from PATH,
+// so the host gate reports a skip on every OS and collectLogs must record it
+// as not attempted instead of a failed command.
+func TestCollectLogs_SkipsJournaldWithoutJournalctl(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	c := NewCollector(t.TempDir(), t.TempDir(), "sys-id", "20260716")
+	diag := LogCollectionDiagnostics{
+		JournalLogs: LogSourceDiagnostics{Details: make(map[string]any)},
+		FileLogs:    LogSourceDiagnostics{Details: make(map[string]any)},
+	}
+	c.collectLogs(t.Context(), testWindowHourly, testSize1KB, false, &diag)
+
+	jl := diag.JournalLogs
+	assert.False(t, jl.Attempted)
+	assert.Contains(t, []any{journalSkipUnsupportedOS, journalSkipContainer, journalSkipNotInstalled},
+		jl.Details[journalSkippedReasonKey])
+	if runtime.GOOS == osLinux && !sysinfo.IsContainer() {
+		// The PATH branch is the only gate that can fire here.
+		assert.Equal(t, journalSkipNotInstalled, jl.Details[journalSkippedReasonKey])
+	}
+	assert.Empty(t, jl.Error)
+	assert.NotEqual(t, "command_failed", jl.Details["error_type"])
+}
+
+func TestJournalSkipReason(t *testing.T) {
+	t.Parallel()
+
+	found := func(string) (string, error) { return "/usr/bin/journalctl", nil }
+	missing := func(string) (string, error) { return "", fmt.Errorf("lookup: %w", exec.ErrNotFound) }
+
+	tests := []struct {
+		name        string
+		goos        string
+		inContainer bool
+		lookPath    func(string) (string, error)
+		want        string
+		wantCalls   int
+	}{
+		{"darwin", "darwin", false, found, journalSkipUnsupportedOS, 0},
+		{"windows", "windows", false, found, journalSkipUnsupportedOS, 0},
+		{"linux container with journalctl", osLinux, true, found, journalSkipContainer, 0},
+		{"linux container without journalctl", osLinux, true, missing, journalSkipContainer, 0},
+		{"linux host without journalctl", osLinux, false, missing, journalSkipNotInstalled, 1},
+		{"linux host with journalctl", osLinux, false, found, "", 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			lookPath := func(name string) (string, error) {
+				calls++
+				assert.Equal(t, journalctlBinary, name)
+				return tt.lookPath(name)
+			}
+			assert.Equal(t, tt.want, journalSkipReason(tt.goos, tt.inContainer, lookPath))
+			assert.Equal(t, tt.wantCalls, calls)
+		})
+	}
+}
+
+func TestMarkJournalSkipped(t *testing.T) {
+	t.Parallel()
+	diag := LogSourceDiagnostics{
+		Attempted:     true,
+		Successful:    true,
+		Error:         "stale failure",
+		EntriesFound:  7,
+		Command:       "journalctl -u birdnet-go.service",
+		PathsSearched: []SearchedPath{},
+		Details:       map[string]any{"error_type": "command_failed", "stale": 1},
+	}
+	markJournalSkipped(&diag, journalSkipUnsupportedOS)
+	assert.False(t, diag.Attempted)
+	assert.False(t, diag.Successful)
+	assert.Empty(t, diag.Error)
+	assert.Zero(t, diag.EntriesFound)
+	assert.Empty(t, diag.Command)
+	assert.NotNil(t, diag.PathsSearched)
+	assert.Equal(t, map[string]any{journalSkippedReasonKey: journalSkipUnsupportedOS}, diag.Details)
 }

@@ -406,7 +406,9 @@ func ScrubUUIDs(message string) string {
 }
 
 // ScrubStandaloneIPs removes or anonymizes standalone IP addresses from text messages
-// It handles both IPv4 and IPv6 addresses that are not part of URLs
+// It handles both IPv4 and IPv6 addresses that are not part of URLs.
+// Time-like candidates such as the "12:34:56" part of a timestamp are left
+// unchanged.
 func ScrubStandaloneIPs(message string) string {
 	// First mark all URLs to avoid processing IPs within them
 	urlPositions := make(map[int]int) // start -> end position of URLs
@@ -428,7 +430,7 @@ func ScrubStandaloneIPs(message string) string {
 	// Find all IP matches in the original message to ensure coordinates
 	// are consistent with URL positions (avoids stale coordinate bug)
 	ipv4Matches := ipv4Pattern.FindAllStringIndex(message, -1)
-	ipv6Matches := ipv6Pattern.FindAllStringIndex(message, -1)
+	ipv6Matches := dropTimeLikeMatches(message, ipv6Pattern.FindAllStringIndex(message, -1))
 
 	// Combine and sort by position to process in order
 	allMatches := make([][]int, 0, len(ipv4Matches)+len(ipv6Matches))
@@ -686,6 +688,47 @@ func isNumeric(s string) bool {
 // isHexChar checks if a rune is a valid hex character
 func isHexChar(r rune) bool {
 	return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'F') || (r >= 'a' && r <= 'f')
+}
+
+// maxTimeTokenColons is the most colons a clock time or position token such as
+// "12:34:56" or ":123:45" carries. A longer digit-only token is not a time.
+const maxTimeTokenColons = 2
+
+// isTimeLikeToken reports whether s is made of digits and colons only, has no
+// "::" and no more than maxTimeTokenColons colons: the shape of the "12:34:56"
+// part of a timestamp or the ":123:45" of a file position. Tokens with hex
+// letters (MAC addresses, IPv6 prefixes cut off by the regex) or more groups
+// are not time-like.
+func isTimeLikeToken(s string) bool {
+	if strings.Contains(s, "::") || strings.Count(s, ":") > maxTimeTokenColons {
+		return false
+	}
+	hasDigit := false
+	for _, r := range s {
+		switch {
+		case r == ':':
+		case r >= '0' && r <= '9':
+			hasDigit = true
+		default:
+			return false
+		}
+	}
+	return hasDigit
+}
+
+// dropTimeLikeMatches removes the matches that are time-like tokens.
+// ipv6Pattern also matches the "12:34:56" part of a timestamp; those are left
+// untouched instead of being hashed. Every other match, including the ones
+// net.ParseIP rejects (MAC addresses, truncated IPv6 prefixes), is still
+// anonymized.
+func dropTimeLikeMatches(message string, matches [][]int) [][]int {
+	kept := matches[:0]
+	for _, match := range matches {
+		if !isTimeLikeToken(message[match[0]:match[1]]) {
+			kept = append(kept, match)
+		}
+	}
+	return kept
 }
 
 // replaceIPMatches replaces IP addresses in a message with their anonymized versions
