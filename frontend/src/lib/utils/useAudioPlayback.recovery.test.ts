@@ -11,9 +11,15 @@ import { createComponentTestFactory } from '../../test/render-helpers';
 import {
   installFakeMediaElement,
   MEDIA_ERR_NETWORK,
+  settle,
   type FakeMediaController,
 } from '../../test/fakeMediaElement';
-import { MAX_AUDIO_LOAD_RETRIES, AUDIO_RETRY_DELAY_MS, PLAY_END_DELAY_MS } from '$lib/utils/audio';
+import {
+  NEVER_SILENT_SEQUENCES,
+  exhaustLoadRetries,
+  runPlaySequence,
+} from '../../test/playSequences';
+import { AUDIO_RETRY_DELAY_MS, PLAY_END_DELAY_MS } from '$lib/utils/audio';
 import { loggers } from '$lib/utils/logger';
 import type { AudioPlaybackState } from './useAudioPlayback.svelte';
 import Wrapper from './UseAudioPlaybackWrapper.test.svelte';
@@ -47,10 +53,6 @@ describe('useAudioPlayback recovery', () => {
     return capturedState;
   }
 
-  async function settle() {
-    await vi.advanceTimersByTimeAsync(0);
-  }
-
   async function renderAndWait(options: { onPlayEnd?: () => void } = {}) {
     wrapperTest.render({
       options: { audioUrl: '/audio/test.mp3', detectionId: 'test-123', ...options },
@@ -61,16 +63,6 @@ describe('useAudioPlayback recovery', () => {
     await waitFor(() => {
       expect(capturedState).not.toBeNull();
     });
-  }
-
-  /** Fail every retry until the budget is spent and the error shows. */
-  async function exhaustRetries() {
-    for (let i = 0; i < MAX_AUDIO_LOAD_RETRIES; i++) {
-      ctl.failLoad();
-      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
-    }
-    ctl.failLoad();
-    await settle();
   }
 
   async function toggle() {
@@ -111,7 +103,7 @@ describe('useAudioPlayback recovery', () => {
 
   it('reloads the clip when play is pressed after load retries are exhausted', async () => {
     await renderAndWait();
-    await exhaustRetries();
+    await exhaustLoadRetries(ctl);
     expect(getState().error).not.toBeNull();
     const loadsBefore = ctl.load.mock.calls.length;
 
@@ -126,7 +118,7 @@ describe('useAudioPlayback recovery', () => {
 
   it('resumes a reload that hits a transient error once the clip loads', async () => {
     await renderAndWait();
-    await exhaustRetries();
+    await exhaustLoadRetries(ctl);
     ctl.setPlayMode('hold');
 
     const pressed = getState().togglePlayPause();
@@ -176,7 +168,7 @@ describe('useAudioPlayback recovery', () => {
 
   it('resumes a queued play on loadedmetadata when canplay never fires', async () => {
     await renderAndWait();
-    await exhaustRetries();
+    await exhaustLoadRetries(ctl);
     ctl.setPlayMode('hold');
     const pressed = getState().togglePlayPause();
     await settle();
@@ -192,7 +184,7 @@ describe('useAudioPlayback recovery', () => {
 
   it('plays a queued intent only once when loadedmetadata and canplay both fire', async () => {
     await renderAndWait();
-    await exhaustRetries();
+    await exhaustLoadRetries(ctl);
     ctl.setPlayMode('hold');
     const pressed = getState().togglePlayPause();
     await settle();
@@ -222,91 +214,25 @@ describe('useAudioPlayback recovery', () => {
     expect(onPlayEnd).toHaveBeenCalledTimes(1);
   });
 
-  describe('a play click is never a silent no-op', () => {
-    type Step =
-      | 'click'
-      | 'exhaust'
-      | 'failLoad'
-      | 'advanceRetry'
-      | 'completeLoad'
-      | 'rejectNextNotAllowed'
-      | 'failNetworkWhilePlaying'
-      | 'metadataOnly';
-
-    interface Sequence {
-      name: string;
-      steps: Step[];
-    }
-
-    const SEQUENCES: Sequence[] = [
-      { name: 'click', steps: ['click'] },
-      { name: 'exhaust, click', steps: ['exhaust', 'click'] },
-      {
-        name: 'exhaust, click, failLoad, advanceRetry, completeLoad, click',
-        steps: ['exhaust', 'click', 'failLoad', 'advanceRetry', 'completeLoad', 'click'],
-      },
-      { name: 'failLoad, click', steps: ['failLoad', 'click'] },
-      {
-        name: 'failLoad, advanceRetry, rejectNextNotAllowed, click',
-        steps: ['failLoad', 'advanceRetry', 'rejectNextNotAllowed', 'click'],
-      },
-      {
-        name: 'click, failNetworkWhilePlaying, advanceRetry, completeLoad, click',
-        steps: ['click', 'failNetworkWhilePlaying', 'advanceRetry', 'completeLoad', 'click'],
-      },
-      { name: 'metadataOnly, click', steps: ['metadataOnly', 'click'] },
-      {
-        name: 'exhaust, rejectNextNotAllowed, click, click',
-        steps: ['exhaust', 'rejectNextNotAllowed', 'click', 'click'],
-      },
-    ];
-
-    it.each(SEQUENCES)('after: $name', async ({ steps }) => {
+  it.each(NEVER_SILENT_SEQUENCES)(
+    'a play click is never a silent no-op after: $name',
+    async ({ steps }) => {
       await renderAndWait();
-      const clickOutcomes: boolean[] = [];
 
-      for (const step of steps) {
-        const loadsBefore = ctl.load.mock.calls.length;
-        switch (step) {
-          case 'click': {
-            await toggle();
-            // The element plays, or a load was started, or the error is visible
-            // while the element is loadable again (the next click plays).
-            const loadGrew = ctl.load.mock.calls.length > loadsBefore;
-            const errorVisibleOnLoadableElement = getState().error !== null && ctl.error === null;
-            clickOutcomes.push(!ctl.paused || loadGrew || errorVisibleOnLoadableElement);
-            break;
-          }
-          case 'exhaust':
-            await exhaustRetries();
-            break;
-          case 'failLoad':
-            ctl.failLoad();
-            await settle();
-            break;
-          case 'advanceRetry':
-            await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
-            break;
-          case 'completeLoad':
-            ctl.completeLoad();
-            await settle();
-            break;
-          case 'rejectNextNotAllowed':
-            ctl.rejectNextPlay('NotAllowedError');
-            break;
-          case 'failNetworkWhilePlaying':
-            ctl.failLoad(MEDIA_ERR_NETWORK);
-            await settle();
-            break;
-          case 'metadataOnly':
-            ctl.completeLoad({ canplay: false });
-            await settle();
-            break;
-        }
-      }
-
-      expect(clickOutcomes.length).toBeGreaterThan(0);
-      expect(clickOutcomes.every(Boolean)).toBe(true);
-    });
-  });
+      await runPlaySequence(steps, ctl, {
+        click: async () => {
+          const loadsBefore = ctl.load.mock.calls.length;
+          await toggle();
+          // The element plays, or a load was started, or the error is visible
+          // while the element is loadable again (the next click plays).
+          const loadGrew = ctl.load.mock.calls.length > loadsBefore;
+          const errorVisibleOnLoadableElement = getState().error !== null && ctl.error === null;
+          expect(!ctl.paused || loadGrew || errorVisibleOnLoadableElement).toBe(true);
+        },
+        advanceRetry: async () => {
+          await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+        },
+      });
+    }
+  );
 });

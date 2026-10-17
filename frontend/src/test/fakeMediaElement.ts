@@ -19,21 +19,22 @@
  */
 
 import { vi, type MockInstance } from 'vitest';
+import type { AudioNodeChain } from '$lib/utils/audioNodes';
 
 /** MediaError.MEDIA_ERR_NETWORK */
 export const MEDIA_ERR_NETWORK = 2;
 
 /** MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED, which browsers report for HTTP 503 and 404 */
-export const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
+const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
 
 /** Duration reported by the fake element once metadata has loaded, in seconds */
-export const FAKE_MEDIA_DURATION_SECONDS = 120;
+const FAKE_MEDIA_DURATION_SECONDS = 120;
 
 /** How a `play()` call settles: immediately, or only when `completeLoad()` runs */
-export type FakePlayMode = 'resolve' | 'hold';
+type FakePlayMode = 'resolve' | 'hold';
 
 /** Names of DOMException rejections the fake can queue for the next `play()` */
-export type FakePlayRejection = 'NotAllowedError' | 'AbortError';
+type FakePlayRejection = 'NotAllowedError' | 'AbortError';
 
 interface FakeMediaError {
   code: number;
@@ -64,8 +65,6 @@ export interface FakeMediaController {
   readonly error: FakeMediaError | null;
   /** Spy on HTMLMediaElement.prototype.play */
   readonly play: MockInstance;
-  /** Spy on HTMLMediaElement.prototype.pause */
-  readonly pause: MockInstance;
   /** Spy on HTMLMediaElement.prototype.load */
   readonly load: MockInstance;
   /** Fire an event on the element */
@@ -232,7 +231,6 @@ export function installFakeMediaElement(): FakeMediaController {
       return state.error;
     },
     play,
-    pause,
     load,
     dispatch(type: string) {
       element.dispatchEvent(new Event(type));
@@ -268,4 +266,21 @@ export function installFakeMediaElement(): FakeMediaController {
       }
     },
   };
+}
+
+/**
+ * Let pending timers and promise callbacks run without advancing the clock.
+ * Requires vi.useFakeTimers().
+ */
+export async function settle(): Promise<void> {
+  await vi.advanceTimersByTimeAsync(0);
+}
+
+/** Minimal Web Audio node chain for tests that mock attachAudioGraphWhenRunning. */
+export function fakeAudioNodeChain(): AudioNodeChain {
+  return {
+    source: { connect: vi.fn(), disconnect: vi.fn() },
+    gain: { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() },
+    highPass: { frequency: { value: 20 }, connect: vi.fn(), disconnect: vi.fn() },
+  } as unknown as AudioNodeChain; // minimal node fakes: tests never call real Web Audio
 }

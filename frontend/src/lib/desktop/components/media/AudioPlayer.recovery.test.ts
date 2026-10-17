@@ -11,9 +11,16 @@ import { screen, fireEvent, cleanup, render } from '@testing-library/svelte';
 import {
   installFakeMediaElement,
   MEDIA_ERR_NETWORK,
+  fakeAudioNodeChain,
+  settle,
   type FakeMediaController,
 } from '../../../../test/fakeMediaElement';
-import { MAX_AUDIO_LOAD_RETRIES, AUDIO_RETRY_DELAY_MS, CANPLAY_TIMEOUT_MS } from '$lib/utils/audio';
+import {
+  NEVER_SILENT_SEQUENCES,
+  exhaustLoadRetries,
+  runPlaySequence,
+} from '../../../../test/playSequences';
+import { AUDIO_RETRY_DELAY_MS, CANPLAY_TIMEOUT_MS } from '$lib/utils/audio';
 import { loggers } from '$lib/utils/logger';
 import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
 import AudioPlayer from './AudioPlayer.svelte';
@@ -41,21 +48,9 @@ const DENOISE_OFF_TEXT = 'components.audioPlayer.processing.denoiseOff';
 const PROCESSING_DEBOUNCE_MS = 300;
 const PROCESSED_BLOB_URL = 'blob:processed-clip';
 
-function fakeChain(): ReturnType<typeof attachAudioGraphWhenRunning> {
-  return {
-    source: { connect: vi.fn(), disconnect: vi.fn() },
-    gain: { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() },
-    highPass: { frequency: { value: 20 }, connect: vi.fn(), disconnect: vi.fn() },
-  } as unknown as ReturnType<typeof attachAudioGraphWhenRunning>; // minimal node fakes
-}
-
 describe('AudioPlayer recovery', () => {
   let ctl: FakeMediaController;
   const mockedAttach = vi.mocked(attachAudioGraphWhenRunning);
-
-  async function settle() {
-    await vi.advanceTimersByTimeAsync(0);
-  }
 
   function mount(props: Record<string, unknown> = {}) {
     return render(AudioPlayer, {
@@ -74,20 +69,11 @@ describe('AudioPlayer recovery', () => {
     await settle();
   }
 
-  async function exhaustRetries() {
-    for (let i = 0; i < MAX_AUDIO_LOAD_RETRIES; i++) {
-      ctl.failLoad();
-      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
-    }
-    ctl.failLoad();
-    await settle();
-  }
-
   beforeEach(() => {
     vi.useFakeTimers();
     ctl = installFakeMediaElement();
     mockedAttach.mockReset();
-    mockedAttach.mockImplementation(() => fakeChain());
+    mockedAttach.mockImplementation(() => fakeAudioNodeChain());
     vi.mocked(loggers.audio.error).mockClear();
     vi.mocked(loggers.audio.warn).mockClear();
   });
@@ -123,7 +109,7 @@ describe('AudioPlayer recovery', () => {
 
   it('renders the load error as a non-blocking alert', async () => {
     const { container } = mount();
-    await exhaustRetries();
+    await exhaustLoadRetries(ctl);
 
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent(LOAD_ERROR_TEXT);
@@ -133,7 +119,7 @@ describe('AudioPlayer recovery', () => {
 
   it('reloads the clip when play is pressed after load retries are exhausted', async () => {
     const { container } = mount();
-    await exhaustRetries();
+    await exhaustLoadRetries(ctl);
     const loadsBefore = ctl.load.mock.calls.length;
 
     await press(container);
@@ -147,7 +133,7 @@ describe('AudioPlayer recovery', () => {
 
   it('does not read Pause while a reload after a failure is loading', async () => {
     const { container } = mount();
-    await exhaustRetries();
+    await exhaustLoadRetries(ctl);
 
     await press(container);
 
@@ -159,7 +145,7 @@ describe('AudioPlayer recovery', () => {
 
   it('queues play when the reload hits a transient error and plays once loaded', async () => {
     const { container } = mount();
-    await exhaustRetries();
+    await exhaustLoadRetries(ctl);
     ctl.setPlayMode('hold');
 
     await fireEvent.click(playButton(container));
@@ -254,98 +240,30 @@ describe('AudioPlayer recovery', () => {
     expect(loggers.audio.warn).toHaveBeenCalled();
   });
 
-  describe('a play click is never a silent no-op', () => {
-    type Step =
-      | 'click'
-      | 'exhaust'
-      | 'failLoad'
-      | 'advanceRetry'
-      | 'completeLoad'
-      | 'rejectNextNotAllowed'
-      | 'failNetworkWhilePlaying'
-      | 'metadataOnly';
-
-    interface Sequence {
-      name: string;
-      steps: Step[];
-    }
-
-    const SEQUENCES: Sequence[] = [
-      { name: 'click', steps: ['click'] },
-      { name: 'exhaust, click', steps: ['exhaust', 'click'] },
-      {
-        name: 'exhaust, click, failLoad, advanceRetry, completeLoad, click',
-        steps: ['exhaust', 'click', 'failLoad', 'advanceRetry', 'completeLoad', 'click'],
-      },
-      { name: 'failLoad, click', steps: ['failLoad', 'click'] },
-      {
-        name: 'failLoad, advanceRetry, rejectNextNotAllowed, click',
-        steps: ['failLoad', 'advanceRetry', 'rejectNextNotAllowed', 'click'],
-      },
-      {
-        name: 'click, failNetworkWhilePlaying, advanceRetry, completeLoad, click',
-        steps: ['click', 'failNetworkWhilePlaying', 'advanceRetry', 'completeLoad', 'click'],
-      },
-      { name: 'metadataOnly, click', steps: ['metadataOnly', 'click'] },
-      {
-        name: 'exhaust, rejectNextNotAllowed, click, click',
-        steps: ['exhaust', 'rejectNextNotAllowed', 'click', 'click'],
-      },
-    ];
-
-    it.each(SEQUENCES)('after: $name', async ({ steps }) => {
+  it.each(NEVER_SILENT_SEQUENCES)(
+    'a play click is never a silent no-op after: $name',
+    async ({ steps }) => {
       const { container } = mount();
-      const clickOutcomes: boolean[] = [];
-      const enabledBeforeClick: boolean[] = [];
 
-      for (const step of steps) {
-        const loadsBefore = ctl.load.mock.calls.length;
-        switch (step) {
-          case 'click': {
-            enabledBeforeClick.push(!playButton(container).disabled);
-            await press(container);
-            // The element plays, or a load was started, or the error is visible
-            // while the element is loadable again (the next click plays).
-            const loadGrew = ctl.load.mock.calls.length > loadsBefore;
-            const errorVisibleOnLoadableElement =
-              screen.queryByText(PLAY_ERROR_TEXT) !== null && ctl.error === null;
-            clickOutcomes.push(!ctl.paused || loadGrew || errorVisibleOnLoadableElement);
-            break;
-          }
-          case 'exhaust':
-            await exhaustRetries();
-            break;
-          case 'failLoad':
-            ctl.failLoad();
-            await settle();
-            break;
-          case 'advanceRetry':
-            await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
-            // The reload's loadstart shows a loading state that ends with the
-            // safety timeout when the test does not load the clip.
-            await vi.advanceTimersByTimeAsync(CANPLAY_TIMEOUT_MS);
-            break;
-          case 'completeLoad':
-            ctl.completeLoad();
-            await settle();
-            break;
-          case 'rejectNextNotAllowed':
-            ctl.rejectNextPlay('NotAllowedError');
-            break;
-          case 'failNetworkWhilePlaying':
-            ctl.failLoad(MEDIA_ERR_NETWORK);
-            await settle();
-            break;
-          case 'metadataOnly':
-            ctl.completeLoad({ canplay: false });
-            await settle();
-            break;
-        }
-      }
-
-      expect(clickOutcomes.length).toBeGreaterThan(0);
-      expect(enabledBeforeClick.every(Boolean)).toBe(true);
-      expect(clickOutcomes.every(Boolean)).toBe(true);
-    });
-  });
+      await runPlaySequence(steps, ctl, {
+        click: async () => {
+          const loadsBefore = ctl.load.mock.calls.length;
+          expect(playButton(container).disabled).toBe(false);
+          await press(container);
+          // The element plays, or a load was started, or the error is visible
+          // while the element is loadable again (the next click plays).
+          const loadGrew = ctl.load.mock.calls.length > loadsBefore;
+          const errorVisibleOnLoadableElement =
+            screen.queryByText(PLAY_ERROR_TEXT) !== null && ctl.error === null;
+          expect(!ctl.paused || loadGrew || errorVisibleOnLoadableElement).toBe(true);
+        },
+        advanceRetry: async () => {
+          await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+          // The reload's loadstart shows a loading state that ends with the
+          // safety timeout when the test does not load the clip.
+          await vi.advanceTimersByTimeAsync(CANPLAY_TIMEOUT_MS);
+        },
+      });
+    }
+  );
 });

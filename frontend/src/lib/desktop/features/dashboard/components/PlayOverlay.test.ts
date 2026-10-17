@@ -5,6 +5,8 @@ import { DASHBOARD_AUDIO_RETRY_DELAYS_MS, PLAY_END_DELAY_MS } from '$lib/utils/a
 import {
   installFakeMediaElement,
   MEDIA_ERR_NETWORK,
+  fakeAudioNodeChain,
+  settle,
   type FakeMediaController,
 } from '../../../../../test/fakeMediaElement';
 import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
@@ -27,26 +29,30 @@ const PLAY_LABEL = 'media.audio.play';
 const PAUSE_LABEL = 'media.audio.pause';
 const LOADING_LABEL = 'media.audio.loading';
 
-function fakeChain(): ReturnType<typeof attachAudioGraphWhenRunning> {
-  return {
-    source: { connect: vi.fn(), disconnect: vi.fn() },
-    gain: { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() },
-    highPass: { frequency: { value: 20 }, connect: vi.fn(), disconnect: vi.fn() },
-  } as unknown as ReturnType<typeof attachAudioGraphWhenRunning>; // minimal node fakes
-}
-
 describe('PlayOverlay', () => {
   let ctl: FakeMediaController;
   const mockedAttach = vi.mocked(attachAudioGraphWhenRunning);
-
-  async function settle() {
-    await vi.advanceTimersByTimeAsync(0);
-  }
 
   async function advanceRetry(index: number) {
     const delay = DASHBOARD_AUDIO_RETRY_DELAYS_MS.at(index);
     if (delay === undefined) throw new Error(`no retry delay at index ${index}`);
     await vi.advanceTimersByTimeAsync(delay);
+  }
+
+  /**
+   * Fail every load from `fromIndex` on, firing each retry timer, so the whole
+   * budget is spent. With `finalFailure` the last reload fails too and the
+   * error shows.
+   */
+  async function exhaustRetries(fromIndex = 0, finalFailure = true) {
+    for (let i = fromIndex; i < DASHBOARD_AUDIO_RETRY_DELAYS_MS.length; i++) {
+      ctl.failLoad();
+      await advanceRetry(i);
+    }
+    if (finalFailure) {
+      ctl.failLoad();
+      await settle();
+    }
   }
 
   function button(): HTMLButtonElement {
@@ -76,7 +82,7 @@ describe('PlayOverlay', () => {
     vi.useFakeTimers();
     ctl = installFakeMediaElement();
     mockedAttach.mockReset();
-    mockedAttach.mockImplementation(() => fakeChain());
+    mockedAttach.mockImplementation(() => fakeAudioNodeChain());
   });
 
   afterEach(() => {
@@ -113,10 +119,7 @@ describe('PlayOverlay', () => {
   it('gives up after the retry budget and keeps the play button working', async () => {
     mount();
 
-    for (let i = 0; i < DASHBOARD_AUDIO_RETRY_DELAYS_MS.length; i++) {
-      ctl.failLoad();
-      await advanceRetry(i);
-    }
+    await exhaustRetries(0, false);
     expect(ctl.load).toHaveBeenCalledTimes(DASHBOARD_AUDIO_RETRY_DELAYS_MS.length);
     expect(alertShown()).toBe(false);
 
@@ -180,12 +183,7 @@ describe('PlayOverlay', () => {
     await vi.advanceTimersByTimeAsync(PLAY_END_DELAY_MS);
     expect(onFreezeEnd).toHaveBeenCalledTimes(1);
 
-    for (let i = 1; i < DASHBOARD_AUDIO_RETRY_DELAYS_MS.length; i++) {
-      ctl.failLoad();
-      await advanceRetry(i);
-    }
-    ctl.failLoad();
-    await settle();
+    await exhaustRetries(1);
     expect(alertShown()).toBe(true);
     expect(button().getAttribute('aria-label')).toBe(PLAY_LABEL);
 
@@ -279,17 +277,15 @@ describe('PlayOverlay', () => {
     });
   });
 
-  describe('loading label', () => {
-    it('does not read Pause while a click waits for a failed clip to reload', async () => {
-      mount();
-      ctl.failLoad();
-      ctl.setPlayMode('hold');
+  it('does not read Pause while a click waits for a failed clip to reload', async () => {
+    mount();
+    ctl.failLoad();
+    ctl.setPlayMode('hold');
 
-      await click();
+    await click();
 
-      expect(button().getAttribute('aria-label')).toBe(LOADING_LABEL);
-      expect(button().disabled).toBe(false);
-    });
+    expect(button().getAttribute('aria-label')).toBe(LOADING_LABEL);
+    expect(button().disabled).toBe(false);
   });
 
   describe('play button stays usable', () => {
@@ -301,13 +297,12 @@ describe('PlayOverlay', () => {
       | 'clickNoFlush'
       | 'failWhilePlaying'
       | 'holdMode'
-      | 'exhaust';
+      | 'exhaust'
+      | 'expectPlaying';
 
     interface Sequence {
       name: string;
       steps: Step[];
-      /** The element must end up playing */
-      endsPlaying?: boolean;
     }
 
     const PO_SEQUENCES: Sequence[] = [
@@ -323,89 +318,99 @@ describe('PlayOverlay', () => {
       },
       {
         name: 'failLoad, hold, click, failLoad, advance, completeLoad',
-        steps: ['failLoad', 'holdMode', 'click', 'failLoad', 'advance', 'completeLoad'],
-        endsPlaying: true,
+        steps: [
+          'failLoad',
+          'holdMode',
+          'click',
+          'failLoad',
+          'advance',
+          'completeLoad',
+          'expectPlaying',
+        ],
       },
       { name: 'failLoad, advance, click', steps: ['failLoad', 'advance', 'click'] },
       {
         name: 'hold, click during preload, failLoad during context wait, advance, completeLoad',
-        steps: ['holdMode', 'clickNoFlush', 'failLoad', 'advance', 'completeLoad'],
-        endsPlaying: true,
+        steps: ['holdMode', 'clickNoFlush', 'failLoad', 'advance', 'completeLoad', 'expectPlaying'],
       },
     ];
 
-    it.each(PO_SEQUENCES)(
-      'the card stays playable after: $name',
-      async ({ steps, endsPlaying }) => {
-        mount();
-        let retryIndex = 0;
-        // True after a click made in hold mode, until the load completes: the only
-        // window in which a timer may call play() on its own.
-        let clickArmedPlay = false;
-        let held = false;
+    /** Click, then assert the click was not a silent no-op. */
+    async function clickAndExpectNotSilent() {
+      const loadsBefore = ctl.load.mock.calls.length;
+      await click();
+      // The element plays, or a load was started, or the error is visible while
+      // the element is loadable again (the next click plays).
+      const loadGrew = ctl.load.mock.calls.length > loadsBefore;
+      expect(!ctl.paused || loadGrew || (alertShown() && ctl.error === null)).toBe(true);
+    }
 
-        for (const step of steps) {
-          const playsBefore = ctl.play.mock.calls.length;
-          const loadsBefore = ctl.load.mock.calls.length;
-          let isClick = false;
+    async function expectPlaying() {
+      await settle();
+      expect(ctl.paused).toBe(false);
+    }
 
-          switch (step) {
-            case 'failLoad':
-              ctl.failLoad();
-              break;
-            case 'failWhilePlaying':
-              ctl.failLoad(MEDIA_ERR_NETWORK);
-              break;
-            case 'advance':
-              await advanceRetry(retryIndex);
-              retryIndex++;
-              break;
-            case 'completeLoad':
-              ctl.completeLoad();
-              clickArmedPlay = false;
-              retryIndex = 0;
-              await settle();
-              break;
-            case 'holdMode':
-              ctl.setPlayMode('hold');
-              held = true;
-              break;
-            case 'exhaust':
-              for (let i = 0; i < DASHBOARD_AUDIO_RETRY_DELAYS_MS.length; i++) {
-                ctl.failLoad();
-                await advanceRetry(i);
-              }
-              ctl.failLoad();
-              break;
-            case 'click':
-              isClick = true;
-              retryIndex = 0;
-              await click();
-              clickArmedPlay = held;
-              break;
-            case 'clickNoFlush':
-              retryIndex = 0;
-              button().click();
-              clickArmedPlay = held;
-              break;
-          }
+    /** A step may call play() only when it is a click or a held click armed a timer. */
+    function expectPlayCallsUnchangedUnless(mayPlay: boolean, playsBefore: number) {
+      if (!mayPlay) expect(ctl.play.mock.calls.length).toBe(playsBefore);
+    }
 
-          expect(button().disabled).toBe(false);
-          const loadGrew = ctl.load.mock.calls.length > loadsBefore;
-          const clickLeftUsableState =
-            !ctl.paused || loadGrew || (alertShown() && ctl.error === null);
-          const playCalledByStep = ctl.play.mock.calls.length > playsBefore;
-          // A click never ends as a silent no-op, and no other step starts playback
-          // unless a held click armed it.
-          expect(isClick ? clickLeftUsableState : true).toBe(true);
-          expect(
-            isClick || step === 'clickNoFlush' || clickArmedPlay ? false : playCalledByStep
-          ).toBe(false);
+    it.each(PO_SEQUENCES)('the card stays playable after: $name', async ({ steps }) => {
+      mount();
+      let retryIndex = 0;
+      // True after a click made in hold mode, until the load completes: the only
+      // window in which a timer may call play() on its own.
+      let clickArmedPlay = false;
+      let held = false;
+
+      for (const step of steps) {
+        const playsBefore = ctl.play.mock.calls.length;
+
+        switch (step) {
+          case 'failLoad':
+            ctl.failLoad();
+            break;
+          case 'failWhilePlaying':
+            ctl.failLoad(MEDIA_ERR_NETWORK);
+            break;
+          case 'advance':
+            await advanceRetry(retryIndex);
+            retryIndex++;
+            break;
+          case 'completeLoad':
+            ctl.completeLoad();
+            clickArmedPlay = false;
+            retryIndex = 0;
+            await settle();
+            break;
+          case 'holdMode':
+            ctl.setPlayMode('hold');
+            held = true;
+            break;
+          case 'exhaust':
+            await exhaustRetries();
+            break;
+          case 'click':
+            retryIndex = 0;
+            await clickAndExpectNotSilent();
+            clickArmedPlay = held;
+            break;
+          case 'clickNoFlush':
+            retryIndex = 0;
+            button().click();
+            clickArmedPlay = held;
+            break;
+          case 'expectPlaying':
+            await expectPlaying();
+            break;
         }
 
-        await settle();
-        expect(endsPlaying ? !ctl.paused : true).toBe(true);
+        expect(button().disabled).toBe(false);
+        expectPlayCallsUnchangedUnless(
+          step === 'click' || step === 'clickNoFlush' || clickArmedPlay,
+          playsBefore
+        );
       }
-    );
+    });
   });
 });
