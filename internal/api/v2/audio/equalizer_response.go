@@ -146,7 +146,8 @@ func (c *Handler) ComputeEqualizerResponse(ctx echo.Context) error {
 // resolveEQResponseRate picks the sample rate to evaluate at. A source that is
 // in the registry wins, with the same rule the analysis pipeline applies when it
 // builds that source's EQ chain: the source's rate when positive, else the
-// configured rate (internal/analysis/audio_pipeline_service.go:817-820). The
+// configured rate (the sourceSampleRate rule in the analysis pipeline's route
+// setup in internal/analysis/audio_pipeline_service.go). The
 // probed SourceSampleRate is an ingest detail and is not used. For an absent or
 // unknown source the explicit sampleRate applies, else the configured rate.
 func (c *Handler) resolveEQResponseRate(req *equalizerResponseRequest) int {
