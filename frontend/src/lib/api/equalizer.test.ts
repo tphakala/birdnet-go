@@ -169,6 +169,31 @@ describe('parseEqualizerResponse', () => {
     expect(() => parseEqualizerResponse(validBody({ skipped: negative }), 1)).toThrow();
   });
 
+  it('rejects a repeated skipped index', () => {
+    const skipped = [
+      { index: 0, type: 'LowPass', reason: 'add_failed' },
+      { index: 0, type: 'LowPass', reason: 'add_failed' },
+    ];
+    expect(() => parseEqualizerResponse(validBody({ skipped }), 2)).toThrow();
+  });
+
+  it.each([
+    ['enabled missing', { enabled: undefined }],
+    ['enabled not a boolean', { enabled: 'true' }],
+    ['sampleRate NaN', { sampleRate: Number.NaN }],
+    ['skipped not an array', { skipped: null }],
+    [
+      'skipped index not an integer',
+      { skipped: [{ index: 0.5, type: 'LowPass', reason: 'add_failed' }] },
+    ],
+    ['skipped type not a string', { skipped: [{ index: 0, type: 1, reason: 'add_failed' }] }],
+    ['skipped reason not a string', { skipped: [{ index: 0, type: 'LowPass', reason: 2 }] }],
+    ['skipped entry not an object', { skipped: ['LowPass'] }],
+    ['point not an object', { points: [20] }],
+  ])('rejects a malformed body: %s', (_name, overrides) => {
+    expect(() => parseEqualizerResponse(validBody(overrides), 2)).toThrow();
+  });
+
   it('maps an unrecognised skip reason to unknown', () => {
     const skipped = [{ index: 0, type: 'LowPass', reason: 'something_new' }];
     expect(parseEqualizerResponse(validBody({ skipped }), 1).skipped[0]?.reason).toBe('unknown');
