@@ -8,6 +8,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/inference"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // TestORTUnavailableMessage_LocalesUseBareMinimumParam pins the contract between
@@ -46,4 +49,29 @@ func TestORTUnavailableMessage_LocalesUseBareMinimumParam(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEmitORTUnavailableNotification_SendsBareMinimumVersion pins the Go half
+// of the contract the locale test checks: the notification carries the bare
+// minimum ("1.29"), never the "1.29 or newer" sentence the English log uses,
+// because every locale string adds its own "or newer" wording.
+func TestEmitORTUnavailableNotification_SendsBareMinimumVersion(t *testing.T) {
+	// Not parallel: setupTestNotification swaps the process-global service.
+	svc := setupTestNotification(t)
+
+	emitORTUnavailableNotification("Perch v2", "library not found")
+
+	notifs, err := svc.List(nil)
+	require.NoError(t, err)
+
+	var found *notification.Notification
+	for _, n := range notifs {
+		if n.MessageKey == notification.MsgORTUnavailableMessage {
+			found = n
+		}
+	}
+	require.NotNil(t, found, "the ORT unavailable notification must be created")
+	assert.Equal(t, inference.ORTMinimumVersion(), found.MessageParams["requiredVersion"])
+	assert.NotContains(t, found.MessageParams["requiredVersion"], "newer")
+	assert.Equal(t, "Perch v2", found.MessageParams["modelName"])
 }
