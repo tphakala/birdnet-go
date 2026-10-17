@@ -31,6 +31,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
+	"github.com/tphakala/birdnet-go/internal/spectrogram/render"
+	"github.com/tphakala/birdnet-go/internal/spectrogram/soxchrome"
 	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
@@ -1157,6 +1159,44 @@ func transcodeStatus(err error) (status int, message string, ok bool) {
 	return 0, "", false
 }
 
+// msgSpectrogramSourceTooShort is the 422 message for a clip holding too little audio
+// for one spectrogram column.
+const msgSpectrogramSourceTooShort = "Source audio is too short for a spectrogram"
+
+// spectrogramSourceStatus maps a failure caused by the stored clip itself to the
+// HTTP status and user message it deserves: everything transcodeStatus knows, plus
+// the renderer's "too little audio" sentinels. All of them are properties of the
+// file's bytes, so retrying cannot change the outcome and the answer is 422.
+// render.ErrInvalidOptions is deliberately absent: the parse sites reject every
+// request value that could cause it, so what remains is a server fault. A not-ready
+// error is not answered here even when it wraps one of these causes (the probe
+// wraps ErrUndecodableSource), because the clip may still be written and the client
+// should retry.
+func spectrogramSourceStatus(err error) (status int, message string, ok bool) {
+	if isSpectrogramNotReady(err) {
+		return 0, "", false
+	}
+	if status, message, ok = transcodeStatus(err); ok {
+		return status, message, true
+	}
+	if errors.Is(err, render.ErrEmptyClip) || errors.Is(err, render.ErrNoColumns) {
+		return http.StatusUnprocessableEntity, msgSpectrogramSourceTooShort, true
+	}
+	return 0, "", false
+}
+
+// isSpectrogramNotReady reports whether err means the clip may still be written, so
+// the client should retry.
+func isSpectrogramNotReady(err error) bool {
+	return errors.Is(err, ffmpeg.ErrAudioFileNotReady) || errors.Is(err, ffmpeg.ErrAudioFileIncomplete)
+}
+
+// isSpectrogramSourceFailure reports whether spectrogramSourceStatus answers err.
+func isSpectrogramSourceFailure(err error) bool {
+	_, _, ok := spectrogramSourceStatus(err)
+	return ok
+}
+
 // transcodeError turns a failed transcode into the HTTP response. A disconnected
 // client or an expired request deadline is answered by handleRequestContextError;
 // otherwise the failure is logged and answered per transcodeStatus, falling back
@@ -1546,7 +1586,9 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 //
 // POST /api/v2/spectrogram/:id/process
 // Body: {"normalize": true, "denoise": "medium", "gain_db": 0}
-// Query: same as GET /api/v2/spectrogram/:id (size, raw)
+// Query: same as GET /api/v2/spectrogram/:id (size, raw, legacy width). A width outside
+// 100..2000 answers 400 before any processing; a clip that cannot be processed or
+// rendered answers 422.
 func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	// Defense in depth: initMediaRoutes skips registering this handler when the
 	// datastore is disabled, but guard the c.DS dereference below anyway.
@@ -1577,6 +1619,12 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	if !transcode.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
 			gainRangeMessage(), http.StatusBadRequest)
+	}
+
+	// Reject an out-of-range legacy width before any processing work.
+	params, err := c.parseSpectrogramParameters(ctx)
+	if err != nil {
+		return c.HandleError(ctx, err, msgInvalidSpectrogramWidth, http.StatusBadRequest)
 	}
 
 	// Resolve clip path
@@ -1651,8 +1699,6 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	_ = tmpSpectrogramFile.Close()
 	defer func() { _ = os.Remove(tmpSpectrogramPath) }()
 
-	params := c.parseSpectrogramParameters(ctx)
-
 	// Resolve frequency profile from detection's model type (the helper logs a
 	// warning and falls back to the bird profile when the lookup fails).
 	profileOpt := spectrogram.WithFrequencyProfile(c.resolveDetectionFrequencyProfile(noteID))
@@ -1660,6 +1706,9 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	if err := c.spectrogramGenerator.GenerateFromFile(ctx.Request().Context(), tmpPath, tmpSpectrogramPath, params.width, params.raw, profileOpt); err != nil {
 		if handled, contextErr := c.handleRequestContextError(ctx); handled {
 			return contextErr
+		}
+		if status, message, ok := spectrogramSourceStatus(err); ok {
+			return c.HandleError(ctx, err, message, status)
 		}
 		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
 	}
@@ -1678,7 +1727,7 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 // spectrogramHTTPError handles common spectrogram generation errors and converts them to appropriate HTTP responses
 func (c *Handler) spectrogramHTTPError(ctx echo.Context, err error) error {
 	switch {
-	case errors.Is(err, ffmpeg.ErrAudioFileNotReady) || errors.Is(err, ffmpeg.ErrAudioFileIncomplete):
+	case isSpectrogramNotReady(err):
 		// Audio file is not ready yet - client should retry. Prefer a dynamic retry
 		// duration from validation when available, else the default. Emitted via the
 		// non-reporting 503 path (not HandleError) so this expected "still encoding"
@@ -1700,10 +1749,29 @@ func (c *Handler) spectrogramHTTPError(ctx echo.Context, err error) error {
 		// Use StatusClientClosedRequest (non-standard, but common for Nginx)
 		return c.HandleError(ctx, err, "Spectrogram generation canceled by client", StatusClientClosedRequest)
 	default:
+		if status, message, ok := spectrogramSourceStatus(err); ok {
+			// The clip cannot be rendered as it stands: unsupported, damaged, too long or
+			// too short. Not a server fault.
+			return c.HandleError(ctx, err, message, status)
+		}
 		// Default to internal server error for other generation failures
 		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
 	}
 }
+
+// Bounds of the legacy ?width= spectrogram parameter. The minimum comes from the
+// renderer so the two cannot drift apart.
+const (
+	minLegacySpectrogramWidth = soxchrome.MinWidth
+	maxLegacySpectrogramWidth = 2000
+)
+
+// msgInvalidSpectrogramWidth is the 400 message for a legacy width outside the bounds.
+var msgInvalidSpectrogramWidth = fmt.Sprintf("Spectrogram width must be between %d and %d pixels",
+	minLegacySpectrogramWidth, maxLegacySpectrogramWidth)
+
+// errInvalidSpectrogramWidth marks a legacy width parameter outside the supported bounds.
+var errInvalidSpectrogramWidth = errors.NewStd("spectrogram width out of range")
 
 // spectrogramParameters holds parsed query parameters for spectrogram requests.
 // This struct is reusable across multiple endpoints.
@@ -1716,17 +1784,21 @@ type spectrogramParameters struct {
 }
 
 // parseSpectrogramParameters extracts and validates spectrogram parameters from the request.
-// This is a reusable helper used by multiple endpoints.
+// This is a reusable helper used by multiple endpoints. It returns an error wrapping
+// errInvalidSpectrogramWidth when the legacy width parameter is an integer outside
+// [minLegacySpectrogramWidth, maxLegacySpectrogramWidth]; callers answer 400.
 //
 // Parameters:
-//   - size: Spectrogram size - "md" (514px), "lg" (1026px), "xl" (2050px)
-//   - width: Legacy parameter for custom width (1-2000px). Ignored if 'size' is present.
+//   - size: Spectrogram size - "md" (514px), "lg" (1026px), "xl" (2050px). Never rejected;
+//     an unknown value falls back to the default.
+//   - width: Legacy parameter for custom width (100-2000px). Ignored if 'size' is present.
+//     A value that is not an integer is ignored like an unknown size.
 //   - raw: Whether to generate raw spectrogram without axes/legends
 //
 // Style and dynamic range are read from settings (not query params) because they are
 // global settings that affect the visual appearance of all spectrograms. Including them
 // in the filename prevents serving stale cached spectrograms when these settings change.
-func (c *Handler) parseSpectrogramParameters(ctx echo.Context) spectrogramParameters {
+func (c *Handler) parseSpectrogramParameters(ctx echo.Context) (spectrogramParameters, error) {
 	spec := c.CurrentSettings().Realtime.Dashboard.Spectrogram
 	params := spectrogramParameters{
 		width:        SpectrogramSizeLg, // Default width (lg) - single render size for all contexts
@@ -1747,12 +1819,15 @@ func (c *Handler) parseSpectrogramParameters(ctx echo.Context) spectrogramParame
 	// Legacy width parameter support (only if size not specified)
 	widthStr := ctx.QueryParam("width")
 	if widthStr != "" && params.sizeStr == "" {
-		if parsedWidth, err := strconv.Atoi(widthStr); err == nil && parsedWidth > 0 && parsedWidth <= 2000 {
+		if parsedWidth, err := strconv.Atoi(widthStr); err == nil {
+			if parsedWidth < minLegacySpectrogramWidth || parsedWidth > maxLegacySpectrogramWidth {
+				return params, fmt.Errorf("%w: %d", errInvalidSpectrogramWidth, parsedWidth)
+			}
 			params.width = parsedWidth
 		}
 	}
 
-	return params
+	return params, nil
 }
 
 // validateNoteIDAndGetClipPath validates the note ID parameter and retrieves the clip path.
@@ -1941,6 +2016,11 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 				}
 			}
 			c.LogWarnIfEnabled("Spectrogram generation skipped: source audio clip not available", logFields...)
+		case isSpectrogramNotReady(err):
+			// Still being written; the 503 below tells the client to retry.
+			c.LogDebugIfEnabled("Spectrogram generation deferred: audio clip not ready", logFields...)
+		case isSpectrogramSourceFailure(err):
+			c.LogWarnIfEnabled("Spectrogram generation skipped: source audio cannot be rendered", logFields...)
 		default:
 			// Unexpected failures (sox/ffmpeg broken, unreadable clip, etc.)
 			c.LogErrorIfEnabled("Spectrogram generation failed", logFields...)
@@ -1988,7 +2068,8 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 // Query Parameters:
 //   - size: Spectrogram size - "md" (514px), "lg" (1026px), "xl" (2050px)
 //     Default: "lg"
-//   - width: Legacy parameter for custom width (1-2000px). Ignored if 'size' is present.
+//   - width: Legacy parameter for custom width (100-2000px). Ignored if 'size' is present.
+//     An integer outside that range answers 400.
 //   - raw: Whether to generate raw spectrogram without axes/legends
 //     Default: true (for backward compatibility with cached spectrograms)
 //     Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
@@ -2047,7 +2128,10 @@ func (c *Handler) ServeSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Parse query parameters
-	params := c.parseSpectrogramParameters(ctx)
+	params, err := c.parseSpectrogramParameters(ctx)
+	if err != nil {
+		return c.HandleError(ctx, err, msgInvalidSpectrogramWidth, http.StatusBadRequest)
+	}
 
 	// Resolve frequency profile from detection's model type. The same profile drives
 	// both the generation effects (profileOpt) and the cache filename token
@@ -2103,7 +2187,8 @@ func (c *Handler) ServeAudioByQueryID(ctx echo.Context) error {
 // Query Parameters:
 //   - size: Spectrogram size - "md" (514px), "lg" (1026px), "xl" (2050px)
 //     Default: "lg"
-//   - width: Legacy parameter for custom width (1-2000px). Ignored if 'size' is present.
+//   - width: Legacy parameter for custom width (100-2000px). Ignored if 'size' is present.
+//     An integer outside that range answers 400.
 //   - raw: Whether to generate raw spectrogram without axes/legends
 //     Default: true (for backward compatibility with cached spectrograms)
 //     Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
@@ -2113,37 +2198,15 @@ func (c *Handler) ServeAudioByQueryID(ctx echo.Context) error {
 func (c *Handler) ServeSpectrogram(ctx echo.Context) error {
 	filename := ctx.Param("filename")
 
-	// Parse size parameter
-	width := SpectrogramSizeLg // Default width (lg) - single render size for all contexts
-	sizeStr := ctx.QueryParam("size")
-	if sizeStr != "" {
-		if validWidth, err := spectrogram.SizeToPixels(sizeStr); err == nil {
-			width = validWidth
-		}
-		// Invalid size parameter falls back to width parameter or default
+	params, err := c.parseSpectrogramParameters(ctx)
+	if err != nil {
+		return c.HandleError(ctx, err, msgInvalidSpectrogramWidth, http.StatusBadRequest)
 	}
-
-	// Legacy width parameter support
-	widthStr := ctx.QueryParam("width")
-	if widthStr != "" && sizeStr == "" {
-		parsedWidth, err := strconv.Atoi(widthStr)
-		if err == nil && parsedWidth > 0 && parsedWidth <= 2000 {
-			width = parsedWidth
-		}
-	}
-
-	// Parse raw spectrogram parameter
-	raw := parseRawParameter(ctx.QueryParam("raw"))
-
-	// Read style settings for filename generation (prevents serving stale cached spectrograms)
-	spec := c.CurrentSettings().Realtime.Dashboard.Spectrogram
-	style := spec.Style
-	dynamicRange := spec.DynamicRange
 
 	// Pass the request context for cancellation/timeout. This filename route has no
 	// note/model context, so it always renders with the default bird profile (empty
 	// frequency suffix).
-	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width, raw, style, dynamicRange, "")
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, params.width, params.raw, params.style, params.dynamicRange, "")
 	if err != nil {
 		return c.spectrogramHTTPError(ctx, err)
 	}
@@ -2179,6 +2242,8 @@ func (c *Handler) ServeSpectrogram(ctx echo.Context) error {
 //   - "generated": Successfully generated (in queue cache)
 //   - "failed": Generation failed
 //   - "exists": Already exists on disk
+//
+// A legacy width query value outside 100..2000 answers 400.
 func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 	// Defense in depth: initMediaRoutes already skips registering this handler when the
 	// datastore is disabled, but guard the c.DS dereferences below anyway.
@@ -2197,7 +2262,10 @@ func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 	}
 
 	// Parse query parameters using shared helper
-	params := c.parseSpectrogramParameters(ctx)
+	params, err := c.parseSpectrogramParameters(ctx)
+	if err != nil {
+		return c.HandleError(ctx, err, msgInvalidSpectrogramWidth, http.StatusBadRequest)
+	}
 
 	// Check queue status first (most volatile state). The in-memory queue is keyed
 	// by an immutable identifier (note ID + visual params), independent of the live
@@ -2305,6 +2373,7 @@ func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 //
 // HTTP Status Codes:
 //   - 200 OK: Spectrogram generated successfully
+//   - 400 Bad Request: legacy width outside 100..2000
 //   - 503 Service Unavailable: Audio file not ready (includes Retry-After header)
 //   - 404 Not Found: Audio file not found
 //   - 408 Request Timeout: Generation timed out
@@ -2312,8 +2381,10 @@ func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 //
 // runAsyncSpectrogramGeneration is the background worker spawned by
 // GenerateSpectrogramByID. It waits out any pending Extended Capture clip export before
-// generating, then records the outcome in the queue status and logs. Extracted from the
-// handler so the handler stays under the cognitive-complexity budget.
+// generating, then records the outcome in the queue status and logs it: a clip that is
+// still being written at Debug, a clip that cannot be rendered at Warn, anything else at
+// Error. It is extracted from the handler so the handler stays under the
+// cognitive-complexity budget.
 func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, queueKey string, params spectrogramParameters, freqSuffix string, profile spectrogram.FrequencyProfile) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -2381,6 +2452,10 @@ func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, 
 			// export abandoned on restart, or a reconcile ghost). Expected and
 			// self-describing, so Warn, not Error.
 			c.LogWarnIfEnabled("Async spectrogram generation skipped: audio clip not available", logFields...)
+		case isSpectrogramNotReady(err):
+			c.LogDebugIfEnabled("Async spectrogram generation deferred: audio clip not ready", logFields...)
+		case isSpectrogramSourceFailure(err):
+			c.LogWarnIfEnabled("Async spectrogram generation skipped: source audio cannot be rendered", logFields...)
 		default:
 			c.LogErrorIfEnabled("Async spectrogram generation failed", logFields...)
 		}
@@ -2403,7 +2478,10 @@ func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Parse query parameters using shared helper
-	params := c.parseSpectrogramParameters(ctx)
+	params, err := c.parseSpectrogramParameters(ctx)
+	if err != nil {
+		return c.HandleError(ctx, err, msgInvalidSpectrogramWidth, http.StatusBadRequest)
+	}
 
 	// Log request details
 	c.LogDebugIfEnabled("Spectrogram generation requested by user",
@@ -3478,7 +3556,8 @@ func (c *Handler) generateWithFallback(ctx context.Context, absAudioPath, absSpe
 	if err := c.spectrogramGenerator.GenerateFromFile(ctx, absAudioPath, absSpectrogramPath, width, raw, genOpts...); err != nil {
 		// Check if this is an expected operational error (context canceled, process killed)
 		// These are normal events during shutdown, timeout, or resource management
-		if spectrogram.IsOperationalError(err) {
+		switch {
+		case spectrogram.IsOperationalError(err):
 			// Log at Debug level for expected operational events
 			getSpectrogramLogger().Debug("Spectrogram generation canceled or interrupted",
 				logger.String("queue_key", queueKey),
@@ -3486,7 +3565,17 @@ func (c *Handler) generateWithFallback(ctx context.Context, absAudioPath, absSpe
 				logger.Int64("duration_ms", time.Since(generationStart).Milliseconds()),
 				logger.String("abs_audio_path", absAudioPath),
 				logger.String("abs_spectrogram_path", absSpectrogramPath))
-		} else {
+		case isSpectrogramNotReady(err):
+			getSpectrogramLogger().Debug("Spectrogram generation deferred: audio clip not ready",
+				logger.String("queue_key", queueKey),
+				logger.Error(err),
+				logger.String("abs_audio_path", absAudioPath))
+		case isSpectrogramSourceFailure(err):
+			getSpectrogramLogger().Warn("Spectrogram generation skipped: source audio cannot be rendered",
+				logger.String("queue_key", queueKey),
+				logger.Error(err),
+				logger.String("abs_audio_path", absAudioPath))
+		default:
 			// Log at Error level for unexpected failures
 			getSpectrogramLogger().Error("Spectrogram generation failed",
 				logger.String("queue_key", queueKey),
