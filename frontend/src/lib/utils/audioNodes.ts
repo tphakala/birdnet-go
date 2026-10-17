@@ -40,9 +40,25 @@ export const MAX_HIGH_PASS_FREQ = 10000;
 export const MAX_GAIN_DB = 24;
 
 /**
+ * Source nodes already created per (context, element). createMediaElementSource
+ * may run at most once per pair (a second call throws InvalidStateError), so a
+ * retry after a failed graph build must reuse the first source.
+ */
+const sourceNodeCache = new WeakMap<
+  BaseAudioContext,
+  WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>
+>();
+
+/**
  * Create a complete audio processing node chain.
  *
  * Chain: source -> highPass -> gain -> [compressor] -> destination
+ *
+ * Once the media element source exists the element is captured by the context
+ * and silent unless the source is connected. If building the rest of the chain
+ * throws, the source is connected straight to the destination so the element
+ * stays audible, and the error is rethrown. A later call for the same element
+ * reuses the cached source, drops that fallback route and rebuilds.
  *
  * @param ctx - AudioContext to create nodes in
  * @param audioElement - HTML audio element to use as source
@@ -56,38 +72,59 @@ export function createAudioNodeChain(
 ): AudioNodeChain {
   const { gainDb = 0, highPassFreq = DEFAULT_HIGH_PASS_FREQ, includeCompressor = false } = options;
 
-  // Create source from audio element
-  const source = ctx.createMediaElementSource(audioElement);
-
-  // Create gain node for volume control
-  const gain = ctx.createGain();
-  gain.gain.value = dbToGain(gainDb);
-
-  // Create high-pass filter to reduce low-frequency noise
-  const highPass = ctx.createBiquadFilter();
-  highPass.type = 'highpass';
-  highPass.frequency.value = highPassFreq;
-  highPass.Q.value = 1;
-
-  if (includeCompressor) {
-    // Create dynamics compressor for consistent volume
-    const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.value = -24;
-    compressor.knee.value = 30;
-    compressor.ratio.value = 12;
-    compressor.attack.value = 0.003;
-    compressor.release.value = 0.25;
-
-    // Connect chain with compressor
-    source.connect(highPass).connect(gain).connect(compressor).connect(ctx.destination);
-
-    return { source, gain, highPass, compressor };
+  let sourcesByElement = sourceNodeCache.get(ctx);
+  if (!sourcesByElement) {
+    sourcesByElement = new WeakMap();
+    sourceNodeCache.set(ctx, sourcesByElement);
+  }
+  let source = sourcesByElement.get(audioElement);
+  if (source) {
+    // Drop the fallback route of an earlier failed build before rebuilding.
+    source.disconnect();
+  } else {
+    source = ctx.createMediaElementSource(audioElement);
+    sourcesByElement.set(audioElement, source);
   }
 
-  // Connect chain without compressor
-  source.connect(highPass).connect(gain).connect(ctx.destination);
+  try {
+    // Create gain node for volume control
+    const gain = ctx.createGain();
+    gain.gain.value = dbToGain(gainDb);
 
-  return { source, gain, highPass };
+    // Create high-pass filter to reduce low-frequency noise
+    const highPass = ctx.createBiquadFilter();
+    highPass.type = 'highpass';
+    highPass.frequency.value = highPassFreq;
+    highPass.Q.value = 1;
+
+    if (includeCompressor) {
+      // Create dynamics compressor for consistent volume
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -24;
+      compressor.knee.value = 30;
+      compressor.ratio.value = 12;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.25;
+
+      // Connect chain with compressor
+      source.connect(highPass).connect(gain).connect(compressor).connect(ctx.destination);
+
+      return { source, gain, highPass, compressor };
+    }
+
+    // Connect chain without compressor
+    source.connect(highPass).connect(gain).connect(ctx.destination);
+
+    return { source, gain, highPass };
+  } catch (err) {
+    try {
+      source.disconnect();
+      source.connect(ctx.destination);
+    } catch {
+      // The fallback route is best effort; the original error is what matters.
+    }
+    throw err;
+  }
 }
 
 /**
@@ -108,7 +145,10 @@ export function createAudioNodeChain(
  * @returns the existing chain if already attached; a freshly built chain when
  *   the context is running; otherwise null (graph not attached, retry on a later
  *   play). Returning the existing chain unchanged also upholds the
- *   once-per-element createMediaElementSource constraint.
+ *   once-per-element createMediaElementSource constraint. Throws when the graph
+ *   build fails; the element then plays through a direct source-to-output route
+ *   (see createAudioNodeChain), so callers should catch, play on, and may call
+ *   this again on a later play.
  */
 export function attachAudioGraphWhenRunning(
   ctx: AudioContext | null,

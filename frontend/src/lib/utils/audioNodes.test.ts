@@ -9,7 +9,11 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { attachAudioGraphWhenRunning, type AudioNodeChain } from './audioNodes';
+import {
+  attachAudioGraphWhenRunning,
+  createAudioNodeChain,
+  type AudioNodeChain,
+} from './audioNodes';
 
 /**
  * Minimal fake AudioContext. connect() returns its argument so the
@@ -100,5 +104,66 @@ describe('attachAudioGraphWhenRunning', () => {
     attachAudioGraphWhenRunning(ctx, fakeElement, null, { includeCompressor: true });
 
     expect(ctx.createDynamicsCompressor).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createAudioNodeChain failure handling', () => {
+  // A fresh element per test: the source-node cache is keyed by element.
+  const freshElement = () => ({}) as unknown as HTMLAudioElement;
+
+  /** Make the next createGain() throw, as a failed graph build would. */
+  function failNextGraphBuild(ctx: ReturnType<typeof makeFakeContext>) {
+    const createGain = vi.mocked(ctx.createGain);
+    createGain.mockImplementationOnce(() => {
+      throw new Error('graph build failed');
+    });
+  }
+
+  /** The source node the fake context handed out for the nth createMediaElementSource call. */
+  function sourceNode(ctx: ReturnType<typeof makeFakeContext>, call: number) {
+    const result = ctx.createMediaElementSource.mock.results.at(call);
+    return result?.value as {
+      connect: ReturnType<typeof vi.fn>;
+      disconnect: ReturnType<typeof vi.fn>;
+    };
+  }
+
+  it('reuses the element source node when an earlier graph build failed', () => {
+    const ctx = makeFakeContext('running');
+    const element = freshElement();
+    failNextGraphBuild(ctx);
+
+    expect(() => createAudioNodeChain(ctx, element)).toThrow('graph build failed');
+    const chain = createAudioNodeChain(ctx, element);
+
+    // A second createMediaElementSource on the same element throws
+    // InvalidStateError in a browser, so the first source must be reused.
+    expect(ctx.createMediaElementSource).toHaveBeenCalledTimes(1);
+    expect(chain.source).toBe(sourceNode(ctx, 0));
+  });
+
+  it('routes the source straight to the output when the graph build fails', () => {
+    const ctx = makeFakeContext('running');
+    failNextGraphBuild(ctx);
+
+    expect(() => createAudioNodeChain(ctx, freshElement())).toThrow('graph build failed');
+
+    expect(sourceNode(ctx, 0).connect).toHaveBeenCalledWith(ctx.destination);
+  });
+
+  it('drops the fallback route before rebuilding the graph', () => {
+    const ctx = makeFakeContext('running');
+    const element = freshElement();
+    failNextGraphBuild(ctx);
+    expect(() => createAudioNodeChain(ctx, element)).toThrow('graph build failed');
+    const source = sourceNode(ctx, 0);
+    const fallbackConnectOrder = source.connect.mock.invocationCallOrder.at(-1) ?? 0;
+
+    createAudioNodeChain(ctx, element);
+
+    const disconnectOrder = source.disconnect.mock.invocationCallOrder.at(-1) ?? 0;
+    const rebuildConnectOrder = source.connect.mock.invocationCallOrder.at(-1) ?? 0;
+    expect(disconnectOrder).toBeGreaterThan(fallbackConnectOrder);
+    expect(rebuildConnectOrder).toBeGreaterThan(disconnectOrder);
   });
 });
