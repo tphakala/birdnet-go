@@ -29,6 +29,10 @@ type pcmBuffer struct {
 	SampleRate int
 	// Channels is the interleaved channel count.
 	Channels int
+	// declaredFrames is the frame count the header declares for a whole-file read
+	// of a source whose length is exact, or unknownFrames when no comparison with
+	// Frames is meaningful (windowed reads and formats without an exact length).
+	declaredFrames int64
 	// wavRoom, when non-nil, is the buffer Data was sliced from, with exactly
 	// wavHeaderBytes of unused space before Data. encodeWAV then builds the WAV in
 	// place instead of copying the samples.
@@ -189,7 +193,11 @@ func decodeSource(ctx context.Context, src *source, win *window, fileSize int64,
 		}
 		return nil, wrapSentinel(ErrUndecodableSource, nil, "decode_read", "source holds no audio", errors.CategoryAudio)
 	}
-	return &pcmBuffer{Data: data, SampleRate: src.sampleRate, Channels: src.channels}, nil
+	declared := int64(unknownFrames)
+	if win == nil && src.exactLength {
+		declared = src.totalFrames
+	}
+	return &pcmBuffer{Data: data, SampleRate: src.sampleRate, Channels: src.channels, declaredFrames: declared}, nil
 }
 
 // positionSource moves the reader to startFrame, past any hidden leading frames:

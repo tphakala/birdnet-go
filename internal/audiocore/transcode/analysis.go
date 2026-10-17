@@ -2,6 +2,7 @@ package transcode
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/tphakala/go-audio-dsp/pcm"
 	audioresampler "github.com/tphakala/go-audio-resampler"
@@ -28,11 +29,18 @@ type MonoSource struct {
 // sources are accepted; stereo is averaged to mono. toRate is the rate Stream
 // delivers; a value of zero or less keeps the source rate. The decoded size is
 // bounded like every other decode in this package. A file with no audio wraps
-// ErrUndecodableSource.
+// ErrUndecodableSource. A WAV or FLAC that delivers fewer frames than its
+// header declares wraps ErrTruncatedSource (and so ErrUndecodableSource), since
+// a spectrogram of the part that exists would be a short picture of a clip that
+// is cut or still being written. Formats without an exact length (MP3, M4A,
+// Opus) are not checked.
 func DecodeMono(ctx context.Context, path string, toRate int) (*MonoSource, error) {
 	buf, err := decodeChannels(ctx, path, nil, maxDecodedPCMBytes, 0, maxAnalysisChannels)
 	if err != nil {
 		return nil, err
+	}
+	if buf.declaredFrames >= 0 && int64(buf.Frames()) < buf.declaredFrames {
+		return nil, truncatedError(nil, "decode_mono_length", fmt.Sprintf("read %d of %d declared frames", buf.Frames(), buf.declaredFrames))
 	}
 	return newMonoSource(buf.Data, buf.SampleRate, buf.Channels, toRate)
 }

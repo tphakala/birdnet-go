@@ -19,8 +19,16 @@ var (
 	ErrUnsupportedSource = errors.NewStd("source audio format is not supported")
 
 	// ErrUndecodableSource marks a source that a decoder rejects: corrupt,
-	// truncated, empty, or not what its extension says.
+	// truncated, empty, or not what its extension says. A source known to be
+	// shorter than its header declares also wraps ErrTruncatedSource.
 	ErrUndecodableSource = errors.NewStd("source audio could not be decoded")
+
+	// ErrTruncatedSource marks a WAV or FLAC source that delivers fewer frames than
+	// its header declares: the file was cut short or is still being written. Such
+	// an error also wraps ErrUndecodableSource, so callers that test only that
+	// sentinel keep their answer. MP3, M4A and Opus carry no exact length and are
+	// never reported this way.
+	ErrTruncatedSource = errors.NewStd("source audio is shorter than its header declares")
 
 	// ErrAudioTooLong marks a source file or a decoded range that exceeds the
 	// size bounds.
@@ -52,6 +60,21 @@ func wrapSentinel(sentinel, cause error, operation, detail string, category erro
 	}
 	return b.Component(componentName).
 		Category(category).
+		Context("operation", operation).
+		Build()
+}
+
+// truncatedError returns an error that wraps ErrTruncatedSource and
+// ErrUndecodableSource and, when non-nil, cause.
+func truncatedError(cause error, operation, detail string) error {
+	var b *errors.ErrorBuilder
+	if cause != nil {
+		b = errors.Newf("%w: %w: %s: %w", ErrTruncatedSource, ErrUndecodableSource, detail, cause)
+	} else {
+		b = errors.Newf("%w: %w: %s", ErrTruncatedSource, ErrUndecodableSource, detail)
+	}
+	return b.Component(componentName).
+		Category(errors.CategoryAudio).
 		Context("operation", operation).
 		Build()
 }
