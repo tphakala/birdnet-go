@@ -543,6 +543,46 @@ func TestValidateSecuritySettings_TrustedProxies(t *testing.T) {
 	}
 }
 
+// TestValidateSecuritySettings_PlainHTTPSessionClients tests plain-HTTP session
+// client address validation.
+func TestValidateSecuritySettings_PlainHTTPSessionClients(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		clients []string
+		wantErr bool
+	}{
+		{name: "empty list", clients: nil},
+		{name: "IPv4 and IPv6 addresses", clients: []string{"172.18.0.5", "2001:db8::5", "::ffff:172.18.0.6"}},
+		{name: "blank entries are skipped", clients: []string{"", "  ", "172.18.0.5"}},
+		{name: "IPv4 range", clients: []string{"172.18.0.0/29"}, wantErr: true},
+		{name: "IPv6 range", clients: []string{"2001:db8::/64"}, wantErr: true},
+		{name: "IPv4 default route", clients: []string{"0.0.0.0/0"}, wantErr: true},
+		{name: "single-host CIDR", clients: []string{"172.18.0.5/32"}, wantErr: true},
+		{name: "cloudflare preset is not an address", clients: []string{TrustedProxyCloudflarePreset}, wantErr: true},
+		{name: "host name", clients: []string{"birdnet-go"}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateSecuritySettings(&Security{
+				PlainHTTPSessionClients: tt.clients,
+				SessionDuration:         24 * time.Hour,
+			})
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assertValidationError(t, err, "security-plainhttpsessionclients-format")
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 // TestValidateSecuritySettings_SessionDuration tests session duration validation
 func TestValidateSecuritySettings_SessionDuration(t *testing.T) {
 	t.Parallel()

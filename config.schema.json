@@ -2144,6 +2144,13 @@
           "$ref": "#/$defs/PublicAccess",
           "description": "features accessible without authentication"
         },
+        "plainhttpsessionclients": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "PlainHTTPSessionClients lists the IP addresses of clients that reach the\napp directly over plain HTTP, for example another container calling\nhttp://birdnet-go:8080 while browsers use an HTTPS reverse proxy. Session\ncookies issued to these clients omit the Secure attribute so the clients can\nsend them back; every other client keeps Secure whenever HTTPS is\nconfigured. Only exact addresses are accepted, not ranges. The match uses\nthe connection's peer address, never forwarded headers, and applies only to\nrequests that arrive without TLS and without reverse-proxy headers. Never\nlist the address a reverse proxy connects from (including a container\nnetwork gateway when the proxy runs on the host), and give listed clients a\nfixed address so it cannot be reassigned: browser sessions through a proxy\nthat terminates TLS without sending forwarding headers would otherwise lose\nSecure. Not shown in the web UI. Empty by default. Hot-reloadable."
+        },
         "privatemode": {
           "type": "boolean",
           "description": "PrivateMode, when true, requires the user to authenticate before any\nUI data is shown. Enforcement lives at the v2 API data layer, which\nreturns 401 to unauthenticated requests; the public SPA shell is still\nserved so it can render a login form instead of the dashboard,\ndetections, analytics, search, about, and notifications views. Settings\nand system routes are additionally auth-gated at the HTTP layer.\nPublicAccess.LiveAudio still applies independently.\nDefault is false to preserve guest-friendly upstream behavior."
