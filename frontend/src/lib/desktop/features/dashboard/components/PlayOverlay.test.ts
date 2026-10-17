@@ -25,6 +25,7 @@ const DETECTION_ID = 4242;
 const RETRY_QUERY_MARKER = '?t=';
 const PLAY_LABEL = 'media.audio.play';
 const PAUSE_LABEL = 'media.audio.pause';
+const LOADING_LABEL = 'media.audio.loading';
 
 function fakeChain(): ReturnType<typeof attachAudioGraphWhenRunning> {
   return {
@@ -275,6 +276,19 @@ describe('PlayOverlay', () => {
 
       expect(onFreezeStart).toHaveBeenCalledTimes(1);
       expect(onFreezeEnd).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('loading label', () => {
+    it('does not read Pause while a click waits for a failed clip to reload', async () => {
+      mount();
+      ctl.failLoad();
+      ctl.setPlayMode('hold');
+
+      await click();
+
+      expect(button().getAttribute('aria-label')).toBe(LOADING_LABEL);
+      expect(button().disabled).toBe(false);
     });
   });
 

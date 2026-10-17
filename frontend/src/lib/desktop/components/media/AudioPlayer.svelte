@@ -2287,7 +2287,11 @@
           class="text-white p-1 rounded-full hover:bg-white/20 shrink-0"
           onclick={handlePlayPause}
           disabled={isLoading}
-          aria-label={isPlaying ? t('media.audio.pause') : t('media.audio.play')}
+          aria-label={isLoading
+            ? t('media.audio.loading')
+            : isPlaying
+              ? t('media.audio.pause')
+              : t('media.audio.play')}
         >
           {#if isLoading}
             <div

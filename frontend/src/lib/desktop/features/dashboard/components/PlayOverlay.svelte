@@ -690,7 +690,11 @@
   <button
     class={cn('play-button pointer-events-auto', isPlaying && 'is-playing')}
     onclick={handlePlayPause}
-    aria-label={isPlaying ? t('media.audio.pause') : t('media.audio.play')}
+    aria-label={isLoading
+      ? t('media.audio.loading')
+      : isPlaying
+        ? t('media.audio.pause')
+        : t('media.audio.play')}
   >
     {#if isLoading}
       <Loader2 class="size-8 animate-spin" />

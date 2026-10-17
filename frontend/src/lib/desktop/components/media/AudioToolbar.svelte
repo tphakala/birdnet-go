@@ -181,7 +181,11 @@
       class="toolbar-btn play-btn"
       onclick={handlePlay}
       disabled={isLoading}
-      aria-label={isCurrentlyPlaying ? t('media.audio.pause') : t('media.audio.play')}
+      aria-label={isLoading
+        ? t('media.audio.loading')
+        : isCurrentlyPlaying
+          ? t('media.audio.pause')
+          : t('media.audio.play')}
     >
       {#if isLoading}
         <Loader2 size={14} class="animate-spin" />

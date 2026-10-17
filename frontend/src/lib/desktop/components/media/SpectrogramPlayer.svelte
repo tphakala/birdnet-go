@@ -187,7 +187,11 @@
       class:is-playing={audio.isPlaying}
       onclick={handlePlayClick}
       disabled={audio.isLoading}
-      aria-label={audio.isPlaying ? t('media.audio.pause') : t('media.audio.play')}
+      aria-label={audio.isLoading
+        ? t('media.audio.loading')
+        : audio.isPlaying
+          ? t('media.audio.pause')
+          : t('media.audio.play')}
     >
       {#if audio.isLoading}
         <div

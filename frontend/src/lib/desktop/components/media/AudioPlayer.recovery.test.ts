@@ -31,6 +31,7 @@ vi.mock('$lib/utils/audioNodes', () => ({
 
 const PLAY_LABEL = 'media.audio.play';
 const PAUSE_LABEL = 'media.audio.pause';
+const LOADING_LABEL = 'media.audio.loading';
 const PLAY_ERROR_TEXT = 'media.audio.playError';
 const LOAD_ERROR_TEXT = 'media.audio.error';
 const DENOISE_LABEL = 'components.audioPlayer.processing.denoise';
@@ -142,6 +143,18 @@ describe('AudioPlayer recovery', () => {
     ctl.completeLoad();
     await settle();
     expect(ctl.paused).toBe(false);
+  });
+
+  it('does not read Pause while a reload after a failure is loading', async () => {
+    const { container } = mount();
+    await exhaustRetries();
+
+    await press(container);
+
+    expect(playButton(container).getAttribute('aria-label')).toBe(LOADING_LABEL);
+    ctl.completeLoad();
+    await settle();
+    expect(playButton(container).getAttribute('aria-label')).toBe(PAUSE_LABEL);
   });
 
   it('queues play when the reload hits a transient error and plays once loaded', async () => {
