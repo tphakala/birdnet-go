@@ -842,10 +842,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 	}
 
 	// Use provided sample rate; fall back to default when caller passes 0
-	effectiveRate := sampleRate
-	if effectiveRate <= 0 {
-		effectiveRate = conf.SampleRate
-	}
+	effectiveRate := pcmSourceRate(sampleRate)
 
 	// Build Sox arguments for PCM stdin
 	// PCM format parameters use constants from conf package for consistency

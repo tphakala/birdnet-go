@@ -16,25 +16,26 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+// nativeSettledAge is how long a clip must have gone unmodified for its size to
+// count as settled without the stability wait. A writer that is still appending
+// keeps moving the modification time, so an older file cannot be mid-write.
+const nativeSettledAge = 10 * ffmpeg.FileStabilityCheckDuration
+
 // nativeSettle is the outcome of one readiness pass over a clip.
 type nativeSettle struct {
-	// ready is true when the size is valid and stable.
-	ready bool
+	// cause says why the file is not ready; nil means it is ready.
+	cause error
 	// retryAfter is how long to wait before the next pass when not ready.
 	retryAfter time.Duration
-	// cause says why the file is not ready.
-	cause error
-	// size is the file size seen by the pass.
-	size int64
 }
 
 // validateNativeSpectrogramInput checks that the clip at absAudioPath is ready
-// for the native renderer: large enough, with a stable size, and openable by the
-// decoder. A file that is not ready after the bounded retries yields an
+// for the native renderer: large enough, with a stable size (a clip unmodified
+// for nativeSettledAge is taken as stable without the wait), and openable by
+// the decoder. A file that is not ready after the bounded retries yields an
 // AudioNotReadyError. A source the decoder permanently rejects (unsupported
 // format or bounds, too long) and context errors are returned as they are.
 func validateNativeSpectrogramInput(ctx context.Context, absAudioPath, audioPath, queueKey string) error {
-	log := getSpectrogramLogger()
 	start := time.Now()
 	retryDelay := ffmpeg.ValidationRetryDelay
 	var lastCause error
@@ -52,8 +53,8 @@ func validateNativeSpectrogramInput(ctx context.Context, absAudioPath, audioPath
 			return notReadyError(err)
 		}
 
-		if settle.ready {
-			return probeNativeFile(ctx, absAudioPath, audioPath, queueKey, settle.size, start)
+		if settle.cause == nil {
+			return probeNativeFile(ctx, absAudioPath, audioPath, queueKey, start)
 		}
 
 		lastCause = settle.cause
@@ -66,7 +67,7 @@ func validateNativeSpectrogramInput(ctx context.Context, absAudioPath, audioPath
 		}
 	}
 
-	log.Info("Audio file not ready for native spectrogram, client should retry",
+	getSpectrogramLogger().Info("Audio file not ready for native spectrogram, client should retry",
 		logger.String("audio_path", audioPath),
 		logger.Error(lastCause),
 		logger.Int("attempts", ffmpeg.MaxValidationAttempts),
@@ -76,7 +77,7 @@ func validateNativeSpectrogramInput(ctx context.Context, absAudioPath, audioPath
 
 // probeNativeFile runs the decoder's header probe on a clip whose size has
 // settled. It is called once: the answer is a function of the file's bytes.
-func probeNativeFile(ctx context.Context, absAudioPath, audioPath, queueKey string, size int64, start time.Time) error {
+func probeNativeFile(ctx context.Context, absAudioPath, audioPath, queueKey string, start time.Time) error {
 	info, err := transcode.ProbeFile(ctx, absAudioPath)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -91,7 +92,6 @@ func probeNativeFile(ctx context.Context, absAudioPath, audioPath, queueKey stri
 		logger.String("audio_path", audioPath),
 		logger.Int("sample_rate", info.SampleRate),
 		logger.Int("channels", info.Channels),
-		logger.Int64("file_size_bytes", size),
 		logger.Int64("validation_duration_ms", time.Since(start).Milliseconds()),
 		logger.String("queue_key", queueKey))
 	return nil
@@ -107,8 +107,9 @@ func notReadyError(cause error) *AudioNotReadyError {
 }
 
 // settleNativeFile runs one readiness pass: the size must be at least
-// ffmpeg.MinValidAudioSize and unchanged over ffmpeg.FileStabilityCheckDuration.
-// A stat failure is returned as an error; any other verdict is in the result.
+// ffmpeg.MinValidAudioSize and, for a recently modified file, unchanged over
+// ffmpeg.FileStabilityCheckDuration. A stat failure is returned as an error;
+// any other verdict is in the result.
 func settleNativeFile(ctx context.Context, path string) (nativeSettle, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -118,15 +119,17 @@ func settleNativeFile(ctx context.Context, path string) (nativeSettle, error) {
 
 	switch {
 	case size == 0:
-		return nativeSettle{retryAfter: ffmpeg.ValidationRetryDelay, cause: ffmpeg.ErrAudioFileEmpty, size: size}, nil
+		return nativeSettle{retryAfter: ffmpeg.ValidationRetryDelay, cause: ffmpeg.ErrAudioFileEmpty}, nil
 	case size < ffmpeg.MinValidAudioSize:
 		return nativeSettle{
 			retryAfter: ffmpeg.ValidationRetryDelay,
 			cause:      fmt.Errorf("%w: size %d bytes < minimum %d bytes", ffmpeg.ErrAudioFileTooSmall, size, ffmpeg.MinValidAudioSize),
-			size:       size,
 		}, nil
 	}
 
+	if time.Since(info.ModTime()) > nativeSettledAge {
+		return nativeSettle{}, nil
+	}
 	if err := waitNative(ctx, ffmpeg.FileStabilityCheckDuration); err != nil {
 		return nativeSettle{}, err
 	}
@@ -139,10 +142,9 @@ func settleNativeFile(ctx context.Context, path string) (nativeSettle, error) {
 		return nativeSettle{
 			retryAfter: ffmpeg.ValidationRetryDelay * ffmpeg.RetryDelayMultiplier,
 			cause:      fmt.Errorf("%w: file size is still changing", ffmpeg.ErrAudioFileIncomplete),
-			size:       size,
 		}, nil
 	}
-	return nativeSettle{ready: true, size: size}, nil
+	return nativeSettle{}, nil
 }
 
 // waitNative sleeps for d, returning ctx.Err() when ctx ends first.

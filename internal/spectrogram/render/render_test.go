@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"image"
+	"image/png"
 	"math"
 	"sync"
 	"testing"
@@ -330,7 +331,7 @@ func encoded(t *testing.T, src Source, opt Options) []byte {
 	img, _, err := Render(t.Context(), src, opt)
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	require.NoError(t, PNG{}.Encode(&buf, img))
+	require.NoError(t, png.Encode(&buf, img))
 	return buf.Bytes()
 }
 

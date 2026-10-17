@@ -497,3 +497,10 @@ func TestStyleForMatchesGetStyleArgs(t *testing.T) {
 		assert.Equal(t, want, render.StyleFor(name), name)
 	}
 }
+
+func TestNativeRangeDB(t *testing.T) {
+	assert.Equal(t, nativeRangeHighContrastDB, nativeRangeDB(conf.SpectrogramDynamicRangeHighContrast))
+	assert.Equal(t, nativeRangeStandardDB, nativeRangeDB(conf.SpectrogramDynamicRangeStandard))
+	assert.Equal(t, nativeRangeExtendedDB, nativeRangeDB(conf.SpectrogramDynamicRangeExtended))
+	assert.Zero(t, nativeRangeDB("unknown"), "an unknown preset gives 0, which render rejects")
+}

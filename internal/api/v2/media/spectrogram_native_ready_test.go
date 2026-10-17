@@ -106,6 +106,21 @@ func TestValidateNativeSpectrogramInput_ReadyClip(t *testing.T) {
 	}
 }
 
+// A clip that has not been modified for longer than nativeSettledAge cannot be
+// mid-write, so readiness skips the stability wait. This runs on the real clock
+// because the file's modification time is real.
+func TestValidateNativeSpectrogramInput_SettledClipSkipsStabilityWait(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "clip.wav")
+	writeToneWAV(t, path, nativeReadyRate, nativeReadySeconds, fixtureToneHz)
+	old := time.Now().Add(-2 * nativeSettledAge)
+	require.NoError(t, os.Chtimes(path, old, old))
+
+	elapsed, err := callNative(t.Context(), path)
+
+	require.NoError(t, err)
+	assert.Less(t, elapsed, ffmpeg.FileStabilityCheckDuration, "an old clip must not wait out the stability check")
+}
+
 func TestValidateNativeSpectrogramInput_EmptyFileExhausts(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "empty.wav")
 	require.NoError(t, os.WriteFile(path, nil, 0o600))

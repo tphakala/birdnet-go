@@ -87,7 +87,7 @@ func Render(ctx context.Context, src Source, opt Options) (img image.Image, cols
 	}
 
 	fullW, fullH := soxchrome.Dims(opt.Width, opt.Rows, opt.Raw)
-	pal := soxchrome.Palette(opt.Style.Palette)
+	pal := paletteFor(opt.Style.Palette)
 	canvasImg := image.NewPaletted(image.Rect(0, 0, fullW, fullH), pal)
 	cv := &canvas{img: canvasImg, atlas: gl}
 	x0, y0 := 0, 0

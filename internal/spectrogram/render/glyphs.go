@@ -3,6 +3,7 @@ package render
 import (
 	"fmt"
 	"image"
+	"strings"
 	"sync"
 
 	"golang.org/x/image/font"
@@ -152,10 +153,5 @@ func thresholdMask(dr image.Rectangle, mask image.Image, maskp image.Point) []in
 
 // isChromeRune reports whether r can appear in chrome text.
 func isChromeRune(r rune) bool {
-	for _, c := range chromeRunes {
-		if c == r {
-			return true
-		}
-	}
-	return false
+	return strings.ContainsRune(chromeRunes, r)
 }

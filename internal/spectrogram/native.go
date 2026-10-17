@@ -1,8 +1,10 @@
 package spectrogram
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"image/png"
 	"os"
 	"time"
 
@@ -21,6 +23,9 @@ const (
 	// nativeOutputFilePerm is the permission mode of the temporary PNG.
 	nativeOutputFilePerm = 0o644
 
+	// nativeWriteBufferBytes is the buffer between the PNG encoder and the file.
+	nativeWriteBufferBytes = 64 * 1024
+
 	// nativeRendererName tags telemetry and logs from this path.
 	nativeRendererName = "native"
 
@@ -36,13 +41,17 @@ const (
 )
 
 // nativeRangeDB maps the dynamic range preset strings getDynamicRange returns to
-// dB.
-//
-//nolint:gochecknoglobals // immutable lookup table
-var nativeRangeDB = map[string]int{
-	conf.SpectrogramDynamicRangeHighContrast: nativeRangeHighContrastDB,
-	conf.SpectrogramDynamicRangeStandard:     nativeRangeStandardDB,
-	conf.SpectrogramDynamicRangeExtended:     nativeRangeExtendedDB,
+// dB; an unknown preset gives 0, which render rejects as invalid options.
+func nativeRangeDB(preset string) int {
+	switch preset {
+	case conf.SpectrogramDynamicRangeHighContrast:
+		return nativeRangeHighContrastDB
+	case conf.SpectrogramDynamicRangeStandard:
+		return nativeRangeStandardDB
+	case conf.SpectrogramDynamicRangeExtended:
+		return nativeRangeExtendedDB
+	}
+	return 0
 }
 
 // pcmSourceRate returns the capture rate for prerender PCM, falling back to the
@@ -79,7 +88,7 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 		Width:   width,
 		Rows:    fftFriendlyHeight(width),
 		Raw:     raw,
-		RangeDB: nativeRangeDB[g.getDynamicRange(settings)],
+		RangeDB: nativeRangeDB(g.getDynamicRange(settings)),
 		Style:   render.StyleFor(settings.Realtime.Dashboard.Spectrogram.Style),
 	}
 	img, cols, err := render.Render(ctx, src, opt)
@@ -91,7 +100,14 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 	if err != nil {
 		return g.nativeFileError(err, operation, "open")
 	}
-	if err := (render.PNG{}).Encode(f, img); err != nil {
+	// The PNG encoder writes many small chunks; buffer them rather than issue
+	// a write call for each.
+	buf := bufio.NewWriterSize(f, nativeWriteBufferBytes)
+	err = png.Encode(buf, img)
+	if err == nil {
+		err = buf.Flush()
+	}
+	if err != nil {
 		_ = f.Close()
 		return g.nativeFileError(err, operation, "encode")
 	}

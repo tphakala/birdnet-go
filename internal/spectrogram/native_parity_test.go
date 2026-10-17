@@ -323,8 +323,8 @@ func nativeRender(t *testing.T, audio string, c parityCase, profile FrequencyPro
 
 func rangeOf(t *testing.T, dr string) int {
 	t.Helper()
-	v, ok := nativeRangeDB[dr]
-	require.True(t, ok)
+	v := nativeRangeDB(dr)
+	require.NotZero(t, v)
 	return v
 }
 
