@@ -33,11 +33,12 @@ type Note struct {
 	// day's detections into one Note per species whose Time is the latest detection, and carry
 	// the earliest one here so the daily summary can report first heard and last heard apart.
 	// Empty on every other read path.
-	FirstTime   string              `gorm:"-" json:"-"`
-	Model       detection.ModelInfo `gorm:"-"` // Runtime only: model that produced this detection
-	BeginTime   time.Time
-	EndTime     time.Time
-	SpeciesCode string
+	FirstTime          string                                  `gorm:"-" json:"-"`
+	Model              detection.ModelInfo                     `gorm:"-"`          // Runtime only: model that produced this detection
+	ModelContributions map[string]detection.ResultModelContrib `gorm:"-" json:"-"` // Runtime only: per-model contributions from cross-model consensus
+	BeginTime          time.Time
+	EndTime            time.Time
+	SpeciesCode        string
 	// ScientificName includes optimized index (scientific_name, date) for new species tracking performance
 	ScientificName string `gorm:"index:idx_notes_sciname;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:1"`
 	CommonName     string `gorm:"index:idx_notes_comname;index:idx_notes_date_commonname_confidence"`
