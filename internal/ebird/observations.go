@@ -47,7 +47,7 @@ func (c *Client) GetRecentObservations(ctx context.Context, lat, lng float64, da
 		days: days,
 	}
 	obs, err := c.observations.GetOrLoad(ctx, key, func(loadCtx context.Context) ([]Observation, error) {
-		url := fmt.Sprintf("%s/v2/data/obs/geo/recent?lat=%s&lng=%s&back=%d&maxResults=200",
+		url := fmt.Sprintf("%s/data/obs/geo/recent?lat=%s&lng=%s&back=%d&maxResults=200",
 			c.config.BaseURL, key.lat, key.lng, days)
 
 		reqCtx, cancel := context.WithTimeout(loadCtx, c.config.Timeout)

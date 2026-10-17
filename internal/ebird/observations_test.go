@@ -25,10 +25,11 @@ func TestGetRecentObservations(t *testing.T) {
 		},
 	}
 
+	var capturedMethod, capturedPath, capturedToken string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "GET", r.Method)
-		assert.Contains(t, r.URL.Path, "/v2/data/obs/geo/recent")
-		assert.Equal(t, "test-key", r.Header.Get("X-eBirdApiToken"))
+		capturedMethod = r.Method
+		capturedPath = r.URL.Path
+		capturedToken = r.Header.Get("X-eBirdApiToken")
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(mockObs)
@@ -41,6 +42,12 @@ func TestGetRecentObservations(t *testing.T) {
 	// First call - cache miss, hits mock server
 	results, err := client.GetRecentObservations(ctx, 60.17, 24.94, 14)
 	require.NoError(t, err)
+
+	// Assertions run in the test goroutine, not the server goroutine
+	assert.Equal(t, "GET", capturedMethod)
+	assert.Equal(t, "/data/obs/geo/recent", capturedPath)
+	assert.Equal(t, "test-key", capturedToken)
+
 	require.Len(t, results, 1)
 	assert.Equal(t, "Turdus merula", results[0].ScientificName)
 	assert.Equal(t, "Eurasian Blackbird", results[0].CommonName)
