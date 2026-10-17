@@ -5,7 +5,8 @@
  * canvas pixels themselves are not checked.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import { isPlainObject } from '$lib/utils/security';
 import { renderTyped } from '../../../../../test/render-helpers';
@@ -47,11 +48,10 @@ function responseBody(overrides: Record<string, unknown> = {}): Record<string, u
   };
 }
 
-/** Wait past the debounce so the request has been sent. */
-async function waitForRequest(count = 1): Promise<void> {
-  await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(count), {
-    timeout: EQUALIZER_RESPONSE_DEBOUNCE_MS * 4,
-  });
+/** Run the debounce and let the request's promise and Svelte's updates settle. */
+async function settle(ms = EQUALIZER_RESPONSE_DEBOUNCE_MS): Promise<void> {
+  await vi.advanceTimersByTimeAsync(ms);
+  await tick();
 }
 
 function isRequestBody(value: unknown): value is EqualizerResponseRequest {
@@ -68,8 +68,66 @@ function lastBody(): EqualizerResponseRequest | undefined {
   return isRequestBody(body) ? body : undefined;
 }
 
+/** A 2d context with every method drawGraph uses, so the curve is drawn. */
+function createContextMock() {
+  return {
+    clearRect: vi.fn(),
+    fillRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    rect: vi.fn(),
+    fillText: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    translate: vi.fn(),
+    rotate: vi.fn(),
+    setLineDash: vi.fn(),
+    createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+  };
+}
+
+/** Grid and reference lines drawn with lineTo on every draw, curve excluded. */
+const GRID_LINE_COUNT = 16 + 6 + 1;
+
+/** lineTo calls made by the most recent draw (after its clearRect). */
+function lineToInLastDraw(ctx: ReturnType<typeof createContextMock>): number {
+  const lastClear = Math.max(0, ...ctx.clearRect.mock.invocationCallOrder);
+  return ctx.lineTo.mock.invocationCallOrder.filter(order => order > lastClear).length;
+}
+
+/** Strokes made by the most recent draw: the plot border, the grid lines and the reference line, plus one for a curve. */
+const GRID_STROKE_COUNT = 1 + 16 + 6 + 1;
+
+/** Calls of one context method made by the most recent draw, with their arguments. */
+function callsInLastDraw(
+  ctx: ReturnType<typeof createContextMock>,
+  method: 'moveTo' | 'lineTo' | 'stroke'
+): unknown[][] {
+  const lastClear = Math.max(0, ...ctx.clearRect.mock.invocationCallOrder);
+  const mock =
+    method === 'moveTo' ? ctx.moveTo.mock : method === 'lineTo' ? ctx.lineTo.mock : ctx.stroke.mock;
+  return mock.calls.filter((_call, i) => (mock.invocationCallOrder.at(i) ?? 0) > lastClear);
+}
+
+/** fillText labels drawn by the most recent draw. */
+function labelsInLastDraw(ctx: ReturnType<typeof createContextMock>): unknown[] {
+  const lastClear = Math.max(0, ...ctx.clearRect.mock.invocationCallOrder);
+  return ctx.fillText.mock.calls
+    .filter((_call, i) => (ctx.fillText.mock.invocationCallOrder.at(i) ?? 0) > lastClear)
+    .map(call => call[0]);
+}
+
+const FLAT_LABEL = 'settings.audio.audioFilters.graph.flatResponse';
+
 describe('FilterResponseGraph', () => {
+  const originalGetContext = vi
+    .mocked(HTMLCanvasElement.prototype.getContext)
+    .getMockImplementation();
+
   beforeEach(() => {
+    vi.useFakeTimers();
     apiPost.mockReset();
     vi.mocked(t).mockClear();
   });
@@ -77,7 +135,22 @@ describe('FilterResponseGraph', () => {
   afterEach(() => {
     cleanup();
     apiPost.mockReset();
+    vi.useRealTimers();
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReset();
+    if (originalGetContext) {
+      vi.mocked(HTMLCanvasElement.prototype.getContext).mockImplementation(originalGetContext);
+    }
   });
+
+  /** Make every canvas return one full context mock, and return it. */
+  function useFullCanvas(): ReturnType<typeof createContextMock> {
+    const ctx = createContextMock();
+    // A partial CanvasRenderingContext2D: drawGraph only calls the methods above
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockImplementation(
+      () => ctx as unknown as CanvasRenderingContext2D
+    );
+    return ctx;
+  }
 
   it('shows the loading text before the first response', async () => {
     apiPost.mockImplementation(() => new Promise(() => {}));
@@ -91,9 +164,8 @@ describe('FilterResponseGraph', () => {
     // so screen readers announce the change.
     const region = screen.getByRole('status');
     expect(region.textContent).toBe('');
-    await waitFor(() =>
-      expect(region).toHaveTextContent('settings.audio.audioFilters.graph.loading')
-    );
+    await settle(0);
+    expect(region).toHaveTextContent('settings.audio.audioFilters.graph.loading');
   });
 
   it('shows the sample rate caption from the response', async () => {
@@ -101,32 +173,80 @@ describe('FilterResponseGraph', () => {
     renderTyped(FilterResponseGraph, {
       props: { equalizer: { enabled: true, filters: [LOW_PASS] }, sampleRate: 96000 },
     });
-    await waitFor(() => expect(screen.getByTestId('eq-graph-sample-rate')).toBeInTheDocument(), {
-      timeout: 1000,
-    });
+    await settle();
+    expect(screen.getByTestId('eq-graph-sample-rate')).toBeInTheDocument();
     expect(t).toHaveBeenCalledWith('settings.audio.audioFilters.graph.sampleRate', {
       rate: 96000,
     });
     expect(screen.queryByTestId('eq-graph-loading')).not.toBeInTheDocument();
   });
 
+  it('strokes the curve through the returned points', async () => {
+    const ctx = useFullCanvas();
+    apiPost.mockResolvedValue(responseBody());
+    renderTyped(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
+    });
+    expect(lineToInLastDraw(ctx)).toBe(GRID_LINE_COUNT);
+    await settle();
+    // Three points: one moveTo and two lineTo segments on top of the grid,
+    // painted by one extra stroke.
+    expect(lineToInLastDraw(ctx)).toBe(GRID_LINE_COUNT + 2);
+    expect(callsInLastDraw(ctx, 'stroke')).toHaveLength(GRID_STROKE_COUNT + 1);
+    // The canvas is 600 px wide in jsdom: the plot spans x 100..540 and
+    // y 40..300, and -96..12 dB maps onto that height. The curve starts at the
+    // first point (20 Hz, -12 dB) and ends at the last one (20 kHz, -6 dB).
+    const start = callsInLastDraw(ctx, 'moveTo').at(-1);
+    const end = callsInLastDraw(ctx, 'lineTo').at(-1);
+    expect(start?.[0]).toBeCloseTo(100);
+    expect(start?.[1]).toBeCloseTo(300 - (84 / 108) * 260);
+    expect(end?.[0]).toBeCloseTo(540);
+    expect(end?.[1]).toBeCloseTo(300 - (90 / 108) * 260);
+    expect(labelsInLastDraw(ctx)).not.toContain(FLAT_LABEL);
+  });
+
   it('keeps the previous curve and shows the updating text while a new request is pending', async () => {
+    const ctx = useFullCanvas();
     apiPost.mockResolvedValueOnce(responseBody());
     const view = render(FilterResponseGraph, {
       props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
     });
-    await waitFor(() => expect(screen.getByTestId('eq-graph-sample-rate')).toBeInTheDocument(), {
-      timeout: 1000,
-    });
+    await settle();
+    expect(screen.getByTestId('eq-graph-sample-rate')).toBeInTheDocument();
     apiPost.mockImplementation(() => new Promise(() => {}));
     await view.rerender({
       equalizer: { enabled: true, filters: [{ ...LOW_PASS, frequency: 12000 }] },
     });
+    await settle();
     expect(screen.getByTestId('eq-graph-updating')).toHaveTextContent(
       'settings.audio.audioFilters.graph.updating'
     );
     expect(screen.queryByTestId('eq-graph-loading')).not.toBeInTheDocument();
     expect(screen.queryByTestId('eq-graph-sample-rate')).not.toBeInTheDocument();
+    expect(lineToInLastDraw(ctx)).toBe(GRID_LINE_COUNT + 2);
+  });
+
+  it('draws the flat label for an empty filter list and for all filters skipped', async () => {
+    const ctx = useFullCanvas();
+    apiPost.mockResolvedValueOnce(responseBody());
+    const view = render(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [] } },
+    });
+    await settle();
+    expect(labelsInLastDraw(ctx)).toContain(FLAT_LABEL);
+
+    apiPost.mockResolvedValueOnce(
+      responseBody({
+        skipped: [
+          { index: 0, type: 'HighPass', reason: 'invalid_parameters' },
+          { index: 1, type: 'LowPass', reason: 'invalid_parameters' },
+        ],
+      })
+    );
+    await view.rerender({ equalizer: { enabled: true, filters: [HIGH_PASS, LOW_PASS] } });
+    await settle();
+    expect(screen.getByTestId('eq-graph-skipped')).toBeInTheDocument();
+    expect(labelsInLastDraw(ctx)).toContain(FLAT_LABEL);
   });
 
   it('lists each skipped filter with its translated reason and the posted type and frequency', async () => {
@@ -138,7 +258,8 @@ describe('FilterResponseGraph', () => {
     renderTyped(FilterResponseGraph, {
       props: { equalizer: { enabled: true, filters: [HIGH_PASS, LOW_PASS] } },
     });
-    const notice = await screen.findByTestId('eq-graph-skipped', undefined, { timeout: 1000 });
+    await settle();
+    const notice = screen.getByTestId('eq-graph-skipped');
     expect(notice).toHaveTextContent(
       'settings.audio.audioFilters.graph.skippedReasons.invalid_parameters'
     );
@@ -150,16 +271,87 @@ describe('FilterResponseGraph', () => {
     expect(t).toHaveBeenCalledWith('settings.audio.audioFilters.graph.skippedHeading', {
       count: 1,
     });
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'settings.audio.audioFilters.graph.skippedHeading'
+    );
   });
 
-  it('shows the error alert and retries on Retry', async () => {
+  it('numbers the first skipped filter 1 and names it from the posted request', async () => {
+    apiPost.mockResolvedValue(
+      responseBody({ skipped: [{ index: 0, type: 'Unrecognised', reason: 'unknown_type' }] })
+    );
+    renderTyped(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [HIGH_PASS, LOW_PASS] } },
+    });
+    await settle();
+    expect(t).toHaveBeenCalledWith(
+      'settings.audio.audioFilters.graph.skippedReasons.unknown_type',
+      expect.objectContaining({ number: 1, type: 'HighPass', frequency: 100 })
+    );
+  });
+
+  it('shows no skipped notice and announces nothing when no filter is skipped', async () => {
+    apiPost.mockResolvedValue(responseBody());
+    renderTyped(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [HIGH_PASS, LOW_PASS] } },
+    });
+    await settle();
+    expect(screen.getByTestId('eq-graph-sample-rate')).toBeInTheDocument();
+    expect(screen.queryByTestId('eq-graph-skipped')).not.toBeInTheDocument();
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
+
+  it('shows the nearest returned point in the tooltip and hides it on a new state', async () => {
+    useFullCanvas();
+    apiPost.mockResolvedValueOnce(responseBody());
+    const view = render(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
+    });
+    await settle();
+    const canvas = view.container.querySelector('canvas');
+    if (!canvas) throw new Error('canvas not rendered');
+    // jsdom reports a zero bounding box, so client coordinates are canvas
+    // coordinates: x 100 is the left edge of the plot (20 Hz).
+    await fireEvent.mouseMove(canvas, { clientX: 100, clientY: 100 });
+    expect(screen.getByText('20 Hz')).toBeInTheDocument();
+    expect(screen.getByText('-12 dB')).toBeInTheDocument();
+
+    apiPost.mockImplementation(() => new Promise(() => {}));
+    await view.rerender({ equalizer: { enabled: true, filters: [] } });
+    await tick();
+    expect(screen.queryByText('20 Hz')).not.toBeInTheDocument();
+  });
+
+  it('removes a drawn curve when a later request fails', async () => {
+    const ctx = useFullCanvas();
+    apiPost.mockResolvedValueOnce(responseBody());
+    const view = render(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
+    });
+    await settle();
+    expect(lineToInLastDraw(ctx)).toBe(GRID_LINE_COUNT + 2);
+
+    apiPost.mockRejectedValueOnce(new Error('server error'));
+    await view.rerender({
+      equalizer: { enabled: true, filters: [{ ...LOW_PASS, frequency: 12000 }] },
+    });
+    await settle();
+    expect(screen.getByTestId('eq-graph-error')).toBeInTheDocument();
+    expect(lineToInLastDraw(ctx)).toBe(GRID_LINE_COUNT);
+    expect(callsInLastDraw(ctx, 'stroke')).toHaveLength(GRID_STROKE_COUNT);
+  });
+
+  it('shows the error alert, draws no curve and retries on Retry', async () => {
+    const ctx = useFullCanvas();
     apiPost.mockRejectedValueOnce(new Error('server error'));
     apiPost.mockResolvedValueOnce(responseBody());
     renderTyped(FilterResponseGraph, {
       props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
     });
-    const alert = await screen.findByTestId('eq-graph-error', undefined, { timeout: 1000 });
+    await settle();
+    const alert = screen.getByTestId('eq-graph-error');
     expect(alert).toHaveTextContent('settings.audio.audioFilters.graph.error');
+    expect(lineToInLastDraw(ctx)).toBe(GRID_LINE_COUNT);
     // The always-rendered alert region announces the error; the visible box
     // is not a second live region.
     expect(alert).toHaveAttribute('role', 'note');
@@ -169,7 +361,8 @@ describe('FilterResponseGraph', () => {
     // The alert and its button are gone, so focus moves to the graph, not the body.
     expect(document.activeElement).not.toBe(document.body);
     expect(document.activeElement).toHaveAttribute('tabindex', '-1');
-    await waitFor(() => expect(screen.getByTestId('eq-graph-sample-rate')).toBeInTheDocument());
+    await settle(0);
+    expect(screen.getByTestId('eq-graph-sample-rate')).toBeInTheDocument();
     expect(screen.queryByTestId('eq-graph-error')).not.toBeInTheDocument();
   });
 
@@ -180,7 +373,9 @@ describe('FilterResponseGraph', () => {
     renderTyped(FilterResponseGraph, {
       props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
     });
-    await screen.findByTestId('eq-graph-error', undefined, { timeout: 1000 });
+    await settle();
+    await settle(0);
+    expect(screen.getByTestId('eq-graph-error')).toBeInTheDocument();
     expect(apiPost).toHaveBeenCalledWith(
       EQUALIZER_RESPONSE_URL,
       expect.anything(),
@@ -194,7 +389,8 @@ describe('FilterResponseGraph', () => {
     const view = render(FilterResponseGraph, {
       props: { equalizer: { enabled: false, filters: [LOW_PASS] }, sampleRate: 192000 },
     });
-    await waitForRequest(1);
+    await settle();
+    expect(apiPost).toHaveBeenCalledTimes(1);
     expect(apiPost).toHaveBeenCalledWith(
       EQUALIZER_RESPONSE_URL,
       {
@@ -210,7 +406,8 @@ describe('FilterResponseGraph', () => {
       equalizer: { enabled: false, filters: [LOW_PASS] },
       sampleRate: undefined,
     });
-    await waitForRequest(2);
+    await settle();
+    expect(apiPost).toHaveBeenCalledTimes(2);
     expect(lastBody()).not.toHaveProperty('sampleRate');
   });
 
@@ -220,7 +417,7 @@ describe('FilterResponseGraph', () => {
       props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
     });
     view.unmount();
-    await new Promise(resolve => setTimeout(resolve, EQUALIZER_RESPONSE_DEBOUNCE_MS * 2));
+    await settle(EQUALIZER_RESPONSE_DEBOUNCE_MS * 2);
     expect(apiPost).not.toHaveBeenCalled();
   });
 });
