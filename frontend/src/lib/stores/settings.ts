@@ -318,7 +318,7 @@ export interface EqualizerFilter {
   q?: number;
   width?: number; // Bandwidth in Hz (for BandReject)
   gain?: number;
-  passes?: number; // Number of filter passes: 0 = off; 1 or more applies it that many times (the editor offers 0 to 4)
+  passes?: number; // Number of filter passes: 0 = off; 1 or more applies it that many times; the backend skips a negative value or one above its limit (the editor offers 0 to 4)
 }
 
 export interface ExportSettings {

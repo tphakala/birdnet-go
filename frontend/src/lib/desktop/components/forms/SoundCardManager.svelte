@@ -56,7 +56,6 @@
   } from '$lib/stores/settings';
 
   // Local EqualizerSettings type matching AudioEqualizerSettings component's interface
-  // where filter.id is optional (assigned on save)
   interface LocalEqualizerSettings {
     enabled: boolean;
     filters: Array<{

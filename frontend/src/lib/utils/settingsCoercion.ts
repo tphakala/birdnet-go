@@ -190,8 +190,9 @@ export function coerceObject<T extends Record<string, unknown>>(
 /**
  * Coerce an equalizer so that it keeps every value the backend produced. Only values the
  * frontend cannot read at all are replaced: a filter type that is not a string becomes
- * LowPass, and a frequency, Q, width or gain that is not a finite number becomes its
- * default. A string type, any finite number (out of the editor's range or not) and any
+ * LowPass, and a frequency, Q, width or gain that coerceNumber cannot turn into a finite
+ * number becomes its default; coerceNumber also turns numeric strings and booleans into
+ * numbers. A string type, any finite number (out of the editor's range or not) and any
  * integer passes stay as stored, because the backend does not validate a disabled
  * equalizer and accepts more than the editor offers; clamping would rewrite them on the
  * next unrelated save. A missing passes means off, a non-integer passes is rounded.
@@ -220,7 +221,10 @@ function coerceEqualizerSettings(value: unknown): EqualizerSettings {
   return { enabled: coerceBoolean(eq.enabled, false), filters };
 }
 
-/** Read a number as stored: finite numbers pass through unclamped, anything else is the default. */
+/**
+ * Read a number as stored: a finite number, or a value coerceNumber turns into one (a
+ * numeric string, a boolean), passes through unclamped; anything else is the default.
+ */
 function coerceStoredNumber(value: unknown, defaultValue: number): number {
   return coerceNumber(value, -Infinity, Infinity, defaultValue);
 }
