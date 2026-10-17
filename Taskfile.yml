@@ -828,7 +828,7 @@ tasks:
         esac
         onnx_target=""
         if [ -n "${ONNX_LIB_DIR}" ]; then
-          onnx_target=$(readlink -f "${ONNX_LIB_DIR}"/libonnxruntime.{{if eq .UNAME_S "Darwin"}}dylib{{else}}so{{end}} 2>/dev/null)
+          onnx_target=$(readlink -f "${ONNX_LIB_DIR}"/libonnxruntime.{{if eq .UNAME_S "Darwin"}}dylib{{else}}so{{end}} 2>/dev/null || true)
         fi
         if [ -n "${onnx_target}" ] && [ -e "${onnx_target}" ] && printf '%s\n' "${onnx_target}" | grep -qF -- '{{.ONNXRUNTIME_VERSION}}'; then
           echo "✅ ONNX Runtime: {{.ONNXRUNTIME_VERSION}} installed in ${ONNX_LIB_DIR}"
