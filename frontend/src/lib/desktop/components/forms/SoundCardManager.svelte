@@ -517,6 +517,7 @@
                     equalizerSettings={newEqualizer}
                     {disabled}
                     onUpdate={handleNewEqualizerUpdate}
+                    sampleRate={newSampleRate}
                   />
                 </div>
               {/if}

@@ -3755,7 +3755,18 @@
         "graph": {
           "flatResponse": "Flacher Frequenzgang (Keine Filter aktiv)",
           "frequency": "Frequenz (Hz)",
-          "gain": "Verstärkung (dB)"
+          "gain": "Verstärkung (dB)",
+          "loading": "Frequenzgang wird berechnet...",
+          "updating": "Frequenzgang wird aktualisiert...",
+          "error": "Der Frequenzgang konnte nicht berechnet werden. Er wird aktualisiert, wenn du einen Filter änderst oder Erneut versuchen wählst.",
+          "sampleRate": "Berechnet für eine Abtastrate von {rate} Hz.",
+          "skippedHeading": "{count, plural, one {# Filter wird nicht auf das Audio angewendet} other {# Filter werden nicht auf das Audio angewendet}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) wird übersprungen: Dieser Filtertyp wird nicht unterstützt.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) wird übersprungen: Seine Einstellungen sind bei {rate} Hz ungültig.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) wird übersprungen: Er konnte nicht zur Filterkette hinzugefügt werden.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) wird übersprungen."
+          }
         }
       },
       "soundLevelMonitoring": {

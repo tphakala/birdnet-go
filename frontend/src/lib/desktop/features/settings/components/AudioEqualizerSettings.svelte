@@ -14,6 +14,8 @@
   - equalizerSettings: Object containing equalizer enabled state and filters array
   - disabled: Boolean to disable all inputs
   - onUpdate: Callback function to update equalizer settings
+  - sampleRate: Sample rate the response preview is calculated at (optional;
+    omit to use the server's configured rate)
   
   @component
 -->
@@ -144,9 +146,11 @@
     equalizerSettings: EqualizerSettings;
     disabled?: boolean;
     onUpdate: (_updatedSettings: EqualizerSettings) => void;
+    /** Sample rate the preview is calculated at; omit to use the server's configured rate. */
+    sampleRate?: number;
   }
 
-  let { equalizerSettings, disabled = false, onUpdate }: Props = $props();
+  let { equalizerSettings, disabled = false, onUpdate, sampleRate }: Props = $props();
 
   // Load filter config from backend
   let eqFilterConfig = $state<Record<string, FilterTypeConfig>>({});
@@ -421,7 +425,13 @@
       <h3 class="text-sm font-medium mb-2">
         {t('settings.audio.audioFilters.frequencyResponse')}
       </h3>
-      <FilterResponseGraph filters={equalizerSettings.filters || []} />
+      <FilterResponseGraph
+        equalizer={{
+          enabled: equalizerSettings.enabled,
+          filters: equalizerSettings.filters ?? [],
+        }}
+        {sampleRate}
+      />
     </div>
 
     <div class="space-y-4">

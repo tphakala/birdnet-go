@@ -3755,7 +3755,18 @@
         "graph": {
           "flatResponse": "Risposta Piatta (Nessun Filtro Applicato)",
           "frequency": "Frequenza (Hz)",
-          "gain": "Guadagno (dB)"
+          "gain": "Guadagno (dB)",
+          "loading": "Calcolo della risposta in frequenza...",
+          "updating": "Aggiornamento della risposta in frequenza...",
+          "error": "Impossibile calcolare la risposta in frequenza. Si aggiorna quando modifichi un filtro o selezioni Riprova.",
+          "sampleRate": "Calcolata per una frequenza di campionamento di {rate} Hz.",
+          "skippedHeading": "{count, plural, one {# filtro non viene applicato all'audio} other {# filtri non vengono applicati all'audio}}",
+          "skippedReasons": {
+            "unknown_type": "Il filtro {number} ({type}, {frequency} Hz) viene saltato: questo tipo di filtro non è supportato.",
+            "invalid_parameters": "Il filtro {number} ({type}, {frequency} Hz) viene saltato: le sue impostazioni non sono valide a {rate} Hz.",
+            "add_failed": "Il filtro {number} ({type}, {frequency} Hz) viene saltato: non è stato possibile aggiungerlo alla catena di filtri.",
+            "unknown": "Il filtro {number} ({type}, {frequency} Hz) viene saltato."
+          }
         }
       },
       "soundLevelMonitoring": {

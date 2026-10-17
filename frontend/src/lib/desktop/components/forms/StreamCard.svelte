@@ -685,6 +685,10 @@
           </button>
           {#if showEqualizer}
             <div id="stream-eq-{index}" class="mt-3" transition:slide={{ duration: 200 }}>
+              <!-- No sampleRate: a stream's EQ chain runs at the pipeline output rate,
+                   which is the server's configured rate (the preview default) for
+                   every stream except a bat stream with a higher native rate. The
+                   probed stream rate is not that rate, so it is not sent. -->
               <AudioEqualizerSettings
                 equalizerSettings={editEqualizer}
                 {disabled}

@@ -3755,7 +3755,18 @@
         "graph": {
           "flatResponse": "Plochá odozva (Žiadne filtre nie sú použité)",
           "frequency": "Frekvencia (Hz)",
-          "gain": "Zisk (dB)"
+          "gain": "Zisk (dB)",
+          "loading": "Výpočet frekvenčnej odozvy...",
+          "updating": "Aktualizácia frekvenčnej odozvy...",
+          "error": "Frekvenčnú odozvu sa nepodarilo vypočítať. Aktualizuje sa pri zmene filtra alebo po výbere možnosti Skúsiť znova.",
+          "sampleRate": "Vypočítané pre vzorkovaciu frekvenciu {rate} Hz.",
+          "skippedHeading": "{count, plural, one {# filter sa na zvuk nepoužije} few {# filtre sa na zvuk nepoužijú} many {# filtra sa na zvuk nepoužije} other {# filtrov sa na zvuk nepoužije}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) sa preskočí: tento typ filtra nie je podporovaný.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) sa preskočí: jeho nastavenia nie sú platné pri {rate} Hz.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) sa preskočí: nepodarilo sa ho pridať do reťazca filtrov.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) sa preskočí."
+          }
         }
       },
       "soundLevelMonitoring": {

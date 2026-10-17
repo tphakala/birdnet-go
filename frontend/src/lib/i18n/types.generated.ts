@@ -2741,6 +2741,15 @@ export type TranslationKey =
   | 'settings.audio.audioFilters.graph.flatResponse'
   | 'settings.audio.audioFilters.graph.frequency'
   | 'settings.audio.audioFilters.graph.gain'
+  | 'settings.audio.audioFilters.graph.loading'
+  | 'settings.audio.audioFilters.graph.updating'
+  | 'settings.audio.audioFilters.graph.error'
+  | 'settings.audio.audioFilters.graph.sampleRate' // params: rate
+  | 'settings.audio.audioFilters.graph.skippedHeading' // params: count
+  | 'settings.audio.audioFilters.graph.skippedReasons.unknown_type' // params: number, type, frequency
+  | 'settings.audio.audioFilters.graph.skippedReasons.invalid_parameters' // params: number, type, frequency, rate
+  | 'settings.audio.audioFilters.graph.skippedReasons.add_failed' // params: number, type, frequency
+  | 'settings.audio.audioFilters.graph.skippedReasons.unknown' // params: number, type, frequency
   | 'settings.audio.soundLevelMonitoring.title'
   | 'settings.audio.soundLevelMonitoring.description'
   | 'settings.audio.soundLevelMonitoring.enable'
@@ -4735,6 +4744,29 @@ export type TranslationParams = {
   'settings.audio.streams.format.withSampleRate': {
     rate: string | number;
     channels: string | number;
+  };
+  'settings.audio.audioFilters.graph.sampleRate': { rate: string | number };
+  'settings.audio.audioFilters.graph.skippedHeading': { count: string | number };
+  'settings.audio.audioFilters.graph.skippedReasons.unknown_type': {
+    number: string | number;
+    type: string | number;
+    frequency: string | number;
+  };
+  'settings.audio.audioFilters.graph.skippedReasons.invalid_parameters': {
+    number: string | number;
+    type: string | number;
+    frequency: string | number;
+    rate: string | number;
+  };
+  'settings.audio.audioFilters.graph.skippedReasons.add_failed': {
+    number: string | number;
+    type: string | number;
+    frequency: string | number;
+  };
+  'settings.audio.audioFilters.graph.skippedReasons.unknown': {
+    number: string | number;
+    type: string | number;
+    frequency: string | number;
   };
   'settings.audio.clipRecording.preCaptureHelp': { max: string | number };
   'settings.audio.clipRecording.bitrateHelp': { min: string | number; max: string | number };
