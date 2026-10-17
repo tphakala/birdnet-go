@@ -3754,7 +3754,7 @@
           "48db": "48 dB"
         },
         "filterHelp": "Legg til flere filtre for å forme frekvensresponsen for optimal fugledeteksjon i ditt miljø.",
-        "emptyEntryRestored": "Skriv inn et tall. Den forrige verdien {value} ble beholdt.",
+        "emptyEntryRestored": "Skriv inn et tall. Den forrige verdien ble beholdt.",
         "graph": {
           "flatResponse": "Flat respons (ingen filtre brukt)",
           "frequency": "Frekvens (Hz)",

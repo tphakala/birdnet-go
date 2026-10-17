@@ -3754,7 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Ajoutez plusieurs filtres pour façonner la réponse en fréquence pour une détection optimale des oiseaux dans votre environnement.",
-        "emptyEntryRestored": "Saisissez un nombre. La valeur précédente {value} a été conservée.",
+        "emptyEntryRestored": "Saisissez un nombre. La valeur précédente a été conservée.",
         "graph": {
           "flatResponse": "Réponse plate (Aucun filtre appliqué)",
           "frequency": "Fréquence (Hz)",

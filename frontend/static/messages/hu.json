@@ -3754,7 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Több szűrőt is hozzáadhat az optimális madár detektáláshoz a környezetében.",
-        "emptyEntryRestored": "Adjon meg egy számot. Az előző érték ({value}) megmaradt.",
+        "emptyEntryRestored": "Adjon meg egy számot. Az előző érték megmaradt.",
         "graph": {
           "flatResponse": "Lapos válasz (nincs szűrő alkalmazva)",
           "frequency": "Frekvencia (Hz)",

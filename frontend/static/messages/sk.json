@@ -3754,7 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Pridajte viacero filtrov na tvarovanie frekvenčnej odozvy pre optimálnu detekciu vtákov vo vašom prostredí.",
-        "emptyEntryRestored": "Zadajte číslo. Predchádzajúca hodnota {value} bola zachovaná.",
+        "emptyEntryRestored": "Zadajte číslo. Predchádzajúca hodnota bola zachovaná.",
         "graph": {
           "flatResponse": "Plochá odozva (Žiadne filtre nie sú použité)",
           "frequency": "Frekvencia (Hz)",

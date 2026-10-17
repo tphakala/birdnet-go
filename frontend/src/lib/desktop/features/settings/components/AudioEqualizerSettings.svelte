@@ -31,6 +31,8 @@
     EQ_PARAMETER_CELL_CLASS,
     type EqRowVariant,
   } from './EqualizerNumberInput.svelte';
+  import { untrack } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -44,6 +46,7 @@
     EQ_OFFERED_MAX_PASSES,
     EQ_PASSES_OFF,
     eqInputStep,
+    type EqFieldNotice,
     type EqNumericParameter,
   } from '$lib/utils/audio/equalizer';
   import type { EqualizerFilterType } from '$lib/stores/settings';
@@ -298,10 +301,111 @@
   }
 
   // Number of filter rows. Part of the parameter cell keys: rows are keyed by position, so
-  // after a row is removed a cell would otherwise show the next filter and keep that
-  // field's notice. Any change in the count remounts every cell, which also drops the
-  // notices of rows that did not move.
+  // after a row is removed a cell would otherwise show the next filter. Any change in the
+  // count remounts every cell, and the effect below drops every filter row's notice.
   const filterCount = $derived((equalizerSettings.filters || []).length);
+
+  // Row a notice belongs to: a filter row by its index, or the new-filter row
+  type NoticeRow = number | 'new';
+
+  // The latest notice in a row, the filter type it was raised for and the field it is about
+  interface RowNotice extends EqFieldNotice {
+    type: string;
+    param: string;
+  }
+
+  // Each row shows only its latest notice, in a band the row reserves (see noticeBand)
+  const rowNotices = new SvelteMap<NoticeRow, RowNotice>();
+
+  $effect(() => {
+    void filterCount;
+    untrack(() => {
+      for (const row of [...rowNotices.keys()]) {
+        if (row !== 'new') rowNotices.delete(row);
+      }
+    });
+  });
+
+  // Record a field's notice, or withdraw it when the row's notice is that field's
+  function setFieldNotice(
+    row: NoticeRow,
+    type: string,
+    param: string,
+    notice: EqFieldNotice | null
+  ) {
+    if (notice) {
+      rowNotices.set(row, { ...notice, type, param });
+      return;
+    }
+    const current = rowNotices.get(row);
+    if (current?.type === type && current.param === param) rowNotices.delete(row);
+  }
+
+  // The notice a row shows, if it was raised for the row's current filter type
+  function rowNotice(row: NoticeRow, type: string): RowNotice | undefined {
+    const notice = rowNotices.get(row);
+    return notice?.type === type ? notice : undefined;
+  }
+
+  function noticeId(row: NoticeRow): string {
+    return `${editorId}-row-${row}-notice`;
+  }
+
+  function noticeText(notice: EqFieldNotice): string {
+    switch (notice.kind) {
+      case 'min':
+        return t('components.forms.numberField.adjustedToMinimum', { value: notice.value });
+      case 'max':
+        return t('components.forms.numberField.adjustedToMaximum', { value: notice.value });
+      case 'empty':
+        // The field above shows the kept value, so the notice does not repeat it
+        return t('settings.audio.audioFilters.emptyEntryRestored');
+    }
+  }
+
+  // Longest notice a row's numeric fields can show, used to reserve the row's notice band.
+  // Clamp notices name a bound and the kept notice names no value, so these are all the
+  // notices the row can show.
+  function reserveText(params: FilterParameter[]): string {
+    let longest = '';
+    for (const param of params) {
+      if (!numericParameter(param)) continue;
+      const candidates = [
+        noticeText({ kind: 'min', value: param.Min }),
+        noticeText({ kind: 'max', value: param.Max }),
+        noticeText({ kind: 'empty', value: param.Default }),
+      ];
+      for (const text of candidates) {
+        if (text.length > longest.length) longest = text;
+      }
+    }
+    return longest;
+  }
+
+  // Column of a parameter within the notice band: the band spans the parameter columns,
+  // so the first parameter is column 1. Literal class names so Tailwind generates them.
+  function bandColumnClass(params: FilterParameter[], param: string | undefined): string {
+    switch (params.findIndex(p => p.Name === param)) {
+      case 1:
+        return 'md:col-start-2';
+      case 2:
+        return 'md:col-start-3';
+      case 3:
+        return 'md:col-start-4';
+      default:
+        return 'md:col-start-1';
+    }
+  }
+
+  // The rightmost numeric parameter: the narrowest start a notice can have, where the
+  // reserved text is measured so that a notice of any field fits in the same height
+  function lastNumericParameter(params: FilterParameter[]): string | undefined {
+    let last: string | undefined;
+    for (const param of params) {
+      if (numericParameter(param)) last = param.Name;
+    }
+    return last;
+  }
 
   // Handle a click on a label whose control is a button: focus the control without the
   // click the browser would otherwise forward to it
@@ -336,6 +440,7 @@
 
     // Reset new filter form
     newFilter = createEmptyFilter();
+    rowNotices.delete('new');
   }
 
   // Remove a filter by index
@@ -525,9 +630,43 @@
           step={eqInputStep(numeric)}
           {disabled}
           {variant}
+          noticeId={rowNotice(row, filterType)?.param === param.Name ? noticeId(row) : undefined}
           onCommit={value => commitNumeric(numeric, value)}
+          onNotice={notice => setFieldNotice(row, filterType, param.Name, notice)}
         />
       {/if}
+    {/snippet}
+
+    <!-- The notice band of a row: the third track of the row grid, spanning the parameter
+         columns as a column subgrid. An invisible copy of the longest notice the row can
+         show, placed at the narrowest column a notice can start in, sets its height for
+         good, so a notice appearing or going away never moves a control. The visible
+         notice starts under the field it is about and runs to the end of the row. Below
+         md the band is a block after the row's fields. -->
+    {#snippet noticeBand(row: NoticeRow, filterType: string, params: FilterParameter[])}
+      {@const notice = rowNotice(row, filterType)}
+      <div class="grid md:col-start-2 md:col-span-4 md:row-start-3 md:grid-cols-subgrid">
+        <p
+          data-eq-notice-reserve
+          aria-hidden="true"
+          class="help-text invisible pt-1 col-start-1 row-start-1 md:col-end-5 {bandColumnClass(
+            params,
+            lastNumericParameter(params)
+          )}"
+        >
+          {reserveText(params)}
+        </p>
+        <p
+          id={noticeId(row)}
+          role="status"
+          class="help-text pt-1 col-start-1 row-start-1 md:col-end-5 {bandColumnClass(
+            params,
+            notice?.param
+          )}"
+        >
+          {notice ? noticeText(notice) : ''}
+        </p>
+      </div>
     {/snippet}
 
     <div class="space-y-4">
@@ -568,6 +707,8 @@
             )}
           {/each}
 
+          {@render noticeBand(index, filter.type, filterParams)}
+
           <!-- Remove button -->
           <div class="flex items-end md:justify-end md:col-start-5 md:row-span-2 md:self-end">
             <button
@@ -593,6 +734,7 @@
             onChange={value => {
               newFilter.type = value as EqualizerFilterType | '';
               getFilterDefaults(newFilter.type);
+              rowNotices.delete('new');
             }}
             {disabled}
             groupBy={false}
@@ -614,6 +756,8 @@
               passes => (newFilter = { ...newFilter, passes })
             )}
           {/each}
+
+          {@render noticeBand('new', newFilter.type, getEqFilterParameters(newFilter.type))}
         {/if}
 
         <!-- Add new filter button -->

@@ -3754,7 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Add multiple filters to shape the frequency response for optimal bird detection in your environment.",
-        "emptyEntryRestored": "Enter a number. The previous value {value} was kept.",
+        "emptyEntryRestored": "Enter a number. The previous value was kept.",
         "graph": {
           "flatResponse": "Flat Response (No Filters Applied)",
           "frequency": "Frequency (Hz)",

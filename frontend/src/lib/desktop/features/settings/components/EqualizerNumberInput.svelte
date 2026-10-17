@@ -3,18 +3,19 @@
 
   Purpose: One numeric parameter of an equalizer filter (frequency, Q, width or gain)
   in the equalizer editor: a labelled number input that commits on change (blur or
-  Enter), never per keystroke, and says when it changed the entry.
+  Enter), never per keystroke, and reports when it changed the entry.
 
   Behaviour:
-  - On change the entry is resolved against [min, max]: an entry outside the range is
-    clamped to the nearest bound, an entry that is not a number keeps the stored value.
-    The input then shows the resolved value, and onCommit receives it unless the entry
-    was not a number.
-  - A notice under the input says why the shown value differs from the entry. It is
-    linked with aria-describedby while it shows, and clears on the next edit or when
-    the value prop changes to anything other than what this input just committed.
-    A parent that reuses an input for another filter (a removed row above, a type
-    switch) remounts it through its each key, which drops the notice as well.
+  - On change the entry is resolved against [min, max] and the step grid: an entry
+    outside the range is clamped to the nearest bound, an entry inside it is rounded to
+    the nearest step, and an entry that is not a number keeps the stored value. The
+    input then shows the resolved value, and onCommit receives it unless the entry was
+    not a number.
+  - onNotice receives why the shown value differs from the entry (clamped or kept), or
+    null when there is nothing to say: after an in-range commit, on the next edit, and
+    when the value prop changes to anything other than what this input just committed.
+    The parent shows the notice in space it reserves, so a notice never moves the page,
+    and passes its id back as noticeId to link it with aria-describedby.
 
   Props:
   - label: Translated parameter name
@@ -23,19 +24,21 @@
   - min, max, step: Input range and step
   - disabled: Disables the input
   - variant: 'edit' for an existing filter row, 'new' for the new-filter row (label style)
+  - noticeId: Id of the notice that currently describes this input, if any
   - onCommit: Called with the committed value
+  - onNotice: Called with the notice for this input, or null to withdraw it
 
   @component
 -->
 <script module lang="ts">
   /**
-   * Layout of one parameter cell in an equalizer row (label, control, notice). From the
-   * md breakpoint the cell spans three rows of the row grid as a subgrid, so the controls
-   * of a row share one track and a notice grows the row without moving any control.
-   * Labels and controls sit at the bottom of their tracks, as the rows' items-end did.
+   * Layout of one parameter cell in an equalizer row (label, control). From the md
+   * breakpoint the cell spans the first two rows of the row grid as a subgrid, so the
+   * labels and the controls of a row each share one track; the third row is the row's
+   * notice band. Labels and controls sit at the bottom of their tracks.
    */
   export const EQ_PARAMETER_CELL_CLASS =
-    'flex flex-col md:row-span-3 md:grid md:grid-rows-subgrid md:gap-y-0 md:items-end';
+    'flex flex-col md:row-span-2 md:grid md:grid-rows-subgrid md:gap-y-0 md:items-end';
 
   /** Row an equalizer field sits in: an existing filter, or the new-filter form. */
   export type EqRowVariant = 'edit' | 'new';
@@ -49,9 +52,9 @@
 </script>
 
 <script lang="ts">
-  import { t } from '$lib/i18n';
+  import { untrack } from 'svelte';
   import { generateId } from '$lib/utils/uuid';
-  import { resolveNumericEntry, type NumericEntryNotice } from '$lib/utils/audio/equalizer';
+  import { resolveNumericEntry, type EqFieldNotice } from '$lib/utils/audio/equalizer';
 
   interface Props {
     label: string;
@@ -62,15 +65,26 @@
     step: number;
     disabled?: boolean;
     variant: EqRowVariant;
+    noticeId?: string;
     onCommit: (_value: number) => void;
+    onNotice: (_notice: EqFieldNotice | null) => void;
   }
 
-  let { label, unit, value, min, max, step, disabled = false, variant, onCommit }: Props = $props();
+  let {
+    label,
+    unit,
+    value,
+    min,
+    max,
+    step,
+    disabled = false,
+    variant,
+    noticeId,
+    onCommit,
+    onNotice,
+  }: Props = $props();
 
   const inputId = generateId('eq-param');
-  const noticeId = `${inputId}-notice`;
-
-  let notice = $state<{ kind: NumericEntryNotice; value: number } | null>(null);
 
   // The value prop this input expects next: the value it last received, or the one it
   // just committed. A plain variable, not state: the effect below must rerun only when
@@ -78,23 +92,14 @@
   let expectedValue: number | undefined;
 
   // A value that arrives from outside (not the one this input just committed) makes
-  // any notice stale.
+  // any notice stale. Only the value prop is tracked: the parent passes a new onNotice
+  // whenever it re-renders, which must not count as a change.
   $effect(() => {
-    if (value !== expectedValue) notice = null;
-    expectedValue = value;
-  });
-
-  const noticeText = $derived.by(() => {
-    if (!notice) return '';
-    switch (notice.kind) {
-      case 'min':
-        return t('components.forms.numberField.adjustedToMinimum', { value: notice.value });
-      case 'max':
-        return t('components.forms.numberField.adjustedToMaximum', { value: notice.value });
-      case 'empty':
-        return t('settings.audio.audioFilters.emptyEntryRestored', { value: notice.value });
-    }
-    return '';
+    const current = value;
+    untrack(() => {
+      if (current !== expectedValue) onNotice(null);
+      expectedValue = current;
+    });
   });
 
   const labelClasses = $derived(eqLabelClasses(variant));
@@ -102,7 +107,7 @@
   function handleChange(input: HTMLInputElement) {
     const result = resolveNumericEntry(input.value, min, max, value, step);
     input.value = String(result.value);
-    notice = result.notice ? { kind: result.notice, value: result.value } : null;
+    onNotice(result.notice ? { kind: result.notice, value: result.value } : null);
     if (result.notice === 'empty') return;
     expectedValue = result.value;
     onCommit(result.value);
@@ -122,11 +127,8 @@
     {max}
     {step}
     {disabled}
-    aria-describedby={notice ? noticeId : undefined}
-    oninput={() => (notice = null)}
+    aria-describedby={noticeId}
+    oninput={() => onNotice(null)}
     onchange={e => handleChange(e.currentTarget)}
   />
-  <p id={noticeId} role="status" class="help-text md:self-start" class:pt-1={notice !== null}>
-    {noticeText}
-  </p>
 </div>

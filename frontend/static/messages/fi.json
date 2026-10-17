@@ -3754,7 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Lisää useita suodattimia muodostaaksesi taajuusvasteen optimaaliseen lintujen tunnistukseen ympäristössäsi.",
-        "emptyEntryRestored": "Anna numero. Edellinen arvo {value} säilytettiin.",
+        "emptyEntryRestored": "Anna numero. Edellinen arvo säilytettiin.",
         "graph": {
           "flatResponse": "Tasainen vaste (Ei suodattimia käytössä)",
           "frequency": "Taajuus (Hz)",

@@ -3754,7 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Fügen Sie mehrere Filter hinzu, um den Frequenzgang für optimale Vogelerkennung in Ihrer Umgebung zu gestalten.",
-        "emptyEntryRestored": "Geben Sie eine Zahl ein. Der vorherige Wert {value} wurde beibehalten.",
+        "emptyEntryRestored": "Geben Sie eine Zahl ein. Der vorherige Wert wurde beibehalten.",
         "graph": {
           "flatResponse": "Flacher Frequenzgang (Keine Filter aktiv)",
           "frequency": "Frequenz (Hz)",

@@ -3754,7 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Lägg till flera filter för att forma frekvensvaret för optimal fågeldetektering i din miljö.",
-        "emptyEntryRestored": "Ange ett tal. Det tidigare värdet {value} behölls.",
+        "emptyEntryRestored": "Ange ett tal. Det tidigare värdet behölls.",
         "graph": {
           "flatResponse": "Plant svar (inga filter tillämpade)",
           "frequency": "Frekvens (Hz)",

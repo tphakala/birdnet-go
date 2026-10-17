@@ -603,7 +603,9 @@ describe('AudioEqualizerSettings', () => {
           expect(input.value).toBe(shown ?? before);
           expect(noticeOf(input)?.textContent.trim()).not.toBe('');
           expect(noticeOf(input)).toHaveAttribute('role', 'status');
-          expect(t).toHaveBeenCalledWith(notice, { value: noticeValue ?? Number(before) });
+          // Clamp notices name the bound; the kept notice names no value, the field shows it
+          const noticeArgs = noticeValue === null ? [notice] : [notice, { value: noticeValue }];
+          expect(t).toHaveBeenCalledWith(...noticeArgs);
           expect(input).not.toHaveAttribute('aria-invalid');
           expect(await r.committed(user, p)).toBe(committed ?? r.restored(before));
         });
@@ -667,6 +669,64 @@ describe('AudioEqualizerSettings', () => {
 
       expect(mockUpdateCallback).toHaveBeenCalledTimes(1);
       expect(lastPayload().filters[0]).toMatchObject({ type: 'LowPass', frequency: 2000 });
+    });
+
+    it('reserves each row a notice band holding the longest notice the row can show', async () => {
+      renderWithFilters([STORED.LowPass]);
+      await screen.findAllByRole('spinbutton', { name: NAME.q });
+
+      const ghosts = document.querySelectorAll('[data-eq-notice-reserve]');
+      // One filter row; the new-filter row has no type picked, so it has no band yet
+      expect(ghosts).toHaveLength(1);
+      const ghost = ghosts[0];
+      expect(ghost).toHaveAttribute('aria-hidden', 'true');
+      // Of the min, max and kept notices, the kept one is the longest here
+      expect(ghost.textContent.trim()).toBe(NOTICE.empty);
+      expect(shownNotices()).toEqual([]);
+    });
+
+    it('keeps the reserved band for a stored value of any length', async () => {
+      const user = userEvent.setup();
+      renderWithFilters([{ type: 'LowPass', frequency: 15000, q: 0.7071067811865476, passes: 1 }]);
+
+      const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
+      const reserve = document.querySelector('[data-eq-notice-reserve]')?.textContent.trim() ?? '';
+      await user.clear(q);
+      await user.tab();
+
+      expect(q.value).toBe('0.7071067811865476');
+      const shown = noticeOf(q)?.textContent.trim() ?? '';
+      expect(shown).not.toBe('');
+      expect(shown.length).toBeLessThanOrEqual(reserve.length);
+      expect(shown).not.toContain('0.7071067811865476');
+      // The kept notice is the same text for every stored value
+      const keptCalls = vi.mocked(t).mock.calls.filter(call => call[0] === NOTICE.empty);
+      expect(keptCalls.length).toBeGreaterThan(0);
+      for (const call of keptCalls) expect(call).toHaveLength(1);
+    });
+
+    it('shows only the latest notice of a row and links only that field to it', async () => {
+      const user = userEvent.setup();
+      renderWithFilters([STORED.LowPass]);
+
+      const frequency = await screen.findByRole<HTMLInputElement>('spinbutton', {
+        name: NAME.cutoff,
+      });
+      const q = screen.getByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
+      await user.clear(frequency);
+      await user.type(frequency, '99999');
+      await user.tab();
+      expect(noticeOf(frequency)).not.toBeNull();
+
+      await user.clear(q);
+      await user.tab();
+      expect(shownNotices()).toHaveLength(1);
+      expect(frequency).not.toHaveAttribute('aria-describedby');
+      expect(noticeOf(q)?.textContent.trim()).toBe(NOTICE.empty);
+
+      // Editing the field that does not own the notice leaves it in place
+      await user.type(frequency, '1');
+      expect(noticeOf(q)?.textContent.trim()).toBe(NOTICE.empty);
     });
 
     it('clears a notice on the next edit of the field', async () => {

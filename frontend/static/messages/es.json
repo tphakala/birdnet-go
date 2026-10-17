@@ -3754,7 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Añade múltiples filtros para dar forma a la respuesta de frecuencia para una detección óptima de aves en tu entorno.",
-        "emptyEntryRestored": "Introduce un número. Se ha conservado el valor anterior {value}.",
+        "emptyEntryRestored": "Introduce un número. Se ha conservado el valor anterior.",
         "graph": {
           "flatResponse": "Respuesta plana (Sin filtros aplicados)",
           "frequency": "Frecuencia (Hz)",

@@ -3754,7 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Dodaj wiele filtrów, aby ukształtować charakterystykę częstotliwościową dla optymalnej detekcji ptaków w twoim środowisku.",
-        "emptyEntryRestored": "Wpisz liczbę. Zachowano poprzednią wartość {value}.",
+        "emptyEntryRestored": "Wpisz liczbę. Zachowano poprzednią wartość.",
         "graph": {
           "flatResponse": "Charakterystyka płaska (Brak filtrów)",
           "frequency": "Częstotliwość (Hz)",

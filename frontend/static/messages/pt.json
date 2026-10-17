@@ -3754,7 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Adicione vários filtros para moldar a resposta de frequência para detecção ideal de pássaros em seu ambiente.",
-        "emptyEntryRestored": "Introduza um número. O valor anterior {value} foi mantido.",
+        "emptyEntryRestored": "Introduza um número. O valor anterior foi mantido.",
         "graph": {
           "flatResponse": "Resposta plana (Sem filtros aplicados)",
           "frequency": "Frequência (Hz)",

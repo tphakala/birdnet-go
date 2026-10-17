@@ -61,6 +61,12 @@ export function eqInputStep(name: EqNumericParameter): number {
  */
 export type NumericEntryNotice = 'min' | 'max' | 'empty';
 
+/** A notice about one committed entry: why it changed, and the value it became. */
+export interface EqFieldNotice {
+  kind: NumericEntryNotice;
+  value: number;
+}
+
 /** Result of resolving a typed entry against a parameter range. */
 export interface NumericEntryResult {
   /** The value to show and, unless notice is 'empty', to commit. */

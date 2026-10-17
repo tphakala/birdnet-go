@@ -3754,7 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Pievienojiet vairākus filtrus, lai veidotu frekvenču raksturlīkni optimālai putnu noteikšanai jūsu vidē.",
-        "emptyEntryRestored": "Ievadiet skaitli. Iepriekšējā vērtība {value} tika saglabāta.",
+        "emptyEntryRestored": "Ievadiet skaitli. Iepriekšējā vērtība tika saglabāta.",
         "graph": {
           "flatResponse": "Plakana raksturlīkne (filtri nav lietoti)",
           "frequency": "Frekvence (Hz)",
