@@ -12,11 +12,12 @@ type ProbeInfo struct {
 
 // ProbeFile reports whether DecodeMono can open path. It runs the same file
 // checks (regular file, size bound) and opens the same decoder with the same
-// sample-rate and channel bounds, returning the same errors, but decodes no
-// audio: it reads what each decoder needs to establish its configuration (the
-// headers; the first MP3 frame; the Opus page index). A nil error does not mean
-// the clip holds audio or is complete: a header-only or truncated data section is
-// found only by decoding. The open itself does not observe ctx.
+// sample-rate and channel bounds, returning the same errors except those only
+// decoding can find (the decoded-size bound), but decodes no audio: it reads
+// what each decoder needs to establish its configuration (the headers; the
+// first MP3 frame; the Opus page index). A nil error does not mean the clip
+// holds audio or is complete: a header-only or truncated data section is found
+// only by decoding. The open itself does not observe ctx.
 func ProbeFile(ctx context.Context, path string) (ProbeInfo, error) {
 	if err := ctx.Err(); err != nil {
 		return ProbeInfo{}, err

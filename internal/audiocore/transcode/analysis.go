@@ -68,7 +68,8 @@ func newMonoSource(data []byte, srcRate, channels, toRate int) (*MonoSource, err
 func (m *MonoSource) SampleRate() int { return m.dstRate }
 
 // SpanSamples returns the clip length in samples at SampleRate, rounded to the
-// nearest sample so a one-frame clip spans one sample, not zero.
+// nearest sample. A clip shorter than half the ratio of the two rates, such as
+// one frame resampled down by more than two, spans zero samples.
 func (m *MonoSource) SpanSamples() int64 {
 	frames := int64(len(m.data) / (bytesPerSample * m.channels))
 	return (frames*int64(m.dstRate) + int64(m.srcRate)/2) / int64(m.srcRate)
