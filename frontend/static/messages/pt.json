@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Resposta de frequência",
         "cutoffFrequency": "Frequência de corte",
         "cutoffFrequencyHelp": "Frequência na qual o filtro começa a atenuar sinais. Os cantos de pássaros normalmente variam de 1 a 10 kHz.",
+        "centerFrequency": "Frequência central",
+        "bandwidth": "Largura de banda",
         "qFactor": "Fator Q",
         "qFactorHelp": "O fator de qualidade controla a nitidez do filtro. Valores mais baixos (0,1-1) criam inclinações mais suaves, valores mais altos (1-10) criam cortes mais acentuados.",
         "gain": "Ganho",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Adicione vários filtros para moldar a resposta de frequência para detecção ideal de pássaros em seu ambiente.",
+        "emptyEntryRestored": "Introduza um número. O valor anterior foi mantido.",
         "graph": {
           "flatResponse": "Resposta plana (Sem filtros aplicados)",
           "frequency": "Frequência (Hz)",

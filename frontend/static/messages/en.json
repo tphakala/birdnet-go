@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Frequency Response",
         "cutoffFrequency": "Cutoff Frequency",
         "cutoffFrequencyHelp": "Frequency at which the filter begins to attenuate signals. Bird calls typically range from 1-10 kHz.",
+        "centerFrequency": "Center Frequency",
+        "bandwidth": "Bandwidth",
         "qFactor": "Q Factor",
         "qFactorHelp": "Quality factor controls the sharpness of the filter. Lower values (0.1-1) create gentler slopes, higher values (1-10) create steeper cutoffs.",
         "gain": "Gain",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Add multiple filters to shape the frequency response for optimal bird detection in your environment.",
+        "emptyEntryRestored": "Enter a number. The previous value was kept.",
         "graph": {
           "flatResponse": "Flat Response (No Filters Applied)",
           "frequency": "Frequency (Hz)",

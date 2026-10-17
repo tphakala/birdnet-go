@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Réponse en fréquence",
         "cutoffFrequency": "Fréquence de coupure",
         "cutoffFrequencyHelp": "Fréquence à laquelle le filtre commence à atténuer les signaux. Les chants d'oiseaux se situent généralement entre 1 et 10 kHz.",
+        "centerFrequency": "Fréquence centrale",
+        "bandwidth": "Largeur de bande",
         "qFactor": "Facteur Q",
         "qFactorHelp": "Le facteur de qualité contrôle la netteté du filtre. Des valeurs faibles (0,1-1) créent des pentes douces, des valeurs élevées (1-10) créent des coupures plus abruptes.",
         "gain": "Gain",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Ajoutez plusieurs filtres pour façonner la réponse en fréquence pour une détection optimale des oiseaux dans votre environnement.",
+        "emptyEntryRestored": "Saisissez un nombre. La valeur précédente a été conservée.",
         "graph": {
           "flatResponse": "Réponse plate (Aucun filtre appliqué)",
           "frequency": "Fréquence (Hz)",

@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Frekvenču raksturlīkne",
         "cutoffFrequency": "Robežfrekvence",
         "cutoffFrequencyHelp": "Frekvence, pie kuras filtrs sāk slāpēt signālus. Putnu dziesmas parasti ir diapazonā no 1 līdz 10 kHz.",
+        "centerFrequency": "Centrālā frekvence",
+        "bandwidth": "Joslas platums",
         "qFactor": "Q faktors",
         "qFactorHelp": "Kvalitātes faktors kontrolē filtra asumu. Zemākas vērtības (0,1-1) rada lēzenākas slīpnes, augstākas vērtības (1-10) rada stāvākas robežas.",
         "gain": "Pastiprināšana",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Pievienojiet vairākus filtrus, lai veidotu frekvenču raksturlīkni optimālai putnu noteikšanai jūsu vidē.",
+        "emptyEntryRestored": "Ievadiet skaitli. Iepriekšējā vērtība tika saglabāta.",
         "graph": {
           "flatResponse": "Plakana raksturlīkne (filtri nav lietoti)",
           "frequency": "Frekvence (Hz)",

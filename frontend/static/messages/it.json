@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Risposta Frequenza",
         "cutoffFrequency": "Frequenza Taglio",
         "cutoffFrequencyHelp": "Frequenza alla quale il filtro inizia ad attenuare segnali. Richiami uccelli variano tipicamente da 1-10 kHz.",
+        "centerFrequency": "Frequenza centrale",
+        "bandwidth": "Larghezza di banda",
         "qFactor": "Fattore Q",
         "qFactorHelp": "Fattore qualità controlla la nitidezza del filtro. Valori più bassi (0.1-1) creano pendenze più dolci, valori più alti (1-10) creano tagli più ripidi.",
         "gain": "Guadagno",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Aggiungi più filtri per modellare la risposta in frequenza per rilevamento ottimale uccelli nel tuo ambiente.",
+        "emptyEntryRestored": "Inserisci un numero. È stato mantenuto il valore precedente.",
         "graph": {
           "flatResponse": "Risposta Piatta (Nessun Filtro Applicato)",
           "frequency": "Frequenza (Hz)",

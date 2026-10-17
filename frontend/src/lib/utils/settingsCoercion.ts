@@ -6,6 +6,7 @@
  */
 
 import { CANDIDATE_SAMPLE_RATES } from '$lib/utils/audio/sampleRate';
+import { DEFAULT_EQ_Q, DEFAULT_EQ_WIDTH_HZ } from '$lib/utils/audio/equalizer';
 import type {
   BirdNetSettings,
   AudioSettings,
@@ -344,8 +345,8 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
             ),
             type: normalizedType as EqualizerFilter['type'],
             frequency: coerceNumber(f.frequency, 20, 20000, defaultFrequency),
-            q: coerceNumber(f.q, 0.1, 10, 0.707),
-            width: coerceNumber(f.width, 1, 10000, 100), // Bandwidth in Hz
+            q: coerceNumber(f.q, 0.1, 10, DEFAULT_EQ_Q),
+            width: coerceNumber(f.width, 1, 10000, DEFAULT_EQ_WIDTH_HZ), // Bandwidth in Hz
             gain: coerceNumber(f.gain, -48, 12, 0),
             // A missing or invalid passes means no filtering; the backend reads it
             // the same way. Filtering only happens for an explicit passes of 1 or more.

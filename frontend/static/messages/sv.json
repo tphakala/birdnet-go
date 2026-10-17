@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Frekvenssvar",
         "cutoffFrequency": "Gränsfrekvens",
         "cutoffFrequencyHelp": "Frekvens vid vilken filtret börjar dämpa signaler. Fågelläten ligger typiskt i intervallet 1-10 kHz.",
+        "centerFrequency": "Mittfrekvens",
+        "bandwidth": "Bandbredd",
         "qFactor": "Q-faktor",
         "qFactorHelp": "Kvalitetsfaktorn styr filtrets skärpa. Lägre värden (0,1-1) ger mjukare lutning, högre värden (1-10) ger brantare avskärning.",
         "gain": "Förstärkning",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Lägg till flera filter för att forma frekvensvaret för optimal fågeldetektering i din miljö.",
+        "emptyEntryRestored": "Ange ett tal. Det tidigare värdet behölls.",
         "graph": {
           "flatResponse": "Plant svar (inga filter tillämpade)",
           "frequency": "Frekvens (Hz)",

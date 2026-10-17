@@ -26,11 +26,29 @@
   import HighPassIcon from '$lib/desktop/components/ui/HighPassIcon.svelte';
   import BandRejectIcon from '$lib/desktop/components/ui/BandRejectIcon.svelte';
   import FilterResponseGraph from './FilterResponseGraph.svelte';
+  import EqualizerNumberInput, {
+    eqLabelClasses,
+    EQ_PARAMETER_CELL_CLASS,
+    type EqRowVariant,
+  } from './EqualizerNumberInput.svelte';
+  import { untrack } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { generateId } from '$lib/utils/uuid';
+  import {
+    DEFAULT_EQ_GAIN_DB,
+    DEFAULT_EQ_Q,
+    DEFAULT_EQ_WIDTH_HZ,
+    EQ_OFFERED_MAX_PASSES,
+    EQ_PASSES_OFF,
+    eqInputStep,
+    type EqFieldNotice,
+    type EqNumericParameter,
+  } from '$lib/utils/audio/equalizer';
   import type { EqualizerFilterType } from '$lib/stores/settings';
   import fallbackEqFilterConfig from './eqFilterFallbackConfig.json';
 
@@ -104,9 +122,19 @@
   let eqFilterConfig = $state<Record<string, FilterTypeConfig>>({});
   let loadingConfig = $state(true);
 
+  // Frequency of the blank form before a type is picked; picking a type sets its default
+  const UNSELECTED_FREQUENCY_HZ = 0;
+
   // Blank form for a new filter; new filters start Off (0 passes)
   function createEmptyFilter(): NewFilterForm {
-    return { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 0 };
+    return {
+      type: '',
+      frequency: UNSELECTED_FREQUENCY_HZ,
+      q: DEFAULT_EQ_Q,
+      width: DEFAULT_EQ_WIDTH_HZ,
+      gain: DEFAULT_EQ_GAIN_DB,
+      passes: EQ_PASSES_OFF,
+    };
   }
 
   // New filter state for adding filters (uses NewFilterForm to allow empty type)
@@ -202,27 +230,195 @@
     return config?.Parameters || [];
   }
 
-  // Clamp a value to the Min/Max range of a filter parameter
-  function clampToParameter(value: number, param: FilterParameter): number {
-    return Math.max(param.Min, Math.min(param.Max, value));
+  // The numeric parameter a table entry describes, or undefined for Passes and unknown names
+  function numericParameter(param: FilterParameter): EqNumericParameter | undefined {
+    switch (param.Name.toLowerCase()) {
+      case 'frequency':
+        return 'Frequency';
+      case 'q':
+        return 'Q';
+      case 'width':
+        return 'Width';
+      case 'gain':
+        return 'Gain';
+    }
+    return undefined;
   }
 
-  // Commit a Q entry: clamp it to the parameter range and show the stored value in the
-  // input. An entry that is not a number restores the current value and commits nothing.
-  function commitQ(
-    input: HTMLInputElement,
-    param: FilterParameter,
-    current: number | undefined,
-    commit: (_q: number) => void
+  // Translated label of a filter parameter. The table's own English label is the
+  // fallback for a parameter the editor has no translation for.
+  function parameterLabel(filterType: string, param: FilterParameter): string {
+    switch (param.Name.toLowerCase()) {
+      case 'frequency':
+        return filterType === 'BandReject'
+          ? t('settings.audio.audioFilters.centerFrequency')
+          : t('settings.audio.audioFilters.cutoffFrequency');
+      case 'q':
+        return t('settings.audio.audioFilters.qFactor');
+      case 'width':
+        return t('settings.audio.audioFilters.bandwidth');
+      case 'gain':
+        return t('settings.audio.audioFilters.gain');
+      case 'passes':
+        return t('settings.audio.audioFilters.attenuation');
+    }
+    return param.Label;
+  }
+
+  // Stored value of a numeric parameter in a filter or in the new-filter form
+  function parameterValue(
+    filter: Filter | NewFilterForm,
+    name: EqNumericParameter
+  ): number | undefined {
+    switch (name) {
+      case 'Frequency':
+        return filter.frequency;
+      case 'Q':
+        return filter.q;
+      case 'Width':
+        return filter.width;
+      case 'Gain':
+        return filter.gain;
+    }
+  }
+
+  // Store a committed numeric parameter in the new-filter form
+  function setNewFilterParameter(name: EqNumericParameter, value: number) {
+    switch (name) {
+      case 'Frequency':
+        newFilter = { ...newFilter, frequency: value };
+        break;
+      case 'Q':
+        newFilter = { ...newFilter, q: value };
+        break;
+      case 'Width':
+        newFilter = { ...newFilter, width: value };
+        break;
+      case 'Gain':
+        newFilter = { ...newFilter, gain: value };
+        break;
+    }
+  }
+
+  // Number of filter rows. Part of the parameter cell keys: rows are keyed by position, so
+  // after a row is removed a cell would otherwise show the next filter. Any change in the
+  // count remounts every cell, and the effect below drops every filter row's notice.
+  const filterCount = $derived((equalizerSettings.filters || []).length);
+
+  // Row a notice belongs to: a filter row by its index, or the new-filter row
+  type NoticeRow = number | 'new';
+
+  // The latest notice in a row, the filter type it was raised for and the field it is about
+  interface RowNotice extends EqFieldNotice {
+    type: string;
+    param: string;
+  }
+
+  // Each row shows only its latest notice, in a band the row reserves (see noticeBand)
+  const rowNotices = new SvelteMap<NoticeRow, RowNotice>();
+
+  $effect(() => {
+    void filterCount;
+    untrack(() => {
+      for (const row of [...rowNotices.keys()]) {
+        if (row !== 'new') rowNotices.delete(row);
+      }
+    });
+  });
+
+  // Record a field's notice, or withdraw it when the row's notice is that field's
+  function setFieldNotice(
+    row: NoticeRow,
+    type: string,
+    param: string,
+    notice: EqFieldNotice | null
   ) {
-    const value = parseFloat(input.value);
-    if (isNaN(value)) {
-      input.value = String(current ?? param.Default);
+    if (notice) {
+      rowNotices.set(row, { ...notice, type, param });
       return;
     }
-    const clamped = clampToParameter(value, param);
-    input.value = String(clamped);
-    commit(clamped);
+    const current = rowNotices.get(row);
+    if (current?.type === type && current.param === param) rowNotices.delete(row);
+  }
+
+  // The notice a row shows, if it was raised for the row's current filter type
+  function rowNotice(row: NoticeRow, type: string): RowNotice | undefined {
+    const notice = rowNotices.get(row);
+    return notice?.type === type ? notice : undefined;
+  }
+
+  function noticeId(row: NoticeRow): string {
+    return `${editorId}-row-${row}-notice`;
+  }
+
+  function noticeText(notice: EqFieldNotice): string {
+    switch (notice.kind) {
+      case 'min':
+        return t('components.forms.numberField.adjustedToMinimum', { value: notice.value });
+      case 'max':
+        return t('components.forms.numberField.adjustedToMaximum', { value: notice.value });
+      case 'empty':
+        // The field above shows the kept value, so the notice does not repeat it
+        return t('settings.audio.audioFilters.emptyEntryRestored');
+    }
+  }
+
+  // Longest notice a row's numeric fields can show, used to reserve the row's notice band.
+  // Clamp notices name a bound and the kept notice names no value, so these are all the
+  // notices the row can show.
+  function reserveText(params: FilterParameter[]): string {
+    let longest = '';
+    for (const param of params) {
+      if (!numericParameter(param)) continue;
+      const candidates = [
+        noticeText({ kind: 'min', value: param.Min }),
+        noticeText({ kind: 'max', value: param.Max }),
+        noticeText({ kind: 'empty', value: param.Default }),
+      ];
+      for (const text of candidates) {
+        if (text.length > longest.length) longest = text;
+      }
+    }
+    return longest;
+  }
+
+  // Column of a parameter within the notice band: the band spans the parameter columns,
+  // so the first parameter is column 1. Literal class names so Tailwind generates them.
+  function bandColumnClass(params: FilterParameter[], param: string | undefined): string {
+    switch (params.findIndex(p => p.Name === param)) {
+      case 1:
+        return 'md:col-start-2';
+      case 2:
+        return 'md:col-start-3';
+      case 3:
+        return 'md:col-start-4';
+      default:
+        return 'md:col-start-1';
+    }
+  }
+
+  // The rightmost numeric parameter: the narrowest start a notice can have, where the
+  // reserved text is measured so that a notice of any field fits in the same height
+  function lastNumericParameter(params: FilterParameter[]): string | undefined {
+    let last: string | undefined;
+    for (const param of params) {
+      if (numericParameter(param)) last = param.Name;
+    }
+    return last;
+  }
+
+  // Handle a click on a label whose control is a button: focus the control without the
+  // click the browser would otherwise forward to it
+  function focusInsteadOfActivating(event: MouseEvent, controlId: string) {
+    event.preventDefault();
+    document.getElementById(controlId)?.focus();
+  }
+
+  // Id prefix of this editor instance, for the <label for> of each attenuation dropdown
+  // (the editor mounts several times on a page)
+  const editorId = generateId('eq-editor');
+  function passesId(row: number | 'new'): string {
+    return `${editorId}-passes-${row}`;
   }
 
   // Add a new filter
@@ -244,6 +440,7 @@
 
     // Reset new filter form
     newFilter = createEmptyFilter();
+    rowNotices.delete('new');
   }
 
   // Remove a filter by index
@@ -287,12 +484,9 @@
       // For passes, ensure integer and clamp to bounds
       if (normalizedParamName === 'passes') {
         const intValue = Math.round(numericValue);
-        validatedValue = Math.max(0, Math.min(4, intValue));
+        validatedValue = Math.max(EQ_PASSES_OFF, Math.min(EQ_OFFERED_MAX_PASSES, intValue));
       } else if (paramConfig) {
-        // Use parameter bounds if available, otherwise use sensible defaults
-        const min = paramConfig.Min ?? 0;
-        const max = paramConfig.Max ?? (normalizedParamName === 'frequency' ? 20000 : 10);
-        validatedValue = Math.max(min, Math.min(max, numericValue));
+        validatedValue = Math.max(paramConfig.Min, Math.min(paramConfig.Max, numericValue));
       } else {
         validatedValue = numericValue;
       }
@@ -386,15 +580,104 @@
       />
     </div>
 
+    <!-- One parameter cell of a filter row: a number input, or the attenuation dropdown -->
+    {#snippet parameterCell(
+      filterType: string,
+      param: FilterParameter,
+      variant: EqRowVariant,
+      row: number | 'new',
+      filter: Filter | NewFilterForm,
+      commitNumeric: (_name: EqNumericParameter, _value: number) => void,
+      commitPasses: (_passes: number) => void
+    )}
+      {@const numeric = numericParameter(param)}
+      {@const unitSuffix = param.Unit ? ` (${param.Unit})` : ''}
+      {#if param.Name.toLowerCase() === 'passes'}
+        <div class={EQ_PARAMETER_CELL_CLASS}>
+          <!-- A label click would also click the dropdown trigger and open the list; it only
+               moves focus there, as a label click does for the number inputs. A label is never
+               focused, so keyboard users reach the dropdown itself and need no key handler. -->
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+          <label
+            class={eqLabelClasses(variant).label}
+            for={passesId(row)}
+            onclick={event => focusInsteadOfActivating(event, passesId(row))}
+          >
+            <span class={eqLabelClasses(variant).text}>
+              {parameterLabel(filterType, param)}{unitSuffix}
+            </span>
+          </label>
+          <SelectDropdown
+            id={passesId(row)}
+            value={String(filter.passes ?? EQ_PASSES_OFF)}
+            options={attenuationOptions}
+            onChange={value => {
+              const passes = Number(value);
+              if (Number.isInteger(passes)) commitPasses(passes);
+            }}
+            {disabled}
+            groupBy={false}
+            menuSize="sm"
+          />
+        </div>
+      {:else if numeric}
+        <EqualizerNumberInput
+          label={parameterLabel(filterType, param)}
+          unit={param.Unit}
+          value={parameterValue(filter, numeric) ?? param.Default}
+          min={param.Min}
+          max={param.Max}
+          step={eqInputStep(numeric)}
+          {disabled}
+          {variant}
+          noticeId={rowNotice(row, filterType)?.param === param.Name ? noticeId(row) : undefined}
+          onCommit={value => commitNumeric(numeric, value)}
+          onNotice={notice => setFieldNotice(row, filterType, param.Name, notice)}
+        />
+      {/if}
+    {/snippet}
+
+    <!-- The notice band of a row: the third track of the row grid, spanning the parameter
+         columns as a column subgrid. An invisible copy of the longest notice the row can
+         show, placed at the narrowest column a notice can start in, sets its height for
+         good, so a notice appearing or going away never moves a control. The visible
+         notice starts under the field it is about and runs to the end of the row. Below
+         md the band is a block after the row's fields. -->
+    {#snippet noticeBand(row: NoticeRow, filterType: string, params: FilterParameter[])}
+      {@const notice = rowNotice(row, filterType)}
+      <div class="grid md:col-start-2 md:col-span-4 md:row-start-3 md:grid-cols-subgrid">
+        <p
+          data-eq-notice-reserve
+          aria-hidden="true"
+          class="help-text invisible pt-1 col-start-1 row-start-1 md:col-end-5 {bandColumnClass(
+            params,
+            lastNumericParameter(params)
+          )}"
+        >
+          {reserveText(params)}
+        </p>
+        <p
+          id={noticeId(row)}
+          role="status"
+          class="help-text pt-1 col-start-1 row-start-1 md:col-end-5 {bandColumnClass(
+            params,
+            notice?.param
+          )}"
+        >
+          {notice ? noticeText(notice) : ''}
+        </p>
+      </div>
+    {/snippet}
+
     <div class="space-y-4">
       <!-- Existing filters -->
       {#each equalizerSettings.filters || [] as filter, index (index)}
         {@const filterParams = getEqFilterParameters(filter.type)}
         <div
-          class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end p-4 bg-[var(--color-base-200)] rounded-lg border border-[var(--color-base-300)]"
+          class="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-y-0 items-end p-4 bg-[var(--color-base-200)] rounded-lg border border-[var(--color-base-300)]"
         >
           <!-- Filter Type Display -->
-          <div class="flex items-end">
+          <div class="flex items-end md:row-span-2 md:self-end">
             <button
               type="button"
               class="btn btn-sm w-full pointer-events-none bg-[var(--color-base-300)] border-[var(--color-base-300)] gap-2"
@@ -410,90 +693,24 @@
             </button>
           </div>
 
-          <!-- Dynamic parameters based on filter type -->
-          {#each filterParams as param (param.Name)}
-            <div class="flex flex-col">
-              <div class="label pt-0">
-                <span class="label-text-alt">
-                  {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
-                </span>
-              </div>
-              {#if param.Name.toLowerCase() === 'passes'}
-                <!-- Select for Passes/Attenuation -->
-                <SelectDropdown
-                  value={String(filter.passes ?? 0)}
-                  options={attenuationOptions}
-                  aria-label={param.Label}
-                  onChange={value =>
-                    updateFilterParameter(index, param.Name, parseInt(value as string))}
-                  {disabled}
-                  groupBy={false}
-                  menuSize="sm"
-                />
-              {:else if param.Name.toLowerCase() === 'frequency'}
-                <!-- Frequency input -->
-                <input
-                  value={filter.frequency ?? param.Default}
-                  oninput={e =>
-                    updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
-                  aria-label={param.Label}
-                  type="number"
-                  min={param.Min}
-                  max={param.Max}
-                  step="1"
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {:else if param.Name.toLowerCase() === 'q'}
-                <!-- Q factor input -->
-                <input
-                  value={filter.q ?? param.Default}
-                  onchange={e =>
-                    commitQ(e.currentTarget, param, filter.q, q =>
-                      updateFilterParameter(index, param.Name, q)
-                    )}
-                  aria-label={param.Label}
-                  type="number"
-                  min={param.Min}
-                  max={param.Max}
-                  step="0.1"
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {:else if param.Name.toLowerCase() === 'width'}
-                <!-- Width (Bandwidth) input -->
-                <input
-                  value={filter.width ?? param.Default}
-                  oninput={e =>
-                    updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
-                  aria-label={param.Label}
-                  type="number"
-                  min={param.Min}
-                  max={param.Max}
-                  step="1"
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {:else if param.Name.toLowerCase() === 'gain'}
-                <!-- Gain input -->
-                <input
-                  value={filter.gain ?? param.Default}
-                  oninput={e =>
-                    updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
-                  aria-label={param.Label}
-                  type="number"
-                  min={param.Min}
-                  max={param.Max}
-                  step="0.1"
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {/if}
-            </div>
+          <!-- Dynamic parameters based on filter type, remounted when the filter count or
+               this row's type changes (see filterCount) -->
+          {#each filterParams as param (`${filterCount}-${filter.type}-${param.Name}`)}
+            {@render parameterCell(
+              filter.type,
+              param,
+              'edit',
+              index,
+              filter,
+              (name, value) => updateFilterParameter(index, name, value),
+              passes => updateFilterParameter(index, param.Name, passes)
+            )}
           {/each}
 
+          {@render noticeBand(index, filter.type, filterParams)}
+
           <!-- Remove button -->
-          <div class="flex items-end md:justify-end md:col-start-5">
+          <div class="flex items-end md:justify-end md:col-start-5 md:row-span-2 md:self-end">
             <button
               type="button"
               class="btn btn-error btn-sm w-full md:w-24"
@@ -507,9 +724,9 @@
       {/each}
 
       <!-- Add new filter section -->
-      <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end mt-6">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-y-0 items-end mt-6">
         <!-- New Filter Type -->
-        <div class="flex flex-col">
+        <div class="flex flex-col md:row-span-2 md:self-end">
           <SelectDropdown
             value={newFilter.type}
             label={t('settings.audio.audioFilters.newFilterType')}
@@ -517,6 +734,7 @@
             onChange={value => {
               newFilter.type = value as EqualizerFilterType | '';
               getFilterDefaults(newFilter.type);
+              rowNotices.delete('new');
             }}
             {disabled}
             groupBy={false}
@@ -524,99 +742,26 @@
           />
         </div>
 
-        <!-- New Audio Filter Parameters -->
+        <!-- New Audio Filter Parameters, keyed by type so a type switch starts every
+             field afresh -->
         {#if newFilter.type}
-          {#each getEqFilterParameters(newFilter.type) as param (param.Name)}
-            <div class="flex flex-col">
-              <div class="label">
-                <span class="label-text">
-                  {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
-                </span>
-              </div>
-              {#if param.Name.toLowerCase() === 'passes'}
-                <!-- Select for Passes/Attenuation -->
-                <SelectDropdown
-                  value={String(newFilter.passes)}
-                  options={attenuationOptions}
-                  aria-label={param.Label}
-                  onChange={value => {
-                    newFilter = { ...newFilter, passes: parseInt(value as string, 10) };
-                  }}
-                  {disabled}
-                  groupBy={false}
-                  menuSize="sm"
-                />
-              {:else if param.Name.toLowerCase() === 'frequency'}
-                <!-- Frequency input -->
-                <input
-                  value={newFilter.frequency}
-                  oninput={e => {
-                    const value = parseFloat(e.currentTarget.value) || 0;
-                    newFilter = { ...newFilter, frequency: value };
-                  }}
-                  aria-label={param.Label}
-                  type="number"
-                  step="1"
-                  min={param.Min}
-                  max={param.Max}
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {:else if param.Name.toLowerCase() === 'q'}
-                <!-- Q factor input -->
-                <input
-                  value={newFilter.q ?? 0.707}
-                  onchange={e =>
-                    commitQ(e.currentTarget, param, newFilter.q, q => {
-                      newFilter = { ...newFilter, q };
-                    })}
-                  aria-label={param.Label}
-                  type="number"
-                  step="0.1"
-                  min={param.Min}
-                  max={param.Max}
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {:else if param.Name.toLowerCase() === 'width'}
-                <!-- Width (Bandwidth) input -->
-                <input
-                  value={newFilter.width ?? 100}
-                  oninput={e => {
-                    const value = parseFloat(e.currentTarget.value) || 100;
-                    newFilter = { ...newFilter, width: value };
-                  }}
-                  aria-label={param.Label}
-                  type="number"
-                  step="1"
-                  min={param.Min}
-                  max={param.Max}
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {:else if param.Name.toLowerCase() === 'gain'}
-                <!-- Gain input -->
-                <input
-                  value={newFilter.gain ?? 0}
-                  oninput={e => {
-                    const value = parseFloat(e.currentTarget.value) || 0;
-                    newFilter = { ...newFilter, gain: value };
-                  }}
-                  aria-label={param.Label}
-                  type="number"
-                  step="0.1"
-                  min={param.Min}
-                  max={param.Max}
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {/if}
-            </div>
+          {#each getEqFilterParameters(newFilter.type) as param (`${newFilter.type}-${param.Name}`)}
+            {@render parameterCell(
+              newFilter.type,
+              param,
+              'new',
+              'new',
+              newFilter,
+              setNewFilterParameter,
+              passes => (newFilter = { ...newFilter, passes })
+            )}
           {/each}
+
+          {@render noticeBand('new', newFilter.type, getEqFilterParameters(newFilter.type))}
         {/if}
 
         <!-- Add new filter button -->
-        <div class="flex flex-col">
+        <div class="flex flex-col md:row-span-2 md:self-end">
           <div class="label">
             <span class="label-text">&nbsp;</span>
           </div>

@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Charakterystyka Częstotliwościowa",
         "cutoffFrequency": "Częstotliwość Odcięcia",
         "cutoffFrequencyHelp": "Częstotliwość, przy której filtr zaczyna tłumić sygnały. Odgłosy ptaków zazwyczaj mieszczą się w zakresie 1-10 kHz.",
+        "centerFrequency": "Częstotliwość środkowa",
+        "bandwidth": "Szerokość pasma",
         "qFactor": "Współczynnik Q",
         "qFactorHelp": "Współczynnik jakości kontroluje ostrość filtra. Niższe wartości (0.1-1) tworzą łagodniejsze zbocza, wyższe wartości (1-10) tworzą ostrzejsze odcięcia.",
         "gain": "Wzmocnienie",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Dodaj wiele filtrów, aby ukształtować charakterystykę częstotliwościową dla optymalnej detekcji ptaków w twoim środowisku.",
+        "emptyEntryRestored": "Wpisz liczbę. Zachowano poprzednią wartość.",
         "graph": {
           "flatResponse": "Charakterystyka płaska (Brak filtrów)",
           "frequency": "Częstotliwość (Hz)",

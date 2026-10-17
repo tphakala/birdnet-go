@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Frekvensrespons",
         "cutoffFrequency": "Afskæringsfrekvens",
         "cutoffFrequencyHelp": "Frekvens, hvor filteret begynder at dæmpe signaler. Fuglekald ligger typisk i intervallet 1-10 kHz.",
+        "centerFrequency": "Centerfrekvens",
+        "bandwidth": "Båndbredde",
         "qFactor": "Q-faktor",
         "qFactorHelp": "Kvalitetsfaktor styrer filterets skarphed. Lavere værdier (0,1-1) giver blødere kurver, højere værdier (1-10) giver skarpere afskæring.",
         "gain": "Forstærkning",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Tilføj flere filtre for at forme frekvensresponsen til optimal fugleregistrering i dit miljø.",
+        "emptyEntryRestored": "Indtast et tal. Den tidligere værdi blev bevaret.",
         "graph": {
           "flatResponse": "Flad respons (ingen filtre anvendt)",
           "frequency": "Frekvens (Hz)",

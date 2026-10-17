@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Respuesta de frecuencia",
         "cutoffFrequency": "Frecuencia de corte",
         "cutoffFrequencyHelp": "Frecuencia a la cual el filtro comienza a atenuar señales. Los cantos de aves típicamente van de 1-10 kHz.",
+        "centerFrequency": "Frecuencia central",
+        "bandwidth": "Ancho de banda",
         "qFactor": "Factor Q",
         "qFactorHelp": "El factor de calidad controla la nitidez del filtro. Valores más bajos (0.1-1) crean pendientes más suaves, valores más altos (1-10) crean cortes más pronunciados.",
         "gain": "Ganancia",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Añade múltiples filtros para dar forma a la respuesta de frecuencia para una detección óptima de aves en tu entorno.",
+        "emptyEntryRestored": "Introduce un número. Se ha conservado el valor anterior.",
         "graph": {
           "flatResponse": "Respuesta plana (Sin filtros aplicados)",
           "frequency": "Frecuencia (Hz)",
