@@ -1168,8 +1168,14 @@ const msgSpectrogramSourceTooShort = "Source audio is too short for a spectrogra
 // the renderer's "too little audio" sentinels. All of them are properties of the
 // file's bytes, so retrying cannot change the outcome and the answer is 422.
 // render.ErrInvalidOptions is deliberately absent: the parse sites reject every
-// request value that could cause it, so what remains is a server fault.
+// request value that could cause it, so what remains is a server fault. A not-ready
+// error is not answered here even when it wraps one of these causes (the probe
+// wraps ErrUndecodableSource), because the clip may still be written and the client
+// should retry.
 func spectrogramSourceStatus(err error) (status int, message string, ok bool) {
+	if isSpectrogramNotReady(err) {
+		return 0, "", false
+	}
 	if status, message, ok = transcodeStatus(err); ok {
 		return status, message, true
 	}
@@ -1180,36 +1186,15 @@ func spectrogramSourceStatus(err error) (status int, message string, ok bool) {
 }
 
 // isSpectrogramNotReady reports whether err means the clip may still be written, so
-// the client should retry. Callers must test it before any source status: a probe-time
-// cause such as ErrUndecodableSource is wrapped by the not-ready error and satisfies
-// both checks.
+// the client should retry.
 func isSpectrogramNotReady(err error) bool {
 	return errors.Is(err, ffmpeg.ErrAudioFileNotReady) || errors.Is(err, ffmpeg.ErrAudioFileIncomplete)
 }
 
-// spectrogramFailureKind classifies a failed generation for logging.
-type spectrogramFailureKind int
-
-const (
-	// spectrogramFailureOther is any failure the switches do not single out.
-	spectrogramFailureOther spectrogramFailureKind = iota
-	// spectrogramFailureNotReady is a clip that may still be written (answered 503).
-	spectrogramFailureNotReady
-	// spectrogramFailureSource is a clip that cannot be rendered (answered 4xx).
-	spectrogramFailureSource
-)
-
-// classifySpectrogramFailure is the shared classification behind the log switches
-// of the spectrogram handlers. Not-ready wins over source status (see
-// isSpectrogramNotReady).
-func classifySpectrogramFailure(err error) spectrogramFailureKind {
-	if isSpectrogramNotReady(err) {
-		return spectrogramFailureNotReady
-	}
-	if _, _, ok := spectrogramSourceStatus(err); ok {
-		return spectrogramFailureSource
-	}
-	return spectrogramFailureOther
+// isSpectrogramSourceFailure reports whether spectrogramSourceStatus answers err.
+func isSpectrogramSourceFailure(err error) bool {
+	_, _, ok := spectrogramSourceStatus(err)
+	return ok
 }
 
 // transcodeError turns a failed transcode into the HTTP response. A disconnected
@@ -2031,10 +2016,10 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 				}
 			}
 			c.LogWarnIfEnabled("Spectrogram generation skipped: source audio clip not available", logFields...)
-		case classifySpectrogramFailure(err) == spectrogramFailureNotReady:
+		case isSpectrogramNotReady(err):
 			// Still being written; the 503 below tells the client to retry.
 			c.LogDebugIfEnabled("Spectrogram generation deferred: audio clip not ready", logFields...)
-		case classifySpectrogramFailure(err) == spectrogramFailureSource:
+		case isSpectrogramSourceFailure(err):
 			c.LogWarnIfEnabled("Spectrogram generation skipped: source audio cannot be rendered", logFields...)
 		default:
 			// Unexpected failures (sox/ffmpeg broken, unreadable clip, etc.)
@@ -2398,8 +2383,8 @@ func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 // GenerateSpectrogramByID. It waits out any pending Extended Capture clip export before
 // generating, then records the outcome in the queue status and logs it: a clip that is
 // still being written at Debug, a clip that cannot be rendered at Warn, anything else at
-// Error. Extracted from the
-// handler so the handler stays under the cognitive-complexity budget.
+// Error. It is extracted from the handler so the handler stays under the
+// cognitive-complexity budget.
 func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, queueKey string, params spectrogramParameters, freqSuffix string, profile spectrogram.FrequencyProfile) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -2467,9 +2452,9 @@ func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, 
 			// export abandoned on restart, or a reconcile ghost). Expected and
 			// self-describing, so Warn, not Error.
 			c.LogWarnIfEnabled("Async spectrogram generation skipped: audio clip not available", logFields...)
-		case classifySpectrogramFailure(err) == spectrogramFailureNotReady:
+		case isSpectrogramNotReady(err):
 			c.LogDebugIfEnabled("Async spectrogram generation deferred: audio clip not ready", logFields...)
-		case classifySpectrogramFailure(err) == spectrogramFailureSource:
+		case isSpectrogramSourceFailure(err):
 			c.LogWarnIfEnabled("Async spectrogram generation skipped: source audio cannot be rendered", logFields...)
 		default:
 			c.LogErrorIfEnabled("Async spectrogram generation failed", logFields...)
@@ -3571,7 +3556,8 @@ func (c *Handler) generateWithFallback(ctx context.Context, absAudioPath, absSpe
 	if err := c.spectrogramGenerator.GenerateFromFile(ctx, absAudioPath, absSpectrogramPath, width, raw, genOpts...); err != nil {
 		// Check if this is an expected operational error (context canceled, process killed)
 		// These are normal events during shutdown, timeout, or resource management
-		if spectrogram.IsOperationalError(err) {
+		switch {
+		case spectrogram.IsOperationalError(err):
 			// Log at Debug level for expected operational events
 			getSpectrogramLogger().Debug("Spectrogram generation canceled or interrupted",
 				logger.String("queue_key", queueKey),
@@ -3579,17 +3565,17 @@ func (c *Handler) generateWithFallback(ctx context.Context, absAudioPath, absSpe
 				logger.Int64("duration_ms", time.Since(generationStart).Milliseconds()),
 				logger.String("abs_audio_path", absAudioPath),
 				logger.String("abs_spectrogram_path", absSpectrogramPath))
-		} else if kind := classifySpectrogramFailure(err); kind == spectrogramFailureNotReady {
+		case isSpectrogramNotReady(err):
 			getSpectrogramLogger().Debug("Spectrogram generation deferred: audio clip not ready",
 				logger.String("queue_key", queueKey),
 				logger.Error(err),
 				logger.String("abs_audio_path", absAudioPath))
-		} else if kind == spectrogramFailureSource {
+		case isSpectrogramSourceFailure(err):
 			getSpectrogramLogger().Warn("Spectrogram generation skipped: source audio cannot be rendered",
 				logger.String("queue_key", queueKey),
 				logger.Error(err),
 				logger.String("abs_audio_path", absAudioPath))
-		} else {
+		default:
 			// Log at Error level for unexpected failures
 			getSpectrogramLogger().Error("Spectrogram generation failed",
 				logger.String("queue_key", queueKey),

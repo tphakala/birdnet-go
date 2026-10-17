@@ -144,26 +144,28 @@ func TestSpectrogramHTTPError_NotReadyWinsOverSourceStatus(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, call(unsupportedErr).Code)
 }
 
-func TestClassifySpectrogramFailure_NotReadyBeforeSourceStatus(t *testing.T) {
+func TestSpectrogramSourceStatus_NotReadyIsNotASourceFailure(t *testing.T) {
 	t.Parallel()
 
 	notReadyAndUndecodable := fmt.Errorf("%w: %w", ffmpeg.ErrAudioFileNotReady, transcode.ErrUndecodableSource)
 	tests := []struct {
-		name string
-		err  error
-		want spectrogramFailureKind
+		name       string
+		err        error
+		wantReady  bool
+		wantSource bool
 	}{
-		{"not ready wrapping undecodable", notReadyAndUndecodable, spectrogramFailureNotReady},
-		{"incomplete", ffmpeg.ErrAudioFileIncomplete, spectrogramFailureNotReady},
-		{"unsupported source", productionWrap(transcode.ErrUnsupportedSource), spectrogramFailureSource},
-		{"no columns", productionWrap(render.ErrNoColumns), spectrogramFailureSource},
-		{"invalid options", productionWrap(render.ErrInvalidOptions), spectrogramFailureOther},
-		{"unknown", errors.NewStd("boom"), spectrogramFailureOther},
+		{"not ready wrapping undecodable", notReadyAndUndecodable, true, false},
+		{"incomplete", ffmpeg.ErrAudioFileIncomplete, true, false},
+		{"unsupported source", productionWrap(transcode.ErrUnsupportedSource), false, true},
+		{"no columns", productionWrap(render.ErrNoColumns), false, true},
+		{"invalid options", productionWrap(render.ErrInvalidOptions), false, false},
+		{"unknown", errors.NewStd("boom"), false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, classifySpectrogramFailure(tt.err))
+			assert.Equal(t, tt.wantReady, isSpectrogramNotReady(tt.err))
+			assert.Equal(t, tt.wantSource, isSpectrogramSourceFailure(tt.err))
 		})
 	}
 }
