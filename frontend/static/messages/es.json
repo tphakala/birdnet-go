@@ -712,7 +712,33 @@
         "error": "Error al cargar los datos",
         "complete": "Datos cargados exitosamente"
       },
-      "noSpecies": "No se detectaron especies en esta fecha"
+      "noSpecies": "No se detectaron especies en esta fecha",
+      "phone": {
+        "columns": {
+          "conf": "Fiab.",
+          "count": "Núm."
+        },
+        "columnNames": {
+          "name": "el nombre de la especie",
+          "conf": "la confianza",
+          "count": "el número de detecciones",
+          "latest": "la última vez escuchada"
+        },
+        "sortBy": "Ordenar por {column}",
+        "sortedAscending": "Ordenado por {column}, ascendente. Toca para invertir.",
+        "sortedDescending": "Ordenado por {column}, descendente. Toca para invertir.",
+        "rowLabel": "{name}: {count, plural, one {# detección} other {# detecciones}}, {confidence} % de confianza, pico a las {peak}. Toca para ver los detalles.",
+        "taxon": {
+          "all": "Todas",
+          "bird": "Aves",
+          "bat": "Murciélagos",
+          "other": "Otros"
+        },
+        "peakAt": "Pico a las {time}",
+        "firstHeard": "Primera vez escuchada a las {time}",
+        "lastHeard": "Última vez escuchada a las {time}",
+        "history": "Historial"
+      }
     },
     "recentDetections": {
       "title": "Detecciones recientes",

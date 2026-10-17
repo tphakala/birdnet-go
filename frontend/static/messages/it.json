@@ -712,7 +712,33 @@
         "error": "Caricamento dati fallito",
         "complete": "Dati caricati con successo"
       },
-      "noSpecies": "Nessuna specie rilevata in questa data"
+      "noSpecies": "Nessuna specie rilevata in questa data",
+      "phone": {
+        "columns": {
+          "conf": "Aff.",
+          "count": "N."
+        },
+        "columnNames": {
+          "name": "nome della specie",
+          "conf": "affidabilità",
+          "count": "numero di rilevamenti",
+          "latest": "ultimo ascolto"
+        },
+        "sortBy": "Ordina per {column}",
+        "sortedAscending": "Ordinato per {column}, crescente. Tocca per invertire.",
+        "sortedDescending": "Ordinato per {column}, decrescente. Tocca per invertire.",
+        "rowLabel": "{name}: {count, plural, one {# rilevamento} other {# rilevamenti}}, affidabilità {confidence}%, picco alle {peak}. Tocca per i dettagli.",
+        "taxon": {
+          "all": "Tutti",
+          "bird": "Uccelli",
+          "bat": "Pipistrelli",
+          "other": "Altri"
+        },
+        "peakAt": "Picco alle {time}",
+        "firstHeard": "Primo ascolto alle {time}",
+        "lastHeard": "Ultimo ascolto alle {time}",
+        "history": "Cronologia"
+      }
     },
     "recentDetections": {
       "title": "Rilevamenti recenti",

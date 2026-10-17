@@ -712,7 +712,33 @@
         "error": "Nepodarilo sa načítať dáta",
         "complete": "Dáta boli úspešne načítané"
       },
-      "noSpecies": "V tento deň neboli zistené žiadne druhy"
+      "noSpecies": "V tento deň neboli zistené žiadne druhy",
+      "phone": {
+        "columns": {
+          "conf": "Spoľ.",
+          "count": "Počet"
+        },
+        "columnNames": {
+          "name": "názvu druhu",
+          "conf": "spoľahlivosti",
+          "count": "počtu detekcií",
+          "latest": "času posledného zachytenia"
+        },
+        "sortBy": "Zoradiť podľa: {column}",
+        "sortedAscending": "Zoradené podľa: {column}, vzostupne. Klepnutím zmeníte poradie.",
+        "sortedDescending": "Zoradené podľa: {column}, zostupne. Klepnutím zmeníte poradie.",
+        "rowLabel": "{name}: {count, plural, one {# detekcia} few {# detekcie} many {# detekcie} other {# detekcií}}, spoľahlivosť {confidence} %, maximum o {peak}. Klepnutím zobrazíte podrobnosti.",
+        "taxon": {
+          "all": "Všetko",
+          "bird": "Vtáky",
+          "bat": "Netopiere",
+          "other": "Ostatné"
+        },
+        "peakAt": "Maximum o {time}",
+        "firstHeard": "Prvýkrát zachytené o {time}",
+        "lastHeard": "Naposledy zachytené o {time}",
+        "history": "História"
+      }
     },
     "recentDetections": {
       "title": "Nedávne detekcie",

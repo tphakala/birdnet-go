@@ -712,7 +712,33 @@
         "error": "Falha ao carregar dados",
         "complete": "Dados carregados com sucesso"
       },
-      "noSpecies": "Nenhuma espécie detectada nesta data"
+      "noSpecies": "Nenhuma espécie detectada nesta data",
+      "phone": {
+        "columns": {
+          "conf": "Fiab.",
+          "count": "N.º"
+        },
+        "columnNames": {
+          "name": "o nome da espécie",
+          "conf": "a confiança",
+          "count": "o número de detecções",
+          "latest": "a última vez ouvida"
+        },
+        "sortBy": "Ordenar por {column}",
+        "sortedAscending": "Ordenado por {column}, ascendente. Toque para inverter.",
+        "sortedDescending": "Ordenado por {column}, descendente. Toque para inverter.",
+        "rowLabel": "{name}: {count, plural, one {# detecção} other {# detecções}}, {confidence}% de confiança, pico às {peak}. Toque para ver os detalhes.",
+        "taxon": {
+          "all": "Todas",
+          "bird": "Aves",
+          "bat": "Morcegos",
+          "other": "Outros"
+        },
+        "peakAt": "Pico às {time}",
+        "firstHeard": "Ouvida pela primeira vez às {time}",
+        "lastHeard": "Ouvida pela última vez às {time}",
+        "history": "Histórico"
+      }
     },
     "recentDetections": {
       "title": "Detecções recentes",

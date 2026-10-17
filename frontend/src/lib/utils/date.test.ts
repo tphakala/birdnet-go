@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   getLocalDateString,
   getDateInTimezone,
+  getHourInTimezone,
   parseLocalDateString,
   isToday,
   isFutureDate,
@@ -422,6 +423,20 @@ describe('Date Utilities', () => {
     it('should handle UTC timezone', () => {
       vi.setSystemTime(new Date('2024-03-10T12:00:00Z'));
       expect(getDateInTimezone('UTC')).toBe('2024-03-10');
+    });
+  });
+
+  describe('getHourInTimezone', () => {
+    it('should return the hour in the given timezone', () => {
+      vi.setSystemTime(new Date('2024-06-15T00:30:00Z'));
+      expect(getHourInTimezone('UTC')).toBe(0);
+      expect(getHourInTimezone('Pacific/Auckland')).toBe(12);
+      expect(getHourInTimezone('America/Los_Angeles')).toBe(17);
+    });
+
+    it('should fall back to the local hour for invalid timezone', () => {
+      vi.setSystemTime(new Date('2024-06-15T00:30:00Z'));
+      expect(getHourInTimezone('Invalid/Timezone')).toBe(new Date().getHours());
     });
   });
 });

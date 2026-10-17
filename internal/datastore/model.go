@@ -38,6 +38,10 @@ type Note struct {
 	BeginTime   time.Time
 	EndTime     time.Time
 	SpeciesCode string
+	// TaxonomicClass is runtime-only: GetTopBirdsData fills it with the taxonomic class name
+	// of the species' label (for example "Aves" or "Chiroptera"), so the daily summary can
+	// group rows by taxon. Empty when the label has no class and on every other read path.
+	TaxonomicClass string `gorm:"-" json:"-"`
 	// ScientificName includes optimized index (scientific_name, date) for new species tracking performance
 	ScientificName string `gorm:"index:idx_notes_sciname;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:1"`
 	CommonName     string `gorm:"index:idx_notes_comname;index:idx_notes_date_commonname_confidence"`

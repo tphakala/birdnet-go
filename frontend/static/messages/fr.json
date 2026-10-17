@@ -712,7 +712,33 @@
         "error": "Échec du chargement des données",
         "complete": "Données chargées avec succès"
       },
-      "noSpecies": "Aucune espèce détectée à cette date"
+      "noSpecies": "Aucune espèce détectée à cette date",
+      "phone": {
+        "columns": {
+          "conf": "Fiab.",
+          "count": "Nb"
+        },
+        "columnNames": {
+          "name": "le nom de l'espèce",
+          "conf": "la confiance",
+          "count": "le nombre de détections",
+          "latest": "la dernière écoute"
+        },
+        "sortBy": "Trier par {column}",
+        "sortedAscending": "Trié par {column}, ordre croissant. Touchez pour inverser.",
+        "sortedDescending": "Trié par {column}, ordre décroissant. Touchez pour inverser.",
+        "rowLabel": "{name} : {count, plural, one {# détection} other {# détections}}, confiance de {confidence} %, pic à {peak}. Touchez pour voir les détails.",
+        "taxon": {
+          "all": "Tous",
+          "bird": "Oiseaux",
+          "bat": "Chauves-souris",
+          "other": "Autres"
+        },
+        "peakAt": "Pic à {time}",
+        "firstHeard": "Première écoute à {time}",
+        "lastHeard": "Dernière écoute à {time}",
+        "history": "Historique"
+      }
     },
     "recentDetections": {
       "title": "Détections récentes",

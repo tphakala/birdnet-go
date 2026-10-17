@@ -132,6 +132,7 @@ type SpeciesDailySummary struct {
 	DaysThisYear    int    `json:"days_this_year,omitempty"`     // Days since first this year
 	DaysThisSeason  int    `json:"days_this_season,omitempty"`   // Days since first this season
 	CurrentSeason   string `json:"current_season,omitempty"`     // Current season name
+	TaxonomicClass  string `json:"taxonomic_class"`              // Label's taxonomic class (e.g. "Aves", "Chiroptera"); "" when the label has none
 }
 
 // SpeciesSummary represents a bird in the overall species summary API response
@@ -188,6 +189,7 @@ type aggregatedBirdInfo struct {
 	MaxConfidence  float64
 	First          string
 	Latest         string
+	TaxonomicClass string
 }
 
 // GetDailySpeciesSummary handles GET /api/v2/analytics/species/daily
@@ -492,6 +494,7 @@ func (c *Handler) updateAggregatedData(aggregatedData map[string]aggregatedBirdI
 			SpeciesCode:    note.SpeciesCode,
 			First:          noteFirstTime(note),
 			Latest:         note.Time,
+			TaxonomicClass: note.TaxonomicClass,
 		}
 	}
 
@@ -507,6 +510,9 @@ func (c *Handler) updateAggregatedData(aggregatedData map[string]aggregatedBirdI
 	}
 	if note.Time > data.Latest {
 		data.Latest = note.Time
+	}
+	if data.TaxonomicClass == "" {
+		data.TaxonomicClass = note.TaxonomicClass
 	}
 
 	aggregatedData[birdKey] = data
@@ -598,6 +604,7 @@ func buildSpeciesSummaryFromData(data *aggregatedBirdInfo, thumbnailURL string) 
 		FirstHeard:     data.First,
 		LatestHeard:    data.Latest,
 		ThumbnailURL:   thumbnailURL,
+		TaxonomicClass: data.TaxonomicClass,
 	}
 }
 
