@@ -14,11 +14,16 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
+// yalueAPIBaseTooOldText is the literal text yalue/onnxruntime_go v1.36.0
+// returns when the loaded library cannot serve its C API level. It is spelled
+// out here so a wrong production marker cannot pass.
+const yalueAPIBaseTooOldText = "Error setting ORT API base: 2"
+
 // apiBaseFailure builds the error InitORT returns when the loaded library is
 // older than the binding's required C API level.
 func apiBaseFailure(t *testing.T) (wrapped, cause error) {
 	t.Helper()
-	cause = errors.NewStd(ortAPIBaseTooOldMarker)
+	cause = errors.NewStd(yalueAPIBaseTooOldText)
 	return fmt.Errorf("Platform-specific initialization failed: %w", cause), cause
 }
 
