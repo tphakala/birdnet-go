@@ -244,6 +244,7 @@ func TestEqualizerResponse_Validation(t *testing.T) {
 		{"maxHz above Nyquist", eqBody(true, "", `"maxHz":24001`)},
 		{"minHz above default max", eqBody(true, "", `"minHz":20000`)},
 		{"too many filters", eqBody(true, manyFilters, "")},
+		{"range too narrow for the point count", eqBody(true, "", `"minHz":1000,"maxHz":1000.000000000001`)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
