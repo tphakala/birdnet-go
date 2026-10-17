@@ -163,7 +163,7 @@ func TestRecordVADHit(t *testing.T) {
 			if tt.holdLabel {
 				require.True(t, p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0, confidence: 0.4}).held)
 			}
-			d := p.recordVADHit(settings, confirmSource, t0.Add(tt.vadAfter))
+			d := p.recordVADHit(settings, confirmSource, t0.Add(tt.vadAfter), 0)
 			assert.Equal(t, tt.wantConfirm, d.confirmed != nil)
 			assert.Equal(t, tt.wantDropped, d.dropped != nil)
 			got, ok := lastHit(p)
@@ -337,7 +337,7 @@ func TestRecordVADHit_FollowsEffectiveOverlap(t *testing.T) {
 	// configured value stays above it: the VAD hit counts alone and does not
 	// resolve the held label hit.
 	attachCadencePlan(t, p, 2.4, 1.0)
-	d := p.recordVADHit(settings, confirmSource, t0.Add(time.Second))
+	d := p.recordVADHit(settings, confirmSource, t0.Add(time.Second), 0)
 
 	assert.Nil(t, d.confirmed)
 	assert.Nil(t, d.dropped)

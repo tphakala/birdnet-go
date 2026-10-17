@@ -11,6 +11,36 @@ import (
 
 var eqLog = logger.Global().Module("audio").Module("equalizer")
 
+// SkipReason says why buildFilterChain left a configured filter out of a chain.
+type SkipReason string
+
+const (
+	// SkipUnknownType means the filter type is not one conf.EQFilterType knows.
+	SkipUnknownType SkipReason = "unknown_type"
+	// SkipInvalidParameters means the library rejected the filter's parameters
+	// for the sample rate, for example a corner at or above Nyquist, a
+	// non-positive Q or width, or more than dspeq.MaxPasses passes.
+	SkipInvalidParameters SkipReason = "invalid_parameters"
+	// SkipAddFailed means the library built the filter but refused to add it to
+	// the chain.
+	SkipAddFailed SkipReason = "add_failed"
+)
+
+// SkippedFilter describes one configured filter that was left out of a chain.
+type SkippedFilter struct {
+	// Index is the filter's position in the settings' Filters slice.
+	Index int
+	// Type is the configured filter type name, as written in the settings.
+	Type string
+	// Reason says why the filter was skipped.
+	Reason SkipReason
+	// Band is the library band built from the filter. It is the zero value for
+	// SkipUnknownType, where no band is built.
+	Band dspeq.Band
+	// Err is the library error. It is nil for SkipUnknownType.
+	Err error
+}
+
 // BuildFilterChain creates a library FilterChain from the given equalizer
 // settings. Returns nil when the equalizer is disabled, has no filters
 // configured, or every filter was skipped. Unknown filter types and filters the
@@ -18,6 +48,48 @@ var eqLog = logger.Global().Module("audio").Module("equalizer")
 // Nyquist) are logged with the reason and skipped without aborting the chain.
 // Every call returns a new chain, since chains hold per-route filter state.
 func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *dspeq.FilterChain {
+	return buildFilterChain(settings, sampleRate, func(s *SkippedFilter) { warnSkippedFilter(s, sampleRate) })
+}
+
+// BuildFilterChainReport builds the same chain as BuildFilterChain, with the
+// same nil returns, and also returns the filters it left out. It does not log a
+// Warn for a skipped filter, since a caller that reports skips to its own
+// client (the equalizer response preview) runs on every edit of a half-typed
+// value. The skipped slice is nil when nothing was skipped.
+func BuildFilterChainReport(settings conf.EqualizerSettings, sampleRate int) (chain *dspeq.FilterChain, skipped []SkippedFilter) {
+	chain = buildFilterChain(settings, sampleRate, func(s *SkippedFilter) {
+		skipped = append(skipped, *s)
+	})
+	return chain, skipped
+}
+
+// warnSkippedFilter writes the Warn line for one skipped filter.
+func warnSkippedFilter(s *SkippedFilter, sampleRate int) {
+	switch s.Reason {
+	case SkipUnknownType:
+		eqLog.Warn("unknown EQ filter type, skipping",
+			logger.String("type", s.Type))
+	case SkipInvalidParameters:
+		eqLog.Warn("skipping EQ filter",
+			logger.String("type", s.Type),
+			logger.Float64("frequency", s.Band.Frequency),
+			logger.Float64("q", s.Band.Q),
+			logger.Float64("width", s.Band.WidthHz),
+			logger.Float64("gain", s.Band.GainDB),
+			logger.Int("passes", s.Band.Passes),
+			logger.Int("sample_rate", sampleRate),
+			logger.Error(s.Err))
+	case SkipAddFailed:
+		eqLog.Warn("failed to add EQ filter to chain",
+			logger.String("type", s.Type),
+			logger.Error(s.Err))
+	}
+}
+
+// buildFilterChain is the shared body of BuildFilterChain and
+// BuildFilterChainReport. onSkip is called once per skipped filter, at the
+// point where the filter is rejected.
+func buildFilterChain(settings conf.EqualizerSettings, sampleRate int, onSkip func(*SkippedFilter)) *dspeq.FilterChain {
 	if !settings.Enabled || len(settings.Filters) == 0 {
 		eqLog.Debug("EQ disabled or no filters configured",
 			logger.Bool("enabled", settings.Enabled),
@@ -36,8 +108,7 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *dspeq.Fi
 
 		filterType, ok := conf.EQFilterType(f.Type)
 		if !ok {
-			eqLog.Warn("unknown EQ filter type, skipping",
-				logger.String("type", f.Type))
+			onSkip(&SkippedFilter{Index: i, Type: f.Type, Reason: SkipUnknownType})
 			continue
 		}
 
@@ -51,21 +122,11 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *dspeq.Fi
 		}
 		filter, err := dspeq.NewFilter(band, sampleRate)
 		if err != nil {
-			eqLog.Warn("skipping EQ filter",
-				logger.String("type", f.Type),
-				logger.Float64("frequency", band.Frequency),
-				logger.Float64("q", band.Q),
-				logger.Float64("width", band.WidthHz),
-				logger.Float64("gain", band.GainDB),
-				logger.Int("passes", band.Passes),
-				logger.Int("sample_rate", sampleRate),
-				logger.Error(err))
+			onSkip(&SkippedFilter{Index: i, Type: f.Type, Reason: SkipInvalidParameters, Band: band, Err: err})
 			continue
 		}
 		if addErr := chain.AddFilter(filter); addErr != nil {
-			eqLog.Warn("failed to add EQ filter to chain",
-				logger.String("type", f.Type),
-				logger.Error(addErr))
+			onSkip(&SkippedFilter{Index: i, Type: f.Type, Reason: SkipAddFailed, Band: band, Err: addErr})
 			continue
 		}
 		eqLog.Debug("added EQ filter",

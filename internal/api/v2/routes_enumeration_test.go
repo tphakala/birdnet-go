@@ -230,6 +230,7 @@ var goldenRoutes = []string{
 	"POST /api/v2/streams/hls/heartbeat",
 	"POST /api/v2/streams/test",
 	"POST /api/v2/support/generate",
+	"POST /api/v2/system/audio/equalizer/response",
 	"POST /api/v2/system/database/backup",
 	"POST /api/v2/system/database/backup/jobs",
 	"POST /api/v2/system/database/legacy/cleanup",
