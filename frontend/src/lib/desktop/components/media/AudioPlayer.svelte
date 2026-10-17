@@ -802,9 +802,7 @@
     }
     // The source is about to change, so a queued play intent or load retry
     // belongs to the old clip and must not autoplay the processed one.
-    playRequestedAfterRetry = false;
-    clearAudioRetryTimer();
-    audioRetryCount = 0;
+    resetRetryState();
 
     if (!processingDenoise && !processingNormalize) {
       // No server-side processing needed; revert to original audio and spectrogram
@@ -818,8 +816,7 @@
       }
       if (audioElement) {
         const pos = audioElement.currentTime;
-        markPlaybackStopped();
-        audioElement.src = audioUrl;
+        replaceSource(audioUrl);
         audioElement.currentTime = pos;
       }
       return;
@@ -867,8 +864,7 @@
 
       if (audioElement) {
         const pos = audioElement.currentTime;
-        markPlaybackStopped();
-        audioElement.src = processedAudioUrl;
+        replaceSource(processedAudioUrl);
         audioElement.currentTime = pos;
       }
 
@@ -897,8 +893,7 @@
       }
       if (audioElement) {
         const pos = audioElement.currentTime;
-        markPlaybackStopped();
-        audioElement.src = audioUrl;
+        replaceSource(audioUrl);
         audioElement.currentTime = pos;
       }
     } finally {
@@ -1060,15 +1055,27 @@
     error = t('media.audio.playError');
   }
 
+  // Drop any queued play intent and pending retry, and restore the full budget.
+  function resetRetryState() {
+    playRequestedAfterRetry = false;
+    clearAudioRetryTimer();
+    audioRetryCount = 0;
+  }
+
+  // Point the element at a new source. The assignment pauses the element without
+  // a 'pause' event, so the playing flag is cleared first.
+  function replaceSource(url: string) {
+    if (!audioElement) return;
+    markPlaybackStopped();
+    audioElement.src = url;
+  }
+
   // Reload a failed clip at once, cancelling any pending retry and restoring the
   // full retry budget. Runs inside the click so the gesture reaches play().
   function reloadAfterFailure() {
     if (!audioElement) return;
-    clearAudioRetryTimer();
-    audioRetryCount = 0;
-    playRequestedAfterRetry = false;
-    markPlaybackStopped();
-    audioElement.src = currentSource();
+    resetRetryState();
+    replaceSource(currentSource());
     audioElement.load();
   }
 
@@ -1249,11 +1256,8 @@
     const frac = isFinite(duration) && duration > 0 ? liveCurrentTime / duration : 0;
     audibleBatsPendingFraction = frac;
     audibleBatsPendingAutoplay = isPlaying || playRequestedAfterRetry;
-    playRequestedAfterRetry = false;
-    clearAudioRetryTimer();
-    audioRetryCount = 0;
-    markPlaybackStopped();
-    audioElement.src = newSrc;
+    resetRetryState();
+    replaceSource(newSrc);
     audioElement.load();
   }
 
@@ -1813,12 +1817,11 @@
           audioRetryTimer = setTimeout(() => {
             audioRetryTimer = undefined;
             if (audioElement) {
-              markPlaybackStopped();
               // Retry against whichever source is currently active; reverting
               // to the original audioUrl here would silently drop out of an
               // active audible-bats or processed-audio derived clip while
               // leaving its state flagged as still active.
-              audioElement.src = currentSource();
+              replaceSource(currentSource());
               audioElement.load();
             }
           }, AUDIO_RETRY_DELAY_MS);
