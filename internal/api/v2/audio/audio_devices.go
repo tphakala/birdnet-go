@@ -17,7 +17,7 @@ import (
 
 // This file holds the /api/v2/system/audio/* device-management handlers
 // (GetAudioDevices, GetDeviceCapabilities, GetActiveAudioDevice,
-// GetEqualizerConfig, ComputeEqualizerResponse). They physically lived in system.go but belong to the
+// GetEqualizerConfig). They physically lived in system.go but belong to the
 // audio/streaming domain; they moved here with the audio domain extraction and
 // are registered by RegisterAudioDeviceRoutes.
 

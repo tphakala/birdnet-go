@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	dspeq "github.com/tphakala/go-audio-dsp/equalizer"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
@@ -262,22 +263,58 @@ func TestEqualizerResponse_Validation(t *testing.T) {
 	})
 }
 
-func TestEqualizerResponse_ClampDB(t *testing.T) {
+func TestEqualizerResponse_RequireFiniteGain(t *testing.T) {
 	t.Parallel()
-	got, err := clampEQResponseDB(math.Inf(-1))
-	require.NoError(t, err)
-	assert.InDelta(t, eqResponseFloorDB, got, 0)
-	got, err = clampEQResponseDB(math.Inf(1))
-	require.NoError(t, err)
-	assert.InDelta(t, eqResponseCeilingDB, got, 0)
-	got, err = clampEQResponseDB(-12.5)
-	require.NoError(t, err)
-	assert.InDelta(t, -12.5, got, 0)
-	got, err = clampEQResponseDB(1e9)
-	require.NoError(t, err)
-	assert.InDelta(t, eqResponseCeilingDB, got, 0)
-	_, err = clampEQResponseDB(math.NaN())
-	require.Error(t, err)
+	require.NoError(t, requireFiniteGain(-12.5))
+	require.NoError(t, requireFiniteGain(dspeq.SectionFloorDB))
+	require.Error(t, requireFiniteGain(math.NaN()))
+	require.Error(t, requireFiniteGain(math.Inf(-1)))
+	require.Error(t, requireFiniteGain(math.Inf(1)))
+}
+
+func TestEqualizerResponse_ExactNullEncodesAsJSON(t *testing.T) {
+	t.Parallel()
+	_, h := setupSystemTestEnvironment(t)
+
+	// A one-pass notch is an exact null at its center, which the library
+	// reports as its per-section floor instead of -Inf.
+	notch := `{"type":"BandReject","frequency":1000,"width":100,"passes":1}`
+	rec := postEQResponse(t, h, eqBody(true, notch, ""))
+	out := decodeEQResponse(t, rec)
+	assert.NotContains(t, rec.Body.String(), "Inf")
+
+	found := false
+	for _, p := range out.Points {
+		if p.Hz == 1000 {
+			found = true
+			assert.InDelta(t, dspeq.SectionFloorDB, p.GainDB, 0)
+		}
+	}
+	assert.True(t, found, "the notch center is sampled")
+}
+
+func TestEqualizerResponse_NarrowNotchCenterReadsTrueDepth(t *testing.T) {
+	t.Parallel()
+	_, h := setupSystemTestEnvironment(t)
+
+	// Q 30 at 15 kHz is a 500 Hz wide notch; 256 log points are about 400 Hz
+	// apart there, so only the center mark can show its depth.
+	const points = 256
+	notch := `{"type":"BandReject","frequency":15000,"width":500,"passes":1}`
+	out := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, notch, fmt.Sprintf(`"points":%d`, points))))
+	assert.Len(t, out.Points, points+1)
+
+	var center float64
+	shallowest := math.Inf(1)
+	for _, p := range out.Points {
+		if p.Hz == 15000 {
+			center = p.GainDB
+		} else {
+			shallowest = math.Min(shallowest, math.Abs(p.Hz-15000))
+		}
+	}
+	assert.InDelta(t, dspeq.SectionFloorDB, center, 0, "the center reads the full depth")
+	assert.Greater(t, shallowest, 100.0, "no sweep point comes near the notch center")
 }
 
 func TestEqualizerResponse_InsertsFilterCenters(t *testing.T) {

@@ -48,7 +48,7 @@ type SkippedFilter struct {
 // Nyquist) are logged with the reason and skipped without aborting the chain.
 // Every call returns a new chain, since chains hold per-route filter state.
 func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *dspeq.FilterChain {
-	return buildFilterChain(settings, sampleRate, logSkippedFilter(sampleRate))
+	return buildFilterChain(settings, sampleRate, func(s *SkippedFilter) { warnSkippedFilter(s, sampleRate) })
 }
 
 // BuildFilterChainReport builds the same chain as BuildFilterChain, with the
@@ -61,12 +61,6 @@ func BuildFilterChainReport(settings conf.EqualizerSettings, sampleRate int) (ch
 		skipped = append(skipped, *s)
 	})
 	return chain, skipped
-}
-
-// logSkippedFilter returns an onSkip callback that writes the Warn line for a
-// filter buildFilterChain skipped at the given sample rate.
-func logSkippedFilter(sampleRate int) func(*SkippedFilter) {
-	return func(s *SkippedFilter) { warnSkippedFilter(s, sampleRate) }
 }
 
 // warnSkippedFilter writes the Warn line for one skipped filter.

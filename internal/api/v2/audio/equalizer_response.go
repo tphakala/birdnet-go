@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"slices"
 
 	"github.com/labstack/echo/v4"
 	dspeq "github.com/tphakala/go-audio-dsp/equalizer"
@@ -33,11 +32,6 @@ const (
 	// maxEQResponseFilters caps the filters in one request. conf has no filter
 	// count limit, so this only bounds the cost of a preview.
 	maxEQResponseFilters = 64
-	// eqResponseFloorDB and eqResponseCeilingDB bound the gain written to the
-	// response, since encoding/json cannot encode -Inf, which the library
-	// reports for an exact null.
-	eqResponseFloorDB   = -300.0
-	eqResponseCeilingDB = 300.0
 )
 
 // equalizerResponseRequest is the body of POST /system/audio/equalizer/response.
@@ -81,12 +75,6 @@ type equalizerResponseBody struct {
 	Skipped    []equalizerSkippedFilter `json:"skipped"`
 }
 
-// eqResponseRange is the validated sweep range and size.
-type eqResponseRange struct {
-	points       int
-	minHz, maxHz float64
-}
-
 // ComputeEqualizerResponse handles POST /api/v2/system/audio/equalizer/response.
 // It builds the equalizer chain for the posted (possibly unsaved) configuration
 // with the builder the audio routes use, and returns the chain's magnitude at
@@ -111,7 +99,7 @@ func (c *Handler) ComputeEqualizerResponse(ctx echo.Context) error {
 	}
 
 	rate := c.resolveEQResponseRate(&req)
-	sweep, err := validateEQResponseRange(&req, rate)
+	points, minHz, maxHz, err := validateEQResponseRange(&req, rate)
 	if err != nil {
 		return c.HandleError(ctx, err, "Invalid frequency range", http.StatusBadRequest)
 	}
@@ -123,12 +111,12 @@ func (c *Handler) ComputeEqualizerResponse(ctx echo.Context) error {
 		chain = dspeq.NewFilterChain()
 	}
 
-	freqs, err := dspeq.LogSweep(sweep.minHz, sweep.maxHz, sweep.points)
+	// The chain's marks put every applied filter's frequency on the grid, so a
+	// narrow notch or peak between two sweep points is still sampled at its
+	// center. An empty chain has none, so a flat curve has exactly points entries.
+	freqs, err := dspeq.LogSweepWithMarks(minHz, maxHz, points, chain.Marks())
 	if err != nil {
 		return c.HandleError(ctx, err, "Invalid frequency range", http.StatusBadRequest)
-	}
-	if req.Equalizer.Enabled {
-		freqs = withFilterCenters(freqs, req.Equalizer.Filters, skipped, sweep)
 	}
 
 	body := equalizerResponseBody{
@@ -138,11 +126,10 @@ func (c *Handler) ComputeEqualizerResponse(ctx echo.Context) error {
 		Skipped:    make([]equalizerSkippedFilter, 0, len(skipped)),
 	}
 	for i, p := range chain.Response(freqs) {
-		gain, clampErr := clampEQResponseDB(p.GainDB)
-		if clampErr != nil {
-			return c.HandleError(ctx, clampErr, "Equalizer response is not finite", http.StatusInternalServerError)
+		if gainErr := requireFiniteGain(p.GainDB); gainErr != nil {
+			return c.HandleError(ctx, gainErr, "Equalizer response is not finite", http.StatusInternalServerError)
 		}
-		body.Points[i] = equalizerResponsePoint{Hz: p.Hz, GainDB: gain}
+		body.Points[i] = equalizerResponsePoint{Hz: p.Hz, GainDB: p.GainDB}
 	}
 	for i := range skipped {
 		body.Skipped = append(body.Skipped, skippedFilterBody(&skipped[i]))
@@ -185,64 +172,39 @@ func (c *Handler) resolveEQResponseRate(req *equalizerResponseRequest) int {
 
 // validateEQResponseRange applies the defaults and checks points and the
 // frequency range against the Nyquist frequency of rate.
-func validateEQResponseRange(req *equalizerResponseRequest, rate int) (eqResponseRange, error) {
+func validateEQResponseRange(req *equalizerResponseRequest, rate int) (points int, minHz, maxHz float64, err error) {
 	nyquist := float64(rate) / 2
-	out := eqResponseRange{
-		points: defaultEQResponsePoints,
-		minHz:  defaultEQResponseMinHz,
-		maxHz:  math.Min(defaultEQResponseMaxHz, nyquist),
-	}
+	points, minHz, maxHz = defaultEQResponsePoints, defaultEQResponseMinHz, math.Min(defaultEQResponseMaxHz, nyquist)
 	if req.Points != nil {
-		out.points = *req.Points
+		points = *req.Points
 	}
 	if req.MinHz != nil {
-		out.minHz = *req.MinHz
+		minHz = *req.MinHz
 	}
 	if req.MaxHz != nil {
-		out.maxHz = *req.MaxHz
+		maxHz = *req.MaxHz
 	}
 	switch {
-	case out.points < minEQResponsePoints || out.points > maxEQResponsePoints:
-		return out, fmt.Errorf("points %d outside [%d, %d]", out.points, minEQResponsePoints, maxEQResponsePoints)
-	case math.IsNaN(out.minHz) || math.IsInf(out.minHz, 0) || out.minHz <= 0:
-		return out, fmt.Errorf("minHz must be finite and above 0, got %g", out.minHz)
-	case math.IsNaN(out.maxHz) || math.IsInf(out.maxHz, 0) || out.maxHz <= out.minHz:
-		return out, fmt.Errorf("maxHz must be finite and above minHz (%g), got %g", out.minHz, out.maxHz)
-	case out.maxHz > nyquist:
-		return out, fmt.Errorf("maxHz %g above the Nyquist frequency %g of %d Hz", out.maxHz, nyquist, rate)
+	case points < minEQResponsePoints || points > maxEQResponsePoints:
+		err = fmt.Errorf("points %d outside [%d, %d]", points, minEQResponsePoints, maxEQResponsePoints)
+	case math.IsNaN(minHz) || math.IsInf(minHz, 0) || minHz <= 0:
+		err = fmt.Errorf("minHz must be finite and above 0, got %g", minHz)
+	case math.IsNaN(maxHz) || math.IsInf(maxHz, 0) || maxHz <= minHz:
+		err = fmt.Errorf("maxHz must be finite and above minHz (%g), got %g", minHz, maxHz)
+	case maxHz > nyquist:
+		err = fmt.Errorf("maxHz %g above the Nyquist frequency %g of %d Hz", maxHz, nyquist, rate)
 	}
-	return out, nil
+	return points, minHz, maxHz, err
 }
 
-// withFilterCenters adds the center frequency of every filter that was applied
-// and lies in the sweep range, so a narrow notch or peak between two sweep
-// points is still sampled at its center. The result is sorted ascending with
-// exact duplicates removed.
-func withFilterCenters(freqs []float64, filters []conf.EqualizerFilter, skipped []equalizer.SkippedFilter, sweep eqResponseRange) []float64 {
-	skippedIdx := make(map[int]struct{}, len(skipped))
-	for i := range skipped {
-		skippedIdx[skipped[i].Index] = struct{}{}
+// requireFiniteGain returns an error for a gain encoding/json cannot write.
+// The library reports a finite gain at every finite frequency, so this is a
+// guard on its contract, not a clamp.
+func requireFiniteGain(gainDB float64) error {
+	if math.IsNaN(gainDB) || math.IsInf(gainDB, 0) {
+		return errors.NewStd("equalizer gain is not finite")
 	}
-	for i := range filters {
-		if _, isSkipped := skippedIdx[i]; isSkipped {
-			continue
-		}
-		if f := filters[i].Frequency; f >= sweep.minHz && f <= sweep.maxHz {
-			freqs = append(freqs, f)
-		}
-	}
-	slices.Sort(freqs)
-	return slices.Compact(freqs)
-}
-
-// clampEQResponseDB limits a gain to [eqResponseFloorDB, eqResponseCeilingDB]
-// so it encodes as JSON. NaN is an error: the library returns it only for a
-// non-finite frequency, which validation excludes.
-func clampEQResponseDB(gainDB float64) (float64, error) {
-	if math.IsNaN(gainDB) {
-		return 0, errors.NewStd("equalizer gain is NaN")
-	}
-	return min(max(gainDB, eqResponseFloorDB), eqResponseCeilingDB), nil
+	return nil
 }
 
 // skippedFilterBody converts a builder skip into its response form.
