@@ -881,6 +881,85 @@ describe('AudioEqualizerSettings', () => {
       }
     });
 
+    it('commits and clamps a gain for a served type that has one', async () => {
+      // A config that serves a shelf type with a gain, as the backend table defines one
+      const lowShelf = {
+        LowShelf: {
+          Parameters: [
+            {
+              Name: 'Frequency',
+              Label: 'Transition Frequency',
+              Type: 'number',
+              Unit: 'Hz',
+              Min: 20,
+              Max: 20000,
+              Default: 100,
+            },
+            {
+              Name: 'Gain',
+              Label: 'Gain',
+              Type: 'number',
+              Unit: 'dB',
+              Min: -30,
+              Max: 30,
+              Default: 0,
+            },
+            {
+              Name: 'Passes',
+              Label: 'Attenuation',
+              Type: 'number',
+              Unit: '',
+              Min: 0,
+              Max: 4,
+              Default: 0,
+            },
+          ],
+        },
+      };
+      global.fetch = vi.fn(() =>
+        Promise.resolve({ ok: true, json: () => Promise.resolve(lowShelf) } as unknown as Response)
+      );
+      const user = userEvent.setup();
+      renderEmpty();
+      await pickType(user, 'LowShelf');
+
+      const gain = await screen.findByRole<HTMLInputElement>('spinbutton', {
+        name: `${KEY}gain (dB)`,
+      });
+      expect(gain).toHaveAttribute('step', '0.1');
+      await user.clear(gain);
+      await user.type(gain, '1.26');
+      await user.tab();
+      expect(gain.value).toBe('1.3');
+      expect(gain.validity.valid).toBe(true);
+
+      await user.clear(gain);
+      await user.type(gain, '50');
+      await user.tab();
+      expect(gain.value).toBe('30');
+      expect(noticeOf(gain)?.textContent.trim()).not.toBe('');
+
+      await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
+      expect(lastPayload().filters[0]).toMatchObject({ type: 'LowShelf', gain: 30 });
+    });
+
+    it('keeps a notice when the editor becomes disabled', async () => {
+      const user = userEvent.setup();
+      const { rerender } = renderWithFilters([STORED.LowPass]);
+
+      const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
+      await user.clear(q);
+      await user.type(q, '50');
+      await user.tab();
+      expect(shownNotices()).toHaveLength(1);
+
+      await rerender({ disabled: true });
+
+      expect(q).toBeDisabled();
+      expect(shownNotices()).toHaveLength(1);
+      expect(noticeOf(q)).not.toBeNull();
+    });
+
     it('names the frequency, Q and bandwidth inputs of existing and new filters', async () => {
       const user = userEvent.setup();
       renderWithFilters([
