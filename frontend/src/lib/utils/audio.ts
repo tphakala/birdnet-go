@@ -25,12 +25,10 @@ export const MAX_AUDIO_LOAD_RETRIES = 3;
 export const AUDIO_RETRY_DELAY_MS = 2000;
 
 /**
- * Background retry schedule for a dashboard card whose clip is not ready yet,
- * in milliseconds. The first step equals the backend's 2 s Retry-After floor
- * (minRetryAfterSeconds in internal/api/v2/media/media.go) and the total of
- * about 90 s spans the backend's 60 s pending-export grace margin
- * (pendingExportGraceMargin, same file). A media element cannot read the HTTP
- * status, so each retry is blind. The number of entries is the retry limit.
+ * Background retry delays in ms for a dashboard card whose clip is still being
+ * exported. Spans the backend's pending-export window (about 90 s total). The
+ * entry count is the retry limit. A media element cannot read the HTTP status, so
+ * retries are blind.
  */
 export const DASHBOARD_AUDIO_RETRY_DELAYS_MS: readonly number[] = [
   2000, 4000, 8000, 16000, 30000, 30000,
