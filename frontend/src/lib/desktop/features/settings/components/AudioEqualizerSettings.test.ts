@@ -403,5 +403,93 @@ describe('AudioEqualizerSettings', () => {
       expect(q.value).toBe('10');
       expect(mockUpdateCallback).not.toHaveBeenCalled();
     });
+
+    it('shows Off for an existing filter that has no passes value', async () => {
+      render(AudioEqualizerSettings, {
+        props: {
+          equalizerSettings: {
+            enabled: true,
+            filters: [{ type: 'LowPass' as const, frequency: 15000, q: 0.707 }],
+          },
+          onUpdate: mockUpdateCallback,
+        },
+      });
+
+      const trigger = await screen.findByRole('combobox', { name: 'Attenuation' });
+      expect(trigger).toHaveTextContent(`${LEVEL_PREFIX}off`);
+    });
+
+    it('clamps an edited Q to the lower bound of the table range', async () => {
+      const user = userEvent.setup();
+      render(AudioEqualizerSettings, {
+        props: {
+          equalizerSettings: {
+            enabled: true,
+            filters: [{ type: 'LowPass' as const, frequency: 15000, q: 0.5, passes: 1 }],
+          },
+          onUpdate: mockUpdateCallback,
+        },
+      });
+
+      const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: 'Q Factor' });
+      await user.clear(q);
+      await user.type(q, '0.01');
+      await user.tab();
+
+      expect(lastPayload().filters[0]).toMatchObject({ q: 0.1 });
+      expect(q.value).toBe('0.1');
+    });
+
+    it('clamps a Q typed for a new filter to the table range and ignores an empty entry', async () => {
+      const user = userEvent.setup();
+      renderEmpty();
+
+      await pickType(user, 'LowPass');
+      const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: 'Q Factor' });
+
+      await user.clear(q);
+      await user.type(q, '50');
+      await user.tab();
+      expect(q.value).toBe('10');
+
+      await user.clear(q);
+      await user.type(q, '0.01');
+      await user.tab();
+      expect(q.value).toBe('0.1');
+
+      await user.clear(q);
+      await user.tab();
+      expect(q.value).toBe('0.1');
+
+      await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
+      expect(lastPayload().filters[0]).toMatchObject({ type: 'LowPass', q: 0.1 });
+    });
+
+    it('names the frequency, Q and bandwidth inputs of existing and new filters', async () => {
+      const user = userEvent.setup();
+      render(AudioEqualizerSettings, {
+        props: {
+          equalizerSettings: {
+            enabled: true,
+            filters: [
+              { type: 'LowPass' as const, frequency: 15000, q: 0.707, passes: 1 },
+              { type: 'BandReject' as const, frequency: 1000, width: 100, q: 0.707, passes: 1 },
+            ],
+          },
+          onUpdate: mockUpdateCallback,
+        },
+      });
+
+      await screen.findAllByRole('spinbutton', { name: 'Q Factor' });
+      const count = (name: string) => screen.queryAllByRole('spinbutton', { name }).length;
+      expect([count('Cutoff Frequency'), count('Center Frequency')]).toEqual([1, 1]);
+      expect([count('Q Factor'), count('Bandwidth')]).toEqual([1, 1]);
+
+      await pickType(user, 'HighPass');
+      expect([count('Cutoff Frequency'), count('Q Factor')]).toEqual([2, 2]);
+
+      await pickType(user, 'BandReject');
+      expect([count('Center Frequency'), count('Bandwidth')]).toEqual([2, 2]);
+    });
   });
 });
