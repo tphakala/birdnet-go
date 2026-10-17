@@ -54,8 +54,9 @@
   // Make responsive to container width, default to reasonable size
   let { equalizer, sampleRate, height = 400 }: Props = $props();
 
-  // Gain range mapped onto the plot height. The grid and labels only go down
-  // to -48 dB, so deep notches below that are clamped to the plot bottom.
+  // Gain range mapped onto the plot height: MIN_DB is the plot bottom. The grid
+  // and labels only go down to -48 dB, so gains between -48 and -96 dB are
+  // drawn below the lowest labelled line, and lower gains sit on the bottom edge.
   const MIN_DB = -96;
   const MAX_DB = 12;
 
