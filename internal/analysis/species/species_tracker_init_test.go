@@ -55,6 +55,9 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 							{ScientificName: fmt.Sprintf("Seasonal_Species_%d", i), FirstSeenDate: "2024-04-01"},
 						}, nil).Once()
 				}
+				// Season carry-over lookback
+				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return([]datastore.NewSpeciesData{}, nil).Once()
 			},
 			&conf.SpeciesTrackingSettings{
 				Enabled:              true,
