@@ -4,6 +4,22 @@
 // classifier's top-K truncation, which retains these classes so a low-confidence
 // speech or dog prediction is not hidden from the filters (issue #4177).
 //
+// Among the Perch/AudioSet labels, the privacy filter's human set is speech and
+// speech-like voicing only (IsHuman, Classify): such a class engages it only
+// when a person is voicing, i.e. speech, conversation, singing, laughter,
+// crying, shouting, whispering, cheering, plus the "homo sapiens" taxon. Every
+// BirdNET "Human " class (vocal, non-vocal and whistle alike, matched by
+// prefix) engages it too, unchanged. The AudioSet/FSD50K body and action
+// classes in nonbird.CategoryHuman that are not voiced (privacyExcludedLabels:
+// hands, chewing, footsteps, running, clapping, applause, finger snapping,
+// farting, burping, crowd, human group actions, and the non-voiced bodily
+// sounds cough, sneeze, breathing, respiratory sounds, sigh, gasp) do not
+// engage it. The first eleven fire on ordinary non-speech sounds and caused
+// measured privacy false positives; the bodily sounds are excluded by
+// maintainer decision (they are not speech), not by measurement. They stay
+// nonbird.CategoryHuman, and IsHumanSound still reports them as human sounds so
+// the processor keeps dropping them as non-bird detections.
+//
 // Why match the RAW label (result.Species) instead of the enriched common name:
 //
 //  1. Locale stability. BirdNET loads a locale-specific label file, so for a
@@ -62,6 +78,36 @@ var perchHumanExtraLabels = map[string]struct{}{
 	"homo sapiens": {}, // human detected as a species (iNaturalist taxon), not a sound class
 }
 
+// privacyExcludedLabels holds the nonbird.CategoryHuman classes that are body or
+// action sounds rather than voiced speech-like sound. They are not privacy hits
+// (see IsHuman) but remain human sounds (see IsHumanSound). Keys are lowercase.
+// A replay of Perch V2 on user-verified clips found the first eleven behind the
+// false "Human vocal" privacy discards while speech clips were still caught; the
+// six bodily sounds were not measured.
+//
+//nolint:gochecknoglobals // immutable lookup table, read-only after init
+var privacyExcludedLabels = map[string]struct{}{
+	"human_group_actions":     {},
+	"hands":                   {},
+	"chewing_and_mastication": {},
+	"walk_and_footsteps":      {},
+	"run":                     {},
+	"clapping":                {},
+	"applause":                {},
+	"finger_snapping":         {},
+	"fart":                    {},
+	"burping_and_eructation":  {},
+	"crowd":                   {},
+	// Non-voiced bodily sounds, excluded by maintainer decision. The replay did
+	// not validate them either way (none drove a false positive or a catch).
+	"cough":              {},
+	"sneeze":             {},
+	"breathing":          {},
+	"respiratory_sounds": {},
+	"sigh":               {},
+	"gasp":               {},
+}
+
 // perchDogLabels enumerates the raw Perch v2 labels treated as a dog by the dog
 // bark filter: the FSD50K dog sound classes plus the domestic dog taxon. Wild
 // canids (wolf, coyote, jackal) are intentionally excluded so they remain
@@ -77,9 +123,10 @@ var perchDogLabels = map[string]struct{}{
 	"canis familiaris": {}, // domestic dog (iNaturalist taxon)
 }
 
-// Classify reports whether a raw classifier label represents a human sound
-// (privacy filter) and/or a dog (dog-bark filter) in a single pass. rawLabel is
-// the untransformed result.Species value. Matching is case-insensitive.
+// Classify reports whether a raw classifier label represents a human voice
+// sound or any BirdNET "Human " class (privacy filter; excludes
+// privacyExcludedLabels) and/or a dog (dog-bark filter) in a single pass.
+// rawLabel is the untransformed result.Species value. Matching is case-insensitive.
 //
 // It lowercases rawLabel ONCE and answers both questions from the lowered form,
 // so the classifier's per-inference truncation (which evaluates every one of the
@@ -91,20 +138,15 @@ func Classify(rawLabel string) (human, dog bool) {
 }
 
 // classifyLowered is the shared core: it takes an already-lowercased label and
-// returns the human and dog verdicts. The human check delegates the AudioSet/
-// FSD50K portion to the shared nonbird package (nonbird.CategoryHuman); the
+// returns the human and dog verdicts. The human verdict is isHumanSoundLowered
+// (the AudioSet/FSD50K portion comes from the shared nonbird package, the
 // iNaturalist taxon "homo sapiens" and the BirdNET locale-stable prefix are
-// handled locally. The dog check matches Perch v2 classes exactly and BirdNET's
-// "Dog" class by its locale-stable English label prefix.
+// handled locally) minus privacyExcludedLabels, so it is the privacy filter's
+// voiced-sound set for Perch labels plus the BirdNET "Human " prefix. The dog
+// check matches Perch v2 classes exactly and BirdNET's "Dog" class by its
+// locale-stable English label prefix.
 func classifyLowered(lowered string) (human, dog bool) {
-	switch {
-	case categoryIsHuman(lowered):
-		human = true
-	case mapHas(perchHumanExtraLabels, lowered):
-		human = true
-	case strings.HasPrefix(lowered, birdnetHumanLabelPrefix):
-		human = true
-	}
+	human = isHumanSoundLowered(lowered) && !mapHas(privacyExcludedLabels, lowered)
 	switch {
 	case mapHas(perchDogLabels, lowered):
 		dog = true
@@ -112,6 +154,15 @@ func classifyLowered(lowered string) (human, dog bool) {
 		dog = true
 	}
 	return human, dog
+}
+
+// isHumanSoundLowered reports whether the (already-lowercased) label is any human
+// sound: a nonbird.CategoryHuman class, the "homo sapiens" taxon or a BirdNET
+// "Human " class. It does not apply privacyExcludedLabels.
+func isHumanSoundLowered(lowered string) bool {
+	return categoryIsHuman(lowered) ||
+		mapHas(perchHumanExtraLabels, lowered) ||
+		strings.HasPrefix(lowered, birdnetHumanLabelPrefix)
 }
 
 // categoryIsHuman reports whether the (already-lowercased) label is an AudioSet/
@@ -126,8 +177,9 @@ func mapHas(m map[string]struct{}, key string) bool {
 	return ok
 }
 
-// IsHuman reports whether a raw classifier label represents a human sound that
-// should engage the privacy filter. See Classify.
+// IsHuman reports whether a raw classifier label represents a human voice sound
+// (or any BirdNET "Human " class) that should engage the privacy filter. Body
+// and action classes are excluded, see privacyExcludedLabels and Classify.
 func IsHuman(rawLabel string) bool {
 	human, _ := Classify(rawLabel)
 	return human
@@ -138,4 +190,12 @@ func IsHuman(rawLabel string) bool {
 func IsDog(rawLabel string) bool {
 	_, dog := Classify(rawLabel)
 	return dog
+}
+
+// IsHumanSound reports whether a raw classifier label is any human sound,
+// including the body and action classes the privacy filter excludes (see
+// privacyExcludedLabels). The processor uses it to keep dropping such labels as
+// non-bird detections; use IsHuman for the privacy filter.
+func IsHumanSound(rawLabel string) bool {
+	return isHumanSoundLowered(strings.ToLower(rawLabel))
 }

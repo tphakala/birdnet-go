@@ -7,9 +7,18 @@ package processor
 import "github.com/tphakala/birdnet-go/internal/labels/vocalization"
 
 // isHumanVocalization reports whether a raw classifier label represents a human
-// sound that should engage the privacy filter. See vocalization.IsHuman.
+// voice sound (or any BirdNET "Human " class) that should engage the privacy
+// filter. See vocalization.IsHuman.
 func isHumanVocalization(rawLabel string) bool {
 	return vocalization.IsHuman(rawLabel)
+}
+
+// isHumanSoundLabel reports whether a raw classifier label is any human sound,
+// including the body and action classes the privacy filter ignores. The detection
+// save filter uses it so those labels are still dropped as non-bird detections.
+// See vocalization.IsHumanSound.
+func isHumanSoundLabel(rawLabel string) bool {
+	return vocalization.IsHumanSound(rawLabel)
 }
 
 // isDogDetection reports whether a raw classifier label represents a dog for the
