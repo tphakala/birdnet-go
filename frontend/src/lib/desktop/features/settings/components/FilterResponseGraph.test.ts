@@ -89,7 +89,26 @@ function createContextMock() {
 }
 
 /** Grid and reference lines drawn with lineTo on every draw, curve excluded. */
-const GRID_LINE_COUNT = 16 + 6 + 1;
+/** The graph draws 16 frequency grid lines, 6 dB grid lines and one 0 dB reference line. */
+const FREQUENCY_GRID_LINES = 16;
+const DB_GRID_LINES = 6;
+const REFERENCE_LINES = 1;
+const PLOT_BORDER_STROKES = 1;
+
+/** Plot geometry in jsdom: the canvas falls back to its 600 px minimum width and the 400 px default height. */
+const PLOT_LEFT = 100;
+const PLOT_RIGHT = 540;
+const PLOT_BOTTOM = 300;
+const PLOT_HEIGHT = 260;
+const MIN_DB = -96;
+const MAX_DB = 12;
+
+/** The y position the graph maps a gain to. */
+function gainToY(gainDb: number): number {
+  return PLOT_BOTTOM - ((gainDb - MIN_DB) / (MAX_DB - MIN_DB)) * PLOT_HEIGHT;
+}
+
+const GRID_LINE_COUNT = FREQUENCY_GRID_LINES + DB_GRID_LINES + REFERENCE_LINES;
 
 /** lineTo calls made by the most recent draw (after its clearRect). */
 function lineToInLastDraw(ctx: ReturnType<typeof createContextMock>): number {
@@ -98,7 +117,7 @@ function lineToInLastDraw(ctx: ReturnType<typeof createContextMock>): number {
 }
 
 /** Strokes made by the most recent draw: the plot border, the grid lines and the reference line, plus one for a curve. */
-const GRID_STROKE_COUNT = 1 + 16 + 6 + 1;
+const GRID_STROKE_COUNT = PLOT_BORDER_STROKES + GRID_LINE_COUNT;
 
 /** Calls of one context method made by the most recent draw, with their arguments. */
 function callsInLastDraw(
@@ -193,15 +212,14 @@ describe('FilterResponseGraph', () => {
     // painted by one extra stroke.
     expect(lineToInLastDraw(ctx)).toBe(GRID_LINE_COUNT + 2);
     expect(callsInLastDraw(ctx, 'stroke')).toHaveLength(GRID_STROKE_COUNT + 1);
-    // The canvas is 600 px wide in jsdom: the plot spans x 100..540 and
-    // y 40..300, and -96..12 dB maps onto that height. The curve starts at the
-    // first point (20 Hz, -12 dB) and ends at the last one (20 kHz, -6 dB).
+    // The curve starts at the first point (20 Hz, -12 dB) and ends at the
+    // last one (20 kHz, -6 dB).
     const start = callsInLastDraw(ctx, 'moveTo').at(-1);
     const end = callsInLastDraw(ctx, 'lineTo').at(-1);
-    expect(start?.[0]).toBeCloseTo(100);
-    expect(start?.[1]).toBeCloseTo(300 - (84 / 108) * 260);
-    expect(end?.[0]).toBeCloseTo(540);
-    expect(end?.[1]).toBeCloseTo(300 - (90 / 108) * 260);
+    expect(start?.[0]).toBeCloseTo(PLOT_LEFT);
+    expect(start?.[1]).toBeCloseTo(gainToY(-12));
+    expect(end?.[0]).toBeCloseTo(PLOT_RIGHT);
+    expect(end?.[1]).toBeCloseTo(gainToY(-6));
     expect(labelsInLastDraw(ctx)).not.toContain(FLAT_LABEL);
   });
 
@@ -311,8 +329,8 @@ describe('FilterResponseGraph', () => {
     const canvas = view.container.querySelector('canvas');
     if (!canvas) throw new Error('canvas not rendered');
     // jsdom reports a zero bounding box, so client coordinates are canvas
-    // coordinates: x 100 is the left edge of the plot (20 Hz).
-    await fireEvent.mouseMove(canvas, { clientX: 100, clientY: 100 });
+    // coordinates: the left edge of the plot is 20 Hz.
+    await fireEvent.mouseMove(canvas, { clientX: PLOT_LEFT, clientY: PLOT_BOTTOM });
     expect(screen.getByText('20 Hz')).toBeInTheDocument();
     expect(screen.getByText('-12 dB')).toBeInTheDocument();
 
