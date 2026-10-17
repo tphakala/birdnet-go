@@ -124,8 +124,9 @@ var perchDogLabels = map[string]struct{}{
 }
 
 // Classify reports whether a raw classifier label represents a human voice
-// sound (privacy filter; excludes privacyExcludedLabels) and/or a dog (dog-bark filter) in a single pass. rawLabel is
-// the untransformed result.Species value. Matching is case-insensitive.
+// sound or any BirdNET "Human " class (privacy filter; excludes
+// privacyExcludedLabels) and/or a dog (dog-bark filter) in a single pass.
+// rawLabel is the untransformed result.Species value. Matching is case-insensitive.
 //
 // It lowercases rawLabel ONCE and answers both questions from the lowered form,
 // so the classifier's per-inference truncation (which evaluates every one of the
