@@ -80,23 +80,49 @@ func pcmSourceRate(rate int) int {
 }
 
 // generateNativeFromFile renders the spectrogram of an audio file into tempPath.
-func (g *Generator) generateNativeFromFile(ctx context.Context, settings *conf.Settings, audioPath, tempPath string, width int, raw bool, profile FrequencyProfile) error {
-	start := time.Now()
-	src, err := transcode.DecodeMono(ctx, audioPath, profile.ResampleRate)
+// The render first takes its share of the memory budget, from the readiness
+// snapshot when the caller supplied one and from a header probe otherwise, then
+// decodes and draws at low priority.
+func (g *Generator) generateNativeFromFile(ctx context.Context, settings *conf.Settings, audioPath, tempPath string, width int, raw bool, profile FrequencyProfile, source *SourceState) error {
+	var decodedBytes int64
+	if source != nil {
+		decodedBytes = source.decodedBytes
+	} else {
+		info, err := transcode.ProbeFile(ctx, audioPath)
+		if err != nil {
+			return g.nativeError(ctx, err, nativeOperationFile)
+		}
+		decodedBytes = info.DecodedBytes
+	}
+	weight := nativeRenderWeight(decodedBytes)
+	release, err := g.acquireRenderBudget(ctx, weight)
 	if err != nil {
 		return g.nativeError(ctx, err, nativeOperationFile)
 	}
-	return g.renderNative(ctx, settings, src, tempPath, width, raw, nativeOperationFile, time.Since(start))
+	defer release()
+
+	return runAtLowPriority(func() error {
+		start := time.Now()
+		src, err := transcode.DecodeMono(ctx, audioPath, profile.ResampleRate)
+		if err != nil {
+			return g.nativeError(ctx, err, nativeOperationFile)
+		}
+		return g.renderNative(ctx, settings, src, tempPath, width, raw, nativeOperationFile, time.Since(start), weight)
+	})
 }
 
-// generateNativeFromPCM renders the spectrogram of s16le mono PCM into tempPath.
+// generateNativeFromPCM renders the spectrogram of s16le mono PCM into tempPath
+// at low priority. The PCM is already in memory, held by the caller, so it takes
+// no share of the render budget.
 func (g *Generator) generateNativeFromPCM(ctx context.Context, settings *conf.Settings, pcmData []byte, tempPath string, width int, raw bool, sampleRate int, profile FrequencyProfile) error {
-	start := time.Now()
-	src, err := transcode.MonoFromPCM16(pcmData, pcmSourceRate(sampleRate), profile.ResampleRate)
-	if err != nil {
-		return g.nativeError(ctx, err, nativeOperationPCM)
-	}
-	return g.renderNative(ctx, settings, src, tempPath, width, raw, nativeOperationPCM, time.Since(start))
+	return runAtLowPriority(func() error {
+		start := time.Now()
+		src, err := transcode.MonoFromPCM16(pcmData, pcmSourceRate(sampleRate), profile.ResampleRate)
+		if err != nil {
+			return g.nativeError(ctx, err, nativeOperationPCM)
+		}
+		return g.renderNative(ctx, settings, src, tempPath, width, raw, nativeOperationPCM, time.Since(start), 0)
+	})
 }
 
 // renderNative draws src and writes the PNG to tempPath. A file already at
@@ -104,8 +130,10 @@ func (g *Generator) generateNativeFromPCM(ctx context.Context, settings *conf.Se
 // per-process sequence) and is removed first; the file is then created
 // exclusively, so a symlink or a file that appears in between still fails.
 // decodeElapsed is the time the caller spent reading and resampling src; it is
-// only logged, with the render and write times, so the renderers can be compared.
-func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, src render.Source, tempPath string, width int, raw bool, operation string, decodeElapsed time.Duration) error {
+// only logged, with the render and write times, so the renderers can be compared,
+// and so is budgetWeight, the render budget bytes the caller holds (zero when it
+// holds none).
+func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, src render.Source, tempPath string, width int, raw bool, operation string, decodeElapsed time.Duration, budgetWeight int64) error {
 	renderStart := time.Now()
 	opt := render.Options{
 		Width:   width,
@@ -142,6 +170,7 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 		logger.Int("width", width),
 		logger.Int("columns", cols),
 		logger.Int("sample_rate", src.SampleRate()),
+		logger.Int64("budget_weight_bytes", budgetWeight),
 		logger.Int64("decode_ms", decodeElapsed.Milliseconds()),
 		logger.Int64("render_ms", renderElapsed.Milliseconds()),
 		logger.Int64("write_ms", time.Since(writeStart).Milliseconds()),

@@ -521,7 +521,7 @@ func TestRenderNative_OverwritesStaleTemp(t *testing.T) {
 	temp := filepath.Join(env.TempDir, "stale.png")
 	require.NoError(t, os.WriteFile(temp, bytes.Repeat([]byte("stale"), 1000), 0o600))
 
-	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), temp, nativeTestWidth, false, nativeOperationFile, 0)
+	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), temp, nativeTestWidth, false, nativeOperationFile, 0, 0)
 
 	require.NoError(t, err)
 	requireNativePNG(t, temp)
@@ -537,7 +537,7 @@ func TestRenderNative_DoesNotWriteThroughASymlink(t *testing.T) {
 		t.Skipf("symlinks are not available: %v", err)
 	}
 
-	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), temp, nativeTestWidth, false, nativeOperationFile, 0)
+	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), temp, nativeTestWidth, false, nativeOperationFile, 0, 0)
 
 	require.NoError(t, err)
 	got, readErr := os.ReadFile(victim) //nolint:gosec // G304: test path
@@ -554,7 +554,7 @@ func TestRenderNative_RemoveFailureIsFileIO(t *testing.T) {
 	require.NoError(t, os.MkdirAll(temp, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(temp, "inner"), []byte("x"), 0o600))
 
-	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), temp, nativeTestWidth, false, nativeOperationFile, 0)
+	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), temp, nativeTestWidth, false, nativeOperationFile, 0, 0)
 
 	require.Error(t, err)
 	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
@@ -604,7 +604,7 @@ func TestRenderNative_OpenFailureIsFileIO(t *testing.T) {
 	gen, env := newNativeGenerator(t)
 	temp := filepath.Join(env.TempDir, "no-such-dir", "out.png")
 
-	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), temp, nativeTestWidth, false, nativeOperationFile, 0)
+	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), temp, nativeTestWidth, false, nativeOperationFile, 0, 0)
 
 	require.Error(t, err)
 	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
