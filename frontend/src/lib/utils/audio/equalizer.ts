@@ -68,27 +68,47 @@ export interface NumericEntryResult {
   notice: NumericEntryNotice | null;
 }
 
+// Decimal places used to cancel floating-point error when counting steps, far below any
+// step the editor uses
+const STEP_COUNT_PRECISION = 9;
+
+// Number of decimal places in a number's shortest decimal form (2 for 0.25, 7 for 1e-7)
+function decimalPlaces(n: number): number {
+  const parts = String(n).toLowerCase().split('e');
+  const fraction = parts.at(0)?.split('.').at(1) ?? '';
+  return Math.max(0, fraction.length - Number(parts.at(1) ?? 0));
+}
+
 /**
- * Resolve the text of a numeric input against [min, max]. The text counts as a number
+ * Resolve the text of a numeric input against [min, max] and the input's step grid,
+ * which starts at min as it does for an HTML number input. The text counts as a number
  * only when Number() reads all of it as a finite number (surrounding spaces and hex,
  * binary or octal literals included); blank text, text with other characters such as
  * a decimal comma, NaN and Infinity keep `current`. An entry outside the range is
- * clamped to the nearest bound; -0 becomes 0.
+ * clamped to the nearest bound. An entry inside it is rounded to the nearest step
+ * without a notice, so a typed entry never leaves the input off its step grid; a step
+ * that is not a positive finite number leaves it unrounded. `current` is returned as
+ * it is, so a stored value off the grid stays off it until the field is committed.
+ * -0 becomes 0.
  */
 export function resolveNumericEntry(
   raw: string,
   min: number,
   max: number,
-  current: number
+  current: number,
+  step: number
 ): NumericEntryResult {
   // Number() reads blank text as 0, so blank text is rejected first
   const parsed = raw.trim() === '' ? NaN : Number(raw);
   if (!Number.isFinite(parsed)) {
     return { value: current, notice: 'empty' };
   }
+  if (parsed < min) return { value: min, notice: 'min' };
+  if (parsed > max) return { value: max, notice: 'max' };
+  if (!(step > 0) || !Number.isFinite(step)) return { value: parsed + 0, notice: null };
+  const steps = Math.round(Number(((parsed - min) / step).toFixed(STEP_COUNT_PRECISION)));
+  const places = Math.max(decimalPlaces(step), decimalPlaces(min));
+  const rounded = Math.min(max, Number((min + steps * step).toFixed(places)));
   // Adding 0 turns -0 into +0 and leaves every other number unchanged
-  const value = parsed + 0;
-  if (value < min) return { value: min, notice: 'min' };
-  if (value > max) return { value: max, notice: 'max' };
-  return { value, notice: null };
+  return { value: rounded + 0, notice: null };
 }

@@ -63,6 +63,7 @@ describe('resolveNumericEntry', () => {
   const MIN = 0.1;
   const MAX = 10;
   const CURRENT = 0.707;
+  const STEP = 0.001;
 
   const CASES: Array<{
     name: string;
@@ -86,14 +87,36 @@ describe('resolveNumericEntry', () => {
     { name: 'decimal comma', raw: '1,5', value: CURRENT, notice: 'empty' },
     { name: 'surrounding spaces', raw: ' 5 ', value: 5, notice: null },
     { name: 'hex literal read by Number', raw: '0x5', value: 5, notice: null },
+    { name: 'rounds silently to the step grid', raw: '0.7071', value: 0.707, notice: null },
+    { name: 'rounds half up to the step grid', raw: '1.2345', value: 1.235, notice: null },
   ];
 
   it.each(CASES)('$name', ({ raw, value, notice }) => {
-    expect(resolveNumericEntry(raw, MIN, MAX, CURRENT)).toEqual({ value, notice });
+    expect(resolveNumericEntry(raw, MIN, MAX, CURRENT, STEP)).toEqual({ value, notice });
+  });
+
+  // Step grids of the other numeric parameters: whole hertz from a minimum of 20 Hz, and
+  // tenths of a decibel from -30 dB
+  it.each([
+    { raw: '1000.5', min: 20, max: 20000, step: 1, value: 1001 },
+    { raw: '1000.4', min: 20, max: 20000, step: 1, value: 1000 },
+    { raw: '1.26', min: -30, max: 30, step: 0.1, value: 1.3 },
+    { raw: '-0.04', min: -30, max: 30, step: 0.1, value: 0 },
+  ])('rounds $raw to $value on a step of $step from $min', ({ raw, min, max, step, value }) => {
+    const result = resolveNumericEntry(raw, min, max, min, step);
+    expect(result).toEqual({ value, notice: null });
+    expect(Object.is(result.value, -0)).toBe(false);
+  });
+
+  it.each([0, -1, NaN, Infinity])('leaves an in-range entry unrounded for a step of %s', step => {
+    expect(resolveNumericEntry('1.2345', MIN, MAX, CURRENT, step)).toEqual({
+      value: 1.2345,
+      notice: null,
+    });
   });
 
   it('normalizes -0 to +0', () => {
-    const result = resolveNumericEntry('-0', -1, 1, 0.5);
+    const result = resolveNumericEntry('-0', -1, 1, 0.5, STEP);
     expect(Object.is(result.value, 0)).toBe(true);
     expect(result.notice).toBeNull();
   });

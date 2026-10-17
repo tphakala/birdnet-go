@@ -100,7 +100,7 @@
   const labelClasses = $derived(eqLabelClasses(variant));
 
   function handleChange(input: HTMLInputElement) {
-    const result = resolveNumericEntry(input.value, min, max, value);
+    const result = resolveNumericEntry(input.value, min, max, value, step);
     input.value = String(result.value);
     notice = result.notice ? { kind: result.notice, value: result.value } : null;
     if (result.notice === 'empty') return;

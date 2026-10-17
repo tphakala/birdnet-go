@@ -377,6 +377,27 @@ describe('AudioEqualizerSettings', () => {
       }
     });
 
+    it.each([
+      { name: NAME.q, typed: '0.7071', shown: '0.707', field: 'q', value: 0.707 },
+      { name: NAME.cutoff, typed: '1000.5', shown: '1001', field: 'frequency', value: 1001 },
+    ])(
+      'commits $typed on the step grid as $shown, so the input stays valid',
+      async ({ name, typed, shown, field, value }) => {
+        const user = userEvent.setup();
+        renderWithFilters([STORED.LowPass]);
+
+        const input = await screen.findByRole<HTMLInputElement>('spinbutton', { name });
+        await user.clear(input);
+        await user.type(input, typed);
+        await user.tab();
+
+        expect(input.value).toBe(shown);
+        expect(input.validity.valid).toBe(true);
+        expect(lastPayload().filters[0]).toHaveProperty(field, value);
+        expect(input).not.toHaveAttribute('aria-describedby');
+      }
+    );
+
     it('keeps a Q typed for a new LowPass filter', async () => {
       const user = userEvent.setup();
       renderEmpty();
