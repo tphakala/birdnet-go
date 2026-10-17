@@ -81,7 +81,7 @@ func axisScale(to float64, maxSteps int) (step int, limit float64, prefix string
 	scale := 1.0
 	fstep := math.Max(1, tenthsPerUnit*to)
 	prefixNum := 0
-	if maxSteps != 0 {
+	if maxSteps != 0 && to > 0 {
 		log10v := math.Inf(1)
 		to *= tenthsPerUnit
 		minStep := to / float64(maxSteps)

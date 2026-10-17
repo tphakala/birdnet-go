@@ -121,8 +121,16 @@ func (g *Generator) nativeFileError(err error, operation, step string) error {
 }
 
 // nativeError classifies a decode or render failure and builds the enhanced
-// error exactly once, since every Build reports to telemetry.
+// error exactly once, since a Build reports to telemetry whenever reporting is
+// active (see ErrorBuilder.Build in internal/errors). An error that is
+// already enhanced (built by the transcode package) is only wrapped with the
+// operation, even when the context has expired as well.
 func (g *Generator) nativeError(ctx context.Context, err error, operation string) error {
+	if _, ok := errors.AsType[*errors.EnhancedError](err); ok {
+		// Already built (and reported) by the transcode package; building again
+		// would report the same failure twice.
+		return fmt.Errorf("native spectrogram %s: %w", operation, err)
+	}
 	if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		// Context-driven interruption is operational, like the sox path's
 		// (IsOperationalError).
@@ -133,10 +141,6 @@ func (g *Generator) nativeError(ctx context.Context, err error, operation string
 			Context("operation", operation).
 			Context("renderer", nativeRendererName).
 			Build()
-	}
-	if _, ok := errors.AsType[*errors.EnhancedError](err); ok {
-		// Already built (and reported) by the transcode package.
-		return fmt.Errorf("native spectrogram %s: %w", operation, err)
 	}
 	category := errors.CategoryAudio
 	if errors.Is(err, render.ErrInvalidOptions) || errors.Is(err, render.ErrEmptyClip) || errors.Is(err, render.ErrNoColumns) {

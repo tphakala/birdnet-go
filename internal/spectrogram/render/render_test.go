@@ -165,7 +165,7 @@ func TestRenderColumnsMatchFit(t *testing.T) {
 					rows := rowsFor(width)
 					opt := Options{Width: width, Rows: rows, RangeDB: testRangeDB, Style: Style{Window: window}}
 					img, cols, err := Render(t.Context(), src, opt)
-					if errors.Is(err, ErrNoColumns) || errors.Is(err, ErrInvalidOptions) {
+					if errors.Is(err, ErrNoColumns) {
 						continue // clip too short for this width; covered by TestRenderValidation
 					}
 					require.NoError(t, err)

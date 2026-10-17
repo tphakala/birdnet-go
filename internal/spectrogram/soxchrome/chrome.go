@@ -130,6 +130,9 @@ func drawLegend(s Surface, p ChromeParams, width int) {
 	}
 	rangeDB := int(math.Round(p.RangeDB))
 	step := tenthsPerUnit * int(math.Ceil(p.RangeDB/tenthsPerUnit*(CellH+2)/float64(k-1)))
+	if step <= 0 {
+		return // a non-positive range has no level labels, and the loop below would never end
+	}
 	for i := 0; i <= rangeDB; i += step {
 		y := int(float64(i)/p.RangeDB*float64(k-1) + .5)
 		s.PrintAt(width-MarginRight+1, base+y+labelRowOffset, IndexLabels, fmt.Sprintf("%+d", i-rangeDB))

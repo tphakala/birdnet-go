@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -215,4 +216,28 @@ func TestDrawChromeDrawsDCAndBothSides(t *testing.T) {
 	assert.Contains(t, texts, "Frequency (kHz)")
 	assert.Contains(t, texts, "-100")
 	assert.Contains(t, texts, "+0")
+}
+
+// A zero-length axis must still yield a finite scale, so the DC tick is drawn
+// instead of the loop bound turning into NaN.
+func TestAxisScaleZeroLength(t *testing.T) {
+	step, limit, prefix := axisScale(0, 10)
+	assert.Equal(t, 1, step)
+	assert.InDelta(t, 0, limit, 0)
+	assert.Empty(t, prefix)
+}
+
+// A non-positive level range must not hang the legend loop.
+func TestDrawChromeZeroRangeTerminates(t *testing.T) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		var r recorder
+		DrawChrome(&r, ChromeParams{Cols: 258, Rows: 129, SampleRate: 24000, Seconds: 2, RangeDB: 0})
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("DrawChrome did not return for RangeDB 0")
+	}
 }
