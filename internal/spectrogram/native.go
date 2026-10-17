@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"image"
 	"image/png"
+	"io"
 	"os"
 	"time"
 
@@ -106,14 +108,7 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 	if err != nil {
 		return g.nativeFileError(err, operation, "open")
 	}
-	// The PNG encoder writes many small chunks; buffer them rather than issue
-	// a write call for each.
-	buf := bufio.NewWriterSize(f, nativeWriteBufferBytes)
-	err = png.Encode(buf, img)
-	if err == nil {
-		err = buf.Flush()
-	}
-	if err != nil {
+	if err := encodePNG(f, img); err != nil {
 		_ = f.Close()
 		return g.nativeFileError(err, operation, "encode")
 	}
@@ -129,6 +124,16 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 		logger.Int("sample_rate", src.SampleRate()),
 		logger.Int64("elapsed_ms", time.Since(start).Milliseconds()))
 	return nil
+}
+
+// encodePNG writes img to w as a PNG. The encoder issues many small writes, so
+// they go through a buffer that is flushed before returning.
+func encodePNG(w io.Writer, img image.Image) error {
+	buf := bufio.NewWriterSize(w, nativeWriteBufferBytes)
+	if err := png.Encode(buf, img); err != nil {
+		return err
+	}
+	return buf.Flush()
 }
 
 // nativeFileError builds the error for a failed temp file step.

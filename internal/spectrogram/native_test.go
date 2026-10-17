@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"image"
+	"image/color"
 	"image/png"
 	"math"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -91,6 +93,7 @@ func markerSoxStub(t *testing.T) (stub, ranFile string) {
 		"  if [ \"$prev\" = \"-o\" ]; then printf 'SOXSTUB\\n' > \"$a\"; fi\n" +
 		"  prev=\"$a\"\n" +
 		"done\n" +
+		"cat > /dev/null\n" +
 		"exit 0\n"
 	require.NoError(t, os.WriteFile(stub, []byte(script), 0o700)) //nolint:gosec // G306: test stub must be executable
 	return stub, ranFile
@@ -560,4 +563,106 @@ func TestRenderNative_RemoveFailureIsFileIO(t *testing.T) {
 	// removal failure apart from the open failure.
 	require.Equal(t, "remove", enhanced.GetContext()["step"])
 	assert.Equal(t, errors.CategoryFileIO, enhanced.Category)
+}
+
+func TestNativeGate_PCMTransitions(t *testing.T) {
+	skipWithoutPOSIXShell(t)
+	gen, env := newNativeGenerator(t)
+	stub, ran := markerSoxStub(t)
+	env.Settings.Realtime.Audio.SoxPath = stub
+	pcm := samplesToPCM(nativeTestSamples(24000))
+
+	sequences := map[string][]bool{
+		"off on off": {false, true, false},
+		"on on":      {true, true},
+	}
+	for name, steps := range sequences {
+		t.Run(name, func(t *testing.T) {
+			_ = os.Remove(ran)
+			wantRuns := 0
+			for i, on := range steps {
+				if on {
+					t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+				} else {
+					t.Setenv(conf.EnvNativeSpectrogramRenderer, "")
+				}
+				out := filepath.Join(env.TempDir, name, string(rune('a'+i))+".png")
+				require.NoError(t, gen.GenerateFromPCM(t.Context(), pcm, out, nativeTestWidth, false, 24000))
+				if on {
+					requireNativePNG(t, out)
+				} else {
+					requireStubFile(t, out)
+					wantRuns++
+				}
+				assert.Equal(t, wantRuns, stubRuns(t, ran), "step %d", i)
+			}
+		})
+	}
+}
+
+func TestRenderNative_OpenFailureIsFileIO(t *testing.T) {
+	gen, env := newNativeGenerator(t)
+	temp := filepath.Join(env.TempDir, "no-such-dir", "out.png")
+
+	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), temp, nativeTestWidth, false, nativeOperationFile)
+
+	require.Error(t, err)
+	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+	require.True(t, ok)
+	assert.Equal(t, errors.CategoryFileIO, enhanced.Category)
+	assert.Equal(t, "spectrogram", enhanced.GetComponent())
+}
+
+// failingWriter accepts n bytes and then fails every write.
+type failingWriter struct{ n int }
+
+var errWriterFull = errors.NewStd("writer full")
+
+func (w *failingWriter) Write(p []byte) (int, error) {
+	if w.n <= 0 {
+		return 0, errWriterFull
+	}
+	k := min(len(p), w.n)
+	w.n -= k
+	if k < len(p) {
+		return k, errWriterFull
+	}
+	return k, nil
+}
+
+func TestEncodePNG(t *testing.T) {
+	img := image.NewPaletted(image.Rect(0, 0, 256, 256), color.Palette{color.Black, color.White})
+	for i := range img.Pix {
+		img.Pix[i] = uint8(i % 2) //nolint:gosec // G115: value is 0 or 1
+	}
+
+	var ok bytes.Buffer
+	require.NoError(t, encodePNG(&ok, img))
+	decoded, err := png.Decode(&ok)
+	require.NoError(t, err)
+	assert.Equal(t, img.Bounds(), decoded.Bounds())
+
+	// The failure can surface from the encoder or from the final flush; both
+	// must be returned.
+	for _, limit := range []int{0, 10, 100} {
+		require.ErrorIs(t, encodePNG(&failingWriter{n: limit}, img), errWriterFull, "limit %d", limit)
+	}
+}
+
+// An image that does not compress below the write buffer overflows it while the
+// encoder is still writing. bufio keeps its first error and returns it again
+// from Flush, so this pins that the failure is returned, not which call raised it.
+func TestEncodePNG_FailureWhileEncoding(t *testing.T) {
+	const side = 600
+	pal := make(color.Palette, 256)
+	for i := range pal {
+		pal[i] = color.Gray{Y: uint8(i)} //nolint:gosec // G115: i < 256
+	}
+	img := image.NewPaletted(image.Rect(0, 0, side, side), pal)
+	rng := rand.New(rand.NewPCG(1, 2)) //nolint:gosec // G404: deterministic test data
+	for i := range img.Pix {
+		img.Pix[i] = uint8(rng.IntN(256)) //nolint:gosec // G115: value is below 256
+	}
+
+	require.ErrorIs(t, encodePNG(&failingWriter{n: 0}, img), errWriterFull)
 }
