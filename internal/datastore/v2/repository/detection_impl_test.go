@@ -898,3 +898,30 @@ func TestGetTopSpecies_NoLimitWhenNonPositive(t *testing.T) {
 	assert.Equal(t, labelA.ID, all[0].LabelID)
 	assert.Equal(t, labelC.ID, all[2].LabelID)
 }
+
+// TestSearch_ExcludeFalsePositive verifies ExcludeFalsePositive keeps unreviewed and
+// correct detections and drops only false positives.
+func TestSearch_ExcludeFalsePositive(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	unreviewed := createTestDetection(t, db, 1000)
+	correct := createTestDetection(t, db, 1001)
+	falsePositive := createTestDetection(t, db, 1002)
+	require.NoError(t, repo.SaveReview(ctx, &entities.DetectionReview{
+		DetectionID: correct.ID, Verified: entities.VerificationCorrect,
+	}))
+	require.NoError(t, repo.SaveReview(ctx, &entities.DetectionReview{
+		DetectionID: falsePositive.ID, Verified: entities.VerificationFalsePositive,
+	}))
+
+	results, total, err := repo.Search(ctx, &SearchFilters{ExcludeFalsePositive: true, Limit: 100})
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), total)
+	ids := make([]uint, 0, len(results))
+	for _, d := range results {
+		ids = append(ids, d.ID)
+	}
+	assert.ElementsMatch(t, []uint{unreviewed.ID, correct.ID}, ids)
+}

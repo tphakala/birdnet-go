@@ -230,6 +230,9 @@ func getAppliedFilters(filters *SearchFilters) map[string]any {
 	if filters.FalsePositiveOnly {
 		applied["false_positive_only"] = filters.FalsePositiveOnly
 	}
+	if filters.ExcludeFalsePositive {
+		applied["exclude_false_positive"] = filters.ExcludeFalsePositive
+	}
 	if filters.LockedOnly {
 		applied["locked_only"] = filters.LockedOnly
 	}

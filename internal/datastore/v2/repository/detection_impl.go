@@ -704,6 +704,13 @@ func (r *detectionRepository) buildSearchJoins(query *gorm.DB, filters *SearchFi
 		}
 	}
 
+	if filters.ExcludeFalsePositive {
+		query = query.Where(fmt.Sprintf(
+			"NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = %s.id AND %s.verified = ?)",
+			r.reviewsTable(), r.reviewsTable(), r.tableName(), r.reviewsTable()),
+			string(entities.VerificationFalsePositive))
+	}
+
 	// Locked filter (requires locks join)
 	if filters.IsLocked != nil {
 		if *filters.IsLocked {

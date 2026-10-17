@@ -167,23 +167,24 @@ func (c *Handler) logValidatedRequest(path, ip string, req *SearchRequest) {
 // buildSearchFilters creates the datastore search filters from the request.
 func (c *Handler) buildSearchFilters(req *SearchRequest, ctxTimeout context.Context) datastore.SearchFilters {
 	return datastore.SearchFilters{
-		Species:           req.Species,
-		SpeciesScientific: req.SpeciesScientific,
-		DateStart:         req.DateStart,
-		DateEnd:           req.DateEnd,
-		ConfidenceMin:     req.ConfidenceMin,
-		ConfidenceMax:     req.ConfidenceMax,
-		VerifiedOnly:      req.VerifiedStatus == VerificationStatusCorrect,
-		UnverifiedOnly:    req.VerifiedStatus == VerificationStatusUnverified,
-		FalsePositiveOnly: req.VerifiedStatus == VerificationStatusFalsePositive,
-		LockedOnly:        req.LockedStatus == "locked",
-		UnlockedOnly:      req.LockedStatus == "unlocked",
-		Device:            req.DeviceFilter,
-		TimeOfDay:         req.TimeOfDay,
-		Page:              req.Page,
-		PerPage:           defaultPerPage,
-		SortBy:            req.SortBy,
-		Ctx:               ctxTimeout,
+		Species:              req.Species,
+		SpeciesScientific:    req.SpeciesScientific,
+		DateStart:            req.DateStart,
+		DateEnd:              req.DateEnd,
+		ConfidenceMin:        req.ConfidenceMin,
+		ConfidenceMax:        req.ConfidenceMax,
+		VerifiedOnly:         req.VerifiedStatus == VerificationStatusCorrect,
+		UnverifiedOnly:       req.VerifiedStatus == VerificationStatusUnverified,
+		FalsePositiveOnly:    req.VerifiedStatus == VerificationStatusFalsePositive,
+		ExcludeFalsePositive: req.VerifiedStatus == VerificationStatusNotFalsePositive,
+		LockedOnly:           req.LockedStatus == "locked",
+		UnlockedOnly:         req.LockedStatus == "unlocked",
+		Device:               req.DeviceFilter,
+		TimeOfDay:            req.TimeOfDay,
+		Page:                 req.Page,
+		PerPage:              defaultPerPage,
+		SortBy:               req.SortBy,
+		Ctx:                  ctxTimeout,
 	}
 }
 
@@ -357,21 +358,23 @@ func (c *Handler) validateSearchDates(path, ip string, req *SearchRequest) error
 // validateSearchStatusEnums validates VerifiedStatus and LockedStatus.
 func (c *Handler) validateSearchStatusEnums(path, ip string, req *SearchRequest) error {
 	validVerifiedStatus := map[string]bool{
-		queryValueAny:                   true,
-		VerificationStatusCorrect:       true,
-		VerificationStatusUnverified:    true,
-		VerificationStatusFalsePositive: true,
+		queryValueAny:                      true,
+		VerificationStatusCorrect:          true,
+		VerificationStatusUnverified:       true,
+		VerificationStatusFalsePositive:    true,
+		VerificationStatusNotFalsePositive: true,
 	}
 	if req.VerifiedStatus == "" {
 		req.VerifiedStatus = queryValueAny
 	} else if !validVerifiedStatus[req.VerifiedStatus] {
 		c.LogErrorIfEnabled("Invalid verified status parameter", logger.String("verifiedStatus", req.VerifiedStatus), logger.String("path", path), logger.String("ip", ip))
-		return fmt.Errorf("invalid verified status %q. Use %q, %q, %q, or %q",
+		return fmt.Errorf("invalid verified status %q. Use %q, %q, %q, %q, or %q",
 			req.VerifiedStatus,
 			queryValueAny,
 			VerificationStatusCorrect,
 			VerificationStatusUnverified,
-			VerificationStatusFalsePositive)
+			VerificationStatusFalsePositive,
+			VerificationStatusNotFalsePositive)
 	}
 
 	validLockedStatus := map[string]bool{queryValueAny: true, "locked": true, "unlocked": true}

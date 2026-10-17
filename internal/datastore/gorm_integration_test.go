@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/datastore/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -687,4 +688,44 @@ func TestDetectionRepository_Save_PropagatesID(t *testing.T) {
 		assert.Equal(t, expectedID, result.ID,
 			"Detection %d: result.ID should be %d after propagation", i, expectedID)
 	}
+}
+
+// TestSearchDetections_ExcludeFalsePositive verifies that ExcludeFalsePositive keeps
+// unreviewed and correct detections and drops only false positives, matching the
+// condition the analytics queries use.
+func TestSearchDetections_ExcludeFalsePositive(t *testing.T) {
+	t.Parallel()
+
+	db := openSQLiteTestDB(t)
+	require.NoError(t, db.AutoMigrate(&Note{}, &NoteReview{}, &NoteLock{}, &NoteComment{}))
+
+	ds := &DataStore{DB: db}
+	notes := []Note{
+		{Date: "2026-07-25", Time: "10:00:00", ScientificName: "Tyto alba", CommonName: "Barn Owl", Confidence: 0.9},
+		{Date: "2026-07-25", Time: "10:01:00", ScientificName: "Tyto alba", CommonName: "Barn Owl", Confidence: 0.9},
+		{Date: "2026-07-25", Time: "10:02:00", ScientificName: "Tyto alba", CommonName: "Barn Owl", Confidence: 0.9},
+	}
+	for i := range notes {
+		require.NoError(t, db.Create(&notes[i]).Error)
+	}
+	require.NoError(t, db.Create(&NoteReview{NoteID: notes[1].ID, Verified: string(entities.VerificationCorrect)}).Error)
+	require.NoError(t, db.Create(&NoteReview{NoteID: notes[2].ID, Verified: string(entities.VerificationFalsePositive)}).Error)
+
+	results, total, err := ds.SearchDetections(&SearchFilters{ExcludeFalsePositive: true, Ctx: t.Context()})
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
+	ids := make([]string, 0, len(results))
+	for i := range results {
+		ids = append(ids, results[i].ID)
+	}
+	assert.ElementsMatch(t, []string{fmt.Sprint(notes[0].ID), fmt.Sprint(notes[1].ID)}, ids)
+}
+
+// TestSearchFilters_ExcludeFalsePositiveIsExclusive verifies ExcludeFalsePositive
+// cannot be combined with another verification filter.
+func TestSearchFilters_ExcludeFalsePositiveIsExclusive(t *testing.T) {
+	t.Parallel()
+
+	f := &SearchFilters{ExcludeFalsePositive: true, VerifiedOnly: true}
+	require.Error(t, f.sanitise())
 }

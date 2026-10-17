@@ -55,6 +55,9 @@ const (
 	VerificationStatusCorrect       = "correct"
 	VerificationStatusFalsePositive = "false_positive"
 	VerificationStatusUnverified    = "unverified"
+	// VerificationStatusNotFalsePositive is a search-only filter value: unverified
+	// and correct detections, i.e. everything except false positives.
+	VerificationStatusNotFalsePositive = "not_false_positive"
 )
 
 // Handler serves the api/v2 detections + search domain endpoints. It embeds the
