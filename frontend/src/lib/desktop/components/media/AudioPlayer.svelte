@@ -48,6 +48,7 @@
     MAX_AUDIO_LOAD_RETRIES,
     AUDIO_RETRY_DELAY_MS,
     isPlayInterruptedError,
+    playButtonLabelKey,
   } from '$lib/utils/audio';
   import {
     getAudioContext,
@@ -2287,11 +2288,7 @@
           class="text-white p-1 rounded-full hover:bg-white/20 shrink-0"
           onclick={handlePlayPause}
           disabled={isLoading}
-          aria-label={isLoading
-            ? t('media.audio.loading')
-            : isPlaying
-              ? t('media.audio.pause')
-              : t('media.audio.play')}
+          aria-label={t(playButtonLabelKey(isLoading, isPlaying))}
         >
           {#if isLoading}
             <div

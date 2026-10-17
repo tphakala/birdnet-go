@@ -29,6 +29,7 @@
     PROGRESS_UPDATE_INTERVAL_MS,
     DASHBOARD_AUDIO_RETRY_DELAYS_MS,
     isPlayInterruptedError,
+    playButtonLabelKey,
   } from '$lib/utils/audio';
   import {
     getAudioContext,
@@ -690,11 +691,7 @@
   <button
     class={cn('play-button pointer-events-auto', isPlaying && 'is-playing')}
     onclick={handlePlayPause}
-    aria-label={isLoading
-      ? t('media.audio.loading')
-      : isPlaying
-        ? t('media.audio.pause')
-        : t('media.audio.play')}
+    aria-label={t(playButtonLabelKey(isLoading, isPlaying))}
   >
     {#if isLoading}
       <Loader2 class="size-8 animate-spin" />

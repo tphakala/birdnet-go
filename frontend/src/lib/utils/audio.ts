@@ -106,3 +106,19 @@ export function dbToGain(db: number): number {
 export function isPlayInterruptedError(err: unknown): boolean {
   return typeof err === 'object' && err !== null && 'name' in err && err.name === ABORT_ERROR_NAME;
 }
+
+/**
+ * Translation key for a play button's accessible label. A loading clip reads as
+ * loading, never as Pause, even when the element already reports playing.
+ *
+ * @param isLoading - whether the clip is loading or reloading
+ * @param isPlaying - whether the element is playing
+ * @returns the i18n key to pass to t()
+ */
+export function playButtonLabelKey(
+  isLoading: boolean,
+  isPlaying: boolean
+): 'media.audio.loading' | 'media.audio.pause' | 'media.audio.play' {
+  if (isLoading) return 'media.audio.loading';
+  return isPlaying ? 'media.audio.pause' : 'media.audio.play';
+}
