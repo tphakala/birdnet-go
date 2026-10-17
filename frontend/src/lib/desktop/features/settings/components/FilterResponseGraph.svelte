@@ -12,7 +12,8 @@
   - Flat 0dB curve and label when the equalizer is disabled, empty, or every
     filter is skipped
   - Loading, updating, error (with Retry) and skipped-filter states, each with
-    visible text and a polite screen reader announcement
+    visible text; loading, updating and skipped are announced through a polite
+    status region, errors through an alert region (both always rendered)
   - Caption with the sample rate the curve was calculated for
 
   Props:
@@ -89,7 +90,16 @@
         drawable.response.skipped.length === drawable.request.equalizer.filters.length)
   );
 
+  // Live regions are rendered empty and get text only after mount, in a later
+  // task: a region inserted together with its text is often not announced.
+  let announce = $state(false);
+
+  const alertText = $derived(
+    announce && graphState.status === 'error' ? t('settings.audio.audioFilters.graph.error') : ''
+  );
+
   const statusText = $derived.by(() => {
+    if (!announce) return '';
     switch (graphState.status) {
       case 'loading':
         return graphState.previous
@@ -473,6 +483,9 @@
 
   // Update colors and dimensions when mounted
   onMount(() => {
+    const announceTimer = setTimeout(() => {
+      announce = true;
+    }, 0);
     updateColors();
     updateCanvasDimensions();
 
@@ -499,6 +512,7 @@
     }
 
     return () => {
+      clearTimeout(announceTimer);
       observer.disconnect();
       resizeObserver?.disconnect();
       loader.dispose();
@@ -604,7 +618,7 @@
         </ul>
       </ErrorAlert>
     {:else if graphState.status === 'error'}
-      <ErrorAlert type="error" data-testid="eq-graph-error">
+      <ErrorAlert type="error" role="note" data-testid="eq-graph-error">
         <span class="block">{t('settings.audio.audioFilters.graph.error')}</span>
         <Button className="mt-2" onclick={handleRetry}>
           {t('common.retry')}
@@ -613,6 +627,7 @@
     {/if}
 
     <div class="sr-only" role="status" aria-atomic="true">{statusText}</div>
+    <div class="sr-only" role="alert">{alertText}</div>
   </div>
 </div>
 

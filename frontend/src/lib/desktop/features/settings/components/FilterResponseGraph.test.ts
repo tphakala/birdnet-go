@@ -73,7 +73,7 @@ describe('FilterResponseGraph', () => {
     apiPost.mockReset();
   });
 
-  it('shows the loading text before the first response', () => {
+  it('shows the loading text before the first response', async () => {
     apiPost.mockImplementation(() => new Promise(() => {}));
     renderTyped(FilterResponseGraph, {
       props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
@@ -81,8 +81,12 @@ describe('FilterResponseGraph', () => {
     expect(screen.getByTestId('eq-graph-loading')).toHaveTextContent(
       'settings.audio.audioFilters.graph.loading'
     );
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'settings.audio.audioFilters.graph.loading'
+    // The live region is inserted empty and gets its text in a later task,
+    // so screen readers announce the change.
+    const region = screen.getByRole('status');
+    expect(region.textContent).toBe('');
+    await waitFor(() =>
+      expect(region).toHaveTextContent('settings.audio.audioFilters.graph.loading')
     );
   });
 
@@ -150,7 +154,10 @@ describe('FilterResponseGraph', () => {
     });
     const alert = await screen.findByTestId('eq-graph-error', undefined, { timeout: 1000 });
     expect(alert).toHaveTextContent('settings.audio.audioFilters.graph.error');
-    expect(alert).toHaveAttribute('role', 'alert');
+    // The always-rendered alert region announces the error; the visible box
+    // is not a second live region.
+    expect(alert).toHaveAttribute('role', 'note');
+    expect(screen.getByRole('alert')).toHaveTextContent('settings.audio.audioFilters.graph.error');
     await fireEvent.click(screen.getByRole('button', { name: 'common.retry' }));
     expect(apiPost).toHaveBeenCalledTimes(2);
     // The alert and its button are gone, so focus moves to the graph, not the body.
