@@ -316,13 +316,53 @@ func TestMonoSource_CallbackErrorStops(t *testing.T) {
 func BenchmarkMonoSourceStreamResample(b *testing.B) {
 	samples := tone(48000, 1, 15, testToneHz, testAmp)
 	m, err := MonoFromPCM16(int16Bytes(samples), 48000, 24000)
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 	b.ReportAllocs()
 	for b.Loop() {
-		if err := m.Stream(b.Context(), func([]float32) error { return nil }); err != nil {
-			b.Fatal(err)
-		}
+		require.NoError(b, m.Stream(b.Context(), func([]float32) error { return nil }))
 	}
+}
+
+// A stereo clip whose channels carry the same signal must resample to what the
+// mono clip does, so the resample path keeps the right frame stride and span.
+func TestDecodeMono_StereoResampleMatchesMono(t *testing.T) {
+	const (
+		srcRate = 48000
+		dstRate = 24000
+		seconds = 1.5
+		eps     = 1e-6
+	)
+	dir := t.TempDir()
+	monoPath := filepath.Join(dir, "mono.wav")
+	stereoPath := filepath.Join(dir, "stereo.wav")
+	writeWAVChannels(t, monoPath, tone(srcRate, 1, seconds, testToneHz, testAmp), srcRate, 1)
+	writeWAVChannels(t, stereoPath, tone(srcRate, 2, seconds, testToneHz, testAmp), srcRate, 2)
+
+	mono, err := DecodeMono(t.Context(), monoPath, dstRate)
+	require.NoError(t, err)
+	stereo, err := DecodeMono(t.Context(), stereoPath, dstRate)
+	require.NoError(t, err)
+
+	assert.Equal(t, mono.SpanSamples(), stereo.SpanSamples())
+	want, got := collectStream(t, mono), collectStream(t, stereo)
+	require.Len(t, got, len(want))
+	for i := range want {
+		require.InDelta(t, want[i], got[i], eps, "sample %d", i)
+	}
+}
+
+// Cancelling while the last resampled chunk is delivered must still return the
+// context error, not flush the resampler tail and report success.
+func TestMonoSource_CanceledOnLastChunkWhileResampling(t *testing.T) {
+	m, err := MonoFromPCM16(pcmBytes16(make([]int16, chunkFrames/2)), 48000, 24000)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	err = m.Stream(ctx, func([]float32) error {
+		cancel()
+		return nil
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
 }
