@@ -34,28 +34,27 @@ func TestCollectRuntimeEnvRedactsASensitiveKey(t *testing.T) {
 	assert.Equal(t, redactedPlaceholder, env[sensitive])
 }
 
-// retiredGate is an allowlisted variable no code reads any more (native MP3 export
-// is unconditional). It stays on the allowlist so a dump shows an operator still
-// setting it, which also pins that allowlist entry.
-const retiredGate = "BIRDNET_MP3_ENCODER"
-
-// retiredAACGate is the AAC counterpart of retiredGate, pinned on its own so
-// removing either historical name from the allowlist fails a test.
-const retiredAACGate = "BIRDNET_AAC_ENCODER"
-
-// TestCollectRuntimeEnvCapturesAllowlistedGates covers the case the feature
-// exists for: a dump that arrives without a clip export in the captured log
-// window must still reveal a retired gate the operator still sets.
-func TestCollectRuntimeEnvCapturesAllowlistedGates(t *testing.T) {
-	t.Setenv(retiredGate, "native")
-	t.Setenv(retiredAACGate, "native")
+// TestCollectRuntimeEnvCapturesAllowlistedVariables covers the case the feature
+// exists for: a dump must reveal an allowlisted variable the operator set, even
+// when nothing in the captured log window shows it. HF_ENDPOINT is the one
+// entry whose value is withheld, so the dump records that it is set, not what to.
+func TestCollectRuntimeEnvCapturesAllowlistedVariables(t *testing.T) {
+	t.Setenv(conf.HuggingFaceEndpointEnvVar, "https://hf-mirror.example")
 
 	env := newTestCollector().collectRuntimeEnv(conf.SupportEnvAllowlist())
 
 	require.NotNil(t, env)
-	assert.Equal(t, "native", env[retiredGate])
-	assert.Equal(t, "native", env[retiredAACGate])
-	assert.NotContains(t, env, "BIRDNET_HLS_ENCODER",
+	assert.Equal(t, redactedPlaceholder, env[conf.HuggingFaceEndpointEnvVar])
+}
+
+// TestCollectRuntimeEnvOmitsUnsetVariable pins that an unset allowlisted
+// variable is absent from the map rather than present with an empty value.
+func TestCollectRuntimeEnvOmitsUnsetVariable(t *testing.T) {
+	t.Setenv(conf.HuggingFaceEndpointEnvVar, "")
+
+	env := newTestCollector().collectRuntimeEnv(conf.SupportEnvAllowlist())
+
+	assert.NotContains(t, env, conf.HuggingFaceEndpointEnvVar,
 		"an unset allowlisted variable must be absent, not present with an empty value")
 }
 
@@ -94,10 +93,10 @@ func TestCollectRuntimeEnvEmptyWhenNoGatesSet(t *testing.T) {
 // the helper in, since the helper being correct in isolation is not what the
 // support dump depends on.
 func TestCollectSystemInfoIncludesRuntimeEnv(t *testing.T) {
-	t.Setenv(retiredGate, "native")
+	t.Setenv(conf.HuggingFaceEndpointEnvVar, "https://hf-mirror.example")
 
 	c := &Collector{}
 	info := c.collectSystemInfo()
 
-	assert.Equal(t, "native", info.RuntimeEnv[retiredGate])
+	assert.Contains(t, info.RuntimeEnv, conf.HuggingFaceEndpointEnvVar)
 }

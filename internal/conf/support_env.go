@@ -9,8 +9,7 @@ import "slices"
 // nothing in config.yaml records them. A dump that arrives without the relevant
 // activity inside the captured log window therefore cannot answer whether the
 // reporter was running a native or an FFmpeg code path, which is the first thing
-// to establish while a gate is still opt-in. No encoder gate is read any more;
-// the entries below that name one are kept as history.
+// to establish while a gate is still opt-in.
 //
 // Coverage before this was partial and asymmetric: the deployment collector
 // reads unit-file Environment= lines, so a systemd user who set a gate in their
@@ -23,9 +22,10 @@ import "slices"
 // user uploads to a third party. This list only grows by someone deciding a
 // specific variable is safe to disclose.
 //
-// The entries here are all "native" or unset, so they are not secrets. Add a
-// future BIRDNET_* runtime gate here so it shows up in dumps without needing
-// the collector changed again; do not add anything that identifies the
+// A gate's value is "native" or unset, so it is not a secret. Add a
+// BIRDNET_* runtime gate here so it shows up in dumps without needing
+// the collector changed again, and remove it when the gate is retired. Do not
+// add anything that identifies the
 // operator or their location (the coordinate and locale variables in env.go are
 // deliberately absent), and do not add anything already recorded in
 // config.yaml, which the dump captures separately.
@@ -38,17 +38,6 @@ import "slices"
 //
 //nolint:gochecknoglobals // package-level allowlist, never mutated after init
 var supportEnvAllowlist = []string{
-	// Historical: no longer read by any code path, because native AAC, native
-	// MP3, native FLAC, native Opus and native HLS are now unconditional.
-	// Captured anyway, so a dump
-	// distinguishes "the operator set nothing" from "the operator set a variable
-	// that stopped doing anything", which otherwise look identical from the
-	// outside.
-	"BIRDNET_AAC_ENCODER",
-	"BIRDNET_MP3_ENCODER",
-	"BIRDNET_FLAC_ENCODER",
-	"BIRDNET_OPUS_ENCODER",
-	"BIRDNET_HLS_ENCODER",
 	// Not a BIRDNET_ variable, and the one entry here whose value is withheld:
 	// the name matches the "endpoint" sensitive-key pattern on its underscore
 	// boundary, so a dump records that it is set but redacts what it is set to.
