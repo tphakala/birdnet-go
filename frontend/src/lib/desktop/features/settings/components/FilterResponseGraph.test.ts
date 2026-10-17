@@ -630,6 +630,48 @@ describe('FilterResponseGraph', () => {
     expect(screen.queryByTestId('eq-graph-clipped')).not.toBeInTheDocument();
   });
 
+  it('returns to the +12 axis without a caption when a request fails after a clipped response', async () => {
+    const ctx = useFullCanvas();
+    apiPost.mockResolvedValueOnce(peakBody(0, 80.04, 0));
+    const view = render(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
+    });
+    await settle();
+    expect(screen.getByTestId('eq-graph-clipped')).toBeInTheDocument();
+    expect(dbLabelsInLastDraw(ctx)).toContain(`${MAX_TOP_DB}dB`);
+
+    apiPost.mockRejectedValueOnce(new Error('server error'));
+    await view.rerender({ equalizer: { enabled: true, filters: [HIGH_PASS] } });
+    await settle();
+    expect(screen.getByTestId('eq-graph-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('eq-graph-clipped')).not.toBeInTheDocument();
+    expect(dbLabelsInLastDraw(ctx)).toContain(`${BASE_MAX_DB}dB`);
+    expect(dbLabelsInLastDraw(ctx)).not.toContain(`${MAX_TOP_DB}dB`);
+  });
+
+  it('shows the true gain in the tooltip for a peak above the top of the graph', async () => {
+    useFullCanvas();
+    apiPost.mockResolvedValueOnce(
+      responseBody({
+        points: [
+          { hz: 20, gainDb: 80.04 },
+          { hz: 1000, gainDb: 0 },
+          { hz: 20000, gainDb: -6 },
+        ],
+      })
+    );
+    const view = render(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
+    });
+    await settle();
+    const canvas = view.container.querySelector('canvas');
+    if (!canvas) throw new Error('canvas not rendered');
+    // The left edge of the plot is 20 Hz, where the curve is clamped to the top edge.
+    await fireEvent.mouseMove(canvas, { clientX: PLOT_LEFT, clientY: PLOT_BOTTOM });
+    expect(screen.getByText('20 Hz')).toBeInTheDocument();
+    expect(screen.getByText('+80 dB')).toBeInTheDocument();
+  });
+
   it('stops requesting after unmount', async () => {
     apiPost.mockImplementation(() => new Promise(() => {}));
     const view = render(FilterResponseGraph, {
