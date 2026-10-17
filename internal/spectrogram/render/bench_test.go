@@ -1,14 +1,17 @@
 package render
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func benchRender(b *testing.B, src Source, opt Options) {
 	b.Helper()
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, _, err := Render(b.Context(), src, opt); err != nil {
-			b.Fatal(err)
-		}
+		_, _, err := Render(b.Context(), src, opt)
+		require.NoError(b, err)
 	}
 }
 
