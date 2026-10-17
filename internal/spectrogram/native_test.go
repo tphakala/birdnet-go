@@ -504,3 +504,60 @@ func TestNativeRangeDB(t *testing.T) {
 	assert.Equal(t, nativeRangeExtendedDB, nativeRangeDB(conf.SpectrogramDynamicRangeExtended))
 	assert.Zero(t, nativeRangeDB("unknown"), "an unknown preset gives 0, which render rejects")
 }
+
+// nativeTestSource is a short mono clip for the file-writing tests.
+func nativeTestSource(t *testing.T) render.Source {
+	t.Helper()
+	src, err := transcode.MonoFromPCM16(samplesToPCM(nativeTestSamples(24000)), 24000, 0)
+	require.NoError(t, err)
+	return src
+}
+
+func TestRenderNative_OverwritesStaleTemp(t *testing.T) {
+	gen, env := newNativeGenerator(t)
+	temp := filepath.Join(env.TempDir, "stale.png")
+	require.NoError(t, os.WriteFile(temp, bytes.Repeat([]byte("stale"), 1000), 0o600))
+
+	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), temp, nativeTestWidth, false, nativeOperationFile)
+
+	require.NoError(t, err)
+	requireNativePNG(t, temp)
+}
+
+// A symlink left at the temp name is replaced, never written through.
+func TestRenderNative_DoesNotWriteThroughASymlink(t *testing.T) {
+	gen, env := newNativeGenerator(t)
+	victim := filepath.Join(env.TempDir, "victim.txt")
+	require.NoError(t, os.WriteFile(victim, []byte("keep"), 0o600))
+	temp := filepath.Join(env.TempDir, "link.png")
+	if err := os.Symlink(victim, temp); err != nil {
+		t.Skipf("symlinks are not available: %v", err)
+	}
+
+	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), temp, nativeTestWidth, false, nativeOperationFile)
+
+	require.NoError(t, err)
+	got, readErr := os.ReadFile(victim) //nolint:gosec // G304: test path
+	require.NoError(t, readErr)
+	assert.Equal(t, "keep", string(got))
+	requireNativePNG(t, temp)
+}
+
+// A temp name that cannot be removed (a non-empty directory) fails the render
+// as a file error instead of being written over.
+func TestRenderNative_RemoveFailureIsFileIO(t *testing.T) {
+	gen, env := newNativeGenerator(t)
+	temp := filepath.Join(env.TempDir, "dir.png")
+	require.NoError(t, os.MkdirAll(temp, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(temp, "inner"), []byte("x"), 0o600))
+
+	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), temp, nativeTestWidth, false, nativeOperationFile)
+
+	require.Error(t, err)
+	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+	require.True(t, ok)
+	// The exclusive create would also fail on a directory, so the step tells the
+	// removal failure apart from the open failure.
+	require.Equal(t, "remove", enhanced.GetContext()["step"])
+	assert.Equal(t, errors.CategoryFileIO, enhanced.Category)
+}

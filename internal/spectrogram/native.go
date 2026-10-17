@@ -81,7 +81,10 @@ func (g *Generator) generateNativeFromPCM(ctx context.Context, settings *conf.Se
 	return g.renderNative(ctx, settings, src, tempPath, width, raw, nativeOperationPCM)
 }
 
-// renderNative draws src and writes the PNG to tempPath, which must not exist.
+// renderNative draws src and writes the PNG to tempPath. A file already at
+// tempPath is a stale temp from a crashed run (the name carries the pid and a
+// per-process sequence) and is removed first; the file is then created
+// exclusively, so a symlink or a file that appears in between still fails.
 func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, src render.Source, tempPath string, width int, raw bool, operation string) error {
 	start := time.Now()
 	opt := render.Options{
@@ -96,6 +99,9 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 		return g.nativeError(ctx, err, operation)
 	}
 
+	if err := g.sfs.Remove(tempPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return g.nativeFileError(err, operation, "remove")
+	}
 	f, err := g.sfs.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, nativeOutputFilePerm)
 	if err != nil {
 		return g.nativeFileError(err, operation, "open")
