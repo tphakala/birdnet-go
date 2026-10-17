@@ -114,6 +114,10 @@ func drawFrequencyAxis(s Surface, p ChromeParams) {
 	}
 }
 
+// maxLegendRangeDB is the largest level range that gets labels. Real ranges are
+// 20 to 180 dB; the bound keeps the integer label loop from wrapping.
+const maxLegendRangeDB = 1e6
+
 // drawLegend draws the dBFS bar, its title and level labels (spectrogram.c:914-931).
 func drawLegend(s Surface, p ChromeParams, width int) {
 	k := min(LegendMaxRows, p.Rows)
@@ -128,14 +132,11 @@ func drawLegend(s Surface, p ChromeParams, width int) {
 			s.Set(width-MarginRight-1-i, base+j, idx)
 		}
 	}
-	if !(p.RangeDB > 0) || math.IsInf(p.RangeDB, 0) {
-		return // only a positive, finite range has level labels
+	if !(p.RangeDB > 0) || p.RangeDB > maxLegendRangeDB {
+		return // only a positive range within the bound has level labels
 	}
 	rangeDB := int(math.Round(p.RangeDB))
 	step := tenthsPerUnit * int(math.Ceil(p.RangeDB/tenthsPerUnit*(CellH+2)/float64(k-1)))
-	if step <= 0 {
-		return // a range too large for int arithmetic wraps the step, and the loop would never end
-	}
 	for i := 0; i <= rangeDB; i += step {
 		y := int(float64(i)/p.RangeDB*float64(k-1) + .5)
 		s.PrintAt(width-MarginRight+1, base+y+labelRowOffset, IndexLabels, fmt.Sprintf("%+d", i-rangeDB))

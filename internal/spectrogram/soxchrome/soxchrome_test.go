@@ -283,6 +283,8 @@ func TestDrawChromeNonFiniteInputsTerminate(t *testing.T) {
 		"negative columns":          func(p *ChromeParams) { p.Cols = -100 },
 		"negative rows":             func(p *ChromeParams) { p.Rows = -100 },
 		"huge range":                func(p *ChromeParams) { p.RangeDB = 1e300 },
+		"range near 2^63":           func(p *ChromeParams) { p.RangeDB = 9e18 },
+		"range past 2^63":           func(p *ChromeParams) { p.RangeDB = 2.5e20 },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
