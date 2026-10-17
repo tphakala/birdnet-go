@@ -347,16 +347,27 @@ func TestRenderRerunAndReorder(t *testing.T) {
 
 	var wg sync.WaitGroup
 	results := make([][]byte, 4)
+	errs := make([]error, len(results))
 	for i := range results {
 		wg.Go(func() {
-			if i%2 == 0 {
-				results[i] = encoded(t, srcA, optA)
-			} else {
-				_ = encoded(t, srcB, optB)
+			src, opt := Source(srcA), optA
+			if i%2 != 0 {
+				src, opt = srcB, optB
 			}
+			// Workers return their errors: FailNow must not run off the test goroutine.
+			img, _, err := Render(t.Context(), src, opt)
+			if err == nil {
+				var buf bytes.Buffer
+				err = png.Encode(&buf, img)
+				results[i] = buf.Bytes()
+			}
+			errs[i] = err
 		})
 	}
 	wg.Wait()
+	for i, err := range errs {
+		require.NoError(t, err, "render %d", i)
+	}
 	assert.Equal(t, first, results[0])
 	assert.Equal(t, first, results[2])
 }

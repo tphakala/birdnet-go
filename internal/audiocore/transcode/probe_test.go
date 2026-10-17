@@ -82,15 +82,15 @@ func TestProbeFile_EmptyAndGarbage(t *testing.T) {
 	}
 }
 
-func TestProbeFile_HeaderOnlyWAVOpensButHoldsNoAudio(t *testing.T) {
+func TestProbeFile_HeaderOnlyWAVHoldsNoAudio(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "header.wav")
 	writeWAVChannels(t, path, nil, testRate, 1)
 
-	_, err := ProbeFile(t.Context(), path)
-	require.NoError(t, err)
+	_, probeErr := ProbeFile(t.Context(), path)
+	_, decodeErr := DecodeMono(t.Context(), path, 0)
 
-	_, err = DecodeMono(t.Context(), path, 0)
-	require.ErrorIs(t, err, ErrUndecodableSource)
+	require.ErrorIs(t, decodeErr, ErrUndecodableSource)
+	require.ErrorIs(t, probeErr, ErrUndecodableSource)
 }
 
 func TestProbeFile_NeverStricterThanDecodeMono(t *testing.T) {
