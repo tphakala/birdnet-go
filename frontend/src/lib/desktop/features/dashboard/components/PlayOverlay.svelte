@@ -190,7 +190,7 @@
     pendingFraction = isFinite(duration) && duration > 0 ? liveCurrentTime / duration : 0;
     // Defer resuming playback until handleLoadedMetadata has restored the
     // position from pendingFraction, so playback doesn't briefly start from 0.
-    pendingAutoplayAfterSwap = isPlaying;
+    pendingAutoplayAfterSwap = isPlaying || retryWithPlay;
     untrack(() => markPlaybackStopped());
     clearAudioRetryTimer();
     audioRetryCount = 0;

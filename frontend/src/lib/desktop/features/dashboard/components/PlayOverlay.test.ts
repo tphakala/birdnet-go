@@ -25,6 +25,7 @@ vi.mock('$lib/utils/audioNodes', () => ({
 
 const DETECTION_ID = 4242;
 const RETRY_QUERY_MARKER = '?t=';
+const BATS_SRC = 'blob:audible-bats-clip';
 const PLAY_LABEL = 'media.audio.play';
 const PAUSE_LABEL = 'media.audio.pause';
 const LOADING_LABEL = 'media.audio.loading';
@@ -297,6 +298,25 @@ describe('PlayOverlay', () => {
     expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
     expect(ctl.play.mock.calls.length).toBe(playsBefore + 1);
     expect(alertShown()).toBe(false);
+  });
+
+  it('keeps a queued play across an audible-bats swap during a retry delay', async () => {
+    const { rerender } = mount();
+    ctl.failLoad();
+    ctl.setPlayMode('hold');
+    await click();
+    ctl.failLoad();
+    // Playback is not running while the retry waits.
+    ctl.dispatch('pause');
+    const playsBefore = ctl.play.mock.calls.length;
+
+    await rerender({ detectionId: DETECTION_ID, audibleBatsSrc: BATS_SRC });
+    await settle();
+    ctl.completeLoad();
+    await settle();
+
+    expect(ctl.play.mock.calls.length).toBe(playsBefore + 1);
+    expect(ctl.paused).toBe(false);
   });
 
   it('does not read Pause while a click waits for a failed clip to reload', async () => {
