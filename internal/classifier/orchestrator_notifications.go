@@ -54,7 +54,7 @@ func emitORTUnavailableNotification(modelName, ortError string) {
 		WithTitleKey(notification.MsgORTUnavailableTitle, nil).
 		WithMessageKey(notification.MsgORTUnavailableMessage, map[string]any{
 			"modelName":       modelName,
-			"requiredVersion": requiredVersion,
+			"requiredVersion": inference.ORTMinimumVersion(),
 			"installGuideURL": inference.ORTInstallGuideURL,
 		}).
 		WithDeliveryTarget(notification.DeliveryTargetBell)
