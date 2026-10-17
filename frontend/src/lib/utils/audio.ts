@@ -24,6 +24,21 @@ export const MAX_AUDIO_LOAD_RETRIES = 3;
 /** Delay between audio load retries in milliseconds */
 export const AUDIO_RETRY_DELAY_MS = 2000;
 
+/**
+ * Background retry schedule for a dashboard card whose clip is not ready yet,
+ * in milliseconds. The first step equals the backend's 2 s Retry-After floor
+ * (minRetryAfterSeconds in internal/api/v2/media/media.go) and the total of
+ * about 90 s spans the backend's 60 s pending-export grace margin
+ * (pendingExportGraceMargin, same file). A media element cannot read the HTTP
+ * status, so each retry is blind. The number of entries is the retry limit.
+ */
+export const DASHBOARD_AUDIO_RETRY_DELAYS_MS: readonly number[] = [
+  2000, 4000, 8000, 16000, 30000, 30000,
+];
+
+/** DOMException name a browser uses when play() is interrupted by a load or pause */
+const ABORT_ERROR_NAME = 'AbortError';
+
 // =============================================================================
 // Playback Speed
 // =============================================================================
@@ -78,4 +93,16 @@ export function applyPlaybackRate(audio: HTMLAudioElement, rate: number): void {
  */
 export function dbToGain(db: number): number {
   return Math.pow(10, db / 20);
+}
+
+/**
+ * Whether a play() rejection is only an interruption (a load() or src change
+ * or pause() arrived before playback started), not a playback failure.
+ * Structural so it works for DOMException in browsers and in jsdom.
+ *
+ * @param err - the value a play() promise rejected with
+ * @returns true when the rejection is an AbortError
+ */
+export function isPlayInterruptedError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'name' in err && err.name === ABORT_ERROR_NAME;
 }

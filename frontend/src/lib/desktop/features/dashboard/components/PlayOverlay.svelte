@@ -15,7 +15,7 @@
   - onAudioContextAvailable?: (available: boolean) => void - Callback for audio context status
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { Play, Pause, Loader2 } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
@@ -27,6 +27,8 @@
     PLAY_END_DELAY_MS,
     CANPLAY_TIMEOUT_MS,
     PROGRESS_UPDATE_INTERVAL_MS,
+    DASHBOARD_AUDIO_RETRY_DELAYS_MS,
+    isPlayInterruptedError,
   } from '$lib/utils/audio';
   import {
     getAudioContext,
@@ -83,12 +85,14 @@
   let canplayTimeoutId: ReturnType<typeof setTimeout> | undefined;
   let updateInterval: ReturnType<typeof setInterval> | undefined;
 
-  // Audio retry state (handles 404 when clip is still being written to disk)
+  // Audio retry state (handles 503/404 while the clip is still being exported).
+  // The element cannot read the HTTP status, so every load failure is retried
+  // blind on DASHBOARD_AUDIO_RETRY_DELAYS_MS; that list's length is the limit.
   let audioRetryCount = 0;
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
-  const MAX_AUDIO_RETRIES = 3;
-  const AUDIO_RETRY_DELAYS = [1000, 2000, 4000];
-  const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
+  // Whether the user asked to play, so a retry should start playback when it
+  // fires. A background retry of a failed preload never plays on its own.
+  let retryWithPlay = false;
 
   // Web Audio API
   let audioContext: AudioContext | null = null;
@@ -159,6 +163,8 @@
       previousAudioUrl = baseUrl;
       previousEffectiveSrc = src;
       pendingFraction = null;
+      retryWithPlay = false;
+      untrack(() => markPlaybackStopped());
       audioElement.src = src;
       // Reset playback state for the new detection.
       isPlaying = false;
@@ -185,27 +191,116 @@
     // Defer resuming playback until handleLoadedMetadata has restored the
     // position from pendingFraction, so playback doesn't briefly start from 0.
     pendingAutoplayAfterSwap = isPlaying;
+    untrack(() => markPlaybackStopped());
+    clearAudioRetryTimer();
+    audioRetryCount = 0;
     audioElement.src = src;
     audioElement.load();
   });
+
+  function clearAudioRetryTimer() {
+    if (audioRetryTimer !== undefined) {
+      clearTimeout(audioRetryTimer);
+      audioRetryTimer = undefined;
+    }
+  }
+
+  // Mirror the pause listener for a stop that fires no pause event (a src
+  // assignment or load() pauses the element silently), so the Play/Pause label,
+  // the progress interval and onFreezeEnd follow the element.
+  function markPlaybackStopped() {
+    if (isPlaying) handlePause();
+  }
+
+  // The source for a reload. The derived audible-bats blob URL is local and can't
+  // take a query param, so use it as-is; only the original clip needs a
+  // cache-busting parameter to avoid the browser serving a cached failure.
+  function retrySource(): string {
+    return audibleBatsSrc ?? `${audioUrl}?t=${String(Date.now())}`;
+  }
+
+  // Reload the clip after the budget-limited retry delay. withPlay is true only
+  // when the user asked to play (I10: a background retry never starts playback).
+  function scheduleRetry(withPlay: boolean) {
+    clearAudioRetryTimer();
+    retryWithPlay = withPlay;
+    const delay = DASHBOARD_AUDIO_RETRY_DELAYS_MS.at(audioRetryCount);
+    if (delay === undefined) return;
+    audioRetryCount++;
+    logger.debug('Audio load failed, retrying', {
+      detectionId,
+      retryCount: audioRetryCount,
+      delay,
+    });
+
+    audioRetryTimer = setTimeout(() => {
+      audioRetryTimer = undefined;
+      if (!audioElement) return;
+      markPlaybackStopped();
+      if (retryWithPlay) isLoading = true;
+      audioElement.src = retrySource();
+      audioElement.load();
+      if (retryWithPlay) {
+        void audioElement
+          .play()
+          .then(() => {
+            retryWithPlay = false;
+            isLoading = false;
+          })
+          .catch(handlePlayRejection);
+      }
+    }, delay);
+  }
+
+  // Handle a rejected play(). While a retry timer is pending the retry plays
+  // (retryWithPlay), so the rejection is expected and ignored.
+  function handlePlayRejection(err: unknown) {
+    if (audioRetryTimer !== undefined) return;
+    isLoading = false;
+    if (isPlayInterruptedError(err)) {
+      logger.debug('Audio play interrupted', { detectionId });
+      return;
+    }
+    retryWithPlay = false;
+    if (audioElement?.error) {
+      error ??= t('media.audio.error');
+      logger.warn('Audio play failed after a load error', {
+        detectionId,
+        code: audioElement.error.code,
+      });
+      return;
+    }
+    logger.error('Error playing audio:', err);
+    error = t('media.audio.playError');
+  }
 
   async function handlePlayPause(event: MouseEvent) {
     event.stopPropagation();
 
     if (!audioElement) return;
 
-    // Clear any previous error and reset retry count for fresh user interaction
+    // Clear any previous error and reset retry count for fresh user interaction.
+    // A click during a background retry cancels it and acts at once.
     error = null;
     audioRetryCount = 0;
-    if (audioRetryTimer) {
-      clearTimeout(audioRetryTimer);
-      audioRetryTimer = undefined;
-    }
+    clearAudioRetryTimer();
 
     try {
-      if (isPlaying) {
+      if (!audioElement.paused && !audioElement.error) {
+        retryWithPlay = false;
         audioElement.pause();
       } else {
+        // Record the play intent before any await so a load error that arrives
+        // during the context wait retries with play.
+        retryWithPlay = true;
+        isLoading = true;
+        // A failed element cannot play: reload it inside this gesture.
+        if (audioElement.error) {
+          markPlaybackStopped();
+          audioElement.src = retrySource();
+          audioElement.load();
+        }
+
         // Initialize the audio context on first play, and re-enter whenever the
         // graph is not attached OR the context has fallen back to suspended
         // (e.g. tab backgrounding / audio-session interruption) so
@@ -227,6 +322,11 @@
             // the context is running, so gain/filter controls aren't shown
             // active when a re-suspended context failed to resume (inert graph).
             onAudioContextAvailable?.(audioNodes !== null && audioContext?.state === 'running');
+          } catch (err) {
+            // A failed graph build must not block playback: the element still
+            // plays through its native output.
+            logger.warn('Audio graph setup failed, playing without processing', err);
+            onAudioContextAvailable?.(false);
           } finally {
             isInitializingContext = false;
           }
@@ -235,17 +335,12 @@
         // Safety check: component may have unmounted during async initialization
         if (!audioElement) return;
 
-        isLoading = true;
         await audioElement.play();
+        retryWithPlay = false;
         isLoading = false;
       }
     } catch (err) {
-      // If a retry is already queued (handleError ran before play() rejected),
-      // don't overwrite the retry state with an error message.
-      if (audioRetryCount > 0) return;
-      logger.error('Error playing audio:', err);
-      error = t('media.audio.playError');
-      isLoading = false;
+      handlePlayRejection(err);
     }
   }
 
@@ -280,6 +375,7 @@
   }
 
   function handleEnded() {
+    retryWithPlay = false;
     isPlaying = false;
     stopProgressInterval();
     progress = 0;
@@ -330,9 +426,7 @@
 
       if (pendingAutoplayAfterSwap) {
         pendingAutoplayAfterSwap = false;
-        void audioElement.play().catch((err: unknown) => {
-          logger.warn('Resume after audio source swap failed', err);
-        });
+        void audioElement.play().catch(handlePlayRejection);
       }
     }
   }
@@ -429,6 +523,10 @@
       canplayTimeoutId = undefined;
     }
     isLoading = false;
+    audioRetryCount = 0;
+    clearAudioRetryTimer();
+    retryWithPlay = false;
+    error = null;
   }
 
   function handleError() {
@@ -438,38 +536,17 @@
       canplayTimeoutId = undefined;
     }
 
-    const isPermanentError = audioElement?.error?.code === MEDIA_ERR_SRC_NOT_SUPPORTED;
-
-    // Retry transparently if user initiated play and retries remain.
-    // This handles the case where the audio clip is still being written
-    // to disk when the user clicks play on a freshly detected species.
-    if (isLoading && !isPermanentError && audioRetryCount < MAX_AUDIO_RETRIES) {
-      const delay = AUDIO_RETRY_DELAYS[Math.min(audioRetryCount, AUDIO_RETRY_DELAYS.length - 1)];
-      audioRetryCount++;
-      logger.debug('Audio load failed, retrying', {
-        detectionId,
-        retryCount: audioRetryCount,
-        delay,
-      });
-
-      audioRetryTimer = setTimeout(() => {
-        if (!audioElement) return;
-        // Ensure isLoading is true so subsequent retries can trigger
-        isLoading = true;
-        // Cache-bust to avoid the browser serving the cached 404. The derived
-        // audible-bats blob URL is local and can't take a query param, so retry
-        // it as-is; only the original clip needs cache-busting.
-        audioElement.src = audibleBatsSrc ?? `${audioUrl}?t=${String(Date.now())}`;
-        audioElement.load();
-        void audioElement.play().catch(() => {
-          // play() rejection handled by the next error event
-        });
-      }, delay);
+    // Retry every failure, including a background preload, until the budget is
+    // spent. The retry plays only when the user asked to.
+    if (audioRetryCount < DASHBOARD_AUDIO_RETRY_DELAYS_MS.length) {
+      scheduleRetry(retryWithPlay);
       return;
     }
 
     error = t('media.audio.error');
     isLoading = false;
+    retryWithPlay = false;
+    markPlaybackStopped();
   }
 
   onMount(() => {
@@ -500,11 +577,7 @@
         canplayTimeoutId = undefined;
       }
 
-      // Clear audio retry timer
-      if (audioRetryTimer) {
-        clearTimeout(audioRetryTimer);
-        audioRetryTimer = undefined;
-      }
+      clearAudioRetryTimer();
 
       // Clean up drag listeners if component unmounts while dragging
       document.removeEventListener('mousemove', handleMouseMove);
@@ -600,7 +673,6 @@
   <button
     class={cn('play-button pointer-events-auto', isPlaying && 'is-playing')}
     onclick={handlePlayPause}
-    disabled={!!error}
     aria-label={isPlaying ? t('media.audio.pause') : t('media.audio.play')}
   >
     {#if isLoading}
@@ -672,6 +744,9 @@
   }
 
   .play-overlay {
+    --play-button-size: 3.5rem;
+    --error-badge-gap: 0.5rem;
+
     position: absolute;
     inset: 0;
     display: flex;
@@ -685,8 +760,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 3.5rem;
-    height: 3.5rem;
+    width: var(--play-button-size);
+    height: var(--play-button-size);
     border-radius: 9999px;
     background-color: rgb(255 255 255 / 0.9);
     color: rgb(15 23 42);
@@ -700,11 +775,6 @@
   .play-button:hover {
     transform: scale(1.1);
     background-color: white;
-  }
-
-  .play-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   /* Show on card hover */
@@ -722,8 +792,8 @@
   /* Progress ring */
   .progress-ring {
     position: absolute;
-    width: 3.5rem;
-    height: 3.5rem;
+    width: var(--play-button-size);
+    height: var(--play-button-size);
     transform: rotate(-90deg);
     pointer-events: none;
   }
@@ -774,12 +844,13 @@
     opacity: 0.7;
   }
 
-  /* Error indicator */
+  /* Error indicator: beside the play button, inside the card. The card clips its
+     overflow, so a badge below the overlay box was invisible. */
   .error-indicator {
     position: absolute;
-    bottom: -1.5rem;
-    left: 50%;
-    transform: translateX(-50%);
+    top: 50%;
+    left: calc(50% + var(--play-button-size) / 2 + var(--error-badge-gap));
+    transform: translateY(-50%);
     font-size: 0.75rem;
     color: var(--text-error);
     background-color: color-mix(in srgb, var(--color-error) 10%, var(--color-base-100));
