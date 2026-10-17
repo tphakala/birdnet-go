@@ -268,17 +268,21 @@ func drawsWithinBudget(p ChromeParams) (ok bool) {
 func TestDrawChromeNonFiniteInputsTerminate(t *testing.T) {
 	base := ChromeParams{Cols: 258, Rows: 129, SampleRate: 24000, Seconds: 2, RangeDB: 100}
 	cases := map[string]func(p *ChromeParams){
-		"zero range":       func(p *ChromeParams) { p.RangeDB = 0 },
-		"negative range":   func(p *ChromeParams) { p.RangeDB = -10 },
-		"NaN range":        func(p *ChromeParams) { p.RangeDB = math.NaN() },
-		"infinite range":   func(p *ChromeParams) { p.RangeDB = math.Inf(1) },
-		"infinite time":    func(p *ChromeParams) { p.Seconds = math.Inf(1) },
-		"NaN time":         func(p *ChromeParams) { p.Seconds = math.NaN() },
-		"zero time":        func(p *ChromeParams) { p.Seconds = 0 },
-		"zero sample rate": func(p *ChromeParams) { p.SampleRate = 0 },
-		"negative columns": func(p *ChromeParams) { p.Cols = -100 },
-		"negative rows":    func(p *ChromeParams) { p.Rows = -100 },
-		"huge range":       func(p *ChromeParams) { p.RangeDB = 1e300 },
+		"zero range":                func(p *ChromeParams) { p.RangeDB = 0 },
+		"negative range":            func(p *ChromeParams) { p.RangeDB = -10 },
+		"NaN range":                 func(p *ChromeParams) { p.RangeDB = math.NaN() },
+		"infinite range":            func(p *ChromeParams) { p.RangeDB = math.Inf(1) },
+		"infinite time":             func(p *ChromeParams) { p.Seconds = math.Inf(1) },
+		"NaN time":                  func(p *ChromeParams) { p.Seconds = math.NaN() },
+		"tiny time":                 func(p *ChromeParams) { p.Seconds = math.SmallestNonzeroFloat64 },
+		"huge time":                 func(p *ChromeParams) { p.Seconds = math.MaxFloat64 },
+		"huge time, no tick budget": func(p *ChromeParams) { p.Seconds, p.Cols = 1e25, 0 },
+		"huge rate, no tick budget": func(p *ChromeParams) { p.SampleRate, p.Rows = 1<<62, 1 },
+		"zero time":                 func(p *ChromeParams) { p.Seconds = 0 },
+		"zero sample rate":          func(p *ChromeParams) { p.SampleRate = 0 },
+		"negative columns":          func(p *ChromeParams) { p.Cols = -100 },
+		"negative rows":             func(p *ChromeParams) { p.Rows = -100 },
+		"huge range":                func(p *ChromeParams) { p.RangeDB = 1e300 },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -289,11 +293,32 @@ func TestDrawChromeNonFiniteInputsTerminate(t *testing.T) {
 	}
 }
 
-func TestAxisScaleNonFiniteLength(t *testing.T) {
-	for _, to := range []float64{math.Inf(1), math.Inf(-1), math.NaN(), math.MaxFloat64} {
-		step, limit, prefix := axisScale(to, 10)
-		assert.Equal(t, 1, step)
-		assert.InDelta(t, 0, limit, 0)
-		assert.Empty(t, prefix)
+// Whatever the length and tick budget, the scale must be one the tick loops can
+// finish: a positive step and a finite limit that is a bounded number of steps
+// away.
+func TestAxisScaleAlwaysUsable(t *testing.T) {
+	const maxTicks = 1e6
+	lengths := []float64{math.Inf(1), math.Inf(-1), math.NaN(), math.MaxFloat64, math.SmallestNonzeroFloat64, 1e25, 1e-300, 0, -5, 2}
+	for _, to := range lengths {
+		for _, maxSteps := range []int{-1, 0, 10, 1000} {
+			step, limit, _ := axisScale(to, maxSteps)
+			require.GreaterOrEqual(t, step, 1, "length %v maxSteps %d", to, maxSteps)
+			require.False(t, math.IsNaN(limit) || math.IsInf(limit, 0), "length %v maxSteps %d limit %v", to, maxSteps, limit)
+			require.LessOrEqual(t, limit/float64(step), maxTicks, "length %v maxSteps %d", to, maxSteps)
+		}
 	}
+}
+
+// A length that cannot be scaled returns the degenerate axis: one step, no limit.
+func TestAxisScaleUnusableLength(t *testing.T) {
+	for _, to := range []float64{math.Inf(1), math.Inf(-1), math.NaN(), math.MaxFloat64, math.SmallestNonzeroFloat64} {
+		step, limit, prefix := axisScale(to, 10)
+		assert.Equal(t, 1, step, "length %v", to)
+		assert.InDelta(t, 0, limit, 0, "length %v", to)
+		assert.Empty(t, prefix, "length %v", to)
+	}
+	step, limit, prefix := axisScale(1e25, 0)
+	assert.Equal(t, 1, step)
+	assert.InDelta(t, 0, limit, 0)
+	assert.Empty(t, prefix)
 }

@@ -41,21 +41,22 @@ const (
 
 // Offsets measured in the text cell, as used by SoX (spectrogram.c:868-931).
 const (
-	timeTitleY      = 24 // baseline row of the time axis title
-	timeLabelBelow  = 6  // tick label offset under the raster
-	timeLabelAbove  = 14 // tick label offset over the raster
-	timeLabelHalfW  = 3  // half a character, centres a tick label
-	freqTitleX      = 10 // column of the rotated frequency title
-	freqLabelGap    = 4  // gap between the raster and a left label
-	freqLabelRight  = 6  // gap between the raster and a right label
-	labelRowOffset  = 5  // rows from a tick down to the label top
-	legendTitleGap  = 2  // columns from the legend bar to its title
-	legendTitleRise = 13 // rows from the legend bar bottom to its title
-	timeTickDensity = 9  // time ticks: one per CellW*9/2 pixels
-	freqTickNumer   = 3  // frequency ticks: one per (CellH*3+1)/2 pixels
-	tenthsPerUnit   = 10 // axis steps are counted in tenths
-	axisStepFive    = 5  // a step of 5 labels only multiples of 10
-	axisStepDivisor = 2  // divisor in the frequency tick density
+	timeTitleY      = 24      // baseline row of the time axis title
+	timeLabelBelow  = 6       // tick label offset under the raster
+	timeLabelAbove  = 14      // tick label offset over the raster
+	timeLabelHalfW  = 3       // half a character, centres a tick label
+	freqTitleX      = 10      // column of the rotated frequency title
+	freqLabelGap    = 4       // gap between the raster and a left label
+	freqLabelRight  = 6       // gap between the raster and a right label
+	labelRowOffset  = 5       // rows from a tick down to the label top
+	legendTitleGap  = 2       // columns from the legend bar to its title
+	legendTitleRise = 13      // rows from the legend bar bottom to its title
+	timeTickDensity = 9       // time ticks: one per CellW*9/2 pixels
+	freqTickNumer   = 3       // frequency ticks: one per (CellH*3+1)/2 pixels
+	tenthsPerUnit   = 10      // axis steps are counted in tenths
+	maxAxisValue    = 1 << 30 // largest step or limit, in tenths, an axis scale may return
+	axisStepFive    = 5       // a step of 5 labels only multiples of 10
+	axisStepDivisor = 2       // divisor in the frequency tick density
 
 	// log10SnapEpsilon is how close a log10 must be to an integer to snap to it.
 	log10SnapEpsilon = 1e-9
@@ -115,5 +116,12 @@ func axisScale(to float64, maxSteps int) (step int, limit float64, prefix string
 			prefix = prefixes[idx : idx+1]
 		}
 	}
-	return max(int(fstep*scale+.5), 1), to * scale, prefix
+	// A step or limit the tick loops cannot finish has no usable scale: a
+	// subnormal length scales to an infinite limit, and an enormous one overflows
+	// int. Every real axis is far below the bound.
+	scaledStep, scaledLimit := fstep*scale, to*scale
+	if !(scaledStep < maxAxisValue && scaledLimit < maxAxisValue) {
+		return 1, 0, ""
+	}
+	return max(int(scaledStep+.5), 1), scaledLimit, prefix
 }
