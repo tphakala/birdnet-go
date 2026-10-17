@@ -719,7 +719,7 @@
 
   <!-- Error indicator -->
   {#if error}
-    <span class="error-indicator" aria-live="polite" role="alert" title={error}>
+    <span class="error-indicator" role="alert" title={error}>
       {t('media.audio.errorShort')}
     </span>
   {/if}
