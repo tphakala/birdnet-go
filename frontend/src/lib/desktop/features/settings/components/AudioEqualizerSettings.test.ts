@@ -492,20 +492,30 @@ describe('AudioEqualizerSettings', () => {
       expect(lastPayload().filters[0]).toMatchObject({ q: 1.5, passes: storedPasses });
     });
 
-    it('commits the stored passes when its custom option is picked, without clamping it', async () => {
+    it('drops the custom attenuation option once a standard level is picked', async () => {
       const user = userEvent.setup();
-      const storedPasses = 8;
-      renderWithFilters([
-        { type: 'LowPass' as const, frequency: 15000, q: 0.707, passes: storedPasses },
+      const view = renderWithFilters([
+        { type: 'LowPass' as const, frequency: 15000, q: 0.707, passes: 8 },
       ]);
 
       await user.click(await screen.findByRole('combobox', { name: NAME.attenuation }));
-      await user.click(await screen.findByRole('option', { name: `${LEVEL_PREFIX}24db` }));
+      expect(await screen.findByRole('option', { name: `${LEVEL_PREFIX}custom` })).toBeVisible();
+      await user.click(screen.getByRole('option', { name: `${LEVEL_PREFIX}24db` }));
       expect(lastPayload().filters[0]).toMatchObject({ passes: 2 });
 
+      // The parent feeds the update back; the stored level is only offered while it is current
+      await view.rerender({
+        equalizerSettings: {
+          enabled: true,
+          filters: [{ type: 'LowPass' as const, frequency: 15000, q: 0.707, passes: 2 }],
+        },
+        onUpdate: mockUpdateCallback,
+      });
       await user.click(await screen.findByRole('combobox', { name: NAME.attenuation }));
-      await user.click(await screen.findByRole('option', { name: `${LEVEL_PREFIX}custom` }));
-      expect(lastPayload().filters[0]).toMatchObject({ passes: storedPasses });
+      expect(await screen.findByRole('option', { name: `${LEVEL_PREFIX}24db` })).toBeVisible();
+      expect(
+        screen.queryByRole('option', { name: `${LEVEL_PREFIX}custom` })
+      ).not.toBeInTheDocument();
     });
 
     it('does not offer a custom attenuation option for a stored passes the list has', async () => {
