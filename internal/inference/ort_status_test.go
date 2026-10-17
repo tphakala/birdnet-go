@@ -3,6 +3,7 @@ package inference
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -47,6 +48,18 @@ func TestORTVersionMeetsMinimum(t *testing.T) {
 	}
 }
 
+// symlinkOrSkip creates a symlink at link pointing at target. On Windows,
+// creating one needs a privilege many runners lack, so a failure there skips
+// the test; on other systems it fails the test.
+func symlinkOrSkip(t *testing.T, target, link string) {
+	t.Helper()
+	err := os.Symlink(target, link)
+	if err != nil && runtime.GOOS == "windows" {
+		t.Skipf("cannot create symlinks on this Windows host: %v", err)
+	}
+	require.NoError(t, err)
+}
+
 // writeLibFile creates an empty file named name inside dir and returns its path.
 func writeLibFile(t *testing.T, dir, name string) string {
 	t.Helper()
@@ -85,9 +98,9 @@ func TestCheckORTAvailability_GatesOnFileNameVersion(t *testing.T) {
 	t.Run("symlink chain to current pin is accepted", func(t *testing.T) {
 		dir := t.TempDir()
 		writeLibFile(t, dir, "libonnxruntime.so.1.31.0")
-		require.NoError(t, os.Symlink("libonnxruntime.so.1.31.0", filepath.Join(dir, "libonnxruntime.so.1")))
+		symlinkOrSkip(t, "libonnxruntime.so.1.31.0", filepath.Join(dir, "libonnxruntime.so.1"))
 		link := filepath.Join(dir, "libonnxruntime.so")
-		require.NoError(t, os.Symlink("libonnxruntime.so.1", link))
+		symlinkOrSkip(t, "libonnxruntime.so.1", link)
 		status := CheckORTAvailability(link)
 		assert.True(t, status.Available)
 		assert.Equal(t, "1.31.0", status.Version)
@@ -120,7 +133,7 @@ func TestCheckORTAvailability_FollowsSymlinkLayoutTransitions(t *testing.T) {
 		t.Helper()
 		link := filepath.Join(dir, name)
 		require.NoError(t, os.RemoveAll(link))
-		require.NoError(t, os.Symlink(target, link))
+		symlinkOrSkip(t, target, link)
 	}
 
 	t.Run("cp -P upgrade then downgrade", func(t *testing.T) {
@@ -196,7 +209,7 @@ func TestInferVersionFromPath(t *testing.T) {
 		versioned := dir + "/libonnxruntime.so.1.25.1"
 		link := dir + "/libonnxruntime.so"
 		require.NoError(t, os.WriteFile(versioned, nil, 0o644))
-		require.NoError(t, os.Symlink(versioned, link))
+		symlinkOrSkip(t, versioned, link)
 		assert.Equal(t, "1.25.1", inferVersionFromPath(link))
 	})
 
@@ -214,7 +227,7 @@ func TestInferVersionFromPath(t *testing.T) {
 		versioned := filepath.Join(dir, "libonnxruntime.1.25.1.dylib")
 		link := filepath.Join(dir, "libonnxruntime.dylib")
 		require.NoError(t, os.WriteFile(versioned, nil, 0o644))
-		require.NoError(t, os.Symlink(versioned, link))
+		symlinkOrSkip(t, versioned, link)
 		assert.Equal(t, "1.25.1", inferVersionFromPath(link))
 	})
 
