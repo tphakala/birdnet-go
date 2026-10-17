@@ -92,8 +92,9 @@ function decimalPlaces(n: number): number {
  * binary or octal literals included); blank text, text with other characters such as
  * a decimal comma, NaN and Infinity keep `current`. An entry outside the range is
  * clamped to the nearest bound. An entry inside it is rounded to the nearest step
- * without a notice, so a typed entry never leaves the input off its step grid; a step
- * that is not a positive finite number leaves it unrounded. `current` is returned as
+ * without a notice, capped at max; when min and max both lie on the step grid, as every
+ * bound of the filter table does, a typed entry never leaves the input off the grid. A
+ * step that is not a positive finite number leaves it unrounded. `current` is returned as
  * it is, so a stored value off the grid stays off it until the field is committed.
  * -0 becomes 0.
  */
