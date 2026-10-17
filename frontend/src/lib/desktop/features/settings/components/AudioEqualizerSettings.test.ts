@@ -232,6 +232,30 @@ describe('AudioEqualizerSettings', () => {
       expect(trigger).toHaveTextContent('settings.audio.audioFilters.attenuationLevels.24db');
     });
 
+    it('focuses the attenuation dropdown without opening it when its label is clicked', async () => {
+      const user = userEvent.setup();
+      render(AudioEqualizerSettings, {
+        props: {
+          equalizerSettings: {
+            enabled: true,
+            filters: [{ type: 'HighPass' as const, frequency: 100, passes: 2, q: 0.707 }],
+          },
+          onUpdate: mockUpdateCallback,
+        },
+      });
+
+      const trigger = await screen.findByRole('combobox', { name: NAME.attenuation });
+      const label = document.querySelector(`label[for="${trigger.id}"]`);
+      if (!(label instanceof HTMLLabelElement)) throw new Error('attenuation label not found');
+
+      await user.click(label);
+
+      expect(trigger).toHaveFocus();
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(mockUpdateCallback).not.toHaveBeenCalled();
+    });
+
     it('names the attenuation dropdown of the new filter independently of its value', async () => {
       const user = userEvent.setup();
       render(AudioEqualizerSettings, {

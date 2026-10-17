@@ -303,6 +303,13 @@
   // notices of rows that did not move.
   const filterCount = $derived((equalizerSettings.filters || []).length);
 
+  // Handle a click on a label whose control is a button: focus the control without the
+  // click the browser would otherwise forward to it
+  function focusInsteadOfActivating(event: MouseEvent, controlId: string) {
+    event.preventDefault();
+    document.getElementById(controlId)?.focus();
+  }
+
   // Id prefix of this editor instance, for the <label for> of each attenuation dropdown
   // (the editor mounts several times on a page)
   const editorId = generateId('eq-editor');
@@ -482,7 +489,15 @@
       {@const unitSuffix = param.Unit ? ` (${param.Unit})` : ''}
       {#if param.Name.toLowerCase() === 'passes'}
         <div class={EQ_PARAMETER_CELL_CLASS}>
-          <label class={eqLabelClasses(variant).label} for={passesId(row)}>
+          <!-- A label click would also click the dropdown trigger and open the list; it only
+               moves focus there, as a label click does for the number inputs. A label is never
+               focused, so keyboard users reach the dropdown itself and need no key handler. -->
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+          <label
+            class={eqLabelClasses(variant).label}
+            for={passesId(row)}
+            onclick={event => focusInsteadOfActivating(event, passesId(row))}
+          >
             <span class={eqLabelClasses(variant).text}>
               {parameterLabel(filterType, param)}{unitSuffix}
             </span>
