@@ -214,7 +214,7 @@ realtime:
           q: 0.7 # Filter Q factor
           gain: 0 # Filter gain (only for certain types)
           width: 0 # Filter width (only for BandPass and BandReject)
-          passes: 1 # Filter passes: 0 turns the filter off, each pass adds 12 dB/oct (LowPass, HighPass)
+          passes: 1 # Filter passes: 0 or no passes line turns the filter off, each pass adds 12 dB/oct (LowPass, HighPass)
 
   # Web dashboard settings
   dashboard:
