@@ -174,12 +174,20 @@
         return graphState.previous
           ? t('settings.audio.audioFilters.graph.updating')
           : t('settings.audio.audioFilters.graph.loading');
-      case 'ready':
-        return graphState.response.skipped.length > 0
-          ? t('settings.audio.audioFilters.graph.skippedHeading', {
+      case 'ready': {
+        const parts: string[] = [];
+        if (graphState.response.skipped.length > 0) {
+          parts.push(
+            t('settings.audio.audioFilters.graph.skippedHeading', {
               count: graphState.response.skipped.length,
             })
-          : '';
+          );
+        }
+        if (drawable && axis.clipped && axis.peakDb !== undefined) {
+          parts.push(t('settings.audio.audioFilters.graph.clipped', { peak: axis.peakDb }));
+        }
+        return parts.join(' ');
+      }
       case 'error':
         return '';
     }
@@ -669,11 +677,13 @@
       {/if}
     </p>
 
-    {#if drawable && axis.clipped && axis.peakDb !== undefined}
-      <p class="text-xs text-[var(--color-base-content)]/70" data-testid="eq-graph-clipped">
-        {t('settings.audio.audioFilters.graph.clipped', { peak: axis.peakDb })}
-      </p>
-    {/if}
+    <p class="min-h-5 text-xs text-[var(--color-base-content)]/70">
+      {#if drawable && axis.clipped && axis.peakDb !== undefined}
+        <span data-testid="eq-graph-clipped" aria-hidden="true">
+          {t('settings.audio.audioFilters.graph.clipped', { peak: axis.peakDb })}
+        </span>
+      {/if}
+    </p>
 
     {#if graphState.status === 'ready' && graphState.response.skipped.length > 0}
       {@const ready = { request: graphState.request, response: graphState.response }}

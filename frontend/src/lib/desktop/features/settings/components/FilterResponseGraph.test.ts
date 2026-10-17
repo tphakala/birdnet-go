@@ -622,6 +622,10 @@ describe('FilterResponseGraph', () => {
     expect(dbLabelsInLastDraw(ctx).at(-1)).toBe(`${MAX_TOP_DB}dB`);
     expect(screen.getByTestId('eq-graph-clipped')).toHaveTextContent(CLIPPED_KEY);
     expect(t).toHaveBeenCalledWith(CLIPPED_KEY, { peak: 80 });
+    // The caption row is always rendered so the editor below does not shift, and
+    // the status region announces it.
+    expect(screen.getByTestId('eq-graph-clipped').parentElement).toHaveClass('min-h-5');
+    expect(screen.getByRole('status')).toHaveTextContent(CLIPPED_KEY);
 
     // The caption goes on a later response below the cap.
     apiPost.mockResolvedValueOnce(peakBody(0, 20, 0));
