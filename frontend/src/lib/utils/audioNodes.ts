@@ -41,13 +41,38 @@ export const MAX_GAIN_DB = 24;
 
 /**
  * Source nodes already created per (context, element). createMediaElementSource
- * may run at most once per pair (a second call throws InvalidStateError), so a
- * retry after a failed graph build must reuse the first source.
+ * may run at most once per pair (a second call throws InvalidStateError). Keyed
+ * by context first so a recreated context never reuses a stale node.
  */
 const sourceNodeCache = new WeakMap<
   BaseAudioContext,
   WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>
 >();
+
+/**
+ * Get the media element source node for this context and element, creating it on
+ * first use. Every caller that routes an element through Web Audio must use this
+ * instead of calling createMediaElementSource directly.
+ *
+ * @param ctx - AudioContext that owns the node
+ * @param element - media element to capture
+ * @returns the cached source node, or a new one
+ */
+export function getOrCreateMediaElementSource(
+  ctx: AudioContext,
+  element: HTMLMediaElement
+): { source: MediaElementAudioSourceNode; cached: boolean } {
+  let sourcesByElement = sourceNodeCache.get(ctx);
+  if (!sourcesByElement) {
+    sourcesByElement = new WeakMap();
+    sourceNodeCache.set(ctx, sourcesByElement);
+  }
+  const existing = sourcesByElement.get(element);
+  if (existing) return { source: existing, cached: true };
+  const source = ctx.createMediaElementSource(element);
+  sourcesByElement.set(element, source);
+  return { source, cached: false };
+}
 
 /**
  * Create a complete audio processing node chain.
@@ -72,19 +97,9 @@ export function createAudioNodeChain(
 ): AudioNodeChain {
   const { gainDb = 0, highPassFreq = DEFAULT_HIGH_PASS_FREQ, includeCompressor = false } = options;
 
-  let sourcesByElement = sourceNodeCache.get(ctx);
-  if (!sourcesByElement) {
-    sourcesByElement = new WeakMap();
-    sourceNodeCache.set(ctx, sourcesByElement);
-  }
-  let source = sourcesByElement.get(audioElement);
-  if (source) {
-    // Drop the fallback route of an earlier failed build before rebuilding.
-    source.disconnect();
-  } else {
-    source = ctx.createMediaElementSource(audioElement);
-    sourcesByElement.set(audioElement, source);
-  }
+  const { source, cached } = getOrCreateMediaElementSource(ctx, audioElement);
+  // Drop the fallback route of an earlier failed build before rebuilding.
+  if (cached) source.disconnect();
 
   try {
     // Create gain node for volume control

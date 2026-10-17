@@ -12,6 +12,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   attachAudioGraphWhenRunning,
   createAudioNodeChain,
+  getOrCreateMediaElementSource,
   type AudioNodeChain,
 } from './audioNodes';
 
@@ -165,5 +166,44 @@ describe('createAudioNodeChain failure handling', () => {
     const rebuildConnectOrder = source.connect.mock.invocationCallOrder.at(-1) ?? 0;
     expect(disconnectOrder).toBeGreaterThan(fallbackConnectOrder);
     expect(rebuildConnectOrder).toBeGreaterThan(disconnectOrder);
+  });
+});
+
+describe('getOrCreateMediaElementSource', () => {
+  const freshElement = () => ({}) as unknown as HTMLAudioElement;
+
+  it('returns one source per context and element', () => {
+    const ctx = makeFakeContext('running');
+    const element = freshElement();
+
+    const first = getOrCreateMediaElementSource(ctx, element);
+    const second = getOrCreateMediaElementSource(ctx, element);
+
+    expect(second.source).toBe(first.source);
+    expect(first.cached).toBe(false);
+    expect(second.cached).toBe(true);
+    expect(ctx.createMediaElementSource).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates a separate source for another context', () => {
+    const element = freshElement();
+    const ctxA = makeFakeContext('running');
+    const ctxB = makeFakeContext('running');
+
+    const a = getOrCreateMediaElementSource(ctxA, element);
+    const b = getOrCreateMediaElementSource(ctxB, element);
+
+    expect(b.source).not.toBe(a.source);
+  });
+
+  it('is shared with the node chain so one element never gets two sources', () => {
+    const ctx = makeFakeContext('running');
+    const element = freshElement();
+
+    const { source } = getOrCreateMediaElementSource(ctx, element);
+    const chain = createAudioNodeChain(ctx, element);
+
+    expect(chain.source).toBe(source);
+    expect(ctx.createMediaElementSource).toHaveBeenCalledTimes(1);
   });
 });

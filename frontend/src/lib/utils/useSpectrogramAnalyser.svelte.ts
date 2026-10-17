@@ -12,7 +12,7 @@
  * This separation means muting audio does not affect the spectrogram visualization.
  *
  * Key constraints:
- * - createMediaElementSource() can only be called once per element (guarded by WeakMap)
+ * - createMediaElementSource() can only be called once per element (shared source cache in audioNodes)
  * - Uses the shared audioContextManager singleton
  * - Does NOT use onMount — exposes connect()/disconnect() for parent control
  */
@@ -23,19 +23,10 @@ import {
   releaseAudioContext,
 } from './audioContextManager';
 import { dbToGain } from './audio';
+import { getOrCreateMediaElementSource } from './audioNodes';
 import { loggers } from './logger';
 
 const logger = loggers.audio;
-
-/**
- * Guard: createMediaElementSource() can only be called once per element per AudioContext.
- * Keyed by AudioContext first, then HTMLMediaElement — so if the AudioContext is
- * recreated (after close), stale source nodes from the old context won't be reused.
- */
-const sourceNodeMap = new WeakMap<
-  AudioContext,
-  WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>
->();
 
 export interface SpectrogramAnalyserOptions {
   /** FFT size — must be power of 2 (default: 1024) */
@@ -89,19 +80,8 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
       audioContext = await getAudioContext();
       sampleRate = audioContext.sampleRate;
 
-      // Guard: reuse existing source node for this element + context combination
-      let contextCache = sourceNodeMap.get(audioContext);
-      if (!contextCache) {
-        contextCache = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
-        sourceNodeMap.set(audioContext, contextCache);
-      }
-      const existingSource = contextCache.get(mediaElement);
-      if (existingSource) {
-        sourceNode = existingSource;
-      } else {
-        sourceNode = audioContext.createMediaElementSource(mediaElement);
-        contextCache.set(mediaElement, sourceNode);
-      }
+      // Reuse the element's existing source node for this context (shared cache)
+      sourceNode = getOrCreateMediaElementSource(audioContext, mediaElement).source;
 
       // Create processing nodes
       highPassNode = audioContext.createBiquadFilter();
