@@ -34,7 +34,7 @@ const FAKE_MEDIA_DURATION_SECONDS = 120;
 type FakePlayMode = 'resolve' | 'hold';
 
 /** Names of DOMException rejections the fake can queue for the next `play()` */
-type FakePlayRejection = 'NotAllowedError' | 'AbortError';
+type FakePlayRejection = 'NotAllowedError' | 'NotSupportedError' | 'AbortError';
 
 interface FakeMediaError {
   code: number;

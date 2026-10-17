@@ -319,6 +319,38 @@ describe('PlayOverlay', () => {
     expect(ctl.paused).toBe(false);
   });
 
+  it('fires each retry at its delay and not one millisecond earlier', async () => {
+    mount();
+
+    for (const delay of DASHBOARD_AUDIO_RETRY_DELAYS_MS) {
+      ctl.failLoad();
+      const loadsBefore = ctl.load.mock.calls.length;
+
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(ctl.load.mock.calls.length).toBe(loadsBefore);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+    }
+  });
+
+  it.each(['NotAllowedError', 'NotSupportedError'] as const)(
+    'shows the badge for a %s rejection and the next click clears it and plays',
+    async rejection => {
+      mount();
+      ctl.completeLoad();
+      ctl.rejectNextPlay(rejection);
+
+      await click();
+      expect(alertShown()).toBe(true);
+      expect(button().disabled).toBe(false);
+
+      await click();
+      expect(alertShown()).toBe(false);
+      expect(ctl.paused).toBe(false);
+    }
+  );
+
   it('does not read Pause while a click waits for a failed clip to reload', async () => {
     mount();
     ctl.failLoad();
