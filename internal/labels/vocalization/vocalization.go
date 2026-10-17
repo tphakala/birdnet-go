@@ -79,11 +79,11 @@ var perchHumanExtraLabels = map[string]struct{}{
 }
 
 // privacyExcludedLabels holds the nonbird.CategoryHuman classes that are body or
-// action sounds rather than voiced speech-like sound. They are not privacy hits (see IsHuman) but
-// remain human sounds (see IsHumanSound). Keys are lowercase. A replay of Perch
-// V2 on user-verified clips found the first eleven behind the false "Human
-// vocal" privacy discards while speech clips were still caught; the six bodily
-// sounds were not measured.
+// action sounds rather than voiced speech-like sound. They are not privacy hits
+// (see IsHuman) but remain human sounds (see IsHumanSound). Keys are lowercase.
+// A replay of Perch V2 on user-verified clips found the first eleven behind the
+// false "Human vocal" privacy discards while speech clips were still caught; the
+// six bodily sounds were not measured.
 //
 //nolint:gochecknoglobals // immutable lookup table, read-only after init
 var privacyExcludedLabels = map[string]struct{}{
