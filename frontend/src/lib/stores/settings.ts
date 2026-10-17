@@ -319,7 +319,7 @@ export interface EqualizerFilter {
   q?: number;
   width?: number; // Bandwidth in Hz (for BandReject)
   gain?: number;
-  passes?: number; // Number of filter passes (1=12dB, 2=24dB, 3=36dB, 4=48dB)
+  passes?: number; // Number of filter passes (0=off, 1=12dB, 2=24dB, 3=36dB, 4=48dB)
 }
 
 export interface ExportSettings {

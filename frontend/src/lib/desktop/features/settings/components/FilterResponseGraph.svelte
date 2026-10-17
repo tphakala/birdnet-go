@@ -10,7 +10,7 @@
   - Modified logarithmic frequency scale optimized for high frequencies (20Hz - 20kHz)
   - Interactive tooltip showing the nearest computed point
   - Flat 0dB curve and label when the equalizer is disabled, empty, or every
-    filter is skipped
+    filter is skipped or set to 0 passes
   - Loading, updating, error (with Retry) and skipped-filter states, each with
     visible text; loading, updating and skipped are announced through a polite
     status region, errors through an alert region (both always rendered)
