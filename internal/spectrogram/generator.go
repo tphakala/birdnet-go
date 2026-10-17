@@ -121,8 +121,8 @@ func (s SourceState) Matches(now os.FileInfo) bool {
 }
 
 // WithSourceState makes GenerateFromFile compare the audio file with state before
-// the render and again before publishing, and return ErrSourceChanged when it
-// differs. Only the native renderer honors it.
+// the render, for every renderer, and again before publishing, for the native
+// renderer, and return ErrSourceChanged when it differs.
 func WithSourceState(state SourceState) GenerateOption {
 	return func(o *generateOptions) {
 		o.source = &state
