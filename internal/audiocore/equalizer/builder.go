@@ -12,11 +12,12 @@ import (
 var eqLog = logger.Global().Module("audio").Module("equalizer")
 
 // bypassPasses is the passes value that turns a filter off: buildFilterChain
-// leaves it out of the chain and does not report it as skipped.
+// leaves a filter of a known type with this value out of the chain and does not
+// report it as skipped.
 const bypassPasses = 0
 
 // SkipReason says why buildFilterChain rejected a configured filter. A filter
-// with passes 0 is bypassed, not skipped, and has no SkipReason.
+// of a known type with passes 0 is bypassed, not skipped, and has no SkipReason.
 type SkipReason string
 
 const (
@@ -57,10 +58,11 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *dspeq.Fi
 }
 
 // BuildFilterChainReport builds the same chain as BuildFilterChain, with the
-// same nil returns, and also returns the filters it left out. It does not log a
-// Warn for a skipped filter, since a caller that reports skips to its own
-// client (the equalizer response preview) runs on every edit of a half-typed
-// value. The skipped slice is nil when nothing was skipped.
+// same nil returns, and also returns the filters it rejected; a bypassed filter
+// is not one of them. It does not log a Warn for a skipped filter, since a
+// caller that reports skips to its own client (the equalizer response preview)
+// runs on every edit of a half-typed value. The skipped slice is nil when
+// nothing was skipped.
 func BuildFilterChainReport(settings conf.EqualizerSettings, sampleRate int) (chain *dspeq.FilterChain, skipped []SkippedFilter) {
 	chain = buildFilterChain(settings, sampleRate, func(s *SkippedFilter) {
 		skipped = append(skipped, *s)
