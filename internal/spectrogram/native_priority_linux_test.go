@@ -17,7 +17,7 @@ import (
 
 const (
 	// priorityClipSeconds makes the render last long enough for the polling below
-	// to see its thread: a clip of this length takes a few hundred milliseconds.
+	// to see its thread: a clip of this length takes between half a second and a second.
 	priorityClipSeconds = 600
 
 	// priorityPollInterval is the pause between scans of the process's threads.
