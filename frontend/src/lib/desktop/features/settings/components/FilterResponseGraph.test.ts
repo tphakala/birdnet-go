@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/sve
 import { t } from '$lib/i18n';
 import { isPlainObject } from '$lib/utils/security';
 import { renderTyped } from '../../../../../test/render-helpers';
-import FilterResponseGraph from './FilterResponseGraph.svelte';
+import FilterResponseGraph, { MAX_DB, MIN_DB } from './FilterResponseGraph.svelte';
 import { EQUALIZER_RESPONSE_DEBOUNCE_MS, EQUALIZER_RESPONSE_URL } from '$lib/api/equalizer';
 import type { EqualizerResponseRequest } from '$lib/api/equalizer';
 
@@ -99,7 +99,6 @@ function axisLabelFont(ctx: ReturnType<typeof createContextMock>): string | unde
   return ctx.textFonts.filter(entry => entry.text === '1k').at(-1)?.font;
 }
 
-/** Grid and reference lines drawn with lineTo on every draw, curve excluded. */
 /** The graph draws 16 frequency grid lines, 6 dB grid lines and one 0 dB reference line. */
 const FREQUENCY_GRID_LINES = 16;
 const DB_GRID_LINES = 6;
@@ -111,8 +110,6 @@ const PLOT_LEFT = 100;
 const PLOT_RIGHT = 540;
 const PLOT_BOTTOM = 300;
 const PLOT_HEIGHT = 260;
-const MIN_DB = -96;
-const MAX_DB = 12;
 
 /** The y position the graph maps a gain to. */
 function gainToY(gainDb: number): number {
