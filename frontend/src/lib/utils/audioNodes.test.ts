@@ -43,6 +43,7 @@ function makeFakeContext(state: AudioContextState) {
     createBiquadFilter: vi.fn(() => makeNode()),
     createDynamicsCompressor: vi.fn(() => makeNode()),
   };
+  // Partial fake: only the factory methods the chain calls exist.
   return ctx as unknown as AudioContext & { createMediaElementSource: ReturnType<typeof vi.fn> };
 }
 
@@ -90,6 +91,7 @@ describe('attachAudioGraphWhenRunning', () => {
 
   it('returns the existing chain unchanged without rebuilding (once-per-element guard)', () => {
     const ctx = makeFakeContext('running');
+    // Partial fake: the helper only returns the chain, it never reads its nodes.
     const existing = { source: {}, gain: {}, highPass: {} } as unknown as AudioNodeChain;
 
     const chain = attachAudioGraphWhenRunning(ctx, fakeElement, existing);
@@ -110,6 +112,7 @@ describe('attachAudioGraphWhenRunning', () => {
 
 describe('createAudioNodeChain failure handling', () => {
   // A fresh element per test: the source-node cache is keyed by element.
+  // Partial fake: the fake context never reads the element, it is only a cache key.
   const freshElement = () => ({}) as unknown as HTMLAudioElement;
 
   /** Make the next createGain() throw, as a failed graph build would. */
@@ -123,6 +126,7 @@ describe('createAudioNodeChain failure handling', () => {
   /** The source node the fake context handed out for the nth createMediaElementSource call. */
   function sourceNode(ctx: ReturnType<typeof makeFakeContext>, call: number) {
     const result = ctx.createMediaElementSource.mock.results.at(call);
+    // The fake context returns plain mock nodes, so narrow to the two methods used.
     return result?.value as {
       connect: ReturnType<typeof vi.fn>;
       disconnect: ReturnType<typeof vi.fn>;
@@ -170,6 +174,7 @@ describe('createAudioNodeChain failure handling', () => {
 });
 
 describe('getOrCreateMediaElementSource', () => {
+  // Partial fake: the fake context never reads the element, it is only a cache key.
   const freshElement = () => ({}) as unknown as HTMLAudioElement;
 
   it('returns one source per context and element', () => {

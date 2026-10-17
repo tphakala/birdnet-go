@@ -208,7 +208,7 @@ export function installFakeMediaElement(): FakeMediaController {
   Object.defineProperty(proto, 'src', {
     configurable: true,
     get(this: HTMLMediaElement) {
-      return originalSrcDescriptor?.get?.call(this) as string;
+      return originalSrcDescriptor?.get?.call(this) ?? '';
     },
     set(this: HTMLMediaElement, value: string) {
       originalSrcDescriptor?.set?.call(this, value);
