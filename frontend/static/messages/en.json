@@ -3745,7 +3745,7 @@
         "attenuation": "Attenuation",
         "attenuationHelp": "Filter rolloff rate. Higher values provide steeper attenuation of filtered frequencies.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Off",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",

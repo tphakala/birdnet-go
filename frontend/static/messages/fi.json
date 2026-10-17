@@ -3745,7 +3745,7 @@
         "attenuation": "Vaimennus",
         "attenuationHelp": "Suodattimen vaimennusnopeus. Korkeammat arvot tarjoavat jyrkemmän suodatettujen taajuuksien vaimentamisen.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Pois",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",

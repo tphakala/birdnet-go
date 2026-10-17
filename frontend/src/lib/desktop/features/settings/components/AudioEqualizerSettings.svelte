@@ -32,74 +32,18 @@
   import { getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import type { EqualizerFilterType } from '$lib/stores/settings';
+  import fallbackEqFilterConfig from './eqFilterFallbackConfig.json';
 
   const logger = loggers.settings;
 
-  // Attenuation options for filter passes
-  const attenuationOptions = [
-    { value: '0', label: '0dB' },
-    { value: '1', label: '12dB' },
-    { value: '2', label: '24dB' },
-    { value: '3', label: '36dB' },
-    { value: '4', label: '48dB' },
-  ];
-
-  // Fallback configuration used when API fails or returns invalid data
-  const FALLBACK_EQ_FILTER_CONFIG = {
-    LowPass: {
-      Parameters: [
-        {
-          Name: 'Frequency',
-          Label: 'Cutoff Frequency',
-          Type: 'number',
-          Unit: 'Hz',
-          Min: 20,
-          Max: 20000,
-          Default: 15000,
-        },
-        { Name: 'Q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
-        { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
-      ],
-    },
-    HighPass: {
-      Parameters: [
-        {
-          Name: 'Frequency',
-          Label: 'Cutoff Frequency',
-          Type: 'number',
-          Unit: 'Hz',
-          Min: 20,
-          Max: 20000,
-          Default: 100,
-        },
-        { Name: 'Q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
-        { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
-      ],
-    },
-    BandReject: {
-      Parameters: [
-        {
-          Name: 'Frequency',
-          Label: 'Center Frequency',
-          Type: 'number',
-          Unit: 'Hz',
-          Min: 20,
-          Max: 20000,
-          Default: 1000,
-        },
-        {
-          Name: 'Width',
-          Label: 'Bandwidth',
-          Type: 'number',
-          Unit: 'Hz',
-          Min: 1,
-          Max: 10000,
-          Default: 100,
-        },
-        { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
-      ],
-    },
-  };
+  // Attenuation options for filter passes (0 passes means the filter is off)
+  let attenuationOptions = $derived([
+    { value: '0', label: t('settings.audio.audioFilters.attenuationLevels.off') },
+    { value: '1', label: t('settings.audio.audioFilters.attenuationLevels.12db') },
+    { value: '2', label: t('settings.audio.audioFilters.attenuationLevels.24db') },
+    { value: '3', label: t('settings.audio.audioFilters.attenuationLevels.36db') },
+    { value: '4', label: t('settings.audio.audioFilters.attenuationLevels.48db') },
+  ]);
 
   interface FilterParameter {
     Name: string;
@@ -116,6 +60,10 @@
     Parameters: FilterParameter[];
     Tooltip?: string;
   }
+
+  // Fallback configuration used when API fails or returns invalid data. It is a
+  // copy of the backend table, kept identical by a Go test.
+  const FALLBACK_EQ_FILTER_CONFIG: Record<string, FilterTypeConfig> = fallbackEqFilterConfig;
 
   interface Filter {
     id?: string;
@@ -156,15 +104,13 @@
   let eqFilterConfig = $state<Record<string, FilterTypeConfig>>({});
   let loadingConfig = $state(true);
 
+  // Blank form for a new filter; new filters start Off (0 passes)
+  function createEmptyFilter(): NewFilterForm {
+    return { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 0 };
+  }
+
   // New filter state for adding filters (uses NewFilterForm to allow empty type)
-  let newFilter = $state<NewFilterForm>({
-    type: '',
-    frequency: 0,
-    q: 0.707,
-    width: 100,
-    gain: 0,
-    passes: 1, // Default to 12dB attenuation
-  });
+  let newFilter = $state<NewFilterForm>(createEmptyFilter());
 
   // Map filter types to their icon components
   const filterIconMap = {
@@ -256,6 +202,29 @@
     return config?.Parameters || [];
   }
 
+  // Clamp a value to the Min/Max range of a filter parameter
+  function clampToParameter(value: number, param: FilterParameter): number {
+    return Math.max(param.Min, Math.min(param.Max, value));
+  }
+
+  // Commit a Q entry: clamp it to the parameter range and show the stored value in the
+  // input. An entry that is not a number restores the current value and commits nothing.
+  function commitQ(
+    input: HTMLInputElement,
+    param: FilterParameter,
+    current: number | undefined,
+    commit: (_q: number) => void
+  ) {
+    const value = parseFloat(input.value);
+    if (isNaN(value)) {
+      input.value = String(current ?? param.Default);
+      return;
+    }
+    const clamped = clampToParameter(value, param);
+    input.value = String(clamped);
+    commit(clamped);
+  }
+
   // Add a new filter
   function addNewFilter() {
     if (!newFilter.type) return;
@@ -270,16 +239,11 @@
       passes: newFilter.passes,
     };
 
-    // Ensure HP/LP filters use Butterworth Q factor
-    if (filterToAdd.type === 'HighPass' || filterToAdd.type === 'LowPass') {
-      filterToAdd.q = 0.707;
-    }
-
     const filters = [...(equalizerSettings.filters || []), filterToAdd];
     onUpdate({ ...equalizerSettings, filters });
 
     // Reset new filter form
-    newFilter = { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 1 };
+    newFilter = createEmptyFilter();
   }
 
   // Remove a filter by index
@@ -360,19 +324,12 @@
   // Set default values when filter type is selected
   function getFilterDefaults(filterType: EqualizerFilterType | '') {
     if (!filterType) {
-      newFilter = { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 1 };
+      newFilter = createEmptyFilter();
       return;
     }
 
     const parameters = getEqFilterParameters(filterType);
-    const updatedFilter: NewFilterForm = {
-      type: filterType,
-      frequency: 0,
-      q: 0.707,
-      width: 100,
-      gain: 0,
-      passes: 1, // Default to 12dB attenuation
-    };
+    const updatedFilter: NewFilterForm = { ...createEmptyFilter(), type: filterType };
 
     // Apply parameter defaults with explicit property assignments
     parameters.forEach(param => {
@@ -395,11 +352,6 @@
           break;
       }
     });
-
-    // Force Q to 0.707 (Butterworth) for HP/LP filters
-    if (filterType === 'HighPass' || filterType === 'LowPass') {
-      updatedFilter.q = 0.707;
-    }
 
     newFilter = updatedFilter;
   }
@@ -460,81 +412,84 @@
 
           <!-- Dynamic parameters based on filter type -->
           {#each filterParams as param (param.Name)}
-            <!-- Skip Q factor for HP/LP filters - always use Butterworth (Q=0.707) -->
-            {#if !(param.Name === 'Q' && (filter.type === 'HighPass' || filter.type === 'LowPass'))}
-              <div class="flex flex-col">
-                <div class="label pt-0">
-                  <span class="label-text-alt">
-                    {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
-                  </span>
-                </div>
-                {#if param.Name.toLowerCase() === 'passes'}
-                  <!-- Select for Passes/Attenuation -->
-                  <SelectDropdown
-                    value={String(filter.passes ?? 0)}
-                    options={attenuationOptions}
-                    aria-label={param.Label}
-                    onChange={value =>
-                      updateFilterParameter(index, param.Name, parseInt(value as string))}
-                    {disabled}
-                    groupBy={false}
-                    menuSize="sm"
-                  />
-                {:else if param.Name.toLowerCase() === 'frequency'}
-                  <!-- Frequency input -->
-                  <input
-                    value={filter.frequency ?? param.Default}
-                    oninput={e =>
-                      updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
-                    type="number"
-                    min={param.Min}
-                    max={param.Max}
-                    step="1"
-                    class="input input-sm w-full"
-                    {disabled}
-                  />
-                {:else if param.Name.toLowerCase() === 'q'}
-                  <!-- Q factor input -->
-                  <input
-                    value={filter.q ?? param.Default}
-                    oninput={e =>
-                      updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
-                    type="number"
-                    min={param.Min}
-                    max={param.Max}
-                    step="0.1"
-                    class="input input-sm w-full"
-                    {disabled}
-                  />
-                {:else if param.Name.toLowerCase() === 'width'}
-                  <!-- Width (Bandwidth) input -->
-                  <input
-                    value={filter.width ?? param.Default}
-                    oninput={e =>
-                      updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
-                    type="number"
-                    min={param.Min}
-                    max={param.Max}
-                    step="1"
-                    class="input input-sm w-full"
-                    {disabled}
-                  />
-                {:else if param.Name.toLowerCase() === 'gain'}
-                  <!-- Gain input -->
-                  <input
-                    value={filter.gain ?? param.Default}
-                    oninput={e =>
-                      updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
-                    type="number"
-                    min={param.Min}
-                    max={param.Max}
-                    step="0.1"
-                    class="input input-sm w-full"
-                    {disabled}
-                  />
-                {/if}
+            <div class="flex flex-col">
+              <div class="label pt-0">
+                <span class="label-text-alt">
+                  {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
+                </span>
               </div>
-            {/if}
+              {#if param.Name.toLowerCase() === 'passes'}
+                <!-- Select for Passes/Attenuation -->
+                <SelectDropdown
+                  value={String(filter.passes ?? 0)}
+                  options={attenuationOptions}
+                  aria-label={param.Label}
+                  onChange={value =>
+                    updateFilterParameter(index, param.Name, parseInt(value as string))}
+                  {disabled}
+                  groupBy={false}
+                  menuSize="sm"
+                />
+              {:else if param.Name.toLowerCase() === 'frequency'}
+                <!-- Frequency input -->
+                <input
+                  value={filter.frequency ?? param.Default}
+                  oninput={e =>
+                    updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
+                  aria-label={param.Label}
+                  type="number"
+                  min={param.Min}
+                  max={param.Max}
+                  step="1"
+                  class="input input-sm w-full"
+                  {disabled}
+                />
+              {:else if param.Name.toLowerCase() === 'q'}
+                <!-- Q factor input -->
+                <input
+                  value={filter.q ?? param.Default}
+                  onchange={e =>
+                    commitQ(e.currentTarget, param, filter.q, q =>
+                      updateFilterParameter(index, param.Name, q)
+                    )}
+                  aria-label={param.Label}
+                  type="number"
+                  min={param.Min}
+                  max={param.Max}
+                  step="0.1"
+                  class="input input-sm w-full"
+                  {disabled}
+                />
+              {:else if param.Name.toLowerCase() === 'width'}
+                <!-- Width (Bandwidth) input -->
+                <input
+                  value={filter.width ?? param.Default}
+                  oninput={e =>
+                    updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
+                  aria-label={param.Label}
+                  type="number"
+                  min={param.Min}
+                  max={param.Max}
+                  step="1"
+                  class="input input-sm w-full"
+                  {disabled}
+                />
+              {:else if param.Name.toLowerCase() === 'gain'}
+                <!-- Gain input -->
+                <input
+                  value={filter.gain ?? param.Default}
+                  oninput={e =>
+                    updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
+                  aria-label={param.Label}
+                  type="number"
+                  min={param.Min}
+                  max={param.Max}
+                  step="0.1"
+                  class="input input-sm w-full"
+                  {disabled}
+                />
+              {/if}
+            </div>
           {/each}
 
           <!-- Remove button -->
@@ -572,90 +527,91 @@
         <!-- New Audio Filter Parameters -->
         {#if newFilter.type}
           {#each getEqFilterParameters(newFilter.type) as param (param.Name)}
-            <!-- Skip Q factor for HP/LP filters - always use Butterworth (Q=0.707) -->
-            {#if !(param.Name === 'Q' && (newFilter.type === 'HighPass' || newFilter.type === 'LowPass'))}
-              <div class="flex flex-col">
-                <div class="label">
-                  <span class="label-text">
-                    {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
-                  </span>
-                </div>
-                {#if param.Name.toLowerCase() === 'passes'}
-                  <!-- Select for Passes/Attenuation -->
-                  <SelectDropdown
-                    value={String(newFilter.passes ?? 1)}
-                    options={attenuationOptions}
-                    aria-label={param.Label}
-                    onChange={value => {
-                      newFilter = { ...newFilter, passes: parseInt(value as string, 10) };
-                    }}
-                    {disabled}
-                    groupBy={false}
-                    menuSize="sm"
-                  />
-                {:else if param.Name.toLowerCase() === 'frequency'}
-                  <!-- Frequency input -->
-                  <input
-                    value={newFilter.frequency}
-                    oninput={e => {
-                      const value = parseFloat(e.currentTarget.value) || 0;
-                      newFilter = { ...newFilter, frequency: value };
-                    }}
-                    type="number"
-                    step="1"
-                    min={param.Min}
-                    max={param.Max}
-                    class="input input-sm w-full"
-                    {disabled}
-                  />
-                {:else if param.Name.toLowerCase() === 'q'}
-                  <!-- Q factor input -->
-                  <input
-                    value={newFilter.q ?? 0.707}
-                    oninput={e => {
-                      const value = parseFloat(e.currentTarget.value) || 0.707;
-                      newFilter = { ...newFilter, q: value };
-                    }}
-                    type="number"
-                    step="0.1"
-                    min={param.Min}
-                    max={param.Max}
-                    class="input input-sm w-full"
-                    {disabled}
-                  />
-                {:else if param.Name.toLowerCase() === 'width'}
-                  <!-- Width (Bandwidth) input -->
-                  <input
-                    value={newFilter.width ?? 100}
-                    oninput={e => {
-                      const value = parseFloat(e.currentTarget.value) || 100;
-                      newFilter = { ...newFilter, width: value };
-                    }}
-                    type="number"
-                    step="1"
-                    min={param.Min}
-                    max={param.Max}
-                    class="input input-sm w-full"
-                    {disabled}
-                  />
-                {:else if param.Name.toLowerCase() === 'gain'}
-                  <!-- Gain input -->
-                  <input
-                    value={newFilter.gain ?? 0}
-                    oninput={e => {
-                      const value = parseFloat(e.currentTarget.value) || 0;
-                      newFilter = { ...newFilter, gain: value };
-                    }}
-                    type="number"
-                    step="0.1"
-                    min={param.Min}
-                    max={param.Max}
-                    class="input input-sm w-full"
-                    {disabled}
-                  />
-                {/if}
+            <div class="flex flex-col">
+              <div class="label">
+                <span class="label-text">
+                  {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
+                </span>
               </div>
-            {/if}
+              {#if param.Name.toLowerCase() === 'passes'}
+                <!-- Select for Passes/Attenuation -->
+                <SelectDropdown
+                  value={String(newFilter.passes)}
+                  options={attenuationOptions}
+                  aria-label={param.Label}
+                  onChange={value => {
+                    newFilter = { ...newFilter, passes: parseInt(value as string, 10) };
+                  }}
+                  {disabled}
+                  groupBy={false}
+                  menuSize="sm"
+                />
+              {:else if param.Name.toLowerCase() === 'frequency'}
+                <!-- Frequency input -->
+                <input
+                  value={newFilter.frequency}
+                  oninput={e => {
+                    const value = parseFloat(e.currentTarget.value) || 0;
+                    newFilter = { ...newFilter, frequency: value };
+                  }}
+                  aria-label={param.Label}
+                  type="number"
+                  step="1"
+                  min={param.Min}
+                  max={param.Max}
+                  class="input input-sm w-full"
+                  {disabled}
+                />
+              {:else if param.Name.toLowerCase() === 'q'}
+                <!-- Q factor input -->
+                <input
+                  value={newFilter.q ?? 0.707}
+                  onchange={e =>
+                    commitQ(e.currentTarget, param, newFilter.q, q => {
+                      newFilter = { ...newFilter, q };
+                    })}
+                  aria-label={param.Label}
+                  type="number"
+                  step="0.1"
+                  min={param.Min}
+                  max={param.Max}
+                  class="input input-sm w-full"
+                  {disabled}
+                />
+              {:else if param.Name.toLowerCase() === 'width'}
+                <!-- Width (Bandwidth) input -->
+                <input
+                  value={newFilter.width ?? 100}
+                  oninput={e => {
+                    const value = parseFloat(e.currentTarget.value) || 100;
+                    newFilter = { ...newFilter, width: value };
+                  }}
+                  aria-label={param.Label}
+                  type="number"
+                  step="1"
+                  min={param.Min}
+                  max={param.Max}
+                  class="input input-sm w-full"
+                  {disabled}
+                />
+              {:else if param.Name.toLowerCase() === 'gain'}
+                <!-- Gain input -->
+                <input
+                  value={newFilter.gain ?? 0}
+                  oninput={e => {
+                    const value = parseFloat(e.currentTarget.value) || 0;
+                    newFilter = { ...newFilter, gain: value };
+                  }}
+                  aria-label={param.Label}
+                  type="number"
+                  step="0.1"
+                  min={param.Min}
+                  max={param.Max}
+                  class="input input-sm w-full"
+                  {disabled}
+                />
+              {/if}
+            </div>
           {/each}
         {/if}
 

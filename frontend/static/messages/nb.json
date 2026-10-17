@@ -3745,7 +3745,7 @@
         "attenuation": "Demping",
         "attenuationHelp": "Filteravtagshastighet. Høyere verdier gir brattere demping av filtrerte frekvenser.",
         "attenuationLevels": {
-          "0db": "0 dB",
+          "off": "Av",
           "12db": "12 dB",
           "24db": "24 dB",
           "36db": "36 dB",

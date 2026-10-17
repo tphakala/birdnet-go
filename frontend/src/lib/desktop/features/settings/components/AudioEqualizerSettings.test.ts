@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/svelte';
+import type { ComponentProps } from 'svelte';
 import userEvent from '@testing-library/user-event';
 import AudioEqualizerSettings from './AudioEqualizerSettings.svelte';
 
@@ -210,7 +211,7 @@ describe('AudioEqualizerSettings', () => {
       });
 
       const trigger = await screen.findByRole('combobox', { name: 'Attenuation' });
-      expect(trigger).toHaveTextContent('24dB');
+      expect(trigger).toHaveTextContent('settings.audio.audioFilters.attenuationLevels.24db');
     });
 
     it('names the attenuation dropdown of the new filter independently of its value', async () => {
@@ -229,7 +230,259 @@ describe('AudioEqualizerSettings', () => {
       await user.click(await screen.findByRole('option', { name: /HighPass/ }));
 
       const trigger = await screen.findByRole('combobox', { name: 'Attenuation' });
-      expect(trigger).toHaveTextContent('12dB');
+      expect(trigger).toHaveTextContent('settings.audio.audioFilters.attenuationLevels.off');
+    });
+  });
+
+  describe('new filter form and Q input', () => {
+    const NEW_FILTER_TYPE = 'settings.audio.audioFilters.newFilterType';
+    const LEVEL_PREFIX = 'settings.audio.audioFilters.attenuationLevels.';
+
+    type EqualizerFilters = ComponentProps<
+      typeof AudioEqualizerSettings
+    >['equalizerSettings']['filters'];
+
+    type Payload = { filters: Array<Record<string, unknown>> };
+
+    beforeEach(() => {
+      Element.prototype.scrollIntoView = vi.fn();
+    });
+
+    function lastPayload(): Payload {
+      const calls = mockUpdateCallback.mock.calls;
+      const last: unknown = calls[calls.length - 1]?.[0];
+      return last as Payload;
+    }
+
+    async function pickType(user: ReturnType<typeof userEvent.setup>, type: string) {
+      await user.click(await screen.findByRole('combobox', { name: NEW_FILTER_TYPE }));
+      await user.click(await screen.findByRole('option', { name: new RegExp(type) }));
+    }
+
+    function renderEmpty() {
+      return render(AudioEqualizerSettings, {
+        props: {
+          equalizerSettings: defaultEqualizerSettings,
+          disabled: false,
+          onUpdate: mockUpdateCallback,
+        },
+      });
+    }
+
+    function renderWithFilters(filters: EqualizerFilters) {
+      return render(AudioEqualizerSettings, {
+        props: {
+          equalizerSettings: { enabled: true, filters },
+          onUpdate: mockUpdateCallback,
+        },
+      });
+    }
+
+    it('presets a new filter to Off and adds it with passes 0', async () => {
+      for (const type of ['LowPass', 'HighPass', 'BandReject']) {
+        mockUpdateCallback.mockClear();
+        const user = userEvent.setup();
+        renderEmpty();
+
+        await pickType(user, type);
+        await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
+
+        const added = lastPayload().filters[0];
+        expect(added).toMatchObject({ type, passes: 0, q: 0.707 });
+        cleanup();
+      }
+    });
+
+    it('adds a new filter with the attenuation the user picked', async () => {
+      const user = userEvent.setup();
+      renderEmpty();
+
+      await pickType(user, 'HighPass');
+      await user.click(await screen.findByRole('combobox', { name: 'Attenuation' }));
+      await user.click(await screen.findByRole('option', { name: `${LEVEL_PREFIX}24db` }));
+      await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
+
+      expect(lastPayload().filters[0]).toMatchObject({ type: 'HighPass', passes: 2 });
+    });
+
+    it('lists Off and the four attenuation levels', async () => {
+      const user = userEvent.setup();
+      renderEmpty();
+
+      await pickType(user, 'LowPass');
+      await user.click(await screen.findByRole('combobox', { name: 'Attenuation' }));
+
+      const names = (await screen.findAllByRole('option')).map(o => o.textContent.trim());
+      expect(names).toEqual(['off', '12db', '24db', '36db', '48db'].map(k => LEVEL_PREFIX + k));
+    });
+
+    it('shows a Q input for LowPass and HighPass but not for BandReject', async () => {
+      renderWithFilters([
+        { type: 'LowPass' as const, frequency: 15000, q: 2, passes: 1 },
+        { type: 'HighPass' as const, frequency: 100, q: 0.5, passes: 1 },
+        { type: 'BandReject' as const, frequency: 1000, width: 100, q: 0.707, passes: 1 },
+      ]);
+
+      const qInputs = await screen.findAllByRole<HTMLInputElement>('spinbutton', {
+        name: 'Q Factor',
+      });
+      expect(qInputs.map(i => i.value)).toEqual(['2', '0.5']);
+    });
+
+    it('keeps a Q typed for a new LowPass filter', async () => {
+      const user = userEvent.setup();
+      renderEmpty();
+
+      await pickType(user, 'LowPass');
+      const q = await screen.findByRole('spinbutton', { name: 'Q Factor' });
+      await user.clear(q);
+      await user.type(q, '1.5');
+      await user.tab();
+      await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
+
+      expect(lastPayload().filters[0]).toMatchObject({ type: 'LowPass', q: 1.5 });
+    });
+
+    it('commits an edited Q on change, clamped to the table range, without touching passes', async () => {
+      const user = userEvent.setup();
+      renderWithFilters([
+        { type: 'LowPass' as const, frequency: 15000, q: 0.707, passes: 0 },
+        { type: 'LowPass' as const, frequency: 12000, q: 0.707 },
+      ]);
+
+      const [first, second] = await screen.findAllByRole('spinbutton', { name: 'Q Factor' });
+
+      await user.clear(first);
+      await user.type(first, '0.5');
+      await user.tab();
+      expect(lastPayload().filters[0]).toMatchObject({ q: 0.5, passes: 0 });
+      const qValues = mockUpdateCallback.mock.calls.map(c => (c[0] as Payload).filters[0].q);
+      expect(qValues).not.toContain(0.1);
+
+      await user.clear(first);
+      await user.type(first, '50');
+      await user.tab();
+      expect(lastPayload().filters[0]).toMatchObject({ q: 10, passes: 0 });
+
+      await user.clear(second);
+      await user.type(second, '1.2');
+      await user.tab();
+      expect(lastPayload().filters[1]).toMatchObject({ q: 1.2 });
+
+      for (const call of mockUpdateCallback.mock.calls) {
+        const filters = (call[0] as Payload).filters;
+        expect(filters[0]?.passes).toBe(0);
+        expect(filters[1]).not.toHaveProperty('passes');
+      }
+    });
+
+    it('shows Off for an existing filter that has no passes value', async () => {
+      renderWithFilters([{ type: 'LowPass' as const, frequency: 15000, q: 0.707 }]);
+
+      const trigger = await screen.findByRole('combobox', { name: 'Attenuation' });
+      expect(trigger).toHaveTextContent(`${LEVEL_PREFIX}off`);
+    });
+
+    // typed: what the user enters. shown: the Q field afterwards (null keeps the value it
+    // had before the entry). committed: the Q handed to onUpdate or stored for the new
+    // filter (null when the entry is empty and nothing may be committed).
+    const Q_ENTRIES = [
+      { name: 'clamps a high entry to the upper bound', typed: '50', shown: '10', committed: 10 },
+      {
+        name: 'clamps a low entry to the lower bound',
+        typed: '0.01',
+        shown: '0.1',
+        committed: 0.1,
+      },
+      {
+        name: 'restores the stored value on an empty entry',
+        typed: '',
+        shown: null,
+        committed: null,
+      },
+    ];
+
+    type UserSession = ReturnType<typeof userEvent.setup>;
+
+    // The edit row commits through onUpdate at once; the new-filter row only on Add Filter.
+    // Each target reports the Q that ended up committed, or undefined when none did.
+    const Q_TARGETS = [
+      {
+        row: 'an existing filter',
+        setup: async (_user: UserSession) => {
+          renderWithFilters([{ type: 'LowPass' as const, frequency: 15000, q: 0.5, passes: 1 }]);
+        },
+        committedQ: async (_user: UserSession) =>
+          mockUpdateCallback.mock.calls.length > 0 ? lastPayload().filters[0].q : undefined,
+        restoredQ: (_before: string) => undefined,
+      },
+      {
+        row: 'a new filter',
+        setup: async (user: UserSession) => {
+          renderEmpty();
+          await pickType(user, 'LowPass');
+        },
+        committedQ: async (user: UserSession) => {
+          await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
+          return lastPayload().filters[0].q;
+        },
+        restoredQ: (before: string) => Number(before),
+      },
+    ];
+
+    describe.each(Q_TARGETS)('Q entry for $row', target => {
+      it.each(Q_ENTRIES)('$name', async ({ typed, shown, committed }) => {
+        const user = userEvent.setup();
+        await target.setup(user);
+
+        const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: 'Q Factor' });
+        const before = q.value;
+        mockUpdateCallback.mockClear();
+        await user.clear(q);
+        if (typed) await user.type(q, typed);
+        await user.tab();
+
+        expect(q.value).toBe(shown ?? before);
+        expect(await target.committedQ(user)).toBe(committed ?? target.restoredQ(before));
+      });
+    });
+
+    it('restores the clamped Q, not the default, when a new filter row gets an empty entry', async () => {
+      const user = userEvent.setup();
+      renderEmpty();
+      await pickType(user, 'LowPass');
+
+      const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: 'Q Factor' });
+      await user.clear(q);
+      await user.type(q, '50');
+      await user.tab();
+      expect(q.value).toBe('10');
+
+      await user.clear(q);
+      await user.tab();
+      expect(q.value).toBe('10');
+
+      await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
+      expect(lastPayload().filters[0].q).toBe(10);
+    });
+
+    it('names the frequency, Q and bandwidth inputs of existing and new filters', async () => {
+      const user = userEvent.setup();
+      renderWithFilters([
+        { type: 'LowPass' as const, frequency: 15000, q: 0.707, passes: 1 },
+        { type: 'BandReject' as const, frequency: 1000, width: 100, q: 0.707, passes: 1 },
+      ]);
+
+      await screen.findAllByRole('spinbutton', { name: 'Q Factor' });
+      const count = (name: string) => screen.queryAllByRole('spinbutton', { name }).length;
+      expect([count('Cutoff Frequency'), count('Center Frequency')]).toEqual([1, 1]);
+      expect([count('Q Factor'), count('Bandwidth')]).toEqual([1, 1]);
+
+      await pickType(user, 'HighPass');
+      expect([count('Cutoff Frequency'), count('Q Factor')]).toEqual([2, 2]);
+
+      await pickType(user, 'BandReject');
+      expect([count('Center Frequency'), count('Bandwidth')]).toEqual([2, 2]);
     });
   });
 });

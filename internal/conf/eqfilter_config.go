@@ -1,12 +1,12 @@
 package conf
 
-// FilterConfig defines the structure and properties of each filter type
+// EqFilterConfig defines the structure and properties of each filter type
 var EqFilterConfig = map[string]EqFilterTypeConfig{
 	"LowPass": {
 		Parameters: []EqFilterParameter{
 			{Name: "Frequency", Label: "Cutoff Frequency", Type: "number", Unit: "Hz", Min: 20, Max: 20000, Default: 15000, Tooltip: "Cutoff frequency above which the signal is attenuated"},
 			{Name: "Q", Label: "Q Factor", Type: "number", Min: 0.1, Max: 10, Default: DefaultEQQFactor, Tooltip: "Quality factor that determines the sharpness of the filter's response"},
-			{Name: "Passes", Label: "Attenuation", Type: "number", Min: 1, Max: 4, Default: 1, Tooltip: "Number of passes to apply the filter — 1=12dB, 2=24dB, 3=36dB, 4=48dB"},
+			{Name: "Passes", Label: "Attenuation", Type: "number", Min: 0, Max: 4, Default: 0, Tooltip: "Number of passes to apply the filter: 0=off, 1=12dB, 2=24dB, 3=36dB, 4=48dB"},
 		},
 		Tooltip: "Low-pass filter attenuates frequencies above the cutoff frequency.",
 	},
@@ -14,7 +14,7 @@ var EqFilterConfig = map[string]EqFilterTypeConfig{
 		Parameters: []EqFilterParameter{
 			{Name: "Frequency", Label: "Cutoff Frequency", Type: "number", Unit: "Hz", Min: 20, Max: 20000, Default: 100, Tooltip: "Cutoff frequency below which the signal is attenuated"},
 			{Name: "Q", Label: "Q Factor", Type: "number", Min: 0.1, Max: 10, Default: DefaultEQQFactor, Tooltip: "Quality factor that determines the sharpness of the filter's response"},
-			{Name: "Passes", Label: "Attenuation", Type: "number", Min: 1, Max: 4, Default: 1, Tooltip: "Number of passes to apply the filter — 1=12dB, 2=24dB, 3=36dB, 4=48dB"},
+			{Name: "Passes", Label: "Attenuation", Type: "number", Min: 0, Max: 4, Default: 0, Tooltip: "Number of passes to apply the filter: 0=off, 1=12dB, 2=24dB, 3=36dB, 4=48dB"},
 		},
 		Tooltip: "High-pass filter attenuates frequencies below the cutoff frequency.",
 	},
@@ -22,7 +22,7 @@ var EqFilterConfig = map[string]EqFilterTypeConfig{
 		Parameters: []EqFilterParameter{
 			{Name: "Frequency", Label: "Center Frequency", Type: "number", Unit: "Hz", Min: 20, Max: 20000, Default: 1000, Tooltip: "Center frequency of the reject band (notch)"},
 			{Name: "Width", Label: "Bandwidth", Type: "number", Unit: "Hz", Min: 1, Max: 10000, Default: 100, Tooltip: "Width of the frequency band that is attenuated"},
-			{Name: "Passes", Label: "Attenuation", Type: "number", Min: 1, Max: 4, Default: 1, Tooltip: "Number of passes to apply the filter — 1=12dB, 2=24dB, 3=36dB, 4=48dB"},
+			{Name: "Passes", Label: "Attenuation", Type: "number", Min: 0, Max: 4, Default: 0, Tooltip: "Number of passes to apply the filter: 0=off, 1=12dB, 2=24dB, 3=36dB, 4=48dB"},
 		},
 		Tooltip: "Band-reject (notch) filter attenuates a narrow range of frequencies, useful for removing interference or hum.",
 	},
@@ -61,13 +61,13 @@ var EqFilterConfig = map[string]EqFilterTypeConfig{
 	*/
 }
 
-// FilterTypeConfig defines the configuration for a specific filter type
+// EqFilterTypeConfig defines the configuration for a specific filter type
 type EqFilterTypeConfig struct {
 	Parameters []EqFilterParameter
 	Tooltip    string
 }
 
-// FilterParameter defines a single parameter for a filter
+// EqFilterParameter defines a single parameter for a filter
 type EqFilterParameter struct {
 	Name    string
 	Label   string

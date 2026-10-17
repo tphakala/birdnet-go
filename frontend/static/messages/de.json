@@ -3745,7 +3745,7 @@
         "attenuation": "Dämpfung",
         "attenuationHelp": "Filterabrollrate. Höhere Werte sorgen für steilere Dämpfung gefilterter Frequenzen.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Aus",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
