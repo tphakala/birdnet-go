@@ -20,7 +20,6 @@
 -->
 <script lang="ts">
   import { getContext } from 'svelte';
-  import { generateId } from '$lib/utils/uuid';
   import {
     Settings,
     Trash2,
@@ -75,7 +74,6 @@
   interface LocalEqualizerSettings {
     enabled: boolean;
     filters: Array<{
-      id?: string;
       type: EqualizerFilterType;
       frequency: number;
       q?: number;
@@ -386,10 +384,7 @@
         editEqualizer.enabled || editEqualizer.filters.length > 0
           ? {
               enabled: editEqualizer.enabled,
-              filters: editEqualizer.filters.map(f => ({
-                ...f,
-                id: f.id || generateId(),
-              })),
+              filters: editEqualizer.filters,
             }
           : undefined;
 

@@ -3751,7 +3751,8 @@
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Add multiple filters to shape the frequency response for optimal bird detection in your environment.",
         "emptyEntryRestored": "Enter a number. The previous value was kept.",

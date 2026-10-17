@@ -3751,7 +3751,8 @@
           "12db": "12 dB",
           "24db": "24 dB",
           "36db": "36 dB",
-          "48db": "48 dB"
+          "48db": "48 dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Legg til flere filtre for å forme frekvensresponsen for optimal fugledeteksjon i ditt miljø.",
         "emptyEntryRestored": "Skriv inn et tall. Den forrige verdien ble beholdt.",

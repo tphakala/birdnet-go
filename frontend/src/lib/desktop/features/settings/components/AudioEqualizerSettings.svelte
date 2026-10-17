@@ -43,7 +43,7 @@
     DEFAULT_EQ_GAIN_DB,
     DEFAULT_EQ_Q,
     DEFAULT_EQ_WIDTH_HZ,
-    EQ_OFFERED_MAX_PASSES,
+    EQ_DB_PER_PASS,
     EQ_PASSES_OFF,
     eqInputStep,
     type EqFieldNotice,
@@ -62,6 +62,24 @@
     { value: '3', label: t('settings.audio.audioFilters.attenuationLevels.36db') },
     { value: '4', label: t('settings.audio.audioFilters.attenuationLevels.48db') },
   ]);
+
+  // The attenuation options for a stored passes value. A passes value the list does not
+  // offer (the backend accepts more than the editor offers) gets an option of its own, so
+  // the dropdown shows the stored value instead of an empty selection.
+  function attenuationOptionsFor(passes: number) {
+    if (!Number.isInteger(passes) || attenuationOptions.some(o => o.value === String(passes))) {
+      return attenuationOptions;
+    }
+    return [
+      ...attenuationOptions,
+      {
+        value: String(passes),
+        label: t('settings.audio.audioFilters.attenuationLevels.custom', {
+          db: passes * EQ_DB_PER_PASS,
+        }),
+      },
+    ];
+  }
 
   interface FilterParameter {
     Name: string;
@@ -84,7 +102,6 @@
   const FALLBACK_EQ_FILTER_CONFIG: Record<string, FilterTypeConfig> = fallbackEqFilterConfig;
 
   interface Filter {
-    id?: string;
     type: EqualizerFilterType;
     frequency: number;
     q?: number;
@@ -481,10 +498,9 @@
       // Return if invalid number
       if (isNaN(numericValue)) return;
 
-      // For passes, ensure integer and clamp to bounds
+      // Passes is a whole number; the dropdown only emits an offered value or the stored one
       if (normalizedParamName === 'passes') {
-        const intValue = Math.round(numericValue);
-        validatedValue = Math.max(EQ_PASSES_OFF, Math.min(EQ_OFFERED_MAX_PASSES, intValue));
+        validatedValue = Math.round(numericValue);
       } else if (paramConfig) {
         validatedValue = Math.max(paramConfig.Min, Math.min(paramConfig.Max, numericValue));
       } else {
@@ -610,7 +626,7 @@
           <SelectDropdown
             id={passesId(row)}
             value={String(filter.passes ?? EQ_PASSES_OFF)}
-            options={attenuationOptions}
+            options={attenuationOptionsFor(filter.passes ?? EQ_PASSES_OFF)}
             onChange={value => {
               const passes = Number(value);
               if (Number.isInteger(passes)) commitPasses(passes);

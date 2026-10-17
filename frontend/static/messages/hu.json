@@ -3751,7 +3751,8 @@
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Több szűrőt is hozzáadhat az optimális madár detektáláshoz a környezetében.",
         "emptyEntryRestored": "Adjon meg egy számot. Az előző érték megmaradt.",

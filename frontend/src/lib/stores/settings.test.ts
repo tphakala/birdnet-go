@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS } from './settings';
-import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
+import type {
+  AudioSettings,
+  BirdNetSettings,
+  EqualizerSettings,
+  RealtimeSettings,
+  SettingsFormData,
+} from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
 import { deferred } from '../../test/async-helpers';
@@ -1495,4 +1501,121 @@ describe('Settings Store - restart status refresh after a save', () => {
       }
     }
   );
+});
+
+describe('Settings Store - equalizer values the backend accepts', () => {
+  // Values the editor never offers but the backend stores: a disabled equalizer is not
+  // validated at all, and an enabled one only bounds frequency and Q
+  const storedFilter = {
+    type: 'Peaking',
+    frequency: 22000,
+    q: 50,
+    width: 0,
+    gain: 20,
+    passes: 8,
+  };
+  const storedEqualizer = () => ({ enabled: true, filters: [{ ...storedFilter }] });
+
+  const loadWith = async (settings: SettingsFormData) => {
+    settingsStore.set({
+      formData: { main: { name: '' } } as unknown as SettingsFormData,
+      originalData: { main: { name: '' } } as unknown as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: false,
+    });
+    vi.mocked(settingsAPI.load).mockResolvedValue(settings);
+    await settingsActions.loadSettings();
+  };
+
+  // The server settings with an equalizer on the global, source and stream paths
+  const withEqualizers = (): SettingsFormData => {
+    const settings = serverSettings() as unknown as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    settings.realtime.audio.equalizer = storedEqualizer();
+    settings.realtime.audio.sources = [
+      { name: 'Card', device: 'hw:0', equalizer: { ...storedEqualizer(), enabled: false } },
+    ];
+    settings.realtime.rtsp = {
+      ...settings.realtime.rtsp,
+      streams: [
+        {
+          name: 'Cam',
+          url: 'rtsp://cam',
+          enabled: true,
+          type: 'rtsp',
+          equalizer: storedEqualizer(),
+        },
+      ],
+    };
+    return settings as unknown as SettingsFormData;
+  };
+
+  beforeEach(() => {
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    vi.mocked(settingsAPI.patchSection).mockReset().mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    vi.mocked(settingsAPI.load).mockReset();
+  });
+
+  it('round-trips stored equalizer values through load and save on every path', async () => {
+    await loadWith(withEqualizers());
+
+    await settingsActions.saveSettings();
+
+    const saved = vi.mocked(settingsAPI.save).mock.calls[0]?.[0] as unknown as Record<
+      string,
+      any // eslint-disable-line @typescript-eslint/no-explicit-any
+    >;
+    expect(saved.realtime.audio.equalizer).toEqual(storedEqualizer());
+    expect(saved.realtime.audio.sources[0].equalizer).toEqual({
+      ...storedEqualizer(),
+      enabled: false,
+    });
+    expect(saved.realtime.rtsp.streams[0].equalizer).toEqual(storedEqualizer());
+  });
+
+  it('reports no unsaved changes after loading, and after a no-op equalizer update', async () => {
+    await loadWith(withEqualizers());
+    expect(get(hasUnsavedChanges)).toBe(false);
+
+    const audio = get(settingsStore).formData.realtime?.audio;
+    if (!audio) throw new Error('audio settings not loaded');
+    // The editor hands back its own copy of the equalizer, with a stray id as older
+    // editor versions added; coercion must remove it, not keep it as a change
+    const sameEqualizer = {
+      enabled: true,
+      filters: [{ ...storedFilter, id: 'filter-1' }],
+    };
+    // 'Peaking' is a type the backend stores but the store's union does not name
+    const equalizer = sameEqualizer as unknown as EqualizerSettings;
+    settingsActions.updateSection('realtime', { audio: { ...audio, equalizer } });
+
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it('reports no unsaved changes after saving a section whose equalizers carry no ids', async () => {
+    await loadWith(withEqualizers());
+
+    const patch: Partial<AudioSettings> = {
+      sources: [
+        {
+          name: 'Card',
+          device: 'hw:0',
+          gain: 0,
+          models: [],
+          equalizer: {
+            enabled: false,
+            filters: [{ type: 'LowPass', frequency: 22000, q: 50, width: 0, gain: 20, passes: 8 }],
+          },
+        },
+      ],
+    };
+    await settingsActions.saveSection('audio', patch);
+
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
 });

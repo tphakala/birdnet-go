@@ -7,6 +7,11 @@ import { DEFAULT_EQ_Q } from '$lib/utils/audio/equalizer';
 import AudioEqualizerSettings from './AudioEqualizerSettings.svelte';
 import fallbackEqFilterConfig from './eqFilterFallbackConfig.json';
 
+// Largest Q the editor accepts, from the fallback table (pinned to the backend table by a
+// Go test), and an entry far above it
+const Q_MAX = fallbackEqFilterConfig.LowPass.Parameters.find(p => p.Name === 'Q')?.Max ?? NaN;
+const Q_ABOVE_MAX = String(Q_MAX * 10);
+
 // Mock dependencies
 // Common mocks are now handled globally in src/test/setup.ts
 // ($lib/i18n, $lib/utils/security, $lib/utils/logger)
@@ -453,9 +458,9 @@ describe('AudioEqualizerSettings', () => {
       expect(qValues).not.toContain(0.1);
 
       await user.clear(first);
-      await user.type(first, '50');
+      await user.type(first, Q_ABOVE_MAX);
       await user.tab();
-      expect(lastPayload().filters[0]).toMatchObject({ q: 10, passes: 0 });
+      expect(lastPayload().filters[0]).toMatchObject({ q: Q_MAX, passes: 0 });
 
       await user.clear(second);
       await user.type(second, '1.2');
@@ -467,6 +472,92 @@ describe('AudioEqualizerSettings', () => {
         expect(filters[0]?.passes).toBe(0);
         expect(filters[1]).not.toHaveProperty('passes');
       }
+    });
+
+    it('shows a stored passes outside the offered levels as its own option and keeps it while Q is edited', async () => {
+      const user = userEvent.setup();
+      const storedPasses = 8;
+      renderWithFilters([
+        { type: 'LowPass' as const, frequency: 15000, q: 0.707, passes: storedPasses },
+      ]);
+
+      const trigger = await screen.findByRole('combobox', { name: NAME.attenuation });
+      expect(trigger).toHaveTextContent(`${LEVEL_PREFIX}custom`);
+      expect(t).toHaveBeenCalledWith(`${LEVEL_PREFIX}custom`, { db: storedPasses * 12 });
+
+      const q = await screen.findByRole('spinbutton', { name: NAME.q });
+      await user.clear(q);
+      await user.type(q, '1.5');
+      await user.tab();
+      expect(lastPayload().filters[0]).toMatchObject({ q: 1.5, passes: storedPasses });
+    });
+
+    it('drops the custom attenuation option once a standard level is picked', async () => {
+      const user = userEvent.setup();
+      const view = renderWithFilters([
+        { type: 'LowPass' as const, frequency: 15000, q: 0.707, passes: 8 },
+      ]);
+
+      await user.click(await screen.findByRole('combobox', { name: NAME.attenuation }));
+      expect(await screen.findByRole('option', { name: `${LEVEL_PREFIX}custom` })).toBeVisible();
+      await user.click(screen.getByRole('option', { name: `${LEVEL_PREFIX}24db` }));
+      expect(lastPayload().filters[0]).toMatchObject({ passes: 2 });
+
+      // The parent feeds the update back; the stored level is only offered while it is current
+      await view.rerender({
+        equalizerSettings: {
+          enabled: true,
+          filters: [{ type: 'LowPass' as const, frequency: 15000, q: 0.707, passes: 2 }],
+        },
+        onUpdate: mockUpdateCallback,
+      });
+      await user.click(await screen.findByRole('combobox', { name: NAME.attenuation }));
+      expect(await screen.findByRole('option', { name: `${LEVEL_PREFIX}24db` })).toBeVisible();
+      expect(
+        screen.queryByRole('option', { name: `${LEVEL_PREFIX}custom` })
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not offer a custom attenuation option for a stored passes the list has', async () => {
+      renderWithFilters([STORED.LowPass]);
+
+      const trigger = await screen.findByRole('combobox', { name: NAME.attenuation });
+      expect(trigger).toHaveTextContent(`${LEVEL_PREFIX}12db`);
+      expect(t).not.toHaveBeenCalledWith(`${LEVEL_PREFIX}custom`, expect.anything());
+    });
+
+    it('shows a stored value below the table minimum until its field is committed', async () => {
+      const user = userEvent.setup();
+      const { min } = bounds('LowPass', 'Frequency');
+      const storedFrequency = min / 2;
+      renderWithFilters([
+        { type: 'LowPass' as const, frequency: storedFrequency, q: 0.5, passes: 1 },
+      ]);
+
+      const frequency = await screen.findByRole<HTMLInputElement>('spinbutton', {
+        name: NAME.cutoff,
+      });
+      expect(frequency.value).toBe(String(storedFrequency));
+
+      // Editing another field leaves the stored frequency alone
+      const q = await screen.findByRole('spinbutton', { name: NAME.q });
+      await user.clear(q);
+      await user.type(q, '1.5');
+      await user.tab();
+      expect(lastPayload().filters[0]).toMatchObject({ frequency: storedFrequency, q: 1.5 });
+    });
+
+    it('keeps a filter of an unknown type as stored and offers no parameters for it', async () => {
+      // 'Notch' is a type the backend stores but the component's filter type does not name
+      const notch = {
+        type: 'Notch',
+        frequency: 1000,
+        passes: 1,
+      } as unknown as EqualizerFilters[number];
+      renderWithFilters([notch]);
+
+      expect(await screen.findByText('Notch')).toBeInTheDocument();
+      expect(screen.queryAllByRole('spinbutton')).toHaveLength(0);
     });
 
     it('shows Off for an existing filter that has no passes value', async () => {
@@ -619,16 +710,16 @@ describe('AudioEqualizerSettings', () => {
 
       const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
       await user.clear(q);
-      await user.type(q, '50');
+      await user.type(q, Q_ABOVE_MAX);
       await user.tab();
-      expect(q.value).toBe('10');
+      expect(q.value).toBe(String(Q_MAX));
 
       await user.clear(q);
       await user.tab();
-      expect(q.value).toBe('10');
+      expect(q.value).toBe(String(Q_MAX));
 
       await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
-      expect(lastPayload().filters[0].q).toBe(10);
+      expect(lastPayload().filters[0].q).toBe(Q_MAX);
     });
 
     it.each([
@@ -735,9 +826,9 @@ describe('AudioEqualizerSettings', () => {
 
       const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
       await user.clear(q);
-      await user.type(q, '50');
+      await user.type(q, Q_ABOVE_MAX);
       await user.tab();
-      expect(t).toHaveBeenCalledWith(NOTICE.max, { value: 10 });
+      expect(t).toHaveBeenCalledWith(NOTICE.max, { value: Q_MAX });
       expect(shownNotices()).toHaveLength(1);
       const noticeId = q.getAttribute('aria-describedby');
 
@@ -779,7 +870,7 @@ describe('AudioEqualizerSettings', () => {
         name: NAME.q,
       });
       await user.clear(first);
-      await user.type(first, '50');
+      await user.type(first, Q_ABOVE_MAX);
       await user.tab();
       expect(shownNotices()).toHaveLength(1);
 
@@ -949,7 +1040,7 @@ describe('AudioEqualizerSettings', () => {
 
       const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
       await user.clear(q);
-      await user.type(q, '50');
+      await user.type(q, Q_ABOVE_MAX);
       await user.tab();
       expect(shownNotices()).toHaveLength(1);
 

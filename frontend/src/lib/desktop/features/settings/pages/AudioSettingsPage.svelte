@@ -617,11 +617,9 @@
   }
 
   // Handle equalizer updates from the AudioEqualizerSettings component
-  // Note: Filter type matches component's local interface with optional id
   function handleEqualizerUpdate(equalizerSettings: {
     enabled: boolean;
     filters: Array<{
-      id?: string;
       type: EqualizerFilterType;
       frequency: number;
       q?: number;
@@ -630,19 +628,10 @@
       passes?: number;
     }>;
   }) {
-    // Transform filters to ensure all have an id (required by store type)
-    const transformedSettings = {
-      enabled: equalizerSettings.enabled,
-      filters: equalizerSettings.filters.map((filter, index) => ({
-        ...filter,
-        id: filter.id || `filter-${Date.now()}-${index}`,
-      })),
-    };
-
     settingsActions.updateSection('realtime', {
       audio: {
         ...settings.audio,
-        equalizer: transformedSettings,
+        equalizer: { enabled: equalizerSettings.enabled, filters: equalizerSettings.filters },
       },
     });
   }
