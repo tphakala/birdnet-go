@@ -6,14 +6,26 @@ import (
 	"path/filepath"
 	"strings"
 
+	ort "github.com/tphakala/birdnet-go/internal/inference/onnx"
 	ortlib "github.com/yalue/onnxruntime_go"
 )
 
-// RequiredORTAPIMajor is the version prefix required by the current
-// yalue/onnxruntime_go binding. Models that depend on ONNX Runtime
-// will not work unless the installed library version starts with this.
-const RequiredORTAPIMajor = "1.25"
+// minORTMajor and minORTMinor are the oldest native ONNX Runtime release the
+// binding can load. yalue/onnxruntime_go v1.36.x calls GetApi(29) (header
+// ORT_API_VERSION 29). ONNX Runtime 1.N serves API N and all older tables, so
+// a library below 1.29 returns NULL and init fails with "Error setting ORT API
+// base: 2". Keep these in step with the Dependabot ignore rule and
+// ort_pins_test.go.
+const (
+	minORTMajor = 1
+	minORTMinor = 29
 
+	// ortOrNewerSuffix turns the minimum version into the user-facing
+	// requirement text.
+	ortOrNewerSuffix = " or newer"
+)
+
+// ORTInstallGuideURL is the install guide linked from ONNX Runtime errors.
 const ORTInstallGuideURL = "https://github.com/tphakala/birdnet-go/wiki/ONNX-Runtime-Installation"
 
 // ORTStatus describes the availability and version compatibility of the
@@ -24,7 +36,7 @@ type ORTStatus struct {
 	// Initialized is true when the ORT environment has already been set up
 	// (i.e., InitONNXRuntime succeeded at some point).
 	Initialized bool `json:"initialized"`
-	// Version holds the detected library version string (e.g. "1.25.1"),
+	// Version holds the detected library version string (e.g. "1.31.0"),
 	// or empty if the version could not be determined.
 	Version string `json:"version,omitempty"`
 	// LibraryPath is the resolved filesystem path to the shared library,
@@ -47,7 +59,9 @@ func CheckORTAvailability(configuredPath string) ORTStatus {
 			Initialized: true,
 			Version:     version,
 		}
-		if version != "" && !isVersionCompatible(version) {
+		// A successful init already proves the C API level, so this only
+		// guards odd version strings.
+		if meets, known := ortVersionMeetsMinimum(version); known && !meets {
 			status.Available = false
 			status.Error = versionError(version)
 		}
@@ -69,11 +83,11 @@ func CheckORTAvailability(configuredPath string) ORTStatus {
 		Version:     version,
 	}
 
-	// If we could determine the version and it is incompatible, reject early.
-	// If version is empty (e.g. Windows where filename lacks version),
-	// be optimistic: the library exists, actual compatibility is verified at
-	// init time when the binding calls OrtGetApiBase.
-	if version != "" && !isVersionCompatible(version) {
+	// Reject only a version known to be too old. Unknown covers unversioned
+	// names (Windows, the macOS tarball, packaged release libraries) and a
+	// resolved "libonnxruntime.so.1"; the real load verifies those and fails
+	// with a readable error when the library is too old.
+	if meets, known := ortVersionMeetsMinimum(version); known && !meets {
 		status.Available = false
 		status.Error = versionError(version)
 	}
@@ -81,10 +95,16 @@ func CheckORTAvailability(configuredPath string) ORTStatus {
 	return status
 }
 
-// ORTRequiredVersion returns a human-readable version string describing the
-// required ONNX Runtime version (e.g. "1.25.x").
+// ORTMinimumVersion returns the oldest supported ONNX Runtime release as
+// "major.minor" (e.g. "1.29"), for use as a localized message parameter.
+func ORTMinimumVersion() string {
+	return fmt.Sprintf("%d.%d", minORTMajor, minORTMinor)
+}
+
+// ORTRequiredVersion returns a human-readable requirement for English text
+// (e.g. "1.29 or newer").
 func ORTRequiredVersion() string {
-	return RequiredORTAPIMajor + ".x"
+	return ORTMinimumVersion() + ortOrNewerSuffix
 }
 
 // resolvedORTPath returns the filesystem path to the ORT shared library.
@@ -115,7 +135,7 @@ func libraryFileExists(path string) bool {
 
 // inferVersionFromPath tries to extract a semver-style version string from the
 // library filename. It first resolves symlinks so that, for example,
-// /usr/lib/libonnxruntime.so -> libonnxruntime.so.1.25.1 yields "1.25.1".
+// /usr/lib/libonnxruntime.so -> libonnxruntime.so.1.31.0 yields "1.31.0".
 // Returns empty string if the version cannot be determined.
 func inferVersionFromPath(libPath string) string {
 	resolved, err := filepath.EvalSymlinks(libPath)
@@ -125,12 +145,12 @@ func inferVersionFromPath(libPath string) string {
 
 	base := filepath.Base(resolved)
 
-	// Linux convention: "libonnxruntime.so.1.25.1" -> "1.25.1"
+	// Linux convention: "libonnxruntime.so.1.31.0" -> "1.31.0"
 	if _, after, ok := strings.Cut(base, ".so."); ok {
 		return after
 	}
 
-	// macOS convention: "libonnxruntime.1.25.1.dylib" -> "1.25.1"
+	// macOS convention: "libonnxruntime.1.31.0.dylib" -> "1.31.0"
 	if before, ok := strings.CutSuffix(base, ".dylib"); ok {
 		name := before
 		for i := range len(name) {
@@ -143,27 +163,29 @@ func inferVersionFromPath(libPath string) string {
 	return ""
 }
 
-// isVersionCompatible checks whether version starts with RequiredORTAPIMajor
-// followed by a dot (ensuring "1.25" matches "1.25.x" but not "1.250").
-// Also accepts an exact major.minor match without a patch version.
-func isVersionCompatible(version string) bool {
-	if version == "" {
-		return false
+// ortVersionMeetsMinimum compares version numerically with the supported
+// minimum. known is false when version cannot be parsed (empty, "1", garbage);
+// meets is then false too, and callers treat an unknown version optimistically.
+func ortVersionMeetsMinimum(version string) (meets, known bool) {
+	major, minor, ok := ort.ParseORTVersion(version)
+	if !ok {
+		return false, false
 	}
-	if version == RequiredORTAPIMajor {
-		return true
+	if major != minORTMajor {
+		return major > minORTMajor, true
 	}
-	return strings.HasPrefix(version, RequiredORTAPIMajor+".")
+	return minor >= minORTMinor, true
 }
 
-// versionError returns a human-readable error message when version is empty or
-// incompatible. Returns empty string for compatible versions.
+// versionError returns a human-readable error message when version is empty,
+// unparseable or too old. Returns empty string for supported versions.
 func versionError(version string) string {
-	if version == "" {
+	meets, known := ortVersionMeetsMinimum(version)
+	if !known {
 		return fmt.Sprintf("unable to determine ONNX Runtime version; required %s; install guide: %s", ORTRequiredVersion(), ORTInstallGuideURL)
 	}
-	if !isVersionCompatible(version) {
-		return fmt.Sprintf("ONNX Runtime version %s is incompatible; required %s; install guide: %s", version, ORTRequiredVersion(), ORTInstallGuideURL)
+	if !meets {
+		return fmt.Sprintf("ONNX Runtime version %s is older than the minimum supported version; required %s; install guide: %s", version, ORTRequiredVersion(), ORTInstallGuideURL)
 	}
 	return ""
 }
