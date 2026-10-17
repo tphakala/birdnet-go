@@ -36,3 +36,7 @@ func assertNativeGate(t *testing.T, env string, enabled func() bool) {
 func TestNativeStreamIngestEnabled(t *testing.T) {
 	assertNativeGate(t, EnvNativeStreamIngest, NativeStreamIngestEnabled)
 }
+
+func TestNativeSpectrogramEnabled(t *testing.T) {
+	assertNativeGate(t, EnvNativeSpectrogramRenderer, NativeSpectrogramEnabled)
+}

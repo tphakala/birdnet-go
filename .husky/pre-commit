@@ -57,8 +57,8 @@ if [ -n "$GO_FILES" ]; then
   
   # Run golangci-lint with the default build tags of `task lint`
   # (noembed,skipfrontend skip model and frontend embedding, which also makes
-  # the run faster). CI additionally lints the integration, pebble_e2e and
-  # normcompare tags. The CGO settings are the ones `task lint` sets, so the
+  # the run faster). CI additionally lints the integration and pebble_e2e
+  # tags. The CGO settings are the ones `task lint` sets, so the
   # TFLite cgo packages typecheck whatever the environment holds.
   REPO_ROOT=$(git rev-parse --show-toplevel)
   CACHE_DIR="$REPO_ROOT/.cache"

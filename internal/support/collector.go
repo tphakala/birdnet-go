@@ -95,6 +95,16 @@ const (
 	journalFlagNoHostname = "--no-hostname"
 	journalFlagLines      = "-n"
 
+	// Journal binary and collection skip reporting
+	journalctlBinary        = "journalctl"
+	osLinux                 = "linux"
+	journalSkippedReasonKey = "skipped_reason"
+
+	// Reasons journald collection is skipped, recorded under journalSkippedReasonKey
+	journalSkipUnsupportedOS = "unsupported_os"
+	journalSkipContainer     = "running_in_container"
+	journalSkipNotInstalled  = "journalctl_not_found"
+
 	// Journal priority levels (syslog severity)
 	priorityEmergency = "0" // System is unusable
 	priorityAlert     = "1" // Action must be taken immediately
@@ -1076,19 +1086,13 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 	var journalLogs []LogEntry
 	var acc logScanAccum
 
-	// Try to collect from journald first (systemd systems).
-	// Skip journal collection in container runtimes (Docker, Podman, LXC,
-	// systemd-nspawn) where journald is typically unavailable. Uses
-	// sysinfo.IsContainer() so the check matches the same gate that
-	// addJournaldLogs uses on the archive path, keeping both journald
-	// collection paths consistent and removing the now-redundant local
-	// Docker-only helper.
-	if sysinfo.IsContainer() {
-		getLogger().Debug("support: running in a container runtime, skipping journal log collection")
-		diagnostics.JournalLogs.Attempted = false
-		diagnostics.JournalLogs.Details = map[string]any{
-			"skipped_reason": "running_in_container",
-		}
+	// Try to collect from journald first (systemd systems). Skipped when
+	// hostJournalSkipReason reports the host cannot have journald: not Linux,
+	// a container runtime, or no journalctl on PATH. The archive path
+	// (addLogFilesToArchive) uses the same function, so both journald paths agree.
+	if reason := hostJournalSkipReason(); reason != "" {
+		getLogger().Debug("support: skipping journal log collection", logger.String("reason", reason))
+		markJournalSkipped(&diagnostics.JournalLogs, reason)
 	} else {
 		getLogger().Debug("support: attempting to collect journal logs")
 		diagnostics.JournalLogs.Attempted = true
@@ -1182,7 +1186,7 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 		logger.Int("maxLines", maxJournalLogLines))
 
 	// Run journalctl command with line limit
-	cmd := exec.CommandContext(ctx, "journalctl", //nolint:gosec // G204: hardcoded command, args are constants/formatted values
+	cmd := exec.CommandContext(ctx, journalctlBinary, //nolint:gosec // G204: hardcoded command, args are constants/formatted values
 		journalFlagUnit, systemdServiceName,
 		journalFlagSince, since,
 		journalFlagNoPager,
@@ -1702,16 +1706,13 @@ func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, dur
 		lfc.logsAdded++
 	}
 
-	// Add journald logs when running on a host where systemd-journald is
-	// actually available. In container runtimes (Docker, Podman, LXC,
-	// systemd-nspawn, generic) the journalctl binary either does not exist
-	// or returns an error, which previously surfaced as a recurring Sentry
-	// event every time a support dump was generated. Use the shared
-	// sysinfo.IsContainer() detector so we cover all container flavours,
-	// not just Docker.
-	switch {
-	case sysinfo.IsContainer():
-		getLogger().Debug("support: skipping journald collection (container runtime)")
+	// Add journald logs only on a host where journald can exist: Linux, not a
+	// container runtime, with journalctl on PATH. Running the command anywhere
+	// else only fails (previously a recurring Sentry event in containers). The
+	// diagnostics path uses the same hostJournalSkipReason gate.
+	switch reason := hostJournalSkipReason(); {
+	case reason != "":
+		getLogger().Debug("support: skipping journald collection", logger.String("reason", reason))
 	case nearDeadline(lfc.ctx):
 		// journalctl runs an external command that can be slow; skip it when the
 		// deadline is near so it cannot overrun the handler window.
@@ -2097,11 +2098,41 @@ func (c *Collector) addLogFileToArchive(ctx context.Context, w *zip.Writer, sour
 	return bw.Flush()
 }
 
+// journalSkipReason reports why journald collection does not apply on this
+// host, or "" when it does. Checks run in order: OS, container, PATH.
+func journalSkipReason(goos string, inContainer bool, lookPath func(string) (string, error)) string {
+	switch {
+	case goos != osLinux:
+		return journalSkipUnsupportedOS
+	case inContainer:
+		return journalSkipContainer
+	}
+	if _, err := lookPath(journalctlBinary); err != nil {
+		return journalSkipNotInstalled
+	}
+	return ""
+}
+
+// hostJournalSkipReason evaluates journalSkipReason for the running host. Both
+// journald collection paths call it so they never disagree.
+func hostJournalSkipReason() string {
+	return journalSkipReason(runtime.GOOS, sysinfo.IsContainer(), exec.LookPath)
+}
+
+// markJournalSkipped records that journald collection was not attempted and why.
+// It clears any result of an earlier attempt and keeps only the searched paths.
+func markJournalSkipped(diag *LogSourceDiagnostics, reason string) {
+	*diag = LogSourceDiagnostics{
+		PathsSearched: diag.PathsSearched,
+		Details:       map[string]any{journalSkippedReasonKey: reason},
+	}
+}
+
 // getJournaldLogs retrieves logs from journald as a string
 func (c *Collector) getJournaldLogs(ctx context.Context, duration time.Duration) string {
 	since := time.Now().Add(-duration).Format(journalTimeFormat)
 
-	cmd := exec.CommandContext(ctx, "journalctl", //nolint:gosec // G204: hardcoded command, args are constants/formatted values
+	cmd := exec.CommandContext(ctx, journalctlBinary, //nolint:gosec // G204: hardcoded command, args are constants/formatted values
 		"-u", "birdnet-go.service",
 		"--since", since,
 		"--no-pager",

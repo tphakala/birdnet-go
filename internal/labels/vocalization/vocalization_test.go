@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 )
 
@@ -34,23 +35,41 @@ func TestIsHuman(t *testing.T) {
 		{"Perch Chatter", "Chatter", true},
 		{"Perch Whispering", "Whispering", true},
 		{"Perch Speech_synthesizer", "Speech_synthesizer", true},
-		{"Perch Human_group_actions", "Human_group_actions", true},
+		{"Perch Human_group_actions", "Human_group_actions", false},
 		{"Perch Screaming", "Screaming", true},
 		{"Perch Shout", "Shout", true},
 		// Perch v2 other vocalizations.
 		{"Perch Singing", "Singing", true},
 		{"Perch Laughter", "Laughter", true},
 		{"Perch Crying_and_sobbing", "Crying_and_sobbing", true},
-		{"Perch Sigh", "Sigh", true},
-		// Perch v2 non-vocal human sounds and actions.
-		{"Perch Cough", "Cough", true},
-		{"Perch Breathing", "Breathing", true},
-		{"Perch Fart", "Fart", true},
-		{"Perch Applause", "Applause", true},
-		{"Perch Clapping", "Clapping", true},
-		{"Perch Crowd", "Crowd", true},
-		{"Perch Walk_and_footsteps", "Walk_and_footsteps", true},
-		{"Perch Run", "Run", true},
+		{"Perch Sigh", "Sigh", false},
+		// Perch v2 non-voiced human sounds and actions: only voiced classes
+		// engage the privacy filter. Bodily sounds (cough, breathing, ...) and
+		// action classes (fart, applause, clapping, crowd, footsteps, run) do not.
+		{"Perch Cough", "Cough", false},
+		{"Perch Breathing", "Breathing", false},
+		{"Perch Sneeze", "Sneeze", false},
+		{"Perch Respiratory_sounds", "Respiratory_sounds", false},
+		{"Perch Gasp", "Gasp", false},
+		{"Perch Yell", "Yell", true},
+		{"Perch Cheering", "Cheering", true},
+		{"Perch Giggle", "Giggle", true},
+		{"Perch Chuckle_and_chortle", "Chuckle_and_chortle", true},
+		{"Perch Male_singing", "Male_singing", true},
+		{"Perch Female_singing", "Female_singing", true},
+		// Excluded non-voice classes (measured privacy false positives).
+		{"Perch Hands", "Hands", false},
+		{"Perch Chewing_and_mastication", "Chewing_and_mastication", false},
+		{"Perch Finger_snapping", "Finger_snapping", false},
+		{"Perch Burping_and_eructation", "Burping_and_eructation", false},
+		{"Perch Hands lowercase", "hands", false},
+		{"Perch CROWD uppercase", "CROWD", false},
+		{"Perch Fart", "Fart", false},
+		{"Perch Applause", "Applause", false},
+		{"Perch Clapping", "Clapping", false},
+		{"Perch Crowd", "Crowd", false},
+		{"Perch Walk_and_footsteps", "Walk_and_footsteps", false},
+		{"Perch Run", "Run", false},
 		// Human taxon (the human species itself).
 		{"Perch Homo sapiens", "Homo sapiens", true},
 		// Case-insensitive matching (custom/future label files may vary casing).
@@ -216,6 +235,85 @@ func TestPerchHumanLabelsParityWithNonbird(t *testing.T) {
 			assert.True(t, ok, "nonbird.CategoryOf(%q) must find the key", key)
 			assert.Equal(t, nonbird.CategoryHuman, cat,
 				"nonbird.CategoryOf(%q) must return CategoryHuman", key)
+		})
+	}
+}
+
+// TestIsHumanSound verifies the broad human-sound check that the processor's
+// detection-save filter uses: every nonbird.CategoryHuman class, the homo sapiens
+// taxon and BirdNET's "Human " prefix, including the classes the privacy filter
+// (IsHuman) excludes. Those must stay classified as human sounds so they are not
+// saved as bird detections.
+func TestIsHumanSound(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		rawLabel string
+		want     bool
+	}{
+		{"speech", "Speech", true},
+		{"BirdNET human vocal (de)", "Human vocal_Mensch Stimme", true},
+		{"homo sapiens", "Homo sapiens", true},
+		{"excluded Human_group_actions", "Human_group_actions", true},
+		{"excluded Hands", "Hands", true},
+		{"excluded Chewing_and_mastication", "Chewing_and_mastication", true},
+		{"excluded Crowd", "Crowd", true},
+		{"excluded Fart", "fart", true},
+		{"dog is not human", "Dog", false},
+		{"cicada collision", "Pacarina schumanni", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, IsHumanSound(tt.rawLabel))
+		})
+	}
+}
+
+// TestPrivacyExcludedLabels pins the exact set of human-category classes the
+// privacy filter ignores: each is still a nonbird human class and IsHumanSound,
+// but IsHuman and Classify report it as not human. Every other nonbird human
+// class must remain a privacy hit.
+func TestPrivacyExcludedLabels(t *testing.T) {
+	t.Parallel()
+
+	excluded := map[string]bool{
+		"human_group_actions": true, "hands": true, "chewing_and_mastication": true,
+		"walk_and_footsteps": true, "run": true, "clapping": true, "applause": true,
+		"finger_snapping": true, "fart": true, "burping_and_eructation": true,
+		"crowd": true,
+		// Non-voiced bodily sounds (maintainer decision).
+		"cough": true, "sneeze": true, "breathing": true,
+		"respiratory_sounds": true, "sigh": true, "gasp": true,
+	}
+
+	for key := range excluded {
+		t.Run("excluded "+key, func(t *testing.T) {
+			t.Parallel()
+			cat, ok := nonbird.CategoryOf(key)
+			require.True(t, ok)
+			assert.Equal(t, nonbird.CategoryHuman, cat)
+			assert.True(t, IsHumanSound(key))
+			assert.False(t, IsHuman(key))
+			human, _ := Classify(key)
+			assert.False(t, human)
+		})
+	}
+
+	kept := []string{
+		"speech", "speech_synthesizer", "male_speech_and_man_speaking",
+		"female_speech_and_woman_speaking", "child_speech_and_kid_speaking",
+		"conversation", "chatter", "human_voice", "whispering", "shout", "yell",
+		"screaming", "singing", "male_singing", "female_singing", "laughter",
+		"giggle", "chuckle_and_chortle", "crying_and_sobbing",
+		"cheering",
+	}
+	for _, key := range kept {
+		t.Run("kept "+key, func(t *testing.T) {
+			t.Parallel()
+			assert.True(t, IsHuman(key), "%q must still engage the privacy filter", key)
 		})
 	}
 }

@@ -204,13 +204,15 @@ func TestReloadSecondaryModels_WarmupHoldsInferenceMu(t *testing.T) {
 
 	started := make(chan struct{})
 	release := make(chan struct{})
+	var startedOnce sync.Once
 	// A non-empty Spec makes the warm-up actually run Predict (sized from the spec);
 	// the blocking Predict lets us observe inferenceMu while the warm-up is in flight.
 	newInst := &mockModelInstance{
 		id:   testSecondaryID,
 		spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 		predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
-			close(started)
+			// The warm-up is followed by the latency probe, which calls Predict again.
+			startedOnce.Do(func() { close(started) })
 			<-release
 			return nil, nil
 		},
@@ -565,4 +567,81 @@ func TestBuildPerch_DoesNotQueuePathCorrection(t *testing.T) {
 
 	assert.Empty(t, o.pendingPathCorrections,
 		"build* must never queue: only a loader may turn a resolution into a config rewrite")
+}
+
+// TestReloadSecondaryModels_StoresProbedLatency pins that a reload replaces the
+// model's probed latency after the swap, and that a failing probe leaves the model
+// unknown instead of keeping the replaced instance's latency.
+func TestReloadSecondaryModels_StoresProbedLatency(t *testing.T) {
+	spec := ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}
+	tests := []struct {
+		name    string
+		predict func(context.Context, [][]float32) ([]datastore.Results, error)
+		known   bool
+	}{
+		{"probe succeeds", func(context.Context, [][]float32) ([]datastore.Results, error) {
+			time.Sleep(time.Millisecond)
+			return nil, nil
+		}, true},
+		{"probe fails", func(context.Context, [][]float32) ([]datastore.Results, error) {
+			return nil, errors.NewStd("probe failure")
+		}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setGlobalBackend(t, "openvino", "gpu", "/opt/ov")
+			o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+			o.models[testSecondaryID] = &modelEntry{
+				instance: &reloadFakeModel{id: testSecondaryID},
+				backend:  secondaryBackendKey{backend: "onnx"},
+			}
+			stale := time.Hour
+			o.storeProbedLatency(testSecondaryID, stale, true)
+
+			newInst := &mockModelInstance{id: testSecondaryID, spec: spec, predict: tt.predict}
+			registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+				return newInst, nil
+			})
+			require.NoError(t, o.ReloadSecondaryModels(), "a failing probe must not fail the reload")
+
+			got, ok := o.ProbedLatencies()[testSecondaryID]
+			assert.Equal(t, tt.known, ok)
+			if tt.known {
+				assert.Positive(t, got)
+				assert.Less(t, got, stale, "the stale latency of the replaced instance must be overwritten")
+			}
+		})
+	}
+}
+
+// TestReloadEntry_AnchorStoresProbedLatency pins the v2.4 anchor's reload probe:
+// the anchor skips the warm-up, so its probe makes one untimed run before the
+// timed ones, and the result replaces the replaced instance's latency.
+func TestReloadEntry_AnchorStoresProbedLatency(t *testing.T) {
+	setGlobalBackend(t, "openvino", "gpu", "/opt/ov")
+	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+	stale := time.Hour
+	o.storeProbedLatency(RegistryIDBirdNETV24, stale, true)
+
+	var calls int
+	next := &mockModelInstance{
+		id:   RegistryIDBirdNETV24,
+		spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+		predict: func(context.Context, [][]float32) ([]datastore.Results, error) {
+			calls++
+			time.Sleep(time.Millisecond)
+			return nil, nil
+		},
+	}
+	swapped, err := o.reloadEntry(RegistryIDBirdNETV24, func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
+		return next, nil
+	}, reloadOpts{skipSpeciesIndex: true})
+	require.NoError(t, err)
+	require.True(t, swapped)
+
+	assert.Equal(t, 1+cadenceProbeRuns, calls, "one untimed run, then the timed probe runs")
+	got, ok := o.ProbedLatencies()[RegistryIDBirdNETV24]
+	require.True(t, ok, "the anchor's probe must be stored")
+	assert.Positive(t, got)
+	assert.Less(t, got, stale, "the replaced instance's latency must be overwritten")
 }

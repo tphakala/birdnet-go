@@ -62,7 +62,7 @@ func TestResolveModelOverlap_BatIsFixedHalf(t *testing.T) {
 	spec := ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second, RawSampleRate: 256000}
 	s := &conf.Settings{}
 	s.BirdNET.Overlap = 2.4 // must be ignored for the bat model
-	assert.Equal(t, 1500*time.Millisecond, ResolveModelOverlap(RegistryIDBat, spec, s))
+	assert.Equal(t, 1500*time.Millisecond, ResolveModelOverlap(RegistryIDBat, spec, ConfiguredBaseOverlap(s)))
 }
 
 func TestResolveModelOverlap_BirdNET3sHonorsOverlap(t *testing.T) {
@@ -71,7 +71,7 @@ func TestResolveModelOverlap_BirdNET3sHonorsOverlap(t *testing.T) {
 	s := &conf.Settings{}
 	s.BirdNET.Overlap = 2.4
 	// base == model clip, so effective overlap equals the configured value.
-	assert.Equal(t, 2400*time.Millisecond, ResolveModelOverlap("BirdNET_V2.4", spec, s))
+	assert.Equal(t, 2400*time.Millisecond, ResolveModelOverlap("BirdNET_V2.4", spec, ConfiguredBaseOverlap(s)))
 }
 
 func TestResolveModelOverlap_Perch5sScales(t *testing.T) {
@@ -80,7 +80,7 @@ func TestResolveModelOverlap_Perch5sScales(t *testing.T) {
 	s := &conf.Settings{}
 	s.BirdNET.Overlap = 2.4
 	// 2.4s on a 3s base = 80% -> 80% of 5s = 4.0s.
-	assert.Equal(t, 4*time.Second, ResolveModelOverlap(RegistryIDPerchV2, spec, s))
+	assert.Equal(t, 4*time.Second, ResolveModelOverlap(RegistryIDPerchV2, spec, ConfiguredBaseOverlap(s)))
 }
 
 func TestResolveModelOverlap_ZeroOverlap(t *testing.T) {
@@ -88,13 +88,13 @@ func TestResolveModelOverlap_ZeroOverlap(t *testing.T) {
 	spec := ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}
 	s := &conf.Settings{}
 	s.BirdNET.Overlap = 0
-	assert.Equal(t, time.Duration(0), ResolveModelOverlap("BirdNET_V2.4", spec, s))
+	assert.Equal(t, time.Duration(0), ResolveModelOverlap("BirdNET_V2.4", spec, ConfiguredBaseOverlap(s)))
 }
 
 func TestResolveModelOverlap_NilSettingsIsZero(t *testing.T) {
 	t.Parallel()
 	spec := ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}
-	assert.Equal(t, time.Duration(0), ResolveModelOverlap("BirdNET_V2.4", spec, nil))
+	assert.Equal(t, time.Duration(0), ResolveModelOverlap("BirdNET_V2.4", spec, ConfiguredBaseOverlap(nil)))
 }
 
 func TestResolveModelOverlap_ZeroClipLengthNeverNegative(t *testing.T) {
@@ -104,7 +104,7 @@ func TestResolveModelOverlap_ZeroClipLengthNeverNegative(t *testing.T) {
 	spec := ModelSpec{SampleRate: 48000}
 	s := &conf.Settings{}
 	s.BirdNET.Overlap = 2.4
-	assert.Equal(t, time.Duration(0), ResolveModelOverlap("BirdNET_V2.4", spec, s))
+	assert.Equal(t, time.Duration(0), ResolveModelOverlap("BirdNET_V2.4", spec, ConfiguredBaseOverlap(s)))
 }
 
 func TestResolveModelOverlap_ClampsBelowClipLength(t *testing.T) {
@@ -114,7 +114,16 @@ func TestResolveModelOverlap_ClampsBelowClipLength(t *testing.T) {
 	// Pathological overlap at/above the clip length must be clamped so a
 	// strictly positive read size remains.
 	s.BirdNET.Overlap = 3.0
-	got := ResolveModelOverlap("BirdNET_V2.4", spec, s)
+	got := ResolveModelOverlap("BirdNET_V2.4", spec, ConfiguredBaseOverlap(s))
 	assert.LessOrEqual(t, got, spec.ClipLength-minAnalysisStep)
 	assert.Positive(t, spec.ClipLength-got, "read step must stay positive")
+}
+
+func TestConfiguredBaseOverlap(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, time.Duration(0), ConfiguredBaseOverlap(nil))
+	s := &conf.Settings{}
+	assert.Equal(t, time.Duration(0), ConfiguredBaseOverlap(s))
+	s.BirdNET.Overlap = 2.8
+	assert.Equal(t, 2800*time.Millisecond, ConfiguredBaseOverlap(s))
 }

@@ -41,7 +41,7 @@ const dailySummary = await response.json();
 
 **Query Parameters:**
 
-- `limit` (optional): Number of recent detections to return, default: 10
+- `limit` (optional): Number of recent detections to return, default: 10, maximum: 1000 (larger values are clamped to 1000)
 
 **Response:**
 

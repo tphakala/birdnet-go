@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -255,10 +256,160 @@ func tryDeleteSpectrogram(pngPath, variant, policy string, log logger.Logger) in
 	return 1
 }
 
+// Variant labels for spectrogram deletion logs and errors.
+const (
+	spectrogramVariantLower = "lowercase"
+	spectrogramVariantUpper = "uppercase"
+	spectrogramVariantSized = "sized"
+)
+
+// renderDirListing is one cached directory listing.
+type renderDirListing struct {
+	entries []os.DirEntry // sorted by name, as os.ReadDir returns them
+	err     error         // non-nil when the listing failed for a reason other than not-exist
+}
+
+// renderDirCache holds directory listings for render deletion, so every clip of
+// a deletion batch that lives in one directory shares a single ReadDir. The zero
+// value is ready to use. It is not safe for concurrent use.
+type renderDirCache struct {
+	readDir func(string) ([]os.DirEntry, error) // nil: os.ReadDir; tests inject a counter
+	dirs    map[string]renderDirListing         // lazily made
+}
+
+// list returns the entries of dir, reading the directory on the first call per
+// batch. A missing directory is an empty listing. Any other failure is logged
+// once, cached, and returned on every later call until reset. A nil receiver
+// lists without caching.
+func (c *renderDirCache) list(dir, policy string) ([]os.DirEntry, error) {
+	if c == nil {
+		return os.ReadDir(dir)
+	}
+	if cached, ok := c.dirs[dir]; ok {
+		return cached.entries, cached.err
+	}
+	readDir := c.readDir
+	if readDir == nil {
+		readDir = os.ReadDir
+	}
+	entries, err := readDir(dir)
+	listing := renderDirListing{entries: entries}
+	switch {
+	case err == nil:
+	case errors.Is(err, fs.ErrNotExist):
+		listing.entries = nil
+	default:
+		listing = renderDirListing{err: err}
+		enhancedErr := errors.New(err).
+			Component("diskmanager").
+			Category(errors.CategoryFileIO).
+			Context("policy", policy).
+			Context("operation", "list_spectrograms").
+			FileContext(dir, 0).
+			Build()
+		GetLogger().Warn("Failed to list directory for spectrogram renders",
+			logger.String("policy", policy),
+			logger.String("dir", dir),
+			logger.Error(enhancedErr),
+			logger.String("error_category", enhancedErr.GetCategory()))
+		if m := getMetrics(); m != nil {
+			m.RecordCleanupError(policy, "spectrogram_deletion")
+		}
+	}
+	if c.dirs == nil {
+		c.dirs = make(map[string]renderDirListing)
+	}
+	c.dirs[dir] = listing
+	return listing.entries, listing.err
+}
+
+// reset drops every cached listing so the next batch reads fresh directories.
+func (c *renderDirCache) reset() {
+	clear(c.dirs)
+}
+
+// entriesWithPrefix returns the entries whose names start with prefix, as a
+// sub-slice of entries. It requires entries sorted by name in byte order, as
+// os.ReadDir returns them, and is only a valid narrowing for specfile.Matching
+// because every render name starts with its clip base (see specfile.ParseRender).
+func entriesWithPrefix(entries []os.DirEntry, prefix string) []os.DirEntry {
+	start, _ := slices.BinarySearchFunc(entries, prefix, func(e os.DirEntry, target string) int {
+		return strings.Compare(e.Name(), target)
+	})
+	end := start
+	for end < len(entries) && strings.HasPrefix(entries[end].Name(), prefix) {
+		end++
+	}
+	return entries[start:end]
+}
+
+// deleteUnsizedSpectrograms removes the "<base>.png" and "<base>.PNG" renders of
+// the clip at basePath (the audio path without its extension). It returns the
+// number of files removed. It is the fallback when the directory cannot be listed.
+func deleteUnsizedSpectrograms(basePath, policy string, log logger.Logger) int {
+	pngPathLower := basePath + ".png"
+	pngPathUpper := basePath + ".PNG"
+
+	log.Debug("Checking for associated spectrograms",
+		logger.String("policy", policy),
+		logger.String("lower_case", pngPathLower),
+		logger.String("upper_case", pngPathUpper))
+
+	deleted := tryDeleteSpectrogram(pngPathLower, spectrogramVariantLower, policy, log)
+
+	// Only try uppercase if lowercase didn't delete (handles case-insensitive FS)
+	if deleted == 0 {
+		deleted += tryDeleteSpectrogram(pngPathUpper, spectrogramVariantUpper, policy, log)
+	} else if _, statErr := os.Stat(pngPathUpper); statErr == nil {
+		// Uppercase is a different file that also exists
+		deleted += tryDeleteSpectrogram(pngPathUpper, spectrogramVariantUpper, policy, log)
+	}
+	return deleted
+}
+
+// deleteClipRenders removes every regular-file render of the clip at audioPath
+// that specfile accepts, sized renders included, using the cached listing of its
+// directory. Non-regular entries are left alone. When the directory cannot be
+// listed it falls back to the unsized names. It returns the number of files
+// removed and never fails the clip.
+func deleteClipRenders(audioPath, policy string, dirs *renderDirCache, log logger.Logger) int {
+	dir := filepath.Dir(audioPath)
+	clipBase := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
+
+	log.Debug("Checking for associated spectrograms",
+		logger.String("policy", policy),
+		logger.String("dir", dir),
+		logger.String("clip_base", clipBase))
+
+	entries, err := dirs.list(dir, policy)
+	if err != nil {
+		return deleteUnsizedSpectrograms(filepath.Join(dir, clipBase), policy, log)
+	}
+
+	deleted := 0
+	for _, entry := range specfile.Matching(entriesWithPrefix(entries, clipBase), clipBase) {
+		if !entry.Type().IsRegular() {
+			continue
+		}
+		name := entry.Name()
+		variant := spectrogramVariantSized
+		if render, _ := specfile.ParseRender(name, clipBase); render.Unsized {
+			variant = spectrogramVariantLower
+			if strings.HasSuffix(name, ".PNG") {
+				variant = spectrogramVariantUpper
+			}
+		}
+		deleted += tryDeleteSpectrogram(filepath.Join(dir, name), variant, policy, log)
+	}
+	return deleted
+}
+
 // deleteFileAndOptionalSpectrogram handles the deletion of the audio file
-// and its associated spectrogram with enhanced error handling, metrics, and timing.
-// It returns errFileAlreadyGone, without touching the spectrogram, when the audio file no longer exists.
-func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectrograms bool, policy string) error {
+// and its associated spectrograms with enhanced error handling, metrics, and timing.
+// When keepSpectrograms is false it removes every render specfile accepts for the
+// clip, reading the clip's directory through dirs.
+// It returns errFileAlreadyGone, without touching the spectrograms, when the audio file no longer exists.
+func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectrograms bool, policy string, dirs *renderDirCache) error {
 	log := GetLogger()
 
 	// Start timing the operation
@@ -291,26 +442,7 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 
 	// Optionally delete associated spectrogram PNG file
 	if !keepSpectrograms {
-		basePath := strings.TrimSuffix(file.Path, filepath.Ext(file.Path))
-		pngPathLower := basePath + ".png"
-		pngPathUpper := basePath + ".PNG"
-
-		log.Debug("Checking for associated spectrograms",
-			logger.String("policy", policy),
-			logger.String("lower_case", pngPathLower),
-			logger.String("upper_case", pngPathUpper))
-
-		spectrogramsDeleted = tryDeleteSpectrogram(pngPathLower, "lowercase", policy, log)
-
-		// Only try uppercase if lowercase didn't delete (handles case-insensitive FS)
-		if spectrogramsDeleted == 0 {
-			spectrogramsDeleted += tryDeleteSpectrogram(pngPathUpper, "uppercase", policy, log)
-		} else {
-			// Check if uppercase is a different file that also exists
-			if _, statErr := os.Stat(pngPathUpper); statErr == nil {
-				spectrogramsDeleted += tryDeleteSpectrogram(pngPathUpper, "uppercase", policy, log)
-			}
-		}
+		spectrogramsDeleted = deleteClipRenders(file.Path, policy, dirs, log)
 
 		// Record spectrogram deletion metrics
 		if m := getMetrics(); m != nil && spectrogramsDeleted > 0 {
@@ -415,7 +547,8 @@ func categorizeFilePath(path string) string {
 // image stays reachable. When it cannot be told whether a render survived (the
 // directory or an entry could not be read), or the move fails, the row is left
 // untouched: a cleared row is never visited by the reconcile pass again, while an
-// untouched one is re-linked or cleared by it on its next run.
+// untouched one is re-linked or cleared by it once a surviving clip earlier in its
+// walk shows the storage is attached.
 //
 // It returns how many rows were retained and how many were cleared.
 func releaseDeletedClipPaths(db Interface, deletedPaths []string, baseDir, policy string, keepSpectrograms bool) (retained, cleared int64) {
@@ -458,7 +591,7 @@ func releaseDeletedClipPaths(db Interface, deletedPaths []string, baseDir, polic
 		retained, err = db.RetainNoteSpectrogramsByClipNames(retain)
 		if err != nil {
 			// The rows keep clip_name, so the reconcile pass re-links the renders or
-			// clears the rows on its next run.
+			// clears the rows once a surviving clip precedes them in its walk.
 			log.Warn("Failed to retain spectrogram references for deleted files, leaving them for the reconcile pass",
 				logger.String("policy", policy),
 				logger.Int("deleted_files", len(retain)),

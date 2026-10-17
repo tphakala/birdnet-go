@@ -84,32 +84,7 @@ and the source of truth.
 
 ## Performance Optimizations
 
-### 1. Translation Memoization
-
-All translated strings are cached in memory to avoid repeated lookups:
-
-```typescript
-const translationCache = new Map<string, { locale: string; params?: string; value: string }>();
-```
-
-- Cache key includes: `key:params:locale`
-- Cache is only cleared after new translations are successfully loaded
-- Parameterized translations are also cached with their computed values
-
-### 2. Double-Buffering Strategy
-
-To prevent UI flickering when loading translations:
-
-```typescript
-let messages = $state<Record<string, string>>({});
-let previousMessages = $state<Record<string, string>>({});
-```
-
-- Current messages are copied to `previousMessages` before loading new ones
-- If new messages fail to load, previous messages are restored
-- UI always has valid translations to display
-
-### 3. localStorage Caching
+### 1. localStorage Caching
 
 Translations are persisted to localStorage for instant loading on app startup:
 
@@ -144,22 +119,17 @@ try {
 - Provides offline capability
 - Fresh translations are still fetched asynchronously in background
 
-### 4. Smart Cache Invalidation
+### 2. Fallback Chain
 
-The cache clearing strategy prevents flickering:
+Multiple fallback mechanisms keep the UI from showing raw keys:
 
-- ❌ **Old approach**: Clear cache → Load new translations → UI shows keys
-- ✅ **New approach**: Keep cache → Load new translations → Clear cache only after success
+1. Messages for the selected locale, from the localStorage cache at startup and then from the network
+2. English messages when the selected locale fails to load; they are cached under `en`, never under the locale that failed
+3. The messages already on screen when both the locale and English fail to load
+4. Critical fallbacks for the loading and error screens before any messages have loaded
+5. The key itself as last resort
 
-### 5. Fallback Chain
-
-Multiple fallback mechanisms ensure translations are always available:
-
-1. Check current locale cache
-2. Check localStorage for cached translations
-3. Use previousMessages (double-buffer)
-4. Search cache for any locale's translation of the key
-5. Return the key itself as last resort
+Plural forms follow the language of the messages on screen, so English shown as a fallback uses English plural rules.
 
 ## Usage Examples
 
@@ -225,24 +195,20 @@ The flickering prevention works through several coordinated mechanisms:
 2. **Navigation**:
    - Translations remain in memory
    - No re-fetching on route changes
-   - Memoization serves repeated translations instantly
 
 3. **Locale Changes**:
    - Previous translations stay visible during loading
    - New translations replace old ones atomically
-   - Cache is preserved until new data is ready
 
 4. **Error Handling**:
-   - Failed loads don't clear existing translations
-   - Fallback to previous messages prevents blank UI
+   - A locale that fails to load is replaced by English
+   - When English fails too, the translations on screen stay
    - Multiple fallback layers ensure robustness
 
 ## Performance Benefits
 
 - **Zero flickering** - Translations are always available
 - **Instant startup** - localStorage cache eliminates initial load time
-- **Reduced re-renders** - Memoization prevents unnecessary computations
-- **Smooth transitions** - Double-buffering ensures seamless locale changes
 - **Memory efficient** - Single shared store for all components
 - **Network efficient** - Translations cached across sessions
 
@@ -509,7 +475,6 @@ try {
 
 - **Initial load**: < 1ms (from localStorage)
 - **Locale switch**: ~50-200ms (network dependent)
-- **Translation lookup**: < 0.1ms (memoized)
 - **Memory usage**: ~200KB per locale
 
 ### Browser Support
@@ -573,7 +538,6 @@ Temporarily add logging in `store.svelte.ts`:
 console.log(`[i18n] Translating: ${key}`, {
   locale: currentLocale,
   params,
-  cached: !!cached,
 });
 
 // In loadMessages()
@@ -589,7 +553,6 @@ function debugI18n() {
     locale: getLocale(),
     loading: isLoading(),
     hasTranslations: hasTranslations(),
-    cacheSize: translationCache.size,
     messageCount: Object.keys(messages).length,
   });
 }
@@ -727,7 +690,6 @@ When working with this i18n system:
 2. **Use dot notation for nested keys** - More efficient than separate objects
 3. **Batch related translations** - Group by feature/component
 4. **Trust the type system** - Generated types are always accurate
-5. **Don't worry about performance** - Memoization handles repeated calls
 
 ### For Human Developers
 

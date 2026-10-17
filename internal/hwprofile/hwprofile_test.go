@@ -1,6 +1,8 @@
 package hwprofile
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"sync"
@@ -77,7 +79,7 @@ func TestProbeAgainstFixtureTrees(t *testing.T) {
 				// more than the fixture's 512 MiB. This project's own low-memory
 				// regression VM has exactly 512 MB, so the guard is not
 				// hypothetical.
-				if hostRAM := mempolicy.DetectTotalMemoryAt(t.TempDir()); hostRAM <= cgroupLimitBytes {
+				if hostRAM, _ := mempolicy.DetectTotalMemoryAt(t.TempDir()); hostRAM <= cgroupLimitBytes {
 					t.Skipf("host RAM (%d bytes) is not above the fixture's cgroup cap, so the cap is not the binding limit", hostRAM)
 				}
 				assert.Equal(t, cgroupLimitBytes, p.TotalRAMBytes)
@@ -114,6 +116,25 @@ func TestProbeAgainstFixtureTrees(t *testing.T) {
 			tt.assert(t, profile)
 		})
 	}
+}
+
+// TestProbeUnreadableCgroupReportsUnknownRAM pins that a cgroup limit file that
+// exists but cannot be read yields an unknown exact ceiling (0) with a
+// read-failed issue, while the host RAM stays available as an upper bound.
+func TestProbeUnreadableCgroupReportsUnknownRAM(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{"proc/self/cgroup": "0::/\n"})
+	// A directory at the file path makes the read fail with a non-NotExist error.
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "sys", "fs", "cgroup", "memory.max"), 0o755))
+	hostRAM, _ := mempolicy.DetectTotalMemoryAt(t.TempDir())
+
+	p := probeHardware(root)
+
+	assert.Zero(t, p.TotalRAMBytes)
+	assert.Contains(t, p.Issues, Issue{Probe: ProbeMemory, Reason: ReasonReadFailed})
+	assert.Equal(t, hostRAM, p.RAMUpperBoundBytes)
+	assert.Equal(t, hostRAM < lowRAMThresholdBytes,
+		slices.Contains(p.Capabilities(), CapLowRAM))
 }
 
 // TestProbeAgainstLiveHost runs the probe against the real filesystem. Fixture

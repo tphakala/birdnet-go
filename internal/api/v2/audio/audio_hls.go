@@ -1108,7 +1108,11 @@ func (c *Handler) setupAudioCallback(sourceID string, sampleRate int, maxQueuedB
 	}
 
 	// Look up per-source gain from the registry so HLS listeners
-	// hear the same gain-adjusted audio as the analysis pipeline.
+	// hear the same gain-adjusted audio as the analysis pipeline. Once the route
+	// exists, AudioRouter.UpdateGain (the update_source_gains action) keeps its
+	// gain current, so a gain change does not close the listener. A gain change
+	// that lands between this read and AddRoute below is not seen by the new route,
+	// which keeps this value until the next gain change.
 	gainDB, _ := eng.Registry().GetGain(sourceID)
 
 	// Resolve EQ filter chain for this source so HLS listeners

@@ -516,6 +516,12 @@
         "title": "{modelName} selhává při každé analýze",
         "message": "{modelName} je načten, ale posledních {failures} analýz za sebou selhalo na {runtime}: inference vrátila chybu. Zvuk je zachycován, ale tento model nic nedetekuje. Zkontrolujte model na stránce Systém > Modely AI.",
         "nonFiniteMessage": "{modelName} je načten, ale posledních {failures} analýz za sebou selhalo na {runtime}: model vrátil neplatné skóre (NaN nebo nekonečné). Zvuk je zachycován, ale tento model nic nedetekuje. Zkontrolujte model na stránce Systém > Modely AI."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Překryv analýzy omezen pro toto zařízení",
+        "cadenceCappedMessage": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} při nastaveném překryvu {configured} s překračuje změřenou kapacitu tohoto zařízení, proto se zvuk analyzuje s překryvem {effective} s. Filtr falešně pozitivních detekcí proto může vyžadovat méně potvrzení. Vaše uložená nastavení se nemění; viz Nastavení > Analýza.",
+        "cadenceOverloadedTitle": "Toto zařízení nestíhá analýzu zvuku",
+        "cadenceOverloadedMessage": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} překračuje změřenou kapacitu tohoto zařízení i bez překryvu, proto se analýza může zpožďovat a detekce mohou být vynechány. Povolte méně modelů nebo zvukových zdrojů, nebo zvolte rychlejší variantu modelu."
       }
     },
     "loading": "Načítání oznámení…"
@@ -2366,7 +2372,9 @@
       "saveAriaLabel": "Uložit změny",
       "savingAriaLabel": "Ukládání změn...",
       "unsavedChanges": "Neuložené změny",
-      "toolbar": "Akce nastavení"
+      "toolbar": "Akce nastavení",
+      "validationBlocked": "Některá pole vyžadují pozornost, než budete moci uložit.",
+      "noChangesToSave": "Žádné změny k uložení."
     },
     "errors": {
       "loadFailed": "Nepodařilo se načíst nastavení",
@@ -2450,10 +2458,9 @@
             "lenient": "Pro nekvalitní zvuk (RTSP kamery, mikrofony webkamer)",
             "moderate": "Vyvážené pro typické hobby konfigurace",
             "balanced": "Původní chování před zářím 2025",
-            "strict": "Vyžaduje RPi 4+. Pro kvalitní mikrofony",
-            "maximum": "Vyžaduje RPi 4+. Pro mikrofony profesionální třídy"
+            "strict": "Pro kvalitní mikrofony",
+            "maximum": "Pro mikrofony profesionální třídy"
           },
-          "hardwareNote": "Úrovně Přísný a Maximální vyžadují vyšší nastavení překryvu a více CPU prostředků. Pro tyto úrovně je nutný hardware RPi 4 nebo lepší.",
           "overlapAdjusted": "Nastavení překryvu bylo automaticky upraveno na {overlap}s, aby splnilo požadavky filtru",
           "overlapReduced": "Nastavení překryvu bylo sníženo na {overlap}s, aby odpovídalo úrovni filtru",
           "levelNames": {
@@ -2465,7 +2472,19 @@
             "maximum": "Maximální",
             "unknown": "Neznámý"
           },
-          "warningOff": "Při vypnutém filtrování je každá detekce nad prahem spolehlivosti okamžitě přijata. To obvykle vede k několika falešným detekcím denně. I mírné filtrování výrazně zlepšuje kvalitu výsledků."
+          "warningOff": "Při vypnutém filtrování je každá detekce nad prahem spolehlivosti okamžitě přijata. To obvykle vede k několika falešným detekcím denně. I mírné filtrování výrazně zlepšuje kvalitu výsledků.",
+          "readoutTitle": "Aktuálně požadovaná potvrzení",
+          "readoutPreviewTitle": "Požadovaná potvrzení po uložení (odhad)",
+          "readoutIntro": "Detekce je přijata, když se shodne dostatek analyzačních oken v rámci {seconds} sekund.",
+          "readoutLine": "{model}: {count} z {windows} oken, nové okno každých {step} s",
+          "readoutPreview": "Odhad podle neuložených změn. Limit zařízení se po uložení znovu ověří.",
+          "readoutPending": "Uložená nastavení se právě uplatňují. Dokud se nenačtou aktualizované počty, jsou tyto hodnoty odhadem.",
+          "capNoticeTitle": "Překryv omezen na výkon tohoto zařízení",
+          "capNotice": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} při nastaveném překryvu {configured} s překračuje změřenou kapacitu tohoto zařízení, proto se zvuk analyzuje s překryvem {effective} s. Filtr proto může vyžadovat méně potvrzení. Vaše uložená nastavení se nemění.",
+          "overloadedNoticeTitle": "Toto zařízení nestíhá analýzu",
+          "overloadedNotice": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} překračuje změřenou kapacitu tohoto zařízení i bez překryvu. Analýza se může zpožďovat a detekce mohou být vynechány. Povolte méně modelů nebo zvukových zdrojů, nebo zvolte rychlejší variantu modelu.",
+          "unknownLatency": "Dobu zpracování se nepodařilo změřit pro {models}, proto se při omezování překryvu nezapočítává. Analýza se přesto může zpožďovat.",
+          "cpuNote": "Vyšší síla analyzuje překrývající se zvuk častěji, což stojí čas CPU pro každý povolený model a zvukový zdroj. BirdNET-Go automaticky omezí překryv na to, co toto zařízení zvládne zpracovat."
         },
         "rangeFilter": {
           "title": "Filtr výskytu",
@@ -2480,7 +2499,7 @@
             "accuracy": "Odhadovaná přesnost: do {accuracy} m",
             "locationDetected": "Poloha prohlížeče byla zjištěna.",
             "geolocationUnsupported": "Tento prohlížeč nepodporuje určování polohy zařízení. Zadejte souřadnice ručně nebo použijte mapu.",
-            "geolocationRequiresHttps": "Určování polohy prohlížeče vyžaduje HTTPS nebo localhost. Zadejte souřadnice ručně nebo použijte mapu.",
+            "geolocationInsecureHelp": "Vyžaduje HTTPS nebo localhost. Vyhledejte místo nebo použijte mapu.",
             "geolocationDenied": "Přístup k poloze byl zamítnut. Zadejte souřadnice ručně nebo použijte mapu.",
             "geolocationUnavailable": "Zařízení nedokázalo určit svou polohu. Zadejte souřadnice ručně nebo použijte mapu.",
             "geolocationTimedOut": "Vypršel časový limit požadavku na polohu. Zkuste to znovu, zadejte souřadnice ručně nebo použijte mapu.",
@@ -3229,7 +3248,7 @@
         "vadEnable": "Povolit Ochranu Soukromí (Silero VAD)",
         "vadHelp": "Spouští vyhrazený neuronový model detekce řeči vedle klasifikátoru pro spolehlivé filtrování hlasu. Spotřebovává další systémové prostředky (cca 20-30 MB RAM a inferenci procesoru na segment).",
         "vadThresholdLabel": "Práh Ochrany Soukromí",
-        "vadThresholdHelp": "Práh citlivosti pro detektor hlasové aktivity (výchozí 0.35). Nižší hodnoty činí filtr citlivějším na tichou nebo vzdálenou řeč."
+        "vadThresholdHelp": "Práh citlivosti pro detektor hlasové aktivity (výchozí 0.6). Nižší hodnoty činí filtr citlivějším na tichou nebo vzdálenou řeč."
       },
       "falsePositivePrevention": {
         "title": "Prevence falešně pozitivních detekcí",
@@ -3781,6 +3800,8 @@
         "frequencyResponse": "Frekvenční odezva",
         "cutoffFrequency": "Mezní frekvence",
         "cutoffFrequencyHelp": "Frekvence, při které filtr začíná tlumit signály. Ptačí zpěv se obvykle pohybuje v rozmezí 1-10 kHz.",
+        "centerFrequency": "Střední frekvence",
+        "bandwidth": "Šířka pásma",
         "qFactor": "Q faktor",
         "qFactorHelp": "Činitel jakosti (Q faktor) řídí ostrost filtru. Nižší hodnoty (0,1-1) vytvářejí jemnější sklony, vyšší hodnoty (1-10) vytvářejí strmější řezy.",
         "gain": "Zesílení",
@@ -3788,17 +3809,31 @@
         "attenuation": "Útlum",
         "attenuationHelp": "Rychlost poklesu filtru. Vyšší hodnoty poskytují strmější tlumení filtrovaných frekvencí.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Vypnuto",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Přidejte více filtrů pro tvarování frekvenční odezvy pro optimální detekci ptáků ve vašem prostředí.",
+        "emptyEntryRestored": "Zadejte číslo. Předchozí hodnota byla zachována.",
         "graph": {
           "flatResponse": "Plochá odezva (žádné filtry nejsou použity)",
           "frequency": "Frekvence (Hz)",
-          "gain": "Zesílení (dB)"
+          "gain": "Zesílení (dB)",
+          "loading": "Výpočet frekvenční odezvy...",
+          "updating": "Aktualizace frekvenční odezvy...",
+          "error": "Frekvenční odezvu nelze vypočítat. Aktualizuje se při změně filtru nebo po výběru možnosti Zkusit znovu.",
+          "sampleRate": "Vypočteno pro vzorkovací frekvenci {rate} Hz.",
+          "clipped": "Odezva dosahuje maxima {peak} dB, což je nad horním okrajem grafu.",
+          "skippedHeading": "{count, plural, one {# filtr se na zvuk nepoužije} few {# filtry se na zvuk nepoužijí} many {# filtru se na zvuk nepoužije} other {# filtrů se na zvuk nepoužije}}",
+          "skippedReasons": {
+            "unknown_type": "Filtr {number} ({type}, {frequency} Hz) je přeskočen: tento typ filtru není podporován.",
+            "invalid_parameters": "Filtr {number} ({type}, {frequency} Hz) je přeskočen: jeho nastavení není platné při {rate} Hz.",
+            "add_failed": "Filtr {number} ({type}, {frequency} Hz) je přeskočen: nepodařilo se jej přidat do řetězce filtrů.",
+            "unknown": "Filtr {number} ({type}, {frequency} Hz) je přeskočen."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3967,7 +4002,7 @@
       "allowSubnetBypassLabel": "Povolit přístup z podsítě k obejití autentizace",
       "subnetBypassLocalNote": "Když je tato možnost zapnutá, klientům ve stejné místní síti jako tento server se automaticky důvěřuje a přihlášení přeskočí. Pole níže použijte pouze k rozšíření této důvěry na další sítě (například samostatnou VLAN nebo směrovanou podsíť).",
       "allowedSubnetsLabel": "Povolené podsítě",
-      "allowedSubnetsHelp": "Další síťové rozsahy, které mohou obejít přihlášení, nad rámec vlastní místní sítě tohoto serveru. Notace CIDR, oddělené čárkami.",
+      "allowedSubnetsHelp": "Další síťové rozsahy, které mohou obejít přihlášení, nad rámec vlastní místní sítě tohoto serveru. Použijte notaci CIDR, například 192.168.10.0/24.",
       "securityWarningTitle": "Bezpečnostní upozornění:",
       "subnetWarningText": "Místní síť tohoto serveru a všechny zde uvedené podsítě získají plný přístup bez přihlášení. Zahrňte pouze sítě, kterým plně důvěřujete.",
       "httpsSettingsTitle": "Nastavení HTTPS",
@@ -4195,6 +4230,77 @@
         "downloadCertificate": "Stáhnout certifikát",
         "downloadCertificateHelp": "Nainstalujte tento certifikát do úložiště důvěryhodných certifikátů vašeho operačního systému, abyste se vyhnuli bezpečnostním upozorněním prohlížeče.",
         "fileReadError": "Nepodařilo se přečíst vybraný soubor"
+      },
+      "reverseProxy": {
+        "title": "Reverzní proxy",
+        "description": "Pro přístup přes nginx, Caddy, Traefik, Cloudflare nebo jinou proxy",
+        "listLabel": "Důvěryhodné proxy",
+        "listHelp": "Přidejte adresu každé proxy před BirdNET-Go. U Dockeru se často jedná o adresu brány Dockeru, například 172.17.0.1.",
+        "placeholder": "Například 172.17.0.1",
+        "emptyState": "Žádné důvěryhodné proxy. BirdNET-Go používá adresu, která se k němu připojuje.",
+        "emptyStateCloudflareOnly": "Důvěryhodné jsou pouze zveřejněné adresy okrajových serverů Cloudflare. Nejsou uvedeny žádné další proxy.",
+        "rangeBadge": "Rozsah",
+        "ruleOwnAddress": "Uveďte vlastní adresu každé proxy. Nikdy neuvádějte rozsah, který zahrnuje i počítače, ze kterých prohlížíte.",
+        "ruleHeaders": "Proxy musí připojit adresu klienta k X-Forwarded-For nebo přepsat X-Real-IP.",
+        "cloudflareLabel": "Důvěřovat Cloudflare",
+        "cloudflareHelp": "Zapněte tuto možnost, pokud je váš web poskytován přes Cloudflare. BirdNET-Go pak důvěřuje publikovaným koncovým adresám Cloudflare.",
+        "check": {
+          "title": "Vaše připojení",
+          "recheck": "Zkontrolovat znovu",
+          "checking": "Kontrola vašeho připojení",
+          "error": "Vaše připojení se nepodařilo zkontrolovat.",
+          "stale": "Tato kontrola zobrazuje uložená nastavení. Pro kontrolu změn nastavení uložte.",
+          "trust": "Důvěřovat {peer}",
+          "trustWarning": "Důvěřujte {peer} pouze v případě, že se jedná o vaši reverzní proxy, a nikoli počítač, ze kterého prohlížíte.",
+          "trustWithCloudflare": "Důvěřovat {peer} a Cloudflare",
+          "cloudflareInFront": "Před {peer} se nachází Cloudflare. Pro ověření vaší adresy důvěřujte oběma.",
+          "cloudflareEdge": "{peer} patří službě Cloudflare. Níže zapněte Důvěřovat Cloudflare.",
+          "chainHint": "Pokud se před {peer} nachází další proxy, uveďte ji také.",
+          "added": "Přidáno do seznamu. Pro uplatnění uložte.",
+          "coveredBy": "Již pokryto rozsahem {range} v seznamu. Uložte pro použití.",
+          "selfClientCause": "Proxy může jako klienta předávat svou vlastní adresu, často proto, že publikování portů kontejneru skrývá skutečného klienta. Opravte to v nastavení sítě kontejneru nebo proxy."
+        },
+        "status": {
+          "direct": {
+            "title": "Připojeno přímo",
+            "body": "Váš prohlížeč se připojuje k BirdNET-Go přímo z {peer}.",
+            "bodyNoPeer": "Váš prohlížeč se připojuje k BirdNET-Go přímo.",
+            "hint": "Pokud používáte reverzní proxy a {peer} je její adresa, nastavte proxy tak, aby odesílala X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Připojeno přes důvěryhodnou proxy",
+            "body": "Vaše připojení přichází přes {peer}, což je důvěryhodná proxy. Vaše adresa {client} byla ověřena.",
+            "hint": "Pokud je {client} další proxy namísto vašeho počítače, uveďte tuto proxy také."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Vaši adresu se nepodařilo ověřit",
+            "body": "{peer} je důvěryhodná, ale adresu, kterou předává, se nepodařilo ověřit. Časté příčiny:",
+            "causeRange": "Uvedený rozsah zahrnuje i váš počítač, takže žádná adresa v řetězci se nepočítá jako vaše.",
+            "causeHeaders": "Proxy nepřipojuje X-Forwarded-For ani nepřepisuje X-Real-IP.",
+            "causeConflict": "Proxy posílá konfliktní nebo opakované hlavičky adres, nebo pouze hlavičku Forwarded."
+          },
+          "untrusted_public_proxy": {
+            "title": "Připojeno přes veřejnou proxy",
+            "body": "Vaše připojení přichází přes {peer}, což je veřejná adresa. U veřejných adres se nikdy nenabízí důvěra jedním kliknutím. Přidejte ji ručně pouze v případě, že jste si jisti, že je to vaše proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Připojeno přes nedůvěryhodnou proxy",
+            "body": "Vaše připojení přichází přes proxy na adrese {peer}, která není důvěryhodná, takže BirdNET-Go nemůže ověřit vaši adresu."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Hlavičky proxy nelze ověřit",
+            "body": "Vaše připojení přichází přes {peer}, ale hlavičky adres, které posílá, by nebylo možné ověřit, ani kdyby byla důvěryhodná.",
+            "bodyNoPeer": "Vaše připojení přichází přes proxy, ale její adresu se nepodařilo přečíst.",
+            "fix": "Nastavte proxy tak, aby připojovala X-Forwarded-For nebo přepisovala X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Za reverzní proxy toto obejití funguje pouze tehdy, když je proxy uvedena jako důvěryhodná.",
+      "bypassProxyLink": "Nastavit důvěryhodné proxy",
+      "allowedSubnetsEmpty": "Žádné další podsítě. Přihlášení může obejít pouze vlastní místní síť tohoto serveru.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} obsahuje neplatnou položku.",
+        "pendingEntry": "{tab}: {field} obsahuje text, který nebyl přidán. Stiskněte Enter nebo Přidat, nebo jej smažte."
       }
     },
     "species": {
@@ -4999,6 +5105,28 @@
         "edit": "Upravit druh",
         "remove": "Odebrat druh"
       }
+    },
+    "networkAddressList": {
+      "add": "Přidat",
+      "remove": "Odebrat {address}",
+      "empty": "Zatím nebyly přidány žádné adresy.",
+      "pendingHint": "Stiskněte Enter nebo Přidat pro přidání této adresy.",
+      "limitReached": "Seznam je plný ({max} položek).",
+      "rowDuplicate": "Duplikát",
+      "rowInvalid": {
+        "cidr": "Neplatný rozsah",
+        "ip": "Neplatná IP adresa",
+        "ipOrCidr": "Neplatná adresa nebo rozsah"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Neplatný rozsah: {values}. Použijte rozsah jako například 192.168.1.0/24.",
+          "ip": "Neplatná IP adresa: {values}. Použijte adresu jako například 192.168.1.10.",
+          "ipOrCidr": "Neplatná adresa nebo rozsah: {values}. Použijte adresu jako například 192.168.1.10 nebo rozsah jako například 192.168.1.0/24."
+        },
+        "duplicate": "Již je v seznamu: {values}.",
+        "limit": "Seznam může obsahovat maximálně {max} položek. Nepřidáno: {values}."
+      }
     }
   },
   "media": {
@@ -5427,13 +5555,6 @@
         "locationHelp": "Vaše poloha pomáhá filtrovat druhy na ty, které jsou ve vaší oblasti pravděpodobné",
         "latitudeLabel": "Zeměpisná šířka",
         "longitudeLabel": "Zeměpisná délka",
-        "useMyLocation": "Použít moji polohu",
-        "locationDetected": "Poloha zjištěna",
-        "locationError": "Polohu se nepodařilo zjistit. Zadejte prosím souřadnice ručně.",
-        "locationDenied": "Přístup k poloze byl odepřen. Zadejte prosím souřadnice ručně.",
-        "geolocationRequiresHttps": "Poloha v prohlížeči vyžaduje HTTPS. Zadejte prosím souřadnice ručně nebo použijte mapu.",
-        "geolocationDenied": "Oprávnění k poloze bylo odepřeno. Zadejte prosím souřadnice ručně nebo použijte mapu.",
-        "geolocationFailed": "Vaši polohu se nepodařilo určit. Zadejte prosím souřadnice ručně nebo použijte mapu.",
         "localesLoading": "Načítání jazyků…",
         "localesLoadFailed": "Nepodařilo se načíst jazykové možnosti. Jako výchozí byla zvolena angličtina."
       },

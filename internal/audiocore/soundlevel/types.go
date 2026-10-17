@@ -1,8 +1,10 @@
 // Package soundlevel provides 1/3 octave band sound level analysis.
 //
-// It implements a standalone processor that filters audio through a bank of
-// ISO 266 standard bandpass filters, accumulates 1-second RMS measurements,
-// and aggregates them over a configurable interval into SoundLevelData.
+// It measures each stream with the go-audio-dsp octave meter: the mean square of
+// every band over one second, in dB relative to a full scale amplitude of 1.0,
+// within [MinLevelDB, MaxLevelDB]. It aggregates those levels into the min, max
+// and arithmetic mean of dB per configurable interval, reported as
+// SoundLevelData.
 package soundlevel
 
 import "time"

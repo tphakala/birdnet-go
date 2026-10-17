@@ -49,10 +49,12 @@ const (
 	// SourceInactive means the source exists but is not currently capturing.
 	SourceInactive SourceState = iota
 
-	// SourceStarting means the source is initialising its connection or device.
+	// SourceStarting means capture is being opened.
 	SourceStarting
 
-	// SourceRunning means the source is actively capturing and dispatching frames.
+	// SourceRunning means capture has been started. For network streams the
+	// connection itself is established asynchronously, and its health is
+	// reported by the stream manager (StreamHealth), not by this state.
 	SourceRunning
 
 	// SourceError means the source has encountered an unrecoverable error.

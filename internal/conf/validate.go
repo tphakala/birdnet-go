@@ -302,11 +302,32 @@ func ValidateSettings(settings *Settings) error {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
+	// Validate the bat ultrasonic filter's STFT settings while the filter is on.
+	if err := validateUltrasonicFilter(settings); err != nil {
+		ve.Errors = append(ve.Errors, err.Error())
+	}
+
 	// If there are any errors, return the ValidationError
 	if len(ve.Errors) > 0 {
 		return ve
 	}
 	return nil
+}
+
+// minUltrasonicFFTSize is the smallest FFT the ultrasonic filter accepts.
+const minUltrasonicFFTSize = 2
+
+// validateUltrasonicFilter rejects invalid ultrasonic STFT settings while the
+// filter is enabled. A disabled filter is not validated: test fixtures and the UI
+// toggle carry zero or stale values for it, and nothing reads them. On Load,
+// normalizeUltrasonicFilter has already repaired the values whether or not the
+// filter is enabled, so a config file never trips this; the settings API path
+// does not run the repair, so enabling the filter with invalid values fails here.
+func validateUltrasonicFilter(settings *Settings) error {
+	if !settings.Bat.UltrasonicFilter.Enabled {
+		return nil
+	}
+	return settings.Bat.UltrasonicFilter.ValidateSTFT()
 }
 
 // minModelThreshold and maxModelThreshold bound the per-model confidence

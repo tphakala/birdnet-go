@@ -33,15 +33,13 @@ type Manager struct {
 	float32PoolMu   sync.Mutex // protects float32Pools; separate from mu to avoid contention
 	bytePools       map[int]*BytePool
 	bytePoolMu      sync.Mutex // protects bytePools; separate from mu to avoid contention
-	float64Pools    map[int]*Float64Pool
-	float64PoolMu   sync.Mutex // protects float64Pools; separate from mu to avoid contention
 	mu              sync.RWMutex
 	logger          logger.Logger
 }
 
 // NewManager creates a Manager with a shared BytePool pre-allocated at the
-// default size and empty per-size maps for BytePool, Float32Pool, and
-// Float64Pool that lazily create pools on first request for each size. The
+// default size and empty per-size maps for BytePool and Float32Pool
+// that lazily create pools on first request for each size. The
 // provided logger is forwarded to each AnalysisBuffer created by
 // AllocateAnalysis.
 func NewManager(log logger.Logger) *Manager {
@@ -55,7 +53,6 @@ func NewManager(log logger.Logger) *Manager {
 		bytePool:        bytePool,
 		float32Pools:    make(map[int]*Float32Pool),
 		bytePools:       make(map[int]*BytePool),
-		float64Pools:    make(map[int]*Float64Pool),
 		logger:          log,
 	}
 }
@@ -249,26 +246,4 @@ func (m *Manager) CaptureBufferHealthAll() []CaptureBufferHealth {
 		})
 	}
 	return infos
-}
-
-// Float64PoolFor returns a Float64Pool for the given slice length, creating
-// one lazily if needed. Returns nil for non-positive sizes. Thread-safe via a
-// dedicated mutex.
-func (m *Manager) Float64PoolFor(size int) *Float64Pool {
-	if size <= 0 {
-		return nil
-	}
-	m.float64PoolMu.Lock()
-	defer m.float64PoolMu.Unlock()
-	if pool, ok := m.float64Pools[size]; ok {
-		return pool
-	}
-	pool, err := NewFloat64Pool(size)
-	if err != nil {
-		m.logger.Error("failed to create Float64Pool",
-			logger.Int("size", size), logger.Error(err))
-		return nil
-	}
-	m.float64Pools[size] = pool
-	return pool
 }

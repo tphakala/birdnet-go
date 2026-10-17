@@ -156,7 +156,7 @@ describe('LoginModal', () => {
     });
 
     it('should reject URLs that are too long and fallback to base path', () => {
-      const longUrl = '/' + 'a'.repeat(2001); // Exceeds MAX_REDIRECT_LENGTH
+      const longUrl = '/' + 'a'.repeat(2001); // Exceeds MAX_LOGIN_REDIRECT_LENGTH
       loginModalTest.render({
         isOpen: true,
         onClose: vi.fn(),
@@ -475,6 +475,73 @@ describe('LoginModal', () => {
       await fireEvent.click(closeButton);
 
       expect(onCloseMock).toHaveBeenCalled();
+    });
+  });
+
+  describe('Cancel handling', () => {
+    function dismissals(): Array<[string, () => Promise<unknown>]> {
+      return [
+        [
+          'close button',
+          () => fireEvent.click(screen.getByRole('button', { name: /close login dialog/i })),
+        ],
+        ['Escape', () => fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })],
+        ['backdrop', () => fireEvent.click(screen.getByRole('button', { name: /close modal/i }))],
+      ];
+    }
+
+    it.each(['close button', 'Escape', 'backdrop'])(
+      'calls onCancel, not onClose, from the %s',
+      async name => {
+        const onClose = vi.fn();
+        const onCancel = vi.fn();
+        loginModalTest.render({ isOpen: true, onClose, onCancel });
+
+        const dismiss = dismissals().find(([label]) => label === name);
+        await dismiss?.[1]();
+
+        expect(onCancel).toHaveBeenCalledTimes(1);
+        expect(onClose).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each(['close button', 'Escape', 'backdrop'])(
+      'falls back to onClose from the %s without onCancel',
+      async name => {
+        const onClose = vi.fn();
+        loginModalTest.render({ isOpen: true, onClose });
+
+        const dismiss = dismissals().find(([label]) => label === name);
+        await dismiss?.[1]();
+
+        expect(onClose).toHaveBeenCalledTimes(1);
+      }
+    );
+
+    it('still calls onClose and not onCancel on a successful password login', async () => {
+      const { api } = await import('$lib/utils/api');
+      vi.mocked(api.post).mockResolvedValue({
+        success: true,
+        message: 'ok',
+        redirectUrl: '/api/v2/auth/callback?code=x',
+      });
+      const onClose = vi.fn();
+      const onCancel = vi.fn();
+      loginModalTest.render({
+        isOpen: true,
+        onClose,
+        onCancel,
+        redirectUrl: '/ui/settings',
+        authConfig: { basicEnabled: true, enabledProviders: [] },
+      });
+
+      await fireEvent.input(screen.getByLabelText('auth.password'), {
+        target: { value: 'valid-password' },
+      });
+      await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
+
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+      expect(onCancel).not.toHaveBeenCalled();
     });
   });
 

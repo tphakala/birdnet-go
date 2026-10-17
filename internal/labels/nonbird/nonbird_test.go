@@ -135,3 +135,66 @@ func TestCategories(t *testing.T) {
 		assert.True(t, ok, "Categories() returned unexpected value %q", c)
 	}
 }
+
+func TestIsMultiWordClassPrefix(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"class with longer sibling", "Car", true},
+		{"lowercase", "engine", true},
+		{"class without longer sibling", "Dog", false},
+		{"multi-word class", "Car_passing_by", false},
+		{"first token that is not a class", "Domestic", false},
+		{"bird", "Turdus merula", false},
+		{"empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, nonbird.IsMultiWordClassPrefix(tt.input))
+		})
+	}
+}
+
+func TestMultiWordLabelNames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		label        string
+		wantIdentity string
+		wantDisplay  string
+		wantOK       bool
+	}{
+		{"two underscores domestic sounds", "Domestic_sounds_and_home_sounds", "Domestic_sounds_and_home_sounds", "Domestic sounds and home sounds", true},
+		{"one underscore", "Power_tool", "Power_tool", "Power tool", true},
+		{"two underscore words", "Car_passing_by", "Car_passing_by", "Car passing by", true},
+		{"four underscores", "Male_speech_and_man_speaking", "Male_speech_and_man_speaking", "Male speech and man speaking", true},
+		{"parentheses", "Bathtub_(filling_or_washing)", "Bathtub_(filling_or_washing)", "Bathtub (filling or washing)", true},
+		{"hyphenated first token", "Fixed-wing_aircraft_and_airplane", "Fixed-wing_aircraft_and_airplane", "Fixed-wing aircraft and airplane", true},
+		{"lowercase keeps case", "power_tool", "power_tool", "power tool", true},
+		{"trailing CR stripped", "Power_tool\r", "Power_tool", "Power tool", true},
+		{"surrounding spaces stripped", "  Power_tool \r\n", "Power_tool", "Power tool", true},
+		{"single token", "Dog", "", "", false},
+		{"binomial", "Turdus merula", "", "", false},
+		{"BirdNET two-part", "Turdus merula_Common Blackbird", "", "", false},
+		{"BirdNET non-bird species", "Canis familiaris_Dog", "", "", false},
+		{"unknown underscore label", "dog_bark", "", "", false},
+		{"prefix of a class", "Domestic_sounds", "", "", false},
+		{"empty", "", "", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			identity, display, ok := nonbird.MultiWordLabelNames(tt.label)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantIdentity, identity)
+			assert.Equal(t, tt.wantDisplay, display)
+		})
+	}
+}

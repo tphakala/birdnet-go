@@ -81,3 +81,25 @@ func TestDominantFrequencyRejectsShortInput(t *testing.T) {
 	got := DominantFrequency([]byte{0x01}, 48000)
 	require.Zero(t, got)
 }
+
+// TestRMSDBFS_OddLengthIsSilenceFloor pins that a half sample at the end of the
+// buffer makes the input undecodable instead of being dropped silently.
+func TestRMSDBFS_OddLengthIsSilenceFloor(t *testing.T) {
+	t.Parallel()
+
+	tone := synthToneS16LE(1000, 48000, 4800, 0.5)
+	require.Greater(t, RMSDBFS(tone), silenceFloorDBFS, "the aligned tone must be measurable")
+
+	assert.InDelta(t, silenceFloorDBFS, RMSDBFS(append(tone, 0x01)), 0)
+}
+
+// TestDominantFrequency_OddLengthIsZero pins that a half sample at the end of
+// the buffer makes the input undecodable instead of being dropped silently.
+func TestDominantFrequency_OddLengthIsZero(t *testing.T) {
+	t.Parallel()
+
+	tone := synthToneS16LE(1000, 48000, 4800, 0.5)
+	require.InDelta(t, 1000, DominantFrequency(tone, 48000), 10, "the aligned tone must be measurable")
+
+	assert.InDelta(t, 0, DominantFrequency(append(tone, 0x01), 48000), 0)
+}

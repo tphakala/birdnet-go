@@ -998,6 +998,60 @@ func TestGetRecentDetections(t *testing.T) {
 			expectedCount:  2,
 		},
 		{
+			name:  "Huge limit is clamped",
+			limit: "999999999",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetections", maxNumResults).Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
+			name:  "Limit at the maximum",
+			limit: "1000",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetections", maxNumResults).Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
+			name:  "Limit above the maximum is clamped",
+			limit: "1001",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetections", maxNumResults).Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
+			name:  "Frontend maximum limit",
+			limit: "48",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetections", 48).Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
+			name:  "Negative limit uses default",
+			limit: "-5",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetections", 10).Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
+			name:  "Non-numeric limit uses default",
+			limit: "abc",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetections", 10).Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
 			name:  "Database error",
 			limit: "5",
 			mockSetup: func(m *mock.Mock) {

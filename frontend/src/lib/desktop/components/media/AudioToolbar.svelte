@@ -19,6 +19,7 @@
   } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
+  import { playButtonLabelKey } from '$lib/utils/audio';
 
   interface Props {
     // Playback state
@@ -120,7 +121,6 @@
     { id: 'mp3', label: 'MP3' },
     { id: 'aac', label: 'AAC' },
     { id: 'opus', label: 'Opus' },
-    { id: 'alac', label: 'ALAC' },
   ];
 
   function formatSelectionTime(seconds: number | null): string {
@@ -182,7 +182,7 @@
       class="toolbar-btn play-btn"
       onclick={handlePlay}
       disabled={isLoading}
-      aria-label={isCurrentlyPlaying ? t('media.audio.pause') : t('media.audio.play')}
+      aria-label={t(playButtonLabelKey(isLoading, isCurrentlyPlaying))}
     >
       {#if isLoading}
         <Loader2 size={14} class="animate-spin" />

@@ -3,10 +3,7 @@ package analysis
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -24,8 +21,8 @@ import (
 // Constants for sound level monitoring
 const (
 	// dB value bounds for validation and sanitization
-	minValidDB = -200.0
-	maxValidDB = 20.0
+	minValidDB = soundlevel.MinLevelDB
+	maxValidDB = soundlevel.MaxLevelDB
 
 	// Error message constants
 	errMsgEmptyField       = "empty %s field"
@@ -78,18 +75,15 @@ func sanitizeSoundLevelData(data soundlevel.SoundLevelData) soundlevel.SoundLeve
 			sanitizedBand.Max = sanitizedBand.Mean
 		}
 
-		// Normalize band key format (ensure consistent naming)
-		normalizedKey := normalizeBandKey(key)
-		sanitized.OctaveBands[normalizedKey] = sanitizedBand
+		sanitized.OctaveBands[key] = sanitizedBand
 
 		// Log sanitization details if debug is enabled and realtime logging is on
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
 			if band.Min != sanitizedBand.Min || band.Max != sanitizedBand.Max ||
-				band.Mean != sanitizedBand.Mean || key != normalizedKey {
+				band.Mean != sanitizedBand.Mean {
 				lg := getSoundLevelLogger()
 				lg.Debug("sanitized and polished octave band data",
 					logger.String("original_band", key),
-					logger.String("normalized_band", normalizedKey),
 					logger.Float64("center_freq", band.CenterFreq),
 					logger.Float64("original_min", band.Min),
 					logger.Float64("original_max", band.Max),
@@ -110,11 +104,11 @@ func sanitizeFloat64(value, defaultValue float64) float64 {
 		return defaultValue
 	}
 	// Clamp to reasonable bounds for sound levels
-	if value < -200.0 {
-		return -200.0
+	if value < minValidDB {
+		return minValidDB
 	}
-	if value > 20.0 {
-		return 20.0
+	if value > maxValidDB {
+		return maxValidDB
 	}
 	return value
 }
@@ -132,29 +126,6 @@ func stringOrDefault(value, defaultValue string) string {
 func roundToDecimalPlaces(value float64, places int) float64 {
 	factor := math.Pow(10, float64(places))
 	return math.Round(value*factor) / factor
-}
-
-// normalizeBandKey ensures consistent band key formatting
-func normalizeBandKey(key string) string {
-	// Already normalized keys will pass through unchanged
-	// Convert any variations to consistent format
-	if strings.Contains(key, "_") {
-		return key // Already in correct format
-	}
-
-	// Handle "1000Hz" -> "1.0_kHz" conversion
-	key = strings.ToLower(key)
-	if before, ok := strings.CutSuffix(key, "hz"); ok {
-		freq := before
-		if val, err := strconv.ParseFloat(freq, 64); err == nil {
-			if val >= 1000 {
-				return fmt.Sprintf("%.1f_kHz", val/1000)
-			}
-			return fmt.Sprintf("%.1f_Hz", val)
-		}
-	}
-
-	return key // Return as-is if we can't parse it
 }
 
 // validateSoundLevelData validates sound level data before publishing
@@ -318,7 +289,8 @@ const soundLevelMQTTPublishTimeout = 5 * time.Second
 //
 // Failure is logged, not returned: the data already reached the shared topic,
 // and the next interval publishes a fresh reading anyway. ErrMQTTClientNotReady
-// is dropped silently, matching how the shared topic handles it.
+// is dropped silently, matching how the shared topic handles it. name is only
+// logged; the failure metric is labelled with sourceID.
 func publishSoundLevelToSourceTopic(settings *conf.Settings, sourceID, name, payload string, proc *processor.Processor) {
 	// validateSoundLevelData already rejected an empty Source before this point,
 	// so no sourceID == "" guard is needed here.
@@ -344,7 +316,7 @@ func publishSoundLevelToSourceTopic(settings *conf.Settings, sourceID, name, pay
 		// Record the failure so it is visible via Prometheus, guarded the same
 		// way the shared-topic path guards its metric recording.
 		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(sourceID, name, "mqtt", "source_topic_error")
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(sourceID, "mqtt", "source_topic_error")
 		}
 	}
 }
@@ -420,7 +392,7 @@ func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processo
 	if err != nil {
 		// Record error metric
 		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "marshal_error")
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, "mqtt", "marshal_error")
 		}
 		return errors.New(err).
 			Component("analysis.soundlevel").
@@ -452,15 +424,15 @@ func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processo
 			// Record a lightweight metric so the condition is still observable
 			// via Prometheus without generating Sentry events.
 			if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-				proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "client_not_ready")
+				proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, "mqtt", "client_not_ready")
 			}
 			return nil
 		}
 
 		// Record error metric
 		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "publish_error")
-			proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "mqtt", "error")
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, "mqtt", "publish_error")
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, "mqtt", "error")
 		}
 		return errors.New(err).
 			Component("analysis.soundlevel").
@@ -478,7 +450,7 @@ func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processo
 
 	// Record success metric
 	if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-		proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "mqtt", "success")
+		proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, "mqtt", "success")
 	}
 
 	LogSoundLevelMQTTPublished(topic, soundData.Source, len(soundData.OctaveBands))
@@ -517,10 +489,56 @@ func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processo
 	return nil
 }
 
-// startSoundLevelPublishers starts all sound level publishers with the given done channel
-func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller) {
-	settings := conf.Setting()
+// soundLevelPublisherChanSize is the capacity of each publisher's own input
+// channel. It matches the pipeline channel so a burst that fits the one fits all.
+const soundLevelPublisherChanSize = soundLevelChanSize
 
+// fanOutSoundLevel copies every value received from src to each channel in dsts
+// until done is closed or src is closed, then closes every destination. Sends
+// are non-blocking, so a slow publisher loses its own intervals without
+// delaying the others. It is the only sender on dsts.
+func fanOutSoundLevel(wg *sync.WaitGroup, done <-chan struct{}, src <-chan soundlevel.SoundLevelData, dsts ...chan soundlevel.SoundLevelData) {
+	wg.Go(func() {
+		defer func() {
+			for _, dst := range dsts {
+				close(dst)
+			}
+		}()
+		drops := make([]int64, len(dsts))
+		for {
+			select {
+			case <-done:
+				return
+			case data, ok := <-src:
+				if !ok {
+					return
+				}
+				for i, dst := range dsts {
+					select {
+					case dst <- data:
+					default:
+						drops[i]++
+						if drops[i]%soundLevelDropLogInterval == 1 {
+							getSoundLevelLogger().Warn("sound level publisher channel full, dropping measurement",
+								logger.Int("publisher_index", i),
+								logger.Int64("total_drops", drops[i]),
+								logger.String("operation", "fan_out_sound_level"))
+						}
+					}
+				}
+			}
+		}
+	})
+}
+
+// startSoundLevelPublishers starts all sound level publishers with the given done channel.
+// Each publisher reads its own channel, fed by one fan-out goroutine from
+// soundLevelChan, so every publisher sees every interval. The MQTT publisher
+// always runs (with a processor) and publishes only while MQTT is enabled; while
+// it is disabled the fan-out still copies each interval to its channel and the
+// publisher drops each one at that check and keeps running, one cheap settings
+// read per interval.
+func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller) {
 	// Create a merged quit channel that responds to both the done channel and global quit
 	mergedQuitChan := make(chan struct{})
 	go func() {
@@ -528,19 +546,36 @@ func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc 
 		close(mergedQuitChan)
 	}()
 
-	// Start MQTT publisher if enabled
-	if settings.Realtime.MQTT.Enabled {
-		startSoundLevelMQTTPublisherWithDone(wg, mergedQuitChan, proc, soundLevelChan)
+	var dsts []chan soundlevel.SoundLevelData
+	newPublisherChan := func() chan soundlevel.SoundLevelData {
+		ch := make(chan soundlevel.SoundLevelData, soundLevelPublisherChanSize)
+		dsts = append(dsts, ch)
+		return ch
+	}
+
+	// Start the MQTT publisher whenever there is a processor, whether or not MQTT
+	// is enabled now: MQTT can be enabled or disabled at runtime (the
+	// reconfigure_mqtt control signal) while sound level monitoring keeps
+	// running, and this publisher is not restarted for that. It publishes only
+	// while the current settings have MQTT enabled (publishSoundLevelToMQTT) and
+	// uses the processor's current client for every message, so a change takes
+	// effect from the next interval.
+	if proc != nil {
+		startSoundLevelMQTTPublisherWithDone(wg, mergedQuitChan, proc, newPublisherChan())
 	}
 
 	// Start SSE publisher if API is available
 	if apiController != nil {
-		startSoundLevelSSEPublisherWithDone(wg, mergedQuitChan, apiController, soundLevelChan)
+		startSoundLevelSSEPublisherWithDone(wg, mergedQuitChan, apiController, newPublisherChan())
 	}
 
 	// Start metrics publisher
 	if proc != nil && proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-		startSoundLevelMetricsPublisherWithDone(wg, mergedQuitChan, proc.Metrics, soundLevelChan)
+		startSoundLevelMetricsPublisherWithDone(wg, mergedQuitChan, proc.Metrics, newPublisherChan())
+	}
+
+	if len(dsts) > 0 {
+		fanOutSoundLevel(wg, mergedQuitChan, soundLevelChan, dsts...)
 	}
 }
 
@@ -560,8 +595,14 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan st
 					getSoundLevelLogger().Info("Sound level channel closed, stopping MQTT publisher")
 					return
 				}
+				// While MQTT is disabled the interval is dropped here, before the
+				// debug log, so a disabled broker does not log a receipt per interval.
+				settings := conf.Setting()
+				if !settings.Realtime.MQTT.Enabled {
+					continue
+				}
 				// Log received sound level data if debug is enabled
-				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
+				if settings.Realtime.Audio.SoundLevel.Debug {
 					lg := getSoundLevelLogger()
 					lg.Debug("MQTT publisher received sound level data",
 						logger.String("source", soundData.Source),
@@ -597,58 +638,6 @@ func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struc
 
 	// Call the refactored function with context and receive-only channel
 	startSoundLevelSSEPublisher(wg, ctx, apiController, soundLevelChan)
-}
-
-// broadcastSoundLevelSSE broadcasts sound level data via SSE with error handling and metrics
-func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData soundlevel.SoundLevelData) error {
-	// Validate data before broadcasting
-	if err := validateSoundLevelData(&soundData); err != nil {
-		// Log validation error if debug enabled
-		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-			lg := getSoundLevelLogger()
-			lg.Debug("sound level data validation failed for SSE",
-				logger.String("source", soundData.Source),
-				logger.Error(err))
-		}
-		return err
-	}
-
-	// Sanitize data before broadcasting
-	sanitizedData := sanitizeSoundLevelData(soundData)
-
-	if err := apiController.BroadcastSoundLevel(&sanitizedData); err != nil {
-		// Record error metric
-		if m := getSoundLevelMetrics(apiController); m != nil {
-			m.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
-			m.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "error")
-		}
-
-		// Return enhanced error
-		return errors.New(err).
-			Component("realtime-analysis").
-			Category(errors.CategoryNetwork).
-			Context("operation", "broadcast_sound_level_sse").
-			Context("source", soundData.Source).
-			Context("name", soundData.Name).
-			Context("bands_count", len(soundData.OctaveBands)).
-			Build()
-	}
-
-	// Record success metric
-	if m := getSoundLevelMetrics(apiController); m != nil {
-		m.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "success")
-	}
-
-	// Log successful broadcast if debug is enabled
-	if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-		lg := getSoundLevelLogger()
-		lg.Debug("successfully broadcast sound level data via SSE",
-			logger.String("source", soundData.Source),
-			logger.String("name", soundData.Name),
-			logger.Int("bands_count", len(soundData.OctaveBands)))
-	}
-
-	return nil
 }
 
 // startSoundLevelMetricsPublisherWithDone starts metrics publisher with a custom done channel

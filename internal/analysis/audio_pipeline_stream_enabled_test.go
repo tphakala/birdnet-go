@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -262,4 +263,43 @@ func TestCaptureAllStreamFallbacks_NilEngine(t *testing.T) {
 	t.Parallel()
 	p := &AudioPipelineService{}
 	assert.Empty(t, p.captureAllStreamFallbacks(), "nil engine must yield an empty map, not panic")
+}
+
+// TestBuildSourceConfigs_PlanningBuildMatchesFullBuild pins that the build used
+// for cadence planning, which skips the stream probes, lists the same sources
+// with the same model assignments as the full build, so the plan covers exactly
+// the buffers the pipeline allocates.
+func TestBuildSourceConfigs_PlanningBuildMatchesFullBuild(t *testing.T) {
+	prev := conf.CloneSettings(conf.GetSettings())
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+
+	settings := &conf.Settings{}
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{Name: "cam1", URL: "rtsp://cam1", Enabled: true, Type: conf.StreamTypeRTSP, Models: []string{"birdnet", "perch"}},
+		{Name: "cam2", URL: "rtsp://cam2", Enabled: false, Type: conf.StreamTypeRTSP, Models: []string{"birdnet"}},
+	}
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "dup-of-cam1", Device: "rtsp://cam1", Models: []string{"bat"}},
+		{Name: "mic", Device: "hw:0,0", Models: []string{"birdnet"}},
+	}
+	conftest.SetTestSettings(settings)
+
+	type key struct {
+		conn   string
+		models string
+	}
+	collect := func(configs []sourceConfigWithModels) []key {
+		keys := make([]key, 0, len(configs))
+		for _, scm := range configs {
+			keys = append(keys, key{conn: scm.config.ConnectionString, models: strings.Join(scm.modelIDs, ",")})
+		}
+		return keys
+	}
+
+	p := &AudioPipelineService{}
+	full := collect(p.buildSourceConfigsWithModels(nil))
+	planning := collect(p.buildSourceConfigs(nil, false))
+
+	require.NotEmpty(t, full)
+	assert.Equal(t, full, planning)
 }

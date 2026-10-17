@@ -120,7 +120,7 @@ func TestRemoveAllSoundLevelConsumers_DrainsMapBeforeRouterCalls(t *testing.T) {
 }
 
 // TestUntrackSoundLevelConsumer_RemovesOnlyTargetEntry verifies that the
-// helper called by reconfigureChangedSources (gain change path) and the
+// helper called by reconfigureChangedSources (route retry path) and the
 // removed-source path in reconfigure_diff drops just the requested source
 // from the tracking map. Without this helper those paths would leave the map
 // out of sync with the router after RemoveAllRoutes / engine.RemoveSource
@@ -146,7 +146,7 @@ func TestUntrackSoundLevelConsumer_RemovesOnlyTargetEntry(t *testing.T) {
 // TestUntrackSoundLevelConsumer_MissingSourceIsNoOp confirms the helper is
 // safe to call for a source that was never tracked (e.g. sound level
 // disabled at the time the route was added). A panic here would block
-// reconfigureChangedSources any time gain changes on a non-soundlevel run.
+// reconfigureChangedSources route retry on a non-soundlevel run.
 func TestUntrackSoundLevelConsumer_MissingSourceIsNoOp(t *testing.T) {
 	t.Parallel()
 

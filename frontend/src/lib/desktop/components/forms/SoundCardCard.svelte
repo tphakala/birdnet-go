@@ -17,7 +17,6 @@
   @component
 -->
 <script lang="ts">
-  import { generateId } from '$lib/utils/uuid';
   import {
     deviceValue,
     deviceMatches,
@@ -64,11 +63,9 @@
   } from '$lib/stores/settings';
 
   // Local EqualizerSettings type matching AudioEqualizerSettings component's interface
-  // where filter.id is optional (assigned on save)
   interface LocalEqualizerSettings {
     enabled: boolean;
     filters: Array<{
-      id?: string;
       type: EqualizerFilterType;
       frequency: number;
       q?: number;
@@ -222,15 +219,12 @@
       editModels = getDefaultModels();
     }
 
-    // Transform equalizer filters to ensure all have an id (required by store type)
+    // A disabled equalizer without filters is stored as undefined
     const transformedEqualizer =
       editEqualizer.enabled || editEqualizer.filters.length > 0
         ? {
             enabled: editEqualizer.enabled,
-            filters: editEqualizer.filters.map(f => ({
-              ...f,
-              id: f.id || generateId(),
-            })),
+            filters: editEqualizer.filters,
           }
         : undefined;
 
@@ -493,6 +487,7 @@
                 equalizerSettings={editEqualizer}
                 {disabled}
                 onUpdate={handleEqualizerUpdate}
+                sampleRate={editSampleRate}
               />
             </div>
           {/if}

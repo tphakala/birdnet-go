@@ -45,8 +45,8 @@ func startSoundLevelSSEPublisher(wg *sync.WaitGroup, ctx context.Context, apiCon
 				if err := apiController.BroadcastSoundLevel(&sanitizedData); err != nil {
 					// Record error metric
 					if soundLevelMetrics := getSoundLevelMetrics(apiController); soundLevelMetrics != nil {
-						soundLevelMetrics.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
-						soundLevelMetrics.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "error")
+						soundLevelMetrics.RecordSoundLevelPublishingError(soundData.Source, "sse", "broadcast_error")
+						soundLevelMetrics.RecordSoundLevelPublishing(soundData.Source, "sse", "error")
 					}
 					// Only log errors occasionally to avoid spam
 					if time.Now().Unix()%60 == 0 { // Log once per minute at most
@@ -58,7 +58,7 @@ func startSoundLevelSSEPublisher(wg *sync.WaitGroup, ctx context.Context, apiCon
 				} else {
 					// Record success metric
 					if soundLevelMetrics := getSoundLevelMetrics(apiController); soundLevelMetrics != nil {
-						soundLevelMetrics.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "success")
+						soundLevelMetrics.RecordSoundLevelPublishing(soundData.Source, "sse", "success")
 					}
 				}
 			}

@@ -50,6 +50,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -90,6 +91,10 @@ type Controller struct {
 	// settings; the remaining deps (Metrics, Processor, settings accessors, and the
 	// error/log helpers) all promote from the shared *apicore.Core.
 	integrations *integrations.Handler
+
+	// proxyTrust caches the checker the connection check builds from
+	// Security.TrustedProxies, rebuilt only when the list changes.
+	proxyTrust proxytrust.Cache
 
 	// detections serves the /api/v2/detections/* CRUD/review/lock/ignore/batch
 	// endpoints and POST /api/v2/search. Besides the shared *apicore.Core it holds
@@ -490,8 +495,8 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c.weather = weather.New(c.Core)
 	c.rangeHandler = rangeapi.New(c.Core)
 	// The SSE handler receives the facade-owned auth check (isClientAuthenticated)
-	// so the public detection stream can anonymize the source DisplayName for
-	// unauthenticated subscribers (matching detections/analytics and the
+	// so the public detection and sound level streams can anonymize the source
+	// display name for unauthenticated subscribers (matching detections/analytics and the
 	// StreamAudioLevel precedent). The bound method value reads c.authService at
 	// call time, so the post-functional-option authService is observed per request.
 	c.sse = sse.New(c.Core, c.isClientAuthenticated)

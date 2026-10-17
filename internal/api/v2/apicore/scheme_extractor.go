@@ -12,11 +12,11 @@ package apicore
 
 import (
 	"net/http"
-	"sync/atomic"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
 // Leading bytes of a unix-socket RemoteAddr as reported by net/http: "@" for a
@@ -48,7 +48,7 @@ func isUnixSocketPeer(remoteAddr string) bool {
 // only matter for the scheme, it must trust exactly the peers that
 // newTrustedProxyIPExtractor trusts, so one list governs client IP and scheme.
 func newTrustedProxySchemeExtractor(getSettings func() *conf.Settings) echo.SchemeExtractor {
-	var cache atomic.Pointer[trustedProxyChecker]
+	var cache proxytrust.Cache
 	fromHeaders := echo.LegacySchemeExtractor()
 	direct := echo.ExtractSchemeDirect()
 
@@ -59,8 +59,8 @@ func newTrustedProxySchemeExtractor(getSettings func() *conf.Settings) echo.Sche
 		if isUnixSocketPeer(req.RemoteAddr) {
 			return fromHeaders(req)
 		}
-		peerIP, _ := peerAddrFromRequest(req)
-		if resolveTrustedProxyChecker(&cache, getSettings).trust(peerIP) {
+		peerIP, _ := proxytrust.PeerAddr(req)
+		if resolveTrustedProxyChecker(&cache, getSettings).TrustsPeer(peerIP) {
 			return fromHeaders(req)
 		}
 		return direct(req)

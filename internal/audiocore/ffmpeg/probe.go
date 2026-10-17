@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -17,7 +18,7 @@ import (
 
 // MinBatSampleRate is the minimum source capture rate in Hz for bat detection
 // models. Streams below this rate cannot carry ultrasonic content.
-const MinBatSampleRate = 96000
+const MinBatSampleRate = audioformat.MinBatSampleRate
 
 // ErrNoAudioStreamsFound reports that ffprobe found no audio streams in the input.
 var ErrNoAudioStreamsFound = errors.NewStd("no audio streams found in probe output")

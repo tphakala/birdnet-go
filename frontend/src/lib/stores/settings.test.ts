@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS } from './settings';
-import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
+import type {
+  AudioSettings,
+  BirdNetSettings,
+  EqualizerSettings,
+  RealtimeSettings,
+  SettingsFormData,
+} from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
 import { deferred } from '../../test/async-helpers';
@@ -1176,6 +1182,134 @@ describe('Settings Store - saveSection', () => {
     expect(lookup(body, ['sentry', 'enabled'])).toBe(true);
   });
 
+  describe('saveSettings joining a pending save', () => {
+    /** Starts a section save that stays in flight until the returned deferred resolves. */
+    const holdSectionSave = () => {
+      const patch = deferred<Record<string, never>>();
+      vi.mocked(settingsAPI.patchSection).mockReturnValueOnce(patch.promise);
+      const sectionSave = settingsActions.saveSection('birdnet', { threshold: 0.9 });
+      return { patch, sectionSave };
+    };
+
+    it('a second saveSettings during a section-save wait joins the first and sends one save', async () => {
+      const { patch, sectionSave } = holdSectionSave();
+
+      const first = settingsActions.saveSettings({ notify: false });
+      const second = settingsActions.saveSettings({ notify: false });
+      patch.resolve({});
+      await Promise.all([sectionSave, first, second]);
+
+      expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('a joined saveSettings rejects with the same error', async () => {
+      vi.mocked(settingsAPI.save).mockRejectedValueOnce(new Error('boom'));
+      const { patch, sectionSave } = holdSectionSave();
+
+      const first = settingsActions.saveSettings({ notify: false }).catch((e: unknown) => e);
+      const second = settingsActions.saveSettings({ notify: false }).catch((e: unknown) => e);
+      patch.resolve({});
+      await sectionSave;
+      const [firstError, secondError] = await Promise.all([first, second]);
+
+      expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+      expect(firstError).toBeInstanceOf(Error);
+      expect(secondError).toBe(firstError);
+      expect(get(settingsStore).isSaving).toBe(false);
+    });
+
+    it('a joined call that wants notifications gets the toast even when the first did not', async () => {
+      const { toastActions } = await import('./toast.js');
+      const { patch, sectionSave } = holdSectionSave();
+
+      const first = settingsActions.saveSettings({ notify: false });
+      const second = settingsActions.saveSettings();
+      patch.resolve({});
+      await Promise.all([sectionSave, first, second]);
+
+      expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+      expect(toastActions.success).toHaveBeenCalledTimes(1);
+    });
+
+    it('isSaving is true while saveSettings waits for section saves', async () => {
+      const { patch, sectionSave } = holdSectionSave();
+
+      const save = settingsActions.saveSettings({ notify: false });
+      expect(get(settingsStore).isSaving).toBe(true);
+      patch.resolve({});
+      await Promise.all([sectionSave, save]);
+
+      expect(get(settingsStore).isSaving).toBe(false);
+    });
+
+    it('edits made during the wait are in the single snapshot', async () => {
+      const { patch, sectionSave } = holdSectionSave();
+
+      const first = settingsActions.saveSettings({ notify: false });
+      settingsActions.updateSection('main', { name: 'Edited during wait' });
+      const second = settingsActions.saveSettings({ notify: false });
+      patch.resolve({});
+      await Promise.all([sectionSave, first, second]);
+
+      expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(settingsAPI.save).mock.calls[0]?.[0].main.name).toBe('Edited during wait');
+    });
+
+    it('sequential saves without section saves still each save', async () => {
+      await settingsActions.saveSettings({ notify: false });
+      await settingsActions.saveSettings({ notify: false });
+
+      expect(settingsAPI.save).toHaveBeenCalledTimes(2);
+    });
+
+    it('a joined save clears an error set during its wait and is saving during its request', async () => {
+      const directRequest = deferred<undefined>();
+      const joinedRequest = deferred<undefined>();
+      vi.mocked(settingsAPI.save)
+        .mockReturnValueOnce(directRequest.promise)
+        .mockReturnValueOnce(joinedRequest.promise);
+
+      // No section save is in flight, so this save sends its request at once.
+      const direct = settingsActions.saveSettings({ notify: false }).catch((e: unknown) => e);
+      await vi.waitFor(() => expect(settingsAPI.save).toHaveBeenCalledTimes(1));
+      const { patch, sectionSave } = holdSectionSave();
+      const joined = settingsActions.saveSettings({ notify: false });
+
+      // The direct save fails while the joined one waits for the section save.
+      directRequest.reject(new Error('direct failed'));
+      await direct;
+      expect(get(settingsStore).error).not.toBeNull();
+
+      patch.resolve({});
+      await sectionSave;
+      await vi.waitFor(() => expect(settingsAPI.save).toHaveBeenCalledTimes(2));
+      expect(get(settingsStore).isSaving).toBe(true);
+      expect(get(settingsStore).error).toBeNull();
+
+      joinedRequest.resolve(undefined);
+      await joined;
+      expect(get(settingsStore).isSaving).toBe(false);
+      expect(get(settingsStore).error).toBeNull();
+    });
+
+    it('a call after the snapshot starts its own save', async () => {
+      const request = deferred<undefined>();
+      vi.mocked(settingsAPI.save).mockReturnValueOnce(request.promise);
+      const { patch, sectionSave } = holdSectionSave();
+
+      const first = settingsActions.saveSettings({ notify: false });
+      patch.resolve({});
+      await sectionSave;
+      // The wait is over and the first save is in flight on the held request.
+      await vi.waitFor(() => expect(settingsAPI.save).toHaveBeenCalledTimes(1));
+      const second = settingsActions.saveSettings({ notify: false });
+      request.resolve(undefined);
+      await Promise.all([first, second]);
+
+      expect(settingsAPI.save).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('saveSettings waits for the store merge, not only the request', async () => {
     const patch = deferred<Record<string, never>>();
     vi.mocked(settingsAPI.patchSection).mockReturnValueOnce(patch.promise);
@@ -1367,4 +1501,121 @@ describe('Settings Store - restart status refresh after a save', () => {
       }
     }
   );
+});
+
+describe('Settings Store - equalizer values the backend accepts', () => {
+  // Values the editor never offers but the backend stores: a disabled equalizer is not
+  // validated at all, and an enabled one only bounds frequency and Q
+  const storedFilter = {
+    type: 'Peaking',
+    frequency: 22000,
+    q: 50,
+    width: 0,
+    gain: 20,
+    passes: 8,
+  };
+  const storedEqualizer = () => ({ enabled: true, filters: [{ ...storedFilter }] });
+
+  const loadWith = async (settings: SettingsFormData) => {
+    settingsStore.set({
+      formData: { main: { name: '' } } as unknown as SettingsFormData,
+      originalData: { main: { name: '' } } as unknown as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: false,
+    });
+    vi.mocked(settingsAPI.load).mockResolvedValue(settings);
+    await settingsActions.loadSettings();
+  };
+
+  // The server settings with an equalizer on the global, source and stream paths
+  const withEqualizers = (): SettingsFormData => {
+    const settings = serverSettings() as unknown as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    settings.realtime.audio.equalizer = storedEqualizer();
+    settings.realtime.audio.sources = [
+      { name: 'Card', device: 'hw:0', equalizer: { ...storedEqualizer(), enabled: false } },
+    ];
+    settings.realtime.rtsp = {
+      ...settings.realtime.rtsp,
+      streams: [
+        {
+          name: 'Cam',
+          url: 'rtsp://cam',
+          enabled: true,
+          type: 'rtsp',
+          equalizer: storedEqualizer(),
+        },
+      ],
+    };
+    return settings as unknown as SettingsFormData;
+  };
+
+  beforeEach(() => {
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    vi.mocked(settingsAPI.patchSection).mockReset().mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    vi.mocked(settingsAPI.load).mockReset();
+  });
+
+  it('round-trips stored equalizer values through load and save on every path', async () => {
+    await loadWith(withEqualizers());
+
+    await settingsActions.saveSettings();
+
+    const saved = vi.mocked(settingsAPI.save).mock.calls[0]?.[0] as unknown as Record<
+      string,
+      any // eslint-disable-line @typescript-eslint/no-explicit-any
+    >;
+    expect(saved.realtime.audio.equalizer).toEqual(storedEqualizer());
+    expect(saved.realtime.audio.sources[0].equalizer).toEqual({
+      ...storedEqualizer(),
+      enabled: false,
+    });
+    expect(saved.realtime.rtsp.streams[0].equalizer).toEqual(storedEqualizer());
+  });
+
+  it('reports no unsaved changes after loading, and after a no-op equalizer update', async () => {
+    await loadWith(withEqualizers());
+    expect(get(hasUnsavedChanges)).toBe(false);
+
+    const audio = get(settingsStore).formData.realtime?.audio;
+    if (!audio) throw new Error('audio settings not loaded');
+    // The editor hands back its own copy of the equalizer, with a stray id as older
+    // editor versions added; coercion must remove it, not keep it as a change
+    const sameEqualizer = {
+      enabled: true,
+      filters: [{ ...storedFilter, id: 'filter-1' }],
+    };
+    // 'Peaking' is a type the backend stores but the store's union does not name
+    const equalizer = sameEqualizer as unknown as EqualizerSettings;
+    settingsActions.updateSection('realtime', { audio: { ...audio, equalizer } });
+
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it('reports no unsaved changes after saving a section whose equalizers carry no ids', async () => {
+    await loadWith(withEqualizers());
+
+    const patch: Partial<AudioSettings> = {
+      sources: [
+        {
+          name: 'Card',
+          device: 'hw:0',
+          gain: 0,
+          models: [],
+          equalizer: {
+            enabled: false,
+            filters: [{ type: 'LowPass', frequency: 22000, q: 50, width: 0, gain: 20, passes: 8 }],
+          },
+        },
+      ],
+    };
+    await settingsActions.saveSection('audio', patch);
+
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
 });

@@ -64,7 +64,6 @@ func TestIsReconfigureOperation(t *testing.T) {
 	}{
 		{"reconfigure_diff suppresses first failure", operationReconfigureDiff, true},
 		{"reconfigure_params suppresses first failure", operationReconfigureParams, true},
-		{"gain_change suppresses first failure", operationGainChange, true},
 		{"model_change suppresses first failure", operationModelChange, true},
 		{"route_retry keeps reconfigure semantics", operationRouteRetry, true},
 		{"start reports immediately", operationStart, false},

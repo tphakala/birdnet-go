@@ -178,6 +178,31 @@ func TestRecordBirdNETProcessingOverrun(t *testing.T) {
 	})
 }
 
+func TestRecordAudioInferenceLockWait(t *testing.T) {
+	t.Parallel()
+	registry := prometheus.NewRegistry()
+	m, err := NewMyAudioMetrics(registry)
+	require.NoError(t, err)
+
+	m.RecordAudioInferenceLockWait("mic_0", 0.25)
+
+	metricFamilies, err := registry.Gather()
+	require.NoError(t, err)
+	var found bool
+	for _, mf := range metricFamilies {
+		if mf.GetName() != "myaudio_audio_inference_lock_wait_seconds" {
+			continue
+		}
+		found = true
+		require.Len(t, mf.GetMetric(), 1)
+		metric := mf.GetMetric()[0]
+		assert.Equal(t, "mic_0", metric.GetLabel()[0].GetValue())
+		assert.Equal(t, uint64(1), metric.GetHistogram().GetSampleCount())
+		assert.InDelta(t, 0.25, metric.GetHistogram().GetSampleSum(), 0.0001)
+	}
+	assert.True(t, found, "lock wait histogram should be present")
+}
+
 func TestRecordBufferAllocationAttempt(t *testing.T) {
 	// Create a new registry for testing
 	registry := prometheus.NewRegistry()

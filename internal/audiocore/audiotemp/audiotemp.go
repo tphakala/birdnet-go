@@ -1,6 +1,6 @@
 // Package audiotemp centralizes the temp-file naming and atomic-finalize
-// contract shared by BirdNET-Go's audio clip writers: the FFmpeg exporter, the
-// native FLAC, AAC and Opus encoders, and the WAV writer. Each writes a clip to
+// contract shared by BirdNET-Go's audio clip writers: the native
+// FLAC, AAC, MP3 and Opus encoders, and the WAV writer. Each writes a clip to
 // a process-unique temp file and atomically renames it into place, so two
 // simultaneous detections that resolve to the same clip path (see GitHub #3323)
 // dedup safely instead of colliding on a shared temp or corrupting the final
@@ -8,7 +8,7 @@
 //
 // WriteFile packages that whole sequence for encoders that can write to an
 // *os.File. It is not yet used everywhere: the FLAC encoder, the WAV writer, the
-// FFmpeg exporter, the importer and the spectrogram generator still drive
+// importer and the spectrogram generator still drive
 // UniquePath and Finalize themselves, so migrating them is worthwhile but out of
 // scope for the change that introduced this. The spectrogram generator in
 // particular needs FinalizeWith rather than WriteFile, since it injects a

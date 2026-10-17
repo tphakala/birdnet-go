@@ -5,34 +5,50 @@ package ultrasonic
 
 import (
 	"math"
-	"math/cmplx"
+
+	"github.com/tphakala/go-audio-dsp/stft"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+// HasUltrasonicBand reports whether a source at sampleRate Hz has any band above
+// splitHz: the rate must be positive and the split strictly below Nyquist
+// (sampleRate/2). The comparison is exact, so an odd rate keeps a split just
+// under its half.
+func HasUltrasonicBand(sampleRate, splitHz int) bool {
+	return sampleRate > 0 && splitHz*2 < sampleRate
+}
 
 // ComputeUSFrameCV computes the coefficient of variation of per-frame ultrasonic
 // energy for the given PCM audio samples. Returns the CV value and whether the
 // computation succeeded (false if insufficient data or invalid parameters).
 //
-// samples contains the raw audio at sampleRate Hz. The function runs an STFT
-// with the configured FFT/hop sizes, sums energy above the frequency split for
-// each frame, and returns std(framePowers)/mean(framePowers).
-func ComputeUSFrameCV(samples []float64, sampleRate int, cfg conf.UltrasonicFilterConfig) (float64, bool) {
-	if len(samples) < cfg.FFTSize || sampleRate <= 0 || cfg.FFTSize < 2 || cfg.HopSize <= 0 {
+// samples are float32 audio in [-1, 1) at sampleRate Hz. The function runs an
+// STFT with the configured FFT and hop sizes using the go-audio-dsp stft
+// package (float32 FFT, symmetric Hann window, no padding), removes each
+// frame's mean first so a DC offset cannot leak roundoff into the ultrasonic
+// bins, sums the power above the frequency split for each frame in float64, and
+// returns std(framePowers)/mean(framePowers). The result agrees with a float64
+// FFT to about 2e-6 absolute.
+//
+// It returns false for any configuration cfg.ValidateSTFT rejects, for a
+// FrequencySplitHz that leaves no band (see HasUltrasonicBand), and when samples hold fewer than two
+// frames.
+func ComputeUSFrameCV(samples []float32, sampleRate int, cfg conf.UltrasonicFilterConfig) (float64, bool) {
+	if cfg.ValidateSTFT() != nil {
+		return 0, false
+	}
+	if len(samples) < cfg.FFTSize || !HasUltrasonicBand(sampleRate, cfg.FrequencySplitHz) {
 		return 0, false
 	}
 
-	if cfg.FFTSize&(cfg.FFTSize-1) != 0 {
-		return 0, false
-	}
-
-	if cfg.FrequencySplitHz < 0 || cfg.FrequencySplitHz >= sampleRate/2 {
-		return 0, false
-	}
-
-	window := hanningWindow(cfg.FFTSize)
 	numFrames := 1 + (len(samples)-cfg.FFTSize)/cfg.HopSize
 	if numFrames < 2 {
+		return 0, false
+	}
+
+	plan, err := stft.New(stft.Config{FrameSize: cfg.FFTSize, HopSize: cfg.HopSize, Window: stft.HannSymmetric})
+	if err != nil {
 		return 0, false
 	}
 
@@ -41,28 +57,39 @@ func ComputeUSFrameCV(samples []float64, sampleRate int, cfg conf.UltrasonicFilt
 	nyquistBin := cfg.FFTSize / 2
 
 	framePowers := make([]float64, numFrames)
-	buf := make([]complex128, cfg.FFTSize)
+	frame := make([]float32, cfg.FFTSize)
+	power := make([]float32, plan.NumBins())
 
-	for frame := range numFrames {
-		offset := frame * cfg.HopSize
-		for i := range cfg.FFTSize {
-			buf[i] = complex(samples[offset+i]*window[i], 0)
-		}
-		fft(buf)
+	for f := range numFrames {
+		offset := f * cfg.HopSize
+		removeMean(frame, samples[offset:offset+cfg.FFTSize])
+		plan.PowerInto(power, frame, stft.NoPad)
 
-		var power float64
+		var sum float64
 		for bin := splitBin; bin <= nyquistBin; bin++ {
-			z := buf[bin]
-			p := real(z)*real(z) + imag(z)*imag(z)
+			p := float64(power[bin])
 			if bin > 0 && bin < nyquistBin {
 				p *= 2
 			}
-			power += p
+			sum += p
 		}
-		framePowers[frame] = power
+		framePowers[f] = sum
 	}
 
 	return coefficientOfVariation(framePowers), true
+}
+
+// removeMean writes src minus its mean into dst. The mean is accumulated in
+// float64; dst and src have the same length.
+func removeMean(dst, src []float32) {
+	var sum float64
+	for _, v := range src {
+		sum += float64(v)
+	}
+	mean := float32(sum / float64(len(src)))
+	for i, v := range src {
+		dst[i] = v - mean
+	}
 }
 
 // IsUnlikely returns true if the given US frame CV falls below the configured
@@ -94,52 +121,4 @@ func coefficientOfVariation(values []float64) float64 {
 		sumSq += d * d
 	}
 	return math.Sqrt(sumSq/n) / mean
-}
-
-// fft performs an in-place iterative Cooley-Tukey FFT on data.
-// len(data) must be a power of 2.
-func fft(data []complex128) {
-	n := len(data)
-	if n <= 1 {
-		return
-	}
-
-	// Bit-reversal permutation
-	j := 0
-	for i := 1; i < n; i++ {
-		bit := n >> 1
-		for j&bit != 0 {
-			j ^= bit
-			bit >>= 1
-		}
-		j ^= bit
-		if i < j {
-			data[i], data[j] = data[j], data[i]
-		}
-	}
-
-	// Butterfly stages
-	for size := 2; size <= n; size <<= 1 {
-		half := size >> 1
-		wn := cmplx.Rect(1, -2.0*math.Pi/float64(size))
-		for start := 0; start < n; start += size {
-			w := complex(1, 0)
-			for k := range half {
-				u := data[start+k]
-				v := w * data[start+k+half]
-				data[start+k] = u + v
-				data[start+k+half] = u - v
-				w *= wn
-			}
-		}
-	}
-}
-
-// hanningWindow returns a Hanning window of length n.
-func hanningWindow(n int) []float64 {
-	w := make([]float64, n)
-	for i := range w {
-		w[i] = 0.5 * (1 - math.Cos(2*math.Pi*float64(i)/float64(n-1)))
-	}
-	return w
 }

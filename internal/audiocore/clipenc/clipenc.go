@@ -9,23 +9,19 @@
 // produced no log line naming the encoder involved, and the triage that
 // attribution makes possible for saved clips was unavailable for uploads.
 //
-// This is a leaf package with no imports on purpose. The obvious alternative
-// homes both cost more than they are worth for five strings: internal/conf
-// documents its native-encoder gate file as scaffolding with a planned
-// deletion, and the tags outlive the gate; internal/audiocore/ffmpeg already
-// exports the sibling format constants but transitively pulls in datastore,
-// telemetry, notification and alerting, none of which internal/birdweather
-// depends on today.
+// This is a leaf package on purpose: it imports only the standard-library-only
+// audioformat package, because internal/audiocore/ffmpeg transitively pulls in
+// datastore, telemetry, notification and alerting, none of which
+// internal/birdweather depends on today.
 //
-// Deliberately limited to the tags. The routing that picks between them
-// (selectEncoder in the processor) stays where it is until the native AAC/Opus
-// gate is removed and the branching simplifies, so it is moved once rather than
-// twice. These names survive that removal unchanged.
+// Deliberately limited to the tags and the format-to-tag lookup. The routing
+// that picks between encoders (selectEncoder in the processor) stays in the
+// processor.
 package clipenc
 
+import "github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
+
 const (
-	// FFmpeg is the external ffmpeg binary.
-	FFmpeg = "ffmpeg"
 	// NativeWAV is the in-tree WAV writer.
 	NativeWAV = "native-wav"
 	// NativeFLAC is the in-tree go-flac encoder.
@@ -37,3 +33,22 @@ const (
 	// NativeMP3 is the in-tree go-mp3 encoder.
 	NativeMP3 = "native-mp3"
 )
+
+// ForFormat returns the native encoder tag for an audioformat constant, and
+// false for a format no native encoder handles.
+func ForFormat(format string) (tag string, ok bool) {
+	switch format {
+	case audioformat.WAV:
+		return NativeWAV, true
+	case audioformat.FLAC:
+		return NativeFLAC, true
+	case audioformat.AAC:
+		return NativeAAC, true
+	case audioformat.Opus:
+		return NativeOpus, true
+	case audioformat.MP3:
+		return NativeMP3, true
+	default:
+		return "", false
+	}
+}

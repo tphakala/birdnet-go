@@ -269,6 +269,26 @@ func (r *SourceRegistry) UpdateState(sourceID string, state SourceState) error {
 	return nil
 }
 
+// TransitionState atomically sets the state to `to` only when the current
+// state equals `from`, and fires SourceStateChanged when it does. It returns
+// false, without an event, when the source does not exist or is in another
+// state. It lets a start path finish without overwriting a concurrent stop.
+func (r *SourceRegistry) TransitionState(sourceID string, from, to SourceState) bool {
+	r.mu.Lock()
+
+	src, ok := r.sources[sourceID]
+	if !ok || src.State != from {
+		r.mu.Unlock()
+		return false
+	}
+	src.State = to
+	snapshot := r.copySource(src)
+	r.mu.Unlock()
+
+	r.notify(SourceEvent{Type: SourceStateChanged, SourceID: sourceID, Source: snapshot})
+	return true
+}
+
 // UpdateDisplayName changes the display name of a source and fires
 // SourceReconfigured. Returns false if the source does not exist or
 // the name is unchanged.

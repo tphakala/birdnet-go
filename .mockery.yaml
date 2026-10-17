@@ -39,6 +39,11 @@ packages:
         config:
           filename: "mock_TelemetryReporter.go"
           mockname: "MockTelemetryReporter"
+      # NoticeService interface used by persistent bell notices
+      NoticeService:
+        config:
+          filename: "mock_NoticeService.go"
+          mockname: "MockNoticeService"
 
   github.com/tphakala/birdnet-go/internal/events:
     interfaces:

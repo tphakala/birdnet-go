@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/semaphore"
+
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -78,6 +80,53 @@ type generateOptions struct {
 	// freqProfile overrides the default bird frequency profile for spectrogram
 	// generation. When nil, BirdProfile() is used.
 	freqProfile *FrequencyProfile
+	// source is the state of the audio file when the caller judged it ready.
+	// When set, the native path refuses to publish a render of a file that has
+	// since changed.
+	source *SourceState
+	// beforePublish, when set, runs after the native render and before the source
+	// is compared and the PNG published. It is a seam for tests that change the
+	// file in that window.
+	beforePublish func()
+}
+
+// ErrSourceChanged marks a render whose audio file differs from the state the
+// caller supplied with WithSourceState: the clip was still being written or was
+// replaced, so the image would not match the file as it stands. Nothing is
+// published; a later request decides from the current bytes.
+var ErrSourceChanged = errors.NewStd("audio file changed during spectrogram generation")
+
+// SourceState is an audio file as the caller's readiness check judged it ready
+// to render: its identity, size and modification time, plus the upper bound of
+// the memory its decode needs.
+type SourceState struct {
+	info         os.FileInfo
+	decodedBytes int64
+}
+
+// NewSourceState captures info, the os.FileInfo of the audio file at the moment
+// it was judged ready, and decodedBytes, the most bytes its decode can hold
+// (transcode.ProbeInfo.DecodedBytes), which sizes the render's memory budget.
+func NewSourceState(info os.FileInfo, decodedBytes int64) SourceState {
+	return SourceState{info: info, decodedBytes: decodedBytes}
+}
+
+// DecodedBytes returns the decoded-size bound the state was created with.
+func (s SourceState) DecodedBytes() int64 { return s.decodedBytes }
+
+// Matches reports whether now describes the same file content as the snapshot:
+// the same file (os.SameFile), size and modification time.
+func (s SourceState) Matches(now os.FileInfo) bool {
+	return now != nil && os.SameFile(s.info, now) && s.info.Size() == now.Size() && s.info.ModTime().Equal(now.ModTime())
+}
+
+// WithSourceState makes GenerateFromFile compare the audio file with state before
+// the render, for every renderer, and again before publishing, for the native
+// renderer, and return ErrSourceChanged when it differs.
+func WithSourceState(state SourceState) GenerateOption {
+	return func(o *generateOptions) {
+		o.source = &state
+	}
 }
 
 // WithDuration provides a pre-validated audio duration (in seconds) to skip
@@ -213,6 +262,11 @@ const (
 type Generator struct {
 	settings *conf.Settings
 	sfs      *securefs.SecureFS
+
+	// renderBudget bounds the memory of native renders in flight, in the bytes
+	// nativeRenderWeight assigns each; renderBudgetBytes is its size.
+	renderBudget      *semaphore.Weighted
+	renderBudgetBytes int64
 }
 
 // NewGenerator creates a new generator instance.
@@ -220,10 +274,12 @@ type Generator struct {
 // the generator always fetches a fresh logger via GetLogger() to avoid
 // stale logger instances that silently drop log messages (see #2025).
 func NewGenerator(settings *conf.Settings, sfs *securefs.SecureFS, _ logger.Logger) *Generator {
-	return &Generator{
+	g := &Generator{
 		settings: settings,
 		sfs:      sfs,
 	}
+	g.initRenderBudget()
+	return g
 }
 
 // log returns a fresh module logger for the spectrogram package.
@@ -262,6 +318,8 @@ func (g *Generator) getDynamicRange(settings *conf.Settings) string {
 // GenerateFromFile creates a spectrogram from an audio file path.
 // Used by API on-demand and user-requested modes.
 // Tries Sox first (faster), falls back to FFmpeg if Sox fails.
+// With BIRDNET_SPECTROGRAM_RENDERER=native (conf.NativeSpectrogramEnabled) the
+// image is drawn in Go, with no sox or FFmpeg fallback.
 //
 // The audioPath and outputPath must be absolute paths.
 // Width is in pixels, raw controls whether to show axes/legends.
@@ -324,8 +382,14 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 	// Verify the audio file is accessible before starting generation.
 	// Checked here (not in each generator method) to produce a clear error
 	// and skip the Sox->FFmpeg fallback when the file simply does not exist.
-	if _, statErr := os.Stat(audioPath); statErr != nil {
+	audioInfo, statErr := os.Stat(audioPath)
+	if statErr != nil {
 		return fmt.Errorf("audio file inaccessible: %w", statErr)
+	}
+	// The queue wait between the caller's readiness check and here can be long
+	// enough for a clip that was still being written to grow or be replaced.
+	if options.source != nil && !options.source.Matches(audioInfo) {
+		return fmt.Errorf("%w: before render", ErrSourceChanged)
 	}
 
 	// Ensure output directory exists using SecureFS (validates path automatically)
@@ -357,8 +421,22 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 	soxCtx, soxCancel := context.WithTimeout(ctx, defaultGenerationTimeout)
 	defer soxCancel()
 
-	// Try Sox first (faster, direct processing)
-	if err := g.generateWithSoxFile(soxCtx, settings, audioPath, tempPath, width, raw, options.preValidatedDuration, profile); err != nil {
+	// With the native renderer selected, a failure is returned as is: there is no
+	// sox or FFmpeg fallback. soxCtx bounds both paths.
+	renderer, native := selectedRenderer()
+	if native {
+		renderErr := g.generateNativeFromFile(soxCtx, settings, audioPath, tempPath, width, raw, profile, options.source)
+		if options.beforePublish != nil {
+			options.beforePublish()
+		}
+		if err := checkSourceUnchanged(soxCtx, options.source, audioPath, renderErr); err != nil {
+			return err
+		}
+		if renderErr != nil {
+			return renderErr
+		}
+	} else if err := g.generateWithSoxFile(soxCtx, settings, audioPath, tempPath, width, raw, options.preValidatedDuration, profile); err != nil {
+		// Try Sox first (faster, direct processing)
 		// If the caller's context is already done (client disconnect, shutdown, or
 		// caller-imposed timeout), the result is no longer wanted. Skip the FFmpeg
 		// fallback: it runs on a context detached from the parent (see
@@ -405,6 +483,7 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 	}
 
 	g.log().Info("Spectrogram generation from file completed",
+		logger.String("renderer", renderer),
 		logger.String("audio_path", g.relPath(audioPath)),
 		logger.Int("width", width),
 		logger.Int64("total_ms", time.Since(start).Milliseconds()))
@@ -412,10 +491,39 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 	return nil
 }
 
+// checkSourceUnchanged compares the audio file with the state readiness judged,
+// after the render and before the PNG is published. A difference, or a file that
+// can no longer be read, returns ErrSourceChanged, wrapping renderErr when the
+// render failed too: a decode error on a file that changed under it is
+// transient and outranks the render error. A nil source (no state supplied) and
+// a render error under a context that is already done (an interruption, not a
+// reading of the file) pass through.
+func checkSourceUnchanged(ctx context.Context, source *SourceState, audioPath string, renderErr error) error {
+	if source == nil {
+		return nil
+	}
+	if renderErr != nil {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+	}
+	if now, err := os.Stat(audioPath); err == nil && source.Matches(now) {
+		return nil
+	}
+	if renderErr != nil {
+		return fmt.Errorf("%w: after render: %w", ErrSourceChanged, renderErr)
+	}
+	return fmt.Errorf("%w: after render", ErrSourceChanged)
+}
+
 // GenerateFromPCM creates a spectrogram from in-memory PCM data.
 // Used by pre-renderer (background mode).
 // PCM format: s16le, mono. sampleRate is the source capture rate in Hz;
 // pass 0 to fall back to conf.SampleRate (48000 Hz).
+// With BIRDNET_SPECTROGRAM_RENDERER=native (conf.NativeSpectrogramEnabled) the
+// image is drawn in Go, with no sox or FFmpeg fallback.
 //
 // Context Timeout Behavior:
 // This function enforces a 60-second timeout for spectrogram generation.
@@ -500,8 +608,15 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 	ctx, cancel := context.WithTimeout(ctx, defaultGenerationTimeout)
 	defer cancel()
 
-	// Generate directly from PCM stdin (no FFmpeg needed)
-	if err := g.generateWithSoxPCM(ctx, settings, pcmData, tempPath, width, raw, sampleRate, profile); err != nil {
+	// With the native renderer selected, a failure is returned as is: there is no
+	// sox fallback.
+	renderer, native := selectedRenderer()
+	if native {
+		if err := g.generateNativeFromPCM(ctx, settings, pcmData, tempPath, width, raw, sampleRate, profile); err != nil {
+			return err
+		}
+	} else if err := g.generateWithSoxPCM(ctx, settings, pcmData, tempPath, width, raw, sampleRate, profile); err != nil {
+		// Generate directly from PCM stdin (no FFmpeg needed)
 		return err
 	}
 
@@ -516,6 +631,7 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 	}
 
 	g.log().Info("Spectrogram generation from PCM completed",
+		logger.String("renderer", renderer),
 		logger.String("output_path", g.relPath(outputPath)),
 		logger.Int("width", width),
 		logger.Int("pcm_bytes", len(pcmData)),
@@ -826,10 +942,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 	}
 
 	// Use provided sample rate; fall back to default when caller passes 0
-	effectiveRate := sampleRate
-	if effectiveRate <= 0 {
-		effectiveRate = conf.SampleRate
-	}
+	effectiveRate := pcmSourceRate(sampleRate)
 
 	// Build Sox arguments for PCM stdin
 	// PCM format parameters use constants from conf package for consistency

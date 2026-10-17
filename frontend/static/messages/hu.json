@@ -516,6 +516,12 @@
         "title": "A(z) {modelName} minden elemzésnél hibázik",
         "message": "A(z) {modelName} be van töltve, de az utolsó {failures} egymást követő elemzése sikertelen volt ezen: {runtime}. A következtetés hibát adott. A rendszer rögzíti a hangot, de ez a modell semmit sem észlel. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon.",
         "nonFiniteMessage": "A(z) {modelName} be van töltve, de az utolsó {failures} egymást követő elemzése sikertelen volt ezen: {runtime}. A modell érvénytelen (NaN vagy végtelen) pontszámokat adott. A rendszer rögzíti a hangot, de ez a modell semmit sem észlel. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Az elemzési átfedés korlátozva ezen az eszközön",
+        "cadenceCappedMessage": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} a beállított {configured} s átfedéssel meghaladja az eszköz mért kapacitását, ezért a hang elemzése {effective} s átfedéssel történik. Emiatt a hamis pozitív szűrő kevesebb megerősítést kérhet. A mentett beállításai nem változnak; lásd Beállítások > Elemzés.",
+        "cadenceOverloadedTitle": "Az eszköz nem bírja a hangelemzést",
+        "cadenceOverloadedMessage": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását, ezért az elemzés lemaradhat, és detektálások maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást, vagy válasszon gyorsabb modellváltozatot."
       }
     },
     "loading": "Értesítések betöltése..."
@@ -2366,7 +2372,9 @@
       "saveAriaLabel": "Módosítások mentése",
       "savingAriaLabel": "Módosítások mentése...",
       "unsavedChanges": "Nem mentett változtatások",
-      "toolbar": "Beállítások műveletek"
+      "toolbar": "Beállítások műveletek",
+      "validationBlocked": "Néhány mezőt ellenőrizni kell, mielőtt menthet.",
+      "noChangesToSave": "Nincs mentendő változtatás."
     },
     "errors": {
       "loadFailed": "A beállítások betöltése sikertelen",
@@ -2450,10 +2458,9 @@
             "lenient": "Gyenge minőségű hanghoz (RTSP kamerák, webkamera mikrofonok)",
             "moderate": "Kiegyensúlyozott tipikus hobbibeállításokhoz",
             "balanced": "Eredeti viselkedés 2025 szeptember előtt",
-            "strict": "RPi 4+ szükséges. Kiváló minőségű mikrofonokhoz",
-            "maximum": "RPi 4+ szükséges. Professzionális minőségű mikrofonokhoz"
+            "strict": "Kiváló minőségű mikrofonokhoz",
+            "maximum": "Professzionális minőségű mikrofonokhoz"
           },
-          "hardwareNote": "A szigorú és maximális szintek nagyobb átfedési beállításokat és több CPU erőforrást igényelnek. Ezekhez a szintekhez RPi 4 vagy jobb hardver szükséges.",
           "overlapAdjusted": "Az átfedési beállítás automatikusan {overlap}s-re állítva a szűrési követelményeknek megfelelően",
           "overlapReduced": "Az átfedési beállítás {overlap}s-re csökkentve a szűrési szintnek megfelelően",
           "levelNames": {
@@ -2465,7 +2472,19 @@
             "maximum": "Maximum",
             "unknown": "Ismeretlen"
           },
-          "warningOff": "Szűrés nélkül a megbízhatósági küszöb feletti minden észlelés azonnal elfogadásra kerül. Ez általában naponta több hamis pozitívat eredményez. Már az enyhe szűrés is jelentősen javítja az eredmények minőségét."
+          "warningOff": "Szűrés nélkül a megbízhatósági küszöb feletti minden észlelés azonnal elfogadásra kerül. Ez általában naponta több hamis pozitívat eredményez. Már az enyhe szűrés is jelentősen javítja az eredmények minőségét.",
+          "readoutTitle": "Jelenleg szükséges megerősítések",
+          "readoutPreviewTitle": "Mentés után szükséges megerősítések (becslés)",
+          "readoutIntro": "Egy detektálás akkor kerül elfogadásra, ha {seconds} másodpercen belül elég elemzési ablak egyezik.",
+          "readoutLine": "{model}: {count} / {windows} ablak, {step} s-ként új ablak",
+          "readoutPreview": "Becslés a nem mentett módosítások alapján. Az eszköz korlátját mentés után újra ellenőrizzük.",
+          "readoutPending": "A mentett beállítások alkalmazása folyamatban. A frissített értékek betöltéséig ezek becsült értékek.",
+          "capNoticeTitle": "Az átfedés az eszköz teljesítményére korlátozva",
+          "capNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} a beállított {configured} s átfedéssel meghaladja az eszköz mért kapacitását, ezért a hang elemzése {effective} s átfedéssel történik. Emiatt a szűrő kevesebb megerősítést kérhet. A mentett beállításai nem változnak.",
+          "overloadedNoticeTitle": "Az eszköz nem bírja az elemzést",
+          "overloadedNotice": "{models, plural, one {# modell} other {# modell}} futtatása {sources, plural, one {# hangforráson} other {# hangforráson}} átfedés nélkül is meghaladja az eszköz mért kapacitását. Az elemzés lemaradhat, és detektálások maradhatnak ki. Engedélyezzen kevesebb modellt vagy hangforrást, vagy válasszon gyorsabb modellváltozatot.",
+          "unknownLatency": "A feldolgozási időt nem sikerült megmérni a következőknél: {models}, ezért az átfedés korlátozásakor nem számít bele. Az elemzés így is lemaradhat.",
+          "cpuNote": "A nagyobb erősség gyakrabban elemzi az átfedő hangot, ami minden engedélyezett modellnél és hangforrásnál CPU-időt igényel. A BirdNET-Go automatikusan arra korlátozza az átfedést, amit ez az eszköz fel tud dolgozni."
         },
         "rangeFilter": {
           "title": "Tartomány szűrő",
@@ -2480,7 +2499,7 @@
             "accuracy": "Becsült pontosság: {accuracy} m-en belül",
             "locationDetected": "A böngésző helye meghatározva.",
             "geolocationUnsupported": "Ez a böngésző nem támogatja az eszköz helymeghatározását. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
-            "geolocationRequiresHttps": "A böngésző helymeghatározásához HTTPS vagy localhost szükséges. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationInsecureHelp": "HTTPS vagy localhost szükséges hozzá. Inkább keressen egy helyet, vagy használja a térképet.",
             "geolocationDenied": "A helyhozzáférési engedély meg lett tagadva. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
             "geolocationUnavailable": "Az eszköz nem tudta meghatározni a helyét. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
             "geolocationTimedOut": "A helymeghatározási kérés túllépte az időkorlátot. Próbálja újra, adja meg kézzel a koordinátákat, vagy használja a térképet.",
@@ -3229,7 +3248,7 @@
         "vadEnable": "Adatvédelmi Őr engedélyezése (Silero VAD)",
         "vadHelp": "Egy külön neurális beszédérzékelő modellt futtat az osztályozó mellett a megbízható hangszűrés érdekében. További rendszererőforrásokat használ (kb. 20-30 MB RAM és CPU-inferencia szegmensenként).",
         "vadThresholdLabel": "Adatvédelmi Őr küszöbértéke",
-        "vadThresholdHelp": "A hangaktivitás-érzékelő érzékenységi küszöbértéke (alapértelmezett 0.35). Alacsonyabb értékek esetén a szűrő érzékenyebb a halk vagy távoli beszédre."
+        "vadThresholdHelp": "A hangaktivitás-érzékelő érzékenységi küszöbértéke (alapértelmezett 0.6). Alacsonyabb értékek esetén a szűrő érzékenyebb a halk vagy távoli beszédre."
       },
       "falsePositivePrevention": {
         "title": "Hamis pozitív megelőzés",
@@ -3781,6 +3800,8 @@
         "frequencyResponse": "Frekvencia válasz",
         "cutoffFrequency": "Levágási frekvencia",
         "cutoffFrequencyHelp": "Az a frekvencia, ahol a szűrő kezdi csökkenteni a jeleket. A madárhangok tipikusan 1-10 kHz tartományban vannak.",
+        "centerFrequency": "Középfrekvencia",
+        "bandwidth": "Sávszélesség",
         "qFactor": "Q faktor",
         "qFactorHelp": "A szűrő élességét szabályozza. Az alacsonyabb értékek (0.1-1) enyhébb meredekséget, a magasabb értékek (1-10) meredekebb levágást hoznak létre.",
         "gain": "Erősítés",
@@ -3788,17 +3809,31 @@
         "attenuation": "Csillapítás",
         "attenuationHelp": "A szűrő lecsengetési rátája. A magasabb értékek meredekebb csillapítást biztosítanak a szűrt frekvenciáknál.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Ki",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Több szűrőt is hozzáadhat az optimális madár detektáláshoz a környezetében.",
+        "emptyEntryRestored": "Adjon meg egy számot. Az előző érték megmaradt.",
         "graph": {
           "flatResponse": "Lapos válasz (nincs szűrő alkalmazva)",
           "frequency": "Frekvencia (Hz)",
-          "gain": "Erősítés (dB)"
+          "gain": "Erősítés (dB)",
+          "loading": "A frekvenciaválasz számítása...",
+          "updating": "A frekvenciaválasz frissítése...",
+          "error": "A frekvenciaválasz nem számítható ki. Frissül, amikor módosít egy szűrőt, vagy az Újra lehetőséget választja.",
+          "sampleRate": "{rate} Hz mintavételi frekvenciára számítva.",
+          "clipped": "A válasz csúcsa {peak} dB, ami a grafikon teteje felett van.",
+          "skippedHeading": "{count, plural, one {# szűrő nem lesz alkalmazva a hangra} other {# szűrő nem lesz alkalmazva a hangra}}",
+          "skippedReasons": {
+            "unknown_type": "A(z) {number}. szűrő ({type}, {frequency} Hz) kihagyva: ez a szűrőtípus nem támogatott.",
+            "invalid_parameters": "A(z) {number}. szűrő ({type}, {frequency} Hz) kihagyva: a beállításai {rate} Hz-en nem érvényesek.",
+            "add_failed": "A(z) {number}. szűrő ({type}, {frequency} Hz) kihagyva: nem sikerült hozzáadni a szűrőlánchoz.",
+            "unknown": "A(z) {number}. szűrő ({type}, {frequency} Hz) kihagyva."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3967,7 +4002,7 @@
       "allowSubnetBypassLabel": "Alhálózatból származó hozzáférés engedélyezése a hitelesítés megkerüléséhez",
       "subnetBypassLocalNote": "Ha engedélyezve van, az ezzel a szerverrel azonos helyi hálózaton lévő kliensek automatikusan megbízhatónak minősülnek és kihagyják a bejelentkezést. Az alábbi mezőt csak akkor töltse ki, ha ezt a bizalmat további hálózatokra (pl. külön VLAN vagy irányított alhálózat) szeretné kiterjeszteni.",
       "allowedSubnetsLabel": "Engedélyezett alhálózatok",
-      "allowedSubnetsHelp": "Engedélyezett hálózati tartományok a bejelentkezés megkerüléséhez (CIDR jelölés, vesszővel elválasztott lista)",
+      "allowedSubnetsHelp": "További hálózati tartományok a bejelentkezés megkerüléséhez, a szerver saját helyi hálózatán felül. Használjon CIDR jelölést, például 192.168.10.0/24.",
       "securityWarningTitle": "Biztonsági figyelmeztetés:",
       "subnetWarningText": "Ezen alhálózatokból származó eszközök korlátozás nélküli hozzáférést kapnak. Csak megbízható belső hálózatokat adjon meg.",
       "httpsSettingsTitle": "HTTPS beállítások",
@@ -4195,6 +4230,77 @@
         "downloadCertificate": "Tanúsítvány letöltése",
         "downloadCertificateHelp": "Telepítse ezt a tanúsítványt az operációs rendszere trust store-ába a böngésző biztonsági figyelmeztetéseinek elkerüléséhez.",
         "fileReadError": "A kiválasztott fájl olvasása sikertelen"
+      },
+      "reverseProxy": {
+        "title": "Fordított proxy",
+        "description": "nginx, Caddy, Traefik, Cloudflare vagy más proxy használatával történő eléréshez",
+        "listLabel": "Megbízható proxyk",
+        "listHelp": "Adja meg a BirdNET-Go előtt lévő minden proxy címét. Docker esetén ez gyakran a Docker átjáró címe, például 172.17.0.1.",
+        "placeholder": "Például 172.17.0.1",
+        "emptyState": "Nincsenek megbízható proxyk. A BirdNET-Go a hozzá csatlakozó címet használja.",
+        "emptyStateCloudflareOnly": "Csak a Cloudflare közzétett peremhálózati címei megbízhatók. Más proxy nincs a listán.",
+        "rangeBadge": "Tartomány",
+        "ruleOwnAddress": "Minden proxy saját címét adja meg. Soha ne adjon meg olyan tartományt, amely tartalmazza azokat a számítógépeket is, amelyekről böngészik.",
+        "ruleHeaders": "A proxynak hozzá kell fűznie a kliens címét az X-Forwarded-For fejléchez, vagy felül kell írnia az X-Real-IP fejlécet.",
+        "cloudflareLabel": "Megbízás a Cloudflare-ben",
+        "cloudflareHelp": "Kapcsolja be ezt, ha a webhely a Cloudflare-en keresztül működik. A BirdNET-Go ekkor megbízhatónak tekinti a Cloudflare közzétett edge címeit.",
+        "check": {
+          "title": "Az Ön kapcsolata",
+          "recheck": "Újraellenőrzés",
+          "checking": "Kapcsolat ellenőrzése",
+          "error": "A kapcsolatot nem sikerült ellenőrizni.",
+          "stale": "Ez az ellenőrzés a mentett beállításokat mutatja. Mentse a módosítások ellenőrzéséhez.",
+          "trust": "{peer} megbízhatónak jelölése",
+          "trustWarning": "Csak akkor bízzon meg ebben ({peer}), ha ez az Ön fordított proxyja, és nem a böngészésre használt gép.",
+          "trustWithCloudflare": "{peer} és a Cloudflare megbízhatónak jelölése",
+          "cloudflareInFront": "A Cloudflare a(z) {peer} előtt helyezkedik el. A cím ellenőrzéséhez bízzon meg mindkettőben.",
+          "cloudflareEdge": "A(z) {peer} a Cloudflare-hez tartozik. Kapcsolja be alább a Megbízás a Cloudflare-ben beállítást.",
+          "chainHint": "Ha egy másik proxy is van a(z) {peer} előtt, azt is adja meg a listában.",
+          "added": "Hozzáadva a listához. Mentse az alkalmazáshoz.",
+          "coveredBy": "A listában szereplő {range} tartomány már lefedi. Mentse az alkalmazáshoz.",
+          "selfClientCause": "Lehet, hogy a proxy a saját címét továbbítja kliensként, gyakran azért, mert a konténer portközzététele elrejti a valódi klienst. Javítsa ezt a konténer vagy a proxy hálózati beállításaiban."
+        },
+        "status": {
+          "direct": {
+            "title": "Közvetlen kapcsolat",
+            "body": "A böngészője közvetlenül csatlakozik a BirdNET-Go-hoz erről a címről: {peer}.",
+            "bodyNoPeer": "A böngészője közvetlenül csatlakozik a BirdNET-Go-hoz.",
+            "hint": "Ha fordított proxyt használ, és {peer} a címe, állítsa be a proxyt úgy, hogy elküldje az X-Forwarded-For fejlécet."
+          },
+          "trusted_proxy": {
+            "title": "Csatlakozás megbízható proxyn keresztül",
+            "body": "A kapcsolat a(z) {peer} megbízható proxyn keresztül érkezik. Az Ön címe ({client}) ellenőrizve lett.",
+            "hint": "Ha a(z) {client} egy másik proxy a számítógépe helyett, azt a proxyt is adja meg a listában."
+          },
+          "trusted_proxy_unverified": {
+            "title": "A címét nem sikerült ellenőrizni",
+            "body": "A(z) {peer} megbízható, de az általa továbbított címet nem sikerült ellenőrizni. Gyakori okok:",
+            "causeRange": "Egy megadott tartomány tartalmazza a számítógépét is, így a lánc egyetlen címe sem számít az Önének.",
+            "causeHeaders": "A proxy nem fűzi hozzá az X-Forwarded-For fejlécet, vagy nem írja felül az X-Real-IP fejlécet.",
+            "causeConflict": "A proxy ütköző vagy ismétlődő címfejléceket küld, vagy csak Forwarded fejlécet küld."
+          },
+          "untrusted_public_proxy": {
+            "title": "Csatlakozás nyilvános proxyn keresztül",
+            "body": "A kapcsolata a(z) {peer} nyilvános címen keresztül érkezik. A nyilvános címekhez soha nem ajánlunk fel egykattintásos megbízást. Csak akkor adja hozzá kézzel, ha biztos benne, hogy ez az Ön proxyja."
+          },
+          "untrusted_proxy": {
+            "title": "Csatlakozás nem megbízható proxyn keresztül",
+            "body": "A kapcsolata a(z) {peer} nem megbízható proxyn keresztül érkezik, így a BirdNET-Go nem tudja ellenőrizni a címét."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "A proxy fejléceit nem lehet ellenőrizni",
+            "body": "A kapcsolata a(z) {peer} címen keresztül érkezik, de az általa küldött címfejléceket akkor sem lehetne ellenőrizni, ha megbízható lenne.",
+            "bodyNoPeer": "A kapcsolata proxyn keresztül érkezik, de a címe nem olvasható.",
+            "fix": "Állítsa be a proxyt úgy, hogy hozzáfűzze az X-Forwarded-For fejlécet, vagy írja felül az X-Real-IP fejlécet."
+          }
+        }
+      },
+      "bypassProxyNote": "Fordított proxy mögött ez a megkerülés csak akkor működik, ha a proxy megbízhatóként van felsorolva.",
+      "bypassProxyLink": "Megbízható proxyk beállítása",
+      "allowedSubnetsEmpty": "Nincsenek további alhálózatok. Csak a szerver saját helyi hálózata kerülheti meg a bejelentkezést.",
+      "validation": {
+        "invalidEntry": "{tab}: a(z) {field} mezőben érvénytelen bejegyzés van.",
+        "pendingEntry": "{tab}: a(z) {field} mezőben hozzá nem adott szöveg van. Nyomja meg az Entert vagy a Hozzáadás gombot, vagy törölje."
       }
     },
     "species": {
@@ -4999,6 +5105,28 @@
         "edit": "Faj szerkesztése",
         "remove": "Faj eltávolítása"
       }
+    },
+    "networkAddressList": {
+      "add": "Hozzáadás",
+      "remove": "{address} eltávolítása",
+      "empty": "Még nincsenek címek hozzáadva.",
+      "pendingHint": "Nyomja meg az Entert vagy a Hozzáadás gombot a cím hozzáadásához.",
+      "limitReached": "A lista megtelt ({max} bejegyzés).",
+      "rowDuplicate": "Duplikátum",
+      "rowInvalid": {
+        "cidr": "Érvénytelen tartomány",
+        "ip": "Érvénytelen IP-cím",
+        "ipOrCidr": "Érvénytelen cím vagy tartomány"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Érvénytelen tartomány: {values}. Használjon egy tartományt, például 192.168.1.0/24.",
+          "ip": "Érvénytelen IP-cím: {values}. Használjon egy címet, például 192.168.1.10.",
+          "ipOrCidr": "Érvénytelen cím vagy tartomány: {values}. Használjon egy címet, például 192.168.1.10 vagy egy tartományt, például 192.168.1.0/24."
+        },
+        "duplicate": "Már szerepel a listában: {values}.",
+        "limit": "A lista legfeljebb {max} bejegyzést tartalmazhat. Nincs hozzáadva: {values}."
+      }
     }
   },
   "media": {
@@ -5427,13 +5555,6 @@
         "locationHelp": "Az Ön helyszíne segít szűrni a fajokat az Ön környékén valószínűek szerint",
         "latitudeLabel": "Szélesség",
         "longitudeLabel": "Hosszúság",
-        "useMyLocation": "Helyszínem használata",
-        "locationDetected": "Helyszín észlelve",
-        "locationError": "A helyszín nem észlelhető. Kérjük, adja meg manuálisan a koordinátákat.",
-        "locationDenied": "A helyszín hozzáférés megtagadva. Kérjük, adja meg manuálisan a koordinátákat.",
-        "geolocationRequiresHttps": "A böngésző helymeghatározáshoz HTTPS szükséges. Adja meg a koordinátákat kézzel, vagy használja a térképet.",
-        "geolocationDenied": "A helymeghatározási engedély megtagadva. Adja meg a koordinátákat kézzel, vagy használja a térképet.",
-        "geolocationFailed": "Nem sikerült meghatározni a tartózkodási helyét. Adja meg a koordinátákat kézzel, vagy használja a térképet.",
         "localesLoading": "Nyelvek betöltése...",
         "localesLoadFailed": "A nyelvi lehetőségek betöltése sikertelen. Az angol lett kiválasztva alapértelmezettként."
       },

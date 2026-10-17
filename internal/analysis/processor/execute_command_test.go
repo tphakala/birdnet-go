@@ -137,7 +137,7 @@ func TestExecuteCommandAction_WithoutParameters(t *testing.T) {
 			detection := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
 
 			// Get actions for the detection
-			actions := processor.getActionsForItem(&detection)
+			actions := processor.getActionsForItem(&detection, processor.currentSettings())
 
 			if tt.expectAction {
 				// Find the ExecuteCommandAction in the list
@@ -192,7 +192,7 @@ func TestExecuteCommandAction_MultipleActionsWithMixedParams(t *testing.T) {
 	}
 
 	detection := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
-	actions := processor.getActionsForItem(&detection)
+	actions := processor.getActionsForItem(&detection, processor.currentSettings())
 
 	// Count ExecuteCommandActions
 	var executeActions []*ExecuteCommandAction
@@ -253,7 +253,7 @@ func TestExecuteCommandAction_ExecuteDefaultsWithNoParams(t *testing.T) {
 	}
 
 	detection := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
-	actions := processor.getActionsForItem(&detection)
+	actions := processor.getActionsForItem(&detection, processor.currentSettings())
 
 	// Should have ExecuteCommandAction AND default actions (like LogAction)
 	var hasExecuteCommand, hasLogAction bool
@@ -311,7 +311,7 @@ func TestValidateCustomCommandActions_SkipsInvalidPath(t *testing.T) {
 
 	// At dispatch time, the ExecuteCommand action must NOT be registered.
 	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
-	actions := processor.getActionsForItem(&det)
+	actions := processor.getActionsForItem(&det, processor.currentSettings())
 	for _, action := range actions {
 		if _, ok := action.(*ExecuteCommandAction); ok {
 			t.Fatalf("invalid command path %q must not produce an ExecuteCommandAction", missingPath)
@@ -356,7 +356,7 @@ func TestValidateCustomCommandActions_AllowsValidPath(t *testing.T) {
 		"valid command path must not be flagged at startup")
 
 	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
-	actions := processor.getActionsForItem(&det)
+	actions := processor.getActionsForItem(&det, processor.currentSettings())
 
 	var found *ExecuteCommandAction
 	for _, a := range actions {
@@ -458,7 +458,7 @@ func TestValidateCustomCommandActions_HotReload_NewSpeciesValidatedOnFirstUse(t 
 	// First dispatch after the reload must trigger per-call validation,
 	// flag the path as invalid, and omit the ExecuteCommandAction.
 	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
-	actions := processor.getActionsForItem(&det)
+	actions := processor.getActionsForItem(&det, processor.currentSettings())
 	for _, action := range actions {
 		if _, ok := action.(*ExecuteCommandAction); ok {
 			t.Fatalf("hot-reloaded invalid command %q must not produce an ExecuteCommandAction", missing)
@@ -485,7 +485,7 @@ func TestValidateCustomCommandActions_HotReload_NewSpeciesValidatedOnFirstUse(t 
 	}
 
 	det2 := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
-	actions2 := processor.getActionsForItem(&det2)
+	actions2 := processor.getActionsForItem(&det2, processor.currentSettings())
 
 	var found *ExecuteCommandAction
 	for _, a := range actions2 {
@@ -554,7 +554,7 @@ func TestGetActionsForItem_BrokenCommand_RespectsExecuteDefaultsFalse(t *testing
 	processor.invalidCommandPaths.Store(missing, timeNowForTest())
 
 	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
-	actions := processor.getActionsForItem(&det)
+	actions := processor.getActionsForItem(&det, processor.currentSettings())
 
 	assert.Empty(t, actions,
 		"broken ExecuteCommand with ExecuteDefaults=false must yield zero actions, not silent default fallbacks")
@@ -608,7 +608,7 @@ func TestGetActionsForItem_BrokenCommand_AllowsExecuteDefaultsTrue(t *testing.T)
 	processor.invalidCommandPaths.Store(missing, timeNowForTest())
 
 	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
-	actions := processor.getActionsForItem(&det)
+	actions := processor.getActionsForItem(&det, processor.currentSettings())
 
 	// LogAction is part of the default set when Log.Enabled is true,
 	// and is the cheapest one to assert presence of without needing a
@@ -756,7 +756,7 @@ func TestGetActionsForItem_UnimplementedAction_FallsThroughToDefaults(t *testing
 	}
 
 	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
-	actions := processor.getActionsForItem(&det)
+	actions := processor.getActionsForItem(&det, processor.currentSettings())
 
 	// The species had only an unimplemented custom action type and no
 	// matching switch branch added anything to the action list. The

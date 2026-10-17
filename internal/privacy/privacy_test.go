@@ -939,6 +939,132 @@ func TestScrubCoordinates(t *testing.T) {
 	runScrubTests(t, ScrubCoordinates, tests)
 }
 
+func TestScrubMessage_KeepsSpaceSeparatedDateTimes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"journal date time", "2026-10-16 00:12:34"},
+		{"date time with fraction", "2026-10-16 00:12:34.015573"},
+		{"syslog prefix", "Oct 16 00:12:34 host birdnet-go[1]: started"},
+		{"date time in a sentence", "restart at 2026-10-16 23:59:01 after crash"},
+		{"clock times", "from 10:15:30 to 11:45:00"},
+		{"dotted date time", "16.10.2026 00:12 started"},
+		{"date time with T", "2026-10-16T00:12:34 started"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.input, ScrubMessage(tt.input))
+		})
+	}
+}
+
+func TestScrubCoordinates_StillScrubsWithNeighbors(t *testing.T) {
+	t.Parallel()
+
+	inputs := []string{
+		"coords:60.1699,24.9384",
+		"Lat:60.1699,24.9384",
+		"error at 60.1699,24.9384: timeout",
+		"60.1699,24.9384N",
+		"60.1699, 24.9384m away",
+		"pos=60.1699,24.9384_x",
+		"user_lat=60.1699 lon=24.9384",
+	}
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			t.Parallel()
+			got := ScrubCoordinates(in)
+			assert.NotContains(t, got, "60.1699")
+			assert.NotContains(t, got, "24.9384")
+		})
+	}
+}
+
+func TestScrubCoordinates_ScrubsPairRightAfterTimestamp(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"date time then pair", "2026-10-16 00:12:34 60.1699,24.9384", "2026-10-16 00:12:34 [LAT],[LON]"},
+		{"syslog then pair", "Oct 16 00:12:34 60.1699,24.9384", "Oct 16 00:12:34 [LAT],[LON]"},
+		{"fractional seconds", "2026-10-16 00:12:34.015573 60.1699,24.9384", "2026-10-16 00:12:34.015573 [LAT],[LON]"},
+		{"comma milliseconds", "2026-10-16 00:12:34,123 60.1699,24.9384", "2026-10-16 00:12:34,123 [LAT],[LON]"},
+		{"syslog fraction", "Oct 16 00:12:34.567 60.1699,24.9384", "Oct 16 00:12:34.567 [LAT],[LON]"},
+		{"RFC3339 offset", "2026-10-16T00:12:34+02:00 60.1699,24.9384", "2026-10-16T00:12:34+02:00 [LAT],[LON]"},
+		{"spaced numeric offset", "2026-10-16 00:12:34 +0200 60.1699,24.9384", "2026-10-16 00:12:34 +0200 [LAT],[LON]"},
+		{"spaced negative offset", "2026-10-16 00:12:34 -0500 60.1699,24.9384", "2026-10-16 00:12:34 -0500 [LAT],[LON]"},
+		{"comma pair right after seconds", "2026-10-16 00:12:34,60.1699 24.9384", "2026-10-16 00:12:34,[LAT],[LON]"},
+		{"long comma fraction", "2026-10-16 00:12:34,015573 60.1699,24.9384", "2026-10-16 00:12:34,015573 [LAT],[LON]"},
+		{"negative latitude glued to time", "2026-10-16T00:12:34-45.12,122.4", "2026-10-16T00:12:34[LAT],[LON]"},
+		{"longitude first right after time", "2026-10-16 00:12:34,151.2093,-33.8688", "2026-10-16 00:12:34,[LAT],[LON]"},
+		{"zero padded pair right after time", "2026-10-16 00:12:34,060.1699,24.9384", "2026-10-16 00:12:34,[LAT],[LON]"},
+		{"syslog longitude first", "Oct 16 00:12:34,151.2093,-33.8688", "Oct 16 00:12:34,[LAT],[LON]"},
+		{"sentence period after fraction", "2026-10-16 00:12:34,123. 50 birds", "2026-10-16 00:12:34,123. 50 birds"},
+		{"Z suffix", "2026-10-16T00:12:34Z 60.1699,24.9384", "2026-10-16T00:12:34Z [LAT],[LON]"},
+		{"negative pair after time", "2026-10-16 00:12:34 -45.123,122.456", "2026-10-16 00:12:34 [LAT],[LON]"},
+		{"pair between timestamps", "2026-10-16 00:12:34 at 60.1699,24.9384 until 2026-10-16 00:13:00", "2026-10-16 00:12:34 at [LAT],[LON] until 2026-10-16 00:13:00"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, ScrubCoordinates(tt.input))
+		})
+	}
+}
+
+func TestTrimGluedCoordinate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		message string
+		start   int
+		end     int
+		want    int
+	}{
+		{"comma fraction before a dot", "00:12:34,151.2", 0, 12, 8},
+		{"comma fraction before a sentence period", "00:12:34,123. 50 birds", 0, 12, 12},
+		{"comma fraction before a final period", "00:12:34,123.", 0, 12, 12},
+		{"comma fraction at end of text", "00:12:34,123", 0, 12, 12},
+		{"dot fraction before a dot", "00:12:34.5.7", 0, 10, 10},
+		{"non-digit after the comma", "00:12:34,123Z.5", 0, 13, 13},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, trimGluedCoordinate(tt.message, tt.start, tt.end))
+		})
+	}
+}
+
+func TestProtectedTimeSpans_MergesTouchingSpans(t *testing.T) {
+	t.Parallel()
+	// The date-time ends exactly where the syslog prefix starts.
+	in := "2026-10-16 00:12:34Oct 16 00:12:35"
+	assert.Equal(t, [][]int{{0, len(in)}}, protectedTimeSpans(in))
+	assert.Equal(t, in, ScrubCoordinates(in))
+}
+
+func TestScrubCoordinates_LabelIsNotASyslogMonth(t *testing.T) {
+	t.Parallel()
+	got := ScrubCoordinates("lat 60 12:34")
+	assert.NotContains(t, got, "lat 60")
+}
+
+func TestScrubCoordinates_StillScrubsBesideTimestamps(t *testing.T) {
+	t.Parallel()
+	got := ScrubCoordinates("2026-10-16 00:12:34 weather for 60.1699,24.9384 failed")
+	assert.Equal(t, "2026-10-16 00:12:34 weather for [LAT],[LON] failed", got)
+}
+
 func TestScrubAPITokens(t *testing.T) {
 	t.Parallel()
 
@@ -2205,4 +2331,137 @@ func TestAnonymizeStacktracePath(t *testing.T) {
 	}
 
 	runScrubTests(t, AnonymizeStacktracePath, tests)
+}
+
+func TestScrubStandaloneIPs_LeavesTimestampsIntact(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"RFC3339 with offset and fraction", "2026-10-16T00:12:34.015573-07:00"},
+		{"RFC3339 Z", "2026-08-23T19:55:13Z"},
+		{"JSON log line", `{"time":"2026-10-16T00:12:34.015573-07:00","msg":"x"}`},
+		{"clock time in free text", "at 12:34:56 done"},
+		{"journal text format", "2026-10-16 00:12:34"},
+		{"syslog prefix", "Oct 16 00:12:34 host birdnet-go[1]: x"},
+		{"duration", "dur 00:00:01 elapsed"},
+		{"Go stack position", "main.go:123:45 panic"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.input, ScrubStandaloneIPs(tt.input))
+		})
+	}
+}
+
+// ipv6Samples are IPv6 addresses the scrubber must still anonymize.
+var ipv6Samples = []struct {
+	name   string
+	addr   string
+	prefix string
+}{
+	{"compressed public", "2001:db8::1", "public-ip-"},
+	{"full form", "2001:0db8:85a3:0000:0000:8a2e:0370:7334", "public-ip-"},
+	{"link local", "fe80::1", "private-ip-"},
+}
+
+func TestScrubStandaloneIPs_StillAnonymizesIPv6(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range ipv6Samples {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ScrubStandaloneIPs("peer " + tt.addr + " up")
+			assert.NotContains(t, got, tt.addr)
+			assert.Contains(t, got, tt.prefix)
+			assert.True(t, strings.HasPrefix(got, "peer ") && strings.HasSuffix(got, " up"), got)
+		})
+	}
+
+	t.Run("zone suffix stays", func(t *testing.T) {
+		t.Parallel()
+		got := ScrubStandaloneIPs("addr fe80::1%eth0 up")
+		assert.NotContains(t, got, "fe80::1")
+		assert.Contains(t, got, "private-ip-")
+		assert.Contains(t, got, "%eth0")
+	})
+
+	t.Run("trailing port stays", func(t *testing.T) {
+		t.Parallel()
+		got := ScrubStandaloneIPs("2001:db8:85a3:0:0:8a2e:370:7334:8080")
+		assert.NotContains(t, got, "2001:db8")
+		assert.True(t, strings.HasSuffix(got, ":8080"), got)
+	})
+
+	t.Run("timestamp next to address", func(t *testing.T) {
+		t.Parallel()
+		got := ScrubStandaloneIPs("2026-10-16T00:12:34Z peer 2001:db8::1")
+		assert.True(t, strings.HasPrefix(got, "2026-10-16T00:12:34Z peer "), got)
+		assert.NotContains(t, got, "2001:db8::1")
+		assert.Contains(t, got, "public-ip-")
+	})
+}
+
+func TestScrubStandaloneIPs_IPv6MatchesAnonymizeIP(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range ipv6Samples {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, "x "+AnonymizeIP(tt.addr)+" y", ScrubStandaloneIPs("x "+tt.addr+" y"))
+		})
+	}
+}
+
+func TestScrubStandaloneIPs_IPv4MappedAnonymizesIPv4Part(t *testing.T) {
+	t.Parallel()
+	got := ScrubStandaloneIPs("peer ::ffff:192.0.2.1 up")
+	assert.NotContains(t, got, "192.0.2.1")
+}
+
+func TestScrubStandaloneIPs_IPv6InURLUntouched(t *testing.T) {
+	t.Parallel()
+	in := "https://[2001:db8::1]:8443/x"
+	assert.Equal(t, in, ScrubStandaloneIPs(in))
+}
+
+func TestScrubStandaloneIPs_NonTimeTokensStillHashed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		leaks string
+	}{
+		{"MAC with letters", "mac aa:bb:cc:dd:ee:ff seen", "aa:bb:cc:dd:ee:ff"},
+		{"MAC of digits", "mac 00:11:22:33:44:55 seen", "00:11:22:33:44:55"},
+		{"IPv6 CIDR prefix", "net 2001:db8:abcd:1234::/64 up", "2001:db8:abcd:1234"},
+		{"short hex token", "id ab:cd:ef seen", "ab:cd:ef"},
+		{"digit-only prefix", "net 2001:1234:5678:9012::/64 up", "2001:1234:5678:9012"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.NotContains(t, ScrubStandaloneIPs(tt.input), tt.leaks)
+		})
+	}
+}
+
+func TestScrubStandaloneIPs_IPv4LeadingZerosStillHashed(t *testing.T) {
+	t.Parallel()
+	got := ScrubStandaloneIPs("host 192.168.001.010 up")
+	assert.Contains(t, got, "invalid-ip-")
+	assert.NotContains(t, got, "192.168.001.010")
+}
+
+func TestScrubMessage_KeepsLogTimestampScrubsIP(t *testing.T) {
+	t.Parallel()
+	got := ScrubMessage(`{"time":"2026-10-16T00:12:34.015573-07:00","msg":"conn from 192.168.1.100"}`)
+	assert.Contains(t, got, `"time":"2026-10-16T00:12:34.015573-07:00"`)
+	assert.NotContains(t, got, "192.168.1.100")
 }

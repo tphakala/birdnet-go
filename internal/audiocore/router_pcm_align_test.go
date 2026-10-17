@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	dspeq "github.com/tphakala/go-audio-dsp/equalizer"
+
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -75,10 +77,11 @@ func splitAt(t *testing.T, src []byte, sizes []int) [][]byte {
 
 // alignRunOpts configures one run through a hand-built route.
 type alignRunOpts struct {
-	gainLinear float64
-	srcRate    int
-	dstRate    int
-	bitDepth   int
+	// gainDB is the route gain in dB; 0 means no gain stage.
+	gainDB   float64
+	srcRate  int
+	dstRate  int
+	bitDepth int
 }
 
 // alignRunResult is everything a test needs to assert on after a run.
@@ -134,11 +137,11 @@ func newAlignTestRoute(t *testing.T, consumer AudioConsumer, opts alignRunOpts) 
 		SourceID:         "align-src",
 		Consumer:         consumer,
 		sourceSampleRate: opts.srcRate,
-		gainLinear:       opts.gainLinear,
 		inbox:            make(chan AudioFrame, 1),
 		done:             make(chan struct{}),
 		stopped:          make(chan struct{}),
 	}
+	route.gain.Store(testGain(t, opts.gainDB))
 	if opts.srcRate != opts.dstRate {
 		rs, err := resample.NewResampler(opts.srcRate, opts.dstRate)
 		require.NoError(t, err)
@@ -164,11 +167,11 @@ func TestRouter_OddLengthFramesDoNotDesyncGainPath(t *testing.T) {
 		sampleCount = 2000
 		// -6 dB, chosen so no sample clamps and the transform stays lossless
 		// enough for an exact comparison between the two chunkings.
-		gainLinear = 0.5
-		rate       = 48000
+		gainDB = -6.020599913279624
+		rate   = 48000
 	)
 	signal := alignTestSignal(sampleCount)
-	opts := alignRunOpts{gainLinear: gainLinear, srcRate: rate, dstRate: rate, bitDepth: 16}
+	opts := alignRunOpts{gainDB: gainDB, srcRate: rate, dstRate: rate, bitDepth: 16}
 
 	control := runChunksThroughRoute(t, splitAt(t, signal, []int{1000, 1000, 1000, 1000}), opts)
 	require.Zero(t, control.routeErrors, "even-length control run must not produce route errors")
@@ -197,7 +200,7 @@ func TestRouter_OddLengthFramesSurviveResampling(t *testing.T) {
 		dstRate     = 32000
 	)
 	signal := alignTestSignal(sampleCount)
-	opts := alignRunOpts{gainLinear: 1.0, srcRate: srcRate, dstRate: dstRate, bitDepth: 16}
+	opts := alignRunOpts{srcRate: srcRate, dstRate: dstRate, bitDepth: 16}
 
 	control := runChunksThroughRoute(t, splitAt(t, signal, []int{1200, 1200, 1200, 1200}), opts)
 	require.Zero(t, control.routeErrors, "even-length control run must not produce route errors")
@@ -225,7 +228,7 @@ func TestRouter_PassThroughPCM16RealignsOddFrames(t *testing.T) {
 
 	const rate = 48000
 	signal := alignTestSignal(2000)
-	opts := alignRunOpts{gainLinear: 1.0, srcRate: rate, dstRate: rate, bitDepth: 16}
+	opts := alignRunOpts{srcRate: rate, dstRate: rate, bitDepth: 16}
 
 	control := runChunksThroughRoute(t, splitAt(t, signal, []int{1000, 1000, 1000, 1000}), opts)
 	require.Zero(t, control.realignments, "even-length control run must not realign anything")
@@ -260,7 +263,7 @@ func TestRouter_NonPCM16IsNeverRealigned(t *testing.T) {
 		r := NewAudioRouter(GetLogger(), nil)
 		t.Cleanup(r.Close)
 		consumer := newCollectingConsumer(rate)
-		route := newAlignTestRoute(t, consumer, alignRunOpts{gainLinear: 1.0, srcRate: rate, dstRate: rate})
+		route := newAlignTestRoute(t, consumer, alignRunOpts{srcRate: rate, dstRate: rate})
 
 		for _, chunk := range chunks {
 			r.handleRouteFrame(AudioFrame{
@@ -280,7 +283,7 @@ func TestRouter_NonPCM16IsNeverRealigned(t *testing.T) {
 		r := NewAudioRouter(GetLogger(), nil)
 		t.Cleanup(r.Close)
 		consumer := newCollectingConsumer(32000)
-		route := newAlignTestRoute(t, consumer, alignRunOpts{gainLinear: 1.0, srcRate: rate, dstRate: 32000})
+		route := newAlignTestRoute(t, consumer, alignRunOpts{srcRate: rate, dstRate: 32000})
 
 		for _, chunk := range chunks {
 			r.handleRouteFrame(AudioFrame{
@@ -310,7 +313,7 @@ func TestRouter_AllCarryFrameSkipsWrite(t *testing.T) {
 	// three of the four chunks produce a write. The sizes still sum to an even
 	// total, so nothing is stranded at the end.
 	chunks := splitAt(t, signal, []int{1, 999, 1001, 1999})
-	opts := alignRunOpts{gainLinear: 1.0, srcRate: rate, dstRate: rate, bitDepth: 16}
+	opts := alignRunOpts{srcRate: rate, dstRate: rate, bitDepth: 16}
 
 	got := runChunksThroughRoute(t, chunks, opts)
 
@@ -329,7 +332,7 @@ func TestRouter_StrandedFinalByteIsWithheld(t *testing.T) {
 	const rate = 48000
 	signal := alignTestSignal(2000)
 	withStray := append(bytes.Clone(signal), 0x7f)
-	opts := alignRunOpts{gainLinear: 1.0, srcRate: rate, dstRate: rate, bitDepth: 16}
+	opts := alignRunOpts{srcRate: rate, dstRate: rate, bitDepth: 16}
 
 	got := runChunksThroughRoute(t, splitAt(t, withStray, []int{999, 1001, 997, 1004}), opts)
 
@@ -354,9 +357,9 @@ func FuzzRouterAlignPCM16(f *testing.F) {
 		consumer := newCollectingConsumer(rate)
 		route := &Route{
 			SourceID: "fuzz-src", Consumer: consumer,
-			sourceSampleRate: rate, gainLinear: 1.0,
-			inbox: make(chan AudioFrame, 1),
-			done:  make(chan struct{}), stopped: make(chan struct{}),
+			sourceSampleRate: rate,
+			inbox:            make(chan AudioFrame, 1),
+			done:             make(chan struct{}), stopped: make(chan struct{}),
 		}
 
 		off := 0
@@ -386,55 +389,157 @@ func FuzzRouterAlignPCM16(f *testing.F) {
 	})
 }
 
-// TestRouter_ResampleAndProcessReturnsEachPooledBufferOnce guards the pool
-// discipline in handleRouteFrame, which is the riskiest thing about routing a
-// frame: the resample buffer is returned early by the processing branch and the
-// deferred release must then skip it. Getting that wrong hands the same backing
-// array to two callers at once, and every existing test still passes, because
-// nothing else asserts buffer identity.
+// requirePoolBuffersDistinct fails when two successive Gets from the pool return
+// the same backing array, which is what a buffer Put twice looks like: both
+// Gets hand the same array to two callers, and two routes would then write over
+// each other. Both buffers are dropped rather than returned.
+func requirePoolBuffersDistinct[T any](t *testing.T, get func() []T, what string) {
+	t.Helper()
+	first, second := get(), get()
+	require.NotEmpty(t, first)
+	require.NotEmpty(t, second)
+	require.NotSame(t, &first[0], &second[0],
+		"%s was returned to its pool twice: two Gets handed back the same array", what)
+}
+
+// TestRouter_PooledBuffersAreReturnedExactlyOnce guards the pool discipline in
+// handleRouteFrame, which is the riskiest thing about routing a frame: a
+// double Put hands one backing array to two callers at once, and every
+// output-only test still passes because nothing else asserts buffer identity.
 //
-// The route resamples and applies gain, so both release sites run for every
-// frame. Afterwards the pool must hold that buffer exactly once: two successive
-// Gets then return distinct arrays, whereas a double Put returns the same array
-// twice.
-func TestRouter_ResampleAndProcessReturnsEachPooledBufferOnce(t *testing.T) {
+// Each case runs frames through a different release path (resample only, gain
+// only, EQ decode, resample then process with the float handoff) and, after
+// every frame, takes two buffers from each pool that path used. The handoff case
+// takes no resample byte buffer, so it checks the float32 and output pools
+// instead of the pool the old rewritten test inspected. A double Put
+// shows up as two Gets returning the same array. The check repeats per frame
+// because under -race sync.Pool drops a random quarter of Puts, so a single
+// frame could hide a double Put.
+func TestRouter_PooledBuffersAreReturnedExactlyOnce(t *testing.T) {
 	// Not parallel: it pins the GC so sync.Pool cannot be drained mid-test.
 	defer debug.SetGCPercent(debug.SetGCPercent(-1))
 
 	const (
+		frames  = 24
 		srcRate = 48000
-		dstRate = 32000
 	)
-	mgr := buffer.NewManager(GetLogger())
-	r := NewAudioRouter(GetLogger(), mgr)
-	t.Cleanup(r.Close)
+	hp := []dspeq.Band{{Type: dspeq.HighPass, Frequency: 100, Q: 0.707, Passes: 1}}
 
-	consumer := newCollectingConsumer(dstRate)
-	route := newAlignTestRoute(t, consumer, alignRunOpts{
-		gainLinear: 0.5, srcRate: srcRate, dstRate: dstRate,
-	})
+	tests := []struct {
+		name    string
+		dstRate int
+		bands   []dspeq.Band
+		gainDB  float64
+		// floatScratch is true when the path takes a float32 buffer, sized to the
+		// output sample count. The byte buffer checked is the resample buffer
+		// (sized by EstimateOutputBytes) when resampleBuf is true, otherwise the
+		// output buffer (sized to the output byte count).
+		floatScratch bool
+		resampleBuf  bool
+	}{
+		{name: "resample_only", dstRate: 32000, resampleBuf: true},
+		{name: "gain_only", dstRate: srcRate, gainDB: -6},
+		{name: "eq_decode", dstRate: srcRate, bands: hp, floatScratch: true},
+		{name: "resample_then_process_handoff", dstRate: 32000, bands: hp, gainDB: -6, floatScratch: true},
+	}
 
-	signal := alignTestSignal(1200)
-	r.handleRouteFrame(AudioFrame{
-		SourceID: "align-src", SourceName: "align",
-		Data: signal, SampleRate: srcRate,
-		BitDepth: 16, Channels: 1,
-	}, route)
-	require.NotEmpty(t, consumer.out, "the frame must reach the consumer")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var chain *dspeq.FilterChain
+			if tt.bands != nil {
+				chain = testChain(t, tt.dstRate, tt.bands...)
+			}
+			r, route, consumer, mgr := newProcessingTestRouter(t, srcRate, tt.dstRate, chain, tt.gainDB)
+			signal := alignTestSignal(1200)
 
-	// The resample buffer is sized from the resampler's own estimate, which is
-	// what handleRouteFrame asked the manager for.
-	outSize := route.resampler.EstimateOutputBytes(len(signal))
-	pool := mgr.BytePoolFor(outSize)
-	require.NotNil(t, pool)
+			var floatPool *buffer.Float32Pool
+			var bytePool *buffer.BytePool
+			for range frames {
+				consumer.out = consumer.out[:0]
+				r.handleRouteFrame(AudioFrame{
+					SourceID: "align-src", SourceName: "align",
+					Data: signal, SampleRate: srcRate,
+					BitDepth: 16, Channels: 1,
+				}, route)
+				require.NotEmpty(t, consumer.out, "the frame must reach the consumer")
 
-	first := pool.Get()
-	second := pool.Get()
-	require.NotEmpty(t, first)
-	require.NotEmpty(t, second)
-	assert.NotSame(t, &first[0], &second[0],
-		"the resample buffer was returned to its pool twice: two Gets handed back the same array, "+
-			"so two routes would write over each other")
+				if tt.floatScratch {
+					floatPool = mgr.Float32PoolFor(len(consumer.out) / bytesPerPCM16Sample)
+					requirePoolBuffersDistinct(t, floatPool.Get, "the float32 scratch buffer")
+				}
+				byteSize := len(consumer.out)
+				if tt.resampleBuf {
+					byteSize = route.resampler.EstimateOutputBytes(len(signal))
+				}
+				bytePool = mgr.BytePoolFor(byteSize)
+				requirePoolBuffersDistinct(t, bytePool.Get, "a byte buffer")
+			}
+
+			// A buffer that is never Put leaves the pool empty, so every Get above
+			// misses; the two Gets per frame can only hit a buffer the router
+			// returned. Without this, a dropped Put would pass the distinctness
+			// check, since a fresh allocation is distinct too.
+			if tt.floatScratch {
+				assert.Positive(t, floatPool.GetStats().Hits, "the float32 scratch buffer was never returned to its pool")
+			}
+			assert.Positive(t, bytePool.GetStats().Hits, "the byte buffer was never returned to its pool")
+		})
+	}
+}
+
+// panickingConsumer panics in Write, standing in for a consumer bug.
+type panickingConsumer struct {
+	mockConsumer
+}
+
+func (c *panickingConsumer) Write(AudioFrame) error { panic("consumer bug") }
+
+// TestRouter_PooledBuffersAreReturnedWhenWritePanics pins that the deferred
+// release in handleRouteFrame returns every pooled buffer, once, when
+// Consumer.Write panics, on the decode path and on the float handoff path.
+func TestRouter_PooledBuffersAreReturnedWhenWritePanics(t *testing.T) {
+	// Not parallel: it pins the GC so sync.Pool cannot be drained mid-test.
+	defer debug.SetGCPercent(debug.SetGCPercent(-1))
+
+	const (
+		frames  = 24
+		srcRate = 48000
+	)
+	hp := []dspeq.Band{{Type: dspeq.HighPass, Frequency: 100, Q: 0.707, Passes: 1}}
+
+	for _, tt := range []struct {
+		name    string
+		dstRate int
+	}{
+		{"eq_decode", srcRate},
+		{"resample_then_process_handoff", 32000},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			mgr := buffer.NewManager(GetLogger())
+			r := NewAudioRouter(GetLogger(), mgr)
+			t.Cleanup(r.Close)
+
+			consumer := &panickingConsumer{mockConsumer{id: "panic", sampleRate: tt.dstRate, bitDepth: 16, channels: 1}}
+			route := newAlignTestRoute(t, consumer, alignRunOpts{gainDB: -6, srcRate: srcRate, dstRate: tt.dstRate, bitDepth: 16})
+			route.filterChain.Store(testChain(t, tt.dstRate, hp...))
+			signal := alignTestSignal(1200)
+
+			for range frames {
+				require.PanicsWithValue(t, "consumer bug", func() {
+					r.handleRouteFrame(AudioFrame{Data: signal, SampleRate: srcRate, BitDepth: 16, Channels: 1}, route)
+				})
+			}
+
+			floatPool := route.float32Pool.Load()
+			bytePool := route.byteOutPool.Load()
+			require.NotNil(t, floatPool)
+			require.NotNil(t, bytePool)
+			assert.Positive(t, floatPool.GetStats().Hits, "the float32 scratch buffer must be returned after a panicking Write")
+			assert.Positive(t, bytePool.GetStats().Hits, "the output buffer must be returned after a panicking Write")
+			requirePoolBuffersDistinct(t, floatPool.Get, "the float32 scratch buffer")
+			requirePoolBuffersDistinct(t, bytePool.Get, "the output buffer")
+		})
+	}
 }
 
 // TestRouter_RealignmentLogsOncePerRunNotPerFrame guards the logging gate.
@@ -456,7 +561,7 @@ func TestRouter_RealignmentLogsOncePerRunNotPerFrame(t *testing.T) {
 	r := NewAudioRouter(log, nil)
 	t.Cleanup(r.Close)
 	consumer := newCollectingConsumer(rate)
-	route := newAlignTestRoute(t, consumer, alignRunOpts{gainLinear: 1.0, srcRate: rate, dstRate: rate})
+	route := newAlignTestRoute(t, consumer, alignRunOpts{srcRate: rate, dstRate: rate})
 
 	// One odd frame followed by even ones is what latches the carry: the odd
 	// frame leaves a byte, and every even frame after it joins that byte, goes

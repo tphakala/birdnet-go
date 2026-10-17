@@ -369,6 +369,7 @@ func NoteFromResult(result *detection.Result) Note {
 
 // AdditionalResultsToDatastoreResults converts a slice of detection.AdditionalResult
 // to datastore.Results for database persistence or JSON serialization.
+// Each species is written in its stored label form (see detection.Species.StoredLabel).
 func AdditionalResultsToDatastoreResults(results []detection.AdditionalResult) []Results {
 	if len(results) == 0 {
 		return nil
@@ -376,12 +377,8 @@ func AdditionalResultsToDatastoreResults(results []detection.AdditionalResult) [
 
 	dsResults := make([]Results, len(results))
 	for i, r := range results {
-		speciesStr := r.Species.ScientificName + "_" + r.Species.CommonName
-		if r.Species.Code != "" {
-			speciesStr += "_" + r.Species.Code
-		}
 		dsResults[i] = Results{
-			Species:    speciesStr,
+			Species:    r.Species.StoredLabel(),
 			Confidence: float32(r.Confidence),
 			RawLabel:   r.RawLabel,
 		}

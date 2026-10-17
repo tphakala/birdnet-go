@@ -55,6 +55,14 @@ const (
 	// minGoMemLimitBytes floors the derived GOMEMLIMIT so a very small box never
 	// gets a limit so tight that the GC thrashes.
 	minGoMemLimitBytes = 96 * bytesPerMiB
+
+	// memoryInexactNote is appended to Decision.Reason when the cgroup memory
+	// limit could not be read.
+	memoryInexactNote = "cgroup memory limit could not be read"
+
+	// memoryUpperBoundNote follows memoryInexactNote when a memory figure was
+	// still detected, since that figure is then only an upper bound.
+	memoryUpperBoundNote = "detected memory is an upper bound and the real limit may be lower"
 )
 
 // Decision is the pure result of evaluating the policy. It carries no side
@@ -63,7 +71,7 @@ type Decision struct {
 	Active          bool   // whether low-memory controls should be applied
 	GoMemLimitBytes int64  // soft GOMEMLIMIT to set; 0 means leave unset
 	ArenaMax        int    // glibc M_ARENA_MAX to set; 0 means do not cap
-	TotalRAMBytes   int64  // effective detected memory (0 = unknown)
+	TotalRAMBytes   int64  // effective detected memory, or an upper bound when Reason says the cgroup limit was unreadable (0 = unknown)
 	Reason          string // human-readable explanation for logging
 }
 
@@ -98,6 +106,21 @@ func Decide(totalRAMBytes int64, numCPU int, mode string) Decision {
 	if active {
 		d.ArenaMax = arenaMaxFor(numCPU)
 		d.GoMemLimitBytes = deriveGoMemLimit(totalRAMBytes)
+	}
+	return d
+}
+
+// decide is Decide plus an annotation: when exact is false Reason says the
+// cgroup limit could not be read and, when a figure was detected, that it is
+// only an upper bound. The thresholds still use that bound, which is sound for
+// "at most N" checks.
+func decide(totalRAMBytes int64, exact bool, numCPU int, mode string) Decision {
+	d := Decide(totalRAMBytes, numCPU, mode)
+	if !exact {
+		d.Reason += "; " + memoryInexactNote
+		if totalRAMBytes > 0 {
+			d.Reason += "; " + memoryUpperBoundNote
+		}
 	}
 	return d
 }
