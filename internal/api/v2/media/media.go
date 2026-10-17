@@ -1829,19 +1829,16 @@ func (c *Handler) handleUserRequestedMode(ctx echo.Context, noteID, clipPath str
 	relAudioPath, err := c.resolveClipRel(clipPath)
 
 	if err == nil {
-		// Build spectrogram path
-		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
-
-		// Check if spectrogram already exists and is non-empty
-		if statInfo, statErr := c.SFS.StatRel(relSpectrogramPath); statErr == nil && statInfo.Size() > 0 {
+		servePath, exists := c.findExistingSpectrogram(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
+		if exists {
 			// Spectrogram exists, serve it with cache headers
 			c.LogDebugIfEnabled("Serving existing spectrogram in user-requested mode",
 				logger.String("note_id", noteID),
-				logger.String("spectrogram_path", relSpectrogramPath),
+				logger.String("spectrogram_path", servePath),
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("ip", ctx.RealIP()))
 
-			if serveErr := c.serveSpectrogramFile(ctx, relSpectrogramPath); serveErr != nil {
+			if serveErr := c.serveSpectrogramFile(ctx, servePath); serveErr != nil {
 				return true, c.translateSecureFSError(ctx, serveErr, msgServeSpectrogramFailed)
 			}
 			return true, nil
@@ -2252,10 +2249,9 @@ func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 	// Resolve the profile token only after the queue miss (this path is about to stat
 	// the disk anyway), so queue-hit polls stay free of a model-type lookup.
 	freqSuffix := c.spectrogramProfileSuffix(noteID)
-	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
 
-	// Check if file exists and is non-empty
-	if statInfo, err := c.SFS.StatRel(relSpectrogramPath); err == nil && statInfo.Size() > 0 {
+	// Check if file exists and is non-empty (including fallbacks to other standard sizes)
+	if _, exists := c.findExistingSpectrogram(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix); exists {
 		return ctx.JSON(http.StatusOK, map[string]any{
 			"data": map[string]any{
 				"status":        spectrogramStatusExists,
@@ -2440,11 +2436,10 @@ func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 	// queue key. The queue key is derived from the note ID and visual params, not the
 	// export-path-derived path, so GetSpectrogramStatus finds this in-flight job even
 	// if Realtime.Audio.Export.Path changes after enqueue.
-	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
 	queueKey := buildSpectrogramQueueKey(noteID, params.width, params.raw, params.style, params.dynamicRange)
 
-	// Check if file already exists on disk and is non-empty
-	if statInfo, err := c.SFS.StatRel(relSpectrogramPath); err == nil && statInfo.Size() > 0 {
+	// Check if file already exists on disk and is non-empty (including fallbacks to other standard sizes)
+	if _, exists := c.findExistingSpectrogram(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix); exists {
 		// Already exists, return immediately with generated status
 		queryParams := url.Values{}
 		sizeParam := params.sizeStr
@@ -2678,6 +2673,39 @@ func buildSpectrogramPaths(relAudioPath string, width int, raw bool, style, dyna
 	relSpectrogramPath = filepath.Join(relAudioDir, spectrogramFilename)
 
 	return relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath
+}
+
+// findExistingSpectrogram checks if a spectrogram for the given audio clip already exists on disk.
+// It checks the exact requested width first, then falls back to any other standard width (sm, md, lg, xl),
+// and finally checks the legacy bare basename.png.
+func (c *Handler) findExistingSpectrogram(relAudioPath string, requestedWidth int, raw bool, style, dynamicRange, freqSuffix string) (string, bool) {
+	// 1. Exact match for requested width
+	_, _, _, exactPath := buildSpectrogramPaths(relAudioPath, requestedWidth, raw, style, dynamicRange, freqSuffix)
+	if statInfo, err := c.SFS.StatRel(exactPath); err == nil && statInfo.Size() > 0 {
+		return exactPath, true
+	}
+
+	// 2. Check other standard widths (sm, md, lg, xl)
+	standardWidths := []int{SpectrogramSizeSm, SpectrogramSizeMd, SpectrogramSizeLg, SpectrogramSizeXl}
+	for _, w := range standardWidths {
+		if w == requestedWidth {
+			continue
+		}
+		_, _, _, fallbackPath := buildSpectrogramPaths(relAudioPath, w, raw, style, dynamicRange, freqSuffix)
+		if statInfo, err := c.SFS.StatRel(fallbackPath); err == nil && statInfo.Size() > 0 {
+			return fallbackPath, true
+		}
+	}
+
+	// 3. Fallback for pre-rendered spectrograms created as <basename>.png
+	if raw && buildStyleSuffix(style, dynamicRange) == "" && freqSuffix == "" {
+		barePath := strings.TrimSuffix(relAudioPath, filepath.Ext(relAudioPath)) + ".png"
+		if statInfo, err := c.SFS.StatRel(barePath); err == nil && statInfo.Size() > 0 {
+			return barePath, true
+		}
+	}
+
+	return "", false
 }
 
 // buildStyleSuffix returns a filename suffix encoding visual style settings.
@@ -3571,6 +3599,13 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 	}
 	if exists {
 		return relSpectrogramPath, nil
+	}
+	// Fallback: check if another standard-size spectrogram already exists on disk before running SoX
+	if fallbackPath, exists := c.findExistingSpectrogram(relAudioPath, width, raw, style, dynamicRange, freqSuffix); exists {
+		getSpectrogramLogger().Debug("Fast path HIT via size fallback: existing spectrogram found",
+			logger.String("queue_key", queueKey),
+			logger.String("fallback_path", fallbackPath))
+		return fallbackPath, nil
 	}
 
 	// Absolute paths needed for generation

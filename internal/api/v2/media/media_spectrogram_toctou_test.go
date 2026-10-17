@@ -73,3 +73,62 @@ func TestGenerateSpectrogramFromRelIgnoresLiveExportPath(t *testing.T) {
 	assert.Equal(t, relSpectrogramPath, got,
 		"generateSpectrogramFromRel must derive the spectrogram path from the threaded relAudioPath, not the live Export.Path")
 }
+
+
+func TestFindExistingSpectrogramFallback(t *testing.T) {
+	withRestoredGlobalSettings(t)
+
+	tmp := t.TempDir()
+	sfs, err := securefs.New(tmp)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sfs.Close() })
+
+	ctx := t.Context()
+
+	controllerCore := &apicore.Core{SFS: sfs}
+	controllerCore.SetTestContext(ctx, nil)
+	controller := &Handler{Core: controllerCore}
+	controller.Settings.Store(apitest.NewValidTestSettings())
+
+	relAudioPath := "2024/06/04/Turdus_merula_80p.wav"
+
+	// Create only the 'sm' spectrogram on disk
+	_, _, _, smSpectrogramPath := buildSpectrogramPaths(relAudioPath, SpectrogramSizeSm, true, "", "", "")
+	full := filepath.Join(tmp, smSpectrogramPath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o750))
+	require.NoError(t, os.WriteFile(full, []byte("PNG_SM_DATA"), 0o600))
+
+	// 1. Calling findExistingSpectrogram requesting md (514) should return the sm (258) path
+	foundPath, exists := controller.findExistingSpectrogram(relAudioPath, SpectrogramSizeMd, true, "", "", "")
+	require.True(t, exists, "findExistingSpectrogram should find the existing sm spectrogram")
+	assert.Equal(t, smSpectrogramPath, foundPath)
+
+	// 2. generateSpectrogramFromRel with requested width=md should return the existing sm path without generating
+	got, err := controller.generateSpectrogramFromRel(ctx, relAudioPath, "clip.wav", "", SpectrogramSizeMd, true, "", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, smSpectrogramPath, got)
+
+	// 3. Test legacy bare <basename>.png fallback
+	relAudioBare := "2024/06/04/Turdus_bare.wav"
+	barePath := "2024/06/04/Turdus_bare.png"
+	fullBare := filepath.Join(tmp, barePath)
+	require.NoError(t, os.WriteFile(fullBare, []byte("PNG_BARE_DATA"), 0o600))
+
+	// Should match when raw=true, style="", dynamicRange="", freqSuffix=""
+	foundBare, existsBare := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeMd, true, "", "", "")
+	require.True(t, existsBare, "findExistingSpectrogram should find bare .png for default raw settings")
+	assert.Equal(t, barePath, foundBare)
+
+	// Should NOT match when raw=false (axes requested)
+	_, existsNonRaw := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeMd, false, "", "", "")
+	assert.False(t, existsNonRaw, "findExistingSpectrogram should not match bare .png when raw=false")
+
+	// Should NOT match when non-default style requested
+	_, existsStyle := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeMd, true, "scientific_dark", "", "")
+	assert.False(t, existsStyle, "findExistingSpectrogram should not match bare .png when non-default style requested")
+
+	// Should NOT match when freqSuffix is non-empty
+	_, existsFreq := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeMd, true, "", "", "-bat")
+	assert.False(t, existsFreq, "findExistingSpectrogram should not match bare .png when freqSuffix is set")
+}
+

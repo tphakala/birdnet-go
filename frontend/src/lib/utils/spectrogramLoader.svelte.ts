@@ -33,8 +33,8 @@ export type SpectrogramLoadState =
 
 /** Configuration for the spectrogram loader */
 export interface SpectrogramLoaderConfig {
-  size?: string;
-  raw?: boolean;
+  size?: string | (() => string | undefined);
+  raw?: boolean | (() => boolean | undefined);
   initialPollIntervalMs?: number;
   maxPollIntervalMs?: number;
   maxPollAttempts?: number;
@@ -89,6 +89,16 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
   // --- Internal helpers ---
 
+  function getSize(): string {
+    const val = typeof config.size === 'function' ? config.size() : config.size;
+    return val ?? DEFAULT_CONFIG.size;
+  }
+
+  function getRaw(): boolean {
+    const val = typeof config.raw === 'function' ? config.raw() : config.raw;
+    return val ?? DEFAULT_CONFIG.raw;
+  }
+
   function clearTimers(): void {
     if (pollTimer) {
       clearTimeout(pollTimer);
@@ -134,19 +144,19 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
   function buildStatusUrl(detectionId: number): string {
     return buildAppUrl(
-      `/api/v2/spectrogram/${detectionId}/status?size=${config.size}&raw=${String(config.raw)}`
+      `/api/v2/spectrogram/${detectionId}/status?size=${getSize()}&raw=${String(getRaw())}`
     );
   }
 
   function buildGenerateUrl(detectionId: number): string {
     return buildAppUrl(
-      `/api/v2/spectrogram/${detectionId}/generate?size=${config.size}&raw=${String(config.raw)}`
+      `/api/v2/spectrogram/${detectionId}/generate?size=${getSize()}&raw=${String(getRaw())}`
     );
   }
 
   function buildImageUrl(detectionId: number): string {
     let url = buildAppUrl(
-      `/api/v2/spectrogram/${detectionId}?size=${config.size}&raw=${String(config.raw)}`
+      `/api/v2/spectrogram/${detectionId}?size=${getSize()}&raw=${String(getRaw())}`
     );
     if (imageRetryCount > 0) {
       url += `&t=${String(Date.now())}`;
@@ -440,6 +450,31 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     }
   }
 
+  function reset(): void {
+    clearTimers();
+    abortPending();
+    releaseCurrentSlot();
+    state = 'idle';
+    showSpinner = false;
+    hasError = false;
+    spectrogramUrl = '';
+    serverStatus = undefined;
+    currentDetectionId = undefined;
+    resetInternalState();
+  }
+
+  function restart(detectionId?: number, size?: string): void {
+    if (destroyed) return;
+    if (size !== undefined) {
+      config.size = size;
+    }
+    const targetId = detectionId ?? currentDetectionId;
+    reset();
+    if (targetId !== undefined) {
+      start(targetId);
+    }
+  }
+
   function handleImageLoad(): void {
     state = 'loaded';
     showSpinner = false;
@@ -512,6 +547,8 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
     start,
     stop,
+    reset,
+    restart,
     handleImageLoad,
     handleImageError,
     destroy,
