@@ -3763,7 +3763,7 @@
           "skippedHeading": "{count, plural, one {# szűrő nem lesz alkalmazva a hangra} other {# szűrő nem lesz alkalmazva a hangra}}",
           "skippedReasons": {
             "unknown_type": "A(z) {number}. szűrő ({type}, {frequency} Hz) kihagyva: ez a szűrőtípus nem támogatott.",
-            "invalid_parameters": "A(z) {number}. szűrő ({type}, {frequency} Hz) kihagyva: a beállításai {rate} Hz-en nem érvényesek, például a frekvencia eléri vagy meghaladja a mintavételi frekvencia felét.",
+            "invalid_parameters": "A(z) {number}. szűrő ({type}, {frequency} Hz) kihagyva: a beállításai {rate} Hz-en nem érvényesek.",
             "add_failed": "A(z) {number}. szűrő ({type}, {frequency} Hz) kihagyva: nem sikerült hozzáadni a szűrőlánchoz.",
             "unknown": "A(z) {number}. szűrő ({type}, {frequency} Hz) kihagyva."
           }

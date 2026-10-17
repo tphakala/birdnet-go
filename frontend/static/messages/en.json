@@ -3763,7 +3763,7 @@
           "skippedHeading": "{count, plural, one {# filter is not applied to the audio} other {# filters are not applied to the audio}}",
           "skippedReasons": {
             "unknown_type": "Filter {number} ({type}, {frequency} Hz) is skipped: this filter type is not supported.",
-            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) is skipped: its settings are not valid at {rate} Hz, for example a frequency at or above half the sample rate.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) is skipped: its settings are not valid at {rate} Hz.",
             "add_failed": "Filter {number} ({type}, {frequency} Hz) is skipped: it could not be added to the filter chain.",
             "unknown": "Filter {number} ({type}, {frequency} Hz) is skipped."
           }

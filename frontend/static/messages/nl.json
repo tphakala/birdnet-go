@@ -3763,7 +3763,7 @@
           "skippedHeading": "{count, plural, one {# filter wordt niet op de audio toegepast} other {# filters worden niet op de audio toegepast}}",
           "skippedReasons": {
             "unknown_type": "Filter {number} ({type}, {frequency} Hz) wordt overgeslagen: dit filtertype wordt niet ondersteund.",
-            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) wordt overgeslagen: de instellingen zijn niet geldig bij {rate} Hz, bijvoorbeeld een frequentie gelijk aan of boven de helft van de samplefrequentie.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) wordt overgeslagen: de instellingen zijn niet geldig bij {rate} Hz.",
             "add_failed": "Filter {number} ({type}, {frequency} Hz) wordt overgeslagen: het kon niet aan de filterketen worden toegevoegd.",
             "unknown": "Filter {number} ({type}, {frequency} Hz) wordt overgeslagen."
           }

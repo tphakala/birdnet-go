@@ -3763,7 +3763,7 @@
           "skippedHeading": "{count, plural, zero {# filtri netiek lietoti audio} one {# filtrs netiek lietots audio} other {# filtri netiek lietoti audio}}",
           "skippedReasons": {
             "unknown_type": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists: šis filtra tips netiek atbalstīts.",
-            "invalid_parameters": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists: tā iestatījumi nav derīgi pie {rate} Hz, piemēram, frekvence ir vienāda ar pusi no iztveršanas frekvences vai lielāka.",
+            "invalid_parameters": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists: tā iestatījumi nav derīgi pie {rate} Hz.",
             "add_failed": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists: to neizdevās pievienot filtru ķēdei.",
             "unknown": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists."
           }

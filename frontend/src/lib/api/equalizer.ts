@@ -38,6 +38,11 @@ export interface EqualizerSkippedFilter {
   index: number;
   type: string;
   reason: EqualizerSkipReason;
+  /**
+   * The backend's specific reason, in English (for example which parameter
+   * is out of range); empty when the response carries none.
+   */
+  message: string;
 }
 
 /** Validated response of the equalizer response endpoint. */
@@ -154,6 +159,7 @@ function toSkipReason(reason: string): EqualizerSkipReason {
  * boolean `enabled`, a non-empty `points` array strictly ascending in `hz`
  * with finite values and `hz` above 0, and `skipped` entries whose `index`
  * points into the `filterCount` posted filters, each index at most once.
+ * Each skipped entry keeps the backend's `message`, or '' when it has none.
  */
 export function parseEqualizerResponse(data: unknown, filterCount: number): EqualizerResponse {
   if (!isPlainObject(data)) {
@@ -193,7 +199,7 @@ export function parseEqualizerResponse(data: unknown, filterCount: number): Equa
     if (!isPlainObject(entry)) {
       throw new Error('equalizer skipped entry is not an object');
     }
-    const { index, type, reason } = entry;
+    const { index, type, reason, message } = entry;
     if (
       typeof index !== 'number' ||
       !Number.isInteger(index) ||
@@ -206,7 +212,12 @@ export function parseEqualizerResponse(data: unknown, filterCount: number): Equa
       throw new Error('equalizer skipped entry is invalid');
     }
     seenIndices.add(index);
-    parsedSkipped.push({ index, type, reason: toSkipReason(reason) });
+    parsedSkipped.push({
+      index,
+      type,
+      reason: toSkipReason(reason),
+      message: typeof message === 'string' ? message : '',
+    });
   }
 
   return { sampleRate, enabled, points: parsedPoints, skipped: parsedSkipped };

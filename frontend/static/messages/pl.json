@@ -3763,7 +3763,7 @@
           "skippedHeading": "{count, plural, one {# filtr nie jest stosowany do dźwięku} few {# filtry nie są stosowane do dźwięku} many {# filtrów nie jest stosowanych do dźwięku} other {# filtra nie jest stosowane do dźwięku}}",
           "skippedReasons": {
             "unknown_type": "Filtr {number} ({type}, {frequency} Hz) jest pomijany: ten typ filtra nie jest obsługiwany.",
-            "invalid_parameters": "Filtr {number} ({type}, {frequency} Hz) jest pomijany: jego ustawienia są nieprawidłowe przy {rate} Hz, na przykład częstotliwość równa połowie częstotliwości próbkowania lub wyższa.",
+            "invalid_parameters": "Filtr {number} ({type}, {frequency} Hz) jest pomijany: jego ustawienia są nieprawidłowe przy {rate} Hz.",
             "add_failed": "Filtr {number} ({type}, {frequency} Hz) jest pomijany: nie udało się dodać go do łańcucha filtrów.",
             "unknown": "Filtr {number} ({type}, {frequency} Hz) jest pomijany."
           }

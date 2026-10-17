@@ -3763,7 +3763,7 @@
           "skippedHeading": "{count, plural, one {# filtro non viene applicato all'audio} other {# filtri non vengono applicati all'audio}}",
           "skippedReasons": {
             "unknown_type": "Il filtro {number} ({type}, {frequency} Hz) viene saltato: questo tipo di filtro non è supportato.",
-            "invalid_parameters": "Il filtro {number} ({type}, {frequency} Hz) viene saltato: le sue impostazioni non sono valide a {rate} Hz, ad esempio una frequenza pari o superiore alla metà della frequenza di campionamento.",
+            "invalid_parameters": "Il filtro {number} ({type}, {frequency} Hz) viene saltato: le sue impostazioni non sono valide a {rate} Hz.",
             "add_failed": "Il filtro {number} ({type}, {frequency} Hz) viene saltato: non è stato possibile aggiungerlo alla catena di filtri.",
             "unknown": "Il filtro {number} ({type}, {frequency} Hz) viene saltato."
           }

@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { tick } from 'svelte';
-import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import { isPlainObject } from '$lib/utils/security';
 import { renderTyped } from '../../../../../test/render-helpers';
@@ -269,9 +269,10 @@ describe('FilterResponseGraph', () => {
   });
 
   it('lists each skipped filter with its translated reason and the posted type and frequency', async () => {
+    const reason = 'WidthHz must be > 0 for a peaking filter';
     apiPost.mockResolvedValue(
       responseBody({
-        skipped: [{ index: 1, type: 'LowPass', reason: 'invalid_parameters', message: 'x' }],
+        skipped: [{ index: 1, type: 'LowPass', reason: 'invalid_parameters', message: reason }],
       })
     );
     renderTyped(FilterResponseGraph, {
@@ -283,6 +284,8 @@ describe('FilterResponseGraph', () => {
       'settings.audio.audioFilters.graph.skippedReasons.invalid_parameters'
     );
     expect(notice).toHaveTextContent('settings.audio.audioFilters.graph.skippedHeading');
+    // The backend's specific reason is shown with the filter it belongs to.
+    expect(within(notice).getByText(reason)).toBeInTheDocument();
     expect(t).toHaveBeenCalledWith(
       'settings.audio.audioFilters.graph.skippedReasons.invalid_parameters',
       expect.objectContaining({ number: 2, type: 'LowPass', frequency: 15000, rate: 48000 })
@@ -297,7 +300,16 @@ describe('FilterResponseGraph', () => {
 
   it('numbers the first skipped filter 1 and names it from the posted request', async () => {
     apiPost.mockResolvedValue(
-      responseBody({ skipped: [{ index: 0, type: 'Unrecognised', reason: 'unknown_type' }] })
+      responseBody({
+        skipped: [
+          {
+            index: 0,
+            type: 'Unrecognised',
+            reason: 'unknown_type',
+            message: 'unknown filter type Unrecognised',
+          },
+        ],
+      })
     );
     renderTyped(FilterResponseGraph, {
       props: { equalizer: { enabled: true, filters: [HIGH_PASS, LOW_PASS] } },
@@ -307,6 +319,9 @@ describe('FilterResponseGraph', () => {
       'settings.audio.audioFilters.graph.skippedReasons.unknown_type',
       expect.objectContaining({ number: 1, type: 'HighPass', frequency: 100 })
     );
+    // The translated unknown-type text already says why; the English backend
+    // message is not repeated under it.
+    expect(screen.queryByText('unknown filter type Unrecognised')).not.toBeInTheDocument();
   });
 
   it('shows no skipped notice and announces nothing when no filter is skipped', async () => {

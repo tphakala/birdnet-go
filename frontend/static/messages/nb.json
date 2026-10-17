@@ -3763,7 +3763,7 @@
           "skippedHeading": "{count, plural, one {# filter brukes ikke på lyden} other {# filtre brukes ikke på lyden}}",
           "skippedReasons": {
             "unknown_type": "Filter {number} ({type}, {frequency} Hz) hoppes over: denne filtertypen støttes ikke.",
-            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) hoppes over: innstillingene er ikke gyldige ved {rate} Hz, for eksempel en frekvens på eller over halvparten av samplingsfrekvensen.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) hoppes over: innstillingene er ikke gyldige ved {rate} Hz.",
             "add_failed": "Filter {number} ({type}, {frequency} Hz) hoppes over: det kunne ikke legges til i filterkjeden.",
             "unknown": "Filter {number} ({type}, {frequency} Hz) hoppes over."
           }

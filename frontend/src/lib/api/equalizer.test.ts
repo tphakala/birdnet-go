@@ -125,7 +125,24 @@ describe('parseEqualizerResponse', () => {
     );
     expect(parsed.sampleRate).toBe(48000);
     expect(parsed.points).toHaveLength(3);
-    expect(parsed.skipped).toEqual([{ index: 0, type: 'LowPass', reason: 'invalid_parameters' }]);
+    expect(parsed.skipped).toEqual([
+      { index: 0, type: 'LowPass', reason: 'invalid_parameters', message: 'x' },
+    ]);
+  });
+
+  it('keeps the backend reason message and defaults a missing one to empty', () => {
+    const message = 'WidthHz 10000 is too wide at Frequency 20 (lower band edge <= 0)';
+    const parsed = parseEqualizerResponse(
+      validBody({
+        skipped: [
+          { index: 0, type: 'BandReject', reason: 'invalid_parameters', message },
+          { index: 1, type: 'LowPass', reason: 'add_failed' },
+          { index: 2, type: 'LowPass', reason: 'add_failed', message: 42 },
+        ],
+      }),
+      3
+    );
+    expect(parsed.skipped.map(entry => entry.message)).toEqual([message, '', '']);
   });
 
   it('rejects the global mock shape {data: []}', () => {

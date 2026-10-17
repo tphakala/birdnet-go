@@ -3763,7 +3763,7 @@
           "skippedHeading": "{count, plural, one {# filtr se na zvuk nepoužije} few {# filtry se na zvuk nepoužijí} many {# filtru se na zvuk nepoužije} other {# filtrů se na zvuk nepoužije}}",
           "skippedReasons": {
             "unknown_type": "Filtr {number} ({type}, {frequency} Hz) je přeskočen: tento typ filtru není podporován.",
-            "invalid_parameters": "Filtr {number} ({type}, {frequency} Hz) je přeskočen: jeho nastavení není platné při {rate} Hz, například frekvence rovná polovině vzorkovací frekvence nebo vyšší.",
+            "invalid_parameters": "Filtr {number} ({type}, {frequency} Hz) je přeskočen: jeho nastavení není platné při {rate} Hz.",
             "add_failed": "Filtr {number} ({type}, {frequency} Hz) je přeskočen: nepodařilo se jej přidat do řetězce filtrů.",
             "unknown": "Filtr {number} ({type}, {frequency} Hz) je přeskočen."
           }

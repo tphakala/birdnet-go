@@ -614,7 +614,12 @@
         </span>
         <ul class="mt-1 list-disc ps-5 space-y-1">
           {#each graphState.response.skipped as entry (entry.index)}
-            <li>{skippedMessage(entry, ready)}</li>
+            <li>
+              {skippedMessage(entry, ready)}
+              {#if entry.message && entry.reason !== 'unknown_type'}
+                <span class="block text-[var(--color-base-content)]/70">{entry.message}</span>
+              {/if}
+            </li>
           {/each}
         </ul>
       </ErrorAlert>

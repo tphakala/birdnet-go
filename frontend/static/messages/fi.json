@@ -3763,7 +3763,7 @@
           "skippedHeading": "{count, plural, one {# suodatinta ei käytetä ääneen} other {# suodatinta ei käytetä ääneen}}",
           "skippedReasons": {
             "unknown_type": "Suodatin {number} ({type}, {frequency} Hz) ohitetaan: tätä suodatintyyppiä ei tueta.",
-            "invalid_parameters": "Suodatin {number} ({type}, {frequency} Hz) ohitetaan: sen asetukset eivät kelpaa {rate} Hz:n taajuudella, esimerkiksi taajuus on vähintään puolet näytteenottotaajuudesta.",
+            "invalid_parameters": "Suodatin {number} ({type}, {frequency} Hz) ohitetaan: sen asetukset eivät kelpaa {rate} Hz:n taajuudella.",
             "add_failed": "Suodatin {number} ({type}, {frequency} Hz) ohitetaan: sitä ei voitu lisätä suodatinketjuun.",
             "unknown": "Suodatin {number} ({type}, {frequency} Hz) ohitetaan."
           }
