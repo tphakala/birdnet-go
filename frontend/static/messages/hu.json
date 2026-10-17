@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Frekvencia válasz",
         "cutoffFrequency": "Levágási frekvencia",
         "cutoffFrequencyHelp": "Az a frekvencia, ahol a szűrő kezdi csökkenteni a jeleket. A madárhangok tipikusan 1-10 kHz tartományban vannak.",
+        "centerFrequency": "Középfrekvencia",
+        "bandwidth": "Sávszélesség",
         "qFactor": "Q faktor",
         "qFactorHelp": "A szűrő élességét szabályozza. Az alacsonyabb értékek (0.1-1) enyhébb meredekséget, a magasabb értékek (1-10) meredekebb levágást hoznak létre.",
         "gain": "Erősítés",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Több szűrőt is hozzáadhat az optimális madár detektáláshoz a környezetében.",
+        "emptyEntryRestored": "Adjon meg egy számot. Az előző érték ({value}) megmaradt.",
         "graph": {
           "flatResponse": "Lapos válasz (nincs szűrő alkalmazva)",
           "frequency": "Frekvencia (Hz)",

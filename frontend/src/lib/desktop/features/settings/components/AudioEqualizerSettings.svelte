@@ -26,11 +26,26 @@
   import HighPassIcon from '$lib/desktop/components/ui/HighPassIcon.svelte';
   import BandRejectIcon from '$lib/desktop/components/ui/BandRejectIcon.svelte';
   import FilterResponseGraph from './FilterResponseGraph.svelte';
+  import EqualizerNumberInput, {
+    eqLabelClasses,
+    EQ_PARAMETER_CELL_CLASS,
+    type EqRowVariant,
+  } from './EqualizerNumberInput.svelte';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { generateId } from '$lib/utils/uuid';
+  import {
+    DEFAULT_EQ_GAIN_DB,
+    DEFAULT_EQ_Q,
+    DEFAULT_EQ_WIDTH_HZ,
+    EQ_OFFERED_MAX_PASSES,
+    EQ_PASSES_OFF,
+    eqInputStep,
+    type EqNumericParameter,
+  } from '$lib/utils/audio/equalizer';
   import type { EqualizerFilterType } from '$lib/stores/settings';
   import fallbackEqFilterConfig from './eqFilterFallbackConfig.json';
 
@@ -104,9 +119,19 @@
   let eqFilterConfig = $state<Record<string, FilterTypeConfig>>({});
   let loadingConfig = $state(true);
 
+  // Frequency of the blank form before a type is picked; picking a type sets its default
+  const UNSELECTED_FREQUENCY_HZ = 0;
+
   // Blank form for a new filter; new filters start Off (0 passes)
   function createEmptyFilter(): NewFilterForm {
-    return { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 0 };
+    return {
+      type: '',
+      frequency: UNSELECTED_FREQUENCY_HZ,
+      q: DEFAULT_EQ_Q,
+      width: DEFAULT_EQ_WIDTH_HZ,
+      gain: DEFAULT_EQ_GAIN_DB,
+      passes: EQ_PASSES_OFF,
+    };
   }
 
   // New filter state for adding filters (uses NewFilterForm to allow empty type)
@@ -202,27 +227,81 @@
     return config?.Parameters || [];
   }
 
-  // Clamp a value to the Min/Max range of a filter parameter
-  function clampToParameter(value: number, param: FilterParameter): number {
-    return Math.max(param.Min, Math.min(param.Max, value));
+  // The numeric parameter a table entry describes, or undefined for Passes and unknown names
+  function numericParameter(param: FilterParameter): EqNumericParameter | undefined {
+    switch (param.Name.toLowerCase()) {
+      case 'frequency':
+        return 'Frequency';
+      case 'q':
+        return 'Q';
+      case 'width':
+        return 'Width';
+      case 'gain':
+        return 'Gain';
+    }
+    return undefined;
   }
 
-  // Commit a Q entry: clamp it to the parameter range and show the stored value in the
-  // input. An entry that is not a number restores the current value and commits nothing.
-  function commitQ(
-    input: HTMLInputElement,
-    param: FilterParameter,
-    current: number | undefined,
-    commit: (_q: number) => void
-  ) {
-    const value = parseFloat(input.value);
-    if (isNaN(value)) {
-      input.value = String(current ?? param.Default);
-      return;
+  // Translated label of a filter parameter. The table's own English label is the
+  // fallback for a parameter the editor has no translation for.
+  function parameterLabel(filterType: string, param: FilterParameter): string {
+    switch (param.Name.toLowerCase()) {
+      case 'frequency':
+        return filterType === 'BandReject'
+          ? t('settings.audio.audioFilters.centerFrequency')
+          : t('settings.audio.audioFilters.cutoffFrequency');
+      case 'q':
+        return t('settings.audio.audioFilters.qFactor');
+      case 'width':
+        return t('settings.audio.audioFilters.bandwidth');
+      case 'gain':
+        return t('settings.audio.audioFilters.gain');
+      case 'passes':
+        return t('settings.audio.audioFilters.attenuation');
     }
-    const clamped = clampToParameter(value, param);
-    input.value = String(clamped);
-    commit(clamped);
+    return param.Label;
+  }
+
+  // Stored value of a numeric parameter in a filter or in the new-filter form
+  function parameterValue(
+    filter: Filter | NewFilterForm,
+    name: EqNumericParameter
+  ): number | undefined {
+    switch (name) {
+      case 'Frequency':
+        return filter.frequency;
+      case 'Q':
+        return filter.q;
+      case 'Width':
+        return filter.width;
+      case 'Gain':
+        return filter.gain;
+    }
+  }
+
+  // Store a committed numeric parameter in the new-filter form
+  function setNewFilterParameter(name: EqNumericParameter, value: number) {
+    switch (name) {
+      case 'Frequency':
+        newFilter = { ...newFilter, frequency: value };
+        break;
+      case 'Q':
+        newFilter = { ...newFilter, q: value };
+        break;
+      case 'Width':
+        newFilter = { ...newFilter, width: value };
+        break;
+      case 'Gain':
+        newFilter = { ...newFilter, gain: value };
+        break;
+    }
+  }
+
+  // Id prefix of this editor instance, for the <label for> of each attenuation dropdown
+  // (the editor mounts several times on a page)
+  const editorId = generateId('eq-editor');
+  function passesId(row: number | 'new'): string {
+    return `${editorId}-passes-${row}`;
   }
 
   // Add a new filter
@@ -287,12 +366,9 @@
       // For passes, ensure integer and clamp to bounds
       if (normalizedParamName === 'passes') {
         const intValue = Math.round(numericValue);
-        validatedValue = Math.max(0, Math.min(4, intValue));
+        validatedValue = Math.max(EQ_PASSES_OFF, Math.min(EQ_OFFERED_MAX_PASSES, intValue));
       } else if (paramConfig) {
-        // Use parameter bounds if available, otherwise use sensible defaults
-        const min = paramConfig.Min ?? 0;
-        const max = paramConfig.Max ?? (normalizedParamName === 'frequency' ? 20000 : 10);
-        validatedValue = Math.max(min, Math.min(max, numericValue));
+        validatedValue = Math.max(paramConfig.Min, Math.min(paramConfig.Max, numericValue));
       } else {
         validatedValue = numericValue;
       }
@@ -386,15 +462,62 @@
       />
     </div>
 
+    <!-- One parameter cell of a filter row: a number input, or the attenuation dropdown -->
+    {#snippet parameterCell(
+      filterType: string,
+      param: FilterParameter,
+      variant: EqRowVariant,
+      row: number | 'new',
+      filter: Filter | NewFilterForm,
+      commitNumeric: (_name: EqNumericParameter, _value: number) => void,
+      commitPasses: (_passes: number) => void
+    )}
+      {@const numeric = numericParameter(param)}
+      {@const unitSuffix = param.Unit ? ` (${param.Unit})` : ''}
+      {#if param.Name.toLowerCase() === 'passes'}
+        <div class={EQ_PARAMETER_CELL_CLASS}>
+          <label class={eqLabelClasses(variant).label} for={passesId(row)}>
+            <span class={eqLabelClasses(variant).text}>
+              {parameterLabel(filterType, param)}{unitSuffix}
+            </span>
+          </label>
+          <SelectDropdown
+            id={passesId(row)}
+            value={String(filter.passes ?? EQ_PASSES_OFF)}
+            options={attenuationOptions}
+            onChange={value => {
+              const passes = Number(value);
+              if (Number.isInteger(passes)) commitPasses(passes);
+            }}
+            {disabled}
+            groupBy={false}
+            menuSize="sm"
+          />
+        </div>
+      {:else if numeric}
+        <EqualizerNumberInput
+          label={parameterLabel(filterType, param)}
+          unit={param.Unit}
+          value={parameterValue(filter, numeric) ?? param.Default}
+          min={param.Min}
+          max={param.Max}
+          step={eqInputStep(numeric)}
+          {disabled}
+          {variant}
+          onCommit={value => commitNumeric(numeric, value)}
+        />
+      {/if}
+    {/snippet}
+
     <div class="space-y-4">
       <!-- Existing filters -->
       {#each equalizerSettings.filters || [] as filter, index (index)}
         {@const filterParams = getEqFilterParameters(filter.type)}
         <div
-          class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end p-4 bg-[var(--color-base-200)] rounded-lg border border-[var(--color-base-300)]"
+          class="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-y-0 items-end p-4 bg-[var(--color-base-200)] rounded-lg border border-[var(--color-base-300)]"
         >
           <!-- Filter Type Display -->
-          <div class="flex items-end">
+          <div class="flex items-end md:row-span-2 md:self-end">
             <button
               type="button"
               class="btn btn-sm w-full pointer-events-none bg-[var(--color-base-300)] border-[var(--color-base-300)] gap-2"
@@ -412,88 +535,19 @@
 
           <!-- Dynamic parameters based on filter type -->
           {#each filterParams as param (param.Name)}
-            <div class="flex flex-col">
-              <div class="label pt-0">
-                <span class="label-text-alt">
-                  {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
-                </span>
-              </div>
-              {#if param.Name.toLowerCase() === 'passes'}
-                <!-- Select for Passes/Attenuation -->
-                <SelectDropdown
-                  value={String(filter.passes ?? 0)}
-                  options={attenuationOptions}
-                  aria-label={param.Label}
-                  onChange={value =>
-                    updateFilterParameter(index, param.Name, parseInt(value as string))}
-                  {disabled}
-                  groupBy={false}
-                  menuSize="sm"
-                />
-              {:else if param.Name.toLowerCase() === 'frequency'}
-                <!-- Frequency input -->
-                <input
-                  value={filter.frequency ?? param.Default}
-                  oninput={e =>
-                    updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
-                  aria-label={param.Label}
-                  type="number"
-                  min={param.Min}
-                  max={param.Max}
-                  step="1"
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {:else if param.Name.toLowerCase() === 'q'}
-                <!-- Q factor input -->
-                <input
-                  value={filter.q ?? param.Default}
-                  onchange={e =>
-                    commitQ(e.currentTarget, param, filter.q, q =>
-                      updateFilterParameter(index, param.Name, q)
-                    )}
-                  aria-label={param.Label}
-                  type="number"
-                  min={param.Min}
-                  max={param.Max}
-                  step="0.1"
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {:else if param.Name.toLowerCase() === 'width'}
-                <!-- Width (Bandwidth) input -->
-                <input
-                  value={filter.width ?? param.Default}
-                  oninput={e =>
-                    updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
-                  aria-label={param.Label}
-                  type="number"
-                  min={param.Min}
-                  max={param.Max}
-                  step="1"
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {:else if param.Name.toLowerCase() === 'gain'}
-                <!-- Gain input -->
-                <input
-                  value={filter.gain ?? param.Default}
-                  oninput={e =>
-                    updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
-                  aria-label={param.Label}
-                  type="number"
-                  min={param.Min}
-                  max={param.Max}
-                  step="0.1"
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {/if}
-            </div>
+            {@render parameterCell(
+              filter.type,
+              param,
+              'edit',
+              index,
+              filter,
+              (name, value) => updateFilterParameter(index, name, value),
+              passes => updateFilterParameter(index, param.Name, passes)
+            )}
           {/each}
 
           <!-- Remove button -->
-          <div class="flex items-end md:justify-end md:col-start-5">
+          <div class="flex items-end md:justify-end md:col-start-5 md:row-span-2 md:self-end">
             <button
               type="button"
               class="btn btn-error btn-sm w-full md:w-24"
@@ -507,9 +561,9 @@
       {/each}
 
       <!-- Add new filter section -->
-      <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end mt-6">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-y-0 items-end mt-6">
         <!-- New Filter Type -->
-        <div class="flex flex-col">
+        <div class="flex flex-col md:row-span-2 md:self-end">
           <SelectDropdown
             value={newFilter.type}
             label={t('settings.audio.audioFilters.newFilterType')}
@@ -524,99 +578,24 @@
           />
         </div>
 
-        <!-- New Audio Filter Parameters -->
+        <!-- New Audio Filter Parameters, keyed by type so a type switch starts every
+             field afresh -->
         {#if newFilter.type}
-          {#each getEqFilterParameters(newFilter.type) as param (param.Name)}
-            <div class="flex flex-col">
-              <div class="label">
-                <span class="label-text">
-                  {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
-                </span>
-              </div>
-              {#if param.Name.toLowerCase() === 'passes'}
-                <!-- Select for Passes/Attenuation -->
-                <SelectDropdown
-                  value={String(newFilter.passes)}
-                  options={attenuationOptions}
-                  aria-label={param.Label}
-                  onChange={value => {
-                    newFilter = { ...newFilter, passes: parseInt(value as string, 10) };
-                  }}
-                  {disabled}
-                  groupBy={false}
-                  menuSize="sm"
-                />
-              {:else if param.Name.toLowerCase() === 'frequency'}
-                <!-- Frequency input -->
-                <input
-                  value={newFilter.frequency}
-                  oninput={e => {
-                    const value = parseFloat(e.currentTarget.value) || 0;
-                    newFilter = { ...newFilter, frequency: value };
-                  }}
-                  aria-label={param.Label}
-                  type="number"
-                  step="1"
-                  min={param.Min}
-                  max={param.Max}
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {:else if param.Name.toLowerCase() === 'q'}
-                <!-- Q factor input -->
-                <input
-                  value={newFilter.q ?? 0.707}
-                  onchange={e =>
-                    commitQ(e.currentTarget, param, newFilter.q, q => {
-                      newFilter = { ...newFilter, q };
-                    })}
-                  aria-label={param.Label}
-                  type="number"
-                  step="0.1"
-                  min={param.Min}
-                  max={param.Max}
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {:else if param.Name.toLowerCase() === 'width'}
-                <!-- Width (Bandwidth) input -->
-                <input
-                  value={newFilter.width ?? 100}
-                  oninput={e => {
-                    const value = parseFloat(e.currentTarget.value) || 100;
-                    newFilter = { ...newFilter, width: value };
-                  }}
-                  aria-label={param.Label}
-                  type="number"
-                  step="1"
-                  min={param.Min}
-                  max={param.Max}
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {:else if param.Name.toLowerCase() === 'gain'}
-                <!-- Gain input -->
-                <input
-                  value={newFilter.gain ?? 0}
-                  oninput={e => {
-                    const value = parseFloat(e.currentTarget.value) || 0;
-                    newFilter = { ...newFilter, gain: value };
-                  }}
-                  aria-label={param.Label}
-                  type="number"
-                  step="0.1"
-                  min={param.Min}
-                  max={param.Max}
-                  class="input input-sm w-full"
-                  {disabled}
-                />
-              {/if}
-            </div>
+          {#each getEqFilterParameters(newFilter.type) as param (`${newFilter.type}-${param.Name}`)}
+            {@render parameterCell(
+              newFilter.type,
+              param,
+              'new',
+              'new',
+              newFilter,
+              setNewFilterParameter,
+              passes => (newFilter = { ...newFilter, passes })
+            )}
           {/each}
         {/if}
 
         <!-- Add new filter button -->
-        <div class="flex flex-col">
+        <div class="flex flex-col md:row-span-2 md:self-end">
           <div class="label">
             <span class="label-text">&nbsp;</span>
           </div>

@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Frekvenčná odozva",
         "cutoffFrequency": "Deliaca frekvencia",
         "cutoffFrequencyHelp": "Frekvencia, pri ktorej filter začína tlmíť signály. Vtáčí spev sa zvyčajne pohybuje v rozmedzí 1-10 kHz.",
+        "centerFrequency": "Stredná frekvencia",
+        "bandwidth": "Šírka pásma",
         "qFactor": "Q faktor",
         "qFactorHelp": "Činiteľ akosti (Q faktor) riadi ostrosť filtra. Nižšie hodnoty (0.1-1) vytvárajú jemnejšie sklony, vyššie hodnoty (1-10) vytvárajú strmšie rezy.",
         "gain": "Zisk",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Pridajte viacero filtrov na tvarovanie frekvenčnej odozvy pre optimálnu detekciu vtákov vo vašom prostredí.",
+        "emptyEntryRestored": "Zadajte číslo. Predchádzajúca hodnota {value} bola zachovaná.",
         "graph": {
           "flatResponse": "Plochá odozva (Žiadne filtre nie sú použité)",
           "frequency": "Frekvencia (Hz)",

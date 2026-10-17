@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Frekvenční odezva",
         "cutoffFrequency": "Mezní frekvence",
         "cutoffFrequencyHelp": "Frekvence, při které filtr začíná tlumit signály. Ptačí zpěv se obvykle pohybuje v rozmezí 1-10 kHz.",
+        "centerFrequency": "Střední frekvence",
+        "bandwidth": "Šířka pásma",
         "qFactor": "Q faktor",
         "qFactorHelp": "Činitel jakosti (Q faktor) řídí ostrost filtru. Nižší hodnoty (0,1-1) vytvářejí jemnější sklony, vyšší hodnoty (1-10) vytvářejí strmější řezy.",
         "gain": "Zesílení",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Přidejte více filtrů pro tvarování frekvenční odezvy pro optimální detekci ptáků ve vašem prostředí.",
+        "emptyEntryRestored": "Zadejte číslo. Předchozí hodnota {value} byla zachována.",
         "graph": {
           "flatResponse": "Plochá odezva (žádné filtry nejsou použity)",
           "frequency": "Frekvence (Hz)",

@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/svelte';
 import type { ComponentProps } from 'svelte';
 import userEvent from '@testing-library/user-event';
+import { t } from '$lib/i18n';
+import { DEFAULT_EQ_Q } from '$lib/utils/audio/equalizer';
 import AudioEqualizerSettings from './AudioEqualizerSettings.svelte';
+import fallbackEqFilterConfig from './eqFilterFallbackConfig.json';
 
 // Mock dependencies
 // Common mocks are now handled globally in src/test/setup.ts
@@ -50,6 +53,21 @@ vi.mock('$lib/desktop/components/ui/HighPassIcon.svelte', () => ({
 vi.mock('$lib/desktop/components/ui/BandRejectIcon.svelte', () => ({
   default: vi.fn(() => ({ $set: vi.fn(), $destroy: vi.fn(), $on: vi.fn() })),
 }));
+
+// The global t mock returns the key, so accessible names are keys plus the unit
+const KEY = 'settings.audio.audioFilters.';
+const NAME = {
+  cutoff: `${KEY}cutoffFrequency (Hz)`,
+  center: `${KEY}centerFrequency (Hz)`,
+  q: `${KEY}qFactor`,
+  width: `${KEY}bandwidth (Hz)`,
+  attenuation: `${KEY}attenuation`,
+};
+const NOTICE = {
+  min: 'components.forms.numberField.adjustedToMinimum',
+  max: 'components.forms.numberField.adjustedToMaximum',
+  empty: `${KEY}emptyEntryRestored`,
+};
 
 describe('AudioEqualizerSettings', () => {
   const mockUpdateCallback = vi.fn();
@@ -210,7 +228,7 @@ describe('AudioEqualizerSettings', () => {
         },
       });
 
-      const trigger = await screen.findByRole('combobox', { name: 'Attenuation' });
+      const trigger = await screen.findByRole('combobox', { name: NAME.attenuation });
       expect(trigger).toHaveTextContent('settings.audio.audioFilters.attenuationLevels.24db');
     });
 
@@ -229,12 +247,12 @@ describe('AudioEqualizerSettings', () => {
       );
       await user.click(await screen.findByRole('option', { name: /HighPass/ }));
 
-      const trigger = await screen.findByRole('combobox', { name: 'Attenuation' });
+      const trigger = await screen.findByRole('combobox', { name: NAME.attenuation });
       expect(trigger).toHaveTextContent('settings.audio.audioFilters.attenuationLevels.off');
     });
   });
 
-  describe('new filter form and Q input', () => {
+  describe('new filter form and parameter inputs', () => {
     const NEW_FILTER_TYPE = 'settings.audio.audioFilters.newFilterType';
     const LEVEL_PREFIX = 'settings.audio.audioFilters.attenuationLevels.';
 
@@ -243,6 +261,7 @@ describe('AudioEqualizerSettings', () => {
     >['equalizerSettings']['filters'];
 
     type Payload = { filters: Array<Record<string, unknown>> };
+    type UserSession = ReturnType<typeof userEvent.setup>;
 
     beforeEach(() => {
       Element.prototype.scrollIntoView = vi.fn();
@@ -254,7 +273,7 @@ describe('AudioEqualizerSettings', () => {
       return last as Payload;
     }
 
-    async function pickType(user: ReturnType<typeof userEvent.setup>, type: string) {
+    async function pickType(user: UserSession, type: string) {
       await user.click(await screen.findByRole('combobox', { name: NEW_FILTER_TYPE }));
       await user.click(await screen.findByRole('option', { name: new RegExp(type) }));
     }
@@ -278,6 +297,19 @@ describe('AudioEqualizerSettings', () => {
       });
     }
 
+    // The notice element an input points at through aria-describedby, if any
+    function noticeOf(input: HTMLElement): HTMLElement | null {
+      const id = input.getAttribute('aria-describedby');
+      return id ? document.getElementById(id) : null;
+    }
+
+    // Text of every notice element in the editor that currently shows something
+    function shownNotices(): string[] {
+      return Array.from(document.querySelectorAll('[role="status"][id$="-notice"]'))
+        .map(n => n.textContent.trim())
+        .filter(text => text !== '');
+    }
+
     it('presets a new filter to Off and adds it with passes 0', async () => {
       for (const type of ['LowPass', 'HighPass', 'BandReject']) {
         mockUpdateCallback.mockClear();
@@ -288,7 +320,7 @@ describe('AudioEqualizerSettings', () => {
         await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
 
         const added = lastPayload().filters[0];
-        expect(added).toMatchObject({ type, passes: 0, q: 0.707 });
+        expect(added).toMatchObject({ type, passes: 0, q: DEFAULT_EQ_Q });
         cleanup();
       }
     });
@@ -298,7 +330,7 @@ describe('AudioEqualizerSettings', () => {
       renderEmpty();
 
       await pickType(user, 'HighPass');
-      await user.click(await screen.findByRole('combobox', { name: 'Attenuation' }));
+      await user.click(await screen.findByRole('combobox', { name: NAME.attenuation }));
       await user.click(await screen.findByRole('option', { name: `${LEVEL_PREFIX}24db` }));
       await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
 
@@ -310,7 +342,7 @@ describe('AudioEqualizerSettings', () => {
       renderEmpty();
 
       await pickType(user, 'LowPass');
-      await user.click(await screen.findByRole('combobox', { name: 'Attenuation' }));
+      await user.click(await screen.findByRole('combobox', { name: NAME.attenuation }));
 
       const names = (await screen.findAllByRole('option')).map(o => o.textContent.trim());
       expect(names).toEqual(['off', '12db', '24db', '36db', '48db'].map(k => LEVEL_PREFIX + k));
@@ -324,9 +356,25 @@ describe('AudioEqualizerSettings', () => {
       ]);
 
       const qInputs = await screen.findAllByRole<HTMLInputElement>('spinbutton', {
-        name: 'Q Factor',
+        name: NAME.q,
       });
       expect(qInputs.map(i => i.value)).toEqual(['2', '0.5']);
+    });
+
+    it('gives the Q input a step that keeps the default 0.707 a valid entry', async () => {
+      const user = userEvent.setup();
+      renderWithFilters([{ type: 'LowPass' as const, frequency: 15000, q: 0.707, passes: 1 }]);
+      await pickType(user, 'HighPass');
+
+      const qInputs = await screen.findAllByRole<HTMLInputElement>('spinbutton', {
+        name: NAME.q,
+      });
+      expect(qInputs).toHaveLength(2);
+      for (const q of qInputs) {
+        expect(q).toHaveAttribute('step', '0.001');
+        expect(q.value).toBe('0.707');
+        expect(q.validity.stepMismatch).toBe(false);
+      }
     });
 
     it('keeps a Q typed for a new LowPass filter', async () => {
@@ -334,7 +382,7 @@ describe('AudioEqualizerSettings', () => {
       renderEmpty();
 
       await pickType(user, 'LowPass');
-      const q = await screen.findByRole('spinbutton', { name: 'Q Factor' });
+      const q = await screen.findByRole('spinbutton', { name: NAME.q });
       await user.clear(q);
       await user.type(q, '1.5');
       await user.tab();
@@ -350,7 +398,7 @@ describe('AudioEqualizerSettings', () => {
         { type: 'LowPass' as const, frequency: 12000, q: 0.707 },
       ]);
 
-      const [first, second] = await screen.findAllByRole('spinbutton', { name: 'Q Factor' });
+      const [first, second] = await screen.findAllByRole('spinbutton', { name: NAME.q });
 
       await user.clear(first);
       await user.type(first, '0.5');
@@ -379,80 +427,150 @@ describe('AudioEqualizerSettings', () => {
     it('shows Off for an existing filter that has no passes value', async () => {
       renderWithFilters([{ type: 'LowPass' as const, frequency: 15000, q: 0.707 }]);
 
-      const trigger = await screen.findByRole('combobox', { name: 'Attenuation' });
+      const trigger = await screen.findByRole('combobox', { name: NAME.attenuation });
       expect(trigger).toHaveTextContent(`${LEVEL_PREFIX}off`);
     });
 
-    // typed: what the user enters. shown: the Q field afterwards (null keeps the value it
-    // had before the entry). committed: the Q handed to onUpdate or stored for the new
-    // filter (null when the entry is empty and nothing may be committed).
-    const Q_ENTRIES = [
-      { name: 'clamps a high entry to the upper bound', typed: '50', shown: '10', committed: 10 },
+    // One entry per numeric parameter, with the filter type that shows it and its bounds
+    // from the fallback table (pinned to the backend table by a Go test).
+    function bounds(type: 'LowPass' | 'BandReject', name: string) {
+      const table =
+        type === 'LowPass' ? fallbackEqFilterConfig.LowPass : fallbackEqFilterConfig.BandReject;
+      const param = table.Parameters.find(p => p.Name === name);
+      if (!param) throw new Error(`no ${name} parameter for ${type}`);
+      return { min: param.Min, max: param.Max };
+    }
+
+    const PARAMS = [
       {
-        name: 'clamps a low entry to the lower bound',
-        typed: '0.01',
-        shown: '0.1',
-        committed: 0.1,
+        param: 'Frequency',
+        field: 'frequency',
+        type: 'LowPass' as const,
+        label: NAME.cutoff,
+        ...bounds('LowPass', 'Frequency'),
       },
       {
-        name: 'restores the stored value on an empty entry',
-        typed: '',
-        shown: null,
-        committed: null,
+        param: 'Q',
+        field: 'q',
+        type: 'LowPass' as const,
+        label: NAME.q,
+        ...bounds('LowPass', 'Q'),
+      },
+      {
+        param: 'Width',
+        field: 'width',
+        type: 'BandReject' as const,
+        label: NAME.width,
+        ...bounds('BandReject', 'Width'),
       },
     ];
 
-    type UserSession = ReturnType<typeof userEvent.setup>;
+    const STORED: Record<'LowPass' | 'BandReject', EqualizerFilters[number]> = {
+      LowPass: { type: 'LowPass', frequency: 12000, q: 0.5, passes: 1 },
+      BandReject: { type: 'BandReject', frequency: 1000, width: 200, passes: 1 },
+    };
+
+    function stored(type: 'LowPass' | 'BandReject'): EqualizerFilters[number] {
+      return type === 'LowPass' ? STORED.LowPass : STORED.BandReject;
+    }
+
+    // typed: what the user enters. shown: the field afterwards (null keeps the value it
+    // had before the entry). committed: the value handed to onUpdate or stored for the
+    // new filter (null when the entry is empty and nothing may be committed). notice:
+    // the key of the notice the field then shows.
+    function entries(min: number, max: number) {
+      return [
+        {
+          name: 'clamps a high entry to the upper bound',
+          typed: String(max * 10),
+          shown: String(max),
+          committed: max,
+          notice: NOTICE.max,
+          noticeValue: max,
+        },
+        {
+          name: 'clamps a low entry to the lower bound',
+          typed: String(min / 10),
+          shown: String(min),
+          committed: min,
+          notice: NOTICE.min,
+          noticeValue: min,
+        },
+        {
+          name: 'restores the stored value on an empty entry',
+          typed: '',
+          shown: null,
+          committed: null,
+          notice: NOTICE.empty,
+          noticeValue: null,
+        },
+      ];
+    }
+
+    type Param = (typeof PARAMS)[number];
 
     // The edit row commits through onUpdate at once; the new-filter row only on Add Filter.
-    // Each target reports the Q that ended up committed, or undefined when none did.
-    const Q_TARGETS = [
+    const ROWS = [
       {
         row: 'an existing filter',
-        setup: async (_user: UserSession) => {
-          renderWithFilters([{ type: 'LowPass' as const, frequency: 15000, q: 0.5, passes: 1 }]);
+        setup: async (_user: UserSession, p: Param) => {
+          renderWithFilters([stored(p.type)]);
         },
-        committedQ: async (_user: UserSession) =>
-          mockUpdateCallback.mock.calls.length > 0 ? lastPayload().filters[0].q : undefined,
-        restoredQ: (_before: string) => undefined,
+        committed: async (_user: UserSession, p: Param) =>
+          mockUpdateCallback.mock.calls.length > 0 ? lastPayload().filters[0][p.field] : undefined,
+        restored: (_before: string) => undefined,
       },
       {
         row: 'a new filter',
-        setup: async (user: UserSession) => {
+        setup: async (user: UserSession, p: Param) => {
           renderEmpty();
-          await pickType(user, 'LowPass');
+          await pickType(user, p.type);
         },
-        committedQ: async (user: UserSession) => {
+        committed: async (user: UserSession, p: Param) => {
           await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
-          return lastPayload().filters[0].q;
+          return lastPayload().filters[0][p.field];
         },
-        restoredQ: (before: string) => Number(before),
+        restored: (before: string) => Number(before),
       },
     ];
 
-    describe.each(Q_TARGETS)('Q entry for $row', target => {
-      it.each(Q_ENTRIES)('$name', async ({ typed, shown, committed }) => {
-        const user = userEvent.setup();
-        await target.setup(user);
+    const CASES = PARAMS.flatMap(p =>
+      ROWS.flatMap(r =>
+        entries(p.min, p.max).map(e => ({ ...e, p, r, label: `${p.param}, ${r.row}` }))
+      )
+    );
 
-        const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: 'Q Factor' });
-        const before = q.value;
-        mockUpdateCallback.mockClear();
-        await user.clear(q);
-        if (typed) await user.type(q, typed);
-        await user.tab();
+    describe.each(CASES)(
+      '$label: $name',
+      ({ p, r, typed, shown, committed, notice, noticeValue }) => {
+        it('commits on change and shows the notice', async () => {
+          const user = userEvent.setup();
+          await r.setup(user, p);
 
-        expect(q.value).toBe(shown ?? before);
-        expect(await target.committedQ(user)).toBe(committed ?? target.restoredQ(before));
-      });
-    });
+          const input = await screen.findByRole<HTMLInputElement>('spinbutton', { name: p.label });
+          const before = input.value;
+          mockUpdateCallback.mockClear();
+          vi.mocked(t).mockClear();
+          await user.clear(input);
+          if (typed) await user.type(input, typed);
+          await user.tab();
+
+          expect(input.value).toBe(shown ?? before);
+          expect(noticeOf(input)?.textContent.trim()).not.toBe('');
+          expect(noticeOf(input)).toHaveAttribute('role', 'status');
+          expect(t).toHaveBeenCalledWith(notice, { value: noticeValue ?? Number(before) });
+          expect(input).not.toHaveAttribute('aria-invalid');
+          expect(await r.committed(user, p)).toBe(committed ?? r.restored(before));
+        });
+      }
+    );
 
     it('restores the clamped Q, not the default, when a new filter row gets an empty entry', async () => {
       const user = userEvent.setup();
       renderEmpty();
       await pickType(user, 'LowPass');
 
-      const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: 'Q Factor' });
+      const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
       await user.clear(q);
       await user.type(q, '50');
       await user.tab();
@@ -466,6 +584,126 @@ describe('AudioEqualizerSettings', () => {
       expect(lastPayload().filters[0].q).toBe(10);
     });
 
+    it.each([
+      { param: 'frequency', type: 'LowPass' as const, label: NAME.cutoff },
+      { param: 'width', type: 'BandReject' as const, label: NAME.width },
+    ])(
+      'does not commit a $param while it is typed, and commits 2000 once on change',
+      async ({ param, type, label }) => {
+        const user = userEvent.setup();
+        renderWithFilters([stored(type)]);
+
+        const input = await screen.findByRole<HTMLInputElement>('spinbutton', { name: label });
+        await user.clear(input);
+        await user.type(input, '2000');
+        expect(mockUpdateCallback).not.toHaveBeenCalled();
+        expect(input.value).toBe('2000');
+
+        await user.tab();
+        expect(mockUpdateCallback).toHaveBeenCalledTimes(1);
+        expect(lastPayload().filters[0]).toHaveProperty(param, 2000);
+        expect(input.value).toBe('2000');
+        expect(input).not.toHaveAttribute('aria-describedby');
+      }
+    );
+
+    it('adds a new filter with the frequency committed on change', async () => {
+      const user = userEvent.setup();
+      renderEmpty();
+      await pickType(user, 'LowPass');
+
+      const frequency = await screen.findByRole<HTMLInputElement>('spinbutton', {
+        name: NAME.cutoff,
+      });
+      await user.clear(frequency);
+      await user.type(frequency, '2000');
+      await user.tab();
+      await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
+
+      expect(mockUpdateCallback).toHaveBeenCalledTimes(1);
+      expect(lastPayload().filters[0]).toMatchObject({ type: 'LowPass', frequency: 2000 });
+    });
+
+    it('clears a notice on the next edit of the field', async () => {
+      const user = userEvent.setup();
+      renderWithFilters([STORED.LowPass]);
+
+      const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
+      await user.clear(q);
+      await user.type(q, '50');
+      await user.tab();
+      expect(t).toHaveBeenCalledWith(NOTICE.max, { value: 10 });
+      expect(shownNotices()).toHaveLength(1);
+      const noticeId = q.getAttribute('aria-describedby');
+
+      await user.type(q, '1');
+      expect(q).not.toHaveAttribute('aria-describedby');
+      expect(document.getElementById(noticeId ?? '')).toHaveTextContent('');
+    });
+
+    it('clears a notice in the new-filter row when the filter type changes', async () => {
+      const user = userEvent.setup();
+      renderEmpty();
+      await pickType(user, 'LowPass');
+
+      const frequency = await screen.findByRole<HTMLInputElement>('spinbutton', {
+        name: NAME.cutoff,
+      });
+      await user.clear(frequency);
+      await user.type(frequency, '99999');
+      await user.tab();
+      expect(shownNotices()).toHaveLength(1);
+      expect(frequency).toHaveAttribute('aria-describedby');
+
+      await pickType(user, 'HighPass');
+      const after = await screen.findByRole<HTMLInputElement>('spinbutton', { name: NAME.cutoff });
+      expect(after.value).toBe('100');
+      expect(after).not.toHaveAttribute('aria-describedby');
+      expect(shownNotices()).toEqual([]);
+    });
+
+    it('clears a notice when the row above is removed', async () => {
+      const user = userEvent.setup();
+      const filters: EqualizerFilters = [
+        { type: 'LowPass', frequency: 12000, q: 0.5, passes: 1 },
+        { type: 'LowPass', frequency: 15000, q: 2, passes: 1 },
+      ];
+      const { rerender } = renderWithFilters(filters);
+
+      const [first] = await screen.findAllByRole<HTMLInputElement>('spinbutton', {
+        name: NAME.q,
+      });
+      await user.clear(first);
+      await user.type(first, '50');
+      await user.tab();
+      expect(shownNotices()).toHaveLength(1);
+
+      // The parent applies the removal of the first row; the second row moves up
+      await rerender({ equalizerSettings: { enabled: true, filters: [filters[1]] } });
+
+      const [q] = screen.getAllByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
+      expect(q.value).toBe('2');
+      expect(q).not.toHaveAttribute('aria-describedby');
+      expect(shownNotices()).toEqual([]);
+    });
+
+    it('disables every parameter input and the attenuation dropdown when disabled', async () => {
+      render(AudioEqualizerSettings, {
+        props: {
+          equalizerSettings: { enabled: true, filters: [STORED.LowPass, STORED.BandReject] },
+          disabled: true,
+          onUpdate: mockUpdateCallback,
+        },
+      });
+
+      const inputs = await screen.findAllByRole('spinbutton');
+      expect(inputs).toHaveLength(4);
+      for (const input of inputs) expect(input).toBeDisabled();
+      for (const trigger of screen.getAllByRole('combobox', { name: NAME.attenuation })) {
+        expect(trigger).toBeDisabled();
+      }
+    });
+
     it('names the frequency, Q and bandwidth inputs of existing and new filters', async () => {
       const user = userEvent.setup();
       renderWithFilters([
@@ -473,16 +711,49 @@ describe('AudioEqualizerSettings', () => {
         { type: 'BandReject' as const, frequency: 1000, width: 100, q: 0.707, passes: 1 },
       ]);
 
-      await screen.findAllByRole('spinbutton', { name: 'Q Factor' });
+      await screen.findAllByRole('spinbutton', { name: NAME.q });
       const count = (name: string) => screen.queryAllByRole('spinbutton', { name }).length;
-      expect([count('Cutoff Frequency'), count('Center Frequency')]).toEqual([1, 1]);
-      expect([count('Q Factor'), count('Bandwidth')]).toEqual([1, 1]);
+      expect([count(NAME.cutoff), count(NAME.center)]).toEqual([1, 1]);
+      expect([count(NAME.q), count(NAME.width)]).toEqual([1, 1]);
 
       await pickType(user, 'HighPass');
-      expect([count('Cutoff Frequency'), count('Q Factor')]).toEqual([2, 2]);
+      expect([count(NAME.cutoff), count(NAME.q)]).toEqual([2, 2]);
 
       await pickType(user, 'BandReject');
-      expect([count('Center Frequency'), count('Bandwidth')]).toEqual([2, 2]);
+      expect([count(NAME.center), count(NAME.width)]).toEqual([2, 2]);
+    });
+
+    describe('Accessibility', () => {
+      it('labels each parameter input and the attenuation dropdown with a label element', async () => {
+        const user = userEvent.setup();
+        renderWithFilters([STORED.LowPass, STORED.BandReject]);
+        await pickType(user, 'LowPass');
+
+        const labelled = [
+          ...screen.getAllByLabelText(NAME.cutoff),
+          ...screen.getAllByLabelText(NAME.q),
+          ...screen.getAllByLabelText(NAME.center),
+          ...screen.getAllByLabelText(NAME.width),
+          ...screen.getAllByLabelText(NAME.attenuation),
+        ];
+        // Edit rows: LowPass 3 and BandReject 3 controls; new LowPass row: 3 controls
+        expect(labelled).toHaveLength(9);
+
+        const labels = Array.from(document.querySelectorAll('label[for]')).filter(
+          l => l.textContent.includes(KEY) && !l.textContent.includes(`${KEY}newFilterType`)
+        );
+        expect(labels).toHaveLength(9);
+        for (const label of labels) {
+          const control = document.getElementById(label.getAttribute('for') ?? '');
+          expect(control).not.toBeNull();
+          expect(control).not.toHaveAttribute('aria-label');
+          await user.click(label);
+          expect(control).toHaveFocus();
+        }
+
+        const ids = labels.map(l => l.getAttribute('for'));
+        expect(new Set(ids).size).toBe(ids.length);
+      });
     });
   });
 });

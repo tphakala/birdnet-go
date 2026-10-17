@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Taajuusvaste",
         "cutoffFrequency": "Rajataajuus",
         "cutoffFrequencyHelp": "Taajuus, jossa suodatin alkaa vaimentaa signaaleja. Lintuäänten taajuudet ovat tyypillisesti 1-10 kHz välillä.",
+        "centerFrequency": "Keskitaajuus",
+        "bandwidth": "Kaistanleveys",
         "qFactor": "Q-kerroin",
         "qFactorHelp": "Laatukerroin ohjaa suodattimen terävyyttä. Matalat arvot (0.1-1) luovat loivempia kaarevia, korkeammat arvot (1-10) luovat jyrkempiä katkoja.",
         "gain": "Vahvistus",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Lisää useita suodattimia muodostaaksesi taajuusvasteen optimaaliseen lintujen tunnistukseen ympäristössäsi.",
+        "emptyEntryRestored": "Anna numero. Edellinen arvo {value} säilytettiin.",
         "graph": {
           "flatResponse": "Tasainen vaste (Ei suodattimia käytössä)",
           "frequency": "Taajuus (Hz)",

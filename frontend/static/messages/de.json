@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Frequenzgang",
         "cutoffFrequency": "Grenzfrequenz",
         "cutoffFrequencyHelp": "Frequenz, bei der der Filter beginnt, Signale zu dämpfen. Vogelrufe liegen typischerweise zwischen 1-10 kHz.",
+        "centerFrequency": "Mittenfrequenz",
+        "bandwidth": "Bandbreite",
         "qFactor": "Q-Faktor",
         "qFactorHelp": "Qualitätsfaktor steuert die Schärfe des Filters. Niedrigere Werte (0,1-1) erzeugen sanftere Übergänge, höhere Werte (1-10) erzeugen steilere Abschnitte.",
         "gain": "Verstärkung",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Fügen Sie mehrere Filter hinzu, um den Frequenzgang für optimale Vogelerkennung in Ihrer Umgebung zu gestalten.",
+        "emptyEntryRestored": "Geben Sie eine Zahl ein. Der vorherige Wert {value} wurde beibehalten.",
         "graph": {
           "flatResponse": "Flacher Frequenzgang (Keine Filter aktiv)",
           "frequency": "Frequenz (Hz)",

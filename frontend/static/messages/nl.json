@@ -3738,6 +3738,8 @@
         "frequencyResponse": "Frequentie Respons",
         "cutoffFrequency": "Afsnij Frequentie",
         "cutoffFrequencyHelp": "Frequentie waarbij de filter signalen begint te verzwakken. Vogelroepen variëren typisch van 1-10 kHz.",
+        "centerFrequency": "Middenfrequentie",
+        "bandwidth": "Bandbreedte",
         "qFactor": "Q-factor",
         "qFactorHelp": "Kwaliteits factor bepaalt de scherpte van de filter. Lagere waarden (0.1-1) creëren zachtere hellingen, hogere waarden (1-10) creëren steilere afsnijdingen.",
         "gain": "Versterking",
@@ -3752,6 +3754,7 @@
           "48db": "48dB"
         },
         "filterHelp": "Voeg meerdere filters toe om de frequentie respons te vormen voor optimale vogel detectie in jouw omgeving.",
+        "emptyEntryRestored": "Voer een getal in. De vorige waarde {value} is behouden.",
         "graph": {
           "flatResponse": "Vlakke respons (Geen filters toegepast)",
           "frequency": "Frequentie (Hz)",
