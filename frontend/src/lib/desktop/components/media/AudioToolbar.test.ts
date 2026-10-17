@@ -6,11 +6,11 @@ import AudioToolbar from './AudioToolbar.svelte';
 describe('AudioToolbar export menu', () => {
   const toolbarTest = createComponentTestFactory(AudioToolbar);
 
-  function renderToolbar(onExport = vi.fn()) {
+  function renderToolbar(onExport = vi.fn(), playback = { isPlaying: false, isLoading: false }) {
     toolbarTest.render({
       props: {
-        isPlaying: false,
-        isLoading: false,
+        isPlaying: playback.isPlaying,
+        isLoading: playback.isLoading,
         currentTime: 0,
         duration: 10,
         progress: 0,
@@ -39,6 +39,13 @@ describe('AudioToolbar export menu', () => {
       },
     });
   }
+
+  it('labels the play button as loading, not Pause, while a playing clip reloads', () => {
+    renderToolbar(vi.fn(), { isPlaying: true, isLoading: true });
+
+    expect(screen.getByRole('button', { name: 'media.audio.loading' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'media.audio.pause' })).not.toBeInTheDocument();
+  });
 
   it('offers exactly the original and the five backend formats, without ALAC', async () => {
     const user = userEvent.setup();
