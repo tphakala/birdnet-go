@@ -28,7 +28,8 @@ const (
 	minRasterEqualReference = 0.995
 	// minRasterEqualLive is the same bound for the live sox cases. Two measure
 	// 0.9901 (3 s tone clip at width 258 with a Dolph window at 120 dB, every
-	// difference one palette step), so the plan's 0.995 is relaxed for them only.
+	// difference one palette step), so the reference bound of 0.995 is relaxed for the
+	// live cases only.
 	minRasterEqualLive = 0.985
 	maxRasterIndexDiff = 2    // largest allowed index difference in the raster
 	minGridEqual       = 0.98 // fraction of grid pixels away from text that match
@@ -46,9 +47,8 @@ const (
 
 	// resamplerSkipReason is why the live cases whose source rate differs from the
 	// profile rate are skipped. go-audio-resampler has no working anti-alias
-	// lowpass for non-integer downsampling ratios (384 kHz to 256 kHz, 48 kHz to
-	// 44.1 kHz and similar), which lifts the noise floor and shows at a 120 dB
-	// range. The 48 kHz to 24 kHz cases are an integer ratio and carry a smaller
+	// lowpass for non-integer downsampling ratios, which lifts the noise floor; it
+	// was measured on 384 kHz to 256 kHz, where it shows at a 120 dB range. The 48 kHz to 24 kHz cases are an integer ratio and carry a smaller
 	// difference whose cause is not yet established; it is re-measured after that
 	// fix. Enable all of these cases, at the same bounds, once the fixed library
 	// release is bumped and the integer-ratio difference is explained.
