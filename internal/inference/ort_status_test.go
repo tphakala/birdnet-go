@@ -9,31 +9,156 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsVersionCompatible(t *testing.T) {
+func TestORTVersionMeetsMinimum(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		version string
-		want    bool
+		name      string
+		version   string
+		wantMeets bool
+		wantKnown bool
 	}{
-		{name: "patch 1", version: "1.25.1", want: true},
-		{name: "patch 0", version: "1.25.0", want: true},
-		{name: "patch 99", version: "1.25.99", want: true},
-		{name: "exact major.minor", version: "1.25", want: true},
-		{name: "older minor", version: "1.24.4", want: false},
-		{name: "newer minor", version: "1.26.0", want: false},
-		{name: "major bump", version: "2.0.0", want: false},
-		{name: "empty string", version: "", want: false},
+		{name: "exact minimum", version: "1.29.0", wantMeets: true, wantKnown: true},
+		{name: "minimum without patch", version: "1.29", wantMeets: true, wantKnown: true},
+		{name: "current pin", version: "1.31.0", wantMeets: true, wantKnown: true},
+		{name: "release candidate", version: "1.29.0-rc1", wantMeets: true, wantKnown: true},
+		{name: "rc without patch", version: "1.29rc1", wantMeets: true, wantKnown: true},
+		{name: "three digit minor", version: "1.100.0", wantMeets: true, wantKnown: true},
+		{name: "major bump", version: "2.0.0", wantMeets: true, wantKnown: true},
+		{name: "surrounding spaces", version: " 1.31.0 ", wantMeets: true, wantKnown: true},
+		{name: "previous minor", version: "1.28.2", wantMeets: false, wantKnown: true},
+		{name: "old pin", version: "1.25.1", wantMeets: false, wantKnown: true},
+		{name: "major zero", version: "0.99", wantMeets: false, wantKnown: true},
+		{name: "numeric compare, not string compare", version: "1.3.0", wantMeets: false, wantKnown: true},
+		{name: "major only", version: "1", wantMeets: false, wantKnown: false},
+		{name: "empty string", version: "", wantMeets: false, wantKnown: false},
+		{name: "garbage", version: "abc", wantMeets: false, wantKnown: false},
+		{name: "non numeric minor", version: "1.x", wantMeets: false, wantKnown: false},
+		{name: "v prefix", version: "v1.31.0", wantMeets: false, wantKnown: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := isVersionCompatible(tt.version)
-			assert.Equal(t, tt.want, got, "isVersionCompatible(%q)", tt.version)
+			meets, known := ortVersionMeetsMinimum(tt.version)
+			assert.Equal(t, tt.wantMeets, meets, "meets for %q", tt.version)
+			assert.Equal(t, tt.wantKnown, known, "known for %q", tt.version)
 		})
 	}
+}
+
+// writeLibFile creates an empty file named name inside dir and returns its path.
+func writeLibFile(t *testing.T, dir, name string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	require.NoError(t, os.WriteFile(path, nil, 0o644))
+	return path
+}
+
+func TestCheckORTAvailability_GatesOnFileNameVersion(t *testing.T) {
+	// Not parallel: once ORT is initialized the fast path ignores the path.
+	if IsORTInitialized() {
+		t.Skip("ORT already initialized in this process; the fast path ignores the path")
+	}
+
+	t.Run("old versioned file is rejected", func(t *testing.T) {
+		path := writeLibFile(t, t.TempDir(), "libonnxruntime.so.1.25.1")
+		status := CheckORTAvailability(path)
+		assert.False(t, status.Available)
+		assert.Equal(t, "1.25.1", status.Version)
+		assert.Contains(t, status.Error, "1.25.1")
+		assert.Contains(t, status.Error, "1.29 or newer")
+	})
+
+	t.Run("previous minor is rejected", func(t *testing.T) {
+		path := writeLibFile(t, t.TempDir(), "libonnxruntime.so.1.28.2")
+		assert.False(t, CheckORTAvailability(path).Available)
+	})
+
+	t.Run("minimum is accepted", func(t *testing.T) {
+		path := writeLibFile(t, t.TempDir(), "libonnxruntime.so.1.29.0")
+		status := CheckORTAvailability(path)
+		assert.True(t, status.Available)
+		assert.Empty(t, status.Error)
+	})
+
+	t.Run("symlink chain to current pin is accepted", func(t *testing.T) {
+		dir := t.TempDir()
+		writeLibFile(t, dir, "libonnxruntime.so.1.31.0")
+		require.NoError(t, os.Symlink("libonnxruntime.so.1.31.0", filepath.Join(dir, "libonnxruntime.so.1")))
+		link := filepath.Join(dir, "libonnxruntime.so")
+		require.NoError(t, os.Symlink("libonnxruntime.so.1", link))
+		status := CheckORTAvailability(link)
+		assert.True(t, status.Available)
+		assert.Equal(t, "1.31.0", status.Version)
+	})
+
+	t.Run("unversioned so.1 is optimistic", func(t *testing.T) {
+		path := writeLibFile(t, t.TempDir(), "libonnxruntime.so.1")
+		status := CheckORTAvailability(path)
+		assert.True(t, status.Available)
+		assert.Equal(t, "1", status.Version)
+		assert.Empty(t, status.Error)
+	})
+
+	t.Run("unversioned dylib is accepted", func(t *testing.T) {
+		path := writeLibFile(t, t.TempDir(), "libonnxruntime.dylib")
+		status := CheckORTAvailability(path)
+		assert.True(t, status.Available)
+		assert.Empty(t, status.Version)
+	})
+}
+
+func TestCheckORTAvailability_FollowsSymlinkLayoutTransitions(t *testing.T) {
+	// Not parallel: same fast-path guard as above.
+	if IsORTInitialized() {
+		t.Skip("ORT already initialized in this process; the fast path ignores the path")
+	}
+
+	// relink replaces the symlink at dir/name with one pointing at target.
+	relink := func(t *testing.T, dir, name, target string) {
+		t.Helper()
+		link := filepath.Join(dir, name)
+		require.NoError(t, os.RemoveAll(link))
+		require.NoError(t, os.Symlink(target, link))
+	}
+
+	t.Run("cp -P upgrade then downgrade", func(t *testing.T) {
+		dir := t.TempDir()
+		lib := filepath.Join(dir, "libonnxruntime.so")
+		writeLibFile(t, dir, "libonnxruntime.so.1.25.1")
+		relink(t, dir, "libonnxruntime.so.1", "libonnxruntime.so.1.25.1")
+		relink(t, dir, "libonnxruntime.so", "libonnxruntime.so.1")
+		assert.False(t, CheckORTAvailability(lib).Available, "old chain")
+
+		writeLibFile(t, dir, "libonnxruntime.so.1.31.0")
+		relink(t, dir, "libonnxruntime.so.1", "libonnxruntime.so.1.31.0")
+		upgraded := CheckORTAvailability(lib)
+		assert.True(t, upgraded.Available, "after cp -P upgrade")
+		assert.Equal(t, "1.31.0", upgraded.Version)
+
+		require.NoError(t, os.Remove(filepath.Join(dir, "libonnxruntime.so.1.31.0")))
+		relink(t, dir, "libonnxruntime.so.1", "libonnxruntime.so.1.25.1")
+		assert.False(t, CheckORTAvailability(lib).Available, "after downgrade")
+	})
+
+	t.Run("regular files then symlink chain", func(t *testing.T) {
+		dir := t.TempDir()
+		lib := filepath.Join(dir, "libonnxruntime.so")
+		for _, name := range []string{"libonnxruntime.so", "libonnxruntime.so.1", "libonnxruntime.so.1.25.1"} {
+			writeLibFile(t, dir, name)
+		}
+		assert.True(t, CheckORTAvailability(lib).Available, "plain regular files carry no version")
+
+		require.NoError(t, os.Remove(lib))
+		require.NoError(t, os.Remove(filepath.Join(dir, "libonnxruntime.so.1")))
+		writeLibFile(t, dir, "libonnxruntime.so.1.31.0")
+		relink(t, dir, "libonnxruntime.so.1", "libonnxruntime.so.1.31.0")
+		relink(t, dir, "libonnxruntime.so", "libonnxruntime.so.1")
+		status := CheckORTAvailability(lib)
+		assert.True(t, status.Available)
+		assert.Equal(t, "1.31.0", status.Version)
+	})
 }
 
 func TestInferVersionFromPath(t *testing.T) {
@@ -55,6 +180,14 @@ func TestInferVersionFromPath(t *testing.T) {
 		plain := dir + "/libonnxruntime.so"
 		require.NoError(t, os.WriteFile(plain, nil, 0o644))
 		assert.Empty(t, inferVersionFromPath(plain))
+	})
+
+	t.Run("unversioned so.1 regular file", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		path := filepath.Join(dir, "libonnxruntime.so.1")
+		require.NoError(t, os.WriteFile(path, nil, 0o644))
+		assert.Equal(t, "1", inferVersionFromPath(path))
 	})
 
 	t.Run("symlink to versioned so", func(t *testing.T) {
@@ -117,21 +250,22 @@ func TestVersionError(t *testing.T) {
 
 	t.Run("compatible version returns empty", func(t *testing.T) {
 		t.Parallel()
-		assert.Empty(t, versionError("1.25.1"))
+		assert.Empty(t, versionError("1.31.0"))
 	})
 
 	t.Run("incompatible version mentions both versions", func(t *testing.T) {
 		t.Parallel()
 		msg := versionError("1.24.4")
 		assert.Contains(t, msg, "1.24.4")
-		assert.Contains(t, msg, "1.25.x")
+		assert.Contains(t, msg, "older than")
+		assert.Contains(t, msg, "1.29 or newer")
 	})
 
 	t.Run("empty version mentions unknown", func(t *testing.T) {
 		t.Parallel()
 		msg := versionError("")
 		assert.Contains(t, msg, "unable to determine")
-		assert.Contains(t, msg, "1.25.x")
+		assert.Contains(t, msg, "1.29 or newer")
 	})
 }
 
@@ -169,5 +303,10 @@ func TestLibraryFileExists(t *testing.T) {
 
 func TestORTRequiredVersion(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "1.25.x", ORTRequiredVersion())
+	assert.Equal(t, "1.29 or newer", ORTRequiredVersion())
+}
+
+func TestORTMinimumVersion(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "1.29", ORTMinimumVersion())
 }

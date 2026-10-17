@@ -476,7 +476,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime nav pieejams",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Skatiet instalēšanas rokasgrāmatu: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} vai jaunāka versija ir nepieciešama modelim {modelName}, bet netika atrasta. Skatiet instalēšanas rokasgrāmatu: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Modeļa reģions var būt novecojis",

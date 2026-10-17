@@ -4,7 +4,7 @@ vars:
   BINARY_DIR: bin
   BINARY_NAME: birdnet-go
   TFLITE_VERSION: v2.17.1
-  ONNXRUNTIME_VERSION: '1.25.1'
+  ONNXRUNTIME_VERSION: '1.31.0'
   # golangci-lint version .golangci.yaml is written for; keep in sync with
   # .github/workflows/golangci-lint.yml, .husky/pre-commit and
   # .devcontainer/postCreateCommand.sh;
@@ -826,7 +826,7 @@ tasks:
           Linux_*) ONNX_LIB_DIR="{{.SYSTEM_LIB_DIR}}";;
           *) echo "⚠️  ONNX Runtime: unsupported platform $(uname -s)_$(uname -m), skipping check";;
         esac
-        if [ -n "${ONNX_LIB_DIR}" ] && ls "${ONNX_LIB_DIR}"/libonnxruntime.*{{.ONNXRUNTIME_VERSION}}* >/dev/null 2>&1; then
+        if [ -n "${ONNX_LIB_DIR}" ] && readlink -f "${ONNX_LIB_DIR}"/libonnxruntime.{{if eq .UNAME_S "Darwin"}}dylib{{else}}so{{end}} 2>/dev/null | grep -qF -- '{{.ONNXRUNTIME_VERSION}}'; then
           echo "✅ ONNX Runtime: {{.ONNXRUNTIME_VERSION}} installed in ${ONNX_LIB_DIR}"
         elif [ -n "${ONNX_LIB_DIR}" ] && ls "${ONNX_LIB_DIR}"/libonnxruntime.* >/dev/null 2>&1; then
           echo "⚠️  ONNX Runtime: installed in ${ONNX_LIB_DIR} but version {{.ONNXRUNTIME_VERSION}} not found"
@@ -1630,7 +1630,7 @@ tasks:
   download-onnxruntime:
     desc: Download and install ONNX Runtime library for the current platform
     status:
-      - 'ls {{.ONNX_LIB_DIR}}/libonnxruntime.*{{.ONNXRUNTIME_VERSION}}* >/dev/null 2>&1'
+      - 'readlink -f "{{.ONNX_LIB_DIR}}/{{.ONNX_LIB_NAME}}" 2>/dev/null | grep -qF -- ''{{.ONNXRUNTIME_VERSION}}'''
     vars:
       ONNX_LIB_DIR:
         sh: |
@@ -1675,11 +1675,14 @@ tasks:
           fi
         fi
 
-        # Install library files
+        # Install library files. -P copies the archive's symlinks as symlinks. A
+        # plain cp writes through an existing libonnxruntime.so -> .so.1 ->
+        # .so.1.<old> chain into the old versioned file, and BirdNET-Go reads the
+        # version from that file name.
         if [ -w "{{.ONNX_LIB_DIR}}" ]; then
-          cp /tmp/onnxruntime/lib/{{.ONNX_LIB_NAME}}* "{{.ONNX_LIB_DIR}}/"
+          cp -P /tmp/onnxruntime/lib/{{.ONNX_LIB_NAME}}* "{{.ONNX_LIB_DIR}}/"
         else
-          sudo cp /tmp/onnxruntime/lib/{{.ONNX_LIB_NAME}}* "{{.ONNX_LIB_DIR}}/"
+          sudo cp -P /tmp/onnxruntime/lib/{{.ONNX_LIB_NAME}}* "{{.ONNX_LIB_DIR}}/"
         fi
 
         rm -rf /tmp/onnxruntime

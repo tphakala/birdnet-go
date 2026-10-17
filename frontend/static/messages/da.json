@@ -476,7 +476,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime ikke tilgængelig",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} er påkrævet til {modelName}, men blev ikke fundet. Se installationsguiden: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} eller nyere er påkrævet til {modelName}, men blev ikke fundet. Se installationsguiden: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Modelregionen kan være forældet",
