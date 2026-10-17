@@ -84,6 +84,10 @@
   let playEndTimeout: ReturnType<typeof setTimeout> | undefined;
   let canplayTimeoutId: ReturnType<typeof setTimeout> | undefined;
   let updateInterval: ReturnType<typeof setInterval> | undefined;
+  // Whether this card currently holds a freeze on dashboard updates. Start and
+  // end are emitted on transitions of this flag, never per play/pause event, so
+  // they stay paired however many events a retry or a quick resume fires.
+  let freezeActive = false;
 
   // Audio retry state (handles 503/404 while the clip is still being exported).
   // The element cannot read the HTTP status, so every load failure is retried
@@ -351,6 +355,18 @@
     }
   }
 
+  function beginFreeze() {
+    if (freezeActive) return;
+    freezeActive = true;
+    onFreezeStart?.();
+  }
+
+  function endFreeze() {
+    if (!freezeActive) return;
+    freezeActive = false;
+    onFreezeEnd?.();
+  }
+
   function handlePlay() {
     isPlaying = true;
     hasEverPlayed = true;
@@ -362,7 +378,7 @@
       applyPlaybackRate(audioElement, playbackSpeed);
     }
 
-    onFreezeStart?.();
+    beginFreeze();
   }
 
   function handlePause() {
@@ -370,7 +386,7 @@
     stopProgressInterval();
     clearPlayEndTimeout();
     playEndTimeout = setTimeout(() => {
-      onFreezeEnd?.();
+      endFreeze();
     }, PLAY_END_DELAY_MS);
   }
 
@@ -382,7 +398,7 @@
     currentTime = 0;
     clearPlayEndTimeout();
     playEndTimeout = setTimeout(() => {
-      onFreezeEnd?.();
+      endFreeze();
     }, PLAY_END_DELAY_MS);
   }
 
@@ -570,6 +586,7 @@
     return () => {
       clearPlayEndTimeout();
       stopProgressInterval();
+      endFreeze();
 
       // Clear canplay safety timeout
       if (canplayTimeoutId) {

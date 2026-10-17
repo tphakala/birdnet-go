@@ -62,7 +62,11 @@ describe('PlayOverlay', () => {
   }
 
   function mount(
-    props: Partial<{ onFreezeEnd: () => void; onAudioContextAvailable: (_a: boolean) => void }> = {}
+    props: Partial<{
+      onFreezeStart: () => void;
+      onFreezeEnd: () => void;
+      onAudioContextAvailable: (_a: boolean) => void;
+    }> = {}
   ) {
     return render(PlayOverlay, { props: { detectionId: DETECTION_ID, ...props } });
   }
@@ -217,6 +221,61 @@ describe('PlayOverlay', () => {
     }
 
     expect(ctl.load.mock.calls.length).toBe(loadsAfterUnmount);
+  });
+
+  describe('freeze callbacks', () => {
+    it('pairs one freeze start with one end when a click during a retry fires two play events', async () => {
+      const onFreezeStart = vi.fn();
+      const onFreezeEnd = vi.fn();
+      mount({ onFreezeStart, onFreezeEnd });
+      ctl.failLoad();
+      ctl.setPlayMode('hold');
+
+      await click();
+      ctl.failLoad();
+      await advanceRetry(0);
+      ctl.completeLoad();
+      await settle();
+      expect(ctl.play).toHaveBeenCalledTimes(2);
+
+      ctl.dispatch('ended');
+      await vi.advanceTimersByTimeAsync(PLAY_END_DELAY_MS);
+
+      expect(onFreezeStart).toHaveBeenCalledTimes(1);
+      expect(onFreezeEnd).toHaveBeenCalledTimes(1);
+    });
+
+    it('pairs one freeze start with one end for pause and resume within the grace period', async () => {
+      const onFreezeStart = vi.fn();
+      const onFreezeEnd = vi.fn();
+      mount({ onFreezeStart, onFreezeEnd });
+      ctl.completeLoad();
+
+      await click();
+      await click();
+      expect(button().getAttribute('aria-label')).toBe(PLAY_LABEL);
+      await click();
+      expect(button().getAttribute('aria-label')).toBe(PAUSE_LABEL);
+
+      ctl.dispatch('ended');
+      await vi.advanceTimersByTimeAsync(PLAY_END_DELAY_MS);
+
+      expect(onFreezeStart).toHaveBeenCalledTimes(1);
+      expect(onFreezeEnd).toHaveBeenCalledTimes(1);
+    });
+
+    it('releases the freeze when the card unmounts while playing', async () => {
+      const onFreezeStart = vi.fn();
+      const onFreezeEnd = vi.fn();
+      const { unmount } = mount({ onFreezeStart, onFreezeEnd });
+      ctl.completeLoad();
+      await click();
+
+      unmount();
+
+      expect(onFreezeStart).toHaveBeenCalledTimes(1);
+      expect(onFreezeEnd).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('play button stays usable', () => {
