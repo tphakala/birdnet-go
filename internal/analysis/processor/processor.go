@@ -1126,9 +1126,12 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 		return true, 0
 	}
 
-	// Check human detection privacy filter. Match the raw label so Perch v2's
-	// FSD50K human classes are caught too, not just BirdNET's "Human *" classes.
-	if isHumanVocalization(result.Species) && result.Confidence > baseThreshold {
+	// Drop human sounds from the saved detections. Match the raw label so Perch
+	// v2's FSD50K human classes are caught too, not just BirdNET's "Human *"
+	// classes. This uses the broad human-sound check, not the privacy filter's
+	// voice-only set, so body and action classes (Hands, Crowd, ...) are still
+	// dropped as non-bird detections.
+	if isHumanSoundLabel(result.Species) && result.Confidence > baseThreshold {
 		return true, 0 // Filter out human detections for privacy
 	}
 

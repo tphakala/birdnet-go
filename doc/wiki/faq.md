@@ -185,7 +185,7 @@ In rough order of impact:
 
 ### The privacy filter isn't catching human speech
 
-The privacy filter is limited by the model. The BirdNET model itself has poor human-speech recognition, so it can only do so much; this is a model limitation, not a BirdNET-Go bug. (Perch has human-speech classes, but the privacy filter does not map to them yet.)
+The privacy filter is limited by the model. The BirdNET model itself has poor human-speech recognition, so it can only do so much; this is a model limitation, not a BirdNET-Go bug. Perch V2 has human-speech classes and the privacy filter uses them. Only voiced sounds (speech, conversation, whispering, shouting, singing, laughter, crying, cheering) trigger it; body and action sounds such as coughing, breathing, clapping, footsteps or chewing do not, because they are not speech and caused false discards.
 
 ### A bird I can clearly hear isn't being detected
 

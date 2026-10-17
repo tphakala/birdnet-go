@@ -49,6 +49,9 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 		{"privacy records Perch speech", "Speech", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, true},
 		{"privacy records localized BirdNET human", "Human vocal_Mensch Stimme", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, true},
 		{"privacy disabled does not record", "Speech", 0.9, func(_ *conf.Settings) {}, (*Processor).handleHumanDetection, true, false},
+		{"privacy ignores excluded Hands", "Hands", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, false},
+		{"privacy ignores excluded Human_group_actions", "Human_group_actions", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, false},
+		{"privacy ignores non-voiced Cough", "Cough", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, false},
 		{"privacy below threshold does not record", "Speech", 0.01, enablePrivacy, (*Processor).handleHumanDetection, true, false},
 		{"dog records Perch bark", "Bark", 0.9, enableDog, (*Processor).handleDogDetection, false, true},
 		{"dog records localized BirdNET dog", "Dog_Hund", 0.9, enableDog, (*Processor).handleDogDetection, false, true},
@@ -109,6 +112,11 @@ func TestShouldFilterDetection_DropsHumanLabels(t *testing.T) {
 	}{
 		{"Perch speech is dropped", "Speech", true},
 		{"localized BirdNET human is dropped", "Human vocal_Mensch Stimme", true},
+		// Classes excluded from the privacy filter are still human sounds, so the
+		// save filter must keep dropping them rather than save them as detections.
+		{"privacy-excluded Hands is still dropped", "Hands", true},
+		{"privacy-excluded Human_group_actions is still dropped", "Human_group_actions", true},
+		{"privacy-excluded Crowd is still dropped", "Crowd", true},
 		{"normal bird is not dropped by the human filter", "Turdus merula", false},
 	}
 
