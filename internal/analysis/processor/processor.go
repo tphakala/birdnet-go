@@ -1617,8 +1617,9 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 // for that cycle; the privacy filter discards a detection when the source's
 // latest speech hit in it is at or after the saved clip's begin less
 // privacyClipGuard. A discard logs the model and score of that hit and, with
-// privacyfilter.debug on, a summary of every detector that counted a hit
-// reaching the clip (priv.contributions).
+// privacyfilter.debug on, a summary of the detectors that counted hits
+// reaching the clip (priv.contributions); the counts are lower bounds once the
+// attribution list is full (humanHitMaxPerSource).
 func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int, priv *privacyCheck) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
@@ -1652,9 +1653,10 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
 				logger.String("operation", privacyFilterOperation))
 			if settings.Realtime.PrivacyFilter.Debug {
-				// With privacyfilter.debug on, say who decided: every detector that
-				// counted a hit reaching the saved clip, with hit counts and best
-				// scores, next to the detection that was dropped.
+				// With privacyfilter.debug on, say who decided: the detectors that
+				// counted hits reaching the saved clip, with hit counts and best
+				// scores (lower bounds once the attribution list is full), next to
+				// the detection that was dropped.
 				GetLogger().Info("privacy filter dropped detection",
 					logger.String("species", item.Detection.Result.Species.CommonName),
 					logger.String("detection_model_id", item.BestModelID),
