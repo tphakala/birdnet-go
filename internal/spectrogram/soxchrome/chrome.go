@@ -136,9 +136,6 @@ func drawLegend(s Surface, p ChromeParams, width int) {
 	if step <= 0 {
 		return // a range too large for int arithmetic wraps the step, and the loop would never end
 	}
-	if step <= 0 {
-		return // a non-positive range has no level labels, and the loop below would never end
-	}
 	for i := 0; i <= rangeDB; i += step {
 		y := int(float64(i)/p.RangeDB*float64(k-1) + .5)
 		s.PrintAt(width-MarginRight+1, base+y+labelRowOffset, IndexLabels, fmt.Sprintf("%+d", i-rangeDB))
