@@ -279,6 +279,41 @@ describe('FilterResponseGraph', () => {
     expect(labelsInLastDraw(ctx)).toContain(FLAT_LABEL);
   });
 
+  it('draws the flat label when every filter has passes 0 and none is skipped', async () => {
+    const ctx = useFullCanvas();
+    apiPost.mockResolvedValueOnce(
+      responseBody({
+        points: [
+          { hz: 20, gainDb: 0 },
+          { hz: 1000, gainDb: 0 },
+          { hz: 20000, gainDb: 0 },
+        ],
+      })
+    );
+    const view = render(FilterResponseGraph, {
+      props: {
+        equalizer: {
+          enabled: true,
+          filters: [
+            { ...HIGH_PASS, passes: 0 },
+            { ...LOW_PASS, passes: 0 },
+          ],
+        },
+      },
+    });
+    await settle();
+    expect(screen.queryByTestId('eq-graph-skipped')).not.toBeInTheDocument();
+    expect(labelsInLastDraw(ctx)).toContain(FLAT_LABEL);
+
+    // One filter switched back on, and the label goes away.
+    apiPost.mockResolvedValueOnce(responseBody());
+    await view.rerender({
+      equalizer: { enabled: true, filters: [{ ...HIGH_PASS, passes: 0 }, LOW_PASS] },
+    });
+    await settle();
+    expect(labelsInLastDraw(ctx)).not.toContain(FLAT_LABEL);
+  });
+
   it('lists each skipped filter with its translated reason and the posted type and frequency', async () => {
     const reason = 'WidthHz must be > 0 for a peaking filter';
     apiPost.mockResolvedValue(

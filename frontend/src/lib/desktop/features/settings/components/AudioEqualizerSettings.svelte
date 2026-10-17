@@ -471,7 +471,7 @@
                 {#if param.Name.toLowerCase() === 'passes'}
                   <!-- Select for Passes/Attenuation -->
                   <SelectDropdown
-                    value={String(filter.passes ?? param.Default ?? 1)}
+                    value={String(filter.passes ?? 0)}
                     options={attenuationOptions}
                     aria-label={param.Label}
                     onChange={value =>

@@ -415,3 +415,43 @@ describe('settingsCoercion security trustedProxies', () => {
     expect(result).toMatchObject({ trustedProxies: ['10.0.0.1'] });
   });
 });
+
+describe('settingsCoercion realtime audio equalizer passes', () => {
+  it('resolves a missing passes to 0 (no filtering) for every filter type', () => {
+    const result = coerceSettings('realtime', {
+      audio: {
+        equalizer: {
+          enabled: true,
+          filters: [
+            { type: 'HighPass', frequency: 100 },
+            { type: 'LowPass', frequency: 15000 },
+            { type: 'BandReject', frequency: 1000 },
+            { type: 'BandPass', frequency: 1000 },
+          ],
+        },
+      },
+    });
+
+    const filters = (result as { audio: { equalizer: { filters: { passes: number }[] } } }).audio
+      .equalizer.filters;
+    expect(filters.map(f => f.passes)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('keeps an explicit passes of 0 and of 2', () => {
+    const result = coerceSettings('realtime', {
+      audio: {
+        equalizer: {
+          enabled: true,
+          filters: [
+            { type: 'HighPass', frequency: 100, passes: 0 },
+            { type: 'LowPass', frequency: 15000, passes: 2 },
+          ],
+        },
+      },
+    });
+
+    const filters = (result as { audio: { equalizer: { filters: { passes: number }[] } } }).audio
+      .equalizer.filters;
+    expect(filters.map(f => f.passes)).toEqual([0, 2]);
+  });
+});

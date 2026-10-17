@@ -347,24 +347,10 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
             q: coerceNumber(f.q, 0.1, 10, 0.707),
             width: coerceNumber(f.width, 1, 10000, 100), // Bandwidth in Hz
             gain: coerceNumber(f.gain, -48, 12, 0),
-            passes: 1, // Default passes
+            // A missing or invalid passes means no filtering; the backend reads it
+            // the same way. Filtering only happens for an explicit passes of 1 or more.
+            passes: coerceNumber(f.passes, 0, 4, 0),
           };
-
-          // Set proper default passes based on filter type
-          if (typeof f.passes === 'number') {
-            coercedFilter.passes = coerceNumber(f.passes, 0, 4, 1);
-          } else {
-            // Default to 1 pass (12dB) for HighPass/LowPass/BandReject filters
-            if (
-              normalizedType === 'HighPass' ||
-              normalizedType === 'LowPass' ||
-              normalizedType === 'BandReject'
-            ) {
-              coercedFilter.passes = 1;
-            } else {
-              coercedFilter.passes = 0; // 0dB for other filter types initially
-            }
-          }
 
           return coercedFilter;
         })

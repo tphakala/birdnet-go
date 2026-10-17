@@ -95,12 +95,18 @@
         : undefined
   );
 
-  /** Disabled, empty and all-skipped configurations give a flat 0 dB curve. */
-  const isFlat = $derived(
-    drawable !== undefined &&
-      (!drawable.response.enabled ||
-        drawable.response.skipped.length === drawable.request.equalizer.filters.length)
-  );
+  /**
+   * Disabled, empty, all-skipped and all-bypassed (passes 0) configurations give
+   * a flat 0 dB curve: no filter is both accepted by the backend and switched on.
+   */
+  const isFlat = $derived.by(() => {
+    if (drawable === undefined) return false;
+    if (!drawable.response.enabled) return true;
+    const skippedIndexes = new Set(drawable.response.skipped.map(entry => entry.index));
+    return !drawable.request.equalizer.filters.some(
+      (filter, index) => !skippedIndexes.has(index) && (filter.passes ?? 0) !== 0
+    );
+  });
 
   // Live regions are rendered empty and get text only after mount, in a later
   // task: a region inserted together with its text is often not announced.
