@@ -540,14 +540,23 @@ func spanContains(outer, inner audioSpan) bool {
 }
 
 const (
-	// humanHitRetention is how long counted hits stay in the attribution list,
-	// measured back from the newest hit of the source. It covers the longest saved
-	// clip plus its guard with room to spare.
-	humanHitRetention = 2 * time.Minute
+	// humanHitMaxPreCapture is the longest pre-capture the export settings allow:
+	// half the longest capture length of 60 s (see the audio export validation).
+	humanHitMaxPreCapture = 30 * time.Second
 
-	// humanHitMaxPerSource bounds the attribution list of one source, so a long
-	// stretch of continuous speech cannot grow it without limit.
-	humanHitMaxPerSource = 256
+	// humanHitRetention is how long counted hits stay in the attribution list,
+	// measured back from the hit being appended. It covers the longest saved clip:
+	// the extended capture limit and the longest pre-capture, with the coverage
+	// wait and the clip guard around them, so a hit at the start of such a clip is
+	// still listed when its detection is decided.
+	humanHitRetention = time.Duration(conf.MaxExtendedCaptureDuration)*time.Second +
+		humanHitMaxPreCapture + privacyCoverageMaxWait + privacyClipGuard
+
+	// humanHitMaxPerSource bounds the attribution list of one source (about 0.5 MB),
+	// so a long stretch of continuous speech cannot grow it without limit. Once it
+	// is reached the oldest entries by arrival order go first, and contributor
+	// counts are a lower bound.
+	humanHitMaxPerSource = 8192
 
 	// vadHitModelID names the VAD gate in hit attribution, next to classifier
 	// model IDs.

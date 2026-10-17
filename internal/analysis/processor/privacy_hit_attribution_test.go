@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -75,6 +76,18 @@ func TestAppendHumanHit_PrunesByAgeAndCapsPerSource(t *testing.T) {
 		p.appendHumanHitLocked(confirmSource, humanHit{at: t0.Add(humanHitRetention + time.Duration(i)*time.Millisecond), trigger: metrics.TriggerLabel})
 	}
 	assert.Len(t, p.humanHits[confirmSource], humanHitMaxPerSource)
+}
+
+func TestAppendHumanHit_RetentionCoversLongestExtendedCapture(t *testing.T) {
+	t.Parallel()
+	p := &Processor{}
+	t0 := time.Unix(1000, 0)
+	longestClip := time.Duration(conf.MaxExtendedCaptureDuration) * time.Second
+
+	p.appendHumanHitLocked(confirmSource, humanHit{at: t0, trigger: metrics.TriggerLabel})
+	p.appendHumanHitLocked(confirmSource, humanHit{at: t0.Add(longestClip), trigger: metrics.TriggerLabel})
+
+	assert.Len(t, p.humanHits[confirmSource], 2, "a hit at the start of the longest extended capture clip is still listed")
 }
 
 func TestRecordHumanHit_OlderHitStaysInAttributionButDoesNotMoveLastHit(t *testing.T) {
