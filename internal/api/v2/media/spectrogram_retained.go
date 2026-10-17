@@ -78,7 +78,7 @@ func (c *Handler) writeNoClip404(ctx echo.Context, noteID string, cause error) e
 // serveRetainedSpectrogram serves a spectrogram render for a detection whose audio
 // was removed. It reads the kept clip name and the model type from the detection in
 // one narrow query; without a kept name it answers the same 404 as a note that never
-// had audio. It never generates.
+// had audio. It never generates. A legacy width outside 100..2000 answers 400.
 func (c *Handler) serveRetainedSpectrogram(ctx echo.Context, noteID string, noClipErr error) error {
 	keptClip, modelType, err := c.DS.GetNoteKeptSpectrogram(noteID)
 	if err != nil {
@@ -101,7 +101,10 @@ func (c *Handler) serveRetainedSpectrogram(ctx echo.Context, noteID string, noCl
 		return c.HandleError(ctx, err, msgRetainedSpectrogramMissing, http.StatusNotFound)
 	}
 
-	params := c.parseSpectrogramParameters(ctx)
+	params, err := c.parseSpectrogramParameters(ctx)
+	if err != nil {
+		return c.HandleError(ctx, err, msgInvalidSpectrogramWidth, http.StatusBadRequest)
+	}
 	freqSuffix := spectrogram.ProfileSuffix(spectrogram.ProfileForModelType(modelType))
 
 	served, err := c.serveExistingRender(ctx, noteID, relClipPath, params, freqSuffix)

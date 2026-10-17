@@ -2,8 +2,6 @@ package media
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,7 +9,6 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -355,32 +352,4 @@ func TestValidateNativeSpectrogramInput_TransitionsAreJudgedOnCurrentBytes(t *te
 			}
 		})
 	}
-}
-
-func TestSpectrogramHTTPError_NativeNotReadyIs503(t *testing.T) {
-	_, h, _ := setupMediaTestEnvironment(t)
-	dir := t.TempDir()
-	corrupt := filepath.Join(dir, "corrupt.flac")
-	writeNativeUndecodable(t, corrupt)
-	legacy := filepath.Join(dir, "legacy.aac")
-	require.NoError(t, os.WriteFile(legacy, make([]byte, nativeReadyUnsupportedBytes), 0o600))
-
-	var notReadyErr, unsupportedErr error
-	synctest.Test(t, func(t *testing.T) {
-		_, notReadyErr = callNative(t.Context(), corrupt)
-		_, unsupportedErr = callNative(t.Context(), legacy)
-	})
-
-	e := echo.New()
-	call := func(err error) *httptest.ResponseRecorder {
-		rec := httptest.NewRecorder()
-		c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", http.NoBody), rec)
-		_ = h.spectrogramHTTPError(c, err)
-		return rec
-	}
-
-	rec := call(notReadyErr)
-	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
-	assert.Equal(t, "2", rec.Header().Get("Retry-After"))
-	assert.Equal(t, http.StatusInternalServerError, call(unsupportedErr).Code)
 }

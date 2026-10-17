@@ -194,6 +194,16 @@ that is not one of the clip formats (WAV, FLAC, MP3, AAC in M4A, Opus), a corrup
 (256 MiB on disk, 128 MiB of decoded audio), or a clip window that starts past the end
 of the audio.
 
+**Spectrogram status codes.** All five spectrogram endpoints (`/media/spectrogram/:filename`,
+`/spectrogram/:id`, `/spectrogram/:id/generate`, `/spectrogram/:id/status` and
+`/spectrogram/:id/process`) answer **400** for a legacy `width` query value that is an
+integer outside 100..2000 (`size` is never rejected; a `width` that is not an integer is
+ignored). The endpoints that render in the request (`/media/spectrogram/:filename`,
+`/spectrogram/:id` and `/spectrogram/:id/process`) answer **422** for a clip that cannot be
+rendered: an unsupported format or a sample rate below 8 kHz, a damaged file, a file above
+the size limits, or a clip too short for one spectrogram column. The first two also answer
+**503** with `Retry-After` while the clip is still being written.
+
 **Pending species image (`503 + Retry-After`).** The image endpoints never contact an
 image provider on the request goroutine: a cold species can take minutes to resolve
 through the provider chain, and thirty queued thumbnail requests also exhaust a
