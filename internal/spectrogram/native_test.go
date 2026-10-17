@@ -644,8 +644,8 @@ func TestEncodePNG(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, img.Bounds(), decoded.Bounds())
 
-	// The failure can surface from the encoder or from the final flush; both
-	// must be returned.
+	// This small image fits in the write buffer, so each limit fails at the final
+	// flush. The encoder failure is covered by the larger image below.
 	for _, limit := range []int{0, 10, 100} {
 		require.ErrorIs(t, encodePNG(&failingWriter{n: limit}, img), errWriterFull, "limit %d", limit)
 	}
