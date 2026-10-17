@@ -48,7 +48,7 @@ func nativeReadyBackoff(base time.Duration) time.Duration {
 // returns its error and the fake time it took.
 func callNative(ctx context.Context, path string) (elapsed time.Duration, err error) {
 	start := time.Now()
-	err = validateNativeSpectrogramInput(ctx, path, filepath.Base(path), "test-key")
+	_, err = validateNativeSpectrogramInput(ctx, path, filepath.Base(path), "test-key")
 	return time.Since(start), err
 }
 
@@ -350,6 +350,45 @@ func TestValidateNativeSpectrogramInput_TransitionsAreJudgedOnCurrentBytes(t *te
 					}
 				})
 			}
+		})
+	}
+}
+
+// The state readiness returns is the stat of the pass that judged the clip ready,
+// plus the probe's decoded-size bound, so the generator can tell whether the file
+// is still the one that passed.
+func TestValidateNativeSpectrogramInput_ReturnsSettledState(t *testing.T) {
+	tests := []struct {
+		name string
+		old  bool
+	}{
+		{name: "old modification time skips the stability wait", old: true},
+		{name: "recent modification time waits for stability"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "clip.wav")
+			writeToneWAV(t, path, nativeReadyRate, nativeReadySeconds, fixtureToneHz)
+
+			synctest.Test(t, func(t *testing.T) {
+				if tt.old {
+					old := time.Now().Add(-2 * nativeSettledAge)
+					require.NoError(t, os.Chtimes(path, old, old))
+				}
+
+				state, err := validateNativeSpectrogramInput(t.Context(), path, filepath.Base(path), "test-key")
+				require.NoError(t, err)
+
+				now, err := os.Stat(path)
+				require.NoError(t, err)
+				assert.True(t, state.Matches(now), "the state matches the file as it stood")
+				assert.Equal(t, int64(nativeReadyRate*nativeReadySeconds*2), state.DecodedBytes(), "16-bit mono at the probe's declared length")
+
+				require.NoError(t, appendBytes(path))
+				grown, err := os.Stat(path)
+				require.NoError(t, err)
+				assert.False(t, state.Matches(grown), "a grown file no longer matches")
+			})
 		})
 	}
 }

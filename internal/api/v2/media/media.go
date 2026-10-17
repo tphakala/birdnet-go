@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1145,6 +1146,10 @@ func transcodeStatus(err error) (status int, message string, ok bool) {
 	switch {
 	case errors.Is(err, transcode.ErrUnsupportedSource):
 		return http.StatusUnprocessableEntity, "Source audio format is not supported for on-demand processing", true
+	case errors.Is(err, transcode.ErrTruncatedSource):
+		// Before ErrUndecodableSource, which a truncated source also wraps, so the
+		// more specific message wins.
+		return http.StatusUnprocessableEntity, "Source audio is shorter than its header declares", true
 	case errors.Is(err, transcode.ErrUndecodableSource):
 		return http.StatusUnprocessableEntity, "Source audio could not be decoded", true
 	case errors.Is(err, transcode.ErrAudioTooLong):
@@ -1186,9 +1191,13 @@ func spectrogramSourceStatus(err error) (status int, message string, ok bool) {
 }
 
 // isSpectrogramNotReady reports whether err means the clip may still be written, so
-// the client should retry.
+// the client should retry. That includes a clip the generator found changed since
+// readiness (spectrogram.ErrSourceChanged), which it reports before the handler
+// wraps it as not-ready.
 func isSpectrogramNotReady(err error) bool {
-	return errors.Is(err, ffmpeg.ErrAudioFileNotReady) || errors.Is(err, ffmpeg.ErrAudioFileIncomplete)
+	return errors.Is(err, ffmpeg.ErrAudioFileNotReady) ||
+		errors.Is(err, ffmpeg.ErrAudioFileIncomplete) ||
+		errors.Is(err, spectrogram.ErrSourceChanged)
 }
 
 // isSpectrogramSourceFailure reports whether spectrogramSourceStatus answers err.
@@ -2604,6 +2613,8 @@ func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 // maxConcurrentSpectrograms limits concurrent spectrogram generations to the number of CPU cores.
 // This adapts automatically to the deployment hardware - 4 on Raspberry Pi 4/5, fewer on Pi Zero/3,
 // more on multi-core desktops - preventing CPU contention while utilizing available resources.
+// Memory is bounded separately: the native renderer's generator holds a byte budget
+// that makes renders of very long clips take turns (spectrogram.Generator).
 var maxConcurrentSpectrograms = runtime.NumCPU()
 
 // semaphoreAcquireTimeout is the maximum time to wait for a semaphore slot before timing out
@@ -2831,20 +2842,31 @@ type durationCacheEntry struct {
 // validateSpectrogramInputs validates that the audio file is complete and ready for spectrogram generation.
 // It returns the validation result and any error encountered during validation.
 // With the native renderer selected it checks readiness in Go
-// (validateNativeSpectrogramInput) and returns a nil result; the ffprobe path
-// below serves the sox renderer.
-func (c *Handler) validateSpectrogramInputs(ctx context.Context, absAudioPath, audioPath, queueKey string) (*ffmpeg.ValidationResult, error) {
+// (validateNativeSpectrogramInput) and returns a nil result with the state of the
+// file that passed, which the generator compares against before publishing; the
+// ffprobe path below serves the sox renderer and returns a nil state.
+func (c *Handler) validateSpectrogramInputs(ctx context.Context, absAudioPath, audioPath, queueKey string) (*ffmpeg.ValidationResult, *spectrogram.SourceState, error) {
 	// Check cache first
 	fileInfo, err := os.Stat(absAudioPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat audio file: %w", err)
+		return nil, nil, fmt.Errorf("failed to stat audio file: %w", err)
 	}
 
 	// The native renderer needs no duration and no ffprobe; see spectrogram_native_ready.go.
 	if conf.NativeSpectrogramEnabled() {
-		return nil, validateNativeSpectrogramInput(ctx, absAudioPath, audioPath, queueKey)
+		state, err := validateNativeSpectrogramInput(ctx, absAudioPath, audioPath, queueKey)
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, &state, nil
 	}
+	result, err := c.validateFFprobeInputs(ctx, fileInfo, absAudioPath, audioPath, queueKey)
+	return result, nil, err
+}
 
+// validateFFprobeInputs is the ffprobe readiness check of validateSpectrogramInputs
+// for the sox renderer; fileInfo is the stat of absAudioPath.
+func (c *Handler) validateFFprobeInputs(ctx context.Context, fileInfo os.FileInfo, absAudioPath, audioPath, queueKey string) (*ffmpeg.ValidationResult, error) {
 	cacheKey := fmt.Sprintf("%s:%d:%s", absAudioPath, fileInfo.Size(), fileInfo.ModTime().Format(time.RFC3339Nano))
 
 	// Try to get from cache
@@ -3714,9 +3736,17 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 		// Step 5: Validate audio file with FFprobe (expensive ~300ms subprocess), or
 		// with the pure-Go check when the native renderer is selected.
 		// Running inside singleflight ensures only one FFprobe call per unique spectrogram key.
-		validationResult, err := c.validateSpectrogramInputs(sharedCtx, absAudioPath, audioPath, queueKey)
+		validationResult, sourceState, err := c.validateSpectrogramInputs(sharedCtx, absAudioPath, audioPath, queueKey)
 		if err != nil {
 			return nil, err
+		}
+		// With the native renderer the generator re-checks the file against the state
+		// readiness judged, so a clip that grew while it waited for a slot or decoded
+		// is not published as a short image. A new slice keeps the caller's backing
+		// array unwritten.
+		genOpts := extraOpts
+		if sourceState != nil {
+			genOpts = append(slices.Clip(extraOpts), spectrogram.WithSourceState(*sourceState))
 		}
 
 		// Extract validated duration to pass to the generator, avoiding a redundant
@@ -3749,7 +3779,12 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 				logger.Int("slots_now_available", maxConcurrentSpectrograms-slotsAfterRelease),
 				logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
 		}()
-		return c.performSpectrogramGeneration(sharedCtx, relSpectrogramPath, absAudioPath, absSpectrogramPath, queueKey, width, raw, validatedDuration, extraOpts...)
+		generated, genErr := c.performSpectrogramGeneration(sharedCtx, relSpectrogramPath, absAudioPath, absSpectrogramPath, queueKey, width, raw, validatedDuration, genOpts...)
+		if errors.Is(genErr, spectrogram.ErrSourceChanged) {
+			// Not-ready, so the client gets a 503 with Retry-After and nothing is cached.
+			return nil, notReadyError(genErr)
+		}
+		return generated, genErr
 	})
 
 	// Wait for either the singleflight result or caller's context cancellation.

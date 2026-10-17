@@ -9,6 +9,7 @@ import (
 	"time"
 
 	aaccodec "github.com/tphakala/go-aac"
+	"github.com/tphakala/go-flac"
 	flacpcm "github.com/tphakala/go-flac/pcm"
 	m4a "github.com/tphakala/go-m4a"
 	aacm4a "github.com/tphakala/go-m4a/aacm4a"
@@ -51,6 +52,11 @@ type source struct {
 	seek func(frame int64) (int64, error)
 	// expansion bounds the initial buffer relative to the file size.
 	expansion int64
+	// exactLength is true when the header's frame count bounds the reads, so
+	// reading fewer frames than totalFrames to EOF means the file is cut short.
+	// Only WAV sets it: go-wav ends a short data chunk with a clean EOF and leaves
+	// the comparison to the caller, while go-flac reports a short stream itself.
+	exactLength bool
 }
 
 // sourceOpeners maps the file extension of each clip format to its decoder. The
@@ -113,6 +119,7 @@ func openWAV(f *os.File) (*source, error) {
 		totalFrames: declaredFrames(info.TotalFrames, info.DataSizeKnown),
 		seek:        dec.SeekToFrame,
 		expansion:   losslessExpansion,
+		exactLength: info.DataSizeKnown,
 	}, nil
 }
 
@@ -229,10 +236,14 @@ func openMP3(f *os.File) (*source, error) {
 // sentinel; anything else means the clip BirdNET-Go wrote is damaged and wraps
 // ErrUndecodableSource. go-m4a reports a failed read of M4A frame data as
 // corrupt data with the cause as text only, so that one still lands here as
-// undecodable.
+// undecodable. A FLAC stream that ends before its declared length wraps
+// ErrTruncatedSource as well.
 func decodeError(operation string, err error) error {
 	if _, ok := errors.AsType[*fs.PathError](err); ok {
 		return wrapError(err, errors.CategoryFileIO, operation)
+	}
+	if errors.Is(err, flac.ErrTruncatedStream) {
+		return truncatedError(err, operation, "stream ended before its declared length")
 	}
 	return wrapSentinel(ErrUndecodableSource, err, operation, "decode failed", errors.CategoryAudio)
 }
