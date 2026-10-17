@@ -168,7 +168,6 @@
       previousAudioUrl = baseUrl;
       previousEffectiveSrc = src;
       pendingFraction = null;
-      retryWithPlay = false;
       untrack(() => markPlaybackStopped());
       audioElement.src = src;
       // Reset playback state for the new detection.
@@ -178,11 +177,7 @@
       duration = 0;
       error = null;
       hasEverPlayed = false;
-      audioRetryCount = 0;
-      if (audioRetryTimer) {
-        clearTimeout(audioRetryTimer);
-        audioRetryTimer = undefined;
-      }
+      resetRetryState();
       return;
     }
 
@@ -210,6 +205,19 @@
     }
   }
 
+  // Drop any pending retry and the play intent, and restore the full budget.
+  function resetRetryState() {
+    audioRetryCount = 0;
+    clearAudioRetryTimer();
+    retryWithPlay = false;
+  }
+
+  // The user's play() resolved: the retry intent is consumed and loading is over.
+  function playStarted() {
+    retryWithPlay = false;
+    isLoading = false;
+  }
+
   // Mirror the pause listener for a stop that fires no pause event (a src
   // assignment or load() pauses the element silently), so the Play/Pause label,
   // the progress interval and onFreezeEnd follow the element.
@@ -224,13 +232,10 @@
     return audibleBatsSrc ?? `${audioUrl}?t=${String(Date.now())}`;
   }
 
-  // Reload the clip after the budget-limited retry delay. withPlay is true only
-  // when the user asked to play (I10: a background retry never starts playback).
-  function scheduleRetry(withPlay: boolean) {
+  // Reload the clip after the given delay. The reload plays only when the user
+  // asked to (retryWithPlay); a background retry never starts playback.
+  function scheduleRetry(delay: number) {
     clearAudioRetryTimer();
-    retryWithPlay = withPlay;
-    const delay = DASHBOARD_AUDIO_RETRY_DELAYS_MS.at(audioRetryCount);
-    if (delay === undefined) return;
     audioRetryCount++;
     logger.debug('Audio load failed, retrying', {
       detectionId,
@@ -246,13 +251,7 @@
       audioElement.src = retrySource();
       audioElement.load();
       if (retryWithPlay) {
-        void audioElement
-          .play()
-          .then(() => {
-            retryWithPlay = false;
-            isLoading = false;
-          })
-          .catch(handlePlayRejection);
+        void audioElement.play().then(playStarted).catch(handlePlayRejection);
       }
     }, delay);
   }
@@ -287,8 +286,7 @@
     // Clear any previous error and reset retry count for fresh user interaction.
     // A click during a background retry cancels it and acts at once.
     error = null;
-    audioRetryCount = 0;
-    clearAudioRetryTimer();
+    resetRetryState();
 
     try {
       if (!audioElement.paused && !audioElement.error) {
@@ -341,8 +339,7 @@
         if (!audioElement) return;
 
         await audioElement.play();
-        retryWithPlay = false;
-        isLoading = false;
+        playStarted();
       }
     } catch (err) {
       handlePlayRejection(err);
@@ -540,9 +537,7 @@
       canplayTimeoutId = undefined;
     }
     isLoading = false;
-    audioRetryCount = 0;
-    clearAudioRetryTimer();
-    retryWithPlay = false;
+    resetRetryState();
     error = null;
   }
 
@@ -555,8 +550,9 @@
 
     // Retry every failure, including a background preload, until the budget is
     // spent. The retry plays only when the user asked to.
-    if (audioRetryCount < DASHBOARD_AUDIO_RETRY_DELAYS_MS.length) {
-      scheduleRetry(retryWithPlay);
+    const delay = DASHBOARD_AUDIO_RETRY_DELAYS_MS.at(audioRetryCount);
+    if (delay !== undefined) {
+      scheduleRetry(delay);
       return;
     }
 
