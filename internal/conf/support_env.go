@@ -22,13 +22,12 @@ import "slices"
 // user uploads to a third party. This list only grows by someone deciding a
 // specific variable is safe to disclose.
 //
-// A gate's value is "native" or unset, so it is not a secret. Add a
-// BIRDNET_* runtime gate here so it shows up in dumps without needing
-// the collector changed again, and remove it when the gate is retired. Do not
-// add anything that identifies the
-// operator or their location (the coordinate and locale variables in env.go are
-// deliberately absent), and do not add anything already recorded in
-// config.yaml, which the dump captures separately.
+// A gate's value is a short mode word such as "native", so it is not a secret.
+// Add a BIRDNET_* runtime gate here so it shows up in dumps without needing the
+// collector changed again, and remove it when the gate is retired. Do not add
+// anything that identifies the operator or their location (the coordinate and
+// locale variables in env.go are deliberately absent), and do not add anything
+// already recorded in config.yaml, which the dump captures separately.
 //
 // Unexported and returned by copy rather than exported directly: this list is a
 // privacy control, deciding what gets written into a file the user uploads to a
@@ -41,6 +40,9 @@ var supportEnvAllowlist = []string{
 	// Opt-in native network stream ingest (see native_ingest.go). Remove it here
 	// when the gate is retired.
 	EnvNativeStreamIngest,
+	// Opt-in native spectrogram renderer (see native_spectrogram.go). Remove it
+	// here when the gate is retired.
+	EnvNativeSpectrogramRenderer,
 	// Not a BIRDNET_ variable, and the one entry here whose value is withheld:
 	// the name matches the "endpoint" sensitive-key pattern on its underscore
 	// boundary, so a dump records that it is set but redacts what it is set to.

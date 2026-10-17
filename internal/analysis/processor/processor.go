@@ -2968,18 +2968,22 @@ func (p *Processor) initPreRenderer() {
 			return
 		}
 
-		// Validate Sox binary is configured and exists
-		if p.Settings.Realtime.Audio.SoxPath == "" {
-			GetLogger().Error("Sox binary not configured, disabling pre-rendering",
-				logger.String("operation", "prerenderer_init"))
-			return
-		}
-		if _, err := exec.LookPath(p.Settings.Realtime.Audio.SoxPath); err != nil {
-			GetLogger().Error("Sox binary not found, disabling pre-rendering",
-				logger.String("path", p.Settings.Realtime.Audio.SoxPath),
-				logger.Error(err),
-				logger.String("operation", "prerenderer_init"))
-			return
+		// Validate Sox binary is configured and exists. The native renderer draws
+		// prerender PCM in Go (spectrogram generator.go GenerateFromPCM) and the gate
+		// cannot change while the process runs, so this prerenderer never reaches sox.
+		if !conf.NativeSpectrogramEnabled() {
+			if p.Settings.Realtime.Audio.SoxPath == "" {
+				GetLogger().Error("Sox binary not configured, disabling pre-rendering",
+					logger.String("operation", "prerenderer_init"))
+				return
+			}
+			if _, err := exec.LookPath(p.Settings.Realtime.Audio.SoxPath); err != nil {
+				GetLogger().Error("Sox binary not found, disabling pre-rendering",
+					logger.String("path", p.Settings.Realtime.Audio.SoxPath),
+					logger.Error(err),
+					logger.String("operation", "prerenderer_init"))
+				return
+			}
 		}
 
 		// Create SecureFS for path validation
@@ -3005,6 +3009,7 @@ func (p *Processor) initPreRenderer() {
 		GetLogger().Info("Spectrogram pre-renderer initialized",
 			logger.String("size", p.Settings.Realtime.Dashboard.Spectrogram.Size),
 			logger.Bool("raw", p.Settings.Realtime.Dashboard.Spectrogram.Raw),
+			logger.Bool("native_renderer", conf.NativeSpectrogramEnabled()),
 			logger.String("operation", "prerenderer_init"))
 	})
 }

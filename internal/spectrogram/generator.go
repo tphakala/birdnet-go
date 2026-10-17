@@ -262,6 +262,8 @@ func (g *Generator) getDynamicRange(settings *conf.Settings) string {
 // GenerateFromFile creates a spectrogram from an audio file path.
 // Used by API on-demand and user-requested modes.
 // Tries Sox first (faster), falls back to FFmpeg if Sox fails.
+// With BIRDNET_SPECTROGRAM_RENDERER=native (conf.NativeSpectrogramEnabled) the
+// image is drawn in Go, with no sox or FFmpeg fallback.
 //
 // The audioPath and outputPath must be absolute paths.
 // Width is in pixels, raw controls whether to show axes/legends.
@@ -357,8 +359,15 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 	soxCtx, soxCancel := context.WithTimeout(ctx, defaultGenerationTimeout)
 	defer soxCancel()
 
-	// Try Sox first (faster, direct processing)
-	if err := g.generateWithSoxFile(soxCtx, settings, audioPath, tempPath, width, raw, options.preValidatedDuration, profile); err != nil {
+	// With the native renderer selected, a failure is returned as is: there is no
+	// sox or FFmpeg fallback. soxCtx bounds both paths.
+	renderer, native := selectedRenderer()
+	if native {
+		if err := g.generateNativeFromFile(soxCtx, settings, audioPath, tempPath, width, raw, profile); err != nil {
+			return err
+		}
+	} else if err := g.generateWithSoxFile(soxCtx, settings, audioPath, tempPath, width, raw, options.preValidatedDuration, profile); err != nil {
+		// Try Sox first (faster, direct processing)
 		// If the caller's context is already done (client disconnect, shutdown, or
 		// caller-imposed timeout), the result is no longer wanted. Skip the FFmpeg
 		// fallback: it runs on a context detached from the parent (see
@@ -405,6 +414,7 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 	}
 
 	g.log().Info("Spectrogram generation from file completed",
+		logger.String("renderer", renderer),
 		logger.String("audio_path", g.relPath(audioPath)),
 		logger.Int("width", width),
 		logger.Int64("total_ms", time.Since(start).Milliseconds()))
@@ -416,6 +426,8 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 // Used by pre-renderer (background mode).
 // PCM format: s16le, mono. sampleRate is the source capture rate in Hz;
 // pass 0 to fall back to conf.SampleRate (48000 Hz).
+// With BIRDNET_SPECTROGRAM_RENDERER=native (conf.NativeSpectrogramEnabled) the
+// image is drawn in Go, with no sox or FFmpeg fallback.
 //
 // Context Timeout Behavior:
 // This function enforces a 60-second timeout for spectrogram generation.
@@ -500,8 +512,15 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 	ctx, cancel := context.WithTimeout(ctx, defaultGenerationTimeout)
 	defer cancel()
 
-	// Generate directly from PCM stdin (no FFmpeg needed)
-	if err := g.generateWithSoxPCM(ctx, settings, pcmData, tempPath, width, raw, sampleRate, profile); err != nil {
+	// With the native renderer selected, a failure is returned as is: there is no
+	// sox fallback.
+	renderer, native := selectedRenderer()
+	if native {
+		if err := g.generateNativeFromPCM(ctx, settings, pcmData, tempPath, width, raw, sampleRate, profile); err != nil {
+			return err
+		}
+	} else if err := g.generateWithSoxPCM(ctx, settings, pcmData, tempPath, width, raw, sampleRate, profile); err != nil {
+		// Generate directly from PCM stdin (no FFmpeg needed)
 		return err
 	}
 
@@ -516,6 +535,7 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 	}
 
 	g.log().Info("Spectrogram generation from PCM completed",
+		logger.String("renderer", renderer),
 		logger.String("output_path", g.relPath(outputPath)),
 		logger.Int("width", width),
 		logger.Int("pcm_bytes", len(pcmData)),
@@ -826,10 +846,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 	}
 
 	// Use provided sample rate; fall back to default when caller passes 0
-	effectiveRate := sampleRate
-	if effectiveRate <= 0 {
-		effectiveRate = conf.SampleRate
-	}
+	effectiveRate := pcmSourceRate(sampleRate)
 
 	// Build Sox arguments for PCM stdin
 	// PCM format parameters use constants from conf package for consistency

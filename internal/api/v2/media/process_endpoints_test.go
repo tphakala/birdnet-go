@@ -19,6 +19,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
@@ -215,6 +216,23 @@ func TestProcessedSpectrogramByID_Renders(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Join(tempDir, ".tmp-processing"))
 	require.NoError(t, err)
 	assert.Empty(t, entries, "the processed WAV and the PNG are removed with the request")
+}
+
+func TestProcessedSpectrogramByID_NativeRendersWithoutBinaries(t *testing.T) {
+	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+	clearBinaryEnvironment(t, controller.Settings.Load())
+
+	writeToneWAV(t, fixturePath(tempDir, "src.wav"), 48000, 1, fixtureToneHz)
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteClipPath", "22").Return("src.wav", nil)
+	mockDS.On("GetNoteModelType", "22").Return("bird", nil).Maybe()
+	controller.DS = mockDS
+
+	rec := postJSON(e, "/api/v2/spectrogram/22/process", `{"normalize": true, "denoise": "light"}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, "image/png", rec.Header().Get("Content-Type"))
+	assert.True(t, bytes.HasPrefix(rec.Body.Bytes(), []byte("\x89PNG")))
 }
 
 func TestTranscodeStatus(t *testing.T) {

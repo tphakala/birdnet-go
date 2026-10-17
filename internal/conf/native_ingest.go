@@ -23,7 +23,7 @@ import (
 const EnvNativeStreamIngest = "BIRDNET_STREAM_INGEST"
 
 // nativeSelectValue is the only value that opts into a native code path. It is
-// used by the ingest gate. Anything else, including an unset variable, keeps the FFmpeg path.
+// used by every native gate. Anything else, including an unset variable, keeps the external-binary path.
 const nativeSelectValue = "native"
 
 // NativeStreamIngestEnabled reports whether network stream ingest should use the
