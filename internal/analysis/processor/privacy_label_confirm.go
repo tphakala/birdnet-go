@@ -26,6 +26,11 @@ const (
 	// privacy discard.
 	privacyFilterOperation = "privacy_filter"
 
+	// privacyFilterDiscardOperation is the log operation of the debug summary of a
+	// detection the privacy filter dropped. It differs from privacyFilterOperation
+	// so the summary is not counted as a second discard.
+	privacyFilterDiscardOperation = "privacy_filter_discard"
+
 	// labelConfirmOperation is the log operation of the confirmation messages. It
 	// must differ from privacyFilterOperation so held and ignored hits are not
 	// counted as discards.
@@ -37,6 +42,7 @@ const (
 type heldLabelHit struct {
 	at         time.Time
 	confidence float32
+	modelID    string // model that scored the label, empty when unknown
 }
 
 // labelHitDecision is what a hit did to the confirmation state, for logging
@@ -55,8 +61,8 @@ func withinLabelConfirmWindow(a, b time.Time) bool {
 
 // takeHeldLocked removes the held label hit of source, if any, and resolves it
 // against a counted hit stamped at: inside the window it is confirmed and
-// recorded with its own stamp, otherwise dropped. The caller holds detectionMutex
-// for writing.
+// recorded with its own stamp, model and confidence, otherwise dropped. The
+// caller holds detectionMutex for writing.
 func (p *Processor) takeHeldLocked(source string, at time.Time) labelHitDecision {
 	held, ok := p.heldLabelHits[source]
 	if !ok {
@@ -66,7 +72,7 @@ func (p *Processor) takeHeldLocked(source string, at time.Time) labelHitDecision
 	if !withinLabelConfirmWindow(held.at, at) {
 		return labelHitDecision{dropped: &held}
 	}
-	p.recordHumanDetectionLocked(source, held.at, metrics.TriggerLabel)
+	p.recordHumanHitLocked(source, held.at, metrics.TriggerLabel, held.modelID, float64(held.confidence))
 	return labelHitDecision{confirmed: &held}
 }
 
@@ -76,7 +82,8 @@ func (p *Processor) takeHeldLocked(source string, at time.Time) labelHitDecision
 // chunk) or when a counted hit of the source, label or VAD, is inside the window;
 // otherwise it is held. LastHumanDetection carries the latest counted stamp, so
 // a hit counted while confirmation was off also confirms after a hot reload to a
-// higher overlap. Counted hits are recorded with their own stamps.
+// higher overlap. Counted hits are recorded with their own stamps, models and
+// confidences, so the verdict can be traced to every model behind it.
 func (p *Processor) recordLabelHit(settings *conf.Settings, source string, hit heldLabelHit) labelHitDecision {
 	baseOverlap := p.effectiveBaseOverlap(settings)
 
@@ -84,13 +91,13 @@ func (p *Processor) recordLabelHit(settings *conf.Settings, source string, hit h
 	defer p.detectionMutex.Unlock()
 
 	if baseOverlap <= labelConfirmMinBaseOverlap {
-		p.recordHumanDetectionLocked(source, hit.at, metrics.TriggerLabel)
+		p.recordHumanHitLocked(source, hit.at, metrics.TriggerLabel, hit.modelID, float64(hit.confidence))
 		return labelHitDecision{}
 	}
 
 	d := p.takeHeldLocked(source, hit.at)
 	if last, ok := p.LastHumanDetection[source]; d.confirmed != nil || (ok && withinLabelConfirmWindow(last.Time, hit.at)) {
-		p.recordHumanDetectionLocked(source, hit.at, metrics.TriggerLabel)
+		p.recordHumanHitLocked(source, hit.at, metrics.TriggerLabel, hit.modelID, float64(hit.confidence))
 		return d
 	}
 
@@ -102,15 +109,16 @@ func (p *Processor) recordLabelHit(settings *conf.Settings, source string, hit h
 	return d
 }
 
-// recordVADHit records a VAD speech hit, which always counts on its own, and
-// lets it confirm a held label hit of the source.
-func (p *Processor) recordVADHit(settings *conf.Settings, source string, at time.Time) labelHitDecision {
+// recordVADHit records a VAD speech hit with its speech probability, attributed
+// to vadHitModelID. It always counts on its own and lets it confirm a held label
+// hit of the source.
+func (p *Processor) recordVADHit(settings *conf.Settings, source string, at time.Time, probability float64) labelHitDecision {
 	baseOverlap := p.effectiveBaseOverlap(settings)
 
 	p.detectionMutex.Lock()
 	defer p.detectionMutex.Unlock()
 
-	p.recordHumanDetectionLocked(source, at, metrics.TriggerVAD)
+	p.recordHumanHitLocked(source, at, metrics.TriggerVAD, vadHitModelID, probability)
 	if baseOverlap <= labelConfirmMinBaseOverlap {
 		return labelHitDecision{}
 	}
@@ -119,43 +127,61 @@ func (p *Processor) recordVADHit(settings *conf.Settings, source string, at time
 
 // logLabelHitDecision logs the outcome of a hit after detectionMutex is
 // released. own is the label hit being processed, recorded unless d.held is set,
-// or nil for a VAD hit (which logs its own line elsewhere). Counted label hits keep the "human detection
-// filtered" line; held and ignored hits use labelConfirmOperation.
+// or nil for a VAD hit (which logs its own line elsewhere). Counted label hits
+// keep the "human detection filtered" line; held and ignored hits use
+// labelConfirmOperation. Every line names the model that scored the hit, and a
+// hit that a later hit confirmed also names the confirming detector, so the
+// aggregated verdict can be traced back to the models behind it.
 func (p *Processor) logLabelHitDecision(settings *conf.Settings, source string, own *heldLabelHit, d *labelHitDecision) {
 	if own == nil && d.confirmed == nil && d.dropped == nil {
 		return
 	}
 	threshold := float32(settings.Realtime.PrivacyFilter.Confidence)
 	display := p.getDisplayNameForSource(source)
-	logCounted := func(confidence float32) {
-		GetLogger().Info("human detection filtered",
-			logger.Float32("confidence", confidence),
+	logCounted := func(h *heldLabelHit, confirmedBy string) {
+		fields := []logger.Field{
+			logger.Float32("confidence", h.confidence),
 			logger.Float32("threshold", threshold),
+			logger.String("model_id", h.modelID),
+			logger.Time("hit_time", h.at),
 			logger.String("source", display),
-			logger.String("operation", privacyFilterOperation))
+			logger.String("operation", privacyFilterOperation),
+		}
+		if confirmedBy != "" {
+			fields = append(fields, logger.String("confirmed_by", confirmedBy))
+		}
+		GetLogger().Info("human detection filtered", fields...)
 	}
 	if d.dropped != nil {
 		GetLogger().Info("privacy filter: human label hit ignored, no second hit within the confirmation window",
 			logger.Float32("confidence", d.dropped.confidence),
 			logger.Float32("threshold", threshold),
+			logger.String("model_id", d.dropped.modelID),
 			logger.Time("hit_time", d.dropped.at),
 			logger.Duration("window", labelConfirmWindow),
 			logger.String("source", display),
 			logger.String("operation", labelConfirmOperation))
 	}
 	if d.confirmed != nil {
-		logCounted(d.confirmed.confidence)
+		// A held hit confirmed by the label hit being processed, or by a VAD hit
+		// when there is no own label hit.
+		confirmedBy := vadHitModelID
+		if own != nil {
+			confirmedBy = own.modelID
+		}
+		logCounted(d.confirmed, confirmedBy)
 	}
 	switch {
 	case own == nil: // a VAD hit logs its own line elsewhere
 	case d.held:
 		GetLogger().Debug("human label hit held for confirmation",
 			logger.Float32("confidence", own.confidence),
+			logger.String("model_id", own.modelID),
 			logger.Time("hit_time", own.at),
 			logger.Duration("window", labelConfirmWindow),
 			logger.String("source", display),
 			logger.String("operation", labelConfirmOperation))
 	default:
-		logCounted(own.confidence)
+		logCounted(own, "")
 	}
 }

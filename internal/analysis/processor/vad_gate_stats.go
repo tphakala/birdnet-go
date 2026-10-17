@@ -15,6 +15,11 @@ import (
 type HumanDetection struct {
 	Time    time.Time
 	Trigger string
+	// ModelID is the model whose label hit stamped Time, or vadHitModelID for the
+	// VAD gate. Empty when the writer gave none.
+	ModelID string
+	// Score is the label confidence or VAD speech probability of that hit.
+	Score float64
 }
 
 // VADSpeechHit is one entry in the recent-speech-hit history feed.
