@@ -96,7 +96,36 @@ func TestRunAtLowPriority_LowersOnlyTheRenderThread(t *testing.T) {
 	assert.Equal(t, callerBefore, callerAfter, "the calling thread keeps its priority")
 }
 
+// baselinePriority returns the raw priority the process runs at when no render
+// is in flight: the highest raw value (the lowest nice) among its live threads.
+// A thread a render left behind at the render priority cannot lower it, and a
+// process that runs at the render priority throughout reports it.
+func baselinePriority(t *testing.T) int {
+	t.Helper()
+	entries, err := os.ReadDir(procSelfTaskDir)
+	require.NoError(t, err)
+	base := 0
+	for _, e := range entries {
+		tid, err := strconv.Atoi(e.Name())
+		require.NoError(t, err)
+		nice, alive, err := threadNice(tid)
+		require.NoError(t, err)
+		if alive {
+			base = max(base, rawNiceOffset-nice)
+		}
+	}
+	require.NotZero(t, base, "the process has live threads")
+	return base
+}
+
 func TestRunAtLowPriority_ThreadIsDiscardedNotPooled(t *testing.T) {
+	// A process that already runs at the render priority (nice -n 19 go test)
+	// cannot show a leak.
+	base := baselinePriority(t)
+	if base == rawNiceOffset-nativeRenderNice {
+		t.Skip("the test process already runs at the render priority")
+	}
+
 	var renderTid int
 	require.NoError(t, runAtLowPriority(func() error {
 		renderTid = unix.Gettid()
@@ -134,7 +163,7 @@ func TestRunAtLowPriority_ThreadIsDiscardedNotPooled(t *testing.T) {
 	for range 2 * extraGoroutines {
 		got := <-results
 		require.NoError(t, got.err)
-		assert.NotEqual(t, rawNiceOffset-nativeRenderNice, got.raw, "a later goroutine must not run at the render priority")
+		assert.Equal(t, base, got.raw, "a later goroutine must run at the baseline priority")
 	}
 }
 
