@@ -97,6 +97,10 @@ func TestBuildFilterChain_ReturnsNil(t *testing.T) {
 			conf.EqualizerFilter{Type: "NoSuchType", Frequency: 100, Q: 1, Passes: 1},
 			conf.EqualizerFilter{Type: "LowPass", Frequency: 24000, Q: butterworthQ, Passes: 1},
 		)},
+		{"every filter bypassed", enabled(
+			conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 0},
+			conf.EqualizerFilter{Type: "LowPass", Frequency: 15000, Q: butterworthQ, Passes: 0},
+		)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -156,11 +160,9 @@ func TestBuildFilterChain_PassesMapping(t *testing.T) {
 		passes       int
 		wantSections int
 	}{
-		{"zero means one section", 0, 1},
 		{"one", 1, 1},
 		{"three", 3, 3},
 		{"sixteen is the library maximum", 16, 16},
-		{"negative is floored to one", -1, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -172,6 +174,48 @@ func TestBuildFilterChain_PassesMapping(t *testing.T) {
 			assert.Equal(t, tt.wantSections, chain.NumSections())
 		})
 	}
+}
+
+func TestBuildFilterChain_ZeroPassesBypassesFilter(t *testing.T) {
+	t.Parallel()
+	allTypes := []conf.EqualizerFilter{
+		{Type: "HighPass", Frequency: 100, Q: butterworthQ},
+		{Type: "LowPass", Frequency: 15000, Q: butterworthQ},
+		{Type: "BandReject", Frequency: 1000, Width: 200},
+		{Type: "BandPass", Frequency: 1000, Width: 200},
+		{Type: "LowShelf", Frequency: 200, Q: butterworthQ, Gain: -6},
+		{Type: "HighShelf", Frequency: 5000, Q: butterworthQ, Gain: 6},
+		{Type: "Peaking", Frequency: 1200, Width: 300, Gain: 8},
+		{Type: "AllPass", Frequency: 1500, Q: butterworthQ},
+	}
+	for _, f := range allTypes {
+		t.Run(f.Type, func(t *testing.T) {
+			t.Parallel()
+			settings := enabled(f)
+			assert.Nil(t, equalizer.BuildFilterChain(settings, testRate))
+			chain, skipped := equalizer.BuildFilterChainReport(settings, testRate)
+			assert.Nil(t, chain)
+			assert.Empty(t, skipped, "a bypassed filter is not a skipped one")
+		})
+	}
+
+	t.Run("equals removal", func(t *testing.T) {
+		t.Parallel()
+		hp := conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 1}
+		off := conf.EqualizerFilter{Type: "BandReject", Frequency: 1000, Width: 200, Passes: 0}
+		lp := conf.EqualizerFilter{Type: "LowPass", Frequency: 15000, Q: butterworthQ, Passes: 1}
+		in := testSignal(testSignalLen, testRate)
+		want := runChain(t, directChain(t, testRate,
+			dspeq.Band{Type: dspeq.HighPass, Frequency: 100, Q: butterworthQ, Passes: 1},
+			dspeq.Band{Type: dspeq.LowPass, Frequency: 15000, Q: butterworthQ, Passes: 1},
+		), in)
+
+		chain, skipped := equalizer.BuildFilterChainReport(enabled(hp, off, lp), testRate)
+		require.NotNil(t, chain)
+		assert.Equal(t, 2, chain.Len())
+		assert.Empty(t, skipped)
+		assert.Equal(t, want, runChain(t, chain, in))
+	})
 }
 
 func TestBuildFilterChain_SkipsRejectedFilter(t *testing.T) {
@@ -188,6 +232,7 @@ func TestBuildFilterChain_SkipsRejectedFilter(t *testing.T) {
 		{"corner at Nyquist", conf.EqualizerFilter{Type: "LowPass", Frequency: 24000, Q: butterworthQ, Passes: 1}},
 		{"zero Q", conf.EqualizerFilter{Type: "LowPass", Frequency: 500, Q: 0, Passes: 1}},
 		{"too many passes", conf.EqualizerFilter{Type: "HighPass", Frequency: 500, Q: butterworthQ, Passes: 17}},
+		{"negative passes", conf.EqualizerFilter{Type: "HighPass", Frequency: 500, Q: butterworthQ, Passes: -1}},
 		{"NaN frequency", conf.EqualizerFilter{Type: "LowPass", Frequency: math.NaN(), Q: butterworthQ, Passes: 1}},
 	}
 	in := testSignal(testSignalLen, testRate)
@@ -234,6 +279,10 @@ func TestBuildFilterChain_RebuildSequence(t *testing.T) {
 	brBand := dspeq.Band{Type: dspeq.BandReject, Frequency: 1000, WidthHz: 200, Passes: 1}
 	brEditedBand := dspeq.Band{Type: dspeq.BandReject, Frequency: 2000, WidthHz: 200, Passes: 1}
 	lsBand := dspeq.Band{Type: dspeq.LowShelf, Frequency: 200, Q: butterworthQ, GainDB: -6, Passes: 1}
+	brEditedOff := brEdited
+	brEditedOff.Passes = 0
+	brOff := br
+	brOff.Passes = 0
 
 	// Each step is a settings save; want lists the bands the builder must
 	// produce for it, in order.
@@ -248,6 +297,9 @@ func TestBuildFilterChain_RebuildSequence(t *testing.T) {
 		{"reorder", []conf.EqualizerFilter{ls, br}, []dspeq.Band{lsBand, brBand}},
 		{"insert rejected in the middle", []conf.EqualizerFilter{ls, bad, br}, []dspeq.Band{lsBand, brBand}},
 		{"edit a frequency", []conf.EqualizerFilter{ls, bad, brEdited}, []dspeq.Band{lsBand, brEditedBand}},
+		{"turn a filter off", []conf.EqualizerFilter{ls, bad, brEditedOff}, []dspeq.Band{lsBand}},
+		{"turn it back on", []conf.EqualizerFilter{ls, bad, brEdited}, []dspeq.Band{lsBand, brEditedBand}},
+		{"insert an off filter at the front", []conf.EqualizerFilter{brOff, ls, brEdited}, []dspeq.Band{lsBand, brEditedBand}},
 	}
 
 	in := testSignal(testSignalLen, testRate)

@@ -892,7 +892,7 @@
         },
         "passes": {
           "type": "integer",
-          "description": "Filter passes for added attenuation or gain"
+          "description": "Cascaded filter sections: 0 turns the filter off, and so does a config.yaml entry with no passes key; 1 or more applies it that many times (at most 16); each pass adds 12 dB/oct for LowPass and HighPass"
         }
       },
       "additionalProperties": false,

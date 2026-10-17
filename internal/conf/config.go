@@ -33,7 +33,7 @@ type EqualizerFilter struct {
 	Q         float64 `yaml:"q" json:"q"`
 	Gain      float64 `yaml:"gain" json:"gain"`     // Only used for certain filter types like Peaking
 	Width     float64 `yaml:"width" json:"width"`   // Only used for certain filter types like BandPass and BandReject
-	Passes    int     `yaml:"passes" json:"passes"` // Filter passes for added attenuation or gain
+	Passes    int     `yaml:"passes" json:"passes"` // Cascaded filter sections: 0 turns the filter off, and so does a config.yaml entry with no passes key; 1 or more applies it that many times (at most 16); each pass adds 12 dB/oct for LowPass and HighPass
 }
 
 // EqualizerSettings is a struct for audio EQ settings

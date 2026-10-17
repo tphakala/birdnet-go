@@ -156,12 +156,43 @@ func TestEqualizerResponse_PassesCountScaleDB(t *testing.T) {
 		f := fmt.Sprintf(`{"type":"HighPass","frequency":200,"q":0.707,"passes":%d}`, passes)
 		return decodeEQResponse(t, postEQResponse(t, h, eqBody(true, f, "")))
 	}
-	p0, p1, p3 := mk(0), mk(1), mk(3)
+	p1, p3 := mk(1), mk(3)
 	require.Len(t, p3.Points, len(p1.Points))
 	for i := range p1.Points {
 		assert.InDelta(t, 3*p1.Points[i].GainDB, p3.Points[i].GainDB, 1e-9, "point %d", i)
-		assert.InDelta(t, p1.Points[i].GainDB, p0.Points[i].GainDB, 0, "passes 0 equals passes 1 at point %d", i)
 	}
+}
+
+// defaultEQFilters mirrors the equalizer filters in conf/defaults.go, which
+// ship with passes 0 (off).
+const defaultEQFilters = `{"type":"HighPass","frequency":100,"q":0.7,"passes":0},` +
+	`{"type":"LowPass","frequency":15000,"q":0.7,"passes":0}`
+
+func TestEqualizerResponse_DefaultConfigIsFlat(t *testing.T) {
+	t.Parallel()
+	_, h := setupSystemTestEnvironment(t)
+
+	rec := postEQResponse(t, h, eqBody(true, defaultEQFilters, ""))
+	out := decodeEQResponse(t, rec)
+
+	assert.True(t, out.Enabled)
+	assert.Len(t, out.Points, defaultEQResponsePoints, "no filter is applied, so no centers are added")
+	for _, p := range out.Points {
+		require.InDelta(t, 0, p.GainDB, 0)
+	}
+	assert.Contains(t, rec.Body.String(), `"skipped":[]`)
+}
+
+func TestEqualizerResponse_ZeroPassesMatchesRemoval(t *testing.T) {
+	t.Parallel()
+	_, h := setupSystemTestEnvironment(t)
+
+	off := `{"type":"LowPass","frequency":15000,"q":0.707,"passes":0}`
+	with := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, hp100Filter+","+off, "")))
+	without := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, hp100Filter, "")))
+
+	assert.Empty(t, with.Skipped)
+	assert.Equal(t, without.Points, with.Points, "a passes-0 filter changes neither the curve nor the marks")
 }
 
 func TestEqualizerResponse_SampleRateMatters(t *testing.T) {
