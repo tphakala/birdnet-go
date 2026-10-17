@@ -17,7 +17,7 @@ import (
 
 // This file holds the /api/v2/system/audio/* device-management handlers
 // (GetAudioDevices, GetDeviceCapabilities, GetActiveAudioDevice,
-// GetEqualizerConfig). They physically lived in system.go but belong to the
+// GetEqualizerConfig, ComputeEqualizerResponse). They physically lived in system.go but belong to the
 // audio/streaming domain; they moved here with the audio domain extraction and
 // are registered by RegisterAudioDeviceRoutes.
 
@@ -34,6 +34,7 @@ func (c *Handler) RegisterAudioDeviceRoutes(g *echo.Group) {
 	audioGroup.GET("/devices/capabilities", c.GetDeviceCapabilities)
 	audioGroup.GET("/active", c.GetActiveAudioDevice)
 	audioGroup.GET("/equalizer/config", c.GetEqualizerConfig)
+	audioGroup.POST("/equalizer/response", c.ComputeEqualizerResponse)
 	audioGroup.GET("/sources", c.ListAudioSources)
 }
 
