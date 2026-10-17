@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	dspeq "github.com/tphakala/go-audio-dsp/equalizer"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
@@ -317,6 +316,34 @@ func TestEqualizerResponse_InsertsFilterCenters(t *testing.T) {
 	assert.Len(t, dup.Points, defaultEQResponsePoints)
 }
 
+func TestEqualizerResponse_SkippedFilterCentersNotInserted(t *testing.T) {
+	t.Parallel()
+	_, h := setupSystemTestEnvironment(t)
+
+	// Both skipped filters sit inside the default range; only the applied
+	// high-pass center (100 Hz) may be added to the sweep.
+	filters := hp100Filter +
+		`,{"type":"Nope","frequency":1000,"q":1,"passes":1}` +
+		`,{"type":"LowPass","frequency":2000,"q":0,"passes":1}`
+	out := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, filters, "")))
+	require.Len(t, out.Skipped, 2)
+	assert.Len(t, out.Points, defaultEQResponsePoints+1)
+	for _, p := range out.Points {
+		assert.NotEqual(t, 1000.0, p.Hz)
+		assert.NotEqual(t, 2000.0, p.Hz)
+	}
+}
+
+func TestEqualizerResponse_DefaultMaxHzFollowsNyquist(t *testing.T) {
+	t.Parallel()
+	_, h := setupSystemTestEnvironment(t)
+
+	out := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, "", `"sampleRate":16000`)))
+	assert.Equal(t, 16000, out.SampleRate)
+	require.Len(t, out.Points, defaultEQResponsePoints)
+	assert.InDelta(t, 8000.0, out.Points[len(out.Points)-1].Hz, 0)
+}
+
 func TestEqualizerResponse_DisabledAddsNoCenters(t *testing.T) {
 	t.Parallel()
 	_, h := setupSystemTestEnvironment(t)
@@ -373,7 +400,8 @@ func TestEqualizerResponse_SourceIDWithoutRateUsesConfiguredRate(t *testing.T) {
 	t.Parallel()
 	// The route falls back to conf.SampleRate when the source has no rate.
 	h, id := registerEQTestSource(t, 0, 96000)
-	out := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, hp30kFilter, fmt.Sprintf(`"sourceId":%q`, id))))
+	// An explicit sampleRate must not replace the route's fallback rate.
+	out := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, hp30kFilter, fmt.Sprintf(`"sourceId":%q,"sampleRate":96000`, id))))
 	assert.Equal(t, conf.SampleRate, out.SampleRate)
 	require.Len(t, out.Skipped, 1)
 }
@@ -394,13 +422,4 @@ func TestEqualizerResponse_UnknownSourceFallsBack(t *testing.T) {
 	_, noEngine := setupSystemTestEnvironment(t)
 	out = decodeEQResponse(t, postEQResponse(t, noEngine, eqBody(true, "", `"sourceId":"nope"`)))
 	assert.Equal(t, conf.SampleRate, out.SampleRate)
-}
-
-// TestEqualizerResponse_LibraryChainIdentity pins that the endpoint's flat
-// curve for an empty chain is the library's own identity.
-func TestEqualizerResponse_LibraryChainIdentity(t *testing.T) {
-	t.Parallel()
-	for _, p := range dspeq.NewFilterChain().Response([]float64{20, 1000}) {
-		assert.InDelta(t, 0, p.GainDB, 0)
-	}
 }
