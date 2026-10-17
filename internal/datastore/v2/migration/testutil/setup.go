@@ -294,6 +294,7 @@ func (ctx *TestContext) createAuxiliaryMigrator(t *testing.T) {
 		ImageCacheRepo:     ctx.ImageCacheRepo,
 		ThresholdRepo:      ctx.ThresholdRepo,
 		NotificationRepo:   ctx.NotificationRepo,
+		V2DB:               ctx.V2Manager.DB(),
 		Logger:             ctx.Logger,
 		DefaultModelID:     ctx.DefaultModelID,
 		SpeciesLabelTypeID: ctx.SpeciesLabelTypeID,
@@ -616,6 +617,10 @@ func newTestLegacyInterface(db *gorm.DB) *testLegacyInterface {
 	return &testLegacyInterface{db: db}
 }
 
+// GormDB implements datastore.GormDBProvider so the auxiliary migrator can read
+// species_notes directly, matching the real legacy *DataStore.
+func (s *testLegacyInterface) GormDB() *gorm.DB { return s.db }
+
 // GetAllImageCaches implements datastore.Interface.
 func (s *testLegacyInterface) GetAllImageCaches(provider string) ([]datastore.ImageCache, error) {
 	var caches []datastore.ImageCache
@@ -661,8 +666,18 @@ func (s *testLegacyInterface) GetAllHourlyWeather() ([]datastore.HourlyWeather, 
 // Stub implementations for unused datastore.Interface methods.
 // These are required by the interface but not used in migration tests.
 
-func (s *testLegacyInterface) Open() error                                         { return nil }
-func (s *testLegacyInterface) Close() error                                        { return nil }
+func (s *testLegacyInterface) Open() error  { return nil }
+func (s *testLegacyInterface) Close() error { return nil }
+func (s *testLegacyInterface) GetSpeciesNotes(_ context.Context, _ string) ([]datastore.SpeciesNote, error) {
+	return nil, nil
+}
+func (s *testLegacyInterface) SaveSpeciesNote(_ context.Context, _ *datastore.SpeciesNote) error {
+	return nil
+}
+func (s *testLegacyInterface) DeleteSpeciesNote(_ context.Context, _ string) error { return nil }
+func (s *testLegacyInterface) UpdateSpeciesNote(_ context.Context, _, _ string) error {
+	return nil
+}
 func (s *testLegacyInterface) Save(_ *datastore.Note, _ []datastore.Results) error { return nil }
 func (s *testLegacyInterface) EnsureModelRegistered(_ detection.ModelInfo) error   { return nil }
 func (s *testLegacyInterface) Delete(_ string) error                               { return nil }

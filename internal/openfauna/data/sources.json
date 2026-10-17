@@ -1,0 +1,20 @@
+{
+  "gbif": {
+    "name": "GBIF",
+    "order": 30,
+    "icon": "gbif",
+    "url": "https://www.gbif.org/species/{id}"
+  },
+  "inaturalist": {
+    "name": "iNaturalist",
+    "order": 20,
+    "icon": "inaturalist",
+    "url": "https://www.inaturalist.org/taxa/{id}?locale={lang}"
+  },
+  "wikipedia": {
+    "name": "Wikipedia",
+    "order": 10,
+    "icon": "wikipedia",
+    "url": "https://www.wikidata.org/wiki/Special:GoToLinkedPage/{lang}wiki/{id}"
+  }
+}
