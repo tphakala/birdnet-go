@@ -89,9 +89,10 @@ func TestValidateSpectrogramInputs_GateOffStillUsesFFprobe(t *testing.T) {
 	h := &Handler{}
 
 	synctest.Test(t, func(t *testing.T) {
-		result, err := h.validateSpectrogramInputs(t.Context(), path, filepath.Base(path), "gate-off-key")
+		result, state, err := h.validateSpectrogramInputs(t.Context(), path, filepath.Base(path), "gate-off-key")
 
 		assert.Nil(t, result)
+		assert.Nil(t, state)
 		_, ok := errors.AsType[*AudioNotReadyError](err)
 		require.True(t, ok, "got %T: %v", err, err)
 		require.ErrorIs(t, err, ffmpeg.ErrAudioFileNotReady)

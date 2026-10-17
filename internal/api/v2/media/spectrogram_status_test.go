@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
+	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/spectrogram/render"
 )
 
@@ -72,11 +73,20 @@ func TestSpectrogramHTTPError_SourceErrorsAre422(t *testing.T) {
 	_, decodeErr := transcode.DecodeMono(t.Context(), corrupt, 0)
 	require.ErrorIs(t, decodeErr, transcode.ErrUndecodableSource)
 
+	cut := filepath.Join(dir, "cut.wav")
+	writeToneWAV(t, cut, nativeReadyRate, 1, fixtureToneHz)
+	cutBytes, err := os.ReadFile(cut) //nolint:gosec // G304: test path
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(cut, cutBytes[:len(cutBytes)/2], 0o600))
+	_, truncatedErr := transcode.DecodeMono(t.Context(), cut, 0)
+	require.ErrorIs(t, truncatedErr, transcode.ErrTruncatedSource)
+
 	const (
 		unsupportedMsg = "Source audio format is not supported for on-demand processing"
 		undecodableMsg = "Source audio could not be decoded"
 		tooLongMsg     = "Audio is too long for on-demand processing"
 		tooShortMsg    = "Source audio is too short for a spectrogram"
+		truncatedMsg   = "Source audio is shorter than its header declares"
 	)
 	tests := []struct {
 		name string
@@ -86,6 +96,7 @@ func TestSpectrogramHTTPError_SourceErrorsAre422(t *testing.T) {
 		{"unsupported extension", probeError(t, legacy), unsupportedMsg},
 		{"rate below 8 kHz", probeError(t, lowRate), unsupportedMsg},
 		{"undecodable at decode time", decodeErr, undecodableMsg},
+		{"truncated wav", truncatedErr, truncatedMsg},
 		{"too long", probeError(t, huge), tooLongMsg},
 		{"no columns", errors.New(render.ErrNoColumns).Component("spectrogram").Category(errors.CategoryValidation).Build(), tooShortMsg},
 		{"empty clip", errors.New(render.ErrEmptyClip).Component("spectrogram").Category(errors.CategoryValidation).Build(), tooShortMsg},
@@ -156,6 +167,8 @@ func TestSpectrogramSourceStatus_NotReadyIsNotASourceFailure(t *testing.T) {
 	}{
 		{"not ready wrapping undecodable", notReadyAndUndecodable, true, false},
 		{"incomplete", ffmpeg.ErrAudioFileIncomplete, true, false},
+		{"source changed wrapping truncated", fmt.Errorf("%w: after render: %w", spectrogram.ErrSourceChanged, transcode.ErrTruncatedSource), true, false},
+		{"truncated source", productionWrap(transcode.ErrTruncatedSource), false, true},
 		{"unsupported source", productionWrap(transcode.ErrUnsupportedSource), false, true},
 		{"no columns", productionWrap(render.ErrNoColumns), false, true},
 		{"invalid options", productionWrap(render.ErrInvalidOptions), false, false},

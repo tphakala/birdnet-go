@@ -204,7 +204,9 @@ rendered: an unsupported format or a sample rate below 8 kHz, a damaged file, a 
 the size limits, or a clip too short for one spectrogram column. The first two also answer
 **503** with `Retry-After` while the clip is still being written, and also when the header probe
 cannot read the clip, since a half-written file looks the same; only damage found while decoding
-answers 422.
+answers 422. With the native renderer, a clip that changes between the readiness check and the
+render also answers 503 and nothing is cached, and a WAV or FLAC that holds fewer samples than
+its header declares answers 422 (a rerun after the file is completed renders it).
 
 **Pending species image (`503 + Retry-After`).** The image endpoints never contact an
 image provider on the request goroutine: a cold species can take minutes to resolve
