@@ -39,6 +39,24 @@ export const MAX_HIGH_PASS_FREQ = 10000;
 /** Maximum gain boost in decibels */
 export const MAX_GAIN_DB = 24;
 
+/** High-pass filter quality factor */
+const HIGH_PASS_Q = 1;
+
+/** Compressor threshold in decibels */
+const COMPRESSOR_THRESHOLD_DB = -24;
+
+/** Compressor knee width in decibels */
+const COMPRESSOR_KNEE_DB = 30;
+
+/** Compressor compression ratio */
+const COMPRESSOR_RATIO = 12;
+
+/** Compressor attack time in seconds */
+const COMPRESSOR_ATTACK_SECONDS = 0.003;
+
+/** Compressor release time in seconds */
+const COMPRESSOR_RELEASE_SECONDS = 0.25;
+
 /**
  * Source nodes already created per (context, element). createMediaElementSource
  * may run at most once per pair (a second call throws InvalidStateError). Keyed
@@ -113,16 +131,16 @@ export function createAudioNodeChain(
     const highPass = ctx.createBiquadFilter();
     highPass.type = 'highpass';
     highPass.frequency.value = highPassFreq;
-    highPass.Q.value = 1;
+    highPass.Q.value = HIGH_PASS_Q;
 
     if (includeCompressor) {
       // Create dynamics compressor for consistent volume
       const compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.value = -24;
-      compressor.knee.value = 30;
-      compressor.ratio.value = 12;
-      compressor.attack.value = 0.003;
-      compressor.release.value = 0.25;
+      compressor.threshold.value = COMPRESSOR_THRESHOLD_DB;
+      compressor.knee.value = COMPRESSOR_KNEE_DB;
+      compressor.ratio.value = COMPRESSOR_RATIO;
+      compressor.attack.value = COMPRESSOR_ATTACK_SECONDS;
+      compressor.release.value = COMPRESSOR_RELEASE_SECONDS;
 
       // Connect chain with compressor
       source.connect(highPass).connect(gain).connect(compressor).connect(ctx.destination);
