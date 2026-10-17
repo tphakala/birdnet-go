@@ -56,6 +56,11 @@ const (
 
 	// maxSourceChannels is the highest channel count accepted. Clips are mono.
 	maxSourceChannels = 1
+
+	// maxAnalysisChannels is the highest channel count the analysis decode
+	// (DecodeMono) accepts. Stored and imported recordings can be stereo; the
+	// spectrogram path downmixes them to mono, as sox and ffmpeg do.
+	maxAnalysisChannels = 2
 )
 
 // Pipeline timeouts, kept at their values from the FFmpeg-based implementation.

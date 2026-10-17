@@ -64,8 +64,15 @@ var sourceOpeners = map[string]func(*os.File) (*source, error){
 	"." + audioformat.FileExtension(audioformat.Opus): openOpus,
 }
 
-// openSource opens the decoder that the extension of path names.
+// openSource opens the decoder that the extension of path names, accepting mono
+// sources only.
 func openSource(f *os.File, path string) (*source, error) {
+	return openSourceChannels(f, path, maxSourceChannels)
+}
+
+// openSourceChannels is openSource that accepts sources of up to maxChannels
+// channels.
+func openSourceChannels(f *os.File, path string, maxChannels int) (*source, error) {
 	open, ok := sourceOpeners[filepath.Ext(path)]
 	if !ok {
 		return nil, wrapSentinel(ErrUnsupportedSource, nil, "decode_open", "file extension is not a clip format", errors.CategoryValidation)
@@ -77,7 +84,7 @@ func openSource(f *os.File, path string) (*source, error) {
 	if src.sampleRate < minSourceSampleRate || src.sampleRate > maxSourceSampleRate {
 		return nil, validationError(ErrUnsupportedSource, "decode_bounds", "sample rate %d Hz outside %d..%d", src.sampleRate, minSourceSampleRate, maxSourceSampleRate)
 	}
-	if src.channels < 1 || src.channels > maxSourceChannels {
+	if src.channels < 1 || src.channels > maxChannels {
 		return nil, validationError(ErrUnsupportedSource, "decode_bounds", "%d channels not supported", src.channels)
 	}
 	return src, nil

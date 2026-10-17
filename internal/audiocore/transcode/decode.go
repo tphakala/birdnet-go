@@ -68,6 +68,13 @@ func decode(ctx context.Context, path string, win *window, maxBytes int) (*pcmBu
 // is read, a source whose sample rate is below minRate (0 accepts any rate). The
 // rejection wraps ErrBelowMinimumRate.
 func decodeAtLeast(ctx context.Context, path string, win *window, maxBytes, minRate int) (*pcmBuffer, error) {
+	return decodeChannels(ctx, path, win, maxBytes, minRate, maxSourceChannels)
+}
+
+// decodeChannels is decodeAtLeast that accepts sources of up to maxChannels
+// channels. The buffer keeps the source channel count; maxBytes counts the
+// interleaved bytes.
+func decodeChannels(ctx context.Context, path string, win *window, maxBytes, minRate, maxChannels int) (*pcmBuffer, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -86,7 +93,7 @@ func decodeAtLeast(ctx context.Context, path string, win *window, maxBytes, minR
 	}
 	defer func() { _ = f.Close() }()
 
-	src, err := openSource(f, path)
+	src, err := openSourceChannels(f, path, maxChannels)
 	if err != nil {
 		return nil, err
 	}
