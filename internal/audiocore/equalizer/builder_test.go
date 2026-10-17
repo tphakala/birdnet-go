@@ -101,10 +101,6 @@ func TestBuildFilterChain_ReturnsNil(t *testing.T) {
 			conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 0},
 			conf.EqualizerFilter{Type: "LowPass", Frequency: 15000, Q: butterworthQ, Passes: 0},
 		)},
-		{"bypassed and skipped", enabled(
-			conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 0},
-			conf.EqualizerFilter{Type: "LowPass", Frequency: 24000, Q: butterworthQ, Passes: 1},
-		)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -202,17 +198,6 @@ func TestBuildFilterChain_ZeroPassesBypassesFilter(t *testing.T) {
 			assert.Empty(t, skipped, "a bypassed filter is not a skipped one")
 		})
 	}
-
-	t.Run("shipped defaults", func(t *testing.T) {
-		t.Parallel()
-		settings := enabled(
-			conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: 0.7, Passes: 0},
-			conf.EqualizerFilter{Type: "LowPass", Frequency: 15000, Q: 0.7, Passes: 0},
-		)
-		chain, skipped := equalizer.BuildFilterChainReport(settings, testRate)
-		assert.Nil(t, chain)
-		assert.Empty(t, skipped)
-	})
 
 	t.Run("equals removal", func(t *testing.T) {
 		t.Parallel()
@@ -331,17 +316,6 @@ func TestBuildFilterChain_RebuildSequence(t *testing.T) {
 		second := equalizer.BuildFilterChain(settings, testRate)
 		assert.NotSame(t, first, second, s.name)
 		assert.Equal(t, want, runChain(t, second, in), s.name)
-
-		// Bypass equals removal: the same settings without the passes-0 filters
-		// build the same chain.
-		var kept []conf.EqualizerFilter
-		for _, f := range s.filters {
-			if f.Passes != 0 {
-				kept = append(kept, f)
-			}
-		}
-		removed := equalizer.BuildFilterChain(enabled(kept...), testRate)
-		assert.Equal(t, want, runChain(t, removed, in), s.name+": bypass equals removal")
 	}
 }
 

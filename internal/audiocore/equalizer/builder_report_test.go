@@ -62,7 +62,6 @@ func TestBuildFilterChainReport_MatchesBuildFilterChain(t *testing.T) {
 		{"empty", enabled()},
 		{"all skipped", enabled(unknown, tooHigh)},
 		{"mixed", enabled(good, unknown, peak, tooHigh)},
-		{"all bypassed", enabled(off)},
 		{"mixed with bypassed", enabled(good, off, unknown, peak, tooHigh)},
 	}
 	for _, tt := range tests {

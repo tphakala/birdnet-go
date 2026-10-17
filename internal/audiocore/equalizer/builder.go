@@ -48,19 +48,16 @@ type SkippedFilter struct {
 
 // BuildFilterChain creates a library FilterChain from the given equalizer
 // settings. Returns nil when the equalizer is disabled, has no filters
-// configured, or no filter was applied. A filter with passes 0 is off: it is
-// left out of the chain without a log line above Debug. Unknown filter types and
-// filters the library rejects for the given sample rate (for example a corner at
-// or above Nyquist) are logged with the reason and skipped without aborting the
-// chain.
+// configured, or no filter was applied. Unknown filter types and filters the
+// library rejects for the given sample rate (for example a corner at or above
+// Nyquist) are logged with the reason and skipped without aborting the chain.
 // Every call returns a new chain, since chains hold per-route filter state.
 func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *dspeq.FilterChain {
 	return buildFilterChain(settings, sampleRate, func(s *SkippedFilter) { warnSkippedFilter(s, sampleRate) })
 }
 
 // BuildFilterChainReport builds the same chain as BuildFilterChain, with the
-// same nil returns, and also returns the filters it left out. A filter with
-// passes 0 is bypassed and is not in skipped. It does not log a
+// same nil returns, and also returns the filters it left out. It does not log a
 // Warn for a skipped filter, since a caller that reports skips to its own
 // client (the equalizer response preview) runs on every edit of a half-typed
 // value. The skipped slice is nil when nothing was skipped.
@@ -110,7 +107,6 @@ func buildFilterChain(settings conf.EqualizerSettings, sampleRate int, onSkip fu
 		logger.Int("sample_rate", sampleRate))
 
 	chain := dspeq.NewFilterChain()
-	bypassed := 0
 
 	for i := range settings.Filters {
 		f := &settings.Filters[i]
@@ -122,7 +118,6 @@ func buildFilterChain(settings conf.EqualizerSettings, sampleRate int, onSkip fu
 		}
 
 		if f.Passes == bypassPasses {
-			bypassed++
 			eqLog.Debug("EQ filter bypassed, passes is 0",
 				logger.Int("index", i),
 				logger.String("type", f.Type),
@@ -154,14 +149,11 @@ func buildFilterChain(settings conf.EqualizerSettings, sampleRate int, onSkip fu
 	}
 
 	if chain.Len() == 0 {
-		eqLog.Debug("EQ filter chain empty after building, no filter applied",
-			logger.Int("bypassed", bypassed),
-			logger.Int("skipped", len(settings.Filters)-bypassed))
+		eqLog.Debug("EQ filter chain empty after building, no filter applied")
 		return nil
 	}
 	eqLog.Debug("EQ filter chain built",
-		logger.Int("active_filters", chain.Len()),
-		logger.Int("bypassed", bypassed))
+		logger.Int("active_filters", chain.Len()))
 	return chain
 }
 
