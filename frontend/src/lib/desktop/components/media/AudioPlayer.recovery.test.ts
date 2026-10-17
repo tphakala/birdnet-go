@@ -20,7 +20,7 @@ import {
   exhaustLoadRetries,
   runPlaySequence,
 } from '../../../../test/playSequences';
-import { AUDIO_RETRY_DELAY_MS, CANPLAY_TIMEOUT_MS } from '$lib/utils/audio';
+import { MAX_AUDIO_LOAD_RETRIES, AUDIO_RETRY_DELAY_MS, CANPLAY_TIMEOUT_MS } from '$lib/utils/audio';
 import { loggers } from '$lib/utils/logger';
 import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
 import AudioPlayer from './AudioPlayer.svelte';
@@ -47,6 +47,11 @@ const DENOISE_OFF_TEXT = 'components.audioPlayer.processing.denoiseOff';
 // Debounce before a processing request starts (PROCESS_DEBOUNCE_MS in AudioPlayer.svelte)
 const PROCESSING_DEBOUNCE_MS = 300;
 const PROCESSED_BLOB_URL = 'blob:processed-clip';
+const BATS_BLOB_URL = 'blob:audible-bats-clip';
+const BATS_TITLE = 'media.audio.audibleBats.title';
+const BATS_ENABLE_TEXT = 'media.audio.audibleBats.enable';
+// Wider than MIN_CONTROLS_WIDTH_PX so the player shows its controls
+const WIDE_CONTAINER_PX = 400;
 
 describe('AudioPlayer recovery', () => {
   let ctl: FakeMediaController;
@@ -238,6 +243,169 @@ describe('AudioPlayer recovery', () => {
     expect(ctl.play).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(PLAY_ERROR_TEXT)).not.toBeInTheDocument();
     expect(loggers.audio.warn).toHaveBeenCalled();
+  });
+
+  it('cancels a pending retry when play is pressed and keeps playing past the old timer', async () => {
+    const { container } = mount();
+    ctl.failLoad();
+    const loadsBefore = ctl.load.mock.calls.length;
+
+    await press(container);
+    expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+    await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+    expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+    expect(ctl.paused).toBe(false);
+  });
+
+  it('reloads instead of pausing when play is pressed on a playing element in the error state', async () => {
+    const { container } = mount();
+    await press(container);
+    ctl.failLoad(MEDIA_ERR_NETWORK);
+    const loadsBefore = ctl.load.mock.calls.length;
+    const playsBefore = ctl.play.mock.calls.length;
+
+    await press(container);
+
+    expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+    expect(ctl.play.mock.calls.length).toBe(playsBefore + 1);
+  });
+
+  it('drops the queued play and keeps the error when retries run out', async () => {
+    const { container } = mount();
+    ctl.setPlayMode('hold');
+    await fireEvent.click(playButton(container));
+    await settle();
+    ctl.failLoad();
+    for (let i = 1; i < MAX_AUDIO_LOAD_RETRIES; i++) {
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+      ctl.failLoad();
+    }
+    await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+    ctl.failLoad();
+    await settle();
+    expect(screen.getByRole('alert')).toHaveTextContent(LOAD_ERROR_TEXT);
+    expect(screen.getByLabelText(PLAY_LABEL)).toBeInTheDocument();
+    const playsBefore = ctl.play.mock.calls.length;
+
+    ctl.completeLoad();
+    await settle();
+
+    expect(ctl.play.mock.calls.length).toBe(playsBefore);
+  });
+
+  describe('audible bats swap', () => {
+    const originalFetch = globalThis.fetch;
+    const originalOffsetWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'offsetWidth'
+    );
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+
+    beforeEach(() => {
+      // The controls (and the bats button) render only above a minimum width.
+      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get: () => WIDE_CONTAINER_PX,
+      });
+      URL.createObjectURL = vi.fn(() => BATS_BLOB_URL);
+      URL.revokeObjectURL = vi.fn();
+      globalThis.fetch = vi.fn().mockImplementation(async () => ({
+        ok: true,
+        status: 200,
+        blob: async () => new Blob(['bats']),
+        headers: new Headers(),
+      }));
+    });
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+      if (originalOffsetWidth) {
+        Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth);
+      }
+    });
+
+    async function activateAudibleBats() {
+      await fireEvent.click(screen.getByLabelText(BATS_TITLE));
+      await fireEvent.click(screen.getByText(BATS_ENABLE_TEXT));
+      await settle();
+    }
+
+    it('resumes playback on the swapped source', async () => {
+      const { container } = mount({ modelType: 'bat' });
+      await press(container);
+      expect(ctl.paused).toBe(false);
+      const playsBefore = ctl.play.mock.calls.length;
+
+      await activateAudibleBats();
+      expect(ctl.paused).toBe(true);
+      ctl.completeLoad();
+      await settle();
+
+      expect(ctl.play.mock.calls.length).toBe(playsBefore + 1);
+      expect(ctl.paused).toBe(false);
+    });
+
+    it('keeps a queued play across the swap', async () => {
+      const { container } = mount({ modelType: 'bat' });
+      ctl.failLoad();
+      ctl.setPlayMode('hold');
+      await fireEvent.click(playButton(container));
+      await settle();
+      ctl.failLoad();
+      // Playback is not running while the retry waits.
+      ctl.dispatch('pause');
+      const playsBefore = ctl.play.mock.calls.length;
+
+      await activateAudibleBats();
+      ctl.completeLoad();
+      await settle();
+
+      expect(ctl.play.mock.calls.length).toBe(playsBefore + 1);
+      expect(ctl.paused).toBe(false);
+    });
+  });
+
+  it('drops a queued play when processing starts', async () => {
+    const originalFetch = globalThis.fetch;
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => PROCESSED_BLOB_URL);
+    URL.revokeObjectURL = vi.fn();
+    globalThis.fetch = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      blob: async () => new Blob(['processed']),
+      headers: new Headers(),
+    }));
+
+    try {
+      mount({ enableClipExtraction: true, showSpectrogram: false });
+      await settle();
+      ctl.failLoad();
+      ctl.setPlayMode('hold');
+      await fireEvent.click(screen.getByLabelText(PLAY_LABEL));
+      await settle();
+      ctl.failLoad();
+      ctl.dispatch('pause');
+      const playsBefore = ctl.play.mock.calls.length;
+
+      await fireEvent.click(screen.getByLabelText(DENOISE_LABEL));
+      await fireEvent.click(screen.getByText(DENOISE_LIGHT_TEXT));
+      await vi.advanceTimersByTimeAsync(PROCESSING_DEBOUNCE_MS);
+      await settle();
+      ctl.completeLoad();
+      await settle();
+
+      expect(ctl.play.mock.calls.length).toBe(playsBefore);
+    } finally {
+      globalThis.fetch = originalFetch;
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+    }
   });
 
   it.each(NEVER_SILENT_SEQUENCES)(
