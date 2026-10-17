@@ -83,7 +83,9 @@ export function getOrCreateMediaElementSource(
  * and silent unless the source is connected. If building the rest of the chain
  * throws, the source is connected straight to the destination so the element
  * stays audible, and the error is rethrown. A later call for the same element
- * reuses the cached source, drops that fallback route and rebuilds.
+ * reuses the cached source, disconnects all of its routes (the fallback route
+ * and any live chain) and rebuilds. A second chain for an element that already
+ * has a live one therefore cuts the first.
  *
  * @param ctx - AudioContext to create nodes in
  * @param audioElement - HTML audio element to use as source
@@ -98,7 +100,8 @@ export function createAudioNodeChain(
   const { gainDb = 0, highPassFreq = DEFAULT_HIGH_PASS_FREQ, includeCompressor = false } = options;
 
   const { source, cached } = getOrCreateMediaElementSource(ctx, audioElement);
-  // Drop the fallback route of an earlier failed build before rebuilding.
+  // The cached source loses all of its routes, not only an earlier fallback, so
+  // a second chain for an element with a live one cuts the first.
   if (cached) source.disconnect();
 
   try {
