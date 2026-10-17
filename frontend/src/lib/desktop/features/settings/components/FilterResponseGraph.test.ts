@@ -70,7 +70,10 @@ function lastBody(): EqualizerResponseRequest | undefined {
 
 /** A 2d context with every method drawGraph uses, so the curve is drawn. */
 function createContextMock() {
-  return {
+  const ctx = {
+    font: '',
+    /** Each fillText call with the font that was set when it ran. */
+    textFonts: [] as Array<{ text: unknown; font: string }>,
     clearRect: vi.fn(),
     fillRect: vi.fn(),
     beginPath: vi.fn(),
@@ -78,7 +81,9 @@ function createContextMock() {
     lineTo: vi.fn(),
     stroke: vi.fn(),
     rect: vi.fn(),
-    fillText: vi.fn(),
+    fillText: vi.fn((text: unknown) => {
+      ctx.textFonts.push({ text, font: ctx.font });
+    }),
     save: vi.fn(),
     restore: vi.fn(),
     translate: vi.fn(),
@@ -86,6 +91,12 @@ function createContextMock() {
     setLineDash: vi.fn(),
     createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
   };
+  return ctx;
+}
+
+/** Font the most recent draw used for a frequency axis label. */
+function axisLabelFont(ctx: ReturnType<typeof createContextMock>): string | undefined {
+  return ctx.textFonts.filter(entry => entry.text === '1k').at(-1)?.font;
 }
 
 /** Grid and reference lines drawn with lineTo on every draw, curve excluded. */
@@ -253,6 +264,9 @@ describe('FilterResponseGraph', () => {
     });
     await settle();
     expect(labelsInLastDraw(ctx)).toContain(FLAT_LABEL);
+    // The flat label uses a larger font; the axis labels drawn after it keep
+    // the axis font.
+    expect(axisLabelFont(ctx)).toMatch(/^11px /);
 
     apiPost.mockResolvedValueOnce(
       responseBody({

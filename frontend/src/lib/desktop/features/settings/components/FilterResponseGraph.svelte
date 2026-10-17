@@ -58,6 +58,9 @@
   // and labels only go down to -48 dB, so gains between -48 and -96 dB are
   // drawn below the lowest labelled line, and lower gains sit on the bottom edge.
   const MIN_DB = -96;
+
+  /** Font of the frequency and gain tick labels. */
+  const AXIS_LABEL_FONT = '11px system-ui, -apple-system, sans-serif';
   const MAX_DB = 12;
 
   let graphState = $state<EqualizerResponseState>({ status: 'loading' });
@@ -299,7 +302,7 @@
     ctx.imageSmoothingEnabled = true;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.font = '11px system-ui, -apple-system, sans-serif';
+    ctx.font = AXIS_LABEL_FONT;
 
     // Draw full canvas background with proper dark mode support
     ctx.fillStyle = colors.background;
@@ -401,7 +404,8 @@
       ctx.globalAlpha = 1;
     }
 
-    // Draw labels
+    // Draw labels (the flat label above may have changed the font)
+    ctx.font = AXIS_LABEL_FONT;
     ctx.fillStyle = colors.text;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
