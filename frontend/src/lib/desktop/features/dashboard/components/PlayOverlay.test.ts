@@ -4,6 +4,7 @@ import { loggers } from '$lib/utils/logger';
 import { DASHBOARD_AUDIO_RETRY_DELAYS_MS, PLAY_END_DELAY_MS } from '$lib/utils/audio';
 import {
   installFakeMediaElement,
+  FAKE_MEDIA_DURATION_SECONDS,
   MEDIA_ERR_NETWORK,
   fakeAudioNodeChain,
   settle,
@@ -26,6 +27,12 @@ vi.mock('$lib/utils/audioNodes', () => ({
 const DETECTION_ID = 4242;
 const RETRY_QUERY_MARKER = '?t=';
 const BATS_SRC = 'blob:audible-bats-clip';
+// The slider is stubbed to SLIDER_WIDTH_PX wide, so a click at x seeks to x / width of the clip.
+const SLIDER_WIDTH_PX = 200;
+const SEEK_CLICK_X = 100;
+const DRAG_CLICK_X = 50;
+const SEEK_EXPECTED_SECONDS = FAKE_MEDIA_DURATION_SECONDS * (SEEK_CLICK_X / SLIDER_WIDTH_PX);
+const DRAG_EXPECTED_SECONDS = FAKE_MEDIA_DURATION_SECONDS * (DRAG_CLICK_X / SLIDER_WIDTH_PX);
 const PLAY_LABEL = 'media.audio.play';
 const PAUSE_LABEL = 'media.audio.pause';
 const LOADING_LABEL = 'media.audio.loading';
@@ -54,6 +61,13 @@ describe('PlayOverlay', () => {
       ctl.failLoad();
       await settle();
     }
+  }
+
+  /** jsdom has no layout, so give the seek area a width. */
+  function stubSliderRect() {
+    // Partial DOMRect: the card only reads left and width.
+    const rect = { left: 0, width: SLIDER_WIDTH_PX } as unknown as DOMRect;
+    vi.spyOn(screen.getByRole('slider'), 'getBoundingClientRect').mockReturnValue(rect);
   }
 
   function button(): HTMLButtonElement {
@@ -298,6 +312,34 @@ describe('PlayOverlay', () => {
     expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
     expect(ctl.play.mock.calls.length).toBe(playsBefore + 1);
     expect(alertShown()).toBe(false);
+  });
+
+  it('starts playback instead of seeking on the first spectrogram tap of a never-played card', async () => {
+    mount();
+    ctl.completeLoad();
+    stubSliderRect();
+
+    await fireEvent.mouseDown(screen.getByRole('slider'), { clientX: SEEK_CLICK_X });
+    await settle();
+
+    expect(ctl.play).toHaveBeenCalledTimes(1);
+    expect(ctl.element.currentTime).toBe(0);
+  });
+
+  it('seeks and starts a drag on a spectrogram click of a healthy card that has played', async () => {
+    mount();
+    ctl.completeLoad();
+    await click();
+    expect(ctl.play).toHaveBeenCalledTimes(1);
+    stubSliderRect();
+
+    await fireEvent.mouseDown(screen.getByRole('slider'), { clientX: SEEK_CLICK_X });
+    expect(ctl.element.currentTime).toBe(SEEK_EXPECTED_SECONDS);
+    await fireEvent.mouseMove(document, { clientX: DRAG_CLICK_X });
+    await fireEvent.mouseUp(document);
+
+    expect(ctl.element.currentTime).toBe(DRAG_EXPECTED_SECONDS);
+    expect(ctl.play).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a queued play across an audible-bats swap during a retry delay', async () => {

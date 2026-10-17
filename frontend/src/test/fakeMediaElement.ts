@@ -28,7 +28,7 @@ export const MEDIA_ERR_NETWORK = 2;
 const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
 
 /** Duration reported by the fake element once metadata has loaded, in seconds */
-const FAKE_MEDIA_DURATION_SECONDS = 120;
+export const FAKE_MEDIA_DURATION_SECONDS = 120;
 
 /** How a `play()` call settles: immediately, or only when `completeLoad()` runs */
 type FakePlayMode = 'resolve' | 'hold';
