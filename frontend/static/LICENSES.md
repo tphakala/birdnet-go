@@ -438,7 +438,7 @@ Source: Apache-2.0
 
 ### github.com/tphakala/go-audio-resampler
 
-License: https://github.com/tphakala/go-audio-resampler/blob/v1.7.0/LICENSE
+License: https://github.com/tphakala/go-audio-resampler/blob/v1.9.0/LICENSE
 Source: LGPL-2.1
 
 ### github.com/tphakala/go-audio-stream
@@ -483,7 +483,7 @@ Source: MIT
 
 ### github.com/tphakala/simd
 
-License: https://github.com/tphakala/simd/blob/v1.12.0/LICENSE
+License: https://github.com/tphakala/simd/blob/v1.13.0/LICENSE
 Source: MIT
 
 ### github.com/valyala/bytebufferpool
@@ -544,6 +544,11 @@ Source: Apache-2.0
 ### golang.org/x/crypto
 
 License: https://cs.opensource.google/go/x/crypto/+/v0.58.0:LICENSE
+Source: BSD-3-Clause
+
+### golang.org/x/image
+
+License: https://cs.opensource.google/go/x/image/+/v0.47.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
