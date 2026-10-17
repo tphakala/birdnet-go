@@ -104,20 +104,9 @@
   let eqFilterConfig = $state<Record<string, FilterTypeConfig>>({});
   let loadingConfig = $state(true);
 
-  // Starting Q and bandwidth of a blank new-filter form
-  const DEFAULT_NEW_FILTER_Q = 0.707;
-  const DEFAULT_NEW_FILTER_WIDTH = 100;
-
   // Blank form for a new filter; new filters start Off (0 passes)
   function createEmptyFilter(): NewFilterForm {
-    return {
-      type: '',
-      frequency: 0,
-      q: DEFAULT_NEW_FILTER_Q,
-      width: DEFAULT_NEW_FILTER_WIDTH,
-      gain: 0,
-      passes: 0,
-    };
+    return { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 0 };
   }
 
   // New filter state for adding filters (uses NewFilterForm to allow empty type)
@@ -576,7 +565,7 @@
               {:else if param.Name.toLowerCase() === 'q'}
                 <!-- Q factor input -->
                 <input
-                  value={newFilter.q ?? DEFAULT_NEW_FILTER_Q}
+                  value={newFilter.q ?? 0.707}
                   onchange={e =>
                     commitQ(e.currentTarget, param, newFilter.q, q => {
                       newFilter = { ...newFilter, q };
@@ -592,7 +581,7 @@
               {:else if param.Name.toLowerCase() === 'width'}
                 <!-- Width (Bandwidth) input -->
                 <input
-                  value={newFilter.width ?? DEFAULT_NEW_FILTER_WIDTH}
+                  value={newFilter.width ?? 100}
                   oninput={e => {
                     const value = parseFloat(e.currentTarget.value) || 100;
                     newFilter = { ...newFilter, width: value };
