@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/spectrogram/render"
 	"github.com/tphakala/birdnet-go/internal/spectrogram/soxchrome"
 )
 
@@ -178,8 +181,9 @@ func TestNativeGate_Transitions(t *testing.T) {
 	}
 }
 
-func TestNativeGate_ExistingFileSurvivesPrerenderWithGateOn(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+// TestNativeGate_PrerenderSubmitLeavesExistingFile pins that a prerender submit
+// skips a spectrogram path that already holds a file, whichever renderer made it.
+func TestNativeGate_PrerenderSubmitLeavesExistingFile(t *testing.T) {
 	pr, env := createMinimalPreRenderer(t, 1)
 	clip := filepath.Join(env.TempDir, "clip.wav")
 	spec, err := BuildSpectrogramPath(clip)
@@ -254,15 +258,22 @@ func TestNativeGate_CanceledIsOperational(t *testing.T) {
 	gen, env := newNativeGenerator(t)
 	samples := nativeTestSamples(24000)
 	audio := writeNativeWAV(t, env.TempDir, "in.wav", samples, 24000)
-	ctx, cancel := context.WithCancel(t.Context())
+	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
+	expired, cancelExpired := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancelExpired()
 
-	errFile := gen.GenerateFromFile(ctx, audio, filepath.Join(env.TempDir, "f.png"), nativeTestWidth, false)
-	errPCM := gen.GenerateFromPCM(ctx, samplesToPCM(samples), filepath.Join(env.TempDir, "p.png"), nativeTestWidth, false, 24000)
-
-	for name, err := range map[string]error{"file": errFile, "pcm": errPCM} {
-		require.Error(t, err, name)
-		assert.True(t, IsOperationalError(err), name)
+	for name, ctx := range map[string]context.Context{"canceled": canceled, "deadline": expired} {
+		errFile := gen.GenerateFromFile(ctx, audio, filepath.Join(env.TempDir, name+"-f.png"), nativeTestWidth, false)
+		errPCM := gen.GenerateFromPCM(ctx, samplesToPCM(samples), filepath.Join(env.TempDir, name+"-p.png"), nativeTestWidth, false, 24000)
+		for entry, err := range map[string]error{"file": errFile, "pcm": errPCM} {
+			require.Error(t, err, name+" "+entry)
+			assert.True(t, IsOperationalError(err), name+" "+entry)
+			enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+			require.True(t, ok, name+" "+entry)
+			assert.Equal(t, errors.CategorySystem, enhanced.Category, name+" "+entry)
+			assert.Equal(t, errors.PriorityLow, enhanced.GetPriority(), name+" "+entry)
+		}
 	}
 }
 
@@ -325,4 +336,130 @@ func TestNativeGate_DecodeErrorReportedOnce(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "audiocore/transcode", enhanced.GetComponent(), "the transcode error is kept, not rebuilt")
 	assert.Contains(t, err.Error(), "native spectrogram "+nativeOperationFile)
+}
+
+// brightestRow returns the image row with the highest palette index in column x.
+func brightestRow(img *image.Paletted, x int) int {
+	best, row := -1, -1
+	for y := range img.Bounds().Dy() {
+		if v := int(img.ColorIndexAt(x, y)); v > best {
+			best, row = v, y
+		}
+	}
+	return row
+}
+
+// toneSamples returns a mono sine clip of the given frequency.
+func toneSamples(rate int, seconds, freq float64) []int16 {
+	out := make([]int16, int(float64(rate)*seconds))
+	for i := range out {
+		out[i] = int16(0.4 * math.MaxInt16 * math.Sin(2*math.Pi*freq*float64(i)/float64(rate)))
+	}
+	return out
+}
+
+func TestNativeGate_ProfileRateSetsNyquist(t *testing.T) {
+	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+	gen, env := newNativeGenerator(t)
+	const (
+		srcRate   = 48000
+		toneHz    = 3000.0
+		birdNyq   = 12000.0
+		rawWidth  = nativeTestWidth
+		wantRow   = 96 // round((1 - 3000/12000) * (129 - 1))
+		sourceNyq = 24000.0
+	)
+	samples := toneSamples(srcRate, nativeTestSeconds, toneHz)
+	audio := writeNativeWAV(t, env.TempDir, "tone.wav", samples, srcRate)
+	require.NotEqual(t, wantRow, int(math.Round((1-toneHz/sourceNyq)*(nativeTestRows-1))), "the source rate must give a different row")
+	require.Equal(t, wantRow, int(math.Round((1-toneHz/birdNyq)*(nativeTestRows-1))))
+
+	fromFile := filepath.Join(env.TempDir, "file.png")
+	require.NoError(t, gen.GenerateFromFile(t.Context(), audio, fromFile, rawWidth, true))
+	fromPCM := filepath.Join(env.TempDir, "pcm.png")
+	require.NoError(t, gen.GenerateFromPCM(t.Context(), samplesToPCM(samples), fromPCM, rawWidth, true, srcRate))
+
+	for name, path := range map[string]string{"file": fromFile, "pcm": fromPCM} {
+		img := decodePNG(t, path)
+		assert.InDelta(t, wantRow, brightestRow(img, img.Bounds().Dx()/2), 1, name)
+	}
+}
+
+func TestNativeGate_BatProfileSetsNyquist(t *testing.T) {
+	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+	gen, env := newNativeGenerator(t)
+	const (
+		srcRate = 256000
+		toneHz  = 50000.0
+		batNyq  = 128000.0
+		seconds = 0.5
+	)
+	wantRow := int(math.Round((1 - toneHz/batNyq) * (nativeTestRows - 1)))
+	samples := toneSamples(srcRate, seconds, toneHz)
+	audio := writeNativeWAV(t, env.TempDir, "bat.wav", samples, srcRate)
+
+	fromFile := filepath.Join(env.TempDir, "file.png")
+	require.NoError(t, gen.GenerateFromFile(t.Context(), audio, fromFile, nativeTestWidth, true, WithFrequencyProfile(BatProfile())))
+	fromPCM := filepath.Join(env.TempDir, "pcm.png")
+	require.NoError(t, gen.GenerateFromPCM(t.Context(), samplesToPCM(samples), fromPCM, nativeTestWidth, true, srcRate, WithFrequencyProfile(BatProfile())))
+
+	for name, path := range map[string]string{"file": fromFile, "pcm": fromPCM} {
+		img := decodePNG(t, path)
+		assert.InDelta(t, wantRow, brightestRow(img, img.Bounds().Dx()/2), 1, name)
+	}
+}
+
+func TestNativeGate_PCMZeroRateUsesDefault(t *testing.T) {
+	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+	gen, env := newNativeGenerator(t)
+	assert.Equal(t, conf.SampleRate, pcmSourceRate(0))
+	assert.Equal(t, conf.SampleRate, pcmSourceRate(-1))
+	assert.Equal(t, 24000, pcmSourceRate(24000))
+
+	pcm := samplesToPCM(toneSamples(conf.SampleRate, nativeTestSeconds, 3000))
+	zero := filepath.Join(env.TempDir, "zero.png")
+	explicit := filepath.Join(env.TempDir, "explicit.png")
+	require.NoError(t, gen.GenerateFromPCM(t.Context(), pcm, zero, nativeTestWidth, false, 0))
+	require.NoError(t, gen.GenerateFromPCM(t.Context(), pcm, explicit, nativeTestWidth, false, conf.SampleRate))
+
+	a, err := os.ReadFile(zero) //nolint:gosec // G304: test path
+	require.NoError(t, err)
+	b, err := os.ReadFile(explicit) //nolint:gosec // G304: test path
+	require.NoError(t, err)
+	assert.Equal(t, a, b)
+}
+
+func TestNativeGate_PCMFailureNoFallback(t *testing.T) {
+	skipWithoutPOSIXShell(t)
+	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+	gen, env := newNativeGenerator(t)
+	stub, ran := markerSoxStub(t)
+	env.Settings.Realtime.Audio.SoxPath = stub
+
+	out := filepath.Join(env.TempDir, "fail.png")
+	// One byte is less than one 16-bit sample, so the native source rejects it.
+	err := gen.GenerateFromPCM(t.Context(), []byte{1}, out, nativeTestWidth, false, 24000)
+
+	require.Error(t, err)
+	assert.NoFileExists(t, out)
+	assertNoSpectrogramTemp(t, out)
+	assert.Zero(t, stubRuns(t, ran), "sox must not run as a fallback")
+}
+
+func TestStyleForMatchesGetStyleArgs(t *testing.T) {
+	for _, name := range []string{
+		conf.SpectrogramStyleDefault, conf.SpectrogramStyleScientificDark,
+		conf.SpectrogramStyleHighContrastDark, conf.SpectrogramStyleScientific, "", "bogus",
+	} {
+		args := getStyleArgs(name)
+		want := render.Style{Palette: soxchrome.PaletteSpec{
+			Monochrome:      slices.Contains(args, "-m"),
+			HighColour:      slices.Contains(args, "-h"),
+			LightBackground: slices.Contains(args, "-l"),
+		}}
+		if slices.Contains(args, "dolph") {
+			want.Window = render.WindowDolph
+		}
+		assert.Equal(t, want, render.StyleFor(name), name)
+	}
 }
