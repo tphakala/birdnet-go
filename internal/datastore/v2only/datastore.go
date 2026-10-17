@@ -924,6 +924,10 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		}
 	}
 
+	// Pre-resolve contributing models before starting the transaction to avoid
+	// holding the transaction lock or deadlocking single-connection SQLite pools.
+	contribs := ds.resolveModelContributions(ctx, note.ModelContributions)
+
 	// Use timeout context for transaction to prevent indefinite lock holding.
 	txCtx, cancel := context.WithTimeout(ctx, saveTransactionTimeout)
 	defer cancel()
@@ -944,6 +948,10 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 					return fmt.Errorf("failed to save predictions: %w", err)
 				}
 			}
+		}
+
+		if err := saveModelContributionsInTx(tx, det.ID, contribs); err != nil {
+			return err
 		}
 
 		return nil
@@ -981,6 +989,59 @@ func buildDedupedPredictions(detectionID uint, results []datastore.Results, pred
 		})
 	}
 	return preds
+}
+
+// saveModelContributionsInTx assigns the detection ID and inserts pre-resolved model contributions.
+func saveModelContributionsInTx(tx *gorm.DB, detectionID uint, contribs []*entities.DetectionModelContribution) error {
+	if len(contribs) == 0 {
+		return nil
+	}
+	for _, c := range contribs {
+		c.DetectionID = detectionID
+	}
+	if err := tx.Create(&contribs).Error; err != nil {
+		return fmt.Errorf("failed to save model contributions: %w", err)
+	}
+	return nil
+}
+
+// resolveModelContributions resolves each contributing AI model in the map and
+// deduplicates by database ModelID (summing hit counts and keeping the maximum
+// confidence) to guard against idx_contrib_detection_model unique constraint violations.
+func (ds *Datastore) resolveModelContributions(ctx context.Context, modelContribs map[string]detection.ResultModelContrib) []*entities.DetectionModelContribution {
+	if len(modelContribs) == 0 {
+		return nil
+	}
+
+	seen := make(map[uint]int, len(modelContribs))
+	contribs := make([]*entities.DetectionModelContribution, 0, len(modelContribs))
+	for _, contrib := range modelContribs {
+		m := contrib.Model.WithDefaults()
+		modelEntity, err := ds.model.GetOrCreate(ctx, m.Name, m.Version, m.Variant,
+			detection.ResolveModelType(m.Name, m.Version), m.ClassifierPath)
+		if err != nil {
+			if ds.log != nil {
+				ds.log.Warn("failed to resolve model for contribution",
+					logger.String("model_name", m.Name),
+					logger.Error(err))
+			}
+			continue
+		}
+		if idx, exists := seen[modelEntity.ID]; exists {
+			contribs[idx].HitCount += contrib.HitCount
+			if contrib.MaxConfidence > contribs[idx].MaxConfidence {
+				contribs[idx].MaxConfidence = contrib.MaxConfidence
+			}
+			continue
+		}
+		seen[modelEntity.ID] = len(contribs)
+		contribs = append(contribs, &entities.DetectionModelContribution{
+			ModelID:       modelEntity.ID,
+			HitCount:      contrib.HitCount,
+			MaxConfidence: contrib.MaxConfidence,
+		})
+	}
+	return contribs
 }
 
 // Delete deletes a note by ID.
