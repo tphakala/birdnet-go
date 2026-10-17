@@ -3760,7 +3760,7 @@
           "updating": "Päivitetään taajuusvastetta...",
           "error": "Taajuusvastetta ei voitu laskea. Se päivittyy, kun muutat suodatinta tai valitset Yritä uudelleen.",
           "sampleRate": "Laskettu {rate} Hz:n näytteenottotaajuudelle.",
-          "skippedHeading": "{count, plural, one {# suodatinta ei käytetä ääneen} other {# suodatinta ei käytetä ääneen}}",
+          "skippedHeading": "{count, plural, one {# suodatin ei ole käytössä äänessä} other {# suodatinta ei käytetä ääneen}}",
           "skippedReasons": {
             "unknown_type": "Suodatin {number} ({type}, {frequency} Hz) ohitetaan: tätä suodatintyyppiä ei tueta.",
             "invalid_parameters": "Suodatin {number} ({type}, {frequency} Hz) ohitetaan: sen asetukset eivät kelpaa {rate} Hz:n taajuudella.",
