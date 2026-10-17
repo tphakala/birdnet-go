@@ -290,7 +290,7 @@ func requireLogLevel(t *testing.T, output, msg, level string) {
 			return
 		}
 	}
-	t.Errorf("log line %q not found in %q", msg, output)
+	require.Failf(t, "log line not found", "log line %q not found in %q", msg, output)
 }
 
 func TestServeSpectrogramByID_RetainedRenderRejectsOutOfRangeWidth(t *testing.T) {
