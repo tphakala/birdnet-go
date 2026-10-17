@@ -34,7 +34,7 @@
   export const MIN_DB = -96;
   /** Gain at the top edge of the plot when no drawn point is higher, in dB. */
   export const BASE_MAX_DB = 12;
-  /** Highest gain the top edge of the plot can reach, in dB. */
+  /** Highest gain the top edge of the plot can reach, in dB. A display choice: a taller axis flattens the rest of the curve. */
   export const MAX_TOP_DB = 48;
   /** Distance between horizontal grid lines and labels, and the steps of the top edge, in dB. */
   export const DB_GRID_STEP = 12;
@@ -145,6 +145,12 @@
 
   /** The y axis for the response being drawn; it follows the drawn peak. */
   const axis = $derived(gainAxis(drawable?.response.points ?? [], MIN_FREQ, MAX_FREQ));
+  const gridLines = $derived(gainGridLines(axis.maxDb));
+  const clippedText = $derived(
+    drawable && axis.clipped && axis.peakDb !== undefined
+      ? t('settings.audio.audioFilters.graph.clipped', { peak: axis.peakDb })
+      : ''
+  );
 
   /**
    * Disabled, empty, all-skipped and all-bypassed (passes 0) configurations give
@@ -183,9 +189,7 @@
             })
           );
         }
-        if (drawable && axis.clipped && axis.peakDb !== undefined) {
-          parts.push(t('settings.audio.audioFilters.graph.clipped', { peak: axis.peakDb }));
-        }
+        if (clippedText) parts.push(clippedText);
         return parts.join(' ');
       }
       case 'error':
@@ -408,7 +412,7 @@
     }
 
     // Horizontal dB grid lines
-    for (const db of gainGridLines(axis.maxDb)) {
+    for (const db of gridLines) {
       const y = dbToY(db);
       ctx.beginPath();
       ctx.moveTo(margins.left, y);
@@ -494,7 +498,7 @@
     // dB labels (positioned to the left of plot area)
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    for (const db of gainGridLines(axis.maxDb)) {
+    for (const db of gridLines) {
       const y = dbToY(db);
       ctx.fillText(`${db}dB`, margins.left - 10, y);
     }
@@ -678,10 +682,8 @@
     </p>
 
     <p class="min-h-5 text-xs text-[var(--color-base-content)]/70">
-      {#if drawable && axis.clipped && axis.peakDb !== undefined}
-        <span data-testid="eq-graph-clipped" aria-hidden="true">
-          {t('settings.audio.audioFilters.graph.clipped', { peak: axis.peakDb })}
-        </span>
+      {#if clippedText}
+        <span data-testid="eq-graph-clipped" aria-hidden="true">{clippedText}</span>
       {/if}
     </p>
 
