@@ -687,6 +687,25 @@ describe('AudioEqualizerSettings', () => {
       expect(shownNotices()).toEqual([]);
     });
 
+    it('clears a notice in the new-filter row when the new type has the same default', async () => {
+      const user = userEvent.setup();
+      renderEmpty();
+      await pickType(user, 'LowPass');
+
+      const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
+      await user.clear(q);
+      await user.tab();
+      expect(q.value).toBe(String(DEFAULT_EQ_Q));
+      expect(shownNotices()).toHaveLength(1);
+
+      // HighPass also defaults Q to DEFAULT_EQ_Q, so the value does not change
+      await pickType(user, 'HighPass');
+      const after = await screen.findByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
+      expect(after.value).toBe(String(DEFAULT_EQ_Q));
+      expect(after).not.toHaveAttribute('aria-describedby');
+      expect(shownNotices()).toEqual([]);
+    });
+
     it('clears a notice when the row above is removed and the next filter has the same value', async () => {
       const user = userEvent.setup();
       const filters: EqualizerFilters = [
@@ -806,6 +825,31 @@ describe('AudioEqualizerSettings', () => {
 
         const ids = labels.map(l => l.getAttribute('for'));
         expect(new Set(ids).size).toBe(ids.length);
+      });
+
+      it('gives every control a unique id when several editors share a page', async () => {
+        const editors = [STORED.LowPass, STORED.BandReject].map(filter =>
+          render(AudioEqualizerSettings, {
+            props: {
+              equalizerSettings: { enabled: true, filters: [filter] },
+              onUpdate: mockUpdateCallback,
+            },
+          })
+        );
+        await waitFor(() => {
+          expect(screen.getAllByRole('combobox', { name: NAME.attenuation })).toHaveLength(2);
+        });
+
+        for (const { container } of editors) {
+          const labels = Array.from(container.querySelectorAll('label[for]'));
+          // Frequency, Q or Width, and Attenuation of the one filter row
+          expect(labels.length).toBeGreaterThanOrEqual(3);
+          for (const label of labels) {
+            const id = label.getAttribute('for') ?? '';
+            expect(document.querySelectorAll(`[id="${id}"]`)).toHaveLength(1);
+            expect(container.contains(document.getElementById(id))).toBe(true);
+          }
+        }
       });
     });
   });
