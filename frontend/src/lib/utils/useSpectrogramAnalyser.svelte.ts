@@ -80,7 +80,9 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
       audioContext = await getAudioContext();
       sampleRate = audioContext.sampleRate;
 
-      // Reuse the element's existing source node for this context (shared cache)
+      // Reuse the element's existing source node for this context. The node is shared
+      // with createAudioNodeChain through the per-element cache, so the analyser and
+      // a node chain must not be used on the same element at the same time.
       sourceNode = getOrCreateMediaElementSource(audioContext, mediaElement).source;
 
       // Create processing nodes
@@ -124,7 +126,11 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
     }
   }
 
-  /** Disconnect the audio graph */
+  /**
+   * Disconnect the audio graph. The source node is shared through the per-element
+   * cache, and disconnect() with no argument drops every route of it, including
+   * one owned by a node chain on the same element.
+   */
   function disconnect(): void {
     try {
       if (outputGainNode) outputGainNode.disconnect();
